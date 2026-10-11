@@ -14,6 +14,7 @@ pub mod linear;
 pub mod mock;
 pub mod notion;
 pub mod registry;
+pub mod routing;
 pub mod scheduler;
 pub mod slack;
 pub mod spotify;

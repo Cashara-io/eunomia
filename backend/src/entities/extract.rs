@@ -48,6 +48,9 @@ pub struct ExtractRecord {
     pub body_text: String,
     /// When the record happened (RFC 3339), so time-sensitive facts carry it.
     pub occurred_at: Option<String>,
+    /// The vault the record is filed in (routing); `None`: the owner's personal vault. Its entities,
+    /// facts and relations are written there.
+    pub vault: Option<RecordId>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -179,14 +182,17 @@ async fn apply_extraction(
     db: &OrgDb,
     owner: &RecordId,
     source_record_id: &str,
+    vault: Option<&RecordId>,
     data: &ExtractionData,
 ) -> AppResult<HashSet<String>> {
     let mut entity_ids: HashMap<String, (RecordId, String)> = HashMap::new();
     let mut touched: HashSet<String> = HashSet::new();
 
+    #[allow(clippy::too_many_arguments)]
     async fn ensure(
         db: &OrgDb,
         owner: &RecordId,
+        vault: Option<&RecordId>,
         entity_ids: &mut HashMap<String, (RecordId, String)>,
         name: &str,
         kind: &str,
@@ -196,7 +202,7 @@ async fn apply_extraction(
         if let Some(entry) = entity_ids.get(&key) {
             return Ok(entry.clone());
         }
-        let entity = service::upsert_entity(db, owner, kind, name, aliases, None).await?;
+        let entity = service::upsert_entity(db, owner, kind, name, aliases, vault).await?;
         let rid: RecordId = crate::rid::parse(&entity.id).map_err(|_| AppError::internal("entity id did not round-trip"))?;
         let entry = (rid, kind.to_string());
         entity_ids.insert(key, entry.clone());
@@ -209,7 +215,7 @@ async fn apply_extraction(
         let kind = KIND_MAP.iter().find(|(s, _)| *s == section).map(|(_, k)| *k).unwrap();
         for item in items {
             let Some(name) = item.name.as_deref().map(str::trim).filter(|n| !n.is_empty() && !is_placeholder(n)) else { continue };
-            let (entry_id, _) = ensure(db, owner, &mut entity_ids, name, kind, Some(item.aliases.clone())).await?;
+            let (entry_id, _) = ensure(db, owner, vault, &mut entity_ids, name, kind, Some(item.aliases.clone())).await?;
             for fact in &item.facts {
                 if fact.is_empty() {
                     continue;
@@ -231,8 +237,8 @@ async fn apply_extraction(
         if !valid_kinds.contains(&from_kind) || !valid_kinds.contains(&to_kind) {
             continue;
         }
-        let (from_id, _) = ensure(db, owner, &mut entity_ids, from_name, from_kind, None).await?;
-        let (to_id, _) = ensure(db, owner, &mut entity_ids, to_name, to_kind, None).await?;
+        let (from_id, _) = ensure(db, owner, vault, &mut entity_ids, from_name, from_kind, None).await?;
+        let (to_id, _) = ensure(db, owner, vault, &mut entity_ids, to_name, to_kind, None).await?;
         service::add_relation(db, owner, &from_id, &to_id, rel.label.as_deref().unwrap_or(""), Some(source_record_id))
             .await?;
     }
@@ -262,7 +268,7 @@ pub async fn extract_entities(db: &OrgDb, settings: &Settings, owner: &RecordId,
         }
     };
 
-    match apply_extraction(db, owner, &record.id, &data).await {
+    match apply_extraction(db, owner, &record.id, record.vault.as_ref(), &data).await {
         Ok(touched) => touched,
         Err(e) => {
             tracing::warn!("entity extraction upsert failed for {}: {}", record.id, e.message);

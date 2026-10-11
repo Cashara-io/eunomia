@@ -2,8 +2,10 @@
 //! `cache::search` (one read path shared with recall); this module only
 //! validates arguments and shapes the JSON.
 //!
-//! Every lookup is owner-scoped: each `cache_record`'s key is
-//! `"{owner_key}:{record_id}"`, so a record id is never valid across owners.
+//! Every lookup is scoped by vault (`cache::search::RecordScope`): the caller's own records kept in
+//! their personal vault, plus records a connector routed to a vault the caller is an active member
+//! of. Each `cache_record`'s key is `"{owner_key}:{record_id}"`; the caller's own records are named
+//! without the owner key, another owner's (in a shared vault) with it.
 //! Tombstoned records (`deleted = true`) are invisible here: not returned by
 //! `get`, not matched by `search`/`list`, and never a `links` endpoint.
 //!
@@ -13,9 +15,15 @@
 use serde_json::{json, Value};
 use surrealdb::types::RecordId;
 
-use crate::cache::search::{self as cs, CacheRecord, RecordFilter, SearchParams};
+use crate::cache::search::{self as cs, CacheRecord, RecordFilter, RecordScope, SearchParams};
 use crate::error::AppResult;
 use crate::pool::OrgDb;
+use crate::vaults::service as vaults_service;
+
+/// An id lookup (`get`, `links`) covers every vault the caller is an active member of.
+async fn every_vault(db: &OrgDb, owner: &RecordId) -> AppResult<RecordScope> {
+    cs::scope_for(db, owner, &vaults_service::accessible_vault_ids(db, owner).await?).await
+}
 
 const SNIPPET_LEN: usize = 200;
 
@@ -54,8 +62,10 @@ pub async fn search(
     mode: &str,
     limit: i64,
     offset: i64,
+    vault_ids: &[RecordId],
 ) -> AppResult<Value> {
     let (since, until) = cs::parse_range(since, until)?;
+    let scope = cs::scope_for(db, owner, &vaults_service::read_vaults(db, owner, vault_ids).await?).await?;
     let non_empty = |v: Option<&[String]>| v.filter(|v| !v.is_empty()).map(<[String]>::to_vec);
     let params = SearchParams {
         filter: RecordFilter {
@@ -68,22 +78,23 @@ pub async fn search(
         limit: limit.clamp(0, 100) as usize,
         offset: offset.max(0) as usize,
     };
-    let (recs, has_more) = cs::search(db, settings, owner, query, &params).await?;
+    let (recs, has_more) = cs::search(db, settings, &scope, query, &params).await?;
     let results: Vec<Value> = recs.iter().map(hit).collect();
     Ok(json!({ "results": results, "has_more": has_more }))
 }
 
 pub async fn get(db: &OrgDb, owner: &RecordId, id: &str) -> AppResult<Value> {
-    let Some(rec) = cs::get(db, owner, id).await? else {
+    let scope = every_vault(db, owner).await?;
+    let Some(rec) = cs::get(db, &scope, id).await? else {
         return Ok(json!({ "error": "not found" }));
     };
-    let links = cs::links(db, owner, &rec.id, None).await?;
+    let links = cs::links(db, &scope, &rec.id, None).await?;
     // A Pocket recording or transcript chunk: attach the whole stored recording (full transcript,
-    // summary, action items, tags).
-    let recording = match rec.source.as_str() {
-        "heypocket" => {
+    // summary, action items, tags), its owner's (the record is in a vault the caller reads).
+    let recording = match (rec.source.as_str(), &rec.owner) {
+        ("heypocket", Some(record_owner)) => {
             let rid = rec.payload.get("recording_id").and_then(Value::as_str).unwrap_or(&rec.external_id);
-            crate::sources::heypocket::stored(db, owner, rid).await?
+            crate::sources::heypocket::stored(db, record_owner, rid).await?
         }
         _ => None,
     };
@@ -131,14 +142,15 @@ pub async fn list(
     };
     let limit = limit.clamp(0, 200) as usize;
     let offset = offset.max(0) as usize;
-    let (recs, total) = cs::list(db, owner, type_, &filters, sort, limit, offset).await?;
+    let scope = cs::scope_for(db, owner, &vaults_service::default_read_vault_ids(db, owner).await?).await?;
+    let (recs, total) = cs::list(db, &scope, type_, &filters, sort, limit, offset).await?;
     let results: Vec<Value> = recs.iter().map(hit).collect();
     let has_more = (offset + results.len()) < total as usize;
     Ok(json!({ "results": results, "total": total, "has_more": has_more }))
 }
 
 pub async fn links(db: &OrgDb, owner: &RecordId, id: &str, rel: Option<&str>) -> AppResult<Value> {
-    Ok(json!({ "links": cs::links(db, owner, id, rel).await? }))
+    Ok(json!({ "links": cs::links(db, &every_vault(db, owner).await?, id, rel).await? }))
 }
 
 /// The tool names these four functions are registered under in the

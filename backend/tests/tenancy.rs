@@ -184,10 +184,12 @@ async fn the_move_carries_a_2x_export_into_one_org_and_is_a_noop_the_second_time
         assert_eq!(count(db.test_raw(), table).await, n, "{table}");
     }
     let owner = eunomia_backend::rid::parse("user:u").unwrap();
-    let ids = eunomia_backend::cache::search::nearest_ids(&db, &owner, unit_vector(1), &Default::default(), 5).await.unwrap();
-    assert_eq!(ids.first().map(String::as_str), Some("r2"));
-    let top1 = eunomia_backend::cache::search::nearest_ids(&db, &owner, unit_vector(1), &Default::default(), 1).await.unwrap();
-    assert_eq!(top1, ["r2"], "HNSW path, no fallback needed");
+    let scope = eunomia_backend::cache::search::RecordScope::own(&owner);
+    let key = |r: &RecordId| eunomia_backend::rid::key_string(&r.key).unwrap();
+    let ids = eunomia_backend::cache::search::nearest_ids(&db, &scope, unit_vector(1), &Default::default(), 5).await.unwrap();
+    assert_eq!(ids.first().map(key).as_deref(), Some("r2"));
+    let top1 = eunomia_backend::cache::search::nearest_ids(&db, &scope, unit_vector(1), &Default::default(), 1).await.unwrap();
+    assert_eq!(top1.iter().map(key).collect::<Vec<_>>(), ["r2"], "HNSW path, no fallback needed");
     let hits: Vec<RecordId> = db.test_raw().query("SELECT VALUE id FROM cache_record WHERE title @1@ 'netflix'").await.unwrap().take(0).unwrap();
     assert_eq!(hits.len(), 1);
 

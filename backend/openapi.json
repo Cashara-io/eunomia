@@ -979,6 +979,55 @@
         ]
       }
     },
+    "/api/connectors/repoint": {
+      "post": {
+        "tags": [
+          "connectors"
+        ],
+        "summary": "Point connectors at another vault",
+        "operationId": "repointConnectors",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepointBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepointOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/connectors/up_bank/finance-summary": {
       "get": {
         "tags": [
@@ -1160,6 +1209,56 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DeleteDataOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/connectors/{kind}/move": {
+      "post": {
+        "tags": [
+          "connectors"
+        ],
+        "summary": "Re-file a connector's synced data by its current routing",
+        "description": "Changing a connector's destination vault or rules applies to records synced afterwards. This moves the records already synced (and the facts and relations extracted from them) to where the current routing sends them. Idempotent: a record already in the right vault is left alone, and a fact the destination already has is not duplicated.",
+        "operationId": "moveConnectorData",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoveReport"
                 }
               }
             }
@@ -4385,7 +4484,9 @@
           "enabled",
           "config",
           "credentials_set",
-          "updated_at"
+          "updated_at",
+          "routing",
+          "routing_fields"
         ],
         "properties": {
           "config": {
@@ -4401,6 +4502,17 @@
           "kind": {
             "type": "string"
           },
+          "routing": {
+            "$ref": "#/components/schemas/Routing",
+            "description": "Which vault its syncs file records in: a default destination and ordered rules."
+          },
+          "routing_fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The fields this connector's rules can match on."
+          },
           "updated_at": {
             "type": "string"
           }
@@ -4415,6 +4527,17 @@
             "type": [
               "boolean",
               "null"
+            ]
+          },
+          "routing": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Routing",
+                "description": "Replaces the routing (destination vault and rules). It applies to records synced from now on;\n`POST /api/connectors/{kind}/move` re-files those already synced."
+              }
             ]
           }
         }
@@ -5515,6 +5638,42 @@
           }
         }
       },
+      "MoveReport": {
+        "type": "object",
+        "description": "What \"Move existing data\" did.",
+        "required": [
+          "records",
+          "memories",
+          "relations",
+          "left"
+        ],
+        "properties": {
+          "left": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Facts and relations left in a vault the owner is no longer a member of.",
+            "minimum": 0
+          },
+          "memories": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Facts drawn from them that moved too (one the destination already had is not duplicated).",
+            "minimum": 0
+          },
+          "records": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Records re-filed to the vault the current rules route them to.",
+            "minimum": 0
+          },
+          "relations": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Relations drawn from them that moved too.",
+            "minimum": 0
+          }
+        }
+      },
       "OkBody": {
         "type": "object",
         "required": [
@@ -5720,6 +5879,80 @@
         "properties": {
           "removed": {
             "type": "boolean"
+          }
+        }
+      },
+      "RepointBody": {
+        "type": "object",
+        "required": [
+          "from",
+          "to"
+        ],
+        "properties": {
+          "from": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Vaults connectors may name now (e.g. the two vaults just merged)."
+          },
+          "to": {
+            "type": "string",
+            "description": "The vault to name instead (e.g. the merged vault)."
+          }
+        }
+      },
+      "RepointOut": {
+        "type": "object",
+        "required": [
+          "connectors"
+        ],
+        "properties": {
+          "connectors": {
+            "type": "integer",
+            "description": "Connectors whose default or rules changed.",
+            "minimum": 0
+          }
+        }
+      },
+      "Routing": {
+        "type": "object",
+        "properties": {
+          "default_vault": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Where records no rule matches go (`vault:...`); absent: your personal vault."
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Rule"
+            },
+            "description": "Checked in order; the first match wins."
+          }
+        }
+      },
+      "Rule": {
+        "type": "object",
+        "required": [
+          "field",
+          "value",
+          "vault"
+        ],
+        "properties": {
+          "field": {
+            "type": "string",
+            "description": "One of the connector's `routing_fields`."
+          },
+          "value": {
+            "type": "string",
+            "description": "What the field must be (case-insensitive); for `title`, a word or phrase it contains."
+          },
+          "vault": {
+            "type": "string",
+            "description": "The vault a matching record goes to (`vault:...`)."
           }
         }
       },

@@ -1,6 +1,6 @@
 # Connectors
 
-Connectors pull your data from other services into Eunomia, where agents read it with the `search`, `get`, `list`, `links` and `recall` tools. Set one up on the **Connectors** page: paste the credential, **Save**, then **Test connection** (one real call to the provider) and **Sync now**. Credentials are encrypted at rest and only ever sent to that provider.
+Connectors pull your data from other services into Eunomia, where agents read it with the `search`, `get`, `list`, `links` and `recall` tools. Each record is filed in a vault (by default your personal vault; see [which vault records go to](#which-vault-records-go-to)). Set one up on the **Connectors** page: paste the credential, **Save**, then **Test connection** (one real call to the provider) and **Sync now**. Credentials are encrypted at rest and only ever sent to that provider.
 
 After the first sync, each connector syncs again on its interval (changeable on its setup page). A failed sync shows the provider's error on the connector's page and the dashboard, and retries with backoff (15 min → 6 h).
 
@@ -20,6 +20,34 @@ Every sync is a `sync` job in the background job queue (see `docs/architecture/j
 | Spotify | Recently played tracks (Spotify keeps only the last 50, so history builds up from when you connect) | Your own Spotify app's client ID + secret and a refresh token (below) | `user-read-recently-played` | 15 min |
 | Todoist | Active tasks with project, due date, labels | API token — Todoist → Settings → Integrations → Developer | Full API token (Todoist has no read-only token) | 15 min |
 | Stripe | Charges (incremental) | [Restricted key](https://dashboard.stripe.com/apikeys) `rk_…` | Charges: Read only | 15 min |
+
+## Which vault records go to
+
+Every record a connector syncs is filed in one vault, and only that vault's members can read it. Set it under **Where records go** on the connector's page (or `routing` in `PUT /api/connectors/{kind}`):
+
+- **Destination vault**: where records go by default. Unset, that is your personal vault, which only you read.
+- **Rules**: an ordered list of *field*, *value*, *vault*. The first rule a record matches sends it to that rule's vault; a record no rule matches goes to the destination vault. Values compare case-insensitively; `title` matches a word or phrase the title contains, every other field must equal the value. There is no AI classification.
+
+| Connector | Rule fields |
+|---|---|
+| PocketAI | `tag`, `folder`, `title` |
+| GitHub | `repo` (`owner/name`), `title` |
+| Slack | `channel` (ID or name, `#` optional), `title` |
+| Gmail | `label` (label ID: `INBOX`, `IMPORTANT`, `CATEGORY_PERSONAL`, or a label of your own as `Label_…`), `title` |
+| Google Calendar | `calendar` (`primary`, or your address), `title` |
+| Discord | `channel` (ID or name), `title` |
+| Notion | `database` (parent database ID), `page` (parent page ID), `title` |
+| Linear | `team` (name), `title` |
+| Todoist | `project` (ID or name), `title` |
+| Up Bank, Spotify, Stripe | `title` |
+
+Example: one Pocket account with both work calls and personal conversations. Make a "Build Paperless" vault, add the rule *tag* `work` → Build Paperless, and leave the destination as your personal vault: recordings tagged `work` (their summary, transcript and every fact extracted from them) are read by Build Paperless's members; the rest stay yours.
+
+Rules only name vaults you are an active member of (saving another is refused). If you later leave a vault a rule names, records it would have sent there go to the destination vault instead, and the server logs it; a record already in that vault moves to where the rules send it the next time it syncs. Each record keeps its source, owner and provider id wherever it is filed.
+
+**Changes apply to future syncs.** A record stays in the vault it was first filed in when it syncs again, so changing the destination or the rules never moves anything by itself. To re-file what is already synced, use **Move existing data** (two steps; `POST /api/connectors/{kind}/move`): every record the current routing sends elsewhere moves, with the facts and relations extracted from it, onto the same-named entities in the destination (created if missing). A fact the destination already has is not copied twice, and running it again moves nothing more. Facts in a vault you have left stay there (`left` in the result); the records themselves still move, they are yours. Observations in both vaults are marked stale and rebuilt. Recorded in the audit log as `connector.move_data`.
+
+**After merging vaults**, the Vaults page offers to point connectors that filed into either merged vault at the new one (`POST /api/connectors/repoint` with `{"from": [...], "to": "vault:..."}`). Like any routing change it applies to future syncs.
 
 ## Pocket recordings
 

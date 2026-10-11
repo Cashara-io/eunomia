@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use serde_json::{json, Value};
 
-use super::{register, IdArgs, bad_args, ToolSpec};
+use super::{register, IdArgs, bad_args, parse_vault_ids, vault_ids_schema, ToolSpec};
 use crate::tools::generic;
 
 pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
@@ -29,6 +29,10 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
         limit: i64,
         #[serde(default)]
         offset: i64,
+        #[serde(default)]
+        vault_id: Option<String>,
+        #[serde(default)]
+        vault_ids: Option<Vec<String>>,
     }
     fn default_mode() -> String {
         "hybrid".to_string()
@@ -51,6 +55,8 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                 "mode": {"type": "string", "enum": ["keyword", "semantic", "hybrid"]},
                 "limit": {"type": "integer", "description": "at most 100, default 20"},
                 "offset": {"type": "integer", "description": "offset + limit at most 1000; page while has_more"},
+                "vault_id": {"type": "string", "description": "search just this vault's records (a vault id or its name); omit for your personal vault and every org vault you belong to"},
+                "vault_ids": vault_ids_schema(),
             },
             "required": ["query"],
         }),
@@ -59,6 +65,10 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                 let a: SearchArgs = match serde_json::from_value(args) {
                     Ok(a) => a,
                     Err(e) => return Ok(bad_args(e)),
+                };
+                let vaults = match parse_vault_ids(&a.vault_id, &a.vault_ids) {
+                    Ok(v) => v,
+                    Err(e) => return Ok(e),
                 };
                 generic::search(
                     &state.db,
@@ -72,6 +82,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     &a.mode,
                     a.limit,
                     a.offset,
+                    &vaults,
                 )
                 .await
             })

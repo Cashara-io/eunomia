@@ -96,7 +96,7 @@ async fn s1_database_per_org() {
         let _: Vec<serde_json::Value> = res.take(0).unwrap();
         first_query.push(t.elapsed());
         let t = Instant::now();
-        let ids = eunomia_backend::cache::search::nearest_ids(&db, &owner, q.clone(), &Default::default(), 10).await.unwrap();
+        let ids = eunomia_backend::cache::search::nearest_ids(&db, &eunomia_backend::cache::search::RecordScope::own(&owner), q.clone(), &Default::default(), 10).await.unwrap();
         knn.push(t.elapsed());
         assert!(!ids.is_empty());
         let t = Instant::now();

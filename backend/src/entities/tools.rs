@@ -33,15 +33,12 @@ pub async fn entities_search(
     kind: Option<&str>,
     limit: usize,
     offset: usize,
-    vault_id: Option<&RecordId>,
+    vault_ids: &[RecordId],
 ) -> AppResult<service::ListEntitiesOut> {
     let needle = query.trim();
     // No vault given: the personal vault plus every org vault the caller
     // belongs to, so org facts aren't invisible to a lookup without `vault_id`.
-    let vaults = match vault_id {
-        Some(v) => vec![v.clone()],
-        None => crate::vaults::service::default_read_vault_ids(db, owner).await?,
-    };
+    let vaults = crate::vaults::service::read_vaults(db, owner, vault_ids).await?;
     // Name/alias matches first, then entities a fact mentions it in.
     let mut hits = Vec::new();
     let mut mentioned = Vec::new();

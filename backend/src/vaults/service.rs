@@ -286,6 +286,21 @@ pub async fn default_read_vault_ids(db: &OrgDb, user_id: &RecordId) -> AppResult
     Ok(out)
 }
 
+/// The vaults a read covers: `vault_ids`, each authorized for reading (duplicates dropped), or when
+/// there are none, [`default_read_vault_ids`].
+pub async fn read_vaults(db: &OrgDb, user_id: &RecordId, vault_ids: &[RecordId]) -> AppResult<Vec<RecordId>> {
+    if vault_ids.is_empty() {
+        return default_read_vault_ids(db, user_id).await;
+    }
+    let mut out: Vec<RecordId> = Vec::with_capacity(vault_ids.len());
+    for v in vault_ids {
+        if !out.contains(v) {
+            out.push(authz::authorize(db, user_id, Action::ReadMemories, v).await?.vault().clone());
+        }
+    }
+    Ok(out)
+}
+
 pub async fn list_my_vaults(db: &OrgDb, user_id: &RecordId) -> AppResult<Vec<VaultWithRole>> {
     #[derive(Deserialize, SurrealValue)]
     struct Row {

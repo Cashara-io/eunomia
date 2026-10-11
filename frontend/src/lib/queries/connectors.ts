@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { deleteConnectorData, listConnectors, testConnector, updateConnector } from "@/lib/gen";
-import type { Connector, ConnectorKind, ConnectorUpdate } from "@/lib/types";
+import { deleteConnectorData, listConnectors, moveConnectorData, repointConnectors, testConnector, updateConnector } from "@/lib/gen";
+import type { Connector, ConnectorKind, ConnectorUpdate, MoveReport } from "@/lib/types";
 import { call } from "./client";
 import { sourceKeys } from "./sources";
 
@@ -30,5 +30,23 @@ export function useDeleteConnectorData() {
   return useMutation({
     mutationFn: (kind: ConnectorKind) => call(deleteConnectorData({ path: { kind } })),
     onSuccess: () => qc.invalidateQueries(),
+  });
+}
+
+/** "Move existing data": re-files what a connector already synced by its current routing. Records, search and the graph change. */
+export function useMoveConnectorData() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (kind: ConnectorKind) => call(moveConnectorData({ path: { kind } })) as Promise<MoveReport>,
+    onSuccess: () => qc.invalidateQueries(),
+  });
+}
+
+/** After a vault merge: connectors filing into `from` file into `to` instead. */
+export function useRepointConnectors() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { from: string[]; to: string }) => call(repointConnectors({ body })) as Promise<{ connectors: number }>,
+    onSuccess: () => qc.invalidateQueries({ queryKey: connectorKeys.all }),
   });
 }
