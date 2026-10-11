@@ -217,6 +217,34 @@ test.describe("MCP server", () => {
     expect(init.result.instructions).toContain("You are the model");
   });
 
+  test("the memory skill is offered to every client as a prompt and a resource", async ({ request }) => {
+    const token = await newToken(request);
+    const init = await (
+      await rpc(request, token, { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-11-25" } })
+    ).json();
+    expect(init.result.capabilities.prompts).toBeTruthy();
+    expect(init.result.capabilities.resources).toBeTruthy();
+
+    const prompts = (await (await rpc(request, token, { jsonrpc: "2.0", id: 2, method: "prompts/list" })).json()).result.prompts;
+    expect(prompts.map((p: { name: string }) => p.name)).toEqual(["eunomia-memory"]);
+    const prompt = await (
+      await rpc(request, token, { jsonrpc: "2.0", id: 3, method: "prompts/get", params: { name: "eunomia-memory" } })
+    ).json();
+    expect(prompt.result.messages[0].role).toBe("user");
+    expect(prompt.result.messages[0].content.text).toContain("## Before you finish");
+
+    const resource = await (
+      await rpc(request, token, { jsonrpc: "2.0", id: 4, method: "resources/read", params: { uri: "eunomia://skill" } })
+    ).json();
+    expect(resource.result.contents[0].text).toContain("# Eunomia memory");
+
+    // the essentials ride in the tool descriptions too, for clients that ignore all of the above
+    const tools = (await (await rpc(request, token, { jsonrpc: "2.0", id: 5, method: "tools/list" })).json()).result.tools;
+    const describe = (n: string) => tools.find((t: { name: string }) => t.name === n).description as string;
+    expect(describe("recall")).toContain("at the start of any task");
+    expect(describe("memory_write")).toContain("before finishing a task");
+  });
+
   test("protocol errors and auth", async ({ request }) => {
     const token = await newToken(request);
 
@@ -229,7 +257,7 @@ test.describe("MCP server", () => {
     ).json();
     expect(unknownTool.error.code).toBe(-32602);
 
-    const unknownMethod = await (await rpc(request, token, { jsonrpc: "2.0", id: 2, method: "resources/list" })).json();
+    const unknownMethod = await (await rpc(request, token, { jsonrpc: "2.0", id: 2, method: "completion/complete" })).json();
     expect(unknownMethod.error.code).toBe(-32601);
 
     // A tool that fails is a result the model sees, not a protocol error.

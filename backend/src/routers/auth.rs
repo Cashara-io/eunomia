@@ -31,7 +31,7 @@ pub fn router() -> Router<AppState> {
         .route("/auth/logout", post(logout))
         .route("/auth/me", get(me))
         .route("/auth/tokens", post(create_token).get(get_tokens))
-        .route("/auth/tokens/{token_id}", delete(delete_token))
+        .route("/auth/tokens/{token_id}", delete(delete_token).patch(rename_token))
         .route("/auth/sessions", get(get_sessions))
         .route("/auth/sessions/{session_id}", delete(revoke_session_route))
         .route("/auth/bootstrap", get(bootstrap))
@@ -80,6 +80,22 @@ struct TokenCreate {
     /// RFC 3339 timestamp in the future. Omit for a token that never expires.
     #[serde(default)]
     expires_at: Option<String>,
+}
+
+#[derive(Deserialize, utoipa::ToSchema)]
+struct TokenRename {
+    /// The new name: trimmed, 1 to 80 characters.
+    name: String,
+}
+
+/// Longest token name, in characters (the same limit as a vault name).
+const MAX_TOKEN_NAME: usize = 80;
+
+fn check_token_name(name: &str) -> AppResult<()> {
+    if name.chars().count() > MAX_TOKEN_NAME {
+        return Err(AppError::bad_request(format!("Token names are at most {MAX_TOKEN_NAME} characters.")));
+    }
+    Ok(())
 }
 
 fn user_agent_from(headers: &HeaderMap) -> Option<String> {
@@ -290,6 +306,7 @@ async fn create_token(
         let trimmed = body.name.trim();
         if trimmed.is_empty() { "API token".to_string() } else { trimmed.to_string() }
     };
+    check_token_name(&name)?;
     let scopes: Vec<String> = match body.scopes {
         None => scopes::ALL.iter().map(|s| s.to_string()).collect(),
         Some(s) if s.is_empty() => return Err(AppError::bad_request("Choose at least one scope.")),
@@ -378,18 +395,20 @@ struct TokenOut {
 async fn get_tokens(State(state): State<AppState>, user: User) -> AppResult<Json<Vec<TokenOut>>> {
     let rows = models_user::list_api_tokens(&state.control, &user.id).await?;
     Ok(Json(
-        rows.into_iter()
-            .map(|r| TokenOut {
-                id: r.id.to_string(),
-                name: r.name,
-                created_at: Some(r.created_at),
-                last_used_at: r.last_used_at,
-                scopes: r.scopes.into_iter().filter(|s| scopes::is_known(s)).collect(),
-                vault_id: r.vault.map(|v| v.to_string()),
-                expires_at: r.expires_at,
-            })
-            .collect(),
+        rows.into_iter().map(token_out).collect(),
     ))
+}
+
+fn token_out(r: models_user::ApiTokenSummary) -> TokenOut {
+    TokenOut {
+        id: r.id.to_string(),
+        name: r.name,
+        created_at: Some(r.created_at),
+        last_used_at: r.last_used_at,
+        scopes: r.scopes.into_iter().filter(|s| scopes::is_known(s)).collect(),
+        vault_id: r.vault.map(|v| v.to_string()),
+        expires_at: r.expires_at,
+    }
 }
 
 #[utoipa::path(
@@ -415,6 +434,36 @@ async fn delete_token(
     }
     audit::record_as_caller(&state.control, &user.id, "auth.token_revoke", &rid.to_string(), "ok").await;
     Ok(Json(json!({ "ok": true })))
+}
+
+#[utoipa::path(
+    operation_id = "renameToken",
+    patch,
+    path = "/api/auth/tokens/{token_id}",
+    tag = "auth",
+    summary = "Rename an API token",
+    params(("token_id" = String, Path)),
+    request_body = TokenRename,
+    responses((status = 200, body = TokenOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = []), ("bearer" = [])),
+)]
+async fn rename_token(
+    State(state): State<AppState>,
+    user: User,
+    Path(token_id): Path<String>,
+    Json(body): Json<TokenRename>,
+) -> AppResult<Json<TokenOut>> {
+    let name = body.name.trim();
+    if name.is_empty() {
+        return Err(AppError::bad_request("Give the token a name."));
+    }
+    check_token_name(name)?;
+    let not_found = || AppError::coded(ErrorCode::AuthNotFound, "Token not found.");
+    let rid: RecordId = crate::rid::parse(&token_id).map_err(|_| not_found())?;
+    let r = models_user::rename_api_token(&state.control, &user.id, &rid, name).await?.ok_or_else(not_found)?;
+    // token-verification cache: invalidate `rid` here once auth.rs caches verified tokens (the name is not part of a verification today)
+    audit::record_as_caller(&state.control, &user.id, "auth.token_rename", &rid.to_string(), "ok").await;
+    Ok(Json(token_out(r)))
 }
 
 #[derive(Deserialize, SurrealValue)]
@@ -531,6 +580,7 @@ async fn bootstrap(State(state): State<AppState>) -> AppResult<Json<BootstrapOut
     create_token,
     get_tokens,
     delete_token,
+    rename_token,
     get_sessions,
     revoke_session_route,
     bootstrap,

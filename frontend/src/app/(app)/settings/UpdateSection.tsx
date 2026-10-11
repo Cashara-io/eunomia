@@ -135,7 +135,7 @@ export function UpdateSection() {
     : phase === "waiting"
       ? "Update requested. Starting in a few seconds…"
       : phase === "applying"
-        ? `Installing ${target ?? status.latest_version}…`
+        ? (status.progress ?? `Installing ${target ?? status.latest_version}…`)
         : phase === "restarting"
           ? "Restarting Eunomia…"
           : status.update_available

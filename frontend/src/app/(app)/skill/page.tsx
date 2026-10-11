@@ -15,14 +15,14 @@ const REFRESH = "./scripts/connect-agents.sh --token <token>";
 
 // Where the skill goes once saved. Mirrors docs/agents.md "The memory skill".
 const ROUTES = [
-  { who: "Every MCP client", how: "Sent as the server's connection instructions. Applies the next time the agent connects." },
+  { who: "Every MCP client", how: "Sent as the server's connection instructions and offered as the eunomia-memory prompt. Applies the next time the agent connects." },
   { who: "Claude Code, Codex, Hermes", how: "Written to skills/eunomia-memory/SKILL.md. Re-run connect-agents.sh to refresh the file." },
-  { who: "Claude Code hooks", how: "SessionStart injects this skill. UserPromptSubmit recalls memories for each prompt." },
+  { who: "Claude Code hooks (optional)", how: "SessionStart injects this skill. UserPromptSubmit recalls memories for each prompt." },
 ];
 
 // The skill that tells connected agents when to recall and what to remember.
-// Sent to every MCP client as connection instructions, injected into Claude
-// Code each session by its hook, and written as SKILL.md by connect-agents.sh.
+// Sent to every MCP client as connection instructions and an MCP prompt, injected
+// into Claude Code each session by its optional hook, and written as SKILL.md by connect-agents.sh.
 export default function SkillPage() {
   const settingsQuery = useSettings();
   const updateSettings = useUpdateSettings();

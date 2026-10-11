@@ -27,6 +27,14 @@ Use it so the user never has to repeat themselves.
   (`memory_delete`).
 - Never store secrets, credentials, or one-off small talk.
 
+## Before you finish
+
+Before you end a task or hand back to the user, save what this session
+taught you with `memory_write`: what happened (decisions made, what was
+tried, what worked) as `experience`, and lasting facts you learned as
+`world`. Keep it short and skip anything already saved. Nothing captures
+the session for you.
+
 ## Code
 
 When you learn how a codebase fits together, map it with

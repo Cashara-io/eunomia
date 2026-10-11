@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createToken, deleteToken, getBootstrap, getMe, listSessions, listTokens, login, logout, register, revokeSession } from "@/lib/gen";
+import { createToken, deleteToken, getBootstrap, getMe, listSessions, listTokens, login, logout, register, renameToken, revokeSession } from "@/lib/gen";
 import type { TokenCreate } from "@/lib/gen";
 import type { ApiToken, Me, Session } from "@/lib/types";
 import { call } from "./client";
@@ -34,6 +34,18 @@ export function useRevokeToken() {
   return useMutation({
     mutationFn: (token_id: string) => call(deleteToken({ path: { token_id } })),
     onSuccess: () => qc.invalidateQueries({ queryKey: authKeys.tokens() }),
+  });
+}
+
+export function useRenameToken() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ token_id, name }: { token_id: string; name: string }) => call(renameToken({ path: { token_id }, body: { name } })),
+    // show the new name at once, then confirm against the server
+    onSuccess: (saved) => {
+      qc.setQueryData<ApiToken[]>(authKeys.tokens(), (old) => old?.map((t) => (t.id === saved.id ? { ...t, name: saved.name } : t)));
+      return qc.invalidateQueries({ queryKey: authKeys.tokens() });
+    },
   });
 }
 

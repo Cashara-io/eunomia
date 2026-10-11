@@ -490,6 +490,63 @@
             "bearer": []
           }
         ]
+      },
+      "patch": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Rename an API token",
+        "operationId": "renameToken",
+        "parameters": [
+          {
+            "name": "token_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRename"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
       }
     },
     "/api/chat/threads": {
@@ -6218,6 +6275,18 @@
           }
         }
       },
+      "TokenRename": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The new name: trimmed, 1 to 80 characters."
+          }
+        }
+      },
       "UpdateAck": {
         "type": "object",
         "description": "Body of `POST /update/request` and `/update/check`.",
@@ -6276,6 +6345,13 @@
               "string",
               "null"
             ]
+          },
+          "progress": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "While `applying`: what the updater is waiting on (e.g. a slow first boot it keeps retrying)."
           },
           "update_available": {
             "type": [

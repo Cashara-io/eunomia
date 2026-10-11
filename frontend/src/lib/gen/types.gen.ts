@@ -752,6 +752,13 @@ export type TokenOut = {
     vault_id?: string | null;
 };
 
+export type TokenRename = {
+    /**
+     * The new name: trimmed, 1 to 80 characters.
+     */
+    name: string;
+};
+
 /**
  * Body of `POST /update/request` and `/update/check`.
  */
@@ -775,6 +782,10 @@ export type UpdateStatus = {
     current_version?: string | null;
     error?: string | null;
     latest_version?: string | null;
+    /**
+     * While `applying`: what the updater is waiting on (e.g. a slow first boot it keeps retrying).
+     */
+    progress?: string | null;
     update_available?: boolean | null;
 };
 
@@ -1083,6 +1094,30 @@ export type DeleteTokenResponses = {
 };
 
 export type DeleteTokenResponse = DeleteTokenResponses[keyof DeleteTokenResponses];
+
+export type RenameTokenData = {
+    body: TokenRename;
+    path: {
+        token_id: string;
+    };
+    query?: never;
+    url: '/api/auth/tokens/{token_id}';
+};
+
+export type RenameTokenErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type RenameTokenError = RenameTokenErrors[keyof RenameTokenErrors];
+
+export type RenameTokenResponses = {
+    200: TokenOut;
+};
+
+export type RenameTokenResponse = RenameTokenResponses[keyof RenameTokenResponses];
 
 export type ListThreadsData = {
     body?: never;

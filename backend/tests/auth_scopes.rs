@@ -216,6 +216,64 @@ async fn token_creation_validates_and_cannot_escalate() {
     assert_eq!((status, body["code"].as_str()), (StatusCode::FORBIDDEN, Some("auth.scope")));
 }
 
+#[tokio::test]
+async fn tokens_are_renamed_by_their_owner_only_and_audited() {
+    let app = TestApp::new().await;
+    let (_, _, made) = send(&app.router, "POST", "/api/auth/tokens", Some(json!({"name": "laptop"})), &bearer(&app.token)).await;
+    let id = made["id"].as_str().unwrap().to_string();
+    let path = format!("/api/auth/tokens/{id}");
+
+    let (status, _, renamed) = send(&app.router, "PATCH", &path, Some(json!({"name": "  work laptop  "})), &bearer(&app.token)).await;
+    assert_eq!(status, StatusCode::OK, "{renamed}");
+    assert_eq!((renamed["id"].as_str(), renamed["name"].as_str()), (Some(id.as_str()), Some("work laptop")));
+    let (_, _, list) = send(&app.router, "GET", "/api/auth/tokens", None, &bearer(&app.token)).await;
+    let row = list.as_array().unwrap().iter().find(|t| t["id"] == id.as_str()).unwrap();
+    assert_eq!(row["name"], "work laptop");
+    assert_eq!(events(&app, "action = 'auth.token_rename'").await.len(), 1);
+
+    // empty (after trimming) and over-long names are refused, and change nothing
+    for bad in [json!({"name": "   "}), json!({"name": "x".repeat(81)})] {
+        let (status, _, body) = send(&app.router, "PATCH", &path, Some(bad.clone()), &bearer(&app.token)).await;
+        assert_eq!((status, body["code"].as_str()), (StatusCode::BAD_REQUEST, Some("validation.invalid")), "{bad}");
+    }
+    let (status, _, _) = send(&app.router, "POST", "/api/auth/tokens", Some(json!({"name": "x".repeat(81)})), &bearer(&app.token)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "creation has the same limit");
+
+    // another user's token is not found, and keeps its name
+    let other = common::register(&app.state, "other@example.com").await;
+    let theirs = create_api_token_with(&app.state.control, &other.id, "theirs", &all(), None, None).await.unwrap();
+    let their_path = format!("/api/auth/tokens/{}", RecordIdExt::to_string(&theirs.id));
+    let (status, _, body) = send(&app.router, "PATCH", &their_path, Some(json!({"name": "mine now"})), &bearer(&app.token)).await;
+    assert_eq!((status, body["code"].as_str()), (StatusCode::NOT_FOUND, Some("auth.not_found")));
+    let (_, _, list) = send(&app.router, "GET", "/api/auth/tokens", None, &bearer(&theirs.token)).await;
+    assert_eq!(list[0]["name"], "theirs");
+    // not a record id at all
+    let (status, _, _) = send(&app.router, "PATCH", "/api/auth/tokens/nope", Some(json!({"name": "y"})), &bearer(&app.token)).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(events(&app, "action = 'auth.token_rename'").await.len(), 1, "failures are not recorded as renames");
+}
+
+#[tokio::test]
+async fn the_memory_skill_prompt_follows_token_scopes() {
+    let app = TestApp::new().await;
+    let rpc = |method: &str, params: Value| json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params});
+    let reader = token(&app, &[scopes::MEMORY_READ], None).await;
+    let (status, _, list) = send(&app.router, "POST", "/mcp", Some(rpc("prompts/list", json!({}))), &bearer(&reader)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(list["result"]["prompts"][0]["name"], "eunomia-memory");
+    let (_, _, got) = send(&app.router, "POST", "/mcp", Some(rpc("prompts/get", json!({"name": "eunomia-memory"}))), &bearer(&reader)).await;
+    assert!(got["result"]["messages"][0]["content"]["text"].as_str().unwrap().contains("## Before you finish"), "{got}");
+    let (_, _, read) = send(&app.router, "POST", "/mcp", Some(rpc("resources/read", json!({"uri": "eunomia://skill"}))), &bearer(&reader)).await;
+    assert!(read["result"]["contents"][0]["text"].as_str().unwrap().starts_with("# Eunomia memory"), "{read}");
+
+    // a token that cannot read memory is offered no prompt and cannot fetch it
+    let connectors = token(&app, &[scopes::CONNECTORS], None).await;
+    let (_, _, list) = send(&app.router, "POST", "/mcp", Some(rpc("prompts/list", json!({}))), &bearer(&connectors)).await;
+    assert_eq!(list["result"]["prompts"], json!([]));
+    let (_, _, got) = send(&app.router, "POST", "/mcp", Some(rpc("prompts/get", json!({"name": "eunomia-memory"}))), &bearer(&connectors)).await;
+    assert_eq!(got["error"]["data"]["code"], "auth.scope", "{got}");
+}
+
 // ------------------------------------------------------- vault restriction
 
 #[tokio::test]

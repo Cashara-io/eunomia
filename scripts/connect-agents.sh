@@ -3,8 +3,8 @@
 # its own API token, so the agent can recall/search/write memory with no
 # OpenAI key on the server -- the agent is the model. Also installs the
 # Eunomia memory skill (SKILL.md for Claude Code, Codex, Hermes) and, for
-# Claude Code, hooks that inject the skill each session and auto-recall
-# memories relevant to every prompt.
+# Claude Code, optional hooks that inject the skill each session and recall
+# memories for every prompt (the MCP server carries the skill without them).
 #
 #   connect-agents.sh --url http://localhost:8001 --email me@example.com --password '...'
 #   connect-agents.sh --url http://localhost:8001 --token <existing-token>
@@ -274,19 +274,21 @@ $body" ;; esac
 
 HOOK_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/eunomia"
 
-# install_claude_hooks <token>: SessionStart injects the skill, UserPromptSubmit
-# injects memories recalled for the prompt. Existing hooks are kept.
+# install_claude_hooks <token>: optional (the MCP server already carries the skill). SessionStart
+# injects the skill, UserPromptSubmit injects memories recalled for the prompt; existing hooks are
+# kept. When ~/.claude/settings.json can't be read or written (not plain JSON, or the agent running
+# this may not change its own settings), skip with one note and carry on.
 install_claude_hooks() {
-  mkdir -p "$HOOK_DIR"
-  (umask 077; printf 'EUNOMIA_URL=%s\nEUNOMIA_TOKEN=%s\n' "$URL" "$1" > "$HOOK_DIR/env")
-  write_hook_script > "$HOOK_DIR/hook.sh"
-  chmod 755 "$HOOK_DIR/hook.sh"
   local file="$HOME/.claude/settings.json" tmp cmd="bash \"$HOOK_DIR/hook.sh\""
-  if ! tmp="$( { [ -e "$file" ] && cat "$file" || true; } | jhooks "$cmd" 2>/dev/null)" || [ -z "$tmp" ]; then
-    warn "    $file isn't plain JSON -- hooks not added"; return 1
+  if tmp="$( { [ ! -e "$file" ] || cat "$file"; } 2>/dev/null | jhooks "$cmd" 2>/dev/null)" && [ -n "$tmp" ] \
+    && { mkdir -p "$HOOK_DIR" \
+      && (umask 077; printf 'EUNOMIA_URL=%s\nEUNOMIA_TOKEN=%s\n' "$URL" "$1" > "$HOOK_DIR/env") \
+      && write_hook_script > "$HOOK_DIR/hook.sh" && chmod 755 "$HOOK_DIR/hook.sh" \
+      && printf '%s\n' "$tmp" | write_file "$file"; } 2>/dev/null; then
+    printf '      + hooks   %s (skill each session, recall on every prompt)\n' "$file"
+  else
+    printf '      - hooks   skipped: %s is not editable here (optional, the MCP server carries the skill)\n' "$file"
   fi
-  printf '%s\n' "$tmp" | write_file "$file"
-  printf '      + hooks   %s (skill each session, recall on every prompt)\n' "$file"
 }
 
 # jhooks <command>: stdin settings.json -> with one Eunomia entry per hook event
