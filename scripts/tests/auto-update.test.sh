@@ -181,17 +181,20 @@ check "up never succeeds: the error says why" grep -q 'restart failed: dependenc
 check "up never succeeds: lock released" test ! -e "$S/.lock"
 rm -f "$TMP/up_fails"
 
-# 7. self-heal: backend healthy but the frontend stuck Created (what a failed `up` leaves) gets started
+# 7. self-heal: after a failed update (the marker it leaves), backend healthy but the frontend stuck
+# Created (what a failed `up` leaves) gets started, once
+check "a failed update leaves the heal marker" test -e "$S/heal"
+printf 'backend running starting\nfrontend created \n' > "$TMP/ps"
+: > "$TMP/docker.log"; update
+check "backend not healthy yet: nothing started" test -z "$(ran)"
+check "backend not healthy yet: marker kept" test -e "$S/heal"
 printf 'surrealdb running healthy\nbackend running healthy\nfrontend created \nsurreal-upgrade exited \nupdater running \n' > "$TMP/ps"
 : > "$TMP/docker.log"; update
 check "stuck frontend is started" grep -qx 'compose up -d frontend' "$TMP/docker.log"
 check "the one-shot surreal-upgrade and the updater are left alone" bash -c "! grep -q 'up -d.*\(surreal-upgrade\|updater\)' '$TMP/docker.log'"
-printf 'backend running starting\nfrontend created \n' > "$TMP/ps"
+check "healed: marker cleared" test ! -e "$S/heal"
 : > "$TMP/docker.log"; update
-check "backend not healthy yet: nothing started" test -z "$(ran)"
-printf 'surrealdb running healthy\nbackend running healthy\nfrontend running \nsurreal-upgrade exited \n' > "$TMP/ps"
-: > "$TMP/docker.log"; update
-check "all running: the heal is a no-op" test -z "$(ran)"
+check "no marker: a service stopped by hand stays stopped" test -z "$(cat "$TMP/docker.log")"
 rm -f "$TMP/ps"
 echo "auto-update: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

@@ -42,7 +42,7 @@ main() {
   trap "rmdir '$status_dir/.lock' 2>/dev/null" EXIT
 
   https_apply "$status_dir"
-  heal_stack
+  heal_stack "$status_dir"
 
   # Nothing requested and checked recently: skip the network round-trip.
   if [ ! -f "$status_dir/requested" ] && [ ! -f "$status_dir/check" ] \
@@ -140,6 +140,7 @@ main() {
   # run); it is refreshed last, after the status is written.
   local services
   services="$(docker compose config --services 2>/dev/null | grep -vx updater | tr '\n' ' ')"
+  touch "$status_dir/heal" # cleared once the stack is up; until then each run starts what is left
   if ! docker compose pull backend frontend backup >/dev/null 2>"$status_dir/.last-error" \
     || ! start_stack "$status_dir" "$current" "$latest" $services; then
     write_status "$status_dir" "$latest" "$latest" false "restart failed: $(tail -5 "$status_dir/.last-error")"
@@ -186,19 +187,24 @@ start_stack() {
     try=$((try + 1))
     delay=$((delay * 2)); [ "$delay" -le 120 ] || delay=120
   done
+  rm -f "$dir/heal"
 }
 
-# heal_stack: the backend is healthy but a service sits Created or exited (an interrupted or failed
-# `up`, here or by an older updater): start it. One `docker compose ps` per run, nothing more when
-# everything is up. Skips the updater itself and the one-shot surreal-upgrade.
+# heal_stack <status_dir>: after an update whose `up` failed or was interrupted (the `heal` marker),
+# once the backend is healthy, start any service left Created or exited, then clear the marker.
+# Without the marker it does nothing, so a service stopped by hand stays stopped. Skips the updater
+# itself and the one-shot surreal-upgrade.
 heal_stack() {
   local ps stuck
+  [ -f "$1/heal" ] || return 0
   ps="$(docker compose ps -a --format '{{.Service}} {{.State}} {{.Health}}' 2>/dev/null)" || return 0
   printf '%s\n' "$ps" | grep -q '^backend running healthy' || return 0
   stuck="$(printf '%s\n' "$ps" | awk '$1 != "updater" && $1 != "surreal-upgrade" && ($2 == "created" || $2 == "exited") { print $1 }' | sort -u | tr '\n' ' ')"
-  [ -n "$stuck" ] || return 0
-  echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) starting stuck services: $stuck"
-  docker compose up -d $stuck >/dev/null 2>&1
+  if [ -n "$stuck" ]; then
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) starting stuck services: $stuck"
+    docker compose up -d $stuck >/dev/null 2>&1 || return 0
+  fi
+  rm -f "$1/heal"
 }
 
 # set_env <KEY> <value>: replace or append KEY=value in .env. Callers pass
