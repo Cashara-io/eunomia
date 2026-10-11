@@ -67,7 +67,7 @@ async fn round_trips_per_request() {
         ("recall", 6),
         ("entities_search", 2),
         ("entities_search fact", 2),
-        ("search", 2),
+        ("search", 3), // + the vault membership lookup since search covers several vaults (#93)
         ("memory_write known", 6),
         ("memory_write new", 8),
     ];

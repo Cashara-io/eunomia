@@ -218,7 +218,14 @@ async fn an_interrupted_move_resumes_and_verifies() {
 
     // pretend the process died mid-copy: the org is still `moving` and some rows are missing
     state.control.test_raw().query("UPDATE $t SET status = 'moving'").bind(("t", org.tenant_record())).await.unwrap().check().unwrap();
-    db.test_raw().query("DELETE memory:m2; DELETE cache_record:r1;").await.unwrap().check().unwrap();
+    // the move's CONCURRENTLY index builds may still be running: a write then can conflict, retry it
+    for attempt in 1.. {
+        match db.test_raw().query("DELETE memory:m2; DELETE cache_record:r1;").await.unwrap().check() {
+            Ok(_) => break,
+            Err(e) if attempt < 20 && e.to_string().contains("conflict") => tokio::time::sleep(std::time::Duration::from_millis(50)).await,
+            Err(e) => panic!("{e}"),
+        }
+    }
     state.pool.evict(&org);
     assert_eq!(state.pool.for_org(&org).await.err().unwrap().code, ErrorCode::TenantNotFound, "a half-moved org is not served");
 

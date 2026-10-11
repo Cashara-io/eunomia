@@ -318,7 +318,8 @@ pub async fn call(app: &AppState, user: &User, name: &str, mut args: Value) -> A
     let started = Instant::now();
     let source = Default::default();
     let captured = args.clone();
-    let mut result = crate::error::TOOL_SOURCE.scope(Arc::clone(&source), run_tool(state, owner, name, spec, args)).instrument(span.clone()).await;
+    // Boxed: the match over every tool is a large future, past a 2 MB stack in debug builds.
+    let mut result = crate::error::TOOL_SOURCE.scope(Arc::clone(&source), Box::pin(run_tool(state, owner, name, spec, args))).instrument(span.clone()).await;
 
     // Every failed tool value carries a stable `code` and the request's `trace_id`.
     if let Ok(Value::Object(map)) = &mut result
