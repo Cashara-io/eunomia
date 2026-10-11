@@ -32,6 +32,7 @@ User tiers: `whale` (user 0), `mid` (top 15 percent), `small` (the rest). Every 
 
 - `steady.js`: constant mix of recall (60 percent), search (30), write (10) across all tiers.
 - `burst.js`: ramping-arrival-rate of writes, with a recall probe alongside.
+- `mcp-mix.js`: saturation over `/mcp` from `VUS` (default 250) agents sharing `TOKENS` (default 4) tokens: recall 30 percent, entities_search 20, memory_write 15, search 15, tools/list 20, no think time, against `ENTITIES`/`MEMORIES` (750/1500) per user seeded in setup. Start the backend with `RATE_LIMIT_TOKEN_PER_MIN=0 RATE_LIMIT_USER_PER_MIN=0` (and `RATE_LIMIT_AUTH_PER_MIN` above `TOKENS`), or the per-token limit refuses most calls. Prints req/s, p50/p95/p99 and the error rate per op; `ONLY=<op>` runs one op alone. Database round trips per request: `cd backend && cargo test --release --test round_trips -- --nocapture`.
 - `noisy.js`: phase 1 small users alone (baseline). Phase 2 the same small users while the whale runs 20 VUs of recall/search with no think time.
 
 ## Thresholds

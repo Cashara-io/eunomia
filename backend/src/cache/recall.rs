@@ -541,22 +541,12 @@ pub async fn recall(
     let time_range = validate(query, time_range, limit, max_tokens)?;
     let pool = limit.saturating_mul(4).max(40);
 
-    let mut vaults = Vec::new();
-    match vault_id {
-        Some(v) => vaults.push(v.clone()),
-        None => vaults.extend(vaults_service::default_read_vault_ids(db, owner).await?),
-    }
-    for v in vaults.iter_mut() {
-        *v = crate::authz::authorize(db, owner, crate::authz::Action::ReadMemories, v).await?.vault().clone();
-    }
-    let personal_vault = vaults_service::personal_vault_id(db, owner).await?;
-    let names: HashMap<String, String> =
-        vaults_service::list_my_vaults(db, owner).await?.into_iter().map(|v| (v.id, v.name)).collect();
+    let scope = vaults_service::read_scope(db, owner, vault_id).await?;
 
     let mut scored = Vec::new();
-    for vault in &vaults {
-        let mut hits = recall_in(db, settings, owner, query, time_range, pool, types, vault, *vault == personal_vault).await?;
-        let (id, name) = (vault.to_string(), names.get(&vault.to_string()).cloned().unwrap_or_default());
+    for vault in &scope.vaults {
+        let mut hits = recall_in(db, settings, owner, query, time_range, pool, types, vault, *vault == scope.personal).await?;
+        let (id, name) = (vault.to_string(), scope.names.get(&vault.to_string()).cloned().unwrap_or_default());
         for h in &mut hits {
             (h.vault, h.vault_name) = (id.clone(), name.clone());
         }

@@ -19,6 +19,7 @@
 //! logging entirely either way.
 
 use std::collections::HashMap;
+use std::future::IntoFuture;
 use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 
@@ -122,7 +123,7 @@ pub fn description(name: &str) -> &'static str {
         "entities_graph" => "Get the entity relationship graph (nodes and edges), optionally restricted to some entity kinds or a vault.",
         "code_entity_upsert" => "Find-or-create a code entity -- a repository, file or symbol -- matched case-insensitively by name, with a short summary. `parent_id` links a file to its repository or a symbol to its file. Returns the entity id.",
         "code_relate" => "Record a labelled relation between two entities, e.g. symbol `calls` symbol, file `imports` file.",
-        "memory_write" => "Remember a fact about a person, organisation, location or code entity (created if new; \"Jane Doe (Acme/JD)\" resolves to an existing \"Jane Doe\", adding the parts as aliases). Type `world` for objective facts, `experience` for things that happened, `observation` for stable patterns. Writes to the personal vault unless `vault_id` is given. The result lists `superseded`: earlier facts about the subject this one made no longer true (left out of recall from now on), and, when a new entity was created, `possible_duplicates`: similar existing entities to `entity_merge`.",
+        "memory_write" => "Remember a fact about a person, organisation, location or code entity (created if new; \"Jane Doe (Acme/JD)\" resolves to an existing \"Jane Doe\", adding the parts as aliases). Type `world` for objective facts, `experience` for things that happened, `observation` for stable patterns. Writes to the personal vault unless `vault_id` is given. Earlier facts about the subject this one makes no longer true are marked superseded in the background (left out of recall from then on). When a new entity was created, the result lists `possible_duplicates`: similar existing entities to `entity_merge`.",
         "consolidate_observations" => "Fold an entity's new raw facts into its consolidated observation (or do it for every entity with new facts when `subject_id` is omitted).",
         "memory_update" => "Edit one memory by id: change its `text`, and/or switch a raw fact between `world` and `experience`. To revise an entity's consolidated belief, `memory_write` with type `observation` instead.",
         "entity_update" => "Edit an entity's `name`, `aliases` (replaces the list) and/or `summary`.",
@@ -182,15 +183,16 @@ fn summarize_args(tool_name: &str, args: &Value) -> String {
 /// append-only `audit_event` row with the actor, the outcome code and the trace id.
 pub(crate) async fn record_audit(state: &OrgState, owner: &RecordId, tool_name: &str, args: &Value, outcome: &str, code: &str) {
     let summary = summarize_args(tool_name, args);
-    let _ = store::cache::RECORD_AUDIT
+    let detail = control_detail(args);
+    // the two rows go to different databases: write them side by side, not one after the other
+    let org_row = store::cache::RECORD_AUDIT
         .on(&state.db)
         .bind(("owner", owner.clone()))
         .bind(("tool_name", tool_name.to_string()))
-        .bind(("args_summary", summary.clone()))
-        .bind(("outcome", outcome.to_string()))
-        .await;
+        .bind(("args_summary", summary))
+        .bind(("outcome", outcome.to_string()));
     // the control database is shared across orgs: no tenant text, only the argument names and a hash
-    record_event(&state.control, owner, tool_name, code, &control_detail(args)).await;
+    let _ = tokio::join!(org_row.into_future(), record_event(&state.control, owner, tool_name, code, &detail));
 }
 
 /// What the cross-org `audit_event` keeps of a call's arguments: their keys and a hash, never values.

@@ -106,10 +106,18 @@ pub fn is_access_token(token: &str) -> bool {
     token.starts_with(ACCESS_PREFIX)
 }
 
+/// A verified OAuth access token: whose it is, what it may do, and which client and grant it belongs to.
+pub struct VerifiedAccess {
+    pub user: User,
+    pub scopes: Vec<String>,
+    pub client_id: String,
+    pub grant: surrealdb::types::RecordId,
+    pub expires_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
 /// Verify an OAuth access token presented on `/mcp`: known, unexpired, grant
-/// still present, and issued for this server's MCP URL. Returns the user and
-/// the scopes they granted.
-pub async fn verify_access_token(state: &AppState, token: &str) -> Option<(User, Vec<String>)> {
+/// still present, and issued for this server's MCP URL.
+pub async fn verify_access_token(state: &AppState, token: &str) -> Option<VerifiedAccess> {
     let row = server::token_row(&state.control, token).await?;
     if row.kind != "access" || row.expired || row.resource.as_deref() != Some(mcp_url(&state.settings).as_str()) {
         return None;
@@ -121,9 +129,19 @@ pub async fn verify_access_token(state: &AppState, token: &str) -> Option<(User,
         email: String,
     }
     let user: UserRow = crate::store::get_control(&state.control, &owner).await.ok()??;
-    let _ = crate::store::control::OAUTH_GRANT_TOUCH.on(&state.control).bind(("id", row.family)).await;
+    // at most once a minute (the statement checks), and the request does not wait for it
+    let (control, grant) = (state.control.clone(), row.family.clone());
+    tokio::spawn(async move {
+        let _ = crate::store::control::OAUTH_GRANT_TOUCH.on(&control).bind(("id", grant)).await;
+    });
     let user = crate::models_user::load_user(&state.control, user.id, user.email).await.ok()?;
-    Some((user, row.scope.unwrap_or_default()))
+    Some(VerifiedAccess {
+        user,
+        scopes: row.scope.unwrap_or_default(),
+        client_id: row.client_id.unwrap_or_default(),
+        grant: row.family,
+        expires_at: row.expires_at.map(chrono::DateTime::from),
+    })
 }
 
 /// 403 `insufficient_scope` when a `tools/call` in `message` (single or batch)

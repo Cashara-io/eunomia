@@ -78,6 +78,10 @@ impl Stmt<Control> {
 #[cfg(feature = "test-support")]
 pub static DYNAMIC_SEEN: std::sync::Mutex<std::collections::BTreeSet<&'static str>> = std::sync::Mutex::new(std::collections::BTreeSet::new());
 
+/// Statements sent to the database since the process started; `tests/round_trips.rs` counts them per request.
+#[cfg(feature = "test-support")]
+pub static SENT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 /// For the few statements whose text is built at runtime (a table name or
 /// an optional clause). Still named, so they still trace.
 // ponytail: not covered by every_query_executes; `tests/dynamic_queries.rs` drives each builder instead. Keep these rare.
@@ -169,9 +173,14 @@ impl<'a> IntoFuture for Q<'a> {
             Scope::Org(o) => o.key(),
             _ => String::new(),
         };
+        #[cfg(feature = "test-support")]
+        SENT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let span = tracing::info_span!("store.query", op = self.name, org = %org, duration_ms = tracing::field::Empty, ok = tracing::field::Empty);
+        let limited = !matches!(self.scope, Scope::Root);
         Box::pin(
             async move {
+                // provisioning and migrations (root) are rare and may run long: they do not queue
+                let _slot = if limited { in_flight().acquire().await.ok() } else { None };
                 let started = Instant::now();
                 let res = self.inner.await.and_then(surface_root_cause);
                 let span = tracing::Span::current();
@@ -182,6 +191,19 @@ impl<'a> IntoFuture for Q<'a> {
             .instrument(span),
         )
     }
+}
+
+/// Statements one process has at the database at once (`EUNOMIA_DB_INFLIGHT`, default 32); the rest
+/// wait here in arrival order. Past the server's cores more parallel queries only share its CPU, so a
+/// heavy one (a full-text recall arm, an entity scan) finishes ever later behind a crowd of light ones
+/// and requests time out at the tail; queueing in order keeps the tail close to the median. A permit
+/// is held for one statement only, never while waiting for another, so it cannot deadlock.
+fn in_flight() -> &'static tokio::sync::Semaphore {
+    static SLOTS: std::sync::OnceLock<tokio::sync::Semaphore> = std::sync::OnceLock::new();
+    SLOTS.get_or_init(|| {
+        let n = std::env::var("EUNOMIA_DB_INFLIGHT").ok().and_then(|v| v.trim().parse().ok()).filter(|n: &usize| *n > 0).unwrap_or(32);
+        tokio::sync::Semaphore::new(n)
+    })
 }
 
 /// When a transaction fails to commit, SurrealDB marks every statement in it "not executed due to a

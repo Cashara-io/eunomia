@@ -37,6 +37,8 @@ pub mod kind {
     pub const MIGRATE_TENANT: &str = "migrate_tenant";
     /// Extract, chunk and index one revision of an uploaded document (`documents::index_job`).
     pub const INDEX_DOCUMENT: &str = "index_document";
+    /// Mark the earlier facts a newly written one makes no longer true (`entities::supersede`).
+    pub const SUPERSEDE: &str = "supersede";
 }
 
 /// Which loops this process runs (`EUNOMIA_ROLE`). `all` keeps the one-container install working.

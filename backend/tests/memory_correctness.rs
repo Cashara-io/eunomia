@@ -352,3 +352,51 @@ async fn a_failing_merge_rolls_back_and_a_merge_of_two_observed_entities_leaves_
         assert_eq!(n.unwrap_or(0), 0, "dangling rows");
     }
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn entity_search_orders_name_hits_by_vault_kind_and_name_then_fact_mentions_and_pages_them() {
+    let app = TestApp::new().await;
+    app.tool("vault_create", json!({"name": "Acme"})).await;
+    let write = |name: &str, kind: &str, text: &str, vault: Option<&str>| {
+        let mut args = json!({"subject_name": name, "subject_kind": kind, "text": text});
+        if let Some(v) = vault {
+            args["vault_id"] = json!(v);
+        }
+        args
+    };
+    for args in [
+        write("Bob Quill", "person", "Bob writes", None),
+        write("Dan", "person", "Dan edits", None),
+        write("Quill Press", "organisation", "a printer", None),
+        write("Carl", "person", "met Carl at the quill conference", None),
+        write("Erin", "person", "Erin reads", None),
+        write("Ann Quill", "person", "Ann prints", Some("Acme")),
+    ] {
+        app.tool("memory_write", args).await;
+    }
+    let dan = app.tool("entities_search", json!({"query": "Dan"})).await["results"][0]["id"].as_str().unwrap().to_string();
+    app.tool("entity_update", json!({"entity_id": dan, "aliases": ["QUILLMASTER"]})).await;
+
+    let names = |v: &Value| v["results"].as_array().unwrap().iter().map(|e| e["name"].as_str().unwrap().to_string()).collect::<Vec<_>>();
+    // personal vault first (people by name, then organisations), then the org vault, then fact mentions
+    let all = app.tool("entities_search", json!({"query": "QUILL"})).await;
+    assert_eq!(names(&all), ["Bob Quill", "Dan", "Quill Press", "Ann Quill", "Carl"], "{all}");
+    assert_eq!((all["total"].as_u64(), all["has_more"].as_bool()), (Some(5), Some(false)));
+
+    let first = app.tool("entities_search", json!({"query": "quill", "limit": 2})).await;
+    assert_eq!(names(&first), ["Bob Quill", "Dan"]);
+    assert_eq!((first["total"].as_u64(), first["has_more"].as_bool()), (Some(5), Some(true)));
+    let last = app.tool("entities_search", json!({"query": "quill", "limit": 2, "offset": 3})).await;
+    assert_eq!(names(&last), ["Ann Quill", "Carl"]);
+    assert_eq!(last["has_more"], json!(false));
+    let past = app.tool("entities_search", json!({"query": "quill", "offset": 9})).await;
+    assert_eq!((names(&past).len(), past["total"].as_u64()), (0, Some(5)));
+
+    let orgs = app.tool("entities_search", json!({"query": "quill", "kind": "organisation"})).await;
+    assert_eq!(names(&orgs), ["Quill Press"]);
+    let acme = app.tool("entities_search", json!({"query": "quill", "vault_id": "Acme"})).await;
+    assert_eq!(names(&acme), ["Ann Quill"]);
+    // an empty query lists everything in the same order
+    let every = app.tool("entities_search", json!({"query": ""})).await;
+    assert_eq!(names(&every), ["Bob Quill", "Carl", "Dan", "Erin", "Quill Press", "Ann Quill"]);
+}

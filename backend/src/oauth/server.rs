@@ -304,6 +304,9 @@ pub struct TokenRow {
     pub kind: String,
     pub family: RecordId,
     pub expired: bool,
+    #[serde(default)]
+    #[surreal(default)]
+    pub expires_at: Option<Datetime>,
     pub used_at: Option<Datetime>,
     pub owner: Option<RecordId>,
     pub client_id: Option<String>,
@@ -327,7 +330,9 @@ fn required<'a>(v: &'a Option<String>, name: &str) -> Result<&'a str, OAuthError
     v.as_deref().filter(|s| !s.is_empty()).ok_or_else(|| OAuthError::bad("invalid_request", format!("{name} is required")))
 }
 
-async fn revoke_family(db: &ControlDb, family: &RecordId, owner: &RecordId) -> Result<(), OAuthError> {
+async fn revoke_family(state: &AppState, family: &RecordId, owner: &RecordId) -> Result<(), OAuthError> {
+    let db = &state.control;
+    state.credentials.forget(&family.to_string());
     q::OAUTH_GRANT_DELETE.on(db).bind(("id", family.clone())).bind(("owner", owner.clone())).await.map_err(OAuthError::server)?;
     q::OAUTH_TOKENS_DELETE_FAMILY.on(db).bind(("family", family.clone())).await.map_err(OAuthError::server)?;
     Ok(())
@@ -423,7 +428,7 @@ async fn exchange_code(state: &AppState, f: &TokenForm) -> Result<Response, OAut
         if let Some(m) = res.take::<Vec<Marker>>(0).map_err(OAuthError::server)?.into_iter().next()
             && let Some(grant) = m.grant_id
         {
-            revoke_family(&state.control, &grant, &m.owner).await?;
+            revoke_family(state, &grant, &m.owner).await?;
         }
         return Err(OAuthError::grant("unknown or already used authorization code"));
     };
@@ -476,7 +481,7 @@ async fn refresh(state: &AppState, f: &TokenForm) -> Result<Response, OAuthError
     }
     // A spent token coming back means two parties hold it: kill the whole grant.
     if row.used_at.is_some() {
-        revoke_family(&state.control, &row.family, &owner).await?;
+        revoke_family(state, &row.family, &owner).await?;
         return Err(OAuthError::grant("refresh token reuse detected; the grant was revoked"));
     }
     if row.expired {
@@ -495,7 +500,7 @@ async fn refresh(state: &AppState, f: &TokenForm) -> Result<Response, OAuthError
     }
     let mut res = q::OAUTH_TOKEN_SPEND.on(&state.control).bind(("id", row.id)).await.map_err(OAuthError::server)?;
     if res.take::<Vec<Gone>>(0).map_err(OAuthError::server)?.is_empty() {
-        revoke_family(&state.control, &row.family, &owner).await?;
+        revoke_family(state, &row.family, &owner).await?;
         return Err(OAuthError::grant("refresh token reuse detected; the grant was revoked"));
     }
     let tokens = issue_tokens(state, &row.family, Some(&scope)).await.map_err(OAuthError::server)?;
@@ -518,9 +523,10 @@ pub async fn revoke(State(state): State<AppState>, Form(f): Form<RevokeForm>) ->
     {
         if row.kind == "refresh" {
             if let Some(owner) = &row.owner {
-                revoke_family(&state.control, &row.family, owner).await?;
+                revoke_family(&state, &row.family, owner).await?;
             }
         } else {
+            state.credentials.forget_presented(token);
             q::OAUTH_TOKEN_DELETE.on(&state.control).bind(("id", row.id)).await.map_err(OAuthError::server)?;
         }
     }

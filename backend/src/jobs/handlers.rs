@@ -25,6 +25,7 @@ pub fn registry() -> Registry {
         .register(kind::PRUNE_AUTH, prune_auth)
         .register(kind::MIGRATE_TENANT, migrate_tenant)
         .register(kind::INDEX_DOCUMENT, crate::documents::index_job)
+        .register(kind::SUPERSEDE, supersede)
 }
 
 /// The org database a job works in. A missing org is permanent; a database that is not ready or is
@@ -137,6 +138,27 @@ async fn consolidate_subject(state: AppState, job: Job) -> Result<(), JobError> 
     let mission = consolidate::observations_mission(db, &job.owner).await?;
     consolidate::consolidate_subject(db, &state.settings, &job.owner, &subject, Some(&mission)).await?;
     Ok(())
+}
+
+/// The check `memory_write` used to wait for: earlier facts about `subject` the new `memory` makes
+/// untrue are marked superseded (and the subject's observation stale, so consolidation rebuilds it).
+/// Best effort like the rest of the enrichment: a failed model call marks nothing.
+async fn supersede(state: AppState, job: Job) -> Result<(), JobError> {
+    let state = org_state(&state, &job).await?;
+    let parse = |field| {
+        payload_str(&job, field).and_then(|v| crate::rid::parse(v).map_err(|_| JobError::permanent(ErrorCode::ValidationInvalid, format!("bad {field} id"))))
+    };
+    let (subject, memory) = (parse("subject")?, parse("memory")?);
+    crate::entities::supersede::check(&state.db, &state.settings, &job.owner, &subject, &[memory]).await;
+    Ok(())
+}
+
+/// One supersede check per written fact.
+pub fn supersede_job(org: crate::pool::OrgId, owner: &RecordId, subject: &RecordId, memory: &RecordId) -> NewJob {
+    let key = format!("{}:{}:{}", kind::SUPERSEDE, org.key(), memory.to_string());
+    NewJob::new(kind::SUPERSEDE, owner.clone(), key)
+        .in_org(org)
+        .payload(json!({ "subject": subject.to_string(), "memory": memory.to_string() }))
 }
 
 /// Queue entity extraction for a freshly written cache record. `hash` is its content hash, so an

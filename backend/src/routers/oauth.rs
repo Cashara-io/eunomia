@@ -198,6 +198,7 @@ async fn revoke_grant(State(state): State<AppState>, user: User, Path(grant_id):
         return Err(AppError::coded(ErrorCode::ResourceNotFound, "No such connected app."));
     }
     crate::store::control::OAUTH_TOKENS_DELETE_FAMILY.on(&state.control).bind(("family", id.clone())).await?.check()?;
+    state.credentials.forget(&id.to_string());
     crate::audit::record_as_caller(&state.control, &user_id, "oauth.grant_revoke", &id.to_string(), "ok").await;
     Ok(Json(crate::openapi::DeletedBody { deleted: true }))
 }

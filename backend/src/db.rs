@@ -27,6 +27,18 @@ pub(crate) async fn connect_raw(settings: &Settings, config: surrealdb::opt::Con
     })
 }
 
+/// Connections the pool opens to a server (`EUNOMIA_DB_CONNECTIONS`, default 8): every database
+/// handle is signed in once on each, and statements take them in turn (see `pool::Sessions`). The
+/// in-memory engine gets one (a second `mem://` would be a second, empty database).
+pub(crate) async fn connect_all(settings: &Settings, config: surrealdb::opt::Config) -> surrealdb::Result<Vec<Db>> {
+    let n = if settings.surreal_url.starts_with("mem://") {
+        1
+    } else {
+        std::env::var("EUNOMIA_DB_CONNECTIONS").ok().and_then(|v| v.trim().parse().ok()).filter(|n: &usize| *n > 0).unwrap_or(8)
+    };
+    futures::future::try_join_all((0..n).map(|_| connect_raw(settings, config.clone()))).await
+}
+
 /// The client refuses a SurrealDB 2.x server with a bare "server version ... does not match" text.
 /// Name the way out instead of leaving the operator to decode it.
 fn old_server_hint(err: &str) -> Option<String> {

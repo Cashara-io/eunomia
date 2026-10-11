@@ -165,8 +165,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     Err(e) => return Ok(e),
                 };
                 let result = entities_tools::memory_write(
-                    &state.db,
-                    &state.settings,
+                    state,
                     owner,
                     &a.subject_name,
                     &a.subject_kind,

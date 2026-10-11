@@ -265,6 +265,7 @@ async fn tokens_are_audience_bound() {
     let access = t["access_token"].as_str().unwrap();
     assert_eq!(mcp(&app, access, rpc("ping", json!({}))).await.status, StatusCode::OK);
     app.state.control.test_raw().query("UPDATE oauth_grant SET resource = 'https://other.example/mcp'").await.unwrap();
+    app.state.credentials.clear(); // a hand edit reaches a cached token only once its entry ages out
     assert_eq!(mcp(&app, access, rpc("ping", json!({}))).await.status, StatusCode::UNAUTHORIZED);
 }
 
@@ -274,6 +275,7 @@ async fn expired_access_tokens_and_codes_are_rejected() {
     let (_, t) = connect(&app, None).await;
     let access = t["access_token"].as_str().unwrap();
     app.state.control.test_raw().query("UPDATE oauth_token SET expires_at = time::now() - 1m WHERE kind = 'access'").await.unwrap();
+    app.state.credentials.clear(); // a hand edit reaches a cached token only once its entry ages out
     assert_eq!(mcp(&app, access, rpc("ping", json!({}))).await.status, StatusCode::UNAUTHORIZED);
 
     let client_id = register(&app).await;

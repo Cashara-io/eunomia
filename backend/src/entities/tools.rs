@@ -12,20 +12,14 @@ use crate::rid::RecordIdExt;
 
 use crate::config::Settings;
 use crate::pool::{ControlDb, OrgDb};
+use crate::state::OrgState;
 use crate::error::AppResult;
 
 use super::{consolidate, service};
 
-/// Case-insensitive substring match against an entity's name or any alias --
-/// split out as a pure function so the search filter is unit-testable.
-fn matches_search(name: &str, aliases: &[String], needle: &str) -> bool {
-    if needle.is_empty() {
-        return true;
-    }
-    let needle = needle.to_lowercase();
-    name.to_lowercase().contains(&needle) || aliases.iter().any(|a| a.to_lowercase().contains(&needle))
-}
-
+/// Entities whose name or an alias contains `query` (case-insensitively), then the ones a fact
+/// mentions it in, in the caller's personal vault plus every org vault they belong to (or `vault_id`).
+/// One round trip; only the page leaves the database (see `store::entities::search_entities`).
 pub async fn entities_search(
     db: &OrgDb,
     owner: &RecordId,
@@ -38,29 +32,8 @@ pub async fn entities_search(
     let needle = query.trim();
     // No vault given: the personal vault plus every org vault the caller
     // belongs to, so org facts aren't invisible to a lookup without `vault_id`.
-    let vaults = match vault_id {
-        Some(v) => vec![v.clone()],
-        None => crate::vaults::service::default_read_vault_ids(db, owner).await?,
-    };
-    // Name/alias matches first, then entities a fact mentions it in.
-    let mut hits = Vec::new();
-    let mut mentioned = Vec::new();
-    for vault in &vaults {
-        let page = service::list_entities(db, owner, kind, Some(vault), None, 0).await?;
-        let in_facts = if needle.is_empty() { Default::default() } else { service::subjects_mentioning(db, vault, needle).await? };
-        for r in page.results {
-            if matches_search(&r.name, &r.aliases, needle) {
-                hits.push(r);
-            } else if in_facts.contains(&r.id) {
-                mentioned.push(r);
-            }
-        }
-    }
-    hits.extend(mentioned);
-    let total = hits.len();
-    let sliced: Vec<service::EntityOut> = hits.into_iter().skip(offset).take(limit).collect();
-    let has_more = offset + sliced.len() < total;
-    Ok(service::ListEntitiesOut { results: sliced, total, has_more })
+    let vaults = crate::vaults::service::read_scope(db, owner, vault_id).await?.vaults;
+    service::search_entities(db, &vaults, needle, kind, limit, offset).await
 }
 
 pub async fn entities_get(db: &OrgDb, control: &ControlDb, owner: &RecordId, id: &RecordId) -> AppResult<Option<service::EntityDetail>> {
@@ -103,12 +76,11 @@ pub async fn code_relate(
     service::add_relation(db, owner, from_id, to_id, label, source_record_id).await
 }
 
-/// Writes the fact, then has the chat model mark earlier facts about the
-/// subject it makes no longer true (see `supersede`).
+/// Writes the fact. With a chat model, a `supersede` job then marks the earlier facts about the
+/// subject it makes no longer true (see `supersede`); the write does not wait for the model.
 #[allow(clippy::too_many_arguments)]
 pub async fn memory_write(
-    db: &OrgDb,
-    settings: &Settings,
+    state: &OrgState,
     owner: &RecordId,
     subject_name: &str,
     subject_kind: &str,
@@ -117,11 +89,11 @@ pub async fn memory_write(
     mem_type: &str,
     vault_id: Option<&RecordId>,
 ) -> AppResult<service::WriteMemoryOut> {
-    let mut out = service::write_memory(db, owner, subject_name, subject_kind, text, source_record_id, mem_type, vault_id).await?;
-    if out.memory.mem_type != "observation" {
+    let out = service::write_memory(&state.db, owner, subject_name, subject_kind, text, source_record_id, mem_type, vault_id).await?;
+    if out.memory.mem_type != "observation" && super::supersede::enabled(&state.db, &state.settings, owner).await {
         let subject = crate::rid::parse(&out.entity.id).map_err(|_| crate::error::AppError::internal("entity id did not round-trip"))?;
-        let new = crate::rid::parse(&out.memory.id).map_err(|_| crate::error::AppError::internal("memory id did not round-trip"))?;
-        out.superseded = super::supersede::check(db, settings, owner, &subject, &[new]).await.iter().map(|r| r.to_string()).collect();
+        let memory = crate::rid::parse(&out.memory.id).map_err(|_| crate::error::AppError::internal("memory id did not round-trip"))?;
+        crate::jobs::enqueue_lossy(&state.control, crate::jobs::handlers::supersede_job(state.db.org(), owner, &subject, &memory)).await;
     }
     Ok(out)
 }
@@ -220,24 +192,6 @@ pub async fn consolidate_observations(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn matches_search_matches_name_case_insensitively() {
-        assert!(matches_search("Alice Smith", &[], "alice"));
-        assert!(matches_search("Alice Smith", &[], "SMITH"));
-        assert!(!matches_search("Alice Smith", &[], "bob"));
-    }
-
-    #[test]
-    fn matches_search_checks_aliases_too() {
-        assert!(matches_search("Robert", &["Bob".to_string(), "Bobby".to_string()], "bob"));
-        assert!(!matches_search("Robert", &["Bobby".to_string()], "xyz"));
-    }
-
-    #[test]
-    fn matches_search_empty_needle_matches_everything() {
-        assert!(matches_search("Anything", &[], ""));
-    }
 
     #[test]
     fn consolidate_out_default_is_all_empty() {
