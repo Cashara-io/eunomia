@@ -51,7 +51,8 @@ then `recall` leaves it out (`entities_get` still shows it, with
 `status: "stale"`).
 
 **Outdated facts.** When new facts arrive (`memory_write`, or a sync), the
-chat model checks them against the entity's earlier facts. An earlier fact a
+chat model checks them against the entity's earlier facts, in the background
+(a few seconds after the write). An earlier fact a
 newer one shows is no longer true ("no access to the repo", then "was granted
 access") is marked `status: "superseded"`: `recall` leaves it out,
 `entities_get` still shows it, and editing it makes it current again. Recall

@@ -60,4 +60,19 @@ async fn round_trips_per_request() {
     for (label, cold, warm) in &rows {
         println!("{label:<22} {cold:>5} {warm:>5}");
     }
+    // Before the hot-path work (v2.0.2): 4, 14, 14, 14, 6, 12, 14 (the four of every request were
+    // authentication). A verified token now costs nothing until its cache entry ages out.
+    let ceilings = [
+        ("tools/list", 0),
+        ("recall", 6),
+        ("entities_search", 2),
+        ("entities_search fact", 2),
+        ("search", 2),
+        ("memory_write known", 6),
+        ("memory_write new", 8),
+    ];
+    for ((label, _, warm), (name, most)) in rows.iter().zip(ceilings) {
+        assert_eq!(*label, name);
+        assert!(*warm <= most, "{label}: {warm} round trips, at most {most} expected");
+    }
 }

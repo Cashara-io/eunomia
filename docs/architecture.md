@@ -261,7 +261,8 @@ An observation is an evolving synthesis for one entity, with source-memory
 lineage, proof count and versioning. Changing raw facts marks that synthesis
 stale, and the scheduler queues a consolidation job for it. Consolidation
 rebuilds it from surviving facts, and a configured chat model can mark
-contradicted earlier facts as superseded, both on `memory_write` and during
+contradicted earlier facts as superseded, both in a background job after
+`memory_write` (the write does not wait for the model) and during
 consolidation. Those facts
 remain inspectable through entity retrieval. Without a chat model,
 contradiction detection does not run.

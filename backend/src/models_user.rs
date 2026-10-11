@@ -411,11 +411,11 @@ pub async fn check_api_token(db: &ControlDb, token: &str) -> AppResult<TokenChec
         return Ok(TokenCheck::Expired);
     }
 
-    // Best-effort bump; failure here must not block auth.
-    let _ = store::control::AUTH_TOKEN_TOUCH
-        .on(db)
-        .bind(("id", row.id.clone()))
-        .await;
+    // Best-effort bump, at most once a minute (the statement checks); the request does not wait for it.
+    let (control, id) = (db.clone(), row.id.clone());
+    tokio::spawn(async move {
+        let _ = store::control::AUTH_TOKEN_TOUCH.on(&control).bind(("id", id)).await;
+    });
 
     let owner_row: Option<UserRow> = store::get_control(db, &row.owner).await?;
     Ok(match owner_row {

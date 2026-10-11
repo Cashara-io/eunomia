@@ -354,18 +354,21 @@ async fn expired_session_is_401_and_live_one_slides_at_most_hourly() {
 
     // used within the hour: not extended
     app.state.control.test_raw().query("UPDATE session SET expires_at = time::now() + 29d + 23h + 30m").await.unwrap().check().unwrap();
+    app.state.credentials.clear(); // a hand edit reaches a cached session only once its entry ages out
     send(&app.router, "GET", "/api/auth/me", None, &c).await;
     let secs = session_expiry_secs_from_now(&app).await;
     assert!(secs < 29 * day + 23 * 3600 + 31 * 60, "not extended, got {secs}s");
 
     // idle for a while: extended back to the full window
     app.state.control.test_raw().query("UPDATE session SET expires_at = time::now() + 10d").await.unwrap().check().unwrap();
+    app.state.credentials.clear(); // a hand edit reaches a cached session only once its entry ages out
     send(&app.router, "GET", "/api/auth/me", None, &c).await;
     let secs = session_expiry_secs_from_now(&app).await;
     assert!(secs > 29 * day, "slid forward, got {secs}s");
 
     // past expiry: rejected
     app.state.control.test_raw().query("UPDATE session SET expires_at = time::now() - 1m").await.unwrap().check().unwrap();
+    app.state.credentials.clear(); // a hand edit reaches a cached session only once its entry ages out
     let (status, _, body) = send(&app.router, "GET", "/api/auth/me", None, &c).await;
     assert_eq!((status, body["code"].as_str()), (StatusCode::UNAUTHORIZED, Some("auth.session_expired")));
 }

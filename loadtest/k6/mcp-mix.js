@@ -91,9 +91,12 @@ function call(token, op, body) {
 }
 
 // recall 30, entities_search 20, memory_write 15, search 15, tools/list 20 (percent)
+// ONLY=<op> runs just that op (to see what one costs under the same concurrency)
+const ONLY = __ENV.ONLY ? [0, 0.3, 0.5, 0.65, 0.8][OPS.indexOf(__ENV.ONLY)] : undefined;
+
 export function mix(data) {
   const token = pick(data.tokens);
-  const r = Math.random();
+  const r = ONLY === undefined ? Math.random() : ONLY;
   if (r < 0.3) call(token, "recall", toolCall(1, "recall", { query: `${pick(FIRST)} ${pick(TOPICS)}`, limit: 10 }));
   else if (r < 0.5) call(token, "entities_search", toolCall(1, "entities_search", { query: Math.random() < 0.5 ? pick(FIRST) : pick(LAST), limit: 20 }));
   else if (r < 0.65) call(token, "memory_write", toolCall(1, "memory_write", writeArgs(Math.floor(Math.random() * 1e6), ENTITIES, `vu${__VU}`)));

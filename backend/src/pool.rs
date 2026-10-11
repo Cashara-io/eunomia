@@ -10,7 +10,7 @@
 //! module or the request path signs in as root: that is `provisioning/` alone.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use hmac::{Hmac, Mac};
@@ -107,34 +107,59 @@ impl<'de> Deserialize<'de> for OrgId {
     }
 }
 
+/// One database signed in once per server connection. SurrealDB works through one connection's
+/// requests largely one at a time, so a single connection caps the whole process at what one core does
+/// (measured: a 10 ms query ran ~100/s over 1 connection, ~310/s over 8). Statements take the
+/// connections in turn; each is a self-contained query, so none depends on which one it ran on.
+pub(crate) struct Sessions {
+    dbs: Vec<Db>,
+    next: AtomicUsize,
+}
+
+impl Sessions {
+    fn new(dbs: Vec<Db>) -> Self {
+        Sessions { dbs, next: AtomicUsize::new(0) }
+    }
+
+    fn pick(&self) -> &Db {
+        &self.dbs[self.next.fetch_add(1, Ordering::Relaxed) % self.dbs.len()]
+    }
+
+    /// The first session: for tests that run raw statements, on any one connection.
+    #[cfg(feature = "test-support")]
+    fn first(&self) -> &Db {
+        &self.dbs[0]
+    }
+}
+
 /// The control database, signed in as its database user.
 #[derive(Clone)]
 pub struct ControlDb {
-    raw: Arc<Db>,
+    raw: Arc<Sessions>,
 }
 
 /// One org's database, signed in as that org's database user.
 #[derive(Clone)]
 pub struct OrgDb {
-    raw: Arc<Db>,
+    raw: Arc<Sessions>,
     org: OrgId,
 }
 
 impl ControlDb {
     /// The raw client. The `RawKey` token can only be made inside `store/`, so nothing else compiles a call.
     pub(crate) fn raw(&self, _: crate::store::RawKey) -> &Db {
-        &self.raw
+        self.raw.pick()
     }
 
     #[cfg(feature = "test-support")]
     pub fn test_raw(&self) -> &Db {
-        &self.raw
+        self.raw.first()
     }
 }
 
 impl OrgDb {
     pub(crate) fn raw(&self, _: crate::store::RawKey) -> &Db {
-        &self.raw
+        self.raw.pick()
     }
 
     pub fn org(&self) -> OrgId {
@@ -143,7 +168,7 @@ impl OrgDb {
 
     #[cfg(feature = "test-support")]
     pub fn test_raw(&self) -> &Db {
-        &self.raw
+        self.raw.first()
     }
 }
 
@@ -188,9 +213,15 @@ pub(crate) async fn session_for(template: &Db, ns: &str, route: &Route) -> surre
     Ok(session)
 }
 
-pub(crate) async fn connect_control(template: &Db, settings: &Settings) -> surrealdb::Result<ControlDb> {
+/// [`session_for`] on every connection, signed in side by side.
+async fn sessions_for(templates: &[Db], ns: &str, route: &Route) -> surrealdb::Result<Sessions> {
+    let dbs = futures::future::try_join_all(templates.iter().map(|t| session_for(t, ns, route))).await?;
+    Ok(Sessions::new(dbs))
+}
+
+pub(crate) async fn connect_control(templates: &[Db], settings: &Settings) -> surrealdb::Result<ControlDb> {
     let route = Route { db: CONTROL_DB.into(), user: DB_USER.into(), pass: control_password(settings) };
-    Ok(ControlDb { raw: Arc::new(session_for(template, &settings.surreal_ns, &route).await?) })
+    Ok(ControlDb { raw: Arc::new(sessions_for(templates, &settings.surreal_ns, &route).await?) })
 }
 
 struct Cache {
@@ -199,7 +230,8 @@ struct Cache {
 }
 
 struct Inner {
-    template: Db,
+    /// One unauthenticated client per server connection (see [`Sessions`]).
+    templates: Vec<Db>,
     control: ControlDb,
     ns: String,
     key: String,
@@ -229,10 +261,10 @@ struct TenantRow {
 }
 
 impl Pool {
-    pub(crate) fn new(template: Db, control: ControlDb, settings: &Settings) -> Self {
+    pub(crate) fn new(templates: Vec<Db>, control: ControlDb, settings: &Settings) -> Self {
         let cap = std::env::var("EUNOMIA_ORG_POOL_CAP").ok().and_then(|v| v.parse().ok()).filter(|n| *n > 0).unwrap_or(256);
         Pool(Arc::new(Inner {
-            template,
+            templates,
             control,
             ns: settings.surreal_ns.clone(),
             key: settings.encryption_key.clone(),
@@ -266,8 +298,8 @@ impl Pool {
             }
             let route = self.route(org).await?;
             self.0.signins.fetch_add(1, Ordering::Relaxed);
-            let session = session_for(&self.0.template, &self.0.ns, &route).await?;
-            let db = OrgDb { raw: Arc::new(session), org: *org };
+            let sessions = sessions_for(&self.0.templates, &self.0.ns, &route).await?;
+            let db = OrgDb { raw: Arc::new(sessions), org: *org };
             self.insert(db.clone());
             Ok(db)
         }
@@ -352,6 +384,6 @@ impl Pool {
     #[cfg(feature = "test-support")]
     pub async fn test_session(&self, org: OrgId, db: &str, user: &str, pass: &str) -> AppResult<OrgDb> {
         let route = Route { db: db.into(), user: user.into(), pass: pass.into() };
-        Ok(OrgDb { raw: Arc::new(session_for(&self.0.template, &self.0.ns, &route).await?), org })
+        Ok(OrgDb { raw: Arc::new(sessions_for(&self.0.templates[..1], &self.0.ns, &route).await?), org })
     }
 }

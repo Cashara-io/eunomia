@@ -251,7 +251,7 @@ async fn logout(State(state): State<AppState>, https: Option<Extension<Forwarded
             let p = p.trim();
             p.strip_prefix(&format!("{SESSION_COOKIE}=")).map(str::to_string)
         }) {
-            auth::revoke_session_by_jwt(&state.control, &state.settings.jwt_secret, &token).await;
+            auth::revoke_session_by_jwt(&state, &token).await;
         }
     let expired = format!("{SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0{}", cookie_flags(&state.settings.public_url, https));
     (StatusCode::OK, [(header::SET_COOKIE, expired)], Json(json!({ "ok": true }))).into_response()
@@ -409,6 +409,7 @@ async fn delete_token(
 ) -> AppResult<Json<serde_json::Value>> {
     let rid: RecordId = crate::rid::parse(&token_id).map_err(|_| AppError::coded(ErrorCode::AuthNotFound, "Token not found."))?;
     let ok = models_user::revoke_api_token(&state.control, &user.id, &rid).await?;
+    state.credentials.forget(&rid.to_string());
     if !ok {
         return Err(AppError::coded(ErrorCode::AuthNotFound, "Token not found."));
     }
@@ -496,7 +497,8 @@ async fn revoke_session_route(
         Some(r) if r.owner == user.id => {}
         _ => return Err(AppError::coded(ErrorCode::AuthNotFound, "Session not found.")),
     }
-    store::control::AUTH_SESSION_REVOKE.on(&state.control).bind(("id", rid)).await?;
+    store::control::AUTH_SESSION_REVOKE.on(&state.control).bind(("id", rid.clone())).await?;
+    state.credentials.forget(&rid.to_string());
     Ok(Json(json!({ "ok": true })))
 }
 
