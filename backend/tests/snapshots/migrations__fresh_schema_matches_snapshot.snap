@@ -137,6 +137,14 @@ expression: info(&db).await
           "index": "FULLTEXT ANALYZER cache_text_analyzer BM25(1.2,0.75) HIGHLIGHTS",
           "name": "cache_record_title_fts",
           "table": "cache_record"
+        },
+        {
+          "cols": [
+            "vault"
+          ],
+          "index": "",
+          "name": "cache_record_vault_idx",
+          "table": "cache_record"
         }
       ]
     },
@@ -423,6 +431,14 @@ expression: info(&db).await
       "indexes": [
         {
           "cols": [
+            "source"
+          ],
+          "index": "",
+          "name": "memory_source_idx",
+          "table": "memory"
+        },
+        {
+          "cols": [
             "subject"
           ],
           "index": "",
@@ -613,6 +629,14 @@ expression: info(&db).await
         "update": false
       },
       "indexes": [
+        {
+          "cols": [
+            "source"
+          ],
+          "index": "",
+          "name": "relates_to_source_idx",
+          "table": "relates_to"
+        },
         {
           "cols": [
             "in",

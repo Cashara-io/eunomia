@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use serde_json::json;
 
-use super::{register, IdArgs, bad_args, parse_rid, parse_opt_rid, to_tool_value, ToolSpec};
+use super::{register, IdArgs, bad_args, parse_rid, parse_opt_rid, parse_vault_ids, to_tool_value, vault_ids_schema, ToolSpec};
 use crate::entities::service::KINDS;
 use crate::entities::tools as entities_tools;
 
@@ -24,6 +24,8 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
         offset: usize,
         #[serde(default)]
         vault_id: Option<String>,
+        #[serde(default)]
+        vault_ids: Option<Vec<String>>,
     }
     fn default_entities_search_limit() -> usize {
         50
@@ -40,6 +42,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                 "limit": {"type": "integer"},
                 "offset": {"type": "integer"},
                 "vault_id": {"type": "string", "description": "search just this vault (a vault id or its name, e.g. \"Acme\"); omit to search your personal vault and every org vault you belong to"},
+                "vault_ids": vault_ids_schema(),
             },
             "required": ["query"],
         }),
@@ -49,7 +52,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     Ok(a) => a,
                     Err(e) => return Ok(bad_args(e)),
                 };
-                let vault_id = match parse_opt_rid("vault_id", &a.vault_id) {
+                let vaults = match parse_vault_ids(&a.vault_id, &a.vault_ids) {
                     Ok(v) => v,
                     Err(e) => return Ok(e),
                 };
@@ -60,7 +63,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     a.kind.as_deref(),
                     a.limit,
                     a.offset,
-                    vault_id.as_ref(),
+                    &vaults,
                 )
                 .await;
                 Ok(to_tool_value(result))

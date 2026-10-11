@@ -49,6 +49,24 @@ pub struct Envelope {
     pub deleted: bool,
     #[serde(default)]
     pub links: Vec<LinkSpec>,
+    /// Where routing files the record (`sources::routing`); never set by a mapper. `None`: no routing
+    /// (uploaded documents, the demo source), so a new record goes to the owner's personal vault.
+    #[serde(skip)]
+    pub placement: Option<Placement>,
+}
+
+/// Where a sync files one record (`sources::routing::Router::placement`). Routing places a record when
+/// it is first stored; a stored record stays in its vault on later syncs (a changed destination applies
+/// to future records only), unless its owner is no longer a member of that vault: then it is re-filed
+/// to `vault`, so a sync never writes into a vault its owner has left.
+#[derive(Debug, Clone, Default)]
+pub struct Placement {
+    /// `None`: the owner's personal vault.
+    pub vault: Option<RecordId>,
+    /// What the rules matched on, kept on the record for "Move existing data".
+    pub route_keys: Vec<String>,
+    /// The vaults the owner is an active member of.
+    pub writable: std::sync::Arc<Vec<RecordId>>,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
@@ -70,11 +88,29 @@ pub struct CacheRecord {
     pub updated_at: Option<Datetime>,
     pub deleted: bool,
     pub embedding: Option<Vec<f32>>,
+    /// The `cache_record` id.
+    #[serde(skip)]
+    pub rid: Option<RecordId>,
+    /// Whose synced record it is.
+    #[serde(skip)]
+    pub owner: Option<RecordId>,
+    /// The vault it is filed in (`None`: its owner's personal vault).
+    #[serde(skip)]
+    pub vault: Option<RecordId>,
 }
 
 #[derive(Debug, Deserialize, SurrealValue)]
 struct Row {
     id: RecordId,
+    #[serde(default)]
+    #[surreal(default)]
+    owner: Option<RecordId>,
+    #[serde(default)]
+    #[surreal(default)]
+    vault: Option<RecordId>,
+    #[serde(default)]
+    #[surreal(default)]
+    route_keys: Option<Vec<String>>,
     #[serde(default)]
     #[surreal(default)]
     source: String,
@@ -132,9 +168,91 @@ pub(crate) fn literal(key: &RecordId) -> String {
     raw.split_once(':').map(|(_, rest)| rest.to_string()).unwrap_or(raw)
 }
 
-fn row_to_record(row: Row) -> CacheRecord {
+/// The id `reader` uses for a record: their own records without the owner prefix (as always), another
+/// owner's (routed to a vault they share) with it, so the id stays unambiguous in a shared vault.
+pub(crate) fn caller_id(key: &RecordId, reader: &RecordId) -> String {
+    let raw = crate::rid::key_string(key.key()).unwrap_or_default();
+    match raw.strip_prefix(&format!("{}:", owner_key(reader))) {
+        Some(own) => own.to_string(),
+        None => raw,
+    }
+}
+
+/// The internal key text of a record (`{owner_key}:{source}:{type}:{external_id}`): what recall passes
+/// between its arms, whoever owns the record.
+pub(crate) fn key_of(key: &RecordId) -> String {
+    crate::rid::key_string(key.key()).unwrap_or_default()
+}
+
+/// The records a caller-facing `id` can name: the reader's own, or (with the owner prefix) another owner's.
+fn candidates(reader: &RecordId, id: &str) -> [RecordId; 2] {
+    [rid(reader, id), RecordId::from_table_key("cache_record", id.to_string())]
+}
+
+/// Which synced records a read sees. Routing files a record in a vault (`vault`); a record it did not
+/// route stays in its owner's personal vault (`vault = NONE`) and is the owner's alone, as every record
+/// was before routing. A read sees the records filed in `vaults` (each one authorized for the caller
+/// first), plus the caller's own personal-vault records when their personal vault is among them.
+#[derive(Debug, Clone)]
+pub struct RecordScope {
+    owner: RecordId,
+    own: bool,
+    vaults: Vec<RecordId>,
+    personal: Option<RecordId>,
+}
+
+impl RecordScope {
+    /// The predicate on `cache_record`; [`RecordScope::bind`] binds `$vaults`, `$own` and `$owner`. Both
+    /// branches are index reads (`cache_record_vault_idx`, `cache_record_owner_idx`).
+    pub(crate) const SQL: &'static str = "(vault IN $vaults OR ($own AND vault = NONE AND owner = $owner))";
+
+    /// Only `owner`'s own personal-vault records.
+    pub fn own(owner: &RecordId) -> Self {
+        RecordScope { owner: owner.clone(), own: true, vaults: Vec::new(), personal: None }
+    }
+
+    /// What `owner` reads across `vaults`, already authorized; `personal` is their personal vault.
+    pub fn vaults(owner: &RecordId, personal: &RecordId, vaults: &[RecordId]) -> Self {
+        RecordScope { owner: owner.clone(), own: vaults.contains(personal), vaults: vaults.to_vec(), personal: Some(personal.clone()) }
+    }
+
+    pub fn owner(&self) -> &RecordId {
+        &self.owner
+    }
+
+    /// This scope narrowed to one of its vaults.
+    pub(crate) fn narrow(&self, vault: &RecordId) -> Self {
+        RecordScope {
+            owner: self.owner.clone(),
+            own: self.own && self.personal.as_ref() == Some(vault),
+            vaults: vec![vault.clone()],
+            personal: self.personal.clone(),
+        }
+    }
+
+    pub(crate) fn bind<'a>(&self, q: store::Q<'a>) -> store::Q<'a> {
+        q.bind(("vaults", self.vaults.clone())).bind(("own", self.own)).bind(("owner", self.owner.clone()))
+    }
+
+    /// The vault a record in this scope is shown in: its own, or the caller's personal vault.
+    pub(crate) fn vault_of(&self, vault: Option<&RecordId>) -> Option<RecordId> {
+        vault.or(self.personal.as_ref()).cloned()
+    }
+}
+
+/// The [`RecordScope`] of a read by `owner` across `vaults` (already authorized). A user without a
+/// personal vault (none is ever made without one) sees only what is filed in `vaults`.
+pub async fn scope_for(db: &OrgDb, owner: &RecordId, vaults: &[RecordId]) -> AppResult<RecordScope> {
+    Ok(match crate::vaults::service::personal_vault_id(db, owner).await {
+        Ok(personal) => RecordScope::vaults(owner, &personal, vaults),
+        Err(_) => RecordScope { owner: owner.clone(), own: false, vaults: vaults.to_vec(), personal: None },
+    })
+}
+
+fn row_to_record(row: Row, reader: &RecordId) -> CacheRecord {
     CacheRecord {
-        id: literal(&row.id),
+        id: caller_id(&row.id, reader),
+        rid: Some(row.id.clone()),
         source: row.source,
         type_: row.type_,
         external_id: row.external_id,
@@ -148,6 +266,8 @@ fn row_to_record(row: Row) -> CacheRecord {
         updated_at: row.updated_at,
         deleted: row.deleted,
         embedding: row.embedding,
+        owner: row.owner,
+        vault: row.vault,
     }
 }
 
@@ -201,6 +321,27 @@ async fn links_unchanged(db: &OrgDb, owner: &RecordId, record_rid: &RecordId, li
     Ok(stored == wanted)
 }
 
+/// The vault and route keys a write gives the record: a stored record keeps its vault (and, without
+/// routing, its keys); see [`Placement`].
+fn place(owner: &RecordId, existing: Option<&Row>, placement: Option<&Placement>) -> (Option<RecordId>, Option<Vec<String>>) {
+    match (existing, placement) {
+        (Some(e), Some(p)) => {
+            let keep = e.vault.as_ref().is_none_or(|v| p.writable.contains(v));
+            if !keep {
+                tracing::info!(
+                    owner = %owner.to_string(),
+                    record = %e.id.to_string(),
+                    "routing: the owner is no longer a member of the record's vault; re-filed where the rules route it now"
+                );
+            }
+            (if keep { e.vault.clone() } else { p.vault.clone() }, Some(p.route_keys.clone()))
+        }
+        (Some(e), None) => (e.vault.clone(), e.route_keys.clone()),
+        (None, Some(p)) => (p.vault.clone(), Some(p.route_keys.clone())),
+        (None, None) => (None, None),
+    }
+}
+
 /// Insert or update one envelope, scoped to `owner`. Returns `(record,
 /// changed)`; `changed` is about the record's content only (it drives embedding and extraction), so a
 /// replay that changes only `links` reconciles them and still reports unchanged.
@@ -209,15 +350,22 @@ pub async fn upsert(db: &OrgDb, owner: &RecordId, env: &Envelope) -> AppResult<(
     let h = hash_envelope(env);
 
     let existing: Option<Row> = store::get(db, &record_rid).await?;
+    let (vault, route_keys) = place(owner, existing.as_ref(), env.placement.as_ref());
     if let Some(existing) = existing
         && existing.content_hash == h && !existing.deleted {
-            store::cache::TOUCH_INGESTED.on(db).bind(("id", record_rid.clone())).await?;
+            store::cache::TOUCH_INGESTED
+                .on(db)
+                .bind(("id", record_rid.clone()))
+                .bind(("vault", vault.clone()))
+                .bind(("route_keys", route_keys))
+                .await?;
             // links are not in the content hash (a re-categorised transaction changes only them)
             if !links_unchanged(db, owner, &record_rid, &env.links).await? {
                 reconcile_links(db, owner, &record_rid, &env.links).await?;
             }
-            let mut rec = row_to_record(existing);
+            let mut rec = row_to_record(existing, owner);
             rec.ingested_at = Some(Datetime::from(chrono::Utc::now()));
+            rec.vault = vault;
             return Ok((rec, false));
         }
 
@@ -242,12 +390,14 @@ pub async fn upsert(db: &OrgDb, owner: &RecordId, env: &Envelope) -> AppResult<(
             .bind(("ingested_at", now))
             .bind(("updated_at", now))
             .bind(("deleted", env.deleted))
+            .bind(("vault", vault.clone()))
+            .bind(("route_keys", route_keys.clone()))
             .await?;
         res.take(0)
     })
     .await?;
     let row = rows.into_iter().next().ok_or_else(|| AppError::internal("cache_record upsert returned no row"))?;
-    let rec = row_to_record(row);
+    let rec = row_to_record(row, owner);
 
     reconcile_links(db, owner, &record_rid, &env.links).await?;
     Ok((rec, true))
@@ -397,15 +547,15 @@ impl RecordFilter {
 
 /// `title` and `body_text` each have their own FULLTEXT index (a two-field index only resolves
 /// the first field). Per search term: the title index (BM25-scored, +1 so a title hit beats a
-/// body-only one) and the body index (its own BM25 score), both pre-filtered by `filter`, every
-/// term's two lookups in one round trip; fused by [`rank_term_hits`].
+/// body-only one) and the body index (its own BM25 score), both pre-filtered by `scope` and `filter`,
+/// every term's two lookups in one round trip; fused by [`rank_term_hits`].
 pub(crate) async fn keyword_ids(
     db: &OrgDb,
-    owner: &RecordId,
+    scope: &RecordScope,
     q: &str,
     filter: &RecordFilter,
     limit: usize,
-) -> AppResult<Vec<String>> {
+) -> AppResult<Vec<RecordId>> {
     #[derive(Deserialize, SurrealValue)]
     struct ScoredRow {
         id: RecordId,
@@ -419,17 +569,18 @@ pub(crate) async fn keyword_ids(
         return Ok(Vec::new());
     }
     let cond = filter.sql();
+    let scoped = RecordScope::SQL;
     let mut sql = String::new();
     for i in 0..terms.len() {
         sql.push_str(&format!(
             "SELECT id, search::score(1) AS score FROM cache_record \
-             WHERE owner = $owner AND title @1@ $t{i} AND deleted = false{cond} ORDER BY score DESC, id LIMIT $limit; \
+             WHERE {scoped} AND title @1@ $t{i} AND deleted = false{cond} ORDER BY score DESC, id LIMIT $limit; \
              SELECT id, search::score(2) AS score FROM cache_record \
-             WHERE owner = $owner AND body_text @2@ $t{i} AND deleted = false{cond} ORDER BY score DESC, id LIMIT $limit;"
+             WHERE {scoped} AND body_text @2@ $t{i} AND deleted = false{cond} ORDER BY score DESC, id LIMIT $limit;"
         ));
     }
     // dynamic: one pair of lookups per term, each with the filters that are set.
-    let mut query = filter.bind(store::dynamic(db, "cache.keyword_ids", sql)).bind(("owner", owner.clone())).bind(("limit", limit as i64));
+    let mut query = scope.bind(filter.bind(store::dynamic(db, "cache.keyword_ids", sql))).bind(("limit", limit as i64));
     for (i, t) in terms.into_iter().enumerate() {
         query = query.bind((format!("t{i}"), t));
     }
@@ -441,70 +592,64 @@ pub(crate) async fn keyword_ids(
         per_term.push(
             title
                 .into_iter()
-                .map(|r| (literal(&r.id), r.score + 1.0))
-                .chain(body.into_iter().map(|r| (literal(&r.id), r.score)))
+                .map(|r| (key_of(&r.id), r.score + 1.0))
+                .chain(body.into_iter().map(|r| (key_of(&r.id), r.score)))
                 .collect(),
         );
     }
-    Ok(rank_term_hits(per_term, limit))
+    Ok(rank_term_hits(per_term, limit).into_iter().map(|k| RecordId::from_table_key("cache_record", k)).collect())
 }
 
 /// Embed the query, then [`nearest_ids`].
 pub(crate) async fn semantic_ids(
     db: &OrgDb,
     settings: &crate::config::Settings,
-    owner: &RecordId,
+    scope: &RecordScope,
     q: &str,
     filter: &RecordFilter,
     limit: usize,
-) -> AppResult<Vec<String>> {
-    let vec = crate::embeddings::service::embed(db, settings, &[q.to_string()], Some(owner))
+) -> AppResult<Vec<RecordId>> {
+    let vec = crate::embeddings::service::embed(db, settings, &[q.to_string()], Some(scope.owner()))
         .await?
         .into_iter()
         .next()
         .unwrap_or_default();
-    nearest_ids(db, owner, vec, filter, limit).await
+    nearest_ids(db, scope, vec, filter, limit).await
 }
 
-/// The `limit` live records of `owner` matching `filter` closest to `vec`, best first. HNSW KNN
+/// The `limit` live records in `scope` matching `filter` closest to `vec`, best first. HNSW KNN
 /// (`<|K,EF|>`, both literal integers: they cannot be bound parameters) answers first. The index is
-/// shared by every owner and the owner filter is not part of the ANN walk, so a small owner among big
+/// shared by every owner and vault and the scope is not part of the ANN walk, so a small scope among big
 /// ones (or a narrow filter) can get fewer than `limit` rows back; then an exact cosine scan over just
-/// this owner's matching records is the answer (it is ground truth, and cheap exactly when the set is small).
-pub async fn nearest_ids(db: &OrgDb, owner: &RecordId, vec: Vec<f32>, filter: &RecordFilter, limit: usize) -> AppResult<Vec<String>> {
+/// the scope's matching records is the answer (it is ground truth, and cheap exactly when the set is small).
+pub async fn nearest_ids(db: &OrgDb, scope: &RecordScope, vec: Vec<f32>, filter: &RecordFilter, limit: usize) -> AppResult<Vec<RecordId>> {
     #[derive(Deserialize, SurrealValue)]
     struct IdRow {
         id: RecordId,
     }
     let ef = (limit * 2).max(64);
     let query = format!(
-        "SELECT id FROM cache_record WHERE owner = $owner AND embedding <|{limit},{ef}|> $vec AND deleted = false{}",
+        "SELECT id FROM cache_record WHERE {} AND embedding <|{limit},{ef}|> $vec AND deleted = false{}",
+        RecordScope::SQL,
         filter.sql()
     );
     // dynamic: the KNN `<|K,EF|>` operator needs literal integers, one SQL text per (K, EF).
-    let mut res = filter
-        .bind(store::dynamic(db, "cache.semantic_ids", query))
-        .bind(("owner", owner.clone()))
-        .bind(("vec", vec.clone()))
-        .await?;
+    let mut res = scope.bind(filter.bind(store::dynamic(db, "cache.semantic_ids", query))).bind(("vec", vec.clone())).await?;
     let rows: Vec<IdRow> = res.take(0)?;
     if rows.len() >= limit {
-        return Ok(rows.into_iter().map(|r| literal(&r.id)).collect());
+        return Ok(rows.into_iter().map(|r| r.id).collect());
     }
     let exact = format!(
         "SELECT id, vector::similarity::cosine(embedding, $vec) AS sim FROM cache_record \
-         WHERE owner = $owner AND deleted = false AND embedding != NONE{} ORDER BY sim DESC LIMIT $limit",
+         WHERE {} AND deleted = false AND embedding != NONE{} ORDER BY sim DESC LIMIT $limit",
+        RecordScope::SQL,
         filter.sql()
     );
     // dynamic: the exact fallback carries the same optional filters.
-    let mut res = filter
-        .bind(store::dynamic(db, "cache.semantic_exact", exact))
-        .bind(("owner", owner.clone()))
-        .bind(("vec", vec))
-        .bind(("limit", limit as i64))
-        .await?;
+    let mut res =
+        scope.bind(filter.bind(store::dynamic(db, "cache.semantic_exact", exact))).bind(("vec", vec)).bind(("limit", limit as i64)).await?;
     let rows: Vec<IdRow> = res.take(0)?;
-    Ok(rows.into_iter().map(|r| literal(&r.id)).collect())
+    Ok(rows.into_iter().map(|r| r.id).collect())
 }
 
 /// Reciprocal Rank Fusion, k=60: sum of `1/(60+rank+1)` per id across any
@@ -544,14 +689,14 @@ impl SearchParams {
     }
 }
 
-/// One page of records matching `q`, plus whether more exist. Filters are
+/// One page of records in `scope` matching `q`, plus whether more exist. Filters are
 /// pushed into every candidate query and candidates are fetched up to
 /// `offset + limit + 1`, so later pages are reachable and `has_more` is
 /// exact for the fused candidate list.
 pub async fn search(
     db: &OrgDb,
     settings: &crate::config::Settings,
-    owner: &RecordId,
+    scope: &RecordScope,
     q: &str,
     p: &SearchParams,
 ) -> AppResult<(Vec<CacheRecord>, bool)> {
@@ -562,40 +707,50 @@ pub async fn search(
         .ok_or_else(|| AppError::bad_request(format!("offset + limit must be at most {MAX_WINDOW}")))?;
     let pool = window + 1;
     let f = &p.filter;
+    let keys = |ids: Vec<RecordId>| ids.iter().map(key_of).collect::<Vec<_>>();
     // Without embeddings (no OpenAI key) every mode degrades to keyword search.
-    let semantic_ok = crate::embeddings::service::available(db, settings, owner).await;
+    let semantic_ok = crate::embeddings::service::available(db, settings, scope.owner()).await;
     let ids = match p.mode.as_str() {
-        "semantic" if semantic_ok => semantic_ids(db, settings, owner, q, f, pool).await?,
-        "keyword" | "semantic" => keyword_ids(db, owner, q, f, pool).await?,
+        "semantic" if semantic_ok => keys(semantic_ids(db, settings, scope, q, f, pool).await?),
+        "keyword" | "semantic" => keys(keyword_ids(db, scope, q, f, pool).await?),
         _ if semantic_ok => {
-            let kw = keyword_ids(db, owner, q, f, pool).await?;
-            rrf(&[kw, semantic_ids(db, settings, owner, q, f, pool).await.unwrap_or_default()])
+            let kw = keys(keyword_ids(db, scope, q, f, pool).await?);
+            rrf(&[kw, keys(semantic_ids(db, settings, scope, q, f, pool).await.unwrap_or_default())])
         }
-        _ => keyword_ids(db, owner, q, f, pool).await?,
+        _ => keys(keyword_ids(db, scope, q, f, pool).await?),
     };
 
     let has_more = ids.len() > window;
-    let page: Vec<String> = ids.into_iter().skip(p.offset).take(p.limit).collect();
-    Ok((get_many(db, owner, &page).await?, has_more))
+    let page: Vec<RecordId> = ids.into_iter().skip(p.offset).take(p.limit).map(|k| RecordId::from_table_key("cache_record", k)).collect();
+    Ok((get_many(db, scope, &page).await?, has_more))
 }
 
-/// `owner`'s live records for `ids`, in `ids` order: tombstoned
-/// (`deleted = true`) and missing ids are dropped. One query for any number
-/// of ids; the one read path behind `get`, `search` and recall hydration.
-pub(crate) async fn get_many(db: &OrgDb, owner: &RecordId, ids: &[String]) -> AppResult<Vec<CacheRecord>> {
+/// The live records among `ids` that `scope` sees, in `ids` order: tombstoned (`deleted = true`),
+/// missing and out-of-scope ids are dropped. One query for any number of ids; the one read path
+/// behind `get`, `search` and recall hydration.
+pub(crate) async fn get_many(db: &OrgDb, scope: &RecordScope, ids: &[RecordId]) -> AppResult<Vec<CacheRecord>> {
     if ids.is_empty() {
         return Ok(Vec::new());
     }
-    let rids: Vec<RecordId> = ids.iter().map(|i| rid(owner, i)).collect();
-    let mut res = store::cache::RECORDS_BY_IDS.on(db).bind(("ids", rids)).bind(("owner", owner.clone())).await?;
-    let rows: Vec<Row> = res.take(0)?;
-    let mut by_id: HashMap<String, CacheRecord> = rows.into_iter().map(row_to_record).map(|r| (r.id.clone(), r)).collect();
-    Ok(ids.iter().filter_map(|i| by_id.remove(i)).collect())
+    let res = scope.bind(store::cache::RECORDS_IN_SCOPE.on(db).bind(("ids", ids.to_vec()))).await;
+    let rows: Vec<Row> = res?.take(0)?;
+    #[allow(clippy::mutable_key_type)] // RecordId hashes by value; the interior mutability is never touched
+    let mut by_id: HashMap<RecordId, Row> = rows.into_iter().map(|r| (r.id.clone(), r)).collect();
+    Ok(ids.iter().filter_map(|i| by_id.remove(i)).map(|r| row_to_record(r, scope.owner())).collect())
 }
 
-/// One live record; a tombstoned record reads as not found.
-pub async fn get(db: &OrgDb, owner: &RecordId, record_id: &str) -> AppResult<Option<CacheRecord>> {
-    Ok(get_many(db, owner, &[record_id.to_string()]).await?.pop())
+/// One live record by its caller-facing id (see [`caller_id`]), if `scope` sees it; a tombstoned record
+/// reads as not found.
+pub async fn get(db: &OrgDb, scope: &RecordScope, record_id: &str) -> AppResult<Option<CacheRecord>> {
+    Ok(get_many(db, scope, &candidates(scope.owner(), record_id)).await?.into_iter().next())
+}
+
+/// `owner`'s own live record, whatever vault it is filed in: for work done on the owner's behalf
+/// (entity extraction), never for a read.
+pub(crate) async fn get_own(db: &OrgDb, owner: &RecordId, record_id: &str) -> AppResult<Option<CacheRecord>> {
+    let mut res = store::cache::RECORDS_BY_IDS.on(db).bind(("ids", vec![rid(owner, record_id)])).bind(("owner", owner.clone())).await?;
+    let rows: Vec<Row> = res.take(0)?;
+    Ok(rows.into_iter().next().map(|r| row_to_record(r, owner)))
 }
 
 /// Columns an agent may sort/filter `list` on -- anything else is a 400.
@@ -665,11 +820,11 @@ pub fn parse_filters(filters: &serde_json::Map<String, Value>) -> AppResult<Vec<
     Ok(out)
 }
 
-/// One page of `owner`'s live records of `type_` matching `filters`, sorted
+/// One page of the live records in `scope` of `type_` matching `filters`, sorted
 /// by `sort` (`-field` for DESC), plus the total match count.
 pub async fn list(
     db: &OrgDb,
-    owner: &RecordId,
+    scope: &RecordScope,
     type_: Option<&str>,
     filters: &[Filter],
     sort: &str,
@@ -682,7 +837,7 @@ pub async fn list(
     }
     let direction = if sort.starts_with('-') { "DESC" } else { "ASC" };
 
-    let mut conditions = vec!["owner = $owner".to_string(), "deleted = false".to_string()];
+    let mut conditions = vec![RecordScope::SQL.to_string(), "deleted = false".to_string()];
     if type_.is_some() {
         conditions.push("type = $type".to_string());
     }
@@ -696,8 +851,8 @@ pub async fn list(
          SELECT count() FROM cache_record WHERE {where_} GROUP ALL"
     );
     // dynamic: caller-chosen filter fields, operators and sort column.
-    let mut q = store::dynamic(db, "cache.list_records", sql)
-        .bind(("owner", owner.clone()))
+    let mut q = scope
+        .bind(store::dynamic(db, "cache.list_records", sql))
         .bind(("type", type_.map(str::to_string)))
         .bind(("limit", limit as i64))
         .bind(("offset", offset as i64));
@@ -712,7 +867,7 @@ pub async fn list(
         count: i64,
     }
     let counts: Vec<CountRow> = res.take(1)?;
-    Ok((rows.into_iter().map(row_to_record).collect(), counts.first().map(|r| r.count).unwrap_or(0)))
+    Ok((rows.into_iter().map(|r| row_to_record(r, scope.owner())).collect(), counts.first().map(|r| r.count).unwrap_or(0)))
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -722,11 +877,12 @@ pub struct LinkEntry {
     pub target_id: String,
 }
 
-/// count: a tombstoned (or never-synced) endpoint hides the link, and a
-/// tombstoned record has no links at all.
-pub async fn links(db: &OrgDb, owner: &RecordId, record_id: &str, rel: Option<&str>) -> AppResult<Vec<LinkEntry>> {
-    let record_rid = rid(owner, record_id);
+/// The links of one record `scope` sees, to and from records it sees (or not yet synced): a tombstoned
+/// endpoint hides the link, and a tombstoned record has no links at all.
+pub async fn links(db: &OrgDb, scope: &RecordScope, record_id: &str, rel: Option<&str>) -> AppResult<Vec<LinkEntry>> {
     let mut out = Vec::new();
+    let Some(record) = get(db, scope, record_id).await? else { return Ok(out) };
+    let Some(record_rid) = record.rid else { return Ok(out) };
 
     #[derive(Deserialize, SurrealValue)]
     struct FwdRow {
@@ -742,23 +898,23 @@ pub async fn links(db: &OrgDb, owner: &RecordId, record_id: &str, rel: Option<&s
     }
 
     let fwd = if rel.is_some() { &store::cache::LINKS_OUT_REL } else { &store::cache::LINKS_OUT };
-    let mut q = fwd.on(db).bind(("id", record_rid.clone()));
+    let mut q = scope.bind(fwd.on(db).bind(("id", record_rid.clone())));
     if let Some(r) = rel {
         q = q.bind(("rel", r.to_string()));
     }
     let fwd: Vec<FwdRow> = q.await?.take(0)?;
     for row in fwd {
-        out.push(LinkEntry { rel: row.rel, direction: "out", target_id: literal(&row.out) });
+        out.push(LinkEntry { rel: row.rel, direction: "out", target_id: caller_id(&row.out, scope.owner()) });
     }
 
     let back = if rel.is_some() { &store::cache::LINKS_IN_REL } else { &store::cache::LINKS_IN };
-    let mut q = back.on(db).bind(("id", record_rid));
+    let mut q = scope.bind(back.on(db).bind(("id", record_rid)));
     if let Some(r) = rel {
         q = q.bind(("rel", r.to_string()));
     }
     let back: Vec<BackRow> = q.await?.take(0)?;
     for row in back {
-        out.push(LinkEntry { rel: row.rel, direction: "in", target_id: literal(&row.in_) });
+        out.push(LinkEntry { rel: row.rel, direction: "in", target_id: caller_id(&row.in_, scope.owner()) });
     }
 
     Ok(out)

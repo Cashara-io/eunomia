@@ -23,6 +23,10 @@ set -uo pipefail
 export PATH="$PATH:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin"
 
 CHECK_EVERY_MIN=10
+# After an update, keep retrying `docker compose up` for this long (seconds), starting this many
+# seconds apart and doubling up to 2 minutes. See start_stack.
+UP_RETRY_FOR="${UP_RETRY_FOR:-1800}"
+UP_RETRY_DELAY="${UP_RETRY_DELAY:-10}"
 
 main() {
   local repo status_dir current latest
@@ -38,6 +42,7 @@ main() {
   trap "rmdir '$status_dir/.lock' 2>/dev/null" EXIT
 
   https_apply "$status_dir"
+  heal_stack "$status_dir"
 
   # Nothing requested and checked recently: skip the network round-trip.
   if [ ! -f "$status_dir/requested" ] && [ ! -f "$status_dir/check" ] \
@@ -135,7 +140,9 @@ main() {
   # run); it is refreshed last, after the status is written.
   local services
   services="$(docker compose config --services 2>/dev/null | grep -vx updater | tr '\n' ' ')"
-  if ! { docker compose pull backend frontend backup && docker compose up -d --remove-orphans $services; } >/dev/null 2>"$status_dir/.last-error"; then
+  touch "$status_dir/heal" # cleared once the stack is up; until then each run starts what is left
+  if ! docker compose pull backend frontend backup >/dev/null 2>"$status_dir/.last-error" \
+    || ! start_stack "$status_dir" "$current" "$latest" $services; then
     write_status "$status_dir" "$latest" "$latest" false "restart failed: $(tail -5 "$status_dir/.last-error")"
     exit 1
   fi
@@ -161,6 +168,43 @@ main() {
     docker run -d --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:$PWD" -w "$PWD" docker:27-cli \
       sh -c "sleep 5 && docker compose up -d $recreate updater" >/dev/null 2>&1
   fi
+}
+
+# start_stack <status_dir> <current> <latest> <service>...: `docker compose up -d`, retried with
+# backoff for up to UP_RETRY_FOR seconds. A first boot after a big update (moving data, running
+# migrations) can outlast compose's wait for the backend to turn healthy: `up` then fails with
+# "dependency failed to start" and leaves the services after it (the frontend) Created, so the site
+# stays down even once the backend is fine. Each retry starts what is left. Progress goes to
+# status.json; the caller reports the failure if the last try fails too.
+start_stack() {
+  local dir="$1" current="$2" latest="$3" delay="$UP_RETRY_DELAY" started=$SECONDS try=1
+  shift 3
+  until docker compose up -d --remove-orphans "$@" >/dev/null 2>"$dir/.last-error"; do
+    [ $((SECONDS - started)) -lt "$UP_RETRY_FOR" ] || return 1
+    write_status "$dir" "$current" "$latest" true "" "Waiting for Eunomia to start (try $try: $(tail -1 "$dir/.last-error")). Retrying in ${delay}s."
+    touch "$dir/.lock" # a long first boot is not a crashed run
+    sleep "$delay"
+    try=$((try + 1))
+    delay=$((delay * 2)); [ "$delay" -le 120 ] || delay=120
+  done
+  rm -f "$dir/heal"
+}
+
+# heal_stack <status_dir>: after an update whose `up` failed or was interrupted (the `heal` marker),
+# once the backend is healthy, start any service left Created or exited, then clear the marker.
+# Without the marker it does nothing, so a service stopped by hand stays stopped. Skips the updater
+# itself and the one-shot surreal-upgrade.
+heal_stack() {
+  local ps stuck
+  [ -f "$1/heal" ] || return 0
+  ps="$(docker compose ps -a --format '{{.Service}} {{.State}} {{.Health}}' 2>/dev/null)" || return 0
+  printf '%s\n' "$ps" | grep -q '^backend running healthy' || return 0
+  stuck="$(printf '%s\n' "$ps" | awk '$1 != "updater" && $1 != "surreal-upgrade" && ($2 == "created" || $2 == "exited") { print $1 }' | sort -u | tr '\n' ' ')"
+  if [ -n "$stuck" ]; then
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) starting stuck services: $stuck"
+    docker compose up -d $stuck >/dev/null 2>&1 || return 0
+  fi
+  rm -f "$1/heal"
 }
 
 # set_env <KEY> <value>: replace or append KEY=value in .env. Callers pass
@@ -275,11 +319,14 @@ EOF
   mv "$1/https-status.json.tmp" "$1/https-status.json"
 }
 
-# write_status <dir> <current> <latest> <applying> <error>
+# write_status <dir> <current> <latest> <applying> <error> [progress]
 write_status() {
-  local error=null
+  local error=null progress=null
   if [ -n "$5" ]; then
     error="\"$(printf '%s' "$5" | tr '\n\r\t' '   ' | sed 's/\\/\\\\/g; s/"/\\"/g')\""
+  fi
+  if [ -n "${6:-}" ]; then
+    progress="\"$(printf '%s' "$6" | tr '\n\r\t' '   ' | sed 's/\\/\\\\/g; s/"/\\"/g')\""
   fi
   cat > "$1/status.json.tmp" <<EOF
 {
@@ -288,7 +335,8 @@ write_status() {
   "update_available": $([ "$2" != "$3" ] && echo true || echo false),
   "checked_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "applying": $4,
-  "error": $error
+  "error": $error,
+  "progress": $progress
 }
 EOF
   mv "$1/status.json.tmp" "$1/status.json"

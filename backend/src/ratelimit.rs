@@ -196,7 +196,15 @@ struct Bucket {
 
 #[derive(Default)]
 pub struct RateLimiter {
-    buckets: Mutex<HashMap<String, Bucket>>,
+    buckets: Mutex<Buckets>,
+}
+
+#[derive(Default)]
+struct Buckets {
+    map: HashMap<String, Bucket>,
+    /// Size at which idle buckets are next dropped: at least `PRUNE_AT`, and twice what a prune
+    /// left, so a map full of busy keys is not rescanned on every check.
+    prune_at: usize,
 }
 
 const PRUNE_AT: usize = 20_000;
@@ -211,12 +219,18 @@ impl RateLimiter {
         let cap = f64::from(per_min);
         let rate = cap / 60.0;
         let now = Instant::now();
-        let mut map = self.buckets.lock().unwrap_or_else(|e| e.into_inner());
-        if map.len() > PRUNE_AT {
+        let mut guard = self.buckets.lock().unwrap_or_else(|e| e.into_inner());
+        let buckets = &mut *guard;
+        if buckets.map.len() > buckets.prune_at.max(PRUNE_AT) {
             // an idle bucket has refilled; dropping it changes nothing
-            map.retain(|_, b| now.duration_since(b.last) < Duration::from_secs(120));
+            buckets.map.retain(|_, b| now.duration_since(b.last) < Duration::from_secs(120));
+            buckets.prune_at = buckets.map.len() * 2;
         }
-        let b = map.entry(key.to_string()).or_insert(Bucket { tokens: cap, last: now });
+        // the key is copied only for a new bucket, not on every check
+        if !buckets.map.contains_key(key) {
+            buckets.map.insert(key.to_string(), Bucket { tokens: cap, last: now });
+        }
+        let Some(b) = buckets.map.get_mut(key) else { return Ok(()) };
         b.tokens = (b.tokens + now.duration_since(b.last).as_secs_f64() * rate).min(cap);
         b.last = now;
         if b.tokens >= 1.0 {
@@ -341,6 +355,18 @@ mod tests {
         for _ in 0..50 {
             assert!(rl.check("free", 0).is_ok());
         }
+    }
+
+    #[test]
+    fn busy_keys_past_the_prune_size_are_not_rescanned_every_check() {
+        let rl = RateLimiter::default();
+        for i in 0..=PRUNE_AT {
+            rl.check(&format!("k{i}"), 10).unwrap();
+        }
+        rl.check("one more", 10).unwrap(); // prunes: every bucket is busy, so all stay
+        let b = rl.buckets.lock().unwrap();
+        assert_eq!(b.map.len(), PRUNE_AT + 2);
+        assert_eq!(b.prune_at, 2 * (PRUNE_AT + 1), "the next prune waits for the map to double");
     }
 
     #[test]

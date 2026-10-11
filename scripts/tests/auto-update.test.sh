@@ -29,11 +29,22 @@ case "\$*" in
   "compose config --services") cat "$TMP/services" ;;
   "compose ps -q surrealdb") [ -f "$TMP/running" ] && echo fakecid ;;
   inspect*) cat "$TMP/running" 2>/dev/null ;;
+  "compose ps -a --format"*) cat "$TMP/ps" 2>/dev/null ;;
+  # \$TMP/up_fails: how many more \`up --remove-orphans\` calls fail the way a slow first boot does
+  "compose up -d --remove-orphans"*)
+    n="\$(cat "$TMP/up_fails" 2>/dev/null || echo 0)"
+    if [ "\$n" -gt 0 ]; then
+      echo \$((n - 1)) > "$TMP/up_fails"
+      echo "dependency failed to start: container eunomia-backend-1 is unhealthy" >&2
+      exit 1
+    fi ;;
 esac
 exit 0
 SHIM
 chmod +x "$TMP/bin/docker"
-update() { EUNOMIA_DIR="$TMP/repo" PATH="$TMP/bin:$PATH" bash "$TMP/repo/scripts/auto-update.sh"; }
+update() { EUNOMIA_DIR="$TMP/repo" PATH="$TMP/bin:$PATH" UP_RETRY_DELAY=0 bash "$TMP/repo/scripts/auto-update.sh"; }
+# what ran besides the cheap per-run health check
+ran() { grep -v '^compose ps -a --format' "$TMP/docker.log" 2>/dev/null; }
 S="$TMP/repo/update-status"
 
 # 1. a check alone reports, never applies
@@ -41,7 +52,7 @@ update
 check "status says an update is available" test "$(field update_available)" = true
 check "status names both versions" test "$(field current_version)" = v1.0.0 -a "$(field latest_version)" = v1.1.0
 check "a check alone doesn't touch the checkout" test "$(cat "$TMP/repo/compose.yml")" = one
-check "a check alone doesn't run docker" test ! -e "$TMP/docker.log"
+check "a check alone doesn't run docker (beyond the health check)" test -z "$(ran)"
 
 # 1b. "Check now": a check marker forces a GitHub check inside the 10-minute window
 (cd "$TMP/src" && git_ tag v1.0.5 HEAD~1)
@@ -77,7 +88,7 @@ check "history recorded" grep -q 'updated v1.0.0 -> v1.1.0' "$S/history.log"
 
 # 3. a request with nothing newer is a no-op
 : > "$TMP/docker.log"; touch "$S/requested"; update
-check "nothing newer: no docker run" test ! -s "$TMP/docker.log"
+check "nothing newer: no docker run (beyond the health check)" test -z "$(ran)"
 check "nothing newer: marker consumed" test ! -e "$S/requested"
 
 # 3b. without HTTPS no caddy reload; with HTTPS on, the update restarts and
@@ -154,5 +165,36 @@ echo surrealdb/surrealdb:v3.3.0 > "$TMP/images"; rm -f "$TMP/running"
 check "surrealdb not running: upgrade script still runs" grep -qx UPGRADE "$TMP/docker.log"
 check "surrealdb not running: release applied after the upgrade" test "$(cat "$TMP/repo/compose.yml")" = nine
 rm -f "$TMP/images" "$TMP/running"
+
+# 6. a slow first boot: `up` fails while the backend is still starting; it is retried until it works
+(cd "$TMP/src" && echo ten > compose.yml && git_ commit -qam v2.0 && git tag v2.0.0)
+echo 2 > "$TMP/up_fails"; : > "$TMP/docker.log"; touch "$S/requested"; update
+check "failed up: retried until it succeeds" test "$(grep -c 'compose up -d --remove-orphans' "$TMP/docker.log")" = 3
+check "failed up then success: reported as updated" test "$(field current_version)" = v2.0.0 -a "$(field error)" = none -a "$(field applying)" = false
+check "failed up then success: history recorded" grep -q 'updated v1.9.0 -> v2.0.0' "$S/history.log"
+# it never comes up within the retry window: reported, once the tries run out
+(cd "$TMP/src" && echo eleven > compose.yml && git_ commit -qam v2.1 && git tag v2.1.0)
+echo 1000 > "$TMP/up_fails"; : > "$TMP/docker.log"; touch "$S/requested"
+EUNOMIA_DIR="$TMP/repo" PATH="$TMP/bin:$PATH" UP_RETRY_DELAY=0 UP_RETRY_FOR=1 bash "$TMP/repo/scripts/auto-update.sh"
+check "up never succeeds: retried, then given up" test "$(grep -c 'compose up -d --remove-orphans' "$TMP/docker.log")" -gt 1
+check "up never succeeds: the error says why" grep -q 'restart failed: dependency failed to start' "$S/status.json"
+check "up never succeeds: lock released" test ! -e "$S/.lock"
+rm -f "$TMP/up_fails"
+
+# 7. self-heal: after a failed update (the marker it leaves), backend healthy but the frontend stuck
+# Created (what a failed `up` leaves) gets started, once
+check "a failed update leaves the heal marker" test -e "$S/heal"
+printf 'backend running starting\nfrontend created \n' > "$TMP/ps"
+: > "$TMP/docker.log"; update
+check "backend not healthy yet: nothing started" test -z "$(ran)"
+check "backend not healthy yet: marker kept" test -e "$S/heal"
+printf 'surrealdb running healthy\nbackend running healthy\nfrontend created \nsurreal-upgrade exited \nupdater running \n' > "$TMP/ps"
+: > "$TMP/docker.log"; update
+check "stuck frontend is started" grep -qx 'compose up -d frontend' "$TMP/docker.log"
+check "the one-shot surreal-upgrade and the updater are left alone" bash -c "! grep -q 'up -d.*\(surreal-upgrade\|updater\)' '$TMP/docker.log'"
+check "healed: marker cleared" test ! -e "$S/heal"
+: > "$TMP/docker.log"; update
+check "no marker: a service stopped by hand stays stopped" test -z "$(cat "$TMP/docker.log")"
+rm -f "$TMP/ps"
 echo "auto-update: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

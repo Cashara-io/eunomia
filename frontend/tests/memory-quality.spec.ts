@@ -65,9 +65,11 @@ test.describe.serial("memory quality", () => {
 
   test("a fact a later one contradicts is superseded and leaves recall", async () => {
     const old = await ok("memory_write", { subject_name: "Riley Chen", subject_kind: "person", text: "Riley has no access to the build server" });
-    expect(old.superseded ?? []).toEqual([]);
     const fresh = await ok("memory_write", { subject_name: "Riley Chen", subject_kind: "person", text: "Riley was granted access to the build server" });
-    expect(fresh.superseded).toEqual([old.memory.id]);
+    // the check runs in a background job after the write: wait for it to mark the old fact
+    const statusOf = async (id: string) => (await ok("entities_get", { id: fresh.entity.id })).memory.find((m: Json) => m.id === id).status ?? null;
+    await expect.poll(() => statusOf(old.memory.id), { timeout: 30_000 }).toBe("superseded");
+    expect(await statusOf(fresh.memory.id)).not.toBe("superseded");
 
     const recalled = await ok("recall", { query: "Riley Chen build server access" });
     const texts = recalled.results.map((i: Json) => i.text);

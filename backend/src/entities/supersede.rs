@@ -1,8 +1,8 @@
 //! Superseded facts: a raw fact a later fact shows is no longer true ("X has
 //! no access to Y", then "X was granted access to Y") is marked
 //! `status = "superseded"`. Recall leaves it out; `entities_get` still shows
-//! it, marked. Checked by the chat model whenever new facts arrive -- on
-//! `memory_write`, and in consolidation (which runs after every sync).
+//! it, marked. Checked by the chat model whenever new facts arrive -- in a
+//! `supersede` job queued by `memory_write`, and in consolidation (which runs after every sync).
 //! Best-effort like the rest of the enrichment: a failure marks nothing.
 
 use std::collections::HashSet;
@@ -88,10 +88,7 @@ async fn call_llm(db: &OrgDb, settings: &Settings, owner: &RecordId, prompt: Str
 /// a later fact supersedes, and (if any) makes the subject's observation
 /// stale. Returns the ids marked. No-op without a chat model.
 pub async fn check(db: &OrgDb, settings: &Settings, owner: &RecordId, subject: &RecordId, new: &[RecordId]) -> Vec<RecordId> {
-    if new.is_empty()
-        || settings.embeddings_backend == "stub"
-        || !crate::embeddings::service::chat_available(db, settings, owner).await
-    {
+    if new.is_empty() || !enabled(db, settings, owner).await {
         return Vec::new();
     }
     match run(db, settings, owner, subject, new).await {
@@ -101,6 +98,11 @@ pub async fn check(db: &OrgDb, settings: &Settings, owner: &RecordId, subject: &
             Vec::new()
         }
     }
+}
+
+/// Whether there is a chat model to run the check with (else it is a no-op, and not worth a job).
+pub async fn enabled(db: &OrgDb, settings: &Settings, owner: &RecordId) -> bool {
+    settings.embeddings_backend != "stub" && crate::embeddings::service::chat_available(db, settings, owner).await
 }
 
 async fn run(db: &OrgDb, settings: &Settings, owner: &RecordId, subject: &RecordId, new: &[RecordId]) -> AppResult<Vec<RecordId>> {

@@ -2,11 +2,11 @@
 
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
-import { useState } from "react";
-import { KeyRound, X } from "lucide-react";
-import { useCreateToken, useRevokeToken, useTokens } from "@/lib/queries/auth";
+import { useRef, useState } from "react";
+import { KeyRound, Pencil, X } from "lucide-react";
+import { useCreateToken, useRenameToken, useRevokeToken, useTokens } from "@/lib/queries/auth";
 import { useVaults } from "@/lib/queries/vaults";
-import type { Scope, Vault } from "@/lib/types";
+import type { ApiToken, Scope, Vault } from "@/lib/types";
 import Tooltip from "@/components/bits/Tooltip";
 import { ICON, CopyField, relativeTime, expiryLabel, PanelHead, RevokeButton, TableSkeleton } from "./shared";
 
@@ -16,6 +16,9 @@ const SCOPES: { id: Scope; label: string; hint: string }[] = [
   { id: "vaults:admin", label: "Manage vaults", hint: "Create, rename, share and delete vaults; settings, tokens and chat" },
   { id: "connectors", label: "Connectors", hint: "View and sync connected sources" },
 ];
+
+// Same limit as the API (and as a vault name).
+const NAME_MAX = 80;
 
 const EXPIRY_OPTIONS = [
   { value: "", label: "Never expires" },
@@ -30,6 +33,7 @@ export function TokensSection() {
   const tokens = tokensQuery.data ?? (tokensQuery.isError ? [] : null);
   const createToken = useCreateToken();
   const revokeToken = useRevokeToken();
+  const renameToken = useRenameToken();
   const vaultList: Vault[] = useVaults().data ?? [];
   const [name, setName] = useState("");
   const [scopes, setScopes] = useState<Scope[]>(SCOPES.map((s) => s.id));
@@ -38,6 +42,11 @@ export function TokensSection() {
   const [minted, setMinted] = useState<{ name: string; token: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Failure | null>(null);
+  // Inline rename: the token being renamed and its draft. The ref is the source of truth for
+  // "still editing", so Enter followed by the blur it causes (or Esc) saves at most once.
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const renamingRef = useRef<string | null>(null);
 
   const vaultName = (id: string) => vaultList.find((v) => v.id === id)?.name ?? id;
 
@@ -57,6 +66,33 @@ export function TokensSection() {
       setError(failure(e, "Could not create a token. Check that you're still signed in, then try again."));
     } finally {
       setBusy(false);
+    }
+  }
+
+  function startRename(t: ApiToken) {
+    renamingRef.current = t.id;
+    setRenaming(t.id);
+    setDraft(t.name);
+    setError(null);
+  }
+
+  function stopRename() {
+    renamingRef.current = null;
+    setRenaming(null);
+  }
+
+  async function saveRename(t: ApiToken) {
+    if (renamingRef.current !== t.id) return;
+    const next = draft.trim();
+    if (!next || next === t.name) return stopRename();
+    renamingRef.current = null;
+    setError(null);
+    try {
+      await renameToken.mutateAsync({ token_id: t.id, name: next });
+      setRenaming(null);
+    } catch (e) {
+      renamingRef.current = t.id;
+      setError(failure(e, "Could not rename that token. Reload and try again."));
     }
   }
 
@@ -91,6 +127,7 @@ export function TokensSection() {
             id="token-name"
             className="field h-8 px-3 text-[13px] w-full"
             placeholder="Name this token (e.g. laptop, MCP)"
+            maxLength={NAME_MAX}
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
@@ -211,7 +248,44 @@ export function TokensSection() {
               const full = SCOPES.every((s) => t.scopes.includes(s.id));
               return (
                 <tr key={t.id}>
-                  <td className="font-medium">{t.name}</td>
+                  <td className="font-medium">
+                    {renaming === t.id ? (
+                      <input
+                        aria-label="New token name"
+                        autoFocus
+                        maxLength={NAME_MAX}
+                        className="field h-7 px-2 text-[13px] w-full min-w-[140px]"
+                        value={draft}
+                        disabled={renameToken.isPending}
+                        onChange={(e) => setDraft(e.target.value)}
+                        onBlur={() => saveRename(t)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            saveRename(t);
+                          } else if (e.key === "Escape") {
+                            stopRename();
+                          }
+                        }}
+                      />
+                    ) : (
+                      <span className="flex items-center gap-1 min-w-0">
+                        <button type="button" onClick={() => startRename(t)} className="truncate text-left cursor-text">
+                          {t.name}
+                        </button>
+                        <Tooltip label="Rename token">
+                          <button
+                            type="button"
+                            onClick={() => startRename(t)}
+                            aria-label={`Rename ${t.name}`}
+                            className="btn btn-ghost btn-sm btn-icon shrink-0"
+                          >
+                            <Pencil {...ICON} />
+                          </button>
+                        </Tooltip>
+                      </span>
+                    )}
+                  </td>
                   <td>
                     <span className="flex flex-col gap-0.5 py-1.5 min-w-0">
                       {full ? (

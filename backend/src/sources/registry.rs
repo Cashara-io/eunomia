@@ -17,6 +17,7 @@ use crate::pool::OrgDb;
 use crate::state::OrgState;
 use crate::store;
 use crate::sources::base::{Conn, Source, SourceCtx};
+use crate::sources::routing;
 use crate::sources::demo::DemoSource;
 use crate::sources::discord::DiscordSource;
 use crate::sources::github::GitHubSource;
@@ -91,7 +92,9 @@ pub async fn enabled(db: &OrgDb, owner: &RecordId) -> AppResult<Vec<Arc<dyn Sour
     Ok(all().into_iter().filter(|s| on.contains(s.provider_key())).collect())
 }
 
-/// Persist -> map -> ingest every raw record for `src`, scoped to `owner`.
+/// Persist -> map -> route -> ingest every raw record for `src`, scoped to `owner`. The connector's
+/// routing is read once here; each raw record's envelopes all go where its first one (the record
+/// itself, before any chunks) routes.
 pub async fn ingest(state: &OrgState, owner: &RecordId, raw_records: &[Value], src: &dyn Source) -> AppResult<IngestReport> {
     let mut persist_errors = Vec::new();
     for raw in raw_records {
@@ -99,8 +102,17 @@ pub async fn ingest(state: &OrgState, owner: &RecordId, raw_records: &[Value], s
             persist_errors.push(format!("store {}: {}", raw.get("id").and_then(Value::as_str).unwrap_or("?"), e.message));
         }
     }
+    let router = routing::Router::for_source(&state.db, owner, src).await?;
     let mut report = ingest::ingest(state, owner, src.key(), raw_records, |raw| {
-        src.map_many(raw).into_iter().map(|env| serde_json::from_value::<Envelope>(env).map_err(|e| e.to_string())).collect()
+        let mut envs: Vec<Envelope> =
+            src.map_many(raw).into_iter().map(|env| serde_json::from_value::<Envelope>(env).map_err(|e| e.to_string())).collect::<Result<_, _>>()?;
+        if let Some(first) = envs.first() {
+            let placement = router.placement(routing::route_keys(src.key(), raw, &first.title));
+            for env in &mut envs {
+                env.placement = Some(placement.clone());
+            }
+        }
+        Ok(envs)
     })
     .await?;
     report.failed += persist_errors.len() as u64;

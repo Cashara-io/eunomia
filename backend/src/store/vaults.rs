@@ -73,15 +73,16 @@ pub const MEMBERSHIP_ANY: Stmt =
 pub const ACCESSIBLE_IDS: Stmt =
     Stmt::new("vaults.accessible_ids", r#"SELECT vault FROM vault_member WHERE user = $user AND status = "active""#);
 
-/// The org vaults a user is an active member of, oldest membership first.
-pub const ORG_IDS: Stmt = Stmt::new(
-    "vaults.org_ids",
-    r#"SELECT vault, created_at FROM vault_member WHERE user = $user AND status = "active" AND vault.kind = "org" ORDER BY created_at"#,
-);
-
 pub const DEFAULT_ID: Stmt = Stmt::new(
     "vaults.default_id",
     r#"SELECT vault, created_at FROM vault_member WHERE user = $user AND status = "active" AND vault.kind = "personal" ORDER BY created_at ASC LIMIT 1"#,
+);
+
+/// Every vault a user is an active member of, with its kind and name, oldest membership first
+/// (`vaults::service::read_scope`).
+pub const MY_MEMBERSHIPS: Stmt = Stmt::new(
+    "vaults.my_memberships",
+    r#"SELECT vault, vault.kind AS kind, vault.name AS name, created_at FROM vault_member WHERE user = $user AND status = "active" ORDER BY created_at"#,
 );
 
 pub const LIST_MINE: Stmt = Stmt::new(
@@ -190,8 +191,8 @@ pub const ALL: &[&Stmt] = &[
     &MEMBERSHIP_ACTIVE,
     &MEMBERSHIP_ANY,
     &ACCESSIBLE_IDS,
-    &ORG_IDS,
     &DEFAULT_ID,
+    &MY_MEMBERSHIPS,
     &LIST_MINE,
     &RENAME,
     &DELETE_VAULT,

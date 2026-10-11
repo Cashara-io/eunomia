@@ -9,7 +9,7 @@ One page: how work that must not block a request (syncs, embeddings, entity extr
 | Field | Meaning |
 |-------|---------|
 | `org` | Org key, or `NONE`. |
-| `kind` | Handler name: `sync`, `embed`, `extract`, `consolidate`, `prune_capsules`, `migrate_tenant`. |
+| `kind` | Handler name: `sync`, `embed`, `extract`, `consolidate`, `supersede`, `prune_capsules`, `migrate_tenant`. |
 | `owner` | `record<user>`; the fairness unit. |
 | `payload` | Ids only (`{"source": "up_bank"}`, `{"record": "..."}`, `{"subject": "person:x"}`). Never content. |
 | `idempotency_key` | UNIQUE. The record id is derived from it too, so a second enqueue is a no-op. |
@@ -74,6 +74,7 @@ Every process with the worker role tries `UPDATE job_leader:scheduler ... WHERE 
 | consolidation | `memory` observations with `status = 'stale'` (set by fact writes), when an LLM key exists | `consolidate` per entity | `consolidate:<subject>:<10 min window>` | every tick |
 | tenant schema | `tenant.schema_version` below the schema this code writes | `migrate_tenant` per org | `migrate_tenant:<org>:<version>` | every tick |
 | extraction | queued by ingest for each changed record (not polled) | `extract` per record | `extract:<owner>:<record>:<content hash>` | on ingest |
+| supersession | queued by `memory_write` for each raw fact, when an LLM key exists (not polled) | `supersede` per fact | `supersede:<org>:<memory>` | on write |
 
 The leader also dead-letters crash-looping jobs and prunes old done jobs (every 10 ticks). The sync schedule is the old one: a source runs every `sync_intervals[source]` seconds (default 900, `heypocket` 86400); after failures it waits the longer of the interval and the backoff table (900 s doubling-ish to 6 h). A source that never ran is due immediately. `sync_status` is written exactly as before.
 

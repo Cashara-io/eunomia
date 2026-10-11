@@ -35,9 +35,9 @@ pub async fn recall_tool(
     limit: usize,
     max_tokens: Option<usize>,
     types: Option<&[MemoryType]>,
-    vault_id: Option<&RecordId>,
+    vault_ids: &[RecordId],
 ) -> AppResult<Value> {
-    let results = recall::recall(db, settings, owner, query, time_range_tuple(time_range)?, limit, max_tokens, types, vault_id).await?;
+    let results = recall::recall(db, settings, owner, query, time_range_tuple(time_range)?, limit, max_tokens, types, vault_ids).await?;
     Ok(json!({ "results": results }))
 }
 
@@ -46,10 +46,10 @@ pub async fn reflect_tool(
     settings: &Settings,
     owner: &RecordId,
     query: &str,
-    vault_id: Option<&RecordId>,
+    vault_ids: &[RecordId],
     limit: usize,
 ) -> AppResult<Value> {
-    reflect::reflect(db, settings, owner, query, vault_id, limit).await
+    reflect::reflect(db, settings, owner, query, vault_ids, limit).await
 }
 
 #[cfg(test)]

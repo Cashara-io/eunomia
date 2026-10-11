@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use serde_json::json;
 
-use super::{register, bad_args, parse_rid, parse_opt_rid, to_tool_value, ToolSpec};
+use super::{register, bad_args, parse_rid, parse_opt_rid, parse_vault_ids, to_tool_value, vault_ids_schema, ToolSpec};
 use crate::cache::recall::MemoryType;
 use crate::cache::tools as cache_tools;
 use crate::entities::service::KINDS;
@@ -28,6 +28,8 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
         types: Option<Vec<MemoryType>>,
         #[serde(default)]
         vault_id: Option<String>,
+        #[serde(default)]
+        vault_ids: Option<Vec<String>>,
     }
     fn default_recall_limit() -> usize {
         20
@@ -55,6 +57,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     "description": "filter memory-sourced results by memory.type",
                 },
                 "vault_id": {"type": "string", "description": "recall from just this vault (a vault id or its name, e.g. \"Acme\"); omit to search your personal vault and every org vault you belong to"},
+                "vault_ids": vault_ids_schema(),
             },
             "required": ["query"],
         }),
@@ -64,7 +67,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     Ok(a) => a,
                     Err(e) => return Ok(bad_args(e)),
                 };
-                let vault_id = match parse_opt_rid("vault_id", &a.vault_id) {
+                let vaults = match parse_vault_ids(&a.vault_id, &a.vault_ids) {
                     Ok(v) => v,
                     Err(e) => return Ok(e),
                 };
@@ -77,7 +80,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     a.limit,
                     a.max_tokens,
                     a.types.as_deref(),
-                    vault_id.as_ref(),
+                    &vaults,
                 )
                 .await
             })
@@ -89,6 +92,8 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
         query: String,
         #[serde(default)]
         vault_id: Option<String>,
+        #[serde(default)]
+        vault_ids: Option<Vec<String>>,
         #[serde(default = "default_reflect_limit")]
         limit: usize,
     }
@@ -104,6 +109,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
             "properties": {
                 "query": {"type": "string"},
                 "vault_id": {"type": "string", "description": "reflect over just this vault (a vault id or its name, e.g. \"Acme\"); omit to use your personal vault and every org vault you belong to"},
+                "vault_ids": vault_ids_schema(),
                 "limit": {"type": "integer", "description": "how many recalled memories to consider"},
             },
             "required": ["query"],
@@ -114,11 +120,11 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     Ok(a) => a,
                     Err(e) => return Ok(bad_args(e)),
                 };
-                let vault_id = match parse_opt_rid("vault_id", &a.vault_id) {
+                let vaults = match parse_vault_ids(&a.vault_id, &a.vault_ids) {
                     Ok(v) => v,
                     Err(e) => return Ok(e),
                 };
-                cache_tools::reflect_tool(&state.db, &state.settings, owner, &a.query, vault_id.as_ref(), a.limit).await
+                cache_tools::reflect_tool(&state.db, &state.settings, owner, &a.query, &vaults, a.limit).await
             })
         }),
     );
@@ -165,8 +171,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     Err(e) => return Ok(e),
                 };
                 let result = entities_tools::memory_write(
-                    &state.db,
-                    &state.settings,
+                    state,
                     owner,
                     &a.subject_name,
                     &a.subject_kind,

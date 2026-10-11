@@ -280,10 +280,6 @@ pub struct GraphOut {
 pub struct WriteMemoryOut {
     pub entity: EntityOut,
     pub memory: MemoryOut,
-    /// Earlier facts about the subject this one made no longer true (now
-    /// left out of recall). Filled in by the `memory_write` tool.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub superseded: Vec<String>,
     /// When the write created a new entity: existing ones of the same kind
     /// whose name shares a word with it -- candidates for `entity_merge`.
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -488,14 +484,6 @@ pub async fn possible_duplicates(db: &OrgDb, entity: &EntityOut) -> AppResult<Ve
     Ok(rows.iter().map(|r| entity_out(table, r)).collect())
 }
 
-/// Ids of the entities in `vault` with a fact whose text matches `query` (full-text, so a handle or
-/// username only ever written in a fact is found).
-pub async fn subjects_mentioning(db: &OrgDb, vault: &RecordId, query: &str) -> AppResult<HashSet<String>> {
-    let mut res = q::SUBJECTS_MENTIONING.on(db).bind(("vault", vault.clone())).bind(("q", query.to_string())).await?.check()?;
-    let ids: Vec<RecordId> = res.take(0)?;
-    Ok(ids.iter().map(|r| r.to_string()).collect())
-}
-
 /// `source_record_id` is optional -- an automatic extraction path always ties
 /// a memory back to the cache_record it was pulled from, but a programmatic
 /// write (`write_memory`) may be a fact an agent knows directly, with no
@@ -529,7 +517,19 @@ pub async fn add_memory(
             format!("not a member of {}'s vault", subject_row.vault.to_string()),
         ));
     }
+    insert_memory(db, owner, subject_id, &subject_row.vault, text, source_record_id, mem_type).await
+}
 
+/// [`add_memory`] once the subject and its vault are known and the caller may write there.
+async fn insert_memory(
+    db: &OrgDb,
+    owner: &RecordId,
+    subject_id: &RecordId,
+    vault: &RecordId,
+    text: &str,
+    source_record_id: Option<&str>,
+    mem_type: &str,
+) -> AppResult<MemoryOut> {
     let source = source_record_id.map(|r| cache_record_rid(owner, r));
     let is_obs = mem_type == "observation";
     let obs_id = observation_rid(subject_id);
@@ -549,7 +549,7 @@ pub async fn add_memory(
         let mut res = stmt
             .on(db)
             .bind(("owner", owner.clone()))
-            .bind(("vault", subject_row.vault.clone()))
+            .bind(("vault", vault.clone()))
             .bind(("subject", subject_id.clone()))
             .bind(("text", text.to_string()))
             .bind(("type", mem_type.to_string()))
@@ -588,12 +588,16 @@ pub async fn write_memory(
     mem_type: &str,
     vault_id: Option<&RecordId>,
 ) -> AppResult<WriteMemoryOut> {
+    authz::require_scope(Action::WriteMemories.scope())?;
+    // upsert_entity_created resolved and checked the vault for a write, and the entity lives in it:
+    // no need to read it back and check again (as `add_memory` does for a bare subject id)
     let (entity, created) = upsert_entity_created(db, owner, subject_kind, subject_name, None, vault_id).await?;
     let entity_rid: RecordId =
         crate::rid::parse(&entity.id).map_err(|_| AppError::internal("entity id did not round-trip"))?;
-    let memory = add_memory(db, owner, &entity_rid, text, source_record_id, mem_type).await?;
+    let vault: RecordId = crate::rid::parse(&entity.vault).map_err(|_| AppError::internal("vault id did not round-trip"))?;
+    let memory = insert_memory(db, owner, &entity_rid, &vault, text, source_record_id, mem_type).await?;
     let possible_duplicates = if created { possible_duplicates(db, &entity).await? } else { Vec::new() };
-    Ok(WriteMemoryOut { entity, memory, superseded: Vec::new(), possible_duplicates })
+    Ok(WriteMemoryOut { entity, memory, possible_duplicates })
 }
 
 /// RELATE two entities, idempotent on the (in, out, label) unique index -- a
@@ -989,6 +993,41 @@ pub async fn list_entities(
     let results: Vec<EntityOut> = page.iter().map(|(k, r)| entity_out(k, r)).collect();
     let has_more = offset + results.len() < total;
 
+    Ok(ListEntitiesOut { results, total, has_more })
+}
+
+/// [`list_entities`] filtered to `needle` (see `entities::tools::entities_search`) over `vaults`, which
+/// the caller has already resolved and checked.
+pub async fn search_entities(
+    db: &OrgDb,
+    vaults: &[RecordId],
+    needle: &str,
+    kind: Option<&str>,
+    limit: usize,
+    offset: usize,
+) -> AppResult<ListEntitiesOut> {
+    let kinds: Vec<&str> = match kind {
+        Some(k) => vec![kind_table(k)?],
+        None => KINDS.to_vec(),
+    };
+    #[derive(Deserialize, SurrealValue)]
+    struct Page {
+        total: i64,
+        results: Vec<EntityRow>,
+    }
+    let end = offset.saturating_add(limit);
+    let mut res = q::search_entities(db, &kinds, !needle.is_empty())
+        .bind(("vaults", vaults.to_vec()))
+        .bind(("needle", needle.to_lowercase()))
+        .bind(("q", needle.to_string()))
+        .bind(("start", offset as i64))
+        .bind(("end", i64::try_from(end).unwrap_or(i64::MAX)))
+        .await?;
+    let page: Option<Page> = res.take(3)?; // three LETs, then the RETURN
+    let Page { total, results } = page.ok_or_else(|| AppError::internal("entity search returned nothing"))?;
+    let total = usize::try_from(total).unwrap_or_default();
+    let results: Vec<EntityOut> = results.iter().map(|r| entity_out(r.id.table(), r)).collect();
+    let has_more = offset + results.len() < total;
     Ok(ListEntitiesOut { results, total, has_more })
 }
 

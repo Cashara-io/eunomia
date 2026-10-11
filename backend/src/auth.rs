@@ -6,6 +6,10 @@ use axum::{
     extract::{FromRef, FromRequestParts},
     http::{header, request::Parts, HeaderMap},
 };
+use std::collections::HashMap;
+use std::sync::RwLock;
+use std::time::{Duration as StdDuration, Instant};
+
 use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, errors::ErrorKind, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
@@ -84,8 +88,80 @@ pub struct Authn {
     pub caller: Caller,
 }
 
-async fn session_authn(db: &ControlDb, secret: &str, token: &str) -> AppResult<Option<Authn>> {
-    let data = match decode::<Claims>(token, &DecodingKey::from_secret(secret.as_bytes()), &validation()) {
+/// How long a verified credential is trusted without asking the database again.
+const CREDENTIAL_TTL: StdDuration = StdDuration::from_secs(20);
+/// Most credentials kept; past it the aged-out ones go, and if none had, all of them.
+const CREDENTIAL_CAP: usize = 10_000;
+
+/// Verified credentials (bearer tokens and session cookies) by the SHA-256 of what was presented,
+/// so a busy credential costs no database round trip per request. Each entry lives at most
+/// [`CREDENTIAL_TTL`] and never past the credential's own expiry. A credential revoked through this
+/// process is dropped at once ([`Credentials::forget`]); one revoked through another replica, or
+/// changed in the database by hand, keeps working here until its entry ages out (at most the TTL).
+#[derive(Default)]
+pub struct Credentials {
+    map: RwLock<HashMap<String, CachedAuthn>>,
+}
+
+struct CachedAuthn {
+    authn: Authn,
+    /// What revoking it names: the token id, the OAuth grant, or the session row.
+    tag: String,
+    until: Instant,
+    expires_at: Option<chrono::DateTime<Utc>>,
+}
+
+impl Credentials {
+    fn get(&self, key: &str) -> Option<Authn> {
+        let fresh = |c: &CachedAuthn| c.until > Instant::now() && c.expires_at.is_none_or(|e| e > Utc::now());
+        {
+            let map = self.map.read().unwrap_or_else(|e| e.into_inner());
+            match map.get(key) {
+                Some(c) if fresh(c) => return Some(c.authn.clone()),
+                None => return None,
+                Some(_) => {}
+            }
+        }
+        self.map.write().unwrap_or_else(|e| e.into_inner()).remove(key);
+        None
+    }
+
+    fn put(&self, key: String, tag: String, authn: &Authn, expires_at: Option<chrono::DateTime<Utc>>) {
+        let now = Instant::now();
+        let mut map = self.map.write().unwrap_or_else(|e| e.into_inner());
+        if map.len() >= CREDENTIAL_CAP {
+            map.retain(|_, c| c.until > now);
+            if map.len() >= CREDENTIAL_CAP {
+                map.clear();
+            }
+        }
+        map.insert(key, CachedAuthn { authn: authn.clone(), tag, until: now + CREDENTIAL_TTL, expires_at });
+    }
+
+    /// Drops every credential revoking `tag` ends: a token id, an OAuth grant (all its access tokens)
+    /// or a session row id.
+    pub fn forget(&self, tag: &str) {
+        self.map.write().unwrap_or_else(|e| e.into_inner()).retain(|_, c| c.tag != tag);
+    }
+
+    /// Drops one presented credential (a token or a session cookie).
+    pub fn forget_presented(&self, presented: &str) {
+        self.map.write().unwrap_or_else(|e| e.into_inner()).remove(&models_user::hash_token(presented));
+    }
+
+    /// Drops everything (a test that edits credentials in the database directly).
+    pub fn clear(&self) {
+        self.map.write().unwrap_or_else(|e| e.into_inner()).clear();
+    }
+}
+
+async fn session_authn(state: &AppState, token: &str) -> AppResult<Option<Authn>> {
+    let key = models_user::hash_token(token);
+    if let Some(a) = state.credentials.get(&key) {
+        return Ok(Some(a));
+    }
+    let db = &state.control;
+    let data = match decode::<Claims>(token, &DecodingKey::from_secret(state.settings.jwt_secret.as_bytes()), &validation()) {
         Ok(d) => d,
         Err(e) if matches!(e.kind(), ErrorKind::ExpiredSignature) => {
             return Err(AppError::coded(ErrorCode::AuthSessionExpired, "Your session has expired. Log in again."));
@@ -100,6 +176,9 @@ async fn session_authn(db: &ControlDb, secret: &str, token: &str) -> AppResult<O
         id: RecordId,
         #[serde(default)]
         expired: bool,
+        #[serde(default)]
+        #[surreal(default)]
+        expires_at: Option<Datetime>,
     }
     let mut res = store::control::AUTH_SESSION_FIND
         .on(db)
@@ -117,33 +196,46 @@ async fn session_authn(db: &ControlDb, secret: &str, token: &str) -> AppResult<O
     let ttl = session_ttl();
     let _ = store::control::AUTH_SESSION_TOUCH
         .on(db)
-        .bind(("id", row.id))
+        .bind(("id", row.id.clone()))
         .bind(("new_exp", Datetime::from(now + ttl)))
         .bind(("threshold", Datetime::from(now + ttl - Duration::hours(1))))
         .await;
 
     let user = models_user::load_user(db, rid, claims.email).await?;
     let caller = Caller::session(&user.id);
-    Ok(Some(Authn { user, caller }))
+    let authn = Authn { user, caller };
+    // the earlier of the row's expiry (as read, before any slide) and the JWT's own
+    let jwt_exp = claims.exp.and_then(|e| chrono::DateTime::from_timestamp(e, 0));
+    let expires_at = row.expires_at.map(chrono::DateTime::from).into_iter().chain(jwt_exp).min();
+    state.credentials.put(key, row.id.to_string(), &authn, expires_at);
+    Ok(Some(authn))
 }
 
 /// A Bearer personal access token, or (on `/mcp` only, `allow_oauth`) an OAuth
 /// access token. `Ok(None)` means unknown; an expired PAT is an error. This is
 /// the one place a bearer credential becomes a [`Caller`].
 pub async fn bearer_authn(state: &AppState, token: &str, allow_oauth: bool) -> AppResult<Option<Authn>> {
-    if crate::oauth::is_access_token(token) {
-        if !allow_oauth {
-            return Ok(None);
-        }
-        let Some((user, granted)) = crate::oauth::verify_access_token(state, token).await else { return Ok(None) };
-        let client = crate::oauth::server::token_row(&state.control, token).await.and_then(|r| r.client_id).unwrap_or_default();
-        let caller = Caller { actor: Actor { kind: "oauth", id: client }, scopes: granted, vault: None, expires_at: None };
-        return Ok(Some(Authn { user, caller }));
+    let oauth = crate::oauth::is_access_token(token);
+    if oauth && !allow_oauth {
+        return Ok(None);
+    }
+    let key = models_user::hash_token(token);
+    if let Some(a) = state.credentials.get(&key) {
+        return Ok(Some(a));
+    }
+    if oauth {
+        let Some(v) = crate::oauth::verify_access_token(state, token).await else { return Ok(None) };
+        let caller = Caller { actor: Actor { kind: "oauth", id: v.client_id }, scopes: v.scopes, vault: None, expires_at: None };
+        let authn = Authn { user: v.user, caller };
+        state.credentials.put(key, v.grant.to_string(), &authn, v.expires_at);
+        return Ok(Some(authn));
     }
     match models_user::check_api_token(&state.control, token).await? {
         TokenCheck::Valid(v) => {
             let actor = Actor { kind: "token", id: v.token_id.to_string() };
-            Ok(Some(Authn { user: v.user, caller: Caller { actor, scopes: v.scopes, vault: v.vault, expires_at: v.expires_at } }))
+            let authn = Authn { user: v.user, caller: Caller { actor, scopes: v.scopes, vault: v.vault, expires_at: v.expires_at } };
+            state.credentials.put(key, v.token_id.to_string(), &authn, v.expires_at);
+            Ok(Some(authn))
         }
         TokenCheck::Expired => Err(AppError::coded(ErrorCode::AuthTokenExpired, "This API token has expired.")),
         TokenCheck::Unknown => Ok(None),
@@ -170,7 +262,7 @@ pub async fn authenticate(state: &AppState, headers: &HeaderMap, mcp: bool) -> A
     if !mcp
         && let Some(token) = session_token(headers)
     {
-        return session_authn(&state.control, &state.settings.jwt_secret, &token).await;
+        return session_authn(state, &token).await;
     }
     Ok(None)
 }
@@ -181,16 +273,17 @@ pub fn session_sid(secret: &str, headers: &HeaderMap) -> Option<String> {
     decode::<Claims>(&token, &DecodingKey::from_secret(secret.as_bytes()), &validation()).ok().map(|d| d.claims.sid)
 }
 
-pub async fn revoke_session_by_jwt(db: &ControlDb, secret: &str, token: &str) {
+pub async fn revoke_session_by_jwt(state: &AppState, token: &str) {
+    state.credentials.forget_presented(token);
     let Ok(data) = decode::<Claims>(
         token,
-        &DecodingKey::from_secret(secret.as_bytes()),
+        &DecodingKey::from_secret(state.settings.jwt_secret.as_bytes()),
         &validation(),
     ) else {
         return;
     };
     let _ = store::control::AUTH_SESSION_REVOKE_BY_SID
-        .on(db)
+        .on(&state.control)
         .bind(("sid", data.claims.sid))
         .await;
 }

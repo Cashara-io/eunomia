@@ -19,6 +19,7 @@
 //! logging entirely either way.
 
 use std::collections::HashMap;
+use std::future::IntoFuture;
 use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 
@@ -115,14 +116,14 @@ pub fn description(name: &str) -> &'static str {
         "get" => "Fetch one synced source record by id, with its full content. For a Pocket recording (or one of its transcript chunks) this includes the whole stored recording: full speaker-labelled transcript, summary, action items, speakers and tags.",
         "list" => "List synced source records, optionally filtered by type and field values, sorted and paginated. Use for browsing rather than searching.",
         "links" => "List the records linked to a given record (e.g. a meeting's attendees, a transaction's merchant), optionally only one relation type.",
-        "recall" => "Retrieve the memories most relevant to a question from the user's memory graph, ranked by combining semantic, keyword, graph and recency signals within a token budget. Searches the personal vault and every org vault the user belongs to unless `vault_id` is given. Each hit carries its vault, its date (`occurred_at`: when a memory was last written) and a 0-1 score relative to the best hit -- check the date before trusting a time-sensitive fact. Use this first when answering questions about people, organisations, places or past events.",
+        "recall" => "Retrieve the memories most relevant to a question from the user's memory graph, ranked by combining semantic, keyword, graph and recency signals within a token budget. Searches the personal vault and every org vault the user belongs to unless `vault_id` is given. Each hit carries its vault, its date (`occurred_at`: when a memory was last written) and a 0-1 score relative to the best hit -- check the date before trusting a time-sensitive fact. Call it at the start of any task touching people, projects, past decisions or code you have worked on.",
         "reflect" => "Answer a question by synthesizing from recalled memories (the personal vault and every org vault the user belongs to, unless `vault_id` is given), with numbered citations; newer memories win conflicts. Answers only from what is already remembered; use `recall` to inspect the raw memories instead.",
         "entities_search" => "Find entities (people, organisations, locations, repositories, files, symbols) by name or alias, then by the text of their facts (a username or handle only ever written in a fact still finds its entity). Searches the personal vault and every org vault the user belongs to unless `vault_id` is given. Returns entity ids for `entities_get`, `memory_write` and `code_relate`.",
         "entities_get" => "Get one entity with its memories (facts and consolidated observations) and its relations to other entities.",
         "entities_graph" => "Get the entity relationship graph (nodes and edges), optionally restricted to some entity kinds or a vault.",
         "code_entity_upsert" => "Find-or-create a code entity -- a repository, file or symbol -- matched case-insensitively by name, with a short summary. `parent_id` links a file to its repository or a symbol to its file. Returns the entity id.",
         "code_relate" => "Record a labelled relation between two entities, e.g. symbol `calls` symbol, file `imports` file.",
-        "memory_write" => "Remember a fact about a person, organisation, location or code entity (created if new; \"Jane Doe (Acme/JD)\" resolves to an existing \"Jane Doe\", adding the parts as aliases). Type `world` for objective facts, `experience` for things that happened, `observation` for stable patterns. Writes to the personal vault unless `vault_id` is given. The result lists `superseded`: earlier facts about the subject this one made no longer true (left out of recall from now on), and, when a new entity was created, `possible_duplicates`: similar existing entities to `entity_merge`.",
+        "memory_write" => "Remember a fact about a person, organisation, location or code entity (created if new; \"Jane Doe (Acme/JD)\" resolves to an existing \"Jane Doe\", adding the parts as aliases). Type `world` for objective facts, `experience` for things that happened, `observation` for stable patterns. Writes to the personal vault unless `vault_id` is given. Earlier facts about the subject this one makes no longer true are marked superseded in the background (left out of recall from then on). When a new entity was created, the result lists `possible_duplicates`: similar existing entities to `entity_merge`. Save durable facts, decisions, preferences and corrections as they come up, and before finishing a task a short summary of what was learned (`experience`).",
         "consolidate_observations" => "Fold an entity's new raw facts into its consolidated observation (or do it for every entity with new facts when `subject_id` is omitted).",
         "memory_update" => "Edit one memory by id: change its `text`, and/or switch a raw fact between `world` and `experience`. To revise an entity's consolidated belief, `memory_write` with type `observation` instead.",
         "entity_update" => "Edit an entity's `name`, `aliases` (replaces the list) and/or `summary`.",
@@ -182,15 +183,16 @@ fn summarize_args(tool_name: &str, args: &Value) -> String {
 /// append-only `audit_event` row with the actor, the outcome code and the trace id.
 pub(crate) async fn record_audit(state: &OrgState, owner: &RecordId, tool_name: &str, args: &Value, outcome: &str, code: &str) {
     let summary = summarize_args(tool_name, args);
-    let _ = store::cache::RECORD_AUDIT
+    let detail = control_detail(args);
+    // the two rows go to different databases: write them side by side, not one after the other
+    let org_row = store::cache::RECORD_AUDIT
         .on(&state.db)
         .bind(("owner", owner.clone()))
         .bind(("tool_name", tool_name.to_string()))
-        .bind(("args_summary", summary.clone()))
-        .bind(("outcome", outcome.to_string()))
-        .await;
+        .bind(("args_summary", summary))
+        .bind(("outcome", outcome.to_string()));
     // the control database is shared across orgs: no tenant text, only the argument names and a hash
-    record_event(&state.control, owner, tool_name, code, &control_detail(args)).await;
+    let _ = tokio::join!(org_row.into_future(), record_event(&state.control, owner, tool_name, code, &detail));
 }
 
 /// What the cross-org `audit_event` keeps of a call's arguments: their keys and a hash, never values.
@@ -249,6 +251,17 @@ fn parse_opt_rid(field: &str, value: &Option<String>) -> Result<Option<RecordId>
     }
 }
 
+/// The vaults a read names: `vault_id` and every one of `vault_ids` (names were already resolved to
+/// ids). Empty: the default scope.
+fn parse_vault_ids(vault_id: &Option<String>, vault_ids: &Option<Vec<String>>) -> Result<Vec<RecordId>, Value> {
+    vault_id.iter().chain(vault_ids.iter().flatten()).map(|v| parse_rid("vault_ids", v)).collect()
+}
+
+/// The `vault_ids` property of a read tool's schema.
+fn vault_ids_schema() -> Value {
+    json!({"type": "array", "items": {"type": "string"}, "description": "read these vaults together (ids or names); with `vault_id`, both are read"})
+}
+
 /// Converts a typed service-layer result into the tool-call `Value` shape:
 /// `Ok` serializes to JSON, `Err` becomes `{"error": <message>}`, so a
 /// handled service error never raises past the registry.
@@ -305,7 +318,8 @@ pub async fn call(app: &AppState, user: &User, name: &str, mut args: Value) -> A
     let started = Instant::now();
     let source = Default::default();
     let captured = args.clone();
-    let mut result = crate::error::TOOL_SOURCE.scope(Arc::clone(&source), run_tool(state, owner, name, spec, args)).instrument(span.clone()).await;
+    // Boxed: the match over every tool is a large future, past a 2 MB stack in debug builds.
+    let mut result = crate::error::TOOL_SOURCE.scope(Arc::clone(&source), Box::pin(run_tool(state, owner, name, spec, args))).instrument(span.clone()).await;
 
     // Every failed tool value carries a stable `code` and the request's `trace_id`.
     if let Ok(Value::Object(map)) = &mut result
@@ -328,6 +342,8 @@ pub async fn call(app: &AppState, user: &User, name: &str, mut args: Value) -> A
 }
 
 const VAULT_ARGS: &[&str] = &["vault_id", "vault_id_a", "vault_id_b"];
+/// Arguments that are a list of vaults.
+const VAULT_LIST_ARGS: &[&str] = &["vault_ids"];
 
 /// A vault given by name ("Acme", "personal") -> its id, among the caller's
 /// vaults, case-insensitively. Ids (`vault:...`) pass through unchanged.
@@ -349,7 +365,10 @@ fn match_vault(given: &str, vaults: &[VaultWithRole]) -> Result<String, String> 
 /// `list_my_vaults` already honours a vault-restricted token, so a name outside it never resolves.
 async fn resolve_vault_names(db: &OrgDb, owner: &RecordId, args: &mut Value) -> Result<(), String> {
     let Some(obj) = args.as_object_mut() else { return Ok(()) };
-    if !VAULT_ARGS.iter().any(|k| obj.get(*k).and_then(Value::as_str).is_some_and(|v| !v.starts_with("vault:"))) {
+    let by_name = |v: &Value| v.as_str().is_some_and(|v| !v.starts_with("vault:"));
+    if !VAULT_ARGS.iter().any(|k| obj.get(*k).is_some_and(by_name))
+        && !VAULT_LIST_ARGS.iter().any(|k| obj.get(*k).and_then(Value::as_array).is_some_and(|a| a.iter().any(by_name)))
+    {
         return Ok(());
     }
     let vaults = list_my_vaults(db, owner).await.map_err(|e| e.message)?;
@@ -357,6 +376,15 @@ async fn resolve_vault_names(db: &OrgDb, owner: &RecordId, args: &mut Value) -> 
         if let Some(given) = obj.get(*key).and_then(Value::as_str) {
             let id = match_vault(given, &vaults)?;
             obj.insert(key.to_string(), Value::String(id));
+        }
+    }
+    for key in VAULT_LIST_ARGS {
+        if let Some(list) = obj.get_mut(*key).and_then(Value::as_array_mut) {
+            for item in list.iter_mut() {
+                if let Some(given) = item.as_str() {
+                    *item = Value::String(match_vault(given, &vaults)?);
+                }
+            }
         }
     }
     Ok(())

@@ -9,16 +9,18 @@
 use super::Stmt;
 
 pub const MEMORY_FOR_EMBED: Stmt = Stmt::new("cache.memory_for_embed", "SELECT id, text, type FROM memory WHERE vault = $vault LIMIT $limit");
+/// Records in a scope (`cache::search::RecordScope`), for the vector cloud.
 pub const RECORDS_FOR_EMBED: Stmt = Stmt::new(
     "cache.records_for_embed",
-    "SELECT id, title, body_text, embedding FROM cache_record WHERE owner = $owner AND deleted = false LIMIT $limit",
+    "SELECT id, title, body_text, embedding FROM cache_record \
+     WHERE (vault IN $vaults OR ($own AND vault = NONE AND owner = $owner)) AND deleted = false LIMIT $limit",
 );
 
 // newest first, limited in the database, so a broad range never loads the whole range
 pub const CACHE_RECORDS_IN_RANGE: Stmt = Stmt::new(
     "cache.records_in_range",
-    "SELECT id, occurred_at FROM cache_record WHERE owner = $owner AND deleted = false \
-     AND occurred_at >= $since AND occurred_at <= $until ORDER BY occurred_at DESC LIMIT $limit",
+    "SELECT id, occurred_at FROM cache_record WHERE (vault IN $vaults OR ($own AND vault = NONE AND owner = $owner)) \
+     AND deleted = false AND occurred_at >= $since AND occurred_at <= $until ORDER BY occurred_at DESC LIMIT $limit",
 );
 pub const MEMORIES_IN_RANGE: Stmt = Stmt::new(
     "cache.memories_in_range",
@@ -30,21 +32,30 @@ pub const MEMORIES_IN_RANGE: Stmt = Stmt::new(
 pub const SYNC_LINKS_OF: Stmt = Stmt::new("cache.sync_links_of", "SELECT rel, out FROM linked_to WHERE in = $id AND origin = 'sync'");
 pub const DELETE_SYNC_LINKS: Stmt = Stmt::new("cache.delete_sync_links", "DELETE linked_to WHERE in = $id AND origin = 'sync'");
 pub const RELATE_SYNC_LINK: Stmt = Stmt::new("cache.relate_sync_link", "RELATE $in->linked_to->$out SET rel = $rel, origin = 'sync'");
-pub const TOUCH_INGESTED: Stmt = Stmt::new("cache.touch_ingested", "UPDATE $id SET ingested_at = time::now()");
+/// An unchanged replayed record: when it was last seen, plus its vault and route keys (see
+/// `cache::search::Placement`).
+pub const TOUCH_INGESTED: Stmt =
+    Stmt::new("cache.touch_ingested", "UPDATE $id SET ingested_at = time::now(), vault = $vault, route_keys = $route_keys");
 pub const UPSERT_RECORD: Stmt = Stmt::new(
     "cache.upsert_record",
     "UPSERT $id SET owner = $owner, source = $source, type = $type, external_id = $external_id, \
      title = $title, body_text = $body_text, occurred_at = $occurred_at, url = $url, \
      payload = $payload, content_hash = $content_hash, ingested_at = $ingested_at, \
-     updated_at = $updated_at, deleted = $deleted RETURN AFTER",
+     updated_at = $updated_at, deleted = $deleted, vault = $vault, route_keys = $route_keys RETURN AFTER",
 );
 /// Whether a stored record already has its embedding (an unchanged replayed record is re-embedded only if not).
 pub const HAS_EMBEDDING: Stmt = Stmt::new("cache.has_embedding", "SELECT VALUE embedding != NONE FROM ONLY $id");
 pub const SET_EMBEDDING: Stmt = Stmt::new("cache.set_embedding", "UPDATE $id SET embedding = $embedding");
 
-/// One live record of the owner by id (`$id` a `cache_record` record id), a tombstone reads as absent.
+/// The owner's own live records by id, whatever vault they are filed in (work done on the owner's
+/// behalf, never a read); a tombstone reads as absent.
 pub const RECORDS_BY_IDS: Stmt =
     Stmt::new("cache.records_by_ids", "SELECT * FROM $ids WHERE owner = $owner AND deleted = false");
+/// The live records by id that a read's scope sees (`cache::search::RecordScope`).
+pub const RECORDS_IN_SCOPE: Stmt = Stmt::new(
+    "cache.records_in_scope",
+    "SELECT * FROM $ids WHERE (vault IN $vaults OR ($own AND vault = NONE AND owner = $owner)) AND deleted = false",
+);
 
 /// A memory page for recall's hydrate: this vault's, and not a stale observation (its facts changed
 /// since it was consolidated, so it is not a current fact; the raw facts are still recalled).
@@ -63,22 +74,27 @@ pub const LIVE_NEIGHBOURS: Stmt = Stmt::new(
 );
 
 // A tombstoned endpoint hides the link (a not-yet-synced target, like a category placeholder, does not),
-// and a tombstoned record has no links at all.
+// and a tombstoned record has no links at all. The other end must be in the read's scope (or not synced
+// yet): a record routed to one vault may link to one its owner kept in another.
 pub const LINKS_OUT: Stmt = Stmt::new(
     "cache.links_out",
-    "SELECT rel, out FROM linked_to WHERE in = $id AND in.deleted != true AND out.deleted != true",
+    "SELECT rel, out FROM linked_to WHERE in = $id AND in.deleted != true AND out.deleted != true \
+     AND (out.owner = NONE OR out.vault IN $vaults OR ($own AND out.vault = NONE AND out.owner = $owner))",
 );
 pub const LINKS_OUT_REL: Stmt = Stmt::new(
     "cache.links_out_rel",
-    "SELECT rel, out FROM linked_to WHERE in = $id AND rel = $rel AND in.deleted != true AND out.deleted != true",
+    "SELECT rel, out FROM linked_to WHERE in = $id AND rel = $rel AND in.deleted != true AND out.deleted != true \
+     AND (out.owner = NONE OR out.vault IN $vaults OR ($own AND out.vault = NONE AND out.owner = $owner))",
 );
 pub const LINKS_IN: Stmt = Stmt::new(
     "cache.links_in",
-    "SELECT rel, in FROM linked_to WHERE out = $id AND in.deleted != true AND out.deleted != true",
+    "SELECT rel, in FROM linked_to WHERE out = $id AND in.deleted != true AND out.deleted != true \
+     AND (in.owner = NONE OR in.vault IN $vaults OR ($own AND in.vault = NONE AND in.owner = $owner))",
 );
 pub const LINKS_IN_REL: Stmt = Stmt::new(
     "cache.links_in_rel",
-    "SELECT rel, in FROM linked_to WHERE out = $id AND rel = $rel AND in.deleted != true AND out.deleted != true",
+    "SELECT rel, in FROM linked_to WHERE out = $id AND rel = $rel AND in.deleted != true AND out.deleted != true \
+     AND (in.owner = NONE OR in.vault IN $vaults OR ($own AND in.vault = NONE AND in.owner = $owner))",
 );
 
 pub const EMBED_CACHE_GET: Stmt = Stmt::new("cache.embed_cache_get", "SELECT text_hmac, vector FROM embed_cache WHERE text_hmac IN $keys");
@@ -136,6 +152,7 @@ pub const ALL: &[&Stmt] = &[
     &UPSERT_RECORD,
     &HAS_EMBEDDING,
     &RECORDS_BY_IDS,
+    &RECORDS_IN_SCOPE,
     &MEMORIES_FOR_RECALL,
     &LIVE_NEIGHBOURS,
     &SET_EMBEDDING,

@@ -40,6 +40,7 @@ test.describe("Click-through fixes", () => {
     await page.getByRole("button", { name: "Create account" }).click();
     await page.waitForURL(/\/onboarding\?next=%2Fvaults/);
     await page.getByRole("button", { name: "Let's go" }).click();
+    await page.getByRole("button", { name: "Skip", exact: true }).click();
     const skip = page.getByRole("button", { name: "Skip & finish" });
     if (await skip.isVisible({ timeout: 2000 }).catch(() => false)) await skip.click();
     await page.waitForURL((url) => url.pathname === "/vaults");
@@ -77,6 +78,35 @@ test.describe("Click-through fixes", () => {
     await expect(page.getByText("Signs you out here.")).toBeVisible();
     await page.getByRole("button", { name: "Keep" }).click();
     await expect(page.getByText("Signs you out here.")).toHaveCount(0);
+  });
+
+  test("an API token is renamed inline: Enter saves, Esc cancels, a bad name shows the error", async ({ browser }) => {
+    const { page } = await newUser(browser, "tokrename");
+    expect((await page.request.post("/api/auth/tokens", { data: { name: "laptop" } })).ok()).toBeTruthy();
+    await page.goto("/settings?tab=tokens");
+    const row = page.getByRole("row").filter({ hasText: "laptop" });
+
+    await row.getByRole("button", { name: "Rename laptop" }).click();
+    await page.getByLabel("New token name").fill("work laptop");
+    await page.getByLabel("New token name").press("Enter");
+    await expect(page.getByRole("button", { name: "Rename work laptop" })).toBeVisible();
+    const saved = await (await page.request.get("/api/auth/tokens")).json();
+    expect(saved.map((t: { name: string }) => t.name)).toContain("work laptop");
+
+    // clicking the name edits it too; Esc puts it back untouched
+    await page.getByRole("button", { name: "work laptop", exact: true }).click();
+    await page.getByLabel("New token name").fill("discarded");
+    await page.getByLabel("New token name").press("Escape");
+    await expect(page.getByRole("button", { name: "Rename work laptop" })).toBeVisible();
+    expect((await (await page.request.get("/api/auth/tokens")).json())[0].name).toBe("work laptop");
+
+    // the server's refusal is shown (the field caps typing at 80, so rename a token deleted meanwhile)
+    const id = saved[0].id;
+    await page.getByRole("button", { name: "Rename work laptop" }).click();
+    expect((await page.request.delete(`/api/auth/tokens/${id}`)).ok()).toBeTruthy();
+    await page.getByLabel("New token name").fill("gone");
+    await page.getByLabel("New token name").press("Enter");
+    await expect(page.getByRole("alert").filter({ hasText: "auth.not_found" })).toBeVisible();
   });
 
   test("chat says up front when no model is configured", async ({ browser }) => {

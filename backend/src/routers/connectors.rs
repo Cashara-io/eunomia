@@ -22,6 +22,7 @@ use crate::connectors::service::{self, Connector, CONNECTOR_KINDS};
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::models_user::User;
 use crate::sources::registry;
+use crate::sources::routing::{self, MoveReport, Routing};
 use crate::state::{AppState, OrgState};
 
 use super::schemas::{FinanceSummary, PocketaiSummary, SnapshotOut};
@@ -37,6 +38,8 @@ pub fn router() -> Router<AppState> {
         .route("/connectors/{kind}", get(get_one).put(put_one))
         .route("/connectors/{kind}/test", axum::routing::post(test_one))
         .route("/connectors/{kind}/data", axum::routing::delete(delete_data))
+        .route("/connectors/{kind}/move", axum::routing::post(move_data))
+        .route("/connectors/repoint", axum::routing::post(repoint))
 }
 
 pub fn snapshot_router() -> Router<AppState> {
@@ -53,6 +56,10 @@ struct ConnectorOut {
     credentials_set: bool,
     #[schema(value_type = String)]
     updated_at: surrealdb::types::Datetime,
+    /// Which vault its syncs file records in: a default destination and ordered rules.
+    routing: Routing,
+    /// The fields this connector's rules can match on.
+    routing_fields: Vec<&'static str>,
 }
 
 fn connector_out(row: &Connector) -> ConnectorOut {
@@ -62,6 +69,8 @@ fn connector_out(row: &Connector) -> ConnectorOut {
         config: row.config.clone(),
         credentials_set: !row.credentials_encrypted.is_empty(),
         updated_at: row.updated_at,
+        routing: Routing::of(&row.routing),
+        routing_fields: registry::for_provider(&row.kind).map(|s| routing::fields(s.key()).to_vec()).unwrap_or_default(),
     }
 }
 
@@ -86,6 +95,9 @@ struct ConnectorUpdateBody {
     enabled: Option<bool>,
     config: Option<Value>,
     credentials: Option<Value>,
+    /// Replaces the routing (destination vault and rules). It applies to records synced from now on;
+    /// `POST /api/connectors/{kind}/move` re-files those already synced.
+    routing: Option<Routing>,
 }
 
 #[derive(Deserialize, utoipa::IntoParams)]
@@ -288,7 +300,11 @@ async fn put_one(
 ) -> AppResult<Json<ConnectorOut>> {
     let state = state.org(&user.org).await?;
     require_known_kind(&kind)?;
-    let row = service::upsert_connector(
+    let routing = match (body.routing, registry::for_provider(&kind)) {
+        (Some(r), Some(src)) => Some(routing::validate(&state.db, &user.id, src.key(), r).await?),
+        _ => None,
+    };
+    let mut row = service::upsert_connector(
         &state.db,
         &state.settings.encryption_key,
         &user.id,
@@ -298,6 +314,10 @@ async fn put_one(
         body.credentials,
     )
     .await?;
+    if let Some(r) = routing {
+        routing::set(&state.db, &row.id, &r).await?;
+        row.routing = serde_json::to_value(&r).unwrap_or_default();
+    }
     Ok(Json(connector_out(&row)))
 }
 
@@ -353,6 +373,63 @@ async fn delete_data(State(app): State<AppState>, user: User, Path(kind): Path<S
         records: out["records"].as_u64().unwrap_or(0),
         memories: out["memories"].as_u64().unwrap_or(0),
     }))
+}
+
+/// "Move existing data": re-files this connector's already-synced records, and the facts and relations
+/// drawn from them, to the vault its current routing sends them to. Account-level (the gate refuses
+/// vault-restricted tokens).
+#[utoipa::path(
+    operation_id = "moveConnectorData",
+    post,
+    path = "/api/connectors/{kind}/move",
+    tag = "connectors",
+    summary = "Re-file a connector's synced data by its current routing",
+    description = "Changing a connector's destination vault or rules applies to records synced afterwards. This moves the records already synced (and the facts and relations extracted from them) to where the current routing sends them. Idempotent: a record already in the right vault is left alone, and a fact the destination already has is not duplicated.",
+    params(("kind" = String, Path)),
+    responses((status = 200, body = MoveReport), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = []), ("bearer" = [])),
+)]
+async fn move_data(State(app): State<AppState>, user: User, Path(kind): Path<String>) -> AppResult<Json<MoveReport>> {
+    let state = app.org(&user.org).await?;
+    require_known_kind(&kind)?;
+    let src = registry::for_provider(&kind).ok_or_else(|| AppError::coded(ErrorCode::ConnectorNotFound, "unknown connector"))?;
+    let report = routing::move_existing(&state, &user.id, src.as_ref()).await?;
+    crate::audit::record_as_caller(&app.control, &user.id, "connector.move_data", &kind, "ok").await;
+    Ok(Json(report))
+}
+
+#[derive(Deserialize, utoipa::ToSchema)]
+struct RepointBody {
+    /// Vaults connectors may name now (e.g. the two vaults just merged).
+    from: Vec<String>,
+    /// The vault to name instead (e.g. the merged vault).
+    to: String,
+}
+
+#[derive(Serialize, utoipa::ToSchema)]
+struct RepointOut {
+    /// Connectors whose default or rules changed.
+    connectors: usize,
+}
+
+/// After a vault merge: point every connector of the caller that files records in one of `from` at
+/// `to` instead. Applies to future syncs, like any routing change.
+#[utoipa::path(
+    operation_id = "repointConnectors",
+    post,
+    path = "/api/connectors/repoint",
+    tag = "connectors",
+    summary = "Point connectors at another vault",
+    request_body = RepointBody,
+    responses((status = 200, body = RepointOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = []), ("bearer" = [])),
+)]
+async fn repoint(State(app): State<AppState>, user: User, Json(body): Json<RepointBody>) -> AppResult<Json<RepointOut>> {
+    let state = app.org(&user.org).await?;
+    let to = crate::rid::parse(&body.to).map_err(|_| AppError::bad_request(format!("invalid vault id {:?}", body.to)))?;
+    let from: Vec<surrealdb::types::RecordId> = body.from.iter().filter_map(|v| crate::rid::parse(v).ok()).collect();
+    let connectors = routing::repoint(&state.db, &user.id, &from, &to).await?;
+    Ok(Json(RepointOut { connectors }))
 }
 
 /// Best-effort figures for each connected account, read live from each
@@ -416,6 +493,8 @@ async fn snapshot(State(state): State<AppState>, user: User) -> AppResult<Json<V
     put_one,
     test_one,
     delete_data,
+    move_data,
+    repoint,
     snapshot,
 ))]
 pub struct Doc;
@@ -434,6 +513,7 @@ mod tests {
             config: json!({}),
             credentials_encrypted: "ciphertext".to_string(),
             updated_at: chrono::Utc::now().into(),
+            routing: json!({}),
         };
         let out = serde_json::to_value(connector_out(&row)).unwrap();
         assert_eq!(out["credentials_set"], true);

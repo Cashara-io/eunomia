@@ -33,6 +33,8 @@ struct UpdateStatus {
     checked_at: Option<String>,
     applying: Option<bool>,
     error: Option<String>,
+    /// While `applying`: what the updater is waiting on (e.g. a slow first boot it keeps retrying).
+    progress: Option<String>,
 }
 
 /// Body of `POST /update/request` and `/update/check`.

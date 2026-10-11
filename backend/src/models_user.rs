@@ -352,6 +352,17 @@ pub async fn list_api_tokens(db: &ControlDb, owner: &RecordId) -> AppResult<Vec<
     Ok(res.take(0)?)
 }
 
+/// The renamed token, or `None` when `owner` has no token `token_id`.
+pub async fn rename_api_token(db: &ControlDb, owner: &RecordId, token_id: &RecordId, name: &str) -> AppResult<Option<ApiTokenSummary>> {
+    let mut res = store::control::AUTH_TOKEN_RENAME
+        .on(db)
+        .bind(("id", token_id.clone()))
+        .bind(("owner", owner.clone()))
+        .bind(("name", name.to_string()))
+        .await?;
+    Ok(res.take::<Vec<ApiTokenSummary>>(0)?.into_iter().next())
+}
+
 pub async fn revoke_api_token(db: &ControlDb, owner: &RecordId, token_id: &RecordId) -> AppResult<bool> {
     let mut res = store::control::AUTH_TOKEN_DELETE
         .on(db)
@@ -411,11 +422,11 @@ pub async fn check_api_token(db: &ControlDb, token: &str) -> AppResult<TokenChec
         return Ok(TokenCheck::Expired);
     }
 
-    // Best-effort bump; failure here must not block auth.
-    let _ = store::control::AUTH_TOKEN_TOUCH
-        .on(db)
-        .bind(("id", row.id.clone()))
-        .await;
+    // Best-effort bump, at most once a minute (the statement checks); the request does not wait for it.
+    let (control, id) = (db.clone(), row.id.clone());
+    tokio::spawn(async move {
+        let _ = store::control::AUTH_TOKEN_TOUCH.on(&control).bind(("id", id)).await;
+    });
 
     let owner_row: Option<UserRow> = store::get_control(db, &row.owner).await?;
     Ok(match owner_row {

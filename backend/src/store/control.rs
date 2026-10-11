@@ -19,6 +19,7 @@ pub const ALL: &[&ControlStmt] = &[
     &AUTH_USER_ONBOARDED,
     &AUTH_USER_DELETE,
     &AUTH_TOKEN_DELETE,
+    &AUTH_TOKEN_RENAME,
     &AUTH_TOKEN_CREATE,
     &AUTH_TOKEN_LIST,
     &AUTH_TOKEN_BY_HASH,
@@ -70,11 +71,13 @@ pub const AUTH_SESSION_FIND: ControlStmt = ControlStmt::new(
 );
 
 /// Slides `expires_at` forward, but only when it is more than an hour behind
-/// `$new_exp` (so at most one extension per hour of use).
+/// `$new_exp` (so at most one extension per hour of use). `last_seen_at` moves at most once a
+/// minute: a session in use does not write its row on every request.
 pub const AUTH_SESSION_TOUCH: ControlStmt = ControlStmt::new(
     "app.auth_session_touch",
     "UPDATE $id SET last_seen_at = time::now(), \
-     expires_at = IF expires_at = NONE OR expires_at < $threshold THEN $new_exp ELSE expires_at END",
+     expires_at = IF expires_at = NONE OR expires_at < $threshold THEN $new_exp ELSE expires_at END \
+     WHERE last_seen_at IS NONE OR last_seen_at < time::now() - 1m OR expires_at = NONE OR expires_at < $threshold",
 );
 
 pub const AUTH_SESSION_REVOKE_BY_SID: ControlStmt =
@@ -106,6 +109,12 @@ pub const AUTH_TOKEN_DELETE: ControlStmt = ControlStmt::new(
     "DELETE api_token WHERE id = $id AND owner = $owner RETURN BEFORE",
 );
 
+pub const AUTH_TOKEN_RENAME: ControlStmt = ControlStmt::new(
+    "app.auth_token_rename",
+    "UPDATE api_token SET name = $name WHERE id = $id AND owner = $owner \
+     RETURN id, name, created_at, last_used_at, scopes, vault, expires_at",
+);
+
 pub const AUTH_USER_ONBOARDED: ControlStmt = ControlStmt::new("app.auth_user_onboarded", "UPDATE $id SET onboarded_at = time::now()");
 
 pub const AUTH_TOKEN_CREATE: ControlStmt = ControlStmt::new(
@@ -127,7 +136,12 @@ pub const AUTH_TOKEN_BY_HASH: ControlStmt =
          WHERE token_hash = $hash LIMIT 1",
     );
 
-pub const AUTH_TOKEN_TOUCH: ControlStmt = ControlStmt::new("app.auth_token_touch", "UPDATE $id SET last_used_at = time::now()");
+/// At most once a minute per token, like `OAUTH_GRANT_TOUCH`: a busy token shared by many clients
+/// would otherwise write its row on every request.
+pub const AUTH_TOKEN_TOUCH: ControlStmt = ControlStmt::new(
+    "app.auth_token_touch",
+    "UPDATE $id SET last_used_at = time::now() WHERE last_used_at IS NONE OR last_used_at < time::now() - 1m",
+);
 
 pub const EXPORT_USER_EMAILS: ControlStmt = ControlStmt::new("app.export_user_emails", "SELECT id, email FROM user WHERE id IN $ids");
 
@@ -207,7 +221,7 @@ pub const OAUTH_TOKEN_CREATE: ControlStmt = ControlStmt::new(
 /// Joins the family so one query serves both bearer verification and refresh.
 pub const OAUTH_TOKEN_BY_HASH: ControlStmt = ControlStmt::new(
     "app.oauth_token_by_hash",
-    "SELECT id, kind, family, expires_at < time::now() AS expired, used_at, family.owner AS owner, \
+    "SELECT id, kind, family, expires_at, expires_at < time::now() AS expired, used_at, family.owner AS owner, \
      family.client_id AS client_id, (scope ?? family.scope) AS scope, family.resource AS resource \
      FROM oauth_token WHERE token_hash = $token_hash LIMIT 1",
 );

@@ -133,6 +133,14 @@ export type ConnectorOut = {
     credentials_set: boolean;
     enabled: boolean;
     kind: string;
+    /**
+     * Which vault its syncs file records in: a default destination and ordered rules.
+     */
+    routing: Routing;
+    /**
+     * The fields this connector's rules can match on.
+     */
+    routing_fields: Array<string>;
     updated_at: string;
 };
 
@@ -140,6 +148,7 @@ export type ConnectorUpdateBody = {
     config?: unknown;
     credentials?: unknown;
     enabled?: boolean | null;
+    routing?: null | Routing;
 };
 
 export type ConsentClient = {
@@ -512,6 +521,28 @@ export type ModelsOut = {
     models: Array<string>;
 };
 
+/**
+ * What "Move existing data" did.
+ */
+export type MoveReport = {
+    /**
+     * Facts and relations left in a vault the owner is no longer a member of.
+     */
+    left: number;
+    /**
+     * Facts drawn from them that moved too (one the destination already had is not duplicated).
+     */
+    memories: number;
+    /**
+     * Records re-filed to the vault the current rules route them to.
+     */
+    records: number;
+    /**
+     * Relations drawn from them that moved too.
+     */
+    relations: number;
+};
+
 export type OkBody = {
     ok: boolean;
     /**
@@ -578,6 +609,50 @@ export type RelationOut = {
 
 export type RemovedBody = {
     removed: boolean;
+};
+
+export type RepointBody = {
+    /**
+     * Vaults connectors may name now (e.g. the two vaults just merged).
+     */
+    from: Array<string>;
+    /**
+     * The vault to name instead (e.g. the merged vault).
+     */
+    to: string;
+};
+
+export type RepointOut = {
+    /**
+     * Connectors whose default or rules changed.
+     */
+    connectors: number;
+};
+
+export type Routing = {
+    /**
+     * Where records no rule matches go (`vault:...`); absent: your personal vault.
+     */
+    default_vault?: string | null;
+    /**
+     * Checked in order; the first match wins.
+     */
+    rules?: Array<Rule>;
+};
+
+export type Rule = {
+    /**
+     * One of the connector's `routing_fields`.
+     */
+    field: string;
+    /**
+     * What the field must be (case-insensitive); for `title`, a word or phrase it contains.
+     */
+    value: string;
+    /**
+     * The vault a matching record goes to (`vault:...`).
+     */
+    vault: string;
 };
 
 export type SessionOut = {
@@ -752,6 +827,13 @@ export type TokenOut = {
     vault_id?: string | null;
 };
 
+export type TokenRename = {
+    /**
+     * The new name: trimmed, 1 to 80 characters.
+     */
+    name: string;
+};
+
 /**
  * Body of `POST /update/request` and `/update/check`.
  */
@@ -775,6 +857,10 @@ export type UpdateStatus = {
     current_version?: string | null;
     error?: string | null;
     latest_version?: string | null;
+    /**
+     * While `applying`: what the updater is waiting on (e.g. a slow first boot it keeps retrying).
+     */
+    progress?: string | null;
     update_available?: boolean | null;
 };
 
@@ -1084,6 +1170,30 @@ export type DeleteTokenResponses = {
 
 export type DeleteTokenResponse = DeleteTokenResponses[keyof DeleteTokenResponses];
 
+export type RenameTokenData = {
+    body: TokenRename;
+    path: {
+        token_id: string;
+    };
+    query?: never;
+    url: '/api/auth/tokens/{token_id}';
+};
+
+export type RenameTokenErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type RenameTokenError = RenameTokenErrors[keyof RenameTokenErrors];
+
+export type RenameTokenResponses = {
+    200: TokenOut;
+};
+
+export type RenameTokenResponse = RenameTokenResponses[keyof RenameTokenResponses];
+
 export type ListThreadsData = {
     body?: never;
     path?: never;
@@ -1327,6 +1437,28 @@ export type GetPocketaiSummaryResponses = {
 
 export type GetPocketaiSummaryResponse = GetPocketaiSummaryResponses[keyof GetPocketaiSummaryResponses];
 
+export type RepointConnectorsData = {
+    body: RepointBody;
+    path?: never;
+    query?: never;
+    url: '/api/connectors/repoint';
+};
+
+export type RepointConnectorsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type RepointConnectorsError = RepointConnectorsErrors[keyof RepointConnectorsErrors];
+
+export type RepointConnectorsResponses = {
+    200: RepointOut;
+};
+
+export type RepointConnectorsResponse = RepointConnectorsResponses[keyof RepointConnectorsResponses];
+
 export type GetUpBankFinanceSummaryData = {
     body?: never;
     path?: never;
@@ -1422,6 +1554,30 @@ export type DeleteConnectorDataResponses = {
 };
 
 export type DeleteConnectorDataResponse = DeleteConnectorDataResponses[keyof DeleteConnectorDataResponses];
+
+export type MoveConnectorDataData = {
+    body?: never;
+    path: {
+        kind: string;
+    };
+    query?: never;
+    url: '/api/connectors/{kind}/move';
+};
+
+export type MoveConnectorDataErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type MoveConnectorDataError = MoveConnectorDataErrors[keyof MoveConnectorDataErrors];
+
+export type MoveConnectorDataResponses = {
+    200: MoveReport;
+};
+
+export type MoveConnectorDataResponse = MoveConnectorDataResponses[keyof MoveConnectorDataResponses];
 
 export type TestConnectorData = {
     body?: never;

@@ -268,22 +268,70 @@ pub async fn personal_vault_id(db: &OrgDb, user_id: &RecordId) -> AppResult<Reco
     })
 }
 
-/// What reads search when no `vault_id` is given: `user_id`'s personal vault (first) plus every org
-/// vault they're an active member of -- not other people's personal vaults they've joined, which stay
-/// opt-in. A vault-restricted credential reads only its vault.
-pub async fn default_read_vault_ids(db: &OrgDb, user_id: &RecordId) -> AppResult<Vec<RecordId>> {
-    if authz::restricted_vault()?.is_some() {
-        return Ok(vec![default_vault_id(db, user_id).await?]);
-    }
+/// The vaults a read covers, from one membership query: `vault_ids` (each must be one of the
+/// user's, and inside a vault-restricted token's vault; duplicates dropped), or without them the user's personal vault first
+/// plus every org vault they're an active member of, oldest membership first -- not other people's
+/// personal vaults they've joined, which stay opt-in. A vault-restricted credential reads only its
+/// vault. The same checks `authz::authorize` makes for `ReadMemories`, without a query per vault.
+pub struct ReadScope {
+    pub vaults: Vec<RecordId>,
+    /// The user's own personal vault (whatever the credential is restricted to).
+    pub personal: RecordId,
+    /// Vault id -> name, for the vaults the credential may see.
+    pub names: HashMap<String, String>,
+}
+
+pub async fn read_scope(db: &OrgDb, user_id: &RecordId, vault_ids: &[RecordId]) -> AppResult<ReadScope> {
+    authz::require_scope(Action::ReadMemories.scope())?;
     #[derive(Deserialize, SurrealValue)]
     struct Row {
         vault: RecordId,
+        #[serde(default)]
+        #[surreal(default)]
+        kind: Option<String>,
+        #[serde(default)]
+        #[surreal(default)]
+        name: Option<String>,
     }
-    let mut res = store::vaults::ORG_IDS.on(db).bind(("user", user_id.clone())).await?;
+    let mut res = store::vaults::MY_MEMBERSHIPS.on(db).bind(("user", user_id.clone())).await?;
     let rows: Vec<Row> = res.take(0)?;
-    let mut out = vec![personal_vault_id(db, user_id).await?];
-    out.extend(rows.into_iter().map(|r| r.vault));
-    Ok(out)
+    let personal = rows.iter().find(|r| r.kind.as_deref() == Some("personal")).map(|r| r.vault.clone()).ok_or_else(|| {
+        AppError::internal(format!("user {} has no personal vault -- registration should have created one", user_id.to_string()))
+    })?;
+    let only = authz::restricted_vault()?;
+    let member = |v: &RecordId| {
+        if rows.iter().any(|r| &r.vault == v) {
+            Ok(())
+        } else {
+            Err(AppError::coded(ErrorCode::VaultForbidden, format!("not a member of vault {}", v.to_string())))
+        }
+    };
+    let vaults = match (vault_ids, &only) {
+        ([_, ..], _) => {
+            let mut out: Vec<RecordId> = Vec::with_capacity(vault_ids.len());
+            for v in vault_ids {
+                authz::check_vault(v)?;
+                member(v)?;
+                if !out.contains(v) {
+                    out.push(v.clone());
+                }
+            }
+            out
+        }
+        ([], Some(o)) => {
+            member(o)?;
+            vec![o.clone()]
+        }
+        ([], None) => std::iter::once(personal.clone())
+            .chain(rows.iter().filter(|r| r.kind.as_deref() == Some("org")).map(|r| r.vault.clone()))
+            .collect(),
+    };
+    let names = rows
+        .into_iter()
+        .filter(|r| only.as_ref().is_none_or(|o| o == &r.vault))
+        .map(|r| (r.vault.to_string(), r.name.unwrap_or_default()))
+        .collect();
+    Ok(ReadScope { vaults, personal, names })
 }
 
 pub async fn list_my_vaults(db: &OrgDb, user_id: &RecordId) -> AppResult<Vec<VaultWithRole>> {

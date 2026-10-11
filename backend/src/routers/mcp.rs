@@ -4,7 +4,8 @@
 //! 2025-03-26 clients) and gets a plain `application/json` reply -- no
 //! sessions and no server-initiated stream, so GET/DELETE are 405. Exposes
 //! the same tool registry the chat agent uses (`tools::registry`), so every
-//! call is owner-scoped and audit-logged exactly like REST/chat calls.
+//! call is owner-scoped and audit-logged exactly like REST/chat calls. The user's memory skill goes
+//! out as the `initialize` instructions, the `eunomia-memory` prompt and the `eunomia://skill` resource.
 //!
 //! Auth is a personal API token or an OAuth access token (`Authorization: Bearer ...`), never the
 //! browser session cookie -- a page the user visits can't drive tools. A batch is capped at
@@ -31,12 +32,19 @@ const MAX_BATCH: usize = 32;
 const SUPPORTED_VERSIONS: &[&str] = &["2025-11-25", "2025-06-18", "2025-03-26"];
 const DEFAULT_VERSION: &str = "2025-06-18";
 
-const INSTRUCTIONS: &str = "Eunomia is the user's personal memory: entities (people, organisations, \
+const INSTRUCTIONS: &str = "Eunomia is the user's long-term memory: entities (people, organisations, \
 locations, code) with remembered facts, plus records synced from their connected sources. \
 Use `recall` before answering questions about the user's world, `search`/`get` for raw synced records, \
 and `memory_write` to remember new facts. You are the model: if the server has no OpenAI key, `reflect` \
 returns the recalled memories for you to answer from (cite them by index) instead of a synthesized answer. \
-Everything is scoped to the user's personal vault unless a `vault_id` is given.";
+Writes go to the user's personal vault unless a `vault_id` is given; `recall`, `reflect` and `entities_search` \
+cover the personal vault and every org vault the user belongs to unless one is.";
+
+/// The memory skill is also served as a prompt and a resource: `instructions` reach only the
+/// clients that read them, and Claude Code offers MCP prompts as slash commands.
+const SKILL_PROMPT: &str = "eunomia-memory";
+const SKILL_URI: &str = "eunomia://skill";
+const SKILL_DESCRIPTION: &str = "The user's Eunomia memory skill: when to recall and what to remember.";
 
 pub fn router() -> Router<AppState> {
     Router::new().route("/mcp", post(handle).get(method_not_allowed).delete(method_not_allowed))
@@ -157,17 +165,62 @@ async fn handle_message(state: &AppState, user: &User, message: &Value) -> Optio
     Some(match method {
         "initialize" => {
             // the user's memory skill rides along, so edits in the UI reach every client on connect
-            let skill = match state.org(&user.org).await {
-                Ok(s) => crate::routers::settings::memory_skill(&s.db, &user.id).await.unwrap_or_default(),
-                Err(_) => String::new(),
-            };
+            let skill = user_skill(state, user).await.unwrap_or_default();
             result_response(id, initialize_result(&params, &skill))
         }
         "ping" => result_response(id, json!({})),
         "tools/list" => result_response(id, json!({ "tools": tool_list() })),
         "tools/call" => call_tool(state, user, id, &params).await,
+        "prompts/list" => {
+            let prompts: Vec<Value> = may_read_skill()
+                .then(|| json!({ "name": SKILL_PROMPT, "title": "Eunomia memory", "description": SKILL_DESCRIPTION, "arguments": [] }))
+                .into_iter()
+                .collect();
+            result_response(id, json!({ "prompts": prompts }))
+        }
+        "resources/list" => {
+            let resources: Vec<Value> = may_read_skill()
+                .then(|| json!({ "uri": SKILL_URI, "name": SKILL_PROMPT, "title": "Eunomia memory skill", "description": SKILL_DESCRIPTION, "mimeType": "text/markdown" }))
+                .into_iter()
+                .collect();
+            result_response(id, json!({ "resources": resources }))
+        }
+        "prompts/get" | "resources/read" => {
+            let (key, wanted, unknown) = if method == "prompts/get" { ("name", SKILL_PROMPT, -32602) } else { ("uri", SKILL_URI, -32002) };
+            let asked = params.get(key).and_then(Value::as_str).unwrap_or_default();
+            if asked != wanted {
+                return Some(error_response(id, unknown, ErrorCode::ResourceNotFound, &format!("Unknown {key}: {asked}")));
+            }
+            if !may_read_skill() {
+                return Some(error_response(id, -32602, ErrorCode::AuthScope, "this token lacks the memory:read scope"));
+            }
+            let Some(skill) = user_skill(state, user).await else {
+                return Some(error_response(id, -32603, ErrorCode::Internal, "could not load the memory skill"));
+            };
+            let body = crate::docs::skill_body(&skill);
+            result_response(id, if method == "prompts/get" { prompt_result(body) } else { resource_result(body) })
+        }
         _ => error_response(id, -32601, ErrorCode::ValidationInvalid, &format!("Method not found: {method}")),
     })
+}
+
+/// The user's memory skill (their own, or the built-in one). `None` if it could not be loaded.
+async fn user_skill(state: &AppState, user: &User) -> Option<String> {
+    let org = state.org(&user.org).await.ok()?;
+    crate::routers::settings::memory_skill(&org.db, &user.id).await.ok()
+}
+
+/// Reading the skill needs `memory:read`, like `recall`; a credential without it is offered nothing.
+fn may_read_skill() -> bool {
+    crate::authz::current().is_some_and(|c| c.allows(crate::scopes::MEMORY_READ))
+}
+
+fn prompt_result(body: &str) -> Value {
+    json!({ "description": SKILL_DESCRIPTION, "messages": [{ "role": "user", "content": { "type": "text", "text": body } }] })
+}
+
+fn resource_result(body: &str) -> Value {
+    json!({ "contents": [{ "uri": SKILL_URI, "mimeType": "text/markdown", "text": body }] })
 }
 
 fn negotiate_version(requested: Option<&str>) -> &'static str {
@@ -181,7 +234,7 @@ fn initialize_result(params: &Value, skill: &str) -> Value {
     let instructions = if body.is_empty() { INSTRUCTIONS.to_string() } else { format!("{INSTRUCTIONS}\n\n{body}") };
     json!({
         "protocolVersion": negotiate_version(params.get("protocolVersion").and_then(Value::as_str)),
-        "capabilities": { "tools": { "listChanged": false } },
+        "capabilities": { "tools": { "listChanged": false }, "prompts": { "listChanged": false }, "resources": { "listChanged": false } },
         "serverInfo": { "name": "eunomia", "title": "Eunomia", "version": crate::config::APP_VERSION },
         "instructions": instructions,
     })
@@ -304,7 +357,42 @@ mod tests {
         assert!(!r["instructions"].as_str().unwrap().contains("name: eunomia-memory"));
         assert_eq!(r["protocolVersion"], "2025-03-26");
         assert!(r["capabilities"]["tools"].is_object());
+        assert!(r["capabilities"]["prompts"].is_object());
+        assert!(r["capabilities"]["resources"].is_object());
         assert_eq!(r["serverInfo"]["name"], "eunomia");
+        // reads are no longer described as personal-vault only
+        assert!(r["instructions"].as_str().unwrap().contains("every org vault"));
+    }
+
+    #[test]
+    fn the_skill_prompt_and_resource_carry_the_skill_body() {
+        let body = crate::docs::skill_body(crate::docs::DEFAULT_SKILL);
+        let p = prompt_result(body);
+        assert_eq!(p["messages"][0]["role"], "user");
+        assert!(p["messages"][0]["content"]["text"].as_str().unwrap().starts_with("# Eunomia memory"));
+        let r = resource_result(body);
+        assert_eq!(r["contents"][0]["uri"], SKILL_URI);
+        assert!(r["contents"][0]["text"].as_str().unwrap().contains("Before you finish"));
+    }
+
+    #[tokio::test]
+    async fn prompts_and_resources_are_listed_only_with_memory_read() {
+        let list = |method: &'static str| rpc(json!({ "jsonrpc": "2.0", "id": 1, "method": method }));
+        let p = crate::authz::as_system(list("prompts/list")).await.unwrap();
+        assert_eq!(p["result"]["prompts"][0]["name"], SKILL_PROMPT);
+        let r = crate::authz::as_system(list("resources/list")).await.unwrap();
+        assert_eq!(r["result"]["resources"][0]["uri"], SKILL_URI);
+        // no credential in scope (as for a token without memory:read): nothing offered, and get is refused
+        assert_eq!(list("prompts/list").await.unwrap()["result"]["prompts"], json!([]));
+        assert_eq!(list("resources/list").await.unwrap()["result"]["resources"], json!([]));
+        let get = rpc(json!({ "jsonrpc": "2.0", "id": 1, "method": "prompts/get", "params": { "name": SKILL_PROMPT } })).await.unwrap();
+        assert_eq!(get["error"]["data"]["code"], "auth.scope");
+        // unknown names: invalid params for a prompt, resource-not-found for a resource
+        let code = |r: Option<Value>| r.unwrap()["error"]["code"].as_i64().unwrap();
+        let bad_prompt = json!({ "jsonrpc": "2.0", "id": 1, "method": "prompts/get", "params": { "name": "nope" } });
+        assert_eq!(code(crate::authz::as_system(rpc(bad_prompt)).await), -32602);
+        let bad_uri = json!({ "jsonrpc": "2.0", "id": 1, "method": "resources/read", "params": { "uri": "eunomia://nope" } });
+        assert_eq!(code(crate::authz::as_system(rpc(bad_uri)).await), -32002);
     }
 
     // -- protocol-level tests: no database needed, `Surreal::init()` is an
@@ -368,7 +456,7 @@ mod tests {
     #[tokio::test]
     async fn protocol_errors_use_the_right_codes() {
         let code = |r: Option<Value>| r.unwrap()["error"]["code"].as_i64().unwrap();
-        assert_eq!(code(rpc(json!({ "jsonrpc": "2.0", "id": 1, "method": "resources/list" })).await), -32601);
+        assert_eq!(code(rpc(json!({ "jsonrpc": "2.0", "id": 1, "method": "completion/complete" })).await), -32601);
         assert_eq!(code(rpc(json!({ "jsonrpc": "2.0", "id": 1 })).await), -32600);
         assert_eq!(code(rpc(json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {} })).await), -32602);
         let unknown = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": "nope" } });

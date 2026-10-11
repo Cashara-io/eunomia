@@ -1,43 +1,25 @@
 "use client";
 
-import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import ErrorLine, { failure } from "@/components/ErrorLine";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { AlertTriangle, ArrowRight } from "lucide-react";
 import type { ApiToken } from "@/lib/types";
 import type { EntityDetail, EntityKind, EntityMemory, SourceRow } from "@/lib/types";
-import { useCreateToken, useTokens } from "@/lib/queries/auth";
+import { useTokens } from "@/lib/queries/auth";
 import { entityKeys, type EntityList } from "@/lib/queries/entities";
 import { call } from "@/lib/queries/client";
 import { useSources, useSyncSource } from "@/lib/queries/sources";
 import { getEntity, listEntities } from "@/lib/gen";
 import AuthorTag, { authorColor, CursorGlyph } from "@/components/AuthorTag";
 import CopyButton from "@/components/bits/CopyButton";
-import DecryptReveal from "@/components/bits/DecryptReveal";
 import DigitRoll from "@/components/bits/DigitRoll";
 import SyncMark, { type SyncStatus } from "@/components/bits/SyncMark";
 import { prefersReducedMotion } from "@/components/bits/motion";
 import { kindForSource } from "@/lib/connectorMeta";
+import ConnectAgents, { useMcpUrl } from "@/components/ConnectAgents";
 import { FAILURE_ALERT_THRESHOLD, isLiveSource, sourceHealth, sourceLabel } from "@/lib/sourceState";
-
-// Same origin as the app: the frontend proxies /mcp to the backend.
-const noSubscribe = () => () => {};
-function useMcpUrl(): string {
-  return useSyncExternalStore(noSubscribe, () => `${window.location.origin}/mcp`, () => "");
-}
-
-function claudeCodeCommand(url: string, token: string) {
-  return `claude mcp add --transport http eunomia ${url} --header "Authorization: Bearer ${token}"`;
-}
-
-function mcpConfig(url: string, token: string) {
-  return JSON.stringify(
-    { mcpServers: { eunomia: { type: "http", url, headers: { Authorization: `Bearer ${token}` } } } },
-    null,
-    2
-  );
-}
 
 /** Compact age: "now", "4m", "3h", "2d". */
 function age(iso: string | null | undefined): string {
@@ -86,24 +68,6 @@ function CopyField({ value, children }: { value: string; children?: React.ReactN
 
 function McpCard() {
   const mcpUrl = useMcpUrl();
-  const [token, setToken] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<Failure | null>(null);
-  const createToken = useCreateToken();
-
-  async function generate() {
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await createToken.mutateAsync({ name: "MCP" });
-      setToken(res.token);
-    } catch (err) {
-      setError(failure(err, "Could not generate a token."));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <section id="connect" className="ledger p-4 flex flex-col gap-3.5 scroll-mt-6" aria-labelledby="connect-title">
       <div className="flex flex-col gap-1">
@@ -118,45 +82,7 @@ function McpCard() {
         <CopyField value={mcpUrl} />
       </label>
 
-      {!token ? (
-        <button onClick={generate} disabled={busy} className="btn btn-primary self-start">
-          {busy ? "Generating…" : "Generate a token"}
-        </button>
-      ) : (
-        <>
-          <label className="label flex flex-col gap-1.5">
-            Personal API token, shown once: store it now
-            <CopyField value={token}>
-              {/* The token only, never the command: it decrypts once as it appears. */}
-              <DecryptReveal key={token} text={token} />
-            </CopyField>
-          </label>
-          <label className="label flex flex-col gap-1.5">
-            Claude Code
-            <CopyField value={claudeCodeCommand(mcpUrl, token)} />
-          </label>
-          <label className="label flex flex-col gap-1.5">
-            Other MCP clients (Streamable HTTP)
-            <div className="field px-2.5 py-2">
-              <pre className="text-[11.5px] font-mono whitespace-pre-wrap break-all" style={{ color: "var(--ink-dim)" }}>
-                {mcpConfig(mcpUrl, token)}
-              </pre>
-            </div>
-          </label>
-        </>
-      )}
-
-      {error && <ErrorLine error={error}>{error.message} Try again, or mint a token in Settings.</ErrorLine>}
-
-      <div className="flex flex-col gap-1.5 pt-3.5" style={{ borderTop: "var(--hair) solid var(--border)" }}>
-        <p className="text-[12px] leading-relaxed" style={{ color: "var(--ink-faint)" }}>
-          Or connect every agent on this machine at once (Claude Code, Codex, Hermes, Cursor, …) from the install folder.{" "}
-          <Link href="/docs" className="underline" style={{ color: "var(--accent-text)" }}>
-            Read the docs
-          </Link>
-        </p>
-        <CopyField value="./scripts/connect-agents.sh --email you@… --password …" />
-      </div>
+      <ConnectAgents />
     </section>
   );
 }

@@ -54,6 +54,8 @@ export type UpdateStatus =
       checked_at: string;
       applying: boolean;
       error: string | null;
+      /** While applying: what the updater is waiting on. Absent from updaters older than this field. */
+      progress?: string | null;
     };
 
 export type HttpsStatus =
@@ -80,19 +82,31 @@ export type ConnectorKind =
   | "todoist"
   | "stripe";
 
+/** One routing rule: a record whose `field` matches `value` goes to `vault`. */
+export type RoutingRule = { field: string; value: string; vault: string };
+/** Where a connector files its records: `default_vault` (absent: personal) unless a rule matches first. */
+export type Routing = { default_vault?: string; rules: RoutingRule[] };
+
 export type Connector = {
   kind: ConnectorKind;
   enabled: boolean;
   config: Record<string, unknown>;
   credentials_set: boolean;
   updated_at: string | null;
+  routing: Routing;
+  /** The fields this connector's rules can match on. */
+  routing_fields: string[];
 };
 
 export type ConnectorUpdate = Partial<{
   enabled: boolean;
   config: Record<string, unknown>;
   credentials: Record<string, string>;
+  routing: Routing;
 }>;
+
+/** What "Move existing data" re-filed. */
+export type MoveReport = { records: number; memories: number; relations: number; left: number };
 
 export type Snapshot = {
   up_bank: { transaction_count: number; spent: number } | null;

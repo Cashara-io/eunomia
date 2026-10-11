@@ -12,9 +12,10 @@ import ThemeToggle from "@/components/ThemeToggle";
 import BlurWords from "@/components/bits/BlurWords";
 import { spark } from "@/components/bits/Spark";
 import { InputModeTracker } from "@/components/bits/motion";
+import ConnectAgents from "@/components/ConnectAgents";
 import ResolveMark from "./ResolveMark";
 
-const STEP_LABELS = ["Welcome", "OpenAI key"];
+const STEP_LABELS = ["Welcome", "Connect your AI", "OpenAI key"];
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -32,6 +33,8 @@ export default function OnboardingPage() {
   const [error, setError] = useState<Failure | null>(null);
   // The welcome moment plays once; coming Back shows it at rest.
   const [welcomed, setWelcomed] = useState(false);
+  // Skip turns into Continue once a token was minted on the Connect step.
+  const [connected, setConnected] = useState(false);
 
   const { isError, data } = meQuery;
   useEffect(() => {
@@ -39,10 +42,10 @@ export default function OnboardingPage() {
     else if (data?.onboarded) router.replace(nextPath());
   }, [isError, data, router]);
 
-  // The 2nd step is pointless if an OpenAI key is already configured
+  // The OpenAI step is pointless if a key is already configured
   // server-wide (env var) or was already set earlier by this user.
   const skipOpenAiStep = Boolean(appSettings?.openai_api_key_set);
-  const steps = skipOpenAiStep ? STEP_LABELS.slice(0, 1) : STEP_LABELS;
+  const steps = skipOpenAiStep ? STEP_LABELS.slice(0, 2) : STEP_LABELS;
 
   /** `from` is the button a pointer click started this from; it sparks on success. Navigation is never delayed. */
   async function finish(from?: Element | null) {
@@ -104,7 +107,7 @@ export default function OnboardingPage() {
       </header>
 
       <main className="flex-1 flex items-center justify-center py-10">
-        <div className="panel w-full max-w-[440px] p-7">
+        <div className="panel w-full max-w-[520px] p-7">
           {!me ? (
             <div className="flex flex-col gap-4" aria-busy="true" aria-label="Loading">
               <div className="skeleton h-1 w-full" />
@@ -124,7 +127,7 @@ export default function OnboardingPage() {
                     <span className="mt-2 flex items-center gap-1.5 whitespace-nowrap text-[12px]" style={{ color: i === step ? "var(--ink)" : "var(--ink-faint)" }}>
                       <span className="font-mono">{i + 1}</span>
                       {label}
-                      {i === 1 && <span className="hidden sm:inline" style={{ color: "var(--ink-faint)" }}>(optional)</span>}
+                      {i === 2 && <span className="hidden sm:inline" style={{ color: "var(--ink-faint)" }}>(optional)</span>}
                     </span>
                   </li>
                 ))}
@@ -139,21 +142,49 @@ export default function OnboardingPage() {
                     <span className="font-medium" style={{ color: "var(--ink)" }}>
                       {me.email}
                     </span>
-                    . {skipOpenAiStep ? "Nothing else to set up, so you can go straight in." : "One optional step, then you're in."} You can
-                    connect a data source any time from Connectors.
+                    . Next, connect the AI you work with{skipOpenAiStep ? "" : ", then optionally add a model key"}. It can all
+                    wait: the dashboard keeps the setup guides, and Connectors adds data sources any time.
                   </p>
-                  <button
-                    onClick={(e) => (skipOpenAiStep ? skip(e.detail > 0 ? e.currentTarget : null) : setStep(1))}
-                    disabled={busy}
-                    className="btn btn-primary h-9 self-start mt-2 px-4"
-                  >
-                    {busy && <Loader2 size={14} strokeWidth={1.75} className="animate-spin" aria-hidden />}
+                  <button onClick={() => setStep(1)} className="btn btn-primary h-9 self-start mt-2 px-4">
                     Let&apos;s go
                   </button>
                 </div>
               )}
 
-              {step === 1 && !skipOpenAiStep && (
+              {/* Hidden, not unmounted, so a minted token survives Back. */}
+              <div hidden={step !== 1} className="flex flex-col gap-4">
+                <h1 className="page-title">Connect your AI</h1>
+                <p className="text-[13.5px] leading-[1.6]" style={{ color: "var(--ink-dim)" }}>
+                  Your agent recalls and saves memories through Eunomia&apos;s MCP server. It learns when to from the
+                  server itself, so there are no skills or hooks to install.
+                </p>
+                <ConnectAgents onToken={() => setConnected(true)} />
+                <div className="flex items-center gap-2 mt-2">
+                  <button
+                    onClick={() => {
+                      setWelcomed(true);
+                      setStep(0);
+                    }}
+                    disabled={busy}
+                    className="btn btn-ghost h-9 px-2.5"
+                  >
+                    <ArrowLeft size={14} strokeWidth={1.75} aria-hidden />
+                    Back
+                  </button>
+                  <div className="flex-1" />
+                  <button
+                    onClick={(e) => (skipOpenAiStep ? skip(e.detail > 0 ? e.currentTarget : null) : setStep(2))}
+                    disabled={busy}
+                    aria-busy={busy}
+                    className={`btn h-9 px-4 ${connected ? "" : "btn-ghost"}`}
+                  >
+                    {busy && <Loader2 size={14} strokeWidth={1.75} className="animate-spin" aria-hidden />}
+                    {connected ? (skipOpenAiStep ? "Finish" : "Continue") : "Skip"}
+                  </button>
+                </div>
+              </div>
+
+              {step === 2 && !skipOpenAiStep && (
                 <div className="flex flex-col gap-4">
                   <h1 className="page-title">Add an OpenAI key</h1>
                   <p className="text-[13.5px] leading-[1.6]" style={{ color: "var(--ink-dim)" }}>
@@ -196,10 +227,7 @@ export default function OnboardingPage() {
 
                   <div className="flex items-center gap-2 mt-2">
                     <button
-                      onClick={() => {
-                        setWelcomed(true);
-                        setStep(0);
-                      }}
+                      onClick={() => setStep(1)}
                       disabled={busy} className="btn btn-ghost h-9 px-2.5">
                       <ArrowLeft size={14} strokeWidth={1.75} aria-hidden />
                       Back

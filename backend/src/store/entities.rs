@@ -195,9 +195,6 @@ pub const MARK_SUPERSEDED: Stmt = Stmt::new(
     r#"UPDATE $ids SET status = "superseded";
        UPDATE memory SET status = "stale" WHERE subject = $subject AND type = "observation";"#,
 );
-/// Subjects in `$vault` with a fact whose text matches `$q` (full-text).
-pub const SUBJECTS_MENTIONING: Stmt =
-    Stmt::new("entities.subjects_mentioning", "SELECT VALUE subject FROM memory WHERE vault = $vault AND text @@ $q LIMIT 200");
 pub const RAW_MEMORIES: Stmt = Stmt::new(
     "entities.raw_memories",
     r#"SELECT * FROM memory WHERE subject = $id AND type IN ["world","experience"] AND status != "superseded" ORDER BY created_at"#,
@@ -250,7 +247,6 @@ pub const ALL: &[&Stmt] = &[
     &EDGES_AMONG,
     &SET_SUMMARY,
     &RAW_MEMORIES,
-    &SUBJECTS_MENTIONING,
     &LIVE_FACTS,
     &MARK_SUPERSEDED,
     &OBSERVATION_OF,
@@ -308,6 +304,38 @@ pub fn sharing_a_word<'a>(db: &'a OrgDb, table: &str) -> Q<'a> {
         format!(
             "SELECT * FROM {table} WHERE vault = $vault AND id != $id \
              AND (string::words(name_key) CONTAINSANY $words OR alias_keys CONTAINSANY $words) LIMIT 5"
+        ),
+    )
+}
+
+/// `entities_search` in one round trip: the `kinds` entities in `$vaults` whose lowercase name or an alias
+/// contains `$needle`, then (`with_facts`) the ones a fact in the searched vaults mentions (full text, at
+/// most 200 facts per vault), each group by vault order, kind order and name, sliced to `$start..$end`
+/// with the total, so only the page leaves the database. One read of each kind's rows serves both groups
+/// (a fact's vault is its subject's). Every `kinds` entry is a `kind_table()`-validated table.
+// ponytail: no index serves a substring match, so the database still reads every entity of the searched
+// kinds in the searched vaults (an index range per vault, `{kind}_vault_name_idx`); only the page is sent.
+pub fn search_entities<'a>(db: &'a OrgDb, kinds: &[&str], with_facts: bool) -> Q<'a> {
+    const MATCH: &str = "(string::contains(name_key, $needle) OR array::any(alias_keys, |$a| string::contains($a, $needle)))";
+    let mentioned = if with_facts {
+        "array::flatten($vaults.map(|$v| (SELECT VALUE subject FROM memory WHERE vault = $v AND text @@ $q LIMIT 200)))"
+    } else {
+        "[]"
+    };
+    let rows: Vec<String> = kinds
+        .iter()
+        .map(|k| format!("(SELECT id, vault, name, aliases, summary, {MATCH} AS hit FROM {k} WHERE vault IN $vaults AND ({MATCH} OR id IN $m) ORDER BY name)"))
+        .collect();
+    dynamic(
+        db,
+        "entities.search",
+        format!(
+            "LET $m = {mentioned}; \
+             LET $rows = array::flatten([{}]); \
+             LET $all = array::concat(array::flatten($vaults.map(|$v| $rows[WHERE vault = $v AND hit])), \
+                 array::flatten($vaults.map(|$v| $rows[WHERE vault = $v AND !hit]))); \
+             RETURN {{ total: array::len($all), results: array::slice($all, $start, $end) }};",
+            rows.join(", ")
         ),
     )
 }
