@@ -110,6 +110,25 @@ check "unparseable JSON is left alone" has "$H/.claude.json" '// not json'
 check "a hand-written codex entry is left alone" has "$H/.codex/config.toml" 'url = "mine"'
 check "other agents still get connected" has "$H/.gemini/settings.json" 'Bearer t'
 
+# --- Claude Code hooks are optional: an uneditable settings.json is a note, not a failure ---
+new_home; mkdir -p "$H/.claude"
+echo '{ // my settings' > "$H/.claude/settings.json"
+out="$(run -- --token t --agents claude 2>"$TMP/err")"; rc=$?
+check "settings.json not plain JSON: still succeeds" test "$rc" -eq 0
+check "settings.json not plain JSON: left untouched" has "$H/.claude/settings.json" '// my settings'
+check "settings.json not plain JSON: one optional note" test "$(printf '%s\n' "$out" | grep -c 'hooks   skipped.*optional')" = 1
+check "settings.json not plain JSON: no warning about it" bash -c "! grep -q 'settings.json\|hooks' '$TMP/err'"
+check "settings.json not plain JSON: MCP still connected" has "$H/.claude.json" 'Bearer t'
+new_home; mkdir -p "$H/.claude"
+echo '{"model":"opus"}' > "$H/.claude/settings.json"; chmod 444 "$H/.claude/settings.json"
+out="$(run -- --token t --agents claude 2>"$TMP/err")"; rc=$?
+chmod 644 "$H/.claude/settings.json"
+if [ "$(id -u)" != 0 ]; then # root writes through 0444
+  check "read-only settings.json (self-modification blocked): still succeeds" test "$rc" -eq 0
+  check "read-only settings.json: unchanged" test "$(cat "$H/.claude/settings.json")" = '{"model":"opus"}'
+  check "read-only settings.json: one optional note, no warning" bash -c "[ \"\$(printf '%s\n' \"\$1\" | grep -c 'hooks   skipped')\" = 1 ] && ! grep -q 'settings.json\|hooks\|denied' '$TMP/err'" _ "$out"
+fi
+
 # --- bad input ---------------------------------------------------------------
 new_home
 check "unknown agent is rejected" bash -c "! run -- --token t --agents nope 2>/dev/null" 

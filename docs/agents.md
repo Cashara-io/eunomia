@@ -33,9 +33,9 @@ cd eunomia
   entry and revokes the old token.
 - Configs for agents you haven't installed yet are written too, so they're
   connected the first time they run (`--detected-only` turns that off).
-- Other settings in those files are preserved. A file the script can't
-  parse, or one with its own hand-written `eunomia` entry, is left untouched
-  and reported.
+- Other settings in those files are preserved. An agent config file the
+  script can't parse, or one with its own hand-written `eunomia` entry, is
+  left untouched and reported.
 - ChatGPT and Claude.ai (web/desktop) need a public `https://` URL. Add it
   by hand under their Connectors settings.
 
@@ -43,16 +43,29 @@ cd eunomia
 
 The **Memory skill** page (sidebar) holds the instructions that tell agents
 when to recall and what to remember. You can view it, edit it, or reset it to the
-built-in default. It reaches agents three ways:
+built-in default. The MCP server carries it, so no harness-specific setup is
+needed:
 
 - **Every MCP client** gets it as the server's connection instructions, so an
-  edit applies the next time the agent connects.
+  edit applies the next time the agent connects. It is also the MCP prompt
+  `eunomia-memory` (a slash command in Claude Code) and the resource
+  `eunomia://skill`.
+- **Clients that ignore all of those** still see the essentials in the tool
+  descriptions: `recall` says to call it at the start of a task, and
+  `memory_write` says to save facts, decisions, preferences and corrections
+  as they come up, plus a short summary of what was learned before finishing.
+  The skill's "Before you finish" step asks for the same, so a session is
+  captured without any hook.
 - **Claude Code, Codex, Hermes** get a `skills/eunomia-memory/SKILL.md`
   (re-run `connect-agents.sh` to refresh the file copies).
-- **Claude Code** also gets two hooks in `~/.claude/settings.json`:
-  `SessionStart` injects your current skill, and `UserPromptSubmit` calls
-  `recall` with each prompt and injects the relevant memories before Claude
-  sees it. The hooks are silent and never block a prompt if Eunomia is down.
+- **Claude Code hooks (optional)**: `connect-agents.sh` also adds two hooks to
+  `~/.claude/settings.json`: `SessionStart` injects your current skill, and
+  `UserPromptSubmit` calls `recall` with each prompt and injects the relevant
+  memories before Claude sees it. The hooks are silent and never block a
+  prompt if Eunomia is down. When the script can't edit that file (it isn't
+  plain JSON, or the agent running the script may not change its own
+  settings), it skips the hooks with a one-line note; everything else works
+  without them.
 
 By hand, for any MCP client: URL `http://localhost:8001/mcp`, header
 `Authorization: Bearer <token>`. Create a token in Settings → API tokens.

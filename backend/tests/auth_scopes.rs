@@ -253,6 +253,27 @@ async fn tokens_are_renamed_by_their_owner_only_and_audited() {
     assert_eq!(events(&app, "action = 'auth.token_rename'").await.len(), 1, "failures are not recorded as renames");
 }
 
+#[tokio::test]
+async fn the_memory_skill_prompt_follows_token_scopes() {
+    let app = TestApp::new().await;
+    let rpc = |method: &str, params: Value| json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params});
+    let reader = token(&app, &[scopes::MEMORY_READ], None).await;
+    let (status, _, list) = send(&app.router, "POST", "/mcp", Some(rpc("prompts/list", json!({}))), &bearer(&reader)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(list["result"]["prompts"][0]["name"], "eunomia-memory");
+    let (_, _, got) = send(&app.router, "POST", "/mcp", Some(rpc("prompts/get", json!({"name": "eunomia-memory"}))), &bearer(&reader)).await;
+    assert!(got["result"]["messages"][0]["content"]["text"].as_str().unwrap().contains("## Before you finish"), "{got}");
+    let (_, _, read) = send(&app.router, "POST", "/mcp", Some(rpc("resources/read", json!({"uri": "eunomia://skill"}))), &bearer(&reader)).await;
+    assert!(read["result"]["contents"][0]["text"].as_str().unwrap().starts_with("# Eunomia memory"), "{read}");
+
+    // a token that cannot read memory is offered no prompt and cannot fetch it
+    let connectors = token(&app, &[scopes::CONNECTORS], None).await;
+    let (_, _, list) = send(&app.router, "POST", "/mcp", Some(rpc("prompts/list", json!({}))), &bearer(&connectors)).await;
+    assert_eq!(list["result"]["prompts"], json!([]));
+    let (_, _, got) = send(&app.router, "POST", "/mcp", Some(rpc("prompts/get", json!({"name": "eunomia-memory"}))), &bearer(&connectors)).await;
+    assert_eq!(got["error"]["data"]["code"], "auth.scope", "{got}");
+}
+
 // ------------------------------------------------------- vault restriction
 
 #[tokio::test]
