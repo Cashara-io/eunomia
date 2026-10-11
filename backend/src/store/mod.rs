@@ -78,6 +78,10 @@ impl Stmt<Control> {
 #[cfg(feature = "test-support")]
 pub static DYNAMIC_SEEN: std::sync::Mutex<std::collections::BTreeSet<&'static str>> = std::sync::Mutex::new(std::collections::BTreeSet::new());
 
+/// Statements sent to the database since the process started; `tests/round_trips.rs` counts them per request.
+#[cfg(feature = "test-support")]
+pub static SENT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 /// For the few statements whose text is built at runtime (a table name or
 /// an optional clause). Still named, so they still trace.
 // ponytail: not covered by every_query_executes; `tests/dynamic_queries.rs` drives each builder instead. Keep these rare.
@@ -169,6 +173,8 @@ impl<'a> IntoFuture for Q<'a> {
             Scope::Org(o) => o.key(),
             _ => String::new(),
         };
+        #[cfg(feature = "test-support")]
+        SENT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let span = tracing::info_span!("store.query", op = self.name, org = %org, duration_ms = tracing::field::Empty, ok = tracing::field::Empty);
         Box::pin(
             async move {
