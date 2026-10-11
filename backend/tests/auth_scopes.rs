@@ -216,6 +216,43 @@ async fn token_creation_validates_and_cannot_escalate() {
     assert_eq!((status, body["code"].as_str()), (StatusCode::FORBIDDEN, Some("auth.scope")));
 }
 
+#[tokio::test]
+async fn tokens_are_renamed_by_their_owner_only_and_audited() {
+    let app = TestApp::new().await;
+    let (_, _, made) = send(&app.router, "POST", "/api/auth/tokens", Some(json!({"name": "laptop"})), &bearer(&app.token)).await;
+    let id = made["id"].as_str().unwrap().to_string();
+    let path = format!("/api/auth/tokens/{id}");
+
+    let (status, _, renamed) = send(&app.router, "PATCH", &path, Some(json!({"name": "  work laptop  "})), &bearer(&app.token)).await;
+    assert_eq!(status, StatusCode::OK, "{renamed}");
+    assert_eq!((renamed["id"].as_str(), renamed["name"].as_str()), (Some(id.as_str()), Some("work laptop")));
+    let (_, _, list) = send(&app.router, "GET", "/api/auth/tokens", None, &bearer(&app.token)).await;
+    let row = list.as_array().unwrap().iter().find(|t| t["id"] == id.as_str()).unwrap();
+    assert_eq!(row["name"], "work laptop");
+    assert_eq!(events(&app, "action = 'auth.token_rename'").await.len(), 1);
+
+    // empty (after trimming) and over-long names are refused, and change nothing
+    for bad in [json!({"name": "   "}), json!({"name": "x".repeat(81)})] {
+        let (status, _, body) = send(&app.router, "PATCH", &path, Some(bad.clone()), &bearer(&app.token)).await;
+        assert_eq!((status, body["code"].as_str()), (StatusCode::BAD_REQUEST, Some("validation.invalid")), "{bad}");
+    }
+    let (status, _, _) = send(&app.router, "POST", "/api/auth/tokens", Some(json!({"name": "x".repeat(81)})), &bearer(&app.token)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "creation has the same limit");
+
+    // another user's token is not found, and keeps its name
+    let other = common::register(&app.state, "other@example.com").await;
+    let theirs = create_api_token_with(&app.state.control, &other.id, "theirs", &all(), None, None).await.unwrap();
+    let their_path = format!("/api/auth/tokens/{}", RecordIdExt::to_string(&theirs.id));
+    let (status, _, body) = send(&app.router, "PATCH", &their_path, Some(json!({"name": "mine now"})), &bearer(&app.token)).await;
+    assert_eq!((status, body["code"].as_str()), (StatusCode::NOT_FOUND, Some("auth.not_found")));
+    let (_, _, list) = send(&app.router, "GET", "/api/auth/tokens", None, &bearer(&theirs.token)).await;
+    assert_eq!(list[0]["name"], "theirs");
+    // not a record id at all
+    let (status, _, _) = send(&app.router, "PATCH", "/api/auth/tokens/nope", Some(json!({"name": "y"})), &bearer(&app.token)).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(events(&app, "action = 'auth.token_rename'").await.len(), 1, "failures are not recorded as renames");
+}
+
 // ------------------------------------------------------- vault restriction
 
 #[tokio::test]

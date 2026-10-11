@@ -490,6 +490,63 @@
             "bearer": []
           }
         ]
+      },
+      "patch": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Rename an API token",
+        "operationId": "renameToken",
+        "parameters": [
+          {
+            "name": "token_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRename"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
       }
     },
     "/api/chat/threads": {
@@ -6215,6 +6272,18 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "TokenRename": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The new name: trimmed, 1 to 80 characters."
           }
         }
       },

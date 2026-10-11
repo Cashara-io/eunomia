@@ -352,6 +352,17 @@ pub async fn list_api_tokens(db: &ControlDb, owner: &RecordId) -> AppResult<Vec<
     Ok(res.take(0)?)
 }
 
+/// The renamed token, or `None` when `owner` has no token `token_id`.
+pub async fn rename_api_token(db: &ControlDb, owner: &RecordId, token_id: &RecordId, name: &str) -> AppResult<Option<ApiTokenSummary>> {
+    let mut res = store::control::AUTH_TOKEN_RENAME
+        .on(db)
+        .bind(("id", token_id.clone()))
+        .bind(("owner", owner.clone()))
+        .bind(("name", name.to_string()))
+        .await?;
+    Ok(res.take::<Vec<ApiTokenSummary>>(0)?.into_iter().next())
+}
+
 pub async fn revoke_api_token(db: &ControlDb, owner: &RecordId, token_id: &RecordId) -> AppResult<bool> {
     let mut res = store::control::AUTH_TOKEN_DELETE
         .on(db)

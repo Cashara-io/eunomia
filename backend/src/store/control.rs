@@ -19,6 +19,7 @@ pub const ALL: &[&ControlStmt] = &[
     &AUTH_USER_ONBOARDED,
     &AUTH_USER_DELETE,
     &AUTH_TOKEN_DELETE,
+    &AUTH_TOKEN_RENAME,
     &AUTH_TOKEN_CREATE,
     &AUTH_TOKEN_LIST,
     &AUTH_TOKEN_BY_HASH,
@@ -104,6 +105,12 @@ pub const AUTH_USER_DELETE: ControlStmt = ControlStmt::new("app.auth_user_delete
 pub const AUTH_TOKEN_DELETE: ControlStmt = ControlStmt::new(
     "app.auth_token_delete",
     "DELETE api_token WHERE id = $id AND owner = $owner RETURN BEFORE",
+);
+
+pub const AUTH_TOKEN_RENAME: ControlStmt = ControlStmt::new(
+    "app.auth_token_rename",
+    "UPDATE api_token SET name = $name WHERE id = $id AND owner = $owner \
+     RETURN id, name, created_at, last_used_at, scopes, vault, expires_at",
 );
 
 pub const AUTH_USER_ONBOARDED: ControlStmt = ControlStmt::new("app.auth_user_onboarded", "UPDATE $id SET onboarded_at = time::now()");
