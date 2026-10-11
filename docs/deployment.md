@@ -209,7 +209,12 @@ release tag. The script checks out the tag, pins `EUNOMIA_IMAGE_TAG` in `.env`,
 pulls and restarts, and appends to `update-status/history.log`. It refuses
 (and says so in Settings) if tracked files like `docker-compose.yml` have
 local edits. A lock in `update-status/` keeps an old host cron job and the
-container from ever running at once.
+container from ever running at once. A restart that fails while the backend
+is still on a slow first boot (moving data, running migrations) is retried
+for up to 30 minutes, with the progress in Settings, before it is reported as
+failed. On every run the updater also starts any service left `Created` or
+stopped once the backend is healthy, so a half-finished restart never leaves
+the site down.
 
 Installs from before the updater existed: run the installer once more from
 the folder that contains your install. It updates in place and keeps your

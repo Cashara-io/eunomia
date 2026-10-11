@@ -6277,6 +6277,13 @@
               "null"
             ]
           },
+          "progress": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "While `applying`: what the updater is waiting on (e.g. a slow first boot it keeps retrying)."
+          },
           "update_available": {
             "type": [
               "boolean",

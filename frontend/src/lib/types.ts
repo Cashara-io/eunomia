@@ -54,6 +54,8 @@ export type UpdateStatus =
       checked_at: string;
       applying: boolean;
       error: string | null;
+      /** While applying: what the updater is waiting on. Absent from updaters older than this field. */
+      progress?: string | null;
     };
 
 export type HttpsStatus =

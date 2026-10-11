@@ -775,6 +775,10 @@ export type UpdateStatus = {
     current_version?: string | null;
     error?: string | null;
     latest_version?: string | null;
+    /**
+     * While `applying`: what the updater is waiting on (e.g. a slow first boot it keeps retrying).
+     */
+    progress?: string | null;
     update_available?: boolean | null;
 };
 
