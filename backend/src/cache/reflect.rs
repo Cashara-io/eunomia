@@ -109,10 +109,10 @@ pub async fn reflect(
     settings: &Settings,
     owner: &RecordId,
     query: &str,
-    vault_id: Option<&RecordId>,
+    vault_ids: &[RecordId],
     limit: usize,
 ) -> AppResult<Value> {
-    let items = recall::recall(db, settings, owner, query, None, limit, None, None, vault_id).await?;
+    let items = recall::recall(db, settings, owner, query, None, limit, None, None, vault_ids).await?;
     if items.is_empty() {
         return Ok(json!({ "answer": "No relevant memories found.", "citations": [] }));
     }

@@ -1,5 +1,5 @@
-//! The "vector cloud": every memory (and, for the personal vault, every
-//! synced record) in one or more vaults, projected from its embedding space
+//! The "vector cloud": every memory and synced record (see `cache::search::RecordScope`) in one or
+//! more vaults, projected from its embedding space
 //! down to 3D with PCA so the UI can draw the overall shape of what's stored
 //! -- one coloured cloud per vault, layered in the same axes.
 //!
@@ -144,7 +144,7 @@ fn label(text: &str) -> String {
     }
 }
 
-async fn layer_items(db: &OrgDb, owner: &RecordId, vault: &RecordId, personal: bool) -> AppResult<Vec<Item>> {
+async fn layer_items(db: &OrgDb, scope: &cs::RecordScope, vault: &RecordId) -> AppResult<Vec<Item>> {
     #[derive(Deserialize, SurrealValue)]
     struct Mem {
         id: RecordId,
@@ -167,7 +167,7 @@ async fn layer_items(db: &OrgDb, owner: &RecordId, vault: &RecordId, personal: b
         .map(|m| Item { id: m.id.to_string(), vault: vault.to_string(), kind: m.mem_type, text: m.text, stored: None })
         .collect();
 
-    if personal && items.len() < MAX_PER_LAYER {
+    if items.len() < MAX_PER_LAYER {
         #[derive(Deserialize, SurrealValue)]
         struct Rec {
             id: RecordId,
@@ -181,14 +181,10 @@ async fn layer_items(db: &OrgDb, owner: &RecordId, vault: &RecordId, personal: b
             #[surreal(default)]
             embedding: Option<Vec<f32>>,
         }
-        let mut res = store::cache::RECORDS_FOR_EMBED
-            .on(db)
-            .bind(("owner", owner.clone()))
-            .bind(("limit", (MAX_PER_LAYER - items.len()) as i64))
-            .await?;
+        let mut res = scope.bind(store::cache::RECORDS_FOR_EMBED.on(db).bind(("limit", (MAX_PER_LAYER - items.len()) as i64))).await?;
         let recs: Vec<Rec> = res.take(0)?;
         items.extend(recs.into_iter().map(|r| Item {
-            id: format!("cache_record:{}", cs::literal(&r.id)),
+            id: format!("cache_record:{}", cs::caller_id(&r.id, scope.owner())),
             vault: vault.to_string(),
             kind: "record".to_string(),
             text: format!("{}\n{}", r.title, r.body_text).trim().to_string(),
@@ -213,7 +209,7 @@ pub async fn cloud(db: &OrgDb, settings: &Settings, owner: &RecordId, vault_ids:
             continue;
         }
         crate::authz::authorize(db, owner, crate::authz::Action::ReadMemories, v).await?;
-        items.extend(layer_items(db, owner, v, *v == personal).await?);
+        items.extend(layer_items(db, &cs::RecordScope::vaults(owner, &personal, std::slice::from_ref(v)), v).await?);
     }
 
     let semantic = if embeddings::available(db, settings, owner).await {

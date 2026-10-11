@@ -116,6 +116,8 @@ struct Ids {
     memory: String,
     thread: String,
     cache_literal: String,
+    /// a record routed to `vault`, by the id its vault's members use
+    routed: String,
     document: String,
     token_id: String,
     session_id: String,
@@ -231,6 +233,16 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
     eunomia_backend::cache::search::upsert(&db, &user.id, &env("1")).await.unwrap();
     eunomia_backend::cache::search::upsert(&db, &user.id, &env("2")).await.unwrap();
     ids.cache_literal = format!("demo:note:{name}-1");
+    // a record a connector routed to the org vault: its members read it, by the owner-keyed id
+    let mut routed = env("routed");
+    let vault_rid = eunomia_backend::rid::parse(&vault).unwrap();
+    routed.placement = Some(eunomia_backend::cache::search::Placement {
+        vault: Some(vault_rid.clone()),
+        route_keys: vec![format!("title:{canary}")],
+        writable: std::sync::Arc::new(vec![vault_rid]),
+    });
+    eunomia_backend::cache::search::upsert(&db, &user.id, &routed).await.unwrap();
+    ids.routed = format!("{}:demo:note:{name}-routed", eunomia_backend::rid::key_string(&user.id.key).unwrap());
 
     // a document: the canary in its name and text, stored in the org's bucket and indexed (the index job
     // run by hand, there is no worker here), so its chunks carry the canary too
@@ -374,9 +386,9 @@ const NO_SECRET_ROWS: &[&str] = &[
 fn attack_value(tool: &str, prop: &str, schema: &Value, victim: &Org) -> Value {
     let id = |i: usize| json!(victim.ids.entities[i]);
     match (tool, prop) {
-        (_, p) if p.contains("vault") && p.ends_with("ids") => json!(victim.ids.vault),
+        (_, p) if p.contains("vault") && p.ends_with("ids") => json!([victim.ids.vault]),
         (_, p) if p.contains("vault") => json!(victim.ids.vault),
-        ("get", "id") | ("links", "id") => json!(victim.ids.cache_literal),
+        ("get", "id") | ("links", "id") => json!(victim.ids.routed),
         (t, "id" | "document_id") if t.starts_with("document_") => json!(victim.ids.document),
         (_, "source_record_id") => json!(victim.ids.cache_literal),
         ("entities_get", "id") => id(0),
@@ -567,6 +579,8 @@ async fn control_group(w: &World) {
     for org in [&w.a, &w.b] {
         let search = call(&w.state, &org.user, "entities_search", json!({"query": org.word("Holdings"), "vault_id": org.ids.vault})).await.to_string();
         assert!(search.contains(&org.canary), "the owner must see its own canary: {search}");
+        let routed = call(&w.state, &org.user, "get", json!({"id": org.ids.routed})).await.to_string();
+        assert!(routed.contains(&org.canary), "the vault's member must read its routed record: {routed}");
         let (_, threads) = raw(&w.router, "GET", "/api/chat/threads", None, Some(&org.token), None).await;
         assert!(threads.contains(&org.canary), "{threads}");
         let (_, audit) = raw(&w.router, "GET", "/api/audit", None, Some(&org.token), None).await;
@@ -652,7 +666,8 @@ enum Call {
 /// The harness can fail: take the owner or vault filter out of one statement (or the small group that
 /// guards one read) and the attacker, calling the matching route or tool as an ordinary user, gets the
 /// victim's data. Shared-database mode, so only the app filters stand between the orgs. Eleven
-/// statements across vaults, entities, cache, chat, connectors, audit and sync status.
+/// statements across vaults, entities, cache (its owner and routed-vault filters), chat, connectors, audit
+/// and sync status.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn mutation_check_removing_one_filter_turns_the_suite_red() {
     let _g = SERIAL.lock().await;
@@ -664,7 +679,7 @@ async fn mutation_check_removing_one_filter_turns_the_suite_red() {
 
     type Case = (&'static str, &'static [(&'static str, &'static str)], fn(&Org) -> Call);
     // (what it covers, [(statement, filter text)], the call that reads it)
-    let cases: [Case; 10] = [
+    let cases: [Case; 11] = [
         ("chat threads", &[("app.chat_thread_list", "WHERE owner = $owner")], |_| Call::Route("/api/chat/threads".into())),
         ("chat messages", &[("app.chat_messages_for_owner", "WHERE owner = $owner")], |_| Call::Route("/api/export".into())),
         ("audit", &[("app.audit_list", "WHERE owner = $owner")], |_| Call::Route("/api/audit".into())),
@@ -675,6 +690,7 @@ async fn mutation_check_removing_one_filter_turns_the_suite_red() {
         ("entity list", &[("entities.list_by_vault", "WHERE vault = $vault")], |_| Call::Route("/api/entities".into())),
         ("entity graph", &[("entities.select_by_vault", "WHERE vault = $vault")], |_| Call::Tool("entities_graph", json!({}))),
         ("cache list", &[("cache.list_records", "owner = $owner")], |_| Call::Tool("list", json!({"type": "note"}))),
+        ("routed records", &[("cache.list_records", "vault IN $vaults")], |_| Call::Tool("list", json!({"type": "note"}))),
     ];
     let probe = |caller: &Org, victim: &Org, call: Call| {
         let w = &w;

@@ -25,6 +25,7 @@ pub const MIGRATIONS: &[(u32, &str, &str)] = &[
     (12, "memory_superseded", include_str!("../migrations/tenant/0012_memory_superseded.surql")),
     (13, "documents", include_str!("../migrations/tenant/0013_documents.surql")),
     (14, "vault_copying", include_str!("../migrations/tenant/0014_vault_copying.surql")),
+    (15, "vault_routing", include_str!("../migrations/tenant/0015_vault_routing.surql")),
 ];
 
 /// The tenant schema version this code writes. An org database is current at this version.

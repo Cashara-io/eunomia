@@ -22,7 +22,7 @@ static MUTATIONS: Mutex<Vec<(String, String, String)>> = Mutex::new(Vec::new());
 
 /// The filter predicates the app puts in org-database statements. Only a predicate is rewritten
 /// (after WHERE, AND, OR or an opening parenthesis), never an assignment (`SET vault = $vault`).
-const FILTERS: &[&str] = &["owner = $owner", "vault = $vault", "user = $user"];
+const FILTERS: &[&str] = &["owner = $owner", "vault = $vault", "user = $user", "vault IN $vaults"];
 const LEADERS: &[&str] = &["WHERE ", "AND ", "OR ", "("];
 
 pub fn set_no_app_filters(on: bool) {
@@ -42,7 +42,7 @@ pub fn clear_mutations() {
     MUTATIONS.lock().unwrap().clear();
 }
 
-// ponytail: textual rewrite of the three predicate shapes the app uses; a new filter shape needs adding to FILTERS
+// ponytail: textual rewrite of the four predicate shapes the app uses; a new filter shape needs adding to FILTERS
 // (the layer-removal runs would then show it still filtering).
 pub(crate) fn transform<'a>(name: &str, sql: &'a str, org_scope: bool) -> Cow<'a, str> {
     let mut out = Cow::Borrowed(sql);

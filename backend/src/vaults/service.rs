@@ -268,8 +268,8 @@ pub async fn personal_vault_id(db: &OrgDb, user_id: &RecordId) -> AppResult<Reco
     })
 }
 
-/// The vaults a read covers, from one membership query: `vault_id` alone (it must be one of the
-/// user's, and inside a vault-restricted token's vault), or without it the user's personal vault first
+/// The vaults a read covers, from one membership query: `vault_ids` (each must be one of the
+/// user's, and inside a vault-restricted token's vault; duplicates dropped), or without them the user's personal vault first
 /// plus every org vault they're an active member of, oldest membership first -- not other people's
 /// personal vaults they've joined, which stay opt-in. A vault-restricted credential reads only its
 /// vault. The same checks `authz::authorize` makes for `ReadMemories`, without a query per vault.
@@ -281,7 +281,7 @@ pub struct ReadScope {
     pub names: HashMap<String, String>,
 }
 
-pub async fn read_scope(db: &OrgDb, user_id: &RecordId, vault_id: Option<&RecordId>) -> AppResult<ReadScope> {
+pub async fn read_scope(db: &OrgDb, user_id: &RecordId, vault_ids: &[RecordId]) -> AppResult<ReadScope> {
     authz::require_scope(Action::ReadMemories.scope())?;
     #[derive(Deserialize, SurrealValue)]
     struct Row {
@@ -306,17 +306,23 @@ pub async fn read_scope(db: &OrgDb, user_id: &RecordId, vault_id: Option<&Record
             Err(AppError::coded(ErrorCode::VaultForbidden, format!("not a member of vault {}", v.to_string())))
         }
     };
-    let vaults = match (vault_id, &only) {
-        (Some(v), _) => {
-            authz::check_vault(v)?;
-            member(v)?;
-            vec![v.clone()]
+    let vaults = match (vault_ids, &only) {
+        ([_, ..], _) => {
+            let mut out: Vec<RecordId> = Vec::with_capacity(vault_ids.len());
+            for v in vault_ids {
+                authz::check_vault(v)?;
+                member(v)?;
+                if !out.contains(v) {
+                    out.push(v.clone());
+                }
+            }
+            out
         }
-        (None, Some(o)) => {
+        ([], Some(o)) => {
             member(o)?;
             vec![o.clone()]
         }
-        (None, None) => std::iter::once(personal.clone())
+        ([], None) => std::iter::once(personal.clone())
             .chain(rows.iter().filter(|r| r.kind.as_deref() == Some("org")).map(|r| r.vault.clone()))
             .collect(),
     };

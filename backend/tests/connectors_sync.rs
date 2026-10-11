@@ -127,7 +127,7 @@ async fn a_due_sync_lands_searchable_records_then_a_401_is_visible_and_keeps_the
     assert_eq!(mock.requests()[0].header("authorization"), "Bearer ghp_test");
 
     let params = search::SearchParams { mode: "keyword".into(), limit: 10, ..Default::default() };
-    let (hits, _more) = search::search(&org.db, &org.settings, &owner, "importer quarterly", &params).await.unwrap();
+    let (hits, _more) = search::search(&org.db, &org.settings, &search::RecordScope::own(&owner), "importer quarterly", &params).await.unwrap();
     assert_eq!(hits.iter().map(|h| h.id.as_str()).collect::<Vec<_>>(), vec![ISSUE_7]);
     assert!(due_syncs(&org).await.unwrap().is_empty(), "a healthy source is not due again within its interval");
 
@@ -329,7 +329,7 @@ async fn a_pocket_recording_is_stored_whole_chunked_embedded_and_extracted() {
     let report = registry::ingest(&org, &owner, &[rec.clone()], &HeyPocketSource).await.unwrap();
     assert_eq!((report.written, report.failed), (4, 0), "recording + 3 chunks: {:?}", report.errors);
 
-    let got = eunomia_backend::tools::generic::get(&org.db, &owner, "heypocket:heypocket.transcript_chunk:rec_1:2").await.unwrap();
+    let got = common::sys(eunomia_backend::tools::generic::get(&org.db, &owner, "heypocket:heypocket.transcript_chunk:rec_1:2")).await.unwrap();
     let stored = &got["recording"];
     assert_eq!(stored["summary"], "Agreed to fix the importer.", "{got}");
     assert_eq!(stored["action_items"], json!(["Ship the fix"]));
@@ -352,7 +352,7 @@ async fn a_pocket_recording_is_stored_whole_chunked_embedded_and_extracted() {
 
     // Another owner's `get` sees nothing.
     let other = RecordId::new("user", "other-owner");
-    assert_eq!(eunomia_backend::tools::generic::get(&org.db, &other, "heypocket:heypocket.recording:rec_1").await.unwrap()["error"], "not found");
+    assert_eq!(common::sys(eunomia_backend::tools::generic::get(&org.db, &other, "heypocket:heypocket.recording:rec_1")).await.unwrap()["error"], "not found");
 
     rec["transcript"]["segments"] = json!([{"speaker": "s1", "text": "Short now."}]);
     registry::ingest(&org, &owner, &[rec.clone()], &HeyPocketSource).await.unwrap();
@@ -423,7 +423,7 @@ async fn link_changes_are_reconciled_without_duplicating_records() {
     registry::ingest(&org, &owner, &[txn("groceries")], &UpBankSource).await.unwrap();
     registry::ingest(&org, &owner, &[txn("takeaway")], &UpBankSource).await.unwrap();
     assert_eq!(count(&org, "SELECT count() FROM cache_record WHERE owner = $owner", &owner).await, 1);
-    let links = search::links(&org.db, &owner, "up_bank:up.transaction:t1", Some("category")).await.unwrap();
+    let links = search::links(&org.db, &search::RecordScope::own(&owner), "up_bank:up.transaction:t1", Some("category")).await.unwrap();
     let json = serde_json::to_string(&links).unwrap();
     assert!(json.contains("takeaway") && !json.contains("groceries"), "{json}");
     drop(app);

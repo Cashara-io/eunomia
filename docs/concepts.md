@@ -23,12 +23,22 @@ vaults only when you ask.
 active member of the vault right now: a pending invitation gives no access,
 and removing someone or leaving takes effect on the next call. A vault name
 only matches vaults you belong to. Relations and entity merges stay inside one
-vault. Without a `vault_id`, `recall`, `reflect` and `entities_search` read
-your personal vault plus every org vault you belong to (each hit names its
-vault), so facts kept in an org vault never look absent; someone else's
-personal vault you've joined is read only when named. Every other tool, and
-the export, uses your own personal vault. Synced records belong to you, not to a vault: they show up
-only in your own recall and vector cloud, and other members never see them.
+vault. Without a `vault_id`, `recall`, `reflect`, `entities_search` and
+`search` read your personal vault plus every org vault you belong to (each hit
+names its vault), so facts kept in an org vault never look absent; someone else's
+personal vault you've joined is read only when named. To read a chosen set of
+vaults together, pass `vault_ids: ["Acme", "Homelab"]` (names or ids; with
+`vault_id` too, both are read); every one must be a vault you belong to. Every
+other tool, and the export, uses your own personal vault.
+
+**Synced records** are filed in a vault by their connector's routing (see
+[connectors](connectors.md#which-vault-records-go-to)). A record left in your
+personal vault (the default) is yours alone: even someone you share your
+personal vault with never sees it. A record routed to another vault is read by
+that vault's active members, in `search`, `get`, `list`, `links`, `recall` and
+the vector cloud, and the facts extracted from it are written there. Another
+member's records carry their owner's key in their id (`<owner>:github:...`), so
+ids stay unambiguous in a shared vault.
 
 ## Entities and memories
 
@@ -116,8 +126,8 @@ page shows the code graph the same way.
 
 ## The vector cloud
 
-Entities → Cloud shows the *shape of what's stored*: every memory (and, for
-your personal vault, every synced record) as a point. The full vectors are
+Entities → Cloud shows the *shape of what's stored*: every memory and synced
+record in a vault as a point. The full vectors are
 projected to 3D with PCA, so the axes are the three directions of greatest
 spread (PC1–PC3), not entities. Pick several vaults to layer them as
 coloured clouds in the **same** space. A vault and its merge, or two teams'

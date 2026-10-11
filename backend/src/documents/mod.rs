@@ -831,6 +831,7 @@ async fn index(state: &OrgState, owner: &RecordId, doc: &DocRow) -> Result<usize
                 }),
                 deleted: false,
                 links: Vec::new(),
+                placement: None,
             })
             .unwrap_or(Value::Null)
         })

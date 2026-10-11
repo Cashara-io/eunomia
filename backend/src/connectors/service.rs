@@ -50,6 +50,10 @@ pub struct Connector {
     #[surreal(default)]
     pub credentials_encrypted: String,
     pub updated_at: Datetime,
+    /// Where its syncs file records (`sources::routing::Routing`).
+    #[serde(default)]
+    #[surreal(default)]
+    pub routing: Value,
 }
 
 pub async fn get_connector(db: &OrgDb, owner: &RecordId, kind: &str) -> AppResult<Option<Connector>> {

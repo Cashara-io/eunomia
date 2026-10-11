@@ -256,8 +256,10 @@ async fn nearest_ids_is_owner_scoped_and_falls_back_to_an_exact_scan() {
     }
     let a = eunomia_backend::rid::parse("user:a").unwrap();
     // Asking for more than owner a has: HNSW is short, the exact scan returns exactly a's live rows, best first.
-    let ids = nearest_ids(&orgdb, &a, unit(1), &Default::default(), 10).await.unwrap();
-    assert_eq!(ids, ["a1", "a3"]);
+    let scope = eunomia_backend::cache::search::RecordScope::own(&a);
+    let ids = nearest_ids(&orgdb, &scope, unit(1), &Default::default(), 10).await.unwrap();
+    let keys: Vec<String> = ids.iter().map(|r| eunomia_backend::rid::key_string(&r.key).unwrap()).collect();
+    assert_eq!(keys, ["a:a1", "a:a3"]);
 }
 
 /// Editing a memory and staling its subject's observation commit together, like WRITE_FACT and

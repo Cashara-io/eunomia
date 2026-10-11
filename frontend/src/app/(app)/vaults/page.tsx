@@ -21,6 +21,7 @@ import {
 import AuthorTag from "@/components/AuthorTag";
 import type { Vault, VaultMember, VaultRole } from "@/lib/types";
 import { useMe } from "@/lib/queries/auth";
+import { useConnectors, useRepointConnectors } from "@/lib/queries/connectors";
 import {
   useAcceptInvitation,
   useCloneVault,
@@ -807,18 +808,40 @@ function MergeVaultsCard({
   const [result, setResult] = useState<string | null>(null);
   const [chips, setChips] = useState<{ from: [string, string]; to: string; id: number } | null>(null);
   const [error, setError] = useState<Failure | null>(null);
+  // the last merge, so connectors that filed into either vault can be pointed at the new one
+  const [mergedInto, setMergedInto] = useState<{ from: string[]; id: string; name: string } | null>(null);
+  const [repointed, setRepointed] = useState<{ ok: boolean; text: string } | null>(null);
+  const connectors = useConnectors().data;
+  const repoint = useRepointConnectors();
+  const routedHere = (c: { routing?: { default_vault?: string; rules?: { vault: string }[] } }, ids: string[]) =>
+    ids.includes(c.routing?.default_vault ?? "") || (c.routing?.rules ?? []).some((r) => ids.includes(r.vault));
+  const affected = mergedInto && connectors ? connectors.filter((c) => routedHere(c, mergedInto.from)).length : 0;
+
+  async function pointConnectors() {
+    if (!mergedInto) return;
+    setRepointed(null);
+    try {
+      const r = await repoint.mutateAsync({ from: mergedInto.from, to: mergedInto.id });
+      setRepointed({ ok: true, text: `${r.connectors === 1 ? "1 connector now files" : `${r.connectors} connectors now file`} into “${mergedInto.name}”. Records already synced stay put until you move them from the connector's page.` });
+    } catch (e) {
+      setRepointed({ ok: false, text: failure(e, "Could not point the connectors at the new vault.", " Try again.").message });
+    }
+  }
 
   async function merge() {
     setBusy(true);
     setError(null);
     setResult(null);
     setChips(null);
+    setMergedInto(null);
+    setRepointed(null);
     const label = (id: string) => vaults.find((v) => v.id === id);
     const from: [string, string] = [vaultLabel(label(a)!), vaultLabel(label(b)!)];
     try {
       const merged = await mergeVaults.mutateAsync({ a, b, name: name.trim() });
       setResult(`Created “${merged.name}” with ${merged.entities} entities.`);
       setChips({ from, to: merged.name, id: Date.now() });
+      setMergedInto({ from: [a, b], id: merged.id, name: merged.name });
       setName("");
     } catch (e) {
       setError(
@@ -909,6 +932,21 @@ function MergeVaultsCard({
             </p>
             {chips && <MergeChips key={chips.id} from={chips.from} to={chips.to} />}
           </div>
+        )}
+        {mergedInto && affected > 0 && !repointed?.ok && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <span className="text-[12.5px]" style={{ color: "var(--ink-dim)" }}>
+              {affected === 1 ? "A connector still files" : `${affected} connectors still file`} into the vaults you merged.
+            </span>
+            <button type="button" className="btn btn-sm" onClick={pointConnectors} disabled={repoint.isPending}>
+              {repoint.isPending ? "Pointing…" : `Point ${affected === 1 ? "it" : "them"} at “${mergedInto.name}”`}
+            </button>
+          </div>
+        )}
+        {repointed && (
+          <p role="status" className="text-[12.5px] fade-in" style={{ color: repointed.ok ? "var(--good)" : "var(--critical)" }}>
+            {repointed.text}
+          </p>
         )}
         {error && <ErrorLine error={error} />}
       </div>

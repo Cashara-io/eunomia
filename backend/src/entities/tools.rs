@@ -27,12 +27,12 @@ pub async fn entities_search(
     kind: Option<&str>,
     limit: usize,
     offset: usize,
-    vault_id: Option<&RecordId>,
+    vault_ids: &[RecordId],
 ) -> AppResult<service::ListEntitiesOut> {
     let needle = query.trim();
     // No vault given: the personal vault plus every org vault the caller
     // belongs to, so org facts aren't invisible to a lookup without `vault_id`.
-    let vaults = crate::vaults::service::read_scope(db, owner, vault_id).await?.vaults;
+    let vaults = crate::vaults::service::read_scope(db, owner, vault_ids).await?.vaults;
     service::search_entities(db, &vaults, needle, kind, limit, offset).await
 }
 

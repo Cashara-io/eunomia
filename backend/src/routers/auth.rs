@@ -461,7 +461,6 @@ async fn rename_token(
     let not_found = || AppError::coded(ErrorCode::AuthNotFound, "Token not found.");
     let rid: RecordId = crate::rid::parse(&token_id).map_err(|_| not_found())?;
     let r = models_user::rename_api_token(&state.control, &user.id, &rid, name).await?.ok_or_else(not_found)?;
-    // token-verification cache: invalidate `rid` here once auth.rs caches verified tokens (the name is not part of a verification today)
     audit::record_as_caller(&state.control, &user.id, "auth.token_rename", &rid.to_string(), "ok").await;
     Ok(Json(token_out(r)))
 }

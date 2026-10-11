@@ -15,6 +15,7 @@ import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import CopyButton from "@/components/bits/CopyButton";
 import SyncMark from "@/components/bits/SyncMark";
 import Tooltip from "@/components/bits/Tooltip";
+import RoutingSection from "./RoutingSection";
 
 // Presets for the sync-interval select, in seconds.
 const SYNC_INTERVAL_PRESETS = [
@@ -423,6 +424,8 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
           )}
         </section>
       )}
+
+      {connector && <RoutingSection kind={kind} label={meta.label} connector={connector} />}
 
       {connected && (
         <section className="flex flex-col gap-3" aria-labelledby="danger-heading">

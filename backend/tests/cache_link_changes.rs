@@ -45,17 +45,17 @@ async fn a_link_only_change_is_reconciled_and_an_identical_replay_is_a_no_op() {
 
     let first = sync(&org, &owner, "groceries").await;
     assert_eq!((first.written, first.skipped), (1, 0));
-    let before = search::get(&org.db, &owner, "demo:txn:t1").await.unwrap().unwrap();
+    let before = search::get(&org.db, &search::RecordScope::own(&owner), "demo:txn:t1").await.unwrap().unwrap();
     assert_eq!(extract_jobs().await, 1);
 
     // only the category link changed: the new link replaces the old one, the record is not rewritten
     let second = sync(&org, &owner, "takeaway").await;
     assert_eq!((second.written, second.skipped), (0, 1), "a link-only change is not a content change");
-    let links = search::links(&org.db, &owner, "demo:txn:t1", Some("category")).await.unwrap();
+    let links = search::links(&org.db, &search::RecordScope::own(&owner), "demo:txn:t1", Some("category")).await.unwrap();
     assert_eq!(targets(links), ["demo:category:takeaway"]);
     assert_eq!(count(org.db.test_raw(), "SELECT count() FROM cache_record WHERE owner = $owner", &owner).await, 1);
     assert_eq!(count(org.db.test_raw(), "SELECT count() FROM linked_to WHERE in.owner = $owner", &owner).await, 1);
-    let after = search::get(&org.db, &owner, "demo:txn:t1").await.unwrap().unwrap();
+    let after = search::get(&org.db, &search::RecordScope::own(&owner), "demo:txn:t1").await.unwrap().unwrap();
     assert_eq!((after.updated_at, &after.content_hash), (before.updated_at, &before.content_hash), "the record itself is untouched");
     assert_eq!(extract_jobs().await, 1, "no re-extraction for a link-only change");
 
@@ -64,7 +64,7 @@ async fn a_link_only_change_is_reconciled_and_an_identical_replay_is_a_no_op() {
     let third = sync(&org, &owner, "takeaway").await;
     assert_eq!((third.written, third.skipped), (0, 1));
     assert_eq!(edge_ids(&org, &owner).await, edges, "an unchanged link set is not rewritten");
-    let replayed = search::get(&org.db, &owner, "demo:txn:t1").await.unwrap().unwrap();
+    let replayed = search::get(&org.db, &search::RecordScope::own(&owner), "demo:txn:t1").await.unwrap().unwrap();
     assert_eq!(replayed.updated_at, before.updated_at);
     assert_eq!(extract_jobs().await, 1);
 }

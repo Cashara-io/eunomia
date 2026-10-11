@@ -251,6 +251,17 @@ fn parse_opt_rid(field: &str, value: &Option<String>) -> Result<Option<RecordId>
     }
 }
 
+/// The vaults a read names: `vault_id` and every one of `vault_ids` (names were already resolved to
+/// ids). Empty: the default scope.
+fn parse_vault_ids(vault_id: &Option<String>, vault_ids: &Option<Vec<String>>) -> Result<Vec<RecordId>, Value> {
+    vault_id.iter().chain(vault_ids.iter().flatten()).map(|v| parse_rid("vault_ids", v)).collect()
+}
+
+/// The `vault_ids` property of a read tool's schema.
+fn vault_ids_schema() -> Value {
+    json!({"type": "array", "items": {"type": "string"}, "description": "read these vaults together (ids or names); with `vault_id`, both are read"})
+}
+
 /// Converts a typed service-layer result into the tool-call `Value` shape:
 /// `Ok` serializes to JSON, `Err` becomes `{"error": <message>}`, so a
 /// handled service error never raises past the registry.
@@ -330,6 +341,8 @@ pub async fn call(app: &AppState, user: &User, name: &str, mut args: Value) -> A
 }
 
 const VAULT_ARGS: &[&str] = &["vault_id", "vault_id_a", "vault_id_b"];
+/// Arguments that are a list of vaults.
+const VAULT_LIST_ARGS: &[&str] = &["vault_ids"];
 
 /// A vault given by name ("Acme", "personal") -> its id, among the caller's
 /// vaults, case-insensitively. Ids (`vault:...`) pass through unchanged.
@@ -351,7 +364,10 @@ fn match_vault(given: &str, vaults: &[VaultWithRole]) -> Result<String, String> 
 /// `list_my_vaults` already honours a vault-restricted token, so a name outside it never resolves.
 async fn resolve_vault_names(db: &OrgDb, owner: &RecordId, args: &mut Value) -> Result<(), String> {
     let Some(obj) = args.as_object_mut() else { return Ok(()) };
-    if !VAULT_ARGS.iter().any(|k| obj.get(*k).and_then(Value::as_str).is_some_and(|v| !v.starts_with("vault:"))) {
+    let by_name = |v: &Value| v.as_str().is_some_and(|v| !v.starts_with("vault:"));
+    if !VAULT_ARGS.iter().any(|k| obj.get(*k).is_some_and(by_name))
+        && !VAULT_LIST_ARGS.iter().any(|k| obj.get(*k).and_then(Value::as_array).is_some_and(|a| a.iter().any(by_name)))
+    {
         return Ok(());
     }
     let vaults = list_my_vaults(db, owner).await.map_err(|e| e.message)?;
@@ -359,6 +375,15 @@ async fn resolve_vault_names(db: &OrgDb, owner: &RecordId, args: &mut Value) -> 
         if let Some(given) = obj.get(*key).and_then(Value::as_str) {
             let id = match_vault(given, &vaults)?;
             obj.insert(key.to_string(), Value::String(id));
+        }
+    }
+    for key in VAULT_LIST_ARGS {
+        if let Some(list) = obj.get_mut(*key).and_then(Value::as_array_mut) {
+            for item in list.iter_mut() {
+                if let Some(given) = item.as_str() {
+                    *item = Value::String(match_vault(given, &vaults)?);
+                }
+            }
         }
     }
     Ok(())
