@@ -12,8 +12,8 @@ export function uniqueEmail(prefix: string): string {
 
 /** Registers a fresh user through the real UI (not an API shortcut, so the
  * session cookie lands in the browser context the same way a real visitor's
- * would) and clicks through the onboarding wizard, skipping the optional
- * OpenAI-key step, landing on the dashboard. */
+ * would) and clicks through the onboarding wizard, skipping the Connect
+ * step and the optional OpenAI-key step, landing on the dashboard. */
 export async function registerAndOnboard(page: Page, email: string, password = "correct-horse-battery-staple") {
   await page.goto("/register");
   await page.getByLabel("Email").fill(email);
@@ -23,6 +23,7 @@ export async function registerAndOnboard(page: Page, email: string, password = "
 
   await page.waitForURL(/\/onboarding/);
   await page.getByRole("button", { name: "Let's go" }).click();
+  await page.getByRole("button", { name: "Skip", exact: true }).click(); // Connect your AI
 
   // The OpenAI-key step only appears when no key is configured server-side.
   const skipFinish = page.getByRole("button", { name: "Skip & finish" });

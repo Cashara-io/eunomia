@@ -33,39 +33,92 @@ cd eunomia
   entry and revokes the old token.
 - Configs for agents you haven't installed yet are written too, so they're
   connected the first time they run (`--detected-only` turns that off).
-- Other settings in those files are preserved. An agent config file the
-  script can't parse, or one with its own hand-written `eunomia` entry, is
-  left untouched and reported.
-- ChatGPT and Claude.ai (web/desktop) need a public `https://` URL. Add it
-  by hand under their Connectors settings.
+- Other settings in those files are preserved. A file the script can't
+  parse, or one with its own hand-written `eunomia` entry, is left untouched
+  and reported.
+- ChatGPT and Claude.ai (web/desktop) need a public `https://` URL. Add them
+  by hand (below).
+
+## Connecting one agent by hand
+
+The onboarding wizard's **Connect your AI** step, and the **Connect an MCP
+client** card on the dashboard, do this for you: pick the client, generate a
+token named after it, and copy the command or config with your URL and token
+already filled in. The steps it shows are these. Use the address you open
+Eunomia at, plus `/mcp` (for example `http://localhost:3000/mcp`, or
+`https://eunomia.example.com/mcp`). A `localhost` or LAN address only works
+for agents on that computer or network. Agents learn when to recall and what
+to remember from the server itself, so there is nothing else to install.
+
+### Claude Code
+
+```bash
+claude mcp add --transport http --scope user eunomia https://eunomia.example.com/mcp \
+  --header "Authorization: Bearer <token>"
+```
+
+`--scope user` makes it available in every project (the default, `local`, is
+the current project only). Check it with `claude mcp list` (eunomia shows
+`✔ Connected`), restart any open session, and `/mcp` inside Claude Code lists
+it. To sign in with OAuth instead of a token, leave out `--header`, then run
+`/mcp` in a session (or `claude mcp login eunomia`) and approve the consent
+page; see [OAuth](#sign-in-with-oauth-no-pasted-token). Use one or the other:
+with a header set, Claude Code doesn't fall back to OAuth.
+
+### Codex
+
+Add to `~/.codex/config.toml` (the Codex CLI, IDE extension and app share it):
+
+```toml
+[mcp_servers.eunomia]
+url = "https://eunomia.example.com/mcp"
+http_headers = { Authorization = "Bearer <token>" }
+```
+
+To keep the token out of the file, use
+`bearer_token_env_var = "EUNOMIA_TOKEN"` instead of `http_headers` and export
+`EUNOMIA_TOKEN` where Codex runs, or add it from the shell with
+`codex mcp add eunomia --url https://eunomia.example.com/mcp --bearer-token-env-var EUNOMIA_TOKEN`.
+A raw `bearer_token` key is rejected for HTTP servers. For OAuth, run
+`codex mcp add eunomia --url …` with no token and `codex mcp login eunomia`.
+Check it with `codex mcp list`, then `/mcp` in a new Codex session.
+
+### ChatGPT
+
+ChatGPT connects from OpenAI's servers, so Eunomia needs a public `https://`
+address (Settings → HTTPS, or a tunnel), and `PUBLIC_URL` must be that address
+(the HTTPS setup sets it). A `localhost` or LAN install can't be reached.
+
+1. In ChatGPT on the web, open [chatgpt.com/plugins](https://chatgpt.com/plugins),
+   choose **+**, then **Add custom MCP server**.
+2. Name it Eunomia, enter the server URL including `/mcp`, and set
+   authentication to **OAuth** (ChatGPT has no option for a pasted bearer
+   token; it registers itself with Eunomia's OAuth server).
+3. Select **I understand and want to continue**, then **Create as a plugin**,
+   and approve access on Eunomia's consent page.
+4. Install it from your personal plugins, then in a chat type `@` and pick
+   Eunomia.
+
+Custom MCP servers depend on your ChatGPT plan and workspace policy: OpenAI
+lists Business, Enterprise and Edu with full (read and write) access, and Pro
+with read-only tools, which can `recall` but not save. Sources:
+[OpenAI: connect ChatGPT](https://developers.openai.com/plugins/deploy/connect-chatgpt),
+[developer mode and MCP apps](https://help.openai.com/en/articles/12584461-developer-mode-and-mcp-apps-in-chatgpt).
 
 ## The memory skill
 
 The **Memory skill** page (sidebar) holds the instructions that tell agents
 when to recall and what to remember. You can view it, edit it, or reset it to the
-built-in default. The MCP server carries it, so no harness-specific setup is
-needed:
+built-in default. It reaches agents three ways:
 
 - **Every MCP client** gets it as the server's connection instructions, so an
-  edit applies the next time the agent connects. It is also the MCP prompt
-  `eunomia-memory` (a slash command in Claude Code) and the resource
-  `eunomia://skill`.
-- **Clients that ignore all of those** still see the essentials in the tool
-  descriptions: `recall` says to call it at the start of a task, and
-  `memory_write` says to save facts, decisions, preferences and corrections
-  as they come up, plus a short summary of what was learned before finishing.
-  The skill's "Before you finish" step asks for the same, so a session is
-  captured without any hook.
+  edit applies the next time the agent connects.
 - **Claude Code, Codex, Hermes** get a `skills/eunomia-memory/SKILL.md`
   (re-run `connect-agents.sh` to refresh the file copies).
-- **Claude Code hooks (optional)**: `connect-agents.sh` also adds two hooks to
-  `~/.claude/settings.json`: `SessionStart` injects your current skill, and
-  `UserPromptSubmit` calls `recall` with each prompt and injects the relevant
-  memories before Claude sees it. The hooks are silent and never block a
-  prompt if Eunomia is down. When the script can't edit that file (it isn't
-  plain JSON, or the agent running the script may not change its own
-  settings), it skips the hooks with a one-line note; everything else works
-  without them.
+- **Claude Code** also gets two hooks in `~/.claude/settings.json`:
+  `SessionStart` injects your current skill, and `UserPromptSubmit` calls
+  `recall` with each prompt and injects the relevant memories before Claude
+  sees it. The hooks are silent and never block a prompt if Eunomia is down.
 
 By hand, for any MCP client: URL `http://localhost:8001/mcp`, header
 `Authorization: Bearer <token>`. Create a token in Settings → API tokens.

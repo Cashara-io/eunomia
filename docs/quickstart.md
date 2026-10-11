@@ -34,6 +34,11 @@ Restart your agent so it loads the new server (in Claude Code: exit, then `claud
 The agent calls Eunomia's `memory_write` and `recall` tools. No OpenAI key is
 needed: your agent is the model.
 
+Agent not connected yet (or installed it later)? The **Connect your AI** step
+when you first sign in, and the **Connect an MCP client** card on the
+dashboard, give the exact setup for Claude Code, Codex and ChatGPT with your
+URL and a fresh token filled in. See [AI agents & MCP](agents.md#connecting-one-agent-by-hand).
+
 ## 4. Optional: add a model key
 
 Settings → OpenAI. Set the **base URL** first (any OpenAI-compatible
