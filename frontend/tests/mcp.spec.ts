@@ -28,7 +28,7 @@ test.describe("MCP server", () => {
     await expect(page.getByText(url, { exact: true })).toBeVisible();
 
     await page.getByRole("button", { name: "Generate a token" }).click();
-    await expect(page.getByText(`claude mcp add --transport http eunomia ${url} --header`)).toBeVisible();
+    await expect(page.getByText(`claude mcp add --transport http --scope user eunomia ${url} --header`)).toBeVisible();
   });
 
   test("initialize, list tools, and call one", async ({ request }) => {
