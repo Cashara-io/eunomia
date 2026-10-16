@@ -13,6 +13,7 @@ use tower::ServiceExt;
 use crate::capsules::{self, Capsule};
 use crate::config::Settings;
 use crate::error::{AppError, AppResult, ErrorCode};
+use crate::rid::RecordIdExt;
 use crate::models_user::{self, User};
 use crate::pool::OrgDb;
 use crate::state::AppState;
@@ -105,10 +106,17 @@ async fn import(db: &OrgDb, user: &User, doc: &Value) -> AppResult<()> {
     let vault = crate::vaults::service::personal_vault_id(db, &user.id).await?;
     let mut seen_relations = std::collections::HashSet::new();
     for e in doc["entities"].as_array().into_iter().flatten() {
-        crate::entities::service::kind_table(e["kind"].as_str().unwrap_or_default())?;
+        let kind = e["kind"].as_str().unwrap_or_default();
+        let table = crate::entities::service::kind_table(kind)?;
         let id = rid(&e["id"])?;
+        if id.table() != table {
+            return Err(AppError::internal(format!("export entity {} is not of kind {kind}", id.to_string())));
+        }
         let aliases: Vec<String> = e["aliases"].as_array().into_iter().flatten().filter_map(|a| a.as_str().map(String::from)).collect();
-        store::dynamic(db, "replay.import_entity", "CREATE $id SET owner = $owner, vault = $vault, name = $name, aliases = $aliases, summary = $summary")
+        // dynamic: a custom-kind entity also keeps its kind
+        let k = if table == crate::entities::service::CUSTOM_TABLE { ", kind = $kind" } else { "" };
+        store::dynamic(db, "replay.import_entity", format!("CREATE $id SET owner = $owner, vault = $vault{k}, name = $name, aliases = $aliases, summary = $summary"))
+            .bind(("kind", kind.to_string()))
             .bind(("id", id.clone()))
             .bind(("owner", user.id.clone()))
             .bind(("vault", vault.clone()))

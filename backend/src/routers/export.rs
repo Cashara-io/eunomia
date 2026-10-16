@@ -25,7 +25,8 @@ use crate::error::{AppError, AppResult};
 use crate::models_user::User;
 use crate::state::AppState;
 
-const KINDS: [&str; 6] = ["person", "organisation", "location", "repository", "file", "symbol"];
+/// Every entity table: the built-in kinds' own, then the one custom kinds share.
+use crate::entities::service::ENTITY_TABLES as KINDS;
 
 pub fn router() -> Router<AppState> {
     Router::new().route("/export", get(export_data))
@@ -34,6 +35,10 @@ pub fn router() -> Router<AppState> {
 #[derive(Debug, Deserialize, SurrealValue)]
 struct EntityRow {
     id: RecordId,
+    /// set on a custom-kind row only; a built-in kind is its table
+    #[serde(default)]
+    #[surreal(default)]
+    kind: Option<String>,
     #[serde(default)]
     #[surreal(default)]
     name: String,
@@ -155,7 +160,7 @@ pub async fn build_export(db: &OrgDb, control: &ControlDb, user: &User) -> AppRe
     // One query per table, not per entity: the entities of every kind, then the memories and the
     // relations (both directions) of all of them at once, grouped back onto their entity.
     struct Bundle {
-        kind: &'static str,
+        kind: String,
         row: EntityRow,
         memories: Vec<MemoryRow>,
         outgoing: Vec<RelationRow>,
@@ -166,9 +171,11 @@ pub async fn build_export(db: &OrgDb, control: &ControlDb, user: &User) -> AppRe
     for kind in KINDS {
         let query = format!("SELECT * FROM {kind} WHERE vault = $vault ORDER BY name");
         // dynamic: the table name is the entity kind
-        let mut res = store::dynamic(db, "app.export_entities", query).bind(("vault", vault.clone())).await?;
-        let rows: Vec<EntityRow> = res.take(0)?;
-        bundles.extend(rows.into_iter().map(|row| Bundle { kind, row, memories: Vec::new(), outgoing: Vec::new(), incoming: Vec::new() }));
+        let rows: Vec<EntityRow> = match store::dynamic(db, "app.export_entities", query).bind(("vault", vault.clone())).await {
+            Err(e) if crate::entities::service::no_custom_table(&e) => Vec::new(),
+            res => res?.take(0)?,
+        };
+        bundles.extend(rows.into_iter().map(|row| Bundle { kind: row.kind.clone().unwrap_or_else(|| kind.to_string()), row, memories: Vec::new(), outgoing: Vec::new(), incoming: Vec::new() }));
     }
 
     let ids: Vec<RecordId> = bundles.iter().map(|b| b.row.id.clone()).collect();
@@ -290,7 +297,7 @@ pub async fn build_export(db: &OrgDb, control: &ControlDb, user: &User) -> AppRe
         })
         .collect();
 
-    let tables = [KINDS.as_slice(), &["memory", "relates_to", "chat_message"]].concat();
+    let tables = [KINDS, &["memory", "relates_to", "chat_message"]].concat();
     Ok(json!({
         "exported_at": Utc::now().to_rfc3339(),
         "user": { "id": user.id.to_string(), "email": user.email },
@@ -320,7 +327,7 @@ mod tests {
     }
 
     #[test]
-    fn kinds_are_the_six_entity_kinds() {
-        assert_eq!(KINDS, ["person", "organisation", "location", "repository", "file", "symbol"]);
+    fn kinds_are_every_entity_table() {
+        assert_eq!(KINDS, ["person", "organisation", "location", "repository", "file", "symbol", "entity"]);
     }
 }

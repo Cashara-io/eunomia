@@ -223,6 +223,19 @@ pub const CONSOLIDATE_UPDATE: Stmt = Stmt::new(
              WHERE version = $expected_version RETURN AFTER",
 );
 
+/// Whether `$kind` is already in `$vault` (slot 0), else every custom kind in it (slot 1).
+pub const CUSTOM_KIND_ROOM: Stmt = Stmt::new(
+    "entities.custom_kind_room",
+    "SELECT VALUE id FROM entity WHERE vault = $vault AND kind = $kind LIMIT 1; \
+     SELECT kind FROM entity WHERE vault = $vault GROUP BY kind;",
+);
+
+/// Every custom kind in `$vaults`, with how many entities it has there.
+pub const CUSTOM_KINDS_IN: Stmt = Stmt::new(
+    "entities.custom_kinds_in",
+    "SELECT kind, count() AS count FROM entity WHERE vault IN $vaults GROUP BY kind ORDER BY kind",
+);
+
 // extract.rs
 pub const UPSERT_APP_SETTINGS: Stmt =
     Stmt::new("entities.upsert_app_settings", "UPSERT $id SET owner = $owner RETURN AFTER");
@@ -253,27 +266,38 @@ pub const ALL: &[&Stmt] = &[
     &CONSOLIDATE_CREATE,
     &CONSOLIDATE_UPDATE,
     &UPSERT_APP_SETTINGS,
+    &CUSTOM_KIND_ROOM,
+    &CUSTOM_KINDS_IN,
 ];
 
 // The helpers below build SQL at runtime, so every_query_executes cannot
 // cover them. `table` is always a kind_table()-validated entity table name
 // (table names cannot be bound parameters); `set` is a join of fixed
-// "field = $field" fragments chosen by the caller.
+// "field = $field" fragments chosen by the caller. A custom kind is never
+// spliced: the `entity` table is filtered by a bound `$kind`.
 
-/// `SELECT * FROM {table} WHERE vault = $vault`, optionally ordered by name.
-pub fn select_by_vault<'a>(db: &'a OrgDb, table: &str, ordered: bool) -> Q<'a> {
+/// ` AND kind = $kind` for the custom-kind table, which holds every custom kind; nothing for a built-in
+/// kind's own table.
+fn kind_clause(table: &str) -> &'static str {
+    if table == "entity" { " AND kind = $kind" } else { "" }
+}
+
+/// `SELECT * FROM {table} WHERE vault = $vault` (and `kind = $kind` when `by_kind`), optionally ordered by name.
+pub fn select_by_vault<'a>(db: &'a OrgDb, table: &str, ordered: bool, by_kind: bool) -> Q<'a> {
+    let k = if by_kind { kind_clause(table) } else { "" };
     if ordered {
-        dynamic(db, "entities.list_by_vault", format!("SELECT * FROM {table} WHERE vault = $vault ORDER BY name"))
+        dynamic(db, "entities.list_by_vault", format!("SELECT * FROM {table} WHERE vault = $vault{k} ORDER BY name"))
     } else {
-        dynamic(db, "entities.select_by_vault", format!("SELECT * FROM {table} WHERE vault = $vault"))
+        dynamic(db, "entities.select_by_vault", format!("SELECT * FROM {table} WHERE vault = $vault{k}"))
     }
 }
 
 pub fn create_entity<'a>(db: &'a OrgDb, table: &str) -> Q<'a> {
+    let k = if table == "entity" { ", kind = $kind" } else { "" };
     dynamic(
         db,
         "entities.create_entity",
-        format!("CREATE {table} SET owner = $owner, vault = $vault, name = $name, aliases = $aliases RETURN AFTER"),
+        format!("CREATE {table} SET owner = $owner, vault = $vault{k}, name = $name, aliases = $aliases RETURN AFTER"),
     )
 }
 
@@ -285,12 +309,13 @@ pub fn update_entity<'a>(db: &'a OrgDb, set: &str) -> Q<'a> {
 /// The `table` entity in `vault` whose lowercase name or an alias is `$needle`, a name match first;
 /// both lookups are index reads. `table` is always a `kind_table()`-validated entity table.
 pub fn find_by_key<'a>(db: &'a OrgDb, table: &str) -> Q<'a> {
+    let k = kind_clause(table);
     dynamic(
         db,
         "entities.find_by_key",
         format!(
-            "SELECT * FROM {table} WHERE vault = $vault AND name_key = $needle LIMIT 1; \
-             SELECT * FROM {table} WITH INDEX {table}_alias_keys_idx WHERE alias_keys CONTAINS $needle AND vault = $vault \
+            "SELECT * FROM {table} WHERE vault = $vault{k} AND name_key = $needle LIMIT 1; \
+             SELECT * FROM {table} WITH INDEX {table}_alias_keys_idx WHERE alias_keys CONTAINS $needle AND vault = $vault{k} \
              ORDER BY created_at LIMIT 1;"
         ),
     )
@@ -302,8 +327,9 @@ pub fn sharing_a_word<'a>(db: &'a OrgDb, table: &str) -> Q<'a> {
         db,
         "entities.sharing_a_word",
         format!(
-            "SELECT * FROM {table} WHERE vault = $vault AND id != $id \
-             AND (string::words(name_key) CONTAINSANY $words OR alias_keys CONTAINSANY $words) LIMIT 5"
+            "SELECT * FROM {table} WHERE vault = $vault{} AND id != $id \
+             AND (string::words(name_key) CONTAINSANY $words OR alias_keys CONTAINSANY $words) LIMIT 5",
+            kind_clause(table)
         ),
     )
 }
@@ -315,7 +341,7 @@ pub fn sharing_a_word<'a>(db: &'a OrgDb, table: &str) -> Q<'a> {
 /// (a fact's vault is its subject's). Every `kinds` entry is a `kind_table()`-validated table.
 // ponytail: no index serves a substring match, so the database still reads every entity of the searched
 // kinds in the searched vaults (an index range per vault, `{kind}_vault_name_idx`); only the page is sent.
-pub fn search_entities<'a>(db: &'a OrgDb, kinds: &[&str], with_facts: bool) -> Q<'a> {
+pub fn search_entities<'a>(db: &'a OrgDb, kinds: &[&str], by_kind: bool, with_facts: bool) -> Q<'a> {
     const MATCH: &str = "(string::contains(name_key, $needle) OR array::any(alias_keys, |$a| string::contains($a, $needle)))";
     let mentioned = if with_facts {
         "array::flatten($vaults.map(|$v| (SELECT VALUE subject FROM memory WHERE vault = $v AND text @@ $q LIMIT 200)))"
@@ -324,7 +350,10 @@ pub fn search_entities<'a>(db: &'a OrgDb, kinds: &[&str], with_facts: bool) -> Q
     };
     let rows: Vec<String> = kinds
         .iter()
-        .map(|k| format!("(SELECT id, vault, name, aliases, summary, {MATCH} AS hit FROM {k} WHERE vault IN $vaults AND ({MATCH} OR id IN $m) ORDER BY name)"))
+        .map(|k| {
+            let kc = if by_kind { kind_clause(k) } else { "" };
+            format!("(SELECT id, vault, kind, name, aliases, summary, {MATCH} AS hit FROM {k} WHERE vault IN $vaults{kc} AND ({MATCH} OR id IN $m) ORDER BY name)")
+        })
         .collect();
     dynamic(
         db,

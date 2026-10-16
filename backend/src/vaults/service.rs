@@ -24,8 +24,9 @@ use crate::error::{AppError, AppResult, ErrorCode};
 use crate::store;
 use crate::tx::{with_retry, with_retry_dup};
 
-/// Entity tables a vault's data can live in -- the same set as `entities::service::KINDS` and `db.rs`'s `memory.subject` record union.
-const ENTITY_KINDS: [&str; 6] = ["person", "organisation", "location", "repository", "file", "symbol"];
+/// Entity tables a vault's data can live in: the built-in kinds' tables and the custom-kind table, the
+/// same set as `memory.subject`'s record union.
+use crate::entities::service::ENTITY_TABLES as ENTITY_KINDS;
 
 #[derive(Debug, Deserialize, SurrealValue)]
 struct VaultRow {
@@ -556,6 +557,10 @@ pub async fn remove_member(db: &OrgDb, control: &ControlDb, user_id: &RecordId, 
 #[derive(Debug, Deserialize, SurrealValue)]
 struct EntityRow {
     id: RecordId,
+    /// set on a custom-kind (`entity` table) row only
+    #[serde(default)]
+    #[surreal(default)]
+    kind: Option<String>,
     #[serde(default)]
     #[surreal(default)]
     name: String,
@@ -595,9 +600,12 @@ struct RelationRow {
 }
 
 /// Looks an entity up in `vault` by case-insensitive name (merge matching).
-async fn find_by_name(db: &OrgDb, kind: &str, vault: &RecordId, name: &str) -> AppResult<Option<EntityRow>> {
-    // dynamic: table name varies over the six entity kinds
-    let mut res = store::dynamic(db, "vaults.find_by_name", format!("SELECT * FROM {kind} WHERE vault = $vault AND string::lowercase(name) = $name LIMIT 1"))
+/// The `table` entity in `vault` named `name` (any case), of the same custom `kind` for the custom-kind table.
+async fn find_by_name(db: &OrgDb, table: &str, kind: Option<&str>, vault: &RecordId, name: &str) -> AppResult<Option<EntityRow>> {
+    let k = if kind.is_some() { " AND kind = $kind" } else { "" };
+    // dynamic: table name varies over the entity tables
+    let mut res = store::dynamic(db, "vaults.find_by_name", format!("SELECT * FROM {table} WHERE vault = $vault{k} AND string::lowercase(name) = $name LIMIT 1"))
+        .bind(("kind", kind.unwrap_or_default().to_string()))
         .bind(("vault", vault.clone()))
         .bind(("name", name.to_lowercase()))
         .await?;
@@ -703,15 +711,18 @@ pub async fn discard_stale_copies(db: &OrgDb) -> AppResult<usize> {
 async fn copy_into(db: &OrgDb, user_id: &RecordId, src: &RecordId, dest: &RecordId, merge_duplicates: bool) -> AppResult<usize> {
     #[allow(clippy::mutable_key_type)] // RecordId hashes by value; the interior mutability is never touched
     let mut id_map: HashMap<RecordId, RecordId> = HashMap::new();
-    for entity_kind in ENTITY_KINDS {
-        // dynamic: table name varies over the six entity kinds
-        let mut res = store::dynamic(db, "vaults.entities_in_vault", format!("SELECT * FROM {entity_kind} WHERE vault = $vault"))
+    for &entity_kind in ENTITY_KINDS {
+        // dynamic: table name varies over the entity tables
+        let res = store::dynamic(db, "vaults.entities_in_vault", format!("SELECT * FROM {entity_kind} WHERE vault = $vault"))
             .bind(("vault", src.clone()))
-            .await?;
-        let rows: Vec<EntityRow> = res.take(0)?;
+            .await;
+        let rows: Vec<EntityRow> = match res {
+            Err(e) if crate::entities::service::no_custom_table(&e) => Vec::new(),
+            res => res?.take(0)?,
+        };
         for row in rows {
             if merge_duplicates
-                && let Some(existing) = find_by_name(db, entity_kind, dest, &row.name).await? {
+                && let Some(existing) = find_by_name(db, entity_kind, row.kind.as_deref(), dest, &row.name).await? {
                     let mut aliases = existing.aliases.clone();
                     for alias in row.aliases.iter().cloned() {
                         if !aliases.iter().any(|a| a.eq_ignore_ascii_case(&alias)) {
@@ -727,15 +738,17 @@ async fn copy_into(db: &OrgDb, user_id: &RecordId, src: &RecordId, dest: &Record
                     id_map.insert(row.id, existing.id);
                     continue;
                 }
-            // dynamic: table name varies over the six entity kinds
+            // dynamic: table name varies over the entity tables; a custom-kind row keeps its kind
+            let k = if row.kind.is_some() { ", kind = $kind" } else { "" };
             let mut created = store::dynamic(
                 db,
                 "vaults.copy_entity",
                 format!(
-                    "CREATE {entity_kind} SET owner = $owner, vault = $vault, name = $name, \
+                    "CREATE {entity_kind} SET owner = $owner, vault = $vault{k}, name = $name, \
                      aliases = $aliases, summary = $summary RETURN AFTER"
                 ),
             )
+                .bind(("kind", row.kind.unwrap_or_default()))
                 .bind(("owner", user_id.clone()))
                 .bind(("vault", dest.clone()))
                 .bind(("name", row.name))
@@ -901,11 +914,14 @@ pub async fn merge_vaults(
         copy_into(db, user_id, b, &dest, true).await?;
         let mut entities = 0;
         for entity_kind in ENTITY_KINDS {
-            // dynamic: table name varies over the six entity kinds
-            let mut res = store::dynamic(db, "vaults.count_entities", format!("SELECT count() FROM {entity_kind} WHERE vault = $vault GROUP ALL"))
+            // dynamic: table name varies over the entity tables
+            let res = store::dynamic(db, "vaults.count_entities", format!("SELECT count() FROM {entity_kind} WHERE vault = $vault GROUP ALL"))
                 .bind(("vault", dest.clone()))
-                .await?;
-            let rows: Vec<CountRow> = res.take(0)?;
+                .await;
+            let rows: Vec<CountRow> = match res {
+                Err(e) if crate::entities::service::no_custom_table(&e) => Vec::new(),
+                res => res?.take(0)?,
+            };
             entities += rows.first().map(|r| r.count).unwrap_or(0) as usize;
         }
         AppResult::Ok(entities)
@@ -985,6 +1001,6 @@ mod vault_tests {
 
     #[test]
     fn entity_kinds_match_memory_subject_union() {
-        assert_eq!(ENTITY_KINDS, ["person", "organisation", "location", "repository", "file", "symbol"]);
+        assert_eq!(ENTITY_KINDS, ["person", "organisation", "location", "repository", "file", "symbol", "entity"]);
     }
 }

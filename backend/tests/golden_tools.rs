@@ -147,6 +147,11 @@ async fn every_registered_tool_has_a_golden() {
     g.snap("document_export", "document_export", json!({"id": doc})).await;
     g.snap("document_delete", "document_delete", json!({"id": doc})).await;
 
+    // -- an agent's own entity kind (last, so it changes no snapshot above) --
+    g.snap("memory_write__custom_kind", "memory_write",
+        json!({"subject_name":"orders_db","subject_kind":"db","text":"orders_db runs Postgres 16"})).await;
+    g.snap("entity_types", "entity_types", json!({})).await;
+
     let registered: BTreeSet<String> = registry::all_tools().keys().map(|k| k.to_string()).collect();
     let missing: Vec<_> = registered.difference(&g.covered).collect();
     let extra: Vec<_> = g.covered.difference(&registered).collect();

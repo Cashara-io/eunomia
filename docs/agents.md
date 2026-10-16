@@ -186,7 +186,8 @@ No. The connected agent is the model.
 | `search` / `get` / `list` / `links` | Raw synced records from connectors |
 | `memory_write` | Remember a fact (`world`, `experience`) or set an entity's `observation` |
 | `memory_update` / `memory_delete` | Edit or delete one memory |
-| `entities_search` / `entities_get` / `entities_graph` | Find and read people, orgs, places, code |
+| `entities_search` / `entities_get` / `entities_graph` | Find and read people, orgs, places, code and custom kinds |
+| `entity_types` | The built-in entity kinds and the custom kinds agents created (any new lowercase `subject_kind` creates one) |
 | `entity_update` / `entity_merge` / `entity_delete` | Edit, de-duplicate, delete entities |
 | `code_entity_upsert` / `code_relate` | Map repositories, files, symbols and their relations |
 | `consolidate_observations` | Fold new facts into each entity's belief |

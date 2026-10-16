@@ -52,7 +52,8 @@ pub const DISCARD_COPY_ROWS: Stmt = Stmt::new(
             DELETE location WHERE vault IN $copying;
             DELETE repository WHERE vault IN $copying;
             DELETE file WHERE vault IN $copying;
-            DELETE symbol WHERE vault IN $copying;"#,
+            DELETE symbol WHERE vault IN $copying;
+            DELETE entity WHERE vault IN $copying;"#,
 );
 pub const DISCARD_COPY_VAULT: Stmt = Stmt::new("vaults.discard_copy_vault", r#"DELETE $vault WHERE status = "copying""#);
 

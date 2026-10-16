@@ -12,7 +12,7 @@ import Tooltip, { TooltipGroup } from "./bits/Tooltip";
 import { cssVar, prefersReducedMotion } from "./bits/motion";
 import { Blobatar } from "@blobatar/react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { EntityDetail, EntityGraph as EntityGraphData, EntityKind } from "@/lib/types";
+import type { BuiltInKind, EntityDetail, EntityGraph as EntityGraphData, EntityKind } from "@/lib/types";
 import { useMe } from "@/lib/queries/auth";
 import {
   entityDetailQuery,
@@ -26,7 +26,7 @@ import {
 } from "@/lib/queries/entities";
 import { useVaults } from "@/lib/queries/vaults";
 
-const KIND_COLOR: Record<EntityKind, string> = {
+const KIND_COLOR: Record<BuiltInKind, string> = {
   person: "var(--kind-person)",
   organisation: "var(--kind-organisation)",
   location: "var(--kind-location)",
@@ -35,7 +35,7 @@ const KIND_COLOR: Record<EntityKind, string> = {
   symbol: "var(--kind-symbol)",
 };
 
-const KIND_LABEL: Record<EntityKind, string> = {
+const KIND_LABEL: Record<BuiltInKind, string> = {
   person: "Person",
   organisation: "Organisation",
   location: "Location",
@@ -45,6 +45,10 @@ const KIND_LABEL: Record<EntityKind, string> = {
 };
 
 const ALL_KINDS: EntityKind[] = ["person", "organisation", "location", "repository", "file", "symbol"];
+
+// An agent's own kind ("db", "decision") has no token of its own: a neutral dot and its name as written.
+const kindColor = (kind: EntityKind) => KIND_COLOR[kind as BuiltInKind] ?? "var(--ink-faint)";
+const kindLabel = (kind: EntityKind) => KIND_LABEL[kind as BuiltInKind] ?? kind;
 
 // Compact age for a timestamp: "now", "4m", "3h", "2d", then a date.
 function age(iso?: string): string | null {
@@ -104,7 +108,8 @@ export default function EntityGraph({
   const deleteMemoryMutation = useDeleteMemory();
   const addRelationMutation = useAddRelation();
   const [selected, setSelected] = useState<EntityDetail | null>(null);
-  const [visibleKinds, setVisibleKinds] = useState<Set<EntityKind>>(new Set(shownKinds));
+  // hidden rather than visible, so a custom kind that shows up later is on by default
+  const [hiddenKinds, setHiddenKinds] = useState<Set<EntityKind>>(new Set());
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState({ kind: shownKinds[0], name: "", aliases: "" });
   const [createError, setCreateError] = useState<Failure | null>(null);
@@ -144,7 +149,7 @@ export default function EntityGraph({
   }, [graph]);
 
   function toggleKind(kind: EntityKind) {
-    setVisibleKinds((prev) => {
+    setHiddenKinds((prev) => {
       const next = new Set(prev);
       if (next.has(kind)) next.delete(kind);
       else next.add(kind);
@@ -353,6 +358,11 @@ export default function EntityGraph({
     );
   }
 
+  // the full graph (no `kinds` given) also carries agents' custom kinds: one filter each
+  const filterKinds = kinds
+    ? shownKinds
+    : [...shownKinds, ...[...new Set(graph.nodes.map((n) => n.kind))].filter((k) => !ALL_KINDS.includes(k)).sort()];
+  const visibleKinds = new Set(filterKinds.filter((k) => !hiddenKinds.has(k)));
   const counts = new Map<EntityKind, number>();
   graph.nodes.forEach((n) => counts.set(n.kind, (counts.get(n.kind) ?? 0) + 1));
   const nameOf = (id: string) => graph.nodes.find((n) => n.id === id)?.name ?? id;
@@ -387,7 +397,7 @@ export default function EntityGraph({
             className="h-8 text-[13px] w-full"
             value={createForm.kind}
             onChange={(v) => setCreateForm((f) => ({ ...f, kind: v as EntityKind }))}
-            options={shownKinds.map((k) => ({ value: k, label: KIND_LABEL[k] }))}
+            options={filterKinds.map((k) => ({ value: k, label: kindLabel(k) }))}
           />
         </div>
         <label className="label flex flex-col gap-1.5">
@@ -440,16 +450,16 @@ export default function EntityGraph({
       {vaultSwitcher}
       {vaultSwitcher && <span className="w-px h-4 shrink-0" style={{ background: "var(--border)" }} aria-hidden />}
       <div className="flex flex-wrap gap-1 items-center" role="group" aria-label="Entity kinds">
-        {shownKinds.map((kind) => {
+        {filterKinds.map((kind) => {
           const active = visibleKinds.has(kind);
           return (
             <button key={kind} type="button" className="pill shrink-0" aria-pressed={active} onClick={() => toggleKind(kind)}>
               <span
                 className="w-2 h-2 rounded-full shrink-0"
-                style={{ background: KIND_COLOR[kind], opacity: active ? 1 : 0.35 }}
+                style={{ background: kindColor(kind), opacity: active ? 1 : 0.35 }}
                 aria-hidden
               />
-              {KIND_LABEL[kind]}
+              {kindLabel(kind)}
               <span className="font-mono" style={{ color: "var(--ink-faint)" }}>
                 {counts.get(kind) ?? 0}
               </span>
@@ -467,7 +477,11 @@ export default function EntityGraph({
             const q = input.value.trim().toLowerCase();
             const hit = graph.nodes.find((n) => n.name.toLowerCase() === q) ?? graph.nodes.find((n) => n.name.toLowerCase().includes(q));
             if (q && hit) {
-              setVisibleKinds((prev) => new Set(prev).add(hit.kind));
+              setHiddenKinds((prev) => {
+                const next = new Set(prev);
+                next.delete(hit.kind);
+                return next;
+              });
               selectNode(hit.id);
               input.value = "";
             }
@@ -540,8 +554,8 @@ export default function EntityGraph({
           <div className="min-w-0">
             <h2 className="text-[16px] font-semibold tracking-[-0.015em] truncate">{selected.name}</h2>
             <span className="text-[12px] inline-flex items-center gap-1.5 mt-0.5" style={{ color: "var(--ink-dim)" }}>
-              <span className="w-2 h-2 rounded-full" style={{ background: KIND_COLOR[selected.kind] }} aria-hidden />
-              {KIND_LABEL[selected.kind]}
+              <span className="w-2 h-2 rounded-full" style={{ background: kindColor(selected.kind) }} aria-hidden />
+              {kindLabel(selected.kind)}
             </span>
           </div>
         </div>
@@ -738,7 +752,7 @@ export default function EntityGraph({
               onChange={(v) => setRelForm((f) => ({ ...f, to: v }))}
               options={graph.nodes
                 .filter((n) => n.id !== selected.id)
-                .map((n) => ({ value: n.id, label: n.name, hint: KIND_LABEL[n.kind] }))}
+                .map((n) => ({ value: n.id, label: n.name, hint: kindLabel(n.kind) }))}
             />
             <input
               className="field h-8 px-2.5 text-[13px]"
@@ -764,7 +778,7 @@ export default function EntityGraph({
           <GraphCanvas
             nodes={graph.nodes}
             edges={graph.edges}
-            kindColor={KIND_COLOR}
+            kindColor={kindColor}
             visibleKinds={visibleKinds}
             insets={insets}
             selectedId={selected?.id}

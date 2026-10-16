@@ -35,6 +35,14 @@ tried, what worked) as `experience`, and lasting facts you learned as
 `world`. Keep it short and skip anything already saved. Nothing captures
 the session for you.
 
+## Your own entity kinds
+
+Beyond the built-in kinds (person, organisation, location, repository, file,
+symbol), `subject_kind` can be any lowercase name you choose, for example
+`db`, `table`, `field`, `defect`, `decision` or `task`. The first write
+under a new name creates that kind in the vault. Call `entity_types` first
+and reuse a kind that fits, so one thing keeps one kind name.
+
 ## Code
 
 When you learn how a codebase fits together, map it with

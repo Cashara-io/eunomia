@@ -157,11 +157,9 @@ fn parse_record_id(id: &str) -> AppResult<RecordId> {
     crate::rid::parse(id).map_err(|_| AppError::not_found("not found"))
 }
 
+/// A built-in kind or a valid custom kind name (see `service::kind_table`).
 fn known_kind_or_400(kind: &str) -> AppResult<()> {
-    if !service::KINDS.contains(&kind) {
-        return Err(AppError::bad_request(format!("unknown kind {kind:?}; use one of {:?}", service::KINDS)));
-    }
-    Ok(())
+    service::kind_table(kind).map(|_| ())
 }
 
 #[utoipa::path(
@@ -210,9 +208,8 @@ async fn entity_graph(
     let kinds_vec = parse_kinds(raw.as_deref());
     let kinds: Option<Vec<String>> = if kinds_vec.is_empty() { None } else { Some(kinds_vec) };
     if let Some(ks) = &kinds {
-        let bad: Vec<&String> = ks.iter().filter(|k| !service::KINDS.contains(&k.as_str())).collect();
-        if !bad.is_empty() {
-            return Err(AppError::bad_request(format!("unknown kind(s) {bad:?}; use one of {:?}", service::KINDS)));
+        for k in ks {
+            known_kind_or_400(k)?;
         }
     }
     let vault_rid = q.vault_id.as_deref().map(parse_record_id).transpose()?;
@@ -482,8 +479,11 @@ mod tests {
     }
 
     #[test]
-    fn known_kind_or_400_rejects_unknown_kind() {
-        assert!(known_kind_or_400("alien").is_err());
+    fn known_kind_or_400_rejects_malformed_kind() {
+        assert!(known_kind_or_400("alien").is_ok(), "a custom kind");
+        for bad in ["", "Alien", "1db", "db-table", "x = 1 OR true; DELETE user; --", &"a".repeat(33)] {
+            assert!(known_kind_or_400(bad).is_err(), "{bad:?}");
+        }
     }
 
     #[test]

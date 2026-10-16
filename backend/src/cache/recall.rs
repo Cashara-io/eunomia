@@ -172,23 +172,29 @@ async fn graph_arm(db: &OrgDb, vault: &RecordId, query: &str, limit: usize) -> A
     if phrases.is_empty() {
         return Ok(Vec::new());
     }
-    let lookups: Vec<String> = crate::entities::service::KINDS
-        .iter()
-        .flat_map(|kind| {
-            [
-                format!("(SELECT id, name, aliases FROM {kind} WHERE vault = $vault AND name_key IN $phrases LIMIT {GRAPH_CANDIDATES})"),
-                format!(
-                    "(SELECT id, name, aliases FROM {kind} WITH INDEX {kind}_alias_keys_idx \
-                     WHERE alias_keys CONTAINSANY $phrases AND vault = $vault LIMIT {GRAPH_CANDIDATES})"
-                ),
-            ]
-        })
-        .collect();
-    // dynamic: one name lookup and one alias lookup per entity kind, in one round trip.
-    let mut res = store::dynamic(db, "cache.graph_entities", format!("RETURN array::flatten([{}]);", lookups.join(", ")))
-        .bind(("vault", vault.clone()))
-        .bind(("phrases", phrases))
-        .await?;
+    let lookup = |tables: &[&str]| {
+        let lookups: Vec<String> = tables
+            .iter()
+            .flat_map(|kind| {
+                [
+                    format!("(SELECT id, name, aliases FROM {kind} WHERE vault = $vault AND name_key IN $phrases LIMIT {GRAPH_CANDIDATES})"),
+                    format!(
+                        "(SELECT id, name, aliases FROM {kind} WITH INDEX {kind}_alias_keys_idx \
+                         WHERE alias_keys CONTAINSANY $phrases AND vault = $vault LIMIT {GRAPH_CANDIDATES})"
+                    ),
+                ]
+            })
+            .collect();
+        // dynamic: one name lookup and one alias lookup per entity table, in one round trip.
+        store::dynamic(db, "cache.graph_entities", format!("RETURN array::flatten([{}]);", lookups.join(", ")))
+            .bind(("vault", vault.clone()))
+            .bind(("phrases", phrases.clone()))
+    };
+    let mut res = match lookup(crate::entities::service::ENTITY_TABLES).await {
+        // schema N-1: no custom-kind table yet
+        Err(e) if crate::entities::service::no_custom_table(&e) => lookup(crate::entities::service::KINDS).await?,
+        res => res?,
+    };
     let rows: Vec<EntityRow> = res.take(0)?;
 
     let q_lower = query.to_lowercase();

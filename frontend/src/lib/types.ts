@@ -168,7 +168,9 @@ export type ToolRecord = ToolHit & {
   recording?: { summary: string; action_items: string[]; transcript: string };
 };
 
-export type EntityKind = "person" | "organisation" | "location" | "repository" | "file" | "symbol";
+export type BuiltInKind = "person" | "organisation" | "location" | "repository" | "file" | "symbol";
+/** A built-in kind, or a custom kind an agent created (a lowercase name such as "db"). */
+export type EntityKind = BuiltInKind | (string & {});
 
 export type EntitySummary = {
   id: string;

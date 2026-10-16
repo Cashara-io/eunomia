@@ -1,0 +1,20 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "built_in": [
+    "person",
+    "organisation",
+    "location",
+    "repository",
+    "file",
+    "symbol"
+  ],
+  "custom": [
+    {
+      "kind": "db",
+      "entities": 1
+    }
+  ]
+}

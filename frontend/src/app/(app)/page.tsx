@@ -313,7 +313,7 @@ function LiveMemory({
                   </td>
                   <td className="hidden md:table-cell overflow-hidden">
                     <span className="flex items-center gap-1.5 min-w-0 text-[12.5px]" style={{ color: "var(--ink-dim)" }}>
-                      <span className="dot" style={{ background: `var(--kind-${m.entityKind})` }} aria-hidden />
+                      <span className="dot" style={{ background: `var(--kind-${m.entityKind}, var(--ink-faint))` }} aria-hidden />
                       <span className="truncate">{m.entityName}</span>
                     </span>
                   </td>

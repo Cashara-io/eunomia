@@ -9,7 +9,7 @@ use serde_json::json;
 use super::{register, bad_args, parse_rid, parse_opt_rid, parse_vault_ids, to_tool_value, vault_ids_schema, ToolSpec};
 use crate::cache::recall::MemoryType;
 use crate::cache::tools as cache_tools;
-use crate::entities::service::KINDS;
+use super::kind_schema;
 use crate::entities::tools as entities_tools;
 
 pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
@@ -152,7 +152,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
             "type": "object",
             "properties": {
                 "subject_name": {"type": "string"},
-                "subject_kind": {"type": "string", "enum": KINDS},
+                "subject_kind": kind_schema(),
                 "text": {"type": "string"},
                 "source_record_id": {"type": "string"},
                 "type": {"type": "string", "enum": ["world", "experience", "observation"]},
