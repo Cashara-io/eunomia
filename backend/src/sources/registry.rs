@@ -2,21 +2,20 @@
 //! source's connector credentials, and running one sync through the ingest
 //! pipeline (`cache::ingest` -- upsert, links, embeddings).
 
-use std::collections::HashSet;
 use std::sync::Arc;
 
-use serde::Deserialize;
 use serde_json::Value;
-use surrealdb::types::{RecordId, SurrealValue};
+use surrealdb::types::RecordId;
 
 use crate::cache::ingest::{self, IngestReport};
 use crate::cache::search::Envelope;
-use crate::connectors::service;
+use crate::connectors::service::{self, Connector};
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::pool::OrgDb;
+use crate::rid::RecordIdExt;
 use crate::state::OrgState;
 use crate::store;
-use crate::sources::base::{Conn, Source, SourceCtx};
+use crate::sources::base::{owner_key_str, Conn, Source, SourceCtx};
 use crate::sources::routing;
 use crate::sources::demo::DemoSource;
 use crate::sources::discord::DiscordSource;
@@ -64,45 +63,74 @@ pub fn for_provider(kind: &str) -> Option<Arc<dyn Source>> {
     all().into_iter().find(|s| s.provider_key() == kind)
 }
 
-/// The decrypted credentials + config of this source's connector, scoped to `owner`.
-pub async fn conn_for(db: &OrgDb, encryption_key: &str, owner: &RecordId, src: &dyn Source) -> AppResult<Conn> {
-    let config = service::get_connector(db, owner, src.provider_key()).await?.map(|c| c.config).unwrap_or(Value::Null);
-    let credentials = service::credentials_for(db, encryption_key, owner, src.provider_key()).await?;
-    Ok(Conn { credentials, config })
+/// The key one connection syncs under (its `sync_status` row, its sync jobs, its `/api/sources` row): the
+/// source key for a kind's first connection (as before 2.0.4), `{source}~{instance}` for each added one.
+pub fn sync_key(src: &dyn Source, conn: &Connector) -> String {
+    if conn.is_first() {
+        src.key().to_string()
+    } else {
+        format!("{}~{}", src.key(), conn.instance)
+    }
 }
 
-#[derive(Debug, Deserialize, SurrealValue)]
-struct ConnectorKindRow {
-    kind: String,
-    #[serde(default)]
-    #[surreal(default)]
-    config: Value,
+/// A [`sync_key`] split into the source key and the connection's instance ("" for the first one).
+pub fn split_key(key: &str) -> (&str, &str) {
+    key.split_once('~').unwrap_or((key, ""))
 }
 
-/// Every source whose connector is enabled for `owner` (excluding connectors
-/// left in the old demo mode).
-pub async fn enabled(db: &OrgDb, owner: &RecordId) -> AppResult<Vec<Arc<dyn Source>>> {
+/// The source and connection a [`sync_key`] names, if `owner` has it. A kind's first connection may
+/// not exist yet (`None` connection), an added one must.
+pub async fn connection(db: &OrgDb, owner: &RecordId, key: &str) -> AppResult<Option<(Arc<dyn Source>, Option<Connector>)>> {
+    let (source, instance) = split_key(key);
+    let Some(src) = get(source) else { return Ok(None) };
+    let conn = service::get_connector(db, owner, src.provider_key(), instance).await?;
+    if conn.is_none() && !instance.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some((src, conn)))
+}
+
+/// The decrypted credentials + config of one connection (empty when there is none).
+pub fn conn_for(encryption_key: &str, row: Option<&Connector>) -> AppResult<Conn> {
+    let Some(row) = row else { return Ok(Conn::default()) };
+    Ok(Conn { credentials: service::credentials_of(encryption_key, row)?, config: row.config.clone() })
+}
+
+/// Every enabled connection of `owner` with its source (excluding connectors left in the old demo mode).
+pub async fn enabled(db: &OrgDb, owner: &RecordId) -> AppResult<Vec<(Arc<dyn Source>, Connector)>> {
     let mut res = store::app::CONNECTOR_ENABLED.on(db).bind(("owner", owner.clone())).await?;
-    let rows: Vec<ConnectorKindRow> = res.take(0)?;
-    let on: HashSet<String> = rows
+    let rows: Vec<Connector> = res.take(0)?;
+    Ok(rows
         .into_iter()
         .filter(|r| !r.config.get("demo").and_then(|v| v.as_bool()).unwrap_or(false))
-        .map(|r| r.kind)
-        .collect();
-    Ok(all().into_iter().filter(|s| on.contains(s.provider_key())).collect())
+        .filter_map(|r| for_provider(&r.kind).map(|src| (src, r)))
+        .collect())
 }
 
-/// Persist -> map -> route -> ingest every raw record for `src`, scoped to `owner`. The connector's
-/// routing is read once here; each raw record's envelopes all go where its first one (the record
-/// itself, before any chunks) routes.
+/// [`ingest_via`] the first connection of `src`'s kind (what a caller without a connection means).
 pub async fn ingest(state: &OrgState, owner: &RecordId, raw_records: &[Value], src: &dyn Source) -> AppResult<IngestReport> {
+    let conn = service::get_connector(&state.db, owner, src.provider_key(), "").await?;
+    ingest_via(state, owner, raw_records, src, conn.as_ref()).await
+}
+
+/// Persist -> map -> route -> ingest every raw record for `src`, scoped to `owner`, each record marked
+/// as synced through `conn`. The connection's routing is read once here; each raw record's envelopes
+/// all go where its first one (the record itself, before any chunks) routes.
+pub async fn ingest_via(
+    state: &OrgState,
+    owner: &RecordId,
+    raw_records: &[Value],
+    src: &dyn Source,
+    conn: Option<&Connector>,
+) -> AppResult<IngestReport> {
     let mut persist_errors = Vec::new();
     for raw in raw_records {
         if let Err(e) = src.persist(&state.db, owner, raw).await {
             persist_errors.push(format!("store {}: {}", raw.get("id").and_then(Value::as_str).unwrap_or("?"), e.message));
         }
     }
-    let router = routing::Router::for_source(&state.db, owner, src).await?;
+    let router = routing::Router::for_connection(&state.db, owner, src, conn).await?;
+    let connector = conn.map(|c| c.id.clone());
     let mut report = ingest::ingest(state, owner, src.key(), raw_records, |raw| {
         let mut envs: Vec<Envelope> =
             src.map_many(raw).into_iter().map(|env| serde_json::from_value::<Envelope>(env).map_err(|e| e.to_string())).collect::<Result<_, _>>()?;
@@ -112,6 +140,9 @@ pub async fn ingest(state: &OrgState, owner: &RecordId, raw_records: &[Value], s
                 env.placement = Some(placement.clone());
             }
         }
+        for env in &mut envs {
+            env.connector = connector.clone();
+        }
         Ok(envs)
     })
     .await?;
@@ -120,21 +151,37 @@ pub async fn ingest(state: &OrgState, owner: &RecordId, raw_records: &[Value], s
     Ok(report)
 }
 
-/// Deletes everything `owner` has from `src` ([`store::cache::DELETE_SOURCE_DATA`]): its cache records
-/// (with their links), the facts and relations extracted from them, and anything the source stores
-/// itself (heypocket's `pocket_recording`). Observations built from deleted facts go stale, or are
-/// deleted if nothing else backs them. Entities, the connector's credentials and its sync cursor are
+/// Deletes everything `owner` synced through `conn` ([`store::cache::DELETE_SOURCE_DATA`]): its cache
+/// records (with their links), the facts and relations extracted from them, and anything the source
+/// stores itself (heypocket's `pocket_recording`). Observations built from deleted facts go stale, or
+/// are deleted if nothing else backs them. Entities, the connector's credentials and its sync cursor are
 /// kept. Returns how many records and memories went.
-pub async fn delete_data(db: &OrgDb, owner: &RecordId, src: &dyn Source) -> AppResult<Value> {
+pub async fn delete_data(db: &OrgDb, owner: &RecordId, conn: &Connector) -> AppResult<Value> {
+    let src = for_provider(&conn.kind).ok_or_else(|| AppError::coded(ErrorCode::ConnectorNotFound, "unknown connector"))?;
     let mut res = crate::tx::with_retry(|| async {
         store::cache::DELETE_SOURCE_DATA
             .on(db)
             .bind(("owner", owner.clone()))
             .bind(("source", src.key().to_string()))
+            .bind(("connector", conn.id.clone()))
+            .bind(("first", conn.is_first()))
             .await
     })
     .await?;
     Ok(res.take::<Option<Value>>(store::cache::DELETE_SOURCE_DATA.slot)?.unwrap_or(Value::Null))
+}
+
+/// Removes one connection: its data ([`delete_data`]), its sync status and the connection itself. A
+/// kind's first connection comes back empty the next time the connectors are listed.
+pub async fn delete_connection(db: &OrgDb, owner: &RecordId, conn: &Connector) -> AppResult<Value> {
+    let out = delete_data(db, owner, conn).await?;
+    let src = for_provider(&conn.kind).ok_or_else(|| AppError::coded(ErrorCode::ConnectorNotFound, "unknown connector"))?;
+    let status = RecordId::from_table_key("sync_status", format!("{}:{}", owner_key_str(owner), sync_key(src.as_ref(), conn)));
+    crate::tx::with_retry(|| async {
+        store::app::CONNECTOR_DELETE.on(db).bind(("status", status.clone())).bind(("id", conn.id.clone())).await?.check()
+    })
+    .await?;
+    Ok(out)
 }
 
 /// Builds the context the cache-reading source helpers take.
@@ -142,7 +189,7 @@ pub fn ctx<'a>(db: &'a OrgDb, encryption_key: &'a str, owner: &'a RecordId) -> S
     SourceCtx { db, encryption_key, owner }
 }
 
-/// Fetch one source for `owner` and ingest what came back. Returns
+/// Fetch one connection ([`sync_key`]) for `owner` and ingest what came back. Returns
 /// `(report, next_cursor)`.
 pub async fn run_sync(
     state: &OrgState,
@@ -150,16 +197,19 @@ pub async fn run_sync(
     key: &str,
     cursor: Option<String>,
 ) -> AppResult<(IngestReport, Option<String>)> {
-    let src = get(key).ok_or_else(|| AppError::coded(ErrorCode::SourceNotFound, format!("no source {key:?}")))?;
-    let conn = conn_for(&state.db, &state.settings.encryption_key, owner, src.as_ref()).await?;
+    let (src, row) = connection(&state.db, owner, key)
+        .await?
+        .ok_or_else(|| AppError::coded(ErrorCode::SourceNotFound, format!("no source {key:?}")))?;
+    let conn = conn_for(&state.settings.encryption_key, row.as_ref())?;
     let result = src.fetch(&conn, cursor).await?;
-    let report = ingest(state, owner, &result.records, src.as_ref()).await?;
+    let report = ingest_via(state, owner, &result.records, src.as_ref(), row.as_ref()).await?;
     Ok((report, result.cursor))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
 
     #[test]
     fn every_source_has_a_unique_key_and_a_real_connector_kind() {
@@ -183,5 +233,26 @@ mod tests {
         assert_eq!(get("heypocket").unwrap().provider_key(), "pocketai");
         assert_eq!(for_provider("pocketai").unwrap().key(), "heypocket");
         assert_eq!(for_provider("up_bank").unwrap().key(), "up_bank");
+    }
+
+    #[test]
+    fn sync_keys_name_the_first_connection_by_its_source_and_others_by_instance() {
+        let mut conn = Connector {
+            id: crate::rid::parse("connector:abc").unwrap(),
+            owner: crate::rid::parse("user:u").unwrap(),
+            kind: "pocketai".into(),
+            instance: String::new(),
+            label: String::new(),
+            enabled: true,
+            config: Value::Null,
+            credentials_encrypted: String::new(),
+            updated_at: chrono::Utc::now().into(),
+            routing: Value::Null,
+        };
+        assert_eq!(sync_key(&HeyPocketSource, &conn), "heypocket");
+        conn.instance = "abc".into();
+        assert_eq!(sync_key(&HeyPocketSource, &conn), "heypocket~abc");
+        assert_eq!(split_key("heypocket~abc"), ("heypocket", "abc"));
+        assert_eq!(split_key("github"), ("github", ""));
     }
 }

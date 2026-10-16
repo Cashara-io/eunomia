@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, ServerSentEventsResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AcceptInvitationData, AcceptInvitationErrors, AcceptInvitationResponses, AddMemoryData, AddMemoryErrors, AddMemoryResponses, AddRelationData, AddRelationErrors, AddRelationResponses, CheckForUpdateData, CheckForUpdateErrors, CheckForUpdateResponses, CloneVaultData, CloneVaultErrors, CloneVaultResponses, CompleteOnboardingData, CompleteOnboardingErrors, CompleteOnboardingResponses, CreateEntityData, CreateEntityErrors, CreateEntityResponses, CreateThreadData, CreateThreadErrors, CreateThreadResponses, CreateTokenData, CreateTokenErrors, CreateTokenResponses, CreateVaultData, CreateVaultErrors, CreateVaultResponses, DecideOauthConsentData, DecideOauthConsentErrors, DecideOauthConsentResponses, DeclineInvitationData, DeclineInvitationErrors, DeclineInvitationResponses, DeleteConnectorDataData, DeleteConnectorDataErrors, DeleteConnectorDataResponses, DeleteDocumentData, DeleteDocumentErrors, DeleteDocumentResponses, DeleteEntityData, DeleteEntityErrors, DeleteEntityResponses, DeleteMemoryData, DeleteMemoryErrors, DeleteMemoryResponses, DeleteThreadData, DeleteThreadErrors, DeleteThreadResponses, DeleteTokenData, DeleteTokenErrors, DeleteTokenResponses, DeleteVaultData, DeleteVaultErrors, DeleteVaultResponses, DownloadDocumentData, DownloadDocumentErrors, DownloadDocumentResponses, ExportDataData, ExportDataErrors, ExportDataResponses, ExportDocumentData, ExportDocumentErrors, ExportDocumentResponses, GetBootstrapData, GetBootstrapErrors, GetBootstrapResponses, GetConnectorData, GetConnectorErrors, GetConnectorResponses, GetDocumentData, GetDocumentErrors, GetDocumentResponses, GetEntityData, GetEntityErrors, GetEntityGraphData, GetEntityGraphErrors, GetEntityGraphResponses, GetEntityResponses, GetFailureCapsuleData, GetFailureCapsuleErrors, GetFailureCapsuleResponses, GetHttpsStatusData, GetHttpsStatusErrors, GetHttpsStatusResponses, GetMeData, GetMeErrors, GetMeResponses, GetMetricsData, GetMetricsErrors, GetMetricsResponses, GetOauthConsentData, GetOauthConsentErrors, GetOauthConsentResponses, GetOpenapiData, GetOpenapiResponses, GetPocketaiAllData, GetPocketaiAllErrors, GetPocketaiAllResponses, GetPocketaiDetailData, GetPocketaiDetailErrors, GetPocketaiDetailResponses, GetPocketaiSummaryData, GetPocketaiSummaryErrors, GetPocketaiSummaryResponses, GetReadyzData, GetReadyzErrors, GetReadyzResponses, GetSettingsData, GetSettingsErrors, GetSettingsResponses, GetSnapshotData, GetSnapshotErrors, GetSnapshotResponses, GetSourcesStatusData, GetSourcesStatusErrors, GetSourcesStatusResponses, GetThreadHistoryData, GetThreadHistoryErrors, GetThreadHistoryResponses, GetUpBankFinanceSummaryData, GetUpBankFinanceSummaryErrors, GetUpBankFinanceSummaryResponses, GetUpdateStatusData, GetUpdateStatusErrors, GetUpdateStatusResponses, GetVectorCloudData, GetVectorCloudErrors, GetVectorCloudResponses, InviteMemberData, InviteMemberErrors, InviteMemberResponses, InvokeToolData, InvokeToolErrors, InvokeToolResponses, LeaveVaultData, LeaveVaultErrors, LeaveVaultResponses, ListAuditData, ListAuditErrors, ListAuditResponses, ListConnectorsData, ListConnectorsErrors, ListConnectorsResponses, ListDocumentsData, ListDocumentsErrors, ListDocumentsResponses, ListEntitiesData, ListEntitiesErrors, ListEntitiesResponses, ListInvitationsData, ListInvitationsErrors, ListInvitationsResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListOauthGrantsData, ListOauthGrantsErrors, ListOauthGrantsResponses, ListOpenaiModelsData, ListOpenaiModelsErrors, ListOpenaiModelsResponses, ListSessionsData, ListSessionsErrors, ListSessionsResponses, ListSourcesData, ListSourcesErrors, ListSourcesResponses, ListThreadsData, ListThreadsErrors, ListThreadsResponses, ListTokensData, ListTokensErrors, ListTokensResponses, ListToolsData, ListToolsErrors, ListToolsResponses, ListVaultsData, ListVaultsErrors, ListVaultsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, MergeEntitiesData, MergeEntitiesErrors, MergeEntitiesResponses, MergeVaultsData, MergeVaultsErrors, MergeVaultsResponses, MoveConnectorDataData, MoveConnectorDataErrors, MoveConnectorDataResponses, ReceiveSourceWebhookData, ReceiveSourceWebhookErrors, ReceiveSourceWebhookResponses, RegisterData, RegisterErrors, RegisterResponses, ReindexDocumentData, ReindexDocumentErrors, ReindexDocumentResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, RenameTokenData, RenameTokenErrors, RenameTokenResponses, RenameVaultData, RenameVaultErrors, RenameVaultResponses, RepointConnectorsData, RepointConnectorsErrors, RepointConnectorsResponses, RequestHttpsData, RequestHttpsErrors, RequestHttpsResponses, RequestUpdateData, RequestUpdateErrors, RequestUpdateResponses, RevokeOauthGrantData, RevokeOauthGrantErrors, RevokeOauthGrantResponses, RevokeSessionData, RevokeSessionErrors, RevokeSessionResponses, SearchPocketaiData, SearchPocketaiErrors, SearchPocketaiResponses, SendMessageData, SendMessageErrors, SendMessageResponse, SendMessageResponses, SyncSourceData, SyncSourceErrors, SyncSourceResponses, TestConnectorData, TestConnectorErrors, TestConnectorResponses, UpdateConnectorData, UpdateConnectorErrors, UpdateConnectorResponses, UpdateEntityData, UpdateEntityErrors, UpdateEntityResponses, UpdateMemoryData, UpdateMemoryErrors, UpdateMemoryResponses, UpdateSettingsData, UpdateSettingsErrors, UpdateSettingsResponses, UploadDocumentData, UploadDocumentErrors, UploadDocumentResponses } from './types.gen';
+import type { AcceptInvitationData, AcceptInvitationErrors, AcceptInvitationResponses, AddMemoryData, AddMemoryErrors, AddMemoryResponses, AddRelationData, AddRelationErrors, AddRelationResponses, CheckForUpdateData, CheckForUpdateErrors, CheckForUpdateResponses, CloneVaultData, CloneVaultErrors, CloneVaultResponses, CompleteOnboardingData, CompleteOnboardingErrors, CompleteOnboardingResponses, CreateConnectorData, CreateConnectorErrors, CreateConnectorResponses, CreateEntityData, CreateEntityErrors, CreateEntityResponses, CreateThreadData, CreateThreadErrors, CreateThreadResponses, CreateTokenData, CreateTokenErrors, CreateTokenResponses, CreateVaultData, CreateVaultErrors, CreateVaultResponses, DecideOauthConsentData, DecideOauthConsentErrors, DecideOauthConsentResponses, DeclineInvitationData, DeclineInvitationErrors, DeclineInvitationResponses, DeleteConnectorData, DeleteConnectorDataData, DeleteConnectorDataErrors, DeleteConnectorDataResponses, DeleteConnectorErrors, DeleteConnectorResponses, DeleteDocumentData, DeleteDocumentErrors, DeleteDocumentResponses, DeleteEntityData, DeleteEntityErrors, DeleteEntityResponses, DeleteMemoryData, DeleteMemoryErrors, DeleteMemoryResponses, DeleteThreadData, DeleteThreadErrors, DeleteThreadResponses, DeleteTokenData, DeleteTokenErrors, DeleteTokenResponses, DeleteVaultData, DeleteVaultErrors, DeleteVaultResponses, DownloadDocumentData, DownloadDocumentErrors, DownloadDocumentResponses, ExportDataData, ExportDataErrors, ExportDataResponses, ExportDocumentData, ExportDocumentErrors, ExportDocumentResponses, GetBootstrapData, GetBootstrapErrors, GetBootstrapResponses, GetConnectorData, GetConnectorErrors, GetConnectorResponses, GetDocumentData, GetDocumentErrors, GetDocumentResponses, GetEntityData, GetEntityErrors, GetEntityGraphData, GetEntityGraphErrors, GetEntityGraphResponses, GetEntityResponses, GetFailureCapsuleData, GetFailureCapsuleErrors, GetFailureCapsuleResponses, GetHttpsStatusData, GetHttpsStatusErrors, GetHttpsStatusResponses, GetMeData, GetMeErrors, GetMeResponses, GetMetricsData, GetMetricsErrors, GetMetricsResponses, GetOauthConsentData, GetOauthConsentErrors, GetOauthConsentResponses, GetOpenapiData, GetOpenapiResponses, GetPocketaiAllData, GetPocketaiAllErrors, GetPocketaiAllResponses, GetPocketaiDetailData, GetPocketaiDetailErrors, GetPocketaiDetailResponses, GetPocketaiSummaryData, GetPocketaiSummaryErrors, GetPocketaiSummaryResponses, GetReadyzData, GetReadyzErrors, GetReadyzResponses, GetSettingsData, GetSettingsErrors, GetSettingsResponses, GetSnapshotData, GetSnapshotErrors, GetSnapshotResponses, GetSourcesStatusData, GetSourcesStatusErrors, GetSourcesStatusResponses, GetThreadHistoryData, GetThreadHistoryErrors, GetThreadHistoryResponses, GetUpBankFinanceSummaryData, GetUpBankFinanceSummaryErrors, GetUpBankFinanceSummaryResponses, GetUpdateStatusData, GetUpdateStatusErrors, GetUpdateStatusResponses, GetVectorCloudData, GetVectorCloudErrors, GetVectorCloudResponses, InviteMemberData, InviteMemberErrors, InviteMemberResponses, InvokeToolData, InvokeToolErrors, InvokeToolResponses, LeaveVaultData, LeaveVaultErrors, LeaveVaultResponses, ListAuditData, ListAuditErrors, ListAuditResponses, ListConnectorsData, ListConnectorsErrors, ListConnectorsResponses, ListDocumentsData, ListDocumentsErrors, ListDocumentsResponses, ListEntitiesData, ListEntitiesErrors, ListEntitiesResponses, ListInvitationsData, ListInvitationsErrors, ListInvitationsResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListOauthGrantsData, ListOauthGrantsErrors, ListOauthGrantsResponses, ListOpenaiModelsData, ListOpenaiModelsErrors, ListOpenaiModelsResponses, ListSessionsData, ListSessionsErrors, ListSessionsResponses, ListSourcesData, ListSourcesErrors, ListSourcesResponses, ListThreadsData, ListThreadsErrors, ListThreadsResponses, ListTokensData, ListTokensErrors, ListTokensResponses, ListToolsData, ListToolsErrors, ListToolsResponses, ListVaultsData, ListVaultsErrors, ListVaultsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, MergeEntitiesData, MergeEntitiesErrors, MergeEntitiesResponses, MergeVaultsData, MergeVaultsErrors, MergeVaultsResponses, MoveConnectorDataData, MoveConnectorDataErrors, MoveConnectorDataResponses, ReceiveSourceWebhookData, ReceiveSourceWebhookErrors, ReceiveSourceWebhookResponses, RegisterData, RegisterErrors, RegisterResponses, ReindexDocumentData, ReindexDocumentErrors, ReindexDocumentResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, RenameTokenData, RenameTokenErrors, RenameTokenResponses, RenameVaultData, RenameVaultErrors, RenameVaultResponses, RepointConnectorsData, RepointConnectorsErrors, RepointConnectorsResponses, RequestHttpsData, RequestHttpsErrors, RequestHttpsResponses, RequestUpdateData, RequestUpdateErrors, RequestUpdateResponses, RevokeOauthGrantData, RevokeOauthGrantErrors, RevokeOauthGrantResponses, RevokeSessionData, RevokeSessionErrors, RevokeSessionResponses, SearchPocketaiData, SearchPocketaiErrors, SearchPocketaiResponses, SendMessageData, SendMessageErrors, SendMessageResponse, SendMessageResponses, SyncSourceData, SyncSourceErrors, SyncSourceResponses, TestConnectorData, TestConnectorErrors, TestConnectorResponses, UpdateConnectorData, UpdateConnectorErrors, UpdateConnectorResponses, UpdateEntityData, UpdateEntityErrors, UpdateEntityResponses, UpdateMemoryData, UpdateMemoryErrors, UpdateMemoryResponses, UpdateSettingsData, UpdateSettingsErrors, UpdateSettingsResponses, UploadDocumentData, UploadDocumentErrors, UploadDocumentResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -251,6 +251,25 @@ export const listConnectors = <ThrowOnError extends boolean = false>(options?: O
 });
 
 /**
+ * Add another connection of a kind
+ *
+ * Creates a further, empty and disabled connection of `kind` (a second Gmail account, another Pocket device). Set it up with `PUT /api/connectors/{connector}` using the returned id.
+ */
+export const createConnector = <ThrowOnError extends boolean = false>(options: Options<CreateConnectorData, ThrowOnError>): RequestResult<CreateConnectorResponses, CreateConnectorErrors, ThrowOnError> => (options.client ?? client).post<CreateConnectorResponses, CreateConnectorErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/connectors',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
  * All PocketAI recordings
  */
 export const getPocketaiAll = <ThrowOnError extends boolean = false>(options?: Options<GetPocketaiAllData, ThrowOnError>): RequestResult<GetPocketaiAllResponses, GetPocketaiAllErrors, ThrowOnError> => (options?.client ?? client).get<GetPocketaiAllResponses, GetPocketaiAllErrors, ThrowOnError>({
@@ -333,7 +352,22 @@ export const getUpBankFinanceSummary = <ThrowOnError extends boolean = false>(op
 });
 
 /**
- * One connector
+ * Remove a connection and its data
+ *
+ * Deletes the connection's credentials, sync status and everything synced through it (as `DELETE /api/connectors/{connector}/data`). Other connections of the same kind are untouched. A kind's first connection comes back empty and disconnected.
+ */
+export const deleteConnector = <ThrowOnError extends boolean = false>(options: Options<DeleteConnectorData, ThrowOnError>): RequestResult<DeleteConnectorResponses, DeleteConnectorErrors, ThrowOnError> => (options.client ?? client).delete<DeleteConnectorResponses, DeleteConnectorErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/connectors/{connector}',
+    ...options
+});
+
+/**
+ * One connection
  */
 export const getConnector = <ThrowOnError extends boolean = false>(options: Options<GetConnectorData, ThrowOnError>): RequestResult<GetConnectorResponses, GetConnectorErrors, ThrowOnError> => (options.client ?? client).get<GetConnectorResponses, GetConnectorErrors, ThrowOnError>({
     security: [{
@@ -341,12 +375,12 @@ export const getConnector = <ThrowOnError extends boolean = false>(options: Opti
             name: 'eunomia_session',
             type: 'apiKey'
         }, { scheme: 'bearer', type: 'http' }],
-    url: '/api/connectors/{kind}',
+    url: '/api/connectors/{connector}',
     ...options
 });
 
 /**
- * Update a connector
+ * Update a connection
  */
 export const updateConnector = <ThrowOnError extends boolean = false>(options: Options<UpdateConnectorData, ThrowOnError>): RequestResult<UpdateConnectorResponses, UpdateConnectorErrors, ThrowOnError> => (options.client ?? client).put<UpdateConnectorResponses, UpdateConnectorErrors, ThrowOnError>({
     security: [{
@@ -354,7 +388,7 @@ export const updateConnector = <ThrowOnError extends boolean = false>(options: O
             name: 'eunomia_session',
             type: 'apiKey'
         }, { scheme: 'bearer', type: 'http' }],
-    url: '/api/connectors/{kind}',
+    url: '/api/connectors/{connector}',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -363,9 +397,9 @@ export const updateConnector = <ThrowOnError extends boolean = false>(options: O
 });
 
 /**
- * Delete everything synced from a connector
+ * Delete everything synced from a connection
  *
- * Removes the connector's synced records, their links, the facts and relations extracted from them, and (Pocket) the stored recordings. Observations built from removed facts go stale. Entities, the credentials and the sync cursor stay.
+ * Removes the records synced through this connection, their links, the facts and relations extracted from them, and (Pocket) the stored recordings. Observations built from removed facts go stale. Entities, the credentials and the sync cursor stay, and so does everything synced through other connections of the same kind.
  */
 export const deleteConnectorData = <ThrowOnError extends boolean = false>(options: Options<DeleteConnectorDataData, ThrowOnError>): RequestResult<DeleteConnectorDataResponses, DeleteConnectorDataErrors, ThrowOnError> => (options.client ?? client).delete<DeleteConnectorDataResponses, DeleteConnectorDataErrors, ThrowOnError>({
     security: [{
@@ -373,12 +407,12 @@ export const deleteConnectorData = <ThrowOnError extends boolean = false>(option
             name: 'eunomia_session',
             type: 'apiKey'
         }, { scheme: 'bearer', type: 'http' }],
-    url: '/api/connectors/{kind}/data',
+    url: '/api/connectors/{connector}/data',
     ...options
 });
 
 /**
- * Re-file a connector's synced data by its current routing
+ * Re-file a connection's synced data by its current routing
  *
  * Changing a connector's destination vault or rules applies to records synced afterwards. This moves the records already synced (and the facts and relations extracted from them) to where the current routing sends them. Idempotent: a record already in the right vault is left alone, and a fact the destination already has is not duplicated.
  */
@@ -388,12 +422,12 @@ export const moveConnectorData = <ThrowOnError extends boolean = false>(options:
             name: 'eunomia_session',
             type: 'apiKey'
         }, { scheme: 'bearer', type: 'http' }],
-    url: '/api/connectors/{kind}/move',
+    url: '/api/connectors/{connector}/move',
     ...options
 });
 
 /**
- * Test a connector's credentials
+ * Test a connection's credentials
  */
 export const testConnector = <ThrowOnError extends boolean = false>(options: Options<TestConnectorData, ThrowOnError>): RequestResult<TestConnectorResponses, TestConnectorErrors, ThrowOnError> => (options.client ?? client).post<TestConnectorResponses, TestConnectorErrors, ThrowOnError>({
     security: [{
@@ -401,7 +435,7 @@ export const testConnector = <ThrowOnError extends boolean = false>(options: Opt
             name: 'eunomia_session',
             type: 'apiKey'
         }, { scheme: 'bearer', type: 'http' }],
-    url: '/api/connectors/{kind}/test',
+    url: '/api/connectors/{connector}/test',
     ...options
 });
 
@@ -908,6 +942,8 @@ export const getSourcesStatus = <ThrowOnError extends boolean = false>(options?:
 
 /**
  * Sync a source now
+ *
+ * `key` is a source key (its first connection) or a connection's key from `GET /api/sources` (`{source}~{instance}`).
  */
 export const syncSource = <ThrowOnError extends boolean = false>(options: Options<SyncSourceData, ThrowOnError>): RequestResult<SyncSourceResponses, SyncSourceErrors, ThrowOnError> => (options.client ?? client).post<SyncSourceResponses, SyncSourceErrors, ThrowOnError>({
     security: [{

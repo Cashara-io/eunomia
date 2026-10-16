@@ -53,6 +53,10 @@ pub struct Envelope {
     /// (uploaded documents, the demo source), so a new record goes to the owner's personal vault.
     #[serde(skip)]
     pub placement: Option<Placement>,
+    /// The connection that synced it (`cache_record.connector`); never set by a mapper. `None` for
+    /// records no connection made (uploaded documents, the demo source).
+    #[serde(skip)]
+    pub connector: Option<RecordId>,
 }
 
 /// Where a sync files one record (`sources::routing::Router::placement`). Routing places a record when
@@ -392,6 +396,7 @@ pub async fn upsert(db: &OrgDb, owner: &RecordId, env: &Envelope) -> AppResult<(
             .bind(("deleted", env.deleted))
             .bind(("vault", vault.clone()))
             .bind(("route_keys", route_keys.clone()))
+            .bind(("connector", env.connector.clone()))
             .await?;
         res.take(0)
     })

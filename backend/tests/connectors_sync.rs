@@ -365,7 +365,8 @@ async fn a_pocket_recording_is_stored_whole_chunked_embedded_and_extracted() {
         "relationships": {"account": {"data": {"id": "acc"}}}});
     registry::ingest(&org, &owner, &[up], &UpBankSource).await.unwrap();
     let up_memories = count(&org, "SELECT count() FROM memory WHERE owner = $owner AND source.source = 'up_bank'", &owner).await;
-    let out = registry::delete_data(&org.db, &owner, &HeyPocketSource).await.unwrap();
+    let pocket = service::get_or_create_connector(&org.db, &owner, "pocketai").await.unwrap();
+    let out = registry::delete_data(&org.db, &owner, &pocket).await.unwrap();
     assert_eq!(out["records"], 4, "{out}");
     assert!(out["memories"].as_i64().unwrap() >= 1, "{out}");
     assert_eq!(count(&org, "SELECT count() FROM cache_record WHERE owner = $owner AND source = 'heypocket'", &owner).await, 0);

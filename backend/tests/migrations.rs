@@ -417,3 +417,32 @@ async fn pocket_cursor_reset_in_0011_runs_with_cursors_present() {
     let cursors: Vec<String> = db.query("SELECT VALUE cursor FROM sync_status ORDER BY id").await.unwrap().take(0).unwrap();
     assert_eq!(cursors, ["keep", ""], "github kept, heypocket restarted");
 }
+
+/// 0017 (multi-connect) over an install with one connector per kind: each existing connection becomes
+/// its kind's first one (`instance = ""`) and keeps its row, credentials and cursor; another first
+/// connection of the same kind is still refused, and an added one is allowed.
+#[tokio::test]
+async fn existing_connectors_become_first_connections_in_0017() {
+    let db = fresh().await;
+    migrate::apply_up_to(&db, 15).await.unwrap();
+    db.query(
+        "CREATE user:u SET email = 'a@b.c', password_hash = 'x';
+         CREATE connector:old SET owner = user:u, kind = 'gmail', enabled = true, credentials_encrypted = 'enc';
+         CREATE sync_status:`u:gmail` SET owner = user:u, cursor = 'keep';",
+    )
+    .await
+    .unwrap()
+    .check()
+    .unwrap();
+    migrate::migrate(&db, &test_settings()).await.unwrap();
+    let row: Option<Value> =
+        db.query("SELECT instance, label, enabled, credentials_encrypted FROM ONLY connector:old").await.unwrap().take(0).unwrap();
+    assert_eq!(row.unwrap(), serde_json::json!({"instance": "", "label": "", "enabled": true, "credentials_encrypted": "enc"}));
+    let found: Vec<Value> =
+        db.query("SELECT id FROM connector WHERE owner = user:u AND kind = 'gmail' AND instance = ''").await.unwrap().take(0).unwrap();
+    assert_eq!(found.len(), 1, "the index finds the migrated row");
+    assert!(db.query("CREATE connector SET owner = user:u, kind = 'gmail'").await.unwrap().check().is_err(), "one first connection per kind");
+    db.query("CREATE connector SET owner = user:u, kind = 'gmail', instance = 'x', label = 'work'").await.unwrap().check().unwrap();
+    let cursor: Option<String> = db.query("SELECT VALUE cursor FROM ONLY sync_status:`u:gmail`").await.unwrap().take(0).unwrap();
+    assert_eq!(cursor.as_deref(), Some("keep"));
+}

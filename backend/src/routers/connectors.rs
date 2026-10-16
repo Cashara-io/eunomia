@@ -18,9 +18,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::connectors::clients::{PocketAIClient, UpBankClient};
-use crate::connectors::service::{self, Connector, CONNECTOR_KINDS};
+use crate::connectors::service::{self, Connector};
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::models_user::User;
+use crate::rid::RecordIdExt;
 use crate::sources::registry;
 use crate::sources::routing::{self, MoveReport, Routing};
 use crate::state::{AppState, OrgState};
@@ -29,16 +30,16 @@ use super::schemas::{FinanceSummary, PocketaiSummary, SnapshotOut};
 
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/connectors", get(list_all))
+        .route("/connectors", get(list_all).post(create_one))
         .route("/connectors/up_bank/finance-summary", get(up_bank_finance_summary))
         .route("/connectors/pocketai/summary", get(pocketai_summary))
         .route("/connectors/pocketai/all", get(pocketai_all))
         .route("/connectors/pocketai/search", get(pocketai_search))
         .route("/connectors/pocketai/detail/{recording_id}", get(pocketai_detail))
-        .route("/connectors/{kind}", get(get_one).put(put_one))
-        .route("/connectors/{kind}/test", axum::routing::post(test_one))
-        .route("/connectors/{kind}/data", axum::routing::delete(delete_data))
-        .route("/connectors/{kind}/move", axum::routing::post(move_data))
+        .route("/connectors/{connector}", get(get_one).put(put_one).delete(delete_one))
+        .route("/connectors/{connector}/test", axum::routing::post(test_one))
+        .route("/connectors/{connector}/data", axum::routing::delete(delete_data))
+        .route("/connectors/{connector}/move", axum::routing::post(move_data))
         .route("/connectors/repoint", axum::routing::post(repoint))
 }
 
@@ -46,9 +47,18 @@ pub fn snapshot_router() -> Router<AppState> {
     Router::new().route("/snapshot", get(snapshot))
 }
 
+/// One connection. A user may connect the same kind more than once (two Gmail accounts); each
+/// connection has its own credentials, sync and records.
 #[derive(Serialize, utoipa::ToSchema)]
 struct ConnectorOut {
+    /// The connection's id (`connector:...`). Routes taking `{connector}` accept it.
+    id: String,
     kind: String,
+    /// The name the user gave this connection (an email address, a device name); "" if none.
+    label: String,
+    /// This connection's key in `GET /api/sources` and `POST /api/sources/{key}/sync`: the source key for
+    /// a kind's first connection, `{source}~{instance}` for each one added after it.
+    source_key: String,
     enabled: bool,
     /// Connector-specific settings (open object).
     #[schema(value_type = Object)]
@@ -63,14 +73,18 @@ struct ConnectorOut {
 }
 
 fn connector_out(row: &Connector) -> ConnectorOut {
+    let src = registry::for_provider(&row.kind);
     ConnectorOut {
+        id: row.id.to_string(),
         kind: row.kind.clone(),
+        label: row.label.clone(),
+        source_key: src.as_ref().map(|s| registry::sync_key(s.as_ref(), row)).unwrap_or_else(|| row.kind.clone()),
         enabled: row.enabled,
         config: row.config.clone(),
         credentials_set: !row.credentials_encrypted.is_empty(),
         updated_at: row.updated_at,
         routing: Routing::of(&row.routing),
-        routing_fields: registry::for_provider(&row.kind).map(|s| routing::fields(s.key()).to_vec()).unwrap_or_default(),
+        routing_fields: src.map(|s| routing::fields(s.key()).to_vec()).unwrap_or_default(),
     }
 }
 
@@ -82,21 +96,31 @@ struct TestOut {
     error: Option<String>,
 }
 
-fn require_known_kind(kind: &str) -> AppResult<()> {
-    if CONNECTOR_KINDS.contains(&kind) {
-        Ok(())
-    } else {
-        Err(AppError::coded(ErrorCode::ConnectorNotFound, "unknown connector"))
-    }
+/// The source behind a connection.
+fn source_of(row: &Connector) -> AppResult<std::sync::Arc<dyn crate::sources::base::Source>> {
+    registry::for_provider(&row.kind).ok_or_else(|| AppError::coded(ErrorCode::ConnectorNotFound, "unknown connector"))
+}
+
+/// What `{connector}` in a path may be: a connection's id, or a kind (its first connection, which is
+/// what these routes meant before a kind could be connected twice).
+const CONNECTOR_PARAM: &str = "A connection id (`connector:...` or its key), or a connector kind for that kind's first connection.";
+
+#[derive(Deserialize, utoipa::ToSchema)]
+struct ConnectorCreateBody {
+    kind: String,
+    /// A name for the new connection, for example the account's email address or the device's name.
+    label: String,
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]
 struct ConnectorUpdateBody {
     enabled: Option<bool>,
+    /// Renames the connection.
+    label: Option<String>,
     config: Option<Value>,
     credentials: Option<Value>,
     /// Replaces the routing (destination vault and rules). It applies to records synced from now on;
-    /// `POST /api/connectors/{kind}/move` re-files those already synced.
+    /// `POST /api/connectors/{connector}/move` re-files those already synced.
     routing: Option<Routing>,
 }
 
@@ -159,8 +183,9 @@ async fn up_bank_finance_summary(
     Query(q): Query<DaysQuery>,
 ) -> AppResult<Json<Value>> {
     let state = state.org(&user.org).await?;
+    // ponytail: the kind's first connection; take a `connector` query parameter if a second Up account needs its own summary
     let row = service::get_or_create_connector(&state.db, &user.id, "up_bank").await?;
-    let creds = service::credentials_for(&state.db, &state.settings.encryption_key, &user.id, "up_bank").await?;
+    let creds = service::credentials_of(&state.settings.encryption_key, &row)?;
     let has_token = creds.get("personal_access_token").and_then(|v| v.as_str()).map(|s| !s.is_empty()).unwrap_or(false);
     if !row.enabled || !has_token {
         return Err(AppError::coded(ErrorCode::ConnectorNotConnected, "Up Bank is not connected"));
@@ -171,8 +196,9 @@ async fn up_bank_finance_summary(
 }
 
 async fn pocketai_client_or_400(state: &OrgState, user: &User) -> AppResult<PocketAIClient> {
+    // ponytail: the kind's first connection, as for the Up summary
     let row = service::get_or_create_connector(&state.db, &user.id, "pocketai").await?;
-    let creds = service::credentials_for(&state.db, &state.settings.encryption_key, &user.id, "pocketai").await?;
+    let creds = service::credentials_of(&state.settings.encryption_key, &row)?;
     let has_key = creds.get("api_key").and_then(|v| v.as_str()).map(|s| !s.is_empty()).unwrap_or(false);
     if !row.enabled || !has_key {
         return Err(AppError::coded(ErrorCode::ConnectorNotConnected, "PocketAI is not connected"));
@@ -267,27 +293,75 @@ async fn pocketai_detail(
 #[utoipa::path(
     operation_id = "getConnector",
     get,
-    path = "/api/connectors/{kind}",
+    path = "/api/connectors/{connector}",
     tag = "connectors",
-    summary = "One connector",
-    params(("kind" = String, Path)),
+    summary = "One connection",
+    params(("connector" = String, Path, description = CONNECTOR_PARAM)),
     responses((status = 200, body = ConnectorOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
 )]
-async fn get_one(State(state): State<AppState>, user: User, Path(kind): Path<String>) -> AppResult<Json<ConnectorOut>> {
+async fn get_one(State(state): State<AppState>, user: User, Path(connector): Path<String>) -> AppResult<Json<ConnectorOut>> {
     let state = state.org(&user.org).await?;
-    require_known_kind(&kind)?;
-    let row = service::get_or_create_connector(&state.db, &user.id, &kind).await?;
+    let row = service::resolve(&state.db, &user.id, &connector).await?;
     Ok(Json(connector_out(&row)))
+}
+
+#[utoipa::path(
+    operation_id = "createConnector",
+    post,
+    path = "/api/connectors",
+    tag = "connectors",
+    summary = "Add another connection of a kind",
+    description = "Creates a further, empty and disabled connection of `kind` (a second Gmail account, another Pocket device). Set it up with `PUT /api/connectors/{connector}` using the returned id.",
+    request_body = ConnectorCreateBody,
+    responses((status = 200, body = ConnectorOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = []), ("bearer" = [])),
+)]
+async fn create_one(State(state): State<AppState>, user: User, Json(body): Json<ConnectorCreateBody>) -> AppResult<Json<ConnectorOut>> {
+    let state = state.org(&user.org).await?;
+    let row = service::create_connection(&state.db, &user.id, &body.kind, &body.label).await?;
+    Ok(Json(connector_out(&row)))
+}
+
+#[derive(Serialize, utoipa::ToSchema)]
+struct DeleteConnectorOut {
+    /// Synced records removed.
+    records: u64,
+    /// Extracted facts removed.
+    memories: u64,
+}
+
+/// Removes one connection with everything synced through it. Account-level: the gate refuses
+/// vault-restricted tokens.
+#[utoipa::path(
+    operation_id = "deleteConnector",
+    delete,
+    path = "/api/connectors/{connector}",
+    tag = "connectors",
+    summary = "Remove a connection and its data",
+    description = "Deletes the connection's credentials, sync status and everything synced through it (as `DELETE /api/connectors/{connector}/data`). Other connections of the same kind are untouched. A kind's first connection comes back empty and disconnected.",
+    params(("connector" = String, Path, description = CONNECTOR_PARAM)),
+    responses((status = 200, body = DeleteConnectorOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = []), ("bearer" = [])),
+)]
+async fn delete_one(State(app): State<AppState>, user: User, Path(connector): Path<String>) -> AppResult<Json<DeleteConnectorOut>> {
+    let state = app.org(&user.org).await?;
+    let row = service::resolve(&state.db, &user.id, &connector).await?;
+    let out = registry::delete_connection(&state.db, &user.id, &row).await?;
+    crate::audit::record_as_caller(&app.control, &user.id, "connector.delete", &connector, "ok").await;
+    Ok(Json(DeleteConnectorOut {
+        records: out["records"].as_u64().unwrap_or(0),
+        memories: out["memories"].as_u64().unwrap_or(0),
+    }))
 }
 
 #[utoipa::path(
     operation_id = "updateConnector",
     put,
-    path = "/api/connectors/{kind}",
+    path = "/api/connectors/{connector}",
     tag = "connectors",
-    summary = "Update a connector",
-    params(("kind" = String, Path)),
+    summary = "Update a connection",
+    params(("connector" = String, Path, description = CONNECTOR_PARAM)),
     request_body = ConnectorUpdateBody,
     responses((status = 200, body = ConnectorOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
@@ -295,25 +369,17 @@ async fn get_one(State(state): State<AppState>, user: User, Path(kind): Path<Str
 async fn put_one(
     State(state): State<AppState>,
     user: User,
-    Path(kind): Path<String>,
+    Path(connector): Path<String>,
     Json(body): Json<ConnectorUpdateBody>,
 ) -> AppResult<Json<ConnectorOut>> {
     let state = state.org(&user.org).await?;
-    require_known_kind(&kind)?;
-    let routing = match (body.routing, registry::for_provider(&kind)) {
-        (Some(r), Some(src)) => Some(routing::validate(&state.db, &user.id, src.key(), r).await?),
-        _ => None,
+    let row = service::resolve(&state.db, &user.id, &connector).await?;
+    let routing = match body.routing {
+        Some(r) => Some(routing::validate(&state.db, &user.id, source_of(&row)?.key(), r).await?),
+        None => None,
     };
-    let mut row = service::upsert_connector(
-        &state.db,
-        &state.settings.encryption_key,
-        &user.id,
-        &kind,
-        body.enabled,
-        body.config,
-        body.credentials,
-    )
-    .await?;
+    let mut row =
+        service::update_connector(&state.db, &state.settings.encryption_key, row, body.enabled, body.config, body.credentials, body.label).await?;
     if let Some(r) = routing {
         routing::set(&state.db, &row.id, &r).await?;
         row.routing = serde_json::to_value(&r).unwrap_or_default();
@@ -324,18 +390,18 @@ async fn put_one(
 #[utoipa::path(
     operation_id = "testConnector",
     post,
-    path = "/api/connectors/{kind}/test",
+    path = "/api/connectors/{connector}/test",
     tag = "connectors",
-    summary = "Test a connector's credentials",
-    params(("kind" = String, Path)),
+    summary = "Test a connection's credentials",
+    params(("connector" = String, Path, description = CONNECTOR_PARAM)),
     responses((status = 200, body = TestOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
 )]
-async fn test_one(State(state): State<AppState>, user: User, Path(kind): Path<String>) -> AppResult<Json<TestOut>> {
+async fn test_one(State(state): State<AppState>, user: User, Path(connector): Path<String>) -> AppResult<Json<TestOut>> {
     let state = state.org(&user.org).await?;
-    require_known_kind(&kind)?;
-    let src = registry::for_provider(&kind).ok_or_else(|| AppError::coded(ErrorCode::ConnectorNotFound, "unknown connector"))?;
-    let conn = registry::conn_for(&state.db, &state.settings.encryption_key, &user.id, src.as_ref()).await?;
+    let row = service::resolve(&state.db, &user.id, &connector).await?;
+    let src = source_of(&row)?;
+    let conn = registry::conn_for(&state.settings.encryption_key, Some(&row))?;
     match src.check(&conn).await {
         Ok(()) => Ok(Json(TestOut { ok: true, error: None })),
         Err(err) => Ok(Json(TestOut { ok: false, error: Some(err.message) })),
@@ -350,25 +416,24 @@ struct DeleteDataOut {
     memories: u64,
 }
 
-/// Deletes all of the caller's data from one connector (see `registry::delete_data`); the connection
+/// Deletes all of the caller's data from one connection (see `registry::delete_data`); the connection
 /// itself stays. Account-level: the gate refuses vault-restricted tokens.
 #[utoipa::path(
     operation_id = "deleteConnectorData",
     delete,
-    path = "/api/connectors/{kind}/data",
+    path = "/api/connectors/{connector}/data",
     tag = "connectors",
-    summary = "Delete everything synced from a connector",
-    description = "Removes the connector's synced records, their links, the facts and relations extracted from them, and (Pocket) the stored recordings. Observations built from removed facts go stale. Entities, the credentials and the sync cursor stay.",
-    params(("kind" = String, Path)),
+    summary = "Delete everything synced from a connection",
+    description = "Removes the records synced through this connection, their links, the facts and relations extracted from them, and (Pocket) the stored recordings. Observations built from removed facts go stale. Entities, the credentials and the sync cursor stay, and so does everything synced through other connections of the same kind.",
+    params(("connector" = String, Path, description = CONNECTOR_PARAM)),
     responses((status = 200, body = DeleteDataOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
 )]
-async fn delete_data(State(app): State<AppState>, user: User, Path(kind): Path<String>) -> AppResult<Json<DeleteDataOut>> {
+async fn delete_data(State(app): State<AppState>, user: User, Path(connector): Path<String>) -> AppResult<Json<DeleteDataOut>> {
     let state = app.org(&user.org).await?;
-    require_known_kind(&kind)?;
-    let src = registry::for_provider(&kind).ok_or_else(|| AppError::coded(ErrorCode::ConnectorNotFound, "unknown connector"))?;
-    let out = registry::delete_data(&state.db, &user.id, src.as_ref()).await?;
-    crate::audit::record_as_caller(&app.control, &user.id, "connector.delete_data", &kind, "ok").await;
+    let row = service::resolve(&state.db, &user.id, &connector).await?;
+    let out = registry::delete_data(&state.db, &user.id, &row).await?;
+    crate::audit::record_as_caller(&app.control, &user.id, "connector.delete_data", &connector, "ok").await;
     Ok(Json(DeleteDataOut {
         records: out["records"].as_u64().unwrap_or(0),
         memories: out["memories"].as_u64().unwrap_or(0),
@@ -381,20 +446,19 @@ async fn delete_data(State(app): State<AppState>, user: User, Path(kind): Path<S
 #[utoipa::path(
     operation_id = "moveConnectorData",
     post,
-    path = "/api/connectors/{kind}/move",
+    path = "/api/connectors/{connector}/move",
     tag = "connectors",
-    summary = "Re-file a connector's synced data by its current routing",
+    summary = "Re-file a connection's synced data by its current routing",
     description = "Changing a connector's destination vault or rules applies to records synced afterwards. This moves the records already synced (and the facts and relations extracted from them) to where the current routing sends them. Idempotent: a record already in the right vault is left alone, and a fact the destination already has is not duplicated.",
-    params(("kind" = String, Path)),
+    params(("connector" = String, Path, description = CONNECTOR_PARAM)),
     responses((status = 200, body = MoveReport), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
 )]
-async fn move_data(State(app): State<AppState>, user: User, Path(kind): Path<String>) -> AppResult<Json<MoveReport>> {
+async fn move_data(State(app): State<AppState>, user: User, Path(connector): Path<String>) -> AppResult<Json<MoveReport>> {
     let state = app.org(&user.org).await?;
-    require_known_kind(&kind)?;
-    let src = registry::for_provider(&kind).ok_or_else(|| AppError::coded(ErrorCode::ConnectorNotFound, "unknown connector"))?;
-    let report = routing::move_existing(&state, &user.id, src.as_ref()).await?;
-    crate::audit::record_as_caller(&app.control, &user.id, "connector.move_data", &kind, "ok").await;
+    let row = service::resolve(&state.db, &user.id, &connector).await?;
+    let report = routing::move_existing(&state, &user.id, source_of(&row)?.as_ref(), &row).await?;
+    crate::audit::record_as_caller(&app.control, &user.id, "connector.move_data", &connector, "ok").await;
     Ok(Json(report))
 }
 
@@ -453,8 +517,7 @@ async fn snapshot(State(state): State<AppState>, user: User) -> AppResult<Json<V
     let week_start = week_start_date.and_hms_opt(0, 0, 0).expect("midnight is always valid").and_utc();
 
     let up_bank = service::get_or_create_connector(&state.db, &user.id, "up_bank").await?;
-    let up_bank_creds =
-        service::credentials_for(&state.db, &state.settings.encryption_key, &user.id, "up_bank").await?;
+    let up_bank_creds = service::credentials_of(&state.settings.encryption_key, &up_bank)?;
     let has_token =
         up_bank_creds.get("personal_access_token").and_then(|v| v.as_str()).map(|s| !s.is_empty()).unwrap_or(false);
     if up_bank.enabled
@@ -466,8 +529,7 @@ async fn snapshot(State(state): State<AppState>, user: User) -> AppResult<Json<V
     }
 
     let pocketai = service::get_or_create_connector(&state.db, &user.id, "pocketai").await?;
-    let pocketai_creds =
-        service::credentials_for(&state.db, &state.settings.encryption_key, &user.id, "pocketai").await?;
+    let pocketai_creds = service::credentials_of(&state.settings.encryption_key, &pocketai)?;
     let has_key = pocketai_creds.get("api_key").and_then(|v| v.as_str()).map(|s| !s.is_empty()).unwrap_or(false);
     if pocketai.enabled && has_key {
         let since = (now - Duration::days(7)).date_naive().to_string();
@@ -490,6 +552,8 @@ async fn snapshot(State(state): State<AppState>, user: User) -> AppResult<Json<V
     pocketai_search,
     pocketai_detail,
     get_one,
+    create_one,
+    delete_one,
     put_one,
     test_one,
     delete_data,
@@ -509,6 +573,8 @@ mod tests {
             id: crate::rid::parse("connector:abc").unwrap(),
             owner: crate::rid::parse("user:abc").unwrap(),
             kind: "up_bank".to_string(),
+            instance: String::new(),
+            label: String::new(),
             enabled: true,
             config: json!({}),
             credentials_encrypted: "ciphertext".to_string(),
@@ -522,17 +588,9 @@ mod tests {
     }
 
     #[test]
-    fn require_known_kind_rejects_demo_and_unknown() {
-        assert!(require_known_kind("up_bank").is_ok());
-        assert!(require_known_kind("demo").is_err());
-        assert!(require_known_kind("something_else").is_err());
-    }
-
-    #[test]
     fn every_known_kind_has_a_source_to_test_with() {
-        for kind in CONNECTOR_KINDS {
+        for kind in service::CONNECTOR_KINDS {
             assert!(registry::for_provider(kind).is_some(), "{kind}");
         }
-        assert!(require_known_kind("open_connector").is_err());
     }
 }

@@ -123,6 +123,18 @@ export type CloudPoint = {
     z: number;
 };
 
+export type ConnectorCreateBody = {
+    kind: string;
+    /**
+     * A name for the new connection, for example the account's email address or the device's name.
+     */
+    label: string;
+};
+
+/**
+ * One connection. A user may connect the same kind more than once (two Gmail accounts); each
+ * connection has its own credentials, sync and records.
+ */
 export type ConnectorOut = {
     /**
      * Connector-specific settings (open object).
@@ -132,7 +144,15 @@ export type ConnectorOut = {
     };
     credentials_set: boolean;
     enabled: boolean;
+    /**
+     * The connection's id (`connector:...`). Routes taking `{connector}` accept it.
+     */
+    id: string;
     kind: string;
+    /**
+     * The name the user gave this connection (an email address, a device name); "" if none.
+     */
+    label: string;
     /**
      * Which vault its syncs file records in: a default destination and ordered rules.
      */
@@ -141,6 +161,11 @@ export type ConnectorOut = {
      * The fields this connector's rules can match on.
      */
     routing_fields: Array<string>;
+    /**
+     * This connection's key in `GET /api/sources` and `POST /api/sources/{key}/sync`: the source key for
+     * a kind's first connection, `{source}~{instance}` for each one added after it.
+     */
+    source_key: string;
     updated_at: string;
 };
 
@@ -148,6 +173,10 @@ export type ConnectorUpdateBody = {
     config?: unknown;
     credentials?: unknown;
     enabled?: boolean | null;
+    /**
+     * Renames the connection.
+     */
+    label?: string | null;
     routing?: null | Routing;
 };
 
@@ -194,6 +223,17 @@ export type Credentials = {
 
 export type DeclinedBody = {
     declined: boolean;
+};
+
+export type DeleteConnectorOut = {
+    /**
+     * Extracted facts removed.
+     */
+    memories: number;
+    /**
+     * Synced records removed.
+     */
+    records: number;
 };
 
 export type DeleteDataOut = {
@@ -717,8 +757,20 @@ export type SnapshotOut = {
     up_bank?: null | WeekSummary;
 };
 
+/**
+ * One connection of a source. A kind's first connection keeps the source key as its `key`; each one
+ * added after it is `{source}~{instance}`.
+ */
 export type SourceOut = {
+    /**
+     * The name the user gave the connection; "" if none.
+     */
+    account: string;
     connected: boolean;
+    /**
+     * The connection's id (`connector:...`); absent for a source never set up.
+     */
+    connector?: string | null;
     key: string;
     label: string;
     provider: string;
@@ -1335,6 +1387,28 @@ export type ListConnectorsResponses = {
 
 export type ListConnectorsResponse = ListConnectorsResponses[keyof ListConnectorsResponses];
 
+export type CreateConnectorData = {
+    body: ConnectorCreateBody;
+    path?: never;
+    query?: never;
+    url: '/api/connectors';
+};
+
+export type CreateConnectorErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type CreateConnectorError = CreateConnectorErrors[keyof CreateConnectorErrors];
+
+export type CreateConnectorResponses = {
+    200: ConnectorOut;
+};
+
+export type CreateConnectorResponse = CreateConnectorResponses[keyof CreateConnectorResponses];
+
 export type GetPocketaiAllData = {
     body?: never;
     path?: never;
@@ -1483,13 +1557,43 @@ export type GetUpBankFinanceSummaryResponses = {
 
 export type GetUpBankFinanceSummaryResponse = GetUpBankFinanceSummaryResponses[keyof GetUpBankFinanceSummaryResponses];
 
+export type DeleteConnectorData = {
+    body?: never;
+    path: {
+        /**
+         * A connection id (`connector:...` or its key), or a connector kind for that kind's first connection.
+         */
+        connector: string;
+    };
+    query?: never;
+    url: '/api/connectors/{connector}';
+};
+
+export type DeleteConnectorErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type DeleteConnectorError = DeleteConnectorErrors[keyof DeleteConnectorErrors];
+
+export type DeleteConnectorResponses = {
+    200: DeleteConnectorOut;
+};
+
+export type DeleteConnectorResponse = DeleteConnectorResponses[keyof DeleteConnectorResponses];
+
 export type GetConnectorData = {
     body?: never;
     path: {
-        kind: string;
+        /**
+         * A connection id (`connector:...` or its key), or a connector kind for that kind's first connection.
+         */
+        connector: string;
     };
     query?: never;
-    url: '/api/connectors/{kind}';
+    url: '/api/connectors/{connector}';
 };
 
 export type GetConnectorErrors = {
@@ -1510,10 +1614,13 @@ export type GetConnectorResponse = GetConnectorResponses[keyof GetConnectorRespo
 export type UpdateConnectorData = {
     body: ConnectorUpdateBody;
     path: {
-        kind: string;
+        /**
+         * A connection id (`connector:...` or its key), or a connector kind for that kind's first connection.
+         */
+        connector: string;
     };
     query?: never;
-    url: '/api/connectors/{kind}';
+    url: '/api/connectors/{connector}';
 };
 
 export type UpdateConnectorErrors = {
@@ -1534,10 +1641,13 @@ export type UpdateConnectorResponse = UpdateConnectorResponses[keyof UpdateConne
 export type DeleteConnectorDataData = {
     body?: never;
     path: {
-        kind: string;
+        /**
+         * A connection id (`connector:...` or its key), or a connector kind for that kind's first connection.
+         */
+        connector: string;
     };
     query?: never;
-    url: '/api/connectors/{kind}/data';
+    url: '/api/connectors/{connector}/data';
 };
 
 export type DeleteConnectorDataErrors = {
@@ -1558,10 +1668,13 @@ export type DeleteConnectorDataResponse = DeleteConnectorDataResponses[keyof Del
 export type MoveConnectorDataData = {
     body?: never;
     path: {
-        kind: string;
+        /**
+         * A connection id (`connector:...` or its key), or a connector kind for that kind's first connection.
+         */
+        connector: string;
     };
     query?: never;
-    url: '/api/connectors/{kind}/move';
+    url: '/api/connectors/{connector}/move';
 };
 
 export type MoveConnectorDataErrors = {
@@ -1582,10 +1695,13 @@ export type MoveConnectorDataResponse = MoveConnectorDataResponses[keyof MoveCon
 export type TestConnectorData = {
     body?: never;
     path: {
-        kind: string;
+        /**
+         * A connection id (`connector:...` or its key), or a connector kind for that kind's first connection.
+         */
+        connector: string;
     };
     query?: never;
-    url: '/api/connectors/{kind}/test';
+    url: '/api/connectors/{connector}/test';
 };
 
 export type TestConnectorErrors = {
