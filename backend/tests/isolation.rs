@@ -685,7 +685,7 @@ async fn mutation_check_removing_one_filter_turns_the_suite_red() {
         ("audit", &[("app.audit_list", "WHERE owner = $owner")], |_| Call::Route("/api/audit".into())),
         ("vault list", &[("vaults.list_mine", "WHERE user = $user")], |_| Call::Tool("vault_list", json!({}))),
         ("vault membership", &[("vaults.membership_active", "WHERE vault = $vault")], |v| Call::Tool("entities_get", json!({"id": v.ids.entities[0]}))),
-        ("connectors", &[("app.connector_by_kind", "WHERE owner = $owner")], |_| Call::Route("/api/connectors/github".into())),
+        ("connectors", &[("app.connectors_of_kind", "WHERE owner = $owner")], |_| Call::Route("/api/connectors/github".into())),
         ("sync status", &[("app.sources_sync_status_list", "WHERE owner = $owner")], |_| Call::Route("/api/sources/status".into())),
         ("entity list", &[("entities.list_by_vault", "WHERE vault = $vault")], |_| Call::Route("/api/entities".into())),
         ("entity graph", &[("entities.select_by_vault", "WHERE vault = $vault")], |_| Call::Tool("entities_graph", json!({}))),

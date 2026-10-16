@@ -2,12 +2,13 @@
 
 import Select from "@/components/Select";
 import { use, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowRight, ChevronRight, Eye, EyeOff } from "lucide-react";
 import { apiOrigin } from "@/lib/api";
 import type { ConnectorKind, ConnectorUpdate } from "@/lib/types";
 import { useMe } from "@/lib/queries/auth";
-import { useConnectors, useTestConnector, useUpdateConnector } from "@/lib/queries/connectors";
+import { useConnectors, useCreateConnector, useDeleteConnector, useTestConnector, useUpdateConnector } from "@/lib/queries/connectors";
 import { useSettings, useUpdateSettings } from "@/lib/queries/settings";
 import { useSyncSource } from "@/lib/queries/sources";
 import { CONNECTOR_META, CONNECTOR_ORDER, ConnectorTile, connectorStatus, type FieldDef } from "@/lib/connectorMeta";
@@ -101,9 +102,25 @@ function SecretToggle({ shown, onToggle, label }: { shown: boolean; onToggle: ()
 
 function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
   const meta = CONNECTOR_META[kind];
+  const router = useRouter();
+  const search = useSearchParams();
+  // ?connector=<id> picks one connection of the kind, ?new=1 sets up another one, neither is the kind's first.
+  const connectorId = search.get("connector");
+  const isNew = !connectorId && search.get("new") === "1";
   const connectorsQuery = useConnectors();
-  // null while loading, undefined when the backend lists no such connector.
-  const connector = connectorsQuery.data ? connectorsQuery.data.find((c) => c.kind === kind) : null;
+  // null while loading, undefined when the backend lists no such connection (and while adding a new one).
+  const connector = connectorsQuery.data
+    ? isNew
+      ? undefined
+      : connectorsQuery.data.find((c) => (connectorId ? c.id === connectorId : c.kind === kind && !c.source_key.includes("~")))
+    : null;
+  // An added connection (not the kind's first) can be removed outright.
+  const added = Boolean(connector?.source_key.includes("~"));
+  const ref = connector?.id ?? kind;
+  const createConnector = useCreateConnector();
+  const deleteConnector = useDeleteConnector();
+  const [name, setName] = useState<string | null>(null);
+  const [nameError, setNameError] = useState("");
   const loadError = connectorsQuery.isError ? failure(connectorsQuery.error, "Could not load this connector.", " Reload the page once the backend is reachable.") : null;
   const updateConnector = useUpdateConnector();
   const testConnector = useTestConnector();
@@ -141,7 +158,7 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
     setTesting(true);
     setTestResult(null);
     try {
-      const r = await testConnector.mutateAsync(kind);
+      const r = await testConnector.mutateAsync(ref);
       setTestResult({ ok: r.ok, error: r.ok ? undefined : { message: r.error || "The provider gave no reason." } });
     } catch (e) {
       setTestResult({ ok: false, error: failure(e, "The test could not run.") });
@@ -158,6 +175,13 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
       if (msg) nextErrors[f.key] = msg;
     }
     setErrors(nextErrors);
+    const label = (name ?? connector?.label ?? "").trim();
+    const missingName = isNew && !label ? "Name this connection, for example the account's email address, so you can tell it apart." : "";
+    setNameError(missingName);
+    if (missingName) {
+      document.getElementById("field-connection-name")?.focus();
+      return;
+    }
     const firstBad = meta.fields.find((f) => nextErrors[f.key]);
     if (firstBad) {
       document.getElementById(`field-${firstBad.key}`)?.focus();
@@ -173,33 +197,38 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
       else config[f.key] = v;
     }
     const body: ConnectorUpdate = { enabled: true };
+    if (name !== null && label !== (connector?.label ?? "")) body.label = label;
     if (Object.keys(credentials).length) body.credentials = credentials;
     if (Object.keys(config).length) body.config = config;
 
     setSaving(true);
     setSaveError(null);
+    let saved;
     try {
-      await updateConnector.mutateAsync({ kind, body });
+      const target = isNew ? (await createConnector.mutateAsync({ kind, label })).id : ref;
+      saved = await updateConnector.mutateAsync({ connector: target, body });
     } catch (err) {
       setSaveError(failure(err, "Could not save.", " Check the values and try again."));
       return;
     } finally {
       setSaving(false);
     }
+    if (isNew) router.replace(`/connectors/setup/${kind}?connector=${encodeURIComponent(saved.id)}`);
+    setName(null);
     setValues({});
     setShown({});
     setSavedFlash(true);
     setTimeout(() => setSavedFlash(false), 1400);
     // Saving is the moment people want to know it works: check it for them.
-    test();
+    if (!isNew) test();
   }
 
   async function syncNow() {
-    if (!meta.sourceKey) return;
+    if (!meta.sourceKey || !connector) return;
     setSyncing(true);
     setSyncMessage(null);
     try {
-      const r = await syncSource.mutateAsync(meta.sourceKey);
+      const r = await syncSource.mutateAsync(connector.source_key);
       setSyncMessage(
         r.error
           ? { ok: false, text: `Sync failed: ${r.error}` }
@@ -233,7 +262,12 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
     setDisconnecting(true);
     setSaveError(null);
     try {
-      await updateConnector.mutateAsync({ kind, body: { enabled: false } });
+      if (added) {
+        await deleteConnector.mutateAsync(ref);
+        router.push("/connectors");
+        return;
+      }
+      await updateConnector.mutateAsync({ connector: ref, body: { enabled: false } });
       setConfirmDisconnect(false);
       setTestResult(null);
     } catch (err) {
@@ -245,7 +279,7 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
 
   // Credentials the provider just turned down are not "Connected", whatever was saved.
   const rejected = connected && testResult !== null && !testResult.ok;
-  const statusText = connector === null ? "Checking…" : isDemo ? "Demo data" : rejected ? "Credentials rejected" : connected ? "Connected" : "Not connected";
+  const statusText = connector === null ? "Checking…" : isNew ? "New connection" : isDemo ? "Demo data" : rejected ? "Credentials rejected" : connected ? "Connected" : "Not connected";
   const statusTone = isDemo ? "var(--warning)" : rejected ? "var(--critical)" : connected ? "var(--good)" : "var(--ink-faint)";
   const sourceKey = meta.sourceKey;
   const override = sourceKey ? appSettings?.sync_intervals?.[sourceKey] : undefined;
@@ -254,18 +288,18 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
   return (
     <div className="max-w-2xl flex flex-col gap-8">
       <header className="flex flex-col gap-3">
-        <Breadcrumb label={meta.label} />
+        <Breadcrumb label={connector?.label ? `${meta.label} (${connector.label})` : meta.label} />
         <div className="flex items-center gap-3 flex-wrap">
           <ConnectorTile kind={kind} size={40} />
           <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-            <h1 className="page-title">{meta.label}</h1>
+            <h1 className="page-title">{isNew ? `Add another ${meta.label} connection` : connector?.label ? `${meta.label}: ${connector.label}` : meta.label}</h1>
             <span className="text-[12.5px] flex items-center gap-1.5" style={{ color: "var(--ink-dim)" }}>
               {connector === null ? <span className="skeleton w-1.5 h-1.5" /> : <span className="dot" style={{ background: statusTone }} aria-hidden />}
               {statusText}
             </span>
           </div>
-          {(connected || isDemo) && sourceKey && (
-            <Link href={`/connectors/${sourceKey}`} className="btn">
+          {(connected || isDemo) && sourceKey && connector && (
+            <Link href={`/connectors/${connector.source_key}`} className="btn">
               View synced data <ArrowRight size={14} strokeWidth={1.75} aria-hidden />
             </Link>
           )}
@@ -291,6 +325,39 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
               <div className="text-[12.5px] break-words" style={{ color: "var(--ink-dim)" }}>
                 {meta.help}
               </div>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="field-connection-name" className="text-[12.5px] font-medium flex items-baseline gap-2">
+              Connection name
+              {!isNew && <span className="label font-normal">Optional</span>}
+            </label>
+            <div className="field flex items-center gap-2 h-8 px-2.5" style={nameError ? { borderColor: "var(--critical)" } : undefined}>
+              <input
+                id="field-connection-name"
+                type="text"
+                autoComplete="off"
+                maxLength={100}
+                className="flex-1 min-w-0 bg-transparent outline-none text-[13px]"
+                placeholder="For example work@example.com or Kitchen Pocket"
+                value={name ?? connector?.label ?? ""}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  if (nameError) setNameError("");
+                }}
+                aria-invalid={nameError ? true : undefined}
+                aria-describedby={nameError ? "err-connection-name" : "help-connection-name"}
+              />
+            </div>
+            {nameError ? (
+              <p id="err-connection-name" className="text-[12px]" style={{ color: "var(--critical)" }}>
+                {nameError}
+              </p>
+            ) : (
+              <p id="help-connection-name" className="text-[12px]" style={{ color: "var(--ink-faint)" }}>
+                Tells this {meta.label} connection apart from others of the same kind.
+              </p>
             )}
           </div>
 
@@ -425,16 +492,22 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
         </section>
       )}
 
-      {connector && <RoutingSection kind={kind} label={meta.label} connector={connector} />}
+      {connector && <RoutingSection label={meta.label} connector={connector} />}
 
-      {connected && (
+      {(connected || added) && (
         <section className="flex flex-col gap-3" aria-labelledby="danger-heading">
           <h2 id="danger-heading" className="section-title">
-            Disconnect
+            {added ? "Remove" : "Disconnect"}
           </h2>
           <div className="ledger p-5 flex items-center justify-between gap-4 flex-wrap text-[13px]">
             <span style={{ color: "var(--ink-dim)" }}>
-              {confirmDisconnect ? `Stop syncing ${meta.label}? Records already synced stay in memory.` : `Stops syncing. Records already synced stay in memory.`}
+              {added
+                ? confirmDisconnect
+                  ? `Remove this ${meta.label} connection? Everything synced through it is deleted too.`
+                  : `Removes this connection and everything synced through it. Other ${meta.label} connections stay.`
+                : confirmDisconnect
+                  ? `Stop syncing ${meta.label}? Records already synced stay in memory.`
+                  : `Stops syncing. Records already synced stay in memory.`}
             </span>
             <div className="flex items-center gap-2">
               {confirmDisconnect && (
@@ -448,7 +521,17 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
                 disabled={disconnecting}
                 onClick={() => (confirmDisconnect ? disconnect() : setConfirmDisconnect(true))}
               >
-                {disconnecting ? "Disconnecting…" : confirmDisconnect ? `Disconnect ${meta.label}` : "Disconnect"}
+                {disconnecting
+                  ? added
+                    ? "Removing…"
+                    : "Disconnecting…"
+                  : confirmDisconnect
+                    ? added
+                      ? "Remove connection"
+                      : `Disconnect ${meta.label}`
+                    : added
+                      ? "Remove"
+                      : "Disconnect"}
               </button>
             </div>
           </div>

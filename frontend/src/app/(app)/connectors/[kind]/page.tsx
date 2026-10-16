@@ -223,7 +223,7 @@ function DeleteData({ row, kind }: { row: SourceRow; kind: ConnectorKind }) {
   async function run() {
     setError(null);
     try {
-      await del.mutateAsync(kind);
+      await del.mutateAsync(row.connector ?? kind);
       dialog.current?.close();
     } catch (e) {
       setError(failure(e, `Could not delete the ${row.label} data. Try again.`));
@@ -290,10 +290,12 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
   const [query, setQuery] = useState("");
   // The submitted search; "" shows the latest records.
   const [activeQuery, setActiveQuery] = useState("");
+  // An added connection's key is `{source}~{instance}`; its records carry the plain source key.
+  const sourceKey = kind.split("~")[0];
   // The offset of the page asked for, of the list or of the active search; a new search starts at 0.
   const [offset, setOffset] = useState(0);
-  const listQuery = useSourceRecords(kind, activeQuery ? 0 : offset);
-  const searchQuery = useSourceSearch(kind, activeQuery, offset);
+  const listQuery = useSourceRecords(sourceKey, activeQuery ? 0 : offset);
+  const searchQuery = useSourceSearch(sourceKey, activeQuery, offset);
   const syncSource = useSyncSource();
   const shown = activeQuery ? (searchQuery.data ?? listQuery.data) : listQuery.data;
   const results: ToolHit[] | null = activeQuery && searchQuery.isError ? [] : (shown?.results ?? (listQuery.isError ? [] : null));
@@ -392,7 +394,7 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
   }
 
   const hasRecords = row.record_count > 0;
-  const settingsHref = connectorKind ? `/connectors/setup/${connectorKind}` : null;
+  const settingsHref = connectorKind ? `/connectors/setup/${connectorKind}${row.connector ? `?connector=${encodeURIComponent(row.connector)}` : ""}` : null;
 
   if (!row.connected && !hasRecords) {
     return (
@@ -428,7 +430,7 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
         <div className="flex items-center gap-3 flex-wrap">
           <ConnectorTile kind={connectorKind ?? null} size={40} />
           <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-            <h1 className="page-title">{row.label}</h1>
+            <h1 className="page-title">{row.account ? `${row.label}: ${row.account}` : row.label}</h1>
             <span className="text-[12.5px] flex items-center gap-1.5" style={{ color: "var(--ink-dim)" }}>
               <span className="dot" style={{ background: h.tone }} aria-hidden />
               {row.connected ? "Connected" : orphaned ? "Source no longer connected, records kept" : "Seeded data, no live connection"}
@@ -462,7 +464,7 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
               </span>
             ),
           },
-          { label: "Writes as", value: <AuthorTag name={row.key} title={`Records from this connector carry the source key ${row.key}`} /> },
+          { label: "Writes as", value: <AuthorTag name={sourceKey} title={`Records from this connector carry the source key ${sourceKey}`} /> },
         ].map((s, i) => (
           <div
             key={s.label}

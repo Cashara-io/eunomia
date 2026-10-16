@@ -224,10 +224,11 @@ expression: info(&db).await
         {
           "cols": [
             "owner",
-            "kind"
+            "kind",
+            "instance"
           ],
           "index": "UNIQUE",
-          "name": "connector_owner_kind_unique",
+          "name": "connector_owner_kind_instance_unique",
           "table": "connector"
         }
       ]

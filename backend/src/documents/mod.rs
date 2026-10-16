@@ -992,6 +992,7 @@ fn chunk_envelope(key: &str, revision: i64, part: i64, title: String, body_text:
         deleted: false,
         links: Vec::new(),
         placement: vault.map(|v| crate::cache::search::Placement { vault: Some(v.clone()), ..Default::default() }),
+        connector: None,
     }
 }
 

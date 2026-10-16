@@ -9,10 +9,12 @@ export const FAILURE_ALERT_THRESHOLD = 3;
 export const isLiveSource = (s: SourceRow) => s.connected || s.record_count > 0;
 
 
-/** The name users know a source by: the connector label when one exists ("heypocket" reads "PocketAI"). */
+/** The name users know a source by: the connector label when one exists ("heypocket" reads "PocketAI"),
+ * plus the connection's name when it has one (a second Gmail account). */
 export function sourceLabel(s: SourceRow): string {
   const kind = kindForSource(s.key);
-  return kind ? CONNECTOR_META[kind].label : s.label;
+  const name = kind ? CONNECTOR_META[kind].label : s.label;
+  return s.account ? `${name} (${s.account})` : name;
 }
 
 export type SourceHealth = { label: "Healthy" | "Retrying" | "Failing" | "Never synced" | "Connected"; tone: string };

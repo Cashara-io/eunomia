@@ -6,7 +6,8 @@
 //! can't send our session cookie or bearer token. Owner is resolved from the
 //! URL itself (`{owner_id}`, a `user:...` record id) and the request is only
 //! trusted once `Source::webhook()` verifies it against that owner's stored
-//! connector credentials, which is why the owner id lives in the URL. Matches
+//! connector credentials, which is why the owner id lives in the URL. With several connections of one
+//! kind, the delivery goes to the one whose own secret verifies it. Matches
 //! `routers::connectors`'s dual-router pattern (`router()` + a second
 //! function the caller mounts separately).
 
@@ -21,6 +22,7 @@ use serde_json::{json, Value};
 use surrealdb::types::RecordId;
 use crate::rid::RecordIdExt;
 
+use crate::connectors::service::Connector;
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::models_user::User;
 use crate::sources::registry;
@@ -78,20 +80,23 @@ async fn sync_status_rows(state: &OrgState, owner: &RecordId) -> AppResult<std::
         .collect())
 }
 
-/// Cached-record count per source key, for the dashboard's totals -- a single
-/// grouped count, not a per-source query.
-async fn record_counts(state: &OrgState, owner: &RecordId) -> AppResult<std::collections::HashMap<String, i64>> {
-    #[derive(Deserialize, SurrealValue)]
-    struct Row {
-        source: String,
-        count: i64,
-    }
+#[derive(Deserialize, SurrealValue)]
+struct CountRow {
+    source: String,
+    #[serde(default)]
+    #[surreal(default)]
+    connector: Option<RecordId>,
+    count: i64,
+}
+
+/// Cached-record counts per source and connection, for the dashboard's totals -- a single grouped
+/// count, not a per-source query.
+async fn record_counts(state: &OrgState, owner: &RecordId) -> AppResult<Vec<CountRow>> {
     let mut res = store::app::SOURCES_RECORD_COUNTS
         .on(&state.db)
         .bind(("owner", owner.clone()))
         .await?;
-    let rows: Vec<Row> = res.take(0)?;
-    Ok(rows.into_iter().map(|r| (r.source, r.count)).collect())
+    Ok(res.take(0)?)
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -105,10 +110,16 @@ struct SyncStatusOut {
     consecutive_failures: i64,
 }
 
+/// One connection of a source. A kind's first connection keeps the source key as its `key`; each one
+/// added after it is `{source}~{instance}`.
 #[derive(Serialize, utoipa::ToSchema)]
 struct SourceOut {
-    key: &'static str,
+    key: String,
     label: &'static str,
+    /// The connection's id (`connector:...`); absent for a source never set up.
+    connector: Option<String>,
+    /// The name the user gave the connection; "" if none.
+    account: String,
     provider: &'static str,
     record_types: &'static [&'static str],
     connected: bool,
@@ -170,26 +181,45 @@ fn status_out(row: Option<&SyncStatusRow>) -> SyncStatusOut {
 async fn list_sources(State(state): State<AppState>, user: User) -> AppResult<Json<Vec<SourceOut>>> {
     let state = state.org(&user.org).await?;
     let statuses = sync_status_rows(&state, &user.id).await?;
-    let enabled_keys: std::collections::HashSet<&'static str> =
-        registry::enabled(&state.db, &user.id).await?.iter().map(|s| s.key()).collect();
+    let enabled: Vec<RecordId> = registry::enabled(&state.db, &user.id).await?.into_iter().map(|(_, c)| c.id).collect();
     let counts = record_counts(&state, &user.id).await?;
+    let mut res = store::app::CONNECTORS_OF_OWNER.on(&state.db).bind(("owner", user.id.clone())).await?;
+    let mut connections: Vec<Connector> = res.take(0)?;
+    connections.sort_by(|a, b| (&a.label, &a.instance).cmp(&(&b.label, &b.instance)));
 
-    Ok(Json(
-        registry::all()
-            .iter()
-            .map(|src| {
-                SourceOut {
-                    key: src.key(),
-                    label: src.label(),
-                    provider: src.provider_key(),
-                    record_types: src.record_types(),
-                    connected: enabled_keys.contains(src.key()),
-                    sync_status: status_out(statuses.get(src.key())),
-                    record_count: counts.get(src.key()).copied().unwrap_or(0),
-                }
-            })
-            .collect(),
-    ))
+    let mut out = Vec::new();
+    for src in registry::all() {
+        let mine: Vec<&Connector> = connections.iter().filter(|c| c.kind == src.provider_key()).collect();
+        // the first connection's row even before it exists (as before 2.0.4), then each added one
+        let first = mine.iter().copied().find(|c| c.is_first());
+        let rows = std::iter::once(first).chain(mine.iter().copied().filter(|c| !c.is_first()).map(Some));
+        for conn in rows {
+            let key = conn.map_or_else(|| src.key().to_string(), |c| registry::sync_key(src.as_ref(), c));
+            let is_first = conn.is_none_or(Connector::is_first);
+            let record_count = counts
+                .iter()
+                .filter(|r| r.source == src.key())
+                .filter(|r| match (&r.connector, conn) {
+                    (Some(id), Some(c)) => *id == c.id,
+                    (None, _) => is_first,
+                    (Some(_), None) => false,
+                })
+                .map(|r| r.count)
+                .sum();
+            out.push(SourceOut {
+                connected: conn.is_some_and(|c| enabled.contains(&c.id)),
+                sync_status: status_out(statuses.get(&key)),
+                key,
+                label: src.label(),
+                connector: conn.map(|c| c.id.to_string()),
+                account: conn.map(|c| c.label.clone()).unwrap_or_default(),
+                provider: src.provider_key(),
+                record_types: src.record_types(),
+                record_count,
+            });
+        }
+    }
+    Ok(Json(out))
 }
 
 #[utoipa::path(
@@ -213,13 +243,14 @@ async fn sources_status(State(state): State<AppState>, user: User) -> AppResult<
     path = "/api/sources/{key}/sync",
     tag = "sources",
     summary = "Sync a source now",
+    description = "`key` is a source key (its first connection) or a connection's key from `GET /api/sources` (`{source}~{instance}`).",
     params(("key" = String, Path)),
     responses((status = 200, body = SyncReport), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
 )]
 async fn sync_now(State(state): State<AppState>, user: User, Path(key): Path<String>) -> AppResult<Json<Value>> {
     let state = state.org(&user.org).await?;
-    if registry::get(&key).is_none() {
+    if registry::connection(&state.db, &user.id, &key).await?.is_none() {
         return Err(AppError::coded(ErrorCode::SourceNotFound, format!("no source {key:?}")));
     }
     Ok(Json(scheduler::sync_now(&state, &user.id, &key).await?))
@@ -274,10 +305,21 @@ async fn source_webhook(
     let Ok(org) = crate::models_user::org_of(&state.control, &owner).await else { return ignored() };
     let state = state.org(&org).await?;
 
-    let conn = registry::conn_for(&state.db, &state.settings.encryption_key, &owner, src.as_ref()).await?;
-    let raw_records = src.webhook(&conn, &parts.headers, &body_bytes).await?;
+    // One URL serves every connection of the kind: the delivery belongs to the connection whose own
+    // signing secret verifies it.
+    let mut res = store::app::CONNECTORS_OF_KIND.on(&state.db).bind(("owner", owner.clone())).bind(("kind", src.provider_key().to_string())).await?;
+    let mut connections: Vec<Connector> = res.take(0)?;
+    connections.sort_by_key(|c| !c.is_first());
+    let mut delivered = None;
+    for row in connections {
+        let conn = registry::conn_for(&state.settings.encryption_key, Some(&row))?;
+        if let Some(records) = src.webhook(&conn, &parts.headers, &body_bytes).await? {
+            delivered = Some((records, row));
+            break;
+        }
+    }
 
-    let Some(raw_records) = raw_records.filter(|r| !r.is_empty()) else {
+    let Some((raw_records, row)) = delivered.filter(|(r, _)| !r.is_empty()) else {
         // Covers both "signature didn't verify" and "nothing worth
         // ingesting" -- `Source::webhook` doesn't distinguish the two (see
         // its doc comment), and responding 200 either way avoids the
@@ -286,8 +328,8 @@ async fn source_webhook(
         return Ok(Json(json!({"status": "ignored"})));
     };
 
-    let report = registry::ingest(&state, &owner, &raw_records, src.as_ref()).await?;
-    tracing::info!(source = %key, owner = %owner.to_string(), report = ?report.as_dict(), "webhook: processed");
+    let report = registry::ingest_via(&state, &owner, &raw_records, src.as_ref(), Some(&row)).await?;
+    tracing::info!(source = %key, connector = %row.id.to_string(), owner = %owner.to_string(), report = ?report.as_dict(), "webhook: processed");
     if report.failed > 0 {
         // Not stored: a 5xx makes the provider redeliver.
         return Err(AppError::new(axum::http::StatusCode::SERVICE_UNAVAILABLE, format!("{} records failed to save; retry", report.failed)));
