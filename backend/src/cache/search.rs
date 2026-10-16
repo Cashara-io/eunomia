@@ -706,18 +706,21 @@ pub async fn search(
         .filter(|w| *w <= MAX_WINDOW)
         .ok_or_else(|| AppError::bad_request(format!("offset + limit must be at most {MAX_WINDOW}")))?;
     let pool = window + 1;
+    // Keyword candidates always come from the full window, so a page's ranking never depends on
+    // `offset` and paging returns each match exactly once (the term-hit fusion reorders by pool).
+    let kw_pool = MAX_WINDOW + 1;
     let f = &p.filter;
     let keys = |ids: Vec<RecordId>| ids.iter().map(key_of).collect::<Vec<_>>();
     // Without embeddings (no OpenAI key) every mode degrades to keyword search.
     let semantic_ok = crate::embeddings::service::available(db, settings, scope.owner()).await;
     let ids = match p.mode.as_str() {
         "semantic" if semantic_ok => keys(semantic_ids(db, settings, scope, q, f, pool).await?),
-        "keyword" | "semantic" => keys(keyword_ids(db, scope, q, f, pool).await?),
+        "keyword" | "semantic" => keys(keyword_ids(db, scope, q, f, kw_pool).await?),
         _ if semantic_ok => {
-            let kw = keys(keyword_ids(db, scope, q, f, pool).await?);
+            let kw = keys(keyword_ids(db, scope, q, f, kw_pool).await?);
             rrf(&[kw, keys(semantic_ids(db, settings, scope, q, f, pool).await.unwrap_or_default())])
         }
-        _ => keys(keyword_ids(db, scope, q, f, pool).await?),
+        _ => keys(keyword_ids(db, scope, q, f, kw_pool).await?),
     };
 
     let has_more = ids.len() > window;
@@ -846,8 +849,10 @@ pub async fn list(
         conditions.push(format!("{} {} {param}", f.path, f.op));
     }
     let where_ = conditions.join(" AND ");
+    // Ties (same occurred_at, or none) break by id, so offset pages never repeat or skip a record.
+    let tiebreak = if field == "id" { String::new() } else { format!(", id {direction}") };
     let sql = format!(
-        "SELECT * FROM cache_record WHERE {where_} ORDER BY {field} {direction} LIMIT $limit START $offset; \
+        "SELECT * FROM cache_record WHERE {where_} ORDER BY {field} {direction}{tiebreak} LIMIT $limit START $offset; \
          SELECT count() FROM cache_record WHERE {where_} GROUP ALL"
     );
     // dynamic: caller-chosen filter fields, operators and sort column.
