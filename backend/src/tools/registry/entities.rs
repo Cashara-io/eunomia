@@ -7,7 +7,7 @@ use std::sync::Arc;
 use serde_json::json;
 
 use super::{register, IdArgs, bad_args, parse_rid, parse_opt_rid, parse_vault_ids, to_tool_value, vault_ids_schema, ToolSpec};
-use crate::entities::service::KINDS;
+use super::kind_schema;
 use crate::entities::tools as entities_tools;
 
 pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
@@ -38,7 +38,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
             "type": "object",
             "properties": {
                 "query": {"type": "string"},
-                "kind": {"type": "string", "enum": KINDS},
+                "kind": kind_schema(),
                 "limit": {"type": "integer"},
                 "offset": {"type": "integer"},
                 "vault_id": {"type": "string", "description": "search just this vault (a vault id or its name, e.g. \"Acme\"); omit to search your personal vault and every org vault you belong to"},
@@ -67,6 +67,39 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                 )
                 .await;
                 Ok(to_tool_value(result))
+            })
+        }),
+    );
+
+    #[derive(serde::Deserialize, Default)]
+    struct EntityTypesArgs {
+        #[serde(default)]
+        vault_id: Option<String>,
+        #[serde(default)]
+        vault_ids: Option<Vec<String>>,
+    }
+
+    register(
+        registry,
+        "entity_types",
+        json!({
+            "type": "object",
+            "properties": {
+                "vault_id": {"type": "string", "description": "list the custom kinds of just this vault (a vault id or its name); omit for your personal vault and every org vault you belong to"},
+                "vault_ids": vault_ids_schema(),
+            },
+        }),
+        Arc::new(|state, owner, args| {
+            Box::pin(async move {
+                let a: EntityTypesArgs = match serde_json::from_value(args) {
+                    Ok(a) => a,
+                    Err(e) => return Ok(bad_args(e)),
+                };
+                let vaults = match parse_vault_ids(&a.vault_id, &a.vault_ids) {
+                    Ok(v) => v,
+                    Err(e) => return Ok(e),
+                };
+                Ok(to_tool_value(entities_tools::entity_types(&state.db, owner, &vaults).await))
             })
         }),
     );
@@ -110,8 +143,8 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
             "properties": {
                 "kinds": {
                     "type": "array",
-                    "items": {"type": "string", "enum": KINDS},
-                    "description": "restrict to these entity kinds (e.g. just the code kinds); omit for the full graph",
+                    "items": kind_schema(),
+                    "description": "restrict to these entity kinds (e.g. just the code kinds, or a custom kind); omit for the full graph",
                 },
                 "vault_id": {"type": "string", "description": "use this vault instead of your personal one (a vault id or its name, e.g. \"Acme\")"},
             },

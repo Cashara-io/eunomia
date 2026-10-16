@@ -236,7 +236,7 @@ pub const CONTROL_TABLES: &[&str] = &[
 
 /// Tables that live in an org database.
 pub const TENANT_TABLES: &[&str] = &[
-    "app_settings", "vault", "vault_member", "connector", "sync_status", "cache_record", "linked_to", "person", "organisation", "location", "repository",
+    "app_settings", "vault", "vault_member", "connector", "sync_status", "cache_record", "linked_to", "person", "organisation", "location", "repository", "entity",
     "file", "symbol", "memory", "relates_to", "chat_thread", "chat_message", "audit_log", "embed_cache", "pocket_recording",
     "document",
 ];

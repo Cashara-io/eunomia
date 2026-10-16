@@ -56,7 +56,8 @@ const SYSTEM_PROMPT: &str = "You are Eunomia's assistant. You have tools to sear
 to the user's personal data layer: cached records from their connected \
 sources (`search`/`get`/`list`/`links`, `recall` for memory-ranked \
 retrieval across both), and an entity-memory graph of people, \
-organisations, locations, and code entities (repositories/files/symbols) \
+organisations, locations, code entities (repositories/files/symbols) and agents' \
+custom kinds (`entity_types` lists them) \
 they've mapped (`entities_search`/`entities_get`/`entities_graph`, \
 `memory_write` to record a new fact about an entity, `memory_update` to \
 correct one). Use a \

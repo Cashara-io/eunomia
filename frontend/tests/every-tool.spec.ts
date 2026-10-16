@@ -62,6 +62,8 @@ test("every MCP tool works end to end", async ({ request, baseURL }) => {
   expect(detail.memory.length).toBe(2);
   expect(detail.relations.length).toBe(1);
   expect((await ok("entities_graph")).edges.length).toBeGreaterThanOrEqual(1);
+  await ok("memory_write", { subject_name: "orders_db", subject_kind: "db", text: "Runs Postgres 16." });
+  expect((await ok("entity_types")).custom).toEqual([{ kind: "db", entities: 1 }]);
   const repo = await ok("code_entity_upsert", { kind: "repository", name: "eunomia", summary: "memory system" });
   const file = await ok("code_entity_upsert", { kind: "file", name: "auth.rs", parent_id: repo.id });
   expect(file.id).toBeTruthy();
