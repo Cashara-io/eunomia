@@ -146,6 +146,9 @@ pub async fn upsert_connector(
     if merged_credentials_encrypted.is_some() {
         set_clauses.push("credentials_encrypted = $credentials_encrypted");
     }
+    // A row created before migration 0015 has no `routing`, and the field is `TYPE object`: any UPDATE
+    // that leaves it NONE is refused (issue #102). Fill it on the way past.
+    set_clauses.push("routing = routing ?? {}");
     set_clauses.push("updated_at = time::now()");
     let query = format!("UPDATE $id SET {} RETURN AFTER", set_clauses.join(", "));
 
