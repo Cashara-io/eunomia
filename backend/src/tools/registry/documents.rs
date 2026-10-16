@@ -31,6 +31,8 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
         content_base64: Option<String>,
         #[serde(default)]
         document_id: Option<String>,
+        #[serde(default)]
+        vault_id: Option<String>,
     }
 
     register(
@@ -44,6 +46,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                 "text": {"type": "string", "description": "the document as UTF-8 text (plain text, Markdown, JSON, CSV)"},
                 "content_base64": {"type": "string", "description": "the document's bytes in base64 (for a PDF), instead of text"},
                 "document_id": {"type": "string", "description": "upload a new version of this document instead of a new one"},
+                "vault_id": {"type": "string", "description": "put a new document in this vault (a vault id or its name, e.g. \"Acme\"); omit for your personal vault"},
             },
             "required": ["filename"],
         }),
@@ -57,7 +60,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     Ok(b) => b,
                     Err(e) => return Ok(e.to_tool_value()),
                 };
-                let up = Upload { filename: a.filename, media_type: a.content_type, bytes, replace: a.document_id };
+                let up = Upload { filename: a.filename, media_type: a.content_type, bytes, replace: a.document_id, vault: a.vault_id };
                 Ok(to_tool_value(documents::upload(state, owner, up).await))
             })
         }),
@@ -69,6 +72,8 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
         limit: i64,
         #[serde(default)]
         offset: i64,
+        #[serde(default)]
+        vault_id: Option<String>,
     }
     fn default_limit() -> i64 {
         50
@@ -82,6 +87,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
             "properties": {
                 "limit": {"type": "integer", "description": "at most 200, default 50"},
                 "offset": {"type": "integer"},
+                "vault_id": {"type": "string", "description": "list this vault's documents (a vault id or its name); omit for your personal vault"},
             },
         }),
         Arc::new(|state, owner, args| {
@@ -90,7 +96,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     Ok(a) => a,
                     Err(e) => return Ok(bad_args(e)),
                 };
-                Ok(to_tool_value(documents::list(state, owner, a.limit, a.offset).await))
+                Ok(to_tool_value(documents::list(state, owner, a.vault_id.as_deref(), a.limit, a.offset).await))
             })
         }),
     );

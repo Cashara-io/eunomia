@@ -1,7 +1,9 @@
 //! Statements for uploaded documents (`documents/`). See the module docs in store/mod.rs.
 //!
 //! The original bytes go through SurrealDB's file functions on the org database's `documents` bucket
-//! (`type::file` builds the pointer from a bound path, so no path is ever spliced into SQL text).
+//! (`type::file` builds the pointer from a bound path, so no path is ever spliced into SQL text), each
+//! vault's under its own key prefix. Access is by the document's vault (`documents::load` authorizes
+//! it); statements that touch chunks or revisions bind the document's own `owner`.
 
 use super::Stmt;
 
@@ -17,17 +19,27 @@ pub const CREATE: Stmt = Stmt::new(
      chunk_count = 0 RETURN AFTER",
 );
 
-/// One live document of the owner (a deleted one reads as absent).
-pub const GET: Stmt = Stmt::new("documents.get", "SELECT * FROM $id WHERE owner = $owner AND status != \"deleted\"");
+/// One live document (a deleted one reads as absent). The caller authorizes its vault.
+pub const GET: Stmt = Stmt::new("documents.get", "SELECT * FROM $id WHERE status != \"deleted\"");
 /// Also a deleted one whose cleanup did not finish (a repeated delete retries it).
-pub const GET_ANY: Stmt = Stmt::new("documents.get_any", "SELECT * FROM $id WHERE owner = $owner");
+pub const GET_ANY: Stmt = Stmt::new("documents.get_any", "SELECT * FROM $id");
 
 pub const LIST: Stmt = Stmt::new(
     "documents.list",
-    "SELECT * FROM document WHERE owner = $owner AND status != \"deleted\" ORDER BY created_at DESC LIMIT $limit START $offset",
+    "SELECT * FROM document WHERE vault = $vault AND status != \"deleted\" ORDER BY created_at DESC LIMIT $limit START $offset",
 );
 pub const COUNT: Stmt =
-    Stmt::new("documents.count", "SELECT count() FROM document WHERE owner = $owner AND status != \"deleted\" GROUP ALL");
+    Stmt::new("documents.count", "SELECT count() FROM document WHERE vault = $vault AND status != \"deleted\" GROUP ALL");
+/// Every document of a vault, deleted ones too (a vault clone, merge or delete).
+pub const IN_VAULT: Stmt = Stmt::new("documents.in_vault", "SELECT * FROM document WHERE vault = $vault");
+
+/// A clone or merge's copy of a document, in the vault being built.
+pub const COPY: Stmt = Stmt::new(
+    "documents.copy",
+    "CREATE $id SET owner = $owner, vault = $vault, filename = $filename, media_type = $media_type, \
+     size_bytes = $size_bytes, sha256 = $sha256, object_path = $object_path, revision = $revision, status = $status, \
+     error = $error, chunk_count = $chunk_count, indexed_at = $indexed_at RETURN AFTER",
+);
 
 /// A new revision (a re-upload or a re-index), only if nobody else published one since `$expected` was read.
 pub const REVISE: Stmt = Stmt::new(
@@ -52,6 +64,12 @@ pub const REMOVE: Stmt = Stmt::new("documents.remove", "DELETE $id WHERE owner =
 pub const CHUNKS: Stmt = Stmt::new(
     "documents.chunks",
     "SELECT id, body_text, payload, embedding != NONE AS has_embedding FROM cache_record WHERE owner = $owner \
+     AND source = \"documents\" AND deleted = false AND payload.document_id = $document AND payload.revision = $revision",
+);
+/// What a clone or merge copies of one revision's chunks.
+pub const CHUNKS_TO_COPY: Stmt = Stmt::new(
+    "documents.chunks_to_copy",
+    "SELECT id, title, body_text, occurred_at, payload, embedding FROM cache_record WHERE owner = $owner \
      AND source = \"documents\" AND deleted = false AND payload.document_id = $document AND payload.revision = $revision",
 );
 /// The same with the vectors (the export).
@@ -99,11 +117,14 @@ pub const ALL: &[&Stmt] = &[
     &GET_ANY,
     &LIST,
     &COUNT,
+    &IN_VAULT,
+    &COPY,
     &REVISE,
     &FINISH,
     &MARK_DELETED,
     &REMOVE,
     &CHUNKS,
+    &CHUNKS_TO_COPY,
     &CHUNK_VECTORS,
     &DELETE_CHUNKS,
 ];

@@ -116,7 +116,7 @@ pub async fn get(db: &OrgDb, owner: &RecordId, id: &str) -> AppResult<Value> {
     }
     // A chunk of an uploaded document: which document, where in it, and how to fetch the original.
     if let Some(mut doc) = crate::documents::chunk_ref(&rec.id, &rec.source, &out["payload"]) {
-        if let Some(d) = crate::documents::summary(db, owner, doc["document_id"].as_str().unwrap_or_default()).await? {
+        if let Some(d) = crate::documents::summary(db, doc["document_id"].as_str().unwrap_or_default()).await? {
             doc["status"] = d.status.into();
             doc["current_revision"] = d.revision.into();
             doc["media_type"] = d.media_type.into();

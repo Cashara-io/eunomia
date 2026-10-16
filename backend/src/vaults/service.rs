@@ -367,12 +367,14 @@ pub async fn rename_vault(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId, n
     Ok(vault.into())
 }
 
-/// Owner-only. Deletes memberships; leaves any person/organisation/.../memory
+/// Owner-only. Deletes the vault's documents (their stored files too, first, so a failure leaves the
+/// vault in place to delete again) and memberships; leaves any person/organisation/.../memory
 /// rows already in the vault in place (orphaned-but-inaccessible, same
 /// accepted tradeoff as the rest of this codebase's delete paths -- add a
 /// cascade if dangling vault data ever becomes a real problem).
 pub async fn delete_vault(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId) -> AppResult<()> {
     authz::authorize(db, user_id, Action::Delete, vault_id).await?;
+    crate::documents::purge_vault_documents(db, vault_id).await?;
     with_retry(|| async {
         store::vaults::DELETE_VAULT.on(db)
             .bind(("vault", vault_id.clone()))
@@ -679,6 +681,16 @@ async fn publish_or_discard<T>(db: &OrgDb, user_id: &RecordId, vault: &RecordId,
 
 /// Deletes a copy in progress and everything it wrote; a vault that is not one is left alone.
 async fn discard_copy(db: &OrgDb, vault: &RecordId) -> AppResult<()> {
+    #[derive(Deserialize, SurrealValue)]
+    struct Status {
+        #[serde(default)]
+        #[surreal(default)]
+        status: Option<String>,
+    }
+    let copying: Option<Status> = store::get(db, vault).await?;
+    if copying.is_some_and(|v| v.status.as_deref() == Some("copying")) {
+        crate::documents::purge_vault_documents(db, vault).await?;
+    }
     with_retry(|| async { store::vaults::DISCARD_COPY_ROWS.on(db).bind(("vault", vault.clone())).await?.check() }).await?;
     with_retry(|| async { store::vaults::DISCARD_COPY_VAULT.on(db).bind(("vault", vault.clone())).await?.check() }).await?;
     Ok(())
@@ -695,12 +707,16 @@ pub async fn discard_stale_copies(db: &OrgDb) -> AppResult<usize> {
     Ok(stale.len())
 }
 
-/// Copies every entity, memory and relation of `src` into `dest` (both
+/// Copies every document (see `documents::copy_vault_documents`), entity,
+/// memory and relation of `src` into `dest` (both
 /// already accessible to `user_id`); returns how many entities of `src` landed
-/// in `dest`. With `merge_duplicates`, entities that share a kind and
+/// in `dest`. A memory extracted from a copied document's chunk points at the
+/// chunk's copy. With `merge_duplicates`, entities that share a kind and
 /// (case-insensitive) name with one already in `dest` are folded into it
 /// instead of duplicated.
 async fn copy_into(db: &OrgDb, user_id: &RecordId, src: &RecordId, dest: &RecordId, merge_duplicates: bool) -> AppResult<usize> {
+    #[allow(clippy::mutable_key_type)] // RecordId hashes by value; the interior mutability is never touched
+    let chunk_map = crate::documents::copy_vault_documents(db, user_id, src, dest).await?;
     #[allow(clippy::mutable_key_type)] // RecordId hashes by value; the interior mutability is never touched
     let mut id_map: HashMap<RecordId, RecordId> = HashMap::new();
     for entity_kind in ENTITY_KINDS {
@@ -769,7 +785,7 @@ async fn copy_into(db: &OrgDb, user_id: &RecordId, src: &RecordId, dest: &Record
             .bind(("subject", new_id.clone()))
             .bind(("text", mem.text))
             .bind(("type", mem.mem_type))
-            .bind(("source", mem.source))
+            .bind(("source", mem.source.map(|s| chunk_map.get(&s).cloned().unwrap_or(s))))
             .await?;
         }
     }

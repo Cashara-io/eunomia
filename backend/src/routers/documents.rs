@@ -43,6 +43,9 @@ struct ListQuery {
     limit: Option<i64>,
     #[serde(default)]
     offset: Option<i64>,
+    /// The vault (`vault:...`); default: the caller's personal vault (a vault-restricted token's own).
+    #[serde(default)]
+    vault_id: Option<String>,
 }
 
 #[utoipa::path(
@@ -57,7 +60,7 @@ struct ListQuery {
 )]
 async fn list_documents(State(state): State<AppState>, user: User, Query(q): Query<ListQuery>) -> AppResult<Json<DocumentList>> {
     let state = state.org(&user.org).await?;
-    Ok(Json(documents::list(&state, &user.id, q.limit.unwrap_or(50), q.offset.unwrap_or(0)).await?))
+    Ok(Json(documents::list(&state, &user.id, q.vault_id.as_deref(), q.limit.unwrap_or(50), q.offset.unwrap_or(0)).await?))
 }
 
 #[derive(Deserialize, utoipa::IntoParams)]
@@ -72,6 +75,9 @@ struct UploadQuery {
     /// Publish the body as a new revision of this document instead of a new document.
     #[serde(default)]
     replace: Option<String>,
+    /// The vault a new document goes in (`vault:...`); default: the caller's personal vault (a vault-restricted token's own).
+    #[serde(default)]
+    vault_id: Option<String>,
 }
 
 #[utoipa::path(
@@ -89,8 +95,8 @@ async fn upload_document(State(state): State<AppState>, user: User, Query(q): Qu
     let state = state.org(&user.org).await?;
     let filename = q.filename.filter(|f| !f.trim().is_empty()).ok_or_else(|| AppError::bad_request("the filename query parameter is required"))?;
     let declared = q.content_type.or_else(|| headers.get(header::CONTENT_TYPE).and_then(|v| v.to_str().ok()).map(str::to_string));
-    let args = json!({ "filename": filename, "replace": q.replace, "bytes": body.len(), "via": "http" });
-    let up = Upload { filename, media_type: declared, bytes: body.to_vec(), replace: q.replace };
+    let args = json!({ "filename": filename, "replace": q.replace, "vault_id": q.vault_id, "bytes": body.len(), "via": "http" });
+    let up = Upload { filename, media_type: declared, bytes: body.to_vec(), replace: q.replace, vault: q.vault_id };
     let out = documents::upload(&state, &user.id, up).await;
     record(&state, &user, "document_upload", &args, &out).await;
     Ok(Json(out?))
