@@ -1658,6 +1658,10 @@ export type ListDocumentsData = {
          */
         limit?: number;
         offset?: number;
+        /**
+         * The vault (`vault:...`); default: the caller's personal vault (a vault-restricted token's own).
+         */
+        vault_id?: string;
     };
     url: '/api/documents';
 };
@@ -1697,6 +1701,10 @@ export type UploadDocumentData = {
          * Publish the body as a new revision of this document instead of a new document.
          */
         replace?: string;
+        /**
+         * The vault a new document goes in (`vault:...`); default: the caller's personal vault (a vault-restricted token's own).
+         */
+        vault_id?: string;
     };
     url: '/api/documents';
 };

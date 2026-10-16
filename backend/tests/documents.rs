@@ -17,6 +17,7 @@ use eunomia_backend::tools::registry;
 use http_body_util::BodyExt;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use surrealdb::types::RecordId;
 use tower::ServiceExt;
 
 const PDF: &[u8] = include_bytes!("fixtures/notes.pdf");
@@ -379,4 +380,143 @@ async fn storage_off_is_a_clear_error_and_the_rest_works() {
     // and the browser session works the same way as tokens
     let (s, body) = app.http_session("GET", "/api/documents", None).await;
     assert_eq!((s, body["total"].clone()), (StatusCode::OK, json!(0)));
+}
+
+async fn vault_doc_ids(app: &TestApp, vault: &str) -> Vec<String> {
+    let listed = app.tool("document_list", json!({"vault_id": vault})).await;
+    listed["results"].as_array().unwrap_or_else(|| panic!("{listed}")).iter().map(|d| d["id"].as_str().unwrap().to_string()).collect()
+}
+
+async fn download(app: &TestApp, id: &str, token: &str) -> (StatusCode, Vec<u8>) {
+    let (s, _, b) = raw(app, "GET", &format!("/api/documents/{id}/download"), vec![], None, token).await;
+    (s, b)
+}
+
+fn prefix(vault: &str) -> String {
+    format!("/{}/", vault.trim_start_matches("vault:"))
+}
+
+async fn ids(db: &eunomia_backend::pool::OrgDb, sql: &str, bind: (&'static str, String)) -> Vec<RecordId> {
+    let mut res = db.test_raw().query(sql.to_string()).bind(bind).await.unwrap();
+    res.take(0).unwrap()
+}
+
+/// Issue #98: each vault's documents in their own storage area, carried by a clone or merge, removed
+/// with the vault; a document stored before 2.0.4 (no vault prefix) still downloads and is carried too.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn documents_live_in_their_vault_and_travel_with_it() {
+    let (app, _stop) = app().await;
+    let db = app.db().await;
+    let rid = |s: &str| eunomia_backend::rid::parse(s).unwrap();
+    let a = app.tool("vault_create", json!({"name": "Alpha", "kind": "org"})).await["id"].as_str().unwrap().to_string();
+    let b = app.tool("vault_create", json!({"name": "Beta", "kind": "org"})).await["id"].as_str().unwrap().to_string();
+    let vaults = app.tool("vault_list", json!({})).await;
+    let personal = vaults["results"].as_array().unwrap_or_else(|| panic!("{vaults}")).iter().find(|v| v["kind"] == "personal").unwrap()["id"].as_str().unwrap().to_string();
+
+    // upload into Alpha (by name, like any vault argument) and Beta (over HTTP): each listed and stored in its own vault
+    let text = "Alpha plan: the heron survey starts in May.";
+    let up = app.tool("document_upload", json!({"filename": "plan.md", "text": text, "vault_id": "Alpha"})).await;
+    let doc_a = up["id"].as_str().unwrap_or_else(|| panic!("{up}")).to_string();
+    assert_eq!(settled(&app, &doc_a).await["document"]["status"], "ready");
+    let (s, _, body) = raw(&app, "POST", &format!("/api/documents?filename=b.txt&vault_id={b}"), b"beta notes".to_vec(), Some("text/plain"), &app.token).await;
+    let doc_b = json_of(&body)["id"].as_str().unwrap_or_else(|| panic!("{s}: {}", String::from_utf8_lossy(&body))).to_string();
+    settled(&app, &doc_b).await;
+    assert_eq!(vault_doc_ids(&app, &a).await, vec![doc_a.clone()]);
+    assert_eq!(vault_doc_ids(&app, &b).await, vec![doc_b.clone()]);
+    assert_eq!(app.tool("document_list", json!({})).await["total"], 0, "the personal vault has none");
+    let (s, _, listed) = raw(&app, "GET", &format!("/api/documents?vault_id={a}"), vec![], None, &app.token).await;
+    assert_eq!((s, json_of(&listed)["total"].clone()), (StatusCode::OK, json!(1)));
+    let path_a = object_path(&app, &doc_a).await;
+    assert!(path_a.starts_with(&prefix(&a)), "{path_a}");
+    assert!(object_path(&app, &doc_b).await.starts_with(&prefix(&b)));
+    let mut res = db.test_raw().query("SELECT VALUE id FROM cache_record WHERE payload.document_id = $d AND vault = $v").bind(("d", doc_a.clone())).bind(("v", rid(&a))).await.unwrap();
+    let chunk_a: Vec<RecordId> = res.take(0).unwrap();
+    assert_eq!(chunk_a.len(), 1, "the chunk is filed in Alpha");
+
+    // a token for Beta, and a colleague in no shared vault, cannot reach Alpha's document
+    let scopes: Vec<String> = ["memory:read", "memory:write"].iter().map(|s| s.to_string()).collect();
+    let beta_token = models_user::create_api_token_with(&app.state.control, &app.user.id, "b", &scopes, Some(&rid(&b)), None).await.unwrap().token;
+    assert_eq!(download(&app, &doc_a, &beta_token).await.0, StatusCode::FORBIDDEN);
+    assert_eq!(download(&app, &doc_b, &beta_token).await, (StatusCode::OK, b"beta notes".to_vec()));
+    let (_, _, beta_list) = raw(&app, "GET", "/api/documents", vec![], None, &beta_token).await;
+    assert_eq!(json_of(&beta_list)["total"], 1, "a restricted token lists its own vault");
+    let colleague = common::register(&app.state, "colleague2@example.com").await;
+    let colleague_token = models_user::create_api_token(&app.state.control, &colleague.id, "t").await.unwrap().token;
+    assert_eq!(download(&app, &doc_a, &colleague_token).await.0, StatusCode::NOT_FOUND);
+    let (s, _, _) = raw(&app, "GET", &format!("/api/documents?vault_id={a}"), vec![], None, &colleague_token).await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+
+    // a document from before 2.0.4: org-level path, no vault prefix
+    let legacy = b"stored before vault buckets";
+    db.test_raw()
+        .query("file::put(type::file('documents', '/legacykey0000000000/1/old.txt'), $b); CREATE document:legacykey0000000000 SET owner = $owner, vault = $vault, filename = 'old.txt', media_type = 'text/plain', size_bytes = $size, sha256 = $sha, object_path = '/legacykey0000000000/1/old.txt', revision = 1, status = 'failed', chunk_count = 0")
+        .bind(("b", surrealdb::types::Bytes::from(legacy.to_vec())))
+        .bind(("owner", app.user.id.clone()))
+        .bind(("vault", rid(&personal)))
+        .bind(("size", legacy.len() as i64))
+        .bind(("sha", sha(legacy)))
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    assert_eq!(download(&app, "document:legacykey0000000000", &app.token).await, (StatusCode::OK, legacy.to_vec()));
+
+    // a memory drawn from Alpha's chunk
+    let wrote = app.tool("memory_write", json!({"subject_name": "Heron Survey", "subject_kind": "organisation", "text": "starts in May", "vault_id": a})).await;
+    assert!(wrote.get("error").is_none(), "{wrote}");
+    db.test_raw().query("UPDATE memory SET source = $c WHERE vault = $v").bind(("c", chunk_a[0].clone())).bind(("v", rid(&a))).await.unwrap().check().unwrap();
+
+    // a failed clone leaves no document or chunk behind
+    let (all_docs, all_chunks, none) = ("SELECT VALUE id FROM document", "SELECT VALUE id FROM cache_record", ("x", String::new()));
+    let (docs_before, chunks_before) = (ids(&db, all_docs, none.clone()).await.len(), ids(&db, all_chunks, none.clone()).await.len());
+    eunomia_backend::vaults::service::FAIL_COPY_AT.store(1, std::sync::atomic::Ordering::SeqCst);
+    let failed = app.tool("vault_clone", json!({"vault_id": a, "name": "Doomed"})).await;
+    assert!(failed.get("error").is_some(), "{failed}");
+    assert_eq!(ids(&db, all_docs, none.clone()).await.len(), docs_before);
+    assert_eq!(ids(&db, all_chunks, none).await.len(), chunks_before);
+
+    // clone: the copy has its own id, its file under the new vault, its chunk with the vector, and the memory's source
+    let clone = app.tool("vault_clone", json!({"vault_id": a, "name": "Alpha Copy"})).await;
+    let c = clone["id"].as_str().unwrap_or_else(|| panic!("{clone}")).to_string();
+    let copied = vault_doc_ids(&app, &c).await;
+    assert_eq!(copied.len(), 1);
+    assert_ne!(copied[0], doc_a);
+    assert_eq!(download(&app, &copied[0], &app.token).await, (StatusCode::OK, text.as_bytes().to_vec()));
+    let copy_path = object_path(&app, &copied[0]).await;
+    assert!(copy_path.starts_with(&prefix(&c)), "{copy_path}");
+    let got = app.tool("document_get", json!({"id": copied[0]})).await;
+    assert_eq!((got["document"]["status"].clone(), got["text"].clone()), (json!("ready"), json!(text)), "{got}");
+    assert_eq!(got["chunks"][0]["has_embedding"], true);
+    let copy_chunk = got["chunks"][0]["chunk_id"].as_str().unwrap().to_string();
+    let hits = app.tool("search", json!({"query": "heron survey", "mode": "keyword", "vault_id": c})).await;
+    assert!(hits.to_string().contains(&copy_chunk), "{hits}");
+    let copy_chunk_rid = ids(&db, "SELECT VALUE id FROM cache_record WHERE payload.document_id = $d", ("d", copied[0].clone())).await;
+    let mut res = db.test_raw().query("SELECT VALUE source FROM memory WHERE vault = $v").bind(("v", rid(&c))).await.unwrap();
+    let sources: Vec<Option<RecordId>> = res.take(0).unwrap();
+    assert_eq!(sources, vec![Some(copy_chunk_rid[0].clone())], "the copied memory points at the copied chunk");
+    assert_eq!(vault_doc_ids(&app, &a).await, vec![doc_a.clone()], "the source is unchanged");
+
+    // merge Alpha and the personal vault: both documents, the legacy one now under the new prefix
+    let merged = app.tool("vault_merge", json!({"vault_id_a": a, "vault_id_b": personal, "name": "Merged"})).await;
+    let m = merged["id"].as_str().unwrap_or_else(|| panic!("{merged}")).to_string();
+    let mut bodies: Vec<Vec<u8>> = Vec::new();
+    for id in vault_doc_ids(&app, &m).await {
+        let (s, body) = download(&app, &id, &app.token).await;
+        assert_eq!(s, StatusCode::OK);
+        assert!(object_path(&app, &id).await.starts_with(&prefix(&m)));
+        bodies.push(body);
+    }
+    bodies.sort();
+    let mut want = vec![text.as_bytes().to_vec(), legacy.to_vec()];
+    want.sort();
+    assert_eq!(bodies, want);
+
+    // delete the clone: its file and rows go, the source's stay
+    let deleted = app.tool("vault_delete", json!({"vault_id": c})).await;
+    assert!(deleted.get("error").is_none(), "{deleted}");
+    assert!(!object_exists(&app, &copy_path).await);
+    assert!(ids(&db, "SELECT VALUE id FROM document WHERE object_path = $p", ("p", copy_path.clone())).await.is_empty());
+    assert!(ids(&db, "SELECT VALUE id FROM cache_record WHERE payload.document_id = $d", ("d", copied[0].clone())).await.is_empty());
+    assert!(object_exists(&app, &path_a).await);
+    assert_eq!(download(&app, &doc_a, &app.token).await.0, StatusCode::OK);
 }

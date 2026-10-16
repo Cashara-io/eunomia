@@ -253,6 +253,14 @@ expression: info(&db).await
           "index": "",
           "name": "document_owner_idx",
           "table": "document"
+        },
+        {
+          "cols": [
+            "vault"
+          ],
+          "index": "",
+          "name": "document_vault_idx",
+          "table": "document"
         }
       ]
     },

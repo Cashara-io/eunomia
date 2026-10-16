@@ -1507,6 +1507,15 @@
               "type": "integer",
               "format": "int64"
             }
+          },
+          {
+            "name": "vault_id",
+            "in": "query",
+            "description": "The vault (`vault:...`); default: the caller's personal vault (a vault-restricted token's own).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -1569,6 +1578,15 @@
             "name": "replace",
             "in": "query",
             "description": "Publish the body as a new revision of this document instead of a new document.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "vault_id",
+            "in": "query",
+            "description": "The vault a new document goes in (`vault:...`); default: the caller's personal vault (a vault-restricted token's own).",
             "required": false,
             "schema": {
               "type": "string"
