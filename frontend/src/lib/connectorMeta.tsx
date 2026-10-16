@@ -322,9 +322,10 @@ export function connectorStatus(c: Connector | undefined): "demo" | "connected" 
   return "disconnected";
 }
 
-/** Connector kind whose data lives under a `sources.list()` key, if any. */
+/** Connector kind whose data lives under a `sources.list()` key, if any. An added connection's key is `{source}~{instance}`. */
 export function kindForSource(sourceKey: string): Connector["kind"] | undefined {
-  return CONNECTOR_ORDER.find((k) => CONNECTOR_META[k].sourceKey === sourceKey);
+  const base = sourceKey.split("~")[0];
+  return CONNECTOR_ORDER.find((k) => CONNECTOR_META[k].sourceKey === base);
 }
 
 /** Short relative age for a sync timestamp: "4m ago", "never". */

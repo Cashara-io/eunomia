@@ -417,3 +417,68 @@ async fn pocket_cursor_reset_in_0011_runs_with_cursors_present() {
     let cursors: Vec<String> = db.query("SELECT VALUE cursor FROM sync_status ORDER BY id").await.unwrap().take(0).unwrap();
     assert_eq!(cursors, ["keep", ""], "github kept, heypocket restarted");
 }
+
+/// 0016 widens `memory.subject` and `relates_to` to the custom-kind table on a database that already
+/// holds memories and relations: they all survive, the edge stays unique, and a custom-kind entity
+/// takes memories and relations.
+#[tokio::test]
+async fn custom_kinds_in_0016_keep_existing_memories_and_relations() {
+    let db = fresh().await;
+    migrate::apply_up_to(&db, 15).await.unwrap();
+    db.query(
+        "CREATE person:ada SET owner = user:u, vault = vault:v, name = 'Ada';
+         CREATE organisation:acme SET owner = user:u, vault = vault:v, name = 'Acme';
+         CREATE memory:m SET owner = user:u, vault = vault:v, subject = person:ada, text = 'Ada likes tea';
+         RELATE person:ada->relates_to->organisation:acme SET label = 'works_at';",
+    )
+    .await
+    .unwrap()
+    .check()
+    .unwrap();
+    migrate::apply_up_to(&db, 16).await.unwrap();
+    assert_eq!(count(&db, "memory WHERE subject = person:ada").await, 1);
+    assert_eq!(count(&db, "relates_to WHERE in = person:ada AND label = 'works_at'").await, 1);
+    let dup = db.query("RELATE person:ada->relates_to->organisation:acme SET label = 'works_at'").await.unwrap().check();
+    assert!(dup.is_err(), "relates_to_unique survives the table redefinition");
+    db.query(
+        "CREATE entity:orders SET owner = user:u, vault = vault:v, kind = 'db', name = 'Orders';
+         CREATE memory:n SET owner = user:u, vault = vault:v, subject = entity:orders, text = 'runs Postgres';
+         RELATE person:ada->relates_to->entity:orders SET label = 'owns';",
+    )
+    .await
+    .unwrap()
+    .check()
+    .unwrap();
+    // a name is unique per kind and vault, case-insensitively; the same name under another kind is fine
+    assert!(db.query("CREATE entity SET owner = user:u, vault = vault:v, kind = 'db', name = 'ORDERS'").await.unwrap().check().is_err());
+    db.query("CREATE entity SET owner = user:u, vault = vault:v, kind = 'table', name = 'Orders'").await.unwrap().check().unwrap();
+}
+
+/// 0017 (multi-connect) over an install with one connector per kind: each existing connection becomes
+/// its kind's first one (`instance = ""`) and keeps its row, credentials and cursor; another first
+/// connection of the same kind is still refused, and an added one is allowed.
+#[tokio::test]
+async fn existing_connectors_become_first_connections_in_0017() {
+    let db = fresh().await;
+    migrate::apply_up_to(&db, 15).await.unwrap();
+    db.query(
+        "CREATE user:u SET email = 'a@b.c', password_hash = 'x';
+         CREATE connector:old SET owner = user:u, kind = 'gmail', enabled = true, credentials_encrypted = 'enc';
+         CREATE sync_status:`u:gmail` SET owner = user:u, cursor = 'keep';",
+    )
+    .await
+    .unwrap()
+    .check()
+    .unwrap();
+    migrate::migrate(&db, &test_settings()).await.unwrap();
+    let row: Option<Value> =
+        db.query("SELECT instance, label, enabled, credentials_encrypted FROM ONLY connector:old").await.unwrap().take(0).unwrap();
+    assert_eq!(row.unwrap(), serde_json::json!({"instance": "", "label": "", "enabled": true, "credentials_encrypted": "enc"}));
+    let found: Vec<Value> =
+        db.query("SELECT id FROM connector WHERE owner = user:u AND kind = 'gmail' AND instance = ''").await.unwrap().take(0).unwrap();
+    assert_eq!(found.len(), 1, "the index finds the migrated row");
+    assert!(db.query("CREATE connector SET owner = user:u, kind = 'gmail'").await.unwrap().check().is_err(), "one first connection per kind");
+    db.query("CREATE connector SET owner = user:u, kind = 'gmail', instance = 'x', label = 'work'").await.unwrap().check().unwrap();
+    let cursor: Option<String> = db.query("SELECT VALUE cursor FROM ONLY sync_status:`u:gmail`").await.unwrap().take(0).unwrap();
+    assert_eq!(cursor.as_deref(), Some("keep"));
+}

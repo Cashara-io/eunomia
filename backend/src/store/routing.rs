@@ -3,11 +3,12 @@
 
 use super::Stmt;
 
-/// One page of `$owner`'s records from `$source`, whatever vault they are filed in.
+/// One page of `$owner`'s records from one connection of `$source` (see `cache::DELETE_SOURCE_DATA`
+/// for `$connector` and `$first`), whatever vault they are filed in.
 pub const RECORDS_OF_SOURCE: Stmt = Stmt::new(
     "routing.records_of_source",
     "SELECT id, vault, title, route_keys FROM cache_record WHERE owner = $owner AND source = $source \
-     ORDER BY id LIMIT $limit START $start",
+     AND (connector = $connector OR ($first AND connector = NONE)) ORDER BY id LIMIT $limit START $start",
 );
 
 /// The facts drawn from `$ids` (records), by the `memory_source_idx` index.

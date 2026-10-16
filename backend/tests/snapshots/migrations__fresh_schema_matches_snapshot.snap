@@ -224,10 +224,11 @@ expression: info(&db).await
         {
           "cols": [
             "owner",
-            "kind"
+            "kind",
+            "instance"
           ],
           "index": "UNIQUE",
-          "name": "connector_owner_kind_unique",
+          "name": "connector_owner_kind_instance_unique",
           "table": "connector"
         }
       ]
@@ -253,6 +254,14 @@ expression: info(&db).await
           "index": "",
           "name": "document_owner_idx",
           "table": "document"
+        },
+        {
+          "cols": [
+            "vault"
+          ],
+          "index": "",
+          "name": "document_vault_idx",
+          "table": "document"
         }
       ]
     },
@@ -277,6 +286,49 @@ expression: info(&db).await
           "index": "UNIQUE",
           "name": "embed_cache_hmac_unique",
           "table": "embed_cache"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
+      "name": "entity",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "alias_keys"
+          ],
+          "index": "",
+          "name": "entity_alias_keys_idx",
+          "table": "entity"
+        },
+        {
+          "cols": [
+            "vault",
+            "kind"
+          ],
+          "index": "",
+          "name": "entity_vault_kind_idx",
+          "table": "entity"
+        },
+        {
+          "cols": [
+            "vault",
+            "kind",
+            "name_key"
+          ],
+          "index": "UNIQUE",
+          "name": "entity_vault_kind_name_key_unique",
+          "table": "entity"
         }
       ]
     },
@@ -609,7 +661,8 @@ expression: info(&db).await
           "location",
           "repository",
           "file",
-          "symbol"
+          "symbol",
+          "entity"
         ],
         "kind": "RELATION",
         "out": [
@@ -618,7 +671,8 @@ expression: info(&db).await
           "location",
           "repository",
           "file",
-          "symbol"
+          "symbol",
+          "entity"
         ]
       },
       "name": "relates_to",

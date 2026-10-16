@@ -19,7 +19,8 @@ use regex::Regex;
 use serde_json::{json, Value};
 use surrealdb::types::Datetime;
 
-const KINDS: [&str; 6] = ["person", "organisation", "location", "repository", "file", "symbol"];
+// the six built-in kinds, then a custom one (the `entity` table, filtered by `kind`)
+const KINDS: [&str; 7] = ["person", "organisation", "location", "repository", "file", "symbol", "db"];
 
 /// Every subset of `items`, as index lists.
 fn subsets(n: usize) -> impl Iterator<Item = Vec<usize>> {
@@ -172,6 +173,8 @@ async fn entities_and_vaults(app: &TestApp) -> Value {
     let found = app.tool("entities_search", json!({"query": "Thing person"})).await;
     let person = found["results"][0]["id"].as_str().expect("entity id").to_string();
     let other = app.tool("entities_search", json!({"query": "Thing organisation"})).await["results"][0]["id"].as_str().unwrap().to_string();
+    let custom = app.tool("entities_search", json!({"query": "Thing", "kind": "db"})).await;
+    assert_eq!(custom["results"].as_array().map(Vec::len), Some(1), "{custom}");
     app.tool("code_relate", json!({"from_id": person, "to_id": other, "label": "knows"})).await;
 
     // update_entity: every non-empty combination of name, aliases, summary (and the empty one)
@@ -199,7 +202,7 @@ async fn entities_and_vaults(app: &TestApp) -> Value {
     }
     let graph = app.tool("entities_graph", json!({})).await;
     assert!(graph.get("error").is_none(), "{graph}");
-    let graph = app.tool("entities_graph", json!({"kinds": ["person", "organisation"]})).await;
+    let graph = app.tool("entities_graph", json!({"kinds": ["person", "organisation", "db"]})).await;
     assert!(graph.get("error").is_none(), "{graph}");
 
     // vault clone and merge (find_by_name, entities_in_vault, copy_entity, count_entities)

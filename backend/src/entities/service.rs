@@ -40,14 +40,48 @@ pub const KINDS: &[&str] = &["person", "organisation", "location", "repository",
 /// Code-graph subset of `KINDS`.
 pub const CODE_KINDS: &[&str] = &["repository", "file", "symbol"];
 
-/// Validates `kind` against `KINDS`, returning the matching static str --
-/// used everywhere a kind is interpolated into a raw SurrealDB query (table
-/// names can't be bound parameters), so an unrecognized kind can never reach
-/// string-formatted SQL. This check is a safety net, not a behavior change
-/// for any caller that already validates kind (every router/tool call site
-/// does).
+/// The one table every agent-defined kind's entities live in, told apart by their `kind` field: a kind
+/// name comes from an agent, so it never becomes a table name.
+pub const CUSTOM_TABLE: &str = "entity";
+
+/// Every entity table: the built-in kinds' own tables, then [`CUSTOM_TABLE`].
+pub const ENTITY_TABLES: &[&str] = &["person", "organisation", "location", "repository", "file", "symbol", CUSTOM_TABLE];
+
+/// Whether `e` is a read of [`CUSTOM_TABLE`] on a database from before migration 0016, which has no such
+/// table. Such a database is still served (schema N-1) until its migration job runs, so a read across
+/// every entity table treats the custom-kind table as empty there; writing a custom kind fails until then.
+// ponytail: drop with the next tenant migration, once 0016 is the oldest schema served.
+pub fn no_custom_table(e: &surrealdb::Error) -> bool {
+    e.to_string().contains("The table 'entity' does not exist")
+}
+
+/// How many custom kinds one vault may hold, so an agent cannot mint thousands.
+pub const MAX_CUSTOM_KINDS: usize = 50;
+
+/// A custom kind name: a lowercase slug (`db`, `table`, `design_decision`) of at most 32 characters,
+/// starting with a letter, and not a built-in kind.
+pub fn is_custom_kind(kind: &str) -> bool {
+    let mut chars = kind.chars();
+    kind.len() <= 32
+        && chars.next().is_some_and(|c| c.is_ascii_lowercase())
+        && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+        && !KINDS.contains(&kind)
+}
+
+/// The table `kind`'s entities live in: a built-in kind's own table, or [`CUSTOM_TABLE`] for a valid
+/// custom kind. Used everywhere a kind picks the table of a raw SurrealDB query (table names can't be
+/// bound parameters), so nothing but a fixed table name ever reaches string-formatted SQL.
 pub fn kind_table(kind: &str) -> AppResult<&'static str> {
-    KINDS.iter().find(|k| **k == kind).copied().ok_or_else(|| AppError::bad_request(format!("unknown kind {kind:?}")))
+    if let Some(k) = KINDS.iter().find(|k| **k == kind) {
+        return Ok(k);
+    }
+    if is_custom_kind(kind) {
+        return Ok(CUSTOM_TABLE);
+    }
+    Err(AppError::bad_request(format!(
+        "invalid kind {kind:?}: use a built-in kind ({}) or your own lowercase name, a letter then letters, digits or _ (at most 32), e.g. \"db\" or \"decision\"",
+        KINDS.join(", ")
+    )))
 }
 
 fn owner_key_string(owner: &RecordId) -> String {
@@ -71,6 +105,10 @@ struct EntityRow {
     #[surreal(default)]
     owner: Option<RecordId>,
     vault: RecordId,
+    /// Set on a [`CUSTOM_TABLE`] row only; a built-in kind is its table.
+    #[serde(default)]
+    #[surreal(default)]
+    kind: Option<String>,
     #[serde(default)]
     #[surreal(default)]
     name: String,
@@ -80,6 +118,12 @@ struct EntityRow {
     #[serde(default)]
     #[surreal(default)]
     summary: String,
+}
+
+impl EntityRow {
+    fn kind(&self) -> String {
+        self.kind.clone().unwrap_or_else(|| self.id.table().to_string())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
@@ -92,10 +136,10 @@ pub struct EntityOut {
     pub vault: String,
 }
 
-fn entity_out(kind: &str, row: &EntityRow) -> EntityOut {
+fn entity_out(row: &EntityRow) -> EntityOut {
     EntityOut {
         id: row.id.to_string(),
-        kind: kind.to_string(),
+        kind: row.kind(),
         name: row.name.clone(),
         aliases: row.aliases.clone(),
         summary: row.summary.clone(),
@@ -337,7 +381,7 @@ async fn emails_for(db: &ControlDb, user_ids: Vec<Option<RecordId>>) -> AppResul
 /// `rid` must name an entity table. `rid::parse` takes any table, so without this a tool or route
 /// handed `memory:..` or `vault_member:..` would read it as an entity.
 pub fn require_entity_id(rid: &RecordId) -> AppResult<()> {
-    if KINDS.contains(&rid.table()) {
+    if ENTITY_TABLES.contains(&rid.table()) {
         return Ok(());
     }
     Err(AppError::bad_request(format!("{} is not an entity id", rid.to_string())))
@@ -412,6 +456,9 @@ pub async fn upsert_entity_created(
         return Err(AppError::bad_request("entity name can't be empty"));
     }
     let needle = name.to_lowercase();
+    if table == CUSTOM_TABLE {
+        check_custom_kind_room(db, &vault, kind).await?;
+    }
 
     // A decorated name ("Jane Doe (Acme/JD)") whose base name already exists resolves to it, the
     // suffix parts becoming aliases.
@@ -424,7 +471,8 @@ pub async fn upsert_entity_created(
         let mut aliases = aliases.clone();
         let needles = std::iter::once((needle.clone(), None)).chain(decorated.as_ref().map(|(base, extra)| (base.to_lowercase(), Some(extra))));
         for (key, extra) in needles {
-            let mut res = q::find_by_key(db, table).bind(("vault", vault.clone())).bind(("needle", key)).await?.check()?;
+            let mut res =
+                q::find_by_key(db, table).bind(("vault", vault.clone())).bind(("kind", kind.to_string())).bind(("needle", key)).await?.check()?;
             let by_name: Vec<EntityRow> = res.take(0)?;
             let by_alias: Vec<EntityRow> = res.take(1)?;
             if let Some(row) = by_name.into_iter().chain(by_alias).next() {
@@ -452,6 +500,7 @@ pub async fn upsert_entity_created(
         let mut created = q::create_entity(db, table)
             .bind(("owner", owner.clone()))
             .bind(("vault", vault.clone()))
+            .bind(("kind", kind.to_string()))
             .bind(("name", name.to_string()))
             .bind(("aliases", aliases.clone()))
             .await?
@@ -461,7 +510,60 @@ pub async fn upsert_entity_created(
         Ok((row, true))
     })
     .await?;
-    Ok((entity_out(table, &row), created))
+    Ok((entity_out(&row), created))
+}
+
+/// A new custom kind may join `vault` only while it holds fewer than [`MAX_CUSTOM_KINDS`]; a kind it
+/// already has always passes.
+// ponytail: read then write, so two writers adding different new kinds at once can each pass at the
+// cap and leave it one over; a per-vault kind registry with a unique index would make it exact.
+async fn check_custom_kind_room(db: &OrgDb, vault: &RecordId, kind: &str) -> AppResult<()> {
+    let mut res = q::CUSTOM_KIND_ROOM.on(db).bind(("vault", vault.clone())).bind(("kind", kind.to_string())).await?.check()?;
+    let known: Vec<RecordId> = res.take(0)?;
+    if !known.is_empty() {
+        return Ok(());
+    }
+    let kinds: Vec<CustomKindRow> = res.take(1)?;
+    if kinds.len() >= MAX_CUSTOM_KINDS {
+        return Err(AppError::bad_request(format!(
+            "this vault already has {MAX_CUSTOM_KINDS} custom entity kinds, the most it can hold; reuse one (`entity_types` lists them)"
+        )));
+    }
+    Ok(())
+}
+
+#[derive(Deserialize, SurrealValue)]
+struct CustomKindRow {
+    kind: String,
+    #[serde(default)]
+    #[surreal(default)]
+    count: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CustomKind {
+    pub kind: String,
+    /// entities of this kind in the listed vaults
+    pub entities: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct EntityTypesOut {
+    pub built_in: Vec<&'static str>,
+    pub custom: Vec<CustomKind>,
+}
+
+/// The built-in kinds, then every custom kind used in `vaults` (already resolved and checked by the
+/// caller) with its entity count.
+pub async fn entity_types(db: &OrgDb, vaults: &[RecordId]) -> AppResult<EntityTypesOut> {
+    let rows: Vec<CustomKindRow> = match q::CUSTOM_KINDS_IN.on(db).bind(("vaults", vaults.to_vec())).await {
+        Err(e) if no_custom_table(&e) => Vec::new(),
+        res => res?.take(0)?,
+    };
+    Ok(EntityTypesOut {
+        built_in: KINDS.to_vec(),
+        custom: rows.into_iter().map(|r| CustomKind { kind: r.kind, entities: r.count }).collect(),
+    })
 }
 
 /// Other `kind` entities in the entity's vault whose name or an alias shares a word (3+ letters) with
@@ -475,13 +577,14 @@ pub async fn possible_duplicates(db: &OrgDb, entity: &EntityOut) -> AppResult<Ve
         return Ok(Vec::new());
     }
     let mut res = q::sharing_a_word(db, table)
+        .bind(("kind", entity.kind.clone()))
         .bind(("vault", crate::rid::parse(&entity.vault).map_err(|_| AppError::internal("vault id did not round-trip"))?))
         .bind(("id", crate::rid::parse(&entity.id).map_err(|_| AppError::internal("entity id did not round-trip"))?))
         .bind(("words", words))
         .await?
         .check()?;
     let rows: Vec<EntityRow> = res.take(0)?;
-    Ok(rows.iter().map(|r| entity_out(table, r)).collect())
+    Ok(rows.iter().map(entity_out).collect())
 }
 
 /// `source_record_id` is optional -- an automatic extraction path always ties
@@ -813,7 +916,7 @@ pub async fn update_entity(
         row = rows.into_iter().next().ok_or_else(|| AppError::internal("entity update returned no row"))?;
     }
 
-    Ok(Some(entity_out(entity_id.table(), &row)))
+    Ok(Some(entity_out(&row)))
 }
 
 /// Delete an entity and everything hanging off it: its `memory` rows and its
@@ -875,10 +978,13 @@ pub async fn merge_entities(
         return Err(AppError::bad_request(format!("loser entity not found: {}", loser_id.to_string())));
     }
     same_vault(&winner, &loser)?;
+    if winner.kind() != loser.kind() {
+        return Err(AppError::bad_request(format!("cannot merge entities of different kinds: {:?} vs {:?}", winner.kind(), loser.kind())));
+    }
 
     merge_rows(db, winner_id, loser_id, loser_names(&loser)).await?;
     let winner = select_entity(db, winner_id).await?.ok_or_else(|| AppError::internal("winner vanished during merge"))?;
-    Ok(entity_out(winner_id.table(), &winner))
+    Ok(entity_out(&winner))
 }
 
 /// What a merged-away entity leaves on the winner: its name and aliases.
@@ -949,7 +1055,7 @@ pub async fn get_entity(db: &OrgDb, control: &ControlDb, owner: &RecordId, entit
 
     Ok(Some(EntityDetail {
         id: entity_id.to_string(),
-        kind: entity_id.table().to_string(),
+        kind: row.kind(),
         name: row.name.clone(),
         aliases: row.aliases.clone(),
         summary: row.summary.clone(),
@@ -959,7 +1065,35 @@ pub async fn get_entity(db: &OrgDb, control: &ControlDb, owner: &RecordId, entit
     }))
 }
 
-/// Entities across `kind` (or all `KINDS`) in the resolved vault, ordered by
+/// Where each of `kinds` lives: its table, plus the `kind` to filter [`CUSTOM_TABLE`] by. `None` is
+/// every entity table, unfiltered (all kinds, built-in and custom).
+fn kind_scopes(kinds: Option<Vec<&str>>) -> AppResult<Vec<(&'static str, Option<String>)>> {
+    match kinds {
+        None => Ok(ENTITY_TABLES.iter().map(|t| (*t, None)).collect()),
+        Some(ks) => ks
+            .into_iter()
+            .map(|k| kind_table(k).map(|t| (t, (t == CUSTOM_TABLE).then(|| k.to_string()))))
+            .collect(),
+    }
+}
+
+/// Every entity of `scopes` in `vault`, scope by scope (each ordered by name when `ordered`).
+async fn select_in_vault(db: &OrgDb, vault: &RecordId, scopes: &[(&'static str, Option<String>)], ordered: bool) -> AppResult<Vec<EntityRow>> {
+    let mut out = Vec::new();
+    for (table, kind) in scopes {
+        let res = q::select_by_vault(db, table, ordered, kind.is_some())
+            .bind(("vault", vault.clone()))
+            .bind(("kind", kind.clone().unwrap_or_default()))
+            .await;
+        match res {
+            Err(e) if no_custom_table(&e) => {}
+            res => out.extend(res?.take::<Vec<EntityRow>>(0)?),
+        }
+    }
+    Ok(out)
+}
+
+/// Entities across `kind` (or all kinds, built-in then custom) in the resolved vault, ordered by
 /// name within each kind. Offset-paginated across the combined (all-kinds)
 /// result -- `limit=None` returns everything from `offset` onward. Returns
 /// `{results, total, has_more}`.
@@ -972,25 +1106,14 @@ pub async fn list_entities(
     offset: usize,
 ) -> AppResult<ListEntitiesOut> {
     let vault = resolve_vault(db, owner, vault_id, Action::ReadMemories).await?;
-    let kinds: Vec<&str> = match kind {
-        Some(k) => vec![kind_table(k)?],
-        None => KINDS.to_vec(),
-    };
+    let rows = select_in_vault(db, &vault, &kind_scopes(kind.map(|k| vec![k]))?, true).await?;
 
-    let mut rows_by_kind: Vec<(&str, EntityRow)> = Vec::new();
-    for k in kinds {
-        let mut res =
-            q::select_by_vault(db, k, true).bind(("vault", vault.clone())).await?;
-        let rows: Vec<EntityRow> = res.take(0)?;
-        rows_by_kind.extend(rows.into_iter().map(|r| (k, r)));
-    }
-
-    let total = rows_by_kind.len();
-    let page: Vec<(&str, EntityRow)> = match limit {
-        None => rows_by_kind.into_iter().skip(offset).collect(),
-        Some(l) => rows_by_kind.into_iter().skip(offset).take(l).collect(),
+    let total = rows.len();
+    let page: Vec<EntityRow> = match limit {
+        None => rows.into_iter().skip(offset).collect(),
+        Some(l) => rows.into_iter().skip(offset).take(l).collect(),
     };
-    let results: Vec<EntityOut> = page.iter().map(|(k, r)| entity_out(k, r)).collect();
+    let results: Vec<EntityOut> = page.iter().map(entity_out).collect();
     let has_more = offset + results.len() < total;
 
     Ok(ListEntitiesOut { results, total, has_more })
@@ -1006,27 +1129,33 @@ pub async fn search_entities(
     limit: usize,
     offset: usize,
 ) -> AppResult<ListEntitiesOut> {
-    let kinds: Vec<&str> = match kind {
-        Some(k) => vec![kind_table(k)?],
-        None => KINDS.to_vec(),
-    };
+    let scopes = kind_scopes(kind.map(|k| vec![k]))?;
+    let tables: Vec<&str> = scopes.iter().map(|(t, _)| *t).collect();
+    let by_kind = kind.filter(|_| tables == [CUSTOM_TABLE]);
     #[derive(Deserialize, SurrealValue)]
     struct Page {
         total: i64,
         results: Vec<EntityRow>,
     }
     let end = offset.saturating_add(limit);
-    let mut res = q::search_entities(db, &kinds, !needle.is_empty())
-        .bind(("vaults", vaults.to_vec()))
-        .bind(("needle", needle.to_lowercase()))
-        .bind(("q", needle.to_string()))
-        .bind(("start", offset as i64))
-        .bind(("end", i64::try_from(end).unwrap_or(i64::MAX)))
-        .await?;
+    let run = |tables: &[&str]| {
+        q::search_entities(db, tables, by_kind.is_some(), !needle.is_empty())
+            .bind(("kind", by_kind.unwrap_or_default().to_string()))
+            .bind(("vaults", vaults.to_vec()))
+            .bind(("needle", needle.to_lowercase()))
+            .bind(("q", needle.to_string()))
+            .bind(("start", offset as i64))
+            .bind(("end", i64::try_from(end).unwrap_or(i64::MAX)))
+    };
+    let mut res = match run(&tables).await {
+        // schema N-1: no custom-kind table yet, so search the built-in kinds alone
+        Err(e) if no_custom_table(&e) && by_kind.is_none() => run(KINDS).await?,
+        res => res?,
+    };
     let page: Option<Page> = res.take(3)?; // three LETs, then the RETURN
     let Page { total, results } = page.ok_or_else(|| AppError::internal("entity search returned nothing"))?;
     let total = usize::try_from(total).unwrap_or_default();
-    let results: Vec<EntityOut> = results.iter().map(|r| entity_out(r.id.table(), r)).collect();
+    let results: Vec<EntityOut> = results.iter().map(entity_out).collect();
     let has_more = offset + results.len() < total;
     Ok(ListEntitiesOut { results, total, has_more })
 }
@@ -1045,36 +1174,20 @@ pub async fn graph(
     vault_id: Option<&RecordId>,
 ) -> AppResult<GraphOut> {
     let vault = resolve_vault(db, owner, vault_id, Action::ReadMemories).await?;
-    let requested: Vec<&str> = match kinds {
-        Some(ks) => {
-            let mut out = Vec::with_capacity(ks.len());
-            for k in ks {
-                out.push(kind_table(k)?);
-            }
-            out
-        }
-        None => KINDS.to_vec(),
-    };
+    let scopes = kind_scopes(kinds.map(|ks| ks.iter().map(String::as_str).collect()))?;
+    let rows_by_kind = select_in_vault(db, &vault, &scopes, false).await?;
 
-    let mut rows_by_kind: Vec<(&str, EntityRow)> = Vec::new();
-    for k in &requested {
-        let mut res =
-            q::select_by_vault(db, k, false).bind(("vault", vault.clone())).await?;
-        let rows: Vec<EntityRow> = res.take(0)?;
-        rows_by_kind.extend(rows.into_iter().map(|r| (*k, r)));
-    }
-
-    let emails = emails_for(control, rows_by_kind.iter().map(|(_, r)| r.owner.clone()).collect()).await?;
+    let emails = emails_for(control, rows_by_kind.iter().map(|r| r.owner.clone()).collect()).await?;
     let nodes: Vec<GraphNode> = rows_by_kind
         .iter()
-        .map(|(k, r)| GraphNode {
+        .map(|r| GraphNode {
             id: r.id.to_string(),
-            kind: k.to_string(),
+            kind: r.kind(),
             name: r.name.clone(),
             owner_email: r.owner.as_ref().and_then(|o| emails.get(&o.to_string()).cloned()),
         })
         .collect();
-    let ids: Vec<RecordId> = rows_by_kind.iter().map(|(_, r)| r.id.clone()).collect();
+    let ids: Vec<RecordId> = rows_by_kind.iter().map(|r| r.id.clone()).collect();
 
     let mut edges: Vec<GraphEdge> = Vec::new();
     if !ids.is_empty() {
@@ -1141,7 +1254,7 @@ pub async fn upsert_code_entity(
             .await?;
         let rows: Vec<EntityRow> = updated.take(0)?;
         let row = rows.into_iter().next().ok_or_else(|| AppError::internal("entity update returned no row"))?;
-        entity = entity_out(kind, &row);
+        entity = entity_out(&row);
     }
 
     if let Some(parent_id) = parent_id {
@@ -1203,9 +1316,21 @@ mod tests {
 
     #[test]
     fn kind_table_rejects_unknown_or_injected_kind() {
-        assert!(kind_table("user").is_err());
+        // any other valid name is a custom kind, kept in the custom-kind table: never a table of its own
+        assert_eq!(kind_table("user").unwrap(), CUSTOM_TABLE);
+        assert_eq!(kind_table("person").unwrap(), "person");
         assert!(kind_table("person; DROP TABLE user").is_err());
         assert!(kind_table("").is_err());
+    }
+
+    #[test]
+    fn custom_kind_names_are_lowercase_slugs() {
+        for ok in ["db", "table", "design_decision", "k2", &"a".repeat(32)] {
+            assert!(is_custom_kind(ok), "{ok}");
+        }
+        for bad in ["", "DB", "Db", "2db", "_db", "db-table", "db table", "dé", &"a".repeat(33), "person", "symbol"] {
+            assert!(!is_custom_kind(bad), "{bad}");
+        }
     }
 
     #[test]

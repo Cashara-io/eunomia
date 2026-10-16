@@ -271,7 +271,7 @@ A near-neutral graphite (or paper) ground with a single felt-green accent and a 
 - **Author 1 to 6** (`author-1` coral, `author-2` sky, `author-3` lilac, `author-4` ochre, `author-5` rose, `author-6` teal): the background of author tags, the author cursor glyph, the account avatar, and the 16% arrival wash on newly arrived rows. Assigned by `authorColor(name)`: known agents get fixed slots (Claude and Claude Code 1, Gemini 2, Cursor 3, Windsurf 4, Eunomia 5, Codex 6); any other name hashes stably into one of the six. Text on a tag is `on-author` (canvas ink in dark, white in light).
 
 ### Tertiary: categorical hues
-- **Entity kinds** (`kind-person`, `kind-organisation`, `kind-location`, `kind-repository`, `kind-file`, `kind-symbol`): muted, desaturated hues for the kind dot beside an entity and the nodes of the entity graph.
+- **Entity kinds** (`kind-person`, `kind-organisation`, `kind-location`, `kind-repository`, `kind-file`, `kind-symbol`): muted, desaturated hues for the kind dot beside an entity and the nodes of the entity graph. A custom kind an agent created has no hue of its own: it uses `ink-faint` and a plain circle node.
 - **Connector and series hues** (`--connector-*`, `--series-1..4` in globals.css): per-source identity dots and chart series. Same muted register as the kinds; never as fills behind text.
 - Kind, connector and series hues are defined once on `:root` and are **not** redefined for the light theme; they are mid-tone on purpose so they hold on both grounds.
 

@@ -111,7 +111,7 @@ struct Org {
 #[derive(Default, Clone)]
 struct Ids {
     vault: String,
-    /// person, organisation, location, repository, file, symbol
+    /// person, organisation, location, repository, file, symbol, then a custom kind (`entity` table)
     entities: Vec<String>,
     memory: String,
     thread: String,
@@ -184,7 +184,7 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
     let v = call(state, &user, "vault_create", json!({"name": format!("{canary} vault"), "kind": "org"})).await;
     ids.vault = v["id"].as_str().unwrap_or_else(|| panic!("{v}")).to_string();
     let vault = ids.vault.clone();
-    let words = [("person", "Bea"), ("organisation", "Holdings"), ("location", "Harbour")];
+    let words = [("person", "Bea"), ("organisation", "Holdings"), ("location", "Harbour"), ("db", "Ledger")];
     for (kind, w) in words {
         call(state, &user, "memory_write", json!({
             "subject_name": format!("{name} {w}"), "subject_kind": kind, "vault_id": vault,
@@ -204,7 +204,7 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
     call(state, &user, "code_entity_upsert", json!({"kind": "symbol", "name": format!("{name}_fn"), "parent_id": file_id, "vault_id": vault})).await;
     call(state, &user, "code_relate", json!({"from_id": file_id, "to_id": repo_id, "label": format!("in {canary}")})).await;
 
-    for kind in ["person", "organisation", "location", "repository", "file", "symbol"] {
+    for kind in ["person", "organisation", "location", "repository", "file", "symbol", "entity"] {
         let rows: Vec<surrealdb::types::RecordId> = db
             .test_raw()
             .query(format!("SELECT VALUE id FROM {kind} WHERE vault = $v"))
@@ -685,7 +685,7 @@ async fn mutation_check_removing_one_filter_turns_the_suite_red() {
         ("audit", &[("app.audit_list", "WHERE owner = $owner")], |_| Call::Route("/api/audit".into())),
         ("vault list", &[("vaults.list_mine", "WHERE user = $user")], |_| Call::Tool("vault_list", json!({}))),
         ("vault membership", &[("vaults.membership_active", "WHERE vault = $vault")], |v| Call::Tool("entities_get", json!({"id": v.ids.entities[0]}))),
-        ("connectors", &[("app.connector_by_kind", "WHERE owner = $owner")], |_| Call::Route("/api/connectors/github".into())),
+        ("connectors", &[("app.connectors_of_kind", "WHERE owner = $owner")], |_| Call::Route("/api/connectors/github".into())),
         ("sync status", &[("app.sources_sync_status_list", "WHERE owner = $owner")], |_| Call::Route("/api/sources/status".into())),
         ("entity list", &[("entities.list_by_vault", "WHERE vault = $vault")], |_| Call::Route("/api/entities".into())),
         ("entity graph", &[("entities.select_by_vault", "WHERE vault = $vault")], |_| Call::Tool("entities_graph", json!({}))),

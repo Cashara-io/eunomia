@@ -5,7 +5,7 @@
 //! Pocket tag, a GitHub repo, a Slack channel, a Gmail label, ...; `title` everywhere). The first rule
 //! that matches a record wins; a record no rule matches goes to the default. No AI classification.
 //!
-//! [`Router::for_source`] reads the rules and the owner's memberships once per sync, then each record
+//! [`Router::for_connection`] reads the rules and the owner's memberships once per sync, then each record
 //! costs O(rules). A rule or default naming a vault the connector's owner is not an active member of
 //! falls back to the default vault (the personal vault for a default), and that is logged: routing never
 //! writes into a vault its owner cannot. Routing places a record when it is first stored (see
@@ -20,6 +20,7 @@ use serde_json::Value;
 use surrealdb::types::{RecordId, SurrealValue};
 
 use crate::cache::search::Placement;
+use crate::connectors::service::Connector;
 use crate::error::{AppError, AppResult};
 use crate::pool::OrgDb;
 use crate::rid::RecordIdExt;
@@ -207,9 +208,9 @@ impl Router {
         Ok(Router { personal, default, rules, targets, writable: Arc::new(writable) })
     }
 
-    /// The routing of `owner`'s connector for `src`, read once.
-    pub async fn for_source(db: &OrgDb, owner: &RecordId, src: &dyn Source) -> AppResult<Router> {
-        let stored = crate::connectors::service::get_connector(db, owner, src.provider_key()).await?.map(|c| c.routing).unwrap_or(Value::Null);
+    /// The routing of one of `owner`'s connections of `src` (none: the personal vault), read once.
+    pub async fn for_connection(db: &OrgDb, owner: &RecordId, src: &dyn Source, conn: Option<&Connector>) -> AppResult<Router> {
+        let stored = conn.map(|c| c.routing.clone()).unwrap_or(Value::Null);
         Router::load(db, owner, src.key(), &Routing::of(&stored)).await
     }
 
@@ -330,15 +331,15 @@ struct EntityRow {
 
 const MOVE_PAGE: usize = 200;
 
-/// "Move existing data": re-files `owner`'s records from `src` to where the connector's current rules
+/// "Move existing data": re-files `owner`'s records synced through `conn` to where its current rules
 /// route them, with the facts and relations drawn from each (into the same-named entities in the
 /// destination, created if missing). Idempotent: a record already where the rules route it is left
 /// alone, and a fact the destination already has is not copied twice. Facts move before their record,
 /// so a run cut short leaves the record in its old vault and the next run finishes it. A fact in a
 /// vault the owner has left stays there (`left`); the record itself still moves, it is the owner's.
-pub async fn move_existing(state: &OrgState, owner: &RecordId, src: &dyn Source) -> AppResult<MoveReport> {
+pub async fn move_existing(state: &OrgState, owner: &RecordId, src: &dyn Source, conn: &Connector) -> AppResult<MoveReport> {
     let db = &state.db;
-    let router = Router::for_source(db, owner, src).await?;
+    let router = Router::for_connection(db, owner, src, Some(conn)).await?;
     let mut report = MoveReport::default();
     // (entity, destination vault) -> the same entity there
     #[allow(clippy::mutable_key_type)] // RecordId hashes by value; the interior mutability is never touched
@@ -350,6 +351,8 @@ pub async fn move_existing(state: &OrgState, owner: &RecordId, src: &dyn Source)
             .on(db)
             .bind(("owner", owner.clone()))
             .bind(("source", src.key().to_string()))
+            .bind(("connector", conn.id.clone()))
+            .bind(("first", conn.is_first()))
             .bind(("limit", MOVE_PAGE as i64))
             .bind(("start", start as i64))
             .await?

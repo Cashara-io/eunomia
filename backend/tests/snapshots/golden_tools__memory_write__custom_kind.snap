@@ -1,0 +1,30 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "entity": {
+    "id": "entity:<id19>",
+    "kind": "db",
+    "name": "orders_db",
+    "aliases": [],
+    "summary": "",
+    "vault": "vault:<id2>"
+  },
+  "memory": {
+    "id": "memory:<id20>",
+    "owner": "user:<id4>",
+    "vault": "vault:<id2>",
+    "subject": "entity:<id19>",
+    "text": "orders_db runs Postgres 16",
+    "source": null,
+    "created_at": "<ts>",
+    "type": "world",
+    "proof_count": 1,
+    "status": null,
+    "source_memories": null,
+    "updated_at": "<ts>",
+    "version": 1,
+    "owner_email": null
+  }
+}

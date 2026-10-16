@@ -79,6 +79,7 @@ pub const READ_ONLY_TOOLS: &[&str] = &[
     "entities_search",
     "entities_get",
     "entities_graph",
+    "entity_types",
     "vault_list",
     "vault_members",
     "document_list",
@@ -118,12 +119,13 @@ pub fn description(name: &str) -> &'static str {
         "links" => "List the records linked to a given record (e.g. a meeting's attendees, a transaction's merchant), optionally only one relation type.",
         "recall" => "Retrieve the memories most relevant to a question from the user's memory graph, ranked by combining semantic, keyword, graph and recency signals within a token budget. Searches the personal vault and every org vault the user belongs to unless `vault_id` is given. Each hit carries its vault, its date (`occurred_at`: when a memory was last written) and a 0-1 score relative to the best hit -- check the date before trusting a time-sensitive fact. Call it at the start of any task touching people, projects, past decisions or code you have worked on.",
         "reflect" => "Answer a question by synthesizing from recalled memories (the personal vault and every org vault the user belongs to, unless `vault_id` is given), with numbered citations; newer memories win conflicts. Answers only from what is already remembered; use `recall` to inspect the raw memories instead.",
-        "entities_search" => "Find entities (people, organisations, locations, repositories, files, symbols) by name or alias, then by the text of their facts (a username or handle only ever written in a fact still finds its entity). Searches the personal vault and every org vault the user belongs to unless `vault_id` is given. Returns entity ids for `entities_get`, `memory_write` and `code_relate`.",
+        "entities_search" => "Find entities (people, organisations, locations, repositories, files, symbols, and any custom kind) by name or alias, then by the text of their facts (a username or handle only ever written in a fact still finds its entity). Searches the personal vault and every org vault the user belongs to unless `vault_id` is given. Returns entity ids for `entities_get`, `memory_write` and `code_relate`.",
+        "entity_types" => "List the entity kinds: the six built-in ones (person, organisation, location, repository, file, symbol) and the custom kinds agents have created (e.g. `db`, `table`, `decision`), each with its entity count. Check it before inventing a new kind, so the same thing keeps one kind name. Reads the personal vault and every org vault the user belongs to unless `vault_id` is given.",
         "entities_get" => "Get one entity with its memories (facts and consolidated observations) and its relations to other entities.",
         "entities_graph" => "Get the entity relationship graph (nodes and edges), optionally restricted to some entity kinds or a vault.",
         "code_entity_upsert" => "Find-or-create a code entity -- a repository, file or symbol -- matched case-insensitively by name, with a short summary. `parent_id` links a file to its repository or a symbol to its file. Returns the entity id.",
         "code_relate" => "Record a labelled relation between two entities, e.g. symbol `calls` symbol, file `imports` file.",
-        "memory_write" => "Remember a fact about a person, organisation, location or code entity (created if new; \"Jane Doe (Acme/JD)\" resolves to an existing \"Jane Doe\", adding the parts as aliases). Type `world` for objective facts, `experience` for things that happened, `observation` for stable patterns. Writes to the personal vault unless `vault_id` is given. Earlier facts about the subject this one makes no longer true are marked superseded in the background (left out of recall from then on). When a new entity was created, the result lists `possible_duplicates`: similar existing entities to `entity_merge`. Save durable facts, decisions, preferences and corrections as they come up, and before finishing a task a short summary of what was learned (`experience`).",
+        "memory_write" => "Remember a fact about a person, organisation, location, code entity or anything else (created if new; \"Jane Doe (Acme/JD)\" resolves to an existing \"Jane Doe\", adding the parts as aliases). `subject_kind` is a built-in kind or your own lowercase kind name (`db`, `table`, `field`, `defect`, `decision`, `task`, ...): a new name creates that kind in the vault (at most 50 custom kinds per vault; `entity_types` lists them, reuse one when it fits). Type `world` for objective facts, `experience` for things that happened, `observation` for stable patterns. Writes to the personal vault unless `vault_id` is given. Earlier facts about the subject this one makes no longer true are marked superseded in the background (left out of recall from then on). When a new entity was created, the result lists `possible_duplicates`: similar existing entities to `entity_merge`. Save durable facts, decisions, preferences and corrections as they come up, and before finishing a task a short summary of what was learned (`experience`).",
         "consolidate_observations" => "Fold an entity's new raw facts into its consolidated observation (or do it for every entity with new facts when `subject_id` is omitted).",
         "memory_update" => "Edit one memory by id: change its `text`, and/or switch a raw fact between `world` and `experience`. To revise an entity's consolidated belief, `memory_write` with type `observation` instead.",
         "entity_update" => "Edit an entity's `name`, `aliases` (replaces the list) and/or `summary`.",
@@ -258,6 +260,19 @@ fn parse_vault_ids(vault_id: &Option<String>, vault_ids: &Option<Vec<String>>) -
 }
 
 /// The `vault_ids` property of a read tool's schema.
+/// An entity kind: a built-in one, or the agent's own lowercase name (validated by
+/// `entities::service::kind_table`), so it is a pattern rather than an enum.
+fn kind_schema() -> Value {
+    json!({
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]{0,31}$",
+        "description": format!(
+            "built-in: {}; or your own lowercase kind name, e.g. db, table, field, defect, decision, task (`entity_types` lists the ones in use)",
+            crate::entities::service::KINDS.join(", ")
+        ),
+    })
+}
+
 fn vault_ids_schema() -> Value {
     json!({"type": "array", "items": {"type": "string"}, "description": "read these vaults together (ids or names); with `vault_id`, both are read"})
 }
@@ -479,6 +494,7 @@ mod tests {
             "entities_search",
             "entities_get",
             "entities_graph",
+            "entity_types",
             "vault_list",
             "vault_members",
             "document_list",
@@ -550,7 +566,7 @@ mod tests {
     fn registry_has_every_tool_wired_up() {
         let expected = [
             "docs", "search", "get", "list", "links", "recall", "reflect", "entities_search", "entities_get",
-            "entities_graph", "code_entity_upsert", "code_relate", "memory_write", "consolidate_observations",
+            "entities_graph", "entity_types", "code_entity_upsert", "code_relate", "memory_write", "consolidate_observations",
             "memory_update", "entity_update", "memory_delete", "entity_delete", "entity_merge", "vault_create", "vault_list", "vault_clone", "vault_merge",
             "vault_invite", "vault_members", "vault_remove_member", "vault_leave", "vault_rename", "vault_delete",
             "document_upload", "document_list", "document_get", "document_download", "document_export", "document_delete",

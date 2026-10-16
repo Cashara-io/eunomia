@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import Link from "next/link";
-import { ChevronRight, Search, X } from "lucide-react";
+import { ChevronRight, Plus, Search, X } from "lucide-react";
 import type { Connector, SourceRow } from "@/lib/types";
 import { useConnectors } from "@/lib/queries/connectors";
 import { useSources } from "@/lib/queries/sources";
@@ -13,11 +13,15 @@ import Tooltip from "@/components/bits/Tooltip";
 
 type StatusFilter = "all" | "connected" | "disconnected";
 
-/** One row of the connected table: a connector with credentials, or a source that holds records without one (demo data). */
+/** One row of the connected table: a connection with credentials, or a source that holds records without one (demo data). */
 type ConnectedRow = {
   id: string;
   kind: Connector["kind"] | null;
   label: string;
+  /** The name the user gave this connection, shown under the kind's name. */
+  account: string;
+  /** The last connection of its kind: an "Add another" row follows it. */
+  addAfter: boolean;
   status: "connected" | "demo";
   source: SourceRow | undefined;
   href: string;
@@ -47,7 +51,6 @@ export default function ConnectorsPage() {
     sourcesQuery.refetch();
   };
 
-  const byKind = Object.fromEntries((connectors ?? []).map((c) => [c.kind, c]));
   const bySource = Object.fromEntries(sourceRows.map((s) => [s.key, s]));
   const q = query.trim().toLowerCase();
 
@@ -55,28 +58,34 @@ export default function ConnectorsPage() {
   const available: Connector["kind"][] = [];
   for (const kind of CONNECTOR_ORDER) {
     const meta = CONNECTOR_META[kind];
-    const status = connectorStatus(byKind[kind]);
-    if (status === "disconnected") {
+    // A kind can be connected more than once (two Gmail accounts): one row per live connection.
+    const live = (connectors ?? []).filter((c) => c.kind === kind && connectorStatus(c) !== "disconnected");
+    if (live.length === 0) {
       available.push(kind);
       continue;
     }
-    connected.push({
-      id: kind,
-      kind,
-      label: meta.label,
-      status,
-      source: meta.sourceKey ? bySource[meta.sourceKey] : undefined,
-      href: meta.sourceKey ? `/connectors/${meta.sourceKey}` : `/connectors/setup/${kind}`,
+    live.forEach((c, i) => {
+      const status = connectorStatus(c) as ConnectedRow["status"];
+      connected.push({
+        id: c.id,
+        kind,
+        label: meta.label,
+        account: c.label,
+        addAfter: i === live.length - 1,
+        status,
+        source: meta.sourceKey ? bySource[c.source_key] : undefined,
+        href: meta.sourceKey ? `/connectors/${c.source_key}` : `/connectors/setup/${kind}?connector=${encodeURIComponent(c.id)}`,
+      });
     });
   }
   // Sources that hold records but belong to no connector (seeded demo data).
   for (const s of sourceRows) {
     if (!kindForSource(s.key) && isLiveSource(s)) {
-      connected.push({ id: s.key, kind: null, label: s.label, status: "demo", source: s, href: `/connectors/${s.key}` });
+      connected.push({ id: s.key, kind: null, label: s.label, account: "", addAfter: false, status: "demo", source: s, href: `/connectors/${s.key}` });
     }
   }
 
-  const shownConnected = connected.filter((r) => matches(q, r.label, r.kind ? CONNECTOR_META[r.kind].description : ""));
+  const shownConnected = connected.filter((r) => matches(q, `${r.label} ${r.account}`, r.kind ? CONNECTOR_META[r.kind].description : ""));
   const shownAvailable = available.filter((k) => matches(q, CONNECTOR_META[k].label, CONNECTOR_META[k].description));
   const loading = connectors === null && !error;
 
@@ -165,10 +174,18 @@ export default function ConnectorsPage() {
                 const fails = s?.sync_status.consecutive_failures ?? 0;
                 const health = sourceHealth(s);
                 return (
-                  <Link key={r.id} href={r.href} className={`${ROW_LINK} ${CONNECTED_COLS}`}>
+                  <Fragment key={r.id}>
+                  <Link href={r.href} className={`${ROW_LINK} ${CONNECTED_COLS}`}>
                     <span className="flex items-center gap-3 min-w-0">
                       <ConnectorTile kind={r.kind} />
-                      <span className="font-medium truncate">{r.label}</span>
+                      <span className="min-w-0 flex flex-col">
+                        <span className="font-medium truncate">{r.label}</span>
+                        {r.account && (
+                          <span className="text-[12px] truncate" style={{ color: "var(--ink-dim)" }}>
+                            {r.account}
+                          </span>
+                        )}
+                      </span>
                     </span>
                     <span className="flex items-center gap-2" title={s?.sync_status.last_error || undefined}>
                       <span className="dot" style={{ background: health.tone }} aria-hidden />
@@ -183,6 +200,17 @@ export default function ConnectorsPage() {
                     </span>
                     <ChevronRight size={14} strokeWidth={1.75} color="var(--ink-faint)" className="hidden md:block" aria-hidden />
                   </Link>
+                  {r.addAfter && r.kind && (
+                    <Link
+                      href={`/connectors/setup/${r.kind}?new=1`}
+                      className="flex items-center gap-2 px-4 h-9 pl-14 text-[12.5px] transition-colors duration-[120ms] ease-[var(--ease-out)] hover:bg-[var(--surface-raised)]"
+                      style={{ color: "var(--ink-dim)" }}
+                    >
+                      <Plus size={13} strokeWidth={1.75} aria-hidden />
+                      Add another {r.label} connection
+                    </Link>
+                  )}
+                  </Fragment>
                 );
               })}
             </div>

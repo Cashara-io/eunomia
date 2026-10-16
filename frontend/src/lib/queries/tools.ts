@@ -6,8 +6,8 @@ import { call } from "./client";
 
 export const toolKeys = {
   all: ["tools"] as const,
-  list: (source: string) => [...toolKeys.all, "list", source] as const,
-  search: (source: string, query: string) => [...toolKeys.all, "search", source, query] as const,
+  list: (source: string, offset = 0) => [...toolKeys.all, "list", source, offset] as const,
+  search: (source: string, query: string, offset = 0) => [...toolKeys.all, "search", source, query, offset] as const,
   record: (id: string) => [...toolKeys.all, "record", id] as const,
   palette: (query: string) => [...toolKeys.all, "palette", query] as const,
   docs: (topic?: string) => [...toolKeys.all, "docs", topic ?? "index"] as const,
@@ -18,17 +18,33 @@ type Hits = { results: ToolHit[] } | { error: string };
 export const invoke = <T>(name: string, body: Record<string, unknown> = {}) => call(invokeTool({ path: { name }, body })) as Promise<T>;
 const hits = (res: Hits) => ("results" in res ? res.results : []);
 
-export const useSourceRecords = (source: string) =>
+/** Records shown per page on a connector's record table. */
+export const RECORDS_PAGE = 50;
+/** One page of a source's records; `offset` echoes the request, `total` is set for a plain list only. */
+export type RecordPage = { results: ToolHit[]; offset: number; has_more: boolean; total?: number };
+type Paged = { results: ToolHit[]; has_more: boolean; total?: number } | { error: string };
+const page = (res: Paged, offset: number): RecordPage =>
+  "results" in res ? { ...res, offset } : { results: [], offset, has_more: false, total: 0 };
+
+/** The backend's search window (`MAX_WINDOW`): a search pages through at most this many matches. */
+export const SEARCH_WINDOW = 1000;
+
+// The previous page of the same source stays on screen while the next one loads.
+export const useSourceRecords = (source: string, offset: number) =>
   useQuery({
-    queryKey: toolKeys.list(source),
-    queryFn: async () => hits(await invoke<Hits>("list", { filters: { source }, sort: "-occurred_at", limit: 50 })),
+    queryKey: toolKeys.list(source, offset),
+    queryFn: async () =>
+      page(await invoke<Paged>("list", { filters: { source }, sort: "-occurred_at", limit: RECORDS_PAGE, offset }), offset),
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[2] === source ? prev : undefined),
   });
 
 // `query` is "" for no search; the previous results stay on screen while a new search loads.
-export const useSourceSearch = (source: string, query: string) =>
+// Keyword mode: its ranking does not shift between pages, so paging shows each match once.
+export const useSourceSearch = (source: string, query: string, offset: number) =>
   useQuery({
-    queryKey: toolKeys.search(source, query),
-    queryFn: async () => hits(await invoke<Hits>("search", { query, sources: [source], limit: 50 })),
+    queryKey: toolKeys.search(source, query, offset),
+    queryFn: async () =>
+      page(await invoke<Paged>("search", { query, sources: [source], mode: "keyword", limit: RECORDS_PAGE, offset }), offset),
     enabled: query !== "",
     placeholderData: keepPreviousData,
   });

@@ -21,9 +21,23 @@ Every sync is a `sync` job in the background job queue (see `docs/architecture/j
 | Todoist | Active tasks with project, due date, labels | API token — Todoist → Settings → Integrations → Developer | Full API token (Todoist has no read-only token) | 15 min |
 | Stripe | Charges (incremental) | [Restricted key](https://dashboard.stripe.com/apikeys) `rk_…` | Charges: Read only | 15 min |
 
+## More than one connection of a kind
+
+You can connect the same kind more than once, for example two Gmail accounts or two Pocket devices. On the Connectors page, **Add another** under a connected kind starts setup for a new connection; give it a name (the account's email address or the device name) so you can tell them apart. Each connection has its own credentials, sync cursor, health, routing and records: every synced record names the connection it came from (`cache_record.connector`).
+
+- API: `POST /api/connectors` with `{"kind": "gmail", "label": "work@example.com"}` creates the connection (empty and disabled); set it up with `PUT /api/connectors/{connector}` using the returned `id`. `label` in the same body renames a connection.
+- Every `/api/connectors/{connector}` route takes a connection id (`connector:...` or just its key) or, as before, a kind. A kind means that kind's first connection, so existing scripts and clients keep working unchanged.
+- `GET /api/sources` lists one row per connection. The first connection of a kind keeps the source key as its `key` (`gmail`); each added one is `gmail~<instance>`, which is also what `POST /api/sources/{key}/sync` takes. Each connection row in `GET /api/connectors` carries this as `source_key`.
+- `DELETE /api/connectors/{connector}` removes one connection with everything synced through it (recorded in the audit log as `connector.delete`). Other connections of the same kind are untouched. Removing a kind's first connection leaves an empty, disconnected one in its place.
+- Webhooks: one URL per kind (`/api/sources/up_bank/webhook/{your user id}`) serves every connection of it. A delivery goes to the connection whose own webhook secret signs it.
+- The Up Bank finance summary, the Pocket summary routes and the dashboard snapshot read the kind's first connection.
+- The same item synced through two connections (a GitHub issue both accounts can see) is stored once, under the connection that synced it last.
+
+**Upgrading:** every connection made before 2.0.4 becomes its kind's first connection and keeps its id, credentials, sync cursor and records. Records synced before the upgrade carry no connection and count as the first connection's (its **Delete all data** still removes them).
+
 ## Which vault records go to
 
-Every record a connector syncs is filed in one vault, and only that vault's members can read it. Set it under **Where records go** on the connector's page (or `routing` in `PUT /api/connectors/{kind}`):
+Every record a connector syncs is filed in one vault, and only that vault's members can read it. Set it under **Where records go** on the connector's page (or `routing` in `PUT /api/connectors/{connector}`):
 
 - **Destination vault**: where records go by default. Unset, that is your personal vault, which only you read.
 - **Rules**: an ordered list of *field*, *value*, *vault*. The first rule a record matches sends it to that rule's vault; a record no rule matches goes to the destination vault. Values compare case-insensitively; `title` matches a word or phrase the title contains, every other field must equal the value. There is no AI classification.
@@ -45,7 +59,7 @@ Example: one Pocket account with both work calls and personal conversations. Mak
 
 Rules only name vaults you are an active member of (saving another is refused). If you later leave a vault a rule names, records it would have sent there go to the destination vault instead, and the server logs it; a record already in that vault moves to where the rules send it the next time it syncs. Each record keeps its source, owner and provider id wherever it is filed.
 
-**Changes apply to future syncs.** A record stays in the vault it was first filed in when it syncs again, so changing the destination or the rules never moves anything by itself. To re-file what is already synced, use **Move existing data** (two steps; `POST /api/connectors/{kind}/move`): every record the current routing sends elsewhere moves, with the facts and relations extracted from it, onto the same-named entities in the destination (created if missing). A fact the destination already has is not copied twice, and running it again moves nothing more. Facts in a vault you have left stay there (`left` in the result); the records themselves still move, they are yours. Observations in both vaults are marked stale and rebuilt. Recorded in the audit log as `connector.move_data`.
+**Changes apply to future syncs.** A record stays in the vault it was first filed in when it syncs again, so changing the destination or the rules never moves anything by itself. To re-file what is already synced, use **Move existing data** (two steps; `POST /api/connectors/{connector}/move`): every record the current routing sends elsewhere moves, with the facts and relations extracted from it, onto the same-named entities in the destination (created if missing). A fact the destination already has is not copied twice, and running it again moves nothing more. Facts in a vault you have left stay there (`left` in the result); the records themselves still move, they are yours. Observations in both vaults are marked stale and rebuilt. Recorded in the audit log as `connector.move_data`.
 
 **After merging vaults**, the Vaults page offers to point connectors that filed into either merged vault at the new one (`POST /api/connectors/repoint` with `{"from": [...], "to": "vault:..."}`). Like any routing change it applies to future syncs.
 
@@ -55,7 +69,7 @@ Each recording is stored whole: everything Pocket's API returns, verbatim, plus 
 
 ## Deleting a connector's data
 
-**Delete all data** on a connector's page (two steps) permanently removes everything synced from it: its records and their search index, Pocket's stored recordings, and every fact and relation extracted from them. Observations built on those facts are rebuilt from what remains. Entities themselves, the connection and its sync position are kept, so later syncs bring in new data only. API: `DELETE /api/connectors/{kind}/data` (account-level: a vault-restricted token cannot call it; recorded in the audit log as `connector.delete_data`).
+**Delete all data** on a connection's page (two steps) permanently removes everything synced through that connection: its records and their search index, Pocket's stored recordings, and every fact and relation extracted from them. Observations built on those facts are rebuilt from what remains. Entities themselves, the connection and its sync position are kept, so later syncs bring in new data only. API: `DELETE /api/connectors/{connector}/data` (account-level: a vault-restricted token cannot call it; recorded in the audit log as `connector.delete_data`).
 
 ## Google (Gmail, Google Calendar): getting a refresh token
 

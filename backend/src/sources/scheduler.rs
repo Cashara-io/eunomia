@@ -7,6 +7,9 @@
 //!
 //! One sync of a given `(owner, source)` at a time: an in-process guard covers runs in this process, and
 //! the job queue covers other replicas (a running `sync` job for the same pair makes this one stand down).
+//!
+//! "Source" here is a sync key (`registry::sync_key`): one connection, so a user's two Gmail
+//! connections (`gmail` and `gmail~<instance>`) keep separate cursors, health and jobs.
 
 use std::collections::HashSet;
 use std::sync::{LazyLock, Mutex};
@@ -248,6 +251,7 @@ pub async fn sync_now(state: &OrgState, owner: &RecordId, key: &str) -> AppResul
 /// One source that should sync now. `period` (the source's interval) sizes the idempotency window.
 pub struct DueSync {
     pub owner: RecordId,
+    /// The connection's sync key.
     pub source: String,
     pub period: u64,
 }
@@ -267,13 +271,14 @@ pub async fn due_syncs(state: &OrgState) -> AppResult<Vec<DueSync>> {
     let now = Utc::now();
     for owner in all_user_ids(state).await? {
         let intervals = sync_intervals_for(db, &owner).await.unwrap_or_default();
-        for src in registry::enabled(db, &owner).await? {
-            let row: Option<SyncStatusRow> = store::get(db, &sync_status_id(&owner, src.key())).await?;
+        for (src, conn) in registry::enabled(db, &owner).await? {
+            let key = registry::sync_key(src.as_ref(), &conn);
+            let row: Option<SyncStatusRow> = store::get(db, &sync_status_id(&owner, &key)).await?;
             let last_run = row.as_ref().and_then(|r| r.last_run.as_ref()).and_then(datetime_to_chrono);
             let failures = row.map_or(0, |r| r.consecutive_failures);
             let period = interval_for(&intervals, src.key());
             if is_due(last_run, failures, period, now) {
-                out.push(DueSync { owner: owner.clone(), source: src.key().to_string(), period });
+                out.push(DueSync { owner: owner.clone(), source: key, period });
             }
         }
     }

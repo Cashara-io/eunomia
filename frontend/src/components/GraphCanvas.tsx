@@ -66,7 +66,7 @@ export default function GraphCanvas({
 }: {
   nodes: GraphNode[];
   edges: GraphEdge[];
-  kindColor: Record<EntityKind, string>;
+  kindColor: (kind: EntityKind) => string;
   visibleKinds: Set<EntityKind>;
   selectedId?: string | null;
   onSelect: (id: string) => void;
@@ -260,7 +260,7 @@ export default function GraphCanvas({
             const hot = hovered === n.id || draggingId === n.id;
             const picked = selectedId === n.id;
             const r = hot || picked ? 16 : 14;
-            const color = kindColor[n.kind];
+            const color = kindColor(n.kind);
             const ring = picked ? "var(--accent)" : hot ? "var(--felt)" : "none";
             const shape = { fill: color, stroke: ring, strokeWidth: picked || hot ? 2 : 0, opacity: picked || hot ? 1 : 0.85 };
             return (
@@ -303,8 +303,11 @@ export default function GraphCanvas({
                   <rect x={-r * 0.95} y={-r * 0.95} width={r * 1.9} height={r * 1.9} rx={6} {...shape} />
                 ) : n.kind === "file" ? (
                   <rect x={-r * 0.6} y={-r * 0.6} width={r * 1.2} height={r * 1.2} rx={1.5} {...shape} />
-                ) : (
+                ) : n.kind === "symbol" ? (
                   <rect x={-r * 0.62} y={-r * 0.62} width={r * 1.24} height={r * 1.24} {...shape} transform="rotate(45)" />
+                ) : (
+                  // an agent's own kind
+                  <circle r={r * 0.7} {...shape} />
                 )}
                 <text
                   y={24}

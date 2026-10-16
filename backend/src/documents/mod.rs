@@ -3,16 +3,22 @@
 //! treat them like synced data. Design and setup: docs/documents.md.
 //!
 //! - Upload validates the type, size and text, stores the bytes at an immutable path chosen here
-//!   (`/{key}/{revision}/{safe name}`), writes the `document` row (status `indexing`) and queues an
-//!   `index_document` job. Nothing the caller sends becomes a path or a URL.
+//!   (`/{vault key}/{key}/{revision}/{safe name}`, so each vault's files sit under their own prefix),
+//!   writes the `document` row (status `indexing`) and queues an `index_document` job. Nothing the
+//!   caller sends becomes a path or a URL. Rows keep their path, so a document stored before 2.0.4
+//!   (`/{key}/{revision}/{safe name}`, no vault prefix) still downloads; its next revision moves it.
 //! - The job extracts the text, chunks it (line-aware, [`CHUNK_CHARS`]), ingests the chunks through
 //!   `cache::ingest` (embedding, extraction jobs), then retires every other revision's chunks and marks
 //!   the document `ready` (or `failed`, with the error; the original stays downloadable).
 //! - Delete marks the document deleted, removes its chunks and what was extracted from them in one
 //!   transaction, then the object, then the row.
 //!
-//! Documents belong to the owner's personal vault (MVP): every operation authorizes on it, and every
-//! query filters by owner, so a guessed id of another user or org reads as absent.
+//! A document lives in one vault (the caller's default one unless a `vault_id` is given): every
+//! operation authorizes on that vault, so its members read and write it and a guessed id of a vault the
+//! caller is not in, or of another org, reads as absent. Its chunks are filed in the same vault (none,
+//! that is the owner's, for the personal vault) and keep the uploader as their owner. A vault clone or
+//! merge copies its documents (bytes, rows, chunks and vectors) into the new vault; deleting a vault
+//! deletes them ([`copy_vault_documents`], [`purge_vault_documents`]).
 
 use base64::Engine;
 use serde::Serialize;
@@ -143,8 +149,8 @@ fn new_key() -> String {
     (0..20).map(|_| ALPHABET[rng.gen_range(0..ALPHABET.len())] as char).collect()
 }
 
-fn object_path(key: &str, revision: i64, filename: &str) -> String {
-    format!("/{key}/{revision}/{}", safe_segment(filename))
+fn object_path(vault: &RecordId, key: &str, revision: i64, filename: &str) -> String {
+    format!("/{}/{key}/{revision}/{}", safe_segment(&key_of(vault)), safe_segment(filename))
 }
 
 /// A document id given by a caller: `document:<key>` with a plain key, else not found.
@@ -171,6 +177,7 @@ pub fn download_path(id: &str) -> String {
 pub(crate) struct DocRow {
     id: RecordId,
     owner: RecordId,
+    vault: RecordId,
     filename: String,
     media_type: String,
     size_bytes: i64,
@@ -313,29 +320,50 @@ async fn delete_object(db: &OrgDb, path: &str) -> AppResult<()> {
 
 // ---- reads ------------------------------------------------------------------------------------
 
-/// The personal vault, authorized for `action` (the credential's scope and vault restriction included).
-async fn personal_vault(db: &OrgDb, owner: &RecordId, action: Action) -> AppResult<RecordId> {
-    let vault = crate::vaults::service::personal_vault_id(db, owner).await?;
-    Ok(authz::authorize(db, owner, action, &vault).await?.vault().clone())
+fn not_found() -> AppError {
+    AppError::coded(ErrorCode::DocumentNotFound, "Document not found.")
 }
 
-async fn load(db: &OrgDb, owner: &RecordId, id: &RecordId, include_deleted: bool) -> AppResult<DocRow> {
+/// The vault a list or upload names (`vault_id`), else the caller's default one (a vault-restricted
+/// token's own vault, otherwise the personal vault), authorized for `action`.
+async fn target_vault(db: &OrgDb, user: &RecordId, vault_id: Option<&str>, action: Action) -> AppResult<RecordId> {
+    let vault = match vault_id {
+        Some(v) => crate::rid::parse(v).map_err(|_| AppError::coded(ErrorCode::VaultNotFound, "Vault not found."))?,
+        None => crate::vaults::service::default_vault_id(db, user).await?,
+    };
+    Ok(authz::authorize(db, user, action, &vault).await?.vault().clone())
+}
+
+/// A document by id, with no access check (jobs, and a chunk the caller already read).
+async fn fetch(db: &OrgDb, id: &RecordId, include_deleted: bool) -> AppResult<DocRow> {
     let stmt = if include_deleted { &q::GET_ANY } else { &q::GET };
-    let mut res = stmt.on(db).bind(("id", id.clone())).bind(("owner", owner.clone())).await?;
+    let mut res = stmt.on(db).bind(("id", id.clone())).await?;
     let rows: Vec<DocRow> = res.take(0)?;
-    rows.into_iter().next().ok_or_else(|| AppError::coded(ErrorCode::DocumentNotFound, "Document not found."))
+    rows.into_iter().next().ok_or_else(not_found)
 }
 
-pub async fn list(state: &OrgState, owner: &RecordId, limit: i64, offset: i64) -> AppResult<DocumentList> {
-    personal_vault(&state.db, owner, Action::ReadMemories).await?;
+/// A document `user` may `action` on: its vault decides. One in a vault the caller is not a member of
+/// reads as absent; a credential lacking the scope, or restricted to another vault, is still refused.
+async fn load(db: &OrgDb, user: &RecordId, id: &RecordId, include_deleted: bool, action: Action) -> AppResult<DocRow> {
+    authz::require_scope(action.scope())?;
+    let doc = fetch(db, id, include_deleted).await?;
+    match authz::authorize(db, user, action, &doc.vault).await {
+        Ok(_) => Ok(doc),
+        Err(e) if e.code == ErrorCode::VaultForbidden => Err(not_found()),
+        Err(e) => Err(e),
+    }
+}
+
+pub async fn list(state: &OrgState, user: &RecordId, vault_id: Option<&str>, limit: i64, offset: i64) -> AppResult<DocumentList> {
+    let vault = target_vault(&state.db, user, vault_id, Action::ReadMemories).await?;
     let (limit, offset) = (limit.clamp(1, 200), offset.max(0));
-    let mut res = q::LIST.on(&state.db).bind(("owner", owner.clone())).bind(("limit", limit)).bind(("offset", offset)).await?;
+    let mut res = q::LIST.on(&state.db).bind(("vault", vault.clone())).bind(("limit", limit)).bind(("offset", offset)).await?;
     let rows: Vec<DocRow> = res.take(0)?;
     #[derive(serde::Deserialize, SurrealValue)]
     struct Count {
         count: i64,
     }
-    let mut res = q::COUNT.on(&state.db).bind(("owner", owner.clone())).await?;
+    let mut res = q::COUNT.on(&state.db).bind(("vault", vault)).await?;
     let total = res.take::<Vec<Count>>(0)?.first().map_or(0, |c| c.count);
     let results: Vec<DocumentOut> = rows.iter().map(DocumentOut::from).collect();
     let has_more = offset + (results.len() as i64) < total;
@@ -367,10 +395,10 @@ fn int(v: &Value, k: &str) -> i64 {
     v.get(k).and_then(Value::as_i64).unwrap_or(0)
 }
 
-async fn chunks(db: &OrgDb, owner: &RecordId, doc: &DocRow) -> AppResult<Vec<ChunkRow>> {
+async fn chunks(db: &OrgDb, doc: &DocRow) -> AppResult<Vec<ChunkRow>> {
     let mut res = q::CHUNKS
         .on(db)
-        .bind(("owner", owner.clone()))
+        .bind(("owner", doc.owner.clone()))
         .bind(("document", doc.id.to_string()))
         .bind(("revision", doc.revision))
         .await?;
@@ -379,10 +407,9 @@ async fn chunks(db: &OrgDb, owner: &RecordId, doc: &DocRow) -> AppResult<Vec<Chu
     Ok(rows)
 }
 
-pub async fn get(state: &OrgState, owner: &RecordId, id: &str, max_chars: Option<usize>) -> AppResult<DocumentDetail> {
-    personal_vault(&state.db, owner, Action::ReadMemories).await?;
-    let doc = load(&state.db, owner, &parse_id(id)?, false).await?;
-    let rows = chunks(&state.db, owner, &doc).await?;
+pub async fn get(state: &OrgState, user: &RecordId, id: &str, max_chars: Option<usize>) -> AppResult<DocumentDetail> {
+    let doc = load(&state.db, user, &parse_id(id)?, false, Action::ReadMemories).await?;
+    let rows = chunks(&state.db, &doc).await?;
     let max = max_chars.unwrap_or(GET_TEXT_CHARS).clamp(1, 1_000_000);
     let mut text = String::new();
     let mut truncated = false;
@@ -410,24 +437,28 @@ pub async fn get(state: &OrgState, owner: &RecordId, id: &str, max_chars: Option
 
 /// The original bytes (checked against the stored SHA-256) and the row they belong to. The caller
 /// records the disclosure in the audit log.
-pub async fn download(state: &OrgState, owner: &RecordId, id: &str) -> AppResult<(DocumentOut, Vec<u8>)> {
-    personal_vault(&state.db, owner, Action::ReadMemories).await?;
-    let doc = load(&state.db, owner, &parse_id(id)?, false).await?;
-    let bytes = get_object(&state.db, &doc.object_path)
+pub async fn download(state: &OrgState, user: &RecordId, id: &str) -> AppResult<(DocumentOut, Vec<u8>)> {
+    let doc = load(&state.db, user, &parse_id(id)?, false, Action::ReadMemories).await?;
+    let bytes = stored_bytes(&state.db, &doc).await?;
+    Ok((DocumentOut::from(&doc), bytes))
+}
+
+/// `doc`'s original bytes, checked against its SHA-256.
+async fn stored_bytes(db: &OrgDb, doc: &DocRow) -> AppResult<Vec<u8>> {
+    let bytes = get_object(db, &doc.object_path)
         .await?
         .ok_or_else(|| AppError::coded(ErrorCode::DocumentStorageUnavailable, "The stored file is missing from document storage.").with_source(doc.object_path.clone()))?;
     if sha256_hex(&bytes) != doc.sha256 {
         return Err(AppError::internal("stored document bytes do not match their sha256").with_source(doc.id.to_string()));
     }
-    Ok((DocumentOut::from(&doc), bytes))
+    Ok(bytes)
 }
 
 /// The versioned export manifest: the document, its chunks with their text and location, and each
 /// chunk's vector (or an explicit `missing`) with the embedding settings. `vectors: false` leaves the
 /// numbers out (an agent's context does not need 1536 floats a chunk).
-pub async fn export(state: &OrgState, owner: &RecordId, id: &str, vectors: bool) -> AppResult<Value> {
-    personal_vault(&state.db, owner, Action::ReadMemories).await?;
-    let doc = load(&state.db, owner, &parse_id(id)?, false).await?;
+pub async fn export(state: &OrgState, user: &RecordId, id: &str, vectors: bool) -> AppResult<Value> {
+    let doc = load(&state.db, user, &parse_id(id)?, false, Action::ReadMemories).await?;
     #[derive(serde::Deserialize, SurrealValue)]
     struct VecRow {
         id: RecordId,
@@ -443,13 +474,13 @@ pub async fn export(state: &OrgState, owner: &RecordId, id: &str, vectors: bool)
     }
     let mut res = q::CHUNK_VECTORS
         .on(&state.db)
-        .bind(("owner", owner.clone()))
+        .bind(("owner", doc.owner.clone()))
         .bind(("document", doc.id.to_string()))
         .bind(("revision", doc.revision))
         .await?;
     let mut rows: Vec<VecRow> = res.take(0)?;
     rows.sort_by_key(|r| int(&r.payload, "part"));
-    let spec = crate::embeddings::service::spec_for(&state.db, &state.settings, owner).await;
+    let spec = crate::embeddings::service::spec_for(&state.db, &state.settings, &doc.owner).await;
     let (embedded, missing) = rows.iter().fold((0, 0), |(e, m), r| if r.embedding.is_some() { (e + 1, m) } else { (e, m + 1) });
     let chunks: Vec<Value> = rows
         .into_iter()
@@ -494,8 +525,10 @@ pub struct Upload {
     /// The declared media type; the extension decides when it is absent or generic.
     pub media_type: Option<String>,
     pub bytes: Vec<u8>,
-    /// A document to publish these bytes as a new revision of.
+    /// A document to publish these bytes as a new revision of (it stays in its vault).
     pub replace: Option<String>,
+    /// The vault a new document goes in; none: the caller's default vault.
+    pub vault: Option<String>,
 }
 
 pub fn sha256_hex(bytes: &[u8]) -> String {
@@ -550,24 +583,28 @@ fn require_storage(state: &OrgState) -> AppResult<()> {
 
 /// Store the bytes and queue indexing. A `replace`d document gets a new revision; its old object is
 /// removed once the new one is in place.
-pub async fn upload(state: &OrgState, owner: &RecordId, up: Upload) -> AppResult<DocumentOut> {
+pub async fn upload(state: &OrgState, user: &RecordId, up: Upload) -> AppResult<DocumentOut> {
     let db = &state.db;
-    let vault = personal_vault(db, owner, Action::WriteMemories).await?;
+    let previous = match &up.replace {
+        Some(id) => Some(load(db, user, &parse_id(id)?, false, Action::WriteMemories).await?),
+        None => None,
+    };
+    let vault = match &previous {
+        Some(p) => p.vault.clone(),
+        None => target_vault(db, user, up.vault.as_deref(), Action::WriteMemories).await?,
+    };
     let filename = clean_filename(&up.filename)?;
     let media = validate(&state.settings, &filename, up.media_type.as_deref(), &up.bytes)?;
     require_storage(state)?;
     let sha = sha256_hex(&up.bytes);
     let size = up.bytes.len() as i64;
 
-    let previous = match &up.replace {
-        Some(id) => Some(load(db, owner, &parse_id(id)?, false).await?),
-        None => None,
+    // a new revision stays with the document's owner, whose chunks it replaces
+    let (id, revision, owner) = match &previous {
+        Some(p) => (p.id.clone(), p.revision + 1, p.owner.clone()),
+        None => (RecordId::from_table_key("document", new_key()), 1, user.clone()),
     };
-    let (id, revision) = match &previous {
-        Some(p) => (p.id.clone(), p.revision + 1),
-        None => (RecordId::from_table_key("document", new_key()), 1),
-    };
-    let path = object_path(&key_of(&id), revision, &filename);
+    let path = object_path(&vault, &key_of(&id), revision, &filename);
     put_object(db, &path, up.bytes).await?;
 
     let written: AppResult<Vec<DocRow>> = async {
@@ -601,21 +638,20 @@ pub async fn upload(state: &OrgState, owner: &RecordId, up: Upload) -> AppResult
     {
         tracing::warn!(document = %row.id.to_string(), error = e.source.as_deref().unwrap_or(&e.message), "the previous revision's file could not be removed");
     }
-    enqueue_index(state, owner, &row).await?;
+    enqueue_index(state, &row).await?;
     Ok(DocumentOut::from(&row))
 }
 
 /// Extract and index the stored bytes again as a new revision (after a failure, or a change in how
 /// text is extracted). The chunks of the previous revision stay searchable until it is ready.
-pub async fn reindex(state: &OrgState, owner: &RecordId, id: &str) -> AppResult<DocumentOut> {
+pub async fn reindex(state: &OrgState, user: &RecordId, id: &str) -> AppResult<DocumentOut> {
     let db = &state.db;
-    personal_vault(db, owner, Action::WriteMemories).await?;
+    let doc = load(db, user, &parse_id(id)?, false, Action::WriteMemories).await?;
     require_storage(state)?;
-    let doc = load(db, owner, &parse_id(id)?, false).await?;
     let mut res = q::REVISE
         .on(db)
         .bind(("id", doc.id.clone()))
-        .bind(("owner", owner.clone()))
+        .bind(("owner", doc.owner.clone()))
         .bind(("filename", doc.filename.clone()))
         .bind(("media_type", doc.media_type.clone()))
         .bind(("size_bytes", doc.size_bytes))
@@ -625,27 +661,124 @@ pub async fn reindex(state: &OrgState, owner: &RecordId, id: &str) -> AppResult<
         .bind(("expected", doc.revision))
         .await?;
     let row: DocRow = res.take::<Vec<DocRow>>(0)?.into_iter().next().ok_or_else(|| AppError::coded(ErrorCode::DbConflict, "the document changed meanwhile; retry"))?;
-    enqueue_index(state, owner, &row).await?;
+    enqueue_index(state, &row).await?;
     Ok(DocumentOut::from(&row))
 }
 
 /// Revoke first (the row reads as deleted and its chunks leave retrieval in one transaction), then the
 /// object, then the row. A failure part way leaves a `deleted` row; deleting again finishes it.
-pub async fn delete(state: &OrgState, owner: &RecordId, id: &str) -> AppResult<DocumentDeleted> {
-    let db = &state.db;
-    personal_vault(db, owner, Action::WriteMemories).await?;
-    let doc = load(db, owner, &parse_id(id)?, true).await?;
-    q::MARK_DELETED.on(db).bind(("id", doc.id.clone())).bind(("owner", owner.clone())).await?.check()?;
-    let removed = remove_chunks(db, owner, &doc.id, -1, -1, -1).await?;
-    if !state.settings.documents_backend.is_empty() {
-        delete_object(db, &doc.object_path).await?;
-    }
-    q::REMOVE.on(db).bind(("id", doc.id.clone())).bind(("owner", owner.clone())).await?.check()?;
+pub async fn delete(state: &OrgState, user: &RecordId, id: &str) -> AppResult<DocumentDeleted> {
+    let doc = load(&state.db, user, &parse_id(id)?, true, Action::WriteMemories).await?;
+    let removed = purge(&state.db, &doc, !state.settings.documents_backend.is_empty()).await?;
     Ok(DocumentDeleted { deleted: true, chunks: int(&removed, "records"), memories: int(&removed, "memories") })
 }
 
-/// Chunks of every revision but `keep` (-1: none kept), or of revision `only` alone, with what was
-/// extracted from them.
+/// Deletes `doc` (see [`delete`]); `objects: false` leaves storage alone (it is not configured).
+async fn purge(db: &OrgDb, doc: &DocRow, objects: bool) -> AppResult<Value> {
+    q::MARK_DELETED.on(db).bind(("id", doc.id.clone())).bind(("owner", doc.owner.clone())).await?.check()?;
+    let removed = remove_chunks(db, &doc.owner, &doc.id, -1, -1, -1).await?;
+    if objects {
+        delete_object(db, &doc.object_path).await?;
+    }
+    q::REMOVE.on(db).bind(("id", doc.id.clone())).bind(("owner", doc.owner.clone())).await?.check()?;
+    Ok(removed)
+}
+
+/// Deletes every document of `vault` like [`delete`] does, bytes included: before a vault is deleted,
+/// and when a failed clone or merge is discarded. A failure part way stops it and the caller fails, so
+/// a retry finishes the job and never leaves a row whose bytes are gone (a deleted row reads as absent).
+/// Storage errors are not skipped: rows exist here only because a file was stored.
+pub async fn purge_vault_documents(db: &OrgDb, vault: &RecordId) -> AppResult<usize> {
+    let mut res = q::IN_VAULT.on(db).bind(("vault", vault.clone())).await?;
+    let docs: Vec<DocRow> = res.take(0)?;
+    for doc in &docs {
+        purge(db, doc, true).await?;
+    }
+    Ok(docs.len())
+}
+
+/// Copies every live document of `src` into `dest` (a vault being built by a clone or merge, which no
+/// one can see yet) as `owner`'s: the bytes under `dest`'s prefix, the row, and the current revision's
+/// chunks with their vectors (filed in `dest`, nothing re-embedded or re-extracted). Returns each source
+/// chunk's copy, so the copied memories that were extracted from a chunk point at its copy.
+/// Each row is written before its bytes, so a failure or a crash part way leaves nothing that
+/// [`purge_vault_documents`] (the discard of a failed copy) does not find. A document still being
+/// indexed is copied as `failed`, to be reindexed from its copied bytes.
+#[allow(clippy::mutable_key_type)] // RecordId hashes by value; the interior mutability is never touched
+pub async fn copy_vault_documents(db: &OrgDb, owner: &RecordId, src: &RecordId, dest: &RecordId) -> AppResult<std::collections::HashMap<RecordId, RecordId>> {
+    let mut chunk_map = std::collections::HashMap::new();
+    let mut res = q::IN_VAULT.on(db).bind(("vault", src.clone())).await?;
+    let docs: Vec<DocRow> = res.take(0)?;
+    for doc in docs.iter().filter(|d| d.status != "deleted") {
+        let bytes = stored_bytes(db, doc).await?;
+        let key = new_key();
+        let id = RecordId::from_table_key("document", key.clone());
+        let path = object_path(dest, &key, doc.revision, &doc.filename);
+        let (status, error) = match doc.status.as_str() {
+            "indexing" => ("failed".to_string(), Some("copied while it was being indexed: reindex it".to_string())),
+            _ => (doc.status.clone(), doc.error.clone()),
+        };
+        q::COPY
+            .on(db)
+            .bind(("id", id.clone()))
+            .bind(("owner", owner.clone()))
+            .bind(("vault", dest.clone()))
+            .bind(("filename", doc.filename.clone()))
+            .bind(("media_type", doc.media_type.clone()))
+            .bind(("size_bytes", doc.size_bytes))
+            .bind(("sha256", doc.sha256.clone()))
+            .bind(("object_path", path.clone()))
+            .bind(("revision", doc.revision))
+            .bind(("status", status.clone()))
+            .bind(("error", error))
+            .bind(("chunk_count", if status == "ready" { doc.chunk_count } else { 0 }))
+            .bind(("indexed_at", doc.indexed_at))
+            .await?
+            .check()?;
+        put_object(db, &path, bytes).await?;
+        if status != "ready" {
+            continue;
+        }
+        #[derive(serde::Deserialize, SurrealValue)]
+        struct Chunk {
+            id: RecordId,
+            #[serde(default)]
+            #[surreal(default)]
+            title: String,
+            #[serde(default)]
+            #[surreal(default)]
+            body_text: String,
+            #[serde(default)]
+            #[surreal(default)]
+            occurred_at: Option<Datetime>,
+            #[serde(default)]
+            #[surreal(default)]
+            payload: Value,
+            #[serde(default)]
+            #[surreal(default)]
+            embedding: Option<Vec<f32>>,
+        }
+        let mut res = q::CHUNKS_TO_COPY
+            .on(db)
+            .bind(("owner", doc.owner.clone()))
+            .bind(("document", doc.id.to_string()))
+            .bind(("revision", doc.revision))
+            .await?;
+        let chunks: Vec<Chunk> = res.take(0)?;
+        for c in chunks {
+            let mut payload = c.payload;
+            payload["document_id"] = json!(id.to_string());
+            let env = chunk_envelope(&key, doc.revision, int(&payload, "part"), c.title, c.body_text, c.occurred_at, payload, Some(dest));
+            crate::cache::search::upsert(db, owner, &env).await?;
+            if let Some(v) = c.embedding {
+                crate::cache::search::set_embedding(db, owner, &env.id, v).await?;
+            }
+            chunk_map.insert(c.id, crate::cache::search::rid(owner, &env.id));
+        }
+    }
+    Ok(chunk_map)
+}
+
 /// Removes `doc`'s chunks: all but revision `keep`, or only revision `only`, or only revisions older
 /// than `below` (each `-1` when unused).
 async fn remove_chunks(db: &OrgDb, owner: &RecordId, doc: &RecordId, keep: i64, only: i64, below: i64) -> AppResult<Value> {
@@ -665,10 +798,11 @@ async fn remove_chunks(db: &OrgDb, owner: &RecordId, doc: &RecordId, keep: i64, 
 
 // ---- indexing ---------------------------------------------------------------------------------
 
-async fn enqueue_index(state: &OrgState, owner: &RecordId, doc: &DocRow) -> AppResult<()> {
+/// Queues indexing as the document's owner (whose chunks they are), whoever in the vault asked.
+async fn enqueue_index(state: &OrgState, doc: &DocRow) -> AppResult<()> {
     let id = doc.id.to_string();
     let key = format!("{}:{}:{}", jobs::kind::INDEX_DOCUMENT, id, doc.revision);
-    let job = NewJob::new(jobs::kind::INDEX_DOCUMENT, owner.clone(), key).in_org(state.db.org()).payload(json!({ "document": id, "revision": doc.revision }));
+    let job = NewJob::new(jobs::kind::INDEX_DOCUMENT, doc.owner.clone(), key).in_org(state.db.org()).payload(json!({ "document": id, "revision": doc.revision }));
     jobs::enqueue(&state.control, job).await?;
     Ok(())
 }
@@ -733,8 +867,9 @@ pub async fn index_job(state: AppState, job: Job) -> Result<(), JobError> {
     let id = parse_id(&doc_id).map_err(|_| JobError::permanent(ErrorCode::ValidationInvalid, "job payload names no document"))?;
     let state = state.org(&job.org_id()?).await?;
     let owner = job.owner.clone();
-    let doc = match load(&state.db, &owner, &id, false).await {
-        Ok(d) => d,
+    let doc = match fetch(&state.db, &id, false).await {
+        Ok(d) if d.owner == owner => d,
+        Ok(_) => return Ok(()),
         Err(e) if e.code == ErrorCode::DocumentNotFound => return Ok(()),
         Err(e) => return Err(finish_err(e)),
     };
@@ -811,33 +946,25 @@ async fn index(state: &OrgState, owner: &RecordId, doc: &DocRow) -> Result<usize
     let n = pieces.len();
     let id = doc.id.to_string();
     let key = key_of(&doc.id);
-    let envelopes: Vec<Value> = pieces
+    // the personal vault's records are filed in none (read by their owner); any other's in it
+    let personal = crate::vaults::service::personal_vault_id(&state.db, owner).await.map_err(IndexError::Transient)?;
+    let vault = (doc.vault != personal).then_some(&doc.vault);
+    let envelopes: Vec<Envelope> = pieces
         .into_iter()
         .enumerate()
         .map(|(i, (start, end, piece))| {
-            let external_id = format!("{key}:{}:{i}", doc.revision);
             let title = if n == 1 { doc.filename.clone() } else { format!("{} (part {}/{n})", doc.filename, i + 1) };
-            serde_json::to_value(Envelope {
-                id: format!("{SOURCE}:{CHUNK_TYPE}:{external_id}"),
-                source: SOURCE.into(),
-                type_: CHUNK_TYPE.into(),
-                external_id,
-                title,
-                body_text: piece,
-                occurred_at: Some(doc.created_at),
-                url: String::new(),
-                payload: json!({
-                    "document_id": id, "revision": doc.revision, "part": i, "char_start": start, "char_end": end, "filename": doc.filename,
-                }),
-                deleted: false,
-                links: Vec::new(),
-                placement: None,
-            })
-            .unwrap_or(Value::Null)
+            let payload = json!({
+                "document_id": id, "revision": doc.revision, "part": i, "char_start": start, "char_end": end, "filename": doc.filename,
+            });
+            chunk_envelope(&key, doc.revision, i as i64, title, piece, Some(doc.created_at), payload, vault)
         })
         .collect();
-    let report = crate::cache::ingest::ingest(state, owner, SOURCE, &envelopes, |raw| {
-        serde_json::from_value::<Envelope>(raw.clone()).map(|e| vec![e]).map_err(|e| e.to_string())
+    let raws: Vec<Value> = envelopes.iter().map(|e| serde_json::to_value(e).unwrap_or(Value::Null)).collect();
+    // the placement is not serialized: put it back on each mapped envelope
+    let placement = envelopes.first().and_then(|e| e.placement.clone());
+    let report = crate::cache::ingest::ingest(state, owner, SOURCE, &raws, |raw| {
+        serde_json::from_value::<Envelope>(raw.clone()).map(|e| vec![Envelope { placement: placement.clone(), ..e }]).map_err(|e| e.to_string())
     })
     .await
     .map_err(IndexError::Transient)?;
@@ -847,11 +974,33 @@ async fn index(state: &OrgState, owner: &RecordId, doc: &DocRow) -> Result<usize
     Ok(n)
 }
 
-/// A document's metadata by id for `get` on one of its chunks (owner-scoped, no vault check: the chunk
-/// was already read under the caller's own rules). `None` when it is gone.
-pub async fn summary(db: &OrgDb, owner: &RecordId, id: &str) -> AppResult<Option<DocumentOut>> {
+/// One chunk of document `key`'s `revision` as a cache envelope, filed in `vault` (`None`: the owner's
+/// personal vault).
+#[allow(clippy::too_many_arguments)]
+fn chunk_envelope(key: &str, revision: i64, part: i64, title: String, body_text: String, occurred_at: Option<Datetime>, payload: Value, vault: Option<&RecordId>) -> Envelope {
+    let external_id = format!("{key}:{revision}:{part}");
+    Envelope {
+        id: format!("{SOURCE}:{CHUNK_TYPE}:{external_id}"),
+        source: SOURCE.into(),
+        type_: CHUNK_TYPE.into(),
+        external_id,
+        title,
+        body_text,
+        occurred_at,
+        url: String::new(),
+        payload,
+        deleted: false,
+        links: Vec::new(),
+        placement: vault.map(|v| crate::cache::search::Placement { vault: Some(v.clone()), ..Default::default() }),
+        connector: None,
+    }
+}
+
+/// A document's metadata by id for `get` on one of its chunks (no vault check: the chunk was already
+/// read under the caller's own rules). `None` when it is gone.
+pub async fn summary(db: &OrgDb, id: &str) -> AppResult<Option<DocumentOut>> {
     let Ok(id) = parse_id(id) else { return Ok(None) };
-    match load(db, owner, &id, false).await {
+    match fetch(db, &id, false).await {
         Ok(d) => Ok(Some(DocumentOut::from(&d))),
         Err(e) if e.code == ErrorCode::DocumentNotFound => Ok(None),
         Err(e) => Err(e),
@@ -917,7 +1066,8 @@ mod tests {
         assert_eq!(safe_segment("project notes (v2).md"), "project_notes__v2_.md");
         assert_eq!(safe_segment("..hidden"), "hidden");
         assert_eq!(safe_segment("ü"), "_");
-        assert_eq!(object_path("abc", 2, "My File.md"), "/abc/2/My_File.md");
+        let vault = RecordId::from_table_key("vault", "v1");
+        assert_eq!(object_path(&vault, "abc", 2, "My File.md"), "/v1/abc/2/My_File.md");
     }
 
     #[test]

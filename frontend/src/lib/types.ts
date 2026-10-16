@@ -87,8 +87,15 @@ export type RoutingRule = { field: string; value: string; vault: string };
 /** Where a connector files its records: `default_vault` (absent: personal) unless a rule matches first. */
 export type Routing = { default_vault?: string; rules: RoutingRule[] };
 
+/** One connection. A kind can be connected more than once (two Gmail accounts). */
 export type Connector = {
+  /** `connector:...`; routes taking a connector accept it. */
+  id: string;
   kind: ConnectorKind;
+  /** The name the user gave this connection; "" if none. */
+  label: string;
+  /** Its key in /api/sources and for syncing: the source key for a kind's first connection, `{source}~{instance}` for an added one. */
+  source_key: string;
   enabled: boolean;
   config: Record<string, unknown>;
   credentials_set: boolean;
@@ -100,6 +107,7 @@ export type Connector = {
 
 export type ConnectorUpdate = Partial<{
   enabled: boolean;
+  label: string;
   config: Record<string, unknown>;
   credentials: Record<string, string>;
   routing: Routing;
@@ -124,6 +132,10 @@ export type SyncStatus = {
 export type SourceRow = {
   key: string;
   label: string;
+  /** The connection's id; absent for a source never set up. */
+  connector?: string | null;
+  /** The name the user gave the connection; "" if none. */
+  account?: string;
   provider: string;
   record_types: string[];
   connected: boolean;
@@ -168,7 +180,9 @@ export type ToolRecord = ToolHit & {
   recording?: { summary: string; action_items: string[]; transcript: string };
 };
 
-export type EntityKind = "person" | "organisation" | "location" | "repository" | "file" | "symbol";
+export type BuiltInKind = "person" | "organisation" | "location" | "repository" | "file" | "symbol";
+/** A built-in kind, or a custom kind an agent created (a lowercase name such as "db"). */
+export type EntityKind = BuiltInKind | (string & {});
 
 export type EntitySummary = {
   id: string;

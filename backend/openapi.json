@@ -836,6 +836,54 @@
             "bearer": []
           }
         ]
+      },
+      "post": {
+        "tags": [
+          "connectors"
+        ],
+        "summary": "Add another connection of a kind",
+        "description": "Creates a further, empty and disabled connection of `kind` (a second Gmail account, another Pocket device). Set it up with `PUT /api/connectors/{connector}` using the returned id.",
+        "operationId": "createConnector",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectorCreateBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
       }
     },
     "/api/connectors/pocketai/all": {
@@ -1135,17 +1183,18 @@
         ]
       }
     },
-    "/api/connectors/{kind}": {
+    "/api/connectors/{connector}": {
       "get": {
         "tags": [
           "connectors"
         ],
-        "summary": "One connector",
+        "summary": "One connection",
         "operationId": "getConnector",
         "parameters": [
           {
-            "name": "kind",
+            "name": "connector",
             "in": "path",
+            "description": "A connection id (`connector:...` or its key), or a connector kind for that kind's first connection.",
             "required": true,
             "schema": {
               "type": "string"
@@ -1187,12 +1236,13 @@
         "tags": [
           "connectors"
         ],
-        "summary": "Update a connector",
+        "summary": "Update a connection",
         "operationId": "updateConnector",
         "parameters": [
           {
-            "name": "kind",
+            "name": "connector",
             "in": "path",
+            "description": "A connection id (`connector:...` or its key), or a connector kind for that kind's first connection.",
             "required": true,
             "schema": {
               "type": "string"
@@ -1239,20 +1289,70 @@
             "bearer": []
           }
         ]
-      }
-    },
-    "/api/connectors/{kind}/data": {
+      },
       "delete": {
         "tags": [
           "connectors"
         ],
-        "summary": "Delete everything synced from a connector",
-        "description": "Removes the connector's synced records, their links, the facts and relations extracted from them, and (Pocket) the stored recordings. Observations built from removed facts go stale. Entities, the credentials and the sync cursor stay.",
+        "summary": "Remove a connection and its data",
+        "description": "Deletes the connection's credentials, sync status and everything synced through it (as `DELETE /api/connectors/{connector}/data`). Other connections of the same kind are untouched. A kind's first connection comes back empty and disconnected.",
+        "operationId": "deleteConnector",
+        "parameters": [
+          {
+            "name": "connector",
+            "in": "path",
+            "description": "A connection id (`connector:...` or its key), or a connector kind for that kind's first connection.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteConnectorOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/connectors/{connector}/data": {
+      "delete": {
+        "tags": [
+          "connectors"
+        ],
+        "summary": "Delete everything synced from a connection",
+        "description": "Removes the records synced through this connection, their links, the facts and relations extracted from them, and (Pocket) the stored recordings. Observations built from removed facts go stale. Entities, the credentials and the sync cursor stay, and so does everything synced through other connections of the same kind.",
         "operationId": "deleteConnectorData",
         "parameters": [
           {
-            "name": "kind",
+            "name": "connector",
             "in": "path",
+            "description": "A connection id (`connector:...` or its key), or a connector kind for that kind's first connection.",
             "required": true,
             "schema": {
               "type": "string"
@@ -1291,18 +1391,19 @@
         ]
       }
     },
-    "/api/connectors/{kind}/move": {
+    "/api/connectors/{connector}/move": {
       "post": {
         "tags": [
           "connectors"
         ],
-        "summary": "Re-file a connector's synced data by its current routing",
+        "summary": "Re-file a connection's synced data by its current routing",
         "description": "Changing a connector's destination vault or rules applies to records synced afterwards. This moves the records already synced (and the facts and relations extracted from them) to where the current routing sends them. Idempotent: a record already in the right vault is left alone, and a fact the destination already has is not duplicated.",
         "operationId": "moveConnectorData",
         "parameters": [
           {
-            "name": "kind",
+            "name": "connector",
             "in": "path",
+            "description": "A connection id (`connector:...` or its key), or a connector kind for that kind's first connection.",
             "required": true,
             "schema": {
               "type": "string"
@@ -1341,17 +1442,18 @@
         ]
       }
     },
-    "/api/connectors/{kind}/test": {
+    "/api/connectors/{connector}/test": {
       "post": {
         "tags": [
           "connectors"
         ],
-        "summary": "Test a connector's credentials",
+        "summary": "Test a connection's credentials",
         "operationId": "testConnector",
         "parameters": [
           {
-            "name": "kind",
+            "name": "connector",
             "in": "path",
+            "description": "A connection id (`connector:...` or its key), or a connector kind for that kind's first connection.",
             "required": true,
             "schema": {
               "type": "string"
@@ -1507,6 +1609,15 @@
               "type": "integer",
               "format": "int64"
             }
+          },
+          {
+            "name": "vault_id",
+            "in": "query",
+            "description": "The vault (`vault:...`); default: the caller's personal vault (a vault-restricted token's own).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -1569,6 +1680,15 @@
             "name": "replace",
             "in": "query",
             "description": "Publish the body as a new revision of this document instead of a new document.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "vault_id",
+            "in": "query",
+            "description": "The vault a new document goes in (`vault:...`); default: the caller's personal vault (a vault-restricted token's own).",
             "required": false,
             "schema": {
               "type": "string"
@@ -3218,6 +3338,7 @@
           "sources"
         ],
         "summary": "Sync a source now",
+        "description": "`key` is a source key (its first connection) or a connection's key from `GET /api/sources` (`{source}~{instance}`).",
         "operationId": "syncSource",
         "parameters": [
           {
@@ -4534,10 +4655,30 @@
           }
         }
       },
-      "ConnectorOut": {
+      "ConnectorCreateBody": {
         "type": "object",
         "required": [
           "kind",
+          "label"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string",
+            "description": "A name for the new connection, for example the account's email address or the device's name."
+          }
+        }
+      },
+      "ConnectorOut": {
+        "type": "object",
+        "description": "One connection. A user may connect the same kind more than once (two Gmail accounts); each\nconnection has its own credentials, sync and records.",
+        "required": [
+          "id",
+          "kind",
+          "label",
+          "source_key",
           "enabled",
           "config",
           "credentials_set",
@@ -4556,8 +4697,16 @@
           "enabled": {
             "type": "boolean"
           },
+          "id": {
+            "type": "string",
+            "description": "The connection's id (`connector:...`). Routes taking `{connector}` accept it."
+          },
           "kind": {
             "type": "string"
+          },
+          "label": {
+            "type": "string",
+            "description": "The name the user gave this connection (an email address, a device name); \"\" if none."
           },
           "routing": {
             "$ref": "#/components/schemas/Routing",
@@ -4569,6 +4718,10 @@
               "type": "string"
             },
             "description": "The fields this connector's rules can match on."
+          },
+          "source_key": {
+            "type": "string",
+            "description": "This connection's key in `GET /api/sources` and `POST /api/sources/{key}/sync`: the source key for\na kind's first connection, `{source}~{instance}` for each one added after it."
           },
           "updated_at": {
             "type": "string"
@@ -4586,6 +4739,13 @@
               "null"
             ]
           },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Renames the connection."
+          },
           "routing": {
             "oneOf": [
               {
@@ -4593,7 +4753,7 @@
               },
               {
                 "$ref": "#/components/schemas/Routing",
-                "description": "Replaces the routing (destination vault and rules). It applies to records synced from now on;\n`POST /api/connectors/{kind}/move` re-files those already synced."
+                "description": "Replaces the routing (destination vault and rules). It applies to records synced from now on;\n`POST /api/connectors/{connector}/move` re-files those already synced."
               }
             ]
           }
@@ -4722,6 +4882,27 @@
         "properties": {
           "declined": {
             "type": "boolean"
+          }
+        }
+      },
+      "DeleteConnectorOut": {
+        "type": "object",
+        "required": [
+          "records",
+          "memories"
+        ],
+        "properties": {
+          "memories": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Extracted facts removed.",
+            "minimum": 0
+          },
+          "records": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Synced records removed.",
+            "minimum": 0
           }
         }
       },
@@ -6164,9 +6345,11 @@
       },
       "SourceOut": {
         "type": "object",
+        "description": "One connection of a source. A kind's first connection keeps the source key as its `key`; each one\nadded after it is `{source}~{instance}`.",
         "required": [
           "key",
           "label",
+          "account",
           "provider",
           "record_types",
           "connected",
@@ -6174,8 +6357,19 @@
           "record_count"
         ],
         "properties": {
+          "account": {
+            "type": "string",
+            "description": "The name the user gave the connection; \"\" if none."
+          },
           "connected": {
             "type": "boolean"
+          },
+          "connector": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The connection's id (`connector:...`); absent for a source never set up."
           },
           "key": {
             "type": "string"

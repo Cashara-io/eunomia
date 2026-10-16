@@ -2,11 +2,11 @@
 
 import { Fragment, use, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronRight, ExternalLink, Search, Settings2, Trash2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronRight, ExternalLink, Search, Settings2, Trash2, X } from "lucide-react";
 import type { ConnectorKind, SourceRow, ToolHit } from "@/lib/types";
 import { useDeleteConnectorData } from "@/lib/queries/connectors";
 import { useSources, useSyncSource } from "@/lib/queries/sources";
-import { useRecord, useSourceRecords, useSourceSearch } from "@/lib/queries/tools";
+import { RECORDS_PAGE, SEARCH_WINDOW, useRecord, useSourceRecords, useSourceSearch } from "@/lib/queries/tools";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import AuthorTag from "@/components/AuthorTag";
 import DigitRoll from "@/components/bits/DigitRoll";
@@ -178,6 +178,14 @@ function RecordRow({ hit }: { hit: ToolHit }) {
   );
 }
 
+/** "51 to 100 of 259" for the list, "51 to 100 matching" for a search; a single page reads as just its count. */
+function rangeLabel(offset: number, count: number, total: number | null, hasMore: boolean): string {
+  const onePage = offset === 0 && !hasMore;
+  const span = onePage ? count.toLocaleString() : `${(offset + 1).toLocaleString()} to ${(offset + count).toLocaleString()}`;
+  if (total === null) return `${span} matching`;
+  return onePage ? span : `${span} of ${total.toLocaleString()}`;
+}
+
 function Breadcrumb({ label }: { label: string }) {
   return (
     <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-[12.5px]" style={{ color: "var(--ink-faint)" }}>
@@ -215,7 +223,7 @@ function DeleteData({ row, kind }: { row: SourceRow; kind: ConnectorKind }) {
   async function run() {
     setError(null);
     try {
-      await del.mutateAsync(kind);
+      await del.mutateAsync(row.connector ?? kind);
       dialog.current?.close();
     } catch (e) {
       setError(failure(e, `Could not delete the ${row.label} data. Try again.`));
@@ -282,16 +290,22 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
   const [query, setQuery] = useState("");
   // The submitted search; "" shows the latest records.
   const [activeQuery, setActiveQuery] = useState("");
-  const listQuery = useSourceRecords(kind);
-  const searchQuery = useSourceSearch(kind, activeQuery);
+  // An added connection's key is `{source}~{instance}`; its records carry the plain source key.
+  const sourceKey = kind.split("~")[0];
+  // The offset of the page asked for, of the list or of the active search; a new search starts at 0.
+  const [offset, setOffset] = useState(0);
+  const listQuery = useSourceRecords(sourceKey, activeQuery ? 0 : offset);
+  const searchQuery = useSourceSearch(sourceKey, activeQuery, offset);
   const syncSource = useSyncSource();
   const shown = activeQuery ? (searchQuery.data ?? listQuery.data) : listQuery.data;
-  const results: ToolHit[] | null = activeQuery && searchQuery.isError ? [] : (shown ?? (listQuery.isError ? [] : null));
+  const results: ToolHit[] | null = activeQuery && searchQuery.isError ? [] : (shown?.results ?? (listQuery.isError ? [] : null));
   const searching = activeQuery !== "" && searchQuery.isFetching;
+  const paging = (activeQuery ? searchQuery : listQuery).isPlaceholderData;
+  const total = listQuery.data?.total ?? 0;
   // Records can outlive their connector (demo data, a removed connector): keep them readable under a read-only row.
-  const orphaned = listed === null && (listQuery.data?.length ?? 0) > 0;
+  const orphaned = listed === null && total > 0;
   const row: SourceRow | null | undefined = orphaned
-    ? { key: kind, label: formatKey(kind), provider: kind, record_types: [], connected: false, record_count: listQuery.data?.length ?? 0, sync_status: { cursor: "", last_run: null, last_ok: null, last_error: "", consecutive_failures: 0 } }
+    ? { key: kind, label: formatKey(kind), provider: kind, record_types: [], connected: false, record_count: total, sync_status: { cursor: "", last_run: null, last_ok: null, last_error: "", consecutive_failures: 0 } }
     : listed === null && listQuery.isPending
       ? undefined
       : listed;
@@ -302,6 +316,7 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
 
   function loadRecords() {
     setActiveQuery("");
+    setOffset(0);
     listQuery.refetch();
   }
 
@@ -314,6 +329,7 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
       searchQuery.refetch();
     } else {
       setActiveQuery(q);
+      setOffset(0);
     }
   }
 
@@ -378,7 +394,7 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
   }
 
   const hasRecords = row.record_count > 0;
-  const settingsHref = connectorKind ? `/connectors/setup/${connectorKind}` : null;
+  const settingsHref = connectorKind ? `/connectors/setup/${connectorKind}${row.connector ? `?connector=${encodeURIComponent(row.connector)}` : ""}` : null;
 
   if (!row.connected && !hasRecords) {
     return (
@@ -414,7 +430,7 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
         <div className="flex items-center gap-3 flex-wrap">
           <ConnectorTile kind={connectorKind ?? null} size={40} />
           <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-            <h1 className="page-title">{row.label}</h1>
+            <h1 className="page-title">{row.account ? `${row.label}: ${row.account}` : row.label}</h1>
             <span className="text-[12.5px] flex items-center gap-1.5" style={{ color: "var(--ink-dim)" }}>
               <span className="dot" style={{ background: h.tone }} aria-hidden />
               {row.connected ? "Connected" : orphaned ? "Source no longer connected, records kept" : "Seeded data, no live connection"}
@@ -448,7 +464,7 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
               </span>
             ),
           },
-          { label: "Writes as", value: <AuthorTag name={row.key} title={`Records from this connector carry the source key ${row.key}`} /> },
+          { label: "Writes as", value: <AuthorTag name={sourceKey} title={`Records from this connector carry the source key ${sourceKey}`} /> },
         ].map((s, i) => (
           <div
             key={s.label}
@@ -487,7 +503,7 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
           <h2 id="records-heading" className="section-title">
             Records{" "}
             <span className="font-mono font-normal" style={{ color: "var(--ink-faint)" }}>
-              {results && (activeQuery ? `${results.length} matching` : results.length > 0 ? `latest ${results.length} of ${row.record_count.toLocaleString()}` : "")}
+              {results && shown && results.length > 0 && rangeLabel(shown.offset, results.length, activeQuery ? null : total, shown.has_more)}
             </span>
           </h2>
           <form onSubmit={runSearch} className="field flex items-center gap-2 h-8 px-2.5 w-full sm:w-72" role="search">
@@ -560,6 +576,16 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
             </tbody>
           </table>
         </div>
+        {shown && (shown.offset > 0 || shown.has_more) && (
+          <nav aria-label="Record pages" className="flex justify-end gap-1.5">
+            <button type="button" className="btn btn-sm" disabled={paging || shown.offset === 0} onClick={() => setOffset(Math.max(0, shown.offset - RECORDS_PAGE))}>
+              <ArrowLeft size={14} strokeWidth={1.75} aria-hidden /> Previous
+            </button>
+            <button type="button" className="btn btn-sm" disabled={paging || !shown.has_more || (activeQuery !== "" && shown.offset + 2 * RECORDS_PAGE > SEARCH_WINDOW)} onClick={() => setOffset(shown.offset + RECORDS_PAGE)}>
+              Next <ArrowRight size={14} strokeWidth={1.75} aria-hidden />
+            </button>
+          </nav>
+        )}
       </section>
 
       {connectorKind && <DeleteData row={row} kind={connectorKind} />}

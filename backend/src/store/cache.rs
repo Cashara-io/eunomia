@@ -41,7 +41,7 @@ pub const UPSERT_RECORD: Stmt = Stmt::new(
     "UPSERT $id SET owner = $owner, source = $source, type = $type, external_id = $external_id, \
      title = $title, body_text = $body_text, occurred_at = $occurred_at, url = $url, \
      payload = $payload, content_hash = $content_hash, ingested_at = $ingested_at, \
-     updated_at = $updated_at, deleted = $deleted, vault = $vault, route_keys = $route_keys RETURN AFTER",
+     updated_at = $updated_at, deleted = $deleted, vault = $vault, route_keys = $route_keys, connector = $connector RETURN AFTER",
 );
 /// Whether a stored record already has its embedding (an unchanged replayed record is re-embedded only if not).
 pub const HAS_EMBEDDING: Stmt = Stmt::new("cache.has_embedding", "SELECT VALUE embedding != NONE FROM ONLY $id");
@@ -111,16 +111,19 @@ pub const AUDIT_PAGE: Stmt = Stmt::new(
 );
 pub const AUDIT_COUNT: Stmt = Stmt::new("cache.audit_count", "SELECT count() FROM audit_log WHERE owner = $owner GROUP ALL");
 
-/// Deletes everything `$owner` has from `$source` (`sources::registry::delete_data`): the facts
-/// drawn from its records, then (like deleting one memory) each affected subject's observations lose
-/// those facts from their lineage and go stale, or are deleted when nothing else backs them; relations
-/// extracted from its records; links either end of which is one of its records; the records
-/// themselves; and the source's own tables (heypocket's `pocket_recording`). Entities, the
-/// connector's credentials and its sync cursor stay. One transaction.
+/// Deletes everything `$owner` has from one connection of `$source` (`sources::registry::delete_data`):
+/// its records are those it synced (`connector = $connector`) plus, for a kind's first connection
+/// (`$first`), the ones synced before 2.0.4 (`connector = NONE`). Then the facts drawn from them and
+/// (like deleting one memory) each affected subject's observations lose those facts from their lineage
+/// and go stale, or are deleted when nothing else backs them; relations extracted from them; links
+/// either end of which is one of them; the records themselves; and their heypocket `pocket_recording`
+/// rows. Entities, the connector's credentials and its sync cursor stay. One transaction.
 pub const DELETE_SOURCE_DATA: Stmt = Stmt::at(
     "cache.delete_source_data",
     r#"BEGIN TRANSACTION;
-        LET $mems = (SELECT id, subject FROM memory WHERE source.owner = $owner AND source.source = $source);
+        LET $records = (SELECT VALUE id FROM cache_record WHERE owner = $owner AND source = $source
+            AND (connector = $connector OR ($first AND connector = NONE)));
+        LET $mems = (SELECT id, subject FROM memory WHERE source IN $records);
         LET $ids = $mems.id;
         LET $subjects = array::distinct($mems.subject);
         DELETE $ids;
@@ -129,14 +132,14 @@ pub const DELETE_SOURCE_DATA: Stmt = Stmt::at(
         UPDATE memory SET status = "stale", updated_at = time::now(),
             source_memories = IF source_memories THEN array::complement(source_memories, $ids) ELSE NONE END
             WHERE type = "observation" AND subject IN $subjects;
-        DELETE relates_to WHERE source.owner = $owner AND source.source = $source;
-        DELETE linked_to WHERE (in.owner = $owner AND in.source = $source) OR (out.owner = $owner AND out.source = $source);
-        LET $records = (SELECT VALUE id FROM cache_record WHERE owner = $owner AND source = $source);
+        DELETE relates_to WHERE source IN $records;
+        DELETE linked_to WHERE in IN $records OR out IN $records;
+        DELETE pocket_recording WHERE owner = $owner
+            AND recording_id IN (SELECT VALUE external_id FROM $records WHERE type = "heypocket.recording");
         DELETE $records;
-        DELETE pocket_recording WHERE owner = $owner AND $source = "heypocket";
         RETURN { records: array::len($records), memories: array::len($ids) };
         COMMIT TRANSACTION;"#,
-    12, // BEGIN 0, three LETs 1 to 3, four writes 4 to 8, LET 9, DELETE 10, DELETE 11, RETURN 12
+    12, // BEGIN 0, four LETs 1 to 4, six writes 5 to 10, DELETE 11, RETURN 12
 );
 
 pub const ALL: &[&Stmt] = &[

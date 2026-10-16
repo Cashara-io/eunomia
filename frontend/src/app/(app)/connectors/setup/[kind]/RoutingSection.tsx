@@ -9,7 +9,7 @@ import SyncMark from "@/components/bits/SyncMark";
 import Tooltip from "@/components/bits/Tooltip";
 import { useVaults } from "@/lib/queries/vaults";
 import { useMoveConnectorData, useUpdateConnector } from "@/lib/queries/connectors";
-import type { Connector, ConnectorKind, MoveReport, Routing, Vault } from "@/lib/types";
+import type { Connector, MoveReport, Routing, Vault } from "@/lib/types";
 
 const ICON = { size: 14, strokeWidth: 1.75 } as const;
 
@@ -42,7 +42,7 @@ function moved(r: MoveReport): string {
 
 /** Where a connector's records go: a destination vault, ordered rules that send matching records
  * elsewhere, and "Move existing data" to re-file what was synced before the current routing. */
-export default function RoutingSection({ kind, label, connector }: { kind: ConnectorKind; label: string; connector: Connector }) {
+export default function RoutingSection({ label, connector }: { label: string; connector: Connector }) {
   const vaults = useVaults().data;
   const update = useUpdateConnector();
   const move = useMoveConnectorData();
@@ -98,7 +98,7 @@ export default function RoutingSection({ kind, label, connector }: { kind: Conne
     try {
       const body: Routing = { rules: routing.rules.map((r) => ({ ...r, value: r.value.trim() })) };
       if (routing.default_vault && routing.default_vault !== personal?.id) body.default_vault = routing.default_vault;
-      await update.mutateAsync({ kind, body: { routing: body } });
+      await update.mutateAsync({ connector: connector.id, body: { routing: body } });
       setDraft(null);
       setSavedFlash(true);
       setTimeout(() => setSavedFlash(false), 1400);
@@ -113,7 +113,7 @@ export default function RoutingSection({ kind, label, connector }: { kind: Conne
     setMoving(true);
     setMoveResult(null);
     try {
-      setMoveResult({ ok: true, text: moved(await move.mutateAsync(kind)) });
+      setMoveResult({ ok: true, text: moved(await move.mutateAsync(connector.id)) });
     } catch (e) {
       setMoveResult({ ok: false, text: failure(e, "Could not move the data.", " Try again.").message });
     } finally {

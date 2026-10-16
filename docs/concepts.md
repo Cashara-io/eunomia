@@ -43,7 +43,7 @@ ids stay unambiguous in a shared vault.
 ## Entities and memories
 
 Entities are people, organisations, locations, repositories, files and
-symbols. Each one has **memories**:
+symbols, plus any **custom kinds** your agents create. Each one has **memories**:
 
 | Type | Meaning |
 |---|---|
@@ -83,6 +83,20 @@ loser's facts and relations move to the winner, its name and aliases become
 the winner's aliases, and if both had an observation they become one stale
 observation to be rebuilt. Relations (`works_at`, `calls`, …) link entities,
 and an edge with the same label is stored only once.
+
+### Entity kinds
+
+The six built-in kinds are fixed. Any other kind is your agent's own: write
+a memory with `subject_kind` set to a new lowercase name (`db`, `table`,
+`field`, `defect`, `decision`, `task`, ...) and the kind exists from then on
+in that vault. A kind name starts with a letter, then letters, digits or
+`_`, at most 32 characters, and a vault holds at most 50 custom kinds.
+`entity_types` lists the built-in kinds and the custom kinds in the vaults
+you read, with how many entities each has. A custom-kind entity works like
+any other: memories, relations, search, recall, merge (with one of the same
+kind), vault clone and merge, export. Kinds belong to their vault: another
+vault, and anyone who is not a member, never sees them. The Entities page
+shows a filter for each custom kind in the vault on screen.
 
 ## Synced records
 

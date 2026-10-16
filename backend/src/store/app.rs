@@ -13,9 +13,11 @@ pub const ALL: &[&Stmt] = &[
     &CHAT_MESSAGES_FOR_OWNER,
     &CHAT_MESSAGE_CREATE,
     &CHAT_MESSAGES_CLEAR,
-    &CONNECTOR_BY_KIND,
+    &CONNECTORS_OF_KIND,
+    &CONNECTORS_OF_OWNER,
     &CONNECTOR_CREATE,
     &CONNECTOR_ENABLED,
+    &CONNECTOR_DELETE,
     &AUDIT_LIST,
     &AUDIT_COUNT,
     &EXPORT_MEMORIES,
@@ -69,14 +71,22 @@ pub const CHAT_MESSAGE_CREATE: Stmt = Stmt::new(
 pub const CHAT_MESSAGES_CLEAR: Stmt =
     Stmt::new("app.chat_messages_clear", "DELETE chat_message WHERE owner = $owner AND thread_id = $thread_id");
 
-pub const CONNECTOR_BY_KIND: Stmt =
-    Stmt::new("app.connector_by_kind", "SELECT * FROM connector WHERE owner = $owner AND kind = $kind LIMIT 1");
+/// Every connection of one kind (a handful at most); callers pick one by its `instance`.
+pub const CONNECTORS_OF_KIND: Stmt =
+    Stmt::new("app.connectors_of_kind", "SELECT * FROM connector WHERE owner = $owner AND kind = $kind");
 
-pub const CONNECTOR_CREATE: Stmt =
-    Stmt::new("app.connector_create", "CREATE connector SET owner = $owner, kind = $kind RETURN AFTER");
+pub const CONNECTORS_OF_OWNER: Stmt = Stmt::new("app.connectors_of_owner", "SELECT * FROM connector WHERE owner = $owner");
+
+pub const CONNECTOR_CREATE: Stmt = Stmt::new(
+    "app.connector_create",
+    "CREATE $id SET owner = $owner, kind = $kind, instance = $instance, label = $label RETURN AFTER",
+);
 
 pub const CONNECTOR_ENABLED: Stmt =
-    Stmt::new("app.connector_enabled", "SELECT kind, config FROM connector WHERE owner = $owner AND enabled = true");
+    Stmt::new("app.connector_enabled", "SELECT * FROM connector WHERE owner = $owner AND enabled = true");
+
+/// Removes one connection and its sync status (its data goes first, `cache::DELETE_SOURCE_DATA`).
+pub const CONNECTOR_DELETE: Stmt = Stmt::new("app.connector_delete", "DELETE $status; DELETE $id;");
 
 pub const AUDIT_LIST: Stmt = Stmt::new(
     "app.audit_list",
@@ -106,7 +116,7 @@ pub const SOURCES_SYNC_STATUS_LIST: Stmt =
 
 pub const SOURCES_RECORD_COUNTS: Stmt = Stmt::new(
     "app.sources_record_counts",
-    "SELECT source, count() AS count FROM cache_record WHERE owner = $owner AND deleted = false GROUP BY source",
+    "SELECT source, connector, count() AS count FROM cache_record WHERE owner = $owner AND deleted = false GROUP BY source, connector",
 );
 
 pub const SOURCES_HEYPOCKET_RECENT: Stmt = Stmt::new(
