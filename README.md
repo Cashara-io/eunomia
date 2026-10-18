@@ -1,5 +1,12 @@
 <div align="center">
 
+<a href="https://www.buildpaperless.com.au/eunomia">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/paperless-logo-light.png">
+    <img src="docs/images/paperless-logo-dark.png" alt="Paperless" width="180">
+  </picture>
+</a>
+
 # Eunomia
 
 ```bash
@@ -270,9 +277,14 @@ The core user guides are also available on the app's Docs page and through
 the `docs` MCP tool. Developer references are listed in the
 [docs index](docs/README.md).
 
+## Support
+
+Questions, bugs or commercial licensing: [developers@buildpaperless.com.au](mailto:developers@buildpaperless.com.au).
+Bugs and feature requests can also go in [GitHub issues](https://github.com/Cashara-io/eunomia/issues).
+
 ## License
 
 Free for personal and noncommercial use under the [PolyForm Noncommercial License 1.0.0](LICENSE).
-Commercial use needs a paid license: [get in touch](https://www.buildpaperless.com.au/contact).
+Commercial use needs a paid license: email [developers@buildpaperless.com.au](mailto:developers@buildpaperless.com.au).
 
 © Midhun Kumar
