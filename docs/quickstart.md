@@ -5,7 +5,7 @@
 You need git and Docker (with the Compose plugin), running.
 
 ```bash
-curl -fsSL https://midhunkumar05.github.io/eunomia/install.sh | bash
+curl -fsSL https://www.buildpaperless.com.au/eunomia/install.sh | bash
 ```
 
 The installer asks a few questions (Enter accepts each default), shows a

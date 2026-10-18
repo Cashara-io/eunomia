@@ -471,7 +471,7 @@ The bits components (`frontend/src/components/bits/`, styles in `bits.css`):
 - **Tooltip / TooltipGroup:** see Tooltip above. Sidebar footer, icon-only toolbar buttons across chat, connectors, vaults, settings, docs, skill, entity graph and 3D scenes.
 - **Theme toggle:** Sun and Moon share a cell and blur-crossfade over 200ms; a pointer click grows the new theme as a circle from the button over 280ms via View Transitions; keyboard, reduced motion or no support swap instantly.
 
-**The Licence Rule.** Files in `bits/` are original implementations inspired by React Bits (reactbits.dev). React Bits is MIT plus Commons Clause and Eunomia is MIT, so no React Bits source is copied; each file opens with an "Inspired by React Bits <Name> (reactbits.dev). Original implementation for Eunomia." header, colours come only from globals.css tokens, and no new dependency is added.
+**The Licence Rule.** Files in `bits/` are original implementations inspired by React Bits (reactbits.dev). React Bits is MIT plus Commons Clause and Eunomia ships under its own license, so no React Bits source is copied; each file opens with an "Inspired by React Bits <Name> (reactbits.dev). Original implementation for Eunomia." header, colours come only from globals.css tokens, and no new dependency is added.
 
 **The One Moment Rule.** At most one authored motion moment per surface; everything else is press feedback and pop-in entrances under 300ms.
 

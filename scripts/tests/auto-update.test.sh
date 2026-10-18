@@ -196,5 +196,10 @@ check "healed: marker cleared" test ! -e "$S/heal"
 : > "$TMP/docker.log"; update
 check "no marker: a service stopped by hand stays stopped" test -z "$(cat "$TMP/docker.log")"
 rm -f "$TMP/ps"
+
+# installs cloned from the old Qyrhal/Eunomia repo are moved to Cashara-io/eunomia
+(cd "$TMP/repo" && git remote set-url origin https://github.com/Qyrhal/Eunomia.git)
+rm -f "$S/status.json"; GIT_TERMINAL_PROMPT=0 GIT_ALLOW_PROTOCOL=file update
+check "old origin repointed" test "$(git -C "$TMP/repo" remote get-url origin)" = https://github.com/Cashara-io/eunomia.git
 echo "auto-update: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

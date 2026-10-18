@@ -63,7 +63,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
 
   backend:
-    image: ghcr.io/qyrhal/eunomia-backend:${EUNOMIA_IMAGE_TAG:-latest}
+    image: ghcr.io/cashara-io/eunomia-backend:${EUNOMIA_IMAGE_TAG:-latest}
     build:
       context: ./backend
       additional_contexts:
@@ -134,7 +134,7 @@ services:
   frontend:
     # come back after a crash or reboot, like the backend
     restart: unless-stopped
-    image: ghcr.io/qyrhal/eunomia-frontend:${EUNOMIA_IMAGE_TAG:-latest}
+    image: ghcr.io/cashara-io/eunomia-frontend:${EUNOMIA_IMAGE_TAG:-latest}
     build: ./frontend
     ports:
       # Set FRONTEND_BIND=127.0.0.1 when a reverse proxy runs on this host (docs/deployment.md).
@@ -190,7 +190,7 @@ services:
   # volume (see backend/scripts/backup/). No ports. If BACKUP_ENCRYPTION_KEY is
   # empty it generates a key into the volume on first start (see docs/deployment.md).
   backup:
-    image: ghcr.io/qyrhal/eunomia-backup:${EUNOMIA_IMAGE_TAG:-latest}
+    image: ghcr.io/cashara-io/eunomia-backup:${EUNOMIA_IMAGE_TAG:-latest}
     build: ./backend/scripts/backup
     restart: unless-stopped
     environment:
