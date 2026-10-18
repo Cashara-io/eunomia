@@ -7,9 +7,9 @@ multi-arch, so Docker pulls the native one.
 ## The installer
 
 ```bash
-curl -fsSL https://midhunkumar05.github.io/eunomia/install.sh | bash
+curl -fsSL https://www.buildpaperless.com.au/eunomia/install.sh | bash
 # unattended, with options:
-curl -fsSL https://midhunkumar05.github.io/eunomia/install.sh | bash -s -- --yes --dir ~/eunomia
+curl -fsSL https://www.buildpaperless.com.au/eunomia/install.sh | bash -s -- --yes --dir ~/eunomia
 ```
 
 It runs four steps: check the machine (installing anything missing), choose a
@@ -58,7 +58,7 @@ HTTPS shows when it's active.
 If you're an agent installing Eunomia for your operator, run:
 
 ```bash
-curl -fsSL https://midhunkumar05.github.io/eunomia/install.sh | bash -s -- --yes
+curl -fsSL https://www.buildpaperless.com.au/eunomia/install.sh | bash -s -- --yes
 ```
 
 With no terminal it runs unattended. It detects which agent you are (Claude
@@ -75,7 +75,7 @@ you aren't detected. Then:
 ## Manual install
 
 ```bash
-git clone https://github.com/Qyrhal/Eunomia.git && cd Eunomia
+git clone https://github.com/Cashara-io/eunomia.git && cd Eunomia
 cp .env.example .env   # set JWT_SECRET, ENCRYPTION_KEY, SURREAL_PASS: openssl rand -base64 32
 docker compose pull && docker compose up -d
 ./scripts/connect-agents.sh --email you@example.com --password '…'   # optional

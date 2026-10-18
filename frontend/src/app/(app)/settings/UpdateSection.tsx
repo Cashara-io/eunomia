@@ -9,7 +9,7 @@ import type { UpdateStatus } from "@/lib/types";
 import SyncMark from "@/components/bits/SyncMark";
 import { ICON, CopyField, relativeTime, PanelHead } from "./shared";
 
-const INSTALL_CMD = "curl -fsSL https://midhunkumar05.github.io/eunomia/install.sh | bash";
+const INSTALL_CMD = "curl -fsSL https://www.buildpaperless.com.au/eunomia/install.sh | bash";
 
 // idle -> waiting (marker dropped, updater picks it up within ~20s) -> applying
 // -> restarting (API briefly unreachable) -> reload once the new version answers.
@@ -129,7 +129,7 @@ export function UpdateSection() {
     );
   }
 
-  const notes = `https://github.com/Qyrhal/Eunomia/releases/tag/${encodeURIComponent(status.latest_version)}`;
+  const notes = `https://github.com/Cashara-io/eunomia/releases/tag/${encodeURIComponent(status.latest_version)}`;
   const line = done
     ? `Updated to ${target}. Reloading…`
     : phase === "waiting"

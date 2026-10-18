@@ -44,6 +44,11 @@ main() {
   https_apply "$status_dir"
   heal_stack "$status_dir"
 
+  # Eunomia moved from Qyrhal/Eunomia: installs cloned from there follow it.
+  case "$(git remote get-url origin 2>/dev/null)" in
+    *[Qq]yrhal/[Ee]unomia*) git remote set-url origin https://github.com/Cashara-io/eunomia.git ;;
+  esac
+
   # Nothing requested and checked recently: skip the network round-trip.
   if [ ! -f "$status_dir/requested" ] && [ ! -f "$status_dir/check" ] \
     && [ -n "$(find "$status_dir/status.json" -mmin -$CHECK_EVERY_MIN 2>/dev/null)" ]; then

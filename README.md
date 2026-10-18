@@ -3,7 +3,7 @@
 # Eunomia
 
 ```bash
-curl -fsSL https://midhunkumar05.github.io/eunomia/install.sh | bash
+curl -fsSL https://www.buildpaperless.com.au/eunomia/install.sh | bash
 ```
 
 **Vaults for persistent, shared AI memory.**
@@ -12,9 +12,9 @@ Give each project, client or team its own memory vault. Keep its people,
 facts and decisions together, share it with collaborators, and let your
 agents pick up that context across sessions.
 
-[![CI](https://github.com/Qyrhal/Eunomia/actions/workflows/ci.yml/badge.svg)](https://github.com/Qyrhal/Eunomia/actions/workflows/ci.yml)
-[![Latest release](https://img.shields.io/github/v/release/Qyrhal/Eunomia?label=release)](https://github.com/Qyrhal/Eunomia/releases/latest)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/Cashara-io/eunomia/actions/workflows/ci.yml/badge.svg)](https://github.com/Cashara-io/eunomia/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/Cashara-io/eunomia?label=release)](https://github.com/Cashara-io/eunomia/releases/latest)
+[![License: PolyForm Noncommercial](https://img.shields.io/badge/License-PolyForm%20Noncommercial-blue.svg)](LICENSE)
 
 ![Scattered knowledge becoming a connected memory graph](docs/images/eunomia-cover.png)
 
@@ -272,4 +272,7 @@ the `docs` MCP tool. Developer references are listed in the
 
 ## License
 
-[MIT](LICENSE) © [Midhun Kumar](https://midhunkumar05.github.io/)
+Free for personal and noncommercial use under the [PolyForm Noncommercial License 1.0.0](LICENSE).
+Commercial use needs a paid license: [get in touch](https://www.buildpaperless.com.au/contact).
+
+© Midhun Kumar

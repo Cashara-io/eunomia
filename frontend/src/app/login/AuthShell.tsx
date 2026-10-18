@@ -23,7 +23,7 @@ export default function AuthShell({ children }: { children: React.ReactNode }) {
         <main className="flex-1 flex items-start sm:items-center justify-center pt-16 pb-12 sm:py-12">
           <div className="w-full max-w-[340px]">{children}</div>
         </main>
-        <p className="label">Self-hosted and MIT licensed.</p>
+        <p className="label">Self-hosted. Free for personal use.</p>
       </div>
       <AgentCanvas />
       <InputModeTracker />

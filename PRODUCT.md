@@ -43,7 +43,7 @@ Self-hosted (Docker Compose or `./run.sh`), Rust/Axum backend on :8001, Next.js 
 ## Evidence on Hand
 
 - No customer logos, testimonials, usage numbers or benchmarks exist. Do not invent any.
-- License: MIT.
+- License: PolyForm Noncommercial 1.0.0 (free for personal use; commercial use is paid).
 
 ## Product Principles
 

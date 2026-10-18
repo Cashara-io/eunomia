@@ -65,7 +65,7 @@ jobs:
           provenance: false # plain per-arch manifests, so they can be joined below
           build-args: APP_VERSION=${{ env.TAG }}
           build-contexts: docs=./docs
-          tags: ghcr.io/qyrhal/eunomia-${{ matrix.image }}:${{ env.TAG }}-${{ matrix.arch }}
+          tags: ghcr.io/cashara-io/eunomia-${{ matrix.image }}:${{ env.TAG }}-${{ matrix.arch }}
 
   manifest:
     needs: build
@@ -84,7 +84,7 @@ jobs:
 
       - name: Join amd64 + arm64 into one tag
         env:
-          IMAGE: ghcr.io/qyrhal/eunomia-${{ matrix.image }}
+          IMAGE: ghcr.io/cashara-io/eunomia-${{ matrix.image }}
           LATEST: ${{ github.event_name == 'push' || inputs.latest }}
         run: |
           tags=(-t "$IMAGE:$TAG")
