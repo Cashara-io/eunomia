@@ -175,8 +175,9 @@ async fn prune_capsules(state: AppState, _job: Job) -> Result<(), JobError> {
     Ok(crate::capsules::prune_default(&state.control).await?)
 }
 
-/// Audit events past `AUDIT_RETENTION_DAYS` and sessions expired for `SESSION_RETENTION_DAYS`.
+/// Tool-usage hours past `TOOL_USAGE_RETENTION_DAYS`, audit events past `AUDIT_RETENTION_DAYS` and sessions expired for `SESSION_RETENTION_DAYS`.
 async fn prune_auth(state: AppState, _job: Job) -> Result<(), JobError> {
+    crate::usage::prune_default(&state.control).await?;
     Ok(crate::audit::prune_default(&state.control).await?)
 }
 

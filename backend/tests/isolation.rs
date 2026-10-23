@@ -319,6 +319,7 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         DELETE membership WHERE user = $u;
         CREATE $mem SET user = $u, org = $org, role = 'owner';
         CREATE audit_event SET user = $u, actor_kind = 'user', actor_id = 'plant', action = 'plant', target = $c, outcome = 'ok';
+        CREATE tool_usage SET org = $okey, bucket = time::now(), user = $u, actor_kind = 'user', actor_id = 'plant', channel = 'mcp', session = $c, tool = 'recall', calls = 1;
         LET $g = (CREATE oauth_grant SET owner = $u, client_id = 'client-x', client_name = $c, scope = ['memory:read'], resource = 'http://localhost:8001/mcp' RETURN VALUE id)[0];
         CREATE oauth_token SET kind = 'access', token_hash = $c, family = $g, expires_at = time::now() + 15m;
         CREATE oauth_code SET code_hash = $c, owner = $u, client_id = 'client-x', redirect_uri = 'http://localhost/cb', code_challenge = $c, scope = ['memory:read'], resource = 'http://x', expires_at = time::now() + 1m;
@@ -328,6 +329,7 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         .test_raw()
         .query(control_sql)
         .bind(("org", user.org.record()))
+        .bind(("okey", user.org.to_string()))
         .bind(("u", uid.clone()))
         .bind(("c", canary.clone()))
         .bind(("mem", surrealdb::types::RecordId::new("membership", canary.clone())))

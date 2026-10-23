@@ -174,7 +174,7 @@ Sources: [adapter contract](../backend/src/sources/base.rs),
 | Memories | `memory` | Facts (`world`), events (`experience`) and consolidated beliefs (`observation`) |
 | Entity relations | `relates_to` | Labelled links such as `works_at`, `imports` or `calls` |
 | Org operations | Vault membership, connectors, sync status, settings, chat, audit log | Per-org permissions, encrypted credentials and operational state |
-| Control | Users, org memberships, sessions, tokens, OAuth grants, audit events, jobs, failure capsules, org routing | Identity and instance-wide state, kept in the `control` database |
+| Control | Users, org memberships, sessions, tokens, OAuth grants, audit events, tool-call usage counters, jobs, failure capsules, org routing | Identity and instance-wide state, kept in the `control` database |
 
 Every row above except Control lives in the org's own database. SurrealDB
 holds graph relations, one BM25 `FULLTEXT` index per text field and a cosine
