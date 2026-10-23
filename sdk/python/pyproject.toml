@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eunomia"
+version = "0.1.0"
+description = "Python client for the Eunomia REST API: manage vaults and read and write memories."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = []
+
+[tool.setuptools]
+packages = ["eunomia"]
+
+[tool.setuptools.package-data]
+eunomia = ["py.typed"]
