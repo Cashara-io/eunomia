@@ -105,7 +105,7 @@ fn no_store(mut r: Response) -> Response {
 }
 
 /// Back to the login page with a short code the page turns into a message.
-fn login_error(state: &AppState, code: &str, next: &str, clear: String) -> Response {
+fn login_error(code: &str, next: &str, clear: String) -> Response {
     let mut q = vec![("oidc_error", code)];
     if next != "/" {
         q.push(("next", next));
@@ -143,7 +143,7 @@ async fn start(State(state): State<AppState>, https: Option<Extension<ForwardedH
         Err(e) => {
             tracing::warn!(error = %e, "OIDC discovery failed");
             record_failure(&state, "provider", &e.to_string()).await;
-            return Ok(login_error(&state, "provider", &next, clear_flow_cookie(&state, https)));
+            return Ok(login_error("provider", &next, clear_flow_cookie(&state, https)));
         }
     };
     let flow = Flow {
@@ -303,7 +303,7 @@ async fn callback(State(state): State<AppState>, https: Option<Extension<Forward
                 tracing::info!(reason = %fail.detail(), "OIDC sign-in refused");
             }
             audit::record(&state.control, Event { user: None, actor: &audit::anonymous(), action: "auth.oidc_login", target: "", outcome: fail.outcome().as_str(), detail: &fail.detail() }).await;
-            Ok(login_error(&state, fail.code(), &next, clear))
+            Ok(login_error(fail.code(), &next, clear))
         }
     }
 }
