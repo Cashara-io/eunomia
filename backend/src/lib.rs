@@ -20,6 +20,7 @@ pub mod llm_net;
 pub mod migrate;
 pub mod models_user;
 pub mod oauth;
+pub mod oidc;
 pub mod openapi;
 pub mod pool;
 pub mod provisioning;
@@ -81,7 +82,8 @@ pub fn app_with(state: AppState, limits: ratelimit::RateConfig) -> axum::Router 
         .merge(routers::tools::router())
         .merge(routers::sources::router())
         .merge(routers::sources::webhook_router())
-        .merge(routers::oauth::router());
+        .merge(routers::oauth::router())
+        .merge(routers::oidc::router());
 
     // Browser-based MCP clients (for example MCP Inspector) run on any origin and
     // authenticate with a bearer token only, so these routes answer CORS for any

@@ -15,6 +15,7 @@ pub const ALL: &[&ControlStmt] = &[
     &AUTH_USER_ID_BY_EMAIL,
     &AUTH_USER_CREATE,
     &AUTH_USER_BY_EMAIL,
+    &AUTH_USER_BY_ID,
     &AUTH_USER_COUNT,
     &AUTH_USER_ONBOARDED,
     &AUTH_USER_DELETE,
@@ -56,6 +57,12 @@ pub const ALL: &[&ControlStmt] = &[
     &USER_EMAIL_LC_BACKFILL,
     &USER_IDS_OLDEST_FIRST,
     &MEMBERSHIP_DELETE_USER,
+    &IDENTITY_FIND,
+    &IDENTITY_CREATE,
+    &IDENTITY_TOUCH,
+    &IDENTITY_LIST_FOR_USER,
+    &IDENTITY_DELETE_USER,
+    &AUTH_SESSION_REVOKE_OWNER,
 ];
 
 pub const AUTH_SESSION_CREATE: ControlStmt =
@@ -99,6 +106,8 @@ pub const AUTH_USER_CREATE: ControlStmt =
 
 pub const AUTH_USER_BY_EMAIL: ControlStmt =
     ControlStmt::new("app.auth_user_by_email", "SELECT * FROM user WHERE email_lc = $email LIMIT 1");
+
+pub const AUTH_USER_BY_ID: ControlStmt = ControlStmt::new("app.auth_user_by_id", "SELECT * FROM user WHERE id = $id LIMIT 1");
 
 pub const AUTH_USER_COUNT: ControlStmt = ControlStmt::new("app.auth_user_count", "SELECT count() FROM user GROUP ALL");
 
@@ -314,3 +323,28 @@ pub const READY_PING: ControlStmt = ControlStmt::new("app.ready_ping", "RETURN 1
 
 /// `/readyz`: the newest control migration applied.
 pub const READY_VERSION: ControlStmt = ControlStmt::new("app.ready_version", "SELECT version FROM _migration ORDER BY version DESC LIMIT 1");
+
+/// The user a provider identity signs in as.
+pub const IDENTITY_FIND: ControlStmt =
+    ControlStmt::new("control.identity_find", "SELECT user FROM identity WHERE issuer = $issuer AND subject = $subject LIMIT 1");
+
+/// Links a provider identity to a user; the unique (issuer, subject) index makes a lost race an error.
+pub const IDENTITY_CREATE: ControlStmt = ControlStmt::new(
+    "control.identity_create",
+    "CREATE identity SET user = $user, issuer = $issuer, subject = $subject, email = $email, last_login_at = time::now()",
+);
+
+pub const IDENTITY_TOUCH: ControlStmt = ControlStmt::new(
+    "control.identity_touch",
+    "UPDATE identity SET last_login_at = time::now(), email = $email WHERE issuer = $issuer AND subject = $subject",
+);
+
+/// The providers a user can sign in with (Settings shows which).
+pub const IDENTITY_LIST_FOR_USER: ControlStmt = ControlStmt::new("control.identity_list_for_user", "SELECT issuer FROM identity WHERE user = $user");
+
+/// Signup cleanup: every identity of a user whose signup failed.
+pub const IDENTITY_DELETE_USER: ControlStmt = ControlStmt::new("control.identity_delete_user", "DELETE identity WHERE user = $user");
+
+/// Ends every browser session of a user (linking a provider to an existing account signs its other sessions out).
+pub const AUTH_SESSION_REVOKE_OWNER: ControlStmt =
+    ControlStmt::new("control.auth_session_revoke_owner", "UPDATE session SET revoked = true WHERE owner = $owner AND revoked = false");

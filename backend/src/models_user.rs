@@ -27,7 +27,10 @@ pub struct User {
 struct UserRow {
     id: RecordId,
     email: String,
-    password_hash: String,
+    /// `None` for an account made by an OpenID Connect provider: it has no password to check.
+    #[serde(default)]
+    #[surreal(default)]
+    password_hash: Option<String>,
 }
 
 /// bcrypt at cost 12 takes a few hundred ms of CPU: it runs on the blocking pool, and at most a few
@@ -69,9 +72,8 @@ pub fn normalize_email(email: &str) -> String {
     email.trim().to_lowercase()
 }
 
-/// Expects an already-normalized email. bcrypt silently ignores everything
-/// past 72 bytes, so longer passwords are rejected rather than truncated.
-pub fn validate_credentials(email: &str, password: &str) -> AppResult<()> {
+/// Expects an already-normalized email.
+pub fn validate_email(email: &str) -> AppResult<()> {
     let valid_email = match email.split_once('@') {
         Some((local, domain)) => {
             !local.is_empty() && domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
@@ -79,9 +81,16 @@ pub fn validate_credentials(email: &str, password: &str) -> AppResult<()> {
         }
         None => false,
     };
-    if !valid_email {
+    if !valid_email || email.len() > 254 {
         return Err(AppError::bad_request("Enter a valid email address."));
     }
+    Ok(())
+}
+
+/// Expects an already-normalized email. bcrypt silently ignores everything
+/// past 72 bytes, so longer passwords are rejected rather than truncated.
+pub fn validate_credentials(email: &str, password: &str) -> AppResult<()> {
+    validate_email(email)?;
     if password.chars().count() < 8 {
         return Err(AppError::bad_request("Password must be at least 8 characters."));
     }
@@ -188,12 +197,24 @@ pub async fn register_user(state: &AppState, email: &str, password: &str) -> App
 /// [`register_user`] with the org choice explicit: `personal` gives the user an org of their own,
 /// otherwise they join the install's org.
 pub async fn register_user_with(state: &AppState, email: &str, password: &str, personal: bool) -> AppResult<User> {
-    let db = &state.control;
-    let email = &normalize_email(email);
-    validate_credentials(email, password)?;
+    let email = normalize_email(email);
+    validate_credentials(&email, password)?;
+    create_account(state, &email, Some(password), None, personal).await
+}
 
-    // Accounts created before emails were normalized may be mixed-case; the
-    // unique index alone wouldn't catch "Alice@x.com" vs "alice@x.com".
+/// An account made by a verified OpenID Connect sign-in: no password, linked to `(issuer, subject)`.
+/// The caller has already decided the signup is allowed and that no account owns `email`.
+pub async fn register_oidc_user(state: &AppState, email: &str, issuer: &str, subject: &str) -> AppResult<User> {
+    let email = normalize_email(email);
+    validate_email(&email)?;
+    create_account(state, &email, None, Some((issuer, subject)), signup_personal()).await
+}
+
+/// The shared signup: the user row (with a bcrypt hash of `password`, or none), the identity link if any,
+/// the org membership and the personal vault. Anything that fails leaves nothing behind.
+async fn create_account(state: &AppState, email: &str, password: Option<&str>, identity: Option<(&str, &str)>, personal: bool) -> AppResult<User> {
+    let db = &state.control;
+
     let mut res = store::control::AUTH_USER_ID_BY_EMAIL
         .on(db)
         .bind(("email", email.to_string()))
@@ -208,7 +229,10 @@ pub async fn register_user_with(state: &AppState, email: &str, password: &str, p
         return Err(AppError::coded(crate::error::ErrorCode::AuthEmailTaken, "A user with that email already exists."));
     }
 
-    let password_hash = hash_password(password).await?;
+    let password_hash = match password {
+        Some(p) => Some(hash_password(p).await?),
+        None => None,
+    };
 
     let mut res = store::control::AUTH_USER_CREATE
         .on(db)
@@ -231,8 +255,11 @@ pub async fn register_user_with(state: &AppState, email: &str, password: &str, p
     let setup = async {
         let org = assign_org(state, &row.id, email, personal).await?;
         joined = Some(org);
+        if let Some((issuer, subject)) = identity {
+            link_identity(&state.control, &row.id, issuer, subject, email).await?;
+        }
         #[cfg(feature = "test-support")]
-        if FAIL_SETUP_FOR.lock().is_ok_and(|f| f.as_deref() == Some(email.as_str())) {
+        if FAIL_SETUP_FOR.lock().is_ok_and(|f| f.as_deref() == Some(email)) {
             return Err(AppError::internal("injected signup failure"));
         }
         let orgdb = state.pool.for_org(&org).await?;
@@ -250,6 +277,7 @@ pub async fn register_user_with(state: &AppState, email: &str, password: &str, p
                 let vault = RecordId::from_table_key("vault", crate::tx::stable_key('p', &row.id.to_string()));
                 let _ = store::vaults::DELETE_VAULT.on(&orgdb).bind(("vault", vault)).await;
             }
+            let _ = store::control::IDENTITY_DELETE_USER.on(db).bind(("user", row.id.clone())).await;
             let _ = store::control::MEMBERSHIP_DELETE_USER.on(db).bind(("user", row.id.clone())).await;
             let _ = store::control::AUTH_USER_DELETE.on(db).bind(("id", row.id.clone())).await;
             Err(e)
@@ -260,6 +288,39 @@ pub async fn register_user_with(state: &AppState, email: &str, password: &str, p
 /// Test-only: the signup for this (normalized) email fails after its org is assigned, to prove the cleanup.
 #[cfg(feature = "test-support")]
 pub static FAIL_SETUP_FOR: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// Links a provider identity to a user. A second link for the same `(issuer, subject)` is a `DbDuplicate` error.
+pub async fn link_identity(db: &ControlDb, user: &RecordId, issuer: &str, subject: &str, email: &str) -> AppResult<()> {
+    store::control::IDENTITY_CREATE
+        .on(db)
+        .bind(("user", user.clone()))
+        .bind(("issuer", issuer.to_string()))
+        .bind(("subject", subject.to_string()))
+        .bind(("email", email.to_string()))
+        .await?
+        .check()?;
+    Ok(())
+}
+
+/// The user a provider identity signs in as, if it has been linked.
+pub async fn user_by_identity(db: &ControlDb, issuer: &str, subject: &str) -> AppResult<Option<User>> {
+    #[derive(Deserialize, SurrealValue)]
+    struct Row {
+        user: RecordId,
+    }
+    let mut res = store::control::IDENTITY_FIND.on(db).bind(("issuer", issuer.to_string())).bind(("subject", subject.to_string())).await?;
+    let Some(row) = res.take::<Vec<Row>>(0)?.into_iter().next() else { return Ok(None) };
+    let mut res = store::control::AUTH_USER_BY_ID.on(db).bind(("id", row.user)).await?;
+    let Some(user) = res.take::<Vec<UserRow>>(0)?.into_iter().next() else { return Ok(None) };
+    Ok(Some(load_user(db, user.id, user.email).await?))
+}
+
+/// The user with this (any-case) email, if there is one.
+pub async fn user_by_email(db: &ControlDb, email: &str) -> AppResult<Option<User>> {
+    let mut res = store::control::AUTH_USER_BY_EMAIL.on(db).bind(("email", normalize_email(email))).await?;
+    let Some(row) = res.take::<Vec<UserRow>>(0)?.into_iter().next() else { return Ok(None) };
+    Ok(Some(load_user(db, row.id, row.email).await?))
+}
 
 pub async fn authenticate(db: &ControlDb, email: &str, password: &str) -> AppResult<Option<User>> {
     let mut res = store::control::AUTH_USER_BY_EMAIL
@@ -273,7 +334,8 @@ pub async fn authenticate(db: &ControlDb, email: &str, password: &str) -> AppRes
         return Ok(None);
     };
 
-    if !verify_password(password, Some(&row.password_hash)).await {
+    // an account made by an OIDC provider has no hash: the same work as a wrong password, then no
+    if !verify_password(password, row.password_hash.as_deref()).await {
         return Ok(None);
     }
     Ok(Some(load_user(db, row.id, row.email).await?))

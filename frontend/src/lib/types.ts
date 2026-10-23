@@ -1,7 +1,7 @@
 // Domain types the pages use. They narrow the generated client's looser
 // shapes (string kinds become unions); the query hooks cast to them.
 
-export type Me = { id: string; email: string; onboarded: boolean };
+export type Me = { id: string; email: string; onboarded: boolean; has_password: boolean; oidc_provider?: string | null };
 
 export type Scope = "memory:read" | "memory:write" | "vaults:admin" | "connectors";
 export type ApiToken = {

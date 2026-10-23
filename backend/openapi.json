@@ -73,7 +73,7 @@
         "tags": [
           "auth"
         ],
-        "summary": "Whether any user exists yet",
+        "summary": "Whether any user exists yet, and how users sign in",
         "operationId": "getBootstrap",
         "responses": {
           "200": {
@@ -216,6 +216,111 @@
           {
             "bearer": []
           }
+        ]
+      }
+    },
+    "/api/auth/oidc/callback": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Finish signing in with the OpenID Connect provider",
+        "description": "The provider redirects the browser here with `code` and `state`. Starts a session and redirects to the page the sign-in began from, or to the login page with an `oidc_error` code.",
+        "operationId": "oidcCallback",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "description": "Authorization code",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "description": "Must match the flow cookie",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "description": "Set when the provider refused",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "iss",
+            "in": "query",
+            "description": "Issuer (RFC 9207)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "303": {
+            "description": "Redirect to the app or back to the login page"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/auth/oidc/start": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Begin signing in with the configured OpenID Connect provider",
+        "description": "Redirects the browser to the provider. `next` is a same-site path to return to afterwards (for example the OAuth consent page).",
+        "operationId": "oidcStart",
+        "parameters": [
+          {
+            "name": "next",
+            "in": "query",
+            "description": "Same-site path to open after sign-in",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "303": {
+            "description": "Redirect to the provider"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
         ]
       }
     },
@@ -4386,19 +4491,39 @@
           }
         }
       },
+      "AuthModeOut": {
+        "type": "string",
+        "enum": [
+          "password",
+          "both",
+          "oidc"
+        ]
+      },
       "AuthOut": {
         "type": "object",
         "required": [
           "id",
           "email",
-          "onboarded"
+          "onboarded",
+          "has_password"
         ],
         "properties": {
           "email": {
             "type": "string"
           },
+          "has_password": {
+            "type": "boolean",
+            "description": "False for an account made by an OpenID Connect provider: it has no password to change or use."
+          },
           "id": {
             "type": "string"
+          },
+          "oidc_provider": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The display name of the configured OpenID Connect provider when this account can sign in with it."
           },
           "onboarded": {
             "type": "boolean"
@@ -4454,11 +4579,23 @@
       "BootstrapOut": {
         "type": "object",
         "required": [
-          "has_users"
+          "has_users",
+          "auth_mode"
         ],
         "properties": {
+          "auth_mode": {
+            "$ref": "#/components/schemas/AuthModeOut",
+            "description": "Which sign-in methods the login and register pages offer."
+          },
           "has_users": {
             "type": "boolean"
+          },
+          "oidc_provider": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The button label (\"Continue with {oidc_provider}\") when an OpenID Connect provider is configured."
           }
         }
       },
