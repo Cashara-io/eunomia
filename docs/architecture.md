@@ -88,6 +88,10 @@ execute the same registered tools. The registry resolves vault names,
 checks access, and logs mutating calls. Chat streams its conversation and
 tool activity over SSE. MCP is stateless Streamable HTTP: JSON-RPC POST
 requests receive JSON replies, with no server-initiated stream.
+`initialize` returns an `Mcp-Session-Id` that names the tool surface (the
+build plus every tool's schema). After an upgrade changes a tool, a request
+with an older id gets 404, so a connected client re-initializes and picks up
+the new tool list without a restart. Nothing is stored server side.
 
 The same backend image runs as `api`, `worker` or `all` (the default):
 `api` serves HTTP, `worker` runs background jobs, and `all` does both in one
