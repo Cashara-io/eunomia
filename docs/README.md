@@ -12,6 +12,7 @@ operators and contributors.
 | [Documents](documents.md) | Uploading files: what is indexed, the MCP tools, storage (SurrealDB's built-in file buckets, optionally on S3), backups |
 | [Concepts](concepts.md) | Vaults, entities, memories, recall, merging, the graph and the 3D vector cloud |
 | [Connectors](connectors.md) | Credentials, source options and sync setup |
+| [Extensions](extensions.md) | Your own scripts feeding Eunomia: a webhook inbox that buffers events, batch claim/ack, the security model, and the plan for hosted runtimes |
 | [Deployment](deployment.md) | TLS, production env vars, updates, org databases, backups |
 
 ## Repository references

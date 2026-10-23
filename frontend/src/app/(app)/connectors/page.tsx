@@ -10,6 +10,7 @@ import { CONNECTOR_META, CONNECTOR_ORDER, ConnectorTile, connectorStatus, kindFo
 import { isLiveSource, sourceHealth } from "@/lib/sourceState";
 import ErrorLine, { failure } from "@/components/ErrorLine";
 import Tooltip from "@/components/bits/Tooltip";
+import ExtensionsSection from "./ExtensionsSection";
 
 type StatusFilter = "all" | "connected" | "disconnected";
 
@@ -217,6 +218,8 @@ export default function ConnectorsPage() {
           </div>
         </section>
       )}
+
+      {statusFilter !== "disconnected" && !q && <ExtensionsSection />}
 
       {statusFilter !== "connected" && (
         <section className="flex flex-col gap-3" aria-labelledby="catalogue-heading">

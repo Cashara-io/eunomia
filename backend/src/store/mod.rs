@@ -25,6 +25,7 @@ pub mod cache;
 pub mod control;
 pub mod documents;
 pub mod entities;
+pub mod extensions;
 pub mod jobs;
 pub mod routing;
 pub mod tenant;
@@ -238,7 +239,7 @@ pub const CONTROL_TABLES: &[&str] = &[
 pub const TENANT_TABLES: &[&str] = &[
     "app_settings", "vault", "vault_member", "connector", "sync_status", "cache_record", "linked_to", "person", "organisation", "location", "repository", "entity",
     "file", "symbol", "memory", "relates_to", "chat_thread", "chat_message", "audit_log", "embed_cache", "pocket_recording",
-    "document",
+    "document", "extension", "extension_event",
 ];
 
 /// The first table `sql` names that lives in the other database. A table is recognised where
@@ -308,7 +309,7 @@ pub fn crossing_table(sql: &str, in_org: bool) -> Option<String> {
 
 /// Every static tenant statement, for the `every_query_executes` test.
 pub fn all() -> Vec<&'static Stmt> {
-    [app::ALL, cache::ALL, documents::ALL, entities::ALL, jobs::ALL, routing::ALL, vaults::ALL].concat()
+    [app::ALL, cache::ALL, documents::ALL, entities::ALL, extensions::ALL, jobs::ALL, routing::ALL, vaults::ALL].concat()
 }
 
 /// Every static control statement.

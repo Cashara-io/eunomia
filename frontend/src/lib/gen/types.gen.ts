@@ -4,6 +4,13 @@ export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});
 };
 
+export type AckOut = {
+    /**
+     * Ids that were leased and are now done. Ids that are unknown, already done or not leased are skipped.
+     */
+    acked: number;
+};
+
 export type AuditEntry = {
     args_summary: string;
     created_at?: string | null;
@@ -92,6 +99,31 @@ export type ChunkRef = {
     chunk_id: string;
     has_embedding: boolean;
     part: number;
+};
+
+export type ClaimBody = {
+    /**
+     * How long the batch is yours, 5 to 3600 seconds; default 300. Ack or nack before it runs out,
+     * or the events go to the next claim.
+     */
+    lease_secs?: number | null;
+    /**
+     * 1 to 500; default 100.
+     */
+    max?: number | null;
+};
+
+export type ClaimOut = {
+    /**
+     * Oldest first. Empty when nothing is waiting.
+     */
+    events: Array<EventOut>;
+    extension_id: string;
+    lease_secs: number;
+    /**
+     * The extension's target vault, to pass as `vault_id` to the tools; `null` is your personal vault.
+     */
+    vault_id?: string | null;
 };
 
 export type CloneOut = {
@@ -214,6 +246,18 @@ export type ConsentResult = {
 export type ConsentScope = {
     description: string;
     scope: string;
+};
+
+export type CreateBody = {
+    description?: string | null;
+    /**
+     * 1 to 80 characters.
+     */
+    name: string;
+    /**
+     * A vault you belong to; omit for your personal vault.
+     */
+    vault_id?: string | null;
 };
 
 export type Credentials = {
@@ -355,6 +399,102 @@ export type EntityUpdate = {
     summary?: string | null;
 };
 
+export type EventDetail = {
+    attempts: number;
+    body: {
+        [key: string]: unknown;
+    };
+    claimed_until?: string | null;
+    delivery_id: string;
+    id: string;
+    last_error?: string | null;
+    received_at: string;
+    /**
+     * `pending`, `claimed`, `done` or `dead`.
+     */
+    status: string;
+};
+
+/**
+ * A claimed event, for the consumer.
+ */
+export type EventOut = {
+    /**
+     * How many times this event has been handed out, this claim included.
+     */
+    attempts: number;
+    /**
+     * The delivery's JSON body, as sent.
+     */
+    body: {
+        [key: string]: unknown;
+    };
+    /**
+     * The sender's delivery id (`X-Delivery-Id`, `X-GitHub-Delivery` or `Idempotency-Key`), or one we made up.
+     */
+    delivery_id: string;
+    /**
+     * `extension_event:...`; pass it back to ack or nack.
+     */
+    id: string;
+    received_at: string;
+};
+
+export type ExtensionOut = {
+    /**
+     * Leased to a consumer right now.
+     */
+    claimed: number;
+    created_at: string;
+    /**
+     * Handed out five times without an ack, or nacked at the last attempt (kept 30 days).
+     */
+    dead: number;
+    description: string;
+    /**
+     * Acked, until they are pruned (7 days).
+     */
+    done: number;
+    enabled: boolean;
+    /**
+     * `extension:...`
+     */
+    id: string;
+    last_delivery_at?: string | null;
+    name: string;
+    /**
+     * Waiting to be claimed, counting events whose lease ran out.
+     */
+    pending: number;
+    /**
+     * The last four characters of the current secret.
+     */
+    secret_hint: string;
+    secret_rotated_at: string;
+    updated_at: string;
+    /**
+     * The vault the script is expected to write to; `null` is your personal vault. Informational:
+     * the script passes it as `vault_id` to the tools.
+     */
+    vault_id?: string | null;
+    /**
+     * Where senders POST: `{PUBLIC_URL}/hooks/ext/{key}`.
+     */
+    webhook_url: string;
+};
+
+/**
+ * The only response that carries a secret in the clear.
+ */
+export type ExtensionWithSecret = {
+    extension: ExtensionOut;
+    /**
+     * Shown once. Send it as `Authorization: Bearer <secret>`, or sign the body with it
+     * (`X-Eunomia-Signature: sha256=<hex HMAC-SHA256>`). Rotate to get a new one.
+     */
+    secret: string;
+};
+
 export type FinanceAccount = {
     balance: string;
     name: string;
@@ -403,6 +543,17 @@ export type GraphOut = {
     nodes: Array<GraphNode>;
 };
 
+export type HookOut = {
+    /**
+     * The buffered event's id.
+     */
+    id: string;
+    /**
+     * `accepted`, or `duplicate` when this delivery id was already stored.
+     */
+    status: string;
+};
+
 /**
  * Body of the `POST /https` response.
  */
@@ -443,6 +594,13 @@ export type HttpsStatus = {
      * `off`, `pending` (waiting for the certificate), `active` or `error`.
      */
     state?: string | null;
+};
+
+export type IdsBody = {
+    /**
+     * Event ids from a claim, at most 500.
+     */
+    ids: Array<string>;
 };
 
 export type InvitationList = {
@@ -583,12 +741,44 @@ export type MoveReport = {
     relations: number;
 };
 
+export type NackBody = {
+    /**
+     * Why, kept on the event (500 characters).
+     */
+    error?: string | null;
+    ids: Array<string>;
+};
+
+export type NackOut = {
+    /**
+     * Handed out five times already, so dead-lettered instead.
+     */
+    dead: number;
+    /**
+     * Back to pending.
+     */
+    requeued: number;
+};
+
 export type OkBody = {
     ok: boolean;
     /**
      * Set on `/readyz` when the server is up but running on the public empty `ENCRYPTION_KEY`.
      */
     warning?: string | null;
+};
+
+export type PatchBody = {
+    description?: string | null;
+    /**
+     * `false` makes the inbox answer 403 `extension.disabled`; buffered events stay.
+     */
+    enabled?: boolean | null;
+    name?: string | null;
+    /**
+     * A vault you belong to; an empty string goes back to your personal vault; omit to keep it.
+     */
+    vault_id?: string | null;
 };
 
 export type PocketaiSummary = {
@@ -2290,6 +2480,251 @@ export type ExportDataResponses = {
 
 export type ExportDataResponse = ExportDataResponses[keyof ExportDataResponses];
 
+export type ListExtensionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/extensions';
+};
+
+export type ListExtensionsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListExtensionsError = ListExtensionsErrors[keyof ListExtensionsErrors];
+
+export type ListExtensionsResponses = {
+    200: Array<ExtensionOut>;
+};
+
+export type ListExtensionsResponse = ListExtensionsResponses[keyof ListExtensionsResponses];
+
+export type CreateExtensionData = {
+    body: CreateBody;
+    path?: never;
+    query?: never;
+    url: '/api/extensions';
+};
+
+export type CreateExtensionErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type CreateExtensionError = CreateExtensionErrors[keyof CreateExtensionErrors];
+
+export type CreateExtensionResponses = {
+    200: ExtensionWithSecret;
+};
+
+export type CreateExtensionResponse = CreateExtensionResponses[keyof CreateExtensionResponses];
+
+export type DeleteExtensionData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/extensions/{id}';
+};
+
+export type DeleteExtensionErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type DeleteExtensionError = DeleteExtensionErrors[keyof DeleteExtensionErrors];
+
+export type DeleteExtensionResponses = {
+    200: OkBody;
+};
+
+export type DeleteExtensionResponse = DeleteExtensionResponses[keyof DeleteExtensionResponses];
+
+export type GetExtensionData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/extensions/{id}';
+};
+
+export type GetExtensionErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetExtensionError = GetExtensionErrors[keyof GetExtensionErrors];
+
+export type GetExtensionResponses = {
+    200: ExtensionOut;
+};
+
+export type GetExtensionResponse = GetExtensionResponses[keyof GetExtensionResponses];
+
+export type UpdateExtensionData = {
+    body: PatchBody;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/extensions/{id}';
+};
+
+export type UpdateExtensionErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type UpdateExtensionError = UpdateExtensionErrors[keyof UpdateExtensionErrors];
+
+export type UpdateExtensionResponses = {
+    200: ExtensionOut;
+};
+
+export type UpdateExtensionResponse = UpdateExtensionResponses[keyof UpdateExtensionResponses];
+
+export type ListExtensionEventsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        /**
+         * `pending`, `claimed`, `done` or `dead`; all when omitted.
+         */
+        status?: string;
+        /**
+         * 1 to 100; default 20.
+         */
+        limit?: number;
+    };
+    url: '/api/extensions/{id}/events';
+};
+
+export type ListExtensionEventsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListExtensionEventsError = ListExtensionEventsErrors[keyof ListExtensionEventsErrors];
+
+export type ListExtensionEventsResponses = {
+    200: Array<EventDetail>;
+};
+
+export type ListExtensionEventsResponse = ListExtensionEventsResponses[keyof ListExtensionEventsResponses];
+
+export type AckExtensionEventsData = {
+    body: IdsBody;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/extensions/{id}/events/ack';
+};
+
+export type AckExtensionEventsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type AckExtensionEventsError = AckExtensionEventsErrors[keyof AckExtensionEventsErrors];
+
+export type AckExtensionEventsResponses = {
+    200: AckOut;
+};
+
+export type AckExtensionEventsResponse = AckExtensionEventsResponses[keyof AckExtensionEventsResponses];
+
+export type ClaimExtensionEventsData = {
+    body: ClaimBody;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/extensions/{id}/events/claim';
+};
+
+export type ClaimExtensionEventsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ClaimExtensionEventsError = ClaimExtensionEventsErrors[keyof ClaimExtensionEventsErrors];
+
+export type ClaimExtensionEventsResponses = {
+    200: ClaimOut;
+};
+
+export type ClaimExtensionEventsResponse = ClaimExtensionEventsResponses[keyof ClaimExtensionEventsResponses];
+
+export type NackExtensionEventsData = {
+    body: NackBody;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/extensions/{id}/events/nack';
+};
+
+export type NackExtensionEventsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type NackExtensionEventsError = NackExtensionEventsErrors[keyof NackExtensionEventsErrors];
+
+export type NackExtensionEventsResponses = {
+    200: NackOut;
+};
+
+export type NackExtensionEventsResponse = NackExtensionEventsResponses[keyof NackExtensionEventsResponses];
+
+export type RotateExtensionSecretData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/extensions/{id}/rotate-secret';
+};
+
+export type RotateExtensionSecretErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type RotateExtensionSecretError = RotateExtensionSecretErrors[keyof RotateExtensionSecretErrors];
+
+export type RotateExtensionSecretResponses = {
+    200: ExtensionWithSecret;
+};
+
+export type RotateExtensionSecretResponse = RotateExtensionSecretResponses[keyof RotateExtensionSecretResponses];
+
 export type RequestHttpsData = {
     body: HttpsRequest;
     path?: never;
@@ -3079,6 +3514,30 @@ export type RemoveMemberResponses = {
 };
 
 export type RemoveMemberResponse = RemoveMemberResponses[keyof RemoveMemberResponses];
+
+export type ReceiveExtensionWebhookData = {
+    body?: never;
+    path: {
+        key: string;
+    };
+    query?: never;
+    url: '/hooks/ext/{key}';
+};
+
+export type ReceiveExtensionWebhookErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ReceiveExtensionWebhookError = ReceiveExtensionWebhookErrors[keyof ReceiveExtensionWebhookErrors];
+
+export type ReceiveExtensionWebhookResponses = {
+    202: HookOut;
+};
+
+export type ReceiveExtensionWebhookResponse = ReceiveExtensionWebhookResponses[keyof ReceiveExtensionWebhookResponses];
 
 export type GetReadyzData = {
     body?: never;

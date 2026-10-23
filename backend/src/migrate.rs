@@ -29,6 +29,7 @@ pub const MIGRATIONS: &[(u32, &str, &str)] = &[
     (16, "custom_entity_kinds", include_str!("../migrations/tenant/0016_custom_entity_kinds.surql")),
     (17, "multi_connect", include_str!("../migrations/tenant/0017_multi_connect.surql")),
     (18, "vault_buckets", include_str!("../migrations/tenant/0018_vault_buckets.surql")),
+    (20, "extensions", include_str!("../migrations/tenant/0020_extensions.surql")),
 ];
 
 /// The tenant schema version this code writes. An org database is current at this version.

@@ -38,6 +38,9 @@ pub enum ErrorCode {
     ConnectorNotFound,
     ConnectorNotConnected,
     SourceNotFound,
+    ExtensionNotFound,
+    ExtensionDisabled,
+    ExtensionBufferFull,
     ToolNotFound,
     ResourceNotFound,
     DocumentNotFound,
@@ -76,6 +79,9 @@ impl ErrorCode {
         ErrorCode::ConnectorNotFound,
         ErrorCode::ConnectorNotConnected,
         ErrorCode::SourceNotFound,
+        ErrorCode::ExtensionNotFound,
+        ErrorCode::ExtensionDisabled,
+        ErrorCode::ExtensionBufferFull,
         ErrorCode::ToolNotFound,
         ErrorCode::ResourceNotFound,
         ErrorCode::DocumentNotFound,
@@ -114,6 +120,9 @@ impl ErrorCode {
             ErrorCode::ConnectorNotFound => "connector.not_found",
             ErrorCode::ConnectorNotConnected => "connector.not_connected",
             ErrorCode::SourceNotFound => "source.not_found",
+            ErrorCode::ExtensionNotFound => "extension.not_found",
+            ErrorCode::ExtensionDisabled => "extension.disabled",
+            ErrorCode::ExtensionBufferFull => "extension.buffer_full",
             ErrorCode::ToolNotFound => "tool.not_found",
             ErrorCode::ResourceNotFound => "resource.not_found",
             ErrorCode::DocumentNotFound => "document.not_found",
@@ -133,10 +142,10 @@ impl ErrorCode {
     pub fn default_status(self) -> StatusCode {
         match self {
             ErrorCode::AuthUnauthorized | ErrorCode::AuthTokenExpired | ErrorCode::AuthSessionExpired => StatusCode::UNAUTHORIZED,
-            ErrorCode::AuthForbidden | ErrorCode::AuthScope | ErrorCode::TenantDenied | ErrorCode::VaultForbidden => {
+            ErrorCode::AuthForbidden | ErrorCode::AuthScope | ErrorCode::TenantDenied | ErrorCode::VaultForbidden | ErrorCode::ExtensionDisabled => {
                 StatusCode::FORBIDDEN
             }
-            ErrorCode::RateLimited => StatusCode::TOO_MANY_REQUESTS,
+            ErrorCode::RateLimited | ErrorCode::ExtensionBufferFull => StatusCode::TOO_MANY_REQUESTS,
             ErrorCode::TenantSchemaBehind | ErrorCode::DocumentStorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
             ErrorCode::DocumentTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
             ErrorCode::DocumentUnsupportedType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
@@ -149,6 +158,7 @@ impl ErrorCode {
             | ErrorCode::ChatThreadNotFound
             | ErrorCode::ConnectorNotFound
             | ErrorCode::SourceNotFound
+            | ErrorCode::ExtensionNotFound
             | ErrorCode::ToolNotFound
             | ErrorCode::TenantNotFound
             | ErrorCode::ResourceNotFound
@@ -316,7 +326,7 @@ mod tests {
                 | ErrorCode::TenantDenied | ErrorCode::TenantNotFound | ErrorCode::TenantSchemaBehind
                 | ErrorCode::TenantProvisioningDisabled | ErrorCode::VaultNotFound | ErrorCode::VaultForbidden | ErrorCode::VaultNameTaken | ErrorCode::EntityNotFound
                 | ErrorCode::MemoryNotFound | ErrorCode::ChatThreadNotFound | ErrorCode::ConnectorNotFound
-                | ErrorCode::ConnectorNotConnected | ErrorCode::SourceNotFound | ErrorCode::ToolNotFound
+                | ErrorCode::ConnectorNotConnected | ErrorCode::SourceNotFound | ErrorCode::ExtensionNotFound | ErrorCode::ExtensionDisabled | ErrorCode::ExtensionBufferFull | ErrorCode::ToolNotFound
                 | ErrorCode::ResourceNotFound | ErrorCode::DocumentNotFound | ErrorCode::DocumentTooLarge
                 | ErrorCode::DocumentUnsupportedType | ErrorCode::DocumentStorageUnavailable | ErrorCode::ValidationInvalid | ErrorCode::DbConflict
                 | ErrorCode::DbDuplicate | ErrorCode::JobNoHandler | ErrorCode::JobLeaseExpired | ErrorCode::JobPanicked

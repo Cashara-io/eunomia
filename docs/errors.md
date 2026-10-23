@@ -35,6 +35,9 @@ The `ErrorCode` enum is in `backend/src/error.rs`. A unit test fails if a code i
 | `connector.not_found` | 404 | Unknown connector kind. | `routers/connectors.rs` |
 | `connector.not_connected` | 400 | The action needs a connector that has not been connected. | `routers/connectors.rs` |
 | `source.not_found` | 404 | Unknown source key. | `routers/sources.rs`, `sources/registry.rs` |
+| `extension.not_found` | 404 | No such extension of yours (a guessed id, another user's, or one already deleted). | `routers/extensions.rs` |
+| `extension.disabled` | 403 | The delivery was authenticated, but the extension is switched off. | `routers/extensions.rs` |
+| `extension.buffer_full` | 429 | The extension's inbox holds the maximum of waiting and leased events (10,000 by default); the sender should retry later. Not a rate limit: it clears as the consumer acks. | `routers/extensions.rs` |
 | `tool.not_found` | 404 | Unknown tool name (REST, MCP and registry). | `routers/tools.rs`, `routers/mcp.rs`, `tools/registry.rs` |
 | `resource.not_found` | 404 | Generic not found, also the default for a bare 404. | `error.rs`, `routers/entities.rs` (bad id), various |
 | `document.not_found` | 404 | No such document of yours (a guessed id, another user's or org's, or one already deleted). | `documents/` |
