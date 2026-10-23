@@ -164,6 +164,8 @@ async fn naming_two_related_entities_returns_their_relation_and_a_hop_reaches_a_
     let hits = recall(&app, json!({"query": "How is Ada Lovelace connected to Acme Corp?"})).await;
     let rel = hits.iter().find(|h| h["kind"] == "relation").unwrap_or_else(|| panic!("{hits:?}"));
     assert_eq!(rel["text"], "Ada Lovelace works at Acme Corp");
+    assert!(hits.iter().take(3).any(|h| h["kind"] == "relation"), "the edge joining the two named entities ranks near the top: {hits:?}");
+    assert_eq!(rel["arms_hit"], 2, "graph and relation arms both count it");
 
     // one hop from Ada reaches Acme's facts; the edge into another vault is not followed
     let hits = recall(&app, json!({"query": "What about Ada Lovelace?"})).await;

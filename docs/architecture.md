@@ -236,7 +236,8 @@ The graph arm finds exact entity names and aliases from phrases in the query,
 follows their memories, includes eligible source records and linked
 neighbours, then takes one bounded hop along `relates_to` (at most 40 edges
 and 10 neighbours, 5 facts each), keeping an edge only when both of its ends
-are in the vault being searched. The temporal arm requires an explicit
+are in the vault being searched. Edges joining two entities the query names
+also form their own ranked list (the relation arm). The temporal arm requires an explicit
 `time_range`; it does not parse phrases such as “last week”. A memory is dated
 by `occurred_at` (when it happened, if its writer said) or else when it was
 written.

@@ -1,5 +1,5 @@
-//! Recall pipeline: 6 arms (semantic over records, keyword, graph, temporal, memory text, semantic
-//! over memories), fused via Reciprocal Rank Fusion, then boosted by recency + "proof" (how many arms
+//! Recall pipeline: 7 arms (semantic over records, keyword, graph, temporal, memory text, semantic
+//! over memories, and relations joining two entities the query names), fused via Reciprocal Rank Fusion, then boosted by recency + "proof" (how many arms
 //! agreed on an item), then truncated to a token budget.
 //!
 //! The query is embedded once, concurrently with the database arms, and both semantic arms share the
@@ -187,10 +187,10 @@ fn name_phrases(query: &str) -> Vec<String> {
 ///
 /// A followed record shows only if it is filed in this vault (or, in the caller's personal vault, is
 /// the caller's own unrouted record): [`hydrate`] drops the rest.
-async fn graph_arm(db: &OrgDb, vault: &RecordId, query: &str, limit: usize) -> AppResult<Vec<String>> {
+async fn graph_arm(db: &OrgDb, vault: &RecordId, query: &str, limit: usize) -> AppResult<GraphHits> {
     let phrases = name_phrases(query);
     if phrases.is_empty() {
-        return Ok(Vec::new());
+        return Ok(GraphHits::default());
     }
     let lookup = |tables: &[&str]| {
         let lookups: Vec<String> = tables
@@ -236,7 +236,7 @@ async fn graph_arm(db: &OrgDb, vault: &RecordId, query: &str, limit: usize) -> A
     matches.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.to_string().cmp(&b.1.to_string())));
     matches.truncate(GRAPH_ENTITIES);
     if matches.is_empty() {
-        return Ok(Vec::new());
+        return Ok(GraphHits::default());
     }
 
     #[derive(Deserialize, SurrealValue)]
@@ -283,22 +283,34 @@ async fn graph_arm(db: &OrgDb, vault: &RecordId, query: &str, limit: usize) -> A
     }
 
     let matched: Vec<RecordId> = matches.into_iter().map(|(_, id)| id).collect();
-    keys.extend(relation_hop(db, vault, &matched).await?);
+    let (between, around) = relation_hop(db, vault, &matched).await?;
+    // a relation joining two entities the question names is the most direct answer it has
+    keys.splice(0..0, between.iter().cloned());
+    keys.extend(around);
 
     let mut seen = HashSet::new();
     keys.retain(|k| seen.insert(k.clone()));
     keys.truncate(limit);
-    Ok(keys)
+    Ok(GraphHits { keys, between })
 }
 
-/// The graph arm's one hop along `relates_to` from the entities a query named: the relations
-/// themselves (those joining two named entities first, so "how is Ada related to Acme" finds the edge
-/// and its evidence), then up to [`GRAPH_NEIGHBOURS`] neighbours' newest facts. Bounded at every step
+/// The graph arm's ranked keys, and separately the relations joining two entities the question
+/// named: recall counts those as their own signal (the `relation` arm), so "how is Ada related to
+/// Acme" ranks the edge above either entity's facts.
+#[derive(Default)]
+struct GraphHits {
+    keys: Vec<String>,
+    between: Vec<String>,
+}
+
+/// The graph arm's one hop along `relates_to` from the entities a query named: the relations joining
+/// two named entities (so "how is Ada related to Acme" finds the edge), then the other relations and
+/// up to [`GRAPH_NEIGHBOURS`] neighbours' newest facts, as two lists. Bounded at every step
 /// ([`GRAPH_EDGES`], [`NEIGHBOUR_MEMORIES`]); an edge counts only when both its ends are in `vault`,
 /// so a hop never leaves the vault being searched. Two queries.
-async fn relation_hop(db: &OrgDb, vault: &RecordId, matched: &[RecordId]) -> AppResult<Vec<String>> {
+async fn relation_hop(db: &OrgDb, vault: &RecordId, matched: &[RecordId]) -> AppResult<(Vec<String>, Vec<String>)> {
     if matched.is_empty() {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), Vec::new()));
     }
     #[derive(Deserialize, SurrealValue)]
     struct EdgeRow {
@@ -325,7 +337,9 @@ async fn relation_hop(db: &OrgDb, vault: &RecordId, matched: &[RecordId]) -> App
 
     let named = |id: &RecordId| matched.contains(id);
     let (between, outward): (Vec<&EdgeRow>, Vec<&EdgeRow>) = edges.iter().partition(|e| named(&e.from) && named(&e.out));
-    let mut keys: Vec<String> = between.iter().chain(outward.iter()).map(|e| format!("relates_to:{}", crate::rid::key_string(&e.id.key).unwrap_or_default())).collect();
+    let key = |e: &&EdgeRow| format!("relates_to:{}", crate::rid::key_string(&e.id.key).unwrap_or_default());
+    let between: Vec<String> = between.iter().map(key).collect();
+    let mut keys: Vec<String> = outward.iter().map(key).collect();
 
     let mut neighbours: Vec<RecordId> = Vec::new();
     for e in &outward {
@@ -354,7 +368,7 @@ async fn relation_hop(db: &OrgDb, vault: &RecordId, matched: &[RecordId]) -> App
             keys.extend(res.take::<Vec<RecordId>>(i)?.iter().map(|id| format!("memory:{}", id.to_string())));
         }
     }
-    Ok(keys)
+    Ok((between, keys))
 }
 
 /// Semantic arm over this vault's remembered facts: the memories nearest the query vector among those
@@ -681,7 +695,7 @@ async fn hydrate_relations(db: &OrgDb, vault: &RecordId, keys: &[&String], out: 
 /// small multipliers in spirit, not exact values -- the task leaves the
 /// exact formula up to the implementation.
 ///
-/// proof:   `1 + 0.05 * (arms_hit - 1)` -> 1.00 .. 1.25 for 1..6 arms
+/// proof:   `1 + 0.05 * (arms_hit - 1)` -> 1.00 .. 1.30 for 1..7 arms
 /// recency: 1.0 at age=0, linearly down to a 0.7 floor at 365+ days old;
 ///          1.0 (neutral) when there's no date to judge recency from.
 ///
@@ -889,11 +903,19 @@ async fn recall_in(
 
     // These arms only query SurrealDB and run one after another (running them concurrently made each
     // several times slower, they contend inside the database).
-    let graph = arm("graph", false, graph_arm(db, vault, query, pool)).await?;
+    let started_graph = std::time::Instant::now();
+    let GraphHits { keys: graph, between: relation } = match tokio::time::timeout(ARM_DEADLINE, graph_arm(db, vault, query, pool)).await {
+        Ok(hits) => hits?,
+        Err(_) => {
+            tracing::warn!("recall: graph arm timed out after {ARM_DEADLINE:?}");
+            GraphHits::default()
+        }
+    };
+    tracing::debug!(arm = "graph", candidates = graph.len(), elapsed_ms = started_graph.elapsed().as_millis() as u64, "recall: arm done");
     let temporal = arm("temporal", false, temporal_ids(db, vault, time_range, pool, dated)).await?;
     let memory = arm("memory_text", false, memory_text_arm(db, vault, query, pool)).await?;
     let memory_semantic = arm("memory_semantic", true, memory_semantic_arm(db, vault, records.query.as_ref(), pool)).await?;
-    let arms = [semantic_keys, keyword_keys, graph, temporal, memory, memory_semantic];
+    let arms = [semantic_keys, keyword_keys, graph, temporal, memory, memory_semantic, relation];
     tracing::debug!(
         semantic = arms[0].len(),
         keyword = arms[1].len(),
@@ -901,6 +923,7 @@ async fn recall_in(
         temporal = arms[3].len(),
         memory_text = arms[4].len(),
         memory_semantic = arms[5].len(),
+        relation = arms[6].len(),
         elapsed_ms = started.elapsed().as_millis() as u64,
         "recall: arm candidates"
     );

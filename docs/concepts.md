@@ -117,7 +117,7 @@ it with `memory_delete` (which also invalidates the observation, as above).
 
 ## Recall
 
-`recall` runs six arms and fuses them (reciprocal rank fusion), then boosts
+`recall` runs seven arms and fuses them (reciprocal rank fusion), then boosts
 results that several arms agree on and recent ones:
 
 1. **semantic**: embeddings over records (needs a model key)
@@ -131,6 +131,8 @@ results that several arms agree on and recent ones:
    of kind `relation`, e.g. "Ada works at Acme") and the neighbours' newest
    facts, only inside the vault being searched
 6. **temporal**: an explicit `time_range`
+7. **relation**: relations joining two entities the question names ("how is
+   Ada connected to Acme"), counted as their own signal
 
 Facts are embedded in the background right after they are written (and by the
 embed job for anything older); editing a fact drops its vector until it is
