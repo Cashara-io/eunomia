@@ -29,6 +29,12 @@ agents pick up that context across sessions.
 
 </div>
 
+## See it in action
+
+[![The Eunomia launch film: memory cards bursting out of the recall bar](docs/images/eunomia-launch-film-poster.jpg)](docs/media/eunomia-launch-film.mp4)
+
+**Watch the launch film** (with sound) in [1080p](docs/media/eunomia-launch-film.mp4) (27 MB) or [720p](docs/media/eunomia-launch-film-720p.mp4) (4 MB): your agents forget, Eunomia remembers, and every agent recalls what the team decided.
+
 ## Why Eunomia?
 
 An agent's conversation ends; the things it learned should stay useful.

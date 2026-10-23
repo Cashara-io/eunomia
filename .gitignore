@@ -16,3 +16,6 @@ playwright-report/
 backups/
 update-status/
 .eunomia-credentials
+
+# Promo film work (renders, raw art, voice takes). The finished film ships in docs/media/.
+video/
