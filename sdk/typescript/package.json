@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "TypeScript client for the Eunomia REST API: manage vaults and read and write memories.",
   "type": "module",
-  "license": "MIT",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "engines": { "node": ">=18" },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
