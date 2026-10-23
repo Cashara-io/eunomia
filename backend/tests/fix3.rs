@@ -52,7 +52,8 @@ async fn readyz_checks_the_control_database_and_its_migration_version() {
     let ((status, _), _) = common::http(&app.router, "GET", "/healthz", None, None, None).await;
     assert_eq!(status, StatusCode::OK);
 
-    app.control().test_raw().query("DELETE _migration WHERE version = 4").await.unwrap().check().unwrap();
+    let newest = eunomia_backend::migrate::CONTROL_MIGRATIONS.iter().map(|m| m.0).max().unwrap();
+    app.control().test_raw().query(format!("DELETE _migration WHERE version = {newest}")).await.unwrap().check().unwrap();
     // the check is cached for 2 seconds: still ready right after the change, down after it expires
     let ((status, _), _) = common::http(&app.router, "GET", "/readyz", None, None, None).await;
     assert_eq!(status, StatusCode::OK);
@@ -60,7 +61,7 @@ async fn readyz_checks_the_control_database_and_its_migration_version() {
     let ((status, body), _) = common::http(&app.router, "GET", "/readyz", None, None, None).await;
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
     assert_eq!(body["code"], "internal");
-    assert!(body["detail"].as_str().unwrap().contains("migration 3"), "{body}");
+    assert!(body["detail"].as_str().unwrap().contains(&format!("migration {}", newest - 1)), "{body}");
 }
 
 /// The old export ran three queries per entity. The batched one must produce the same document.
