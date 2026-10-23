@@ -283,7 +283,7 @@ async fn graph_arm(db: &OrgDb, vault: &RecordId, query: &str, limit: usize) -> A
     }
 
     let matched: Vec<RecordId> = matches.into_iter().map(|(_, id)| id).collect();
-    let (between, around) = relation_hop(db, vault, &matched).await?;
+    let (between, around) = Box::pin(relation_hop(db, vault, &matched)).await?;
     // a relation joining two entities the question names is the most direct answer it has
     keys.splice(0..0, between.iter().cloned());
     keys.extend(around);
@@ -904,7 +904,8 @@ async fn recall_in(
     // These arms only query SurrealDB and run one after another (running them concurrently made each
     // several times slower, they contend inside the database).
     let started_graph = std::time::Instant::now();
-    let GraphHits { keys: graph, between: relation } = match tokio::time::timeout(ARM_DEADLINE, graph_arm(db, vault, query, pool)).await {
+    // boxed: the graph arm's future is large, and inline it pushes a debug build past a thread's stack
+    let GraphHits { keys: graph, between: relation } = match tokio::time::timeout(ARM_DEADLINE, Box::pin(graph_arm(db, vault, query, pool))).await {
         Ok(hits) => hits?,
         Err(_) => {
             tracing::warn!("recall: graph arm timed out after {ARM_DEADLINE:?}");
@@ -914,7 +915,7 @@ async fn recall_in(
     tracing::debug!(arm = "graph", candidates = graph.len(), elapsed_ms = started_graph.elapsed().as_millis() as u64, "recall: arm done");
     let temporal = arm("temporal", false, temporal_ids(db, vault, time_range, pool, dated)).await?;
     let memory = arm("memory_text", false, memory_text_arm(db, vault, query, pool)).await?;
-    let memory_semantic = arm("memory_semantic", true, memory_semantic_arm(db, vault, records.query.as_ref(), pool)).await?;
+    let memory_semantic = arm("memory_semantic", true, Box::pin(memory_semantic_arm(db, vault, records.query.as_ref(), pool))).await?;
     let arms = [semantic_keys, keyword_keys, graph, temporal, memory, memory_semantic, relation];
     tracing::debug!(
         semantic = arms[0].len(),
