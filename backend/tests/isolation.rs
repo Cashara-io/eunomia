@@ -318,6 +318,7 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         UPDATE $u SET api_token_hash = $c;
         DELETE membership WHERE user = $u;
         CREATE $mem SET user = $u, org = $org, role = 'owner';
+        CREATE identity SET user = $u, issuer = 'https://idp.example', subject = $c, email = $c;
         CREATE audit_event SET user = $u, actor_kind = 'user', actor_id = 'plant', action = 'plant', target = $c, outcome = 'ok';
         LET $g = (CREATE oauth_grant SET owner = $u, client_id = 'client-x', client_name = $c, scope = ['memory:read'], resource = 'http://localhost:8001/mcp' RETURN VALUE id)[0];
         CREATE oauth_token SET kind = 'access', token_hash = $c, family = $g, expires_at = time::now() + 15m;
