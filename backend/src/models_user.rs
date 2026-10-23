@@ -199,7 +199,7 @@ pub async fn register_user(state: &AppState, email: &str, password: &str) -> App
 pub async fn register_user_with(state: &AppState, email: &str, password: &str, personal: bool) -> AppResult<User> {
     let email = normalize_email(email);
     validate_credentials(&email, password)?;
-    create_account(state, &email, Some(password), None, personal).await
+    Box::pin(create_account(state, &email, Some(password), None, personal)).await
 }
 
 /// An account made by a verified OpenID Connect sign-in: no password, linked to `(issuer, subject)`.
@@ -207,7 +207,7 @@ pub async fn register_user_with(state: &AppState, email: &str, password: &str, p
 pub async fn register_oidc_user(state: &AppState, email: &str, issuer: &str, subject: &str) -> AppResult<User> {
     let email = normalize_email(email);
     validate_email(&email)?;
-    create_account(state, &email, None, Some((issuer, subject)), signup_personal()).await
+    Box::pin(create_account(state, &email, None, Some((issuer, subject)), signup_personal())).await
 }
 
 /// The shared signup: the user row (with a bcrypt hash of `password`, or none), the identity link if any,
