@@ -205,7 +205,9 @@ flowchart TD
     Q --> G[Graph: named entities and their facts]
     Q --> T[Temporal: explicit date range]
     Q --> M[Memory text: remembered facts]
+    Q --> V[Memory semantic: remembered fact vectors]
     S --> R[Reciprocal Rank Fusion]
+    V --> R
     K --> R
     G --> R
     T --> R
@@ -215,8 +217,9 @@ flowchart TD
     B --> O[Sort, limit and fit optional token budget]
 ```
 
-The semantic arm runs concurrently with the local database work. The four
-database arms execute sequentially to avoid measured database contention.
+The query is embedded once, concurrently with the local database work, and both
+semantic arms share the vector. The database arms execute sequentially to
+avoid measured database contention.
 Every arm has a four-second deadline. Timeouts yield no candidates for that
 arm; a semantic provider error also drops only the semantic arm. Other
 database errors can still fail the request. Four seconds is an arm deadline,
@@ -224,23 +227,35 @@ not a total request deadline.
 
 Semantic and record-keyword searches only include the caller's own records
 alongside their personal vault. Memory-text search works across readable
-vaults without embeddings. The graph arm finds exact entity names and aliases
-from phrases in the query, follows their memories, and includes eligible
-source records and linked neighbours. The temporal arm requires an explicit
-`time_range`; it does not parse phrases such as “last week”.
+vaults without embeddings. Memory-semantic search does the same by meaning:
+facts are embedded in the background (`memory.embedding`, HNSW), tagged with
+the provider and model that made them (`embedding_spec`), and a query only
+meets vectors with the same tag; a database event drops a fact's vector when
+its text changes. Semantic hits below a cosine similarity of 0.15 are dropped.
+The graph arm finds exact entity names and aliases from phrases in the query,
+follows their memories, includes eligible source records and linked
+neighbours, then takes one bounded hop along `relates_to` (at most 40 edges
+and 10 neighbours, 5 facts each), keeping an edge only when both of its ends
+are in the vault being searched. The temporal arm requires an explicit
+`time_range`; it does not parse phrases such as “last week”. A memory is dated
+by `occurred_at` (when it happened, if its writer said) or else when it was
+written.
 
 Reciprocal Rank Fusion sums `1 / (60 + rank)` across the ranked candidate
 lists, with rank starting at 1. Hydration rechecks record ownership and vault scope and excludes stale
 observations and superseded facts. Agreement adds 5% for each additional arm
 that found the same item. Recency decreases linearly from 1.0 to a floor of
-0.5 over 365 days; undated items receive a neutral multiplier. Scores are
+0.5 over 365 days; undated items receive a neutral multiplier. With a
+`time_range`, items dated inside it get 1.0 and items dated outside it the
+floor. Scores are
 normalised relative to the best returned hit. “Proof” here means retrieval
 agreement, not independent evidence that a fact is true.
 
 Results retain their IDs, source, date, vault and number of matching arms.
 An optional token budget estimates one token per four characters and trims
 individual texts; clients can use the ID to fetch full content. There is no
-cross-encoder reranking step.
+cross-encoder reranking step. `reflect` recalls within a 6,000-token budget,
+so its citations always map to items the model was shown.
 
 Sources: [recall orchestration and ranking](../backend/src/cache/recall.rs),
 [full-text, vector search and RRF](../backend/src/cache/search.rs).

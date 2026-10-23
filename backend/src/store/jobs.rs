@@ -22,6 +22,7 @@ pub const CONTROL_ALL: &[&ControlStmt] = &[
 /// Reconciler probes run in the org's database.
 pub const ALL: &[&Stmt] = &[
     &EMBED_BACKLOG,
+    &MEMORY_EMBED_BACKLOG,
     &STALE_OBSERVATIONS,
 ];
 
@@ -134,6 +135,14 @@ pub const EMBED_BACKLOG: Stmt = Stmt::new(
     "jobs.embed_backlog",
     "SELECT id, title, body_text FROM cache_record WHERE owner = $owner AND deleted = false AND embedding IS NONE \
      AND string::len(string::trim(string::concat(title, body_text))) > 0 LIMIT $limit",
+);
+
+/// An owner's memories with no vector from the current model (`$spec`, see `embeddings::EmbedSpec`):
+/// never embedded, edited since (the `memory_text_changed` event cleared it), or made by another model.
+pub const MEMORY_EMBED_BACKLOG: Stmt = Stmt::new(
+    "jobs.memory_embed_backlog",
+    "SELECT id, text FROM memory WHERE owner = $owner AND (embedding_spec IS NONE OR embedding_spec != $spec) \
+     AND string::len(string::trim(text)) > 0 LIMIT $limit",
 );
 
 pub const STALE_OBSERVATIONS: Stmt = Stmt::new(

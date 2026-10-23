@@ -95,8 +95,15 @@ pub async fn memory_write(
     source_record_id: Option<&str>,
     mem_type: &str,
     vault_id: Option<&RecordId>,
+    occurred_at: Option<&str>,
 ) -> AppResult<service::WriteMemoryOut> {
+    let occurred_at = occurred_at.map(|s| crate::cache::search::parse_datetime("occurred_at", s).map(surrealdb::types::Datetime::from)).transpose()?;
     let out = service::write_memory(&state.db, owner, subject_name, subject_kind, text, source_record_id, mem_type, vault_id).await?;
+    let memory_rid = crate::rid::parse(&out.memory.id).map_err(|_| crate::error::AppError::internal("memory id did not round-trip"))?;
+    if let Some(at) = occurred_at {
+        crate::store::cache::SET_MEMORY_OCCURRED_AT.on(&state.db).bind(("id", memory_rid.clone())).bind(("at", at)).await?.check()?;
+    }
+    embed_soon(state, owner);
     if out.memory.mem_type != "observation" && super::supersede::enabled(&state.db, &state.settings, owner).await {
         let subject = crate::rid::parse(&out.entity.id).map_err(|_| crate::error::AppError::internal("entity id did not round-trip"))?;
         let memory = crate::rid::parse(&out.memory.id).map_err(|_| crate::error::AppError::internal("memory id did not round-trip"))?;
@@ -104,6 +111,23 @@ pub async fn memory_write(
     }
     Ok(out)
 }
+
+/// Embed the owner's new facts now, off the request path, so recall finds them by meaning within
+/// seconds rather than at the next embed job. Best effort: the job picks up whatever this misses.
+fn embed_soon(state: &OrgState, owner: &RecordId) {
+    let (db, settings, owner) = (state.db.clone(), state.settings.clone(), owner.clone());
+    tokio::spawn(crate::authz::as_system(async move {
+        if !crate::embeddings::service::available(&db, &settings, &owner).await {
+            return;
+        }
+        if let Err(e) = crate::embeddings::service::embed_memory_backlog(&db, &settings, &owner, EMBED_SOON_BATCH).await {
+            tracing::debug!(error = %e.message, "embedding a new memory failed; the embed job will retry");
+        }
+    }));
+}
+
+/// Memories embedded right after a write (the new one and any backlog alongside it).
+const EMBED_SOON_BATCH: usize = 16;
 
 pub async fn memory_update(
     db: &OrgDb,

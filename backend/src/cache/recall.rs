@@ -1,11 +1,18 @@
-//! Recall pipeline: 5 arms (semantic, keyword, graph, temporal, memory text),
-//! fused via Reciprocal Rank Fusion, then boosted by recency + "proof" (how
-//! many arms agreed on an item), then truncated to a token budget.
+//! Recall pipeline: 6 arms (semantic over records, keyword, graph, temporal, memory text, semantic
+//! over memories), fused via Reciprocal Rank Fusion, then boosted by recency + "proof" (how many arms
+//! agreed on an item), then truncated to a token budget.
+//!
+//! The query is embedded once, concurrently with the database arms, and both semantic arms share the
+//! vector. A memory is only compared with vectors made by the same provider and model
+//! (`memory.embedding_spec`), and a semantic hit must clear [`MIN_SIMILARITY`], so an unrelated
+//! nearest neighbour never rides in on rank alone. The graph arm follows the matched entities' own
+//! memories and then one bounded `relates_to` hop: the relations themselves (kind `relation`) and the
+//! neighbours' newest facts, only where both ends are in the vault being searched.
 //!
 //! Pipeline, matching the reference diagram:
 //!
 //! ```text
-//!     [semantic | keyword, graph, temporal, memory text]  (provider arm alongside the DB arms)
+//!     [semantic | keyword, graph, temporal, memory text, memory semantic]  (query embedded alongside the DB arms)
 //!                      |
 //!                 RRF fusion (k=60, reusing cache::search's rrf_scores)
 //!                      |
@@ -24,7 +31,8 @@
 //!
 //! Natural-language date parsing ("last week", "in March") is also out of
 //! scope for v1 -- the temporal arm only activates when an explicit
-//! `time_range` is given.
+//! `time_range` is given. A memory is dated by when it happened if its writer said so
+//! (`memory.occurred_at`), else by when it was written.
 //!
 //! The graph arm's entity matching queries the
 //! `person`/`organisation`/`location`/`repository`/`file`/`symbol` tables
@@ -59,6 +67,14 @@ const ARM_DEADLINE: Duration = Duration::from_secs(4);
 /// (runs of up to `NAME_WORDS` of the first `MAX_NAME_WORDS` words).
 const GRAPH_CANDIDATES: usize = 20;
 const GRAPH_ENTITIES: usize = 10;
+/// The one `relates_to` hop: edges read from the matched entities, neighbours followed, and how many
+/// of each neighbour's newest facts come along.
+const GRAPH_EDGES: usize = 40;
+const GRAPH_NEIGHBOURS: usize = 10;
+const NEIGHBOUR_MEMORIES: usize = 5;
+/// Cosine similarity a semantic hit needs to count at all. Nearest-neighbour search always returns
+/// K rows; without a floor the K-th unrelated fact would still earn a fused score.
+const MIN_SIMILARITY: f64 = 0.15;
 const NAME_WORDS: usize = 6;
 const MAX_NAME_WORDS: usize = 64;
 
@@ -83,7 +99,8 @@ pub struct RecallItem {
     pub kind: &'static str,
     pub text: String,
     pub source: Option<String>,
-    /// A record's date, or when a memory was last written or edited.
+    /// A record's date; for a memory, when it happened if its writer said so, else when it was last
+    /// written or edited; for a relation, when it was recorded.
     pub occurred_at: Option<String>,
     /// 0..1, relative to the best hit of this recall.
     pub score: f64,
@@ -95,6 +112,9 @@ pub struct RecallItem {
     /// where to download the original (`documents::chunk_ref`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub document: Option<serde_json::Value>,
+    /// `superseded` for a fact a later one replaced; only returned when history was asked for.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -262,10 +282,149 @@ async fn graph_arm(db: &OrgDb, vault: &RecordId, query: &str, limit: usize) -> A
         }
     }
 
+    let matched: Vec<RecordId> = matches.into_iter().map(|(_, id)| id).collect();
+    keys.extend(relation_hop(db, vault, &matched).await?);
+
     let mut seen = HashSet::new();
     keys.retain(|k| seen.insert(k.clone()));
     keys.truncate(limit);
     Ok(keys)
+}
+
+/// The graph arm's one hop along `relates_to` from the entities a query named: the relations
+/// themselves (those joining two named entities first, so "how is Ada related to Acme" finds the edge
+/// and its evidence), then up to [`GRAPH_NEIGHBOURS`] neighbours' newest facts. Bounded at every step
+/// ([`GRAPH_EDGES`], [`NEIGHBOUR_MEMORIES`]); an edge counts only when both its ends are in `vault`,
+/// so a hop never leaves the vault being searched. Two queries.
+async fn relation_hop(db: &OrgDb, vault: &RecordId, matched: &[RecordId]) -> AppResult<Vec<String>> {
+    if matched.is_empty() {
+        return Ok(Vec::new());
+    }
+    #[derive(Deserialize, SurrealValue)]
+    struct EdgeRow {
+        id: RecordId,
+        #[serde(rename = "in")]
+        #[surreal(rename = "in")]
+        from: RecordId,
+        out: RecordId,
+        #[serde(default)]
+        #[surreal(default)]
+        iv: Option<RecordId>,
+        #[serde(default)]
+        #[surreal(default)]
+        ov: Option<RecordId>,
+    }
+    // dynamic: the edge bound is a literal LIMIT.
+    let sql = format!(
+        "LET $edges = array::distinct(array::flatten((SELECT VALUE array::concat(->relates_to, <-relates_to) FROM $ents))); \
+         SELECT id, in, out, in.vault AS iv, out.vault AS ov FROM $edges LIMIT {GRAPH_EDGES};"
+    );
+    let mut res = store::dynamic(db, "cache.graph_edges", sql).bind(("ents", matched.to_vec())).await?;
+    let edges: Vec<EdgeRow> = res.take(1)?;
+    let edges: Vec<EdgeRow> = edges.into_iter().filter(|e| e.iv.as_ref() == Some(vault) && e.ov.as_ref() == Some(vault)).collect();
+
+    let named = |id: &RecordId| matched.contains(id);
+    let (between, outward): (Vec<&EdgeRow>, Vec<&EdgeRow>) = edges.iter().partition(|e| named(&e.from) && named(&e.out));
+    let mut keys: Vec<String> = between.iter().chain(outward.iter()).map(|e| format!("relates_to:{}", crate::rid::key_string(&e.id.key).unwrap_or_default())).collect();
+
+    let mut neighbours: Vec<RecordId> = Vec::new();
+    for e in &outward {
+        let far = if named(&e.from) { &e.out } else { &e.from };
+        if !neighbours.contains(far) {
+            neighbours.push(far.clone());
+        }
+    }
+    neighbours.truncate(GRAPH_NEIGHBOURS);
+    if !neighbours.is_empty() {
+        let sql: String = (0..neighbours.len())
+            .map(|i| {
+                format!(
+                    "SELECT VALUE id FROM memory WITH INDEX memory_subject_idx \
+                     WHERE subject = $n{i} AND vault = $vault ORDER BY created_at DESC LIMIT {NEIGHBOUR_MEMORIES};"
+                )
+            })
+            .collect();
+        // dynamic: one statement per neighbour.
+        let mut q = store::dynamic(db, "cache.graph_neighbour_memories", sql).bind(("vault", vault.clone()));
+        for (i, id) in neighbours.iter().enumerate() {
+            q = q.bind((format!("n{i}"), id.clone()));
+        }
+        let mut res = q.await?;
+        for i in 0..neighbours.len() {
+            keys.extend(res.take::<Vec<RecordId>>(i)?.iter().map(|id| format!("memory:{}", id.to_string())));
+        }
+    }
+    Ok(keys)
+}
+
+/// Semantic arm over this vault's remembered facts: the memories nearest the query vector among those
+/// embedded by the same provider and model, best first, each at least [`MIN_SIMILARITY`]. HNSW first;
+/// when the shared index underfills for this vault (a small vault among big ones) the exact cosine
+/// scan over the vault's vectors is the answer, as for records (`cache::search::nearest_ids`).
+async fn memory_semantic_arm(db: &OrgDb, vault: &RecordId, query: Option<&QueryVector>, limit: usize) -> AppResult<Vec<String>> {
+    let Some(q) = query else { return Ok(Vec::new()) };
+    Ok(nearest_memories(db, vault, &q.vector, &q.spec, limit).await?.into_iter().map(|id| format!("memory:{}", id.to_string())).collect())
+}
+
+/// The `limit` memories of `vault` nearest `vector` among those embedded under `spec`, best first,
+/// each at least [`MIN_SIMILARITY`] (see [`memory_semantic_arm`]).
+pub async fn nearest_memories(db: &OrgDb, vault: &RecordId, vector: &[f32], spec: &str, limit: usize) -> AppResult<Vec<RecordId>> {
+    #[derive(Deserialize, SurrealValue)]
+    struct SimRow {
+        id: RecordId,
+        #[serde(default)]
+        #[surreal(default)]
+        sim: f64,
+    }
+    let ef = (limit * 2).max(64);
+    // dynamic: the KNN `<|K,EF|>` operator needs literal integers.
+    let knn = format!(
+        "SELECT id, vector::similarity::cosine(embedding, $vec) AS sim FROM memory \
+         WHERE vault = $vault AND embedding_spec = $spec AND embedding <|{limit},{ef}|> $vec ORDER BY sim DESC"
+    );
+    let bind = |sql: String, name: &'static str| {
+        store::dynamic(db, name, sql).bind(("vault", vault.clone())).bind(("spec", spec.to_string())).bind(("vec", vector.to_vec()))
+    };
+    let mut rows: Vec<SimRow> = bind(knn, "cache.memory_semantic").await?.take(0)?;
+    if rows.len() < limit {
+        let exact = "SELECT id, vector::similarity::cosine(embedding, $vec) AS sim FROM memory \
+                     WHERE vault = $vault AND embedding_spec = $spec ORDER BY sim DESC LIMIT $limit"
+            .to_string();
+        rows = bind(exact, "cache.memory_semantic_exact").bind(("limit", limit as i64)).await?.take(0)?;
+    }
+    Ok(rows.into_iter().filter(|r| r.sim >= MIN_SIMILARITY).map(|r| r.id).collect())
+}
+
+/// The query's vector, made once per recall and shared by both semantic arms, with the
+/// `embedding_spec` it was made under.
+struct QueryVector {
+    vector: Vec<f32>,
+    spec: String,
+}
+
+/// Embeds the query under [`ARM_DEADLINE`]. `None` (and the semantic arms contribute nothing) without a
+/// working provider, on a provider error, or past the deadline.
+async fn query_vector(db: &OrgDb, settings: &Settings, owner: &RecordId, query: &str) -> Option<QueryVector> {
+    use crate::embeddings::service as embeddings;
+    let fut = async {
+        if query.trim().is_empty() || !embeddings::available(db, settings, owner).await {
+            return AppResult::Ok(None);
+        }
+        let spec = embeddings::spec_for(db, settings, owner).await?.tag();
+        let vector = embeddings::embed(db, settings, &[query.to_string()], Some(owner)).await?.into_iter().next().unwrap_or_default();
+        Ok((vector.len() == embeddings::dim()).then_some(QueryVector { vector, spec }))
+    };
+    match tokio::time::timeout(ARM_DEADLINE, fut).await {
+        Ok(Ok(v)) => v,
+        Ok(Err(e)) => {
+            tracing::warn!("recall: semantic arms skipped: {}", e.message);
+            None
+        }
+        Err(_) => {
+            tracing::warn!("recall: query embedding timed out after {ARM_DEADLINE:?}");
+            None
+        }
+    }
 }
 
 /// Full-text arm over remembered facts (`memory.text`), BM25-ranked. This is
@@ -330,7 +489,8 @@ async fn temporal_records(db: &OrgDb, scope: &cs::RecordScope, time_range: Optio
 
 /// Explicit date-range filter only -- no NL date parsing in v1. Merges the
 /// newest `limit` of `records` (this vault's share of [`temporal_records`], dated `occurred_at`) and
-/// `memory` rows (`created_at`, vault-scoped) in the range, ranked by recency. Each side is ordered and
+/// `memory` rows (vault-scoped, dated when they happened if known, else when written) in the range,
+/// ranked by recency. Each side is ordered and
 /// limited in the database, so a broad range never loads the whole range.
 async fn temporal_ids(
     db: &OrgDb,
@@ -346,7 +506,7 @@ async fn temporal_ids(
     #[derive(Deserialize, SurrealValue)]
     struct MemRow {
         id: RecordId,
-        created_at: Datetime,
+        at: Datetime,
     }
 
     let mut dated = records;
@@ -358,7 +518,7 @@ async fn temporal_ids(
         .bind(("limit", limit as i64))
         .await?;
     let rows: Vec<MemRow> = res.take(0)?;
-    dated.extend(rows.into_iter().map(|r| (r.created_at, format!("memory:{}", r.id.to_string()))));
+    dated.extend(rows.into_iter().map(|r| (r.at, format!("memory:{}", r.id.to_string()))));
 
     dated.sort_by_key(|d| std::cmp::Reverse(d.0));
     Ok(dated.into_iter().take(limit).map(|(_, k)| k).collect())
@@ -372,6 +532,7 @@ struct Hydrated {
     occurred_at: Option<DateTime<Utc>>,
     mem_type: String,
     document: Option<serde_json::Value>,
+    status: Option<String>,
 }
 
 /// Every candidate key's content, in at most two queries (records, memories) whatever the candidate
@@ -380,7 +541,14 @@ struct Hydrated {
 /// observation (its facts changed since it was consolidated) is left out: it is not
 /// a current fact; the raw facts it summarised are still recalled. So is a superseded fact (a later
 /// fact contradicted it; see `entities::supersede`).
-async fn hydrate(db: &OrgDb, scope: &cs::RecordScope, vault: &RecordId, keys: &[&String], found: &HashMap<String, cs::CacheRecord>) -> AppResult<HashMap<String, Hydrated>> {
+async fn hydrate(
+    db: &OrgDb,
+    scope: &cs::RecordScope,
+    vault: &RecordId,
+    keys: &[&String],
+    found: &HashMap<String, cs::CacheRecord>,
+    history: bool,
+) -> AppResult<HashMap<String, Hydrated>> {
     let mut out = HashMap::new();
     let mut records = Vec::new();
     let mut fetch = Vec::new();
@@ -407,9 +575,12 @@ async fn hydrate(db: &OrgDb, scope: &cs::RecordScope, vault: &RecordId, keys: &[
                 source: if rec.source.is_empty() { None } else { Some(rec.source) },
                 occurred_at: rec.occurred_at.map(to_chrono),
                 mem_type: String::new(),
+                status: None,
             },
         );
     }
+
+    hydrate_relations(db, vault, keys, &mut out).await?;
 
     let memory_ids: Vec<RecordId> =
         keys.iter().filter_map(|k| k.strip_prefix("memory:")).filter_map(|r| crate::rid::parse(r).ok()).collect();
@@ -429,6 +600,12 @@ async fn hydrate(db: &OrgDb, scope: &cs::RecordScope, vault: &RecordId, keys: &[
         #[serde(default)]
         #[surreal(default)]
         updated_at: Option<Datetime>,
+        #[serde(default)]
+        #[surreal(default)]
+        occurred_at: Option<Datetime>,
+        #[serde(default)]
+        #[surreal(default)]
+        status: Option<String>,
         #[serde(rename = "type", default = "default_memory_type")]
         #[surreal(rename = "type", default = "default_memory_type")]
         mem_type: String,
@@ -436,7 +613,8 @@ async fn hydrate(db: &OrgDb, scope: &cs::RecordScope, vault: &RecordId, keys: &[
     fn default_memory_type() -> String {
         "world".to_string()
     }
-    let mut res = store::cache::MEMORIES_FOR_RECALL.on(db).bind(("ids", memory_ids)).bind(("vault", vault.clone())).await?;
+    let mut res =
+        store::cache::MEMORIES_FOR_RECALL.on(db).bind(("ids", memory_ids)).bind(("vault", vault.clone())).bind(("history", history)).await?;
     let rows: Vec<MemRow> = res.take(0)?;
     for row in rows {
         out.insert(
@@ -446,20 +624,64 @@ async fn hydrate(db: &OrgDb, scope: &cs::RecordScope, vault: &RecordId, keys: &[
                 kind: "memory",
                 text: row.text,
                 source: row.source.map(|s| cs::caller_id(&s, scope.owner())),
-                occurred_at: Some(to_chrono(row.updated_at.unwrap_or(row.created_at))),
+                occurred_at: Some(to_chrono(row.occurred_at.or(row.updated_at).unwrap_or(row.created_at))),
                 mem_type: row.mem_type,
                 document: None,
+                status: row.status.filter(|s| s == "superseded"),
             },
         );
     }
     Ok(out)
 }
 
+/// The graph arm's `relates_to:` keys as readable items ("Ada Lovelace works at Acme Corp"), one
+/// query. Authorization again: both ends must be in `vault`.
+async fn hydrate_relations(db: &OrgDb, vault: &RecordId, keys: &[&String], out: &mut HashMap<String, Hydrated>) -> AppResult<()> {
+    let ids: Vec<RecordId> =
+        keys.iter().filter_map(|k| k.strip_prefix("relates_to:")).map(|k| RecordId::from_table_key("relates_to", k.to_string())).collect();
+    if ids.is_empty() {
+        return Ok(());
+    }
+    #[derive(Deserialize, SurrealValue)]
+    struct RelRow {
+        id: RecordId,
+        #[serde(default)]
+        #[surreal(default)]
+        label: String,
+        #[serde(default)]
+        #[surreal(default)]
+        a: String,
+        #[serde(default)]
+        #[surreal(default)]
+        b: String,
+        created_at: Datetime,
+    }
+    let mut res = store::cache::RELATIONS_FOR_RECALL.on(db).bind(("ids", ids)).bind(("vault", vault.clone())).await?;
+    let rows: Vec<RelRow> = res.take(0)?;
+    for row in rows {
+        let label = if row.label.is_empty() { "related to".to_string() } else { row.label.replace('_', " ") };
+        out.insert(
+            format!("relates_to:{}", crate::rid::key_string(&row.id.key).unwrap_or_default()),
+            Hydrated {
+                id: row.id.to_string(),
+                kind: "relation",
+                text: format!("{} {label} {}", row.a, row.b),
+                source: None,
+                occurred_at: Some(to_chrono(row.created_at)),
+                mem_type: String::new(),
+                document: None,
+                status: None,
+            },
+        );
+    }
+    Ok(())
+}
+
 /// Monotonic in both arm-count ("proof") and recency, matching the diagram's
 /// small multipliers in spirit, not exact values -- the task leaves the
 /// exact formula up to the implementation.
 ///
-/// proof:   `1 + 0.05 * (arms_hit - 1)` -> 1.00 .. 1.20 for 1..5 arms
+/// proof:   `1 + 0.05 * (arms_hit - 1)` -> 1.00 .. 1.25 for 1..6 arms
 /// recency: 1.0 at age=0, linearly down to a 0.7 floor at 365+ days old;
 ///          1.0 (neutral) when there's no date to judge recency from.
 ///
@@ -475,6 +697,18 @@ fn boost(arms_hit: usize, occurred_at: Option<DateTime<Utc>>, now: DateTime<Utc>
     };
 
     proof * recency
+}
+
+/// [`boost`], except that with an explicit date range "recent" means "in the range asked about": an
+/// item dated inside it gets the full recency factor and one dated outside it the floor, whatever its
+/// age (a question about last year must not prefer this week's facts). Undated items stay neutral.
+fn boost_in(arms_hit: usize, occurred_at: Option<DateTime<Utc>>, now: DateTime<Utc>, range: Option<(DateTime<Utc>, DateTime<Utc>)>) -> f64 {
+    let Some((since, until)) = range else { return boost(arms_hit, occurred_at, now) };
+    let proof = boost(arms_hit, None, now);
+    match occurred_at {
+        Some(at) if at < since || at > until => proof * RECENCY_FLOOR,
+        _ => proof,
+    }
 }
 
 /// Checks recall's inputs up front -- every bound is a clear 400, not a slow
@@ -530,7 +764,8 @@ async fn arm(
 /// Recall in `vault_ids`, or -- when there are none -- in the caller's personal
 /// vault and every org vault they belong to (facts kept in an org vault must
 /// not look absent to a caller that forgot to pass it). Each hit names its vault; scores are scaled so
-/// the best hit is 1.
+/// the best hit is 1. `history` also returns facts a later one superseded, marked `status: superseded`
+/// (for "what did we think before"); otherwise only current facts.
 #[allow(clippy::too_many_arguments)]
 pub async fn recall(
     db: &OrgDb,
@@ -542,6 +777,7 @@ pub async fn recall(
     max_tokens: Option<usize>,
     types: Option<&[MemoryType]>,
     vault_ids: &[RecordId],
+    history: bool,
 ) -> AppResult<Vec<RecallItem>> {
     let time_range = validate(query, time_range, limit, max_tokens)?;
     let pool = limit.saturating_mul(4).max(40);
@@ -552,7 +788,7 @@ pub async fn recall(
 
     let mut scored = Vec::new();
     for vault in &rs.vaults {
-        let mut hits = recall_in(db, &scope.narrow(vault), query, time_range, pool, types, vault, &records).await?;
+        let mut hits = recall_in(db, &scope.narrow(vault), query, time_range, pool, types, vault, &records, history).await?;
         let (id, name) = (vault.to_string(), rs.names.get(&vault.to_string()).cloned().unwrap_or_default());
         for h in &mut hits {
             (h.vault, h.vault_name) = (id.clone(), name.clone());
@@ -581,6 +817,8 @@ struct RecordArms {
     keyword: Vec<String>,
     temporal: Vec<String>,
     found: HashMap<String, cs::CacheRecord>,
+    /// The query's vector, for the memory semantic arm of each vault's pass.
+    query: Option<QueryVector>,
 }
 
 impl RecordArms {
@@ -590,8 +828,8 @@ impl RecordArms {
     }
 }
 
-/// The semantic arm waits on an external embedding provider: it runs concurrently with the rest,
-/// so a slow or hanging provider costs at most its deadline. Every arm has its own deadline.
+/// Embedding the query waits on an external provider: it runs concurrently with the keyword and
+/// temporal arms, so a slow or hanging provider costs at most its deadline. Every arm has its own deadline.
 async fn record_arms(
     db: &OrgDb,
     settings: &Settings,
@@ -602,20 +840,17 @@ async fn record_arms(
 ) -> AppResult<RecordArms> {
     let no_filter = cs::RecordFilter::default();
     let keys = |ids: Vec<RecordId>| ids.iter().map(record_key).collect::<Vec<_>>();
-    let semantic = arm("semantic", true, async {
-        if crate::embeddings::service::available(db, settings, scope.owner()).await {
-            Ok(keys(cs::semantic_ids(db, settings, scope, query, &no_filter, pool).await?))
-        } else {
-            Ok(Vec::new())
-        }
-    });
     let local = async {
         let keyword = arm("keyword", false, async { Ok(keys(cs::keyword_ids(db, scope, query, &no_filter, pool).await?)) }).await;
         let temporal = arm("temporal", false, temporal_records(db, scope, time_range, pool)).await;
         (keyword, temporal)
     };
-    let (semantic, (keyword, temporal)) = tokio::join!(semantic, local);
-    let (semantic, keyword, temporal) = (semantic?, keyword?, temporal?);
+    let (qv, (keyword, temporal)) = tokio::join!(query_vector(db, settings, scope.owner(), query), local);
+    let (keyword, temporal) = (keyword?, temporal?);
+    let semantic = match &qv {
+        Some(q) => arm("semantic", true, async { Ok(keys(cs::nearest_ids(db, scope, q.vector.clone(), &no_filter, pool).await?)) }).await?,
+        None => Vec::new(),
+    };
 
     let mut seen = HashSet::new();
     let ids: Vec<RecordId> = semantic
@@ -626,7 +861,7 @@ async fn record_arms(
         .map(|k| RecordId::from_table_key("cache_record", k["cache_record:".len()..].to_string()))
         .collect();
     let found = cs::get_many(db, scope, &ids).await?.into_iter().filter_map(|r| Some((record_key(r.rid.as_ref()?), r))).collect();
-    Ok(RecordArms { semantic, keyword, temporal, found })
+    Ok(RecordArms { semantic, keyword, temporal, found, query: qv })
 }
 
 /// One vault's ranked hits (raw scores, unsorted): its share of the record arms, plus the graph,
@@ -641,6 +876,7 @@ async fn recall_in(
     types: Option<&[MemoryType]>,
     vault: &RecordId,
     records: &RecordArms,
+    history: bool,
 ) -> AppResult<Vec<RecallItem>> {
     let started = std::time::Instant::now();
     let semantic_keys = records.in_vault(&records.semantic, scope, vault);
@@ -656,13 +892,15 @@ async fn recall_in(
     let graph = arm("graph", false, graph_arm(db, vault, query, pool)).await?;
     let temporal = arm("temporal", false, temporal_ids(db, vault, time_range, pool, dated)).await?;
     let memory = arm("memory_text", false, memory_text_arm(db, vault, query, pool)).await?;
-    let arms = [semantic_keys, keyword_keys, graph, temporal, memory];
+    let memory_semantic = arm("memory_semantic", true, memory_semantic_arm(db, vault, records.query.as_ref(), pool)).await?;
+    let arms = [semantic_keys, keyword_keys, graph, temporal, memory, memory_semantic];
     tracing::debug!(
         semantic = arms[0].len(),
         keyword = arms[1].len(),
         graph = arms[2].len(),
         temporal = arms[3].len(),
         memory_text = arms[4].len(),
+        memory_semantic = arms[5].len(),
         elapsed_ms = started.elapsed().as_millis() as u64,
         "recall: arm candidates"
     );
@@ -672,9 +910,10 @@ async fn recall_in(
         return Ok(Vec::new());
     }
     let keys: Vec<&String> = rrf.keys().collect();
-    let mut hydrated = hydrate(db, scope, vault, &keys, &records.found).await?;
+    let mut hydrated = hydrate(db, scope, vault, &keys, &records.found, history).await?;
 
     let now = Utc::now();
+    let range = time_range.map(|(a, b)| (to_chrono(a), to_chrono(b)));
     let mut scored: Vec<RecallItem> = Vec::new();
     for (key, base_score) in &rrf {
         let Some(item) = hydrated.remove(key) else {
@@ -689,7 +928,7 @@ async fn recall_in(
             }
         }
         let arms_hit = arms.iter().filter(|arm| arm.contains(key)).count();
-        let b = boost(arms_hit, item.occurred_at, now);
+        let b = boost_in(arms_hit, item.occurred_at, now, range);
         scored.push(RecallItem {
             id: item.id,
             kind: item.kind,
@@ -701,6 +940,7 @@ async fn recall_in(
             vault: String::new(),
             vault_name: String::new(),
             document: item.document,
+            status: item.status,
         });
     }
     Ok(scored)
@@ -733,6 +973,18 @@ fn fit_budget(items: Vec<RecallItem>, budget: usize) -> Vec<RecallItem> {
 mod tests {
     use super::*;
     use chrono::Duration;
+
+    #[test]
+    fn a_date_range_makes_in_range_items_recent_and_the_rest_old() {
+        let now = Utc::now();
+        let range = Some((now - Duration::days(600), now - Duration::days(300)));
+        let inside = boost_in(1, Some(now - Duration::days(400)), now, range);
+        let outside = boost_in(1, Some(now), now, range);
+        assert!((inside - 1.0).abs() < 1e-9);
+        assert!((outside - RECENCY_FLOOR).abs() < 1e-9);
+        assert!((boost_in(1, None, now, range) - 1.0).abs() < 1e-9);
+        assert_eq!(boost_in(2, Some(now), now, None), boost(2, Some(now), now));
+    }
 
     #[test]
     fn boost_is_neutral_with_one_arm_and_no_date() {
@@ -769,7 +1021,7 @@ mod tests {
     }
 
     fn item(text: &str) -> RecallItem {
-        RecallItem { id: "m".into(), kind: "memory", text: text.into(), source: None, occurred_at: None, score: 1.0, arms_hit: 1, vault: String::new(), vault_name: String::new(), document: None }
+        RecallItem { id: "m".into(), kind: "memory", text: text.into(), source: None, occurred_at: None, score: 1.0, arms_hit: 1, vault: String::new(), vault_name: String::new(), document: None, status: None }
     }
 
     #[test]

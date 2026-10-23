@@ -117,18 +117,36 @@ it with `memory_delete` (which also invalidates the observation, as above).
 
 ## Recall
 
-`recall` runs five arms and fuses them (reciprocal rank fusion), then boosts
+`recall` runs six arms and fuses them (reciprocal rank fusion), then boosts
 results that several arms agree on and recent ones:
 
 1. **semantic**: embeddings over records (needs a model key)
-2. **keyword**: full-text over records
-3. **memory text**: full-text (BM25) over memories, so a fact is found by what it says
-4. **graph**: entities named in the question, then their memories and linked records
-5. **temporal**: an explicit `time_range`
+2. **memory semantic**: embeddings over remembered facts, so a fact is found by
+   what it means ("Grace's occupation" finds "builds compilers for a living");
+   needs a model key
+3. **keyword**: full-text over records
+4. **memory text**: full-text (BM25) over memories, so a fact is found by what it says
+5. **graph**: entities named in the question, their memories and linked
+   records, then one hop along their relations: the relations themselves (a hit
+   of kind `relation`, e.g. "Ada works at Acme") and the neighbours' newest
+   facts, only inside the vault being searched
+6. **temporal**: an explicit `time_range`
 
-The semantic arm runs alongside the four database arms, and every arm has a
+Facts are embedded in the background right after they are written (and by the
+embed job for anything older); editing a fact drops its vector until it is
+embedded again, and a query only meets vectors from the same model. A
+semantic hit must reach a minimum similarity, so an unrelated nearest
+neighbour never rides in on rank alone.
+
+A fact can carry when it happened: `memory_write` takes `occurred_at` (a fact
+written today about last March). The temporal arm and recency use it, and with
+a `time_range` "recent" means "inside that range". Superseded facts are left
+out unless `include_history` is true, which returns them marked
+`status: "superseded"`.
+
+The query is embedded once, alongside the database arms, and every arm has a
 4-second deadline: a slow or failing embedding provider drops only the
-semantic arm. Inputs are bounded (query at
+semantic arms. Inputs are bounded (query at
 most 2000 characters, `limit` 1-100, `max_tokens` 1-100000, `time_range` two
 ISO 8601 dates with since <= until); anything else is a clear error.
 
