@@ -881,6 +881,65 @@ async fn mcp_batches_are_capped_and_charged_per_message() {
     assert_eq!((status, v["code"].as_str()), (StatusCode::TOO_MANY_REQUESTS, Some("rate.limited")), "{v}");
 }
 
+// ------------------------------------------------------------ bulk writes (#87)
+
+fn registry_cost(n: usize) -> usize {
+    eunomia_backend::tools::registry::extra_cost("memory_write_batch", &json!({"items": facts(n, 0)}))
+}
+
+fn facts(n: usize, from: usize) -> Value {
+    Value::Array((from..from + n).map(|i| json!({"subject_name": format!("Page {i}"), "subject_kind": "file", "text": format!("page {i} says hello")})).collect())
+}
+
+/// Hundreds of facts go in as batches of 100: each item is written like `memory_write`, a bad item
+/// fails alone, and a batch costs one request per 10 facts -- cheap enough for a 900-page import,
+/// still inside the rate limit.
+#[tokio::test]
+async fn bulk_writes_go_in_batches_charged_per_ten_facts() {
+    let app = TestApp::new().await;
+    let tok = bearer(&app.token);
+    let (status, _, v) = send(&app.router, "POST", "/api/tools/memory_write_batch", Some(json!({"items": facts(100, 0)})), &tok).await;
+    assert_eq!(status, StatusCode::OK, "{v}");
+    assert_eq!((v["written"].as_u64(), v["failed"].as_u64()), (Some(100), Some(0)), "{v}");
+    assert_eq!(v["results"][99]["index"], 99);
+    assert!(v["results"][0]["memory_id"].as_str().unwrap().starts_with("memory:"));
+
+    let mut mixed = facts(2, 100);
+    mixed.as_array_mut().unwrap().insert(1, json!({"subject_name": "No text", "subject_kind": "file"}));
+    let (_, _, v) = send(&app.router, "POST", "/api/tools/memory_write_batch", Some(json!({"items": mixed})), &tok).await;
+    assert_eq!((v["written"].as_u64(), v["failed"].as_u64()), (Some(2), Some(1)), "{v}");
+    assert_eq!((v["results"][1]["ok"].as_bool(), v["results"][1]["code"].as_str()), (Some(false), Some("validation.invalid")), "{v}");
+
+    let (_, _, v) = send(&app.router, "POST", "/api/tools/memory_write_batch", Some(json!({"items": facts(101, 0)})), &tok).await;
+    assert!(v["error"].as_str().unwrap_or_default().contains("100"), "{v}");
+
+    // A batch costs one request per 10 facts, over REST and MCP alike. Wall-clock refill makes exact
+    // budgets flaky under load, so: a batch fits a fresh budget, and once the budget is drained by
+    // plain requests, a batch is refused at once. (That a refused surcharge takes nothing is the
+    // limiter's own unit test, `ratelimit::a_refused_multi_token_charge_takes_nothing`.)
+    let limited = app_with_limits(&app, RateConfig { token_per_min: 10, user_per_min: 0, ..RateConfig::default() });
+    let batch = |n: usize, from: usize| Some(json!({"items": facts(n, from)}));
+    let (status, _, v) = send(&limited, "POST", "/api/tools/memory_write_batch", batch(50, 200), &tok).await;
+    assert_eq!(status, StatusCode::OK, "{v}");
+    let mut drained = false;
+    for _ in 0..30 {
+        if send(&limited, "GET", "/api/vaults", None, &tok).await.0 == StatusCode::TOO_MANY_REQUESTS {
+            drained = true;
+            break;
+        }
+    }
+    assert!(drained, "a 10/min token runs dry");
+    let (status, headers, _) = send(&limited, "POST", "/api/tools/memory_write_batch", batch(50, 500), &tok).await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    assert!(headers.contains_key("retry-after"));
+    let call = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "memory_write_batch", "arguments": {"items": facts(50, 600)}}});
+    let (status, _, _) = send(&limited, "POST", "/mcp", Some(call), &tok).await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    // the batch spent 5 of the 10: about 5 plain requests (plus a little refill) drained the rest
+    assert_eq!(registry_cost(50), 4);
+    assert_eq!(memory_count(&app).await, 100 + 2 + 50, "refused batches wrote nothing");
+}
+
 // ------------------------------------------------------------ the chat agent runs as the caller
 
 /// A stand-in for the OpenAI endpoint: asks for a `memory_write` first, then answers in text.

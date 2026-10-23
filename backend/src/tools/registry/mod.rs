@@ -92,6 +92,22 @@ pub const READ_ONLY_TOOLS: &[&str] = &[
 /// row records the document id, never its content.
 pub const DISCLOSURE_TOOLS: &[&str] = &["document_download", "document_export"];
 
+/// Most facts one `memory_write_batch` call takes.
+pub const MAX_BATCH_ITEMS: usize = 100;
+/// Facts in a batch covered by the request's own rate-limit charge; each further group of this many
+/// costs one more request ([`extra_cost`]).
+pub const BATCH_ITEMS_PER_REQUEST: usize = 10;
+
+/// Rate-limit units a call costs beyond the one request the gate already charged: a batch of facts
+/// costs one request per [`BATCH_ITEMS_PER_REQUEST`] of them, so a bulk import is ten times cheaper
+/// than one call per fact yet cannot slip past the limit.
+pub fn extra_cost(name: &str, args: &Value) -> usize {
+    match name {
+        "memory_write_batch" => args["items"].as_array().map_or(0, |a| a.len().min(MAX_BATCH_ITEMS).div_ceil(BATCH_ITEMS_PER_REQUEST).saturating_sub(1)),
+        _ => 0,
+    }
+}
+
 pub fn is_read_only(name: &str) -> bool {
     READ_ONLY_TOOLS.contains(&name)
 }
@@ -126,6 +142,7 @@ pub fn description(name: &str) -> &'static str {
         "code_entity_upsert" => "Find-or-create a code entity -- a repository, file or symbol -- matched case-insensitively by name, with a short summary. `parent_id` links a file to its repository or a symbol to its file. Returns the entity id.",
         "code_relate" => "Record a labelled relation between two entities, e.g. symbol `calls` symbol, file `imports` file.",
         "memory_write" => "Remember a fact about a person, organisation, location, code entity or anything else (created if new; \"Jane Doe (Acme/JD)\" resolves to an existing \"Jane Doe\", adding the parts as aliases). `subject_kind` is a built-in kind or your own lowercase kind name (`db`, `table`, `field`, `defect`, `decision`, `task`, ...): a new name creates that kind in the vault (at most 50 custom kinds per vault; `entity_types` lists them, reuse one when it fits). Type `world` for objective facts, `experience` for things that happened, `observation` for stable patterns. Writes to the personal vault unless `vault_id` is given. Earlier facts about the subject this one makes no longer true are marked superseded in the background (left out of recall from then on). When a new entity was created, the result lists `possible_duplicates`: similar existing entities to `entity_merge`. Save durable facts, decisions, preferences and corrections as they come up, and before finishing a task a short summary of what was learned (`experience`).",
+        "memory_write_batch" => "Remember many facts in one call (up to 100), each exactly as `memory_write` would (same fields per item; a batch-level `vault_id` applies to items without their own). Use it to import or back-fill: a page, a document's notes or a whole export, instead of one call per fact. Returns one result per item in input order (`ok`, `memory_id`, or `error` and `code`); a failed item does not stop the rest. Costs one request against the rate limit per 10 facts.",
         "consolidate_observations" => "Fold an entity's new raw facts into its consolidated observation (or do it for every entity with new facts when `subject_id` is omitted).",
         "memory_update" => "Edit one memory by id: change its `text`, and/or switch a raw fact between `world` and `experience`. To revise an entity's consolidated belief, `memory_write` with type `observation` instead.",
         "entity_update" => "Edit an entity's `name`, `aliases` (replaces the list) and/or `summary`.",
@@ -566,7 +583,7 @@ mod tests {
     fn registry_has_every_tool_wired_up() {
         let expected = [
             "docs", "search", "get", "list", "links", "recall", "reflect", "entities_search", "entities_get",
-            "entities_graph", "entity_types", "code_entity_upsert", "code_relate", "memory_write", "consolidate_observations",
+            "entities_graph", "entity_types", "code_entity_upsert", "code_relate", "memory_write", "memory_write_batch", "consolidate_observations",
             "memory_update", "entity_update", "memory_delete", "entity_delete", "entity_merge", "vault_create", "vault_list", "vault_clone", "vault_merge",
             "vault_invite", "vault_members", "vault_remove_member", "vault_leave", "vault_rename", "vault_delete",
             "document_upload", "document_list", "document_get", "document_download", "document_export", "document_delete",

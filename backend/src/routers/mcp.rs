@@ -85,6 +85,22 @@ async fn handle(State(state): State<AppState>, authn: Option<Extension<Authn>>, 
         }
     }
 
+    // a batch tool costs more than the one request the gate charged (`registry::extra_cost`)
+    if let Some(Extension(m)) = &meter {
+        let calls: Vec<&Value> = match &message {
+            Value::Array(b) => b.iter().collect(),
+            m => vec![m],
+        };
+        let extra: usize = calls
+            .iter()
+            .filter(|c| c.get("method").and_then(Value::as_str) == Some("tools/call"))
+            .map(|c| registry::extra_cost(c["params"]["name"].as_str().unwrap_or_default(), &c["params"]["arguments"]))
+            .sum();
+        if let Err(wait) = m.charge(extra) {
+            return crate::gate::rate_limited(wait);
+        }
+    }
+
     // OAuth tokens carry scopes; a personal API token is limited by its own scopes (the gate and the registry check them).
     if let Some(granted) = &granted
         && let Some(denied) = crate::oauth::scope_challenge(&state.settings, &message, granted)

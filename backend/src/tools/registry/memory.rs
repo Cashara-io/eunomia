@@ -12,6 +12,40 @@ use crate::cache::tools as cache_tools;
 use super::kind_schema;
 use crate::entities::tools as entities_tools;
 
+/// `memory_write_batch`'s input schema, built in its own frame: `register_all` builds every schema
+/// inline, and in a debug build one more nested `json!` there overflows a test thread's stack.
+#[inline(never)]
+fn batch_schema() -> serde_json::Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "items": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": super::MAX_BATCH_ITEMS,
+                "description": "the facts, each written exactly as `memory_write` would write it",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "subject_name": {"type": "string"},
+                        "subject_kind": kind_schema(),
+                        "text": {"type": "string"},
+                        "source_record_id": {"type": "string"},
+                        "type": {"type": "string", "enum": ["world", "experience", "observation"]},
+                        "vault_id": {"type": "string", "description": "this item's vault, overriding the batch's"},
+                    },
+                    "required": ["subject_name", "subject_kind", "text"],
+                },
+            },
+            "vault_id": {"type": "string", "description": "write every item into this vault instead of your personal one (a vault id or its name)"},
+        },
+        "required": ["items"],
+    })
+}
+
+/// Writes in flight at once inside one `memory_write_batch` call.
+const BATCH_CONCURRENCY: usize = 4;
+
 pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
     // -- cache::tools: recall, reflect (read-only) ---------------------------
 
@@ -182,6 +216,83 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                 )
                 .await;
                 Ok(to_tool_value(result))
+            })
+        }),
+    );
+
+    #[derive(serde::Deserialize)]
+    struct BatchItem {
+        subject_name: String,
+        subject_kind: String,
+        text: String,
+        #[serde(default)]
+        source_record_id: Option<String>,
+        #[serde(rename = "type", default = "default_memory_write_type")]
+        mem_type: String,
+        #[serde(default)]
+        vault_id: Option<String>,
+    }
+    #[derive(serde::Deserialize)]
+    struct MemoryWriteBatchArgs {
+        items: Vec<serde_json::Value>,
+        #[serde(default)]
+        vault_id: Option<String>,
+    }
+
+    register(
+        registry,
+        "memory_write_batch",
+        batch_schema(),
+        Arc::new(|state, owner, args| {
+            Box::pin(async move {
+                use futures::StreamExt;
+                let a: MemoryWriteBatchArgs = match serde_json::from_value(args) {
+                    Ok(a) => a,
+                    Err(e) => return Ok(bad_args(e)),
+                };
+                if a.items.is_empty() || a.items.len() > super::MAX_BATCH_ITEMS {
+                    return Ok(crate::error::AppError::bad_request(format!("items: 1 to {} facts per call", super::MAX_BATCH_ITEMS)).to_tool_value());
+                }
+                // a few writes at a time: facts about one subject serialise on its lock anyway, and a
+                // wide fan-out would only trade 429s for database write conflicts. Each write's (large)
+                // future is boxed rather than held inline in the stream.
+                let results: Vec<serde_json::Value> = futures::stream::iter(a.items.into_iter().enumerate())
+                    .map(|(index, raw)| {
+                        let default_vault = a.vault_id.clone();
+                        Box::pin(async move {
+                            let item: BatchItem = match serde_json::from_value(raw) {
+                                Ok(i) => i,
+                                Err(e) => return json!({"index": index, "ok": false, "error": e.to_string(), "code": "validation.invalid"}),
+                            };
+                            let vault = match parse_opt_rid("vault_id", &item.vault_id.or(default_vault)) {
+                                Ok(v) => v,
+                                Err(e) => return json!({"index": index, "ok": false, "error": e["error"], "code": e["code"]}),
+                            };
+                            let out = entities_tools::memory_write(
+                                state,
+                                owner,
+                                &item.subject_name,
+                                &item.subject_kind,
+                                &item.text,
+                                item.source_record_id.as_deref(),
+                                &item.mem_type,
+                                vault.as_ref(),
+                            )
+                            .await;
+                            match out {
+                                Ok(o) => json!({"index": index, "ok": true, "entity_id": o.entity.id, "memory_id": o.memory.id}),
+                                Err(e) => {
+                                    let v = e.to_tool_value();
+                                    json!({"index": index, "ok": false, "error": v["error"], "code": v["code"]})
+                                }
+                            }
+                        })
+                    })
+                    .buffered(BATCH_CONCURRENCY)
+                    .collect()
+                    .await;
+                let written = results.iter().filter(|r| r["ok"] == true).count();
+                Ok(json!({"written": written, "failed": results.len() - written, "results": results}))
             })
         }),
     );
