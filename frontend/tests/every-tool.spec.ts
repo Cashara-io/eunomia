@@ -105,6 +105,14 @@ test("every MCP tool works end to end", async ({ request, baseURL }) => {
   expect((await call("document_upload", { filename: "x.exe", text: "MZ" })).isError).toBe(true);
   expect((await ok("document_delete", { id: doc.id })).deleted).toBe(true);
 
+  // bulk writes: one result per fact, a bad one fails alone
+  const batch = await ok("memory_write_batch", { items: [
+    { subject_name: "Import page 1", subject_kind: "file", text: "Page one of the import." },
+    { subject_name: "Import page 2", subject_kind: "file" },
+  ] });
+  expect([batch.written, batch.failed]).toEqual([1, 1]);
+  expect(batch.results[1].code).toBe("validation.invalid");
+
   // coverage: every tool the server lists was exercised above
   const list = await request.post("/mcp", {
     headers: { Authorization: `Bearer ${me.token}` },
