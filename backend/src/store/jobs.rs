@@ -11,6 +11,7 @@ pub const CONTROL_ALL: &[&ControlStmt] = &[
     &FAIL,
     &RELEASE_WORKER,
     &REAP_POISONED,
+    &REVIVE_DEAD_MIGRATIONS,
     &PRUNE_DONE,
     &LEADER_ACQUIRE,
     &LEADER_RELEASE,
@@ -90,6 +91,16 @@ pub const REAP_POISONED: ControlStmt = ControlStmt::new(
     "UPDATE job SET status = 'dead', last_error_code = 'job.lease_expired', locked_by = NONE, locked_until = NONE, \
          updated_at = time::now() \
      WHERE status = 'running' AND locked_until < time::now() AND attempts >= max_attempts RETURN VALUE id",
+);
+
+/// Dead `migrate_tenant` jobs back to ready, once each time a process becomes scheduler leader (a
+/// boot, in practice). Their key carries only the target schema, so without this a migration that
+/// died stays dead across upgrades and the org stays behind; a release that fixes the cause has to be
+/// able to run it again. Once per leadership, so a migration that still fails cannot crash-loop.
+pub const REVIVE_DEAD_MIGRATIONS: ControlStmt = ControlStmt::new(
+    "jobs.revive_dead_migrations",
+    "UPDATE job SET status = 'ready', attempts = 0, run_at = time::now(), last_error_code = NONE, updated_at = time::now() \
+     WHERE kind = 'migrate_tenant' AND status = 'dead' RETURN VALUE id",
 );
 
 pub const PRUNE_DONE: ControlStmt = ControlStmt::new(

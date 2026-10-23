@@ -29,6 +29,7 @@ pub async fn run(state: AppState, cfg: WorkerConfig, mut shutdown: watch::Receiv
             Ok(true) => {
                 if !leading {
                     tracing::info!(worker = %cfg.id, "became scheduler leader");
+                    revive_dead_migrations(&state.control).await;
                 }
                 leading = true;
                 tick(&state, ticks).await;
@@ -91,6 +92,15 @@ fn org_id(r: &surrealdb::types::RecordId) -> Option<OrgId> {
 
 async fn ready_orgs(state: &AppState) -> Vec<OrgId> {
     tenants(state).await.iter().filter(|t| t.status == "ready").filter_map(|t| org_id(&t.org)).collect()
+}
+
+/// See `store::jobs::REVIVE_DEAD_MIGRATIONS`. A failure is logged; the next leader tries again.
+pub async fn revive_dead_migrations(db: &crate::pool::ControlDb) {
+    match store::jobs::REVIVE_DEAD_MIGRATIONS.on(db).await.and_then(|mut r| r.take::<Vec<surrealdb::types::RecordId>>(0)) {
+        Ok(ids) if !ids.is_empty() => tracing::info!(jobs = ids.len(), "retrying org migrations that had failed"),
+        Ok(_) => {}
+        Err(e) => tracing::warn!(error = %e, "could not retry failed org migrations"),
+    }
 }
 
 /// One `migrate_tenant` job per org whose database is behind the schema this code writes. The key
