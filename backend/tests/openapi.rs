@@ -42,7 +42,9 @@ fn every_registered_route_is_in_the_spec() {
             // The registration ends at the next `.route(` or the end of its statement.
             let rest = rest.split(".route(").next().unwrap().split(';').next().unwrap();
             for m in method.captures_iter(rest) {
-                routes.insert((m[1].to_string(), format!("/api{route}")));
+                // the extension inboxes live outside /api (`hook_router`), next to the OAuth and MCP paths
+                let full = if route.starts_with("/hooks/") { route.to_string() } else { format!("/api{route}") };
+                routes.insert((m[1].to_string(), full));
             }
         }
     }

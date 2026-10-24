@@ -21,6 +21,8 @@ const nextConfig: NextConfig = {
     return [
       { source: "/api/:path*", destination: `${backend}/api/:path*` },
       { source: "/mcp", destination: `${backend}/mcp` },
+      // an extension's webhook inbox (the URL shown on the Connectors page)
+      { source: "/hooks/:path*", destination: `${backend}/hooks/:path*` },
       // health probes through the one public port
       { source: "/healthz", destination: `${backend}/healthz` },
       { source: "/readyz", destination: `${backend}/readyz` },

@@ -9,6 +9,7 @@ pub mod settings;
 pub mod audit;
 pub mod debug;
 pub mod export;
+pub mod extensions;
 pub mod sources;
 pub mod tools;
 pub mod update;

@@ -60,6 +60,9 @@ pub async fn tick(state: &AppState, n: u64) {
             if let Err(e) = crate::vaults::service::discard_stale_copies(&org_state.db).await {
                 tracing::warn!(error = %e.message, "deleting stale vault copies failed");
             }
+            if let Err(e) = crate::extensions::prune(&org_state.db).await {
+                tracing::warn!(error = %e.message, "pruning extension events failed");
+            }
         }
     }
     if n.is_multiple_of(SLOW_EVERY)

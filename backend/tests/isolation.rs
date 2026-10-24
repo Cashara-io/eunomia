@@ -120,6 +120,8 @@ struct Ids {
     routed: String,
     document: String,
     token_id: String,
+    extension: String,
+    extension_key: String,
     session_id: String,
     grant_id: String,
     trace: String,
@@ -298,6 +300,14 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
     // a job, a capsule (a failing tool call), and the org / membership / user rows
     let (_, body) = raw(router, "POST", "/api/auth/tokens", Some(json!({"name": format!("{canary} token")})), Some(&token), None).await;
     ids.token_id = serde_json::from_str::<Value>(&body).unwrap()["id"].as_str().unwrap_or_else(|| panic!("{body}")).to_string();
+    // an extension named for the canary, and one buffered delivery with the canary in its body
+    let (status, body) = raw(router, "POST", "/api/extensions", Some(json!({"name": format!("{canary} extension")})), Some(&token), None).await;
+    assert_eq!(status, 200, "{body}");
+    let created: Value = serde_json::from_str(&body).unwrap();
+    ids.extension = created["extension"]["id"].as_str().unwrap().to_string();
+    ids.extension_key = created["extension"]["webhook_url"].as_str().unwrap().rsplit('/').next().unwrap().to_string();
+    let (status, body) = raw(router, "POST", &format!("/hooks/ext/{}", ids.extension_key), Some(json!({"note": canary})), Some(created["secret"].as_str().unwrap()), None).await;
+    assert_eq!(status, 202, "{body}");
     let login = raw(router, "POST", "/api/auth/login", Some(json!({"email": user.email, "password": common::PASSWORD})), None, Some(&format!("{canary} browser"))).await;
     assert_eq!(login.0, 200, "{}", login.1);
     ids.session_id = {
@@ -433,6 +443,7 @@ fn path_value(param: &str, victim: &Org) -> String {
         "memory_id" => victim.ids.memory.clone(),
         "thread_id" => victim.ids.thread.clone(),
         "token_id" => victim.ids.token_id.clone(),
+        "id" => victim.ids.extension.clone(),
         "session_id" => victim.ids.session_id.clone(),
         "grant_id" => victim.ids.grant_id.clone(),
         "trace_id" => victim.ids.trace.clone(),
@@ -506,7 +517,14 @@ async fn attack(w: &World, attacker: &Org, victim: &Org, victim_must_stay_unchan
             let mut url = path.clone();
             for p in op["parameters"].as_array().into_iter().flatten().filter(|p| p["in"] == "path") {
                 let name = p["name"].as_str().unwrap();
-                url = url.replace(&format!("{{{name}}}"), &path_value(name, victim));
+                // A delivery to the victim's real inbox opens the victim's database (it is the victim's own inbound
+                // traffic, and the span names their org), so the attack names a missing extension of the attacker's.
+                let value = if path.starts_with("/hooks/ext/") {
+                    format!("{}_0123456789abcdef", eunomia_backend::rid::key_string(attacker.user.id.key()).unwrap())
+                } else {
+                    path_value(name, victim)
+                };
+                url = url.replace(&format!("{{{name}}}"), &value);
             }
             let has_query = op["parameters"].as_array().into_iter().flatten().any(|p| p["in"] == "query");
             if has_query {
@@ -622,14 +640,15 @@ async fn run_mode(mode: Mode) {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn isolation_holds_with_both_layers() {
     let _g = SERIAL.lock().await;
-    run_mode(Mode::Normal).await;
+    // boxed: the attack walk is a large future, which overflowed a debug test thread's stack
+    Box::pin(run_mode(Mode::Normal)).await;
 }
 
 /// App filters off: the database wall alone keeps the orgs apart.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn isolation_holds_with_app_filters_off() {
     let _g = SERIAL.lock().await;
-    run_mode(Mode::NoAppFilters).await;
+    Box::pin(run_mode(Mode::NoAppFilters)).await;
 }
 
 /// All orgs in one database: the app filters alone keep them apart.
@@ -639,7 +658,7 @@ async fn isolation_holds_in_a_shared_database() {
     if filters_forced_off() {
         return;
     }
-    run_mode(Mode::SharedDb).await;
+    Box::pin(run_mode(Mode::SharedDb)).await;
 }
 
 /// Both layers removed at once leaks, so the suite measures the layers and not the data: shared database
