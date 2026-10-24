@@ -46,6 +46,7 @@ pub const CONTROL_MIGRATIONS: &[(u32, &str, &str)] = &[
     (3, "audit_actor_system", include_str!("../migrations/control/0003_audit_actor_system.surql")),
     (4, "email_lc_and_owner_slot", include_str!("../migrations/control/0004_email_lc_and_owner_slot.surql")),
     (5, "tool_usage", include_str!("../migrations/control/0005_tool_usage.surql")),
+    (6, "oidc_identity", include_str!("../migrations/control/0006_oidc_identity.surql")),
 ];
 
 /// The last tenant migration the legacy single database may be brought to before its data moves out

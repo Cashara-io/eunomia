@@ -57,6 +57,7 @@ pub fn test_settings() -> Settings {
         // SurrealDB's built-in file bucket, in memory
         documents_backend: "memory".into(),
         documents_max_bytes: 256 * 1024,
+        auth: Default::default(),
     }
 }
 

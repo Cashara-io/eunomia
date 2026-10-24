@@ -18,9 +18,19 @@ export type AuditPage = {
     total: number;
 };
 
+export type AuthModeOut = 'password' | 'both' | 'oidc';
+
 export type AuthOut = {
     email: string;
+    /**
+     * False for an account made by an OpenID Connect provider: it has no password to change or use.
+     */
+    has_password: boolean;
     id: string;
+    /**
+     * The display name of the configured OpenID Connect provider when this account can sign in with it.
+     */
+    oidc_provider?: string | null;
     onboarded: boolean;
 };
 
@@ -36,7 +46,15 @@ export type AuthzParams = {
 };
 
 export type BootstrapOut = {
+    /**
+     * Which sign-in methods the login and register pages offer.
+     */
+    auth_mode: AuthModeOut;
     has_users: boolean;
+    /**
+     * The button label ("Continue with {oidc_provider}") when an OpenID Connect provider is configured.
+     */
+    oidc_provider?: string | null;
 };
 
 export type Capsule = {
@@ -1239,6 +1257,78 @@ export type GetMeResponses = {
 };
 
 export type GetMeResponse = GetMeResponses[keyof GetMeResponses];
+
+export type OidcCallbackData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Authorization code
+         */
+        code?: string;
+        /**
+         * Must match the flow cookie
+         */
+        state?: string;
+        /**
+         * Set when the provider refused
+         */
+        error?: string;
+        /**
+         * Issuer (RFC 9207)
+         */
+        iss?: string;
+    };
+    url: '/api/auth/oidc/callback';
+};
+
+export type OidcCallbackErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OidcCallbackError = OidcCallbackErrors[keyof OidcCallbackErrors];
+
+export type OidcCallbackResponses = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OidcCallbackResponse = OidcCallbackResponses[keyof OidcCallbackResponses];
+
+export type OidcStartData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Same-site path to open after sign-in
+         */
+        next?: string;
+    };
+    url: '/api/auth/oidc/start';
+};
+
+export type OidcStartErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OidcStartError = OidcStartErrors[keyof OidcStartErrors];
+
+export type OidcStartResponses = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OidcStartResponse = OidcStartResponses[keyof OidcStartResponses];
 
 export type RegisterData = {
     body: Credentials;

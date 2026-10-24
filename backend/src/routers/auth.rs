@@ -42,6 +42,10 @@ struct AuthOut {
     id: String,
     email: String,
     onboarded: bool,
+    /// False for an account made by an OpenID Connect provider: it has no password to change or use.
+    has_password: bool,
+    /// The display name of the configured OpenID Connect provider when this account can sign in with it.
+    oidc_provider: Option<String>,
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -59,6 +63,18 @@ struct TokenCreated {
 #[derive(Serialize, utoipa::ToSchema)]
 struct BootstrapOut {
     has_users: bool,
+    /// Which sign-in methods the login and register pages offer.
+    auth_mode: AuthModeOut,
+    /// The button label ("Continue with {oidc_provider}") when an OpenID Connect provider is configured.
+    oidc_provider: Option<String>,
+}
+
+#[derive(Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "lowercase")]
+enum AuthModeOut {
+    Password,
+    Both,
+    Oidc,
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]
@@ -98,17 +114,47 @@ fn check_token_name(name: &str) -> AppResult<()> {
     Ok(())
 }
 
-fn user_agent_from(headers: &HeaderMap) -> Option<String> {
+pub(crate) fn user_agent_from(headers: &HeaderMap) -> Option<String> {
     headers.get(header::USER_AGENT).and_then(|v| v.to_str().ok()).map(str::to_string)
 }
 
-async fn onboarded(state: &AppState, user: &User) -> AppResult<bool> {
+/// The `AuthOut` for a user: onboarding state, whether a password exists, and the linked provider.
+async fn auth_out(state: &AppState, user: User) -> AppResult<AuthOut> {
     #[derive(Deserialize, SurrealValue)]
     struct Row {
         onboarded_at: Option<Datetime>,
+        #[serde(default)]
+        #[surreal(default)]
+        password_hash: Option<String>,
     }
     let row: Option<Row> = store::get_control(&state.control, &user.id).await?;
-    Ok(row.map(|r| r.onboarded_at.is_some()).unwrap_or(false))
+    let oidc_provider = match &state.settings.auth.oidc {
+        Some(cfg) => {
+            #[derive(Deserialize, SurrealValue)]
+            struct Link {
+                issuer: String,
+            }
+            let mut res = store::control::IDENTITY_LIST_FOR_USER.on(&state.control).bind(("user", user.id.clone())).await?;
+            let links: Vec<Link> = res.take(0)?;
+            links.iter().any(|l| l.issuer == cfg.issuer).then(|| cfg.provider_name.clone())
+        }
+        None => None,
+    };
+    Ok(AuthOut {
+        id: user.id.to_string(),
+        email: user.email,
+        onboarded: row.as_ref().is_some_and(|r| r.onboarded_at.is_some()),
+        has_password: row.is_some_and(|r| r.password_hash.is_some()),
+        oidc_provider,
+    })
+}
+
+/// Password sign-in and signup are off when `AUTH_MODE=oidc`.
+pub(crate) fn require_password_enabled(state: &AppState) -> AppResult<()> {
+    if state.settings.auth.password_enabled() {
+        return Ok(());
+    }
+    Err(AppError::coded(ErrorCode::AuthPasswordDisabled, "This server signs in through a single sign-on provider. Email and password are turned off."))
 }
 
 /// `COOKIE_SECURE`: `true`, `false`, or `auto` (default). `auto` marks the cookie `Secure` when the
@@ -122,12 +168,12 @@ fn cookie_secure(mode: &str, public_url: &str, forwarded_https: bool) -> bool {
     }
 }
 
-fn cookie_flags(public_url: &str, https: Option<Extension<ForwardedHttps>>) -> &'static str {
+pub(crate) fn cookie_flags(public_url: &str, https: Option<Extension<ForwardedHttps>>) -> &'static str {
     let mode = std::env::var("COOKIE_SECURE").unwrap_or_default();
     if cookie_secure(&mode, public_url, https.is_some_and(|Extension(h)| h.0)) { "; Secure" } else { "" }
 }
 
-fn session_cookie_header(token: &str, public_url: &str, https: Option<Extension<ForwardedHttps>>) -> String {
+pub(crate) fn session_cookie_header(token: &str, public_url: &str, https: Option<Extension<ForwardedHttps>>) -> String {
     format!("{SESSION_COOKIE}={token}; HttpOnly; SameSite=Lax; Path=/{}", cookie_flags(public_url, https))
 }
 
@@ -135,7 +181,7 @@ fn session_cookie_header(token: &str, public_url: &str, https: Option<Extension<
 /// `open` lets anyone who can reach the server sign up; `invite` only emails the operator listed in
 /// `SIGNUP_ALLOWLIST` or `EUNOMIA_ADMIN_EMAILS` (a vault invitation needs an existing account, so it
 /// cannot be the invitation); `closed` nobody. The first user can always sign up. Unknown values close.
-fn signup_allowed(mode: &str, has_users: bool, email: &str, allowlist: &str) -> bool {
+pub(crate) fn signup_allowed(mode: &str, has_users: bool, email: &str, allowlist: &str) -> bool {
     if !has_users {
         return true;
     }
@@ -176,6 +222,7 @@ async fn register(
     headers: HeaderMap,
     Json(body): Json<Credentials>,
 ) -> AppResult<Response> {
+    require_password_enabled(&state)?;
     let has_users = crate::capsules::first_user(&state.control).await?.is_some();
     // an operator address is not verified, so whoever signed up with it first would become operator:
     // it must already have an account before it is listed (same refusal text, nothing to probe)
@@ -199,7 +246,7 @@ async fn register(
         .await?;
     audit::record_as_caller(&state.control, &user.id, "auth.register", "", "ok").await;
 
-    let body = AuthOut { id: user.id.to_string(), email: user.email, onboarded: false };
+    let body = AuthOut { id: user.id.to_string(), email: user.email, onboarded: false, has_password: true, oidc_provider: None };
     Ok((
         StatusCode::OK,
         [(header::SET_COOKIE, session_cookie_header(&token, &state.settings.public_url, https))],
@@ -225,6 +272,7 @@ async fn login(
     headers: HeaderMap,
     Json(body): Json<Credentials>,
 ) -> AppResult<Response> {
+    require_password_enabled(&state)?;
     // checked before the bcrypt work, only failures count. Lockout is per account and address, so a stranger
     // cannot lock a known email out; a looser per-account ceiling still stops guessing spread over addresses.
     let account_key = format!("login-fail:{}", models_user::normalize_email(&body.email));
@@ -254,9 +302,7 @@ async fn login(
     let token = auth::start_session(&state.control, &state.settings.jwt_secret, &user, user_agent_from(&headers).as_deref())
         .await?;
     audit::record_as_caller(&state.control, &user.id, "auth.login", "", "ok").await;
-    let onboarded = onboarded(&state, &user).await?;
-
-    let body = AuthOut { id: user.id.to_string(), email: user.email, onboarded };
+    let body = auth_out(&state, user).await?;
     Ok((
         StatusCode::OK,
         [(header::SET_COOKIE, session_cookie_header(&token, &state.settings.public_url, https))],
@@ -296,8 +342,7 @@ async fn logout(State(state): State<AppState>, https: Option<Extension<Forwarded
     security(("cookie" = []), ("bearer" = [])),
 )]
 async fn me(State(state): State<AppState>, user: User) -> AppResult<Json<AuthOut>> {
-    let onboarded = onboarded(&state, &user).await?;
-    Ok(Json(AuthOut { id: user.id.to_string(), email: user.email, onboarded }))
+    Ok(Json(auth_out(&state, user).await?))
 }
 
 #[utoipa::path(
@@ -568,7 +613,7 @@ async fn revoke_session_route(
     get,
     path = "/api/auth/bootstrap",
     tag = "auth",
-    summary = "Whether any user exists yet",
+    summary = "Whether any user exists yet, and how users sign in",
     responses((status = 200, body = BootstrapOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(()),
 )]
@@ -580,7 +625,13 @@ async fn bootstrap(State(state): State<AppState>) -> AppResult<Json<BootstrapOut
     let mut res = store::control::AUTH_USER_COUNT.on(&state.control).await?;
     let rows: Vec<CountRow> = res.take(0)?;
     let has_users = rows.first().map(|r| r.count > 0).unwrap_or(false);
-    Ok(Json(BootstrapOut { has_users }))
+    let auth = &state.settings.auth;
+    let auth_mode = match auth.mode {
+        crate::oidc::AuthMode::Password => AuthModeOut::Password,
+        crate::oidc::AuthMode::Both => AuthModeOut::Both,
+        crate::oidc::AuthMode::Oidc => AuthModeOut::Oidc,
+    };
+    Ok(Json(BootstrapOut { has_users, auth_mode, oidc_provider: auth.oidc.as_ref().map(|o| o.provider_name.clone()) }))
 }
 
 #[derive(utoipa::OpenApi)]

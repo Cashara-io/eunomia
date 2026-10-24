@@ -109,6 +109,39 @@ expression: first
       "kind": {
         "kind": "NORMAL"
       },
+      "name": "identity",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "issuer",
+            "subject"
+          ],
+          "index": "UNIQUE",
+          "name": "identity_subject_unique",
+          "table": "identity"
+        },
+        {
+          "cols": [
+            "user"
+          ],
+          "index": "",
+          "name": "identity_user_idx",
+          "table": "identity"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
       "name": "job",
       "permissions": {
         "create": false,

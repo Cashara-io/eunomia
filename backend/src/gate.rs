@@ -70,6 +70,9 @@ pub fn explicit_class(method: &Method, path: &str) -> Option<Class> {
         ["mcp"] => Mcp,
         ["api", "openapi.json"] => Public,
         ["api", "auth", "register" | "login"] => AuthAttempt,
+        // the browser leaves for the provider (a redirect, nothing to guess) and comes back (a code exchange: limited per client address like login)
+        ["api", "auth", "oidc", "start"] => Public,
+        ["api", "auth", "oidc", "callback"] => AuthAttempt,
         ["api", "auth", "logout" | "bootstrap"] => Public,
         ["api", "auth", "me"] => Any,
         ["api", "auth", "tokens" | "sessions", ..] => Account(scopes::VAULTS_ADMIN),
