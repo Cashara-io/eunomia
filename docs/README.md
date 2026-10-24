@@ -9,6 +9,7 @@ operators and contributors.
 | [Quickstart](quickstart.md) | Install, sign in, connect an agent — five minutes |
 | [Installation](installation.md) | Every installer flag, manual install, installing as an AI agent |
 | [AI agents & MCP](agents.md) | Connecting Claude Code, Codex, Hermes, …; tokens and OAuth; the tools; running without an OpenAI key |
+| [Python and TypeScript SDKs](sdk.md) | Manage vaults and memories from a script with a personal API token |
 | [Documents](documents.md) | Uploading files: what is indexed, the MCP tools, storage (SurrealDB's built-in file buckets, optionally on S3), backups |
 | [Concepts](concepts.md) | Vaults, entities, memories, recall, merging, the graph and the 3D vector cloud |
 | [Connectors](connectors.md) | Credentials, source options and sync setup |

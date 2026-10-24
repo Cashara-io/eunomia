@@ -29,6 +29,7 @@ pub const MIGRATIONS: &[(u32, &str, &str)] = &[
     (16, "custom_entity_kinds", include_str!("../migrations/tenant/0016_custom_entity_kinds.surql")),
     (17, "multi_connect", include_str!("../migrations/tenant/0017_multi_connect.surql")),
     (18, "vault_buckets", include_str!("../migrations/tenant/0018_vault_buckets.surql")),
+    (19, "memory_recall", include_str!("../migrations/tenant/0019_memory_recall.surql")),
     (20, "extensions", include_str!("../migrations/tenant/0020_extensions.surql")),
 ];
 
@@ -250,6 +251,9 @@ async fn apply(db: &Db, which: Set, max: u32) -> surrealdb::Result<()> {
         if tenant && version == 10 {
             backfill_entity_keys(db).await?;
         }
+        if tenant && version == 17 {
+            backfill_connector_routing(db).await?;
+        }
         // DEFINE is allowed inside a transaction, so schema and ledger row commit together.
         let mut attempt = 1;
         loop {
@@ -333,6 +337,15 @@ async fn backfill_entity_keys(db: &Db) -> surrealdb::Result<()> {
         .await?
         .check()?;
     }
+    Ok(())
+}
+
+/// 0017 pre-step: 0015 typed `connector.routing` as an object with a default, which only applies to new
+/// rows, so a connector made before 2.0.3 has none. 0017's `UPDATE connector` rewrites every row and
+/// failed its type check, leaving the org at schema 16 (`tenant.schema_behind`, issue #85). Give those
+/// rows the default empty routing first. Idempotent.
+async fn backfill_connector_routing(db: &Db) -> surrealdb::Result<()> {
+    root(db, "migrate.backfill_routing", "UPDATE connector SET routing = {} WHERE routing = NONE;").await?.check()?;
     Ok(())
 }
 

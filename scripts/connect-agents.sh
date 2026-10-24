@@ -119,7 +119,12 @@ login() {
     http POST /api/auth/register "$body"
     [ "$HTTP_CODE" != 409 ] || die "an account for $EMAIL already exists with a different password"
   fi
-  [ "$HTTP_CODE" = 200 ] || die "could not log in to $URL (HTTP $HTTP_CODE) -- is Eunomia running?"
+  if [ "$HTTP_CODE" != 200 ]; then
+    # the server says why (signup closed, invite only, ...): show it rather than a bare status (#76)
+    local why=""; [ -n "$HTTP_BODY" ] && why="$(printf '%s' "$HTTP_BODY" | jfield detail 2>/dev/null)"
+    [ "$HTTP_CODE" = 403 ] && [ -n "$why" ] && die "Eunomia refused the account for $EMAIL: $why"
+    die "could not log in to $URL (HTTP $HTTP_CODE${why:+: $why}) -- is Eunomia running?"
+  fi
   LOGGED_IN=1
 }
 

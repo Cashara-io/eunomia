@@ -149,6 +149,17 @@ fn signup_allowed(mode: &str, has_users: bool, email: &str, allowlist: &str) -> 
     }
 }
 
+/// Why signup was refused, in words the person and their admin can act on (issue #76: a bare
+/// "403 forbidden" left a second user guessing). A reserved operator address reads like an
+/// invite-only refusal, so it says nothing about which addresses are operators.
+fn signup_refusal(mode: &str, reserved: bool) -> &'static str {
+    match mode.trim().to_ascii_lowercase().as_str() {
+        _ if reserved => "Signup on this server is by invitation only. Ask the admin to add your email to SIGNUP_ALLOWLIST.",
+        "invite" => "Signup on this server is by invitation only. Ask the admin to add your email to SIGNUP_ALLOWLIST.",
+        _ => "Signup is closed on this server (SIGNUP). Ask the admin to create your account or to open signup.",
+    }
+}
+
 #[utoipa::path(
     operation_id = "register",
     post,
@@ -169,8 +180,10 @@ async fn register(
     // an operator address is not verified, so whoever signed up with it first would become operator:
     // it must already have an account before it is listed (same refusal text, nothing to probe)
     let reserved = has_users && authz::operator_email_listed(&body.email);
-    if reserved || !signup_allowed(&std::env::var("SIGNUP").unwrap_or_default(), has_users, &body.email, &std::env::var("SIGNUP_ALLOWLIST").unwrap_or_default()) {
-        return Err(AppError::coded(ErrorCode::AuthForbidden, "Signup is not open on this server. Ask the admin for access."));
+    let mode = std::env::var("SIGNUP").unwrap_or_default();
+    if reserved || !signup_allowed(&mode, has_users, &body.email, &std::env::var("SIGNUP_ALLOWLIST").unwrap_or_default()) {
+        tracing::info!(signup = %mode, reserved, "signup refused by the SIGNUP policy");
+        return Err(AppError::coded(ErrorCode::AuthForbidden, signup_refusal(&mode, reserved)));
     }
     let user = models_user::register_user(&state, &body.email, &body.password)
         .await
@@ -607,6 +620,14 @@ mod tests {
             if trimmed.is_empty() { "API token".to_string() } else { trimmed.to_string() }
         };
         assert_eq!(name, "API token");
+    }
+
+    #[test]
+    fn a_refusal_says_which_policy_refused() {
+        assert!(signup_refusal("invite", false).contains("SIGNUP_ALLOWLIST"));
+        assert!(signup_refusal("closed", false).contains("closed"));
+        assert!(signup_refusal("junk", false).contains("closed"), "a typo closes, and says so");
+        assert_eq!(signup_refusal("", true), signup_refusal("invite", false), "a reserved address reveals nothing more");
     }
 
     #[test]

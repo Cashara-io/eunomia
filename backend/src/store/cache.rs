@@ -22,10 +22,11 @@ pub const CACHE_RECORDS_IN_RANGE: Stmt = Stmt::new(
     "SELECT id, occurred_at FROM cache_record WHERE (vault IN $vaults OR ($own AND vault = NONE AND owner = $owner)) \
      AND deleted = false AND occurred_at >= $since AND occurred_at <= $until ORDER BY occurred_at DESC LIMIT $limit",
 );
+/// Dated by when the fact happened (`occurred_at`) if its writer said, else when it was written.
 pub const MEMORIES_IN_RANGE: Stmt = Stmt::new(
     "cache.memories_in_range",
-    "SELECT id, created_at FROM memory WHERE vault = $vault \
-     AND created_at >= $since AND created_at <= $until ORDER BY created_at DESC LIMIT $limit",
+    "SELECT id, occurred_at ?? created_at AS at FROM memory WHERE vault = $vault \
+     AND (occurred_at ?? created_at) >= $since AND (occurred_at ?? created_at) <= $until ORDER BY at DESC LIMIT $limit",
 );
 
 /// A record's sync links, to tell whether a replay changed only them.
@@ -61,9 +62,19 @@ pub const RECORDS_IN_SCOPE: Stmt = Stmt::new(
 /// since it was consolidated, so it is not a current fact; the raw facts are still recalled).
 pub const MEMORIES_FOR_RECALL: Stmt = Stmt::new(
     "cache.memories_for_recall",
-    "SELECT id, text, source, created_at, updated_at, type FROM $ids WHERE vault = $vault \
-     AND !(type = \"observation\" AND status = \"stale\") AND status != \"superseded\"",
+    "SELECT id, text, source, created_at, updated_at, occurred_at, type, status FROM $ids WHERE vault = $vault \
+     AND !(type = \"observation\" AND status = \"stale\") AND ($history OR status != \"superseded\")",
 );
+/// Relations the graph arm surfaced, as names, when both ends are in the vault being searched.
+pub const RELATIONS_FOR_RECALL: Stmt = Stmt::new(
+    "cache.relations_for_recall",
+    "SELECT id, label, in.name AS a, out.name AS b, created_at FROM $ids WHERE in.vault = $vault AND out.vault = $vault",
+);
+/// When a fact happened, as its writer said (`memory_write`'s `occurred_at`).
+pub const SET_MEMORY_OCCURRED_AT: Stmt = Stmt::new("cache.set_memory_occurred_at", "UPDATE $id SET occurred_at = $at");
+/// A vector for a memory, unless its text changed since it was read for embedding.
+pub const SET_MEMORY_EMBEDDING: Stmt =
+    Stmt::new("cache.set_memory_embedding", "UPDATE $id SET embedding = $embedding, embedding_spec = $spec WHERE text = $text");
 
 /// Each source's live linked records in either direction, one traversal for the whole batch (recall's
 /// graph arm). Tombstoned sources and targets are skipped.
@@ -159,6 +170,9 @@ pub const ALL: &[&Stmt] = &[
     &MEMORIES_FOR_RECALL,
     &LIVE_NEIGHBOURS,
     &SET_EMBEDDING,
+    &SET_MEMORY_EMBEDDING,
+    &SET_MEMORY_OCCURRED_AT,
+    &RELATIONS_FOR_RECALL,
     &LINKS_OUT,
     &LINKS_OUT_REL,
     &LINKS_IN,

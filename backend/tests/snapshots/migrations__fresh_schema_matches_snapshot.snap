@@ -550,6 +550,23 @@ expression: info(&db).await
       "indexes": [
         {
           "cols": [
+            "embedding"
+          ],
+          "index": "HNSW DIMENSION 1536 DIST COSINE TYPE F32 EFC 150 M 12 M0 24 LM 0.40242960438184466f",
+          "name": "memory_embedding_idx",
+          "table": "memory"
+        },
+        {
+          "cols": [
+            "owner",
+            "embedding_spec"
+          ],
+          "index": "",
+          "name": "memory_owner_spec_idx",
+          "table": "memory"
+        },
+        {
+          "cols": [
             "source"
           ],
           "index": "",

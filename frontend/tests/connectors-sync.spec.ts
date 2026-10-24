@@ -64,7 +64,9 @@ test("a connector syncs real API data that the search tool then finds", async ({
     await expect(page.getByText("Connection works")).toBeVisible();
 
     await page.getByRole("button", { name: "Sync now" }).click();
-    await expect(page.getByRole("status")).toHaveText(/Synced: 1 new or changed/);
+    // The scheduler may sync a newly connected source before this click does: then the click finds the
+    // issue already stored ("1 unchanged"). Either way it must be stored exactly once (checked below).
+    await expect(page.getByRole("status")).toHaveText(/Synced: (1 new or changed|0 new or changed, 1 unchanged)/);
 
     const found = await (await page.request.post("/api/tools/search", { data: { query: "zanzibar importer" } })).json();
     expect(found.results.map((r: { id: string }) => r.id)).toContain("github:github.issue:acme/widget#42");
