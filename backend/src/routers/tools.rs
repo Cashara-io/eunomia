@@ -5,13 +5,13 @@
 //! `all_tools()` and `call()` pick up new registry entries automatically.
 
 use axum::{
-    extract::{Path, State},
+    extract::{Extension, Path, State},
+    response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
 use serde_json::Value;
 
-use crate::error::AppResult;
 use crate::models_user::User;
 use crate::state::AppState;
 use crate::tools::registry;
@@ -50,15 +50,24 @@ async fn catalogue() -> Json<Value> {
 async fn invoke(
     State(state): State<AppState>,
     user: User,
+    meter: Option<Extension<crate::gate::Meter>>,
     Path(name): Path<String>,
     body: Option<Json<Value>>,
-) -> AppResult<Json<Value>> {
+) -> Response {
     if !registry::all_tools().contains_key(name.as_str()) {
-        return Err(crate::error::AppError::coded(crate::error::ErrorCode::ToolNotFound, format!("unknown tool {name:?}")));
+        return crate::error::AppError::coded(crate::error::ErrorCode::ToolNotFound, format!("unknown tool {name:?}")).into_response();
     }
     let args = body.map(|Json(v)| v).unwrap_or(Value::Object(serde_json::Map::new()));
-    let result = registry::call(&state, &user, &name, args).await?;
-    Ok(Json(result))
+    // the gate charged one request; a batch tool costs more (`registry::extra_cost`)
+    if let Some(Extension(m)) = &meter
+        && let Err(wait) = m.charge(registry::extra_cost(&name, &args))
+    {
+        return crate::gate::rate_limited(wait);
+    }
+    match registry::call(&state, &user, &name, args).await {
+        Ok(result) => Json(result).into_response(),
+        Err(e) => e.into_response(),
+    }
 }
 
 #[derive(utoipa::OpenApi)]
