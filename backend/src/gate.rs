@@ -39,7 +39,7 @@ pub enum Class {
     Public,
     /// Login and signup: public, but limited per client address.
     AuthAttempt,
-    /// A source's webhook: public (the source signs it), limited per client address.
+    /// A source's or extension's webhook: public (the sender signs it or holds the secret), limited per client address.
     Webhook,
     /// `/mcp`: Bearer only, and the handler does its own protocol-level errors.
     Mcp,
@@ -70,6 +70,9 @@ pub fn explicit_class(method: &Method, path: &str) -> Option<Class> {
         ["mcp"] => Mcp,
         ["api", "openapi.json"] => Public,
         ["api", "auth", "register" | "login"] => AuthAttempt,
+        // the browser leaves for the provider (a redirect, nothing to guess) and comes back (a code exchange: limited per client address like login)
+        ["api", "auth", "oidc", "start"] => Public,
+        ["api", "auth", "oidc", "callback"] => AuthAttempt,
         ["api", "auth", "logout" | "bootstrap"] => Public,
         ["api", "auth", "me"] => Any,
         ["api", "auth", "tokens" | "sessions", ..] => Account(scopes::VAULTS_ADMIN),
@@ -80,6 +83,10 @@ pub fn explicit_class(method: &Method, path: &str) -> Option<Class> {
         ["api", "vaults", ..] => Vault(if read { scopes::MEMORY_READ } else { scopes::VAULTS_ADMIN }),
         ["api", "connectors", ..] | ["api", "snapshot"] => Account(scopes::CONNECTORS),
         ["api", "sources", _, "webhook", _] => Webhook,
+        // an extension's inbox: public, authenticated by its own secret, limited per client address
+        ["hooks", "ext", _] => Webhook,
+        ["api", "extensions", _, "events", ..] => Account(if read { scopes::MEMORY_READ } else { scopes::MEMORY_WRITE }),
+        ["api", "extensions", ..] => Account(scopes::CONNECTORS),
         ["api", "sources", ..] => Account(scopes::CONNECTORS),
         ["api", "settings" | "debug" | "export" | "update" | "https" | "audit" | "chat" | "oauth", ..] => Account(scopes::VAULTS_ADMIN),
         // OAuth endpoints for MCP clients: public, so limited per client address like login
@@ -357,6 +364,11 @@ mod tests {
         assert_eq!(class(Method::DELETE, "/api/vaults/vault:x"), Vault(scopes::VAULTS_ADMIN));
         assert_eq!(class(Method::POST, "/api/sources/github/webhook/user:x"), Webhook);
         assert_eq!(class(Method::POST, "/api/sources/github/sync"), Account(scopes::CONNECTORS));
+        assert_eq!(class(Method::POST, "/hooks/ext/abc_def"), Webhook);
+        assert_eq!(class(Method::GET, "/api/extensions"), Account(scopes::CONNECTORS));
+        assert_eq!(class(Method::POST, "/api/extensions/extension:x/rotate-secret"), Account(scopes::CONNECTORS));
+        assert_eq!(class(Method::POST, "/api/extensions/extension:x/events/claim"), Account(scopes::MEMORY_WRITE));
+        assert_eq!(class(Method::GET, "/api/extensions/extension:x/events"), Account(scopes::MEMORY_READ));
         assert_eq!(class(Method::GET, "/api/tools"), Public);
         assert_eq!(class(Method::POST, "/api/tools/recall"), Any);
         assert_eq!(class(Method::GET, "/api/something-new"), Account(scopes::VAULTS_ADMIN));

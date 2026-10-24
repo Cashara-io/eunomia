@@ -4,6 +4,13 @@ export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});
 };
 
+export type AckOut = {
+    /**
+     * Ids that were leased and are now done. Ids that are unknown, already done or not leased are skipped.
+     */
+    acked: number;
+};
+
 export type AuditEntry = {
     args_summary: string;
     created_at?: string | null;
@@ -18,9 +25,19 @@ export type AuditPage = {
     total: number;
 };
 
+export type AuthModeOut = 'password' | 'both' | 'oidc';
+
 export type AuthOut = {
     email: string;
+    /**
+     * False for an account made by an OpenID Connect provider: it has no password to change or use.
+     */
+    has_password: boolean;
     id: string;
+    /**
+     * The display name of the configured OpenID Connect provider when this account can sign in with it.
+     */
+    oidc_provider?: string | null;
     onboarded: boolean;
 };
 
@@ -36,7 +53,15 @@ export type AuthzParams = {
 };
 
 export type BootstrapOut = {
+    /**
+     * Which sign-in methods the login and register pages offer.
+     */
+    auth_mode: AuthModeOut;
     has_users: boolean;
+    /**
+     * The button label ("Continue with {oidc_provider}") when an OpenID Connect provider is configured.
+     */
+    oidc_provider?: string | null;
 };
 
 export type Capsule = {
@@ -94,6 +119,31 @@ export type ChunkRef = {
     part: number;
 };
 
+export type ClaimBody = {
+    /**
+     * How long the batch is yours, 5 to 3600 seconds; default 300. Ack or nack before it runs out,
+     * or the events go to the next claim.
+     */
+    lease_secs?: number | null;
+    /**
+     * 1 to 500; default 100.
+     */
+    max?: number | null;
+};
+
+export type ClaimOut = {
+    /**
+     * Oldest first. Empty when nothing is waiting.
+     */
+    events: Array<EventOut>;
+    extension_id: string;
+    lease_secs: number;
+    /**
+     * The extension's target vault, to pass as `vault_id` to the tools; `null` is your personal vault.
+     */
+    vault_id?: string | null;
+};
+
 export type CloneOut = {
     created_at?: string | null;
     entities_copied: number;
@@ -121,6 +171,17 @@ export type CloudPoint = {
     x: number;
     y: number;
     z: number;
+};
+
+export type CloudSimilarityBody = {
+    /**
+     * ids of points returned by the cloud, at most 40
+     */
+    ids: Array<string>;
+    /**
+     * the vaults the points were listed from (same as `vault_ids` of the cloud); default: your personal vault
+     */
+    vault_ids?: Array<string>;
 };
 
 export type ConnectorCreateBody = {
@@ -214,6 +275,18 @@ export type ConsentResult = {
 export type ConsentScope = {
     description: string;
     scope: string;
+};
+
+export type CreateBody = {
+    description?: string | null;
+    /**
+     * 1 to 80 characters.
+     */
+    name: string;
+    /**
+     * A vault you belong to; omit for your personal vault.
+     */
+    vault_id?: string | null;
 };
 
 export type Credentials = {
@@ -355,6 +428,102 @@ export type EntityUpdate = {
     summary?: string | null;
 };
 
+export type EventDetail = {
+    attempts: number;
+    body: {
+        [key: string]: unknown;
+    };
+    claimed_until?: string | null;
+    delivery_id: string;
+    id: string;
+    last_error?: string | null;
+    received_at: string;
+    /**
+     * `pending`, `claimed`, `done` or `dead`.
+     */
+    status: string;
+};
+
+/**
+ * A claimed event, for the consumer.
+ */
+export type EventOut = {
+    /**
+     * How many times this event has been handed out, this claim included.
+     */
+    attempts: number;
+    /**
+     * The delivery's JSON body, as sent.
+     */
+    body: {
+        [key: string]: unknown;
+    };
+    /**
+     * The sender's delivery id (`X-Delivery-Id`, `X-GitHub-Delivery` or `Idempotency-Key`), or one we made up.
+     */
+    delivery_id: string;
+    /**
+     * `extension_event:...`; pass it back to ack or nack.
+     */
+    id: string;
+    received_at: string;
+};
+
+export type ExtensionOut = {
+    /**
+     * Leased to a consumer right now.
+     */
+    claimed: number;
+    created_at: string;
+    /**
+     * Handed out five times without an ack, or nacked at the last attempt (kept 30 days).
+     */
+    dead: number;
+    description: string;
+    /**
+     * Acked, until they are pruned (7 days).
+     */
+    done: number;
+    enabled: boolean;
+    /**
+     * `extension:...`
+     */
+    id: string;
+    last_delivery_at?: string | null;
+    name: string;
+    /**
+     * Waiting to be claimed, counting events whose lease ran out.
+     */
+    pending: number;
+    /**
+     * The last four characters of the current secret.
+     */
+    secret_hint: string;
+    secret_rotated_at: string;
+    updated_at: string;
+    /**
+     * The vault the script is expected to write to; `null` is your personal vault. Informational:
+     * the script passes it as `vault_id` to the tools.
+     */
+    vault_id?: string | null;
+    /**
+     * Where senders POST: `{PUBLIC_URL}/hooks/ext/{key}`.
+     */
+    webhook_url: string;
+};
+
+/**
+ * The only response that carries a secret in the clear.
+ */
+export type ExtensionWithSecret = {
+    extension: ExtensionOut;
+    /**
+     * Shown once. Send it as `Authorization: Bearer <secret>`, or sign the body with it
+     * (`X-Eunomia-Signature: sha256=<hex HMAC-SHA256>`). Rotate to get a new one.
+     */
+    secret: string;
+};
+
 export type FinanceAccount = {
     balance: string;
     name: string;
@@ -403,6 +572,17 @@ export type GraphOut = {
     nodes: Array<GraphNode>;
 };
 
+export type HookOut = {
+    /**
+     * The buffered event's id.
+     */
+    id: string;
+    /**
+     * `accepted`, or `duplicate` when this delivery id was already stored.
+     */
+    status: string;
+};
+
 /**
  * Body of the `POST /https` response.
  */
@@ -443,6 +623,13 @@ export type HttpsStatus = {
      * `off`, `pending` (waiting for the certificate), `active` or `error`.
      */
     state?: string | null;
+};
+
+export type IdsBody = {
+    /**
+     * Event ids from a claim, at most 500.
+     */
+    ids: Array<string>;
 };
 
 export type InvitationList = {
@@ -583,12 +770,44 @@ export type MoveReport = {
     relations: number;
 };
 
+export type NackBody = {
+    /**
+     * Why, kept on the event (500 characters).
+     */
+    error?: string | null;
+    ids: Array<string>;
+};
+
+export type NackOut = {
+    /**
+     * Handed out five times already, so dead-lettered instead.
+     */
+    dead: number;
+    /**
+     * Back to pending.
+     */
+    requeued: number;
+};
+
 export type OkBody = {
     ok: boolean;
     /**
      * Set on `/readyz` when the server is up but running on the public empty `ENCRYPTION_KEY`.
      */
     warning?: string | null;
+};
+
+export type PatchBody = {
+    description?: string | null;
+    /**
+     * `false` makes the inbox answer 403 `extension.disabled`; buffered events stay.
+     */
+    enabled?: boolean | null;
+    name?: string | null;
+    /**
+     * A vault you belong to; an empty string goes back to your personal vault; omit to keep it.
+     */
+    vault_id?: string | null;
 };
 
 export type PocketaiSummary = {
@@ -750,6 +969,30 @@ export type SettingsUpdate = {
 };
 
 /**
+ * Pairwise relationships between points of the cloud, measured on the real vectors (not the 3D
+ * projection). Row `i` / column `j` of every matrix refers to `ids[i]` / `ids[j]`.
+ */
+export type Similarity = {
+    /**
+     * Pearson correlation of the vectors' components, -1..1
+     */
+    correlation: Array<Array<number>>;
+    /**
+     * cosine similarity, -1..1 (1 = same direction)
+     */
+    cosine: Array<Array<number>>;
+    /**
+     * euclidean distance between the vectors
+     */
+    distance: Array<Array<number>>;
+    ids: Array<string>;
+    /**
+     * "semantic" (model embeddings) or "lexical" (hashed words, no model)
+     */
+    space: string;
+};
+
+/**
  * Each side is null when that connector is not connected or its call failed.
  */
 export type SnapshotOut = {
@@ -886,6 +1129,26 @@ export type TokenRename = {
     name: string;
 };
 
+export type ToolUsageReport = {
+    by_channel: Array<UsageByChannel>;
+    by_credential: Array<UsageByCredential>;
+    by_person: Array<UsageByPerson>;
+    by_session: Array<UsageBySession>;
+    by_tool: Array<UsageByTool>;
+    hours: number;
+    /**
+     * `org`: everyone in the org (instance admin). `self`: the caller's own usage.
+     */
+    scope: string;
+    series: Array<UsagePoint>;
+    /**
+     * `hour` for ranges up to 48 hours, `day` beyond.
+     */
+    series_step: string;
+    since: string;
+    totals: UsageCounts;
+};
+
 /**
  * Body of `POST /update/request` and `/update/check`.
  */
@@ -914,6 +1177,74 @@ export type UpdateStatus = {
      */
     progress?: string | null;
     update_available?: boolean | null;
+};
+
+export type UsageByChannel = UsageCounts & {
+    /**
+     * `mcp`, `rest` or `chat`.
+     */
+    channel: string;
+};
+
+export type UsageByCredential = UsageCounts & {
+    /**
+     * The token's or OAuth client's id; empty for the browser session.
+     */
+    credential_id: string;
+    email: string;
+    /**
+     * `session` (the signed-in browser), `token` (personal API token) or `oauth` (an OAuth client).
+     */
+    kind: string;
+    /**
+     * Token name, OAuth client name, or "Browser session".
+     */
+    label: string;
+    user_id: string;
+};
+
+export type UsageByPerson = UsageCounts & {
+    email: string;
+    user_id: string;
+};
+
+export type UsageBySession = UsageCounts & {
+    channel: string;
+    email: string;
+    /**
+     * The `Mcp-Session-Id` the client sent, or the chat thread id.
+     */
+    session: string;
+    user_id: string;
+};
+
+export type UsageByTool = UsageCounts & {
+    read_only: boolean;
+    tool: string;
+};
+
+/**
+ * Calls, failed calls and mean duration of a group of tool calls.
+ */
+export type UsageCounts = {
+    /**
+     * Mean time a call took, in milliseconds.
+     */
+    avg_ms: number;
+    calls: number;
+    /**
+     * Calls that ended in an error (a tool error value, a refused scope, or a failure).
+     */
+    errors: number;
+};
+
+export type UsagePoint = {
+    /**
+     * Start of the hour or day (UTC), RFC 3339.
+     */
+    bucket: string;
+    calls: number;
+    errors: number;
 };
 
 export type VaultClone = {
@@ -997,6 +1328,37 @@ export type ListAuditResponses = {
 };
 
 export type ListAuditResponse = ListAuditResponses[keyof ListAuditResponses];
+
+export type GetToolUsageData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Look back this many hours (1 to 2160, default 168 = 7 days).
+         */
+        hours?: number;
+        /**
+         * Admin only: restrict the report to one person (a `user:...` id).
+         */
+        user?: string;
+    };
+    url: '/api/audit/tool-usage';
+};
+
+export type GetToolUsageErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetToolUsageError = GetToolUsageErrors[keyof GetToolUsageErrors];
+
+export type GetToolUsageResponses = {
+    200: ToolUsageReport;
+};
+
+export type GetToolUsageResponse = GetToolUsageResponses[keyof GetToolUsageResponses];
 
 export type GetBootstrapData = {
     body?: never;
@@ -1085,6 +1447,78 @@ export type GetMeResponses = {
 };
 
 export type GetMeResponse = GetMeResponses[keyof GetMeResponses];
+
+export type OidcCallbackData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Authorization code
+         */
+        code?: string;
+        /**
+         * Must match the flow cookie
+         */
+        state?: string;
+        /**
+         * Set when the provider refused
+         */
+        error?: string;
+        /**
+         * Issuer (RFC 9207)
+         */
+        iss?: string;
+    };
+    url: '/api/auth/oidc/callback';
+};
+
+export type OidcCallbackErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OidcCallbackError = OidcCallbackErrors[keyof OidcCallbackErrors];
+
+export type OidcCallbackResponses = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OidcCallbackResponse = OidcCallbackResponses[keyof OidcCallbackResponses];
+
+export type OidcStartData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Same-site path to open after sign-in
+         */
+        next?: string;
+    };
+    url: '/api/auth/oidc/start';
+};
+
+export type OidcStartErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OidcStartError = OidcStartErrors[keyof OidcStartErrors];
+
+export type OidcStartResponses = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OidcStartResponse = OidcStartResponses[keyof OidcStartResponses];
 
 export type RegisterData = {
     body: Credentials;
@@ -2046,6 +2480,28 @@ export type GetVectorCloudResponses = {
 
 export type GetVectorCloudResponse = GetVectorCloudResponses[keyof GetVectorCloudResponses];
 
+export type GetCloudSimilarityData = {
+    body: CloudSimilarityBody;
+    path?: never;
+    query?: never;
+    url: '/api/entities/cloud/similarity';
+};
+
+export type GetCloudSimilarityErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetCloudSimilarityError = GetCloudSimilarityErrors[keyof GetCloudSimilarityErrors];
+
+export type GetCloudSimilarityResponses = {
+    200: Similarity;
+};
+
+export type GetCloudSimilarityResponse = GetCloudSimilarityResponses[keyof GetCloudSimilarityResponses];
+
 export type GetEntityGraphData = {
     body?: never;
     path?: never;
@@ -2289,6 +2745,251 @@ export type ExportDataResponses = {
 };
 
 export type ExportDataResponse = ExportDataResponses[keyof ExportDataResponses];
+
+export type ListExtensionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/extensions';
+};
+
+export type ListExtensionsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListExtensionsError = ListExtensionsErrors[keyof ListExtensionsErrors];
+
+export type ListExtensionsResponses = {
+    200: Array<ExtensionOut>;
+};
+
+export type ListExtensionsResponse = ListExtensionsResponses[keyof ListExtensionsResponses];
+
+export type CreateExtensionData = {
+    body: CreateBody;
+    path?: never;
+    query?: never;
+    url: '/api/extensions';
+};
+
+export type CreateExtensionErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type CreateExtensionError = CreateExtensionErrors[keyof CreateExtensionErrors];
+
+export type CreateExtensionResponses = {
+    200: ExtensionWithSecret;
+};
+
+export type CreateExtensionResponse = CreateExtensionResponses[keyof CreateExtensionResponses];
+
+export type DeleteExtensionData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/extensions/{id}';
+};
+
+export type DeleteExtensionErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type DeleteExtensionError = DeleteExtensionErrors[keyof DeleteExtensionErrors];
+
+export type DeleteExtensionResponses = {
+    200: OkBody;
+};
+
+export type DeleteExtensionResponse = DeleteExtensionResponses[keyof DeleteExtensionResponses];
+
+export type GetExtensionData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/extensions/{id}';
+};
+
+export type GetExtensionErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetExtensionError = GetExtensionErrors[keyof GetExtensionErrors];
+
+export type GetExtensionResponses = {
+    200: ExtensionOut;
+};
+
+export type GetExtensionResponse = GetExtensionResponses[keyof GetExtensionResponses];
+
+export type UpdateExtensionData = {
+    body: PatchBody;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/extensions/{id}';
+};
+
+export type UpdateExtensionErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type UpdateExtensionError = UpdateExtensionErrors[keyof UpdateExtensionErrors];
+
+export type UpdateExtensionResponses = {
+    200: ExtensionOut;
+};
+
+export type UpdateExtensionResponse = UpdateExtensionResponses[keyof UpdateExtensionResponses];
+
+export type ListExtensionEventsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        /**
+         * `pending`, `claimed`, `done` or `dead`; all when omitted.
+         */
+        status?: string;
+        /**
+         * 1 to 100; default 20.
+         */
+        limit?: number;
+    };
+    url: '/api/extensions/{id}/events';
+};
+
+export type ListExtensionEventsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListExtensionEventsError = ListExtensionEventsErrors[keyof ListExtensionEventsErrors];
+
+export type ListExtensionEventsResponses = {
+    200: Array<EventDetail>;
+};
+
+export type ListExtensionEventsResponse = ListExtensionEventsResponses[keyof ListExtensionEventsResponses];
+
+export type AckExtensionEventsData = {
+    body: IdsBody;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/extensions/{id}/events/ack';
+};
+
+export type AckExtensionEventsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type AckExtensionEventsError = AckExtensionEventsErrors[keyof AckExtensionEventsErrors];
+
+export type AckExtensionEventsResponses = {
+    200: AckOut;
+};
+
+export type AckExtensionEventsResponse = AckExtensionEventsResponses[keyof AckExtensionEventsResponses];
+
+export type ClaimExtensionEventsData = {
+    body: ClaimBody;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/extensions/{id}/events/claim';
+};
+
+export type ClaimExtensionEventsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ClaimExtensionEventsError = ClaimExtensionEventsErrors[keyof ClaimExtensionEventsErrors];
+
+export type ClaimExtensionEventsResponses = {
+    200: ClaimOut;
+};
+
+export type ClaimExtensionEventsResponse = ClaimExtensionEventsResponses[keyof ClaimExtensionEventsResponses];
+
+export type NackExtensionEventsData = {
+    body: NackBody;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/extensions/{id}/events/nack';
+};
+
+export type NackExtensionEventsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type NackExtensionEventsError = NackExtensionEventsErrors[keyof NackExtensionEventsErrors];
+
+export type NackExtensionEventsResponses = {
+    200: NackOut;
+};
+
+export type NackExtensionEventsResponse = NackExtensionEventsResponses[keyof NackExtensionEventsResponses];
+
+export type RotateExtensionSecretData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/extensions/{id}/rotate-secret';
+};
+
+export type RotateExtensionSecretErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type RotateExtensionSecretError = RotateExtensionSecretErrors[keyof RotateExtensionSecretErrors];
+
+export type RotateExtensionSecretResponses = {
+    200: ExtensionWithSecret;
+};
+
+export type RotateExtensionSecretResponse = RotateExtensionSecretResponses[keyof RotateExtensionSecretResponses];
 
 export type RequestHttpsData = {
     body: HttpsRequest;
@@ -3079,6 +3780,30 @@ export type RemoveMemberResponses = {
 };
 
 export type RemoveMemberResponse = RemoveMemberResponses[keyof RemoveMemberResponses];
+
+export type ReceiveExtensionWebhookData = {
+    body?: never;
+    path: {
+        key: string;
+    };
+    query?: never;
+    url: '/hooks/ext/{key}';
+};
+
+export type ReceiveExtensionWebhookErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ReceiveExtensionWebhookError = ReceiveExtensionWebhookErrors[keyof ReceiveExtensionWebhookErrors];
+
+export type ReceiveExtensionWebhookResponses = {
+    202: HookOut;
+};
+
+export type ReceiveExtensionWebhookResponse = ReceiveExtensionWebhookResponses[keyof ReceiveExtensionWebhookResponses];
 
 export type GetReadyzData = {
     body?: never;

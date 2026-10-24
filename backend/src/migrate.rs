@@ -30,6 +30,7 @@ pub const MIGRATIONS: &[(u32, &str, &str)] = &[
     (17, "multi_connect", include_str!("../migrations/tenant/0017_multi_connect.surql")),
     (18, "vault_buckets", include_str!("../migrations/tenant/0018_vault_buckets.surql")),
     (19, "memory_recall", include_str!("../migrations/tenant/0019_memory_recall.surql")),
+    (20, "extensions", include_str!("../migrations/tenant/0020_extensions.surql")),
 ];
 
 /// The tenant schema version this code writes. An org database is current at this version.
@@ -45,6 +46,8 @@ pub const CONTROL_MIGRATIONS: &[(u32, &str, &str)] = &[
     (2, "oauth_token_scope", include_str!("../migrations/control/0002_oauth_token_scope.surql")),
     (3, "audit_actor_system", include_str!("../migrations/control/0003_audit_actor_system.surql")),
     (4, "email_lc_and_owner_slot", include_str!("../migrations/control/0004_email_lc_and_owner_slot.surql")),
+    (5, "tool_usage", include_str!("../migrations/control/0005_tool_usage.surql")),
+    (6, "oidc_identity", include_str!("../migrations/control/0006_oidc_identity.surql")),
 ];
 
 /// The last tenant migration the legacy single database may be brought to before its data moves out

@@ -68,12 +68,73 @@
         ]
       }
     },
+    "/api/audit/tool-usage": {
+      "get": {
+        "tags": [
+          "audit"
+        ],
+        "summary": "Tool-call counts per person, credential, channel, MCP session and tool",
+        "description": "Counts every tool call (read-only and mutating; REST, MCP and chat) over a look-back window. A regular user sees their own usage; an instance admin sees everyone in the org and may narrow to one person with `user`.",
+        "operationId": "getToolUsage",
+        "parameters": [
+          {
+            "name": "hours",
+            "in": "query",
+            "description": "Look back this many hours (1 to 2160, default 168 = 7 days).",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "user",
+            "in": "query",
+            "description": "Admin only: restrict the report to one person (a `user:...` id).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolUsageReport"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/auth/bootstrap": {
       "get": {
         "tags": [
           "auth"
         ],
-        "summary": "Whether any user exists yet",
+        "summary": "Whether any user exists yet, and how users sign in",
         "operationId": "getBootstrap",
         "responses": {
           "200": {
@@ -216,6 +277,111 @@
           {
             "bearer": []
           }
+        ]
+      }
+    },
+    "/api/auth/oidc/callback": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Finish signing in with the OpenID Connect provider",
+        "description": "The provider redirects the browser here with `code` and `state`. Starts a session and redirects to the page the sign-in began from, or to the login page with an `oidc_error` code.",
+        "operationId": "oidcCallback",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "description": "Authorization code",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "description": "Must match the flow cookie",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "description": "Set when the provider refused",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "iss",
+            "in": "query",
+            "description": "Issuer (RFC 9207)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "303": {
+            "description": "Redirect to the app or back to the login page"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/auth/oidc/start": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Begin signing in with the configured OpenID Connect provider",
+        "description": "Redirects the browser to the provider. `next` is a same-site path to return to afterwards (for example the OAuth consent page).",
+        "operationId": "oidcStart",
+        "parameters": [
+          {
+            "name": "next",
+            "in": "query",
+            "description": "Same-site path to open after sign-in",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "303": {
+            "description": "Redirect to the provider"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
         ]
       }
     },
@@ -2163,6 +2329,55 @@
         ]
       }
     },
+    "/api/entities/cloud/similarity": {
+      "post": {
+        "tags": [
+          "entities"
+        ],
+        "summary": "Pairwise similarity of vector cloud points",
+        "operationId": "getCloudSimilarity",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloudSimilarityBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Similarity"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/entities/graph": {
       "get": {
         "tags": [
@@ -2674,6 +2889,548 @@
               "application/json": {
                 "schema": {
                   "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/extensions": {
+      "get": {
+        "tags": [
+          "extensions"
+        ],
+        "summary": "List your extensions with their inbox counts",
+        "operationId": "listExtensions",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExtensionOut"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "extensions"
+        ],
+        "summary": "Create an extension and its inbox",
+        "description": "The response carries the inbox secret once; it cannot be read again, only rotated.",
+        "operationId": "createExtension",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionWithSecret"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/extensions/{id}": {
+      "get": {
+        "tags": [
+          "extensions"
+        ],
+        "summary": "One extension",
+        "operationId": "getExtension",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "extensions"
+        ],
+        "summary": "Delete an extension and every event in its inbox",
+        "operationId": "deleteExtension",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkBody"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "extensions"
+        ],
+        "summary": "Rename, redescribe, retarget, enable or disable an extension",
+        "operationId": "updateExtension",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/extensions/{id}/events": {
+      "get": {
+        "tags": [
+          "extensions"
+        ],
+        "summary": "Look at the inbox without leasing anything, newest first",
+        "operationId": "listExtensionEvents",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "`pending`, `claimed`, `done` or `dead`; all when omitted.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "1 to 100; default 20.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EventDetail"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/extensions/{id}/events/ack": {
+      "post": {
+        "tags": [
+          "extensions"
+        ],
+        "summary": "Mark leased events done",
+        "operationId": "ackExtensionEvents",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdsBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AckOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/extensions/{id}/events/claim": {
+      "post": {
+        "tags": [
+          "extensions"
+        ],
+        "summary": "Lease a batch of buffered events",
+        "description": "At-least-once: an event whose lease runs out without an ack is handed out again, up to five times, then it is dead. A batch also stops at about 8 MiB of bodies.",
+        "operationId": "claimExtensionEvents",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/extensions/{id}/events/nack": {
+      "post": {
+        "tags": [
+          "extensions"
+        ],
+        "summary": "Give leased events back",
+        "description": "They are claimable again at once; after the fifth attempt they are dead-lettered instead.",
+        "operationId": "nackExtensionEvents",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NackBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NackOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/extensions/{id}/rotate-secret": {
+      "post": {
+        "tags": [
+          "extensions"
+        ],
+        "summary": "Issue a new inbox secret; the old one stops working at once",
+        "operationId": "rotateExtensionSecret",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionWithSecret"
                 }
               }
             }
@@ -4297,6 +5054,51 @@
         ]
       }
     },
+    "/hooks/ext/{key}": {
+      "post": {
+        "tags": [
+          "extensions"
+        ],
+        "summary": "An extension's inbox (authenticated by the extension's secret)",
+        "description": "The body is JSON, at most 256 KiB. Prove the secret with `Authorization: Bearer <secret>` or `X-Eunomia-Signature: sha256=<hex HMAC-SHA256 of the raw body keyed with the secret>`. A sender's own `X-Delivery-Id`, `X-GitHub-Delivery` or `Idempotency-Key` makes a retry a no-op. 429 `extension.buffer_full` means the inbox holds its maximum of unprocessed events.",
+        "operationId": "receiveExtensionWebhook",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HookOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
     "/readyz": {
       "get": {
         "tags": [
@@ -4334,6 +5136,19 @@
   },
   "components": {
     "schemas": {
+      "AckOut": {
+        "type": "object",
+        "required": [
+          "acked"
+        ],
+        "properties": {
+          "acked": {
+            "type": "integer",
+            "description": "Ids that were leased and are now done. Ids that are unknown, already done or not leased are skipped.",
+            "minimum": 0
+          }
+        }
+      },
       "AuditEntry": {
         "type": "object",
         "required": [
@@ -4386,19 +5201,39 @@
           }
         }
       },
+      "AuthModeOut": {
+        "type": "string",
+        "enum": [
+          "password",
+          "both",
+          "oidc"
+        ]
+      },
       "AuthOut": {
         "type": "object",
         "required": [
           "id",
           "email",
-          "onboarded"
+          "onboarded",
+          "has_password"
         ],
         "properties": {
           "email": {
             "type": "string"
           },
+          "has_password": {
+            "type": "boolean",
+            "description": "False for an account made by an OpenID Connect provider: it has no password to change or use."
+          },
           "id": {
             "type": "string"
+          },
+          "oidc_provider": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The display name of the configured OpenID Connect provider when this account can sign in with it."
           },
           "onboarded": {
             "type": "boolean"
@@ -4454,11 +5289,23 @@
       "BootstrapOut": {
         "type": "object",
         "required": [
-          "has_users"
+          "has_users",
+          "auth_mode"
         ],
         "properties": {
+          "auth_mode": {
+            "$ref": "#/components/schemas/AuthModeOut",
+            "description": "Which sign-in methods the login and register pages offer."
+          },
           "has_users": {
             "type": "boolean"
+          },
+          "oidc_provider": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The button label (\"Continue with {oidc_provider}\") when an OpenID Connect provider is configured."
           }
         }
       },
@@ -4567,6 +5414,58 @@
           }
         }
       },
+      "ClaimBody": {
+        "type": "object",
+        "properties": {
+          "lease_secs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "How long the batch is yours, 5 to 3600 seconds; default 300. Ack or nack before it runs out,\nor the events go to the next claim."
+          },
+          "max": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "1 to 500; default 100."
+          }
+        }
+      },
+      "ClaimOut": {
+        "type": "object",
+        "required": [
+          "extension_id",
+          "lease_secs",
+          "events"
+        ],
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventOut"
+            },
+            "description": "Oldest first. Empty when nothing is waiting."
+          },
+          "extension_id": {
+            "type": "string"
+          },
+          "lease_secs": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "vault_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The extension's target vault, to pass as `vault_id` to the tools; `null` is your personal vault."
+          }
+        }
+      },
       "CloneOut": {
         "type": "object",
         "required": [
@@ -4652,6 +5551,28 @@
           "z": {
             "type": "number",
             "format": "float"
+          }
+        }
+      },
+      "CloudSimilarityBody": {
+        "type": "object",
+        "required": [
+          "ids"
+        ],
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "ids of points returned by the cloud, at most 40"
+          },
+          "vault_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "the vaults the points were listed from (same as `vault_ids` of the cloud); default: your personal vault"
           }
         }
       },
@@ -4856,6 +5777,31 @@
           },
           "scope": {
             "type": "string"
+          }
+        }
+      },
+      "CreateBody": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "1 to 80 characters."
+          },
+          "vault_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A vault you belong to; omit for your personal vault."
           }
         }
       },
@@ -5241,6 +6187,184 @@
           }
         }
       },
+      "EventDetail": {
+        "type": "object",
+        "required": [
+          "id",
+          "delivery_id",
+          "status",
+          "attempts",
+          "received_at",
+          "body"
+        ],
+        "properties": {
+          "attempts": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "body": {
+            "type": "object"
+          },
+          "claimed_until": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "delivery_id": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "received_at": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "description": "`pending`, `claimed`, `done` or `dead`."
+          }
+        }
+      },
+      "EventOut": {
+        "type": "object",
+        "description": "A claimed event, for the consumer.",
+        "required": [
+          "id",
+          "delivery_id",
+          "received_at",
+          "attempts",
+          "body"
+        ],
+        "properties": {
+          "attempts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "How many times this event has been handed out, this claim included."
+          },
+          "body": {
+            "type": "object",
+            "description": "The delivery's JSON body, as sent."
+          },
+          "delivery_id": {
+            "type": "string",
+            "description": "The sender's delivery id (`X-Delivery-Id`, `X-GitHub-Delivery` or `Idempotency-Key`), or one we made up."
+          },
+          "id": {
+            "type": "string",
+            "description": "`extension_event:...`; pass it back to ack or nack."
+          },
+          "received_at": {
+            "type": "string"
+          }
+        }
+      },
+      "ExtensionOut": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "enabled",
+          "webhook_url",
+          "secret_hint",
+          "secret_rotated_at",
+          "created_at",
+          "updated_at",
+          "pending",
+          "claimed",
+          "done",
+          "dead"
+        ],
+        "properties": {
+          "claimed": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Leased to a consumer right now."
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "dead": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Handed out five times without an ack, or nacked at the last attempt (kept 30 days)."
+          },
+          "description": {
+            "type": "string"
+          },
+          "done": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Acked, until they are pruned (7 days)."
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string",
+            "description": "`extension:...`"
+          },
+          "last_delivery_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "pending": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Waiting to be claimed, counting events whose lease ran out."
+          },
+          "secret_hint": {
+            "type": "string",
+            "description": "The last four characters of the current secret."
+          },
+          "secret_rotated_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "vault_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The vault the script is expected to write to; `null` is your personal vault. Informational:\nthe script passes it as `vault_id` to the tools."
+          },
+          "webhook_url": {
+            "type": "string",
+            "description": "Where senders POST: `{PUBLIC_URL}/hooks/ext/{key}`."
+          }
+        }
+      },
+      "ExtensionWithSecret": {
+        "type": "object",
+        "description": "The only response that carries a secret in the clear.",
+        "required": [
+          "extension",
+          "secret"
+        ],
+        "properties": {
+          "extension": {
+            "$ref": "#/components/schemas/ExtensionOut"
+          },
+          "secret": {
+            "type": "string",
+            "description": "Shown once. Send it as `Authorization: Bearer <secret>`, or sign the body with it\n(`X-Eunomia-Signature: sha256=<hex HMAC-SHA256>`). Rotate to get a new one."
+          }
+        }
+      },
       "FinanceAccount": {
         "type": "object",
         "required": [
@@ -5428,6 +6552,23 @@
           }
         }
       },
+      "HookOut": {
+        "type": "object",
+        "required": [
+          "status",
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The buffered event's id."
+          },
+          "status": {
+            "type": "string",
+            "description": "`accepted`, or `duplicate` when this delivery id was already stored."
+          }
+        }
+      },
       "HttpsAck": {
         "type": "object",
         "description": "Body of the `POST /https` response.",
@@ -5501,6 +6642,21 @@
               "null"
             ],
             "description": "`off`, `pending` (waiting for the certificate), `active` or `error`."
+          }
+        }
+      },
+      "IdsBody": {
+        "type": "object",
+        "required": [
+          "ids"
+        ],
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Event ids from a claim, at most 500."
           }
         }
       },
@@ -5912,6 +7068,46 @@
           }
         }
       },
+      "NackBody": {
+        "type": "object",
+        "required": [
+          "ids"
+        ],
+        "properties": {
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why, kept on the event (500 characters)."
+          },
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "NackOut": {
+        "type": "object",
+        "required": [
+          "requeued",
+          "dead"
+        ],
+        "properties": {
+          "dead": {
+            "type": "integer",
+            "description": "Handed out five times already, so dead-lettered instead.",
+            "minimum": 0
+          },
+          "requeued": {
+            "type": "integer",
+            "description": "Back to pending.",
+            "minimum": 0
+          }
+        }
+      },
       "OkBody": {
         "type": "object",
         "required": [
@@ -5927,6 +7123,37 @@
               "null"
             ],
             "description": "Set on `/readyz` when the server is up but running on the public empty `ENCRYPTION_KEY`."
+          }
+        }
+      },
+      "PatchBody": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "`false` makes the inbox answer 403 `extension.disabled`; buffered events stay."
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "vault_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A vault you belong to; an empty string goes back to your personal vault; omit to keep it."
           }
         }
       },
@@ -6315,6 +7542,62 @@
           },
           "sync_intervals": {},
           "theme": {}
+        }
+      },
+      "Similarity": {
+        "type": "object",
+        "description": "Pairwise relationships between points of the cloud, measured on the real vectors (not the 3D\nprojection). Row `i` / column `j` of every matrix refers to `ids[i]` / `ids[j]`.",
+        "required": [
+          "space",
+          "ids",
+          "cosine",
+          "distance",
+          "correlation"
+        ],
+        "properties": {
+          "correlation": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "float"
+              }
+            },
+            "description": "Pearson correlation of the vectors' components, -1..1"
+          },
+          "cosine": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "float"
+              }
+            },
+            "description": "cosine similarity, -1..1 (1 = same direction)"
+          },
+          "distance": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "float"
+              }
+            },
+            "description": "euclidean distance between the vectors"
+          },
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "space": {
+            "type": "string",
+            "description": "\"semantic\" (model embeddings) or \"lexical\" (hashed words, no model)"
+          }
         }
       },
       "SnapshotOut": {
@@ -6714,6 +7997,78 @@
           }
         }
       },
+      "ToolUsageReport": {
+        "type": "object",
+        "required": [
+          "since",
+          "hours",
+          "scope",
+          "totals",
+          "by_person",
+          "by_credential",
+          "by_channel",
+          "by_session",
+          "by_tool",
+          "series_step",
+          "series"
+        ],
+        "properties": {
+          "by_channel": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsageByChannel"
+            }
+          },
+          "by_credential": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsageByCredential"
+            }
+          },
+          "by_person": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsageByPerson"
+            }
+          },
+          "by_session": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsageBySession"
+            }
+          },
+          "by_tool": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsageByTool"
+            }
+          },
+          "hours": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "scope": {
+            "type": "string",
+            "description": "`org`: everyone in the org (instance admin). `self`: the caller's own usage."
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsagePoint"
+            }
+          },
+          "series_step": {
+            "type": "string",
+            "description": "`hour` for ranges up to 48 hours, `day` beyond."
+          },
+          "since": {
+            "type": "string"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/UsageCounts"
+          }
+        }
+      },
       "UpdateAck": {
         "type": "object",
         "description": "Body of `POST /update/request` and `/update/check`.",
@@ -6785,6 +8140,184 @@
               "boolean",
               "null"
             ]
+          }
+        }
+      },
+      "UsageByChannel": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/UsageCounts"
+          },
+          {
+            "type": "object",
+            "required": [
+              "channel"
+            ],
+            "properties": {
+              "channel": {
+                "type": "string",
+                "description": "`mcp`, `rest` or `chat`."
+              }
+            }
+          }
+        ]
+      },
+      "UsageByCredential": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/UsageCounts"
+          },
+          {
+            "type": "object",
+            "required": [
+              "user_id",
+              "email",
+              "kind",
+              "label",
+              "credential_id"
+            ],
+            "properties": {
+              "credential_id": {
+                "type": "string",
+                "description": "The token's or OAuth client's id; empty for the browser session."
+              },
+              "email": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "description": "`session` (the signed-in browser), `token` (personal API token) or `oauth` (an OAuth client)."
+              },
+              "label": {
+                "type": "string",
+                "description": "Token name, OAuth client name, or \"Browser session\"."
+              },
+              "user_id": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "UsageByPerson": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/UsageCounts"
+          },
+          {
+            "type": "object",
+            "required": [
+              "user_id",
+              "email"
+            ],
+            "properties": {
+              "email": {
+                "type": "string"
+              },
+              "user_id": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "UsageBySession": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/UsageCounts"
+          },
+          {
+            "type": "object",
+            "required": [
+              "user_id",
+              "email",
+              "channel",
+              "session"
+            ],
+            "properties": {
+              "channel": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              },
+              "session": {
+                "type": "string",
+                "description": "The `Mcp-Session-Id` the client sent, or the chat thread id."
+              },
+              "user_id": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "UsageByTool": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/UsageCounts"
+          },
+          {
+            "type": "object",
+            "required": [
+              "tool",
+              "read_only"
+            ],
+            "properties": {
+              "read_only": {
+                "type": "boolean"
+              },
+              "tool": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "UsageCounts": {
+        "type": "object",
+        "description": "Calls, failed calls and mean duration of a group of tool calls.",
+        "required": [
+          "calls",
+          "errors",
+          "avg_ms"
+        ],
+        "properties": {
+          "avg_ms": {
+            "type": "number",
+            "format": "double",
+            "description": "Mean time a call took, in milliseconds."
+          },
+          "calls": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "errors": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Calls that ended in an error (a tool error value, a refused scope, or a failure)."
+          }
+        }
+      },
+      "UsagePoint": {
+        "type": "object",
+        "required": [
+          "bucket",
+          "calls",
+          "errors"
+        ],
+        "properties": {
+          "bucket": {
+            "type": "string",
+            "description": "Start of the hour or day (UTC), RFC 3339."
+          },
+          "calls": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "errors": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },

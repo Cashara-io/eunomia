@@ -338,6 +338,73 @@ expression: info(&db).await
       "kind": {
         "kind": "NORMAL"
       },
+      "name": "extension",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "owner"
+          ],
+          "index": "",
+          "name": "extension_owner_idx",
+          "table": "extension"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
+      "name": "extension_event",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "owner"
+          ],
+          "index": "",
+          "name": "extension_event_owner_idx",
+          "table": "extension_event"
+        },
+        {
+          "cols": [
+            "extension",
+            "status",
+            "received_at"
+          ],
+          "index": "",
+          "name": "extension_event_queue_idx",
+          "table": "extension_event"
+        },
+        {
+          "cols": [
+            "extension",
+            "received_at"
+          ],
+          "index": "",
+          "name": "extension_event_recent_idx",
+          "table": "extension_event"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
       "name": "file",
       "permissions": {
         "create": false,

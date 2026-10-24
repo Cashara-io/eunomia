@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, ServerSentEventsResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AcceptInvitationData, AcceptInvitationErrors, AcceptInvitationResponses, AddMemoryData, AddMemoryErrors, AddMemoryResponses, AddRelationData, AddRelationErrors, AddRelationResponses, CheckForUpdateData, CheckForUpdateErrors, CheckForUpdateResponses, CloneVaultData, CloneVaultErrors, CloneVaultResponses, CompleteOnboardingData, CompleteOnboardingErrors, CompleteOnboardingResponses, CreateConnectorData, CreateConnectorErrors, CreateConnectorResponses, CreateEntityData, CreateEntityErrors, CreateEntityResponses, CreateThreadData, CreateThreadErrors, CreateThreadResponses, CreateTokenData, CreateTokenErrors, CreateTokenResponses, CreateVaultData, CreateVaultErrors, CreateVaultResponses, DecideOauthConsentData, DecideOauthConsentErrors, DecideOauthConsentResponses, DeclineInvitationData, DeclineInvitationErrors, DeclineInvitationResponses, DeleteConnectorData, DeleteConnectorDataData, DeleteConnectorDataErrors, DeleteConnectorDataResponses, DeleteConnectorErrors, DeleteConnectorResponses, DeleteDocumentData, DeleteDocumentErrors, DeleteDocumentResponses, DeleteEntityData, DeleteEntityErrors, DeleteEntityResponses, DeleteMemoryData, DeleteMemoryErrors, DeleteMemoryResponses, DeleteThreadData, DeleteThreadErrors, DeleteThreadResponses, DeleteTokenData, DeleteTokenErrors, DeleteTokenResponses, DeleteVaultData, DeleteVaultErrors, DeleteVaultResponses, DownloadDocumentData, DownloadDocumentErrors, DownloadDocumentResponses, ExportDataData, ExportDataErrors, ExportDataResponses, ExportDocumentData, ExportDocumentErrors, ExportDocumentResponses, GetBootstrapData, GetBootstrapErrors, GetBootstrapResponses, GetConnectorData, GetConnectorErrors, GetConnectorResponses, GetDocumentData, GetDocumentErrors, GetDocumentResponses, GetEntityData, GetEntityErrors, GetEntityGraphData, GetEntityGraphErrors, GetEntityGraphResponses, GetEntityResponses, GetFailureCapsuleData, GetFailureCapsuleErrors, GetFailureCapsuleResponses, GetHttpsStatusData, GetHttpsStatusErrors, GetHttpsStatusResponses, GetMeData, GetMeErrors, GetMeResponses, GetMetricsData, GetMetricsErrors, GetMetricsResponses, GetOauthConsentData, GetOauthConsentErrors, GetOauthConsentResponses, GetOpenapiData, GetOpenapiResponses, GetPocketaiAllData, GetPocketaiAllErrors, GetPocketaiAllResponses, GetPocketaiDetailData, GetPocketaiDetailErrors, GetPocketaiDetailResponses, GetPocketaiSummaryData, GetPocketaiSummaryErrors, GetPocketaiSummaryResponses, GetReadyzData, GetReadyzErrors, GetReadyzResponses, GetSettingsData, GetSettingsErrors, GetSettingsResponses, GetSnapshotData, GetSnapshotErrors, GetSnapshotResponses, GetSourcesStatusData, GetSourcesStatusErrors, GetSourcesStatusResponses, GetThreadHistoryData, GetThreadHistoryErrors, GetThreadHistoryResponses, GetUpBankFinanceSummaryData, GetUpBankFinanceSummaryErrors, GetUpBankFinanceSummaryResponses, GetUpdateStatusData, GetUpdateStatusErrors, GetUpdateStatusResponses, GetVectorCloudData, GetVectorCloudErrors, GetVectorCloudResponses, InviteMemberData, InviteMemberErrors, InviteMemberResponses, InvokeToolData, InvokeToolErrors, InvokeToolResponses, LeaveVaultData, LeaveVaultErrors, LeaveVaultResponses, ListAuditData, ListAuditErrors, ListAuditResponses, ListConnectorsData, ListConnectorsErrors, ListConnectorsResponses, ListDocumentsData, ListDocumentsErrors, ListDocumentsResponses, ListEntitiesData, ListEntitiesErrors, ListEntitiesResponses, ListInvitationsData, ListInvitationsErrors, ListInvitationsResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListOauthGrantsData, ListOauthGrantsErrors, ListOauthGrantsResponses, ListOpenaiModelsData, ListOpenaiModelsErrors, ListOpenaiModelsResponses, ListSessionsData, ListSessionsErrors, ListSessionsResponses, ListSourcesData, ListSourcesErrors, ListSourcesResponses, ListThreadsData, ListThreadsErrors, ListThreadsResponses, ListTokensData, ListTokensErrors, ListTokensResponses, ListToolsData, ListToolsErrors, ListToolsResponses, ListVaultsData, ListVaultsErrors, ListVaultsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, MergeEntitiesData, MergeEntitiesErrors, MergeEntitiesResponses, MergeVaultsData, MergeVaultsErrors, MergeVaultsResponses, MoveConnectorDataData, MoveConnectorDataErrors, MoveConnectorDataResponses, ReceiveSourceWebhookData, ReceiveSourceWebhookErrors, ReceiveSourceWebhookResponses, RegisterData, RegisterErrors, RegisterResponses, ReindexDocumentData, ReindexDocumentErrors, ReindexDocumentResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, RenameTokenData, RenameTokenErrors, RenameTokenResponses, RenameVaultData, RenameVaultErrors, RenameVaultResponses, RepointConnectorsData, RepointConnectorsErrors, RepointConnectorsResponses, RequestHttpsData, RequestHttpsErrors, RequestHttpsResponses, RequestUpdateData, RequestUpdateErrors, RequestUpdateResponses, RevokeOauthGrantData, RevokeOauthGrantErrors, RevokeOauthGrantResponses, RevokeSessionData, RevokeSessionErrors, RevokeSessionResponses, SearchPocketaiData, SearchPocketaiErrors, SearchPocketaiResponses, SendMessageData, SendMessageErrors, SendMessageResponse, SendMessageResponses, SyncSourceData, SyncSourceErrors, SyncSourceResponses, TestConnectorData, TestConnectorErrors, TestConnectorResponses, UpdateConnectorData, UpdateConnectorErrors, UpdateConnectorResponses, UpdateEntityData, UpdateEntityErrors, UpdateEntityResponses, UpdateMemoryData, UpdateMemoryErrors, UpdateMemoryResponses, UpdateSettingsData, UpdateSettingsErrors, UpdateSettingsResponses, UploadDocumentData, UploadDocumentErrors, UploadDocumentResponses } from './types.gen';
+import type { AcceptInvitationData, AcceptInvitationErrors, AcceptInvitationResponses, AckExtensionEventsData, AckExtensionEventsErrors, AckExtensionEventsResponses, AddMemoryData, AddMemoryErrors, AddMemoryResponses, AddRelationData, AddRelationErrors, AddRelationResponses, CheckForUpdateData, CheckForUpdateErrors, CheckForUpdateResponses, ClaimExtensionEventsData, ClaimExtensionEventsErrors, ClaimExtensionEventsResponses, CloneVaultData, CloneVaultErrors, CloneVaultResponses, CompleteOnboardingData, CompleteOnboardingErrors, CompleteOnboardingResponses, CreateConnectorData, CreateConnectorErrors, CreateConnectorResponses, CreateEntityData, CreateEntityErrors, CreateEntityResponses, CreateExtensionData, CreateExtensionErrors, CreateExtensionResponses, CreateThreadData, CreateThreadErrors, CreateThreadResponses, CreateTokenData, CreateTokenErrors, CreateTokenResponses, CreateVaultData, CreateVaultErrors, CreateVaultResponses, DecideOauthConsentData, DecideOauthConsentErrors, DecideOauthConsentResponses, DeclineInvitationData, DeclineInvitationErrors, DeclineInvitationResponses, DeleteConnectorData, DeleteConnectorDataData, DeleteConnectorDataErrors, DeleteConnectorDataResponses, DeleteConnectorErrors, DeleteConnectorResponses, DeleteDocumentData, DeleteDocumentErrors, DeleteDocumentResponses, DeleteEntityData, DeleteEntityErrors, DeleteEntityResponses, DeleteExtensionData, DeleteExtensionErrors, DeleteExtensionResponses, DeleteMemoryData, DeleteMemoryErrors, DeleteMemoryResponses, DeleteThreadData, DeleteThreadErrors, DeleteThreadResponses, DeleteTokenData, DeleteTokenErrors, DeleteTokenResponses, DeleteVaultData, DeleteVaultErrors, DeleteVaultResponses, DownloadDocumentData, DownloadDocumentErrors, DownloadDocumentResponses, ExportDataData, ExportDataErrors, ExportDataResponses, ExportDocumentData, ExportDocumentErrors, ExportDocumentResponses, GetBootstrapData, GetBootstrapErrors, GetBootstrapResponses, GetCloudSimilarityData, GetCloudSimilarityErrors, GetCloudSimilarityResponses, GetConnectorData, GetConnectorErrors, GetConnectorResponses, GetDocumentData, GetDocumentErrors, GetDocumentResponses, GetEntityData, GetEntityErrors, GetEntityGraphData, GetEntityGraphErrors, GetEntityGraphResponses, GetEntityResponses, GetExtensionData, GetExtensionErrors, GetExtensionResponses, GetFailureCapsuleData, GetFailureCapsuleErrors, GetFailureCapsuleResponses, GetHttpsStatusData, GetHttpsStatusErrors, GetHttpsStatusResponses, GetMeData, GetMeErrors, GetMeResponses, GetMetricsData, GetMetricsErrors, GetMetricsResponses, GetOauthConsentData, GetOauthConsentErrors, GetOauthConsentResponses, GetOpenapiData, GetOpenapiResponses, GetPocketaiAllData, GetPocketaiAllErrors, GetPocketaiAllResponses, GetPocketaiDetailData, GetPocketaiDetailErrors, GetPocketaiDetailResponses, GetPocketaiSummaryData, GetPocketaiSummaryErrors, GetPocketaiSummaryResponses, GetReadyzData, GetReadyzErrors, GetReadyzResponses, GetSettingsData, GetSettingsErrors, GetSettingsResponses, GetSnapshotData, GetSnapshotErrors, GetSnapshotResponses, GetSourcesStatusData, GetSourcesStatusErrors, GetSourcesStatusResponses, GetThreadHistoryData, GetThreadHistoryErrors, GetThreadHistoryResponses, GetToolUsageData, GetToolUsageErrors, GetToolUsageResponses, GetUpBankFinanceSummaryData, GetUpBankFinanceSummaryErrors, GetUpBankFinanceSummaryResponses, GetUpdateStatusData, GetUpdateStatusErrors, GetUpdateStatusResponses, GetVectorCloudData, GetVectorCloudErrors, GetVectorCloudResponses, InviteMemberData, InviteMemberErrors, InviteMemberResponses, InvokeToolData, InvokeToolErrors, InvokeToolResponses, LeaveVaultData, LeaveVaultErrors, LeaveVaultResponses, ListAuditData, ListAuditErrors, ListAuditResponses, ListConnectorsData, ListConnectorsErrors, ListConnectorsResponses, ListDocumentsData, ListDocumentsErrors, ListDocumentsResponses, ListEntitiesData, ListEntitiesErrors, ListEntitiesResponses, ListExtensionEventsData, ListExtensionEventsErrors, ListExtensionEventsResponses, ListExtensionsData, ListExtensionsErrors, ListExtensionsResponses, ListInvitationsData, ListInvitationsErrors, ListInvitationsResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListOauthGrantsData, ListOauthGrantsErrors, ListOauthGrantsResponses, ListOpenaiModelsData, ListOpenaiModelsErrors, ListOpenaiModelsResponses, ListSessionsData, ListSessionsErrors, ListSessionsResponses, ListSourcesData, ListSourcesErrors, ListSourcesResponses, ListThreadsData, ListThreadsErrors, ListThreadsResponses, ListTokensData, ListTokensErrors, ListTokensResponses, ListToolsData, ListToolsErrors, ListToolsResponses, ListVaultsData, ListVaultsErrors, ListVaultsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, MergeEntitiesData, MergeEntitiesErrors, MergeEntitiesResponses, MergeVaultsData, MergeVaultsErrors, MergeVaultsResponses, MoveConnectorDataData, MoveConnectorDataErrors, MoveConnectorDataResponses, NackExtensionEventsData, NackExtensionEventsErrors, NackExtensionEventsResponses, OidcCallbackData, OidcCallbackErrors, OidcCallbackResponses, OidcStartData, OidcStartErrors, OidcStartResponses, ReceiveExtensionWebhookData, ReceiveExtensionWebhookErrors, ReceiveExtensionWebhookResponses, ReceiveSourceWebhookData, ReceiveSourceWebhookErrors, ReceiveSourceWebhookResponses, RegisterData, RegisterErrors, RegisterResponses, ReindexDocumentData, ReindexDocumentErrors, ReindexDocumentResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, RenameTokenData, RenameTokenErrors, RenameTokenResponses, RenameVaultData, RenameVaultErrors, RenameVaultResponses, RepointConnectorsData, RepointConnectorsErrors, RepointConnectorsResponses, RequestHttpsData, RequestHttpsErrors, RequestHttpsResponses, RequestUpdateData, RequestUpdateErrors, RequestUpdateResponses, RevokeOauthGrantData, RevokeOauthGrantErrors, RevokeOauthGrantResponses, RevokeSessionData, RevokeSessionErrors, RevokeSessionResponses, RotateExtensionSecretData, RotateExtensionSecretErrors, RotateExtensionSecretResponses, SearchPocketaiData, SearchPocketaiErrors, SearchPocketaiResponses, SendMessageData, SendMessageErrors, SendMessageResponse, SendMessageResponses, SyncSourceData, SyncSourceErrors, SyncSourceResponses, TestConnectorData, TestConnectorErrors, TestConnectorResponses, UpdateConnectorData, UpdateConnectorErrors, UpdateConnectorResponses, UpdateEntityData, UpdateEntityErrors, UpdateEntityResponses, UpdateExtensionData, UpdateExtensionErrors, UpdateExtensionResponses, UpdateMemoryData, UpdateMemoryErrors, UpdateMemoryResponses, UpdateSettingsData, UpdateSettingsErrors, UpdateSettingsResponses, UploadDocumentData, UploadDocumentErrors, UploadDocumentResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -32,7 +32,22 @@ export const listAudit = <ThrowOnError extends boolean = false>(options?: Option
 });
 
 /**
- * Whether any user exists yet
+ * Tool-call counts per person, credential, channel, MCP session and tool
+ *
+ * Counts every tool call (read-only and mutating; REST, MCP and chat) over a look-back window. A regular user sees their own usage; an instance admin sees everyone in the org and may narrow to one person with `user`.
+ */
+export const getToolUsage = <ThrowOnError extends boolean = false>(options?: Options<GetToolUsageData, ThrowOnError>): RequestResult<GetToolUsageResponses, GetToolUsageErrors, ThrowOnError> => (options?.client ?? client).get<GetToolUsageResponses, GetToolUsageErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/audit/tool-usage',
+    ...options
+});
+
+/**
+ * Whether any user exists yet, and how users sign in
  */
 export const getBootstrap = <ThrowOnError extends boolean = false>(options?: Options<GetBootstrapData, ThrowOnError>): RequestResult<GetBootstrapResponses, GetBootstrapErrors, ThrowOnError> => (options?.client ?? client).get<GetBootstrapResponses, GetBootstrapErrors, ThrowOnError>({ url: '/api/auth/bootstrap', ...options });
 
@@ -65,6 +80,20 @@ export const getMe = <ThrowOnError extends boolean = false>(options?: Options<Ge
     url: '/api/auth/me',
     ...options
 });
+
+/**
+ * Finish signing in with the OpenID Connect provider
+ *
+ * The provider redirects the browser here with `code` and `state`. Starts a session and redirects to the page the sign-in began from, or to the login page with an `oidc_error` code.
+ */
+export const oidcCallback = <ThrowOnError extends boolean = false>(options?: Options<OidcCallbackData, ThrowOnError>): RequestResult<OidcCallbackResponses, OidcCallbackErrors, ThrowOnError> => (options?.client ?? client).get<OidcCallbackResponses, OidcCallbackErrors, ThrowOnError>({ url: '/api/auth/oidc/callback', ...options });
+
+/**
+ * Begin signing in with the configured OpenID Connect provider
+ *
+ * Redirects the browser to the provider. `next` is a same-site path to return to afterwards (for example the OAuth consent page).
+ */
+export const oidcStart = <ThrowOnError extends boolean = false>(options?: Options<OidcStartData, ThrowOnError>): RequestResult<OidcStartResponses, OidcStartErrors, ThrowOnError> => (options?.client ?? client).get<OidcStartResponses, OidcStartErrors, ThrowOnError>({ url: '/api/auth/oidc/start', ...options });
 
 /**
  * Create an account and start a session
@@ -605,6 +634,23 @@ export const getVectorCloud = <ThrowOnError extends boolean = false>(options?: O
 });
 
 /**
+ * Pairwise similarity of vector cloud points
+ */
+export const getCloudSimilarity = <ThrowOnError extends boolean = false>(options: Options<GetCloudSimilarityData, ThrowOnError>): RequestResult<GetCloudSimilarityResponses, GetCloudSimilarityErrors, ThrowOnError> => (options.client ?? client).post<GetCloudSimilarityResponses, GetCloudSimilarityErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/entities/cloud/similarity',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
  * Entity graph
  */
 export const getEntityGraph = <ThrowOnError extends boolean = false>(options?: Options<GetEntityGraphData, ThrowOnError>): RequestResult<GetEntityGraphResponses, GetEntityGraphErrors, ThrowOnError> => (options?.client ?? client).get<GetEntityGraphResponses, GetEntityGraphErrors, ThrowOnError>({
@@ -751,6 +797,162 @@ export const exportData = <ThrowOnError extends boolean = false>(options?: Optio
             type: 'apiKey'
         }, { scheme: 'bearer', type: 'http' }],
     url: '/api/export',
+    ...options
+});
+
+/**
+ * List your extensions with their inbox counts
+ */
+export const listExtensions = <ThrowOnError extends boolean = false>(options?: Options<ListExtensionsData, ThrowOnError>): RequestResult<ListExtensionsResponses, ListExtensionsErrors, ThrowOnError> => (options?.client ?? client).get<ListExtensionsResponses, ListExtensionsErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/extensions',
+    ...options
+});
+
+/**
+ * Create an extension and its inbox
+ *
+ * The response carries the inbox secret once; it cannot be read again, only rotated.
+ */
+export const createExtension = <ThrowOnError extends boolean = false>(options: Options<CreateExtensionData, ThrowOnError>): RequestResult<CreateExtensionResponses, CreateExtensionErrors, ThrowOnError> => (options.client ?? client).post<CreateExtensionResponses, CreateExtensionErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/extensions',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Delete an extension and every event in its inbox
+ */
+export const deleteExtension = <ThrowOnError extends boolean = false>(options: Options<DeleteExtensionData, ThrowOnError>): RequestResult<DeleteExtensionResponses, DeleteExtensionErrors, ThrowOnError> => (options.client ?? client).delete<DeleteExtensionResponses, DeleteExtensionErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/extensions/{id}',
+    ...options
+});
+
+/**
+ * One extension
+ */
+export const getExtension = <ThrowOnError extends boolean = false>(options: Options<GetExtensionData, ThrowOnError>): RequestResult<GetExtensionResponses, GetExtensionErrors, ThrowOnError> => (options.client ?? client).get<GetExtensionResponses, GetExtensionErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/extensions/{id}',
+    ...options
+});
+
+/**
+ * Rename, redescribe, retarget, enable or disable an extension
+ */
+export const updateExtension = <ThrowOnError extends boolean = false>(options: Options<UpdateExtensionData, ThrowOnError>): RequestResult<UpdateExtensionResponses, UpdateExtensionErrors, ThrowOnError> => (options.client ?? client).patch<UpdateExtensionResponses, UpdateExtensionErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/extensions/{id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Look at the inbox without leasing anything, newest first
+ */
+export const listExtensionEvents = <ThrowOnError extends boolean = false>(options: Options<ListExtensionEventsData, ThrowOnError>): RequestResult<ListExtensionEventsResponses, ListExtensionEventsErrors, ThrowOnError> => (options.client ?? client).get<ListExtensionEventsResponses, ListExtensionEventsErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/extensions/{id}/events',
+    ...options
+});
+
+/**
+ * Mark leased events done
+ */
+export const ackExtensionEvents = <ThrowOnError extends boolean = false>(options: Options<AckExtensionEventsData, ThrowOnError>): RequestResult<AckExtensionEventsResponses, AckExtensionEventsErrors, ThrowOnError> => (options.client ?? client).post<AckExtensionEventsResponses, AckExtensionEventsErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/extensions/{id}/events/ack',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Lease a batch of buffered events
+ *
+ * At-least-once: an event whose lease runs out without an ack is handed out again, up to five times, then it is dead. A batch also stops at about 8 MiB of bodies.
+ */
+export const claimExtensionEvents = <ThrowOnError extends boolean = false>(options: Options<ClaimExtensionEventsData, ThrowOnError>): RequestResult<ClaimExtensionEventsResponses, ClaimExtensionEventsErrors, ThrowOnError> => (options.client ?? client).post<ClaimExtensionEventsResponses, ClaimExtensionEventsErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/extensions/{id}/events/claim',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Give leased events back
+ *
+ * They are claimable again at once; after the fifth attempt they are dead-lettered instead.
+ */
+export const nackExtensionEvents = <ThrowOnError extends boolean = false>(options: Options<NackExtensionEventsData, ThrowOnError>): RequestResult<NackExtensionEventsResponses, NackExtensionEventsErrors, ThrowOnError> => (options.client ?? client).post<NackExtensionEventsResponses, NackExtensionEventsErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/extensions/{id}/events/nack',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Issue a new inbox secret; the old one stops working at once
+ */
+export const rotateExtensionSecret = <ThrowOnError extends boolean = false>(options: Options<RotateExtensionSecretData, ThrowOnError>): RequestResult<RotateExtensionSecretResponses, RotateExtensionSecretErrors, ThrowOnError> => (options.client ?? client).post<RotateExtensionSecretResponses, RotateExtensionSecretErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/extensions/{id}/rotate-secret',
     ...options
 });
 
@@ -1209,6 +1411,13 @@ export const removeMember = <ThrowOnError extends boolean = false>(options: Opti
     url: '/api/vaults/{vault_id}/members/{email}',
     ...options
 });
+
+/**
+ * An extension's inbox (authenticated by the extension's secret)
+ *
+ * The body is JSON, at most 256 KiB. Prove the secret with `Authorization: Bearer <secret>` or `X-Eunomia-Signature: sha256=<hex HMAC-SHA256 of the raw body keyed with the secret>`. A sender's own `X-Delivery-Id`, `X-GitHub-Delivery` or `Idempotency-Key` makes a retry a no-op. 429 `extension.buffer_full` means the inbox holds its maximum of unprocessed events.
+ */
+export const receiveExtensionWebhook = <ThrowOnError extends boolean = false>(options: Options<ReceiveExtensionWebhookData, ThrowOnError>): RequestResult<ReceiveExtensionWebhookResponses, ReceiveExtensionWebhookErrors, ThrowOnError> => (options.client ?? client).post<ReceiveExtensionWebhookResponses, ReceiveExtensionWebhookErrors, ThrowOnError>({ url: '/hooks/ext/{key}', ...options });
 
 /**
  * Readiness: the control database answers and its schema is current

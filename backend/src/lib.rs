@@ -12,6 +12,7 @@ pub mod documents;
 pub mod embeddings;
 pub mod entities;
 pub mod error;
+pub mod extensions;
 pub mod gate;
 #[cfg(feature = "test-support")]
 pub mod isolation;
@@ -20,6 +21,7 @@ pub mod llm_net;
 pub mod migrate;
 pub mod models_user;
 pub mod oauth;
+pub mod oidc;
 pub mod openapi;
 pub mod pool;
 pub mod provisioning;
@@ -34,6 +36,7 @@ pub mod store;
 pub mod telemetry;
 pub mod tools;
 pub mod tx;
+pub mod usage;
 pub mod vaults;
 
 use axum::http::{header, HeaderName, HeaderValue, Method};
@@ -81,7 +84,9 @@ pub fn app_with(state: AppState, limits: ratelimit::RateConfig) -> axum::Router 
         .merge(routers::tools::router())
         .merge(routers::sources::router())
         .merge(routers::sources::webhook_router())
-        .merge(routers::oauth::router());
+        .merge(routers::extensions::router())
+        .merge(routers::oauth::router())
+        .merge(routers::oidc::router());
 
     // Browser-based MCP clients (for example MCP Inspector) run on any origin and
     // authenticate with a bearer token only, so these routes answer CORS for any
@@ -112,7 +117,7 @@ pub fn app_with(state: AppState, limits: ratelimit::RateConfig) -> axum::Router 
             .layer(cors)
     };
 
-    let open = axum::Router::new().route("/healthz", axum::routing::get(healthz)).route("/readyz", axum::routing::get(readyz)).merge(routers::mcp::router()).merge(oauth::router());
+    let open = axum::Router::new().route("/healthz", axum::routing::get(healthz)).route("/readyz", axum::routing::get(readyz)).merge(routers::mcp::router()).merge(routers::extensions::hook_router()).merge(oauth::router());
     // One ceiling for every request body, ahead of everything else (a handler that reads the body
     // itself, like the webhook, is bounded too); raise it with the env var. Document uploads are the
     // exception: their router has its own ceiling, the document size limit plus room for the request.

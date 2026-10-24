@@ -21,6 +21,7 @@ The `ErrorCode` enum is in `backend/src/error.rs`. A unit test fails if a code i
 | `auth.scope` | 403 | The token lacks the scope this route or tool needs, or is restricted to another vault, or the route is account-level and the token is vault-restricted. | `gate.rs`, `authz.rs`, `tools/registry.rs` |
 | `auth.token_expired` | 401 | The API token's `expires_at` has passed. Create a new token. | `gate.rs`, `auth.rs` |
 | `auth.session_expired` | 401 | The session cookie is past its (sliding) expiry or its JWT `exp`. Log in again. | `gate.rs`, `auth.rs` |
+| `auth.password_disabled` | 403 | `AUTH_MODE=oidc`: email and password sign-in and signup are turned off; users sign in through the OpenID Connect provider (`/api/auth/oidc/start`). | `routers/auth.rs` |
 | `rate.limited` | 429 | Too many requests for this user, token or (for login and signup) client address. Also 10 failed logins for one email, or 30 failed token requests for one OAuth client, in 15 minutes, whatever the address (counted per process). Honour the `Retry-After` header. | `gate.rs`, `routers/auth.rs`, `oauth/server.rs` |
 | `tenant.denied` | 403 | The database refused a query on permissions grounds, or a statement named a table of the other database (control vs org) and was refused before it was sent. Logged at error level; treat as a high-severity alert. | `error.rs` (DB error mapping), `store/mod.rs` (`CROSSING_MARK`) |
 | `tenant.not_found` | 404 | The org has no ready database: its routing row is missing or the database is still being created or moved. | `pool.rs` |
@@ -35,6 +36,9 @@ The `ErrorCode` enum is in `backend/src/error.rs`. A unit test fails if a code i
 | `connector.not_found` | 404 | Unknown connector kind. | `routers/connectors.rs` |
 | `connector.not_connected` | 400 | The action needs a connector that has not been connected. | `routers/connectors.rs` |
 | `source.not_found` | 404 | Unknown source key. | `routers/sources.rs`, `sources/registry.rs` |
+| `extension.not_found` | 404 | No such extension of yours (a guessed id, another user's, or one already deleted). | `routers/extensions.rs` |
+| `extension.disabled` | 403 | The delivery was authenticated, but the extension is switched off. | `routers/extensions.rs` |
+| `extension.buffer_full` | 429 | The extension's inbox holds the maximum of waiting and leased events (10,000 by default); the sender should retry later. Not a rate limit: it clears as the consumer acks. | `routers/extensions.rs` |
 | `tool.not_found` | 404 | Unknown tool name (REST, MCP and registry). | `routers/tools.rs`, `routers/mcp.rs`, `tools/registry.rs` |
 | `resource.not_found` | 404 | Generic not found, also the default for a bare 404. | `error.rs`, `routers/entities.rs` (bad id), various |
 | `document.not_found` | 404 | No such document of yours (a guessed id, another user's or org's, or one already deleted). | `documents/` |
