@@ -23,6 +23,8 @@ type Props = {
   links?: SceneLink[];
   axes?: [string, string, string];
   selectedId?: string | null;
+  /** points to mark with a numbered frame (a multi-selection), in number order */
+  highlightIds?: string[];
   onSelect?: (id: string) => void;
   ariaLabel: string;
   /** draw every point's label (only sensible for small graphs) */
@@ -72,7 +74,7 @@ const easeInOut = (t: number) => (t < 0.5 ? 8 * t ** 4 : 1 - (-2 * t + 2) ** 4 /
 type Box = { x0: number; y0: number; x1: number; y1: number };
 const pointerDriven = () => document.documentElement.dataset.input === "pointer" && !prefersReducedMotion();
 
-export default function Scene3D({ points, links = [], axes, selectedId, onSelect, ariaLabel, labels, zoomControls, flat, insets }: Props) {
+export default function Scene3D({ points, links = [], axes, selectedId, highlightIds, onSelect, ariaLabel, labels, zoomControls, flat, insets }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const zoomTextRef = useRef<HTMLSpanElement>(null);
@@ -87,11 +89,13 @@ export default function Scene3D({ points, links = [], axes, selectedId, onSelect
   const insetsRef = useRef<SceneInsets>(insets ?? NO_INSETS);
   const onSelectRef = useRef(onSelect);
   const selectedRef = useRef(selectedId);
+  const highlightRef = useRef(highlightIds);
   const [hover, setHover] = useState<{ label: string; x: number; y: number } | null>(null);
 
   useEffect(() => {
     onSelectRef.current = onSelect;
     selectedRef.current = selectedId;
+    highlightRef.current = highlightIds;
   });
 
   const { top = 0, right = 0, bottom = 0, left = 0 } = insets ?? {};
@@ -260,6 +264,32 @@ export default function Scene3D({ points, links = [], axes, selectedId, onSelect
     selFrame.className = "frame-selected";
     Object.assign(selFrame.style, { position: "absolute", left: "0", top: "0", display: "none" });
     overlay.appendChild(selFrame);
+    // numbered frames for a multi-selection, one per highlighted point (pooled)
+    const marks: { box: HTMLDivElement; num: HTMLSpanElement }[] = [];
+    const mark = (k: number) => {
+      if (!marks[k]) {
+        const box = document.createElement("div");
+        Object.assign(box.style, { position: "absolute", left: "0", top: "0", display: "none", border: "1px solid var(--accent)", borderRadius: "50%" });
+        const num = document.createElement("span");
+        Object.assign(num.style, {
+          position: "absolute",
+          right: "-6px",
+          top: "-8px",
+          minWidth: "14px",
+          height: "14px",
+          padding: "0 3px",
+          borderRadius: "7px",
+          background: "var(--accent)",
+          color: "var(--on-accent)",
+          font: "600 9.5px/14px var(--font-mono), monospace",
+          textAlign: "center",
+        });
+        box.appendChild(num);
+        overlay.appendChild(box);
+        marks[k] = { box, num };
+      }
+      return marks[k];
+    };
     // pointer pick ring: positioned per frame, animated by WAAPI on its own scale
     const pickRing = document.createElement("div");
     Object.assign(pickRing.style, { position: "absolute", left: "0", top: "0", display: "none" });
@@ -503,6 +533,25 @@ export default function Scene3D({ points, links = [], axes, selectedId, onSelect
           selFrame.style.transform = `translate(${((v.x + 1) / 2) * size.w - box / 2}px, ${((1 - v.y) / 2) * size.h - box / 2}px)`;
         }
       } else selFrame.style.display = "none";
+      const hl = highlightRef.current ?? [];
+      for (let k = 0; k < Math.max(hl.length, marks.length); k++) {
+        const at = k < hl.length ? index.get(hl[k]) : undefined;
+        if (at === undefined) {
+          if (marks[k]) marks[k].box.style.display = "none";
+          continue;
+        }
+        const d = disc(at, at === sel ? SELECTED_SCALE : 1);
+        const m = mark(k);
+        if (d.hidden) {
+          m.box.style.display = "none";
+          continue;
+        }
+        const box = Math.round(2 * d.r + 8);
+        m.box.style.display = "block";
+        m.box.style.width = m.box.style.height = `${box}px`;
+        m.box.style.transform = `translate(${d.x - box / 2}px, ${d.y - box / 2}px)`;
+        if (m.num.textContent !== String(k + 1)) m.num.textContent = String(k + 1);
+      }
       if (pickIdx !== undefined) {
         const p = disc(pickIdx, pickIdx === sel ? SELECTED_SCALE : 1);
         const d = Math.round(2 * p.r + 4);

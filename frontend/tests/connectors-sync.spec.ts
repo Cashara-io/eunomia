@@ -59,6 +59,10 @@ test("a connector syncs real API data that the search tool then finds", async ({
     await expect(page.getByRole("button", { name: "Saved" })).toBeVisible();
     // Point the connector at the mock instead of api.github.com (test-only hook).
     expect((await page.request.put("/api/connectors/github", { data: { config: { base_url: github.base } } })).ok()).toBeTruthy();
+    // that change bypassed the page: reload so it shows the saved credentials (the button is disabled
+    // with "Save credentials first" until it does, which raced the click above under CI load)
+    await page.reload();
+    await expect(page.getByRole("button", { name: "Test connection" })).toBeEnabled();
 
     await page.getByRole("button", { name: "Test connection" }).click();
     await expect(page.getByText("Connection works")).toBeVisible();
