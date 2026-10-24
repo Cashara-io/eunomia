@@ -9,6 +9,9 @@
 //!
 //! Async end to end: handlers need to be `async fn` for axum concurrency, and the same shape serves MCP.
 //!
+//! Usage: every call, read-only or not, is also counted in `tool_usage` (`crate::usage`, one atomic
+//! upsert in a spawned task, so it adds no latency and cannot fail the call).
+//!
 //! Audit trail: every call through [`call`] for a tool NOT in
 //! [`READ_ONLY_TOOLS`] writes one `audit_log` row (owner, tool name, a
 //! redacted/truncated summary of the args, outcome, timestamp) -- this is
@@ -338,6 +341,7 @@ pub async fn call(app: &AppState, user: &User, name: &str, mut args: Value) -> A
     });
     if let Err(e) = needed {
         record_event(&app.control, owner, name, e.code.as_str(), "").await;
+        count_call(app, user, name, true, 0);
         return Err(e);
     }
     let state = &app.org(&user.org).await?;
@@ -369,8 +373,15 @@ pub async fn call(app: &AppState, user: &User, name: &str, mut args: Value) -> A
     span.record("duration_ms", started.elapsed().as_secs_f64() * 1000.0);
     span.in_scope(|| tracing::info!(outcome, "tool call"));
     let source = source.lock().unwrap().take();
+    let errored = !matches!(&result, Ok(v) if v.get("error").is_none());
+    count_call(app, user, name, errored, started.elapsed().as_millis() as u64);
     record_failure(state, owner, name, captured, &result, source).await;
     result
+}
+
+/// Counts the call in the usage table (`crate::usage`), read-only or not. Spawned: it never waits.
+fn count_call(app: &AppState, user: &User, tool: &str, errored: bool, ms: u64) {
+    crate::usage::record(&app.control, crate::usage::Sample { org: user.org.to_string(), user: user.id.clone(), tool: tool.to_string(), errored, ms });
 }
 
 const VAULT_ARGS: &[&str] = &["vault_id", "vault_id_a", "vault_id_b"];

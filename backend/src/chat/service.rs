@@ -591,7 +591,7 @@ async fn run_send(
             let result = if !chat_may_call(&name) {
                 json!({ "error": format!("`{name}` is not available in the in-app chat; the user can do this from the app itself") })
             } else {
-                match registry::call(&state.app, user, &name, args).await {
+                match crate::usage::with_context(crate::usage::Channel::Chat, thread_id.to_string(), registry::call(&state.app, user, &name, args)).await {
                     Ok(v) => v,
                     Err(e) => e.to_tool_value(),
                 }

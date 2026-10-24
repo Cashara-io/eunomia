@@ -886,6 +886,26 @@ export type TokenRename = {
     name: string;
 };
 
+export type ToolUsageReport = {
+    by_channel: Array<UsageByChannel>;
+    by_credential: Array<UsageByCredential>;
+    by_person: Array<UsageByPerson>;
+    by_session: Array<UsageBySession>;
+    by_tool: Array<UsageByTool>;
+    hours: number;
+    /**
+     * `org`: everyone in the org (instance admin). `self`: the caller's own usage.
+     */
+    scope: string;
+    series: Array<UsagePoint>;
+    /**
+     * `hour` for ranges up to 48 hours, `day` beyond.
+     */
+    series_step: string;
+    since: string;
+    totals: UsageCounts;
+};
+
 /**
  * Body of `POST /update/request` and `/update/check`.
  */
@@ -914,6 +934,74 @@ export type UpdateStatus = {
      */
     progress?: string | null;
     update_available?: boolean | null;
+};
+
+export type UsageByChannel = UsageCounts & {
+    /**
+     * `mcp`, `rest` or `chat`.
+     */
+    channel: string;
+};
+
+export type UsageByCredential = UsageCounts & {
+    /**
+     * The token's or OAuth client's id; empty for the browser session.
+     */
+    credential_id: string;
+    email: string;
+    /**
+     * `session` (the signed-in browser), `token` (personal API token) or `oauth` (an OAuth client).
+     */
+    kind: string;
+    /**
+     * Token name, OAuth client name, or "Browser session".
+     */
+    label: string;
+    user_id: string;
+};
+
+export type UsageByPerson = UsageCounts & {
+    email: string;
+    user_id: string;
+};
+
+export type UsageBySession = UsageCounts & {
+    channel: string;
+    email: string;
+    /**
+     * The `Mcp-Session-Id` the client sent, or the chat thread id.
+     */
+    session: string;
+    user_id: string;
+};
+
+export type UsageByTool = UsageCounts & {
+    read_only: boolean;
+    tool: string;
+};
+
+/**
+ * Calls, failed calls and mean duration of a group of tool calls.
+ */
+export type UsageCounts = {
+    /**
+     * Mean time a call took, in milliseconds.
+     */
+    avg_ms: number;
+    calls: number;
+    /**
+     * Calls that ended in an error (a tool error value, a refused scope, or a failure).
+     */
+    errors: number;
+};
+
+export type UsagePoint = {
+    /**
+     * Start of the hour or day (UTC), RFC 3339.
+     */
+    bucket: string;
+    calls: number;
+    errors: number;
 };
 
 export type VaultClone = {
@@ -997,6 +1085,37 @@ export type ListAuditResponses = {
 };
 
 export type ListAuditResponse = ListAuditResponses[keyof ListAuditResponses];
+
+export type GetToolUsageData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Look back this many hours (1 to 2160, default 168 = 7 days).
+         */
+        hours?: number;
+        /**
+         * Admin only: restrict the report to one person (a `user:...` id).
+         */
+        user?: string;
+    };
+    url: '/api/audit/tool-usage';
+};
+
+export type GetToolUsageErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetToolUsageError = GetToolUsageErrors[keyof GetToolUsageErrors];
+
+export type GetToolUsageResponses = {
+    200: ToolUsageReport;
+};
+
+export type GetToolUsageResponse = GetToolUsageResponses[keyof GetToolUsageResponses];
 
 export type GetBootstrapData = {
     body?: never;

@@ -125,11 +125,19 @@ async fn handle(State(state): State<AppState>, authn: Option<Extension<Authn>>, 
         return denied;
     }
 
-    let replies: Vec<Value> = match &message {
+    // tool calls in this request are counted under the client's MCP session, when it sent one
+    let session = crate::usage::session_from_header(headers.get("mcp-session-id").and_then(|v| v.to_str().ok()));
+    crate::usage::with_context(crate::usage::Channel::Mcp, session, respond(&state, &user, &message, initializing)).await
+}
+
+/// Handles the (already validated) message or batch and builds the HTTP reply; a successful
+/// `initialize` gets a session id ([`new_session_id`]).
+async fn respond(state: &AppState, user: &User, message: &Value, initializing: bool) -> Response {
+    let replies: Vec<Value> = match message {
         Value::Array(batch) if !batch.is_empty() => {
             let mut out = Vec::new();
             for m in batch {
-                if let Some(r) = handle_message(&state, &user, m).await {
+                if let Some(r) = handle_message(state, user, m).await {
                     out.push(r);
                 }
             }
@@ -138,7 +146,7 @@ async fn handle(State(state): State<AppState>, authn: Option<Extension<Authn>>, 
             }
             return Json(Value::Array(out)).into_response();
         }
-        m => handle_message(&state, &user, m).await.into_iter().collect(),
+        m => handle_message(state, user, m).await.into_iter().collect(),
     };
     match replies.into_iter().next() {
         Some(reply) if initializing && reply.get("result").is_some() => {

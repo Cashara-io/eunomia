@@ -47,6 +47,12 @@ pub const ALL: &[&ControlStmt] = &[
     &OAUTH_PRUNE,
     &AUDIT_EVENT_CREATE,
     &AUDIT_PRUNE,
+    &TOOL_USAGE_RECORD,
+    &TOOL_USAGE_PRUNE,
+    &TOOL_USAGE_REPORT,
+    &TOOL_USAGE_USERS,
+    &TOOL_USAGE_TOKENS,
+    &TOOL_USAGE_CLIENTS,
     &SESSION_PRUNE,
     &ORG_OF_USER,
     &ORG_FIRST_OWNER,
@@ -251,6 +257,41 @@ pub const AUDIT_EVENT_CREATE: ControlStmt = ControlStmt::new(
 
 /// Retention only: the one place the app deletes `audit_event` rows (see `audit::prune`).
 pub const AUDIT_PRUNE: ControlStmt = ControlStmt::new("app.audit_prune", "DELETE audit_event WHERE created_at < time::now() - <duration>$age");
+
+/// Counts one tool call: upserts the hour/user/credential/channel/session/tool row (its id is derived
+/// from those, see `usage::row_id`) and adds to its counters in one atomic statement.
+pub const TOOL_USAGE_RECORD: ControlStmt = ControlStmt::new(
+    "app.tool_usage_record",
+    "UPSERT $id SET org = $org, bucket = $bucket, user = $user, actor_kind = $actor_kind, actor_id = $actor_id, \
+     channel = $channel, session = $sess, tool = $tool, calls = (calls ?? 0) + 1, errors = (errors ?? 0) + $errors, \
+     total_ms = (total_ms ?? 0) + $ms, updated_at = time::now() RETURN NONE",
+);
+
+/// Retention only: the one place the app deletes `tool_usage` rows (see `usage::prune`).
+pub const TOOL_USAGE_PRUNE: ControlStmt = ControlStmt::new("app.tool_usage_prune", "DELETE tool_usage WHERE bucket < time::now() - <duration>$age");
+
+/// The usage report's six aggregates over one org (or one user of it) since `$since`: by person, by
+/// credential, by channel, by session, by tool, and per hour.
+pub const TOOL_USAGE_REPORT: ControlStmt = ControlStmt::new(
+    "app.tool_usage_report",
+    "SELECT user, math::sum(calls) AS calls, math::sum(errors) AS errors, math::sum(total_ms) AS total_ms FROM tool_usage \
+       WHERE org = $org AND bucket >= $since AND ($user IS NONE OR user = $user) GROUP BY user; \
+     SELECT user, actor_kind, actor_id, math::sum(calls) AS calls, math::sum(errors) AS errors, math::sum(total_ms) AS total_ms FROM tool_usage \
+       WHERE org = $org AND bucket >= $since AND ($user IS NONE OR user = $user) GROUP BY user, actor_kind, actor_id; \
+     SELECT channel, math::sum(calls) AS calls, math::sum(errors) AS errors, math::sum(total_ms) AS total_ms FROM tool_usage \
+       WHERE org = $org AND bucket >= $since AND ($user IS NONE OR user = $user) GROUP BY channel; \
+     SELECT user, channel, session, math::sum(calls) AS calls, math::sum(errors) AS errors, math::sum(total_ms) AS total_ms FROM tool_usage \
+       WHERE org = $org AND bucket >= $since AND session != '' AND ($user IS NONE OR user = $user) GROUP BY user, channel, session; \
+     SELECT tool, math::sum(calls) AS calls, math::sum(errors) AS errors, math::sum(total_ms) AS total_ms FROM tool_usage \
+       WHERE org = $org AND bucket >= $since AND ($user IS NONE OR user = $user) GROUP BY tool; \
+     SELECT bucket, math::sum(calls) AS calls, math::sum(errors) AS errors FROM tool_usage \
+       WHERE org = $org AND bucket >= $since AND ($user IS NONE OR user = $user) GROUP BY bucket",
+);
+
+/// Names for the report's rows: the people, their API tokens and the OAuth clients behind them.
+pub const TOOL_USAGE_USERS: ControlStmt = ControlStmt::new("app.tool_usage_users", "SELECT id, email FROM user WHERE id IN $ids");
+pub const TOOL_USAGE_TOKENS: ControlStmt = ControlStmt::new("app.tool_usage_tokens", "SELECT id, name FROM api_token WHERE owner IN $ids");
+pub const TOOL_USAGE_CLIENTS: ControlStmt = ControlStmt::new("app.tool_usage_clients", "SELECT client_id, name FROM oauth_client WHERE client_id IN $ids");
 
 /// Sessions that expired, or were revoked and last seen, longer than `$age` ago.
 pub const SESSION_PRUNE: ControlStmt = ControlStmt::new(
