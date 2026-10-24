@@ -36,8 +36,9 @@ pub async fn recall_tool(
     max_tokens: Option<usize>,
     types: Option<&[MemoryType]>,
     vault_ids: &[RecordId],
+    history: bool,
 ) -> AppResult<Value> {
-    let results = recall::recall(db, settings, owner, query, time_range_tuple(time_range)?, limit, max_tokens, types, vault_ids).await?;
+    let results = recall::recall(db, settings, owner, query, time_range_tuple(time_range)?, limit, max_tokens, types, vault_ids, history).await?;
     Ok(json!({ "results": results }))
 }
 

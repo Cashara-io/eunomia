@@ -29,6 +29,7 @@ pub async fn run(state: AppState, cfg: WorkerConfig, mut shutdown: watch::Receiv
             Ok(true) => {
                 if !leading {
                     tracing::info!(worker = %cfg.id, "became scheduler leader");
+                    revive_dead_migrations(&state.control).await;
                 }
                 leading = true;
                 tick(&state, ticks).await;
@@ -93,6 +94,15 @@ async fn ready_orgs(state: &AppState) -> Vec<OrgId> {
     tenants(state).await.iter().filter(|t| t.status == "ready").filter_map(|t| org_id(&t.org)).collect()
 }
 
+/// See `store::jobs::REVIVE_DEAD_MIGRATIONS`. A failure is logged; the next leader tries again.
+pub async fn revive_dead_migrations(db: &crate::pool::ControlDb) {
+    match store::jobs::REVIVE_DEAD_MIGRATIONS.on(db).await.and_then(|mut r| r.take::<Vec<surrealdb::types::RecordId>>(0)) {
+        Ok(ids) if !ids.is_empty() => tracing::info!(jobs = ids.len(), "retrying org migrations that had failed"),
+        Ok(_) => {}
+        Err(e) => tracing::warn!(error = %e, "could not retry failed org migrations"),
+    }
+}
+
 /// One `migrate_tenant` job per org whose database is behind the schema this code writes. The key
 /// carries the target version, so a retry or a second leader does not queue it twice.
 pub async fn reconcile_tenant_migrations(state: &AppState) {
@@ -143,15 +153,21 @@ pub async fn reconcile_embeddings(state: &OrgState) {
         if !crate::embeddings::service::available(&state.db, &state.settings, &owner).await {
             continue;
         }
-        if has_embed_backlog(&state.db, &owner).await.unwrap_or(false) {
+        if has_embed_backlog(state, &owner).await.unwrap_or(false) {
             let key = super::periodic_key(kind::EMBED, &owner, 300);
             super::enqueue_lossy(&state.control, NewJob::new(kind::EMBED, owner, key).in_org(state.db.org())).await;
         }
     }
 }
 
-async fn has_embed_backlog(db: &crate::pool::OrgDb, owner: &surrealdb::types::RecordId) -> AppResult<bool> {
+async fn has_embed_backlog(state: &OrgState, owner: &surrealdb::types::RecordId) -> AppResult<bool> {
+    let db = &state.db;
     let mut res = store::jobs::EMBED_BACKLOG.on(db).bind(("owner", owner.clone())).bind(("limit", 1)).await?;
+    if !res.take::<Vec<surrealdb::types::RecordId>>("id")?.is_empty() {
+        return Ok(true);
+    }
+    let spec = crate::embeddings::service::spec_for(db, &state.settings, owner).await?.tag();
+    let mut res = store::jobs::MEMORY_EMBED_BACKLOG.on(db).bind(("owner", owner.clone())).bind(("spec", spec)).bind(("limit", 1)).await?;
     Ok(!res.take::<Vec<surrealdb::types::RecordId>>("id")?.is_empty())
 }
 

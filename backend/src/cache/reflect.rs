@@ -104,6 +104,9 @@ cite them by index like [1], and say so plainly if they don't contain enough to 
     })
 }
 
+/// Token budget for the memories reflect hands the model (or the agent, in recall-only mode).
+const REFLECT_TOKENS: usize = 6_000;
+
 pub async fn reflect(
     db: &OrgDb,
     settings: &Settings,
@@ -112,7 +115,9 @@ pub async fn reflect(
     vault_ids: &[RecordId],
     limit: usize,
 ) -> AppResult<Value> {
-    let items = recall::recall(db, settings, owner, query, None, limit, None, None, vault_ids).await?;
+    // a bounded context: one long transcript among the hits cannot crowd out the rest or blow the
+    // model's window, and every citation index still maps to an item the model was shown
+    let items = recall::recall(db, settings, owner, query, None, limit, Some(REFLECT_TOKENS), None, vault_ids, false).await?;
     if items.is_empty() {
         return Ok(json!({ "answer": "No relevant memories found.", "citations": [] }));
     }
@@ -196,6 +201,7 @@ mod tests {
             vault: String::new(),
             vault_name: String::new(),
             document: None,
+            status: None,
         }
     }
 

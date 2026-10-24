@@ -91,6 +91,31 @@ async fn enqueue_dedupes_on_idempotency_key() {
     assert_eq!(count(&state, "SELECT count() AS n FROM job GROUP ALL").await, 3);
 }
 
+/// A `migrate_tenant` that died (issue #85: 0017 failed on every attempt) is retried when a process
+/// next becomes leader, so a release that fixes the cause heals the org; its key alone would keep the
+/// dead job in place forever. Other dead jobs stay dead.
+#[tokio::test]
+async fn a_dead_org_migration_is_retried_by_the_next_leader() {
+    let state = bare_state().await;
+    state
+        .control
+        .test_raw()
+        .query(
+            "CREATE job SET kind = 'migrate_tenant', owner = user:u1, idempotency_key = 'migrate_tenant:o:18', status = 'dead', attempts = 5, last_error_code = 'internal';
+             CREATE job SET kind = 'sync', owner = user:u1, idempotency_key = 'sync:x', status = 'dead', attempts = 5;",
+        )
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    eunomia_backend::jobs::leader::revive_dead_migrations(&state.control).await;
+    let m = rows(&state, "migrate_tenant").await;
+    assert_eq!((m[0].status.as_str(), m[0].attempts, m[0].last_error_code.as_deref()), ("ready", 0, None));
+    assert_eq!(rows(&state, "sync").await[0].status, "dead");
+    // the same key still dedupes a fresh enqueue: one row, not two
+    assert!(!jobs::enqueue(&state.control, NewJob::new("migrate_tenant", owner(1), "migrate_tenant:o:18")).await.unwrap());
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn concurrent_workers_run_each_job_once() {
     let state = bare_state().await;
