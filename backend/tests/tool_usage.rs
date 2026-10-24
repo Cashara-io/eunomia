@@ -45,6 +45,17 @@ async fn mcp(app: &TestApp, token: &str, session: Option<&str>, tool: &str, args
     v["result"]["isError"].as_bool().unwrap()
 }
 
+/// A real MCP session id: what `initialize` hands out (a made-up one is refused as stale, #90).
+async fn mcp_session(app: &TestApp, token: &str) -> String {
+    let body = json!({"jsonrpc": "2.0", "id": 0, "method": "initialize", "params": {"protocolVersion": "2025-06-18"}});
+    let mut req = Request::builder().method("POST").uri("/mcp").header(header::AUTHORIZATION, format!("Bearer {token}")).header(header::CONTENT_TYPE, "application/json");
+    req = req.header("accept", "application/json");
+    let mut req = req.body(Body::from(body.to_string())).unwrap();
+    req.extensions_mut().insert(axum::extract::ConnectInfo(std::net::SocketAddr::from(([127, 0, 0, 1], 4000))));
+    let resp = app.router.clone().oneshot(req).await.unwrap();
+    resp.headers().get("mcp-session-id").expect("initialize issues a session id").to_str().unwrap().to_string()
+}
+
 async fn report(app: &TestApp, token: &str, query: &str) -> (StatusCode, Value) {
     usage::settle().await;
     send(&app.router, "GET", &format!("/api/audit/tool-usage{query}"), None, token, &[]).await
@@ -67,10 +78,11 @@ async fn every_call_is_counted_per_person_credential_channel_session_and_tool() 
         assert_eq!(rest(&app, &app.token, "recall", json!({"query": "anything"})).await.0, StatusCode::OK);
     }
     // admin, token "laptop": a read, a write and a failing read over MCP session s1, one read over session s2
-    assert!(!mcp(&app, &laptop, Some("s1.abc"), "recall", json!({"query": "x"})).await);
-    assert!(!mcp(&app, &laptop, Some("s1.abc"), "memory_write", json!({"subject_name": "Ann", "subject_kind": "person", "text": "Ann likes tea"})).await);
-    assert!(mcp(&app, &laptop, Some("s1.abc"), "entities_get", json!({"id": "not-an-id"})).await);
-    assert!(!mcp(&app, &laptop, Some("s2.def"), "recall", json!({"query": "y"})).await);
+    let (s1, s2) = (mcp_session(&app, &laptop).await, mcp_session(&app, &laptop).await);
+    assert!(!mcp(&app, &laptop, Some(&s1), "recall", json!({"query": "x"})).await);
+    assert!(!mcp(&app, &laptop, Some(&s1), "memory_write", json!({"subject_name": "Ann", "subject_kind": "person", "text": "Ann likes tea"})).await);
+    assert!(mcp(&app, &laptop, Some(&s1), "entities_get", json!({"id": "not-an-id"})).await);
+    assert!(!mcp(&app, &laptop, Some(&s2), "recall", json!({"query": "y"})).await);
     // the member: a read over REST and an erroring read over REST, one MCP call with no session id
     assert_eq!(rest(&app, &member_token, "recall", json!({"query": "z"})).await.0, StatusCode::OK);
     assert_eq!(rest(&app, &member_token, "entities_get", json!({"id": "nope"})).await.0, StatusCode::OK);
@@ -105,9 +117,9 @@ async fn every_call_is_counted_per_person_credential_channel_session_and_tool() 
     // per MCP session (calls with no session id are not listed)
     let sessions = &r["by_session"];
     assert_eq!(sessions.as_array().unwrap().len(), 2, "{sessions}");
-    assert_eq!((row(sessions, "session", "s1.abc")["calls"].as_i64(), row(sessions, "session", "s1.abc")["errors"].as_i64()), (Some(3), Some(1)));
-    assert_eq!(row(sessions, "session", "s2.def")["calls"], 1);
-    assert_eq!(row(sessions, "session", "s1.abc")["channel"], "mcp");
+    assert_eq!((row(sessions, "session", &s1)["calls"].as_i64(), row(sessions, "session", &s1)["errors"].as_i64()), (Some(3), Some(1)));
+    assert_eq!(row(sessions, "session", &s2)["calls"], 1);
+    assert_eq!(row(sessions, "session", &s1)["channel"], "mcp");
 
     // per tool, reads and writes
     assert_eq!(row(&r["by_tool"], "tool", "recall")["calls"], 6);

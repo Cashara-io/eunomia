@@ -69,8 +69,9 @@ async fn round_trips_per_request() {
         ("entities_search", 3),
         ("entities_search fact", 3),
         ("search", 4), // + the vault membership lookup since search covers several vaults (#93)
-        ("memory_write known", 7),
-        ("memory_write new", 9),
+        // + 1 off the request path: the post-write embed checks whether the writer has a model (#65)
+        ("memory_write known", 8),
+        ("memory_write new", 10),
     ];
     for ((label, _, warm), (name, most)) in rows.iter().zip(ceilings) {
         assert_eq!(*label, name);

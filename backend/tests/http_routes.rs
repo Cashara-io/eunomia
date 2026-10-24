@@ -35,6 +35,26 @@ async fn signup_then_login_issues_a_session_cookie() {
     assert_eq!(body["email"], "new@example.com");
 }
 
+/// Issue #76: on a default install a second person signs up (even with the first one's password),
+/// gets their own personal vault in the install's org, and the first user is unaffected.
+#[tokio::test]
+async fn a_second_user_can_sign_up_on_a_default_install() {
+    let state = common::bare_state().await;
+    let router = eunomia_backend::app(state.clone());
+    let signup = |email: &str| json!({"email": email, "password": PASSWORD});
+    let ((status, first), _) = http(&router, "POST", "/api/auth/register", Some(signup("root@example.com")), None, None).await;
+    assert_eq!(status, StatusCode::OK, "{first}");
+    let ((status, second), cookie) = http(&router, "POST", "/api/auth/register", Some(signup("second@example.com")), None, None).await;
+    assert_eq!(status, StatusCode::OK, "{second}");
+    let session = cookie.unwrap().split(';').next().unwrap().to_string();
+    let ((status, vaults), _) = http(&router, "GET", "/api/vaults", None, None, Some(&session)).await;
+    assert_eq!(status, StatusCode::OK, "{vaults}");
+    let personal: Vec<_> = vaults["results"].as_array().unwrap().iter().filter(|v| v["kind"] == "personal").collect();
+    assert_eq!(personal.len(), 1, "the second user has exactly their own personal vault: {vaults}");
+    let ((status, _), _) = http(&router, "POST", "/api/auth/login", Some(signup("root@example.com")), None, None).await;
+    assert_eq!(status, StatusCode::OK);
+}
+
 #[tokio::test]
 async fn protected_routes_return_401_without_auth() {
     let app = TestApp::new().await;
