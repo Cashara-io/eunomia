@@ -184,6 +184,47 @@ pub fn dim() -> usize {
     DIM
 }
 
+impl EmbedSpec {
+    /// The `memory.embedding_spec` a vector made under this spec carries: a query is only compared
+    /// with vectors from the same provider and model.
+    pub fn tag(&self) -> String {
+        format!("{}|{}|{DIM}", self.origin, self.model)
+    }
+}
+
+/// Embed up to `limit` of `owner`'s memories that have no vector from the current model (never
+/// embedded, edited since, or embedded by another model). Returns how many were written. A memory
+/// edited while this ran keeps no vector (`SET_MEMORY_EMBEDDING` checks the text) and is picked up again.
+pub async fn embed_memory_backlog(db: &OrgDb, settings: &Settings, owner: &RecordId, limit: usize) -> AppResult<usize> {
+    #[derive(Deserialize, SurrealValue)]
+    struct Row {
+        id: RecordId,
+        text: String,
+    }
+    let spec = spec_for(db, settings, owner).await?.tag();
+    let mut res = store::jobs::MEMORY_EMBED_BACKLOG.on(db).bind(("owner", owner.clone())).bind(("spec", spec.clone())).bind(("limit", limit as i64)).await?;
+    let rows: Vec<Row> = res.take(0)?;
+    if rows.is_empty() {
+        return Ok(0);
+    }
+    let texts: Vec<String> = rows.iter().map(|r| r.text.clone()).collect();
+    let vectors = embed(db, settings, &texts, Some(owner)).await?;
+    for (row, vector) in rows.iter().zip(vectors) {
+        if vector.len() != DIM {
+            return Err(AppError::internal(format!("embedding for {} has dimension {}", row.id.to_string(), vector.len())));
+        }
+        store::cache::SET_MEMORY_EMBEDDING
+            .on(db)
+            .bind(("id", row.id.clone()))
+            .bind(("embedding", vector))
+            .bind(("spec", spec.clone()))
+            .bind(("text", row.text.clone()))
+            .await?
+            .check()?;
+    }
+    Ok(rows.len())
+}
+
 /// Whether embeddings can run for `owner` right now. Without them the
 /// semantic arm of search/recall is skipped and the connected MCP agent is
 /// the model: keyword + graph + temporal retrieval still work, and the agent

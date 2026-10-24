@@ -60,7 +60,7 @@ const EMBED_BATCH: i64 = 50;
 /// Per run; the reconciler enqueues again while a backlog remains.
 const EMBED_BATCHES: usize = 10;
 
-/// Embed cache records whose `embedding` is NONE.
+/// Embed cache records whose `embedding` is NONE, then memories without a vector from the current model.
 async fn embed(state: AppState, job: Job) -> Result<(), JobError> {
     let state = org_state(&state, &job).await?;
     #[derive(serde::Deserialize, SurrealValue)]
@@ -97,6 +97,12 @@ async fn embed(state: AppState, job: Job) -> Result<(), JobError> {
                 .bind(("embedding", vector))
                 .await
                 .map_err(AppError::from)?;
+        }
+    }
+    // remembered facts too, so recall's semantic arm finds them by meaning (issue #65)
+    for _ in 0..EMBED_BATCHES {
+        if embeddings::embed_memory_backlog(db, &state.settings, &job.owner, EMBED_BATCH as usize).await? < EMBED_BATCH as usize {
+            break;
         }
     }
     Ok(())
@@ -175,8 +181,9 @@ async fn prune_capsules(state: AppState, _job: Job) -> Result<(), JobError> {
     Ok(crate::capsules::prune_default(&state.control).await?)
 }
 
-/// Audit events past `AUDIT_RETENTION_DAYS` and sessions expired for `SESSION_RETENTION_DAYS`.
+/// Tool-usage hours past `TOOL_USAGE_RETENTION_DAYS`, audit events past `AUDIT_RETENTION_DAYS` and sessions expired for `SESSION_RETENTION_DAYS`.
 async fn prune_auth(state: AppState, _job: Job) -> Result<(), JobError> {
+    crate::usage::prune_default(&state.control).await?;
     Ok(crate::audit::prune_default(&state.control).await?)
 }
 

@@ -2,7 +2,12 @@
 //!
 //! Stateless: every POST carries one JSON-RPC message (or a batch, for
 //! 2025-03-26 clients) and gets a plain `application/json` reply -- no
-//! sessions and no server-initiated stream, so GET/DELETE are 405. Exposes
+//! server-initiated stream, so GET/DELETE are 405. The only session state is the
+//! `Mcp-Session-Id` handed out by `initialize`: it names the tool surface the client
+//! was shown ([`surface_epoch`]), and a request carrying one from another surface (an
+//! upgrade changed a tool's schema) gets 404, which tells a Streamable HTTP client to
+//! re-initialize and re-fetch `tools/list`. Nothing is stored, so any replica and any
+//! restart of the same build accept it. Exposes
 //! the same tool registry the chat agent uses (`tools::registry`), so every
 //! call is owner-scoped and audit-logged exactly like REST/chat calls. The user's memory skill goes
 //! out as the `initialize` instructions, the `eunomia-memory` prompt and the `eunomia://skill` resource.
@@ -31,6 +36,7 @@ use crate::tools::registry;
 const MAX_BATCH: usize = 32;
 const SUPPORTED_VERSIONS: &[&str] = &["2025-11-25", "2025-06-18", "2025-03-26"];
 const DEFAULT_VERSION: &str = "2025-06-18";
+const SESSION_HEADER: &str = "mcp-session-id";
 
 const INSTRUCTIONS: &str = "Eunomia is the user's long-term memory: entities (people, organisations, \
 locations, code) with remembered facts, plus records synced from their connected sources. \
@@ -72,6 +78,17 @@ async fn handle(State(state): State<AppState>, authn: Option<Extension<Authn>>, 
         return (StatusCode::BAD_REQUEST, Json(error_response(Value::Null, -32700, ErrorCode::ValidationInvalid, "Parse error"))).into_response();
     };
 
+    // a session from before the tool surface changed: 404 makes the client start over (issue #90).
+    // `initialize` itself is how it starts over, so it is never refused.
+    let initializing = message.get("method").and_then(Value::as_str) == Some("initialize");
+    if !initializing
+        && let Some(session) = headers.get(SESSION_HEADER).and_then(|v| v.to_str().ok())
+        && !session_current(session)
+    {
+        let err = error_response(Value::Null, -32001, ErrorCode::ValidationInvalid, "Session expired: the server's tools changed. Re-initialize.");
+        return (StatusCode::NOT_FOUND, Json(err)).into_response();
+    }
+
     if let Value::Array(batch) = &message {
         if batch.len() > MAX_BATCH {
             let msg = format!("Batch too large: at most {MAX_BATCH} messages per request.");
@@ -85,6 +102,22 @@ async fn handle(State(state): State<AppState>, authn: Option<Extension<Authn>>, 
         }
     }
 
+    // a batch tool costs more than the one request the gate charged (`registry::extra_cost`)
+    if let Some(Extension(m)) = &meter {
+        let calls: Vec<&Value> = match &message {
+            Value::Array(b) => b.iter().collect(),
+            m => vec![m],
+        };
+        let extra: usize = calls
+            .iter()
+            .filter(|c| c.get("method").and_then(Value::as_str) == Some("tools/call"))
+            .map(|c| registry::extra_cost(c["params"]["name"].as_str().unwrap_or_default(), &c["params"]["arguments"]))
+            .sum();
+        if let Err(wait) = m.charge(extra) {
+            return crate::gate::rate_limited(wait);
+        }
+    }
+
     // OAuth tokens carry scopes; a personal API token is limited by its own scopes (the gate and the registry check them).
     if let Some(granted) = &granted
         && let Some(denied) = crate::oauth::scope_challenge(&state.settings, &message, granted)
@@ -92,11 +125,19 @@ async fn handle(State(state): State<AppState>, authn: Option<Extension<Authn>>, 
         return denied;
     }
 
-    let replies: Vec<Value> = match &message {
+    // tool calls in this request are counted under the client's MCP session, when it sent one
+    let session = crate::usage::session_from_header(headers.get("mcp-session-id").and_then(|v| v.to_str().ok()));
+    crate::usage::with_context(crate::usage::Channel::Mcp, session, respond(&state, &user, &message, initializing)).await
+}
+
+/// Handles the (already validated) message or batch and builds the HTTP reply; a successful
+/// `initialize` gets a session id ([`new_session_id`]).
+async fn respond(state: &AppState, user: &User, message: &Value, initializing: bool) -> Response {
+    let replies: Vec<Value> = match message {
         Value::Array(batch) if !batch.is_empty() => {
             let mut out = Vec::new();
             for m in batch {
-                if let Some(r) = handle_message(&state, &user, m).await {
+                if let Some(r) = handle_message(state, user, m).await {
                     out.push(r);
                 }
             }
@@ -105,13 +146,48 @@ async fn handle(State(state): State<AppState>, authn: Option<Extension<Authn>>, 
             }
             return Json(Value::Array(out)).into_response();
         }
-        m => handle_message(&state, &user, m).await.into_iter().collect(),
+        m => handle_message(state, user, m).await.into_iter().collect(),
     };
     match replies.into_iter().next() {
+        Some(reply) if initializing && reply.get("result").is_some() => {
+            ([(header::HeaderName::from_static(SESSION_HEADER), new_session_id())], Json(reply)).into_response()
+        }
         Some(reply) => Json(reply).into_response(),
         // Notifications and client responses get no body.
         None => StatusCode::ACCEPTED.into_response(),
     }
+}
+
+/// A short fingerprint of the tool surface a client is shown: the build plus every tool's name,
+/// description, annotations and input schema. Computed once; it changes exactly when an upgrade
+/// changes what `tools/list` returns, not on a restart of the same build.
+fn surface_epoch() -> &'static str {
+    static EPOCH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    EPOCH.get_or_init(|| {
+        use sha2::{Digest, Sha256};
+        let mut names: Vec<&&str> = registry::all_tools().keys().collect();
+        names.sort();
+        let mut h = Sha256::new();
+        h.update(crate::config::APP_VERSION.as_bytes());
+        for name in names {
+            let spec = &registry::all_tools()[*name];
+            h.update(name.as_bytes());
+            h.update(registry::description(name).as_bytes());
+            h.update([spec.read_only as u8, registry::is_destructive(name) as u8]);
+            h.update(spec.schema.to_string().as_bytes());
+        }
+        hex::encode(&h.finalize()[..8])
+    })
+}
+
+/// `<surface epoch>.<random>`: visible ASCII, as the transport requires; the random part only keeps
+/// two clients' ids apart in logs.
+fn new_session_id() -> String {
+    format!("{}.{}", surface_epoch(), uuid::Uuid::new_v4().simple())
+}
+
+fn session_current(id: &str) -> bool {
+    id.split_once('.').is_some_and(|(epoch, _)| epoch == surface_epoch())
 }
 
 /// The caller the gate already authenticated, plus the scopes an OAuth token was limited to

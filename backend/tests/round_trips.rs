@@ -62,14 +62,16 @@ async fn round_trips_per_request() {
     }
     // Before the hot-path work (v2.0.2): 4, 14, 14, 14, 6, 12, 14 (the four of every request were
     // authentication). A verified token now costs nothing until its cache entry ages out.
+    // Every tool call also sends one `tool_usage` upsert (spawned after the call, off the request path), the +1 on each.
     let ceilings = [
         ("tools/list", 0),
-        ("recall", 6),
-        ("entities_search", 2),
-        ("entities_search fact", 2),
-        ("search", 3), // + the vault membership lookup since search covers several vaults (#93)
-        ("memory_write known", 6),
-        ("memory_write new", 8),
+        ("recall", 7),
+        ("entities_search", 3),
+        ("entities_search fact", 3),
+        ("search", 4), // + the vault membership lookup since search covers several vaults (#93)
+        // + 1 off the request path: the post-write embed checks whether the writer has a model (#65)
+        ("memory_write known", 8),
+        ("memory_write new", 10),
     ];
     for ((label, _, warm), (name, most)) in rows.iter().zip(ceilings) {
         assert_eq!(*label, name);

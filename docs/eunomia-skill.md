@@ -23,6 +23,9 @@ Use it so the user never has to repeat themselves.
   entity.
 - Types: `world` for facts, `experience` for things that happened,
   `observation` for an entity's overall belief (it revises in place).
+- If the fact happened or became true at another time than now (a decision
+  made last March, a past job), pass `occurred_at` (ISO date), so date-range
+  recall finds it.
 - Wrong or outdated memory: `memory_update` it. Delete only when asked
   (`memory_delete`).
 - Never store secrets, credentials, or one-off small talk.

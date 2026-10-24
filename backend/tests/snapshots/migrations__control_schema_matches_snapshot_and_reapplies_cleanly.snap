@@ -424,6 +424,40 @@ expression: first
       "kind": {
         "kind": "NORMAL"
       },
+      "name": "tool_usage",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "org",
+            "bucket"
+          ],
+          "index": "",
+          "name": "tool_usage_org_idx",
+          "table": "tool_usage"
+        },
+        {
+          "cols": [
+            "user",
+            "bucket"
+          ],
+          "index": "",
+          "name": "tool_usage_user_idx",
+          "table": "tool_usage"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
       "name": "user",
       "permissions": {
         "create": false,

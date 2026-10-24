@@ -1,0 +1,28 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "written": 2,
+  "failed": 1,
+  "results": [
+    {
+      "index": "<unstable>",
+      "ok": true,
+      "entity_id": "file:<id21>",
+      "memory_id": "memory:<id22>"
+    },
+    {
+      "index": "<unstable>",
+      "ok": false,
+      "error": "missing field `text`",
+      "code": "validation.invalid"
+    },
+    {
+      "index": "<unstable>",
+      "ok": true,
+      "entity_id": "file:<id23>",
+      "memory_id": "memory:<id24>"
+    }
+  ]
+}

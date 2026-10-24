@@ -35,6 +35,7 @@ pub mod store;
 pub mod telemetry;
 pub mod tools;
 pub mod tx;
+pub mod usage;
 pub mod vaults;
 
 use axum::http::{header, HeaderName, HeaderValue, Method};

@@ -29,6 +29,7 @@ pub const MIGRATIONS: &[(u32, &str, &str)] = &[
     (16, "custom_entity_kinds", include_str!("../migrations/tenant/0016_custom_entity_kinds.surql")),
     (17, "multi_connect", include_str!("../migrations/tenant/0017_multi_connect.surql")),
     (18, "vault_buckets", include_str!("../migrations/tenant/0018_vault_buckets.surql")),
+    (19, "memory_recall", include_str!("../migrations/tenant/0019_memory_recall.surql")),
 ];
 
 /// The tenant schema version this code writes. An org database is current at this version.
@@ -44,7 +45,8 @@ pub const CONTROL_MIGRATIONS: &[(u32, &str, &str)] = &[
     (2, "oauth_token_scope", include_str!("../migrations/control/0002_oauth_token_scope.surql")),
     (3, "audit_actor_system", include_str!("../migrations/control/0003_audit_actor_system.surql")),
     (4, "email_lc_and_owner_slot", include_str!("../migrations/control/0004_email_lc_and_owner_slot.surql")),
-    (5, "oidc_identity", include_str!("../migrations/control/0005_oidc_identity.surql")),
+    (5, "tool_usage", include_str!("../migrations/control/0005_tool_usage.surql")),
+    (6, "oidc_identity", include_str!("../migrations/control/0006_oidc_identity.surql")),
 ];
 
 /// The last tenant migration the legacy single database may be brought to before its data moves out
@@ -250,6 +252,9 @@ async fn apply(db: &Db, which: Set, max: u32) -> surrealdb::Result<()> {
         if tenant && version == 10 {
             backfill_entity_keys(db).await?;
         }
+        if tenant && version == 17 {
+            backfill_connector_routing(db).await?;
+        }
         // DEFINE is allowed inside a transaction, so schema and ledger row commit together.
         let mut attempt = 1;
         loop {
@@ -333,6 +338,15 @@ async fn backfill_entity_keys(db: &Db) -> surrealdb::Result<()> {
         .await?
         .check()?;
     }
+    Ok(())
+}
+
+/// 0017 pre-step: 0015 typed `connector.routing` as an object with a default, which only applies to new
+/// rows, so a connector made before 2.0.3 has none. 0017's `UPDATE connector` rewrites every row and
+/// failed its type check, leaving the org at schema 16 (`tenant.schema_behind`, issue #85). Give those
+/// rows the default empty routing first. Idempotent.
+async fn backfill_connector_routing(db: &Db) -> surrealdb::Result<()> {
+    root(db, "migrate.backfill_routing", "UPDATE connector SET routing = {} WHERE routing = NONE;").await?.check()?;
     Ok(())
 }
 

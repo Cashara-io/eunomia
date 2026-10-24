@@ -9,6 +9,9 @@
 //!
 //! Async end to end: handlers need to be `async fn` for axum concurrency, and the same shape serves MCP.
 //!
+//! Usage: every call, read-only or not, is also counted in `tool_usage` (`crate::usage`, one atomic
+//! upsert in a spawned task, so it adds no latency and cannot fail the call).
+//!
 //! Audit trail: every call through [`call`] for a tool NOT in
 //! [`READ_ONLY_TOOLS`] writes one `audit_log` row (owner, tool name, a
 //! redacted/truncated summary of the args, outcome, timestamp) -- this is
@@ -92,6 +95,22 @@ pub const READ_ONLY_TOOLS: &[&str] = &[
 /// row records the document id, never its content.
 pub const DISCLOSURE_TOOLS: &[&str] = &["document_download", "document_export"];
 
+/// Most facts one `memory_write_batch` call takes.
+pub const MAX_BATCH_ITEMS: usize = 100;
+/// Facts in a batch covered by the request's own rate-limit charge; each further group of this many
+/// costs one more request ([`extra_cost`]).
+pub const BATCH_ITEMS_PER_REQUEST: usize = 10;
+
+/// Rate-limit units a call costs beyond the one request the gate already charged: a batch of facts
+/// costs one request per [`BATCH_ITEMS_PER_REQUEST`] of them, so a bulk import is ten times cheaper
+/// than one call per fact yet cannot slip past the limit.
+pub fn extra_cost(name: &str, args: &Value) -> usize {
+    match name {
+        "memory_write_batch" => args["items"].as_array().map_or(0, |a| a.len().min(MAX_BATCH_ITEMS).div_ceil(BATCH_ITEMS_PER_REQUEST).saturating_sub(1)),
+        _ => 0,
+    }
+}
+
 pub fn is_read_only(name: &str) -> bool {
     READ_ONLY_TOOLS.contains(&name)
 }
@@ -117,7 +136,7 @@ pub fn description(name: &str) -> &'static str {
         "get" => "Fetch one synced source record by id, with its full content. For a Pocket recording (or one of its transcript chunks) this includes the whole stored recording: full speaker-labelled transcript, summary, action items, speakers and tags.",
         "list" => "List synced source records, optionally filtered by type and field values, sorted and paginated. Use for browsing rather than searching.",
         "links" => "List the records linked to a given record (e.g. a meeting's attendees, a transaction's merchant), optionally only one relation type.",
-        "recall" => "Retrieve the memories most relevant to a question from the user's memory graph, ranked by combining semantic, keyword, graph and recency signals within a token budget. Searches the personal vault and every org vault the user belongs to unless `vault_id` is given. Each hit carries its vault, its date (`occurred_at`: when a memory was last written) and a 0-1 score relative to the best hit -- check the date before trusting a time-sensitive fact. Call it at the start of any task touching people, projects, past decisions or code you have worked on.",
+        "recall" => "Retrieve the memories most relevant to a question from the user's memory graph, ranked by combining semantic, keyword, graph and recency signals within a token budget. Searches the personal vault and every org vault the user belongs to unless `vault_id` is given. Finds facts by meaning as well as by words, and follows one hop of relations from the entities you name (hits of kind `relation`). Each hit carries its vault, its date (`occurred_at`: when a memory happened if its writer gave `occurred_at`, else when it was last written) and a 0-1 score relative to the best hit -- check the date before trusting a time-sensitive fact. Superseded facts are left out unless `include_history` is true. Call it at the start of any task touching people, projects, past decisions or code you have worked on.",
         "reflect" => "Answer a question by synthesizing from recalled memories (the personal vault and every org vault the user belongs to, unless `vault_id` is given), with numbered citations; newer memories win conflicts. Answers only from what is already remembered; use `recall` to inspect the raw memories instead.",
         "entities_search" => "Find entities (people, organisations, locations, repositories, files, symbols, and any custom kind) by name or alias, then by the text of their facts (a username or handle only ever written in a fact still finds its entity). Searches the personal vault and every org vault the user belongs to unless `vault_id` is given. Returns entity ids for `entities_get`, `memory_write` and `code_relate`.",
         "entity_types" => "List the entity kinds: the six built-in ones (person, organisation, location, repository, file, symbol) and the custom kinds agents have created (e.g. `db`, `table`, `decision`), each with its entity count. Check it before inventing a new kind, so the same thing keeps one kind name. Reads the personal vault and every org vault the user belongs to unless `vault_id` is given.",
@@ -126,6 +145,7 @@ pub fn description(name: &str) -> &'static str {
         "code_entity_upsert" => "Find-or-create a code entity -- a repository, file or symbol -- matched case-insensitively by name, with a short summary. `parent_id` links a file to its repository or a symbol to its file. Returns the entity id.",
         "code_relate" => "Record a labelled relation between two entities, e.g. symbol `calls` symbol, file `imports` file.",
         "memory_write" => "Remember a fact about a person, organisation, location, code entity or anything else (created if new; \"Jane Doe (Acme/JD)\" resolves to an existing \"Jane Doe\", adding the parts as aliases). `subject_kind` is a built-in kind or your own lowercase kind name (`db`, `table`, `field`, `defect`, `decision`, `task`, ...): a new name creates that kind in the vault (at most 50 custom kinds per vault; `entity_types` lists them, reuse one when it fits). Type `world` for objective facts, `experience` for things that happened, `observation` for stable patterns. Writes to the personal vault unless `vault_id` is given. Earlier facts about the subject this one makes no longer true are marked superseded in the background (left out of recall from then on). When a new entity was created, the result lists `possible_duplicates`: similar existing entities to `entity_merge`. Save durable facts, decisions, preferences and corrections as they come up, and before finishing a task a short summary of what was learned (`experience`).",
+        "memory_write_batch" => "Remember many facts in one call (up to 100), each exactly as `memory_write` would (same fields per item; a batch-level `vault_id` applies to items without their own). Use it to import or back-fill: a page, a document's notes or a whole export, instead of one call per fact. Returns one result per item in input order (`ok`, `memory_id`, or `error` and `code`); a failed item does not stop the rest. Costs one request against the rate limit per 10 facts.",
         "consolidate_observations" => "Fold an entity's new raw facts into its consolidated observation (or do it for every entity with new facts when `subject_id` is omitted).",
         "memory_update" => "Edit one memory by id: change its `text`, and/or switch a raw fact between `world` and `experience`. To revise an entity's consolidated belief, `memory_write` with type `observation` instead.",
         "entity_update" => "Edit an entity's `name`, `aliases` (replaces the list) and/or `summary`.",
@@ -321,6 +341,7 @@ pub async fn call(app: &AppState, user: &User, name: &str, mut args: Value) -> A
     });
     if let Err(e) = needed {
         record_event(&app.control, owner, name, e.code.as_str(), "").await;
+        count_call(app, user, name, true, 0);
         return Err(e);
     }
     let state = &app.org(&user.org).await?;
@@ -352,8 +373,15 @@ pub async fn call(app: &AppState, user: &User, name: &str, mut args: Value) -> A
     span.record("duration_ms", started.elapsed().as_secs_f64() * 1000.0);
     span.in_scope(|| tracing::info!(outcome, "tool call"));
     let source = source.lock().unwrap().take();
+    let errored = !matches!(&result, Ok(v) if v.get("error").is_none());
+    count_call(app, user, name, errored, started.elapsed().as_millis() as u64);
     record_failure(state, owner, name, captured, &result, source).await;
     result
+}
+
+/// Counts the call in the usage table (`crate::usage`), read-only or not. Spawned: it never waits.
+fn count_call(app: &AppState, user: &User, tool: &str, errored: bool, ms: u64) {
+    crate::usage::record(&app.control, crate::usage::Sample { org: user.org.to_string(), user: user.id.clone(), tool: tool.to_string(), errored, ms });
 }
 
 const VAULT_ARGS: &[&str] = &["vault_id", "vault_id_a", "vault_id_b"];
@@ -566,7 +594,7 @@ mod tests {
     fn registry_has_every_tool_wired_up() {
         let expected = [
             "docs", "search", "get", "list", "links", "recall", "reflect", "entities_search", "entities_get",
-            "entities_graph", "entity_types", "code_entity_upsert", "code_relate", "memory_write", "consolidate_observations",
+            "entities_graph", "entity_types", "code_entity_upsert", "code_relate", "memory_write", "memory_write_batch", "consolidate_observations",
             "memory_update", "entity_update", "memory_delete", "entity_delete", "entity_merge", "vault_create", "vault_list", "vault_clone", "vault_merge",
             "vault_invite", "vault_members", "vault_remove_member", "vault_leave", "vault_rename", "vault_delete",
             "document_upload", "document_list", "document_get", "document_download", "document_export", "document_delete",

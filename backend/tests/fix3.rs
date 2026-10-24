@@ -52,6 +52,7 @@ async fn readyz_checks_the_control_database_and_its_migration_version() {
     let ((status, _), _) = common::http(&app.router, "GET", "/healthz", None, None, None).await;
     assert_eq!(status, StatusCode::OK);
 
+    // the newest control migration, whichever that is, goes missing from the ledger
     let newest = eunomia_backend::migrate::CONTROL_MIGRATIONS.iter().map(|m| m.0).max().unwrap();
     app.control().test_raw().query(format!("DELETE _migration WHERE version = {newest}")).await.unwrap().check().unwrap();
     // the check is cached for 2 seconds: still ready right after the change, down after it expires

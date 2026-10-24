@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { X } from "lucide-react";
 import ErrorLine, { failure } from "./ErrorLine";
 import Scene3D from "./Scene3D";
+import VectorInsights from "./VectorInsights";
 import { useEntityCloud } from "@/lib/queries/entities";
 import { useVaults } from "@/lib/queries/vaults";
 
@@ -79,7 +80,8 @@ export default function VectorCloud() {
         Each point is a memory or synced record. Layer vaults into one shared space, drag to orbit, click a point to read it.
       </p>
 
-      <div className="ledger relative flex-1 min-h-0 overflow-hidden" style={{ minHeight: 420 }}>
+      <div className="flex flex-col lg:flex-row gap-3 flex-1 min-h-0">
+      <div className="ledger relative flex-1 min-h-0 overflow-hidden min-w-0" style={{ minHeight: 420 }}>
         {error ? (
           <div className="m-4">
             <ErrorLine error={error} />
@@ -122,6 +124,23 @@ export default function VectorCloud() {
             <p className="text-[13px] leading-snug" style={{ color: "var(--ink)" }}>{selected.label}</p>
           </aside>
         )}
+      </div>
+      {data && points.length > 0 && !error && (
+        <aside
+          className="ledger lg:w-[340px] lg:shrink-0 lg:overflow-y-auto lg:min-h-0"
+          aria-label="Insights"
+        >
+          <VectorInsights
+            points={points}
+            vaultOrder={picked}
+            nameOf={nameOf}
+            colorOf={colorOf}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            space={data.space}
+          />
+        </aside>
+      )}
       </div>
     </div>
   );
