@@ -1,3 +1,0 @@
-#V2
-SELECT schema_version FROM tenant; SELECT kind, status, attempts FROM job WHERE kind = 'migrate_tenant';
-SELECT id, routing, instance FROM connector;

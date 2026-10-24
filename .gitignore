@@ -19,3 +19,6 @@ update-status/
 
 # Promo film work (renders, raw art, voice takes). The finished film ships in docs/media/.
 video/
+
+# SurrealDB CLI query history (`surreal sql`)
+history.txt
