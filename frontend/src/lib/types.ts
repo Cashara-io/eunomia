@@ -227,6 +227,7 @@ export type VaultInvitation = {
 
 export type CloudPoint = { id: string; vault: string; kind: string; label: string; x: number; y: number; z: number };
 export type Cloud = { space: "semantic" | "lexical"; points: CloudPoint[] };
+export type CloudSimilarity = { space: "semantic" | "lexical"; ids: string[]; cosine: number[][]; distance: number[][]; correlation: number[][] };
 
 export type ChatToolCall = { id: string; type: "function"; function: { name: string; arguments: string } };
 

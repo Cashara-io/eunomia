@@ -31,6 +31,7 @@ pub fn router() -> Router<AppState> {
         .route("/entities", get(list_entities).post(create_entity))
         .route("/entities/graph", get(entity_graph))
         .route("/entities/cloud", get(vector_cloud))
+        .route("/entities/cloud/similarity", post(cloud_similarity))
         .route("/entities/memory/{memory_id}", axum::routing::patch(update_memory).delete(delete_memory))
         .route("/entities/{entity_id}", get(get_entity).patch(update_entity).delete(delete_entity))
         .route("/entities/{entity_id}/memory", post(add_memory))
@@ -142,15 +143,44 @@ async fn vector_cloud(
     Query(q): Query<CloudQuery>,
 ) -> AppResult<Json<crate::cache::cloud::Cloud>> {
     let state = state.org(&user.org).await?;
-    let ids = q
-        .vault_ids
-        .unwrap_or_default()
-        .split(',')
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(parse_record_id)
-        .collect::<AppResult<Vec<_>>>()?;
+    let ids = parse_vault_ids(q.vault_ids.as_deref().unwrap_or_default())?;
     Ok(Json(crate::cache::cloud::cloud(&state.db, &state.settings, &user.id, &ids).await?))
+}
+
+/// Comma-separated vault ids, as the cloud endpoints take them.
+fn parse_vault_ids(raw: &str) -> AppResult<Vec<RecordId>> {
+    raw.split(',').map(str::trim).filter(|s| !s.is_empty()).map(parse_record_id).collect()
+}
+
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+struct CloudSimilarityBody {
+    /// the vaults the points were listed from (same as `vault_ids` of the cloud); default: your personal vault
+    #[serde(default)]
+    vault_ids: Vec<String>,
+    /// ids of points returned by the cloud, at most 40
+    ids: Vec<String>,
+}
+
+/// Cosine similarity, euclidean distance and Pearson correlation between points of the vector
+/// cloud, on the full vectors (never sent to the browser). Same vault access as the cloud.
+#[utoipa::path(
+    operation_id = "getCloudSimilarity",
+    post,
+    path = "/api/entities/cloud/similarity",
+    tag = "entities",
+    summary = "Pairwise similarity of vector cloud points",
+    request_body = CloudSimilarityBody,
+    responses((status = 200, body = crate::cache::cloud::Similarity), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = []), ("bearer" = [])),
+)]
+async fn cloud_similarity(
+    State(state): State<AppState>,
+    user: User,
+    Json(body): Json<CloudSimilarityBody>,
+) -> AppResult<Json<crate::cache::cloud::Similarity>> {
+    let state = state.org(&user.org).await?;
+    let vault_ids = parse_vault_ids(&body.vault_ids.join(","))?;
+    Ok(Json(crate::cache::cloud::similarity(&state.db, &state.settings, &user.id, &vault_ids, &body.ids).await?))
 }
 
 fn parse_record_id(id: &str) -> AppResult<RecordId> {
@@ -447,6 +477,7 @@ async fn merge_entities(
     create_entity,
     entity_graph,
     vector_cloud,
+    cloud_similarity,
     update_memory,
     delete_memory,
     get_entity,

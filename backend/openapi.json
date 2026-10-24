@@ -2329,6 +2329,55 @@
         ]
       }
     },
+    "/api/entities/cloud/similarity": {
+      "post": {
+        "tags": [
+          "entities"
+        ],
+        "summary": "Pairwise similarity of vector cloud points",
+        "operationId": "getCloudSimilarity",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloudSimilarityBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Similarity"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/entities/graph": {
       "get": {
         "tags": [
@@ -4853,6 +4902,28 @@
           }
         }
       },
+      "CloudSimilarityBody": {
+        "type": "object",
+        "required": [
+          "ids"
+        ],
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "ids of points returned by the cloud, at most 40"
+          },
+          "vault_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "the vaults the points were listed from (same as `vault_ids` of the cloud); default: your personal vault"
+          }
+        }
+      },
       "ConnectorCreateBody": {
         "type": "object",
         "required": [
@@ -6513,6 +6584,62 @@
           },
           "sync_intervals": {},
           "theme": {}
+        }
+      },
+      "Similarity": {
+        "type": "object",
+        "description": "Pairwise relationships between points of the cloud, measured on the real vectors (not the 3D\nprojection). Row `i` / column `j` of every matrix refers to `ids[i]` / `ids[j]`.",
+        "required": [
+          "space",
+          "ids",
+          "cosine",
+          "distance",
+          "correlation"
+        ],
+        "properties": {
+          "correlation": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "float"
+              }
+            },
+            "description": "Pearson correlation of the vectors' components, -1..1"
+          },
+          "cosine": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "float"
+              }
+            },
+            "description": "cosine similarity, -1..1 (1 = same direction)"
+          },
+          "distance": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "float"
+              }
+            },
+            "description": "euclidean distance between the vectors"
+          },
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "space": {
+            "type": "string",
+            "description": "\"semantic\" (model embeddings) or \"lexical\" (hashed words, no model)"
+          }
         }
       },
       "SnapshotOut": {

@@ -141,6 +141,17 @@ export type CloudPoint = {
     z: number;
 };
 
+export type CloudSimilarityBody = {
+    /**
+     * ids of points returned by the cloud, at most 40
+     */
+    ids: Array<string>;
+    /**
+     * the vaults the points were listed from (same as `vault_ids` of the cloud); default: your personal vault
+     */
+    vault_ids?: Array<string>;
+};
+
 export type ConnectorCreateBody = {
     kind: string;
     /**
@@ -765,6 +776,30 @@ export type SettingsUpdate = {
     openai_base_url?: string | null;
     sync_intervals?: unknown;
     theme?: unknown;
+};
+
+/**
+ * Pairwise relationships between points of the cloud, measured on the real vectors (not the 3D
+ * projection). Row `i` / column `j` of every matrix refers to `ids[i]` / `ids[j]`.
+ */
+export type Similarity = {
+    /**
+     * Pearson correlation of the vectors' components, -1..1
+     */
+    correlation: Array<Array<number>>;
+    /**
+     * cosine similarity, -1..1 (1 = same direction)
+     */
+    cosine: Array<Array<number>>;
+    /**
+     * euclidean distance between the vectors
+     */
+    distance: Array<Array<number>>;
+    ids: Array<string>;
+    /**
+     * "semantic" (model embeddings) or "lexical" (hashed words, no model)
+     */
+    space: string;
 };
 
 /**
@@ -2254,6 +2289,28 @@ export type GetVectorCloudResponses = {
 };
 
 export type GetVectorCloudResponse = GetVectorCloudResponses[keyof GetVectorCloudResponses];
+
+export type GetCloudSimilarityData = {
+    body: CloudSimilarityBody;
+    path?: never;
+    query?: never;
+    url: '/api/entities/cloud/similarity';
+};
+
+export type GetCloudSimilarityErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetCloudSimilarityError = GetCloudSimilarityErrors[keyof GetCloudSimilarityErrors];
+
+export type GetCloudSimilarityResponses = {
+    200: Similarity;
+};
+
+export type GetCloudSimilarityResponse = GetCloudSimilarityResponses[keyof GetCloudSimilarityResponses];
 
 export type GetEntityGraphData = {
     body?: never;

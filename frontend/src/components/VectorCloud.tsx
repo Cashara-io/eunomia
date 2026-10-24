@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { X } from "lucide-react";
 import ErrorLine, { failure } from "./ErrorLine";
 import Scene3D from "./Scene3D";
+import MemoryRows, { MAX_COMPARE } from "./MemoryRows";
 import VectorInsights from "./VectorInsights";
 import { useEntityCloud } from "@/lib/queries/entities";
 import { useVaults } from "@/lib/queries/vaults";
@@ -11,6 +12,10 @@ import { useVaults } from "@/lib/queries/vaults";
 // One colour per layered vault, in pick order.
 // Series colours, never the accent: the accent marks only what is pressable or selected.
 const LAYER_COLORS = ["var(--series-2)", "var(--series-1)", "var(--series-3)", "var(--series-4)", "var(--kind-repository)", "var(--kind-location)"];
+const PANELS = [
+  { id: "rows", label: "Memories" },
+  { id: "insights", label: "Insights" },
+] as const;
 const AXES: [string, string, string] = ["PC1", "PC2", "PC3"];
 
 export default function VectorCloud() {
@@ -41,8 +46,28 @@ export default function VectorCloud() {
     return v ? (v.kind === "personal" ? "Personal" : v.name) : id;
   };
 
+  // Rows ticked for comparison, in tick order (these are the numbers drawn on the points).
+  const [rawSelection, setSelection] = useState<string[]>([]);
+  const [tab, setTab] = useState<(typeof PANELS)[number]["id"]>("rows");
+  const selection = useMemo(() => {
+    const live = new Set(points.map((p) => p.id));
+    return rawSelection.filter((id) => live.has(id));
+  }, [rawSelection, points]);
+  function toggleRow(id: string) {
+    setSelection(selection.includes(id) ? selection.filter((x) => x !== id) : selection.length < MAX_COMPARE ? [...selection, id] : selection);
+    setSelectedId(id);
+  }
+  // A click on a point in the graph ticks (or unticks) its row.
+  function pickPoint(id: string) {
+    if (selection.includes(id)) {
+      setSelection(selection.filter((x) => x !== id));
+      setSelectedId(null);
+    } else toggleRow(id);
+  }
+
   function toggle(id: string) {
     setSelectedId(null);
+    setSelection([]);
     setPicked(picked.includes(id) ? picked.filter((x) => x !== id) : [...picked, id]);
   }
 
@@ -77,7 +102,7 @@ export default function VectorCloud() {
         )}
       </div>
       <p className="text-[12px] -mt-1" style={{ color: "var(--ink-faint)" }}>
-        Each point is a memory or synced record. Layer vaults into one shared space, drag to orbit, click a point to read it.
+        Each point is a memory or synced record. Layer vaults into one shared space, drag to orbit, click a point to read it and add it to the comparison.
       </p>
 
       <div className="flex flex-col lg:flex-row gap-3 flex-1 min-h-0">
@@ -97,7 +122,7 @@ export default function VectorCloud() {
             Nothing stored in these vaults yet.
           </div>
         ) : (
-          <Scene3D points={points} axes={AXES} selectedId={selectedId} onSelect={setSelectedId} ariaLabel="Vector cloud" />
+          <Scene3D points={points} axes={AXES} selectedId={selectedId} highlightIds={selection} onSelect={pickPoint} ariaLabel="Vector cloud" />
         )}
         {selected && (
           <aside
@@ -126,19 +151,40 @@ export default function VectorCloud() {
         )}
       </div>
       {data && points.length > 0 && !error && (
-        <aside
-          className="ledger lg:w-[340px] lg:shrink-0 lg:overflow-y-auto lg:min-h-0"
-          aria-label="Insights"
-        >
-          <VectorInsights
-            points={points}
-            vaultOrder={picked}
-            nameOf={nameOf}
-            colorOf={colorOf}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-            space={data.space}
-          />
+        <aside className="ledger max-lg:shrink-0 lg:w-[340px] lg:shrink-0 lg:min-h-0 flex flex-col overflow-hidden" aria-label="Analysis">
+          <div className="p-2 pb-0 shrink-0">
+            <div className="flex gap-0.5 p-0.5 rounded-lg" style={{ background: "var(--surface-raised)" }} role="tablist" aria-label="Analysis view">
+              {PANELS.map((t) => (
+                <button key={t.id} role="tab" aria-selected={tab === t.id} className="pill flex-1 justify-center" onClick={() => setTab(t.id)}>
+                  {t.label}
+                  {t.id === "rows" && selection.length > 0 && <span className="font-mono" style={{ color: "var(--ink-faint)" }}>{selection.length}</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+          {tab === "rows" ? (
+            <MemoryRows
+              points={points}
+              vaultIds={picked}
+              nameOf={nameOf}
+              selection={selection}
+              focusId={selectedId}
+              onToggle={toggleRow}
+              onClear={() => setSelection([])}
+            />
+          ) : (
+            <div className="lg:overflow-y-auto lg:min-h-0">
+              <VectorInsights
+                points={points}
+                vaultOrder={picked}
+                nameOf={nameOf}
+                colorOf={colorOf}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+                space={data.space}
+              />
+            </div>
+          )}
         </aside>
       )}
       </div>
