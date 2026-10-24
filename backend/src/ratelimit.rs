@@ -213,11 +213,31 @@ impl RateLimiter {
     /// Takes one token from `key`'s bucket (capacity and refill: `per_min` per minute).
     /// `Err(seconds)` is how long until a token is available.
     pub fn check(&self, key: &str, per_min: u32) -> Result<(), u64> {
+        self.check_n(key, per_min, 1)
+    }
+
+    /// Whether `key`'s bucket holds `n` tokens now, taking none.
+    pub fn peek(&self, key: &str, per_min: u32, n: u32) -> Result<(), u64> {
+        if per_min == 0 {
+            return Ok(());
+        }
+        let guard = self.buckets.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(b) = guard.map.get(key) else { return Ok(()) };
+        let (cap, rate) = (f64::from(per_min), f64::from(per_min) / 60.0);
+        let tokens = (b.tokens + Instant::now().duration_since(b.last).as_secs_f64() * rate).min(cap);
+        let need = f64::from(n.max(1)).min(cap);
+        if tokens >= need { Ok(()) } else { Err(((need - tokens) / rate).ceil().max(1.0) as u64) }
+    }
+
+    /// Takes `n` tokens from `key`'s bucket, or none: a refused request (a batch too big for what is
+    /// left) costs nothing, so a smaller one right after can still go through. `Err(seconds)` until `n` tokens will be there.
+    pub fn check_n(&self, key: &str, per_min: u32, n: u32) -> Result<(), u64> {
         if per_min == 0 {
             return Ok(());
         }
         let cap = f64::from(per_min);
         let rate = cap / 60.0;
+        let need = f64::from(n.max(1)).min(cap);
         let now = Instant::now();
         let mut guard = self.buckets.lock().unwrap_or_else(|e| e.into_inner());
         let buckets = &mut *guard;
@@ -233,11 +253,13 @@ impl RateLimiter {
         let Some(b) = buckets.map.get_mut(key) else { return Ok(()) };
         b.tokens = (b.tokens + now.duration_since(b.last).as_secs_f64() * rate).min(cap);
         b.last = now;
-        if b.tokens >= 1.0 {
-            b.tokens -= 1.0;
+        if b.tokens >= need {
+            if n > 0 {
+                b.tokens -= need;
+            }
             Ok(())
         } else {
-            Err(((1.0 - b.tokens) / rate).ceil().max(1.0) as u64)
+            Err(((need - b.tokens) / rate).ceil().max(1.0) as u64)
         }
     }
 }
@@ -305,6 +327,17 @@ impl FailThrottle {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_refused_multi_token_charge_takes_nothing() {
+        let l = RateLimiter::default();
+        assert!(l.check_n("k", 15, 10).is_ok());
+        assert!(l.check_n("k", 15, 10).is_err(), "only 5 left");
+        assert!(l.peek("k", 15, 5).is_ok(), "the refusal took nothing");
+        assert!(l.check_n("k", 15, 5).is_ok());
+        assert!(l.check("k", 15).is_err());
+        assert!(l.check_n("free", 0, 1000).is_ok(), "0 turns the limit off");
+    }
 
     #[test]
     fn fail_throttle_blocks_after_max_and_clears() {

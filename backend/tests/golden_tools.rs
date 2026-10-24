@@ -57,6 +57,12 @@ fn s(v: &Value, ptr: &str) -> String {
 
 #[tokio::test]
 async fn every_registered_tool_has_a_golden() {
+    // boxed: one await per tool makes this future large, and pinned on the test thread's stack it
+    // overflows a debug build once a few more tools are added
+    Box::pin(goldens()).await
+}
+
+async fn goldens() {
     let mut g = Golden { app: TestApp::new().await, norm: Normalizer::default(), covered: BTreeSet::new() };
     let bob = common::register(&g.app.state, "bob@example.com").await;
 
@@ -151,6 +157,12 @@ async fn every_registered_tool_has_a_golden() {
     g.snap("memory_write__custom_kind", "memory_write",
         json!({"subject_name":"orders_db","subject_kind":"db","text":"orders_db runs Postgres 16"})).await;
     g.snap("entity_types", "entity_types", json!({})).await;
+    // -- bulk writes (after entity_types, so they change no snapshot above): one result per item, a bad one fails alone --
+    g.snap("memory_write_batch", "memory_write_batch", json!({"items": [
+        {"subject_name": "Import page 1", "subject_kind": "file", "text": "page one says hello"},
+        {"subject_name": "Import page 2", "subject_kind": "file"},
+        {"subject_name": "Import page 3", "subject_kind": "file", "text": "page three says goodbye", "type": "experience"},
+    ]})).await;
 
     let registered: BTreeSet<String> = registry::all_tools().keys().map(|k| k.to_string()).collect();
     let missing: Vec<_> = registered.difference(&g.covered).collect();

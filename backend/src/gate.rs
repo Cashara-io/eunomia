@@ -302,12 +302,19 @@ pub struct Meter {
 }
 
 impl Meter {
-    /// Takes `n` more tokens from each bucket the request was already charged to. `Err(seconds)` when one runs dry.
+    /// Takes `n` more tokens from each bucket the request was already charged to, all or nothing.
+    /// `Err(seconds)` when one has too few.
     pub fn charge(&self, n: usize) -> Result<(), u64> {
-        for _ in 0..n {
-            for (key, per_min) in &self.buckets {
-                self.limiter.check(key, *per_min)?;
-            }
+        if n == 0 {
+            return Ok(());
+        }
+        let n = u32::try_from(n).unwrap_or(u32::MAX);
+        // every bucket must have room before any is charged, so a refusal costs nothing
+        for (key, per_min) in &self.buckets {
+            self.limiter.peek(key, *per_min, n)?;
+        }
+        for (key, per_min) in &self.buckets {
+            self.limiter.check_n(key, *per_min, n)?;
         }
         Ok(())
     }
