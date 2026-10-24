@@ -8,7 +8,7 @@ Namespace `eunomia` (`SURREAL_NS`) holds one `control` database and one `org_<32
 
 | Database | Tables | Migrations |
 |----------|--------|------------|
-| `control` | `user`, `org`, `membership` (user, org, role), `tenant` (org to database name, schema version, status, encrypted database password), `session`, `api_token`, `oauth_*`, `audit_event`, `job`, `job_leader`, `failure_capsule` | `backend/migrations/control/` |
+| `control` | `user`, `org`, `membership` (user, org, role), `tenant` (org to database name, schema version, status, encrypted database password), `session`, `api_token`, `oauth_*`, `audit_event`, `tool_usage` (hourly tool-call counters, counts only), `job`, `job_leader`, `failure_capsule` | `backend/migrations/control/` |
 | `org_<uuid>` (`STRICT`) | `vault`, `vault_member`, entity tables, `memory`, `relates_to`, `cache_record`, `linked_to`, `connector`, `sync_status`, `app_settings`, `chat_*`, `audit_log`, `embed_cache`, `document` (plus the `documents` file bucket, see [documents.md](../documents.md)) | `backend/migrations/tenant/` |
 
 **The control database holds no tenant content.** `audit_event` keeps the tool name, the argument names and a sha256 of the arguments (never the values); the owner's own `audit_log` in the org database keeps the readable summary. A failure capsule keeps only a hash and shape of the arguments by default, and its error text has quoted values stripped (a unique-index error echoes the record, for example). A test writes a canary through a tool and scans every control table for it.

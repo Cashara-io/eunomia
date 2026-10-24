@@ -12,6 +12,7 @@ import { UpdateSection } from "./UpdateSection";
 import { HttpsSection } from "./HttpsSection";
 import { GeneralSection } from "./GeneralSection";
 import { DataSection } from "./DataSection";
+import { UsageSection } from "./UsageSection";
 
 const TABS = [
   { id: "general", label: "General" },
@@ -20,6 +21,7 @@ const TABS = [
   { id: "tokens", label: "API tokens" },
   { id: "apps", label: "Connected apps" },
   { id: "sessions", label: "Sessions" },
+  { id: "usage", label: "Usage" },
   { id: "data", label: "Your data" },
 ] as const;
 
@@ -116,6 +118,7 @@ function Settings() {
             {tab === "tokens" && <TokensSection />}
             {tab === "apps" && <ConnectedAppsSection />}
             {tab === "sessions" && <SessionsSection />}
+            {tab === "usage" && <UsageSection />}
             {tab === "data" && <DataSection />}
           </div>
         </div>

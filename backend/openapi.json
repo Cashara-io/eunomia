@@ -68,6 +68,67 @@
         ]
       }
     },
+    "/api/audit/tool-usage": {
+      "get": {
+        "tags": [
+          "audit"
+        ],
+        "summary": "Tool-call counts per person, credential, channel, MCP session and tool",
+        "description": "Counts every tool call (read-only and mutating; REST, MCP and chat) over a look-back window. A regular user sees their own usage; an instance admin sees everyone in the org and may narrow to one person with `user`.",
+        "operationId": "getToolUsage",
+        "parameters": [
+          {
+            "name": "hours",
+            "in": "query",
+            "description": "Look back this many hours (1 to 2160, default 168 = 7 days).",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "user",
+            "in": "query",
+            "description": "Admin only: restrict the report to one person (a `user:...` id).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolUsageReport"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/auth/bootstrap": {
       "get": {
         "tags": [
@@ -6841,6 +6902,78 @@
           }
         }
       },
+      "ToolUsageReport": {
+        "type": "object",
+        "required": [
+          "since",
+          "hours",
+          "scope",
+          "totals",
+          "by_person",
+          "by_credential",
+          "by_channel",
+          "by_session",
+          "by_tool",
+          "series_step",
+          "series"
+        ],
+        "properties": {
+          "by_channel": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsageByChannel"
+            }
+          },
+          "by_credential": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsageByCredential"
+            }
+          },
+          "by_person": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsageByPerson"
+            }
+          },
+          "by_session": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsageBySession"
+            }
+          },
+          "by_tool": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsageByTool"
+            }
+          },
+          "hours": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "scope": {
+            "type": "string",
+            "description": "`org`: everyone in the org (instance admin). `self`: the caller's own usage."
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsagePoint"
+            }
+          },
+          "series_step": {
+            "type": "string",
+            "description": "`hour` for ranges up to 48 hours, `day` beyond."
+          },
+          "since": {
+            "type": "string"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/UsageCounts"
+          }
+        }
+      },
       "UpdateAck": {
         "type": "object",
         "description": "Body of `POST /update/request` and `/update/check`.",
@@ -6912,6 +7045,184 @@
               "boolean",
               "null"
             ]
+          }
+        }
+      },
+      "UsageByChannel": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/UsageCounts"
+          },
+          {
+            "type": "object",
+            "required": [
+              "channel"
+            ],
+            "properties": {
+              "channel": {
+                "type": "string",
+                "description": "`mcp`, `rest` or `chat`."
+              }
+            }
+          }
+        ]
+      },
+      "UsageByCredential": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/UsageCounts"
+          },
+          {
+            "type": "object",
+            "required": [
+              "user_id",
+              "email",
+              "kind",
+              "label",
+              "credential_id"
+            ],
+            "properties": {
+              "credential_id": {
+                "type": "string",
+                "description": "The token's or OAuth client's id; empty for the browser session."
+              },
+              "email": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "description": "`session` (the signed-in browser), `token` (personal API token) or `oauth` (an OAuth client)."
+              },
+              "label": {
+                "type": "string",
+                "description": "Token name, OAuth client name, or \"Browser session\"."
+              },
+              "user_id": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "UsageByPerson": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/UsageCounts"
+          },
+          {
+            "type": "object",
+            "required": [
+              "user_id",
+              "email"
+            ],
+            "properties": {
+              "email": {
+                "type": "string"
+              },
+              "user_id": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "UsageBySession": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/UsageCounts"
+          },
+          {
+            "type": "object",
+            "required": [
+              "user_id",
+              "email",
+              "channel",
+              "session"
+            ],
+            "properties": {
+              "channel": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              },
+              "session": {
+                "type": "string",
+                "description": "The `Mcp-Session-Id` the client sent, or the chat thread id."
+              },
+              "user_id": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "UsageByTool": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/UsageCounts"
+          },
+          {
+            "type": "object",
+            "required": [
+              "tool",
+              "read_only"
+            ],
+            "properties": {
+              "read_only": {
+                "type": "boolean"
+              },
+              "tool": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "UsageCounts": {
+        "type": "object",
+        "description": "Calls, failed calls and mean duration of a group of tool calls.",
+        "required": [
+          "calls",
+          "errors",
+          "avg_ms"
+        ],
+        "properties": {
+          "avg_ms": {
+            "type": "number",
+            "format": "double",
+            "description": "Mean time a call took, in milliseconds."
+          },
+          "calls": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "errors": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Calls that ended in an error (a tool error value, a refused scope, or a failure)."
+          }
+        }
+      },
+      "UsagePoint": {
+        "type": "object",
+        "required": [
+          "bucket",
+          "calls",
+          "errors"
+        ],
+        "properties": {
+          "bucket": {
+            "type": "string",
+            "description": "Start of the hour or day (UTC), RFC 3339."
+          },
+          "calls": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "errors": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },

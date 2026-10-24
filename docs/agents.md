@@ -185,6 +185,7 @@ No. The connected agent is the model.
 | `reflect` | Cited answer from recalled memories (or the memories, without a key) |
 | `search` / `get` / `list` / `links` | Raw synced records from connectors |
 | `memory_write` | Remember a fact (`world`, `experience`) or set an entity's `observation` |
+| `memory_write_batch` | Remember up to 100 facts in one call, one result per fact; for imports |
 | `memory_update` / `memory_delete` | Edit or delete one memory |
 | `entities_search` / `entities_get` / `entities_graph` | Find and read people, orgs, places, code and custom kinds |
 | `entity_types` | The built-in entity kinds and the custom kinds agents created (any new lowercase `subject_kind` creates one) |
@@ -197,3 +198,14 @@ No. The connected agent is the model.
 | `document_download` / `document_export` / `document_delete` | The HTTP route for the original bytes, the passages-and-vectors manifest, deletion |
 
 Destructive tools are flagged `destructiveHint` so clients can ask first.
+
+### Importing a lot at once
+
+Writing hundreds of facts one call at a time (say, 900 pages of notes) runs
+into the per-token rate limit (`RATE_LIMIT_TOKEN_PER_MIN`, 600 by default):
+the extra calls get `429 rate.limited` with `Retry-After`. Use
+`memory_write_batch` instead. It takes up to 100 facts per call, writes each
+exactly like `memory_write`, and returns one result per fact, so a bad item
+fails alone. A batch costs one request per 10 facts, so 900 facts are 9 calls
+and 90 requests, well inside a minute's limit. If a client still gets a 429,
+it should wait `Retry-After` seconds and resend that batch.
