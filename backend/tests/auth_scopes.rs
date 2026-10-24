@@ -881,6 +881,37 @@ async fn mcp_batches_are_capped_and_charged_per_message() {
     assert_eq!((status, v["code"].as_str()), (StatusCode::TOO_MANY_REQUESTS, Some("rate.limited")), "{v}");
 }
 
+/// `initialize` hands out a session id naming the tool surface; a request carrying one from an older
+/// surface (the server was upgraded under a connected client) gets 404 so the client re-initializes
+/// and re-fetches `tools/list` (issue #90). No session id at all keeps working, as before.
+#[tokio::test]
+async fn mcp_sessions_from_an_older_tool_surface_are_sent_to_reinitialize() {
+    let app = TestApp::new().await;
+    let init = json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18"}});
+    let (status, headers, v) = send(&app.router, "POST", "/mcp", Some(init.clone()), &bearer(&app.token)).await;
+    assert_eq!(status, StatusCode::OK, "{v}");
+    let session = headers.get("mcp-session-id").expect("initialize issues a session id").to_str().unwrap().to_string();
+    assert!(session.is_ascii() && session.contains('.'), "{session}");
+
+    let list = json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"});
+    let with = |id: &str| {
+        let mut h = bearer(&app.token);
+        h.push(("mcp-session-id", id.to_string()));
+        h
+    };
+    let (status, _, v) = send(&app.router, "POST", "/mcp", Some(list.clone()), &with(&session)).await;
+    assert_eq!(status, StatusCode::OK, "the current session is accepted: {v}");
+    let (status, _, _) = send(&app.router, "POST", "/mcp", Some(list.clone()), &bearer(&app.token)).await;
+    assert_eq!(status, StatusCode::OK, "no session id: stateless clients keep working");
+
+    let (status, _, v) = send(&app.router, "POST", "/mcp", Some(list), &with("0000000000000000.made-up-before-restart")).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{v}");
+    // re-initializing with the stale id is how the client recovers
+    let (status, headers, _) = send(&app.router, "POST", "/mcp", Some(init), &with("0000000000000000.old")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(headers.get("mcp-session-id").unwrap().to_str().unwrap().split('.').next(), session.split('.').next());
+}
+
 // ------------------------------------------------------------ bulk writes (#87)
 
 fn registry_cost(n: usize) -> usize {

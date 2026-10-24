@@ -482,3 +482,26 @@ async fn existing_connectors_become_first_connections_in_0017() {
     let cursor: Option<String> = db.query("SELECT VALUE cursor FROM ONLY sync_status:`u:gmail`").await.unwrap().take(0).unwrap();
     assert_eq!(cursor.as_deref(), Some("keep"));
 }
+
+/// 0017 over connectors made before 0015 (2.0.2 and older): those rows have no `routing`, which 0015
+/// typed `object` without backfilling, so 0017's `UPDATE connector` failed the type check and the org
+/// stayed at schema 16 (issue #85). The pre-step gives them the default empty routing first.
+#[tokio::test]
+async fn connectors_from_before_routing_migrate_through_0017() {
+    let db = fresh().await;
+    migrate::apply_up_to(&db, 14).await.unwrap();
+    db.query(
+        "CREATE user:u SET email = 'a@b.c', password_hash = 'x';
+         CREATE connector:old SET owner = user:u, kind = 'gmail', enabled = true, credentials_encrypted = 'enc';",
+    )
+    .await
+    .unwrap()
+    .check()
+    .unwrap();
+    migrate::apply_up_to(&db, 16).await.unwrap();
+    let routing: Option<Value> = db.query("SELECT VALUE routing FROM ONLY connector:old").await.unwrap().take(0).unwrap();
+    assert_eq!(routing, None, "0015 does not backfill: the row still has no routing");
+    migrate::migrate(&db, &test_settings()).await.unwrap();
+    let row: Option<Value> = db.query("SELECT routing, instance, label FROM ONLY connector:old").await.unwrap().take(0).unwrap();
+    assert_eq!(row.unwrap(), serde_json::json!({"routing": {}, "instance": "", "label": ""}));
+}

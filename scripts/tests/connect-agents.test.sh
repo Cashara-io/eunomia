@@ -176,6 +176,11 @@ check "eunomia hook added beside them" has "$H/.claude/settings.json" 'eunomia/h
 
 PW=wrong api --agents claude >/dev/null 2>&1; rc=$?
 check "a wrong password for an existing account fails" test "$rc" -ne 0
+KEEP_H="$H"; new_home; mkdir -p "$H/.claude"
+out="$(api --email closed@b.co --agents claude 2>&1)"; rc=$?
+check "a refused signup fails" test "$rc" -ne 0
+check "a refused signup says why, not just HTTP 403" bash -c 'printf "%s" "$1" | grep -q "refused the account for closed@b.co: Signup is closed"' _ "$out"
+H="$KEEP_H"
 kill "$MOCK_PID" 2>/dev/null; sleep 0.3
 check "hooks never fail when Eunomia is down" bash -c "$(declare -f HOOK); echo '{\"prompt\":\"Ada\"}' | HOOK prompt; HOOK session"
 

@@ -11,6 +11,7 @@ pub const CONTROL_ALL: &[&ControlStmt] = &[
     &FAIL,
     &RELEASE_WORKER,
     &REAP_POISONED,
+    &REVIVE_DEAD_MIGRATIONS,
     &PRUNE_DONE,
     &LEADER_ACQUIRE,
     &LEADER_RELEASE,
@@ -22,6 +23,7 @@ pub const CONTROL_ALL: &[&ControlStmt] = &[
 /// Reconciler probes run in the org's database.
 pub const ALL: &[&Stmt] = &[
     &EMBED_BACKLOG,
+    &MEMORY_EMBED_BACKLOG,
     &STALE_OBSERVATIONS,
 ];
 
@@ -92,6 +94,16 @@ pub const REAP_POISONED: ControlStmt = ControlStmt::new(
      WHERE status = 'running' AND locked_until < time::now() AND attempts >= max_attempts RETURN VALUE id",
 );
 
+/// Dead `migrate_tenant` jobs back to ready, once each time a process becomes scheduler leader (a
+/// boot, in practice). Their key carries only the target schema, so without this a migration that
+/// died stays dead across upgrades and the org stays behind; a release that fixes the cause has to be
+/// able to run it again. Once per leadership, so a migration that still fails cannot crash-loop.
+pub const REVIVE_DEAD_MIGRATIONS: ControlStmt = ControlStmt::new(
+    "jobs.revive_dead_migrations",
+    "UPDATE job SET status = 'ready', attempts = 0, run_at = time::now(), last_error_code = NONE, updated_at = time::now() \
+     WHERE kind = 'migrate_tenant' AND status = 'dead' RETURN VALUE id",
+);
+
 pub const PRUNE_DONE: ControlStmt = ControlStmt::new(
     "jobs.prune_done",
     "DELETE job WHERE status = 'done' AND updated_at < time::now() - <duration>$age RETURN NONE",
@@ -134,6 +146,14 @@ pub const EMBED_BACKLOG: Stmt = Stmt::new(
     "jobs.embed_backlog",
     "SELECT id, title, body_text FROM cache_record WHERE owner = $owner AND deleted = false AND embedding IS NONE \
      AND string::len(string::trim(string::concat(title, body_text))) > 0 LIMIT $limit",
+);
+
+/// An owner's memories with no vector from the current model (`$spec`, see `embeddings::EmbedSpec`):
+/// never embedded, edited since (the `memory_text_changed` event cleared it), or made by another model.
+pub const MEMORY_EMBED_BACKLOG: Stmt = Stmt::new(
+    "jobs.memory_embed_backlog",
+    "SELECT id, text FROM memory WHERE owner = $owner AND (embedding_spec IS NONE OR embedding_spec != $spec) \
+     AND string::len(string::trim(text)) > 0 LIMIT $limit",
 );
 
 pub const STALE_OBSERVATIONS: Stmt = Stmt::new(

@@ -33,6 +33,7 @@ fn batch_schema() -> serde_json::Value {
                         "source_record_id": {"type": "string"},
                         "type": {"type": "string", "enum": ["world", "experience", "observation"]},
                         "vault_id": {"type": "string", "description": "this item's vault, overriding the batch's"},
+                    "occurred_at": {"type": "string", "description": "when the fact happened (ISO 8601), if not now"},
                     },
                     "required": ["subject_name", "subject_kind", "text"],
                 },
@@ -64,6 +65,8 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
         vault_id: Option<String>,
         #[serde(default)]
         vault_ids: Option<Vec<String>>,
+        #[serde(default)]
+        include_history: bool,
     }
     fn default_recall_limit() -> usize {
         20
@@ -92,6 +95,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                 },
                 "vault_id": {"type": "string", "description": "recall from just this vault (a vault id or its name, e.g. \"Acme\"); omit to search your personal vault and every org vault you belong to"},
                 "vault_ids": vault_ids_schema(),
+                "include_history": {"type": "boolean", "description": "also return facts a later fact superseded, marked status \"superseded\" (for what was true before); default false: current facts only"},
             },
             "required": ["query"],
         }),
@@ -115,6 +119,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     a.max_tokens,
                     a.types.as_deref(),
                     &vaults,
+                    a.include_history,
                 )
                 .await
             })
@@ -174,6 +179,8 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
         mem_type: String,
         #[serde(default)]
         vault_id: Option<String>,
+        #[serde(default)]
+        occurred_at: Option<String>,
     }
     fn default_memory_write_type() -> String {
         "world".to_string()
@@ -191,6 +198,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                 "source_record_id": {"type": "string"},
                 "type": {"type": "string", "enum": ["world", "experience", "observation"]},
                 "vault_id": {"type": "string", "description": "write into this vault instead of your personal one (a vault id or its name, e.g. \"Acme\")"},
+                "occurred_at": {"type": "string", "description": "when the fact happened or became true (ISO 8601 date or datetime), if not now: e.g. a decision made last March. Recall's time_range and recency use it"},
             },
             "required": ["subject_name", "subject_kind", "text"],
         }),
@@ -213,6 +221,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     a.source_record_id.as_deref(),
                     &a.mem_type,
                     vault_id.as_ref(),
+                    a.occurred_at.as_deref(),
                 )
                 .await;
                 Ok(to_tool_value(result))
@@ -231,6 +240,8 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
         mem_type: String,
         #[serde(default)]
         vault_id: Option<String>,
+        #[serde(default)]
+        occurred_at: Option<String>,
     }
     #[derive(serde::Deserialize)]
     struct MemoryWriteBatchArgs {
@@ -277,6 +288,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                                 item.source_record_id.as_deref(),
                                 &item.mem_type,
                                 vault.as_ref(),
+                                item.occurred_at.as_deref(),
                             )
                             .await;
                             match out {
