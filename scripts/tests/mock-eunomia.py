@@ -17,15 +17,22 @@ class H(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def _body(self):
-        n = int(self.headers.get("Content-Length") or 0)
-        return json.loads(self.rfile.read(n) or b"{}")
+        if not hasattr(self, "_parsed"):
+            n = int(self.headers.get("Content-Length") or 0)
+            self._parsed = json.loads(self.rfile.read(n) or b"{}")
+        return self._parsed
+
+    def _peek_email(self):
+        return self._body().get("email")
 
     def handle_any(self, method):
         log.write(f"{method} {self.path}\n")
         if self.path == "/api/auth/login" and method == "POST":
-            ok = state["registered"] and self._body().get("password") == "correct-horse"
+            ok = state["registered"] and self._body().get("password") == "correct-horse" and self._peek_email() == "a@b.co"
             return self._send(200 if ok else 401, {"email": "a@b.co"} if ok else {"detail": "no"})
         if self.path == "/api/auth/register" and method == "POST":
+            if self._peek_email() == "closed@b.co":
+                return self._send(403, {"code": "auth.forbidden", "detail": "Signup is closed on this server (SIGNUP). Ask the admin to create your account or to open signup."})
             if state["registered"]:
                 return self._send(409, {"detail": "exists"})
             state["registered"] = True
