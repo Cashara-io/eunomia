@@ -15,6 +15,7 @@ pub const ALL: &[&ControlStmt] = &[
     &AUTH_USER_ID_BY_EMAIL,
     &AUTH_USER_CREATE,
     &AUTH_USER_BY_EMAIL,
+    &AUTH_USER_BY_ID,
     &AUTH_USER_COUNT,
     &AUTH_USER_ONBOARDED,
     &AUTH_USER_DELETE,
@@ -47,6 +48,12 @@ pub const ALL: &[&ControlStmt] = &[
     &OAUTH_PRUNE,
     &AUDIT_EVENT_CREATE,
     &AUDIT_PRUNE,
+    &TOOL_USAGE_RECORD,
+    &TOOL_USAGE_PRUNE,
+    &TOOL_USAGE_REPORT,
+    &TOOL_USAGE_USERS,
+    &TOOL_USAGE_TOKENS,
+    &TOOL_USAGE_CLIENTS,
     &SESSION_PRUNE,
     &ORG_OF_USER,
     &ORG_FIRST_OWNER,
@@ -56,6 +63,12 @@ pub const ALL: &[&ControlStmt] = &[
     &USER_EMAIL_LC_BACKFILL,
     &USER_IDS_OLDEST_FIRST,
     &MEMBERSHIP_DELETE_USER,
+    &IDENTITY_FIND,
+    &IDENTITY_CREATE,
+    &IDENTITY_TOUCH,
+    &IDENTITY_LIST_FOR_USER,
+    &IDENTITY_DELETE_USER,
+    &AUTH_SESSION_REVOKE_OWNER,
 ];
 
 pub const AUTH_SESSION_CREATE: ControlStmt =
@@ -99,6 +112,8 @@ pub const AUTH_USER_CREATE: ControlStmt =
 
 pub const AUTH_USER_BY_EMAIL: ControlStmt =
     ControlStmt::new("app.auth_user_by_email", "SELECT * FROM user WHERE email_lc = $email LIMIT 1");
+
+pub const AUTH_USER_BY_ID: ControlStmt = ControlStmt::new("app.auth_user_by_id", "SELECT * FROM user WHERE id = $id LIMIT 1");
 
 pub const AUTH_USER_COUNT: ControlStmt = ControlStmt::new("app.auth_user_count", "SELECT count() FROM user GROUP ALL");
 
@@ -252,6 +267,41 @@ pub const AUDIT_EVENT_CREATE: ControlStmt = ControlStmt::new(
 /// Retention only: the one place the app deletes `audit_event` rows (see `audit::prune`).
 pub const AUDIT_PRUNE: ControlStmt = ControlStmt::new("app.audit_prune", "DELETE audit_event WHERE created_at < time::now() - <duration>$age");
 
+/// Counts one tool call: upserts the hour/user/credential/channel/session/tool row (its id is derived
+/// from those, see `usage::row_id`) and adds to its counters in one atomic statement.
+pub const TOOL_USAGE_RECORD: ControlStmt = ControlStmt::new(
+    "app.tool_usage_record",
+    "UPSERT $id SET org = $org, bucket = $bucket, user = $user, actor_kind = $actor_kind, actor_id = $actor_id, \
+     channel = $channel, session = $sess, tool = $tool, calls = (calls ?? 0) + 1, errors = (errors ?? 0) + $errors, \
+     total_ms = (total_ms ?? 0) + $ms, updated_at = time::now() RETURN NONE",
+);
+
+/// Retention only: the one place the app deletes `tool_usage` rows (see `usage::prune`).
+pub const TOOL_USAGE_PRUNE: ControlStmt = ControlStmt::new("app.tool_usage_prune", "DELETE tool_usage WHERE bucket < time::now() - <duration>$age");
+
+/// The usage report's six aggregates over one org (or one user of it) since `$since`: by person, by
+/// credential, by channel, by session, by tool, and per hour.
+pub const TOOL_USAGE_REPORT: ControlStmt = ControlStmt::new(
+    "app.tool_usage_report",
+    "SELECT user, math::sum(calls) AS calls, math::sum(errors) AS errors, math::sum(total_ms) AS total_ms FROM tool_usage \
+       WHERE org = $org AND bucket >= $since AND ($user IS NONE OR user = $user) GROUP BY user; \
+     SELECT user, actor_kind, actor_id, math::sum(calls) AS calls, math::sum(errors) AS errors, math::sum(total_ms) AS total_ms FROM tool_usage \
+       WHERE org = $org AND bucket >= $since AND ($user IS NONE OR user = $user) GROUP BY user, actor_kind, actor_id; \
+     SELECT channel, math::sum(calls) AS calls, math::sum(errors) AS errors, math::sum(total_ms) AS total_ms FROM tool_usage \
+       WHERE org = $org AND bucket >= $since AND ($user IS NONE OR user = $user) GROUP BY channel; \
+     SELECT user, channel, session, math::sum(calls) AS calls, math::sum(errors) AS errors, math::sum(total_ms) AS total_ms FROM tool_usage \
+       WHERE org = $org AND bucket >= $since AND session != '' AND ($user IS NONE OR user = $user) GROUP BY user, channel, session; \
+     SELECT tool, math::sum(calls) AS calls, math::sum(errors) AS errors, math::sum(total_ms) AS total_ms FROM tool_usage \
+       WHERE org = $org AND bucket >= $since AND ($user IS NONE OR user = $user) GROUP BY tool; \
+     SELECT bucket, math::sum(calls) AS calls, math::sum(errors) AS errors FROM tool_usage \
+       WHERE org = $org AND bucket >= $since AND ($user IS NONE OR user = $user) GROUP BY bucket",
+);
+
+/// Names for the report's rows: the people, their API tokens and the OAuth clients behind them.
+pub const TOOL_USAGE_USERS: ControlStmt = ControlStmt::new("app.tool_usage_users", "SELECT id, email FROM user WHERE id IN $ids");
+pub const TOOL_USAGE_TOKENS: ControlStmt = ControlStmt::new("app.tool_usage_tokens", "SELECT id, name FROM api_token WHERE owner IN $ids");
+pub const TOOL_USAGE_CLIENTS: ControlStmt = ControlStmt::new("app.tool_usage_clients", "SELECT client_id, name FROM oauth_client WHERE client_id IN $ids");
+
 /// Sessions that expired, or were revoked and last seen, longer than `$age` ago.
 pub const SESSION_PRUNE: ControlStmt = ControlStmt::new(
     "app.session_prune",
@@ -314,3 +364,28 @@ pub const READY_PING: ControlStmt = ControlStmt::new("app.ready_ping", "RETURN 1
 
 /// `/readyz`: the newest control migration applied.
 pub const READY_VERSION: ControlStmt = ControlStmt::new("app.ready_version", "SELECT version FROM _migration ORDER BY version DESC LIMIT 1");
+
+/// The user a provider identity signs in as.
+pub const IDENTITY_FIND: ControlStmt =
+    ControlStmt::new("control.identity_find", "SELECT user FROM identity WHERE issuer = $issuer AND subject = $subject LIMIT 1");
+
+/// Links a provider identity to a user; the unique (issuer, subject) index makes a lost race an error.
+pub const IDENTITY_CREATE: ControlStmt = ControlStmt::new(
+    "control.identity_create",
+    "CREATE identity SET user = $user, issuer = $issuer, subject = $subject, email = $email, last_login_at = time::now()",
+);
+
+pub const IDENTITY_TOUCH: ControlStmt = ControlStmt::new(
+    "control.identity_touch",
+    "UPDATE identity SET last_login_at = time::now(), email = $email WHERE issuer = $issuer AND subject = $subject",
+);
+
+/// The providers a user can sign in with (Settings shows which).
+pub const IDENTITY_LIST_FOR_USER: ControlStmt = ControlStmt::new("control.identity_list_for_user", "SELECT issuer FROM identity WHERE user = $user");
+
+/// Signup cleanup: every identity of a user whose signup failed.
+pub const IDENTITY_DELETE_USER: ControlStmt = ControlStmt::new("control.identity_delete_user", "DELETE identity WHERE user = $user");
+
+/// Ends every browser session of a user (linking a provider to an existing account signs its other sessions out).
+pub const AUTH_SESSION_REVOKE_OWNER: ControlStmt =
+    ControlStmt::new("control.auth_session_revoke_owner", "UPDATE session SET revoked = true WHERE owner = $owner AND revoked = false");

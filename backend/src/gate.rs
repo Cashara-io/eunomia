@@ -70,6 +70,9 @@ pub fn explicit_class(method: &Method, path: &str) -> Option<Class> {
         ["mcp"] => Mcp,
         ["api", "openapi.json"] => Public,
         ["api", "auth", "register" | "login"] => AuthAttempt,
+        // the browser leaves for the provider (a redirect, nothing to guess) and comes back (a code exchange: limited per client address like login)
+        ["api", "auth", "oidc", "start"] => Public,
+        ["api", "auth", "oidc", "callback"] => AuthAttempt,
         ["api", "auth", "logout" | "bootstrap"] => Public,
         ["api", "auth", "me"] => Any,
         ["api", "auth", "tokens" | "sessions", ..] => Account(scopes::VAULTS_ADMIN),
@@ -306,12 +309,19 @@ pub struct Meter {
 }
 
 impl Meter {
-    /// Takes `n` more tokens from each bucket the request was already charged to. `Err(seconds)` when one runs dry.
+    /// Takes `n` more tokens from each bucket the request was already charged to, all or nothing.
+    /// `Err(seconds)` when one has too few.
     pub fn charge(&self, n: usize) -> Result<(), u64> {
-        for _ in 0..n {
-            for (key, per_min) in &self.buckets {
-                self.limiter.check(key, *per_min)?;
-            }
+        if n == 0 {
+            return Ok(());
+        }
+        let n = u32::try_from(n).unwrap_or(u32::MAX);
+        // every bucket must have room before any is charged, so a refusal costs nothing
+        for (key, per_min) in &self.buckets {
+            self.limiter.peek(key, *per_min, n)?;
+        }
+        for (key, per_min) in &self.buckets {
+            self.limiter.check_n(key, *per_min, n)?;
         }
         Ok(())
     }

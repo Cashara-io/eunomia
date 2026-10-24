@@ -23,7 +23,7 @@ use crate::config::Settings;
 use crate::pool::OrgDb;
 use crate::store;
 use crate::embeddings::service as embeddings;
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 use crate::vaults::service as vaults_service;
 
 /// Points per vault layer -- keeps the payload and the PCA cheap.
@@ -194,9 +194,16 @@ async fn layer_items(db: &OrgDb, scope: &cs::RecordScope, vault: &RecordId) -> A
     Ok(items)
 }
 
-/// The cloud for `vault_ids` (default: the caller's personal vault). Every
-/// vault must be one the caller belongs to.
-pub async fn cloud(db: &OrgDb, settings: &Settings, owner: &RecordId, vault_ids: &[RecordId]) -> AppResult<Cloud> {
+/// Items of the authorised vaults and their vectors in one space (shared by the cloud and the
+/// pairwise similarity, so both see exactly the same points).
+struct Space {
+    space: &'static str,
+    items: Vec<Item>,
+    vectors: Vec<Vec<f32>>,
+}
+
+/// Every vault must be one the caller can read; default: the caller's default vault.
+async fn load_space(db: &OrgDb, settings: &Settings, owner: &RecordId, vault_ids: &[RecordId]) -> AppResult<Space> {
     let personal = vaults_service::personal_vault_id(db, owner).await?;
     let vaults: Vec<RecordId> =
         if vault_ids.is_empty() { vec![vaults_service::default_vault_id(db, owner).await?] } else { vault_ids.to_vec() };
@@ -231,7 +238,13 @@ pub async fn cloud(db: &OrgDb, settings: &Settings, owner: &RecordId, vault_ids:
         Some(v) if v.iter().all(|x| x.len() == embeddings::DIM) => ("semantic", v),
         _ => ("lexical", items.iter().map(|i| lexical_vector(&i.text)).collect()),
     };
+    Ok(Space { space, items, vectors })
+}
 
+/// The cloud for `vault_ids` (default: the caller's personal vault). Every
+/// vault must be one the caller belongs to.
+pub async fn cloud(db: &OrgDb, settings: &Settings, owner: &RecordId, vault_ids: &[RecordId]) -> AppResult<Cloud> {
+    let Space { space, items, vectors } = load_space(db, settings, owner, vault_ids).await?;
     let coords = pca3(&vectors);
     let points = items
         .into_iter()
@@ -239,6 +252,81 @@ pub async fn cloud(db: &OrgDb, settings: &Settings, owner: &RecordId, vault_ids:
         .map(|(i, [x, y, z])| CloudPoint { id: i.id, vault: i.vault, kind: i.kind, label: label(&i.text), x, y, z })
         .collect();
     Ok(Cloud { space, points })
+}
+
+/// Most points a similarity request may compare (the response holds three n x n matrices).
+pub const MAX_COMPARE: usize = 40;
+
+/// Pairwise relationships between points of the cloud, measured on the real vectors (not the 3D
+/// projection). Row `i` / column `j` of every matrix refers to `ids[i]` / `ids[j]`.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub struct Similarity {
+    /// "semantic" (model embeddings) or "lexical" (hashed words, no model)
+    pub space: &'static str,
+    pub ids: Vec<String>,
+    /// cosine similarity, -1..1 (1 = same direction)
+    pub cosine: Vec<Vec<f32>>,
+    /// euclidean distance between the vectors
+    pub distance: Vec<Vec<f32>>,
+    /// Pearson correlation of the vectors' components, -1..1
+    pub correlation: Vec<Vec<f32>>,
+}
+
+fn cosine(a: &[f32], b: &[f32]) -> f32 {
+    let dot: f32 = a.iter().zip(b).map(|(x, y)| x * y).sum();
+    let na = a.iter().map(|x| x * x).sum::<f32>().sqrt();
+    let nb = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+    if na > 0.0 && nb > 0.0 {
+        (dot / (na * nb)).clamp(-1.0, 1.0)
+    } else {
+        0.0
+    }
+}
+
+fn euclidean(a: &[f32], b: &[f32]) -> f32 {
+    a.iter().zip(b).map(|(x, y)| (x - y) * (x - y)).sum::<f32>().sqrt()
+}
+
+fn centered(v: &[f32]) -> Vec<f32> {
+    let mean = v.iter().sum::<f32>() / v.len().max(1) as f32;
+    v.iter().map(|x| x - mean).collect()
+}
+
+type Matrix = Vec<Vec<f32>>;
+
+/// The cosine, distance and Pearson matrices for `vectors`, in the given order.
+pub fn similarity_matrices(vectors: &[Vec<f32>]) -> (Matrix, Matrix, Matrix) {
+    let cen: Vec<Vec<f32>> = vectors.iter().map(|v| centered(v)).collect();
+    let matrix = |f: &dyn Fn(usize, usize) -> f32| -> Vec<Vec<f32>> {
+        (0..vectors.len()).map(|i| (0..vectors.len()).map(|j| f(i, j)).collect()).collect()
+    };
+    (
+        matrix(&|i, j| if i == j { 1.0 } else { cosine(&vectors[i], &vectors[j]) }),
+        matrix(&|i, j| if i == j { 0.0 } else { euclidean(&vectors[i], &vectors[j]) }),
+        matrix(&|i, j| if i == j { 1.0 } else { cosine(&cen[i], &cen[j]) }),
+    )
+}
+
+/// Compare `ids` (points of the cloud for `vault_ids`). Same authorisation as [`cloud`]: every
+/// vault must be readable by the caller, and an id outside those vaults is "not found".
+pub async fn similarity(db: &OrgDb, settings: &Settings, owner: &RecordId, vault_ids: &[RecordId], ids: &[String]) -> AppResult<Similarity> {
+    let mut wanted: Vec<String> = Vec::new();
+    for id in ids {
+        if !wanted.contains(id) {
+            wanted.push(id.clone());
+        }
+    }
+    if wanted.len() > MAX_COMPARE {
+        return Err(AppError::bad_request(format!("compare at most {MAX_COMPARE} points at a time")));
+    }
+    let Space { space, items, vectors } = load_space(db, settings, owner, vault_ids).await?;
+    let mut picked = Vec::with_capacity(wanted.len());
+    for id in &wanted {
+        let at = items.iter().position(|i| &i.id == id).ok_or_else(|| AppError::not_found("not found"))?;
+        picked.push(vectors[at].clone());
+    }
+    let (cosine, distance, correlation) = similarity_matrices(&picked);
+    Ok(Similarity { space, ids: wanted, cosine, distance, correlation })
 }
 
 #[cfg(test)]
@@ -278,6 +366,26 @@ mod tests {
     fn pca_handles_empty_and_single_inputs() {
         assert!(pca3(&[]).is_empty());
         assert_eq!(pca3(&[vec![1.0, 2.0]]), vec![[0.0, 0.0, 0.0]]);
+    }
+
+    #[test]
+    fn similarity_matrices_are_symmetric_and_sensible() {
+        let v = vec![vec![1.0, 0.0, 0.0], vec![2.0, 0.0, 0.0], vec![0.0, 1.0, 0.0], vec![-1.0, 0.0, 0.0]];
+        let (cosine, distance, correlation) = similarity_matrices(&v);
+        assert_eq!(cosine[0][0], 1.0);
+        assert!((cosine[0][1] - 1.0).abs() < 1e-6); // same direction, different length
+        assert!(cosine[0][2].abs() < 1e-6); // orthogonal
+        assert!((cosine[0][3] + 1.0).abs() < 1e-6); // opposite
+        assert!((distance[0][1] - 1.0).abs() < 1e-6 && distance[0][0] == 0.0);
+        for i in 0..4 {
+            for j in 0..4 {
+                assert!((cosine[i][j] - cosine[j][i]).abs() < 1e-6);
+                assert!((distance[i][j] - distance[j][i]).abs() < 1e-6);
+                assert!((correlation[i][j] - correlation[j][i]).abs() < 1e-6);
+            }
+        }
+        // a zero vector has no direction: similarity 0, not NaN
+        assert_eq!(similarity_matrices(&[vec![0.0, 0.0], vec![1.0, 0.0]]).0[0][1], 0.0);
     }
 
     #[test]

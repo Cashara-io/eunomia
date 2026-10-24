@@ -93,6 +93,7 @@ async fn entity_responses_match_their_schemas() {
     c.call("updateEntity", &format!("/api/entities/{ada_id}"), Some(json!({"summary": "a mathematician"}))).await;
     c.call("getEntityGraph", "/api/entities/graph", None).await;
     c.call("getVectorCloud", "/api/entities/cloud", None).await;
+    c.call("getCloudSimilarity", "/api/entities/cloud/similarity", Some(json!({"ids": []}))).await;
     let dup = c.call("createEntity", "/api/entities", Some(json!({"kind": "person", "name": "Robert"}))).await;
     c.call("mergeEntities", &format!("/api/entities/{bob_id}/merge"), Some(json!({"loser_id": dup["id"]}))).await;
 }

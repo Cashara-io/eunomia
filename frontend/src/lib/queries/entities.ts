@@ -7,12 +7,13 @@ import {
   deleteMemory,
   getEntity,
   getEntityGraph,
+  getCloudSimilarity,
   getVectorCloud,
   listEntities,
   mergeEntities,
   updateEntity,
 } from "@/lib/gen";
-import type { Cloud, EntityDetail, EntityGraph, EntityKind, EntityMemory, EntityRelation, EntitySummary } from "@/lib/types";
+import type { Cloud, CloudSimilarity, EntityDetail, EntityGraph, EntityKind, EntityMemory, EntityRelation, EntitySummary } from "@/lib/types";
 import { call } from "./client";
 
 export const entityKeys = {
@@ -21,6 +22,7 @@ export const entityKeys = {
   detail: (id: string) => [...entityKeys.all, "detail", id] as const,
   graph: (kinds: EntityKind[] | undefined, vaultId: string | undefined) => [...entityKeys.all, "graph", kinds ?? null, vaultId ?? null] as const,
   cloud: (vaultIds: string[]) => [...entityKeys.all, "cloud", vaultIds] as const,
+  similarity: (vaultIds: string[], ids: string[]) => [...entityKeys.all, "similarity", vaultIds, ids] as const,
   live: () => [...entityKeys.all, "live"] as const,
 };
 
@@ -51,6 +53,15 @@ export const useEntityCloud = (vaultIds: string[]) =>
     // Layering another vault keeps the old points until the new cloud lands.
     placeholderData: keepPreviousData,
     enabled: vaultIds.length > 0,
+  });
+
+/** Cosine / distance / correlation between cloud points on their full vectors, computed server-side. */
+export const useCloudSimilarity = (vaultIds: string[], ids: string[]) =>
+  useQuery({
+    queryKey: entityKeys.similarity(vaultIds, ids),
+    queryFn: () => call(getCloudSimilarity({ body: { vault_ids: vaultIds, ids } })) as Promise<CloudSimilarity>,
+    enabled: vaultIds.length > 0 && ids.length >= 2,
+    placeholderData: keepPreviousData,
   });
 
 // Memories live on entities, the graph and the cloud both draw them: any write refreshes the whole entity tree.

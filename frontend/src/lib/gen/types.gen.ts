@@ -25,9 +25,19 @@ export type AuditPage = {
     total: number;
 };
 
+export type AuthModeOut = 'password' | 'both' | 'oidc';
+
 export type AuthOut = {
     email: string;
+    /**
+     * False for an account made by an OpenID Connect provider: it has no password to change or use.
+     */
+    has_password: boolean;
     id: string;
+    /**
+     * The display name of the configured OpenID Connect provider when this account can sign in with it.
+     */
+    oidc_provider?: string | null;
     onboarded: boolean;
 };
 
@@ -43,7 +53,15 @@ export type AuthzParams = {
 };
 
 export type BootstrapOut = {
+    /**
+     * Which sign-in methods the login and register pages offer.
+     */
+    auth_mode: AuthModeOut;
     has_users: boolean;
+    /**
+     * The button label ("Continue with {oidc_provider}") when an OpenID Connect provider is configured.
+     */
+    oidc_provider?: string | null;
 };
 
 export type Capsule = {
@@ -153,6 +171,17 @@ export type CloudPoint = {
     x: number;
     y: number;
     z: number;
+};
+
+export type CloudSimilarityBody = {
+    /**
+     * ids of points returned by the cloud, at most 40
+     */
+    ids: Array<string>;
+    /**
+     * the vaults the points were listed from (same as `vault_ids` of the cloud); default: your personal vault
+     */
+    vault_ids?: Array<string>;
 };
 
 export type ConnectorCreateBody = {
@@ -940,6 +969,30 @@ export type SettingsUpdate = {
 };
 
 /**
+ * Pairwise relationships between points of the cloud, measured on the real vectors (not the 3D
+ * projection). Row `i` / column `j` of every matrix refers to `ids[i]` / `ids[j]`.
+ */
+export type Similarity = {
+    /**
+     * Pearson correlation of the vectors' components, -1..1
+     */
+    correlation: Array<Array<number>>;
+    /**
+     * cosine similarity, -1..1 (1 = same direction)
+     */
+    cosine: Array<Array<number>>;
+    /**
+     * euclidean distance between the vectors
+     */
+    distance: Array<Array<number>>;
+    ids: Array<string>;
+    /**
+     * "semantic" (model embeddings) or "lexical" (hashed words, no model)
+     */
+    space: string;
+};
+
+/**
  * Each side is null when that connector is not connected or its call failed.
  */
 export type SnapshotOut = {
@@ -1076,6 +1129,26 @@ export type TokenRename = {
     name: string;
 };
 
+export type ToolUsageReport = {
+    by_channel: Array<UsageByChannel>;
+    by_credential: Array<UsageByCredential>;
+    by_person: Array<UsageByPerson>;
+    by_session: Array<UsageBySession>;
+    by_tool: Array<UsageByTool>;
+    hours: number;
+    /**
+     * `org`: everyone in the org (instance admin). `self`: the caller's own usage.
+     */
+    scope: string;
+    series: Array<UsagePoint>;
+    /**
+     * `hour` for ranges up to 48 hours, `day` beyond.
+     */
+    series_step: string;
+    since: string;
+    totals: UsageCounts;
+};
+
 /**
  * Body of `POST /update/request` and `/update/check`.
  */
@@ -1104,6 +1177,74 @@ export type UpdateStatus = {
      */
     progress?: string | null;
     update_available?: boolean | null;
+};
+
+export type UsageByChannel = UsageCounts & {
+    /**
+     * `mcp`, `rest` or `chat`.
+     */
+    channel: string;
+};
+
+export type UsageByCredential = UsageCounts & {
+    /**
+     * The token's or OAuth client's id; empty for the browser session.
+     */
+    credential_id: string;
+    email: string;
+    /**
+     * `session` (the signed-in browser), `token` (personal API token) or `oauth` (an OAuth client).
+     */
+    kind: string;
+    /**
+     * Token name, OAuth client name, or "Browser session".
+     */
+    label: string;
+    user_id: string;
+};
+
+export type UsageByPerson = UsageCounts & {
+    email: string;
+    user_id: string;
+};
+
+export type UsageBySession = UsageCounts & {
+    channel: string;
+    email: string;
+    /**
+     * The `Mcp-Session-Id` the client sent, or the chat thread id.
+     */
+    session: string;
+    user_id: string;
+};
+
+export type UsageByTool = UsageCounts & {
+    read_only: boolean;
+    tool: string;
+};
+
+/**
+ * Calls, failed calls and mean duration of a group of tool calls.
+ */
+export type UsageCounts = {
+    /**
+     * Mean time a call took, in milliseconds.
+     */
+    avg_ms: number;
+    calls: number;
+    /**
+     * Calls that ended in an error (a tool error value, a refused scope, or a failure).
+     */
+    errors: number;
+};
+
+export type UsagePoint = {
+    /**
+     * Start of the hour or day (UTC), RFC 3339.
+     */
+    bucket: string;
+    calls: number;
+    errors: number;
 };
 
 export type VaultClone = {
@@ -1187,6 +1328,37 @@ export type ListAuditResponses = {
 };
 
 export type ListAuditResponse = ListAuditResponses[keyof ListAuditResponses];
+
+export type GetToolUsageData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Look back this many hours (1 to 2160, default 168 = 7 days).
+         */
+        hours?: number;
+        /**
+         * Admin only: restrict the report to one person (a `user:...` id).
+         */
+        user?: string;
+    };
+    url: '/api/audit/tool-usage';
+};
+
+export type GetToolUsageErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetToolUsageError = GetToolUsageErrors[keyof GetToolUsageErrors];
+
+export type GetToolUsageResponses = {
+    200: ToolUsageReport;
+};
+
+export type GetToolUsageResponse = GetToolUsageResponses[keyof GetToolUsageResponses];
 
 export type GetBootstrapData = {
     body?: never;
@@ -1275,6 +1447,78 @@ export type GetMeResponses = {
 };
 
 export type GetMeResponse = GetMeResponses[keyof GetMeResponses];
+
+export type OidcCallbackData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Authorization code
+         */
+        code?: string;
+        /**
+         * Must match the flow cookie
+         */
+        state?: string;
+        /**
+         * Set when the provider refused
+         */
+        error?: string;
+        /**
+         * Issuer (RFC 9207)
+         */
+        iss?: string;
+    };
+    url: '/api/auth/oidc/callback';
+};
+
+export type OidcCallbackErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OidcCallbackError = OidcCallbackErrors[keyof OidcCallbackErrors];
+
+export type OidcCallbackResponses = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OidcCallbackResponse = OidcCallbackResponses[keyof OidcCallbackResponses];
+
+export type OidcStartData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Same-site path to open after sign-in
+         */
+        next?: string;
+    };
+    url: '/api/auth/oidc/start';
+};
+
+export type OidcStartErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OidcStartError = OidcStartErrors[keyof OidcStartErrors];
+
+export type OidcStartResponses = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type OidcStartResponse = OidcStartResponses[keyof OidcStartResponses];
 
 export type RegisterData = {
     body: Credentials;
@@ -2235,6 +2479,28 @@ export type GetVectorCloudResponses = {
 };
 
 export type GetVectorCloudResponse = GetVectorCloudResponses[keyof GetVectorCloudResponses];
+
+export type GetCloudSimilarityData = {
+    body: CloudSimilarityBody;
+    path?: never;
+    query?: never;
+    url: '/api/entities/cloud/similarity';
+};
+
+export type GetCloudSimilarityErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetCloudSimilarityError = GetCloudSimilarityErrors[keyof GetCloudSimilarityErrors];
+
+export type GetCloudSimilarityResponses = {
+    200: Similarity;
+};
+
+export type GetCloudSimilarityResponse = GetCloudSimilarityResponses[keyof GetCloudSimilarityResponses];
 
 export type GetEntityGraphData = {
     body?: never;

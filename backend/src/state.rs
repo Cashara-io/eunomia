@@ -22,6 +22,8 @@ pub struct AppStateInner {
     pub credentials: crate::auth::Credentials,
     /// `/readyz` result and when it was taken: the route is public, so it answers from here for 2 seconds.
     pub ready_cache: std::sync::Mutex<Option<(std::time::Instant, Option<String>)>>,
+    /// OpenID Connect provider client: discovery and key-set caches (see `oidc.rs`).
+    pub oidc: crate::oidc::Client,
 }
 
 impl std::ops::Deref for AppState {
@@ -70,7 +72,7 @@ impl AppState {
             None => crate::connectors::crypto::rotate_tenant_passwords(settings, &control).await?,
         };
         let pool = Pool::new(templates, control.clone(), settings);
-        Ok(AppState(Arc::new(AppStateInner { control, pool, provisioner, settings: settings.clone(), fail_throttle: Default::default(), credentials: Default::default(), ready_cache: Default::default() })))
+        Ok(AppState(Arc::new(AppStateInner { control, pool, provisioner, settings: settings.clone(), fail_throttle: Default::default(), credentials: Default::default(), ready_cache: Default::default(), oidc: Default::default() })))
     }
 
     /// Connect to an install that is already set up, without provisioning or moving anything
@@ -80,7 +82,7 @@ impl AppState {
         let templates = crate::db::connect_all(settings, config).await?;
         let control = crate::pool::connect_control(&templates, settings).await?;
         let pool = Pool::new(templates, control.clone(), settings);
-        Ok(AppState(Arc::new(AppStateInner { control, pool, provisioner: None, settings: settings.clone(), fail_throttle: Default::default(), credentials: Default::default(), ready_cache: Default::default() })))
+        Ok(AppState(Arc::new(AppStateInner { control, pool, provisioner: None, settings: settings.clone(), fail_throttle: Default::default(), credentials: Default::default(), ready_cache: Default::default(), oidc: Default::default() })))
     }
 
     /// The org's database, bundled with the app state.

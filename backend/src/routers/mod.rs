@@ -16,3 +16,4 @@ pub mod update;
 pub mod https;
 pub mod mcp;
 pub mod oauth;
+pub mod oidc;

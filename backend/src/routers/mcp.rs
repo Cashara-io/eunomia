@@ -102,6 +102,22 @@ async fn handle(State(state): State<AppState>, authn: Option<Extension<Authn>>, 
         }
     }
 
+    // a batch tool costs more than the one request the gate charged (`registry::extra_cost`)
+    if let Some(Extension(m)) = &meter {
+        let calls: Vec<&Value> = match &message {
+            Value::Array(b) => b.iter().collect(),
+            m => vec![m],
+        };
+        let extra: usize = calls
+            .iter()
+            .filter(|c| c.get("method").and_then(Value::as_str) == Some("tools/call"))
+            .map(|c| registry::extra_cost(c["params"]["name"].as_str().unwrap_or_default(), &c["params"]["arguments"]))
+            .sum();
+        if let Err(wait) = m.charge(extra) {
+            return crate::gate::rate_limited(wait);
+        }
+    }
+
     // OAuth tokens carry scopes; a personal API token is limited by its own scopes (the gate and the registry check them).
     if let Some(granted) = &granted
         && let Some(denied) = crate::oauth::scope_challenge(&state.settings, &message, granted)
@@ -109,11 +125,19 @@ async fn handle(State(state): State<AppState>, authn: Option<Extension<Authn>>, 
         return denied;
     }
 
-    let replies: Vec<Value> = match &message {
+    // tool calls in this request are counted under the client's MCP session, when it sent one
+    let session = crate::usage::session_from_header(headers.get("mcp-session-id").and_then(|v| v.to_str().ok()));
+    crate::usage::with_context(crate::usage::Channel::Mcp, session, respond(&state, &user, &message, initializing)).await
+}
+
+/// Handles the (already validated) message or batch and builds the HTTP reply; a successful
+/// `initialize` gets a session id ([`new_session_id`]).
+async fn respond(state: &AppState, user: &User, message: &Value, initializing: bool) -> Response {
+    let replies: Vec<Value> = match message {
         Value::Array(batch) if !batch.is_empty() => {
             let mut out = Vec::new();
             for m in batch {
-                if let Some(r) = handle_message(&state, &user, m).await {
+                if let Some(r) = handle_message(state, user, m).await {
                     out.push(r);
                 }
             }
@@ -122,7 +146,7 @@ async fn handle(State(state): State<AppState>, authn: Option<Extension<Authn>>, 
             }
             return Json(Value::Array(out)).into_response();
         }
-        m => handle_message(&state, &user, m).await.into_iter().collect(),
+        m => handle_message(state, user, m).await.into_iter().collect(),
     };
     match replies.into_iter().next() {
         Some(reply) if initializing && reply.get("result").is_some() => {
@@ -471,6 +495,7 @@ mod tests {
             public_url: "http://localhost:8001".into(),
             documents_backend: String::new(),
             documents_max_bytes: 1 << 20,
+            auth: Default::default(),
         };
         AppState::build(&settings, surrealdb::opt::Config::new()).await.unwrap()
     }

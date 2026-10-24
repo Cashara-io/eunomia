@@ -328,7 +328,9 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         UPDATE $u SET api_token_hash = $c;
         DELETE membership WHERE user = $u;
         CREATE $mem SET user = $u, org = $org, role = 'owner';
+        CREATE identity SET user = $u, issuer = 'https://idp.example', subject = $c, email = $c;
         CREATE audit_event SET user = $u, actor_kind = 'user', actor_id = 'plant', action = 'plant', target = $c, outcome = 'ok';
+        CREATE tool_usage SET org = $okey, bucket = time::now(), user = $u, actor_kind = 'user', actor_id = 'plant', channel = 'mcp', session = $c, tool = 'recall', calls = 1;
         LET $g = (CREATE oauth_grant SET owner = $u, client_id = 'client-x', client_name = $c, scope = ['memory:read'], resource = 'http://localhost:8001/mcp' RETURN VALUE id)[0];
         CREATE oauth_token SET kind = 'access', token_hash = $c, family = $g, expires_at = time::now() + 15m;
         CREATE oauth_code SET code_hash = $c, owner = $u, client_id = 'client-x', redirect_uri = 'http://localhost/cb', code_challenge = $c, scope = ['memory:read'], resource = 'http://x', expires_at = time::now() + 1m;
@@ -338,6 +340,7 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         .test_raw()
         .query(control_sql)
         .bind(("org", user.org.record()))
+        .bind(("okey", user.org.to_string()))
         .bind(("u", uid.clone()))
         .bind(("c", canary.clone()))
         .bind(("mem", surrealdb::types::RecordId::new("membership", canary.clone())))
@@ -637,14 +640,15 @@ async fn run_mode(mode: Mode) {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn isolation_holds_with_both_layers() {
     let _g = SERIAL.lock().await;
-    run_mode(Mode::Normal).await;
+    // boxed: the attack walk is a large future, which overflowed a debug test thread's stack
+    Box::pin(run_mode(Mode::Normal)).await;
 }
 
 /// App filters off: the database wall alone keeps the orgs apart.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn isolation_holds_with_app_filters_off() {
     let _g = SERIAL.lock().await;
-    run_mode(Mode::NoAppFilters).await;
+    Box::pin(run_mode(Mode::NoAppFilters)).await;
 }
 
 /// All orgs in one database: the app filters alone keep them apart.
@@ -654,7 +658,7 @@ async fn isolation_holds_in_a_shared_database() {
     if filters_forced_off() {
         return;
     }
-    run_mode(Mode::SharedDb).await;
+    Box::pin(run_mode(Mode::SharedDb)).await;
 }
 
 /// Both layers removed at once leaks, so the suite measures the layers and not the data: shared database

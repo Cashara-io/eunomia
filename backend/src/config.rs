@@ -32,6 +32,8 @@ pub struct Settings {
     pub documents_backend: String,
     /// `EUNOMIA_DOCUMENTS_MAX_BYTES`: the largest document accepted, default 25 MiB.
     pub documents_max_bytes: usize,
+    /// `AUTH_MODE` and `OIDC_*`: how users sign in (password, an OpenID Connect provider, or both).
+    pub auth: crate::oidc::AuthConfig,
 }
 
 fn env_or(key: &str, default: &str) -> String {
@@ -72,6 +74,11 @@ impl Settings {
             public_url: env_or("PUBLIC_URL", "http://localhost:8001").trim_end_matches('/').to_string(),
             documents_backend: env_or("EUNOMIA_DOCUMENTS_BACKEND", "").trim().to_string(),
             documents_max_bytes: env::var("EUNOMIA_DOCUMENTS_MAX_BYTES").ok().and_then(|v| v.trim().parse().ok()).filter(|n| *n > 0).unwrap_or(25 << 20),
+            auth: crate::oidc::AuthConfig::from_vars(|k| env::var(k).ok()).unwrap_or_else(|e| {
+                // refuse to start rather than fall back to a sign-in method the operator did not choose
+                eprintln!("invalid sign-in configuration: {e}");
+                std::process::exit(2);
+            }),
         }
     }
 }
