@@ -176,6 +176,17 @@ async fn entities_and_vaults(app: &TestApp) -> Value {
     let custom = app.tool("entities_search", json!({"query": "Thing", "kind": "db"})).await;
     assert_eq!(custom["results"].as_array().map(Vec::len), Some(1), "{custom}");
     app.tool("code_relate", json!({"from_id": person, "to_id": other, "label": "knows"})).await;
+    // recall's one relates_to hop: the edges of a named entity and its neighbours' facts
+    let recalled = app.tool("recall", json!({"query": "what does Thing person know?"})).await;
+    assert!(recalled.to_string().contains("knows"), "{recalled}");
+    // the memory semantic arm's KNN text per limit, and its exact fallback
+    let db = app.db().await;
+    let vault = eunomia_backend::vaults::service::personal_vault_id(&db, &app.user.id).await.unwrap();
+    for limit in [1, 3, 10, 50] {
+        let mut v = vec![0.0f32; 1536];
+        v[0] = 1.0;
+        eunomia_backend::cache::recall::nearest_memories(&db, &vault, &v, "stub|stub|1536", limit).await.unwrap_or_else(|e| panic!("nearest_memories {limit}: {e:?}"));
+    }
 
     // update_entity: every non-empty combination of name, aliases, summary (and the empty one)
     for (n, on) in subsets(3).enumerate() {

@@ -153,15 +153,21 @@ pub async fn reconcile_embeddings(state: &OrgState) {
         if !crate::embeddings::service::available(&state.db, &state.settings, &owner).await {
             continue;
         }
-        if has_embed_backlog(&state.db, &owner).await.unwrap_or(false) {
+        if has_embed_backlog(state, &owner).await.unwrap_or(false) {
             let key = super::periodic_key(kind::EMBED, &owner, 300);
             super::enqueue_lossy(&state.control, NewJob::new(kind::EMBED, owner, key).in_org(state.db.org())).await;
         }
     }
 }
 
-async fn has_embed_backlog(db: &crate::pool::OrgDb, owner: &surrealdb::types::RecordId) -> AppResult<bool> {
+async fn has_embed_backlog(state: &OrgState, owner: &surrealdb::types::RecordId) -> AppResult<bool> {
+    let db = &state.db;
     let mut res = store::jobs::EMBED_BACKLOG.on(db).bind(("owner", owner.clone())).bind(("limit", 1)).await?;
+    if !res.take::<Vec<surrealdb::types::RecordId>>("id")?.is_empty() {
+        return Ok(true);
+    }
+    let spec = crate::embeddings::service::spec_for(db, &state.settings, owner).await?.tag();
+    let mut res = store::jobs::MEMORY_EMBED_BACKLOG.on(db).bind(("owner", owner.clone())).bind(("spec", spec)).bind(("limit", 1)).await?;
     Ok(!res.take::<Vec<surrealdb::types::RecordId>>("id")?.is_empty())
 }
 
