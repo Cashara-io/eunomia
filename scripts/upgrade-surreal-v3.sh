@@ -139,7 +139,7 @@ v3_up() { # v3_up COMPOSE_FILE: a 3.x server on the -v3 volume, reachable as sur
   v3_down
   COMPOSE_FILE="$1" compose run -d --no-deps --use-aliases --name "$V3CTR" surrealdb >/dev/null || return 1
   for i in $(seq 1 90); do
-    docker run --rm --network "$NET" "$target_image" isready --endpoint http://surrealdb:8000 >/dev/null 2>&1 && return 0
+    docker run --rm --network "$NET" "$target_image" isready --endpoint ws://surrealdb:8000 >/dev/null 2>&1 && return 0
     sleep 2
   done
   return 1
