@@ -265,6 +265,10 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
     };
     common::sys(eunomia_backend::documents::index_job(state.clone(), job)).await.unwrap();
 
+    // an agent skill with the canary in its description and body (the name is a plain slug an attacker may guess)
+    // boxed: this function's future is already near the test thread's stack limit
+    Box::pin(call(state, &user, "skill_save", json!({"name": format!("{}-runbook", name.to_lowercase()), "description": format!("{name} runbook {canary}"), "body": format!("steps {canary}")}))).await;
+
     let (_, body) = raw(router, "POST", "/api/chat/threads", Some(json!({"title": format!("{canary} thread")})), Some(&token), None).await;
     ids.thread = serde_json::from_str::<Value>(&body).unwrap()["id"].as_str().unwrap_or_else(|| panic!("{body}")).to_string();
     let enc = crypto::encrypt(&state.settings.encryption_key, &json!({"token": canary}).to_string());
@@ -704,7 +708,7 @@ async fn mutation_check_removing_one_filter_turns_the_suite_red() {
     let cases: [Case; 11] = [
         ("chat threads", &[("app.chat_thread_list", "WHERE owner = $owner")], |_| Call::Route("/api/chat/threads".into())),
         ("chat messages", &[("app.chat_messages_for_owner", "WHERE owner = $owner")], |_| Call::Route("/api/export".into())),
-        ("audit", &[("app.audit_list", "WHERE owner = $owner")], |_| Call::Route("/api/audit".into())),
+        ("audit", &[("app.audit_list", "WHERE owner = $owner")], |_| Call::Route("/api/audit?limit=500".into())),
         ("vault list", &[("vaults.list_mine", "WHERE user = $user")], |_| Call::Tool("vault_list", json!({}))),
         ("vault membership", &[("vaults.membership_active", "WHERE vault = $vault")], |v| Call::Tool("entities_get", json!({"id": v.ids.entities[0]}))),
         ("connectors", &[("app.connectors_of_kind", "WHERE owner = $owner")], |_| Call::Route("/api/connectors/github".into())),

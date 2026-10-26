@@ -1,0 +1,10 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "id": "skill:<id25>",
+  "name": "anvil-budget",
+  "vault": "vault:<id2>",
+  "embedded": false
+}

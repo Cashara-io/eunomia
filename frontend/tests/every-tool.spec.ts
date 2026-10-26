@@ -105,6 +105,14 @@ test("every MCP tool works end to end", async ({ request, baseURL }) => {
   expect((await call("document_upload", { filename: "x.exe", text: "MZ" })).isError).toBe(true);
   expect((await ok("document_delete", { id: doc.id })).deleted).toBe(true);
 
+  // agent skills: save, replace by name, find, read, delete, and a bad name is a validation error
+  const skill = await ok("skill_save", { name: "deploy-rollback", description: "How to roll back a bad deploy", body: "# Roll back\n\n1. Revert." });
+  expect((await ok("skill_save", { name: "deploy-rollback", description: "How to roll back a bad deploy", body: "# Roll back v2" })).id).toBe(skill.id);
+  expect((await ok("skill_find", { query: "roll back a deploy" })).skills.map((s: { id: string }) => s.id)).toContain(skill.id);
+  expect((await ok("skill_get", { id: skill.id })).body).toBe("# Roll back v2");
+  expect((await call("skill_save", { name: "Bad Name", description: "d", body: "b" })).isError).toBe(true);
+  expect((await ok("skill_delete", { id: skill.id })).deleted).toBe(skill.id);
+
   // bulk writes: one result per fact, a bad one fails alone
   const batch = await ok("memory_write_batch", { items: [
     { subject_name: "Import page 1", subject_kind: "file", text: "Page one of the import." },

@@ -1,0 +1,12 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "id": "skill:<id25>",
+  "name": "anvil-budget",
+  "description": "How to read the anvil budget",
+  "vault": "vault:<id2>",
+  "updated_at": "<ts>",
+  "body": "# Anvil budget\n\n1. Open the sheet."
+}

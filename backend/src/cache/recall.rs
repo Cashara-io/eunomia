@@ -74,7 +74,7 @@ const GRAPH_NEIGHBOURS: usize = 10;
 const NEIGHBOUR_MEMORIES: usize = 5;
 /// Cosine similarity a semantic hit needs to count at all. Nearest-neighbour search always returns
 /// K rows; without a floor the K-th unrelated fact would still earn a fused score.
-const MIN_SIMILARITY: f64 = 0.15;
+pub(crate) const MIN_SIMILARITY: f64 = 0.15;
 const NAME_WORDS: usize = 6;
 const MAX_NAME_WORDS: usize = 64;
 
