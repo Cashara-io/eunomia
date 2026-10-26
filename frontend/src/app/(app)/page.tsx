@@ -412,8 +412,8 @@ const isExpired = (iso: string | null) => iso !== null && new Date(iso).getTime(
 function Agents({ tokens }: { tokens: ApiToken[] | null | "error" }) {
   const sorted = Array.isArray(tokens) ? tokens.filter((t) => !isExpired(t.expires_at)).sort((a, b) => (b.last_used_at ?? "").localeCompare(a.last_used_at ?? "")) : [];
   return (
-    <section aria-labelledby="agents-title" className="flex flex-wrap items-end gap-x-4 gap-y-2 min-h-8">
-      <span id="agents-title" className="label pb-[3px]">
+    <section aria-labelledby="agents-title" className="flex flex-wrap items-center gap-x-4 gap-y-2 min-h-8">
+      <span id="agents-title" className="label">
         Agents
       </span>
       {tokens === null ? (
@@ -430,23 +430,23 @@ function Agents({ tokens }: { tokens: ApiToken[] | null | "error" }) {
           </a>
         </span>
       ) : (
-        <ul className="flex flex-wrap items-end gap-x-4 gap-y-2">
+        <ul className="flex flex-wrap items-center gap-x-4 gap-y-2">
           {sorted.slice(0, AGENTS_SHOWN).map((t) => {
             const live = isLive(t.last_used_at);
             return (
-              <li key={t.id} className="flex items-end gap-1.5">
+              <li key={t.id} className="flex items-center gap-1.5">
                 <AuthorTag name={t.name} cursor title={`${t.name}: API token, ${t.last_used_at ? `last used ${stamp(t.last_used_at)}` : "never used"}`} />
                 {live ? (
-                  <span className="flex items-center gap-1 text-[11.5px] pb-[3px]" style={{ color: "var(--ink-dim)" }}>
+                  <span className="flex items-center gap-1 text-[11.5px]" style={{ color: "var(--ink-dim)" }}>
                     <span className="dot" style={{ background: "var(--good)" }} aria-hidden />
                     live
                   </span>
                 ) : t.last_used_at ? (
-                  <time dateTime={t.last_used_at} className="font-mono text-[11.5px] pb-[3px]" style={{ color: "var(--ink-faint)" }}>
+                  <time dateTime={t.last_used_at} className="font-mono text-[11.5px]" style={{ color: "var(--ink-faint)" }}>
                     {age(t.last_used_at)}
                   </time>
                 ) : (
-                  <span className="text-[11.5px] pb-[3px]" style={{ color: "var(--ink-faint)" }}>
+                  <span className="text-[11.5px]" style={{ color: "var(--ink-faint)" }}>
                     never used
                   </span>
                 )}
@@ -454,7 +454,7 @@ function Agents({ tokens }: { tokens: ApiToken[] | null | "error" }) {
             );
           })}
           {sorted.length > AGENTS_SHOWN && (
-            <li className="pb-[3px]">
+            <li>
               <Link href="/settings?tab=tokens" className="text-[12px] underline-offset-2 hover:underline" style={{ color: "var(--accent-text)" }}>
                 +{sorted.length - AGENTS_SHOWN} more
               </Link>
@@ -530,8 +530,8 @@ export default function DashboardPage() {
   const selected = live?.find((m) => m.id === selectedId) ?? live?.[0] ?? null;
 
   return (
-    <div className="flex flex-col gap-6 max-w-[1240px]">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-8 max-w-[1240px]">
+      <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="page-title">Dashboard</h1>
         <Agents tokens={tokens} />
       </header>
@@ -565,18 +565,18 @@ export default function DashboardPage() {
         />
       )}
 
-      {/* Mobile order: live memory, inspector + connect, then sources. */}
-      <div className="grid gap-x-6 gap-y-8 lg:grid-cols-[minmax(0,1fr)_320px] items-start">
+      {/* Mobile order: live memory, sources, then inspector and connect. From lg the right column is the sticky inspector. */}
+      <div className="grid gap-x-6 gap-y-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:grid-rows-[auto_1fr] items-start">
         <div className="min-w-0 lg:col-start-1 lg:row-start-1">
           <LiveMemory rows={live} arrived={arrived} selectedId={selected?.id ?? null} onSelect={setSelectedId} />
         </div>
 
-        <div className="flex flex-col gap-6 min-w-0 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:sticky lg:top-8">
+        <div className="order-3 lg:order-none flex flex-col gap-8 min-w-0 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:sticky lg:top-8">
           {selected && <Inspector row={selected} />}
           <McpCard />
         </div>
 
-        <div className="flex flex-col gap-8 min-w-0 lg:col-start-1 lg:row-start-2">
+        <div className="order-2 lg:order-none flex flex-col gap-8 min-w-0 lg:col-start-1 lg:row-start-2">
           <section className="flex flex-col gap-3" aria-labelledby="connected-sources">
             <h2 id="connected-sources" className="section-title">
               Connected sources
@@ -617,7 +617,9 @@ export default function DashboardPage() {
                               <span className="dot" title={health.label} style={{ background: health.tone }} />
                               <span className="sr-only">{health.label}:</span>
                               <span className="font-medium truncate">{sourceLabel(s)}</span>
-                              <AuthorTag name={s.key} />
+                              <span className="hidden sm:inline-flex">
+                                <AuthorTag name={s.key} />
+                              </span>
                             </div>
                           </td>
                           <td className="text-right font-mono text-[12.5px]">
