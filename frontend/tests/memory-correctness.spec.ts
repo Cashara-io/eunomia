@@ -212,7 +212,8 @@ test.describe.serial("memory correctness", () => {
     expect(stale).toHaveLength(1);
     expect(stale[0].status).toBe("stale");
     const recalled = await ok("recall", { query: "Alice Mover Paris" });
-    expect(recalled.results.map((r: Json) => r.id)).not.toContain(obs.id);
+    // the stale belief never surfaces; the background reconciler may already have rebuilt the observation (same id, now Berlin)
+    expect(recalled.results.map((r: Json) => r.text)).not.toContain(obs.text);
     expect(recalled.results.map((r: Json) => r.text)).toContain("Alice lives in Berlin");
 
     if (!llmMode) return;
