@@ -38,6 +38,8 @@ test.describe("Sign up", () => {
     const email = uniqueEmail("dupe");
     await registerAndOnboard(page, email, PASSWORD);
 
+    // leave the app first: an open page would react to the dropped cookie by redirecting to /login itself, racing the goto below
+    await page.goto("about:blank");
     await context.clearCookies();
     await fillRegister(page, email.toUpperCase(), PASSWORD);
     await expect(page.getByText("A user with that email already exists.")).toBeVisible();
@@ -47,6 +49,8 @@ test.describe("Sign up", () => {
     const email = uniqueEmail("casing");
     await registerAndOnboard(page, email, PASSWORD);
 
+    // leave the app first: an open page would react to the dropped cookie by redirecting to /login itself, racing the goto below
+    await page.goto("about:blank");
     await context.clearCookies();
     await page.goto("/login");
     await page.getByLabel("Email").fill(`  ${email.toUpperCase()} `);

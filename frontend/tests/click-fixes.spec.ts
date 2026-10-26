@@ -20,6 +20,8 @@ test.describe("Click-through fixes", () => {
   test("a wrong password shows the error with its code", async ({ page, context }) => {
     const email = uniqueEmail("wrongpw");
     await registerAndOnboard(page, email);
+    // leave the app first: an open page would react to the dropped cookie by redirecting to /login itself, racing the goto below
+    await page.goto("about:blank");
     await context.clearCookies();
     await page.goto("/login");
     await page.getByLabel("Email").fill(email);
