@@ -57,6 +57,12 @@ When you learn how a codebase fits together, map it with
 To keep a file the user gives you (notes, a spec, an export), `document_upload` it; its passages then
 show up in `recall` and `search` with a `document` reference, and `document_get` reads it whole.
 
+## Skills
+
+When you work out a procedure worth reusing, `skill_save` it (a lowercase hyphenated name, a description
+of when to use it, a Markdown body). Before a task that may have one, `skill_find` it, then `skill_get`
+its body.
+
 ## Answering from memory
 
 `reflect` gives a cited answer. If it returns `mode: "recall_only"`, write the

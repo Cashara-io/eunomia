@@ -164,6 +164,12 @@ async fn goldens() {
         {"subject_name": "Import page 3", "subject_kind": "file", "text": "page three says goodbye", "type": "experience"},
     ]})).await;
 
+    // -- agent skills (last, so they change no snapshot above; keyword-only: no embedding key) --
+    let skill = Box::pin(g.snap("skill_save", "skill_save", json!({"name": "anvil-budget", "description": "How to read the anvil budget", "body": "# Anvil budget\n\n1. Open the sheet."}))).await;
+    Box::pin(g.snap("skill_find", "skill_find", json!({"query": "anvil"}))).await;
+    Box::pin(g.snap("skill_get", "skill_get", json!({"id": s(&skill, "/id")}))).await;
+    Box::pin(g.snap("skill_delete", "skill_delete", json!({"id": s(&skill, "/id")}))).await;
+
     let registered: BTreeSet<String> = registry::all_tools().keys().map(|k| k.to_string()).collect();
     let missing: Vec<_> = registered.difference(&g.covered).collect();
     let extra: Vec<_> = g.covered.difference(&registered).collect();

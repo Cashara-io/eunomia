@@ -18,6 +18,8 @@ test.describe("Auth", () => {
     await registerAndOnboard(page, email);
 
     // Drop the session and confirm login re-establishes it.
+    // leave the app first: an open page would react to the dropped cookie by redirecting to /login itself, racing the goto below
+    await page.goto("about:blank");
     await context.clearCookies();
     await page.goto("/login");
     await page.getByLabel("Email").fill(email);

@@ -48,6 +48,7 @@ mod documents;
 mod entities;
 mod memory;
 mod records;
+mod skills;
 mod vaults;
 
 pub use admin::list_audit;
@@ -89,6 +90,8 @@ pub const READ_ONLY_TOOLS: &[&str] = &[
     "document_get",
     "document_download",
     "document_export",
+    "skill_find",
+    "skill_get",
 ];
 
 /// Read-only tools that still get an audit row: they disclose an original file or its vectors. The
@@ -118,7 +121,7 @@ pub fn is_read_only(name: &str) -> bool {
 /// Tools that irreversibly remove data or access -- flagged to MCP clients
 /// (`destructiveHint`) so they can ask before running them.
 pub fn is_destructive(name: &str) -> bool {
-    matches!(name, "memory_delete" | "entity_delete" | "entity_merge" | "vault_delete" | "vault_remove_member" | "vault_leave" | "document_delete")
+    matches!(name, "memory_delete" | "entity_delete" | "entity_merge" | "vault_delete" | "vault_remove_member" | "vault_leave" | "document_delete" | "skill_delete")
 }
 
 /// Tools over the user's raw synced source records, which belong to no vault:
@@ -168,6 +171,10 @@ pub fn description(name: &str) -> &'static str {
         "document_download" => "How to download an uploaded document's original bytes: an authenticated HTTP GET (the bytes never pass through the tool), with the size and SHA-256 to verify them.",
         "document_export" => "An uploaded document's export manifest: every chunk with its text, location and whether it has an embedding, plus the embedding model and dimension. Vectors are left out unless `include_vectors` is true; `vectors_url` serves the full manifest over HTTP.",
         "document_delete" => "Delete an uploaded document: its stored file, its chunks (they leave search, recall and get at once) and the memories extracted from them. Irreversible.",
+        "skill_save" => "Save a skill you learned (a name, a description of when to use it, and a Markdown body) in the user's personal vault, or in `vault_id`. Saving a name again replaces that skill. It is embedded so `skill_find` finds it by meaning. These are agent skills kept in Eunomia, not the built-in memory skill.",
+        "skill_find" => "Find saved skills by what you need to do: by meaning when embeddings are on, and by keyword in a skill's name or description. Searches every vault you can read, or one `vault_id`. Returns id, name, description, vault and updated_at, not the body: `skill_get` reads it.",
+        "skill_get" => "One saved skill with its full Markdown body, by id (from `skill_find`) or by name (an error names the ids if several vaults hold that name).",
+        "skill_delete" => "Delete one saved skill by id. Irreversible.",
         _ => "",
     }
 }
@@ -177,15 +184,15 @@ pub fn description(name: &str) -> &'static str {
 const SECRET_KEY_HINTS: &[&str] = &["password", "token", "secret", "credential", "api_key", "apikey"];
 const ARGS_SUMMARY_MAX: usize = 500;
 
-// a document's content, kept out of the audit summary (its size stands in for it)
-const CONTENT_KEYS: &[&str] = &["text", "content_base64"];
+// a document's or skill's content, kept out of the audit summary (its size stands in for it)
+const CONTENT_KEYS: &[&str] = &["text", "content_base64", "body"];
 
 fn summarize_args(tool_name: &str, args: &Value) -> String {
     let mut redacted = serde_json::Map::new();
     if let Some(obj) = args.as_object() {
         for (k, v) in obj {
             let lower = k.to_lowercase();
-            if tool_name.starts_with("document_") && CONTENT_KEYS.contains(&k.as_str()) {
+            if (tool_name.starts_with("document_") || tool_name.starts_with("skill_")) && CONTENT_KEYS.contains(&k.as_str()) {
                 redacted.insert(k.clone(), json!(format!("<{} chars>", v.as_str().map_or(0, |s| s.chars().count()))));
             } else if SECRET_KEY_HINTS.iter().any(|hint| lower.contains(hint)) {
                 redacted.insert(k.clone(), json!("***"));
@@ -319,6 +326,7 @@ fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
     entities::register_all(registry);
     code::register_all(registry);
     vaults::register_all(registry);
+    skills::register_all(registry);
 }
 
 pub fn all_tools() -> &'static HashMap<&'static str, ToolSpec> {
@@ -529,6 +537,8 @@ mod tests {
             "document_get",
             "document_download",
             "document_export",
+            "skill_find",
+            "skill_get",
         ];
         assert_eq!(READ_ONLY_TOOLS.len(), expected.len());
         for name in expected {
@@ -591,6 +601,12 @@ mod tests {
     }
 
     #[test]
+    fn skill_body_never_reaches_the_audit_summary() {
+        let summary = summarize_args("skill_save", &json!({ "name": "n", "body": "secret steps" }));
+        assert!(!summary.contains("secret steps") && summary.contains("<12 chars>"), "{summary}");
+    }
+
+    #[test]
     fn registry_has_every_tool_wired_up() {
         let expected = [
             "docs", "search", "get", "list", "links", "recall", "reflect", "entities_search", "entities_get",
@@ -598,6 +614,7 @@ mod tests {
             "memory_update", "entity_update", "memory_delete", "entity_delete", "entity_merge", "vault_create", "vault_list", "vault_clone", "vault_merge",
             "vault_invite", "vault_members", "vault_remove_member", "vault_leave", "vault_rename", "vault_delete",
             "document_upload", "document_list", "document_get", "document_download", "document_export", "document_delete",
+            "skill_save", "skill_find", "skill_get", "skill_delete",
         ];
         let tools = all_tools();
         for name in expected {

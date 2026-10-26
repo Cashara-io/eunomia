@@ -196,8 +196,37 @@ No. The connected agent is the model.
 | `vault_invite` / `vault_members` / `vault_remove_member` / `vault_leave` / `vault_rename` / `vault_delete` | Sharing |
 | `document_upload` / `document_list` / `document_get` | Upload a document (text, Markdown, JSON, CSV, text PDF) and read its extracted text; its passages are found by `search`, `recall` and `get`, each hit naming the document ([documents](documents.md)) |
 | `document_download` / `document_export` / `document_delete` | The HTTP route for the original bytes, the passages-and-vectors manifest, deletion |
+| `skill_save` / `skill_find` / `skill_get` / `skill_delete` | Keep a skill an agent learned, find it later by meaning, read its body, delete it ([agent skills](#agent-skills)) |
 
 Destructive tools are flagged `destructiveHint` so clients can ask first.
+
+### Agent skills
+
+An agent can save a skill it learned (the same shape as a `SKILL.md`: a name, a description of when to use
+it, and a Markdown body) and any agent can find it later:
+
+- `skill_save` takes `name` (lowercase letters, digits and hyphens, at most 64 characters), `description`
+  (at most 1024 characters) and `body` (Markdown, at most 64 KiB), and keeps it in your personal vault, or
+  in `vault_id` (an id or a vault name). Saving the same name in the same vault replaces the skill. It
+  needs write access to the vault. It embeds the name and description right away when an embedding
+  provider is configured (the result says `embedded: true`). Without one it still saves, and the skill is
+  found by keyword only, until it is saved again.
+- `skill_find` takes a `query` in plain words (and optionally `vault_id` and `limit`, at most 50). It
+  searches every vault you can read, by meaning when embeddings are on, plus a keyword match on name and
+  description. It returns each skill's `id`, `name`, `description`, `vault` and `updated_at`, not the body.
+- `skill_get` returns the full body, by `id` or by `name`. If several vaults you can read hold that name,
+  it answers with an error naming the ids; pass `vault_id` or an id.
+- `skill_delete` removes one skill by id.
+
+A vault you are not a member of, another org, or a token restricted to another vault never shows its
+skills: they read as not found.
+
+These are different from the built-in [memory skill](#the-memory-skill), the one set of instructions that
+tells agents when to recall and what to remember. Agent skills are many, are written by agents, and live
+in a vault like any other memory.
+
+Known gap: `vault_clone` and `vault_merge` do not copy skills yet, and there is no page for them in the
+web app.
 
 ### Importing a lot at once
 

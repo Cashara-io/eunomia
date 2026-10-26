@@ -1,0 +1,7 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "deleted": "skill:<id25>"
+}
