@@ -7,9 +7,12 @@ import { dirname, join } from "node:path";
 import { after, before, beforeEach, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { createHash } from "node:crypto";
+import type { Socket } from "node:net";
 import { connectAgentsScript, init, normalizeUrl, sync, type InitOptions } from "../src/init.js";
 import { credentialsPath, isLocalUrl, loadCredentials, stringifyToml } from "../src/project.js";
 import { defaultsPrompter, type Prompter } from "../src/prompt.js";
+import { watch } from "../src/watch.js";
 
 // ---------------------------------------------------------------------------
 // A small fake Eunomia: the routes init and sync call, with real-ish auth rules.
@@ -17,11 +20,15 @@ import { defaultsPrompter, type Prompter } from "../src/prompt.js";
 
 type Tok = { id: string; name: string; token: string; scopes: string[]; vault_id: string | null };
 type Skill = { name: string; description: string; body: string; vault: string };
+type Change = { seq: number; op: string; kind: string; id: string; actor: string; at: string; vault: string };
 const fake = {
   authMode: "password",
   vaults: [] as { id: string; name: string; kind: string; role: string }[],
   tokens: [] as Tok[],
   skills: [] as Skill[],
+  changes: [] as Change[],
+  /** WebSocket handshakes to the change log, and the open sockets. */
+  ws: [] as { path: string; auth?: string; socket: Socket }[],
   calls: [] as { method: string; path: string; body: any }[],
   failMint: false,
   /** Tokens the server refuses for vault reads (lost access), though they still exist. */
@@ -38,6 +45,9 @@ function reset() {
   fake.vaults = [{ id: "vault:personal", name: "Personal", kind: "personal", role: "owner" }];
   fake.tokens = [{ id: "api_token:user", name: "mine", token: USER_TOKEN, scopes: ["memory:read", "memory:write", "vaults:admin", "connectors"], vault_id: null }];
   fake.skills = [];
+  fake.changes = [];
+  for (const w of fake.ws) w.socket.destroy();
+  fake.ws = [];
   fake.calls = [];
   fake.failMint = false;
   fake.blind = new Set();
@@ -85,6 +95,13 @@ function handle(method: string, path: string, body: any, headers: IncomingMessag
     fake.vaults.push(v);
     return [200, v];
   }
+  const log = /^\/api\/vaults\/([^/?]+)\/changes\?after=(\d+)&limit=(\d+)$/.exec(path);
+  if (log) {
+    const vault = decodeURIComponent(log[1]);
+    if (restricted && vault !== restricted) return deny(`this token is restricted to vault ${restricted}`);
+    const page = fake.changes.filter((c) => c.vault === vault && c.seq > +log[2]).slice(0, +log[3]);
+    return [200, { changes: page.map(({ vault: _v, ...c }) => c), next: page.at(-1)?.seq ?? +log[2] }];
+  }
   const tool = /^\/api\/tools\/(\w+)$/.exec(path)?.[1];
   if (tool) {
     const err = (error: string, code: string): [number, unknown] => [200, { error, code }];
@@ -114,6 +131,29 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   res.writeHead(status, { "content-type": "application/json", ...headers });
   res.end(JSON.stringify(payload));
 });
+
+/** A WebSocket handshake on the change log route: a valid token gets a socket, anything else a 403. */
+server.on("upgrade", (req: IncomingMessage, socket: Socket) => {
+  const auth = req.headers.authorization;
+  const known = fake.tokens.some((t) => auth === `Bearer ${t.token}`);
+  if (!known || !/^\/api\/vaults\/[^/]+\/changes\/ws\?after=\d+$/.test(req.url!)) {
+    socket.end("HTTP/1.1 403 Forbidden\r\ncontent-length: 0\r\n\r\n");
+    return;
+  }
+  const accept = createHash("sha1").update(`${req.headers["sec-websocket-key"]}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest("base64");
+  socket.write(`HTTP/1.1 101 Switching Protocols\r\nupgrade: websocket\r\nconnection: Upgrade\r\nsec-websocket-accept: ${accept}\r\n\r\n`);
+  // the client's close frame: answer it and hang up
+  socket.on("data", (d: Buffer) => (d[0] & 0x0f) === 8 && socket.end(Buffer.from([0x88, 0])));
+  socket.on("error", () => undefined);
+  fake.ws.push({ path: req.url!, auth, socket });
+});
+
+/** One unmasked text frame, as a server sends it. */
+function wsText(text: string): Buffer {
+  const p = Buffer.from(text);
+  const head = p.length < 126 ? Buffer.from([0x81, p.length]) : Buffer.from([0x81, 126, p.length >> 8, p.length & 255]);
+  return Buffer.concat([head, p]);
+}
 
 /** Another server that a hostile eunomia.toml points at: it answers health checks and records everything. */
 const seen: { path: string; auth?: string; cookie?: string; body: string }[] = [];
@@ -145,6 +185,7 @@ before(async () => {
   REDIRECT = await listen(redirector);
 });
 after(() => {
+  for (const w of fake.ws) w.socket.destroy();
   server.close();
   attacker.close();
   redirector.close();
@@ -631,6 +672,80 @@ describe("sync", () => {
     const code = await new Promise<number | null>((r) => child.on("close", r));
     assert.equal(code, 1);
     assert.match(err, /input ended before setup finished/);
+  });
+});
+
+describe("watch", () => {
+  const change = (seq: number, vault: string): Change => ({ seq, op: "created", kind: "memory", id: `memory:m${seq}`, actor: "api_token:2", at: "2026-10-28T10:00:00Z", vault });
+  const printed = () => lines.filter((l) => l.startsWith("#")).map((l) => Number(/^#(\d+)/.exec(l)![1]));
+  async function until(cond: () => boolean) {
+    for (let i = 0; i < 200 && !cond(); i++) await new Promise((r) => setTimeout(r, 20));
+    assert.ok(cond(), "timed out");
+  }
+  const cursor = () => JSON.parse(readFileSync(join(repo, ".eunomia", "cache", "watch.json"), "utf8"));
+
+  // Node 18 has no WebSocket: the live half runs on Node 22+ (and Bun), the polling test below everywhere
+  it("prints the backlog, then live changes over a WebSocket, each once", { skip: !globalThis.WebSocket }, async () => {
+    await init(opts({ vault: "Acme" }));
+    const vault = vaultId("Acme");
+    fake.changes = [change(1, vault), change(2, vault), change(1, "vault:personal")];
+    lines = [];
+    const stop = new AbortController();
+    const done = watch({ cwd: repo, env: env(), log: (l) => lines.push(l), signal: stop.signal, pollMs: 50 });
+    await until(() => fake.ws.length === 1);
+    assert.deepEqual(printed(), [1, 2]);
+    assert.match(lines.join("\n"), /#1\s+created\s+memory\s+memory:m1\s+by api_token:2/);
+    const ws = fake.ws[0];
+    assert.equal(ws.path, `/api/vaults/${encodeURIComponent(vault)}/changes/ws?after=2`);
+    assert.equal(ws.auth, `Bearer ${projectTokens()[0].token}`, "the project token, in a header");
+    ws.socket.write(wsText(JSON.stringify(change(3, vault))));
+    ws.socket.write(wsText(JSON.stringify(change(2, vault))));
+    await until(() => printed().includes(3));
+    stop.abort();
+    assert.equal(await done, 0);
+    assert.deepEqual(printed(), [1, 2, 3], "each change once, in order");
+    assert.deepEqual(cursor(), { vault, after: 3 });
+    assertNoSecretsIn(repo);
+  });
+
+  it("polls without a WebSocket (Node 18) and starts after the saved cursor", async () => {
+    await init(opts({ vault: "Acme" }));
+    const vault = vaultId("Acme");
+    fake.changes = [change(1, vault), change(2, vault)];
+    const run = async (until_: number) => {
+      lines = [];
+      const stop = new AbortController();
+      const done = watch({ cwd: repo, env: env(), log: (l) => lines.push(l), signal: stop.signal, WebSocket: null, pollMs: 20 });
+      await until(() => printed().includes(until_));
+      stop.abort();
+      assert.equal(await done, 0);
+      return printed();
+    };
+    assert.deepEqual(await run(2), [1, 2]);
+    fake.changes.push(change(3, vault));
+    assert.deepEqual(await run(3), [3]);
+    assert.match(lines[0], /after change 2 \(polling/);
+    assert.deepEqual(cursor(), { vault, after: 3 });
+    assert.equal(fake.ws.length, 0);
+  });
+
+  it("a refused token stops the watch with one clear message", async () => {
+    await init(opts({ vault: "Acme" }));
+    fake.tokens = fake.tokens.filter((t) => !t.name.startsWith("create-eunomia:"));
+    await assert.rejects(watch({ cwd: repo, env: env(), log: (l) => lines.push(l), WebSocket: null }), /refused the request .*run `npx create-eunomia` again/);
+  });
+
+  it("a token restricted to another vault is refused, and nothing is sent to an unnamed server", async () => {
+    await init(opts({ vault: "Acme" }));
+    const other = { id: "vault:other", name: "Other", kind: "org", role: "owner" };
+    fake.vaults.push(other);
+    const toml = join(repo, ".eunomia", "eunomia.toml");
+    writeFileSync(toml, readFileSync(toml, "utf8").replace(vaultId("Acme"), other.id));
+    const token = projectTokens()[0].token;
+    const env2 = env({ EUNOMIA_TOKEN: token, EUNOMIA_URL: URL_ });
+    await assert.rejects(watch({ cwd: repo, env: env2, log: (l) => lines.push(l), WebSocket: null }), /refused the request \(this token is restricted/);
+    await assert.rejects(watch({ cwd: repo, env: env({ EUNOMIA_TOKEN: token, EUNOMIA_URL: EVIL }), log: (l) => lines.push(l) }), /Nothing was sent/);
+    assert.equal(seen.length, 0);
   });
 });
 

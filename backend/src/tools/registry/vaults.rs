@@ -1,4 +1,5 @@
-//! Vault management: create, list, clone, merge, invite, members, remove, leave, rename, delete.
+//! Vault management: create, list, clone, merge, invite, members, remove, leave, rename, delete, and
+//! `changes_since`, a vault's change log (`crate::changes`).
 //! Part of the tool registry (see `registry/mod.rs`); one `register` call per tool.
 
 use std::collections::HashMap;
@@ -6,7 +7,9 @@ use std::sync::Arc;
 
 use serde_json::json;
 
-use super::{register, bad_args, parse_rid, ToolSpec};
+use super::{register, bad_args, parse_rid, to_tool_value, ToolSpec};
+use crate::authz::{self, Action};
+use crate::vaults::service::default_vault_id;
 use crate::vaults::tools as vaults_tools;
 
 pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
@@ -285,6 +288,53 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     Err(e) => return Ok(e),
                 };
                 Ok(vaults_tools::vault_delete(&state.db, owner, &vault_id).await)
+            })
+        }),
+    );
+
+    #[derive(serde::Deserialize)]
+    struct ChangesSinceArgs {
+        #[serde(default)]
+        vault_id: Option<String>,
+        #[serde(default)]
+        after: i64,
+        #[serde(default = "default_changes_limit")]
+        limit: i64,
+    }
+
+    fn default_changes_limit() -> i64 {
+        crate::changes::DEFAULT_LIMIT
+    }
+
+    register(
+        registry,
+        "changes_since",
+        json!({
+            "type": "object",
+            "properties": {
+                "vault_id": {"type": "string", "description": "the vault (an id or its name); omit for your personal vault"},
+                "after": {"type": "integer", "description": "the `next` of the previous call; 0 (default) reads from the start"},
+                "limit": {"type": "integer", "description": "at most 1000, default 100"},
+            },
+        }),
+        Arc::new(|state, owner, args| {
+            Box::pin(async move {
+                let a: ChangesSinceArgs = match serde_json::from_value(args) {
+                    Ok(a) => a,
+                    Err(e) => return Ok(bad_args(e)),
+                };
+                let vault = match a.vault_id.as_deref().map(|v| parse_rid("vault_id", v)).transpose() {
+                    Ok(v) => v,
+                    Err(e) => return Ok(e),
+                };
+                let page = async {
+                    let vault = match vault {
+                        Some(v) => authz::authorize(&state.db, owner, Action::ReadMemories, &v).await?.vault().clone(),
+                        None => default_vault_id(&state.db, owner).await?,
+                    };
+                    crate::changes::after(&state.db, &vault, a.after, a.limit).await
+                };
+                Ok(to_tool_value(page.await))
             })
         }),
     );

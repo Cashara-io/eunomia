@@ -17,6 +17,7 @@ import {
   skillsDir,
   writeConfig,
   type Credentials,
+  type ProjectConfig,
 } from "./project.js";
 import type { Prompter } from "./prompt.js";
 import { formatSync, syncSkills, TokenRejected, type SyncResult } from "./skills.js";
@@ -351,10 +352,11 @@ function relativeHome(env: NodeJS.ProcessEnv, p: string): string {
 }
 
 /**
- * Sync with the token stored for this exact server and vault, or EUNOMIA_TOKEN (CI). EUNOMIA_TOKEN
- * only goes out when EUNOMIA_URL (or --url) names the same server as the committed file.
+ * The project's config and the token for it: the one stored for this exact server and vault, or
+ * EUNOMIA_TOKEN (CI). EUNOMIA_TOKEN only goes out when EUNOMIA_URL (or --url) names the same server
+ * as the committed file. Sync and watch both start here.
  */
-export async function sync(o: { cwd: string; url?: string; env: NodeJS.ProcessEnv; log: (l: string) => void }): Promise<number> {
+export function storedToken(o: { cwd: string; url?: string; env: NodeJS.ProcessEnv }): { cfg: ProjectConfig; token: string } {
   const cfg = readConfig(o.cwd);
   if (!cfg) throw new Error("no .eunomia/eunomia.toml here: run `npm create eunomia` first");
   const named = o.url ?? o.env.EUNOMIA_URL;
@@ -371,6 +373,12 @@ export async function sync(o: { cwd: string; url?: string; env: NodeJS.ProcessEn
     token = loadCredentials(cfg.url, cfg.vaultId, o.env)?.token;
   }
   if (!token) throw new Error(`no token for ${cfg.url} on this machine: run \`npx create-eunomia\` to sign in (or set EUNOMIA_URL and EUNOMIA_TOKEN)`);
+  return { cfg, token };
+}
+
+/** Saves .eunomia/skills into the project's vault (see [`storedToken`] for the credential). */
+export async function sync(o: { cwd: string; url?: string; env: NodeJS.ProcessEnv; log: (l: string) => void }): Promise<number> {
+  const { cfg, token } = storedToken(o);
   if (!existsSync(skillsDir(o.cwd))) o.log("  no .eunomia/skills folder yet");
   o.log(`Syncing .eunomia/skills to ${cfg.vaultName} on ${cfg.url}:`);
   const result = await runSync(new Api(cfg.url, token), o.cwd, cfg.vaultId);

@@ -113,6 +113,14 @@ test("every MCP tool works end to end", async ({ request, baseURL }) => {
   expect((await call("skill_save", { name: "Bad Name", description: "d", body: "b" })).isError).toBe(true);
   expect((await ok("skill_delete", { id: skill.id })).deleted).toBe(skill.id);
 
+  // the change log has the skill's save, save again and delete, in order, and none of its content
+  const log = await ok("changes_since", { limit: 1000 });
+  const rows: { seq: number; op: string; kind: string; id: string }[] = log.changes;
+  expect(rows.filter((c) => c.id === skill.id).map((c) => `${c.op} ${c.kind}`)).toEqual(["created skill", "updated skill", "deleted skill"]);
+  expect(rows.map((c) => c.seq)).toEqual(rows.map((_, i) => i + 1));
+  expect(log.next).toBe(rows.length);
+  expect(JSON.stringify(log)).not.toContain("Roll back");
+
   // bulk writes: one result per fact, a bad one fails alone
   const batch = await ok("memory_write_batch", { items: [
     { subject_name: "Import page 1", subject_kind: "file", text: "Page one of the import." },

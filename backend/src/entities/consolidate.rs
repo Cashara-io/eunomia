@@ -280,6 +280,8 @@ pub async fn consolidate_subject(
     })
     .await?;
     let Some(row) = row else { return Ok(None) };
+    let op = if existing.is_none() { crate::changes::CREATED } else { crate::changes::UPDATED };
+    crate::changes::record(db, &subject_row.vault, op, crate::changes::MEMORY, &row.id).await;
 
     Ok(Some(ConsolidatedObservation { id: row.id.to_string(), text: row.text }))
 }
