@@ -1,7 +1,7 @@
 /** `.eunomia/skills/*.md` (SKILL.md style) and their sync into the project's vault. */
 
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { existsSync, lstatSync, readdirSync, readFileSync } from "node:fs";
+import { basename, join, relative } from "node:path";
 import { Api, ApiError } from "./api.js";
 
 export interface Skill {
@@ -67,24 +67,28 @@ export function parseFrontmatter(text: string): { fields: Record<string, string>
 
 function unquoteYaml(v: string, line: number): string {
   if (v.startsWith('"')) {
-    if (!/^"(?:[^"\\]|\\.)*"$/.test(v)) throw new Error(`frontmatter line ${line}: unterminated "string"`);
+    const m = /^("(?:[^"\\]|\\.)*")(?:\s+#.*)?$/.exec(v);
+    if (!m) throw new Error(`frontmatter line ${line}: unterminated "string"`);
     try {
-      return JSON.parse(v);
+      return JSON.parse(m[1]);
     } catch {
       throw new Error(`frontmatter line ${line}: unsupported escape in "string"`);
     }
   }
   if (v.startsWith("'")) {
-    if (!/^'(?:[^']|'')*'$/.test(v)) throw new Error(`frontmatter line ${line}: unterminated 'string'`);
-    return v.slice(1, -1).replace(/''/g, "'");
+    const m = /^'((?:[^']|'')*)'(?:\s+#.*)?$/.exec(v);
+    if (!m) throw new Error(`frontmatter line ${line}: unterminated 'string'`);
+    return m[1].replace(/''/g, "'");
   }
-  return v.replace(/\s+#.*$/, "");
+  const plain = v.replace(/(^|\s+)#.*$/, "");
+  // YAML's null: the same as leaving the key out
+  return /^(null|Null|NULL|~)$/.test(plain) ? "" : plain;
 }
 
-/** Reads one skill file and checks it against the server's rules. */
-export function readSkill(path: string): Skill {
+/** Reads one skill file and checks it against the server's rules. `fallbackName` is used when it has no `name`. */
+export function readSkill(path: string, fallbackName = basename(path).replace(/\.md$/i, "")): Skill {
   const { fields, body } = parseFrontmatter(readFileSync(path, "utf8"));
-  const name = fields.name || basename(path).replace(/\.md$/i, "");
+  const name = fields.name || fallbackName;
   const description = (fields.description ?? "").trim();
   if (!validName(name)) throw new Error(`name ${JSON.stringify(name)} must be 1 to 64 lowercase letters, digits and hyphens, starting with a letter or digit`);
   if (!description) throw new Error("needs a description: when to use the skill");
@@ -105,32 +109,71 @@ export interface SyncResult {
 // ponytail: best effort, at most 50 skills; a server-side skill_list would make "only on the server" exact.
 const LIST_QUERY = "an ar at de ed en er es in it le nd on or re se st te th ti to";
 
+/** Thrown when the server refuses the token: the whole sync stops with one message. */
+export class TokenRejected extends Error {}
+
+type Entry = { file: string; fallbackName?: string; error?: string };
+
+/**
+ * The skill files in `dir`: `<name>.md` (not README.md) and `<name>/SKILL.md`. Only regular files
+ * inside the folder count: a symlink (which could point outside the repo) is reported, never read.
+ */
+export function listSkillFiles(dir: string): Entry[] {
+  if (!existsSync(dir)) return [];
+  if (lstatSync(dir).isSymbolicLink()) return [{ file: dir, error: "is a symlink: skipped, skills must live in the repo" }];
+  const out: Entry[] = [];
+  for (const name of readdirSync(dir).sort()) {
+    const path = join(dir, name);
+    const st = lstatSync(path);
+    if (st.isSymbolicLink()) {
+      out.push({ file: path, error: "is a symlink: skipped, skills must be regular files in the repo" });
+    } else if (st.isFile()) {
+      if (name.toLowerCase().endsWith(".md") && name.toLowerCase() !== "readme.md") out.push({ file: path });
+    } else if (st.isDirectory()) {
+      const skill = join(path, "SKILL.md");
+      if (!lstatExists(skill)) continue;
+      out.push(lstatSync(skill).isFile() ? { file: skill, fallbackName: name } : { file: skill, error: "is not a regular file (a symlink?): skipped" });
+    }
+  }
+  return out;
+}
+
+function lstatExists(p: string): boolean {
+  try {
+    lstatSync(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Upserts every skill file into `vaultId`. One bad file is reported and the rest carry on. */
 export async function syncSkills(api: Api, dir: string, vaultId: string): Promise<SyncResult> {
-  const files = existsSync(dir)
-    ? readdirSync(dir)
-        .filter((f) => f.toLowerCase().endsWith(".md") && f.toLowerCase() !== "readme.md")
-        .sort()
-    : [];
   const results: SyncResult["results"] = [];
   const seen = new Map<string, string>();
-  for (const f of files) {
-    const file = join(dir, f);
+  const rel = (f: string) => relative(dir, f);
+  for (const entry of listSkillFiles(dir)) {
+    const { file } = entry;
+    if (entry.error) {
+      results.push({ file, outcome: "error", error: entry.error });
+      continue;
+    }
     let skill: Skill;
     try {
-      skill = readSkill(file);
+      skill = readSkill(file, entry.fallbackName);
     } catch (e) {
       results.push({ file, outcome: "error", error: (e as Error).message });
       continue;
     }
     if (seen.has(skill.name)) {
-      results.push({ file, name: skill.name, outcome: "error", error: `name ${skill.name} is already used by ${basename(seen.get(skill.name)!)}` });
+      results.push({ file, name: skill.name, outcome: "error", error: `name ${skill.name} is already used by ${rel(seen.get(skill.name)!)}` });
       continue;
     }
     seen.set(skill.name, file);
     try {
       results.push({ file, name: skill.name, outcome: await upsert(api, skill, vaultId) });
     } catch (e) {
+      if (e instanceof ApiError && e.status === 401) throw new TokenRejected(`${api.url} rejected the token: run \`npx create-eunomia\` again to sign in`);
       results.push({ file, name: skill.name, outcome: "error", error: (e as Error).message });
     }
   }
