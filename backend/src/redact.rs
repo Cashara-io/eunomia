@@ -79,6 +79,16 @@ static PATTERNS: LazyLock<Vec<(&'static str, Regex, String)>> = LazyLock::new(||
     ]
 });
 
+/// Compiles every pattern now, at boot ([`crate::state::AppState::build`]). Compiling takes ~150 KiB of
+/// stack in a debug build; left lazy, the first write pays it at the bottom of a deep tool call, which
+/// overflowed a 2 MiB test thread. A search on compiled patterns needs under 20 KiB.
+pub fn init() {
+    for re in [&PEM_BEGIN, &PEM_END, &PEM_BODY] {
+        LazyLock::force(re);
+    }
+    LazyLock::force(&PATTERNS);
+}
+
 /// `text` with every known secret replaced by its marker. Each kind found is added to `found` (counts
 /// summed when the kind is already there, so one report can cover several fields).
 pub fn redact(text: &str, found: &mut Vec<Redaction>) -> String {
@@ -209,6 +219,16 @@ mod tests {
             assert_eq!(found, vec![Redaction { kind: "private key".into(), count: n }]);
             assert!(!out.contains("BEGIN") && !out.contains("MIIE"));
         }
+    }
+
+    #[test]
+    fn after_init_a_redaction_fits_a_small_stack() {
+        // compiling the patterns takes ~150 KiB of stack in debug; init() pays that once at boot, so a
+        // write deep in a tool call only searches (under 20 KiB). Any pattern init() misses fails here.
+        init();
+        let text = format!("ghp_{} postgres://u:p@h -----BEGIN PRIVATE KEY-----\nMIIE", "a".repeat(36));
+        let out = std::thread::Builder::new().stack_size(128 * 1024).spawn(move || run(&text).0).unwrap().join().unwrap();
+        assert!(!out.contains("ghp_") && !out.contains("MIIE"), "{out}");
     }
 
     #[test]
