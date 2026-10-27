@@ -135,7 +135,6 @@ export function readConfig(root: string): (ProjectConfig & { raw: Toml }) | unde
   return { url, vaultId, vaultName: raw.vault?.name ?? vaultId, raw };
 }
 
-/** Writes eunomia.toml, keeping any other sections and keys already in it. */
 /** `.eunomia` and `.eunomia/skills` must be real folders in the repo, never symlinks to elsewhere. */
 function refuseSymlinks(root: string): void {
   for (const dir of [projectDir(root), skillsDir(root)]) {
@@ -149,6 +148,7 @@ function refuseSymlinks(root: string): void {
   }
 }
 
+/** Writes eunomia.toml, keeping any other sections and keys already in it. */
 export function writeConfig(root: string, cfg: ProjectConfig, previous: Toml = {}): void {
   refuseSymlinks(root);
   const data: Toml = { ...previous };
