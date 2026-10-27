@@ -21,7 +21,8 @@ It asks for:
    It checks `/healthz` first. In a repo that already has `.eunomia/eunomia.toml`, that file's URL is
    used, but your credentials only go to it once you confirm it (or name the same URL with `--url`
    or `EUNOMIA_URL`). A named URL that differs from the file's stops init before anything is sent,
-   so a committed file can never steer your password or token to another server. Plain `http://` to
+   so a committed file can never steer your password or token to another server. A redirect from
+   the server is refused rather than followed, for the same reason. Plain `http://` to
    another machine gets a warning, and a URL with a user name or password in it is refused.
 2. **Sign-in.** Your email and password (typed hidden), or an existing API token (checked before
    init goes on). A server set to single sign-on only (`AUTH_MODE=oidc`) has password sign-in off:
