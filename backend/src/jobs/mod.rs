@@ -22,6 +22,7 @@ use crate::tx::{stable_key, with_retry, with_retry_dup};
 
 pub mod handlers;
 pub mod leader;
+pub mod redact_backfill;
 pub mod worker;
 
 /// Job kinds the built-in handlers serve.
@@ -39,6 +40,8 @@ pub mod kind {
     pub const INDEX_DOCUMENT: &str = "index_document";
     /// Mark the earlier facts a newly written one makes no longer true (`entities::supersede`).
     pub const SUPERSEDE: &str = "supersede";
+    /// Redact secrets stored before writes were redacted, once per org per detector version (`redact_backfill`).
+    pub const REDACT_BACKFILL: &str = "redact_backfill";
 }
 
 /// Which loops this process runs (`EUNOMIA_ROLE`). `all` keeps the one-container install working.
