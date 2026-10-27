@@ -46,10 +46,11 @@ utoipa = "5"
 url = "2"
 # text out of text-based PDF uploads (documents/)
 pdf-extract = "0.12"
+# secret redaction on memory writes (redact.rs)
+regex = "1"
 
 [dev-dependencies]
 tokio-test = "0.4"
-regex = "1"
 insta = { version = "1", features = ["json", "redactions"] }
 jsonschema = { version = "0.58.6", default-features = false }
 eunomia-backend = { path = ".", features = ["test-support"] }

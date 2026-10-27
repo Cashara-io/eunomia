@@ -6848,6 +6848,13 @@
             "type": "integer",
             "format": "int64"
           },
+          "redacted": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Redaction"
+            },
+            "description": "Secrets this write replaced with `[redacted: <kind>]` markers (kind and count only). Present\nonly on a write or edit that redacted something."
+          },
           "source": {
             "type": [
               "string",
@@ -7264,6 +7271,23 @@
             }
           },
           "title": {
+            "type": "string"
+          }
+        }
+      },
+      "Redaction": {
+        "type": "object",
+        "description": "What one write had redacted: `count` secrets of `kind` (e.g. \"github token\").",
+        "required": [
+          "kind",
+          "count"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "kind": {
             "type": "string"
           }
         }
