@@ -4,10 +4,13 @@
 //! (`GET /api/vaults/{vault}/changes`), the `changes_since` tool, or live over a WebSocket
 //! (`routers/changes.rs`), which this module feeds through an in-process broadcast.
 //!
-//! The write paths call [`record`] after their own write commits: `entities/service.rs` (memories and
-//! entities), `tools/registry/skills.rs` and `documents/`.
-// ponytail: the row is a second transaction after the write, so a crash between the two loses one row
-// (never a seq). Moving it into each write's own transaction closes that if it ever matters.
+//! The write paths call [`record`] or [`record_many`] after their own write commits:
+//! `entities/service.rs` (memories, entities, relations), `entities/consolidate.rs`,
+//! `tools/registry/skills.rs`, `documents/`, `sources/registry.rs` (a connection's data going) and
+//! `vaults/service.rs` (what a clone or merge copies into its new vault).
+// ponytail: the rows are a second transaction after the write, retried a few times; a crash or a
+// database outage in between loses rows (never a seq), so the log is at most once. Moving the append
+// into each write's own transaction closes that if it ever matters.
 
 use std::sync::OnceLock;
 
@@ -29,11 +32,17 @@ pub const MERGED: &str = "merged";
 
 pub const MEMORY: &str = "memory";
 pub const ENTITY: &str = "entity";
+pub const RELATION: &str = "relation";
 pub const SKILL: &str = "skill";
 pub const DOCUMENT: &str = "document";
 
 pub const DEFAULT_LIMIT: i64 = 100;
 pub const MAX_LIMIT: i64 = 1000;
+
+/// Rows per append transaction.
+const BATCH: usize = 500;
+/// Tries per batch (each try also retries a commit conflict, `tx::with_retry_dup`).
+const ATTEMPTS: u32 = 3;
 
 /// One row of a vault's change log.
 #[derive(Debug, Clone, Serialize, SurrealValue, utoipa::ToSchema)]
@@ -42,7 +51,7 @@ pub struct Change {
     pub seq: i64,
     /// `created`, `updated`, `deleted` or `merged` (an entity merged into another, which gets `updated`).
     pub op: String,
-    /// `memory`, `entity`, `skill` or `document`.
+    /// `memory`, `entity`, `relation`, `skill` or `document`.
     pub kind: String,
     /// The item's id; fetch it to see what changed (it may be gone).
     pub id: String,
@@ -68,9 +77,9 @@ pub struct Event {
     pub change: Change,
 }
 
-// ponytail: in-process only. With several backend replicas a follower sees only the writes of the
-// replica it is connected to (until it reconnects and reads the backlog); a shared bus (SurrealDB
-// LIVE SELECT, Redis pub/sub) would fix that.
+// ponytail: in-process only. With several backend replicas a follower hears only the writes of the
+// replica it is connected to, and reads the rest from the database on its periodic catch-up
+// (`routers/changes.rs`); a shared bus (SurrealDB LIVE SELECT, Redis pub/sub) would make them live.
 fn bus() -> &'static broadcast::Sender<Event> {
     static BUS: OnceLock<broadcast::Sender<Event>> = OnceLock::new();
     BUS.get_or_init(|| broadcast::channel(1024).0)
@@ -82,20 +91,47 @@ pub fn subscribe() -> broadcast::Receiver<Event> {
     bus().subscribe()
 }
 
-/// Appends a change to `vault`'s log, as the current caller. Never fails the write it follows (that
-/// already committed): a failure is logged.
+/// Appends a change to `vault`'s log, as the current caller. See [`record_many`].
 pub async fn record(db: &OrgDb, vault: &RecordId, op: &'static str, kind: &'static str, item: &RecordId) {
+    record_many(db, vault, vec![(op, kind, item.clone())]).await;
+}
+
+/// Appends changes to `vault`'s log in order, as the current caller, [`BATCH`] rows per transaction
+/// (the bulk writes: a vault copy, a connection's data going). Never fails the write it follows (that
+/// already committed): a batch still failing after [`ATTEMPTS`] tries is logged and its rows are lost.
+pub async fn record_many(db: &OrgDb, vault: &RecordId, items: Vec<(&'static str, &'static str, RecordId)>) {
+    if items.is_empty() {
+        return;
+    }
     let actor = authz::current().map_or_else(|| "system".to_string(), |c| c.actor.id);
     // its own task, awaited: every write path ends here, and polled inline it takes them past a 2 MiB
-    // test stack (debug builds); the row is still written before the write returns
-    let (db2, vault2, item2) = (db.clone(), vault.clone(), item.clone());
-    let result = match tokio::spawn(async move { append(&db2, &vault2, op, kind, &item2, actor).await }).await {
-        Ok(r) => r.map_err(|e| e.message),
-        Err(e) => Err(e.to_string()),
-    };
-    if let Err(e) = result {
-        tracing::error!(vault = %vault.to_string(), item = %item.to_string(), error = %e, "change log: row not written");
+    // test stack (debug builds); the rows are still written before the write returns
+    let (db2, vault2) = (db.clone(), vault.clone());
+    let task = tokio::spawn(async move {
+        for chunk in items.chunks(BATCH) {
+            let mut wait = std::time::Duration::from_millis(100);
+            for attempt in 1..=ATTEMPTS {
+                match append(&db2, &vault2, chunk, &actor).await {
+                    Ok(()) => break,
+                    Err(e) if attempt == ATTEMPTS => {
+                        tracing::error!(vault = %vault2.to_string(), rows = chunk.len(), error = %e.message, "change log: rows not written");
+                    }
+                    Err(_) => {
+                        tokio::time::sleep(wait).await;
+                        wait *= 4;
+                    }
+                }
+            }
+        }
+    });
+    if let Err(e) = task.await {
+        tracing::error!(vault = %vault.to_string(), error = %e, "change log: append task failed");
     }
+}
+
+/// The vault's counter row (migration 0022).
+pub fn counter(vault: &RecordId) -> RecordId {
+    RecordId::from_table_key("change_seq", vault.key().clone())
 }
 
 /// Like `tx::lock`, but stripes of its own: callers append while holding a `tx::lock` stripe (a
@@ -112,27 +148,46 @@ async fn vault_lock(vault: &RecordId) -> Option<tokio::sync::MutexGuard<'static,
     Some(LOCKS[(h.finish() as usize) % LOCKS.len()].lock().await)
 }
 
-async fn append(db: &OrgDb, vault: &RecordId, op: &'static str, kind: &'static str, item: &RecordId, actor: String) -> AppResult<()> {
-    let counter = RecordId::from_table_key("change_seq", vault.key().clone());
+async fn append(db: &OrgDb, vault: &RecordId, items: &[(&'static str, &'static str, RecordId)], actor: &str) -> AppResult<()> {
+    let rows: Vec<serde_json::Value> =
+        items.iter().enumerate().map(|(i, (op, kind, item))| serde_json::json!({"i": i + 1, "op": op, "kind": kind, "item": item.to_string()})).collect();
     // one writer per vault in this process; the transaction still orders writers in other processes
     let _guard = vault_lock(vault).await;
-    let change = with_retry_dup(|| async {
+    let changes = with_retry_dup(|| async {
         let mut res = store::changes::APPEND
             .on(db)
-            .bind(("counter", counter.clone()))
+            .bind(("counter", counter(vault)))
             .bind(("vault", vault.clone()))
-            .bind(("op", op))
-            .bind(("kind", kind))
-            .bind(("item", item.to_string()))
-            .bind(("actor", actor.clone()))
+            .bind(("items", rows.clone()))
+            .bind(("actor", actor.to_string()))
             .await?;
-        let rows: Vec<Change> = res.take(store::changes::APPEND.slot)?;
-        rows.into_iter().next().ok_or_else(|| surrealdb::Error::query("change append returned no row".into(), None))
+        res.take::<Vec<Change>>(store::changes::APPEND.slot)
     })
     .await?;
-    // no receivers is fine
-    let _ = bus().send(Event { org: db.org(), vault: vault.clone(), change });
+    for change in changes {
+        // no receivers is fine
+        let _ = bus().send(Event { org: db.org(), vault: vault.clone(), change });
+    }
     Ok(())
+}
+
+/// Logs the memories a bulk delete reports (`deleted`: `[id, vault]` pairs, as text) in their vaults,
+/// and takes the list out of the report, which callers show.
+pub async fn record_deleted_memories(db: &OrgDb, report: &mut serde_json::Value) {
+    let Some(pairs) = report.as_object_mut().and_then(|o| o.remove("deleted")) else { return };
+    let mut by_vault: std::collections::BTreeMap<String, Vec<(&'static str, &'static str, RecordId)>> = Default::default();
+    for pair in pairs.as_array().into_iter().flatten() {
+        if let (Some(id), Some(vault)) = (pair[0].as_str(), pair[1].as_str())
+            && let Ok(id) = crate::rid::parse(id)
+        {
+            by_vault.entry(vault.to_string()).or_default().push((DELETED, MEMORY, id));
+        }
+    }
+    for (vault, items) in by_vault {
+        if let Ok(vault) = crate::rid::parse(&vault) {
+            record_many(db, &vault, items).await;
+        }
+    }
 }
 
 /// `vault`'s changes after `after`, oldest first. The caller has authorized the read.

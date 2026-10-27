@@ -27,6 +27,20 @@ use crate::state::{AppState, OrgState};
 
 /// How often a live follower's credential and membership are checked again.
 const RECHECK: Duration = Duration::from_secs(30);
+/// How often a live follower is pinged and catches up from the database, whatever the broadcast says.
+const TICK: Duration = Duration::from_secs(5);
+
+/// Test-only: when above 0, [`RECHECK`] in seconds, so a test sees an idle socket closed in seconds.
+#[cfg(feature = "test-support")]
+pub static TEST_RECHECK_SECS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+fn recheck_every() -> Duration {
+    #[cfg(feature = "test-support")]
+    if let n @ 1.. = TEST_RECHECK_SECS.load(std::sync::atomic::Ordering::Relaxed) {
+        return Duration::from_secs(n);
+    }
+    RECHECK
+}
 
 pub fn router() -> Router<AppState> {
     Router::new().route("/vaults/{vault_id}/changes", get(list_changes)).route("/vaults/{vault_id}/changes/ws", get(follow_changes))
@@ -116,6 +130,7 @@ async fn follow(mut socket: WebSocket, state: OrgState, headers: HeaderMap, vaul
     // subscribe before reading the backlog, so a change committed in between is not missed
     let mut rx = changes::subscribe();
     let mut checked = Instant::now();
+    let mut tick = tokio::time::interval_at(tokio::time::Instant::now() + TICK, TICK);
     let mut result = catch_up(&mut socket, &state, &vault, &mut last).await;
     while result.is_ok() {
         result = tokio::select! {
@@ -123,25 +138,30 @@ async fn follow(mut socket: WebSocket, state: OrgState, headers: HeaderMap, vaul
                 Some(Ok(Message::Close(_))) | Some(Err(_)) | None => Err(Stop::Gone),
                 _ => Ok(()),
             },
+            // even when nothing arrives: recheck the caller, keep the connection alive, and read rows a
+            // missed broadcast or another replica wrote
+            _ = tick.tick() => async {
+                if checked.elapsed() >= recheck_every() {
+                    checked = Instant::now();
+                    recheck(&state, &headers, &vault).await?;
+                }
+                socket.send(Message::Ping(Default::default())).await.map_err(|_| Stop::Gone)?;
+                catch_up(&mut socket, &state, &vault, &mut last).await
+            }.await,
             ev = rx.recv() => match ev {
                 Ok(ev) if ev.org != state.db.org() || ev.vault != vault || ev.change.seq <= last => Ok(()),
-                Ok(ev) => {
-                    let mut allowed = Ok(());
-                    if checked.elapsed() > RECHECK {
+                other => async {
+                    if checked.elapsed() >= recheck_every() {
                         checked = Instant::now();
-                        allowed = recheck(&state, &headers, &vault).await;
+                        recheck(&state, &headers, &vault).await?;
                     }
-                    if allowed.is_err() {
-                        allowed
-                    } else if ev.change.seq == last + 1 {
-                        send(&mut socket, &ev.change, &mut last).await
-                    } else {
-                        // published out of order, or rows this process never saw: the database has them all
-                        catch_up(&mut socket, &state, &vault, &mut last).await
+                    match other {
+                        Ok(ev) if ev.change.seq == last + 1 => send(&mut socket, &ev.change, &mut last).await,
+                        // published out of order, lagged, or rows this process never saw: the database has them all
+                        Ok(_) | Err(RecvError::Lagged(_)) => catch_up(&mut socket, &state, &vault, &mut last).await,
+                        Err(RecvError::Closed) => Err(Stop::Gone),
                     }
-                }
-                Err(RecvError::Lagged(_)) => catch_up(&mut socket, &state, &vault, &mut last).await,
-                Err(RecvError::Closed) => Err(Stop::Gone),
+                }.await,
             },
         };
     }

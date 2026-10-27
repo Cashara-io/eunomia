@@ -176,7 +176,7 @@ pub fn description(name: &str) -> &'static str {
         "skill_find" => "Find saved skills by what you need to do: by meaning when embeddings are on, and by keyword in a skill's name or description. Searches every vault you can read, or one `vault_id`. Returns id, name, description, vault and updated_at, not the body: `skill_get` reads it.",
         "skill_get" => "One saved skill with its full Markdown body, by id (from `skill_find`) or by name (an error names the ids if several vaults hold that name).",
         "skill_delete" => "Delete one saved skill by id. Irreversible.",
-        "changes_since" => "A vault's change log after a cursor: one numbered row per write (seq, op created/updated/deleted/merged, kind memory/entity/skill/document, the item's id, who wrote it, when), oldest first, with no content (fetch the item to see it). Pass the returned `next` as `after` to read on. Your personal vault unless `vault_id` is given.",
+        "changes_since" => "A vault's change log after a cursor: one numbered row per write (seq, op created/updated/deleted/merged, kind memory/entity/relation/skill/document, the item's id, who wrote it, when), oldest first, with no content (fetch the item to see it). Pass the returned `next` as `after` to read on. Your personal vault unless `vault_id` is given.",
         _ => "",
     }
 }

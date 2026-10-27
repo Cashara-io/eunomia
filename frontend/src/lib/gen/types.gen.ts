@@ -112,7 +112,7 @@ export type Change = {
      */
     id: string;
     /**
-     * `memory`, `entity`, `skill` or `document`.
+     * `memory`, `entity`, `relation`, `skill` or `document`.
      */
     kind: string;
     /**

@@ -31,6 +31,8 @@ const fake = {
   ws: [] as { path: string; auth?: string; socket: Socket }[],
   calls: [] as { method: string; path: string; body: any }[],
   failMint: false,
+  /** The change log route never answers (a stuck server). */
+  hang: false,
   /** Tokens the server refuses for vault reads (lost access), though they still exist. */
   blind: new Set<string>(),
   n: 0,
@@ -50,6 +52,7 @@ function reset() {
   fake.ws = [];
   fake.calls = [];
   fake.failMint = false;
+  fake.hang = false;
   fake.blind = new Set();
 }
 
@@ -127,6 +130,7 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   for await (const c of req) raw += c;
   const body = raw ? JSON.parse(raw) : undefined;
   fake.calls.push({ method: req.method!, path: req.url!, body });
+  if (fake.hang && req.url!.includes("/changes?")) return;
   const [status, payload, headers] = handle(req.method!, req.url!, body, req.headers);
   res.writeHead(status, { "content-type": "application/json", ...headers });
   res.end(JSON.stringify(payload));
@@ -186,6 +190,7 @@ before(async () => {
 });
 after(() => {
   for (const w of fake.ws) w.socket.destroy();
+  server.closeAllConnections();
   server.close();
   attacker.close();
   redirector.close();
@@ -746,6 +751,36 @@ describe("watch", () => {
     await assert.rejects(watch({ cwd: repo, env: env2, log: (l) => lines.push(l), WebSocket: null }), /refused the request \(this token is restricted/);
     await assert.rejects(watch({ cwd: repo, env: env({ EUNOMIA_TOKEN: token, EUNOMIA_URL: EVIL }), log: (l) => lines.push(l) }), /Nothing was sent/);
     assert.equal(seen.length, 0);
+  });
+
+  it("never reads or writes its cursor through a symlink a repo committed", async () => {
+    await init(opts({ vault: "Acme" }));
+    fake.changes = [change(1, vaultId("Acme"))];
+    const victim = join(home, ".zshrc");
+    writeFileSync(victim, "export SAFE=1\n");
+    const cache = join(repo, ".eunomia", "cache");
+    mkdirSync(cache, { recursive: true });
+    symlinkSync(victim, join(cache, "watch.json"));
+    await assert.rejects(watch({ cwd: repo, env: env(), log: (l) => lines.push(l), WebSocket: null }), /watch\.json is a symlink/);
+    rmSync(cache, { recursive: true });
+    const elsewhere = join(home, "elsewhere");
+    mkdirSync(elsewhere);
+    symlinkSync(elsewhere, cache);
+    await assert.rejects(watch({ cwd: repo, env: env(), log: (l) => lines.push(l), WebSocket: null }), /cache is a symlink/);
+    assert.equal(readFileSync(victim, "utf8"), "export SAFE=1\n");
+    assert.deepEqual(readdirSync(elsewhere), []);
+  });
+
+  it("Ctrl-C ends the watch at once, even with a request in flight", async () => {
+    await init(opts({ vault: "Acme" }));
+    fake.hang = true;
+    const stop = new AbortController();
+    const done = watch({ cwd: repo, env: env(), log: (l) => lines.push(l), signal: stop.signal, WebSocket: null });
+    await until(() => fake.calls.some((c) => c.path.includes("/changes?")));
+    const t = Date.now();
+    stop.abort();
+    assert.equal(await done, 0);
+    assert.ok(Date.now() - t < 1000, "it did not wait for the stuck request");
   });
 });
 
