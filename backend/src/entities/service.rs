@@ -31,6 +31,7 @@ use crate::error::{AppError, AppResult, ErrorCode};
 use crate::store::entities as q;
 use crate::tx::{lock, with_retry, with_retry_dup};
 use crate::authz::{self, Action};
+use crate::changes;
 use crate::vaults::service as vaults_service;
 
 /// Entity kinds this module manages -- the same set as
@@ -466,7 +467,7 @@ pub async fn upsert_entity_created(
     // Read-then-write: a concurrent upsert of the same name (in any case) loses on the
     // `(vault, name_key)` unique index, and the retry's re-read finds the winner. Both lookups are
     // index reads (`name_key`, `alias_keys`), however large the vault.
-    let (row, created) = with_retry_dup(|| async {
+    let (row, changed) = with_retry_dup(|| async {
         let mut found = None;
         let mut aliases = aliases.clone();
         let needles = std::iter::once((needle.clone(), None)).chain(decorated.as_ref().map(|(base, extra)| (base.to_lowercase(), Some(extra))));
@@ -484,7 +485,7 @@ pub async fn upsert_entity_created(
 
         if let Some(row) = found {
             if aliases.iter().all(|a| row.aliases.contains(a)) {
-                return Ok((row, false));
+                return Ok((row, None));
             }
             // array::union is atomic, so two alias merges cannot lose each other's update.
             let mut updated = q::MERGE_ALIASES
@@ -494,7 +495,7 @@ pub async fn upsert_entity_created(
                 .await?
                 .check()?;
             let rows: Vec<EntityRow> = updated.take(0)?;
-            return Ok((rows.into_iter().next().unwrap_or(row), false));
+            return Ok((rows.into_iter().next().unwrap_or(row), Some(changes::UPDATED)));
         }
 
         let mut created = q::create_entity(db, table)
@@ -507,10 +508,13 @@ pub async fn upsert_entity_created(
             .check()?;
         let rows: Vec<EntityRow> = created.take(0)?;
         let row = rows.into_iter().next().ok_or_else(|| surrealdb::Error::query("entity insert returned no row".into(), None))?;
-        Ok((row, true))
+        Ok((row, Some(changes::CREATED)))
     })
     .await?;
-    Ok((entity_out(&row), created))
+    if let Some(op) = changed {
+        changes::record(db, &vault, op, changes::ENTITY, &row.id).await;
+    }
+    Ok((entity_out(&row), changed == Some(changes::CREATED)))
 }
 
 /// A new custom kind may join `vault` only while it holds fewer than [`MAX_CUSTOM_KINDS`]; a kind it
@@ -664,6 +668,9 @@ async fn insert_memory(
         rows.into_iter().next().ok_or_else(|| surrealdb::Error::query("memory write returned no row".into(), None))
     })
     .await?;
+    // an observation is revised in place: past its first version it is an update
+    let op = if memory.version > 1 { changes::UPDATED } else { changes::CREATED };
+    changes::record(db, vault, op, changes::MEMORY, &memory.id).await;
 
     Ok(memory_out(&memory, None))
 }
@@ -750,7 +757,10 @@ pub async fn add_relation(
         Ok(mut res) => {
             let rows: Vec<RelationRow> = res.take(0)?;
             match rows.into_iter().next() {
-                Some(row) => Ok(relation_out(&row, None, None)),
+                Some(row) => {
+                    changes::record(db, &in_row.vault, changes::CREATED, changes::RELATION, &row.id).await;
+                    Ok(relation_out(&row, None, None))
+                }
                 None => find_relation(db, from_id, to_id, label)
                     .await?
                     .map(|r| relation_out(&r, None, None))
@@ -800,6 +810,8 @@ pub async fn delete_memory(db: &OrgDb, owner: &RecordId, memory_id: &RecordId) -
             .check()
     })
     .await?;
+    // ponytail: an observation deleted along with its only fact gets no row of its own; recall finds it gone
+    changes::record(db, &row.vault, changes::DELETED, changes::MEMORY, memory_id).await;
     Ok(true)
 }
 
@@ -865,6 +877,7 @@ pub async fn update_memory(
     .await?;
     let rows: Vec<MemoryRow> = res.take(stmt.slot)?;
     let updated = rows.into_iter().next().ok_or_else(|| AppError::internal("memory update returned no row"))?;
+    changes::record(db, &row.vault, changes::UPDATED, changes::MEMORY, memory_id).await;
     Ok(Some(memory_out(&updated, None)))
 }
 
@@ -914,6 +927,7 @@ pub async fn update_entity(
         let mut res = qry.await?;
         let rows: Vec<EntityRow> = res.take(0)?;
         row = rows.into_iter().next().ok_or_else(|| AppError::internal("entity update returned no row"))?;
+        changes::record(db, &row.vault, changes::UPDATED, changes::ENTITY, entity_id).await;
     }
 
     Ok(Some(entity_out(&row)))
@@ -935,6 +949,8 @@ pub async fn delete_entity(db: &OrgDb, owner: &RecordId, entity_id: &RecordId) -
         .check()
     })
     .await?;
+    // its memories and edges go with it: one row for the entity, not one per memory
+    changes::record(db, &row.vault, changes::DELETED, changes::ENTITY, entity_id).await;
     Ok(true)
 }
 
@@ -983,6 +999,8 @@ pub async fn merge_entities(
     }
 
     merge_rows(db, winner_id, loser_id, loser_names(&loser)).await?;
+    changes::record(db, &winner.vault, changes::MERGED, changes::ENTITY, loser_id).await;
+    changes::record(db, &winner.vault, changes::UPDATED, changes::ENTITY, winner_id).await;
     let winner = select_entity(db, winner_id).await?.ok_or_else(|| AppError::internal("winner vanished during merge"))?;
     Ok(entity_out(&winner))
 }
@@ -1254,6 +1272,7 @@ pub async fn upsert_code_entity(
             .await?;
         let rows: Vec<EntityRow> = updated.take(0)?;
         let row = rows.into_iter().next().ok_or_else(|| AppError::internal("entity update returned no row"))?;
+        changes::record(db, &row.vault, changes::UPDATED, changes::ENTITY, &row.id).await;
         entity = entity_out(&row);
     }
 

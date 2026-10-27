@@ -65,7 +65,8 @@ file) is revoked after the new one exists, so tokens on your other machines or C
   eunomia.toml      server URL, vault id and name (commit it)
   skills/           one SKILL.md-style file per skill (commit them)
     README.md       how to write one (not synced)
-  .gitignore        keeps a future local cache out of git
+  .gitignore        keeps cache/ out of git
+  cache/            local only: watch's cursor (watch.json)
 ```
 
 ## Skills sync
@@ -96,8 +97,60 @@ and left alone: sync never deletes. Agents find the skills with the `skill_find`
 tools. In CI, set `EUNOMIA_TOKEN` and `EUNOMIA_URL` (it must match the URL in `eunomia.toml`)
 instead of signing in. A token the server refuses stops the sync with one message: run init again.
 
+## Watching changes
+
+Every write that changes the vault adds one numbered row to its change log: a memory or entity
+created, updated, merged or deleted, a relation between entities created, a skill saved or deleted, a
+document uploaded or deleted, the facts that go when a document's passages or a connection's synced
+data are removed, and everything a `vault_clone` or `vault_merge` copies into its new vault. A row
+says what changed (`seq`, `op`, `kind`, the item's `id`), who (`actor`: a user, token or OAuth client
+id, or `system` for background work) and when (`at`). It never holds the content, so nothing secret
+lands in the log: fetch the item to see it. `seq` counts up from 1 per vault with no gaps, even with
+many writers at once.
+
+```bash
+npx create-eunomia watch     # or: bunx create-eunomia watch
+```
+
+It prints one line per change, from where it last stopped (the cursor is kept in
+`.eunomia/cache/watch.json`), then follows new ones live until Ctrl-C:
+
+```
+#41  created  memory    memory:k3v...  by api_token:x2...  2026-10-28T10:04:12Z
+#42  merged   entity    person:9qa...  by user:ad3...  2026-10-28T10:05:40Z
+```
+
+It uses the same token as sync (or `EUNOMIA_TOKEN` with a matching `EUNOMIA_URL`) and sends it only to
+the server in `eunomia.toml`. On Node 22+ and Bun it follows a WebSocket; Node 18 has none, so it asks
+every 3 seconds instead. A token the server refuses stops it with one message.
+
+Other clients use the same log:
+
+- `GET /api/vaults/{vault}/changes?after=<seq>&limit=<n>` returns `{changes, next}`; pass `next` as
+  `after` for the following page (at most 1000 rows per page).
+- `GET /api/vaults/{vault}/changes/ws?after=<seq>` upgrades to a WebSocket that sends the rows after
+  the cursor, then each new one as a JSON text message. A browser authenticates with its session cookie
+  (from the app's own origin); other clients send `Authorization: Bearer <token>`.
+- The `changes_since` MCP tool ([agents](agents.md#change-log)).
+
+All three follow the vault's access rules: you must be a member, and the project's token (restricted to
+this vault) cannot read any other vault's log. A live socket checks the credential and membership again
+every 30 seconds, whether or not anything changed, and closes (code 1008) once either is gone. Every
+5 seconds it also sends a ping and reads any rows it has not sent from the database. Live rows come
+from the server the socket is connected to; with several backend replicas, rows written through
+another one arrive within those 5 seconds.
+
+Not logged:
+
+- facts marked superseded in the background (the fact itself does not change);
+- an observation deleted because the only facts behind it went (its facts' rows show it);
+- the memories and relations that go with a deleted or merged-away entity (the entity's row covers them);
+- links between synced records, which belong to no vault.
+
+The row is written right after the write it records, in its own transaction, and retried a few times.
+A crash or a database outage in that moment can lose the row, never a `seq` number: the log is at
+most once. The log is kept for the life of the vault.
+
 ## Coming next
 
-- A change log of what agents learned in the project.
-- `eunomia watch`: live updates over WebSocket.
 - A project ontology: the entity kinds the vault uses.

@@ -638,6 +638,8 @@ pub async fn upload(state: &OrgState, user: &RecordId, up: Upload) -> AppResult<
     {
         tracing::warn!(document = %row.id.to_string(), error = e.source.as_deref().unwrap_or(&e.message), "the previous revision's file could not be removed");
     }
+    let op = if row.revision > 1 { crate::changes::UPDATED } else { crate::changes::CREATED };
+    crate::changes::record(db, &vault, op, crate::changes::DOCUMENT, &row.id).await;
     enqueue_index(state, &row).await?;
     Ok(DocumentOut::from(&row))
 }
@@ -670,6 +672,7 @@ pub async fn reindex(state: &OrgState, user: &RecordId, id: &str) -> AppResult<D
 pub async fn delete(state: &OrgState, user: &RecordId, id: &str) -> AppResult<DocumentDeleted> {
     let doc = load(&state.db, user, &parse_id(id)?, true, Action::WriteMemories).await?;
     let removed = purge(&state.db, &doc, !state.settings.documents_backend.is_empty()).await?;
+    crate::changes::record(&state.db, &doc.vault, crate::changes::DELETED, crate::changes::DOCUMENT, &doc.id).await;
     Ok(DocumentDeleted { deleted: true, chunks: int(&removed, "records"), memories: int(&removed, "memories") })
 }
 
@@ -793,7 +796,9 @@ async fn remove_chunks(db: &OrgDb, owner: &RecordId, doc: &RecordId, keep: i64, 
             .await
     })
     .await?;
-    Ok(res.take::<Option<Value>>(q::DELETE_CHUNKS.slot)?.unwrap_or(Value::Null))
+    let mut report = res.take::<Option<Value>>(q::DELETE_CHUNKS.slot)?.unwrap_or(Value::Null);
+    crate::changes::record_deleted_memories(db, &mut report).await;
+    Ok(report)
 }
 
 // ---- indexing ---------------------------------------------------------------------------------

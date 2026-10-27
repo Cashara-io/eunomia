@@ -1,13 +1,16 @@
 #!/usr/bin/env node
-/** Entry point: `npm create eunomia` (init) and `npx create-eunomia sync`. */
+/** Entry point: `npm create eunomia` (init), `npx create-eunomia sync` and `npx create-eunomia watch`. */
 
 import { init, sync } from "./init.js";
 import { defaultsPrompter, terminalPrompter } from "./prompt.js";
+import { watch } from "./watch.js";
 
 const HELP = `create-eunomia: turn this repo into a Eunomia project (one shared vault for every agent)
 
   npm create eunomia [-- flags]        set up .eunomia/ here (also bun create / pnpm create)
   npx create-eunomia sync              save .eunomia/skills/*.md into the project's vault
+  npx create-eunomia watch             print each change to the project's vault as it happens
+                                       (resumes after the last one it printed; Ctrl-C stops)
 
 Flags (init):
   --url <url>        Eunomia server (or EUNOMIA_URL; default http://localhost:8001)
@@ -23,7 +26,7 @@ Flags (init):
   -h, --help         this help
 
 Credentials go only to a server you name (--url, EUNOMIA_URL or the prompt) or confirm.
-Sync uses the token init stored in ~/.config/eunomia for this exact server, or
+Sync and watch use the token init stored in ~/.config/eunomia for this exact server, or
 EUNOMIA_TOKEN together with EUNOMIA_URL (or --url) naming the same server as eunomia.toml.
 Docs: https://github.com/Cashara-io/eunomia/blob/main/docs/projects.md`;
 
@@ -46,7 +49,7 @@ function parseArgs(argv: string[]): { command: string; flags: Record<string, str
       const v = inline ?? argv[++i];
       if (v === undefined) throw new Error(`${a} needs a value`);
       flags[k] = v;
-    } else if (a === "sync" || a === "init") command = a;
+    } else if (a === "sync" || a === "init" || a === "watch") command = a;
     else throw new Error(`unknown command ${a} (see --help)`);
   }
   return { command, flags, yes, help, createVault };
@@ -60,6 +63,11 @@ async function main(): Promise<number> {
   }
   const log = (l: string) => console.log(l);
   if (args.command === "sync") return sync({ cwd: process.cwd(), url: args.flags.url, env: process.env, log });
+  if (args.command === "watch") {
+    const stop = new AbortController();
+    process.once("SIGINT", () => stop.abort());
+    return watch({ cwd: process.cwd(), url: args.flags.url, env: process.env, log, signal: stop.signal });
+  }
   const prompt = args.yes ? defaultsPrompter() : terminalPrompter();
   try {
     return await init({ cwd: process.cwd(), ...args.flags, createVault: args.createVault, yes: args.yes, env: process.env, prompt, log });
