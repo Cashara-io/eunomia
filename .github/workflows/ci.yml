@@ -206,6 +206,13 @@ jobs:
           done
           exit $rc
       - run: bash -n scripts/*.sh scripts/ci/*.sh scripts/tests/*.sh backend/scripts/backup/eunomia-backup.sh
+      # create-eunomia ships a copy of connect-agents.sh, so it is tested here: build (which copies the
+      # script in), then format, init and sync tests against an in-test fake server. Node 18 is its floor.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - run: npm ci && npm test
+        working-directory: cli/create-eunomia
 
   # Real SurrealDB 2.7 -> 3.3 data move (scripts/upgrade-surreal-v3.sh), including a
   # forced mismatch that must roll back, and an upgrade from the released v1.2.2
