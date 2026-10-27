@@ -160,7 +160,11 @@ async fn embed_skill(state: &OrgState, owner: &RecordId, skill: &Skill) -> bool 
     }
 }
 
-async fn save(state: &OrgState, owner: &RecordId, a: SaveArgs) -> AppResult<Value> {
+async fn save(state: &OrgState, owner: &RecordId, mut a: SaveArgs) -> AppResult<Value> {
+    // the name is a lowercase slug, too narrow to hold a secret of a known shape
+    let mut redacted = Vec::new();
+    a.description = crate::redact::redact(&a.description, &mut redacted);
+    a.body = crate::redact::redact(&a.body, &mut redacted);
     validate(&a.name, &a.description, &a.body)?;
     let vault = match a.vault_id.as_deref() {
         None => default_vault_id(&state.db, owner).await?,
@@ -187,7 +191,11 @@ async fn save(state: &OrgState, owner: &RecordId, a: SaveArgs) -> AppResult<Valu
     let op = if existed.is_empty() { changes::CREATED } else { changes::UPDATED };
     changes::record(&state.db, &vault, op, changes::SKILL, &skill.id).await;
     let embedded = embed_skill(state, owner, &skill).await;
-    Ok(json!({ "id": skill.id.to_string(), "name": skill.name, "vault": skill.vault.to_string(), "embedded": embedded }))
+    let mut out = json!({ "id": skill.id.to_string(), "name": skill.name, "vault": skill.vault.to_string(), "embedded": embedded });
+    if !redacted.is_empty() {
+        out["redacted"] = json!(redacted);
+    }
+    Ok(out)
 }
 
 /// Lowercase words of at least two characters.

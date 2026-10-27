@@ -206,6 +206,10 @@ pub struct MemoryOut {
     pub updated_at: Option<Datetime>,
     pub version: i64,
     pub owner_email: Option<String>,
+    /// Secrets this write replaced with `[redacted: <kind>]` markers (kind and count only). Present
+    /// only on a write or edit that redacted something.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub redacted: Vec<crate::redact::Redaction>,
 }
 
 fn memory_out(row: &MemoryRow, owner_email: Option<String>) -> MemoryOut {
@@ -224,6 +228,7 @@ fn memory_out(row: &MemoryRow, owner_email: Option<String>) -> MemoryOut {
         updated_at: row.updated_at,
         version: row.version,
         owner_email,
+        redacted: Vec::new(),
     }
 }
 
@@ -637,6 +642,9 @@ async fn insert_memory(
     source_record_id: Option<&str>,
     mem_type: &str,
 ) -> AppResult<MemoryOut> {
+    // every memory write (tools, REST, extraction) lands here, so this is the one place secrets are dropped
+    let mut redacted = Vec::new();
+    let text = crate::redact::redact(text, &mut redacted);
     let source = source_record_id.map(|r| cache_record_rid(owner, r));
     let is_obs = mem_type == "observation";
     let obs_id = observation_rid(subject_id);
@@ -672,7 +680,7 @@ async fn insert_memory(
     let op = if memory.version > 1 { changes::UPDATED } else { changes::CREATED };
     changes::record(db, vault, op, changes::MEMORY, &memory.id).await;
 
-    Ok(memory_out(&memory, None))
+    Ok(MemoryOut { redacted, ..memory_out(&memory, None) })
 }
 
 /// Deterministic id of a subject's observation when it is first created, so
@@ -854,6 +862,9 @@ pub async fn update_memory(
         return Ok(None);
     }
     check_memory_edit(&row.mem_type, text, new_type)?;
+    let mut redacted = Vec::new();
+    let text = text.map(|t| crate::redact::redact(t, &mut redacted));
+    let text = text.as_deref();
 
     let stmt = match (text, new_type) {
         (Some(_), Some(_)) => &q::UPDATE_MEMORY_TEXT_TYPE,
@@ -878,7 +889,7 @@ pub async fn update_memory(
     let rows: Vec<MemoryRow> = res.take(stmt.slot)?;
     let updated = rows.into_iter().next().ok_or_else(|| AppError::internal("memory update returned no row"))?;
     changes::record(db, &row.vault, changes::UPDATED, changes::MEMORY, memory_id).await;
-    Ok(Some(memory_out(&updated, None)))
+    Ok(Some(MemoryOut { redacted, ..memory_out(&updated, None) }))
 }
 
 /// Edit an entity's own fields -- name/aliases/summary -- vault-scoped, same

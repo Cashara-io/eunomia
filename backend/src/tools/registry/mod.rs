@@ -203,7 +203,8 @@ fn summarize_args(tool_name: &str, args: &Value) -> String {
             }
         }
     }
-    let mut summary = Value::Object(redacted).to_string();
+    // the args hold the raw text a memory write redacts, so the audit row redacts it too
+    let mut summary = crate::redact::redact(&Value::Object(redacted).to_string(), &mut Vec::new());
     if summary.chars().count() > ARGS_SUMMARY_MAX {
         summary = summary.chars().take(ARGS_SUMMARY_MAX).collect::<String>() + "\u{2026}";
     }
