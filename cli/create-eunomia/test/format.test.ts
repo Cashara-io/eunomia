@@ -65,6 +65,12 @@ describe("frontmatter", () => {
     assert.equal(r.body, "body");
   });
 
+  it("allows a comment after a quoted value, and reads null or ~ as missing", () => {
+    const r = parseFrontmatter(`---\nname: "deploy" # the id\ntitle: 'it''s' # x\ndescription: ~\nlicense: null\n---\nbody\n`);
+    assert.deepEqual(r.fields, { name: "deploy", title: "it's", description: "", license: "" });
+    assert.throws(() => parseFrontmatter('---\nname: "a" b\n---\n'), /unterminated/);
+  });
+
   it("accepts CRLF and a byte order mark", () => {
     assert.equal(parseFrontmatter("\uFEFF---\r\nname: a\r\n---\r\nbody\r\n").fields.name, "a");
   });

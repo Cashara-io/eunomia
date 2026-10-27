@@ -12,9 +12,17 @@ export interface Prompter {
 export function terminalPrompter(): Prompter {
   let rl: Interface | undefined;
   let muted = false;
+  let ended = false;
+  let pending: ((e: Error) => void) | undefined;
+  const eof = () => new Error("input ended before setup finished: run it in a terminal, or pass flags with --yes");
   const open = () => {
     if (!rl) {
       rl = createInterface({ input: process.stdin, output: process.stdout, terminal: Boolean(process.stdin.isTTY) });
+      // stdin at EOF (or ctrl-D): fail the question instead of hanging or taking ""
+      rl.on("close", () => {
+        ended = true;
+        pending?.(eof());
+      });
       // hide typed characters while `muted`, keep the newline
       const write = (rl as any)._writeToOutput?.bind(rl);
       (rl as any)._writeToOutput = (s: string) => {
@@ -24,7 +32,16 @@ export function terminalPrompter(): Prompter {
     }
     return rl;
   };
-  const question = (q: string) => new Promise<string>((resolve) => open().question(q, resolve));
+  const question = (q: string) =>
+    new Promise<string>((resolve, reject) => {
+      const r = open();
+      if (ended) return reject(eof());
+      pending = reject;
+      r.question(q, (a) => {
+        pending = undefined;
+        resolve(a);
+      });
+    });
   return {
     async ask(q, fallback) {
       const a = (await question(fallback ? `${q} [${fallback}]: ` : `${q}: `)).trim();

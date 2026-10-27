@@ -14,24 +14,31 @@ Flags (init):
   --email <email>    sign in with email and password (or EUNOMIA_EMAIL)
   --password <pw>    the password (prefer EUNOMIA_PASSWORD, or the hidden prompt)
   --token <token>    sign in with an API token instead (or EUNOMIA_TOKEN)
-  --vault <id|name>  the project's vault; a name that does not exist is created
-  --agents <list>    agents to connect: auto (default), all, none, or claude,codex,...
+  --vault <id|name>  the project's vault (one of yours)
+  --create-vault     create the --vault name if you have none by that name
+  --agents <list>    agents to connect with connect-agents.sh: claude,codex,..., all or auto.
+                     Each gets its own account-wide token in its global config. Default:
+                     asked (installed agents only); none with --yes or with --token
   -y, --yes          no questions: take the defaults
   -h, --help         this help
 
-Sync uses the token init stored in ~/.config/eunomia, or EUNOMIA_TOKEN.
+Credentials go only to a server you name (--url, EUNOMIA_URL or the prompt) or confirm.
+Sync uses the token init stored in ~/.config/eunomia for this exact server, or
+EUNOMIA_TOKEN together with EUNOMIA_URL (or --url) naming the same server as eunomia.toml.
 Docs: https://github.com/Cashara-io/eunomia/blob/main/docs/projects.md`;
 
 const VALUE_FLAGS = ["url", "email", "password", "token", "vault", "agents"] as const;
 
-export function parseArgs(argv: string[]): { command: string; flags: Record<string, string>; yes: boolean; help: boolean } {
+function parseArgs(argv: string[]): { command: string; flags: Record<string, string>; yes: boolean; help: boolean; createVault: boolean } {
   const flags: Record<string, string> = {};
   let command = "init";
   let yes = false;
   let help = false;
+  let createVault = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "-y" || a === "--yes") yes = true;
+    else if (a === "--create-vault") createVault = true;
     else if (a === "-h" || a === "--help") help = true;
     else if (a.startsWith("--")) {
       const [k, inline] = a.slice(2).split(/=(.*)/s, 2);
@@ -42,7 +49,7 @@ export function parseArgs(argv: string[]): { command: string; flags: Record<stri
     } else if (a === "sync" || a === "init") command = a;
     else throw new Error(`unknown command ${a} (see --help)`);
   }
-  return { command, flags, yes, help };
+  return { command, flags, yes, help, createVault };
 }
 
 async function main(): Promise<number> {
@@ -52,10 +59,10 @@ async function main(): Promise<number> {
     return 0;
   }
   const log = (l: string) => console.log(l);
-  if (args.command === "sync") return sync({ cwd: process.cwd(), env: process.env, log });
+  if (args.command === "sync") return sync({ cwd: process.cwd(), url: args.flags.url, env: process.env, log });
   const prompt = args.yes ? defaultsPrompter() : terminalPrompter();
   try {
-    return await init({ cwd: process.cwd(), ...args.flags, yes: args.yes, env: process.env, prompt, log });
+    return await init({ cwd: process.cwd(), ...args.flags, createVault: args.createVault, yes: args.yes, env: process.env, prompt, log });
   } finally {
     prompt.close();
   }
