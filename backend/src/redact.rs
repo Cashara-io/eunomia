@@ -16,23 +16,51 @@ pub struct Redaction {
     pub count: usize,
 }
 
-/// (kind, pattern, replacement). Most specific first: `sk-ant-` before `sk-`. A replacement other than
-/// the plain marker keeps the capture groups around the secret.
+static PEM_BEGIN: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----").expect("pem begin"));
+static PEM_END: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----").expect("pem end"));
+/// A block's body when it has no END line (a truncated paste): its header lines and base64. One blank line
+/// may open the body (PGP armor), a later one ends it. Anchored, so it only reads as far as it matches.
+static PEM_BODY: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(concat!(
+        r"^(?:[ \t]*\r?\n[A-Za-z][A-Za-z0-9-]*: [^\n]*)*(?:(?:[ \t]*\r?\n){1,2}[ \t]*|[ \t]+)[A-Za-z0-9+/=]+",
+        r"(?:(?:[ \t]*\r?\n[ \t]*|[ \t]+)[A-Za-z0-9+/=]+)*",
+    ))
+    .expect("pem body")
+});
+/// Farthest an END line may sit from its BEGIN. A PEM key is a few KB (RSA 4096 is ~3.3 KB) and an armored
+/// PGP secret key with subkeys is usually under 20 KB; past this the block is redacted as unterminated.
+const PEM_MAX_BLOCK: usize = 64 * 1024;
+
+/// Private key blocks, BEGIN to END, or BEGIN over its body when no END follows within [`PEM_MAX_BLOCK`].
+/// Linear: one pass each for BEGIN and END markers, and the blocks it redacts never overlap. (A single
+/// regex with a lazy `.*?` to the END line rescans the rest of the text from every BEGIN.)
+fn redact_private_keys(text: &str) -> (String, usize) {
+    let ends: Vec<_> = PEM_END.find_iter(text).collect();
+    let (mut out, mut last, mut next_end, mut count) = (String::with_capacity(text.len()), 0, 0, 0);
+    for begin in PEM_BEGIN.find_iter(text) {
+        if begin.start() < last {
+            continue; // inside a block already redacted
+        }
+        while ends.get(next_end).is_some_and(|e| e.start() < begin.end()) {
+            next_end += 1;
+        }
+        let stop = match ends.get(next_end) {
+            Some(e) if e.end() - begin.start() <= PEM_MAX_BLOCK => e.end(),
+            _ => begin.end() + PEM_BODY.find(&text[begin.end()..]).map_or(0, |m| m.end()),
+        };
+        out.push_str(&text[last..begin.start()]);
+        out.push_str("[redacted: private key]");
+        (last, count) = (stop, count + 1);
+    }
+    out.push_str(&text[last..]);
+    (out, count)
+}
+
+/// (kind, pattern, replacement), after the private keys. Most specific first: `sk-ant-` before `sk-`. A
+/// replacement other than the plain marker keeps the capture groups around the secret.
 static PATTERNS: LazyLock<Vec<(&'static str, Regex, String)>> = LazyLock::new(|| {
     let p = |kind: &'static str, re: &str| (kind, Regex::new(re).expect("redaction pattern"), format!("[redacted: {kind}]"));
     vec![
-        // to the END line or, without one (a truncated paste), over its header lines and base64 body: one
-        // blank line may open the body (PGP armor), a later one ends it
-        p(
-            "private key",
-            concat!(
-                r"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----(?:",
-                r"(?s:.*?)-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----",
-                r"|(?:[ \t]*\r?\n[A-Za-z][A-Za-z0-9-]*: [^\n]*)*(?:(?:[ \t]*\r?\n){1,2}[ \t]*|[ \t]+)[A-Za-z0-9+/=]+",
-                r"(?:(?:[ \t]*\r?\n[ \t]*|[ \t]+)[A-Za-z0-9+/=]+)*",
-                r"|)",
-            ),
-        ),
         // only the password, which runs to the last `@` before a host: `redis://:p@ss@db:6379/0` keeps
         // the scheme, the (possibly empty) user and the host
         (
@@ -54,17 +82,21 @@ static PATTERNS: LazyLock<Vec<(&'static str, Regex, String)>> = LazyLock::new(||
 /// `text` with every known secret replaced by its marker. Each kind found is added to `found` (counts
 /// summed when the kind is already there, so one report can cover several fields).
 pub fn redact(text: &str, found: &mut Vec<Redaction>) -> String {
-    let mut out = text.to_string();
+    let mut note = |kind: &str, count: usize| match found.iter_mut().find(|r| r.kind == kind) {
+        Some(r) => r.count += count,
+        None => found.push(Redaction { kind: kind.to_string(), count }),
+    };
+    let (mut out, keys) = redact_private_keys(text);
+    if keys > 0 {
+        note("private key", keys);
+    }
     for (kind, re, replacement) in PATTERNS.iter() {
         let count = re.find_iter(&out).count();
         if count == 0 {
             continue;
         }
         out = re.replace_all(&out, replacement.as_str()).into_owned();
-        match found.iter_mut().find(|r| r.kind == *kind) {
-            Some(r) => r.count += count,
-            None => found.push(Redaction { kind: kind.to_string(), count }),
-        }
+        note(kind, count);
     }
     out
 }
@@ -146,10 +178,36 @@ mod tests {
                 "[redacted: private key]\ndone",
             ),
             ("-----BEGIN PGP PRIVATE KEY BLOCK-----\n\nlQOYBF0abc\nxyz+/", "[redacted: private key]"),
+            ("a\r\n-----BEGIN EC PRIVATE KEY-----\r\nMHcCAQEE\r\nIBx+/=\r\n-----END EC PRIVATE KEY-----\r\nb", "a\r\n[redacted: private key]\r\nb"),
+            ("-----BEGIN PRIVATE KEY-----\r\nMHcCAQEE\r\nIBx+/=\r\n\r\nsee above", "[redacted: private key]\r\n\r\nsee above"),
+            ("-----BEGIN PRIVATE KEY-----", "[redacted: private key]"),
         ] {
             let (out, found) = run(text);
             assert_eq!(out, want, "{text}");
             assert_eq!(found, vec![Redaction { kind: "private key".into(), count: 1 }], "{text}");
+        }
+    }
+
+    #[test]
+    fn an_end_line_past_the_cap_leaves_the_block_unterminated() {
+        let filler = "words ".repeat(PEM_MAX_BLOCK / 6 + 1);
+        let text = format!("-----BEGIN PRIVATE KEY-----\nMIIE\n\n{filler}\n-----END PRIVATE KEY-----");
+        let (out, found) = run(&text);
+        assert_eq!(out, format!("[redacted: private key]\n\n{filler}\n-----END PRIVATE KEY-----"));
+        assert_eq!(found, vec![Redaction { kind: "private key".into(), count: 1 }]);
+    }
+
+    #[test]
+    fn a_mib_of_begin_markers_redacts_in_linear_time() {
+        let m = "-----BEGIN PRIVATE KEY-----";
+        let block = format!("{m}\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASC\n");
+        for (text, n) in [(m.repeat((1 << 20) / m.len()), (1 << 20) / m.len()), (block.repeat((1 << 20) / block.len()), (1 << 20) / block.len())] {
+            let started = std::time::Instant::now();
+            let (out, found) = run(&text);
+            // the quadratic regex took ~55 s here in release; linear is a few ms (tens in debug)
+            assert!(started.elapsed() < std::time::Duration::from_secs(2), "{:?}", started.elapsed());
+            assert_eq!(found, vec![Redaction { kind: "private key".into(), count: n }]);
+            assert!(!out.contains("BEGIN") && !out.contains("MIIE"));
         }
     }
 
