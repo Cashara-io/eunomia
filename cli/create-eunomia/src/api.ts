@@ -6,11 +6,6 @@ export interface Vault {
   kind: string;
   role?: string;
 }
-export interface TokenInfo {
-  id: string;
-  name: string;
-  vault_id?: string | null;
-}
 
 export class ApiError extends Error {
   constructor(
@@ -92,16 +87,17 @@ export class Api {
     await this.request("POST", "/api/auth/logout").catch(() => undefined);
   }
 
+  /** Who the credential belongs to; a 401 means it is not valid. */
+  async me(): Promise<{ id: string; email: string }> {
+    return (await this.request<{ id: string; email: string }>("GET", "/api/auth/me")).data;
+  }
+
   async listVaults(): Promise<Vault[]> {
     return (await this.request<{ results: Vault[] }>("GET", "/api/vaults")).data.results;
   }
 
   async createVault(name: string): Promise<Vault> {
     return (await this.request<Vault>("POST", "/api/vaults", { name, kind: "org" })).data;
-  }
-
-  async listTokens(): Promise<TokenInfo[]> {
-    return (await this.request<TokenInfo[]>("GET", "/api/auth/tokens")).data;
   }
 
   async deleteToken(id: string): Promise<void> {

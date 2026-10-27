@@ -80,6 +80,28 @@ export function stringifyToml(data: Toml, header: string[] = []): string {
 // .eunomia/
 // ---------------------------------------------------------------------------
 
+/** `http(s)://host[:port][/path]` without a trailing slash, `/mcp` or `/api`. Never echoes the input, which may hold a password. */
+export function normalizeUrl(u: string): string {
+  const raw = u.trim();
+  const bad = new Error("the server URL must start with http:// or https://");
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw bad;
+  }
+  if (parsed.username || parsed.password) throw new Error("the server URL must not contain a user name or password");
+  const url = raw.replace(/\/+$/, "").replace(/\/(mcp|api)$/, "");
+  if (!/^https?:$/.test(parsed.protocol) || !/^https?:\/\/[^\s"'\\]+$/.test(url)) throw bad;
+  return url;
+}
+
+/** A host where plain http never leaves the machine. */
+export function isLocalUrl(url: string): boolean {
+  const h = new URL(url).hostname;
+  return h === "localhost" || h.endsWith(".localhost") || /^127\./.test(h) || h === "[::1]";
+}
+
 export const projectDir = (root: string) => join(root, ".eunomia");
 export const skillsDir = (root: string) => join(projectDir(root), "skills");
 const configPath = (root: string) => join(projectDir(root), "eunomia.toml");
@@ -101,9 +123,14 @@ export function readConfig(root: string): (ProjectConfig & { raw: Toml }) | unde
   } catch (e) {
     throw new Error(`${p}: ${(e as Error).message}`);
   }
-  const url = raw.server?.url;
   const vaultId = raw.vault?.id;
-  if (!url || !vaultId) throw new Error(`${p}: needs [server] url and [vault] id`);
+  if (!raw.server?.url || !vaultId) throw new Error(`${p}: needs [server] url and [vault] id`);
+  let url: string;
+  try {
+    url = normalizeUrl(raw.server.url);
+  } catch (e) {
+    throw new Error(`${p}: ${(e as Error).message}`);
+  }
   return { url, vaultId, vaultName: raw.vault?.name ?? vaultId, raw };
 }
 
@@ -122,7 +149,8 @@ export function writeConfig(root: string, cfg: ProjectConfig, previous: Toml = {
 
 const SKILLS_README = `# Project skills
 
-Each \`*.md\` file here (except this README) is one skill, in SKILL.md style:
+Each \`*.md\` file here (except this README), or \`<name>/SKILL.md\` folder, is one skill,
+in SKILL.md style:
 
 \`\`\`markdown
 ---
@@ -177,6 +205,9 @@ export function credentialsPath(url: string, vaultId: string, env: NodeJS.Proces
 export function saveCredentials(c: Credentials, env: NodeJS.ProcessEnv = process.env): string {
   const p = credentialsPath(c.url, c.vaultId, env);
   mkdirSync(join(configHome(env), "projects"), { recursive: true, mode: 0o700 });
+  // tighten folders that already existed (connect-agents.sh makes ~/.config/eunomia with the umask)
+  chmodSync(configHome(env), 0o700);
+  chmodSync(join(configHome(env), "projects"), 0o700);
   const lines = [`EUNOMIA_URL=${c.url}`, `EUNOMIA_VAULT=${c.vaultId}`, `EUNOMIA_TOKEN=${c.token}`];
   if (c.tokenId) lines.push(`EUNOMIA_TOKEN_ID=${c.tokenId}`);
   writeFileSync(p, lines.join("\n") + "\n", { mode: 0o600 });
