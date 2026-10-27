@@ -40,9 +40,18 @@ export class Api {
         headers: { ...this.auth, ...(body === undefined ? {} : { "content-type": "application/json" }) },
         body: body === undefined ? undefined : JSON.stringify(body),
         signal: AbortSignal.timeout(20_000),
+        // never follow: a redirect would resend the login body (email and password) to another host
+        redirect: "manual",
       });
     } catch (e) {
       throw new ApiError(0, "client.transport", `could not reach ${this.url} (${(e as Error).message})`);
+    }
+    if (res.status >= 300 && res.status < 400) {
+      throw new ApiError(
+        res.status,
+        "client.redirect",
+        `${this.url} answered with a redirect (HTTP ${res.status}); nothing is sent on to another address: pass the server's own address with --url`,
+      );
     }
     const text = await res.text();
     let data: any = undefined;

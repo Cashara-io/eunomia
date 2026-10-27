@@ -1,7 +1,7 @@
 /** The `.eunomia/` folder (committed, never secret) and the per-user token store (~/.config/eunomia). */
 
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -115,6 +115,7 @@ const HEADER = [
 
 /** The project's config, or `undefined` when there is none yet. Throws on a malformed file. */
 export function readConfig(root: string): (ProjectConfig & { raw: Toml }) | undefined {
+  refuseSymlinks(root);
   const p = configPath(root);
   if (!existsSync(p)) return undefined;
   let raw: Toml;
@@ -135,7 +136,21 @@ export function readConfig(root: string): (ProjectConfig & { raw: Toml }) | unde
 }
 
 /** Writes eunomia.toml, keeping any other sections and keys already in it. */
+/** `.eunomia` and `.eunomia/skills` must be real folders in the repo, never symlinks to elsewhere. */
+function refuseSymlinks(root: string): void {
+  for (const dir of [projectDir(root), skillsDir(root)]) {
+    let link = false;
+    try {
+      link = lstatSync(dir).isSymbolicLink();
+    } catch {
+      // not there yet
+    }
+    if (link) throw new Error(`${dir} is a symlink: the project folder must live in the repo`);
+  }
+}
+
 export function writeConfig(root: string, cfg: ProjectConfig, previous: Toml = {}): void {
+  refuseSymlinks(root);
   const data: Toml = { ...previous };
   data.server = { ...previous.server, url: cfg.url };
   data.vault = { ...previous.vault, id: cfg.vaultId, name: cfg.vaultName };
@@ -169,6 +184,7 @@ to save them into this project's vault, where every agent finds them with \`skil
 
 /** Creates the folder skeleton, never overwriting a file that is already there. Returns what it created. */
 export function ensureSkeleton(root: string): string[] {
+  refuseSymlinks(root);
   const created: string[] = [];
   const put = (path: string, text: string) => {
     if (existsSync(path)) return;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -125,8 +125,16 @@ const attacker: Server = createServer(async (req, res) => {
   res.end(req.url === "/healthz" ? '{"status":"ok"}' : '{"auth_mode":"password"}');
 });
 
+/** A named server that answers the public checks, then 307s everything else to the attacker. */
+const redirector: Server = createServer((req, res) => {
+  if (req.url === "/healthz") return void res.writeHead(200, { "content-type": "application/json" }).end('{"status":"ok"}');
+  if (req.url === "/api/auth/bootstrap") return void res.writeHead(200, { "content-type": "application/json" }).end('{"auth_mode":"password"}');
+  res.writeHead(307, { location: EVIL + req.url }).end();
+});
+
 let URL_ = "";
 let EVIL = "";
+let REDIRECT = "";
 const listen = async (s: Server) => {
   await new Promise<void>((r) => s.listen(0, "127.0.0.1", r));
   return `http://127.0.0.1:${(s.address() as { port: number }).port}`;
@@ -134,10 +142,12 @@ const listen = async (s: Server) => {
 before(async () => {
   URL_ = await listen(server);
   EVIL = await listen(attacker);
+  REDIRECT = await listen(redirector);
 });
 after(() => {
   server.close();
   attacker.close();
+  redirector.close();
 });
 
 // ---------------------------------------------------------------------------
@@ -376,6 +386,36 @@ describe("server URL and credentials (a committed file cannot steer them)", () =
     const other = URL_.replace("127.0.0.1", "localhost");
     await assert.rejects(sync({ cwd: repo, url: other, env: env(), log: () => {} }), /but you named/);
     assert.equal(loadCredentials(other, vaultId("Acme"), env()), undefined);
+  });
+
+  it("refuses a redirect instead of resending the password to another host", async () => {
+    await assert.rejects(init(opts({ url: REDIRECT, vault: "Acme" })), /answered with a redirect \(HTTP 307\); nothing is sent on to another address/);
+    noCredentialsReached();
+    assert.ok(!seen.some((r) => r.body.includes("ada@example.com")), "no login body reached the other host");
+    assert.equal(seen.length, 0);
+  });
+
+  it("refuses a redirect on the token check, and never says signed in", async () => {
+    await assert.rejects(init(opts({ url: REDIRECT, email: undefined, password: undefined, token: USER_TOKEN, vault: "Acme" })), /answered with a redirect/);
+    assert.ok(!lines.some((l) => l.includes("signed in")));
+    noCredentialsReached();
+    assert.equal(seen.length, 0);
+  });
+
+  it("refuses a .eunomia folder that is a symlink, for reads and writes", async () => {
+    const elsewhere = join(home, "elsewhere");
+    mkdirSync(elsewhere);
+    writeFileSync(join(elsewhere, "eunomia.toml"), stringifyToml({ server: { url: URL_ }, vault: { id: "vault:x", name: "X" } }));
+    symlinkSync(elsewhere, join(repo, ".eunomia"));
+    await assert.rejects(init(opts({ vault: "Acme" })), /\.eunomia is a symlink: the project folder must live in the repo/);
+    await assert.rejects(sync({ cwd: repo, env: env(), log: () => {} }), /is a symlink/);
+    // an empty symlinked folder: init must not write through it either
+    const empty = join(home, "empty");
+    mkdirSync(empty);
+    rmSync(join(repo, ".eunomia"));
+    symlinkSync(empty, join(repo, ".eunomia"));
+    await assert.rejects(init(opts({ vault: "Acme" })), /is a symlink/);
+    assert.deepEqual(readdirSync(empty), []);
   });
 
   it("refuses a URL with a user name or password, without echoing it", () => {
