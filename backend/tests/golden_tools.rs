@@ -9,6 +9,8 @@
 mod common;
 
 use std::collections::BTreeSet;
+use std::future::Future;
+use std::pin::Pin;
 
 use common::{Normalizer, TestApp};
 use eunomia_backend::sources::registry as sources;
@@ -23,31 +25,37 @@ struct Golden {
 
 impl Golden {
     /// Call `tool`, snapshot the normalized output as `label`, return the raw output.
-    async fn snap(&mut self, label: &str, tool: &str, args: Value) -> Value {
-        let out = self.app.tool(tool, args).await;
-        let mut stable = self.norm.apply(&out);
-        // Equal-scored hits come back in random-id order; sort them so the golden is stable.
-        for key in ["results", "memories"] {
-            if let Some(Value::Array(items)) = stable.get_mut(key) {
-                for field in ["text", "name"] {
-                    if items.iter().all(|i| i.get(field).is_some()) {
-                        items.sort_by_key(|i| i[field].to_string());
-                        break;
+    ///
+    /// Not an `async fn`: the future is built in this short frame and handed back boxed, so the long
+    /// `goldens` poll frame holds a pointer per call. As an `async fn`, a debug build kept a copy of every
+    /// call's future (~5 KB each) in that frame, ~550 KiB on top of the tool call's own stack.
+    fn snap<'a>(&'a mut self, label: &'a str, tool: &'a str, args: Value) -> Pin<Box<dyn Future<Output = Value> + 'a>> {
+        Box::pin(async move {
+            let out = self.app.tool(tool, args).await;
+            let mut stable = self.norm.apply(&out);
+            // Equal-scored hits come back in random-id order; sort them so the golden is stable.
+            for key in ["results", "memories"] {
+                if let Some(Value::Array(items)) = stable.get_mut(key) {
+                    for field in ["text", "name"] {
+                        if items.iter().all(|i| i.get(field).is_some()) {
+                            items.sort_by_key(|i| i[field].to_string());
+                            break;
+                        }
                     }
-                }
-                // Scores and indexes depend on the (random-id) tie-break rank, so they are not stable.
-                for item in items.iter_mut() {
-                    for noisy in ["score", "index"] {
-                        if let Some(sc) = item.get_mut(noisy) {
-                            *sc = json!("<unstable>");
+                    // Scores and indexes depend on the (random-id) tie-break rank, so they are not stable.
+                    for item in items.iter_mut() {
+                        for noisy in ["score", "index"] {
+                            if let Some(sc) = item.get_mut(noisy) {
+                                *sc = json!("<unstable>");
+                            }
                         }
                     }
                 }
             }
-        }
-        insta::assert_json_snapshot!(label, stable);
-        self.covered.insert(tool.to_string());
-        out
+            insta::assert_json_snapshot!(label, stable);
+            self.covered.insert(tool.to_string());
+            out
+        })
     }
 }
 
@@ -175,12 +183,12 @@ async fn goldens() {
     ]})).await;
 
     // -- agent skills (last, so they change no snapshot above; keyword-only: no embedding key) --
-    let skill = Box::pin(g.snap("skill_save", "skill_save", json!({"name": "anvil-budget", "description": "How to read the anvil budget", "body": "# Anvil budget\n\n1. Open the sheet."}))).await;
-    Box::pin(g.snap("skill_find", "skill_find", json!({"query": "anvil"}))).await;
-    Box::pin(g.snap("skill_get", "skill_get", json!({"id": s(&skill, "/id")}))).await;
-    Box::pin(g.snap("skill_delete", "skill_delete", json!({"id": s(&skill, "/id")}))).await;
+    let skill = g.snap("skill_save", "skill_save", json!({"name": "anvil-budget", "description": "How to read the anvil budget", "body": "# Anvil budget\n\n1. Open the sheet."})).await;
+    g.snap("skill_find", "skill_find", json!({"query": "anvil"})).await;
+    g.snap("skill_get", "skill_get", json!({"id": s(&skill, "/id")})).await;
+    g.snap("skill_delete", "skill_delete", json!({"id": s(&skill, "/id")})).await;
     // -- the change log: the first writes above, oldest first --
-    Box::pin(g.snap("changes_since", "changes_since", json!({"after": 0, "limit": 3}))).await;
+    g.snap("changes_since", "changes_since", json!({"after": 0, "limit": 3})).await;
 
     let registered: BTreeSet<String> = registry::all_tools().keys().map(|k| k.to_string()).collect();
     let missing: Vec<_> = registered.difference(&g.covered).collect();
