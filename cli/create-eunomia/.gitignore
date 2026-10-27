@@ -1,0 +1,5 @@
+node_modules/
+dist/
+dist-test/
+# copied from scripts/connect-agents.sh by the build
+connect-agents.sh
