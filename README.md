@@ -122,6 +122,9 @@ work without a key; embeddings must return 1,536-dimensional vectors.
 See [Quickstart](docs/quickstart.md) for the first run and
 [Installation](docs/installation.md) for manual setup and installer options.
 
+To give a repo's agents one shared vault and skills, run `npm create eunomia` in
+it. See [Projects](docs/projects.md).
+
 ### Upgrading from 1.x
 
 2.0 moves to SurrealDB 3.3 and gives each org its own database. Any 1.x
@@ -273,6 +276,7 @@ database. See [Backups](INSTALLATION.md#backups).
 | [Quickstart](docs/quickstart.md) | Install, sign in and remember your first fact |
 | [Installation](docs/installation.md) | Installer flags, manual setup and supported platforms |
 | [AI agents & MCP](docs/agents.md) | Agent configuration, tokens, OAuth and every tool |
+| [Projects](docs/projects.md) | `npm create eunomia`: one vault and shared skills per repo |
 | [Concepts](docs/concepts.md) | Vaults, facts, observations, graphs and the vector cloud |
 | [Underlying workings](docs/architecture.md) | Source-linked architecture, tenancy, jobs, ingestion, retrieval and access checks |
 | [Connectors](docs/connectors.md) | Source credentials and sync setup |
