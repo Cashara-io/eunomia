@@ -201,6 +201,11 @@ No. The connected agent is the model.
 
 Destructive tools are flagged `destructiveHint` so clients can ask first.
 
+Secrets are never stored: `memory_write`, `memory_write_batch`, `memory_update`, `skill_save` and the REST
+memory routes replace API keys, tokens, private keys, JWTs and passwords in URLs with a marker such as
+`[redacted: github token]`, still save the rest, and return `redacted: [{"kind", "count"}]` so the agent
+knows what was dropped.
+
 ### Agent skills
 
 An agent can save a skill it learned (the same shape as a `SKILL.md`: a name, a description of when to use
