@@ -30,6 +30,7 @@ const CONTROL_COPY: &[&str] =
 const TENANT_COPY: &[&str] = &[
     "app_settings", "vault", "vault_member", "connector", "sync_status", "cache_record", "person", "organisation", "location", "repository", "file",
     "symbol", "entity", "memory", "chat_thread", "chat_message", "audit_log", "embed_cache", "pocket_recording", "document", "extension", "extension_event", "skill",
+    "redact_backfill",
 ];
 const TENANT_EDGES: &[&str] = &["linked_to", "relates_to"];
 

@@ -155,6 +155,15 @@ async fn embed_skill(state: &OrgState, owner: &RecordId, skill: &Skill) -> bool 
     }
 }
 
+/// Embeds skill `id` again (its description changed outside `skill_save`: the secret backfill).
+pub(crate) async fn reembed(state: &OrgState, owner: &RecordId, id: &RecordId) -> AppResult<bool> {
+    let row: Option<Skill> = store::get(&state.db, id).await?;
+    Ok(match row {
+        Some(skill) => embed_skill(state, owner, &skill).await,
+        None => false,
+    })
+}
+
 async fn save(state: &OrgState, owner: &RecordId, mut a: SaveArgs) -> AppResult<Value> {
     // the name is a lowercase slug, too narrow to hold a secret of a known shape
     let mut redacted = Vec::new();
