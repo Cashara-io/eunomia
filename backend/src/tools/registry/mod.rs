@@ -48,7 +48,7 @@ mod documents;
 mod entities;
 mod memory;
 mod records;
-mod skills;
+pub(crate) mod skills;
 mod vaults;
 
 pub use admin::list_audit;

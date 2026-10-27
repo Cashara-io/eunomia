@@ -57,6 +57,7 @@ pub async fn tick(state: &AppState, n: u64) {
         reconcile_observations(&org_state).await;
         if n.is_multiple_of(SLOW_EVERY) {
             reconcile_embeddings(&org_state).await;
+            reconcile_redact_backfill(&org_state).await;
             if let Err(e) = crate::vaults::service::discard_stale_copies(&org_state.db).await {
                 tracing::warn!(error = %e.message, "deleting stale vault copies failed");
             }
@@ -147,6 +148,19 @@ pub async fn reconcile_syncs(state: &OrgState) {
         let job = NewJob::new(kind::SYNC, d.owner, key).in_org(state.db.org()).payload(serde_json::json!({ "source": d.source }));
         super::enqueue_lossy(&state.control, job).await;
     }
+}
+
+/// The secret backfill, until this org's marker says it is done for the current detectors. The key carries
+/// the detector version, so a second leader or tick does not queue it twice.
+pub async fn reconcile_redact_backfill(state: &OrgState) {
+    // an error: the org is still at the schema before the marker table; the tick after its migration queues it
+    if super::redact_backfill::done(state).await.unwrap_or(true) {
+        return;
+    }
+    let Ok(owners) = owners(state).await else { return };
+    let Some(owner) = owners.into_iter().next() else { return };
+    let key = format!("{}:{}:{}", kind::REDACT_BACKFILL, state.db.org().key(), crate::redact::DETECTOR_VERSION);
+    super::enqueue_lossy(&state.control, NewJob::new(kind::REDACT_BACKFILL, owner, key).in_org(state.db.org())).await;
 }
 
 /// Cache records still missing an embedding, for owners that can embed.

@@ -778,6 +778,21 @@ expression: info(&db).await
       "drop": false,
       "schemafull": true,
       "kind": {
+        "kind": "NORMAL"
+      },
+      "name": "redact_backfill",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": []
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
         "enforced": false,
         "in": [
           "person",

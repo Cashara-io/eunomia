@@ -110,6 +110,7 @@ pub const LINKS_IN_REL: Stmt = Stmt::new(
 
 pub const EMBED_CACHE_GET: Stmt = Stmt::new("cache.embed_cache_get", "SELECT text_hmac, vector FROM embed_cache WHERE text_hmac IN $keys");
 pub const EMBED_CACHE_PUT: Stmt = Stmt::new("cache.embed_cache_put", "UPSERT $id SET text_hmac = $hmac, vector = $vector");
+pub const EMBED_CACHE_DELETE: Stmt = Stmt::new("cache.embed_cache_delete", "DELETE embed_cache WHERE text_hmac IN $keys");
 
 pub const RECORD_AUDIT: Stmt = Stmt::new(
     "cache.record_audit",
@@ -179,6 +180,7 @@ pub const ALL: &[&Stmt] = &[
     &LINKS_IN_REL,
     &EMBED_CACHE_GET,
     &EMBED_CACHE_PUT,
+    &EMBED_CACHE_DELETE,
     &RECORD_AUDIT,
     &AUDIT_PAGE,
     &AUDIT_COUNT,
