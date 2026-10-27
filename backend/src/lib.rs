@@ -25,6 +25,7 @@ pub mod oidc;
 pub mod openapi;
 pub mod pool;
 pub mod provisioning;
+pub mod redact;
 pub mod rid;
 pub mod ratelimit;
 pub mod replay;

@@ -400,3 +400,32 @@ async fn entity_search_orders_name_hits_by_vault_kind_and_name_then_fact_mention
     let every = app.tool("entities_search", json!({"query": ""})).await;
     assert_eq!(names(&every), ["Bob Quill", "Carl", "Dan", "Erin", "Quill Press", "Ann Quill"]);
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_written_secret_is_redacted_and_reported() {
+    let app = TestApp::new().await;
+    let key = format!("ghp_{}", "a1B2c3D4e5".repeat(4));
+    let w = app.tool("memory_write", json!({"subject_name": "Deploy Bot", "subject_kind": "person", "text": format!("uses {key} to push")})).await;
+    assert_eq!(w["memory"]["text"], "uses [redacted: github token] to push");
+    assert_eq!(w["memory"]["redacted"], json!([{"kind": "github token", "count": 1}]));
+
+    // stored redacted, and the call's audit row does not keep it either
+    let entity = app.tool("entities_get", json!({"id": w["entity"]["id"]})).await;
+    assert_eq!(entity["memory"][0]["text"], "uses [redacted: github token] to push");
+    assert!(entity["memory"][0].get("redacted").is_none(), "a read reports nothing");
+    let mut res = app.db().await.test_raw().query("SELECT VALUE args_summary FROM audit_log").await.unwrap();
+    let summaries: Vec<String> = res.take(0).unwrap();
+    assert!(!summaries.is_empty() && summaries.iter().all(|s| !s.contains(&key)), "{summaries:?}");
+
+    // an edit and a batch item are redacted the same way
+    let u = app.tool("memory_update", json!({"memory_id": w["memory"]["id"], "text": "key AKIAIOSFODNN7EXAMPLE rotated"})).await;
+    assert_eq!(u["text"], "key [redacted: aws access key] rotated");
+    assert_eq!(u["redacted"], json!([{"kind": "aws access key", "count": 1}]));
+    let items = json!([
+        {"subject_name": "Deploy Bot", "subject_kind": "person", "text": format!("{key} and {key}")},
+        {"subject_name": "Deploy Bot", "subject_kind": "person", "text": "nothing secret, see memory:abc123"},
+    ]);
+    let b = app.tool("memory_write_batch", json!({"items": items})).await;
+    assert_eq!(b["results"][0]["redacted"], json!([{"kind": "github token", "count": 2}]));
+    assert!(b["results"][1].get("redacted").is_none());
+}

@@ -131,8 +131,10 @@ pub fn redact(v: &Value) -> Value {
     }
 }
 
-/// Masks the word after `Bearer` and any run of 40 or more token characters (API tokens, JWTs, hashes).
+/// Redacts known secret shapes ([`crate::redact`]), then masks the word after `Bearer` and any run of 40
+/// or more token characters (API tokens, JWTs, hashes).
 pub fn scrub(s: &str) -> String {
+    let s = &crate::redact::redact(s, &mut Vec::new());
     let is_delim = |c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.');
     let (mut out, mut after_bearer) = (String::with_capacity(s.len()), false);
     for piece in s.split_inclusive(is_delim) {
