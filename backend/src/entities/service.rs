@@ -757,7 +757,10 @@ pub async fn add_relation(
         Ok(mut res) => {
             let rows: Vec<RelationRow> = res.take(0)?;
             match rows.into_iter().next() {
-                Some(row) => Ok(relation_out(&row, None, None)),
+                Some(row) => {
+                    changes::record(db, &in_row.vault, changes::CREATED, changes::RELATION, &row.id).await;
+                    Ok(relation_out(&row, None, None))
+                }
                 None => find_relation(db, from_id, to_id, label)
                     .await?
                     .map(|r| relation_out(&r, None, None))

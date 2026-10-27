@@ -1,6 +1,6 @@
 /** `create-eunomia watch`: one line per change to the project's vault, live, resuming where it stopped. */
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Api, ApiError, type Change } from "./api.js";
 import { storedToken } from "./init.js";
@@ -22,9 +22,27 @@ export interface WatchOptions {
 }
 
 /** The cursor: the last seq printed, per vault, in the project's git-ignored cache. */
-const cursorPath = (cwd: string) => join(projectDir(cwd), "cache", "watch.json");
+const cacheDir = (cwd: string) => join(projectDir(cwd), "cache");
+const cursorPath = (cwd: string) => join(cacheDir(cwd), "watch.json");
+
+/**
+ * A repo can commit `.eunomia/cache` or `watch.json` as a symlink (to `~/.zshrc`, say): refuse to read
+ * or write through one, so a hostile repo cannot make watch overwrite a file outside it.
+ */
+function refuseLinks(cwd: string): void {
+  for (const p of [cacheDir(cwd), cursorPath(cwd)]) {
+    let link = false;
+    try {
+      link = lstatSync(p).isSymbolicLink();
+    } catch {
+      // not there yet
+    }
+    if (link) throw new Error(`${p} is a symlink: remove it (watch keeps its cursor there and will not follow a link)`);
+  }
+}
 
 export function readCursor(cwd: string, vaultId: string): number {
+  refuseLinks(cwd);
   try {
     const c = JSON.parse(readFileSync(cursorPath(cwd), "utf8"));
     return c.vault === vaultId && Number.isSafeInteger(c.after) && c.after > 0 ? c.after : 0;
@@ -33,9 +51,14 @@ export function readCursor(cwd: string, vaultId: string): number {
   }
 }
 
+/** A new file beside the cursor (never an existing one or a link), then renamed over it: a crash leaves the old or the new cursor. */
 function saveCursor(cwd: string, vaultId: string, after: number): void {
-  mkdirSync(join(projectDir(cwd), "cache"), { recursive: true });
-  writeFileSync(cursorPath(cwd), JSON.stringify({ vault: vaultId, after }) + "\n");
+  mkdirSync(cacheDir(cwd), { recursive: true });
+  refuseLinks(cwd);
+  const tmp = `${cursorPath(cwd)}.${process.pid}.tmp`;
+  rmSync(tmp, { force: true });
+  writeFileSync(tmp, JSON.stringify({ vault: vaultId, after }) + "\n", { flag: "wx" });
+  renameSync(tmp, cursorPath(cwd));
 }
 
 export function formatChange(c: Change): string {
@@ -69,10 +92,11 @@ export async function watch(o: WatchOptions): Promise<number> {
     try {
       let page;
       do {
-        page = await api.changes(cfg.vaultId, after, PAGE);
+        page = await api.changes(cfg.vaultId, after, PAGE, o.signal);
         page.changes.forEach(print);
       } while (page.changes.length === PAGE);
     } catch (e) {
+      if (o.signal?.aborted) break;
       if (e instanceof ApiError && (e.status === 401 || e.status === 403 || e.code === "client.redirect")) {
         throw new Error(`${cfg.url} refused the request (${e.message}): run \`npx create-eunomia\` again to sign in`);
       }

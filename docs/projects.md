@@ -100,7 +100,9 @@ instead of signing in. A token the server refuses stops the sync with one messag
 ## Watching changes
 
 Every write that changes the vault adds one numbered row to its change log: a memory or entity
-created, updated, merged or deleted, a skill saved or deleted, a document uploaded or deleted. A row
+created, updated, merged or deleted, a relation between entities created, a skill saved or deleted, a
+document uploaded or deleted, the facts that go when a document's passages or a connection's synced
+data are removed, and everything a `vault_clone` or `vault_merge` copies into its new vault. A row
 says what changed (`seq`, `op`, `kind`, the item's `id`), who (`actor`: a user, token or OAuth client
 id, or `system` for background work) and when (`at`). It never holds the content, so nothing secret
 lands in the log: fetch the item to see it. `seq` counts up from 1 per vault with no gaps, even with
@@ -133,10 +135,21 @@ Other clients use the same log:
 
 All three follow the vault's access rules: you must be a member, and the project's token (restricted to
 this vault) cannot read any other vault's log. A live socket checks the credential and membership again
-before it sends a change (at most every 30 seconds) and closes (code 1008) once either is gone.
+every 30 seconds, whether or not anything changed, and closes (code 1008) once either is gone. Every
+5 seconds it also sends a ping and reads any rows it has not sent from the database. Live rows come
+from the server the socket is connected to; with several backend replicas, rows written through
+another one arrive within those 5 seconds.
 
-Not logged: what `vault_clone` and `vault_merge` copy into a new vault, and facts marked superseded in
-the background (the fact itself does not change). The log is kept for the life of the vault.
+Not logged:
+
+- facts marked superseded in the background (the fact itself does not change);
+- an observation deleted because the only facts behind it went (its facts' rows show it);
+- the memories and relations that go with a deleted or merged-away entity (the entity's row covers them);
+- links between synced records, which belong to no vault.
+
+The row is written right after the write it records, in its own transaction, and retried a few times.
+A crash or a database outage in that moment can lose the row, never a `seq` number: the log is at
+most once. The log is kept for the life of the vault.
 
 ## Coming next
 

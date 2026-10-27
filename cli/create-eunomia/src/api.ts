@@ -17,6 +17,16 @@ export interface Change {
   at: string;
 }
 
+/** Aborts when either does (`AbortSignal.any` is Node 20+; the floor is 18). */
+function anySignal(a: AbortSignal, b: AbortSignal): AbortSignal {
+  const ctl = new AbortController();
+  for (const s of [a, b]) {
+    if (s.aborted) ctl.abort(s.reason);
+    else s.addEventListener("abort", () => ctl.abort(s.reason), { once: true });
+  }
+  return ctl.signal;
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -42,14 +52,16 @@ export class Api {
     this.auth = { authorization: `Bearer ${token}` };
   }
 
-  async request<T>(method: string, path: string, body?: unknown): Promise<{ status: number; data: T; headers: Headers }> {
+  /** `cancel` aborts the request too (watch's Ctrl-C); every request gives up after 20 s. */
+  async request<T>(method: string, path: string, body?: unknown, cancel?: AbortSignal): Promise<{ status: number; data: T; headers: Headers }> {
+    const signal = cancel ? anySignal(cancel, AbortSignal.timeout(20_000)) : AbortSignal.timeout(20_000);
     let res: Response;
     try {
       res = await fetch(this.url + path, {
         method,
         headers: { ...this.auth, ...(body === undefined ? {} : { "content-type": "application/json" }) },
         body: body === undefined ? undefined : JSON.stringify(body),
-        signal: AbortSignal.timeout(20_000),
+        signal,
         // never follow: a redirect would resend the login body (email and password) to another host
         redirect: "manual",
       });
@@ -130,8 +142,8 @@ export class Api {
   }
 
   /** A page of the vault's change log after `after`, oldest first. */
-  async changes(vaultId: string, after: number, limit: number): Promise<{ changes: Change[]; next: number }> {
-    return (await this.request<{ changes: Change[]; next: number }>("GET", `/api/vaults/${encodeURIComponent(vaultId)}/changes?after=${after}&limit=${limit}`)).data;
+  async changes(vaultId: string, after: number, limit: number, cancel?: AbortSignal): Promise<{ changes: Change[]; next: number }> {
+    return (await this.request<{ changes: Change[]; next: number }>("GET", `/api/vaults/${encodeURIComponent(vaultId)}/changes?after=${after}&limit=${limit}`, undefined, cancel)).data;
   }
 
   /** Calls a registry tool over REST. Tool failures come back as `{error, code}` with HTTP 200. */

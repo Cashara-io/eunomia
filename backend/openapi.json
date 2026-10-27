@@ -5518,7 +5518,7 @@
           },
           "kind": {
             "type": "string",
-            "description": "`memory`, `entity`, `skill` or `document`."
+            "description": "`memory`, `entity`, `relation`, `skill` or `document`."
           },
           "op": {
             "type": "string",

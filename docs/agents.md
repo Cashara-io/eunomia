@@ -231,8 +231,10 @@ web app.
 
 ### Change log
 
-Every write that changes a vault (a memory or entity created, updated, merged or deleted, a skill saved or
-deleted, a document uploaded or deleted) adds one numbered row to that vault's change log. `changes_since`
+Every write that changes a vault (a memory or entity created, updated, merged or deleted, a relation
+created, a skill saved or deleted, a document uploaded or deleted, what a vault clone or merge copies; the
+full list and what is not logged are in [projects](projects.md#watching-changes)) adds one numbered row
+to that vault's change log. `changes_since`
 reads it: `after` (the `next` of your previous call, 0 to start), `limit` (at most 1000, default 100) and
 `vault_id` (your personal vault by default). Each row has `seq`, `op`, `kind`, the item's `id`, the `actor`
 (a user, token or OAuth client id, or `system`) and `at`. Rows never hold content: fetch the item to see it.

@@ -159,3 +159,50 @@ async fn the_websocket_sends_the_backlog_then_live_changes() {
     let err = tokio_tungstenite::connect_async(req).await.expect_err("refused");
     assert!(err.to_string().contains("403"), "{err}");
 }
+
+#[tokio::test]
+async fn relations_and_what_a_vault_clone_copies_are_logged() {
+    let app = TestApp::new().await;
+    let team = app.tool("vault_create", json!({"name": "Team"})).await["id"].as_str().unwrap().to_string();
+    let a = app.tool("memory_write", json!({"subject_name": "Ada", "subject_kind": "person", "text": "a", "vault_id": team})).await;
+    let b = app.tool("memory_write", json!({"subject_name": "Acme", "subject_kind": "organisation", "text": "b", "vault_id": team})).await;
+    let rel = app.tool("code_relate", json!({"from_id": a["entity"]["id"], "to_id": b["entity"]["id"], "label": "works_at"})).await;
+    assert!(rel.get("error").is_none(), "{rel}");
+    let (_, page) = app.http("GET", &format!("/api/vaults/{team}/changes"), None, true).await;
+    assert_eq!(ops(&page).last().unwrap(), "created relation", "{page}");
+
+    let clone = app.tool("vault_clone", json!({"vault_id": team, "name": "Copy"})).await["id"].as_str().unwrap().to_string();
+    let (_, page) = app.http("GET", &format!("/api/vaults/{clone}/changes"), None, true).await;
+    assert_eq!(seqs(&page), [1, 2, 3, 4, 5], "{page}");
+    let mut kinds = ops(&page);
+    kinds.sort();
+    assert_eq!(kinds, ["created entity", "created entity", "created memory", "created memory", "created relation"]);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_idle_socket_is_closed_once_its_token_is_revoked() {
+    eunomia_backend::routers::changes::TEST_RECHECK_SECS.store(1, std::sync::atomic::Ordering::Relaxed);
+    let app = TestApp::new().await;
+    let base = serve(&app).await;
+    let vault = personal(&app).await;
+    let created = create_api_token_with(app.control(), &app.user.id, "w", &[scopes::MEMORY_READ.to_string()], None, None).await.unwrap();
+    let mut req = format!("{base}/api/vaults/{vault}/changes/ws").into_client_request().unwrap();
+    req.headers_mut().insert("authorization", format!("Bearer {}", created.token).parse().unwrap());
+    let (mut ws, _) = tokio_tungstenite::connect_async(req).await.expect("connect");
+    let cookie = app.session_cookie().await;
+    let path = format!("/api/auth/tokens/{}", eunomia_backend::rid::RecordIdExt::to_string(&created.id));
+    let ((status, body), _) = common::http(&app.router, "DELETE", &path, None, None, Some(&cookie)).await;
+    assert_eq!(status, 200, "{body}");
+    // no write happens: the timer alone finds the token gone
+    let closed = tokio::time::timeout(std::time::Duration::from_secs(20), async {
+        while let Some(Ok(msg)) = ws.next().await {
+            if let Message::Close(frame) = msg {
+                return frame.map(|f| u16::from(f.code));
+            }
+        }
+        None
+    })
+    .await
+    .expect("closed within 20 s");
+    assert_eq!(closed, Some(1008));
+}

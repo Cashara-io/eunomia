@@ -796,7 +796,9 @@ async fn remove_chunks(db: &OrgDb, owner: &RecordId, doc: &RecordId, keep: i64, 
             .await
     })
     .await?;
-    Ok(res.take::<Option<Value>>(q::DELETE_CHUNKS.slot)?.unwrap_or(Value::Null))
+    let mut report = res.take::<Option<Value>>(q::DELETE_CHUNKS.slot)?.unwrap_or(Value::Null);
+    crate::changes::record_deleted_memories(db, &mut report).await;
+    Ok(report)
 }
 
 // ---- indexing ---------------------------------------------------------------------------------

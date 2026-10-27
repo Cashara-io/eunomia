@@ -379,6 +379,7 @@ pub async fn delete_vault(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId) -
     with_retry(|| async {
         store::vaults::DELETE_VAULT.on(db)
             .bind(("vault", vault_id.clone()))
+            .bind(("counter", crate::changes::counter(vault_id)))
             .await?
             .check()
     })
@@ -715,6 +716,29 @@ pub async fn discard_stale_copies(db: &OrgDb) -> AppResult<usize> {
     Ok(stale.len())
 }
 
+/// One `created` row per item a clone or merge put in the new vault `dest` (once it is published, so a
+/// failed copy logs nothing): its entities, memories, relations and documents.
+async fn log_copy(db: &OrgDb, dest: &RecordId) -> AppResult<()> {
+    use crate::changes::{self, CREATED};
+    let mut items = Vec::new();
+    for entity_kind in ENTITY_KINDS {
+        // dynamic: table name varies over the entity tables
+        let res = store::dynamic(db, "vaults.entity_ids_in_vault", format!("SELECT VALUE id FROM {entity_kind} WHERE vault = $vault")).bind(("vault", dest.clone())).await;
+        let ids: Vec<RecordId> = match res {
+            Err(e) if crate::entities::service::no_custom_table(&e) => Vec::new(),
+            res => res?.take(0)?,
+        };
+        items.extend(ids.into_iter().map(|id| (CREATED, changes::ENTITY, id)));
+    }
+    let mut res = store::changes::IDS_IN_VAULT.on(db).bind(("vault", dest.clone())).await?;
+    for (slot, kind) in [(0, changes::MEMORY), (1, changes::RELATION), (2, changes::DOCUMENT)] {
+        let ids: Vec<RecordId> = res.take(slot)?;
+        items.extend(ids.into_iter().map(|id| (CREATED, kind, id)));
+    }
+    changes::record_many(db, dest, items).await;
+    Ok(())
+}
+
 /// Copies every document (see `documents::copy_vault_documents`), entity,
 /// memory and relation of `src` into `dest` (both
 /// already accessible to `user_id`); returns how many entities of `src` landed
@@ -871,6 +895,7 @@ pub async fn clone_vault(
     let staged = stage_copy(db, &clone_name, kind).await?;
     let copied = copy_into(db, user_id, vault_id, &staged.id, false).await;
     let copied = publish_or_discard(db, user_id, &staged.id, copied).await?;
+    log_copy(db, &staged.id).await?;
     let clone: VaultOut = staged.into();
 
     Ok(CloneOut {
@@ -944,6 +969,7 @@ pub async fn merge_vaults(
     }
     .await;
     let entities = publish_or_discard(db, user_id, &dest, copied).await?;
+    log_copy(db, &dest).await?;
     let merged: VaultOut = staged.into();
     Ok(MergeOut {
         id: merged.id,
