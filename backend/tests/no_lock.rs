@@ -204,3 +204,32 @@ async fn concurrent_first_signups_converge_on_one_org() {
     let owners: Option<i64> = res.take("count").unwrap();
     assert_eq!(owners, Some(1), "exactly one owner");
 }
+
+/// Lock off: four writers append to one vault's change log at once. Asserted: the seqs are exactly
+/// 1..=n, no repeat and no gap, whatever the engine does with the racing counter updates. Measured
+/// and printed: how many of the appends made it (one that exhausts its retries is logged, not written).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn change_log_appends_with_the_lock_off_have_no_gap_or_repeat() {
+    use eunomia_backend::changes;
+    let _s = SERIAL.lock().await;
+    let _l = LocksOff::set(true);
+    let app = TestApp::new().await;
+    let db = app.db().await;
+    let vault = common::sys(eunomia_backend::vaults::service::default_vault_id(&db, &app.user.id)).await.unwrap();
+    let mut tasks = Vec::new();
+    for t in 0..4 {
+        let (db, vault) = (db.clone(), vault.clone());
+        tasks.push(tokio::spawn(async move {
+            for i in 0..50 {
+                changes::record(&db, &vault, changes::CREATED, changes::MEMORY, &RecordId::new("memory", format!("m{t}x{i}"))).await;
+            }
+        }));
+    }
+    for t in tasks {
+        t.await.unwrap();
+    }
+    let seqs: Vec<i64> = changes::after(&db, &vault, 0, 1000).await.unwrap().changes.iter().map(|c| c.seq).collect();
+    eprintln!("NO_LOCK changes: attempted=200 written={}", seqs.len());
+    assert_eq!(seqs, (1..=seqs.len() as i64).collect::<Vec<_>>(), "consecutive from 1");
+    assert!(seqs.len() > 150, "most appends land: {}", seqs.len());
+}

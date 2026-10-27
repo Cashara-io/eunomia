@@ -208,7 +208,7 @@ fn gate_user(authn: Option<Extension<Authn>>) -> Option<(User, Option<Vec<String
 /// connect). Any request that carries a cookie, or no bearer, must come from no
 /// browser at all, the same origin (directly or via the frontend's proxy, which
 /// forwards the original host) or an allowed CORS origin.
-fn origin_allowed(headers: &HeaderMap, cors_allowed_origins: &str) -> bool {
+pub(crate) fn origin_allowed(headers: &HeaderMap, cors_allowed_origins: &str) -> bool {
     let Some(origin) = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok()) else {
         return true;
     };

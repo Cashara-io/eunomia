@@ -395,6 +395,8 @@ async fn secret_rows(w: &World, org: &Org) -> BTreeMap<String, usize> {
 const NO_SECRET_ROWS: &[&str] = &[
     "oauth_client",  // an instance-wide registry of MCP clients, not per org
     "job_leader",    // one global lease row
+    "change",        // the change log keeps ids, never content (tests/changes.rs)
+    "change_seq",    // one counter per vault
 ];
 
 // ---- the attack -----------------------------------------------------------------------------

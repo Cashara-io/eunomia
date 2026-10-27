@@ -7,6 +7,16 @@ export interface Vault {
   role?: string;
 }
 
+/** One row of a vault's change log: what changed, never its content. */
+export interface Change {
+  seq: number;
+  op: string;
+  kind: string;
+  id: string;
+  actor: string;
+  at: string;
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -117,6 +127,11 @@ export class Api {
   async mintProjectToken(name: string, vaultId: string): Promise<{ id: string; token: string }> {
     const body = { name, scopes: ["memory:write"], vault_id: vaultId };
     return (await this.request<{ id: string; token: string }>("POST", "/api/auth/tokens", body)).data;
+  }
+
+  /** A page of the vault's change log after `after`, oldest first. */
+  async changes(vaultId: string, after: number, limit: number): Promise<{ changes: Change[]; next: number }> {
+    return (await this.request<{ changes: Change[]; next: number }>("GET", `/api/vaults/${encodeURIComponent(vaultId)}/changes?after=${after}&limit=${limit}`)).data;
   }
 
   /** Calls a registry tool over REST. Tool failures come back as `{error, code}` with HTTP 200. */

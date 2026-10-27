@@ -13,6 +13,7 @@ use surrealdb::types::{Datetime, RecordId, SurrealValue};
 use super::{bad_args, register, to_tool_value, ToolSpec};
 use crate::authz::{self, Action};
 use crate::cache::recall::MIN_SIMILARITY;
+use crate::changes;
 use crate::embeddings::service as embeddings;
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::pool::OrgDb;
@@ -165,6 +166,8 @@ async fn save(state: &OrgState, owner: &RecordId, a: SaveArgs) -> AppResult<Valu
         None => default_vault_id(&state.db, owner).await?,
         Some(v) => authz::authorize(&state.db, owner, Action::WriteMemories, &parse_vault(v)?).await?.vault().clone(),
     };
+    // for the change log only: two saves of a new name racing may both say `created`
+    let existed: Vec<Skill> = store::skills::BY_NAME.on(&state.db).bind(("vaults", vec![vault.clone()])).bind(("name", a.name.clone())).await?.take(0)?;
     // a write to the skill table can conflict with SurrealDB's background HNSW compaction of
     // skill_embedding_idx (a commit conflict, safe to run again); a duplicate is a racing save of the
     // same new name, and the rerun's WHERE finds that row and replaces it
@@ -181,6 +184,8 @@ async fn save(state: &OrgState, owner: &RecordId, a: SaveArgs) -> AppResult<Valu
     })
     .await?;
     let skill = rows.into_iter().next().ok_or_else(|| AppError::internal("skill upsert returned no row"))?;
+    let op = if existed.is_empty() { changes::CREATED } else { changes::UPDATED };
+    changes::record(&state.db, &vault, op, changes::SKILL, &skill.id).await;
     let embedded = embed_skill(state, owner, &skill).await;
     Ok(json!({ "id": skill.id.to_string(), "name": skill.name, "vault": skill.vault.to_string(), "embedded": embedded }))
 }
@@ -285,6 +290,7 @@ async fn delete(state: &OrgState, owner: &RecordId, id: &str) -> AppResult<Value
     let skill = load(state, owner, id, Action::WriteMemories).await?;
     // retried like the upsert: the HNSW compaction can conflict with it
     with_retry(|| async { store::skills::DELETE.on(&state.db).bind(("id", skill.id.clone())).await?.check() }).await?;
+    changes::record(&state.db, &skill.vault, changes::DELETED, changes::SKILL, &skill.id).await;
     Ok(json!({ "deleted": skill.id.to_string() }))
 }
 
