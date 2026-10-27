@@ -168,7 +168,9 @@ pub async fn delete_data(db: &OrgDb, owner: &RecordId, conn: &Connector) -> AppR
             .await
     })
     .await?;
-    Ok(res.take::<Option<Value>>(store::cache::DELETE_SOURCE_DATA.slot)?.unwrap_or(Value::Null))
+    let mut report = res.take::<Option<Value>>(store::cache::DELETE_SOURCE_DATA.slot)?.unwrap_or(Value::Null);
+    crate::changes::record_deleted_memories(db, &mut report).await;
+    Ok(report)
 }
 
 /// Removes one connection: its data ([`delete_data`]), its sync status and the connection itself. A
