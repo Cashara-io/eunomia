@@ -7,6 +7,7 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 use serde::Serialize;
+use serde_json::Value;
 
 /// What one write had redacted: `count` secrets of `kind` (e.g. "github token").
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, utoipa::ToSchema)]
@@ -20,9 +21,25 @@ pub struct Redaction {
 static PATTERNS: LazyLock<Vec<(&'static str, Regex, String)>> = LazyLock::new(|| {
     let p = |kind: &'static str, re: &str| (kind, Regex::new(re).expect("redaction pattern"), format!("[redacted: {kind}]"));
     vec![
-        p("private key", r"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----(?s:.*?)-----END (?:[A-Z0-9]+ )*PRIVATE KEY-----"),
-        // only the password: `postgres://app:hunter2@db` keeps the user and host
-        ("url password", Regex::new(r"(\b[A-Za-z][A-Za-z0-9+.-]*://[^\s:/@]+:)[^\s@/]+@").expect("redaction pattern"), "${1}[redacted: url password]@".into()),
+        // to the END line or, without one (a truncated paste), over its header lines and base64 body: one
+        // blank line may open the body (PGP armor), a later one ends it
+        p(
+            "private key",
+            concat!(
+                r"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----(?:",
+                r"(?s:.*?)-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----",
+                r"|(?:[ \t]*\r?\n[A-Za-z][A-Za-z0-9-]*: [^\n]*)*(?:(?:[ \t]*\r?\n){1,2}[ \t]*|[ \t]+)[A-Za-z0-9+/=]+",
+                r"(?:(?:[ \t]*\r?\n[ \t]*|[ \t]+)[A-Za-z0-9+/=]+)*",
+                r"|)",
+            ),
+        ),
+        // only the password, which runs to the last `@` before a host: `redis://:p@ss@db:6379/0` keeps
+        // the scheme, the (possibly empty) user and the host
+        (
+            "url password",
+            Regex::new(r"(\b[A-Za-z][A-Za-z0-9+.-]*://[^\s:/@]*:)\S*@([A-Za-z0-9.\[\]-]+(?::[0-9]+)?(?:[^A-Za-z0-9.\[\]:@_-]|$))").expect("redaction pattern"),
+            "${1}[redacted: url password]@${2}".into(),
+        ),
         p("jwt", r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"),
         p("anthropic key", r"\bsk-ant-[A-Za-z0-9_-]{20,}"),
         p("openai key", r"\bsk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{20,}|\bsk-[A-Za-z0-9]{32,}"),
@@ -50,6 +67,16 @@ pub fn redact(text: &str, found: &mut Vec<Redaction>) -> String {
         }
     }
     out
+}
+
+/// [`redact`] on every string inside `v`, at any depth, before it is serialized anywhere.
+pub fn redact_value(v: &mut Value) {
+    match v {
+        Value::String(s) => *s = redact(s, &mut Vec::new()),
+        Value::Array(a) => a.iter_mut().for_each(redact_value),
+        Value::Object(m) => m.values_mut().for_each(redact_value),
+        _ => {}
+    }
 }
 
 #[cfg(test)]
@@ -94,10 +121,44 @@ mod tests {
     }
 
     #[test]
-    fn url_keeps_user_and_host() {
-        let (out, found) = run("connect with postgres://app:hunter2@db.internal:5432/main please");
-        assert_eq!(out, "connect with postgres://app:[redacted: url password]@db.internal:5432/main please");
-        assert_eq!(found, vec![Redaction { kind: "url password".into(), count: 1 }]);
+    fn url_keeps_scheme_user_and_host() {
+        let m = "[redacted: url password]";
+        for (text, want) in [
+            ("connect with postgres://app:hunter2@db.internal:5432/main please", format!("connect with postgres://app:{m}@db.internal:5432/main please")),
+            ("redis://:secretpw@cache:6379/0", format!("redis://:{m}@cache:6379/0")),
+            ("postgres://u:p@ss@host/db", format!("postgres://u:{m}@host/db")),
+            ("postgres://u:pa/ss@host", format!("postgres://u:{m}@host")),
+            ("a https://u:x@y.com, b", format!("a https://u:{m}@y.com, b")),
+        ] {
+            let (out, found) = run(text);
+            assert_eq!(out, want, "{text}");
+            assert_eq!(found, vec![Redaction { kind: "url password".into(), count: 1 }], "{text}");
+        }
+    }
+
+    #[test]
+    fn private_keys_without_an_end_line_and_pgp_blocks() {
+        for (text, want) in [
+            ("key:\n-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA\nqW9xZ+/abc=\n\nsee above.", "key:\n[redacted: private key]\n\nsee above."),
+            ("-----BEGIN OPENSSH PRIVATE KEY----- b3BlbnNzaC1rZXk AAAABG5vbmU", "[redacted: private key]"),
+            (
+                "-----BEGIN PGP PRIVATE KEY BLOCK-----\nVersion: GnuPG v2\n\nlQOYBF0abc\n=tWzN\n-----END PGP PRIVATE KEY BLOCK-----\ndone",
+                "[redacted: private key]\ndone",
+            ),
+            ("-----BEGIN PGP PRIVATE KEY BLOCK-----\n\nlQOYBF0abc\nxyz+/", "[redacted: private key]"),
+        ] {
+            let (out, found) = run(text);
+            assert_eq!(out, want, "{text}");
+            assert_eq!(found, vec![Redaction { kind: "private key".into(), count: 1 }], "{text}");
+        }
+    }
+
+    #[test]
+    fn redact_value_reaches_nested_strings() {
+        let gh = format!("ghp_{}", "x".repeat(36));
+        let mut v = serde_json::json!({"a": [{"b": format!("\n{gh}")}], "n": 1});
+        redact_value(&mut v);
+        assert_eq!(v, serde_json::json!({"a": [{"b": "\n[redacted: github token]"}], "n": 1}));
     }
 
     #[test]
@@ -119,6 +180,7 @@ mod tests {
             "she uses sk-learn and scikit-learn for the task-sk model",
             "the ghp_ prefix marks a GitHub token; AKIA starts AWS keys",
             "https://example.com:8080/path?q=1 and mailto:avi@example.com",
+            "http://host:8080 and ssh://git@github.com:22/org/repo.git",
             "https://github.com/Cashara-io/eunomia/pull/110",
             "user@host.example ssh git@github.com:org/repo.git",
             "eyJ alone is not a token, nor is a.b.c",

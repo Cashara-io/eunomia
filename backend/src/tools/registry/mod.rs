@@ -199,12 +199,14 @@ fn summarize_args(tool_name: &str, args: &Value) -> String {
             } else if SECRET_KEY_HINTS.iter().any(|hint| lower.contains(hint)) {
                 redacted.insert(k.clone(), json!("***"));
             } else {
-                redacted.insert(k.clone(), v.clone());
+                // each string before serializing: JSON escapes (`\n` before a key) would hide a secret's start
+                let mut v = v.clone();
+                crate::redact::redact_value(&mut v);
+                redacted.insert(k.clone(), v);
             }
         }
     }
-    // the args hold the raw text a memory write redacts, so the audit row redacts it too
-    let mut summary = crate::redact::redact(&Value::Object(redacted).to_string(), &mut Vec::new());
+    let mut summary = Value::Object(redacted).to_string();
     if summary.chars().count() > ARGS_SUMMARY_MAX {
         summary = summary.chars().take(ARGS_SUMMARY_MAX).collect::<String>() + "\u{2026}";
     }
@@ -579,6 +581,19 @@ mod tests {
         assert!(!summary.contains("abc"));
         assert!(summary.contains("hello"));
         assert!(summary.contains("***"));
+    }
+
+    #[test]
+    fn summarize_args_redacts_secrets_after_a_newline_or_tab() {
+        let token = format!("ghp_{}", "a1B2c3D4e5".repeat(4));
+        for (tool, args) in [
+            ("memory_write", json!({ "text": format!("line1\n{token}\tand\t{token}") })),
+            ("skill_save", json!({ "description": format!("use\n{token}"), "nested": [{ "x": format!("\t{token}") }] })),
+        ] {
+            let summary = summarize_args(tool, &args);
+            assert!(!summary.contains(&token), "{summary}");
+            assert!(summary.contains("[redacted: github token]"), "{summary}");
+        }
     }
 
     #[test]
