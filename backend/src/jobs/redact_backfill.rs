@@ -4,8 +4,12 @@
 //! back only the rows it changed. Progress lives in `redact_backfill:v<DETECTOR_VERSION>`: a crashed run
 //! resumes at its cursor, a finished one is never repeated, and a new detector version runs it again.
 //!
+//! Rewrites leave `version` and `updated_at` alone, so a client cache or a change feed keeps the old text
+//! until it refetches the row.
+//!
 //! Not covered (not redacted on write either): uploaded documents, synced connector records, chat
-//! messages, entity names and summaries, extension webhook deliveries.
+//! messages, entity names, aliases and summaries, relation labels (`relates_to.label`, `linked_to.rel`),
+//! sync errors (`sync_status.last_error`), extension webhook deliveries.
 
 use serde::Deserialize;
 use serde_json::Value;
@@ -18,6 +22,7 @@ use crate::redact::{self, DETECTOR_VERSION};
 use crate::rid::RecordIdExt;
 use crate::state::OrgState;
 use crate::store::redact as q;
+use crate::store::Stmt;
 use crate::tx::with_retry;
 
 /// Rows read per batch. Each rewrite is its own statement: no long transaction, no table lock.
@@ -67,6 +72,9 @@ async fn save(state: &OrgState, p: &Progress) -> AppResult<()> {
 }
 
 /// Runs the backfill from where it stopped, at most `max_batches` batches (`None`: to the end).
+///
+/// Counts are saved after each batch, so a crash between a batch's rewrites and its save undercounts:
+/// the resumed run finds those rows already redacted. The text is right either way.
 pub async fn run(state: &OrgState, max_batches: Option<usize>) -> AppResult<Progress> {
     let mut p = load(state).await?.unwrap_or(Progress {
         stage: STAGES[0].into(),
@@ -95,13 +103,12 @@ pub async fn run(state: &OrgState, max_batches: Option<usize>) -> AppResult<Prog
             p.stage = STAGES[next].into();
             if p.stage == "done" {
                 p.done_at = Some(Datetime::from(chrono::Utc::now()));
+                // before the marker says done: a crash between the two repeats the event, never loses it
+                report(state, &p).await;
             }
         }
         save(state, &p).await?;
         batches += 1;
-        if p.done_at.is_some() {
-            report(state, &p).await;
-        }
     }
     Ok(p)
 }
@@ -127,15 +134,38 @@ fn wrote(mut res: surrealdb::IndexedResults) -> AppResult<bool> {
     Ok(!res.take::<Vec<RecordId>>(0)?.is_empty())
 }
 
-/// Best effort: a stale memo only costs a vector nobody can look up without the old text.
-async fn forget_vectors(state: &OrgState, owner: &RecordId, texts: Vec<String>) {
-    if let Err(e) = crate::embeddings::service::forget(&state.db, &state.settings, &texts, owner).await {
-        tracing::warn!(error = %e.message, "secret backfill: could not drop cached vectors");
+/// The old texts of one batch's rewritten rows, by owner, whose memoized vectors go at the batch's end.
+#[derive(Default)]
+struct Stale(Vec<(RecordId, Vec<String>)>);
+
+impl Stale {
+    fn add(&mut self, owner: &RecordId, text: String) {
+        match self.0.iter_mut().find(|(o, _)| o == owner) {
+            Some((_, texts)) => texts.push(text),
+            None => self.0.push((owner.clone(), vec![text])),
+        }
+    }
+
+    /// One spec lookup and one delete per owner. Best effort: a stale memo is only a vector, found by the
+    /// HMAC of a text that is no longer stored.
+    // ponytail: an embed job that read the old text before the rewrite can still memoize its vector after
+    // this; closing that needs the embed path to re-check the text before its cache write.
+    async fn forget(self, state: &OrgState) {
+        for (owner, texts) in self.0 {
+            if let Err(e) = crate::embeddings::service::forget(&state.db, &state.settings, &texts, &owner).await {
+                tracing::warn!(error = %e.message, "secret backfill: could not drop cached vectors");
+            }
+        }
     }
 }
 
 /// (last id read, rows changed); no last id once the table is exhausted.
 type Batch = (Option<RecordId>, i64);
+
+/// The first batch of a table, or the one after `cursor`: two statements, so each can use the id order.
+fn batch_stmt<'a>(first: &'a Stmt, after: &'a Stmt, cursor: &Option<RecordId>) -> &'a Stmt {
+    if cursor.is_some() { after } else { first }
+}
 
 async fn memory_batch(state: &OrgState, cursor: &Option<RecordId>) -> AppResult<Batch> {
     #[derive(Deserialize, SurrealValue)]
@@ -144,20 +174,21 @@ async fn memory_batch(state: &OrgState, cursor: &Option<RecordId>) -> AppResult<
         owner: RecordId,
         text: String,
     }
-    let rows: Vec<Row> = q::MEMORY_BATCH.on(&state.db).bind(("cursor", cursor.clone())).bind(("limit", BATCH)).await?.check()?.take(0)?;
-    let mut changed = 0;
+    let stmt = batch_stmt(&q::MEMORY_FIRST, &q::MEMORY_AFTER, cursor);
+    let rows: Vec<Row> = stmt.on(&state.db).bind(("cursor", cursor.clone())).bind(("limit", BATCH)).await?.check()?.take(0)?;
+    let (mut changed, mut stale) = (0, Stale::default());
     for row in &rows {
         let text = redact::redact(&row.text, &mut Vec::new());
         if text == row.text {
             continue;
         }
         let set = || async { q::SET_MEMORY_TEXT.on(&state.db).bind(("id", row.id.clone())).bind(("text", text.clone())).bind(("old", row.text.clone())).await?.check() };
-        let res = with_retry(set).await?;
-        if wrote(res)? {
+        if wrote(with_retry(set).await?)? {
             changed += 1;
-            forget_vectors(state, &row.owner, vec![row.text.clone()]).await;
+            stale.add(&row.owner, row.text.clone());
         }
     }
+    stale.forget(state).await;
     Ok((rows.last().map(|r| r.id.clone()), changed))
 }
 
@@ -170,8 +201,9 @@ async fn skill_batch(state: &OrgState, cursor: &Option<RecordId>) -> AppResult<B
         description: String,
         body: String,
     }
-    let rows: Vec<Row> = q::SKILL_BATCH.on(&state.db).bind(("cursor", cursor.clone())).bind(("limit", BATCH)).await?.check()?.take(0)?;
-    let mut changed = 0;
+    let stmt = batch_stmt(&q::SKILL_FIRST, &q::SKILL_AFTER, cursor);
+    let rows: Vec<Row> = stmt.on(&state.db).bind(("cursor", cursor.clone())).bind(("limit", BATCH)).await?.check()?.take(0)?;
+    let (mut changed, mut stale) = (0, Stale::default());
     for row in &rows {
         let description = redact::redact(&row.description, &mut Vec::new());
         let body = redact::redact(&row.body, &mut Vec::new());
@@ -195,12 +227,13 @@ async fn skill_batch(state: &OrgState, cursor: &Option<RecordId>) -> AppResult<B
             continue;
         }
         changed += 1;
-        // only name + description are embedded: a body-only change keeps its vector
+        // only name + description are embedded, so a body-only change keeps its vector. A new description
+        // drops it (`skill_text_changed`) and the embed job's skill backlog makes a new one.
         if new_description {
-            forget_vectors(state, &row.owner, vec![format!("{}\n{}", row.name, row.description)]).await;
-            crate::tools::registry::skills::reembed(state, &row.owner, &row.id).await?;
+            stale.add(&row.owner, format!("{}\n{}", row.name, row.description));
         }
     }
+    stale.forget(state).await;
     Ok((rows.last().map(|r| r.id.clone()), changed))
 }
 
@@ -210,7 +243,8 @@ async fn audit_batch(state: &OrgState, cursor: &Option<RecordId>) -> AppResult<B
         id: RecordId,
         args_summary: String,
     }
-    let rows: Vec<Row> = q::AUDIT_BATCH.on(&state.db).bind(("cursor", cursor.clone())).bind(("limit", BATCH)).await?.check()?.take(0)?;
+    let stmt = batch_stmt(&q::AUDIT_FIRST, &q::AUDIT_AFTER, cursor);
+    let rows: Vec<Row> = stmt.on(&state.db).bind(("cursor", cursor.clone())).bind(("limit", BATCH)).await?.check()?.take(0)?;
     let mut changed = 0;
     for row in &rows {
         let summary = redact_summary(&row.args_summary);
@@ -218,8 +252,7 @@ async fn audit_batch(state: &OrgState, cursor: &Option<RecordId>) -> AppResult<B
             continue;
         }
         let set = || async { q::SET_AUDIT_SUMMARY.on(&state.db).bind(("id", row.id.clone())).bind(("summary", summary.clone())).bind(("old", row.args_summary.clone())).await?.check() };
-        let res = with_retry(set).await?;
-        if wrote(res)? {
+        if wrote(with_retry(set).await?)? {
             changed += 1;
         }
     }

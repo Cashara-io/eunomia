@@ -5,7 +5,7 @@
 
 use super::Stmt;
 
-pub const ALL: &[&Stmt] = &[&UPSERT, &SET_EMBEDDING, &LIST_META, &BY_NAME, &DELETE];
+pub const ALL: &[&Stmt] = &[&UPSERT, &SET_EMBEDDING, &LIST_META, &BY_NAME, &DELETE, &EMBED_BACKLOG];
 
 /// Create or replace by (vault, name). The vector goes; `SET_EMBEDDING` sets it again if one can be made.
 pub const UPSERT: Stmt = Stmt::new(
@@ -30,3 +30,10 @@ pub const LIST_META: Stmt = Stmt::new(
 pub const BY_NAME: Stmt = Stmt::new("skills.by_name", "SELECT * FROM skill WHERE vault IN $vaults AND name = $name ORDER BY id");
 
 pub const DELETE: Stmt = Stmt::new("skills.delete", "DELETE $id");
+
+/// An author's skills with no vector from the current model (`$spec`): saved while no embedding key existed,
+/// or a description changed outside `skill_save` (the secret backfill). The embed job works through them.
+pub const EMBED_BACKLOG: Stmt = Stmt::new(
+    "skills.embed_backlog",
+    "SELECT VALUE id FROM skill WHERE owner = $owner AND (embedding_spec IS NONE OR embedding_spec != $spec) LIMIT $limit",
+);

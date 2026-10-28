@@ -212,9 +212,11 @@ descriptions and bodies, and audit-log argument summaries, and drops the vectors
 so the embed job makes new ones. It runs once per org, resumes where it stopped after a crash, and runs
 again when the detectors gain new shapes. When it finishes, the server logs `secret backfill finished`
 with how many rows of each kind changed, and the instance audit log gets a `redact.backfill` event with
-the same counts. It never logs the text. Uploaded documents, synced connector records, chat messages,
-entity names and summaries, and extension webhook deliveries are not redacted on write, so the backfill
-leaves them alone too.
+the same counts. It never logs the text. A rewrite leaves a memory's `version` and `updated_at` as they
+were, so a client cache or a change feed shows the old text until it fetches the row again. Uploaded
+documents, synced connector records, chat messages, entity names, aliases and summaries, relation labels,
+sync error messages and extension webhook deliveries are not redacted on write, so the backfill leaves
+them alone too.
 
 ### Agent skills
 

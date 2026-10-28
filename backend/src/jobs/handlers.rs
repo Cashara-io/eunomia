@@ -106,6 +106,8 @@ async fn embed(state: AppState, job: Job) -> Result<(), JobError> {
             break;
         }
     }
+    // and skills (name + description) left without a vector
+    crate::tools::registry::skills::embed_backlog(&state, &job.owner, EMBED_BATCH as usize).await?;
     Ok(())
 }
 
