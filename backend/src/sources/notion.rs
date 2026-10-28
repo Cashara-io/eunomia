@@ -4,7 +4,12 @@
 //! token, bearer auth + `Notion-Version`.
 //!
 //! Incremental: stop paging once results are older than the cursor (the
-//! newest `last_edited_time` seen last sync).
+//! newest `last_edited_time` seen last sync). Notion allows about 3 requests a second, and every page
+//! costs one block request, so the block reads are paced and capped per sync: the oldest changed
+//! records go first and the cursor resumes after the last one read, so a big workspace (the first
+//! sync) drains over several syncs instead of hitting a 429 that fails every attempt from scratch.
+
+use std::time::Duration;
 
 use async_trait::async_trait;
 use serde_json::{json, Value};
@@ -14,6 +19,10 @@ use crate::error::AppResult;
 use crate::sources::base::{envelope, items, rfc3339, s, Conn, Source, SyncResult, MAX_PAGES};
 
 const BASE_URL: &str = "https://api.notion.com/v1";
+/// Pause before each block read: Notion's average limit is 3 requests a second.
+const BLOCK_PACING: Duration = if cfg!(test) { Duration::ZERO } else { Duration::from_millis(400) };
+/// Pages whose text is read in one sync (databases carry no text and are free).
+const MAX_PAGES_PER_SYNC: usize = 100;
 
 fn api(conn: &Conn) -> AppResult<Api> {
     Ok(Api::new(&conn.config, BASE_URL, bearer(&require(&conn.credentials, "integration_token")?))
@@ -98,7 +107,19 @@ impl Source for NotionSource {
             start = page.get("next_cursor").and_then(|v| v.as_str()).map(String::from);
         }
 
+        // Oldest first, so the cursor never skips past a record left unread by the cap. Equal
+        // timestamps stay (`<` above), so a tie cut by the cap is read on the next sync.
+        changed.sort_by(|a, b| s(a, "/last_edited_time").cmp(s(b, "/last_edited_time")));
+        let mut pages = 0;
+        if let Some(cut) = changed.iter().position(|r| {
+            pages += usize::from(s(r, "/object") == "page");
+            pages > MAX_PAGES_PER_SYNC
+        }) {
+            changed.truncate(cut);
+        }
+
         for r in changed.iter_mut().filter(|r| s(r, "/object") == "page") {
+            tokio::time::sleep(BLOCK_PACING).await;
             let blocks = api.get(&format!("/blocks/{}/children", s(r, "/id")), &[("page_size", "100".into())]).await?;
             r["_text"] = json!(blocks_text(&items(&blocks, "/results")));
         }
@@ -172,10 +193,10 @@ mod tests {
         assert!(reqs.iter().all(|r| r.header("authorization") == "Bearer ntn_test" && r.header("notion-version") == "2022-06-28"));
 
         let envs = envelopes(&NotionSource, &res.records);
-        assert_eq!(envs[0].title, "Roadmap");
-        assert_eq!(envs[0].body_text, "Q2 goals\nShip the sync engine.");
-        assert_eq!(envs[1].title, "Tasks");
-        assert_eq!(envs[1].payload["object"], "database");
+        assert_eq!(envs[0].title, "Tasks", "oldest first");
+        assert_eq!(envs[0].payload["object"], "database");
+        assert_eq!(envs[1].title, "Roadmap");
+        assert_eq!(envs[1].body_text, "Q2 goals\nShip the sync engine.");
     }
 
     #[tokio::test]
@@ -192,6 +213,20 @@ mod tests {
             .unwrap();
         assert_eq!(res.records.len(), 1);
         assert_eq!(mock.requests().iter().filter(|r| r.method == "POST").count(), 1, "no second search page");
+    }
+
+    #[tokio::test]
+    async fn a_big_backlog_is_read_oldest_first_and_the_cursor_resumes_after_it() {
+        let results: Vec<Value> =
+            (0..MAX_PAGES_PER_SYNC + 5).map(|i| page(&format!("p{i}"), &format!("2024-03-01T00:{:02}:{:02}.000Z", i / 60, i % 60), "T")).collect();
+        let mut routes = vec![route("POST", "/search", json!({"results": results.iter().rev().cloned().collect::<Vec<_>>(), "has_more": false}))];
+        routes.extend((0..MAX_PAGES_PER_SYNC + 5).map(|i| route("GET", &format!("/blocks/p{i}/children"), json!({"results": []}))));
+        let mock = serve(routes).await;
+        let res = NotionSource.fetch(&mock.conn(json!({"integration_token": "t"})), None).await.unwrap();
+        assert_eq!(res.records.len(), MAX_PAGES_PER_SYNC);
+        assert_eq!(s(&res.records[0], "/id"), "p0", "oldest first");
+        let last = MAX_PAGES_PER_SYNC - 1;
+        assert_eq!(res.cursor.as_deref(), Some(format!("2024-03-01T00:{:02}:{:02}.000Z", last / 60, last % 60).as_str()));
     }
 
     #[tokio::test]
