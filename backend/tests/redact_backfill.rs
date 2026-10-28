@@ -10,7 +10,7 @@ use std::pin::Pin;
 
 use common::TestApp;
 use eunomia_backend::embeddings::service as embeddings;
-use eunomia_backend::jobs::{kind, leader, redact_backfill};
+use eunomia_backend::jobs::{handlers, kind, leader, redact_backfill, worker, WorkerConfig};
 use eunomia_backend::state::OrgState;
 use serde_json::{json, Value};
 
@@ -63,10 +63,23 @@ async fn backfill_redacts_stored_secrets_once_and_resumes() {
     let app = TestApp::with_settings(settings).await;
     let org = app.state.org(&app.user.org).await.unwrap();
 
-    // what the leader queues before the backfill has run
+    // what the leader queues before the backfill has run: one job per org per window, and a job that
+    // died is queued again in the next window
+    let jobs = || async {
+        let mut res = app.control().test_raw().query("SELECT count() AS n FROM job WHERE kind = $k GROUP ALL").bind(("k", kind::REDACT_BACKFILL)).await.unwrap();
+        res.take::<Option<i64>>("n").unwrap().unwrap_or(0)
+    };
     tick(&app).await;
-    let mut res = app.control().test_raw().query("SELECT count() AS n FROM job WHERE kind = $k GROUP ALL").bind(("k", kind::REDACT_BACKFILL)).await.unwrap();
-    assert_eq!(res.take::<Option<i64>>("n").unwrap(), Some(1), "one backfill job per org");
+    assert_eq!(jobs().await, 1, "one backfill job per org");
+    Box::pin(leader::reconcile_redact_backfill(&org, 7)).await;
+    Box::pin(leader::reconcile_redact_backfill(&org, 7)).await;
+    assert_eq!(jobs().await, 2, "deduped within a window");
+    app.control().test_raw().query("UPDATE job SET status = 'dead' WHERE kind = $k").bind(("k", kind::REDACT_BACKFILL)).await.unwrap().check().unwrap();
+    Box::pin(leader::reconcile_redact_backfill(&org, 7)).await;
+    assert_eq!(jobs().await, 2);
+    Box::pin(leader::reconcile_redact_backfill(&org, 8)).await;
+    assert_eq!(jobs().await, 3, "the next window queues a dead backfill again");
+    app.control().test_raw().query("DELETE job WHERE kind = $k").bind(("k", kind::REDACT_BACKFILL)).await.unwrap().check().unwrap();
 
     // facts and an observation, then their text swapped for plaintext the way rows from before redaction hold it
     for (text, ty) in [("fact one", "world"), ("fact two", "world"), ("fact three", "experience"), ("Alice is a person.", "observation"), ("Alice likes tea", "world")] {
@@ -139,7 +152,7 @@ async fn backfill_redacts_stored_secrets_once_and_resumes() {
     let skill = sql(&app, "SELECT description, body, embedding_spec FROM skill", json!({})).await;
     assert_eq!(skill[0]["description"], "ship with [redacted: stripe key]");
     assert_eq!(skill[0]["body"], "steps:\n[redacted: github token]\nthen push");
-    assert!(!skill[0]["embedding_spec"].is_null(), "the new description was embedded again");
+    assert!(skill[0]["embedding_spec"].is_null(), "the new description waits for the embed job");
 
     let audit = sql(&app, "SELECT VALUE args_summary FROM audit_log", json!({})).await;
     let audit = serde_json::to_string(&audit).unwrap();
@@ -156,10 +169,26 @@ async fn backfill_redacts_stored_secrets_once_and_resumes() {
     let again = run(&org, None).await;
     assert_eq!((again.changed_memory, again.changed_skill, again.changed_audit_log, again.done_at), (4, 1, 1, p.done_at));
     assert_eq!(sql(&app, "SELECT id, text, version, updated_at FROM memory ORDER BY id", json!({})).await, before);
-    app.control().test_raw().query("DELETE job WHERE kind = $k").bind(("k", kind::REDACT_BACKFILL)).await.unwrap().check().unwrap();
-    tick(&app).await;
-    let mut res = app.control().test_raw().query("SELECT count() AS n FROM job WHERE kind = $k GROUP ALL").bind(("k", kind::REDACT_BACKFILL)).await.unwrap();
-    assert_eq!(res.take::<Option<i64>>("n").unwrap().unwrap_or(0), 0, "a finished org is not queued again");
+    Box::pin(leader::reconcile_redact_backfill(&org, 9)).await;
+    assert_eq!(jobs().await, 0, "a finished org is not queued again");
     let mut res = app.control().test_raw().query("SELECT count() AS n FROM audit_event WHERE action = 'redact.backfill' GROUP ALL").await.unwrap();
     assert_eq!(res.take::<Option<i64>>("n").unwrap(), Some(1));
+
+    // the embed job (queued by the leader, run by a worker) makes the dropped vectors again
+    tick(&app).await;
+    let (stop, rx) = tokio::sync::watch::channel(false);
+    let cfg = WorkerConfig { poll: std::time::Duration::from_millis(20), ..WorkerConfig::default() };
+    let w = tokio::spawn(worker::run(app.state.clone(), handlers::registry(), cfg, rx));
+    let missing = || sql(&app, "SELECT VALUE id FROM memory WHERE embedding = NONE", json!({}));
+    let skill_missing = || sql(&app, "SELECT VALUE id FROM skill WHERE embedding_spec = NONE", json!({}));
+    for _ in 0..500 {
+        if missing().await.is_empty() && skill_missing().await.is_empty() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    stop.send(true).unwrap();
+    w.await.unwrap();
+    assert_eq!(missing().await, Vec::<Value>::new(), "memories embedded again");
+    assert_eq!(skill_missing().await, Vec::<Value>::new(), "the skill embedded again");
 }

@@ -123,8 +123,7 @@ async fn load(state: &OrgState, owner: &RecordId, id: &str, action: Action) -> A
 
 /// Embeds name + description under the owner's provider and stores the vector. `false`, with a warning,
 /// when there is no provider or it fails: the skill is saved either way, found by keyword.
-// ponytail: a skill saved while no embedding key exists stays keyword-only until saved again; the upgrade
-// is an embed_skill_backlog beside embed_memory_backlog (embeddings/service.rs), called from jobs/handlers.rs.
+// A skill left without a vector (no key at save time, a failed call) is picked up by `embed_backlog`.
 async fn embed_skill(state: &OrgState, owner: &RecordId, skill: &Skill) -> bool {
     if !embeddings::available(&state.db, &state.settings, owner).await {
         return false;
@@ -160,13 +159,19 @@ async fn embed_skill(state: &OrgState, owner: &RecordId, skill: &Skill) -> bool 
     }
 }
 
-/// Embeds skill `id` again (its description changed outside `skill_save`: the secret backfill).
-pub(crate) async fn reembed(state: &OrgState, owner: &RecordId, id: &RecordId) -> AppResult<bool> {
-    let row: Option<Skill> = store::get(&state.db, id).await?;
-    Ok(match row {
-        Some(skill) => embed_skill(state, owner, &skill).await,
-        None => false,
-    })
+/// Embeds up to `limit` of `owner`'s skills that have no vector from the current model. Returns how many
+/// it found; one that fails stays in the backlog for the next embed job.
+pub(crate) async fn embed_backlog(state: &OrgState, owner: &RecordId, limit: usize) -> AppResult<usize> {
+    let spec = embeddings::spec_for(&state.db, &state.settings, owner).await?.tag();
+    let mut res = store::skills::EMBED_BACKLOG.on(&state.db).bind(("owner", owner.clone())).bind(("spec", spec)).bind(("limit", limit as i64)).await?;
+    let ids: Vec<RecordId> = res.take(0)?;
+    for id in &ids {
+        let row: Option<Skill> = store::get(&state.db, id).await?;
+        if let Some(skill) = row {
+            embed_skill(state, owner, &skill).await;
+        }
+    }
+    Ok(ids.len())
 }
 
 async fn save(state: &OrgState, owner: &RecordId, mut a: SaveArgs) -> AppResult<Value> {
