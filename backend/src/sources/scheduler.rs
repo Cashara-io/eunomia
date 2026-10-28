@@ -8,6 +8,13 @@
 //! One sync of a given `(owner, source)` at a time: an in-process guard covers runs in this process, and
 //! the job queue covers other replicas (a running `sync` job for the same pair makes this one stand down).
 //!
+//! Offline: with the user's `sync_check_connectivity` setting on (the default), an unreachable internet
+//! ([`crate::sources::connectivity`]) makes scheduled runs stand down without touching `sync_status`
+//! (no error, no failure count, no backoff), so the sources are still due and sync on the first tick
+//! after the connection returns. [`due_syncs`] enqueues nothing for such a user, and [`sync_job`] (the
+//! `sync` job body) re-checks for jobs queued just before the connection dropped. A manual "Sync now"
+//! probes afresh and answers `{"status": "offline"}` instead of attempting a sync that cannot work.
+//!
 //! "Source" here is a sync key (`registry::sync_key`): one connection, so a user's two Gmail
 //! connections (`gmail` and `gmail~<instance>`) keep separate cursors, health and jobs.
 
@@ -27,7 +34,7 @@ use crate::store;
 use crate::error::AppResult;
 use crate::sources::base::{datetime_to_chrono, owner_key_str};
 use crate::jobs::NewJob;
-use crate::sources::registry;
+use crate::sources::{connectivity, registry};
 
 const BACKOFF: [u64; 5] = [900, 1800, 3600, 7200, 21600];
 
@@ -111,6 +118,34 @@ fn already_running(key: &str) -> Value {
     json!({"source": key, "status": "already_running"})
 }
 
+/// The sync was not attempted because the machine has no internet connection.
+fn offline(key: &str) -> Value {
+    json!({"source": key, "status": "offline"})
+}
+
+/// Whether `owner` wants syncs held back while offline (`app_settings.sync_check_connectivity`).
+/// On unless switched off: a missing row, a row from before the field, or a failed read all mean on.
+pub async fn check_connectivity_enabled(db: &OrgDb, owner: &RecordId) -> bool {
+    #[derive(Deserialize, SurrealValue)]
+    struct Row {
+        #[serde(default)]
+        #[surreal(default)]
+        sync_check_connectivity: Option<bool>,
+    }
+    let read = async {
+        let mut res = store::app::SOURCES_SYNC_CHECK_CONNECTIVITY.on(db).bind(("owner", owner.clone())).await?;
+        let rows: Vec<Row> = res.take(0)?;
+        AppResult::Ok(rows.into_iter().next().and_then(|r| r.sync_check_connectivity))
+    };
+    read.await.ok().flatten().unwrap_or(true)
+}
+
+/// Whether a sync for `owner` should be held back now: the setting is on and the probe finds no
+/// internet. `fresh` skips the probe's short cache.
+async fn held_offline(state: &OrgState, owner: &RecordId, fresh: bool) -> bool {
+    check_connectivity_enabled(&state.db, owner).await && !connectivity::is_online(&state.settings.connectivity_probe, fresh).await
+}
+
 /// Whether a sync job for this pair other than `me` holds a live lease (another replica is running it).
 async fn running_elsewhere(state: &OrgState, owner: &RecordId, key: &str, me: Option<&RecordId>) -> AppResult<bool> {
     let me = me.cloned().unwrap_or_else(|| RecordId::from_table_key("job", "none"));
@@ -151,6 +186,31 @@ pub async fn sync_source(state: &OrgState, owner: &RecordId, key: &str, job: Opt
         Err(e) => return json!({"source": key, "error": e.message}),
     }
     sync_locked(state, owner, key).await
+}
+
+/// How long after standing down offline the follow-up sync job waits.
+pub const OFFLINE_RETRY_SECS: i64 = 60;
+
+/// The job that retries `key` after a scheduled run stood down offline. The finished job keeps its
+/// `sync:<owner>:<source>:<window>` idempotency key, so without this the source could not be queued again
+/// until the next window (up to a full interval after the connection returns, 24 hours for heypocket).
+/// Each job queues at most one successor under a fresh key, so there is one retry chain per source while
+/// offline, and a retry that finds the machine still offline queues the next. It touches no `sync_status`.
+pub fn offline_retry_job(org: crate::pool::OrgId, owner: &RecordId, key: &str) -> NewJob {
+    let job_key = format!("{}:{}:{key}:offline:{}", crate::jobs::kind::SYNC, owner_key_str(owner), uuid::Uuid::new_v4().simple());
+    let mut job = NewJob::new(crate::jobs::kind::SYNC, owner.clone(), job_key).in_org(org).payload(json!({ "source": key }));
+    job.run_at = Some(Utc::now() + chrono::Duration::seconds(OFFLINE_RETRY_SECS));
+    job
+}
+
+/// The body of the `sync` job. A scheduled run (`manual` false) stands down with `{"status": "offline"}`
+/// when the user's connectivity check is on and the machine is offline, leaving `sync_status` alone; a
+/// manual one already passed that check when it was requested, so it goes ahead. Otherwise [`sync_source`].
+pub async fn sync_job(state: &OrgState, owner: &RecordId, key: &str, job: Option<&RecordId>, manual: bool) -> Value {
+    if !manual && held_offline(state, owner, false).await {
+        return offline(key);
+    }
+    sync_source(state, owner, key, job).await
 }
 
 async fn sync_locked(state: &OrgState, owner: &RecordId, key: &str) -> Value {
@@ -219,7 +279,12 @@ struct StatusReport {
 /// "Sync now": queue a `sync` job and wait for the result, so a manual run gets the same lease, claim
 /// cap and retry rules as a scheduled one. If a sync job for the pair is already waiting or running (or
 /// answers `{"status": "already_running"}` instead of starting another. If no worker finishes it within the wait, answers `{"status": "queued"}`.
+/// With the user's connectivity check on and a fresh probe finding no internet, answers `{"status": "offline"}`
+/// without queueing anything or touching `sync_status`: a sync that cannot reach the provider would only record an error.
 pub async fn sync_now(state: &OrgState, owner: &RecordId, key: &str) -> AppResult<Value> {
+    if held_offline(state, owner, true).await {
+        return Ok(offline(key));
+    }
     let Some(queueing) = Claim::take(&QUEUEING, owner, key) else { return Ok(already_running(key)) };
     if sync_active(state, owner, key).await? {
         return Ok(already_running(key));
@@ -227,7 +292,7 @@ pub async fn sync_now(state: &OrgState, owner: &RecordId, key: &str) -> AppResul
     let started = Utc::now();
     let job_key = format!("{}:{}:{key}:manual:{}", crate::jobs::kind::SYNC, owner_key_str(owner), uuid::Uuid::new_v4().simple());
     let job_id = RecordId::from_table_key("job", crate::tx::stable_key('j', &job_key));
-    let job = NewJob::new(crate::jobs::kind::SYNC, owner.clone(), job_key).in_org(state.db.org()).payload(json!({ "source": key }));
+    let job = NewJob::new(crate::jobs::kind::SYNC, owner.clone(), job_key).in_org(state.db.org()).payload(json!({ "source": key, "manual": true }));
     crate::jobs::enqueue(&state.control, job).await?;
     drop(queueing);
 
@@ -264,12 +329,15 @@ pub fn is_due(last_run: Option<chrono::DateTime<Utc>>, failures: i64, interval: 
     (now - last_run).num_seconds() >= wait as i64
 }
 
-/// Every enabled source, for every user, whose interval and backoff window have elapsed.
+/// Every enabled source, for every user, whose interval and backoff window have elapsed. A user whose
+/// connectivity check is on while the machine is offline gets none: nothing is enqueued, so nothing is
+/// recorded either, and their sources are due again on the next tick.
 pub async fn due_syncs(state: &OrgState) -> AppResult<Vec<DueSync>> {
     let db = &state.db;
     let mut out = Vec::new();
     let now = Utc::now();
     for owner in all_user_ids(state).await? {
+        let first = out.len();
         let intervals = sync_intervals_for(db, &owner).await.unwrap_or_default();
         for (src, conn) in registry::enabled(db, &owner).await? {
             let key = registry::sync_key(src.as_ref(), &conn);
@@ -280,6 +348,10 @@ pub async fn due_syncs(state: &OrgState) -> AppResult<Vec<DueSync>> {
             if is_due(last_run, failures, period, now) {
                 out.push(DueSync { owner: owner.clone(), source: key, period });
             }
+        }
+        if out.len() > first && held_offline(state, &owner, false).await {
+            tracing::debug!(owner = %owner.to_string(), skipped = out.len() - first, "offline: scheduled syncs skipped");
+            out.truncate(first);
         }
     }
     Ok(out)

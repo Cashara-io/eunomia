@@ -4,6 +4,8 @@ Connectors pull your data from other services into Eunomia, where agents read it
 
 After the first sync, each connector syncs again on its interval (changeable on its setup page). A failed sync shows the provider's error on the connector's page and the dashboard, and retries with backoff (15 min → 6 h).
 
+When the machine has no internet connection, scheduled syncs are skipped quietly instead of failing: no error is shown, no failure is counted and the backoff does not grow, and the sources sync again on the first scheduler tick after the connection returns. This is the **Skip syncs while offline** switch under Settings, General (on by default, per user). "Sync now" checks afresh and answers that you are offline rather than attempting a sync that cannot work. The check is a short TCP connect to a few well-known addresses; see `EUNOMIA_CONNECTIVITY_PROBE` in [deployment](deployment.md) to change them.
+
 Every sync is a `sync` job in the background job queue (see `docs/architecture/jobs.md`): scheduled syncs and **Sync now** share it, so only one sync of a connector runs at a time. If one is already waiting or running, **Sync now** says so instead of starting another.
 
 | Connector | What it syncs | Credential (where to get it) | Scopes / permissions | Default interval |

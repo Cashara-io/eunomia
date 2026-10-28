@@ -344,7 +344,10 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
     setSyncError(null);
     let result: "done" | "failed" = "done";
     try {
-      await syncSource.mutateAsync(kind);
+      if ((await syncSource.mutateAsync(kind)).status === "offline") {
+        result = "failed";
+        setSyncError({ message: "You're offline, so nothing was synced. Try again when you have a connection." });
+      }
     } catch (e) {
       result = "failed";
       setSyncError(failure(e, "The sync could not start."));

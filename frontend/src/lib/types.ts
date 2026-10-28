@@ -32,6 +32,8 @@ export type AppSettings = {
   /** "" = automatic (OPENAI_CHAT_MODEL, else gpt-4o-mini on OpenAI, else the endpoint's first chat model). */
   chat_model: string;
   sync_intervals: Record<string, number>;
+  /** Skip scheduled syncs while there is no internet connection (default true). */
+  sync_check_connectivity: boolean;
   theme: { mode?: "light" | "dark" | "system"; accent?: string };
   openai_api_key_set: boolean;
   /** A usable model endpoint resolves for this user, so chat can answer. */

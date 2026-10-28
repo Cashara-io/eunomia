@@ -43,13 +43,21 @@ fn payload_str<'a>(job: &'a Job, field: &str) -> Result<&'a str, JobError> {
 
 /// One source for one user. `sync_source` records health and backoff in `sync_status` and never
 /// fails, so a failing source ends this job normally and the next window tries again. A run that finds
-/// another sync of the same source in progress stands down.
+/// another sync of the same source in progress stands down, and so does a scheduled run while the
+/// machine is offline (with the user's connectivity check on); neither is a failure.
 async fn sync(state: AppState, job: Job) -> Result<(), JobError> {
     let source = payload_str(&job, "source")?;
     let state = org_state(&state, &job).await?;
-    let report = crate::sources::scheduler::sync_source(&state, &job.owner, source, Some(&job.id)).await;
-    match (report.get("error"), report.get("status")) {
+    let manual = job.payload.get("manual").and_then(|v| v.as_bool()).unwrap_or(false);
+    let report = crate::sources::scheduler::sync_job(&state, &job.owner, source, Some(&job.id), manual).await;
+    match (report.get("error"), report.get("status").and_then(|s| s.as_str())) {
         (Some(e), _) => tracing::warn!(source, error = %e, "source sync failed"),
+        (None, Some("offline")) => {
+            tracing::info!(source, "source sync skipped: offline");
+            // this job is done and its window's key spent: queue a retry so the source resumes soon after the connection returns
+            let retry = crate::sources::scheduler::offline_retry_job(state.db.org(), &job.owner, source);
+            super::enqueue_lossy(&state.control, retry).await;
+        }
         (None, Some(_)) => tracing::info!(source, "source sync skipped: already running"),
         (None, None) => tracing::info!(source, report = %report, "source synced"),
     }

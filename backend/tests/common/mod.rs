@@ -57,6 +57,8 @@ pub fn test_settings() -> Settings {
         // SurrealDB's built-in file bucket, in memory
         documents_backend: "memory".into(),
         documents_max_bytes: 256 * 1024,
+        // never probe the network from tests: a sandbox with no route would otherwise skip every sync
+        connectivity_probe: "off".into(),
         auth: Default::default(),
     }
 }

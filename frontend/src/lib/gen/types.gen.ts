@@ -938,6 +938,11 @@ export type SettingsOut = {
     openai_api_key_set: boolean;
     openai_base_url: string;
     /**
+     * Probe for an internet connection before a scheduled sync and skip it quietly while offline.
+     * Default true. "Sync now" reports `status: "offline"` instead of failing.
+     */
+    sync_check_connectivity: boolean;
+    /**
      * Open map of source key to sync interval seconds.
      */
     sync_intervals: {
@@ -964,6 +969,10 @@ export type SettingsUpdate = {
     observations_mission?: string | null;
     openai_api_key?: string | null;
     openai_base_url?: string | null;
+    /**
+     * Skip scheduled syncs while there is no internet connection (default true).
+     */
+    sync_check_connectivity?: boolean | null;
     sync_intervals?: unknown;
     theme?: unknown;
 };
@@ -1044,6 +1053,9 @@ export type SyncReport = {
     failed?: number | null;
     skipped?: number | null;
     source: string;
+    /**
+     * `already_running`, `queued`, or `offline` (the connectivity check found no internet; nothing was attempted).
+     */
     status?: string | null;
     written?: number | null;
 };

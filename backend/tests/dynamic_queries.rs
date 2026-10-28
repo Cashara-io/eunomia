@@ -234,8 +234,8 @@ async fn entities_and_vaults(app: &TestApp) -> Value {
 }
 
 async fn settings_and_connectors(app: &TestApp) {
-    // app.settings_update: every subset of the seven patchable fields
-    for on in subsets(7) {
+    // app.settings_update: every subset of the eight patchable fields
+    for on in subsets(8) {
         let mut body = serde_json::Map::new();
         for i in on {
             let (k, v) = [
@@ -246,6 +246,7 @@ async fn settings_and_connectors(app: &TestApp) {
                 ("openai_base_url", json!("http://127.0.0.1:9/v1")),
                 ("observations_mission", json!("keep it short")),
                 ("memory_skill", json!("my skill")),
+                ("sync_check_connectivity", json!(false)),
             ][i]
                 .clone();
             body.insert(k.into(), v);

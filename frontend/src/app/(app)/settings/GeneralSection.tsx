@@ -24,6 +24,7 @@ export function GeneralSection({ settings }: { settings: AppSettings }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<Failure | null>(null);
+  const [syncError, setSyncError] = useState<Failure | null>(null);
 
   const urlInvalid = baseUrlInput.trim() !== "" && !/^https?:\/\/\S+$/.test(baseUrlInput.trim());
   const dirty =
@@ -64,6 +65,16 @@ export function GeneralSection({ settings }: { settings: AppSettings }) {
     }
   }
 
+  /* Saves at once: it is a single switch, not part of the OpenAI form below. */
+  async function setCheckConnectivity(on: boolean) {
+    setSyncError(null);
+    try {
+      await updateSettings.mutateAsync({ sync_check_connectivity: on });
+    } catch (e) {
+      setSyncError(failure(e, "Could not save the setting. Try again."));
+    }
+  }
+
   const row = "grid gap-1.5 md:grid-cols-[180px_minmax(0,1fr)] md:gap-6 px-5 py-4 items-start";
 
   return (
@@ -81,6 +92,29 @@ export function GeneralSection({ settings }: { settings: AppSettings }) {
             <ChevronRight {...ICON} aria-hidden />
           </span>
         </Link>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <PanelHead title="Syncing" />
+        <label htmlFor="check-connectivity" className="ledger px-5 py-4 flex items-start gap-3 cursor-pointer">
+          <input
+            id="check-connectivity"
+            type="checkbox"
+            className="mt-0.5"
+            style={{ accentColor: "var(--accent)" }}
+            checked={settings.sync_check_connectivity}
+            disabled={updateSettings.isPending}
+            onChange={(e) => setCheckConnectivity(e.target.checked)}
+          />
+          <span className="flex flex-col gap-0.5">
+            <span className="text-[13px] font-medium">Skip syncs while offline</span>
+            <span className="text-[12px]" style={{ color: "var(--ink-faint)" }}>
+              Checks for an internet connection before each scheduled sync. With no connection the sync is skipped quietly, with no
+              error shown, and picks up again by itself when you are back online. Sync now says so instead of failing.
+            </span>
+          </span>
+        </label>
+        {syncError && <ErrorLine error={syncError} />}
       </div>
 
       <form

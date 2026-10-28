@@ -7455,6 +7455,7 @@
           "embedding_model",
           "chat_model",
           "sync_intervals",
+          "sync_check_connectivity",
           "theme",
           "openai_api_key_set",
           "model_configured",
@@ -7488,6 +7489,10 @@
           },
           "openai_base_url": {
             "type": "string"
+          },
+          "sync_check_connectivity": {
+            "type": "boolean",
+            "description": "Probe for an internet connection before a scheduled sync and skip it quietly while offline.\nDefault true. \"Sync now\" reports `status: \"offline\"` instead of failing."
           },
           "sync_intervals": {
             "type": "object",
@@ -7539,6 +7544,13 @@
               "string",
               "null"
             ]
+          },
+          "sync_check_connectivity": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Skip scheduled syncs while there is no internet connection (default true)."
           },
           "sync_intervals": {},
           "theme": {}
@@ -7753,7 +7765,8 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "`already_running`, `queued`, or `offline` (the connectivity check found no internet; nothing was attempted)."
           },
           "written": {
             "type": [
