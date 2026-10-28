@@ -20,7 +20,7 @@ Every sync is a `sync` job in the background job queue (see `docs/architecture/j
 | Spotify | Recently played tracks (Spotify keeps only the last 50, so history builds up from when you connect) | Your own Spotify app's client ID + secret and a refresh token (below) | `user-read-recently-played` | 15 min |
 | Todoist | Active tasks with project, due date, labels | API token — Todoist → Settings → Integrations → Developer | Full API token (Todoist has no read-only token) | 15 min |
 | Stripe | Charges (incremental) | [Restricted key](https://dashboard.stripe.com/apikeys) `rk_…` | Charges: Read only | 15 min |
-| Ed Discussion | One record per thread, with its answers and comments in the text (30 days back, then every thread that changed; 100 threads per sync, oldest first). Active courses, or the course IDs you list; region `us` (default), `au` or `eu`. Only the newest 5,000 threads per course are scanned; threads deeper than that are never synced | API token from [edstem.org/us/settings/api-tokens](https://edstem.org/us/settings/api-tokens) | Ed's API is unofficial and has no scopes; the token reads what you can | 30 min |
+| Ed Discussion | One record per thread, with its answers and comments in the text (30 days back, then every thread that changed; 100 threads per sync, oldest first). Active courses, or the course IDs you list; region `us` (default), `au` (edstem.org/au, served from `edstem.org/api`) or `eu`. Only the newest 5,000 threads per course are scanned; threads deeper than that are never synced | API token from [edstem.org/us/settings/api-tokens](https://edstem.org/us/settings/api-tokens) | Ed's API is unofficial and has no scopes; the token reads what you can | 30 min |
 
 ## More than one connection of a kind
 

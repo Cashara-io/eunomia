@@ -1,7 +1,8 @@
 //! Ed Discussion source: one record per thread (question, post or announcement) in the courses the
 //! token's owner is enrolled in, with its answers and comments flattened into the body. Uses Ed's
-//! unofficial API (`https://{region}.edstem.org/api`), bearer token from
-//! edstem.org/us/settings/api-tokens. `config.region` (`us`, `au` or `eu`) picks the host and
+//! unofficial API (`https://us.edstem.org/api`; `au` accounts use `https://edstem.org/api`, `eu` is
+//! `https://eu.edstem.org/api`), bearer token from edstem.org/us/settings/api-tokens.
+//! `config.region` (`us`, `au` or `eu`) picks the host and
 //! `config.course_id` (comma-separated) limits the courses; unset, every active enrolment is synced.
 //!
 //! Incremental: the cursor is the newest thread `updated_at` seen in the course listings (UTC). Each
@@ -20,7 +21,7 @@ use crate::connectors::clients::{bearer, require, str_field, Api};
 use crate::error::{AppError, AppResult};
 use crate::sources::base::{envelope, items, rfc3339, s, Conn, Source, SyncResult, MAX_PAGES};
 
-/// The hosts Ed runs. The region goes into a hostname, so anything else is refused.
+/// The regions Ed runs. The region picks the API host ([`api_base`]), so anything else is refused.
 const REGIONS: &[&str] = &["us", "au", "eu"];
 const PAGE_SIZE: usize = 100;
 const LOOKBACK_DAYS: i64 = 30;
@@ -41,9 +42,18 @@ fn region(conn: &Conn) -> AppResult<String> {
     }
 }
 
+/// `au` accounts are served from the bare `edstem.org` host (`au.edstem.org` only redirects to it).
+fn api_base(region: &str) -> String {
+    if region == "au" {
+        "https://edstem.org/api".to_string()
+    } else {
+        format!("https://{region}.edstem.org/api")
+    }
+}
+
 fn api(conn: &Conn) -> AppResult<(Api, String)> {
     let region = region(conn)?;
-    let base = format!("https://{region}.edstem.org/api");
+    let base = api_base(&region);
     let token = require(&conn.credentials, "api_token")?;
     Ok((Api::new(&conn.config, &base, bearer(&token)), region))
 }
@@ -360,6 +370,13 @@ mod tests {
         conn.config["region"] = json!(" AU ");
         assert_eq!(region(&conn).unwrap(), "au");
         assert!(mock.requests().is_empty());
+    }
+
+    #[test]
+    fn au_uses_the_bare_host_and_the_others_their_subdomain() {
+        assert_eq!(api_base("au"), "https://edstem.org/api");
+        assert_eq!(api_base("us"), "https://us.edstem.org/api");
+        assert_eq!(api_base("eu"), "https://eu.edstem.org/api");
     }
 
     #[tokio::test]

@@ -307,8 +307,8 @@ export const CONNECTOR_META: Record<Connector["kind"], ConnectorMeta> = {
     help: (
       <>
         Create an API token at <A href="https://edstem.org/us/settings/api-tokens">edstem.org/us/settings/api-tokens</A>.
-        Ed&apos;s API is unofficial and may change. Set the region to <C>au</C> or <C>eu</C> if your Ed is hosted
-        there (default <C>us</C>). Leave course IDs empty to sync every active course, or list course IDs separated by
+        Ed&apos;s API is unofficial and may change. Set the region to <C>au</C> if your Ed is at edstem.org/au (Australian
+        universities), or <C>eu</C> for Europe (default <C>us</C>). Leave course IDs empty to sync every active course, or list course IDs separated by
         commas (the number in a course&apos;s URL). The first sync reads the last 30 days.
       </>
     ),
