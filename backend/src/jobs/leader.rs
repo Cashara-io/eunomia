@@ -57,6 +57,7 @@ pub async fn tick(state: &AppState, n: u64) {
         reconcile_observations(&org_state).await;
         if n.is_multiple_of(SLOW_EVERY) {
             reconcile_embeddings(&org_state).await;
+            reconcile_redact_backfill(&org_state, super::window(3600)).await;
             if let Err(e) = crate::vaults::service::discard_stale_copies(&org_state.db).await {
                 tracing::warn!(error = %e.message, "deleting stale vault copies failed");
             }
@@ -149,6 +150,23 @@ pub async fn reconcile_syncs(state: &OrgState) {
     }
 }
 
+/// The secret backfill, until this org's marker says it is done for the current detectors. The key carries
+/// the detector version and an hourly `window`: a second leader or tick in the window does not queue it
+/// twice, and a job that died (attempts used up) is queued again in the next window. The marker keeps it
+/// to one finished run.
+// ponytail: a run longer than an hour can overlap the next window's; the rewrites are compare-and-set, so
+// only the counts can be off. A "running job of this kind for this org" probe is the fix if that matters.
+pub async fn reconcile_redact_backfill(state: &OrgState, window: u64) {
+    // an error: the org is still at the schema before the marker table; the tick after its migration queues it
+    if super::redact_backfill::done(state).await.unwrap_or(true) {
+        return;
+    }
+    let Ok(owners) = owners(state).await else { return };
+    let Some(owner) = owners.into_iter().next() else { return };
+    let key = format!("{}:{}:{}:{window}", kind::REDACT_BACKFILL, state.db.org().key(), crate::redact::DETECTOR_VERSION);
+    super::enqueue_lossy(&state.control, NewJob::new(kind::REDACT_BACKFILL, owner, key).in_org(state.db.org())).await;
+}
+
 /// Cache records still missing an embedding, for owners that can embed.
 pub async fn reconcile_embeddings(state: &OrgState) {
     let Ok(owners) = owners(state).await else { return };
@@ -170,8 +188,12 @@ async fn has_embed_backlog(state: &OrgState, owner: &surrealdb::types::RecordId)
         return Ok(true);
     }
     let spec = crate::embeddings::service::spec_for(db, &state.settings, owner).await?.tag();
-    let mut res = store::jobs::MEMORY_EMBED_BACKLOG.on(db).bind(("owner", owner.clone())).bind(("spec", spec)).bind(("limit", 1)).await?;
-    Ok(!res.take::<Vec<surrealdb::types::RecordId>>("id")?.is_empty())
+    let mut res = store::jobs::MEMORY_EMBED_BACKLOG.on(db).bind(("owner", owner.clone())).bind(("spec", spec.clone())).bind(("limit", 1)).await?;
+    if !res.take::<Vec<surrealdb::types::RecordId>>("id")?.is_empty() {
+        return Ok(true);
+    }
+    let mut res = store::skills::EMBED_BACKLOG.on(db).bind(("owner", owner.clone())).bind(("spec", spec)).bind(("limit", 1)).await?;
+    Ok(!res.take::<Vec<surrealdb::types::RecordId>>(0)?.is_empty())
 }
 
 #[derive(serde::Deserialize, SurrealValue)]

@@ -205,6 +205,18 @@ memory routes replace API keys, tokens, private keys, JWTs and passwords in URLs
 `[redacted: github token]`, still save the rest, and return `redacted: [{"kind", "count"}]` so the agent
 knows what was dropped.
 
+Secrets saved before redaction existed are redacted once after the upgrade, by a background job in each
+org (`redact_backfill`). It rewrites memories (facts, observations and superseded facts), skill
+descriptions and bodies, and audit-log argument summaries, and drops the vectors made from the old text,
+so the embed job makes new ones. It runs once per org, resumes where it stopped after a crash, and runs
+again when the detectors gain new shapes. When it finishes, the server logs `secret backfill finished`
+with how many rows of each kind changed, and the instance audit log gets a `redact.backfill` event with
+the same counts. It never logs the text. A rewrite leaves a memory's `version` and `updated_at` as they
+were, so a client cache or a change feed shows the old text until it fetches the row again. Uploaded
+documents, synced connector records, chat messages, entity names, aliases and summaries, relation labels,
+sync error messages and extension webhook deliveries are not redacted on write, so the backfill leaves
+them alone too.
+
 ### Agent skills
 
 An agent can save a skill it learned (the same shape as a `SKILL.md`: a name, a description of when to use
