@@ -19,6 +19,7 @@ use crate::sources::base::{owner_key_str, Conn, Source, SourceCtx};
 use crate::sources::routing;
 use crate::sources::demo::DemoSource;
 use crate::sources::discord::DiscordSource;
+use crate::sources::ed::EdSource;
 use crate::sources::github::GitHubSource;
 use crate::sources::gmail::GmailSource;
 use crate::sources::google_calendar::GoogleCalendarSource;
@@ -46,6 +47,7 @@ pub fn all() -> Vec<Arc<dyn Source>> {
         Arc::new(SpotifySource),
         Arc::new(TodoistSource),
         Arc::new(StripeSource),
+        Arc::new(EdSource),
     ]
 }
 

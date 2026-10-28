@@ -80,7 +80,8 @@ export type ConnectorKind =
   | "discord"
   | "spotify"
   | "todoist"
-  | "stripe";
+  | "stripe"
+  | "ed";
 
 /** One routing rule: a record whose `field` matches `value` goes to `vault`. */
 export type RoutingRule = { field: string; value: string; vault: string };

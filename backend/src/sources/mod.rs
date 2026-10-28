@@ -5,6 +5,7 @@
 pub mod base;
 pub mod demo;
 pub mod discord;
+pub mod ed;
 pub mod github;
 pub mod gmail;
 pub mod google_calendar;

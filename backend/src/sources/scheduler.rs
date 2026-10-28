@@ -298,15 +298,16 @@ async fn sync_intervals_for(db: &OrgDb, owner: &RecordId) -> AppResult<Value> {
 }
 
 /// `sync_intervals.get(key, default)`, where the default is heypocket's
-/// 24h plan-mandated minimum and everything else's fallback is 15 minutes.
+/// 24h plan-mandated minimum, Ed's 30 minutes (an unofficial API, and every sync rescans each course's
+/// listing) and everything else's fallback is 15 minutes.
 fn interval_for(sync_intervals: &Value, key: &str) -> u64 {
     if let Some(v) = sync_intervals.get(key).and_then(|v| v.as_u64()) {
         return v.max(1);
     }
-    if key == "heypocket" {
-        86400
-    } else {
-        900
+    match key {
+        "heypocket" => 86400,
+        "ed" => 1800,
+        _ => 900,
     }
 }
 
@@ -358,5 +359,6 @@ mod tests {
         let intervals = json!({});
         assert_eq!(interval_for(&intervals, "heypocket"), 86400);
         assert_eq!(interval_for(&intervals, "up_bank"), 900);
+        assert_eq!(interval_for(&intervals, "ed"), 1800);
     }
 }

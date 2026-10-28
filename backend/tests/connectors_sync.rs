@@ -626,6 +626,16 @@ fn per_connector() -> Vec<(&'static str, &'static str, Value, Value, Vec<Route>)
             vec![route("GET", "/charges", json!({"object": "list", "has_more": false, "data": [{"id": "ch_1", "object": "charge", "amount": 2500, "currency": "aud",
                 "created": 1700000100, "status": "succeeded", "paid": true, "refunded": false, "description": "Pro", "payment_intent": "pi_1"}]}))],
         ),
+        (
+            "ed", "ed", json!({}), json!({"api_token": "ed-tok"}),
+            vec![
+                route("GET", "/user", json!({"user": {"id": 7, "name": "Sam"}, "courses": [{"course": {"id": 10, "code": "X101", "name": "Intro", "status": "active"}, "role": {"role": "student"}}]})),
+                route("GET", "/courses/10/threads", json!({"threads": [{"id": 501, "course_id": 10, "user_id": 7, "title": "Lifetimes?", "updated_at": "2999-01-01T00:00:00.000000+00:00"}]})),
+                route("GET", "/threads/501", json!({"thread": {"id": 501, "course_id": 10, "user_id": 7, "title": "Lifetimes?", "category": "General", "type": "question",
+                    "document": "How do borrows end?", "is_answered": false, "is_anonymous": false, "updated_at": "2999-01-01T00:00:00.000000+00:00", "deleted_at": null,
+                    "answers": [], "comments": []}, "users": [{"id": 7, "name": "Ada"}]})),
+            ],
+        ),
     ]
 }
 

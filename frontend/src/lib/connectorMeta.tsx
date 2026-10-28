@@ -4,6 +4,7 @@ import {
   CreditCard,
   Database,
   GitBranch,
+  GraduationCap,
   Landmark,
   Mail,
   MessageCircle,
@@ -298,6 +299,27 @@ export const CONNECTOR_META: Record<Connector["kind"], ConnectorMeta> = {
     sourceKey: "stripe",
     webhooks: false,
   },
+  ed: {
+    label: "Ed Discussion",
+    description: "Threads, answers and comments from your Ed Discussion courses.",
+    icon: <GraduationCap size={18} strokeWidth={1.75} />,
+    tint: "var(--connector-ed)",
+    help: (
+      <>
+        Create an API token at <A href="https://edstem.org/us/settings/api-tokens">edstem.org/us/settings/api-tokens</A>.
+        Ed&apos;s API is unofficial and may change. Set the region to <C>au</C> or <C>eu</C> if your Ed is hosted
+        there (default <C>us</C>). Leave course IDs empty to sync every active course, or list course IDs separated by
+        commas (the number in a course&apos;s URL). The first sync reads the last 30 days.
+      </>
+    ),
+    fields: [
+      { key: "api_token", label: "API token", placeholder: "…", secret: true },
+      { key: "region", label: "Region (optional)", placeholder: "us, au or eu", secret: false },
+      { key: "course_id", label: "Course IDs (optional)", placeholder: "12345, 67890", secret: false },
+    ],
+    sourceKey: "ed",
+    webhooks: false,
+  },
 };
 
 export const CONNECTOR_ORDER: Connector["kind"][] = [
@@ -313,6 +335,7 @@ export const CONNECTOR_ORDER: Connector["kind"][] = [
   "spotify",
   "todoist",
   "stripe",
+  "ed",
 ];
 
 export function connectorStatus(c: Connector | undefined): "demo" | "connected" | "disconnected" {

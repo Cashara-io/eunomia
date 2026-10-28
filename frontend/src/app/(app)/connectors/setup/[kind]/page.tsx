@@ -29,11 +29,12 @@ const SYNC_INTERVAL_PRESETS = [
 ];
 
 // Fallback interval a source runs at when the user hasn't set an override,
-// per the backend scheduler (heypocket defaults to 24h there; every other
-// source falls back to the scheduler's generic 900s/15min default).
+// per the backend scheduler (heypocket defaults to 24h there, ed to 30 min;
+// every other source falls back to the scheduler's generic 900s/15min default).
 const SOURCE_DEFAULT_INTERVAL: Record<string, number> = {
   up_bank: 900,
   heypocket: 86400,
+  ed: 1800,
 };
 
 function isConnectorKind(kind: string): kind is ConnectorKind {
