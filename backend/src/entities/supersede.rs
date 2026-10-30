@@ -13,7 +13,7 @@ use serde_json::{json, Value};
 use surrealdb::types::{Datetime, RecordId, SurrealValue};
 
 use crate::config::Settings;
-use crate::embeddings::provider;
+use crate::embeddings::{provider, service as embeddings};
 use crate::error::{AppError, AppResult};
 use crate::pool::OrgDb;
 use crate::rid::RecordIdExt;
@@ -127,12 +127,30 @@ async fn run(db: &OrgDb, settings: &Settings, owner: &RecordId, subject: &Record
         return Ok(Vec::new());
     }
     let new_ids: HashSet<String> = new_rows.iter().map(|r| r.id.to_string()).collect();
+    // New facts usually have no vector yet (the embed job runs later), so embed them here. The vector
+    // is saved too, so recall finds the fact by meaning straight away.
+    let spec = embeddings::spec_for(db, settings, owner).await?.tag();
+    let texts: Vec<String> = new_rows.iter().map(|r| r.text.clone()).collect();
+    let vectors = embeddings::embed(db, settings, &texts, Some(owner)).await?;
     // Only live facts close in meaning to a new fact are candidates: one fact can't make an unrelated one untrue.
     let mut older: Vec<FactRow> = Vec::new();
-    for n in &new_rows {
+    for (n, vector) in new_rows.iter().zip(vectors) {
+        if vector.len() != embeddings::dim() {
+            return Err(AppError::internal(format!("embedding for {} has dimension {}", n.id.to_string(), vector.len())));
+        }
+        crate::store::cache::SET_MEMORY_EMBEDDING
+            .on(db)
+            .bind(("id", n.id.clone()))
+            .bind(("embedding", vector.clone()))
+            .bind(("spec", spec.clone()))
+            .bind(("text", n.text.clone()))
+            .await?
+            .check()?;
         let mut res = q::SIMILAR_LIVE_FACTS
             .on(db)
             .bind(("new", n.id.clone()))
+            .bind(("vector", vector))
+            .bind(("spec", spec.clone()))
             .bind(("subject", subject.clone()))
             .bind(("limit", NEIGHBOURS as i64))
             .await?;

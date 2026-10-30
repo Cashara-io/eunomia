@@ -189,15 +189,13 @@ pub const FACTS_BY_ID: Stmt = Stmt::new(
     r#"SELECT id, text, updated_at ?? created_at AS at FROM $ids
        WHERE type IN ["world","experience"] AND status != "superseded""#,
 );
-/// The subject's live raw facts most similar to one new fact (same embedding model), best first.
+/// The subject's live raw facts most similar to one new fact's `$vector` (same embedding `$spec`), best first.
 /// Only these can be superseded by it: a fact about something else can't be made untrue by it.
-pub const SIMILAR_LIVE_FACTS: Stmt = Stmt::at(
+pub const SIMILAR_LIVE_FACTS: Stmt = Stmt::new(
     "entities.similar_live_facts",
-    r#"LET $n = (SELECT embedding, embedding_spec FROM ONLY $new);
-       SELECT id, text, updated_at ?? created_at AS at, vector::similarity::cosine(embedding, $n.embedding) AS sim
+    r#"SELECT id, text, updated_at ?? created_at AS at, vector::similarity::cosine(embedding, $vector) AS sim
        FROM memory WHERE subject = $subject AND id != $new AND type IN ["world","experience"]
-       AND status != "superseded" AND embedding_spec = $n.embedding_spec ORDER BY sim DESC LIMIT $limit"#,
-    1,
+       AND status != "superseded" AND embedding_spec = $spec ORDER BY sim DESC LIMIT $limit"#,
 );
 /// Marks facts superseded and makes the subject's observation stale.
 pub const MARK_SUPERSEDED: Stmt = Stmt::new(
