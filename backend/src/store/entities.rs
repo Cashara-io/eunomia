@@ -183,11 +183,21 @@ pub const SET_SUMMARY: Stmt = Stmt::new(
 );
 
 // consolidate.rs
-/// A subject's latest live raw facts, newest first, dated by their last write (supersede).
-pub const LIVE_FACTS: Stmt = Stmt::new(
-    "entities.live_facts",
-    r#"SELECT id, text, updated_at ?? created_at AS at FROM memory WHERE subject = $subject
-       AND type IN ["world","experience"] AND status != "superseded" ORDER BY at DESC LIMIT $limit"#,
+/// The facts being checked (the new ones), dated by their last write.
+pub const FACTS_BY_ID: Stmt = Stmt::new(
+    "entities.facts_by_id",
+    r#"SELECT id, text, updated_at ?? created_at AS at FROM $ids
+       WHERE type IN ["world","experience"] AND status != "superseded""#,
+);
+/// The subject's live raw facts most similar to one new fact (same embedding model), best first.
+/// Only these can be superseded by it: a fact about something else can't be made untrue by it.
+pub const SIMILAR_LIVE_FACTS: Stmt = Stmt::at(
+    "entities.similar_live_facts",
+    r#"LET $n = (SELECT embedding, embedding_spec FROM ONLY $new);
+       SELECT id, text, updated_at ?? created_at AS at, vector::similarity::cosine(embedding, $n.embedding) AS sim
+       FROM memory WHERE subject = $subject AND id != $new AND type IN ["world","experience"]
+       AND status != "superseded" AND embedding_spec = $n.embedding_spec ORDER BY sim DESC LIMIT $limit"#,
+    1,
 );
 /// Marks facts superseded and makes the subject's observation stale.
 pub const MARK_SUPERSEDED: Stmt = Stmt::new(
@@ -260,7 +270,8 @@ pub const ALL: &[&Stmt] = &[
     &EDGES_AMONG,
     &SET_SUMMARY,
     &RAW_MEMORIES,
-    &LIVE_FACTS,
+    &FACTS_BY_ID,
+    &SIMILAR_LIVE_FACTS,
     &MARK_SUPERSEDED,
     &OBSERVATION_OF,
     &CONSOLIDATE_CREATE,
