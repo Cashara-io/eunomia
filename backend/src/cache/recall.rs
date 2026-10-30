@@ -441,6 +441,33 @@ async fn query_vector(db: &OrgDb, settings: &Settings, owner: &RecordId, query: 
     }
 }
 
+/// Query terms for [`memory_text_arm`]: [`cs::search_terms`], with each
+/// number joined to the nearest word before it (or after it, if it comes
+/// first), as in `week 11`. Dated facts read "On 2026-10-29, ...", so a bare
+/// `2026` or `10` matches most of a vault, and its BM25 scan is slow enough to
+/// hit [`ARM_DEADLINE`] while ranking almost nothing. A two-word match (`@@`
+/// needs both) stays fast and keeps the number's meaning.
+fn memory_text_terms(query: &str) -> Vec<String> {
+    let terms = cs::search_terms(query);
+    let numeric = |t: &str| t.chars().all(|c| c.is_ascii_digit());
+    let mut out: Vec<String> = Vec::new();
+    for (i, t) in terms.iter().enumerate() {
+        let term = if !numeric(t) {
+            t.clone()
+        } else {
+            let word = terms[..i].iter().rev().chain(terms[i + 1..].iter()).find(|w| !numeric(w));
+            match word {
+                Some(w) => format!("{w} {t}"),
+                None => t.clone(), // only numbers in the query: nothing to pair with
+            }
+        };
+        if !out.contains(&term) {
+            out.push(term);
+        }
+    }
+    out
+}
+
 /// Full-text arm over remembered facts (`memory.text`), BM25-ranked. This is
 /// what makes a fact an agent wrote with `memory_write` findable by what it
 /// says, not just by its subject's name -- no embeddings required. Works for
@@ -455,7 +482,7 @@ async fn memory_text_arm(db: &OrgDb, vault: &RecordId, query: &str, limit: usize
     }
     // one BM25 match per term (`@@` with a whole question needs every word to
     // match), all in one round trip
-    let terms = cs::search_terms(query);
+    let terms = memory_text_terms(query);
     if terms.is_empty() {
         return Ok(Vec::new());
     }
@@ -995,6 +1022,16 @@ fn fit_budget(items: Vec<RecallItem>, budget: usize) -> Vec<RecallItem> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn memory_text_terms_pair_numbers_with_a_word() {
+        assert_eq!(memory_text_terms("where are my week 11 notes"), vec!["week", "week 11", "notes"]);
+        assert_eq!(memory_text_terms("2026 plans"), vec!["plans 2026", "plans"]);
+        assert_eq!(memory_text_terms("mlp 4-10"), vec!["mlp", "mlp 4", "mlp 10"]);
+        assert_eq!(memory_text_terms("ece4179 port 8001"), vec!["ece4179", "port", "port 8001"]);
+        assert_eq!(memory_text_terms("2026"), vec!["2026"]);
+    }
+
     use super::*;
     use chrono::Duration;
 
