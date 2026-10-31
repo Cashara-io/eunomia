@@ -15,6 +15,7 @@ operators and contributors.
 | [Concepts](concepts.md) | Vaults, entities, memories, recall, merging, the graph and the 3D vector cloud |
 | [Connectors](connectors.md) | Credentials, source options and sync setup |
 | [Extensions](extensions.md) | Your own scripts feeding Eunomia: a webhook inbox that buffers events, batch claim/ack, the security model, and the plan for hosted runtimes |
+| [Password managers](password-managers.md) | Let tools use secrets kept in your own 1Password or Bitwarden Secrets Manager: set-up, references, the resolution log, what it protects against |
 | [Deployment](deployment.md) | TLS, production env vars, updates, org databases, backups |
 
 ## Repository references
