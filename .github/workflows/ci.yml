@@ -198,9 +198,9 @@ jobs:
       # Every SurrealDB pin (crate, lock, compose, backup image, CI, drills, run.sh) on the same patch.
       - run: bash scripts/ci/check-surreal-pins.sh
       # Every script test that needs no Docker, by glob so a new one cannot be forgotten.
-      # SKIP lists the ones that need real containers (upgrade-surreal-v3 has its own job below).
+      # SKIP lists the ones that need real containers (upgrade-surreal-v3 and update-path have their own jobs below).
       - run: |
-          SKIP="upgrade-surreal-v3.test.sh"
+          SKIP="upgrade-surreal-v3.test.sh update-path.test.sh"
           rc=0
           for t in scripts/tests/*.test.sh; do
             case " $SKIP " in *" $(basename "$t") "*) echo "skip $t"; continue ;; esac
@@ -220,6 +220,31 @@ jobs:
         with:
           fetch-depth: 0   # case B reads the released v1.2.2 compose file from its tag
       - run: bash scripts/tests/upgrade-surreal-v3.test.sh
+
+  # An install on the previous release takes this PR's build through the real updater: the published
+  # ghcr images of `from`, seeded through the API, backup, "Update now" and the OLD release's
+  # scripts/auto-update.sh (only `docker compose pull` is shimmed: the build is tagged v9.9.9-ci,
+  # local only, never pushed), then counts, reads, ledgers, health, an idempotent re-run and a
+  # rollback (old tag, pre-update backup restored). Compose project eu-update, ports 8251 and 3251.
+  update-path:
+    needs: [frontend]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        from: [v2.0.7]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the release tags: the stand-in GitHub serves them
+      - run: bash scripts/tests/update-path.test.sh "${{ matrix.from }}"
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: update-path-${{ matrix.from }}
+          path: update-path-artifacts/
+          if-no-files-found: ignore
 
   # Backups really restore, on a throwaway SurrealDB 3.3.5 container. The two drills share the
   # container name fw-backup-db and port 8211, so they run one after the other.

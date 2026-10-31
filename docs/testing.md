@@ -22,10 +22,28 @@ Every test layer, from cheapest to most destructive. Run the first six on every 
 
 - `backend`: `cargo clippy --all-targets -- -D warnings`, `cargo nextest run`, `TEST_HARDENED=1 cargo nextest run`, `ISOLATION_TEST_NO_APP_FILTERS=1 cargo nextest run --test isolation`, `job_claims_across_processes` against a real RocksDB-backed SurrealDB 3.3.5 container (below), `cargo build --release`.
 - `frontend`: generated API client check, lint, build, `tsc`. `e2e`: Playwright against the compose stack.
-- `scripts`: every `scripts/tests/*.test.sh` except the Docker one, plus `bash -n` on the scripts.
+- `scripts`: `scripts/ci/check-surreal-pins.sh` (every SurrealDB pin on the same patch), every `scripts/tests/*.test.sh` except the two that need Docker, plus `bash -n` on the scripts.
 - `upgrade-surreal-v3`: `scripts/tests/upgrade-surreal-v3.test.sh` (real 2.x to 3.3 move; the large-table case `UPGRADE_TEST_LARGE=1` is not run in CI).
 - `restore-drill`: `scripts/restore-drill.sh` then `scripts/restore-drill-tenancy.sh`.
+- `update-path`: `scripts/tests/update-path.test.sh v2.0.7`, an install on the previous release updated to this build through the real updater (below).
 - Not in CI: Chaos, k6, fuzz.
+
+## Update path
+
+`bash scripts/tests/update-path.test.sh <from-tag>` (CI job `update-path`, `from: v2.0.7`; needs Docker, `jq` and a clone with the release tags) proves that an install on a released tag takes the current checkout through the real update path:
+
+1. Builds this checkout's backend, frontend and backup images and tags them `v9.9.9-ci`, a local-only tag that sorts above every release. It is never pushed: pushing any `v*` tag publishes images and offers it to every install.
+2. A local bare repo stands in for GitHub: the real tags up to `<from-tag>`, plus `v9.9.9-ci` on HEAD.
+3. Clones `<from-tag>` from it and starts it with that release's published ghcr images, as compose project `eu-update` on ports 8251 (backend) and 3251 (frontend), `EMBEDDINGS_BACKEND=stub` (so the HNSW indexes hold vectors) and `EUNOMIA_SIGNUP_ORG=personal` (two users, two org databases).
+4. Seeds through the API: two users, a PAT each, entities of the built-in kinds and a custom one, facts, an edited fact, a deleted fact, a relation, two extra vaults, skills, a document. One fact is marked superseded with the statement `entities.mark_superseded` runs, because superseding needs a chat model the test does not have.
+5. Snapshots per-database, per-table row counts, the `_migration` ledgers and a fixed set of reads (recall, entities_get, skill_get, skill_find, the documents list).
+6. `backup now pre-update`.
+7. "Update now" as the admin (`POST /api/update/request`), then the OLD release's `scripts/auto-update.sh` on the host with `EUNOMIA_DIR` set. Only `docker compose pull` is shimmed; every other docker call is real.
+8. Asserts `status.json` and `history.log`, every service healthy and on the new images, `surrealdb` on the pin in `docker-compose.yml` with the `ws://` healthcheck, `/readyz`, ledgers at the latest migration, row counts (bar the tables that move by themselves: jobs, sessions, audit and usage rows) and reads unchanged.
+9. Runs the updater again, restarts the backend and runs `up -d` again: no new history line, no container recreated, no new ledger rows, counts unchanged.
+10. Rollback: copies the data volume and reports (information only) whether the old SurrealDB opens what the new one wrote; then checks out `<from-tag>`, starts it on a fresh volume, restores the pre-update backup with `backend/scripts/restore.sh <file> --wipe`, and checks counts, reads and ledgers against the snapshot.
+
+On failure, logs, `docker compose ps`, the snapshots and `update-status/` go to `update-path-artifacts/` (uploaded by CI). `UPDATE_PATH_KEEP=1` leaves the stack up, `UPDATE_PATH_SKIP_BUILD=1` reuses existing `v9.9.9-ci` images. Waits are bounded; the job's timeout is 45 minutes.
 
 ## Safety
 
