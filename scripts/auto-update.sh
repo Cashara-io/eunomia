@@ -141,12 +141,23 @@ main() {
     echo "JWT_SECRET=$(head -c 32 /dev/urandom | base64 | tr -d '\n')" >> .env
   fi
 
+  # The key the backend and the secrets-helper sidecar share (docs/architecture/specs/broker.md). Without
+  # one the sidecar still only answers on its internal network; hex, so it needs no quoting anywhere.
+  if ! grep -q '^SECRETS_HELPER_KEY=.' .env; then
+    sed -i.bak '/^SECRETS_HELPER_KEY=/d' .env && rm -f .env.bak
+    echo "SECRETS_HELPER_KEY=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')" >> .env
+  fi
+
   # Everything except the updater itself (recreating it here would kill this
   # run); it is refreshed last, after the status is written.
   local services
   services="$(docker compose config --services 2>/dev/null | grep -vx updater | tr '\n' ' ')"
   touch "$status_dir/heal" # cleared once the stack is up; until then each run starts what is left
-  if ! docker compose pull backend frontend backup >/dev/null 2>"$status_dir/.last-error" \
+  # the images this release publishes; a compose file without secrets-helper (an older tag) pulls the three
+  local images="backend frontend backup"
+  printf '%s\n' $services | grep -qx secrets-helper && images="$images secrets-helper"
+  # shellcheck disable=SC2086 # a list of service names
+  if ! docker compose pull $images >/dev/null 2>"$status_dir/.last-error" \
     || ! start_stack "$status_dir" "$current" "$latest" $services; then
     write_status "$status_dir" "$latest" "$latest" false "restart failed: $(tail -5 "$status_dir/.last-error")"
     exit 1

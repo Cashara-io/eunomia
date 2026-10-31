@@ -10,3 +10,7 @@ services:
   backend:
     extra_hosts:
       - "host.docker.internal:host-gateway"
+  # the secrets-helper reaches the Playwright mock 1Password Connect and Bitwarden servers the same way
+  secrets-helper:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

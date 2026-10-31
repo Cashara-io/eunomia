@@ -114,6 +114,7 @@ jobs:
         run: |
           echo "JWT_SECRET=$(openssl rand -hex 32)" >> .env
           echo "ENCRYPTION_KEY=$(openssl rand -hex 32)" >> .env
+          echo "SECRETS_HELPER_KEY=$(openssl rand -hex 32)" >> .env
           # The connectors spec points connectors at its in-test mock provider.
           echo "EUNOMIA_ALLOW_CONNECTOR_BASE_URL=1" >> .env
           # the suite registers many users a minute from one address
@@ -121,7 +122,7 @@ jobs:
           # The backend writes https.json here and the HTTPS spec plays the updater.
           mkdir -p update-status && chmod 777 update-status
           echo "E2E_UPDATE_STATUS_DIR=$PWD/update-status" >> "$GITHUB_ENV"
-          docker compose -p eunomia-ci -f docker-compose.yml -f docker-compose.ci.yml up -d backend frontend
+          docker compose -p eunomia-ci -f docker-compose.yml -f docker-compose.ci.yml up -d backend frontend secrets-helper
 
       - name: Wait for backend and frontend
         run: |
@@ -205,7 +206,7 @@ jobs:
       # Every script test that needs no Docker, by glob so a new one cannot be forgotten.
       # SKIP lists the ones that need real containers (upgrade-surreal-v3 and update-path have their own jobs below).
       - run: |
-          SKIP="upgrade-surreal-v3.test.sh update-path.test.sh"
+          SKIP="upgrade-surreal-v3.test.sh update-path.test.sh secrets-helper-compose.test.sh"
           rc=0
           for t in scripts/tests/*.test.sh; do
             case " $SKIP " in *" $(basename "$t") "*) echo "skip $t"; continue ;; esac
@@ -220,6 +221,23 @@ jobs:
           node-version: 18
       - run: npm ci && npm test
         working-directory: cli/create-eunomia
+      # the credential broker's sidecar: its unit tests and the mock 1Password Connect and Bitwarden servers
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci && npm test
+        working-directory: secrets-helper
+
+  # The backend and the real secrets-helper container on the compose networks: Test connection through
+  # the sidecar to a mock 1Password Connect container, the sidecar reachable from the backend only, no
+  # published port, nothing written to its filesystem, no token in its environment.
+  secrets-helper-compose:
+    needs: [frontend]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/tests/secrets-helper-compose.test.sh
 
   # Real SurrealDB 2.7 -> 3.3 data move (scripts/upgrade-surreal-v3.sh), including a
   # forced mismatch that must roll back, and an upgrade from the released v1.2.2
