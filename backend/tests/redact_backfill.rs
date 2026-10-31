@@ -103,7 +103,14 @@ async fn backfill_redacts_stored_secrets_once_and_resumes() {
         sql(&app, "UPDATE memory SET text = $new WHERE text = $old", json!({"old": old, "new": new})).await;
     }
     // embedded as stored, secrets included, as an old install's rows were
-    Box::pin(embeddings::embed_memory_backlog(&org.db, &org.settings, &app.user.id, 100)).await.unwrap();
+    // a write's own background embedding can still be landing on a row this touches: retry a conflict
+    for attempt in 1..=20 {
+        match Box::pin(embeddings::embed_memory_backlog(&org.db, &org.settings, &app.user.id, 100)).await {
+            Ok(_) => break,
+            Err(e) if e.code == eunomia_backend::error::ErrorCode::DbConflict && attempt < 20 => tokio::time::sleep(std::time::Duration::from_millis(20)).await,
+            Err(e) => panic!("embedding the backlog: {e:?}"),
+        }
+    }
     let embedded = |text: &'static str| sql(&app, "SELECT VALUE embedding != NONE FROM memory WHERE text = $t", json!({"t": text}));
     assert_eq!(embedded("Alice likes tea").await, vec![json!(true)]);
     let cached = || sql(&app, "SELECT VALUE id FROM embed_cache", json!({}));

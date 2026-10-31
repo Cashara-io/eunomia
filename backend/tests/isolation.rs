@@ -285,7 +285,8 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         DELETE vault_member WHERE vault = $v;
         CREATE $vm SET vault = $v, user = $u, role = 'owner';
         CREATE change SET vault = $v, seq = 1000000, op = 'created', kind = 'memory', item = $c, actor = $c;
-        CREATE $cs SET n = 0;";
+        CREATE $cs SET n = 0;
+        CREATE $rb SET stage = 'done', done_at = time::now();";
     let uid = user.id.clone();
     db.test_raw()
         .query(sql)
@@ -298,6 +299,8 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         .bind(("v", eunomia_backend::rid::parse(&vault).unwrap()))
         .bind(("vm", surrealdb::types::RecordId::new("vault_member", canary.clone())))
         .bind(("cs", surrealdb::types::RecordId::new("change_seq", canary.clone())))
+        // the backfill marker holds counts only; the canary is its key (a real marker is `v<version>`)
+        .bind(("rb", surrealdb::types::RecordId::new("redact_backfill", canary.clone())))
         .await
         .unwrap()
         .check()
