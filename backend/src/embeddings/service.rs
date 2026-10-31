@@ -305,6 +305,15 @@ pub async fn embed(db: &OrgDb, settings: &Settings, texts: &[String], owner: Opt
     Ok(keys.iter().map(|k| cached.get(k).cloned().unwrap_or_default()).collect())
 }
 
+/// Drops the memoized vectors of `texts` under `owner`'s current [`EmbedSpec`], so a text that was
+/// redacted leaves no vector of the secret behind. Vectors made under an earlier model stay.
+pub async fn forget(db: &OrgDb, settings: &Settings, texts: &[String], owner: &RecordId) -> AppResult<()> {
+    let spec = spec_for(db, settings, owner).await?;
+    let keys: Vec<String> = texts.iter().map(|t| spec.cache_key(&settings.encryption_key, t)).collect();
+    store::cache::EMBED_CACHE_DELETE.on(db).bind(("keys", keys)).await?.check()?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

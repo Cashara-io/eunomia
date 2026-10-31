@@ -201,6 +201,25 @@ No. The connected agent is the model.
 
 Destructive tools are flagged `destructiveHint` so clients can ask first.
 
+Secrets are never stored: `memory_write`, `memory_write_batch`, `memory_update`, `skill_save` and the REST
+memory routes replace API keys, tokens, private keys, JWTs and passwords in URLs with a marker such as
+`[redacted: github token]`, still save the rest, and return `redacted: [{"kind", "count"}]` so the agent
+knows what was dropped.
+
+Secrets saved before redaction existed are redacted once after the upgrade, by a background job in each
+org (`redact_backfill`). It rewrites memories (facts, observations and superseded facts), skill
+descriptions and bodies, and audit-log argument summaries, and drops the vectors made from the old text,
+so the embed job makes new ones. It runs once per org, resumes where it stopped after a crash, and runs
+again when the detectors gain new shapes. When it finishes, the server logs `secret backfill finished`
+with how many rows of each kind changed, and the instance audit log gets a `redact.backfill` event with
+the same counts. It never logs the text. A rewrite leaves a memory's `version` and `updated_at` as they
+were, but adds an `updated` row (actor `system`) to the vault's change log for each rewritten memory or
+skill, so a client following the vault (for example `create-eunomia watch`) fetches the redacted text.
+Change-log rows hold no content, so there is nothing in them to redact. Uploaded
+documents, synced connector records, chat messages, entity names, aliases and summaries, relation labels,
+sync error messages and extension webhook deliveries are not redacted on write, so the backfill leaves
+them alone too.
+
 ### Agent skills
 
 An agent can save a skill it learned (the same shape as a `SKILL.md`: a name, a description of when to use

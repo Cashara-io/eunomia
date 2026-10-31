@@ -55,6 +55,7 @@ impl AppState {
     pub async fn build(settings: &Settings, config: surrealdb::opt::Config) -> AppResult<AppState> {
         // before anything derives a database password from the key
         crate::connectors::crypto::require_key(settings)?;
+        crate::redact::init();
         let templates = crate::db::connect_all(settings, config).await?;
         let template = &templates[0];
         let provisioner = Provisioner::connect(template, settings);
