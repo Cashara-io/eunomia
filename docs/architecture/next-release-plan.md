@@ -1,8 +1,8 @@
 # Eunomia next release plan
 
-Status: proposed 2026-10-31; decisions D1, D2, D5, D7, D9, D10 recorded 2026-10-31 (section 9). Phase 1 is in progress as the 2.0.8 patch release (branch `release/2.0.8`); nothing else is built yet. Base: `main` at 9a0820b (release 2.0.7, tag `v2.0.7`). Owner decisions that bind this plan: **SurrealDB stays the primary database** and **Rust stays** (both from [foundation-plan.md](foundation-plan.md)); the phase order below was agreed with Avi; **nothing merges without Avi's OK**. Owner decisions, made and open, are collected in section 9; open ones are marked **DECISION FOR AVI** where they come up, and decided ones say **Decided 2026-10-31**.
+Status: proposed 2026-10-31; decisions D1, D2, D5, D7, D9, D10 recorded 2026-10-31 (section 10). Phase 1 is in progress as the 2.0.8 patch release (branch `release/2.0.8`); nothing else is built yet. Base: `main` at 9a0820b (release 2.0.7, tag `v2.0.7`). Owner decisions that bind this plan: **SurrealDB stays the primary database** and **Rust stays** (both from [foundation-plan.md](foundation-plan.md)); the phase order below was agreed with Avi; **nothing merges without Avi's OK**. Owner decisions, made and open, are collected in section 10; open ones are marked **DECISION FOR AVI** where they come up, and decided ones say **Decided 2026-10-31**.
 
-How this was made: one agent read the repo at 9a0820b (docs, CI, compose files, updater, migration runner, tests) and the open PRs (#109, #111, #112, #114, #115) and merged #102 with read-only `gh`. The external SurrealDB facts (3.3.5, 4.0.0-beta.1, the licence) were checked by the lead (the supervising agent) on 2026-10-31 against the surrealdb.com release notes and licence page, GitHub releases, crates.io and Docker Hub (the `v3.3.5` tag exists). The four workstreams and the phase order come from Avi. Every repo claim cites a path. Where something is inferred rather than read, it says "inferred". Facts that could not be confirmed are listed at the end.
+How this was made: one agent read the repo at 9a0820b (docs, CI, compose files, updater, migration runner, tests) and the open PRs (#109, #111, #112, #114, #115) and merged #102 with read-only `gh`. The external SurrealDB facts (3.3.5, 4.0.0-beta.1, the licence) were checked by the lead (the supervising agent) on 2026-10-31 against the surrealdb.com release notes and licence page, GitHub releases, crates.io and Docker Hub (the `v3.3.5` tag exists). The four workstreams and the phase order come from Avi. Every repo claim cites a path. Where something is inferred rather than read, it says "inferred". Workstream 5 (simulation / what-if, Phase 4) was added by Avi on 2026-10-31, with its research in [specs/simulation-research.md](specs/simulation-research.md). Facts that could not be confirmed are listed in section 11.
 
 ## 1. The release, in one table
 
@@ -12,6 +12,7 @@ How this was made: one agent read the repo at 9a0820b (docs, CI, compose files, 
 | 2 | Eunomia Projects: finish steps 1 and 2 (#112, #114), then the remaining steps | 2 | M | 5 (2 open) | yes (#114 adds a tenant migration) |
 | 3 | Enterprise password managers: 1Password and Bitwarden Secrets Manager through a credential broker and a provider sidecar | 2 | L | 4 (plus #111, #115 first) | yes (#115, plus broker tables) |
 | 4 | Ontology foundation: SurrealDB object layer, self-hosted ClickHouse events with an in-app control panel, OpenTelemetry Collector, Square POS connector, data and schema blast radius (plan, apply, rollback), RDF and OWL import and export | 3 | L (upper end) | 15 | yes |
+| 5 | Simulation / what-if: five engines (propagation, Markov, DES, ABM, SD) inside Monte Carlo runs, baseline vs A/B scenarios, an allow-listed generative UI; on assumptions, not trained models (predictions are a later release) | 4 | L (upper end); XL with wave 2 | 16 (S16 later) | yes (one tenant migration plus a ClickHouse table, S1) |
 
 ```mermaid
 flowchart LR
@@ -43,11 +44,22 @@ flowchart LR
     D10 --> D8
     D8 --> D9["SHACL validation with rudof, optional"]
   end
+  subgraph P4["Phase 4: simulation / what-if"]
+    S1["Schema and sim_results"] --> S2["eunomia-sim: Monte Carlo, propagation, Markov"]
+    S2 --> S3["Scenario API, guardrails, agent planner"]
+    S3 --> S4["Generative UI catalogue"]
+    S3 --> S5["DES and the wine and logistics templates"]
+  end
   R1 --> B1
   R1 --> C1
   B3 --> D1
   C3 --> D1
   D3 --> R3(["Release, Avi OK"])
+  D5 --> S1
+  D2 --> S1
+  S4 --> R4(["Phase 4 release, Avi OK (D14)"])
+  S5 --> R4
+  R4 -.-> L5["Later release: predictions pipeline"]
   L4["Parked: SurrealDB 4.x on SurrealKV, not scheduled"]
   R3 -.-> L4
 ```
@@ -184,6 +196,7 @@ After the tag is pushed and `release.yml` has published, a short **post-publish 
 | L2 Projects | `feat/projects-` (and the open `feat/create-eunomia`, `feat/project-changes`) | section 5 | 2 |
 | L3 Broker | `feat/broker-` (and the open `feat/redact-secrets`, `feat/redact-backfill`) | section 6 | 2 |
 | L4 Ontology | `feat/ontology-` | section 7 | 3 |
+| L5 Simulation | `feat/sim-` (inferred) | section 8 | 4 |
 
 - One Claude Code session per lane, each in its own worktree: `git worktree add ../eu-<lane> -b <branch> origin/main`. Worktrees share the stash stack, so lanes never use bare `git stash`; they make WIP commits.
 - Each lane starts from a short written spec by the lead, `docs/architecture/specs/<lane>.md` (goal, non-goals, files it may touch, migrations it needs, the tests that prove it, open questions). The lane does not start coding until Avi has read the spec.
@@ -214,6 +227,7 @@ Initial queue for this release, in proposed merge order:
 | tenant | 0024 | `credential_refs` (references, plus the encrypted provider settings, see 6.3) | L3 | broker core |
 | tenant | 0025 | `ontology_core` | L4 | ontology schema |
 | tenant | (0026) | `ontology_change` (blast radius scenarios, change records, backups) | L4 | O10, O12; only if not folded into 0025 (7.8) |
+| tenant | (next free) | `simulation_core` (`assumption`, `edge_rule`, `state_model`, `scenario_run`, and the shared `scenario` fields, D15) | L5 | S1 (8.10) |
 
 The control `0007_secret_providers` line from the first draft is gone: under D5 the provider token is stored with the org's connector credentials, not in control (6.3).
 
@@ -441,8 +455,8 @@ Worked example: Coles' DC Laverton trucks are delayed 6 hours. Which routes, sto
 - **Traversal.** Walk the `links` relation (7.2) outward from the object, one depth at a time, breadth first, in the backend (inferred: app-side BFS in Rust over one `SELECT` per depth on `links` filtered by `in` or `out` and link type, rather than a single recursive SurrealQL path query, because the app needs the path to each node, a node cap and a per-node permission check; to confirm against 3.3.5's recursive graph idioms in the O1 spec). For the example: DC, then the routes it `serves`, then the stores on those routes (`stops_at`), then the suppliers linked inbound (`supplies`, direction `in`). Orders are ClickHouse events keyed by store ids (as Square orders are in 7.4), so they come from the money step below, not from the graph walk.
 - **Per link type traversal rules**, stored on the link type rows beside `object_type` (7.2), so they are data and customers can tune them: `propagates` (true or false), `direction` (`out`, `in` or `both`), and an optional per link type `max_depth`. A link type with no rule does not propagate (safe default, inferred). Changing a rule is a schema change and goes through 7.6.2, because it changes every future data blast radius.
 - **Limits.** Bounded depth, a node cap (default 5,000, inferred) and a server-side timeout (default 10 seconds, inferred). When a limit is hit the result says which one and is marked `truncated`, never silently partial.
-- **Tenancy and permissions.** The walk runs inside the org's own SurrealDB database (no cross-org edge can exist), and every reached object is checked against the vaults the actor may read (`backend/src/authz.rs`). Proposed: an object the actor may not read is left out and the walk does not continue through it, so the result never reveals hidden objects, not even as a count (inferred; it can undercount for a narrow actor, D11 in section 9).
-- **Output.** Affected objects grouped by object type with counts, each with the path that reached it (`dc:laverton -serves-> route:r12 -stops_at-> store:s881`) and its depth; plus **volume and money at risk** from ClickHouse: events whose `object_id` is in the affected set and whose `ts` (or a due time in `attrs`) falls in the window, counted and summed per object type (for the example: open orders and their value for the reached stores in the 6 hour window). Which event types count and which attribute holds the money is configured per object type (inferred design; the definition is D12 in section 9). Money at risk needs ClickHouse, so it arrives with O5; before that the graph part works alone and the money columns are absent.
+- **Tenancy and permissions.** The walk runs inside the org's own SurrealDB database (no cross-org edge can exist), and every reached object is checked against the vaults the actor may read (`backend/src/authz.rs`). Proposed: an object the actor may not read is left out and the walk does not continue through it, so the result never reveals hidden objects, not even as a count (inferred; it can undercount for a narrow actor, D11 in section 10).
+- **Output.** Affected objects grouped by object type with counts, each with the path that reached it (`dc:laverton -serves-> route:r12 -stops_at-> store:s881`) and its depth; plus **volume and money at risk** from ClickHouse: events whose `object_id` is in the affected set and whose `ts` (or a due time in `attrs`) falls in the window, counted and summed per object type (for the example: open orders and their value for the reached stores in the 6 hour window). Which event types count and which attribute holds the money is configured per object type (inferred design; the definition is D12 in section 10). Money at risk needs ClickHouse, so it arrives with O5; before that the graph part works alone and the money columns are absent.
 - **Surfaces.** REST: `POST /api/ontology/blast-radius`, with request and response types in the OpenAPI document through `utoipa` (`backend/src/openapi.rs`), as every route today. MCP: a read-only `ontology_blast_radius` tool through `registry::call` (`backend/src/tools/registry/mod.rs`), so it is counted in `tool_usage` like every tool. UI: a graph view (reusing `frontend/src/components/GraphCanvas.tsx`, which `EntityGraph.tsx` already uses) and a sortable table of the same result, with the path for each row.
 - **Scenarios.** A result can be saved as a named scenario: the input, the result snapshot, who saved it and when, so a planner can compare "DC Laverton 6 hours late" with "DC Laverton closed". Saving writes a row (the only write in 7.6.1), in a tenant `scenario` table.
 - **Tests.** A seeded logistics fixture (one DC, routes, stores, suppliers, with ClickHouse order events) with hand-computed answers: affected counts per type, paths, money at risk; depth limits (depth 1 stops at routes); the node cap and timeout give `truncated`; a link type with `propagates: false` stops the walk; an actor without access to a vault gets a smaller result that never names the hidden objects; and the isolation suite (`backend/tests/isolation.rs`) gets canary rows for `scenario` and proves a blast radius in one org never reaches another org's objects or events.
@@ -527,7 +541,138 @@ O10, O12 and O13 need only O2, so they can run while ingest (O4 to O9) is under 
 
 Size: L (upper end). About 15 PRs.
 
-## 8. All PRs by phase
+## 8. Workstream 5: Simulation / what-if (Phase 4, lane L5)
+
+Added at Avi's request on 2026-10-31. This section summarises the research in [specs/simulation-research.md](specs/simulation-research.md) (repositories checked with `gh api`, SimPy with the GitLab API, on 2026-10-31); the full tables, alternatives, worked examples and licence notes are there.
+
+**Scope.** Simulation and what-if scenario modelling over the ontology (SurrealDB 3.3.5, section 7) and the event history (ClickHouse, 7.3). It runs on **stated assumptions, not trained models**. Predictions (trained or zero-shot forecasting models, causal ML, with their own data pipeline) are a **separate, later release and out of scope here**; the candidates are only listed in the appendix at the end of this document.
+
+### 8.1 Engines, Monte Carlo and scenarios
+
+Five engines, picked per question, all reading the same ontology and ClickHouse history, in a new Rust crate `eunomia-sim`:
+
+| Engine | Answers | Built on |
+|---|---|---|
+| Graph propagation | "If X changes, what does it touch, and by how much?" Phase 3's blast radius walker (7.6.1) plus CEL formulas on edges (elasticity, lead time, capacity, share) | petgraph, cel-rust |
+| Markov chains and Markov reward models | How customers, deliveries or orders move between states, and what that is worth | nalgebra (own module of about 200 lines) |
+| Discrete-event simulation (DES) | Queues, resources and timing: trucks, docks, kitchen, bar staff | nexosim |
+| Agent-based modelling (ABM), wave 2 | Actors with different rules, such as customer segments with different price sensitivity | krABMaga |
+| System dynamics (SD) | Stocks and flows with feedback over months (inventory, backlog) | native Euler or RK4, about 300 lines |
+
+Every engine runs inside a **Monte Carlo wrapper**: N seeded runs (default 2,000, capped by a time budget such as 3 seconds), sampling each assumption from its range, in parallel with rayon; quantiles with polars and in ClickHouse; a tornado sensitivity by swinging each assumption between its P10 and P90. Results are always a **scenario comparison**: baseline vs A vs B, each with P10, P50 and P90 bands. Runs are seeded and the spec is hashed and stored, so any result reruns from the audit log.
+
+How the agent picks an engine: rules first, the LLM second (price, cost, share or capacity: propagation; customers, retention or delivery states over time: Markov; queues and delays rippling: DES; differing behaviour: ABM; feedback loops over months: SD). Engines combine; the agent shows which it chose and why, and the user can switch.
+
+### 8.2 Markov chains as a core method
+
+- **Estimate** the transition matrix from ClickHouse transition counts (`from_state`, `to_state`, `count()` over a window, per segment and per season), with Laplace or Dirichlet smoothing.
+- **Uncertainty**: sample each row from Dirichlet(counts + alpha), so a row built from 12 observations is visibly wider than one from 12,000.
+- **Scenario** = a perturbation of rates ("regular to lapsed +3 points, range 0 to 7"), rows always renormalised, invalid matrices rejected.
+- **Outputs**: n-step distribution, stationary distribution, absorption probabilities and expected time to absorption through the fundamental matrix N = (I - Q)^-1, and a reward model (for example spend per regular visit) for expected value over the horizon.
+- **Limits shown in the UI**: memoryless unless the states encode history (for example "regular 1y+"); a single matrix is wrong across seasons, so estimate per season or use a time-varying matrix; perturbations are assumptions, not data.
+- **Checks**: PyDTMC (MIT) as the CI oracle for parity tests; the markovchain R package's bootstrap as the cross-check for rate intervals.
+
+### 8.3 Data model (SurrealDB ontology and ClickHouse)
+
+New tenant tables, all `SCHEMAFULL`:
+
+| Table | Holds |
+|---|---|
+| `assumption` | key, target (record or edge), kind (elasticity, lead time, capacity, share, rate, transition), distribution (fixed, uniform, triangular, PERT, normal, lognormal, beta, Dirichlet) and params, unit, source (`measured`, `user`, `template`), the measuring query, a note |
+| `edge_rule` | a CEL expression on an ontology edge type or instance, for example `units_new = units_base * (1 + elasticity * pct_price_change)` |
+| `state_model` | a Markov chain: entity type, states, absorbing states, step (day, week, month), the ClickHouse query and window it is estimated from, counts, smoothing |
+| `scenario` | name, base (baseline or another scenario), interventions (set, scale, delay, remove, add on records, edges or transition rates), horizon, runs, seed, engine, status |
+| `scenario_run` | result summary, quantiles, sensitivity, links to the ClickHouse rows |
+
+ClickHouse: reads aggregate `events` into series and transition counts; writes go to a new `sim_results` table (`scenario_id`, `run_id`, `metric`, `t`, `value`; MergeTree ordered by `org, scenario_id, metric, t`), with quantiles by `quantilesTDigest(0.1, 0.5, 0.9)`. ClickHouse's own `simpleLinearRegression` and `seriesDecomposeSTL` can give the measured baseline trend and seasonality without Python. Phase 3 already plans a tenant `scenario` table for saved blast radius results (7.6.1); the two must be one table (D15).
+
+### 8.4 Agent rules: the engine computes, the model never does
+
+- **The LLM plans, the engine computes.** The agent turns the question into a typed `ScenarioSpec`, picks the engine and explains the result. **Numbers only ever come from runs, never from the model's own head**: every number shown carries the id of the `scenario_run` that produced it.
+- Enforced, not just asked for: reply text uses templated slots that the backend fills, and a check rejects a reply whose numbers do not match a run field.
+- **Assumptions in, ranges out.** Every input is either measured (from ClickHouse, with its query) or assumed (set by the user or a template default, with a range), and the UI labels which.
+- Exposed as REST and MCP tools through `registry::call`: `scenario.create`, `scenario.run`, `scenario.compare`, `markov.estimate`, `assumption.suggest`, `sim.explain`. Specs, seeds and results go into the #102 tool-call audit.
+
+### 8.5 Not enough history: the low-history fallback
+
+Checks before any run: a minimum number of observations per transition row (for example 30), a minimum number of weeks of sales for the item (for example 8), and some observed price variation before any elasticity claim. When a check fails:
+
+- use **template assumptions** with wide ranges (for example a restaurant wine elasticity range from published hospitality studies), flagged "industry range, not your data";
+- offer an **experiment instead**: Eunomia writes a test plan as a task (for example a 4 week price test on some wines, the others as control), tracks it through the connector's events, and turns the assumption into `measured` when it ends;
+- label the result **low confidence** with the reason, and widen the bands.
+
+### 8.6 Guardrails against overclaiming
+
+- Every chart caption states the horizon, the number of runs, and which inputs are measured and which assumed.
+- Never "will": "in 80% of runs, between X and Y, given these assumptions".
+- A result whose P10 to P90 range spans zero is labelled "direction uncertain".
+- Assumptions outside sane bounds are rejected (a positive elasticity for a normal good, probabilities outside 0 to 1, negative capacity).
+- A **back-test** button reruns the baseline from 3 months ago against what actually happened, so the user sees how wrong the model tends to be.
+- The assumptions panel always sits next to the result, editable, worded "these are assumptions, not data".
+
+### 8.7 Generative UI: 11 approved components
+
+An allow-listed catalogue, A2UI style: the agent returns a typed JSON spec per component, and the frontend renders it through AI SDK UI tool parts in assistant-ui (the AI SDK RSC `streamUI` path is experimental and paused, so it is not used). No agent-generated code or HTML.
+
+| Component | Shows | Library |
+|---|---|---|
+| `ScenarioSummaryCard` | headline deltas with P10, P50, P90, probability of loss, confidence label | React and the design system |
+| `FanChart` | baseline vs scenario over time with bands | ECharts |
+| `ScenarioCompare` | interval plot of baseline vs A vs B per metric | ECharts or Vega-Lite |
+| `TornadoChart` | sensitivity to each assumption | ECharts |
+| `AssumptionsPanel` | editable sliders with ranges, measured or assumed badges, re-run | React (mathjs live preview for small chains) |
+| `MarkovStateDiagram` | states sized by share, edges labelled with probability, baseline vs scenario colouring | React Flow and dagre; Mermaid for exports |
+| `StateFlowSankey` | population flow between states over steps | ECharts sankey |
+| `BlastRadiusGraph` | affected objects and edges with impact | React Flow |
+| `ImpactMap` | stores and routes coloured by impact, animated delays | MapLibre and deck.gl |
+| `ExperimentPlanCard` | a proposed price or A/B test with dates and a success metric | React |
+| `VegaChart` | escape hatch: an agent-authored Vega-Lite spec, validated against a schema | react-vega |
+
+### 8.8 Two worked examples
+
+> **EXAMPLE NUMBERS ONLY.** Both examples below come from a quick prototype simulation on **made-up assumptions**. They are not real data and not predictions. Full tables are in the research file (5.8, 5.9).
+
+- **Wine at a Square POS restaurant.** "If we raise wine prices 10%, will we gain or lose customers and revenue?" Example inputs: 600 glasses a week at $14, a triangular elasticity of -1.8 to -0.6, 0% to 6% of wine drinkers stopping visits, regular to lapsed up 0 to 7 points. Propagation over one week (example): margin falls in about 87% of runs. A Markov reward model over 6 months (example): about 29 fewer regulars, revenue change P50 -$3,815 (P10 -$9,283, P90 +$1,165). The biggest lever is the regular to lapsed assumption, so the agent proposes a price test. A wider range of wines is Scenario B beside A.
+- **Coles transport delay.** "If outbound trucks from the Laverton DC are delayed 6 hours, what is affected?" Phase 3's blast radius finds routes, stores and categories; DES and propagation on example stock cover and delay ranges give (example) P50 7 stores with a stockout and P50 $6,829 of lost sales; a Markov chain of delivery states moves on-time delivery from 92.0% at baseline to a P50 of 55.0% (example). Scenario B reroutes 10 stores from Dandenong DC, shown on `ImpactMap` and in `ScenarioCompare`.
+
+### 8.9 Shortlist and licence flags
+
+| Use | Pick |
+|---|---|
+| Rust core (embed) | nalgebra, petgraph, cel-rust, rand and rand_distr, statrs, nexosim, krABMaga (wave 2), polars |
+| Frontend (embed) | AI SDK UI, assistant-ui, ECharts, Vega-Lite, React Flow and dagre, MapLibre and deck.gl, mathjs |
+| Ideas only | A2UI (allow-listed catalogue), AG-UI (state delta events), BPTK scenario manager, Amazon SCSE module split, PyDTMC and markovchain, SimPy and Mesa for prototypes |
+| Optional sidecar | OSRM (BSD-2-Clause) for real drive times on maps |
+| **Avoid** | desim (GPL-3.0), evalexpr (AGPL-3.0, relicensed), Insight Maker `simulation` (AGPL-3.0) |
+
+Licence flags: the "Apache-2.0 / MIT" Rust crates are reported by GitHub under one SPDX id and published dual-licensed, to confirm in each `Cargo.toml` before adding; elkjs is EPL-2.0 (acceptable unmodified, but dagre is preferred); salabim's MIT is per its readme. The same rule as 7.7.1 holds: nothing GPL, AGPL or LGPL is linked into Eunomia.
+
+### 8.10 PRs
+
+Each PR meets section 2. Sizes from the research: S under 300 lines, M 300 to 1,000, L 1,000 to 2,500, XL above. Dependencies are inferred from the research's design; migrations are given only where the research states them.
+
+| PR | Size | Depends on | Migrations |
+|---|---|---|---|
+| S1 schema: `assumption`, `edge_rule`, `state_model`, `scenario`, `scenario_run`; ClickHouse `sim_results` | M | O5, O10 | tenant (new tables, through the queue, 3.2) and ClickHouse `sim_results` |
+| S2 `eunomia-sim` crate: seeded Monte Carlo runner, quantiles, time budget | M | S1 | none stated |
+| S3 CEL edge rules: parser, validator, unit checks, sandbox limits | M | S1 | none stated |
+| S4 propagation engine on petgraph with the Phase 3 walker | L | S2, S3, O10 | none stated |
+| S5 Markov engine: estimation, Dirichlet uncertainty, perturbations, absorption, reward model, PyDTMC parity in CI | L | S2, O5 | none stated |
+| S6 scenario API: REST and MCP tools, audit logging | M | S4, S5 | none stated |
+| S7 data sufficiency checks, template packs (hospitality, grocery logistics), experiment plan generator | M | S6 | none stated |
+| S8 guardrails: number provenance check, sane bounds, back-test endpoint | M | S6 | none stated |
+| S9 generative UI part 1: summary card, fan chart, compare, tornado, assumptions panel | L | S6 | none stated |
+| S10 generative UI part 2: Markov state diagram, state sankey, blast radius graph | M | S9 | none stated |
+| S11 generative UI part 3: impact map, optional OSRM sidecar container | L | S9 | none stated (a new compose service must pass the old-updater rule, 6.6) |
+| S12 agent planner: question to `ScenarioSpec`, engine rules, explanation templates | M | S6, S8 | none stated |
+| S13 DES engine on nexosim for logistics | L | S2 | none stated |
+| S14 Square wine template end to end, with demo data | M | S12, O7 | none stated |
+| S15 Coles-style logistics template end to end, with synthetic data | M | S11, S12, S13 | none stated |
+| S16 wave 2: ABM on krABMaga, SD stocks and flows, MCP Apps chart output | XL (split later) | S12 | none stated |
+
+Rough effort (from the research): S1 to S12 about 5 to 7 weeks, S13 to S15 about 3 weeks, S16 later. Size: L (upper end), XL with S16. 16 PRs.
+
+## 9. All PRs by phase
 
 | Phase | PR | Lane | Depends on | Touches migrations |
 |---|---|---|---|---|
@@ -548,10 +693,13 @@ Size: L (upper end). About 15 PRs.
 | 2 | B4 Settings UI: references and resolution log | L3 | B1 | no |
 | 3 | O1 to O9 | L4 (O1 lead) | Phase 2 | O2 tenant 0025; O5, O7 maybe |
 | 3 | O10 to O15 (blast radius, plan and apply, the `eunomia-rdf` crate, RDF and OWL import and export, SHACL; 7.6, 7.7) | L4 | O2; O10 money at risk after O5 | O10, O12 tenant, folded into 0025 or else 0026 |
+| 4 | S1 to S12 (schema, Monte Carlo, CEL rules, propagation, Markov, scenario API, low-history fallback, guardrails, generative UI, agent planner; 8.10) | L5 | O5, O10 | S1: tenant `simulation_core` and ClickHouse `sim_results` |
+| 4 | S13 to S15 (DES, wine and logistics templates) | L5 | S2, S11, S12, O7 | none stated |
+| 4 | S16 wave 2 (ABM, SD, MCP Apps), later | L5 | S12 | none stated |
 
-Total: about 30 PRs, 5 of them already open (#109, #111, #112, #114, #115). Rough effort: Phase 1 about 1.5 weeks, Phase 2 about 3 weeks with the two lanes in parallel, Phase 3 about 6 to 7 weeks (inferred, same scale as foundation-plan.md's estimates; O10 to O15 add about 2 weeks because O10, O12 and O13 can run beside ingest).
+Total: about 46 PRs (30 for Phases 1 to 3, 16 for Phase 4 with S16 later), 5 of them already open (#109, #111, #112, #114, #115). Rough effort: Phase 1 about 1.5 weeks, Phase 2 about 3 weeks with the two lanes in parallel, Phase 3 about 6 to 7 weeks (inferred, same scale as foundation-plan.md's estimates; O10 to O15 add about 2 weeks because O10, O12 and O13 can run beside ingest), Phase 4 about 8 to 10 weeks for S1 to S15 (the research's estimate), S16 not counted. About 19 to 22 weeks in all if the phases run one after another (inferred); the Monte Carlo runner and the DES model could be prototyped earlier against fixtures to shorten that (inferred).
 
-## 9. Risks and open decisions for Avi
+## 10. Risks and open decisions for Avi
 
 | # | Risk or decision | Impact | Proposal or decision |
 |---|---|---|---|
@@ -568,6 +716,10 @@ Total: about 30 PRs, 5 of them already open (#109, #111, #112, #114, #115). Roug
 | D11 | Blast radius and objects the actor may not read | Hiding them can undercount the impact for a narrow actor; showing them leaks what exists | Proposed: leave them out and do not walk through them; an admin's run sees everything in the org; a saved scenario records whose permissions it ran under (7.6.1) |
 | D12 | **What "money at risk" means** | Wrong totals mislead planners | Proposed: per object type, admins choose the event types and the money attribute (for example open orders, `attrs.total`), summed in the window, one currency per org at first; refunds, partial delays and probabilities are out of scope (7.6.1) |
 | D13 | Which link types propagate by default | Too many: huge, noisy results; too few: missed impact | Proposed: none propagate until set on the link type; seeded ontologies (Projects step 6, the logistics fixture) ship sensible rules; changing a rule is a schema plan (7.6.2) |
+| D14 | Phase 4 in the same release as Phase 3, or its own | One large release mixes ontology and simulation regressions | Proposed: its own release after Phase 3 ships, as D2 did for Phase 1 (inferred) |
+| D15 | One `scenario` table for blast radius (O10) and simulation (S1) | Two tables with the same name and different shapes | Proposed: one table, specced in O1 with room for S1's fields (base, interventions, horizon, runs, seed, engine), so S1 adds fields rather than a rival table |
+| D16 | Phase 4 scope for the first cut | 16 PRs, about 8 to 10 weeks | Proposed: S1 to S12 first, S13 to S15 next, S16 (ABM, SD, MCP Apps) in a later release |
+| D17 | OSRM sidecar for drive times (S11) | Another compose service and map data to host | Proposed: optional, behind a compose profile like `ontology`; straight-line times without it (inferred) |
 | R1 | A 3.3.1 server may not open data written by 3.3.5 | Rollback by downgrade fails | Lower than first feared: the 3.3.2 to 3.3.4 notes say rollback to an earlier 3.3 binary is safe (4.3). Still proven by the `update-path` rollback drill; a volume copy before the new server starts stays the fallback |
 | R2 | Stacked PRs never ran CI | Merged untested on the real server | `workflow_dispatch`, one green run required |
 | R3 | `update-path` uses a pull shim | The one step that differs from production | Post-publish smoke with real images |
@@ -580,8 +732,14 @@ Total: about 30 PRs, 5 of them already open (#109, #111, #112, #114, #115). Roug
 | R10 | OWL mapping fidelity | Imported vocabularies lose meaning (restrictions, equivalences) or export differently | Map only classes, subclasses, datatype and object properties, domain and range, and individuals; `reasonable` makes OWL 2 RL consequences explicit before mapping; list everything skipped in the plan; ROBOT checks of the packs, and round-trip and isomorphism tests on GS1, schema.org and IOF subsets (7.7, 7.7.1) |
 | R11 | A schema apply that touches many rows | Long backfills, large snapshots, rollback after later edits | Batched idempotent jobs, snapshot retention window, drift check on rollback; snapshot size shown in the plan (7.6.2) |
 | R12 | Customer-driven schema change near the BSL line | Plan and apply, and RDF import, give customers more control over types | Types stay rows, never `DEFINE` statements; no raw SurrealQL; the 7.5 rules apply to O12 and O14; the research file's per-class `DEFINE TABLE` sketch is not followed (7.7.1) |
+| R13 | Simulation results read as forecasts | Owners act on made-up assumptions as if they were data | The 8.6 guardrails: measured vs assumed labels, "in N% of runs" wording, "direction uncertain", back-test, editable assumptions panel; predictions stay a later release |
+| R14 | The agent writes a number that no run produced | A confident wrong figure in a reply | Templated text slots filled by the backend, and a check that every number in a reply matches a `scenario_run` field (S8) |
+| R15 | Monte Carlo load on the backend (2,000 runs per scenario, in parallel) | Slow requests, CPU contention with recall and tools | Time budget (about 3 seconds), run cap, rayon pool sized below the core count; long runs as background jobs (`backend/src/jobs`, inferred) |
+| R16 | Markov limits: memoryless chains and seasonality | Wrong answers for loyalty built over years or Christmas trade | States that encode history, per-season or time-varying matrices, limits shown in the UI (8.2) |
+| R17 | Copyleft simulation libraries | Licence breach if linked | desim, evalexpr and Insight Maker avoided (8.9); a dependency licence check in CI such as `cargo-deny` (7.7.1) |
+| R18 | Thin history at small customers | Wide bands or template-only answers | The low-history fallback (8.5): template ranges flagged as such, low confidence label, an experiment plan to measure |
 
-## 10. Not confirmed
+## 11. Not confirmed
 
 - The 2.0.5 Projects proposal: not in the repo or in the issue and PR bodies searched; the `v2.0.5` release notes (read by the lead) have no Projects content. It was reviewed with Avi outside the repo; section 5 is built from #112, #114 and `docs/projects.md` on `feat/project-changes` until the lead commits it as `docs/architecture/specs/projects.md`.
 - Whether the 3.3.2 to 3.3.5 notes require an index rebuild, and whether 3.3.1 starts on data 3.3.5 has written.
@@ -591,3 +749,10 @@ Total: about 30 PRs, 5 of them already open (#109, #111, #112, #114, #115). Roug
 - The control panel's compose path (7.3): that `COMPOSE_PROFILES` in `.env` keeps the `ontology` profile on across a plain `docker compose up -d --remove-orphans`, and which ClickHouse endpoints and system tables give health, disk and ingest rate on the pinned version.
 - Blast radius and RDF (7.6, 7.7): whether SurrealDB 3.3.5's recursive graph idioms could replace the app-side walk while keeping paths, a node cap and per-vault checks; the default depth, node cap and timeout (all inferred); the licence of each published crate in 7.7.1 on crates.io (the research file answers format coverage and repository licences, checked on GitHub); and the "901 new consequences" example quoted in 7.6 (taken from the open-ontologies README as relayed by Avi on 2026-10-31; its licence, Rust stack and features were checked in the research file).
 - Which Playwright specs need an empty install (`E2E_UPGRADED` skip list, inferred).
+- Simulation (section 8): the dual licence of each "Apache-2.0 / MIT" Rust crate in its `Cargo.toml`, and salabim's licence beyond its readme; how ClickHouse tables such as `sim_results` are migrated and versioned (the plan has no ClickHouse migration runner yet; O4 or O5 must provide one, inferred); that `quantilesTDigest`, `simpleLinearRegression` and `seriesDecomposeSTL` behave as expected on the pinned ClickHouse version; the sources for the template assumption packs ("published hospitality studies" are not yet named); and the defaults (2,000 runs, a 3 second budget, 30 observations per row, 8 weeks of sales), which are research proposals, not measured.
+- The research says React Flow is "already in our design system". It is not on `main` at 9a0820b: `frontend/package.json` has `d3-force` and `recharts`, and `GraphCanvas.tsx` uses `d3-force`. React Flow, dagre, ECharts, Vega-Lite, MapLibre, deck.gl, AI SDK UI and assistant-ui would all be new frontend dependencies (bundle size to check in S9).
+- The wine and Coles figures in 8.8 are example numbers from made-up assumptions, not results on any customer's data.
+
+## Appendix: Later, predictions pipeline
+
+**Out of scope for this plan.** Trained or zero-shot prediction models, with their own data pipeline, are a separate later release. Candidates are listed, with licences, in the appendix of [specs/simulation-research.md](specs/simulation-research.md): time series foundation models (Chronos-2, TimesFM 2.5, Granite TTM, Toto), classic forecasting (statsforecast, Prophet, Darts, and grafana's Rust `augurs`), causal and uplift ML (DoWhy, EconML, CausalML, CausalPy, PyMC-Marketing) and tabular models (TabPFN, TabICL). Licence flags to carry forward: Moirai's weights are CC-BY-NC-4.0, TiRex is under a licence where large enterprises must pay, TimeGPT is a closed hosted API, and TabPFN's v2.5 and later weights are non-commercial. Serving would be a Python sidecar or ONNX from Rust; nothing of this is designed here.
