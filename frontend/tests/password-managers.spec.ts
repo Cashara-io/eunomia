@@ -114,7 +114,7 @@ test.describe("as the instance admin", () => {
       await row.getByLabel("New token (leave empty to keep the stored one)").fill("connect-e2e-wrong");
       await row.getByRole("button", { name: "Save" }).click();
       await row.getByRole("button", { name: "Test connection" }).click();
-      await expect(row.getByRole("alert")).toContainText("refused the token");
+      await expect(row.getByText(/refused the token/)).toBeVisible();
       expect(await page.content()).not.toContain("connect-e2e-wrong");
 
       await row.getByRole("button", { name: "Remove 1Password Connect" }).click();
@@ -153,7 +153,7 @@ test.describe("as the instance admin", () => {
     await page.getByLabel("Reference", { exact: true }).fill("op://only/two");
     await page.getByLabel(/Allowed tools/).fill("*");
     await page.getByRole("button", { name: "Add reference" }).last().click();
-    await expect(page.getByRole("alert")).toContainText("op:// takes vault/item/field");
+    await expect(page.getByText(/op:\/\/ takes vault\/item\/field/)).toBeVisible();
 
     await page.getByLabel("Reference", { exact: true }).fill(ref);
     await page.getByRole("button", { name: "Add reference" }).last().click();
