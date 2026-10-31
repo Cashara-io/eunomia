@@ -136,6 +136,32 @@ async fn saving_a_name_again_replaces_the_skill_in_that_vault_only() {
     assert_eq!(pick["body"], "t");
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn racing_saves_of_one_new_name_all_succeed_as_one_skill() {
+    let app = TestApp::new().await;
+    let saves = (0..8).map(|i| app.tool("skill_save", json!({"name": "race", "description": "d", "body": format!("v{i}")})));
+    let saved = futures::future::join_all(saves).await;
+    assert!(saved.iter().all(|s| s.get("error").is_none()), "the loser of the unique (vault, name) index replaces the winner: {saved:?}");
+    let ids: std::collections::BTreeSet<String> = saved.iter().map(|s| s["id"].to_string()).collect();
+    assert_eq!(ids.len(), 1, "one skill: {saved:?}");
+}
+
+/// A write to `skill` can conflict with SurrealDB's background compaction of the skill HNSW index (each
+/// skill write queues one), a delete most often, even of a skill with no vector: every write retries it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn skill_writes_retry_a_conflict_with_the_index_compaction() {
+    let app = TestApp::new().await;
+    for i in 0..60 {
+        let name = format!("s{i}");
+        let saved = app.tool("skill_save", save_args(&name, "d")).await;
+        assert!(saved.get("error").is_none(), "save {i}: {saved}");
+        let again = app.tool("skill_save", json!({"name": name, "description": "d", "body": "b2"})).await;
+        assert!(again.get("error").is_none(), "save again {i}: {again}");
+        let deleted = app.tool("skill_delete", json!({"id": saved["id"]})).await;
+        assert!(deleted.get("error").is_none(), "delete {i}: {deleted}");
+    }
+}
+
 #[tokio::test]
 async fn another_user_or_org_cannot_find_get_or_delete_a_skill() {
     let app = TestApp::new().await;
