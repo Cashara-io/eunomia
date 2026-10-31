@@ -21,6 +21,8 @@ Every test layer, from cheapest to most destructive. Run the first six on every 
 
 ## What CI runs
 
+CI (`.github/workflows/ci.yml`) runs on every push to `main` and on every pull request, whatever its base, so a stacked PR (base `release/2.0.x` or another feature branch) gets the same jobs as one into `main`. `workflow_dispatch` also allows a manual run on any branch once the workflow is on the default branch.
+
 - `backend`: `cargo clippy --all-targets -- -D warnings`, `cargo nextest run`, `TEST_HARDENED=1 cargo nextest run`, `ISOLATION_TEST_NO_APP_FILTERS=1 cargo nextest run --test isolation`, `job_claims_across_processes` against a real RocksDB-backed SurrealDB 3.3.5 container (below), `cargo build --release`.
 - `frontend`: generated API client check, lint, build, `tsc`. `e2e`: Playwright against the compose stack.
 - `scripts`: `scripts/ci/check-surreal-pins.sh` (every SurrealDB pin on the same patch), every `scripts/tests/*.test.sh` except the two that need Docker, plus `bash -n` on the scripts, then `npm test` for `cli/create-eunomia` on Node 18.
