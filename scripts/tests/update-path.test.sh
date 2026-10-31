@@ -316,10 +316,10 @@ if [ "${UPDATE_PATH_SKIP_BUILD:-}" = 1 ] && docker image inspect "ghcr.io/cashar
   log "1. reusing the $FAKE images (UPDATE_PATH_SKIP_BUILD=1)"
 else
   log "1. building this checkout as $FAKE"
-  (cd "$ROOT" && EUNOMIA_IMAGE_TAG="$FAKE" docker compose --env-file /dev/null -p "$P-build" build backend frontend backup) > "$W/build.txt" 2>&1 \
+  (cd "$ROOT" && EUNOMIA_IMAGE_TAG="$FAKE" docker compose --env-file /dev/null -p "$P-build" build backend frontend backup secrets-helper) > "$W/build.txt" 2>&1 \
     || { tail -40 "$W/build.txt"; die "docker compose build failed"; }
 fi
-for s in backend frontend backup; do docker image inspect "ghcr.io/cashara-io/eunomia-$s:$FAKE" >/dev/null 2>&1 || die "no image eunomia-$s:$FAKE"; done
+for s in backend frontend backup secrets-helper; do docker image inspect "ghcr.io/cashara-io/eunomia-$s:$FAKE" >/dev/null 2>&1 || die "no image eunomia-$s:$FAKE"; done
 if [ -n "$FROM_REF" ]; then
   if [ "${UPDATE_PATH_SKIP_BUILD:-}" = 1 ] && docker image inspect "ghcr.io/cashara-io/eunomia-backend:$FROM" >/dev/null 2>&1; then
     log "1. reusing the local $FROM images (UPDATE_PATH_SKIP_BUILD=1)"
@@ -498,7 +498,14 @@ wait_healthy 600; check "every service healthy after the update" test $? -eq 0
 check "nothing left Created or exited (bar the one-shot)" bash -c "! (cd '$I' && docker compose ps -a --format '{{.Service}} {{.State}}') | grep -v '^surreal-upgrade ' | grep -v '^updater ' | grep -qE ' (created|exited)'"
 check "surrealdb runs surrealdb/surrealdb:$PIN" bash -c "[ \"\$(docker inspect -f '{{.Config.Image}}' \"\$(cd '$I' && docker compose ps -q surrealdb)\")\" = surrealdb/surrealdb:$PIN ]"
 check "surrealdb healthcheck is isready over ws" bash -c "docker inspect -f '{{json .Config.Healthcheck.Test}}' \"\$(cd '$I' && docker compose ps -q surrealdb)\" | grep -q 'ws://'"
-for s in backend frontend backup; do
+# the secrets-helper sidecar is new in this build: the OLD updater's plain `up -d --remove-orphans` must
+# have started it (its image was not in that updater's pull list), healthy, with no published port
+sh_health() { docker inspect -f '{{.State.Health.Status}}' "$(dc ps -q secrets-helper)" 2>/dev/null; }
+for _ in $(seq 40); do [ "$(sh_health)" = healthy ] && break; sleep 3; done
+check "secrets-helper started by the old updater and healthy" test "$(sh_health)" = healthy
+check "secrets-helper publishes no port" bash -c "[ -z \"\$(docker port \"\$(cd '$I' && docker compose ps -q secrets-helper)\")\" ]"
+check "the backend reaches secrets-helper" dc exec -T backend curl -fsS --max-time 5 http://secrets-helper:8080/healthz
+for s in backend frontend backup secrets-helper; do
   check "$s runs eunomia-$s:$FAKE" bash -c "[ \"\$(docker inspect -f '{{.Config.Image}}' \"\$(cd '$I' && docker compose ps -q $s)\")\" = ghcr.io/cashara-io/eunomia-$s:$FAKE ]"
 done
 check "/readyz answers 200" curl -fsS -o /dev/null --max-time 10 "http://127.0.0.1:$BPORT/readyz"
@@ -556,7 +563,7 @@ EUNOMIA_DIR="$I" PATH="$W/shim:$PATH" bash "$I/scripts/auto-update.sh" > "$W/aut
 check "a second auto-update.sh exits 0" test "$rc" -eq 0
 check "still on $FAKE, no new history line" bash -c "jq -e '.current_version == \"$FAKE\" and .error == null' '$I/update-status/status.json' && [ \"\$(wc -l < '$I/update-status/history.log')\" -eq $hist ]"
 dc restart backend >/dev/null 2>&1; wait_healthy 300; check "healthy after a backend restart" test $? -eq 0
-cids() { local s; for s in surrealdb backend frontend backup; do dc ps -q "$s"; done; }
+cids() { local s; for s in surrealdb backend frontend backup secrets-helper; do dc ps -q "$s"; done; }
 ids1="$(cids)"
 dc up -d > "$W/up-again.txt" 2>&1; check "a second up -d succeeds" test $? -eq 0
 updater_runs() { [ "$(dc ps --format '{{.Service}} {{.State}}' updater)" = "updater running" ]; }

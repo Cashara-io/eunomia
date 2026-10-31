@@ -146,6 +146,8 @@ rm -f "$TMP/images" "$TMP/running"
 # 4c. an existing key survives every later update, and a blank one is replaced
 check "later updates keep the encryption key" test "$(sed -n 's/^ENCRYPTION_KEY=//p' "$TMP/repo/.env")" = "$KEY_AFTER_FIRST"
 check "later updates keep the JWT secret" test "$(sed -n 's/^JWT_SECRET=//p' "$TMP/repo/.env")" = "$JWT_AFTER"
+check "a missing secrets-helper key is generated (hex)" grep -Eq '^SECRETS_HELPER_KEY=[0-9a-f]{64}$' "$TMP/repo/.env"
+SH_KEY="$(sed -n 's/^SECRETS_HELPER_KEY=//p' "$TMP/repo/.env")"
 check "later updates add only one key line" test "$(grep -c '^ENCRYPTION_KEY=' "$TMP/repo/.env")" = 1
 sed -i.bak 's/^ENCRYPTION_KEY=.*/ENCRYPTION_KEY=/' "$TMP/repo/.env" && rm -f "$TMP/repo/.env.bak"
 (cd "$TMP/src" && echo six > compose.yml && git_ commit -qam v1.5 && git tag v1.5.0)
@@ -196,6 +198,15 @@ check "healed: marker cleared" test ! -e "$S/heal"
 : > "$TMP/docker.log"; update
 check "no marker: a service stopped by hand stays stopped" test -z "$(cat "$TMP/docker.log")"
 rm -f "$TMP/ps"
+
+# a release with the secrets-helper sidecar: its image is pulled too, and the key from before is kept
+printf 'surrealdb\nbackend\nfrontend\nsecrets-helper\nupdater\n' > "$TMP/services"
+(cd "$TMP/src" && echo sidecar > compose.yml && git_ commit -qam v2.2 && git tag v2.2.0)
+: > "$TMP/docker.log"; touch "$S/requested"; update
+check "the secrets-helper image is pulled with the others" grep -q 'compose pull backend frontend backup secrets-helper' "$TMP/docker.log"
+check "the secrets-helper key is kept across updates" test "$(sed -n 's/^SECRETS_HELPER_KEY=//p' "$TMP/repo/.env")" = "$SH_KEY"
+check "one secrets-helper key line" test "$(grep -c '^SECRETS_HELPER_KEY=' "$TMP/repo/.env")" = 1
+printf 'surrealdb\nbackend\nfrontend\nupdater\n' > "$TMP/services"
 
 # installs cloned from the old Qyrhal/Eunomia repo are moved to Cashara-io/eunomia
 (cd "$TMP/repo" && git remote set-url origin https://github.com/Qyrhal/Eunomia.git)

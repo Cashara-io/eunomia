@@ -124,10 +124,14 @@ services:
       # (docs/documents.md)
       - EUNOMIA_DOCUMENTS_BACKEND=${EUNOMIA_DOCUMENTS_BACKEND:-file:/data/documents}
       - EUNOMIA_DOCUMENTS_MAX_BYTES=${EUNOMIA_DOCUMENTS_MAX_BYTES:-26214400}
+      # the credential broker's sidecar (below), on the secrets network only the two of them join
+      - SECRETS_HELPER_URL=http://secrets-helper:8080
+      - SECRETS_HELPER_KEY=${SECRETS_HELPER_KEY:-}
     # Read/write access to ONE small status directory -- not the repo, not
     # the docker socket. The `updater` service below does the actual update.
     volumes:
       - ./update-status:/update-status
+    networks: [default, secrets]
     depends_on:
       surrealdb:
         condition: service_healthy
@@ -154,6 +158,30 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+
+  # The credential broker's sidecar (docs/architecture/specs/broker.md): resolves 1Password and Bitwarden
+  # Secrets Manager references for the backend. Always on and tiny (Node, idle until a password manager
+  # is configured in Settings, Connectors). Stateless: the provider token comes with each request from
+  # the backend (stored encrypted in the org's database) and is never written here; no volume, no port.
+  # It joins `secrets` (internal: only the backend can reach it) and `secrets-egress` (its own way out to
+  # the providers), never the default network the other services share. A missing SECRETS_HELPER_KEY
+  # (the first update to this release, under an older updater) leaves the network as the only gate.
+  secrets-helper:
+    image: ghcr.io/cashara-io/eunomia-secrets-helper:${EUNOMIA_IMAGE_TAG:-latest}
+    build: ./secrets-helper
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      - SECRETS_HELPER_KEY=${SECRETS_HELPER_KEY:-}
+    networks: [secrets, secrets-egress]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/healthz').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
 
   # Applies updates when you click "Update now" in Settings (see
   # scripts/updater.sh). Not web-facing: no ports, its only input is the
@@ -219,6 +247,14 @@ services:
     depends_on:
       surrealdb:
         condition: service_healthy
+
+networks:
+  default:
+  # backend <-> secrets-helper only, no way out
+  secrets:
+    internal: true
+  # secrets-helper -> the password managers
+  secrets-egress:
 
 volumes:
   eunomia-surreal-data:
