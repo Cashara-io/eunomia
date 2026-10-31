@@ -269,6 +269,19 @@ async fn a_resolved_value_reaches_the_tool_and_nothing_else() {
     let d: Value = serde_json::from_str(log[0]["detail"].as_str().unwrap()).unwrap();
     assert_eq!((log[0]["outcome"].as_str(), d["ref"].as_str(), d["tool"].as_str(), d["ref_id"].as_str()), (Some("ok"), Some(REF), Some("test_echo_secret"), r["id"].as_str()));
 
+    // edit and remove through the API (the vault check repeats on every statement)
+    let id = r["id"].as_str().unwrap();
+    let (status, edited) = w.app.http_session("PUT", &format!("/api/secrets/refs/{id}"), Some(json!({"vault_id": w.personal, "allowed_tools": ["test_echo_secret", "test_fail_secret", "other_tool"], "label": "Square"}))).await;
+    assert_eq!(status, 200, "{edited}");
+    assert_eq!(edited["allowed_tools"], json!(["test_echo_secret", "test_fail_secret", "other_tool"]));
+    assert_eq!(edited["label"], "Square");
+    let (status, _) = w.app.http_session("POST", "/api/secrets/refs", Some(json!({"reference": "op://Ops/Temp/x", "provider": "onepassword_connect", "vault_id": w.personal, "allowed_tools": ["*"]}))).await;
+    assert_eq!(status, 200);
+    let temp = raw(&w, "org", "SELECT VALUE <string> id FROM credential_ref WHERE reference = 'op://Ops/Temp/x'").await;
+    let temp = temp[0].as_str().unwrap();
+    assert_eq!(w.app.http_session("DELETE", &format!("/api/secrets/refs/{temp}"), None).await.0, 200);
+    assert_eq!(w.app.http_session("DELETE", &format!("/api/secrets/refs/{temp}"), None).await.0, 404, "gone");
+
     // the resolution log and counts, admin only
     let (status, page) = w.app.http_session("GET", "/api/secrets/log?limit=1", None).await;
     assert_eq!(status, 200, "{page}");

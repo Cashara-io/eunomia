@@ -38,11 +38,11 @@ pub const REF_CREATE: Stmt = Stmt::new(
 
 pub const REF_UPDATE: Stmt = Stmt::new(
     "secrets.ref_update",
-    "UPDATE credential_ref SET vault = $new_vault, label = $label, allowed_tools = $allowed_tools, allowed_actors = $allowed_actors, \
-     updated_at = time::now() WHERE id = $id AND vault IN $vaults RETURN AFTER",
+    "UPDATE $id SET vault = $new_vault, label = $label, allowed_tools = $allowed_tools, allowed_actors = $allowed_actors, \
+     updated_at = time::now() WHERE vault IN $vaults RETURN AFTER",
 );
 
-pub const REF_DELETE: Stmt = Stmt::new("secrets.ref_delete", "DELETE credential_ref WHERE id = $id AND vault IN $vaults RETURN BEFORE");
+pub const REF_DELETE: Stmt = Stmt::new("secrets.ref_delete", "DELETE $id WHERE vault IN $vaults RETURN BEFORE");
 
 /// Everything but the token.
 pub const PROVIDER_LIST: Stmt = Stmt::new(
