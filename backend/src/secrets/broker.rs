@@ -169,7 +169,7 @@ pub async fn prepare(state: &OrgState, user: &User, tool: &str, args: &Value) ->
 
     // the registered row each reference may use
     for item in items.iter_mut().filter(|i| i.outcome == outcome::OK) {
-        let rows = match refs_named(&state.db, &item.text).await {
+        let rows = match refs_named(&state.db, &user.id, &item.text).await {
             Ok(rows) => rows,
             Err(e) => {
                 tracing::warn!(error = %e.message, "secret broker: reading references failed");
@@ -178,7 +178,7 @@ pub async fn prepare(state: &OrgState, user: &User, tool: &str, args: &Value) ->
             }
         };
         if rows.is_empty() {
-            item.fail(outcome::DENIED, "the reference is not registered in this organisation");
+            item.fail(outcome::DENIED, "the reference is not registered for any vault you belong to");
             continue;
         }
         // the row bound to the call's vault first, then the others in creation order

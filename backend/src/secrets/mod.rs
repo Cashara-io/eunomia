@@ -58,12 +58,19 @@ pub struct ProviderRow {
     pub updated_at: Datetime,
 }
 
-pub fn provider_id(kind: &str) -> RecordId {
-    RecordId::new("secret_provider", kind.to_string())
+/// `secret_provider:<org key>_<kind>`: the org in the key keeps rows apart even in one shared database.
+pub fn provider_id(db: &OrgDb, kind: &str) -> RecordId {
+    RecordId::new("secret_provider", format!("{}_{kind}", db.org().key()))
 }
 
 pub async fn providers(db: &OrgDb) -> AppResult<Vec<ProviderRow>> {
-    Ok(q::PROVIDER_LIST.on(db).await?.check()?.take(0)?)
+    let ids: Vec<RecordId> = KINDS.iter().map(|k| provider_id(db, k)).collect();
+    Ok(q::PROVIDER_LIST.on(db).bind(("ids", ids)).await?.check()?.take(0)?)
+}
+
+/// The vaults whose references `user` may see and use: the ones they belong to.
+pub async fn my_vaults(db: &OrgDb, user: &RecordId) -> AppResult<Vec<RecordId>> {
+    crate::vaults::service::accessible_vault_ids(db, user).await
 }
 
 /// The decrypted settings the sidecar needs, or `None` when the kind is not configured.
@@ -76,7 +83,7 @@ pub async fn provider_config(db: &OrgDb, key: &str, kind: &str) -> AppResult<Opt
         host: Option<String>,
         token_enc: String,
     }
-    let rows: Vec<Row> = q::PROVIDER_TOKEN.on(db).bind(("id", provider_id(kind))).await?.check()?.take(0)?;
+    let rows: Vec<Row> = q::PROVIDER_TOKEN.on(db).bind(("id", provider_id(db, kind))).await?.check()?.take(0)?;
     let Some(row) = rows.into_iter().next() else { return Ok(None) };
     let token = Zeroizing::new(crate::connectors::crypto::decrypt(key, &row.token_enc)?);
     Ok(Some(client::ProviderConfig { kind: row.kind, token, host: row.host }))
@@ -117,7 +124,7 @@ pub async fn put_provider(db: &OrgDb, key: &str, user: &RecordId, kind: &str, ho
             let enc = crate::connectors::crypto::encrypt(key, &token);
             q::PROVIDER_PUT
                 .on(db)
-                .bind(("id", provider_id(kind)))
+                .bind(("id", provider_id(db, kind)))
                 .bind(("kind", kind.to_string()))
                 .bind(("host", host))
                 .bind(("token_enc", enc))
@@ -127,7 +134,7 @@ pub async fn put_provider(db: &OrgDb, key: &str, user: &RecordId, kind: &str, ho
         }
         None => {
             let ids: Vec<RecordId> =
-                q::PROVIDER_PUT_KEEP_TOKEN.on(db).bind(("id", provider_id(kind))).bind(("host", host)).bind(("user", user.clone())).await?.check()?.take(0)?;
+                q::PROVIDER_PUT_KEEP_TOKEN.on(db).bind(("id", provider_id(db, kind))).bind(("host", host)).bind(("user", user.clone())).await?.check()?.take(0)?;
             if ids.is_empty() {
                 return Err(AppError::bad_request("enter the token: none is stored for this provider yet"));
             }
@@ -143,20 +150,24 @@ pub async fn delete_provider(db: &OrgDb, kind: &str) -> AppResult<bool> {
         #[allow(dead_code)]
         kind: String,
     }
-    let gone: Vec<Gone> = q::PROVIDER_DELETE.on(db).bind(("id", provider_id(kind))).await?.check()?.take(0)?;
+    let gone: Vec<Gone> = q::PROVIDER_DELETE.on(db).bind(("id", provider_id(db, kind))).await?.check()?.take(0)?;
     Ok(!gone.is_empty())
 }
 
-pub async fn refs(db: &OrgDb) -> AppResult<Vec<CredentialRef>> {
-    Ok(q::REF_LIST.on(db).await?.check()?.take(0)?)
+pub async fn refs(db: &OrgDb, user: &RecordId) -> AppResult<Vec<CredentialRef>> {
+    let vaults = my_vaults(db, user).await?;
+    Ok(q::REF_LIST.on(db).bind(("vaults", vaults)).await?.check()?.take(0)?)
 }
 
-pub async fn refs_named(db: &OrgDb, reference: &str) -> AppResult<Vec<CredentialRef>> {
-    Ok(q::REF_BY_REFERENCE.on(db).bind(("reference", reference.to_string())).await?.check()?.take(0)?)
+/// The registered rows for `reference` in the vaults `user` belongs to.
+pub async fn refs_named(db: &OrgDb, user: &RecordId, reference: &str) -> AppResult<Vec<CredentialRef>> {
+    let vaults = my_vaults(db, user).await?;
+    Ok(q::REF_BY_REFERENCE.on(db).bind(("reference", reference.to_string())).bind(("vaults", vaults)).await?.check()?.take(0)?)
 }
 
-pub async fn get_ref(db: &OrgDb, id: &RecordId) -> AppResult<Option<CredentialRef>> {
-    Ok(q::REF_GET.on(db).bind(("id", id.clone())).await?.check()?.take::<Vec<CredentialRef>>(0)?.into_iter().next())
+pub async fn get_ref(db: &OrgDb, user: &RecordId, id: &RecordId) -> AppResult<Option<CredentialRef>> {
+    let vaults = my_vaults(db, user).await?;
+    Ok(q::REF_GET.on(db).bind(("id", id.clone())).bind(("vaults", vaults)).await?.check()?.take::<Vec<CredentialRef>>(0)?.into_iter().next())
 }
 
 /// The editable part of a reference.
@@ -222,15 +233,16 @@ fn duplicate(e: AppError) -> AppError {
     if e.code == ErrorCode::DbDuplicate { AppError::coded(ErrorCode::DbDuplicate, "That reference is already registered for this vault.") } else { e }
 }
 
-pub async fn update_ref(db: &OrgDb, id: &RecordId, fields: RefFields) -> AppResult<Option<CredentialRef>> {
+pub async fn update_ref(db: &OrgDb, user: &RecordId, id: &RecordId, fields: RefFields) -> AppResult<Option<CredentialRef>> {
     let f = check_fields(fields)?;
-    let current = get_ref(db, id).await?;
+    let current = get_ref(db, user, id).await?;
     let Some(current) = current else { return Ok(None) };
     let label = if f.label.is_empty() { current.reference.clone() } else { f.label };
     let rows: Vec<CredentialRef> = q::REF_UPDATE
         .on(db)
         .bind(("id", id.clone()))
-        .bind(("vault", f.vault))
+        .bind(("new_vault", f.vault))
+        .bind(("vaults", my_vaults(db, user).await?))
         .bind(("label", label))
         .bind(("allowed_tools", f.allowed_tools))
         .bind(("allowed_actors", f.allowed_actors))
@@ -242,7 +254,8 @@ pub async fn update_ref(db: &OrgDb, id: &RecordId, fields: RefFields) -> AppResu
     Ok(rows.into_iter().next())
 }
 
-pub async fn delete_ref(db: &OrgDb, id: &RecordId) -> AppResult<bool> {
-    let gone: Vec<CredentialRef> = q::REF_DELETE.on(db).bind(("id", id.clone())).await?.check()?.take(0)?;
+pub async fn delete_ref(db: &OrgDb, user: &RecordId, id: &RecordId) -> AppResult<bool> {
+    let vaults = my_vaults(db, user).await?;
+    let gone: Vec<CredentialRef> = q::REF_DELETE.on(db).bind(("id", id.clone())).bind(("vaults", vaults)).await?.check()?.take(0)?;
     Ok(!gone.is_empty())
 }
