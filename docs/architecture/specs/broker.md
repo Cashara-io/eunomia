@@ -162,8 +162,10 @@ JSON, at most 64 KiB. Every response carries `Cache-Control: no-store`.
 
 Two layers:
 
-1. **Network.** The sidecar is attached only to a compose network `secrets` (`internal: true`) that only
-   `backend` and `secrets-helper` join. The frontend, backup, updater, database and Caddy cannot reach it.
+1. **Network.** The sidecar is not on the default compose network. It joins `secrets` (`internal: true`,
+   no outside access), which only `backend` and `secrets-helper` join, and `secrets-egress`, a plain
+   bridge only the sidecar joins, for its outbound calls to the providers. The frontend, backup, updater,
+   database and Caddy cannot reach it.
 2. **Shared key.** `SECRETS_HELPER_KEY` in `.env`, sent as `Authorization: Bearer <key>` and compared in
    constant time. The installer writes it and the updater adds it when missing, like the other keys.
    Under an OLD updater (the first update to this release) the key is absent: the sidecar then accepts
