@@ -97,7 +97,7 @@ mcp() { # mcp TOKEN TOOL ARGS-JSON : the tool's result object; fails on a protoc
   out="$(api -H "Authorization: Bearer $1" -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
     -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"$2\",\"arguments\":$3}}" "$BASE/mcp")" || return 1
   out="$(printf '%s' "$out" | sed -n 's/^data: //p;/^{/p' | head -1)"
-  [ "$(printf '%s' "$out" | jq -r '.result.isError // "x"')" = false ] || { echo "mcp $2 failed: $out" >&2; return 1; }
+  printf '%s' "$out" | jq -e '(.result != null) and (.result.isError != true)' >/dev/null 2>&1 || { echo "mcp $2 failed: $out" >&2; return 1; }
   printf '%s' "$out" | jq -c '.result.content[0].text | fromjson'
 }
 wait_healthy() { # wait_healthy SECONDS : backend and surrealdb healthy, frontend and backup running
