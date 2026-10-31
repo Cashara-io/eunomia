@@ -100,6 +100,15 @@ export async function watch(o: WatchOptions): Promise<number> {
       if (e instanceof ApiError && (e.status === 401 || e.status === 403 || e.code === "client.redirect")) {
         throw new Error(`${cfg.url} refused the request (${e.message}): run \`npx create-eunomia\` again to sign in`);
       }
+      // the server no longer keeps the changes after our cursor (retention), or the cursor is past its
+      // newest change (a restored database): say so, and read on from the oldest change it keeps
+      if (e instanceof ApiError && e.code === "changes.resync") {
+        o.log(`  the server can no longer list the changes after #${after} (${e.message}).`);
+        o.log("  Changes in between are not shown: re-check what you need (for skills, `npx create-eunomia sync`). Reading on from the oldest change it keeps.");
+        after = 0;
+        saveCursor(o.cwd, cfg.vaultId, 0);
+        continue;
+      }
       o.log(`  ${(e as Error).message}; retrying`);
       await sleep(pollMs, o.signal);
       continue;

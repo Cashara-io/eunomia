@@ -4,6 +4,7 @@
 mod common;
 
 use common::TestApp;
+use eunomia_backend::changes::{self, Retention};
 use eunomia_backend::models_user::create_api_token_with;
 use eunomia_backend::rid;
 use eunomia_backend::scopes;
@@ -72,8 +73,11 @@ async fn every_write_appends_one_numbered_row_without_content() {
     // paging and the tool
     let (_, one) = app.http("GET", &format!("/api/vaults/{vault}/changes?after=3&limit=2"), None, true).await;
     assert_eq!((seqs(&one), one["next"].clone()), (vec![4, 5], json!(5)));
-    let (_, none) = app.http("GET", &format!("/api/vaults/{vault}/changes?after=99"), None, true).await;
-    assert_eq!((seqs(&none), none["next"].clone()), (vec![], json!(99)), "an empty page keeps the cursor");
+    let (_, none) = app.http("GET", &format!("/api/vaults/{vault}/changes?after=25"), None, true).await;
+    assert_eq!((seqs(&none), none["next"].clone()), (vec![], json!(25)), "an empty page keeps the cursor");
+    // a cursor past the newest change (a restored database) is not silently an empty page
+    let (status, ahead) = app.http("GET", &format!("/api/vaults/{vault}/changes?after=99"), None, true).await;
+    assert_eq!((status.as_u16(), ahead["code"].clone()), (410, json!("changes.resync")), "{ahead}");
     let tool = app.tool("changes_since", json!({"after": 24})).await;
     assert_eq!(seqs(&tool), [25], "{tool}");
 }
@@ -209,4 +213,82 @@ async fn an_idle_socket_is_closed_once_its_token_is_revoked() {
     .await
     .expect("closed within 20 s");
     assert_eq!(closed, Some(1008));
+}
+
+async fn page(app: &TestApp, vault: &str, after: i64) -> (u16, Value) {
+    let (status, page) = app.http("GET", &format!("/api/vaults/{vault}/changes?after={after}&limit=1000"), None, true).await;
+    (status.as_u16(), page)
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn retention_keeps_the_newest_rows_and_a_cursor_below_them_must_resync() {
+    let app = TestApp::new().await;
+    let base = serve(&app).await;
+    let vault = personal(&app).await;
+    for i in 0..10 {
+        app.tool("memory_write", json!({"subject_name": "Ada", "subject_kind": "person", "text": format!("f{i}")})).await;
+    }
+    let db = app.db().await;
+    // one entity and ten memories: 11 rows, keep the newest 4
+    assert_eq!(changes::prune(&db, Retention { days: 0, max_rows: 4 }).await.unwrap(), 7);
+    assert_eq!(seqs(&page(&app, &vault, 0).await.1), [8, 9, 10, 11], "after=0 reads from the oldest kept row");
+    assert_eq!(seqs(&page(&app, &vault, 7).await.1), [8, 9, 10, 11], "a cursor right below the window is fine");
+    let (status, old) = page(&app, &vault, 3).await;
+    assert_eq!((status, old["code"].clone()), (410, json!("changes.resync")), "{old}");
+    assert!(old["detail"].as_str().unwrap().contains("the oldest kept is 8"), "{old}");
+    assert_eq!(page(&app, &vault, 11).await, (200, json!({"changes": [], "next": 11})), "up to date");
+    assert_eq!(page(&app, &vault, 12).await.1["code"], "changes.resync", "past the newest change");
+    let tool = app.tool("changes_since", json!({"after": 3})).await;
+    assert_eq!(tool["code"], "changes.resync", "{tool}");
+    // a stale cursor gets no socket: 410 before the upgrade
+    let mut req = format!("{base}/api/vaults/{vault}/changes/ws?after=3").into_client_request().unwrap();
+    req.headers_mut().insert("authorization", format!("Bearer {}", app.token).parse().unwrap());
+    let err = tokio_tungstenite::connect_async(req).await.expect_err("refused");
+    assert!(err.to_string().contains("410"), "{err}");
+
+    // seqs go on from the counter, never restart; a second trim removes only what the new row pushed out
+    app.tool("memory_write", json!({"subject_name": "Ada", "subject_kind": "person", "text": "after the trim"})).await;
+    assert_eq!(seqs(&page(&app, &vault, 11).await.1), [12]);
+    assert_eq!(changes::prune(&db, Retention { days: 0, max_rows: 4 }).await.unwrap(), 1);
+    assert_eq!(changes::prune(&db, Retention { days: 0, max_rows: 4 }).await.unwrap(), 0, "idempotent");
+    assert_eq!(seqs(&page(&app, &vault, 0).await.1), [9, 10, 11, 12]);
+}
+
+#[tokio::test]
+async fn retention_by_age_and_its_defaults() {
+    let app = TestApp::new().await;
+    let vault = personal(&app).await;
+    let team = app.tool("vault_create", json!({"name": "Team"})).await["id"].as_str().unwrap().to_string();
+    for i in 0..5 {
+        app.tool("memory_write", json!({"subject_name": "Ada", "subject_kind": "person", "text": format!("f{i}")})).await;
+        app.tool("memory_write", json!({"subject_name": "Bo", "subject_kind": "person", "text": format!("t{i}"), "vault_id": team})).await;
+    }
+    let db = app.db().await;
+    // the personal vault's first three rows are 100 days old; the team vault's are all new
+    db.test_raw()
+        .query("UPDATE change SET at = time::now() - 100d WHERE vault = $v AND seq <= 3")
+        .bind(("v", rid::parse(&vault).unwrap()))
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    assert_eq!(changes::prune(&db, Retention { days: 0, max_rows: 0 }).await.unwrap(), 0, "0 and 0 keep everything");
+    assert_eq!(changes::prune(&db, Retention { days: 90, max_rows: 0 }).await.unwrap(), 3);
+    assert_eq!(seqs(&page(&app, &vault, 0).await.1), [4, 5, 6]);
+    assert_eq!(page(&app, &vault, 2).await.1["code"], "changes.resync");
+    assert_eq!(seqs(&page(&app, &team, 0).await.1), [1, 2, 3, 4, 5, 6], "another vault's new rows stay");
+
+    // everything old: the log is empty, and only a cursor at the newest change is still in it
+    db.test_raw().query("UPDATE change SET at = time::now() - 100d").await.unwrap().check().unwrap();
+    assert_eq!(changes::prune(&db, Retention { days: 90, max_rows: 0 }).await.unwrap(), 9);
+    assert_eq!(page(&app, &vault, 0).await, (200, json!({"changes": [], "next": 0})));
+    assert_eq!(page(&app, &vault, 6).await, (200, json!({"changes": [], "next": 6})), "it saw everything: nothing to resync");
+    assert_eq!(page(&app, &vault, 5).await.1["code"], "changes.resync", "it missed seq 6");
+
+    // the environment: defaults when absent or unreadable, 0 turns a limit off
+    let env = |pairs: &'static [(&'static str, &'static str)]| move |k: &str| pairs.iter().find(|(n, _)| *n == k).map(|(_, v)| v.to_string());
+    assert_eq!(Retention::from_vars(env(&[])), Retention { days: 90, max_rows: 100_000 });
+    assert_eq!(Retention::from_vars(env(&[("CHANGE_LOG_RETENTION_DAYS", "0"), ("CHANGE_LOG_MAX_ROWS", "0")])), Retention { days: 0, max_rows: 0 });
+    assert_eq!(Retention::from_vars(env(&[("CHANGE_LOG_RETENTION_DAYS", " 7 "), ("CHANGE_LOG_MAX_ROWS", "500")])), Retention { days: 7, max_rows: 500 });
+    assert_eq!(Retention::from_vars(env(&[("CHANGE_LOG_RETENTION_DAYS", "soon"), ("CHANGE_LOG_MAX_ROWS", "-5")])), Retention { days: 90, max_rows: 100_000 });
 }

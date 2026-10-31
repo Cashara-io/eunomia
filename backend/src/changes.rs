@@ -4,6 +4,11 @@
 //! (`GET /api/vaults/{vault}/changes`), the `changes_since` tool, or live over a WebSocket
 //! (`routers/changes.rs`), which this module feeds through an in-process broadcast.
 //!
+//! Retention: the scheduler leader trims each org's log at most hourly ([`prune_due`]) to the last
+//! `CHANGE_LOG_RETENTION_DAYS` (default 90) and at most `CHANGE_LOG_MAX_ROWS` rows per vault (default
+//! 100,000). A cursor below what is kept, or past the newest change (a restored database), is refused
+//! with `changes.resync` (HTTP 410): the client re-reads what it needs and starts again from `after=0`.
+//!
 //! The write paths call [`record`] or [`record_many`] after their own write commits:
 //! `entities/service.rs` (memories, entities, relations), `entities/consolidate.rs`,
 //! `tools/registry/skills.rs`, `documents/`, `sources/registry.rs` (a connection's data going) and
@@ -19,7 +24,7 @@ use surrealdb::types::{Datetime, RecordId, SurrealValue};
 use tokio::sync::broadcast;
 
 use crate::authz;
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult, ErrorCode};
 use crate::pool::{OrgDb, OrgId};
 use crate::rid::RecordIdExt;
 use crate::store;
@@ -191,10 +196,130 @@ pub async fn record_deleted_memories(db: &OrgDb, report: &mut serde_json::Value)
 }
 
 /// `vault`'s changes after `after`, oldest first. The caller has authorized the read.
+///
+/// `after = 0` reads from the oldest row still kept. Any other cursor must lie in the log: a cursor
+/// whose next rows retention removed, or one past the newest change (the database was restored from a
+/// backup), is `changes.resync`, never a silently short page.
 pub async fn after(db: &OrgDb, vault: &RecordId, after: i64, limit: i64) -> AppResult<ChangePage> {
     let limit = limit.clamp(1, MAX_LIMIT);
     let changes: Vec<Change> =
         store::changes::AFTER.on(db).bind(("vault", vault.clone())).bind(("after", after)).bind(("limit", limit)).await?.take(0)?;
+    // the common case, the next row right after the cursor, costs nothing more
+    if after != 0 && changes.first().is_none_or(|c| c.seq != after + 1) {
+        check_cursor(db, vault, after, changes.first().map(|c| c.seq)).await?;
+    }
     let next = changes.last().map_or(after, |c| c.seq);
     Ok(ChangePage { changes, next })
+}
+
+/// The vault's last seq handed out (0 before its first change) and its oldest kept row's seq.
+async fn bounds(db: &OrgDb, vault: &RecordId) -> AppResult<(i64, Option<i64>)> {
+    let mut res = store::changes::BOUNDS.on(db).bind(("counter", counter(vault))).bind(("vault", vault.clone())).await?;
+    let head: Vec<i64> = res.take(0)?;
+    let oldest: Vec<i64> = res.take(1)?;
+    Ok((head.first().copied().unwrap_or(0), oldest.first().copied()))
+}
+
+/// Refuses a cursor the log cannot continue from. Seqs have no gaps (each comes with its row, in one
+/// transaction), so a first row above `after + 1`, or no row while the counter is past `after`, means
+/// retention removed the rows in between.
+async fn check_cursor(db: &OrgDb, vault: &RecordId, after: i64, first: Option<i64>) -> AppResult<()> {
+    let (head, oldest) = bounds(db, vault).await?;
+    if after < 0 || after > head {
+        return Err(resync(format!("cursor {after} is not in this vault's change log (its newest change is {head}): the log was restored or reset")));
+    }
+    if first.map_or(head > after, |seq| seq > after + 1) {
+        let kept = oldest.map_or_else(|| "none are kept".to_string(), |o| format!("the oldest kept is {o}"));
+        return Err(resync(format!("changes after {after} are no longer kept ({kept})")));
+    }
+    Ok(())
+}
+
+fn resync(why: String) -> AppError {
+    AppError::coded(ErrorCode::ChangesResync, format!("{why}; re-read what you need and start again from after=0"))
+}
+
+/// How long the log keeps rows, read from the environment when retention runs (a change applies at
+/// the next run, no restart needed): `CHANGE_LOG_RETENTION_DAYS` (default [`DEFAULT_RETENTION_DAYS`],
+/// `0`: whatever their age) and `CHANGE_LOG_MAX_ROWS`, the newest rows kept per vault (default
+/// [`DEFAULT_MAX_ROWS`], `0`: no cap). An unset or unreadable value takes the default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Retention {
+    pub days: u32,
+    pub max_rows: i64,
+}
+
+pub const DEFAULT_RETENTION_DAYS: u32 = 90;
+pub const DEFAULT_MAX_ROWS: i64 = 100_000;
+/// Rows deleted per statement, so one vault's first trim never meets the hardened server's 60 s limit.
+const PRUNE_BATCH: i64 = 5_000;
+/// How often one process trims one org's log at most.
+const PRUNE_EVERY: std::time::Duration = std::time::Duration::from_secs(3600);
+
+impl Retention {
+    pub fn from_env() -> Self {
+        Self::from_vars(|k| std::env::var(k).ok())
+    }
+
+    pub fn from_vars(get: impl Fn(&str) -> Option<String>) -> Self {
+        let days = get("CHANGE_LOG_RETENTION_DAYS").and_then(|v| v.trim().parse().ok()).unwrap_or(DEFAULT_RETENTION_DAYS);
+        let max_rows = get("CHANGE_LOG_MAX_ROWS").and_then(|v| v.trim().parse::<i64>().ok()).filter(|n| *n >= 0).unwrap_or(DEFAULT_MAX_ROWS);
+        Retention { days, max_rows }
+    }
+}
+
+/// Trims every vault's log in `db` to `r`: rows older than `r.days`, and all but the newest
+/// `r.max_rows`. The counters stay, so seqs never restart. Returns the rows deleted. Idempotent.
+pub async fn prune(db: &OrgDb, r: Retention) -> AppResult<i64> {
+    if r.days == 0 && r.max_rows == 0 {
+        return Ok(0);
+    }
+    #[derive(serde::Deserialize, SurrealValue)]
+    struct Counter {
+        id: RecordId,
+        n: i64,
+    }
+    let counters: Vec<Counter> = store::changes::COUNTERS.on(db).await?.take(0)?;
+    let mut gone = 0;
+    for c in counters {
+        let vault = RecordId::from_table_key("vault", c.id.key().clone());
+        let mut cut = if r.max_rows > 0 { c.n - r.max_rows } else { 0 };
+        if r.days > 0 {
+            let by_age: Vec<i64> =
+                store::changes::CUT_BY_AGE.on(db).bind(("vault", vault.clone())).bind(("age", format!("{}d", r.days))).await?.take(0)?;
+            cut = cut.max(by_age.first().copied().unwrap_or(0));
+        }
+        let Some(oldest) = bounds(db, &vault).await?.1.filter(|o| *o <= cut) else { continue };
+        let mut lo = oldest - 1;
+        while lo < cut {
+            let hi = (lo + PRUNE_BATCH).min(cut);
+            store::changes::PRUNE_RANGE.on(db).bind(("vault", vault.clone())).bind(("lo", lo)).bind(("hi", hi)).await?.check()?;
+            lo = hi;
+        }
+        gone += cut - oldest + 1;
+    }
+    Ok(gone)
+}
+
+/// [`prune`] with [`Retention::from_env`], at most every [`PRUNE_EVERY`] per org in this process: the
+/// scheduler leader calls it on its slow ticks (`jobs/leader.rs`). A failure is logged and retried
+/// at the next slow tick.
+pub async fn prune_due(db: &OrgDb) {
+    static LAST: OnceLock<std::sync::Mutex<std::collections::HashMap<String, std::time::Instant>>> = OnceLock::new();
+    let key = db.org().key();
+    {
+        let last = LAST.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner());
+        if last.get(&key).is_some_and(|t| t.elapsed() < PRUNE_EVERY) {
+            return;
+        }
+    }
+    match prune(db, Retention::from_env()).await {
+        Ok(gone) => {
+            if gone > 0 {
+                tracing::info!(rows = gone, "change log: trimmed to the retention window");
+            }
+            LAST.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner()).insert(key, std::time::Instant::now());
+        }
+        Err(e) => tracing::warn!(error = %e.message, "change log: retention failed"),
+    }
 }

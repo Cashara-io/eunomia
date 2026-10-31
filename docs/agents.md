@@ -243,6 +243,9 @@ to that vault's change log. `changes_since`
 reads it: `after` (the `next` of your previous call, 0 to start), `limit` (at most 1000, default 100) and
 `vault_id` (your personal vault by default). Each row has `seq`, `op`, `kind`, the item's `id`, the `actor`
 (a user, token or OAuth client id, or `system`) and `at`. Rows never hold content: fetch the item to see it.
+The log keeps the last 90 days and at most 100,000 rows per vault by default. A cursor below what is kept,
+or past the newest change (after a restore), answers `changes.resync`: re-read what you need and start
+again from `after=0` ([retention](projects.md#retention)).
 The same log is `GET /api/vaults/{vault}/changes` over REST and a WebSocket for live updates
 ([projects](projects.md#watching-changes)).
 
