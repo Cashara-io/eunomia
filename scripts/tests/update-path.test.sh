@@ -33,9 +33,10 @@ CURL_IMG="ghcr.io/cashara-io/eunomia-backend:$FROM"   # any image with curl on t
 PIN="$(sed -n 's#^ *image: surrealdb/surrealdb:\(v[0-9.]*\)$#\1#p' "$ROOT/docker-compose.yml" | head -1)"
 LATEST_TENANT="$(find "$ROOT/backend/migrations/tenant" -name '[0-9]*.surql' | sed 's#.*/0*\([0-9]*\)_.*#\1#' | sort -n | tail -1)"
 LATEST_CONTROL="$(find "$ROOT/backend/migrations/control" -name '[0-9]*.surql' | sed 's#.*/0*\([0-9]*\)_.*#\1#' | sort -n | tail -1)"
-# Rows that move by themselves (sessions, jobs, audit and usage rows written by the reads below):
+# Rows that move by themselves (sessions, jobs, audit and usage rows, and the embedding cache that
+# recall in the reads below fills):
 # compared for presence only, not for an exact count.
-VOLATILE="${UPDATE_PATH_VOLATILE:-job job_leader audit_event audit_log tool_usage session failure_capsule _migration_lock rate_limit}"
+VOLATILE="${UPDATE_PATH_VOLATILE:-job job_leader audit_event audit_log tool_usage session failure_capsule _migration_lock rate_limit embed_cache}"
 PASS=0; FAIL=0; T0=$SECONDS
 log() { printf '[update-path %4ss] %s\n' "$((SECONDS - T0))" "$*"; }
 check() { local d="$1"; shift; if "$@" >/dev/null 2>&1; then PASS=$((PASS + 1)); log "ok: $d"; else FAIL=$((FAIL + 1)); log "FAIL: $d"; fi; }
