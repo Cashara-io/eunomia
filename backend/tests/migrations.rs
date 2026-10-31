@@ -505,3 +505,142 @@ async fn connectors_from_before_routing_migrate_through_0017() {
     let row: Option<Value> = db.query("SELECT routing, instance, label FROM ONLY connector:old").await.unwrap().take(0).unwrap();
     assert_eq!(row.unwrap(), serde_json::json!({"routing": {}, "instance": "", "label": ""}));
 }
+
+/// The three HNSW indexes 0022 rebuilds, as (table, index).
+const VECTOR_INDEXES: [(&str, &str); 3] =
+    [("memory", "memory_embedding_idx"), ("skill", "skill_embedding_idx"), ("cache_record", "cache_record_embedding_idx")];
+
+/// A 1536-dimension vector near axis `i`, with a little of axis `i + 1`, so neighbours are ordered.
+fn axis(i: usize) -> Vec<f32> {
+    let mut v = vec![0.0f32; 1536];
+    v[i] = 1.0;
+    v[i + 1] = 0.25;
+    v
+}
+
+/// Waits (bounded) until every vector index reports its background build `ready`, and returns the
+/// last `INFO FOR INDEX` of each, so a test can see a build happened.
+async fn vector_indexes_ready(db: &Db) -> Vec<Value> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    loop {
+        let mut infos = Vec::new();
+        for (table, index) in VECTOR_INDEXES {
+            let info: Option<Value> = db.query(format!("INFO FOR INDEX {index} ON {table}")).await.unwrap().take(0).unwrap();
+            infos.push(info.unwrap_or(Value::Null));
+        }
+        // no `building` entry: built inline, nothing running
+        if infos.iter().all(|i| i["building"].is_null() || i["building"]["status"] == "ready") {
+            return infos;
+        }
+        assert!(std::time::Instant::now() < deadline, "vector indexes not ready: {infos:?}");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+}
+
+/// The `k` nearest ids of `table` to `v` through the HNSW index (`<|K,EF|>`), nearest first.
+async fn knn(db: &Db, table: &str, v: Vec<f32>, k: usize) -> Vec<String> {
+    let sql = format!("SELECT id, vector::similarity::cosine(embedding, $v) AS sim FROM {table} WHERE embedding <|{k},64|> $v ORDER BY sim DESC");
+    let rows: Vec<Value> = db.query(sql).bind(("v", v)).await.unwrap().take(0).unwrap();
+    rows.iter().map(|r| r["id"].as_str().map(String::from).unwrap_or_else(|| r["id"].to_string())).collect()
+}
+
+/// 0022: an org at schema 21 whose vector tables had rows inserted and then some deleted (on 3.3.1 that
+/// could leave dead points in the HNSW graph) is rebuilt; kNN then finds exactly the live rows, nearest
+/// first, row counts are unchanged, a second pass applies nothing, and running the statements again is
+/// harmless.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn rebuild_vector_indexes_in_0022_keeps_rows_and_knn_finds_the_live_ones() {
+    let db = fresh().await;
+    let s = test_settings();
+    migrate::apply_up_to(&db, 21).await.unwrap();
+    vector_indexes_ready(&db).await;
+    // 40 rows per table on axes 0..40; then every row on an odd axis is deleted
+    for i in 0..40usize {
+        db.query(
+            "CREATE type::record('memory', $k) SET owner = user:u, vault = vault:v, subject = person:p, text = $t, embedding = $e, embedding_spec = 'stub';
+             CREATE type::record('skill', $k) SET owner = user:u, vault = vault:v, name = $t, description = 'd', body = 'b', embedding = $e, embedding_spec = 'stub';
+             CREATE type::record('cache_record', $k) SET owner = user:u, source = 'demo', type = 'note', external_id = $t, content_hash = 'h',
+                 ingested_at = time::now(), updated_at = time::now(), embedding = $e;",
+        )
+        .bind(("k", format!("r{i:02}")))
+        .bind(("t", format!("row {i}")))
+        .bind(("e", axis(i)))
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    }
+    for i in (1..40usize).step_by(2) {
+        db.query("DELETE type::record('memory', $k); DELETE type::record('skill', $k); DELETE type::record('cache_record', $k);")
+            .bind(("k", format!("r{i:02}")))
+            .await
+            .unwrap()
+            .check()
+            .unwrap();
+    }
+    let before: Vec<usize> = futures::future::join_all(VECTOR_INDEXES.iter().map(|(t, _)| count(&db, t))).await;
+    assert_eq!(before, [20, 20, 20]);
+
+    migrate::migrate(&db, &s).await.unwrap();
+    let ledger: Vec<String> = db.query("SELECT VALUE name FROM _migration WHERE version = 22").await.unwrap().take(0).unwrap();
+    assert_eq!(ledger, ["rebuild_vector_indexes"]);
+    vector_indexes_ready(&db).await;
+
+    let check = |label: &'static str| {
+        let db = db.clone();
+        async move {
+            for (table, _) in VECTOR_INDEXES {
+                assert_eq!(count(&db, table).await, 20, "{label}: {table} rows unchanged");
+                // a live row is its own nearest neighbour, then the next live row on
+                let near = knn(&db, table, axis(10), 3).await;
+                assert_eq!(near.first().map(String::as_str), Some(format!("{table}:r10").as_str()), "{label}: {table} {near:?}");
+                assert_eq!(near.len(), 3, "{label}: {table} kNN fills K from the live rows: {near:?}");
+                // near a deleted row: K live rows, none of them deleted
+                let around = knn(&db, table, axis(11), 5).await;
+                assert_eq!(around.len(), 5, "{label}: {table} {around:?}");
+                for id in &around {
+                    let n: usize = id.rsplit('r').next().unwrap().trim_end_matches(|c: char| !c.is_ascii_digit()).parse().unwrap();
+                    assert_eq!(n % 2, 0, "{label}: {table} kNN returned a deleted row: {around:?}");
+                }
+            }
+        }
+    };
+    check("after 0022").await;
+
+    // a second boot applies nothing
+    let schema = info(&db).await;
+    migrate::migrate(&db, &s).await.unwrap();
+    assert_eq!(count(&db, "_migration").await, migrate::MIGRATIONS.len());
+    assert_eq!(schema, info(&db).await);
+
+    // running the rebuild statements again (twice) is harmless. Right after a rebuild the retired index
+    // is still being reclaimed in the background, so a redefinition can meet a commit conflict; it is
+    // retryable, and retried, as the runner does.
+    let sql = migrate::MIGRATIONS.iter().find(|m| m.0 == 22).unwrap().2;
+    for _ in 0..2 {
+        eunomia_backend::tx::with_retry(|| async { db.query(sql).await?.check().map(|_| ()) }).await.unwrap();
+        vector_indexes_ready(&db).await;
+    }
+    check("after running 0022 twice more").await;
+    assert_eq!(schema, info(&db).await, "the definitions are unchanged");
+}
+
+/// A fresh org: 0022 runs right after 0008, 0019 and 0021 define the indexes (their builds may still be
+/// running). The indexes come up and answer kNN over rows written afterwards.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_fresh_org_runs_0022_right_after_the_index_definitions() {
+    let db = fresh().await;
+    migrate::migrate(&db, &test_settings()).await.unwrap();
+    assert_eq!(count(&db, "_migration").await, migrate::MIGRATIONS.len());
+    vector_indexes_ready(&db).await;
+    for i in 0..5usize {
+        db.query("CREATE type::record('memory', $k) SET owner = user:u, vault = vault:v, subject = person:p, text = 't', embedding = $e")
+            .bind(("k", format!("r{i:02}")))
+            .bind(("e", axis(i)))
+            .await
+            .unwrap()
+            .check()
+            .unwrap();
+    }
+    assert_eq!(knn(&db, "memory", axis(3), 1).await, ["memory:r03"]);
+}

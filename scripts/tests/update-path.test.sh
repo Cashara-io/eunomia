@@ -14,7 +14,8 @@
 #   7. "Update now" as the admin, then the OLD checkout's scripts/auto-update.sh, for real except
 #      that a PATH shim turns `docker compose pull` into a no-op ($FAKE exists only locally);
 #   8. assert status.json, history.log, every service healthy, the new SurrealDB pin running,
-#      ledgers current, counts and reads unchanged;
+#      ledgers current, counts and reads unchanged, tenant 0022's rebuilt vector indexes present
+#      and answering kNN;
 #   9. run the updater again, restart the backend, `up -d` again: nothing changes;
 #  10. rollback: the old tag on a fresh volume, restore the pre-update backup, counts and reads again.
 # Own compose project ($P), ports 8251 (backend) and 3251 (frontend). Artifacts (logs, snapshots) in
@@ -131,6 +132,52 @@ wait_tenants() { # wait_tenants SECONDS : every org's tenant row and ledger at L
     sleep 3
   done
   log "tenants not at $LATEST_TENANT after $1 s"; ledgers; return 1
+}
+# Tenant 0022 rebuilt these HNSW indexes ("table:index").
+VECTOR_INDEXES="memory:memory_embedding_idx skill:skill_embedding_idx cache_record:cache_record_embedding_idx"
+ledger_has() { # ledger_has VERSION NAME : every org ledger has that migration
+  local db
+  for db in $(org_dbs); do
+    [ "$(echo "SELECT VALUE name FROM _migration WHERE version = $1;" | sql "$db" | jq -r '.[0].result[0] // empty')" = "$2" ] || { log "   $db: no $1_$2 in the ledger"; return 1; }
+  done
+}
+vector_indexes() { # vector_indexes : every org database defines the three HNSW indexes (INFO FOR TABLE)
+  local db ti
+  for db in $(org_dbs); do
+    for ti in $VECTOR_INDEXES; do
+      echo "INFO FOR TABLE ${ti%%:*};" | sql "$db" | jq -e --arg i "${ti#*:}" '.[0].result.indexes[$i] // "" | test("HNSW")' >/dev/null \
+        || { log "   $db: no HNSW index ${ti#*:}"; return 1; }
+    done
+  done
+}
+wait_vector_builds() { # wait_vector_builds SECONDS : no background build of the three indexes still running
+  local until=$((SECONDS + $1)) db ti busy
+  while [ $SECONDS -lt $until ]; do
+    busy=0
+    for db in $(org_dbs); do
+      for ti in $VECTOR_INDEXES; do
+        [ "$(echo "INFO FOR INDEX ${ti#*:} ON ${ti%%:*};" | sql "$db" | jq -r '.[0].result.building.status // "ready"')" = ready ] || busy=1
+      done
+    done
+    [ "$busy" = 0 ] && return 0
+    sleep 2
+  done
+  log "vector index builds still running after $1 s"; return 1
+}
+knn_live() { # knn_live : in every org, a kNN query (<|K,EF|>) from an embedded row's own vector returns K rows, that row among them
+  local db t n k out seen=0
+  for db in $(org_dbs); do
+    for t in memory skill; do
+      n="$(echo "SELECT count() FROM $t WHERE embedding != NONE GROUP ALL;" | sql "$db" | jq -r '.[0].result[0].count // 0')"
+      [ "$n" -gt 0 ] || continue
+      k=$(( n < 10 ? n : 10 ))
+      out="$(echo "LET \$r = (SELECT id, embedding FROM $t WHERE embedding != NONE ORDER BY id LIMIT 1)[0]; SELECT VALUE id FROM $t WHERE embedding <|$k,64|> \$r.embedding; RETURN \$r.id;" | sql "$db")"
+      printf '%s' "$out" | jq -e --argjson k "$k" '.[2].result as $id | .[1].result | (length == $k) and any(. == $id)' >/dev/null \
+        || { log "   $db.$t: kNN did not return $k rows including its own: $(printf '%s' "$out" | head -c 400)"; return 1; }
+      seen=$((seen + 1))
+    done
+  done
+  [ "$seen" -ge 2 ] || { log "   no embedded memory or skill to search"; return 1; }
 }
 reads() { # reads FILE : a fixed set of reads, reduced to what must not change (ids, counts, bodies)
   {
@@ -314,6 +361,13 @@ diff "$W/stable-before.txt" "$W/stable-after.txt" | head -20
 check "the same tables before and after" diff <(cut -d' ' -f1 "$W/counts-before.txt") <(cut -d' ' -f1 "$W/counts-after.txt")
 check "the fixed reads unchanged" diff "$W/reads-before.txt" "$W/reads-after.txt"
 diff "$W/reads-before.txt" "$W/reads-after.txt" | head -20
+# Tenant 0022 (rebuild_vector_indexes): in every org ledger, the three HNSW indexes defined, and the
+# rebuilt indexes answer kNN over the live rows (the reads above go through recall and skill_find, whose
+# exact-scan fallback would hide a broken index, so this queries the index itself). Row counts: above.
+check "every org ledger has 0022_rebuild_vector_indexes" ledger_has 22 rebuild_vector_indexes
+check "every org defines the three HNSW indexes" vector_indexes
+wait_vector_builds 300; check "the rebuilt vector indexes finished building" test $? -eq 0
+check "kNN through the rebuilt memory and skill indexes returns the live rows" knn_live
 check "no tenant.schema_behind" bash -c "! curl -sS -H 'Authorization: Bearer $TOKEN_A' -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"recall\",\"arguments\":{\"query\":\"algorithm\"}}}' '$BASE/mcp' | grep -q schema_behind"
 
 # ---- 9. idempotent -----------------------------------------------------------------------------
