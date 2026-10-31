@@ -1316,7 +1316,7 @@ export const renameVault = <ThrowOnError extends boolean = false>(options: Optio
 /**
  * A vault's change log after a cursor
  *
- * One row per write that changed the vault (no content: fetch the item). `next` is the cursor for the following page.
+ * One row per write that changed the vault (no content: fetch the item). `next` is the cursor for the following page. `after=0` reads from the oldest row kept; a cursor below what retention keeps, or past the newest change, is 410 `changes.resync`.
  */
 export const listVaultChanges = <ThrowOnError extends boolean = false>(options: Options<ListVaultChangesData, ThrowOnError>): RequestResult<ListVaultChangesResponses, ListVaultChangesErrors, ThrowOnError> => (options.client ?? client).get<ListVaultChangesResponses, ListVaultChangesErrors, ThrowOnError>({
     security: [{
@@ -1331,7 +1331,7 @@ export const listVaultChanges = <ThrowOnError extends boolean = false>(options: 
 /**
  * Follow a vault's change log over a WebSocket
  *
- * Upgrades to a WebSocket that sends each change after `after` as a JSON text message (a `Change`), then every new one as it commits. A browser authenticates with its session cookie from an allowed origin; other clients send a Bearer token.
+ * Upgrades to a WebSocket that sends each change after `after` as a JSON text message (a `Change`), then every new one as it commits. A browser authenticates with its session cookie from an allowed origin; other clients send a Bearer token. A cursor outside the kept log is refused with 410 `changes.resync` before the upgrade; a socket that falls behind what is kept closes with code 4410.
  */
 export const followVaultChanges = <ThrowOnError extends boolean = false>(options: Options<FollowVaultChangesData, ThrowOnError>): RequestResult<FollowVaultChangesResponses, FollowVaultChangesErrors, ThrowOnError> => (options.client ?? client).get<FollowVaultChangesResponses, FollowVaultChangesErrors, ThrowOnError>({
     security: [{

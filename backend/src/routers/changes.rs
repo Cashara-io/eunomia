@@ -29,6 +29,9 @@ use crate::state::{AppState, OrgState};
 const RECHECK: Duration = Duration::from_secs(30);
 /// How often a live follower is pinged and catches up from the database, whatever the broadcast says.
 const TICK: Duration = Duration::from_secs(5);
+/// The close code for a cursor the log can no longer continue from (`changes.resync`; 4000 to 4999 are
+/// the application's own): re-read from `after=0`.
+pub const CLOSE_RESYNC: u16 = 4410;
 
 /// Test-only: when above 0, [`RECHECK`] in seconds, so a test sees an idle socket closed in seconds.
 #[cfg(feature = "test-support")]
@@ -79,7 +82,7 @@ fn parse_vault_id(vault_id: &str) -> AppResult<RecordId> {
     path = "/api/vaults/{vault_id}/changes",
     tag = "vaults",
     summary = "A vault's change log after a cursor",
-    description = "One row per write that changed the vault (no content: fetch the item). `next` is the cursor for the following page.",
+    description = "One row per write that changed the vault (no content: fetch the item). `next` is the cursor for the following page. `after=0` reads from the oldest row kept; a cursor below what retention keeps, or past the newest change, is 410 `changes.resync`.",
     params(("vault_id" = String, Path), ChangesQuery),
     responses((status = 200, body = ChangePage), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
@@ -97,7 +100,7 @@ async fn list_changes(State(state): State<AppState>, user: User, Path(vault_id):
     path = "/api/vaults/{vault_id}/changes/ws",
     tag = "vaults",
     summary = "Follow a vault's change log over a WebSocket",
-    description = "Upgrades to a WebSocket that sends each change after `after` as a JSON text message (a `Change`), then every new one as it commits. A browser authenticates with its session cookie from an allowed origin; other clients send a Bearer token.",
+    description = "Upgrades to a WebSocket that sends each change after `after` as a JSON text message (a `Change`), then every new one as it commits. A browser authenticates with its session cookie from an allowed origin; other clients send a Bearer token. A cursor outside the kept log is refused with 410 `changes.resync` before the upgrade; a socket that falls behind what is kept closes with code 4410.",
     params(("vault_id" = String, Path), FollowQuery),
     responses((status = 101, description = "Switching to the WebSocket protocol"), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
@@ -117,13 +120,17 @@ async fn follow_changes(
     let state = app.org(&user.org).await?;
     let vault = parse_vault_id(&vault_id)?;
     authz::authorize(&state.db, &user.id, Action::ReadMemories, &vault).await?;
+    // a cursor outside the log is refused before the upgrade, as over REST (410 changes.resync)
+    changes::after(&state.db, &vault, q.after, 1).await?;
     Ok(ws.on_upgrade(move |socket| follow(socket, state, headers, vault, q.after)))
 }
 
-/// Why a socket stops: the client left, or its credential or membership is gone.
+/// Why a socket stops: the client left, its credential or membership is gone, or retention removed
+/// rows it had not sent yet.
 enum Stop {
     Gone,
     Denied(String),
+    Resync,
 }
 
 async fn follow(mut socket: WebSocket, state: OrgState, headers: HeaderMap, vault: RecordId, mut last: i64) {
@@ -165,8 +172,14 @@ async fn follow(mut socket: WebSocket, state: OrgState, headers: HeaderMap, vaul
             },
         };
     }
-    if let Err(Stop::Denied(reason)) = result {
-        let _ = socket.send(Message::Close(Some(CloseFrame { code: 1008, reason: reason.into() }))).await;
+    match result {
+        Err(Stop::Denied(reason)) => {
+            let _ = socket.send(Message::Close(Some(CloseFrame { code: 1008, reason: reason.into() }))).await;
+        }
+        Err(Stop::Resync) => {
+            let _ = socket.send(Message::Close(Some(CloseFrame { code: CLOSE_RESYNC, reason: ErrorCode::ChangesResync.as_str().into() }))).await;
+        }
+        _ => {}
     }
 }
 
@@ -182,7 +195,9 @@ async fn recheck(state: &OrgState, headers: &HeaderMap, vault: &RecordId) -> Res
 
 async fn catch_up(socket: &mut WebSocket, state: &OrgState, vault: &RecordId, last: &mut i64) -> Result<(), Stop> {
     loop {
-        let page = changes::after(&state.db, vault, *last, changes::MAX_LIMIT).await.map_err(|_| Stop::Gone)?;
+        let page = changes::after(&state.db, vault, *last, changes::MAX_LIMIT)
+            .await
+            .map_err(|e| if e.code == ErrorCode::ChangesResync { Stop::Resync } else { Stop::Gone })?;
         for change in &page.changes {
             send(socket, change, last).await?;
         }

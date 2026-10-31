@@ -196,7 +196,7 @@ No. The connected agent is the model.
 | `vault_invite` / `vault_members` / `vault_remove_member` / `vault_leave` / `vault_rename` / `vault_delete` | Sharing |
 | `document_upload` / `document_list` / `document_get` | Upload a document (text, Markdown, JSON, CSV, text PDF) and read its extracted text; its passages are found by `search`, `recall` and `get`, each hit naming the document ([documents](documents.md)) |
 | `document_download` / `document_export` / `document_delete` | The HTTP route for the original bytes, the passages-and-vectors manifest, deletion |
-| `skill_save` / `skill_find` / `skill_get` / `skill_delete` | Keep a skill an agent learned, find it later by meaning, read its body, delete it ([agent skills](#agent-skills)) |
+| `skill_save` / `skill_find` / `skill_list` / `skill_get` / `skill_delete` | Keep a skill an agent learned, find it later by meaning, list a vault's skills, read its body, delete it ([agent skills](#agent-skills)) |
 | `changes_since` | A vault's numbered change log after a cursor: what was created, updated, merged or deleted, by whom, with no content ([change log](#change-log)) |
 
 Destructive tools are flagged `destructiveHint` so clients can ask first.
@@ -215,6 +215,11 @@ it, and a Markdown body) and any agent can find it later:
 - `skill_find` takes a `query` in plain words (and optionally `vault_id` and `limit`, at most 50). It
   searches every vault you can read, by meaning when embeddings are on, plus a keyword match on name and
   description. It returns each skill's `id`, `name`, `description`, `vault` and `updated_at`, not the body.
+- `skill_list` lists every skill of one vault (your personal vault, or `vault_id`; a token restricted to
+  one vault lists that vault), sorted by name, with the same fields as `skill_find`. It pages: `limit`
+  (default 100, at most 500) and `after`, the `next` of the previous call; `next` is `null` on the last
+  page. It is read-only and needs only `memory:read`. `create-eunomia sync` uses it for the skills that
+  are only on the server ([projects](projects.md#skills-sync)).
 - `skill_get` returns the full body, by `id` or by `name`. If several vaults you can read hold that name,
   it answers with an error naming the ids; pass `vault_id` or an id.
 - `skill_delete` removes one skill by id.
@@ -238,6 +243,9 @@ to that vault's change log. `changes_since`
 reads it: `after` (the `next` of your previous call, 0 to start), `limit` (at most 1000, default 100) and
 `vault_id` (your personal vault by default). Each row has `seq`, `op`, `kind`, the item's `id`, the `actor`
 (a user, token or OAuth client id, or `system`) and `at`. Rows never hold content: fetch the item to see it.
+The log keeps the last 90 days and at most 100,000 rows per vault by default. A cursor below what is kept,
+or past the newest change (after a restore), answers `changes.resync`: re-read what you need and start
+again from `after=0` ([retention](projects.md#retention)).
 The same log is `GET /api/vaults/{vault}/changes` over REST and a WebSocket for live updates
 ([projects](projects.md#watching-changes)).
 
