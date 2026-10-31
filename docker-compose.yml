@@ -6,7 +6,7 @@ services:
     # capability is denied except the function families the backend's SQL uses
     # (docs/architecture/surreal-functions.md), guests are refused, and a runaway query or
     # transaction is cut off. tests run the suite under the same --allow-funcs list.
-    image: surrealdb/surrealdb:v3.3.1
+    image: surrealdb/surrealdb:v3.3.5
     user: root
     entrypoint:
       - /surreal
@@ -16,8 +16,8 @@ services:
       - --pass
       - ${SURREAL_PASS:-root}
       - --deny-all
-      # --deny-all also refuses guests (adding --deny-guests is a startup error on 3.3.1) but denies RPC,
-      # HTTP (the isready healthcheck) and root queries too: allow those explicitly. Verified on a live 3.3.1 server.
+      # --deny-all also refuses guests (adding --deny-guests is a startup error on 3.3.1 and 3.3.5) but denies RPC,
+      # HTTP and root queries too: allow those explicitly. Verified on live 3.3.1 and 3.3.5 servers.
       - --allow-rpc
       - --allow-http
       - --allow-arbitrary-query=system
@@ -43,7 +43,9 @@ services:
       surreal-upgrade:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "/surreal", "isready", "--endpoint", "http://localhost:8000"]
+      # ws, not http: under --deny-all, isready over http fails with "Method not allowed" while the
+      # server is fine, and the backend (service_healthy) then never starts after an update
+      test: ["CMD", "/surreal", "isready", "--endpoint", "ws://localhost:8000"]
       interval: 5s
       timeout: 5s
       retries: 10

@@ -209,6 +209,73 @@ async fn the_move_carries_a_2x_export_into_one_org_and_is_a_noop_the_second_time
     assert_eq!(count(db.test_raw(), "memory").await, 3);
 }
 
+/// From SurrealDB 3.3.4 `INSERT IGNORE` raises a row's ASSERT or type error instead of skipping the row.
+/// The move keeps the old behaviour: a row the new schema refuses is left out, the good rows of the
+/// same batch land, and the skipped rows are counted (report, audit event) without their values. A
+/// resumed move skips the same rows again and verifies; a later boot does nothing.
+#[tokio::test]
+async fn the_move_skips_rows_the_new_schema_refuses_and_counts_them() {
+    let (state, old) = state_with_legacy().await;
+    // An old install whose schema let these through (loosened here, so the old database accepts them).
+    old.query(
+        "DEFINE FIELD OVERWRITE type ON memory TYPE string DEFAULT 'world';
+         DEFINE FIELD OVERWRITE proof_count ON memory TYPE any;
+         DEFINE FIELD OVERWRITE title ON cache_record TYPE any;
+         LET $m = (SELECT * FROM memory LIMIT 1)[0];
+         CREATE memory:bad_assert SET owner = $m.owner, vault = $m.vault, subject = $m.subject, text = 'fine', type = 'rumour-ghp_assertsecret';
+         CREATE memory:bad_type SET owner = $m.owner, vault = $m.vault, subject = $m.subject, text = 'fine', proof_count = 'hunter2-typesecret';
+         CREATE cache_record:zbad SET owner = user:u, source = 'demo', type = 'note', external_id = 'zbad', content_hash = 'h',
+             ingested_at = time::now(), updated_at = time::now(), title = 4242;",
+    )
+    .await
+    .unwrap()
+    .check()
+    .unwrap();
+    let p = state.provisioner.as_ref().unwrap();
+    let report = legacy::move_if_needed(p, &state.control, &state.settings).await.unwrap();
+    let org = only_org(&state).await;
+
+    let mut ids: Vec<&str> = report.skipped.iter().map(|r| r.id.as_str()).collect();
+    ids.sort();
+    assert_eq!(ids, ["cache_record:zbad", "memory:bad_assert", "memory:bad_type"], "{report:?}");
+    assert_eq!(report.skipped_by_table().into_iter().collect::<Vec<_>>(), [("cache_record", 1), ("memory", 2)]);
+    for r in &report.skipped {
+        assert!(!r.error.contains("secret"), "a refused value reached the report: {}", r.error);
+        assert!(!r.error.is_empty());
+    }
+    let assert_err = &report.skipped.iter().find(|r| r.id == "memory:bad_assert").unwrap().error;
+    assert!(assert_err.contains("`type`"), "{assert_err}");
+    let type_err = &report.skipped.iter().find(|r| r.id == "memory:bad_type").unwrap().error;
+    assert!(type_err.contains("`proof_count`"), "{type_err}");
+
+    // the good rows landed, the move verified, and the audit event says what was skipped
+    let status: String = scalar(state.control.test_raw(), &format!("SELECT VALUE status FROM tenant:{}", org.key())).await;
+    assert_eq!(status, "ready");
+    let db = state.pool.for_org(&org).await.unwrap();
+    assert_eq!(count(db.test_raw(), "memory").await, 2, "the fixture's two memories, not the bad ones");
+    assert_eq!(count(db.test_raw(), "cache_record").await, 2);
+    assert_eq!(count(&old, "memory").await, 4, "the old database keeps every row");
+    let detail: String = scalar(state.control.test_raw(), "SELECT VALUE detail FROM audit_event WHERE action = 'legacy.move'").await;
+    assert_eq!(detail, "3 invalid rows skipped (cache_record: 1, memory: 2); the log lists each record id and error");
+
+    // a crash before `ready` resumes: the same rows are skipped again, nothing is duplicated, it verifies
+    state.control.test_raw().query("UPDATE $t SET status = 'moving'").bind(("t", org.tenant_record())).await.unwrap().check().unwrap();
+    state.pool.evict(&org);
+    let again = legacy::move_if_needed(p, &state.control, &state.settings).await.unwrap();
+    assert_eq!(again.skipped.len(), 3);
+    let db = state.pool.for_org(&org).await.unwrap();
+    assert_eq!(count(db.test_raw(), "memory").await, 2);
+    assert_eq!(count(db.test_raw(), "cache_record").await, 2);
+    assert_eq!(count(state.control.test_raw(), "membership").await, 3);
+
+    // a later boot is a no-op
+    let noop = legacy::move_if_needed(p, &state.control, &state.settings).await.unwrap();
+    assert!(noop.skipped.is_empty());
+    assert_eq!(only_org(&state).await, org);
+    assert_eq!(count(db.test_raw(), "memory").await, 2);
+    assert_eq!(count(state.control.test_raw(), "audit_event WHERE action = 'legacy.move'").await, 2, "one per completed move");
+}
+
 #[tokio::test]
 async fn an_interrupted_move_resumes_and_verifies() {
     let (state, _old) = state_with_legacy().await;

@@ -17,7 +17,7 @@ cleanup
 docker build -q -t "$IMG" backend/scripts/backup >/dev/null
 docker network create "$NET" >/dev/null
 docker volume create "$VOL" >/dev/null
-docker run -d --name "$DB" --network "$NET" -p 127.0.0.1:8211:8000 --user root surrealdb/surrealdb:v3.3.1 \
+docker run -d --name "$DB" --network "$NET" -p 127.0.0.1:8211:8000 --user root surrealdb/surrealdb:v3.3.5 \
   start --user root --pass root memory >/dev/null
 
 # Run the backup image against the throwaway DB.

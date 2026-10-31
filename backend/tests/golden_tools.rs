@@ -55,11 +55,21 @@ fn s(v: &Value, ptr: &str) -> String {
     v.pointer(ptr).and_then(Value::as_str).unwrap_or_else(|| panic!("no string at {ptr} in {v}")).to_string()
 }
 
-#[tokio::test]
-async fn every_registered_tool_has_a_golden() {
+#[test]
+fn every_registered_tool_has_a_golden() {
     // boxed: one await per tool makes this future large, and pinned on the test thread's stack it
-    // overflows a debug build once a few more tools are added
-    Box::pin(goldens()).await
+    // overflows a debug build once a few more tools are added. And on its own 8 MiB thread: the
+    // in-memory SurrealDB 3.3.5 engine runs every query on this thread, and in a debug build one of
+    // them goes past the default 2 MiB test stack (it passes with 3 MiB; 3.3.1 fitted in 2 MiB).
+    let run = std::thread::Builder::new()
+        .name("goldens".into())
+        .stack_size(8 << 20)
+        .spawn(|| tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(Box::pin(goldens())))
+        .unwrap()
+        .join();
+    if let Err(panic) = run {
+        std::panic::resume_unwind(panic);
+    }
 }
 
 async fn goldens() {

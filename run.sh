@@ -11,7 +11,7 @@ DB=eunomia-dev-surrealdb
 if [ -z "$(docker ps -q -f name="^${DB}$")" ]; then
   echo "==> starting SurrealDB ($DB, data in volume eunomia-dev-surreal)"
   docker run -d --rm --name "$DB" --user root -p 127.0.0.1:8000:8000 -v eunomia-dev-surreal:/data \
-    surrealdb/surrealdb:v3.3.1 start --user root --pass root rocksdb:/data/eunomia.db >/dev/null
+    surrealdb/surrealdb:v3.3.5 start --user root --pass root rocksdb:/data/eunomia.db >/dev/null
 fi
 until docker exec "$DB" /surreal isready --endpoint http://localhost:8000 >/dev/null 2>&1; do sleep 1; done
 
