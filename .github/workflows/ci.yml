@@ -197,6 +197,8 @@ jobs:
       - run: CONNECT_JSON=py bash scripts/tests/connect-agents.test.sh
       # Every SurrealDB pin (crate, lock, compose, backup image, CI, drills, run.sh) on the same patch.
       - run: bash scripts/ci/check-surreal-pins.sh
+      # Migration numbers contiguous and unique, every file registered, queued numbers landed only when locked (backend/migrations/QUEUE.md).
+      - run: bash scripts/ci/check-migrations.sh
       # Every script test that needs no Docker, by glob so a new one cannot be forgotten.
       # SKIP lists the ones that need real containers (upgrade-surreal-v3 and update-path have their own jobs below).
       - run: |
