@@ -46,3 +46,5 @@ The 3.x release is cut from `foundation`. It no longer has to wait for the bridg
 ```
 
 Test: `bash scripts/tests/check-release-order.test.sh`.
+
+`scripts/ci/check-surreal-pins.sh` exits 1 when the SurrealDB version is not the same, to the patch, in every place it is pinned: the crate in `backend/Cargo.toml` (an exact `=X.Y.Z`) and `backend/Cargo.lock`, the `surrealdb` image in `docker-compose.yml`, the backup image's `FROM` (`backend/scripts/backup/Dockerfile`), the claim-db container in `.github/workflows/ci.yml`, both restore drills, the target image of `scripts/tests/upgrade-surreal-v3.test.sh` and `run.sh`. The `scripts` CI job runs it on every PR. To move SurrealDB, change all of them in one PR (`cargo update -p surrealdb --precise X.Y.Z` for the lock). Test: `bash scripts/tests/check-surreal-pins.test.sh`.

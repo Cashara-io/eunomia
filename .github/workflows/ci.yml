@@ -195,6 +195,8 @@ jobs:
       # connect-agents.sh against a throwaway HOME and a mock API, with jq and
       # again with the python3 fallback.
       - run: CONNECT_JSON=py bash scripts/tests/connect-agents.test.sh
+      # Every SurrealDB pin (crate, lock, compose, backup image, CI, drills, run.sh) on the same patch.
+      - run: bash scripts/ci/check-surreal-pins.sh
       # Every script test that needs no Docker, by glob so a new one cannot be forgotten.
       # SKIP lists the ones that need real containers (upgrade-surreal-v3 has its own job below).
       - run: |
