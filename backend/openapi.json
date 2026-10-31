@@ -3799,6 +3799,504 @@
         ]
       }
     },
+    "/api/secrets/counts": {
+      "get": {
+        "tags": [
+          "secrets"
+        ],
+        "summary": "Resolutions per reference and outcome over a window",
+        "operationId": "getSecretCounts",
+        "parameters": [
+          {
+            "name": "hours",
+            "in": "query",
+            "description": "Look-back window in hours, 1 to 2160 (90 days), default 168.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RefCount"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/secrets/log": {
+      "get": {
+        "tags": [
+          "secrets"
+        ],
+        "summary": "Every secret resolution in this organisation, newest first (never a value)",
+        "operationId": "listSecretResolutions",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "1 to 200, default 50.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "description": "An RFC 3339 time: entries strictly older (the `next_before` of the previous page).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogPage"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/secrets/providers": {
+      "get": {
+        "tags": [
+          "secrets"
+        ],
+        "summary": "The configured password managers (never their tokens)",
+        "operationId": "listSecretProviders",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderOut"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/secrets/providers/{kind}": {
+      "put": {
+        "tags": [
+          "secrets"
+        ],
+        "summary": "Save a password manager's host and token",
+        "description": "The token is encrypted (AES-256-GCM under ENCRYPTION_KEY) before it is stored and is never returned. Needs a browser session.",
+        "operationId": "putSecretProvider",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkBody"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "secrets"
+        ],
+        "summary": "Remove a password manager and its stored token",
+        "operationId": "deleteSecretProvider",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkBody"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/secrets/providers/{kind}/test": {
+      "post": {
+        "tags": [
+          "secrets"
+        ],
+        "summary": "Test connection: the secrets helper signs in with the stored token",
+        "operationId": "testSecretProvider",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/secrets/refs": {
+      "get": {
+        "tags": [
+          "secrets"
+        ],
+        "summary": "Registered secret references (never values)",
+        "operationId": "listSecretRefs",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RefOut"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "secrets"
+        ],
+        "summary": "Register a secret reference",
+        "operationId": "createSecretRef",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/secrets/refs/{id}": {
+      "put": {
+        "tags": [
+          "secrets"
+        ],
+        "summary": "Change a reference's vault, label, allowed tools or allowed actors",
+        "operationId": "updateSecretRef",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "secrets"
+        ],
+        "summary": "Remove a reference (the secret in the password manager is untouched)",
+        "operationId": "deleteSecretRef",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkBody"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/settings": {
       "get": {
         "tags": [
@@ -5563,6 +6061,36 @@
           }
         }
       },
+      "CheckOut": {
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "properties": {
+          "detail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`denied`, `provider_error`, `bad_config` or `unreachable` (the sidecar itself) when not ok."
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        }
+      },
       "ChunkRef": {
         "type": "object",
         "description": "Where one chunk sits in its document.",
@@ -6952,6 +7480,91 @@
           }
         }
       },
+      "LogEntry": {
+        "type": "object",
+        "required": [
+          "id",
+          "at",
+          "actor_kind",
+          "actor_id",
+          "reference",
+          "ref_id",
+          "tool",
+          "channel",
+          "session",
+          "vault_id",
+          "outcome",
+          "reason",
+          "trace_id"
+        ],
+        "properties": {
+          "actor_id": {
+            "type": "string"
+          },
+          "actor_kind": {
+            "type": "string",
+            "description": "`user`, `token` or `oauth`."
+          },
+          "at": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string",
+            "description": "`rest`, `mcp` or `chat`."
+          },
+          "id": {
+            "type": "string",
+            "description": "`audit_event:...`"
+          },
+          "outcome": {
+            "type": "string",
+            "description": "`ok`, `denied`, `not_found` or `provider_error`."
+          },
+          "reason": {
+            "type": "string"
+          },
+          "ref_id": {
+            "type": "string",
+            "description": "`credential_ref:...`, empty when the reference was not registered."
+          },
+          "reference": {
+            "type": "string"
+          },
+          "session": {
+            "type": "string"
+          },
+          "tool": {
+            "type": "string"
+          },
+          "trace_id": {
+            "type": "string"
+          },
+          "vault_id": {
+            "type": "string"
+          }
+        }
+      },
+      "LogPage": {
+        "type": "object",
+        "required": [
+          "entries"
+        ],
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LogEntry"
+            }
+          },
+          "next_before": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pass as `before` for the next (older) page; absent on the last page."
+          }
+        }
+      },
       "MemberList": {
         "type": "object",
         "required": [
@@ -7428,6 +8041,58 @@
           }
         }
       },
+      "ProviderBody": {
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Connect: the Connect server URL (required). Bitwarden: the server URL (optional; the US cloud when\nempty, `https://vault.bitwarden.eu` for the EU cloud). Service accounts: none."
+          },
+          "token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The bootstrap token. Required when none is stored; omit to keep the stored one. Write-only."
+          }
+        }
+      },
+      "ProviderOut": {
+        "type": "object",
+        "description": "A configured provider. Never the token: only that one is stored.",
+        "required": [
+          "kind",
+          "configured",
+          "updated_at",
+          "updated_by"
+        ],
+        "properties": {
+          "configured": {
+            "type": "boolean",
+            "description": "Always `true` in a listed row: a token is stored (encrypted). It is never returned."
+          },
+          "host": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "description": "`onepassword_connect`, `onepassword_service_account` or `bitwarden_sm`."
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "updated_by": {
+            "type": "string",
+            "description": "`user:...`"
+          }
+        }
+      },
       "RecentRecording": {
         "type": "object",
         "required": [
@@ -7470,6 +8135,147 @@
             "minimum": 0
           },
           "kind": {
+            "type": "string"
+          }
+        }
+      },
+      "RefBody": {
+        "type": "object",
+        "required": [
+          "vault_id"
+        ],
+        "properties": {
+          "allowed_actors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "`user:...`, `api_token:...` or `oauth_client:...`; empty: any member of the vault."
+          },
+          "allowed_tools": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Tools that may resolve it; `*` is any tool that takes secrets."
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "provider": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The provider kind that resolves it. Ignored on update."
+          },
+          "reference": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`op://<vault>/<item>/[<section>/]<field>` or `bws://<secret-id>`. Ignored on update."
+          },
+          "vault_id": {
+            "type": "string",
+            "description": "The vault the reference is bound to: only its members may use it."
+          }
+        }
+      },
+      "RefCount": {
+        "type": "object",
+        "required": [
+          "reference",
+          "ref_id",
+          "ok",
+          "denied",
+          "not_found",
+          "provider_error"
+        ],
+        "properties": {
+          "denied": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "last_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "not_found": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "ok": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "provider_error": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "ref_id": {
+            "type": "string"
+          },
+          "reference": {
+            "type": "string"
+          }
+        }
+      },
+      "RefOut": {
+        "type": "object",
+        "required": [
+          "id",
+          "reference",
+          "provider",
+          "vault_id",
+          "label",
+          "allowed_tools",
+          "allowed_actors",
+          "created_by",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "allowed_actors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "allowed_tools": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "created_by": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "description": "`credential_ref:...`"
+          },
+          "label": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "reference": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "vault_id": {
             "type": "string"
           }
         }

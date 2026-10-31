@@ -87,6 +87,7 @@ pub fn explicit_class(method: &Method, path: &str) -> Option<Class> {
         ["hooks", "ext", _] => Webhook,
         ["api", "extensions", _, "events", ..] => Account(if read { scopes::MEMORY_READ } else { scopes::MEMORY_WRITE }),
         ["api", "extensions", ..] => Account(scopes::CONNECTORS),
+        ["api", "secrets", ..] => Account(scopes::VAULTS_ADMIN),
         ["api", "sources", ..] => Account(scopes::CONNECTORS),
         ["api", "settings" | "debug" | "export" | "update" | "https" | "audit" | "chat" | "oauth", ..] => Account(scopes::VAULTS_ADMIN),
         // OAuth endpoints for MCP clients: public, so limited per client address like login
@@ -369,6 +370,8 @@ mod tests {
         assert_eq!(class(Method::POST, "/api/extensions/extension:x/rotate-secret"), Account(scopes::CONNECTORS));
         assert_eq!(class(Method::POST, "/api/extensions/extension:x/events/claim"), Account(scopes::MEMORY_WRITE));
         assert_eq!(class(Method::GET, "/api/extensions/extension:x/events"), Account(scopes::MEMORY_READ));
+        assert_eq!(class(Method::GET, "/api/secrets/refs"), Account(scopes::VAULTS_ADMIN));
+        assert_eq!(class(Method::PUT, "/api/secrets/providers/bitwarden_sm"), Account(scopes::VAULTS_ADMIN));
         assert_eq!(class(Method::GET, "/api/tools"), Public);
         assert_eq!(class(Method::POST, "/api/tools/recall"), Any);
         assert_eq!(class(Method::GET, "/api/something-new"), Account(scopes::VAULTS_ADMIN));
