@@ -3809,14 +3809,11 @@
         "parameters": [
           {
             "name": "hours",
-            "in": "path",
+            "in": "query",
             "description": "Look-back window in hours, 1 to 2160 (90 days), default 168.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
+              "type": "integer",
               "format": "int64"
             }
           }
@@ -3866,27 +3863,21 @@
         "parameters": [
           {
             "name": "limit",
-            "in": "path",
+            "in": "query",
             "description": "1 to 200, default 50.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
+              "type": "integer",
               "format": "int64"
             }
           },
           {
             "name": "before",
-            "in": "path",
+            "in": "query",
             "description": "An RFC 3339 time: entries strictly older (the `next_before` of the previous page).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           }
         ],

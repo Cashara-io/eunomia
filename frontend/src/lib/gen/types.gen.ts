@@ -3336,13 +3336,13 @@ export type GetOpenapiResponse = GetOpenapiResponses[keyof GetOpenapiResponses];
 
 export type GetSecretCountsData = {
     body?: never;
-    path: {
+    path?: never;
+    query?: {
         /**
          * Look-back window in hours, 1 to 2160 (90 days), default 168.
          */
-        hours: number | null;
+        hours?: number;
     };
-    query?: never;
     url: '/api/secrets/counts';
 };
 
@@ -3363,17 +3363,17 @@ export type GetSecretCountsResponse = GetSecretCountsResponses[keyof GetSecretCo
 
 export type ListSecretResolutionsData = {
     body?: never;
-    path: {
+    path?: never;
+    query?: {
         /**
          * 1 to 200, default 50.
          */
-        limit: number | null;
+        limit?: number;
         /**
          * An RFC 3339 time: entries strictly older (the `next_before` of the previous page).
          */
-        before: string | null;
+        before?: string;
     };
-    query?: never;
     url: '/api/secrets/log';
 };
 

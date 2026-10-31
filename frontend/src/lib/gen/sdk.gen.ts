@@ -1050,7 +1050,7 @@ export const getOpenapi = <ThrowOnError extends boolean = false>(options?: Optio
 /**
  * Resolutions per reference and outcome over a window
  */
-export const getSecretCounts = <ThrowOnError extends boolean = false>(options: Options<GetSecretCountsData, ThrowOnError>): RequestResult<GetSecretCountsResponses, GetSecretCountsErrors, ThrowOnError> => (options.client ?? client).get<GetSecretCountsResponses, GetSecretCountsErrors, ThrowOnError>({
+export const getSecretCounts = <ThrowOnError extends boolean = false>(options?: Options<GetSecretCountsData, ThrowOnError>): RequestResult<GetSecretCountsResponses, GetSecretCountsErrors, ThrowOnError> => (options?.client ?? client).get<GetSecretCountsResponses, GetSecretCountsErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
             name: 'eunomia_session',
@@ -1063,7 +1063,7 @@ export const getSecretCounts = <ThrowOnError extends boolean = false>(options: O
 /**
  * Every secret resolution in this organisation, newest first (never a value)
  */
-export const listSecretResolutions = <ThrowOnError extends boolean = false>(options: Options<ListSecretResolutionsData, ThrowOnError>): RequestResult<ListSecretResolutionsResponses, ListSecretResolutionsErrors, ThrowOnError> => (options.client ?? client).get<ListSecretResolutionsResponses, ListSecretResolutionsErrors, ThrowOnError>({
+export const listSecretResolutions = <ThrowOnError extends boolean = false>(options?: Options<ListSecretResolutionsData, ThrowOnError>): RequestResult<ListSecretResolutionsResponses, ListSecretResolutionsErrors, ThrowOnError> => (options?.client ?? client).get<ListSecretResolutionsResponses, ListSecretResolutionsErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
             name: 'eunomia_session',
