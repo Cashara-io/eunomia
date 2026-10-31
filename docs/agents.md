@@ -213,7 +213,9 @@ so the embed job makes new ones. It runs once per org, resumes where it stopped 
 again when the detectors gain new shapes. When it finishes, the server logs `secret backfill finished`
 with how many rows of each kind changed, and the instance audit log gets a `redact.backfill` event with
 the same counts. It never logs the text. A rewrite leaves a memory's `version` and `updated_at` as they
-were, so a client cache or a change feed shows the old text until it fetches the row again. Uploaded
+were, but adds an `updated` row (actor `system`) to the vault's change log for each rewritten memory or
+skill, so a client following the vault (for example `create-eunomia watch`) fetches the redacted text.
+Change-log rows hold no content, so there is nothing in them to redact. Uploaded
 documents, synced connector records, chat messages, entity names, aliases and summaries, relation labels,
 sync error messages and extension webhook deliveries are not redacted on write, so the backfill leaves
 them alone too.
