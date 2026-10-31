@@ -279,6 +279,39 @@ expression: info(&db).await
       "kind": {
         "kind": "NORMAL"
       },
+      "name": "credential_ref",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "reference"
+          ],
+          "index": "",
+          "name": "credential_ref_reference_idx",
+          "table": "credential_ref"
+        },
+        {
+          "cols": [
+            "vault",
+            "reference"
+          ],
+          "index": "UNIQUE",
+          "name": "credential_ref_vault_reference_idx",
+          "table": "credential_ref"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
       "name": "document",
       "permissions": {
         "create": false,
@@ -892,6 +925,21 @@ expression: info(&db).await
           "table": "repository"
         }
       ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
+      "name": "secret_provider",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": []
     },
     {
       "drop": false,

@@ -140,6 +140,16 @@ export type ChatRequest = {
     message: string;
 };
 
+export type CheckOut = {
+    detail?: string | null;
+    /**
+     * `denied`, `provider_error`, `bad_config` or `unreachable` (the sidecar itself) when not ok.
+     */
+    error?: string | null;
+    message?: string | null;
+    ok: boolean;
+};
+
 /**
  * Where one chunk sits in its document.
  */
@@ -703,6 +713,45 @@ export type ListEntitiesOut = {
     total: number;
 };
 
+export type LogEntry = {
+    actor_id: string;
+    /**
+     * `user`, `token` or `oauth`.
+     */
+    actor_kind: string;
+    at: string;
+    /**
+     * `rest`, `mcp` or `chat`.
+     */
+    channel: string;
+    /**
+     * `audit_event:...`
+     */
+    id: string;
+    /**
+     * `ok`, `denied`, `not_found` or `provider_error`.
+     */
+    outcome: string;
+    reason: string;
+    /**
+     * `credential_ref:...`, empty when the reference was not registered.
+     */
+    ref_id: string;
+    reference: string;
+    session: string;
+    tool: string;
+    trace_id: string;
+    vault_id: string;
+};
+
+export type LogPage = {
+    entries: Array<LogEntry>;
+    /**
+     * Pass as `before` for the next (older) page; absent on the last page.
+     */
+    next_before?: string | null;
+};
+
 export type MemberList = {
     results: Array<MemberOut>;
 };
@@ -885,6 +934,38 @@ export type Problem = {
     type: string;
 };
 
+export type ProviderBody = {
+    /**
+     * Connect: the Connect server URL (required). Bitwarden: the server URL (optional; the US cloud when
+     * empty, `https://vault.bitwarden.eu` for the EU cloud). Service accounts: none.
+     */
+    host?: string | null;
+    /**
+     * The bootstrap token. Required when none is stored; omit to keep the stored one. Write-only.
+     */
+    token?: string | null;
+};
+
+/**
+ * A configured provider. Never the token: only that one is stored.
+ */
+export type ProviderOut = {
+    /**
+     * Always `true` in a listed row: a token is stored (encrypted). It is never returned.
+     */
+    configured: boolean;
+    host?: string | null;
+    /**
+     * `onepassword_connect`, `onepassword_service_account` or `bitwarden_sm`.
+     */
+    kind: string;
+    updated_at: string;
+    /**
+     * `user:...`
+     */
+    updated_by: string;
+};
+
 export type RecentRecording = {
     duration_minutes: number;
     recorded_at?: string | null;
@@ -898,6 +979,56 @@ export type RecentRecording = {
 export type Redaction = {
     count: number;
     kind: string;
+};
+
+export type RefBody = {
+    /**
+     * `user:...`, `api_token:...` or `oauth_client:...`; empty: any member of the vault.
+     */
+    allowed_actors?: Array<string>;
+    /**
+     * Tools that may resolve it; `*` is any tool that takes secrets.
+     */
+    allowed_tools?: Array<string>;
+    label?: string | null;
+    /**
+     * The provider kind that resolves it. Ignored on update.
+     */
+    provider?: string | null;
+    /**
+     * `op://<vault>/<item>/[<section>/]<field>` or `bws://<secret-id>`. Ignored on update.
+     */
+    reference?: string | null;
+    /**
+     * The vault the reference is bound to: only its members may use it.
+     */
+    vault_id: string;
+};
+
+export type RefCount = {
+    denied: number;
+    last_at?: string | null;
+    not_found: number;
+    ok: number;
+    provider_error: number;
+    ref_id: string;
+    reference: string;
+};
+
+export type RefOut = {
+    allowed_actors: Array<string>;
+    allowed_tools: Array<string>;
+    created_at: string;
+    created_by: string;
+    /**
+     * `credential_ref:...`
+     */
+    id: string;
+    label: string;
+    provider: string;
+    reference: string;
+    updated_at: string;
+    vault_id: string;
 };
 
 export type RelationCreate = {
@@ -3202,6 +3333,250 @@ export type GetOpenapiResponses = {
 };
 
 export type GetOpenapiResponse = GetOpenapiResponses[keyof GetOpenapiResponses];
+
+export type GetSecretCountsData = {
+    body?: never;
+    path: {
+        /**
+         * Look-back window in hours, 1 to 2160 (90 days), default 168.
+         */
+        hours: number | null;
+    };
+    query?: never;
+    url: '/api/secrets/counts';
+};
+
+export type GetSecretCountsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetSecretCountsError = GetSecretCountsErrors[keyof GetSecretCountsErrors];
+
+export type GetSecretCountsResponses = {
+    200: Array<RefCount>;
+};
+
+export type GetSecretCountsResponse = GetSecretCountsResponses[keyof GetSecretCountsResponses];
+
+export type ListSecretResolutionsData = {
+    body?: never;
+    path: {
+        /**
+         * 1 to 200, default 50.
+         */
+        limit: number | null;
+        /**
+         * An RFC 3339 time: entries strictly older (the `next_before` of the previous page).
+         */
+        before: string | null;
+    };
+    query?: never;
+    url: '/api/secrets/log';
+};
+
+export type ListSecretResolutionsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListSecretResolutionsError = ListSecretResolutionsErrors[keyof ListSecretResolutionsErrors];
+
+export type ListSecretResolutionsResponses = {
+    200: LogPage;
+};
+
+export type ListSecretResolutionsResponse = ListSecretResolutionsResponses[keyof ListSecretResolutionsResponses];
+
+export type ListSecretProvidersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/secrets/providers';
+};
+
+export type ListSecretProvidersErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListSecretProvidersError = ListSecretProvidersErrors[keyof ListSecretProvidersErrors];
+
+export type ListSecretProvidersResponses = {
+    200: Array<ProviderOut>;
+};
+
+export type ListSecretProvidersResponse = ListSecretProvidersResponses[keyof ListSecretProvidersResponses];
+
+export type DeleteSecretProviderData = {
+    body?: never;
+    path: {
+        kind: string;
+    };
+    query?: never;
+    url: '/api/secrets/providers/{kind}';
+};
+
+export type DeleteSecretProviderErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type DeleteSecretProviderError = DeleteSecretProviderErrors[keyof DeleteSecretProviderErrors];
+
+export type DeleteSecretProviderResponses = {
+    200: OkBody;
+};
+
+export type DeleteSecretProviderResponse = DeleteSecretProviderResponses[keyof DeleteSecretProviderResponses];
+
+export type PutSecretProviderData = {
+    body: ProviderBody;
+    path: {
+        kind: string;
+    };
+    query?: never;
+    url: '/api/secrets/providers/{kind}';
+};
+
+export type PutSecretProviderErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type PutSecretProviderError = PutSecretProviderErrors[keyof PutSecretProviderErrors];
+
+export type PutSecretProviderResponses = {
+    200: OkBody;
+};
+
+export type PutSecretProviderResponse = PutSecretProviderResponses[keyof PutSecretProviderResponses];
+
+export type TestSecretProviderData = {
+    body?: never;
+    path: {
+        kind: string;
+    };
+    query?: never;
+    url: '/api/secrets/providers/{kind}/test';
+};
+
+export type TestSecretProviderErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type TestSecretProviderError = TestSecretProviderErrors[keyof TestSecretProviderErrors];
+
+export type TestSecretProviderResponses = {
+    200: CheckOut;
+};
+
+export type TestSecretProviderResponse = TestSecretProviderResponses[keyof TestSecretProviderResponses];
+
+export type ListSecretRefsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/secrets/refs';
+};
+
+export type ListSecretRefsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListSecretRefsError = ListSecretRefsErrors[keyof ListSecretRefsErrors];
+
+export type ListSecretRefsResponses = {
+    200: Array<RefOut>;
+};
+
+export type ListSecretRefsResponse = ListSecretRefsResponses[keyof ListSecretRefsResponses];
+
+export type CreateSecretRefData = {
+    body: RefBody;
+    path?: never;
+    query?: never;
+    url: '/api/secrets/refs';
+};
+
+export type CreateSecretRefErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type CreateSecretRefError = CreateSecretRefErrors[keyof CreateSecretRefErrors];
+
+export type CreateSecretRefResponses = {
+    200: RefOut;
+};
+
+export type CreateSecretRefResponse = CreateSecretRefResponses[keyof CreateSecretRefResponses];
+
+export type DeleteSecretRefData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/secrets/refs/{id}';
+};
+
+export type DeleteSecretRefErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type DeleteSecretRefError = DeleteSecretRefErrors[keyof DeleteSecretRefErrors];
+
+export type DeleteSecretRefResponses = {
+    200: OkBody;
+};
+
+export type DeleteSecretRefResponse = DeleteSecretRefResponses[keyof DeleteSecretRefResponses];
+
+export type UpdateSecretRefData = {
+    body: RefBody;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/secrets/refs/{id}';
+};
+
+export type UpdateSecretRefErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type UpdateSecretRefError = UpdateSecretRefErrors[keyof UpdateSecretRefErrors];
+
+export type UpdateSecretRefResponses = {
+    200: RefOut;
+};
+
+export type UpdateSecretRefResponse = UpdateSecretRefResponses[keyof UpdateSecretRefResponses];
 
 export type GetSettingsData = {
     body?: never;

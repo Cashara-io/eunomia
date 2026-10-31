@@ -173,7 +173,7 @@ async fn backfill_redacts_stored_secrets_once_and_resumes() {
     // one admin-visible audit event with counts, no text
     let mut res = app.control().test_raw().query("SELECT VALUE detail FROM audit_event WHERE action = 'redact.backfill'").await.unwrap();
     let details: Vec<String> = res.take(0).unwrap();
-    assert_eq!(details, vec!["version=1 memory=4 skill=1 audit_log=1".to_string()]);
+    assert_eq!(details, vec![format!("version={} memory=4 skill=1 audit_log=1", eunomia_backend::redact::DETECTOR_VERSION)]);
 
     // each rewritten memory and skill is in its vault's change log as `updated` by `system`, so a client
     // following the vault fetches the redacted text; audit rows are not vault items. No content in a row.

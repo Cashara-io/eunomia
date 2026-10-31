@@ -286,7 +286,9 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         CREATE $vm SET vault = $v, user = $u, role = 'owner';
         CREATE change SET vault = $v, seq = 1000000, op = 'created', kind = 'memory', item = $c, actor = $c;
         CREATE $cs SET n = 0;
-        CREATE $rb SET stage = 'done', done_at = time::now();";
+        CREATE $rb SET stage = 'done', done_at = time::now();
+        CREATE credential_ref SET reference = 'op://Ops/Item/field', provider = 'onepassword_connect', vault = $v, label = $c, created_by = $u;
+        CREATE secret_provider:onepassword_connect SET kind = 'onepassword_connect', host = $c, token_enc = 'enc:v1:planted', created_by = $u, updated_by = $u;";
     let uid = user.id.clone();
     db.test_raw()
         .query(sql)

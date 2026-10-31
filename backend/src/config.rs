@@ -34,6 +34,12 @@ pub struct Settings {
     pub documents_max_bytes: usize,
     /// `AUTH_MODE` and `OIDC_*`: how users sign in (password, an OpenID Connect provider, or both).
     pub auth: crate::oidc::AuthConfig,
+    /// `SECRETS_HELPER_URL`: the credential broker's sidecar on the internal compose network
+    /// (docs/architecture/specs/broker.md), default `http://secrets-helper:8080`.
+    pub secrets_helper_url: String,
+    /// `SECRETS_HELPER_KEY`: the shared key the sidecar checks; empty when an old updater has not
+    /// written one yet (the dedicated internal network is then the only gate).
+    pub secrets_helper_key: String,
 }
 
 fn env_or(key: &str, default: &str) -> String {
@@ -75,10 +81,13 @@ impl Settings {
             documents_backend: env_or("EUNOMIA_DOCUMENTS_BACKEND", "").trim().to_string(),
             documents_max_bytes: env::var("EUNOMIA_DOCUMENTS_MAX_BYTES").ok().and_then(|v| v.trim().parse().ok()).filter(|n| *n > 0).unwrap_or(25 << 20),
             auth: crate::oidc::AuthConfig::from_vars(|k| env::var(k).ok()).unwrap_or_else(|e| {
+
                 // refuse to start rather than fall back to a sign-in method the operator did not choose
                 eprintln!("invalid sign-in configuration: {e}");
                 std::process::exit(2);
             }),
+            secrets_helper_url: env_or("SECRETS_HELPER_URL", crate::secrets::client::DEFAULT_URL).trim_end_matches('/').to_string(),
+            secrets_helper_key: env_or("SECRETS_HELPER_KEY", "").trim().to_string(),
         }
     }
 }

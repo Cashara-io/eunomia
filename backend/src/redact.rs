@@ -3,7 +3,9 @@
 //! write still succeeds and the agent learns what was dropped. Known shapes only, no entropy guessing:
 //! ordinary prose, record ids, git SHAs and UUIDs pass through untouched.
 
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
+
+use zeroize::Zeroizing;
 
 use regex::Regex;
 use serde::Serialize;
@@ -11,7 +13,8 @@ use serde_json::Value;
 
 /// Bump when a detector is added or widened: each org's stored text is then redacted again once
 /// (`jobs::redact_backfill`), so rows written before the new shape was known lose it too.
-pub const DETECTOR_VERSION: i64 = 1;
+/// 2: the password managers' own tokens (1Password service accounts, Bitwarden machine accounts).
+pub const DETECTOR_VERSION: i64 = 2;
 
 /// What one write had redacted: `count` secrets of `kind` (e.g. "github token").
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, utoipa::ToSchema)]
@@ -72,6 +75,14 @@ static PATTERNS: LazyLock<Vec<(&'static str, Regex, String)>> = LazyLock::new(||
             Regex::new(r"(\b[A-Za-z][A-Za-z0-9+.-]*://[^\s:/@]*:)\S*@([A-Za-z0-9.\[\]-]+(?::[0-9]+)?(?:[^A-Za-z0-9.\[\]:@_-]|$))").expect("redaction pattern"),
             "${1}[redacted: url password]@${2}".into(),
         ),
+        // 1Password service account token: `ops_` and a long base64url string (1Password documents the
+        // prefix for scanners; the tokens run to about a kilobyte, so 80 characters rules out names like ops_team)
+        p("1password service account token", r"\bops_[A-Za-z0-9_-]{80,}={0,2}"),
+        // Bitwarden Secrets Manager machine account access token: 0.<access token id>.<client secret>:<16-byte key, base64>
+        p(
+            "bitwarden access token",
+            r"\b0\.[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\.[A-Za-z0-9]{20,}:[A-Za-z0-9+/]{21,22}={0,2}",
+        ),
         p("jwt", r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"),
         p("anthropic key", r"\bsk-ant-[A-Za-z0-9_-]{20,}"),
         p("openai key", r"\bsk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{20,}|\bsk-[A-Za-z0-9]{32,}"),
@@ -100,6 +111,12 @@ pub fn redact(text: &str, found: &mut Vec<Redaction>) -> String {
         Some(r) => r.count += count,
         None => found.push(Redaction { kind: kind.to_string(), count }),
     };
+    // first the exact values the credential broker resolved for the call in progress, if any
+    let (text, exact) = EXACT.try_with(|v| scrub_exact(text, v)).unwrap_or_else(|_| (text.to_string(), 0));
+    if exact > 0 {
+        note(EXACT_KIND, exact);
+    }
+    let text = text.as_str();
     let (mut out, keys) = redact_private_keys(text);
     if keys > 0 {
         note("private key", keys);
@@ -116,6 +133,62 @@ pub fn redact(text: &str, found: &mut Vec<Redaction>) -> String {
 }
 
 /// [`redact`] on every string inside `v`, at any depth, before it is serialized anywhere.
+/// The kind (and so the marker, `[redacted: secret]`) for a value the credential broker resolved.
+pub const EXACT_KIND: &str = "secret";
+const EXACT_MARKER: &str = "[redacted: secret]";
+
+tokio::task_local! {
+    /// The values the broker resolved for the tool call in progress (`secrets::broker`).
+    static EXACT: Arc<Vec<Zeroizing<String>>>;
+}
+
+/// Runs a tool call with the broker's resolved `values` in scope: every [`redact`] inside it (the memory,
+/// skill and audit write paths) replaces them first, exactly, whatever their shape.
+pub async fn with_exact<F: std::future::Future>(values: Arc<Vec<Zeroizing<String>>>, fut: F) -> F::Output {
+    EXACT.scope(values, fut).await
+}
+
+/// `text` with each exact value replaced by `[redacted: secret]`, longest first (so a value that
+/// contains another is not left half replaced), and how many were replaced.
+pub fn scrub_exact(text: &str, values: &[Zeroizing<String>]) -> (String, usize) {
+    let mut sorted: Vec<&str> = values.iter().map(|v| v.as_str()).filter(|v| !v.is_empty()).collect();
+    sorted.sort_by_key(|v| std::cmp::Reverse(v.len()));
+    let mut out = text.to_string();
+    let mut n = 0;
+    for v in sorted {
+        let c = out.matches(v).count();
+        if c > 0 {
+            n += c;
+            out = out.replace(v, EXACT_MARKER);
+        }
+    }
+    (out, n)
+}
+
+/// [`scrub_exact`] on every string inside `v` (keys too: a value used as an object key goes as well).
+pub fn scrub_exact_value(v: &mut Value, values: &[Zeroizing<String>]) -> usize {
+    match v {
+        Value::String(s) => {
+            let (out, n) = scrub_exact(s, values);
+            *s = out;
+            n
+        }
+        Value::Array(a) => a.iter_mut().map(|x| scrub_exact_value(x, values)).sum(),
+        Value::Object(m) => {
+            let mut n = 0;
+            let entries: Vec<(String, Value)> = std::mem::take(m).into_iter().collect();
+            for (k, mut x) in entries {
+                n += scrub_exact_value(&mut x, values);
+                let (k, kn) = scrub_exact(&k, values);
+                n += kn;
+                m.insert(k, x);
+            }
+            n
+        }
+        _ => 0,
+    }
+}
+
 pub fn redact_value(v: &mut Value) {
     match v {
         Value::String(s) => *s = redact(s, &mut Vec::new()),
@@ -132,6 +205,33 @@ mod tests {
     fn run(text: &str) -> (String, Vec<Redaction>) {
         let mut found = Vec::new();
         (redact(text, &mut found), found)
+    }
+
+    #[test]
+    fn password_manager_tokens() {
+        let ops = format!("ops_{}", "eyJzaWduSW5BZGRyZXNzIjoibXkuMXBhc3N3b3JkLmNvbSJ9".repeat(3));
+        let bws = "0.6b2f0a8e-1c3d-4e5f-8a9b-0c1d2e3f4a5b.e2eClientSecretNotReal012345:ABEiM0RVZneImaq7zN3u/w==";
+        for (kind, secret) in [("1password service account token", ops.as_str()), ("bitwarden access token", bws)] {
+            let (out, found) = run(&format!("token: {secret} end"));
+            assert_eq!(out, format!("token: [redacted: {kind}] end"), "{secret}");
+            assert_eq!(found, vec![Redaction { kind: kind.into(), count: 1 }]);
+        }
+        // look-alikes stay
+        for fine in ["ops_team is on call", "ops_dashboard_v2", "version 0.6b2f0a8e-1c3d-4e5f-8a9b-0c1d2e3f4a5b is a uuid", "1.0.3:abc"] {
+            assert_eq!(run(fine).0, fine);
+        }
+    }
+
+    #[tokio::test]
+    async fn exact_values_in_scope_are_scrubbed_first() {
+        let values = Arc::new(vec![Zeroizing::new("plain-looking-value".to_string()), Zeroizing::new("plain".to_string())]);
+        let (out, found) = with_exact(values.clone(), async { run("a plain-looking-value and plain words") }).await;
+        assert_eq!(out, "a [redacted: secret] and [redacted: secret] words");
+        assert_eq!(found, vec![Redaction { kind: "secret".into(), count: 2 }]);
+        assert_eq!(run("plain-looking-value").0, "plain-looking-value", "outside the scope nothing is exact-scrubbed");
+        let mut v = serde_json::json!({"a": ["x plain-looking-value"], "plain-looking-value": 1});
+        assert_eq!(scrub_exact_value(&mut v, &values), 2);
+        assert_eq!(v, serde_json::json!({"a": ["x [redacted: secret]"], "[redacted: secret]": 1}));
     }
 
     #[test]

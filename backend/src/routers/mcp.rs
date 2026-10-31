@@ -346,7 +346,7 @@ async fn call_tool(state: &AppState, user: &User, id: Value, params: &Value) -> 
     let Some(name) = params.get("name").and_then(Value::as_str) else {
         return error_response(id, -32602, ErrorCode::ValidationInvalid, "tools/call needs a tool `name`");
     };
-    if !registry::all_tools().contains_key(name) {
+    if registry::find(name).is_none() {
         return error_response(id, -32602, ErrorCode::ToolNotFound, &format!("Unknown tool: {name}"));
     }
     let args = match params.get("arguments") {
@@ -496,6 +496,8 @@ mod tests {
             documents_backend: String::new(),
             documents_max_bytes: 1 << 20,
             auth: Default::default(),
+        secrets_helper_url: crate::secrets::client::DEFAULT_URL.into(),
+        secrets_helper_key: String::new(),
         };
         AppState::build(&settings, surrealdb::opt::Config::new()).await.unwrap()
     }
