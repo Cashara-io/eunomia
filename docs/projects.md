@@ -151,6 +151,24 @@ The row is written right after the write it records, in its own transaction, and
 A crash or a database outage in that moment can lose the row, never a `seq` number: the log is at
 most once. The log is kept for the life of the vault.
 
+### Backups and restores
+
+The change log is two tables in each org database, `change` (the rows) and `change_seq` (one counter
+per vault), added by tenant migration 0023. A backup holds them like any other table. Restoring a
+backup taken before the update that added them (the `pre-update` backup the updater path takes):
+
+- onto the previous release, the supported rollback (`backend/scripts/restore.sh <file> --wipe`): each
+  database is deleted and re-created from the backup, so `change` and `change_seq` are gone with it
+  and the previous release never sees them. `scripts/tests/update-path.test.sh` checks exactly this:
+  after the rollback the install has the snapshot's tables and nothing else.
+- onto this release: the restored org database is back at its old schema version, so it answers
+  `tenant.schema_behind` until its `migrate_tenant` job applies 0023 again (as after any update), and
+  then has an empty log whose seqs start from 1.
+
+Any restore winds a vault's log back to what the backup held, so a client's cursor can be above the
+restored log's last seq. Delete `.eunomia/cache/watch.json` (or read from `after=0`) after a restore
+to start that client again from the restored log.
+
 ## Coming next
 
 - A project ontology: the entity kinds the vault uses.
