@@ -1,4 +1,4 @@
-//! The per-vault change log (`changes.rs`, migration 0022): numbered rows for every write, read over
+//! The per-vault change log (`changes.rs`, migration 0023): numbered rows for every write, read over
 //! REST, the `changes_since` tool and a WebSocket, with the same vault rules as any vault route.
 
 mod common;

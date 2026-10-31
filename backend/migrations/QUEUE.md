@@ -13,6 +13,6 @@ Control set: no reservations (control stays at 0006).
 | set | number | name | lane | PR | state |
 |---|---|---|---|---|---|
 | tenant | 0022 | rebuild_vector_indexes | L1 | #119 | locked |
-| tenant | 0023 | changes | L2 Projects | #114 (carried in the Phase 2 Projects PR) | reserved |
+| tenant | 0023 | changes | L2 Projects | #114 (carried in the Phase 2 Projects PR) | locked |
 | tenant | 0024 | redact_backfill | L3 Broker | #115 (carried in the Phase 2 broker stack) | reserved |
 | tenant | 0025 | credential_refs | L3 Broker | broker core | reserved |
