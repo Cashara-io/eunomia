@@ -23,7 +23,10 @@
 #      ledgers current, counts and reads unchanged, tenant 0022's rebuilt vector indexes present
 #      and answering kNN;
 #   9. run the updater again, restart the backend, `up -d` again: nothing changes;
-#  10. rollback: the old tag on a fresh volume, restore the pre-update backup, counts and reads again.
+#  9b. the change log (tenant 0023) works on the upgraded stack: a write logs a row that REST and
+#      `changes_since` return, and the new tables hold exactly those rows;
+#  10. rollback: the old tag on a fresh volume, restore the pre-update backup, counts and reads again,
+#      and none of the tables the update added.
 # Own compose project ($P), ports 8251 (backend) and 3251 (frontend). Artifacts (logs, snapshots) in
 # $ROOT/update-path-artifacts on failure. UPDATE_PATH_KEEP=1 leaves the stack and temp dir up.
 set -uo pipefail
@@ -51,6 +54,10 @@ LATEST_CONTROL="$(find "$ROOT/backend/migrations/control" -name '[0-9]*.surql' |
 # recall in the reads below fills):
 # compared for presence only, not for an exact count.
 VOLATILE="${UPDATE_PATH_VOLATILE:-job job_leader audit_event audit_log tool_usage session failure_capsule _migration_lock rate_limit embed_cache}"
+# Tables this checkout's tenant migrations add (0023_changes: the change log and its per-vault
+# counter). Where <from-tag> lacks one, the update must add it to every org database, empty: nothing
+# backfills it. Their counts are checked on their own, so they are left out of the before/after diff.
+NEW_TABLES="${UPDATE_PATH_NEW_TABLES:-change change_seq}"
 BUILT_FROM=0
 PASS=0; FAIL=0; T0=$SECONDS
 log() { printf '[update-path %4ss] %s\n' "$((SECONDS - T0))" "$*"; }
@@ -107,7 +114,18 @@ counts() { # counts: "<db>.<table> <rows>" for control and every org database, s
       'to_entries[] | "\($db).\($t[.key]) \(.value.result[0].count // 0)"'
   done | sort
 }
-stable() { awk -v v=" $VOLATILE " '{ split($1, a, "."); if (index(v, " " a[2] " ") == 0) print }' "$1"; }
+stable() { awk -v v=" $VOLATILE $NEW_TABLES " '{ split($1, a, "."); if (index(v, " " a[2] " ") == 0) print }' "$1"; }
+tables() { cut -d' ' -f1 "$1"; }
+expected_new() { # expected_new COUNTS-BEFORE : "<db>.<table> 0" for each NEW_TABLES table an org database lacked
+  local db t
+  for db in $(tables "$1" | cut -d. -f1 | grep '^org_' | sort -u); do
+    for t in $NEW_TABLES; do grep -q "^$db\.$t " "$1" || echo "$db.$t 0"; done
+  done | sort
+}
+added() { awk 'NR == FNR { seen[$1] = 1; next } !($1 in seen)' "$1" "$2" | sort; }   # added BEFORE AFTER : lines of AFTER whose table BEFORE lacks
+others_empty() { # others_empty COUNTS ORG : every NEW_TABLES table outside ORG holds no row
+  awk -v org="$2" -v n=" $NEW_TABLES " '{ split($1, a, "."); if (a[1] != org && index(n, " " a[2] " ") && $2 != 0) bad = 1 } END { exit bad }' "$1"
+}
 ledgers() { # "<db> <rows> <max version>" for every _migration ledger
   local db
   for db in control $(org_dbs); do
@@ -465,7 +483,10 @@ stable "$W/counts-before.txt" > "$W/stable-before.txt"; stable "$W/counts-after.
 expect_ledgers "$W/stable-before.txt" "$W/ledgers-before.txt" > "$W/stable-expected.txt"
 check "per-table row counts unchanged (bar $VOLATILE; _migration grown by the new migrations)" diff "$W/stable-expected.txt" "$W/stable-after.txt"
 diff "$W/stable-expected.txt" "$W/stable-after.txt" | head -20
-check "the same tables before and after" diff <(cut -d' ' -f1 "$W/counts-before.txt") <(cut -d' ' -f1 "$W/counts-after.txt")
+check "no table gone after the update" test -z "$(added "$W/counts-after.txt" "$W/counts-before.txt")"
+expected_new "$W/counts-before.txt" > "$W/new-expected.txt"; added "$W/counts-before.txt" "$W/counts-after.txt" > "$W/new-after.txt"
+check "the new tables are exactly the migrations' ($NEW_TABLES), in every org database, empty" diff "$W/new-expected.txt" "$W/new-after.txt"
+diff "$W/new-expected.txt" "$W/new-after.txt" | head -20
 check "the fixed reads unchanged" diff "$W/reads-before.txt" "$W/reads-after.txt"
 diff "$W/reads-before.txt" "$W/reads-after.txt" | head -20
 # Tenant 0022 (rebuild_vector_indexes): in every org ledger, the three HNSW indexes defined, and the
@@ -500,6 +521,36 @@ check "no new ledger rows" diff "$W/ledgers-after.txt" "$W/ledgers-again.txt"
 counts > "$W/counts-again.txt"; stable "$W/counts-again.txt" > "$W/stable-again.txt"
 check "counts unchanged after the re-run" diff "$W/stable-expected.txt" "$W/stable-again.txt"
 diff "$W/stable-expected.txt" "$W/stable-again.txt" | head -20
+check "the new tables still empty after the re-run" diff "$W/new-expected.txt" <(added "$W/counts-before.txt" "$W/counts-again.txt")
+
+# ---- 9b. the change log on the upgraded stack --------------------------------------------------
+# Only where the update added it (a "from" release that already has it compares it like any table).
+# shellcheck disable=SC2016 # $id and $n in the jq programs are jq variables
+if grep -q '\.change ' "$W/new-expected.txt"; then
+  log "9b. the change log on the upgraded stack"
+  changes() { api -f -H "Authorization: Bearer $1" "$BASE/api/vaults/$2/changes${3:-}"; }
+  changes "$TOKEN_A" "$TEAM" > "$W/changes-empty.json"
+  check "the Team vault's log starts empty (0023 backfills nothing)" jq -e '.changes == [] and .next == 0' "$W/changes-empty.json"
+  NEWMEM="$(mcp "$TOKEN_A" memory_write "{\"subject_name\":\"Grace Hopper\",\"subject_kind\":\"person\",\"text\":\"Popularised the term debugging.\",\"vault_id\":\"$TEAM\"}" | jq -r .memory.id)"
+  check "a write in the Team vault after the update" test -n "$NEWMEM" -a "$NEWMEM" != null
+  wait_jobs 120
+  changes "$TOKEN_A" "$TEAM" > "$W/changes-team.json"
+  check "GET /api/vaults/{vault}/changes returns the write (memory created, by the token, not system)" \
+    jq -e --arg id "$NEWMEM" '[.changes[] | select(.id == $id and .kind == "memory" and .op == "created" and .actor != "system")] | length == 1' "$W/changes-team.json"
+  check "its seqs run 1..n with no gap, and next is n" jq -e '[.changes[].seq] == [range(1; (.changes | length) + 1)] and .next == (.changes | length)' "$W/changes-team.json"
+  NEXT="$(jq -r .next "$W/changes-team.json")"
+  changes "$TOKEN_A" "$TEAM" "?after=$NEXT" > "$W/changes-next.json"
+  check "after=next returns nothing more" jq -e --argjson n "$NEXT" '.changes == [] and .next == $n' "$W/changes-next.json"
+  mcp "$TOKEN_A" changes_since "{\"vault_id\":\"$TEAM\"}" > "$W/changes-mcp.json"
+  check "changes_since returns the write" jq -e --arg id "$NEWMEM" '[.changes[].id] | index($id) != null' "$W/changes-mcp.json"
+  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 -H "Authorization: Bearer $TOKEN_B" "$BASE/api/vaults/$TEAM/changes")"
+  check "the other org cannot read the Team vault's log (HTTP $code)" test "$code" != 200
+  counts > "$W/counts-changes.txt"
+  N_TEAM="$(jq '.changes | length' "$W/changes-team.json")"
+  check "change in $ORG_A holds exactly the Team vault's $N_TEAM rows" grep -qx "$ORG_A.change $N_TEAM" "$W/counts-changes.txt"
+  check "change_seq in $ORG_A holds one counter (the Team vault's)" grep -qx "$ORG_A.change_seq 1" "$W/counts-changes.txt"
+  check "the other org's change log is still empty" others_empty "$W/counts-changes.txt" "$ORG_A"
+fi
 
 # ---- 10. rollback ------------------------------------------------------------------------------
 log "10. rollback to $FROM"
@@ -536,6 +587,7 @@ wait_jobs 120
 wait_embeddings 600; check "no embedding backlog after the rollback" test $? -eq 0
 counts > "$W/counts-rollback.txt"; stable "$W/counts-rollback.txt" > "$W/stable-rollback.txt"
 check "counts after the rollback match the snapshot" diff "$W/stable-before.txt" "$W/stable-rollback.txt"
+check "the rollback has exactly the snapshot's tables (none the update added)" diff <(tables "$W/counts-before.txt") <(tables "$W/counts-rollback.txt")
 diff "$W/stable-before.txt" "$W/stable-rollback.txt" | head -20
 reads "$W/reads-rollback.txt"; check "the reads answer after the rollback" test $? -eq 0
 check "the fixed reads after the rollback match the snapshot" diff "$W/reads-before.txt" "$W/reads-rollback.txt"

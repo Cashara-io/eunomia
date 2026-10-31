@@ -272,6 +272,9 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
     let (_, body) = raw(router, "POST", "/api/chat/threads", Some(json!({"title": format!("{canary} thread")})), Some(&token), None).await;
     ids.thread = serde_json::from_str::<Value>(&body).unwrap()["id"].as_str().unwrap_or_else(|| panic!("{body}")).to_string();
     let enc = crypto::encrypt(&state.settings.encryption_key, &json!({"token": canary}).to_string());
+    // The change log holds ids, never content (tests/changes.rs), so its canary row is planted: the
+    // canary as the item and the actor, at a seq far above the real rows, so a route or tool that
+    // leaks another org's log shows it. Its counter table has no free text: the canary is the key.
     let sql = "
         CREATE chat_message SET owner = $u, thread_id = $thread, role = 'user', content = $c;
         UPSERT $settings SET owner = $u, observations_mission = $c, memory_skill = $c;
@@ -280,7 +283,9 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         CREATE embed_cache SET text_hmac = $c, vector = [0.5, 0.25];
         CREATE pocket_recording SET owner = $u, recording_id = 'rec', title = $c, transcript = $c, raw = {note: $c};
         DELETE vault_member WHERE vault = $v;
-        CREATE $vm SET vault = $v, user = $u, role = 'owner';";
+        CREATE $vm SET vault = $v, user = $u, role = 'owner';
+        CREATE change SET vault = $v, seq = 1000000, op = 'created', kind = 'memory', item = $c, actor = $c;
+        CREATE $cs SET n = 0;";
     let uid = user.id.clone();
     db.test_raw()
         .query(sql)
@@ -292,6 +297,7 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         .bind(("sync", surrealdb::types::RecordId::new("sync_status", format!("{}:github", eunomia_backend::rid::key_string(uid.key()).unwrap()))))
         .bind(("v", eunomia_backend::rid::parse(&vault).unwrap()))
         .bind(("vm", surrealdb::types::RecordId::new("vault_member", canary.clone())))
+        .bind(("cs", surrealdb::types::RecordId::new("change_seq", canary.clone())))
         .await
         .unwrap()
         .check()
@@ -395,8 +401,6 @@ async fn secret_rows(w: &World, org: &Org) -> BTreeMap<String, usize> {
 const NO_SECRET_ROWS: &[&str] = &[
     "oauth_client",  // an instance-wide registry of MCP clients, not per org
     "job_leader",    // one global lease row
-    "change",        // the change log keeps ids, never content (tests/changes.rs)
-    "change_seq",    // one counter per vault
 ];
 
 // ---- the attack -----------------------------------------------------------------------------
