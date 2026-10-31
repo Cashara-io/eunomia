@@ -16,7 +16,7 @@ case "\$*" in
   "compose ps -q backend"*) cat "$T/bid" 2>/dev/null ;;    # the backend, when one exists
   "compose ps -q"*) ;;                                     # nothing else running
   "compose run --rm --no-deps -T -v"*backup*) [ -f "$T/backup_fails" ] && exit 1 ;;
-  "compose config --images") echo surrealdb/surrealdb:v3.3.1 ;;
+  "compose config --images") echo surrealdb/surrealdb:v3.3.5 ;;
   "volume ls"*) cat "$T/volume" 2>/dev/null ;;
   "network inspect"*) [ -f "$T/net" ] || exit 1 ;;
   "inspect -f {{.State.Running}} proj-v2scratch") cat "$T/scratch_running" 2>/dev/null ;;

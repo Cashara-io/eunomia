@@ -58,12 +58,12 @@ jobs:
       - run: TEST_HARDENED=1 cargo nextest run
       # The isolation proof with the application-level owner/vault filters switched off.
       - run: ISOLATION_TEST_NO_APP_FILTERS=1 cargo nextest run --test isolation
-      # Exactly-once job claims from 4 separate processes on one real RocksDB-backed SurrealDB 3.3.1,
+      # Exactly-once job claims from 4 separate processes on one real RocksDB-backed SurrealDB 3.3.5,
       # started with the hardened flags of docker-compose.yml (the test skips itself without
       # TEST_SURREAL_URL, so the runs above only compile it). docs/architecture/jobs.md.
       - name: Job claims across processes (real SurrealDB)
         run: |
-          docker run -d --name fw-claim-db --user root -p 127.0.0.1:8231:8000 surrealdb/surrealdb:v3.3.1 start \
+          docker run -d --name fw-claim-db --user root -p 127.0.0.1:8231:8000 surrealdb/surrealdb:v3.3.5 start \
             --user root --pass root --deny-all --allow-rpc --allow-http --allow-arbitrary-query=system \
             --allow-funcs=time,string,search,count,array,vector,math,file,type::file --allow-experimental=files rocksdb:/data/db
           for _ in $(seq 30); do curl -fsS http://127.0.0.1:8231/health >/dev/null && break; sleep 1; done
@@ -219,7 +219,7 @@ jobs:
           fetch-depth: 0   # case B reads the released v1.2.2 compose file from its tag
       - run: bash scripts/tests/upgrade-surreal-v3.test.sh
 
-  # Backups really restore, on a throwaway SurrealDB 3.3.1 container. The two drills share the
+  # Backups really restore, on a throwaway SurrealDB 3.3.5 container. The two drills share the
   # container name fw-backup-db and port 8211, so they run one after the other.
   restore-drill:
     runs-on: ubuntu-latest

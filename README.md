@@ -212,7 +212,7 @@ if you want browser sessions to survive backend restarts. Then run:
 ./run.sh
 ```
 
-This starts SurrealDB 3.3.1 in Docker, the Rust backend on `:8001`, and Next.js
+This starts SurrealDB 3.3.5 in Docker, the Rust backend on `:8001`, and Next.js
 on `:3000`. The frontend proxies `/api/*` and `/mcp` to the backend. A dev
 volume last used with SurrealDB 2.x must be removed or upgraded first.
 The Compose stack uses prebuilt images; see [Installation](docs/installation.md)
@@ -237,7 +237,7 @@ With the stack running and system Chrome installed:
 [CI](.github/workflows/ci.yml) runs clippy and the backend tests (also under
 the hardened SurrealDB settings, plus the org isolation proof), every script
 test, the frontend checks, Playwright against the Compose stack built from
-the repository with SurrealDB 3.3.1, the 2.x to 3.3 upgrade, and restore
+the repository with SurrealDB 3.3.5, the 2.x to 3.3 upgrade, and restore
 drills. The [recall evaluation](frontend/tests/recall-eval.spec.ts) measures
 Recall@5 and MRR on a fixed corpus, and checks for cross-vault and cross-user
 leaks. See [Testing](docs/testing.md) for every layer.

@@ -6,7 +6,7 @@ services:
     # capability is denied except the function families the backend's SQL uses
     # (docs/architecture/surreal-functions.md), guests are refused, and a runaway query or
     # transaction is cut off. tests run the suite under the same --allow-funcs list.
-    image: surrealdb/surrealdb:v3.3.1
+    image: surrealdb/surrealdb:v3.3.5
     user: root
     entrypoint:
       - /surreal
@@ -16,8 +16,8 @@ services:
       - --pass
       - ${SURREAL_PASS:-root}
       - --deny-all
-      # --deny-all also refuses guests (adding --deny-guests is a startup error on 3.3.1) but denies RPC,
-      # HTTP and root queries too: allow those explicitly. Verified on a live 3.3.1 server.
+      # --deny-all also refuses guests (adding --deny-guests is a startup error on 3.3.1 and 3.3.5) but denies RPC,
+      # HTTP and root queries too: allow those explicitly. Verified on live 3.3.1 and 3.3.5 servers.
       - --allow-rpc
       - --allow-http
       - --allow-arbitrary-query=system

@@ -13,7 +13,7 @@
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$HERE/../.."
-OLD_IMG=surrealdb/surrealdb:v2.7.0 NEW_IMG=surrealdb/surrealdb:v3.3.1
+OLD_IMG=surrealdb/surrealdb:v2.7.0 NEW_IMG=surrealdb/surrealdb:v3.3.5
 NET=fw-upgrade_default
 W="$(mktemp -d)"
 export EUNOMIA_DIR="$W" COMPOSE_PROJECT_NAME=fw-upgrade BACKEND_PORT=8242 BACKUP_ENCRYPTION_KEY=test-key-not-secret

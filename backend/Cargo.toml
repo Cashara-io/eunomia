@@ -19,7 +19,7 @@ http-body-util = "0.1"
 tower-http = { version = "0.6", features = ["cors", "limit"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
-surrealdb = { version = "=3.3.1", features = ["protocol-ws", "kv-mem"] }
+surrealdb = { version = "=3.3.5", features = ["protocol-ws", "kv-mem"] }
 jsonwebtoken = "9"
 bcrypt = "0.15"
 sha2 = "0.10"
