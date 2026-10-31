@@ -262,3 +262,104 @@ async fn find_by_meaning_when_embeddings_are_available() {
     let found = app.tool("skill_find", json!({"query": "billing"})).await;
     assert!(names(&found).contains(&"invoice-export".to_string()), "{found}");
 }
+
+/// Every page of `skill_list` for `args`, following `next`, with the page sizes seen.
+async fn list_all(app: &TestApp, args: Value) -> (Vec<String>, Vec<usize>) {
+    let (mut all, mut sizes, mut after) = (Vec::new(), Vec::new(), None::<String>);
+    for _ in 0..100 {
+        let mut a = args.clone();
+        if let Some(n) = &after {
+            a["after"] = json!(n);
+        }
+        let page = app.tool("skill_list", a).await;
+        let got = names(&page);
+        assert!(page["skills"].as_array().unwrap().iter().all(|s| s.get("body").is_none() && s["id"].as_str().unwrap().starts_with("skill:")), "{page}");
+        sizes.push(got.len());
+        all.extend(got);
+        match page["next"].as_str() {
+            Some(n) => after = Some(n.to_string()),
+            None => return (all, sizes),
+        }
+    }
+    panic!("skill_list never ended");
+}
+
+#[tokio::test]
+async fn skill_list_pages_through_one_vault_by_name() {
+    let app = TestApp::new().await;
+    let team = app.tool("vault_create", json!({"name": "Team"})).await;
+    let team_id = team["id"].as_str().unwrap().to_string();
+    let mine = ["zeta", "alpha", "mu", "beta", "omega", "kappa", "delta"];
+    for n in mine {
+        app.tool("skill_save", save_args(n, "a personal skill")).await;
+    }
+    for n in ["team-a", "team-b"] {
+        app.tool("skill_save", json!({"name": n, "description": "a team skill", "body": "b", "vault_id": team_id})).await;
+    }
+    let mut sorted: Vec<String> = mine.iter().map(|s| s.to_string()).collect();
+    sorted.sort();
+
+    // the personal vault by default, sorted by name, three at a time: 3, 3, 1, and the last page says so
+    let (all, sizes) = list_all(&app, json!({"limit": 3})).await;
+    assert_eq!(all, sorted);
+    assert_eq!(sizes, [3, 3, 1]);
+    // exactly a page's worth: no empty page after it
+    let (_, sizes) = list_all(&app, json!({"limit": 7})).await;
+    assert_eq!(sizes, [7]);
+    // the default page holds them all; another vault by id, or by name
+    assert_eq!(list_all(&app, json!({})).await.0, sorted);
+    assert_eq!(list_all(&app, json!({"vault_id": team_id})).await.0, ["team-a", "team-b"]);
+    let by_name = app.tool("skill_list", json!({"vault_id": "Team"})).await;
+    assert_eq!(names(&by_name), ["team-a", "team-b"]);
+    assert_eq!(by_name["vault"], team_id.as_str());
+    // a cursor past the end, and limits outside 1..=500, still answer
+    let past = app.tool("skill_list", json!({"after": "zzz"})).await;
+    assert!(names(&past).is_empty() && past["next"].is_null(), "{past}");
+    assert_eq!(names(&app.tool("skill_list", json!({"limit": 0})).await).len(), 1);
+    assert_eq!(names(&app.tool("skill_list", json!({"limit": 100000})).await).len(), 7);
+    // a skill saved again keeps its place; a deleted one is gone from the list
+    app.tool("skill_save", save_args("beta", "changed")).await;
+    let delta = app.tool("skill_get", json!({"name": "delta"})).await;
+    app.tool("skill_delete", json!({"id": delta["id"]})).await;
+    let (all, _) = list_all(&app, json!({"limit": 2})).await;
+    assert_eq!(all, ["alpha", "beta", "kappa", "mu", "omega", "zeta"]);
+}
+
+#[tokio::test]
+async fn skill_list_follows_the_vault_rules() {
+    let app = TestApp::new().await;
+    let team = app.tool("vault_create", json!({"name": "Team"})).await;
+    let team_id = team["id"].as_str().unwrap().to_string();
+    let personal = app.tool("skill_save", save_args("payroll-steps", "Private steps for the payroll run")).await;
+    app.tool("skill_save", json!({"name": "team-notes", "description": "For the team", "body": "b", "vault_id": team_id})).await;
+    let personal_vault = personal["vault"].as_str().unwrap().to_string();
+
+    // an org mate who is not a member, and a user of another org: an error that names nothing
+    let mate = common::register(&app.state, "mate@example.com").await;
+    let outsider = common::register_personal(&app.state, "outsider@example.com").await;
+    for user in [&mate, &outsider] {
+        for vault in [&personal_vault, &team_id] {
+            let out = call_as(&app, user, "skill_list", json!({"vault_id": vault})).await;
+            assert!(out.get("error").is_some() && !out.to_string().contains("payroll") && !out.to_string().contains("team-notes"), "{out}");
+        }
+        // their own default vault holds none of these
+        let own = call_as(&app, user, "skill_list", json!({})).await;
+        assert!(names(&own).is_empty(), "{own}");
+    }
+
+    // a token restricted to the team vault lists that vault by default, and cannot list another
+    let granted: Vec<String> = scopes::ALL.iter().map(|s| s.to_string()).collect();
+    let token = create_api_token_with(app.control(), &app.user.id, "r", &granted, Some(&rid::parse(&team_id).unwrap()), None).await.unwrap().token;
+    assert_eq!(names(&rest(&app, &token, "skill_list", json!({})).await), ["team-notes"]);
+    let refused = rest(&app, &token, "skill_list", json!({"vault_id": personal_vault})).await;
+    assert_eq!(refused["code"], "auth.scope", "{refused}");
+    // a read-only token may list
+    let reader = create_api_token_with(app.control(), &app.user.id, "ro", &["memory:read".to_string()], None, None).await.unwrap().token;
+    assert_eq!(names(&rest(&app, &reader, "skill_list", json!({})).await), ["payroll-steps"]);
+
+    // bad input is a validation error
+    // (an unknown vault name stops in the registry's name lookup, as for skill_save)
+    let unknown = app.tool("skill_list", json!({"vault_id": "nope"})).await;
+    assert!(unknown["error"].is_string() && unknown["code"] != "internal", "{unknown}");
+    assert!(app.tool("skill_list", json!({"limit": "ten"})).await["error"].as_str().unwrap().starts_with("invalid arguments"));
+}

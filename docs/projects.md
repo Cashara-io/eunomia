@@ -93,8 +93,10 @@ npx create-eunomia sync      # or: bunx create-eunomia sync, pnpm dlx create-eun
 
 Each skill is reported as `created`, `updated`, `unchanged` (not saved again) or `error` (a bad file
 is reported and the rest still sync). Skills that are in the vault but not in the folder are listed
-and left alone: sync never deletes. Agents find the skills with the `skill_find` and `skill_get` MCP
-tools. In CI, set `EUNOMIA_TOKEN` and `EUNOMIA_URL` (it must match the URL in `eunomia.toml`)
+and left alone: sync never deletes. That list is exact: sync reads the vault's skills page by page with
+the `skill_list` tool. A server from before it (2.0.x) has no `skill_list`, so sync falls back to a
+search that finds at most 50 and says the list may miss some. Agents find the skills with the
+`skill_find`, `skill_list` and `skill_get` MCP tools. In CI, set `EUNOMIA_TOKEN` and `EUNOMIA_URL` (it must match the URL in `eunomia.toml`)
 instead of signing in. A token the server refuses stops the sync with one message: run init again.
 
 ## Watching changes

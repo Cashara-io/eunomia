@@ -35,6 +35,8 @@ const fake = {
   hang: false,
   /** Tokens the server refuses for vault reads (lost access), though they still exist. */
   blind: new Set<string>(),
+  /** A server from before `skill_list` (2.0.x): the tool route answers 404 tool.not_found. */
+  noSkillList: false,
   n: 0,
 };
 const PASSWORD = "s3cret-pass";
@@ -54,6 +56,7 @@ function reset() {
   fake.failMint = false;
   fake.hang = false;
   fake.blind = new Set();
+  fake.noSkillList = false;
 }
 
 function handle(method: string, path: string, body: any, headers: IncomingMessage["headers"]): [number, unknown, Record<string, string>?] {
@@ -120,7 +123,14 @@ function handle(method: string, path: string, body: any, headers: IncomingMessag
       fake.skills.push({ name: body.name, description: body.description, body: body.body, vault: body.vault_id });
       return [200, { id: "skill:1", name: body.name }];
     }
-    if (tool === "skill_find") return [200, { skills: fake.skills.filter((x) => x.vault === body.vault_id).map(({ name, description }) => ({ name, description })) }];
+    if (tool === "skill_list") {
+      if (fake.noSkillList) return [404, { code: "tool.not_found", detail: `unknown tool "skill_list"` }];
+      const all = fake.skills.filter((x) => x.vault === body.vault_id).map(({ name, description }) => ({ name, description })).sort((a, b) => (a.name < b.name ? -1 : 1));
+      const rest = all.filter((x) => body.after === undefined || x.name > body.after);
+      const page = rest.slice(0, Math.min(body.limit ?? 100, 500));
+      return [200, { skills: page, vault: body.vault_id, next: rest.length > page.length ? page.at(-1)!.name : null }];
+    }
+    if (tool === "skill_find") return [200, { skills: fake.skills.filter((x) => x.vault === body.vault_id).slice(0, body.limit ?? 10).map(({ name, description }) => ({ name, description })) }];
   }
   return [404, { code: "x.none", detail: `no route ${method} ${path}` }];
 }
@@ -606,6 +616,39 @@ describe("sync", () => {
     assert.ok(fake.skills.some((s) => s.name === "only-on-server"), "never deleted");
     const saves = fake.calls.filter((c) => c.path === "/api/tools/skill_save" && c.body.name === "db-migrate");
     assert.equal(saves.length, 1, "unchanged skills are not saved again");
+  });
+
+  it("lists every skill only on the server with skill_list, page by page, not a 50-result search", async () => {
+    await init(opts({ vault: "Acme" }));
+    const vault = vaultId("Acme");
+    skill("deploy-rollback", "Roll back a bad deploy.");
+    const extra = Array.from({ length: 1203 }, (_, i) => `server-${String(i).padStart(4, "0")}`);
+    for (const name of extra) fake.skills.push({ name, description: "x", body: "y", vault });
+    fake.skills.push({ name: "other-vault", description: "x", body: "y", vault: "vault:personal" });
+    lines = [];
+    fake.calls = [];
+    assert.equal(await sync({ cwd: repo, env: env(), log: (l) => lines.push(l) }), 0);
+    const out = lines.join("\n");
+    const listed = /on the server only \(kept, not deleted\): (.*)/.exec(out)![1].split(", ");
+    assert.deepEqual(listed, extra, "every one, sorted, none from another vault, not the repo's own");
+    assert.ok(!out.includes("may miss"), out);
+    const pages = fake.calls.filter((c) => c.path === "/api/tools/skill_list");
+    assert.deepEqual(pages.map((c) => c.body.after), [undefined, "server-0498", "server-0998"], "deploy-rollback is on the server too and sorts first");
+    assert.ok(pages.every((c) => c.body.vault_id === vault && c.body.limit === 500));
+    assert.ok(!fake.calls.some((c) => c.path === "/api/tools/skill_find"), "no search on a server with skill_list");
+  });
+
+  it("falls back to the best-effort search on a server without skill_list, and says so", async () => {
+    await init(opts({ vault: "Acme" }));
+    const vault = vaultId("Acme");
+    fake.noSkillList = true;
+    for (let i = 0; i < 60; i++) fake.skills.push({ name: `old-${String(i).padStart(2, "0")}`, description: "x", body: "y", vault });
+    lines = [];
+    assert.equal(await sync({ cwd: repo, env: env(), log: (l) => lines.push(l) }), 0);
+    const out = lines.join("\n");
+    const listed = /on the server only \(kept, not deleted\): (.*)/.exec(out)![1].split(", ");
+    assert.equal(listed.length, 50, "the search caps at 50");
+    assert.match(out, /this server has no skill_list, so the list above may miss some skills/);
   });
 
   it("reads <name>/SKILL.md folders and skips symlinks, reporting them", async () => {

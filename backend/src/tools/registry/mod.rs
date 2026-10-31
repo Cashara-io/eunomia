@@ -91,6 +91,7 @@ pub const READ_ONLY_TOOLS: &[&str] = &[
     "document_download",
     "document_export",
     "skill_find",
+    "skill_list",
     "skill_get",
     "changes_since",
 ];
@@ -174,6 +175,7 @@ pub fn description(name: &str) -> &'static str {
         "document_delete" => "Delete an uploaded document: its stored file, its chunks (they leave search, recall and get at once) and the memories extracted from them. Irreversible.",
         "skill_save" => "Save a skill you learned (a name, a description of when to use it, and a Markdown body) in the user's personal vault, or in `vault_id`. Saving a name again replaces that skill. It is embedded so `skill_find` finds it by meaning. These are agent skills kept in Eunomia, not the built-in memory skill.",
         "skill_find" => "Find saved skills by what you need to do: by meaning when embeddings are on, and by keyword in a skill's name or description. Searches every vault you can read, or one `vault_id`. Returns id, name, description, vault and updated_at, not the body: `skill_get` reads it.",
+        "skill_list" => "Every saved skill of one vault (your personal vault unless `vault_id` is given), sorted by name, a page at a time: id, name, description, vault and updated_at, not the body. Pass the returned `next` as `after` for the following page; `next` is null on the last one. Use `skill_find` to search by meaning instead.",
         "skill_get" => "One saved skill with its full Markdown body, by id (from `skill_find`) or by name (an error names the ids if several vaults hold that name).",
         "skill_delete" => "Delete one saved skill by id. Irreversible.",
         "changes_since" => "A vault's change log after a cursor: one numbered row per write (seq, op created/updated/deleted/merged, kind memory/entity/relation/skill/document, the item's id, who wrote it, when), oldest first, with no content (fetch the item to see it). Pass the returned `next` as `after` to read on. Your personal vault unless `vault_id` is given.",
@@ -540,6 +542,7 @@ mod tests {
             "document_download",
             "document_export",
             "skill_find",
+            "skill_list",
             "skill_get",
             "changes_since",
         ];
@@ -617,7 +620,7 @@ mod tests {
             "memory_update", "entity_update", "memory_delete", "entity_delete", "entity_merge", "vault_create", "vault_list", "vault_clone", "vault_merge",
             "vault_invite", "vault_members", "vault_remove_member", "vault_leave", "vault_rename", "vault_delete",
             "document_upload", "document_list", "document_get", "document_download", "document_export", "document_delete",
-            "skill_save", "skill_find", "skill_get", "skill_delete", "changes_since",
+            "skill_save", "skill_find", "skill_list", "skill_get", "skill_delete", "changes_since",
         ];
         let tools = all_tools();
         for name in expected {

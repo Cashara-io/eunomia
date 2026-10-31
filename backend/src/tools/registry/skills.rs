@@ -1,4 +1,4 @@
-//! Agent skills: save, find, get, delete (`store/skills.rs`, issue #93). A skill is what an agent
+//! Agent skills: save, find, list, get, delete (`store/skills.rs`, issue #93). A skill is what an agent
 //! learned, in SKILL.md style (name, description, markdown body), kept in a vault and embedded so
 //! another agent finds it by meaning. Not the built-in memory skill (`docs.rs` DEFAULT_SKILL).
 //! Part of the tool registry (see `registry/mod.rs`); one `register` call per tool.
@@ -27,6 +27,9 @@ const MAX_DESCRIPTION: usize = 1024;
 const MAX_BODY: usize = 64 * 1024;
 const DEFAULT_LIMIT: usize = 10;
 const MAX_LIMIT: usize = 50;
+/// `skill_list` pages: by name, the default and the most per page.
+const LIST_DEFAULT: i64 = 100;
+const LIST_MAX: i64 = 500;
 /// Skills whose name and description the keyword match reads at most.
 // ponytail: the keyword arm scans this many recent skills in Rust; a full-text index if a vault outgrows it.
 const KEYWORD_SCAN: i64 = 1000;
@@ -264,6 +267,32 @@ async fn find(state: &OrgState, owner: &RecordId, a: FindArgs) -> AppResult<Valu
     Ok(json!({ "skills": hits.iter().map(Skill::summary).collect::<Vec<_>>() }))
 }
 
+/// Every skill of one vault, by name, a page at a time (no bodies): what `create-eunomia sync` compares
+/// with the repo. `next` is the last name returned when there may be more, else `null`.
+async fn list(state: &OrgState, owner: &RecordId, a: ListArgs) -> AppResult<Value> {
+    let vault = match a.vault_id.as_deref() {
+        Some(v) => {
+            let v = parse_vault(v)?;
+            authz::authorize(&state.db, owner, Action::ReadMemories, &v).await?;
+            v
+        }
+        None => default_vault_id(&state.db, owner).await?,
+    };
+    let limit = a.limit.unwrap_or(LIST_DEFAULT).clamp(1, LIST_MAX);
+    // one more than asked: whether another page exists, without a count
+    let mut rows: Vec<Skill> = store::skills::PAGE
+        .on(&state.db)
+        .bind(("vault", vault.clone()))
+        .bind(("after", a.after.unwrap_or_default()))
+        .bind(("limit", limit + 1))
+        .await?
+        .take(0)?;
+    let more = rows.len() as i64 > limit;
+    rows.truncate(limit as usize);
+    let next = if more { rows.last().map(|s| json!(s.name)) } else { None };
+    Ok(json!({ "skills": rows.iter().map(Skill::summary).collect::<Vec<_>>(), "vault": vault.to_string(), "next": next }))
+}
+
 async fn get(state: &OrgState, owner: &RecordId, a: GetArgs) -> AppResult<Value> {
     let skill = match (a.id.as_deref(), a.name.as_deref()) {
         (Some(id), _) => load(state, owner, id, Action::ReadMemories).await?,
@@ -310,6 +339,16 @@ struct FindArgs {
     vault_id: Option<String>,
     #[serde(default)]
     limit: Option<usize>,
+}
+
+#[derive(Deserialize)]
+struct ListArgs {
+    #[serde(default)]
+    vault_id: Option<String>,
+    #[serde(default)]
+    after: Option<String>,
+    #[serde(default)]
+    limit: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -367,6 +406,27 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
             Box::pin(async move {
                 match serde_json::from_value::<FindArgs>(args) {
                     Ok(a) => Ok(to_tool_value(find(state, owner, a).await)),
+                    Err(e) => Ok(bad_args(e)),
+                }
+            })
+        }),
+    );
+
+    register(
+        registry,
+        "skill_list",
+        json!({
+            "type": "object",
+            "properties": {
+                "vault_id": {"type": "string", "description": "the vault (a vault id or its name); omit for your personal vault"},
+                "after": {"type": "string", "description": "the `next` of the previous call; omit for the first page"},
+                "limit": {"type": "integer", "description": "at most 500, default 100"},
+            },
+        }),
+        Arc::new(|state, owner, args| {
+            Box::pin(async move {
+                match serde_json::from_value::<ListArgs>(args) {
+                    Ok(a) => Ok(to_tool_value(list(state, owner, a).await)),
                     Err(e) => Ok(bad_args(e)),
                 }
             })

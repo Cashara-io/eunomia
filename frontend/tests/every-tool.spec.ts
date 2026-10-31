@@ -110,6 +110,9 @@ test("every MCP tool works end to end", async ({ request, baseURL }) => {
   expect((await ok("skill_save", { name: "deploy-rollback", description: "How to roll back a bad deploy", body: "# Roll back v2" })).id).toBe(skill.id);
   expect((await ok("skill_find", { query: "roll back a deploy" })).skills.map((s: { id: string }) => s.id)).toContain(skill.id);
   expect((await ok("skill_get", { id: skill.id })).body).toBe("# Roll back v2");
+  const listed = await ok("skill_list", { limit: 1 });
+  expect(listed.skills.map((s: { name: string }) => s.name)).toEqual(["deploy-rollback"]);
+  expect(listed.next).toBeNull();
   expect((await call("skill_save", { name: "Bad Name", description: "d", body: "b" })).isError).toBe(true);
   expect((await ok("skill_delete", { id: skill.id })).deleted).toBe(skill.id);
 
