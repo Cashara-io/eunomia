@@ -3,8 +3,11 @@ name: CI
 on:
   push:
     branches: [main]
+  # Every pull request, whatever its base: a stacked PR (base release/2.0.x or another feature branch)
+  # gets the same jobs as one into main.
   pull_request:
-    branches: [main]
+  # A manual run on any branch; only offered once this file is on the default branch.
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
