@@ -24,6 +24,9 @@ pub struct Problem {
     /// Stable dotted error code, see `docs/errors.md`.
     pub code: String,
     pub trace_id: Option<String>,
+    /// A stable machine-readable reason under `code`, when there is one (docs/errors.md).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
 }
 
 #[derive(Serialize, ToSchema)]

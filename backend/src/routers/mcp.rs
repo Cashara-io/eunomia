@@ -498,6 +498,7 @@ mod tests {
             auth: Default::default(),
         secrets_helper_url: crate::secrets::client::DEFAULT_URL.into(),
         secrets_helper_key: String::new(),
+        secrets_helper_enabled: true,
         };
         AppState::build(&settings, surrealdb::opt::Config::new()).await.unwrap()
     }

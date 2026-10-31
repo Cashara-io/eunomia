@@ -206,15 +206,18 @@ pub struct AppError {
     pub message: String,
     /// Raw cause (database or upstream text). Logged, never sent.
     pub source: Option<String>,
+    /// A stable machine-readable reason under `code`, sent as `reason` when set (for example
+    /// `helper_disabled` under `secret.unavailable`; the values are listed in docs/errors.md).
+    pub reason: Option<&'static str>,
 }
 
 impl AppError {
     pub fn coded(code: ErrorCode, message: impl Into<String>) -> Self {
-        AppError { code, status: code.default_status(), message: message.into(), source: None }
+        AppError { code, status: code.default_status(), message: message.into(), source: None, reason: None }
     }
 
     pub fn new(status: StatusCode, message: impl Into<String>) -> Self {
-        AppError { code: ErrorCode::from_status(status), status, message: message.into(), source: None }
+        AppError { code: ErrorCode::from_status(status), status, message: message.into(), source: None, reason: None }
     }
 
     pub fn unauthorized(message: impl Into<String>) -> Self {
@@ -238,6 +241,11 @@ impl AppError {
         self
     }
 
+    pub fn with_reason(mut self, reason: &'static str) -> Self {
+        self.reason = Some(reason);
+        self
+    }
+
     /// The message that is safe to show a client or agent.
     pub fn detail(&self) -> &str {
         if self.code.hides_message() {
@@ -252,7 +260,11 @@ impl AppError {
         if let Some(s) = &self.source {
             let _ = TOOL_SOURCE.try_with(|c| *c.lock().unwrap() = Some(s.clone()));
         }
-        json!({ "error": self.detail(), "code": self.code.as_str(), "trace_id": crate::telemetry::current_trace_id() })
+        let mut v = json!({ "error": self.detail(), "code": self.code.as_str(), "trace_id": crate::telemetry::current_trace_id() });
+        if let Some(r) = self.reason {
+            v["reason"] = json!(r);
+        }
+        v
     }
 
     /// Logs the cause on the current span. Called once, where the error leaves the process.
@@ -272,7 +284,7 @@ impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         self.log();
         let info = crate::capsules::FailureInfo { code: self.code, source: self.source.clone().unwrap_or_else(|| self.message.clone()) };
-        let body = json!({
+        let mut body = json!({
             "type": "about:blank",
             "title": self.status.canonical_reason().unwrap_or("Error"),
             "status": self.status.as_u16(),
@@ -280,6 +292,9 @@ impl IntoResponse for AppError {
             "code": self.code.as_str(),
             "trace_id": crate::telemetry::current_trace_id(),
         });
+        if let Some(r) = self.reason {
+            body["reason"] = json!(r);
+        }
         let mut resp = (self.status, [(header::CONTENT_TYPE, "application/problem+json")], body.to_string()).into_response();
         resp.extensions_mut().insert(info);
         resp

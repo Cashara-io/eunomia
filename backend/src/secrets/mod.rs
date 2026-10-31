@@ -16,14 +16,62 @@ use crate::error::{AppError, AppResult, ErrorCode};
 use crate::pool::OrgDb;
 use crate::store::secrets as q;
 
+/// How far a provider kind is proven. `Preview`: works against our mock of the provider's API, not yet
+/// checked against the provider's own service; shown with a "Preview" badge in Settings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Stability {
+    Stable,
+    Preview,
+}
+
+/// One provider kind and what Settings says about it. The one source of truth for the kinds, their
+/// names and their stability (the settings API serves it; the UI and the docs follow it).
+#[derive(Debug, Clone, Copy, Serialize, utoipa::ToSchema)]
+pub struct Kind {
+    /// As stored and as the sidecar names it.
+    pub kind: &'static str,
+    /// For people.
+    pub label: &'static str,
+    pub stability: Stability,
+    /// `true` exactly when `stability` is `preview`.
+    pub preview: bool,
+    /// One line for Settings when the kind is in preview.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<&'static str>,
+}
+
+const fn kind(kind: &'static str, label: &'static str, stability: Stability, note: Option<&'static str>) -> Kind {
+    Kind { kind, label, stability, preview: matches!(stability, Stability::Preview), note }
+}
+
+/// Every provider kind (decided by Avi on 2026-11-01: Bitwarden Secrets Manager ships as a preview).
+pub const PROVIDERS: &[Kind] = &[
+    kind("onepassword_connect", "1Password Connect", Stability::Stable, None),
+    kind("onepassword_service_account", "1Password service account", Stability::Stable, None),
+    kind(
+        "bitwarden_sm",
+        "Bitwarden Secrets Manager",
+        Stability::Preview,
+        Some("Preview: Eunomia's own Bitwarden client is tested against a mock of Bitwarden's API, not yet against Bitwarden's cloud. Try it on non-critical secrets first."),
+    ),
+];
+
 /// The provider kinds, as stored and as the sidecar names them.
-pub const KINDS: &[&str] = &["onepassword_connect", "onepassword_service_account", "bitwarden_sm"];
+pub fn kinds() -> impl Iterator<Item = &'static str> {
+    PROVIDERS.iter().map(|k| k.kind)
+}
+
+/// The metadata of a known kind.
+pub fn kind_info(kind: &str) -> Option<&'static Kind> {
+    PROVIDERS.iter().find(|k| k.kind == kind)
+}
 
 /// The longest bootstrap token accepted (a 1Password service account token is about 1 KB).
 pub const MAX_TOKEN: usize = 4096;
 
 pub fn valid_kind(kind: &str) -> AppResult<&'static str> {
-    KINDS.iter().copied().find(|k| *k == kind).ok_or_else(|| AppError::bad_request(format!("the provider kind is one of {}", KINDS.join(", "))))
+    kind_info(kind).map(|k| k.kind).ok_or_else(|| AppError::bad_request(format!("the provider kind is one of {}", kinds().collect::<Vec<_>>().join(", "))))
 }
 
 /// Which provider kinds can resolve a reference with this scheme.
@@ -64,7 +112,7 @@ pub fn provider_id(db: &OrgDb, kind: &str) -> RecordId {
 }
 
 pub async fn providers(db: &OrgDb) -> AppResult<Vec<ProviderRow>> {
-    let ids: Vec<RecordId> = KINDS.iter().map(|k| provider_id(db, k)).collect();
+    let ids: Vec<RecordId> = kinds().map(|k| provider_id(db, k)).collect();
     Ok(q::PROVIDER_LIST.on(db).bind(("ids", ids)).await?.check()?.take(0)?)
 }
 
@@ -154,9 +202,9 @@ pub async fn delete_provider(db: &OrgDb, kind: &str) -> AppResult<bool> {
     Ok(!gone.is_empty())
 }
 
-pub async fn refs(db: &OrgDb, user: &RecordId) -> AppResult<Vec<CredentialRef>> {
-    let vaults = my_vaults(db, user).await?;
-    Ok(q::REF_LIST.on(db).bind(("vaults", vaults)).await?.check()?.take(0)?)
+/// The references bound to `vaults` (the ones the caller may manage: see routers/secrets.rs).
+pub async fn refs(db: &OrgDb, vaults: &[RecordId]) -> AppResult<Vec<CredentialRef>> {
+    Ok(q::REF_LIST.on(db).bind(("vaults", vaults.to_vec())).await?.check()?.take(0)?)
 }
 
 /// The registered rows for `reference` in the vaults `user` belongs to.
@@ -165,9 +213,9 @@ pub async fn refs_named(db: &OrgDb, user: &RecordId, reference: &str) -> AppResu
     Ok(q::REF_BY_REFERENCE.on(db).bind(("reference", reference.to_string())).bind(("vaults", vaults)).await?.check()?.take(0)?)
 }
 
-pub async fn get_ref(db: &OrgDb, user: &RecordId, id: &RecordId) -> AppResult<Option<CredentialRef>> {
-    let vaults = my_vaults(db, user).await?;
-    Ok(q::REF_GET.on(db).bind(("id", id.clone())).bind(("vaults", vaults)).await?.check()?.take::<Vec<CredentialRef>>(0)?.into_iter().next())
+/// A reference bound to one of `vaults`, or `None` (also when it is bound to another vault).
+pub async fn get_ref(db: &OrgDb, vaults: &[RecordId], id: &RecordId) -> AppResult<Option<CredentialRef>> {
+    Ok(q::REF_GET.on(db).bind(("id", id.clone())).bind(("vaults", vaults.to_vec())).await?.check()?.take::<Vec<CredentialRef>>(0)?.into_iter().next())
 }
 
 /// The editable part of a reference.
@@ -233,16 +281,17 @@ fn duplicate(e: AppError) -> AppError {
     if e.code == ErrorCode::DbDuplicate { AppError::coded(ErrorCode::DbDuplicate, "That reference is already registered for this vault.") } else { e }
 }
 
-pub async fn update_ref(db: &OrgDb, user: &RecordId, id: &RecordId, fields: RefFields) -> AppResult<Option<CredentialRef>> {
+/// Edits a reference bound to one of `vaults`; the new vault must be one of them too (the caller checks).
+pub async fn update_ref(db: &OrgDb, vaults: &[RecordId], id: &RecordId, fields: RefFields) -> AppResult<Option<CredentialRef>> {
     let f = check_fields(fields)?;
-    let current = get_ref(db, user, id).await?;
+    let current = get_ref(db, vaults, id).await?;
     let Some(current) = current else { return Ok(None) };
     let label = if f.label.is_empty() { current.reference.clone() } else { f.label };
     let rows: Vec<CredentialRef> = q::REF_UPDATE
         .on(db)
         .bind(("id", id.clone()))
         .bind(("new_vault", f.vault))
-        .bind(("vaults", my_vaults(db, user).await?))
+        .bind(("vaults", vaults.to_vec()))
         .bind(("label", label))
         .bind(("allowed_tools", f.allowed_tools))
         .bind(("allowed_actors", f.allowed_actors))
@@ -254,8 +303,7 @@ pub async fn update_ref(db: &OrgDb, user: &RecordId, id: &RecordId, fields: RefF
     Ok(rows.into_iter().next())
 }
 
-pub async fn delete_ref(db: &OrgDb, user: &RecordId, id: &RecordId) -> AppResult<bool> {
-    let vaults = my_vaults(db, user).await?;
-    let gone: Vec<CredentialRef> = q::REF_DELETE.on(db).bind(("id", id.clone())).bind(("vaults", vaults)).await?.check()?.take(0)?;
+pub async fn delete_ref(db: &OrgDb, vaults: &[RecordId], id: &RecordId) -> AppResult<bool> {
+    let gone: Vec<CredentialRef> = q::REF_DELETE.on(db).bind(("id", id.clone())).bind(("vaults", vaults.to_vec())).await?.check()?.take(0)?;
     Ok(!gone.is_empty())
 }

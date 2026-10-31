@@ -3805,6 +3805,7 @@
           "secrets"
         ],
         "summary": "Resolutions per reference and outcome over a window",
+        "description": "Org owners and instance admins: the whole organisation; a vault owner: the vaults they own.",
         "operationId": "getSecretCounts",
         "parameters": [
           {
@@ -3853,12 +3854,139 @@
         ]
       }
     },
+    "/api/secrets/helper": {
+      "get": {
+        "tags": [
+          "secrets"
+        ],
+        "summary": "The secrets helper's status: off, starting, running or unreachable",
+        "operationId": "getSecretsHelper",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HelperStatus"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "secrets"
+        ],
+        "summary": "Ask the updater to switch the secrets helper on or off",
+        "description": "Instance admins, browser session. Writes `update-status/secrets.json`; the updater (within 20 seconds) adds `secrets` to COMPOSE_PROFILES in .env and starts the helper, or removes it and stops the helper, restarting the backend either way, and reports in `update-status/secrets-status.json`.",
+        "operationId": "requestSecretsHelper",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HelperRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HelperAck"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/secrets/kinds": {
+      "get": {
+        "tags": [
+          "secrets"
+        ],
+        "summary": "The password manager kinds Eunomia supports, with their stability (Bitwarden Secrets Manager is a preview)",
+        "operationId": "listSecretKinds",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Kind"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/secrets/log": {
       "get": {
         "tags": [
           "secrets"
         ],
         "summary": "Every secret resolution in this organisation, newest first (never a value)",
+        "description": "Org owners and instance admins see the whole organisation; a vault owner sees the resolutions of the vaults they own.",
         "operationId": "listSecretResolutions",
         "parameters": [
           {
@@ -3913,12 +4041,52 @@
         ]
       }
     },
+    "/api/secrets/me": {
+      "get": {
+        "tags": [
+          "secrets"
+        ],
+        "summary": "What the caller may manage under Password managers",
+        "operationId": "getSecretAccess",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/secrets/providers": {
       "get": {
         "tags": [
           "secrets"
         ],
         "summary": "The configured password managers (never their tokens)",
+        "description": "Org owners and instance admins; a vault owner sees which kinds are configured (no host), to pick one for a reference.",
         "operationId": "listSecretProviders",
         "responses": {
           "200": {
@@ -4062,6 +4230,7 @@
           "secrets"
         ],
         "summary": "Test connection: the secrets helper signs in with the stored token",
+        "description": "The provider's answer is `{ok, error?, message?}`. When the secrets helper itself is switched off or not answering: `secret.unavailable` (503) with `reason` `helper_disabled` or `helper_unreachable`, at once.",
         "operationId": "testSecretProvider",
         "parameters": [
           {
@@ -5757,6 +5926,36 @@
   },
   "components": {
     "schemas": {
+      "AccessOut": {
+        "type": "object",
+        "required": [
+          "manage_providers",
+          "manage_refs",
+          "toggle_helper",
+          "vaults"
+        ],
+        "properties": {
+          "manage_providers": {
+            "type": "boolean",
+            "description": "An org owner or instance admin: may set up providers and manage every vault's references."
+          },
+          "manage_refs": {
+            "type": "boolean",
+            "description": "May manage references at all (an org manager, or the owner of a vault)."
+          },
+          "toggle_helper": {
+            "type": "boolean",
+            "description": "An instance admin: may switch the secrets helper on or off."
+          },
+          "vaults": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VaultRef"
+            },
+            "description": "The vaults the caller may bind references to."
+          }
+        }
+      },
       "AckOut": {
         "type": "object",
         "required": [
@@ -6078,7 +6277,7 @@
               "string",
               "null"
             ],
-            "description": "`denied`, `provider_error`, `bad_config` or `unreachable` (the sidecar itself) when not ok."
+            "description": "`denied`, `provider_error` or `bad_config` when not ok. (The sidecar itself not answering is a\n`secret.unavailable` error with reason `helper_disabled` or `helper_unreachable`, not this.)"
           },
           "message": {
             "type": [
@@ -7262,6 +7461,89 @@
           }
         }
       },
+      "HelperAck": {
+        "type": "object",
+        "required": [
+          "configured",
+          "requested"
+        ],
+        "properties": {
+          "configured": {
+            "type": "boolean",
+            "description": "`false`: there is no updater on this server (no `update-status/`); switch the profile on by hand."
+          },
+          "requested": {
+            "type": "boolean"
+          }
+        }
+      },
+      "HelperRequest": {
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "HelperStatus": {
+        "type": "object",
+        "description": "The secrets helper's status for Settings.",
+        "required": [
+          "state",
+          "enabled",
+          "can_request",
+          "profile"
+        ],
+        "properties": {
+          "can_request": {
+            "type": "boolean",
+            "description": "The updater's request channel is there (`update-status/`): \"Enable password managers\" works.\nWhen `false`, Settings shows the manual steps instead."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "The profile is on for this backend (`EUNOMIA_COMPOSE_PROFILES` names `secrets`)."
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why, for people (the updater's error, or why the helper is not answering)."
+          },
+          "pending": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`enable` or `disable` while a request waits for the updater."
+          },
+          "profile": {
+            "type": "string",
+            "description": "The compose profile to switch on by hand: `secrets`."
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`helper_disabled` (off or starting) or `helper_unreachable` (unreachable): what a resolution\ngets now; absent when running."
+          },
+          "state": {
+            "type": "string",
+            "description": "`off` (the `secrets` profile is not on), `starting` (asked for, or started and not answering yet),\n`running` (answers its health check) or `unreachable` (on, but not answering)."
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The helper's version when running."
+          }
+        }
+      },
       "HookOut": {
         "type": "object",
         "required": [
@@ -7446,6 +7728,40 @@
           }
         }
       },
+      "Kind": {
+        "type": "object",
+        "description": "One provider kind and what Settings says about it. The one source of truth for the kinds, their\nnames and their stability (the settings API serves it; the UI and the docs follow it).",
+        "required": [
+          "kind",
+          "label",
+          "stability",
+          "preview"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "As stored and as the sidecar names it."
+          },
+          "label": {
+            "type": "string",
+            "description": "For people."
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "One line for Settings when the kind is in preview."
+          },
+          "preview": {
+            "type": "boolean",
+            "description": "`true` exactly when `stability` is `preview`."
+          },
+          "stability": {
+            "$ref": "#/components/schemas/Stability"
+          }
+        }
+      },
       "LeftBody": {
         "type": "object",
         "required": [
@@ -7495,6 +7811,7 @@
           "vault_id",
           "outcome",
           "reason",
+          "code",
           "trace_id"
         ],
         "properties": {
@@ -7511,6 +7828,10 @@
           "channel": {
             "type": "string",
             "description": "`rest`, `mcp` or `chat`."
+          },
+          "code": {
+            "type": "string",
+            "description": "The stable code when the secrets helper itself failed: `helper_disabled` or `helper_unreachable`."
           },
           "id": {
             "type": "string",
@@ -8020,6 +8341,13 @@
           "detail": {
             "type": "string"
           },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A stable machine-readable reason under `code`, when there is one (docs/errors.md)."
+          },
           "status": {
             "type": "integer",
             "format": "int32",
@@ -8065,6 +8393,9 @@
         "description": "A configured provider. Never the token: only that one is stored.",
         "required": [
           "kind",
+          "label",
+          "stability",
+          "preview",
           "configured",
           "updated_at",
           "updated_by"
@@ -8078,11 +8409,24 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "The server URL; shown to org managers only (a vault owner sees `null`)."
           },
           "kind": {
             "type": "string",
             "description": "`onepassword_connect`, `onepassword_service_account` or `bitwarden_sm`."
+          },
+          "label": {
+            "type": "string",
+            "description": "For people (`GET /api/secrets/kinds`)."
+          },
+          "preview": {
+            "type": "boolean",
+            "description": "`true` for a kind in preview (Bitwarden Secrets Manager)."
+          },
+          "stability": {
+            "$ref": "#/components/schemas/Stability",
+            "description": "`stable` or `preview` (`GET /api/secrets/kinds`)."
           },
           "updated_at": {
             "type": "string"
@@ -8721,6 +9065,14 @@
             "type": "string"
           }
         }
+      },
+      "Stability": {
+        "type": "string",
+        "description": "How far a provider kind is proven. `Preview`: works against our mock of the provider's API, not yet\nchecked against the provider's own service; shown with a \"Preview\" badge in Settings.",
+        "enum": [
+          "stable",
+          "preview"
+        ]
       },
       "SyncReport": {
         "type": "object",
@@ -9417,6 +9769,22 @@
           },
           "kind": {
             "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "VaultRef": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "`vault:...`"
           },
           "name": {
             "type": "string"

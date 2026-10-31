@@ -202,12 +202,20 @@ pub async fn prepare(state: &OrgState, user: &User, tool: &str, args: &Value) ->
     }
 
     // resolve, one sidecar call per provider kind, only when nothing so far was refused
+    // the helper's own failure (switched off, or down), for the error's `reason`
+    let mut helper: Option<&'static str> = None;
     if items.iter().all(|i| i.outcome == outcome::OK) {
         let client = Client::from_settings(&state.settings);
+        if !client.enabled() {
+            // the `secrets` profile is off: fail now, no provider token decrypted, no network call
+            let off = Unreachable::disabled();
+            helper = Some(off.reason);
+            items.iter_mut().for_each(|i| i.fail(outcome::PROVIDER_ERROR, off.message.clone()));
+        }
         let mut kinds: Vec<String> = items.iter().filter_map(|i| i.row.as_ref().map(|r| r.provider.clone())).collect();
         kinds.sort();
         kinds.dedup();
-        for kind in kinds {
+        for kind in kinds.into_iter().filter(|_| client.enabled()) {
             let idx: Vec<usize> = (0..items.len()).filter(|n| items[*n].row.as_ref().is_some_and(|r| r.provider == kind)).collect();
             let config = match super::provider_config(&state.db, &state.settings.encryption_key, &kind).await {
                 Ok(Some(c)) => c,
@@ -223,7 +231,10 @@ pub async fn prepare(state: &OrgState, user: &User, tool: &str, args: &Value) ->
             };
             let refs: Vec<String> = idx.iter().map(|n| items[*n].text.clone()).collect();
             match client.resolve(&config, &refs).await {
-                Err(Unreachable(m)) => idx.iter().for_each(|n| items[*n].fail(outcome::PROVIDER_ERROR, m.clone())),
+                Err(u) => {
+                    helper = Some(u.reason);
+                    idx.iter().for_each(|n| items[*n].fail(outcome::PROVIDER_ERROR, u.message.clone()));
+                }
                 Ok(results) => {
                     for (n, r) in idx.iter().zip(results) {
                         let item = &mut items[*n];
@@ -264,13 +275,19 @@ pub async fn prepare(state: &OrgState, user: &User, tool: &str, args: &Value) ->
             "session": ctx.session,
             "vault": item.row.as_ref().map(|r| r.vault.to_string()).or_else(|| call_vault.as_ref().map(|v| v.to_string())).unwrap_or_default(),
             "reason": item.reason.chars().take(120).collect::<String>(),
+            // the stable code when the helper itself failed (`helper_disabled`, `helper_unreachable`)
+            "code": helper.filter(|_| item.outcome == outcome::PROVIDER_ERROR).unwrap_or_default(),
         })
         .to_string();
         audit::record(&state.control, Event { user: Some(&user.id), actor: &actor, action: "secret.resolve", target: &org, outcome: item.outcome, detail: &detail }).await;
     }
     if failed {
         let why: Vec<String> = items.iter().filter(|i| !i.reason.starts_with("not used:")).map(|i| format!("{} ({}: {})", i.text, i.outcome, i.reason)).collect();
-        return Prep::Failed(AppError::coded(ErrorCode::SecretUnavailable, format!("A secret reference could not be used, so the tool did not run: {}", why.join("; "))));
+        // the stable reason: the helper's, else the first refused reference's outcome
+        let reason = helper.or_else(|| items.iter().find(|i| !i.reason.starts_with("not used:")).map(|i| i.outcome)).unwrap_or(outcome::DENIED);
+        return Prep::Failed(
+            AppError::coded(ErrorCode::SecretUnavailable, format!("A secret reference could not be used, so the tool did not run: {}", why.join("; "))).with_reason(reason),
+        );
     }
 
     let pairs: Vec<(String, &str)> = items.iter().map(|i| (i.pointer.clone(), i.value.as_ref().map(|v| v.as_str()).unwrap_or_default())).collect();

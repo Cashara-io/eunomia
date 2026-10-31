@@ -4,6 +4,25 @@ export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});
 };
 
+export type AccessOut = {
+    /**
+     * An org owner or instance admin: may set up providers and manage every vault's references.
+     */
+    manage_providers: boolean;
+    /**
+     * May manage references at all (an org manager, or the owner of a vault).
+     */
+    manage_refs: boolean;
+    /**
+     * An instance admin: may switch the secrets helper on or off.
+     */
+    toggle_helper: boolean;
+    /**
+     * The vaults the caller may bind references to.
+     */
+    vaults: Array<VaultRef>;
+};
+
 export type AckOut = {
     /**
      * Ids that were leased and are now done. Ids that are unknown, already done or not leased are skipped.
@@ -143,7 +162,8 @@ export type ChatRequest = {
 export type CheckOut = {
     detail?: string | null;
     /**
-     * `denied`, `provider_error`, `bad_config` or `unreachable` (the sidecar itself) when not ok.
+     * `denied`, `provider_error` or `bad_config` when not ok. (The sidecar itself not answering is a
+     * `secret.unavailable` error with reason `helper_disabled` or `helper_unreachable`, not this.)
      */
     error?: string | null;
     message?: string | null;
@@ -620,6 +640,59 @@ export type GraphOut = {
     nodes: Array<GraphNode>;
 };
 
+export type HelperAck = {
+    /**
+     * `false`: there is no updater on this server (no `update-status/`); switch the profile on by hand.
+     */
+    configured: boolean;
+    requested: boolean;
+};
+
+export type HelperRequest = {
+    enabled: boolean;
+};
+
+/**
+ * The secrets helper's status for Settings.
+ */
+export type HelperStatus = {
+    /**
+     * The updater's request channel is there (`update-status/`): "Enable password managers" works.
+     * When `false`, Settings shows the manual steps instead.
+     */
+    can_request: boolean;
+    /**
+     * The profile is on for this backend (`EUNOMIA_COMPOSE_PROFILES` names `secrets`).
+     */
+    enabled: boolean;
+    /**
+     * Why, for people (the updater's error, or why the helper is not answering).
+     */
+    message?: string | null;
+    /**
+     * `enable` or `disable` while a request waits for the updater.
+     */
+    pending?: string | null;
+    /**
+     * The compose profile to switch on by hand: `secrets`.
+     */
+    profile: string;
+    /**
+     * `helper_disabled` (off or starting) or `helper_unreachable` (unreachable): what a resolution
+     * gets now; absent when running.
+     */
+    reason?: string | null;
+    /**
+     * `off` (the `secrets` profile is not on), `starting` (asked for, or started and not answering yet),
+     * `running` (answers its health check) or `unreachable` (on, but not answering).
+     */
+    state: string;
+    /**
+     * The helper's version when running.
+     */
+    version?: string | null;
+};
+
 export type HookOut = {
     /**
      * The buffered event's id.
@@ -703,6 +776,30 @@ export type InviteRequest = {
     role?: string;
 };
 
+/**
+ * One provider kind and what Settings says about it. The one source of truth for the kinds, their
+ * names and their stability (the settings API serves it; the UI and the docs follow it).
+ */
+export type Kind = {
+    /**
+     * As stored and as the sidecar names it.
+     */
+    kind: string;
+    /**
+     * For people.
+     */
+    label: string;
+    /**
+     * One line for Settings when the kind is in preview.
+     */
+    note?: string | null;
+    /**
+     * `true` exactly when `stability` is `preview`.
+     */
+    preview: boolean;
+    stability: Stability;
+};
+
 export type LeftBody = {
     left: boolean;
 };
@@ -724,6 +821,10 @@ export type LogEntry = {
      * `rest`, `mcp` or `chat`.
      */
     channel: string;
+    /**
+     * The stable code when the secrets helper itself failed: `helper_disabled` or `helper_unreachable`.
+     */
+    code: string;
     /**
      * `audit_event:...`
      */
@@ -922,6 +1023,10 @@ export type Problem = {
      */
     code: string;
     detail: string;
+    /**
+     * A stable machine-readable reason under `code`, when there is one (docs/errors.md).
+     */
+    reason?: string | null;
     status: number;
     /**
      * The HTTP reason phrase.
@@ -954,11 +1059,26 @@ export type ProviderOut = {
      * Always `true` in a listed row: a token is stored (encrypted). It is never returned.
      */
     configured: boolean;
+    /**
+     * The server URL; shown to org managers only (a vault owner sees `null`).
+     */
     host?: string | null;
     /**
      * `onepassword_connect`, `onepassword_service_account` or `bitwarden_sm`.
      */
     kind: string;
+    /**
+     * For people (`GET /api/secrets/kinds`).
+     */
+    label: string;
+    /**
+     * `true` for a kind in preview (Bitwarden Secrets Manager).
+     */
+    preview: boolean;
+    /**
+     * `stable` or `preview` (`GET /api/secrets/kinds`).
+     */
+    stability: Stability;
     updated_at: string;
     /**
      * `user:...`
@@ -1215,6 +1335,12 @@ export type SpendByDay = {
 };
 
 /**
+ * How far a provider kind is proven. `Preview`: works against our mock of the provider's API, not yet
+ * checked against the provider's own service; shown with a "Preview" badge in Settings.
+ */
+export type Stability = 'stable' | 'preview';
+
+/**
  * Outcome of a sync or webhook ingest: an ingest report, `source` + `error` when the sync failed, or
  * `status: "already_running"` when a sync of that source is already queued or running, or
  * `status: "queued"` when it was queued but no worker finished it within the wait. Schema only:
@@ -1453,6 +1579,14 @@ export type VaultOut = {
     created_at?: string | null;
     id: string;
     kind: string;
+    name: string;
+};
+
+export type VaultRef = {
+    /**
+     * `vault:...`
+     */
+    id: string;
     name: string;
 };
 
@@ -3361,6 +3495,72 @@ export type GetSecretCountsResponses = {
 
 export type GetSecretCountsResponse = GetSecretCountsResponses[keyof GetSecretCountsResponses];
 
+export type GetSecretsHelperData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/secrets/helper';
+};
+
+export type GetSecretsHelperErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetSecretsHelperError = GetSecretsHelperErrors[keyof GetSecretsHelperErrors];
+
+export type GetSecretsHelperResponses = {
+    200: HelperStatus;
+};
+
+export type GetSecretsHelperResponse = GetSecretsHelperResponses[keyof GetSecretsHelperResponses];
+
+export type RequestSecretsHelperData = {
+    body: HelperRequest;
+    path?: never;
+    query?: never;
+    url: '/api/secrets/helper';
+};
+
+export type RequestSecretsHelperErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type RequestSecretsHelperError = RequestSecretsHelperErrors[keyof RequestSecretsHelperErrors];
+
+export type RequestSecretsHelperResponses = {
+    200: HelperAck;
+};
+
+export type RequestSecretsHelperResponse = RequestSecretsHelperResponses[keyof RequestSecretsHelperResponses];
+
+export type ListSecretKindsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/secrets/kinds';
+};
+
+export type ListSecretKindsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListSecretKindsError = ListSecretKindsErrors[keyof ListSecretKindsErrors];
+
+export type ListSecretKindsResponses = {
+    200: Array<Kind>;
+};
+
+export type ListSecretKindsResponse = ListSecretKindsResponses[keyof ListSecretKindsResponses];
+
 export type ListSecretResolutionsData = {
     body?: never;
     path?: never;
@@ -3391,6 +3591,28 @@ export type ListSecretResolutionsResponses = {
 };
 
 export type ListSecretResolutionsResponse = ListSecretResolutionsResponses[keyof ListSecretResolutionsResponses];
+
+export type GetSecretAccessData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/secrets/me';
+};
+
+export type GetSecretAccessErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetSecretAccessError = GetSecretAccessErrors[keyof GetSecretAccessErrors];
+
+export type GetSecretAccessResponses = {
+    200: AccessOut;
+};
+
+export type GetSecretAccessResponse = GetSecretAccessResponses[keyof GetSecretAccessResponses];
 
 export type ListSecretProvidersData = {
     body?: never;

@@ -17,7 +17,14 @@ Providers in this release:
 |---|---|---|
 | `onepassword_connect` | Connect server URL and a Connect token | the Connect REST API on the customer's server |
 | `onepassword_service_account` | a service account token (`ops_...`) | the official `@1password/sdk` (MIT) |
-| `bitwarden_sm` | a machine account access token, optional server URL (default the US cloud) | Bitwarden's public identity and API endpoints, with our own small client (see Licence) |
+| `bitwarden_sm` (**preview**) | a machine account access token, optional server URL (default the US cloud) | Bitwarden's public identity and API endpoints, with our own small client (see Licence) |
+
+**Bitwarden Secrets Manager is a preview (decided by Avi on 2026-11-01).** Our own client is tested
+against a mock of Bitwarden's API, not yet against Bitwarden's cloud. One source of truth,
+`secrets::PROVIDERS` (backend), gives each kind a `stability` (`stable` or `preview`), a `preview` flag
+and a one-line `note`; `GET /api/secrets/kinds` and every provider in `GET /api/secrets/providers` carry
+them, and Settings shows a "Preview" badge and the note from there. It leaves preview once it has been
+checked against a real Bitwarden account (open question 1).
 
 ## Non-goals
 
@@ -134,14 +141,42 @@ log in Settings reads these rows (`action = 'secret.resolve' AND target = <org>`
 
 ## Error
 
-`secret.unavailable` (HTTP 503 on REST, a tool error value on MCP): a `$secret` reference could not be
-resolved for this call. The message says which reference and whether it was denied, not found or a
-provider failure; never a value or a token. Added to `docs/errors.md`.
+`secret.unavailable` (a tool error value, on REST and MCP alike, as every tool error; HTTP 503 from the
+settings routes): a `$secret` reference could not be resolved for this call. The message says which
+reference and whether it was denied, not found or a provider failure; never a value or a token. A stable
+`reason` comes with it (`reason` in the tool error value and in the problem body):
+
+| `reason` | When |
+|---|---|
+| `helper_disabled` | the secrets helper is switched off (its `secrets` compose profile is not on). Answered at once: no provider token is decrypted and nothing goes on the network |
+| `helper_unreachable` | the helper is on but did not answer properly: down, starting, slower than the timeouts, refusing the internal key, or answering nonsense |
+| `denied`, `not_found`, `provider_error` | otherwise, the first refused reference's outcome |
+
+The `secret.resolve` audit row carries the same `helper_disabled` or `helper_unreachable` in
+`detail.code`. Added to `docs/errors.md`.
 
 ## Settings API (backend, B1)
 
-Org owners and instance admins only (`membership.role = 'owner'` or `authz::is_admin`); anyone else
-gets `auth.forbidden`. A vault-restricted token gets `auth.scope` (account-level routes).
+Who may (vault owners decided by Avi on 2026-11-01):
+
+- **Org owners and instance admins** (`membership.role = 'owner'` or `authz::is_admin`): everything, for
+  every vault they belong to. Only they set up a provider: its token is org-wide. Saving, removing or
+  testing a provider also needs a browser session.
+- **Vault owners** (`vault_member.role = 'owner'`): create, edit and remove the references bound to a
+  vault they own, and read that vault's resolution log and counts (entries whose `detail.vault` is a vault
+  they own). They see which provider kinds are configured (no host, no `updated_by`), to pick one. They
+  cannot bind a reference to, or move one into, a vault they do not own (`vault.forbidden`); another
+  vault's reference is not found to them (404, as another org's is); every provider route and the helper
+  switch are `auth.forbidden`. Every user owns their personal vault, so every member can register
+  references for it, which only they can then use (see the threat model).
+- **Instance admins only**: switching the secrets helper on or off (`POST /api/secrets/helper`), as for
+  HTTPS: it changes the server's compose stack.
+- **Anyone signed in**: `GET /api/secrets/kinds` and `GET /api/secrets/helper`.
+
+A vault-restricted token gets `auth.scope` on every route here (account-level in `gate.rs`), **even for
+the vault it is restricted to**: such a token is an agent's, and letting it register or widen references
+would let an agent grant itself secrets. An unrestricted token acts as its user. Anyone else gets
+`auth.forbidden`.
 
 | Route | What |
 |---|---|
@@ -153,6 +188,69 @@ gets `auth.forbidden`. A vault-restricted token gets `auth.scope` (account-level
 | `PUT /api/secrets/refs/{id}`, `DELETE /api/secrets/refs/{id}` | edit, remove |
 | `GET /api/secrets/log?limit=&before=` | the resolution log (paginated, newest first) |
 | `GET /api/secrets/counts?hours=` | per reference: `ok`, `denied`, `not_found`, `provider_error` counts over the window |
+| `GET /api/secrets/kinds` | the provider kinds: `{kind, label, stability, preview, note?}` (Bitwarden is `preview`) |
+| `GET /api/secrets/me` | what the caller may do here: `{manage_providers, manage_refs, toggle_helper, vaults: [{id, name}]}` |
+| `GET /api/secrets/helper` | the helper's status (below) |
+| `POST /api/secrets/helper` | `{enabled}`: ask the updater to switch the helper on or off (below) |
+
+For a vault owner the log is read in batches of 200 from the org's `secret.resolve` rows and filtered on
+`detail.vault`; a page stops after 2000 rows read and then gives `next_before` to carry on.
+
+## The helper is behind a compose profile (decided by Avi on 2026-11-01)
+
+`secrets-helper` runs only under the compose profile **`secrets`**, off by default, the way `caddy` sits
+behind `https`. An install that never turns it on is exactly as before under any updater's plain
+`docker compose up -d --remove-orphans` (the old updater's whole update step): no helper container, no
+helper image pulled. The backend still joins the empty internal `secrets` network.
+
+**How the backend knows.** Compose passes `EUNOMIA_COMPOSE_PROFILES=${COMPOSE_PROFILES:-}` to the
+backend. The helper is on when that list names `secrets` (`Settings::secrets_helper_enabled`); when the
+variable is absent (the backend not run by this compose file: `cargo run`, the test suite, another
+orchestrator) it is on and `SECRETS_HELPER_URL` is simply tried. Off, every resolution and "Test
+connection" fail at once with `secret.unavailable`, `helper_disabled`; on but not answering,
+`helper_unreachable` within the timeouts below (connect 2 s; a stopped container's name does not resolve,
+so that is immediate). Settings, references, the log and everything else work either way.
+
+**Status** (`GET /api/secrets/helper`): `state` is
+
+| `state` | Meaning |
+|---|---|
+| `off` | the profile is not on (`reason: helper_disabled`); `message` holds the updater's error if the last switch failed |
+| `starting` | an enable request waits for the updater, or the updater wrote `starting` less than 5 minutes ago and the helper does not answer yet |
+| `running` | `GET /healthz` answered within 2 s (`version` is the helper's) |
+| `unreachable` | the profile is on but the helper does not answer (`reason: helper_unreachable`) |
+
+plus `enabled` (the profile, as this backend sees it), `pending` (`enable` or `disable` while a request
+waits), `can_request` (the updater's `update-status/` directory is there) and `profile` (`secrets`).
+
+**Switching it on and off: the updater channel (plan 7.3, as Settings, HTTPS does).** "Enable password
+managers" (instance admins, browser session) writes `update-status/secrets.json`
+(`{"enabled": true}`, one key per line). The updater (`scripts/auto-update.sh`, `secrets_apply`, every
+20 s) validates it, removes it, and:
+
+- **enable**: writes `starting` to `update-status/secrets-status.json`, adds `secrets` to
+  `COMPOSE_PROFILES` in `.env` (keeping any other profile, such as `https`), so every later plain
+  `docker compose up -d` keeps the helper, then `docker compose pull secrets-helper` and
+  `docker compose up -d backend secrets-helper` (the backend is recreated to see the new profile: the app
+  is away for a few seconds). Outcome `running` or `error` with a message.
+- **disable**: removes `secrets` from `COMPOSE_PROFILES` (the line goes when it was the only profile),
+  `docker compose rm -sf secrets-helper`, `docker compose up -d backend`. Outcome `off` or `error`.
+
+The status goes to its own `secrets-status.json` rather than `status.json`, which the update check
+rewrites whole every 10 minutes (the same reason HTTPS has `https-status.json`). The HTTPS switch now
+adds and removes only its own profile in `COMPOSE_PROFILES`, so the two do not undo each other.
+
+**The first update to this release runs the OLD updater**, which knows nothing of `secrets.json`: the
+install comes up with the profile off (the backend answers `helper_disabled`). The `updater` service runs
+`scripts/auto-update.sh` from the checkout afresh every 20 s (`scripts/updater.sh`), so the pass after the
+checkout is already this release's script, and a request is acted on from then on (one written earlier
+waits in `update-status/`). A host cron job running the script does the same.
+
+**By hand** (no updater service, or an admin who prefers it): add `secrets` to `COMPOSE_PROFILES` in
+`.env` (`COMPOSE_PROFILES=secrets`, or `COMPOSE_PROFILES=https,secrets` with HTTPS on), then
+`docker compose up -d`. Settings shows exactly that when `can_request` is false.
+
+D5 holds either way: the helper is stateless and the token never rests in it.
 
 ## Sidecar internal API (`secrets-helper`, version 1)
 
@@ -168,10 +266,11 @@ Two layers:
    bridge only the sidecar joins, for its outbound calls to the providers. The frontend, backup, updater,
    database and Caddy cannot reach it.
 2. **Shared key.** `SECRETS_HELPER_KEY` in `.env`, sent as `Authorization: Bearer <key>` and compared in
-   constant time. The installer writes it and the updater adds it when missing, like the other keys.
-   Under an OLD updater (the first update to this release) the key is absent: the sidecar then accepts
-   calls on its internal network alone and logs once that the key is unset. That is the safe default:
-   layer 1 already keeps every other container out.
+   constant time. The updater adds it when missing, like the other keys: on an update, and when it
+   switches the helper on (`secrets_apply`), so a helper started through "Enable password managers" always
+   has one, even on an install whose last update ran an OLD updater. Switched on by hand without one, the
+   sidecar accepts calls on its internal network alone and logs once that the key is unset. That is the
+   safe default: layer 1 already keeps every other container out.
 
 Why both: the key alone would need the old updater to have written it (it cannot); the network alone
 leaves a compromised backend-adjacent container on the shared network as a caller, which the dedicated
@@ -239,6 +338,9 @@ large), `404` (unknown route).
 | The sidecar logs a token in an error | scrubber on every message; test |
 | Provider down | `secret.unavailable`, never a fallback; audited `provider_error` |
 | Timing attack on the internal key | constant-time compare |
+| A vault owner registers a reference to any item the org's provider token can read (every user owns their personal vault, and any member can create a vault) | **the provider token's own scope is the boundary**: give the service account, Connect token or machine account access only to the password-manager vaults whose items any vault owner in Eunomia may use (docs/password-managers.md says so). Every registration is audited (`secret.ref.create` with the actor) and every resolution is in the log the org owners see. A per-provider allow-list of reference prefixes for vault owners would close it but needs a tenant migration (open question 5) |
+| A vault-restricted (agent) token grants itself a secret | `auth.scope` on every settings route, even for its own vault; test |
+| The helper is off or down | `secret.unavailable` at once (`helper_disabled`) or within the timeouts (`helper_unreachable`); never a hang, never a fallback |
 | A malicious tool argument smuggles a reference for another org | lookups are in the caller's org database only |
 
 Residual risks: the value is in backend memory during the call, and copies inside a tool handler are
@@ -267,19 +369,45 @@ detectors may or may not catch.
 - Isolation: org A's reference does not resolve for org B; canary rows for both tables.
 - Sidecar (B2): unit tests; a mock Connect and a mock Bitwarden through the real sidecar; no token on
   the sidecar's filesystem or in its environment after a call.
-- Update path: the broker tables are new and empty after the update (listed as new), the sidecar starts
-  healthy under the old updater's `docker compose up -d --remove-orphans`.
+- Bitwarden is `preview` in `GET /api/secrets/kinds` and in a configured provider; the 1Password kinds
+  are `stable`; the UI shows the badge and the note (Playwright).
+- Helper switched off: a resolution and "Test connection" answer `secret.unavailable` / `helper_disabled`
+  in well under 2 s with nothing sent to the sidecar; every settings route still answers 200; the status is
+  `off`. Helper on but not answering: `helper_unreachable` within 4 s; status `unreachable`. Status
+  `running` against the mock; the enable request file (admins, browser session; a token gets
+  `auth.scope`, a member `auth.forbidden`); `starting` while it waits; the updater's error shown.
+- Vault owners: own vault create, edit, remove, list, log and counts; another vault (where they are a
+  plain member) `vault.forbidden` or 404, and the row untouched; providers and the helper switch
+  `auth.forbidden`; a token restricted to their own vault `auth.scope` on every route; a member with only a
+  personal vault sees nothing of others'; org B sees nothing; the org owner as before.
+- The updater (`scripts/tests/auto-update.test.sh`): enable adds `secrets` to `COMPOSE_PROFILES` and keeps
+  `https`; disable removes only `secrets`; the HTTPS switch keeps `secrets`; a malformed request is
+  refused; outcomes in `secrets-status.json`.
+- Update path: the broker tables are new and empty after the update (listed as new); with the profile off
+  (what the old updater gives) no `secrets-helper` container exists, the backend answers
+  `secret.unavailable` / `helper_disabled` for "Test connection", the other services are healthy and the
+  data is intact; then, switched on the way the new updater does it, the helper turns healthy.
 
 ## Open questions for Avi
 
 1. Bitwarden: the official SDK's licence is not OSI and restricts use; the sidecar talks to Bitwarden's
    public endpoints with its own small client (client credentials login, then decrypting the secret with
    the access token's key, as Bitwarden documents). It is tested against our mock, not against
-   Bitwarden's cloud. Is a manual check against a real Bitwarden account before release acceptable, or
-   should Bitwarden wait?
+   Bitwarden's cloud. **Decided by Avi on 2026-11-01: Bitwarden ships as a preview**, marked in the API,
+   the UI and the docs. Still open: who checks it against a real Bitwarden account, and when it leaves
+   preview.
 2. Admins: settings are for org owners and instance admins. Should vault owners manage references bound
-   to their own vault?
+   to their own vault? **Decided by Avi on 2026-11-01: yes**, for the vaults they own (see Settings API).
 3. Connector settings: resolving `{"$secret": ...}` inside connector credentials needs the sync jobs to
    call the broker. A follow-up PR, or in this release?
 4. The resolution log reads `audit_event` without an index on `action` (a control migration would add
    one; this lane holds only tenant numbers). Fine at today's volumes; worth a control migration later?
+   (A vault owner's log page reads up to 2000 of the org's rows to fill a page, which makes the index
+   more worthwhile.)
+5. Vault owners can register a reference to any item the org's provider token can read (threat model).
+   Today the provider token's scope is the boundary, and the docs tell admins to scope it. Should a later
+   PR add a per-provider allow-list of reference prefixes for vault owners (a tenant migration), or an
+   org setting that turns vault-owner management off?
+6. The sidecar as a compose profile (**decided by Avi on 2026-11-01**, replacing "always on"): fresh
+   installs also start with it off. Should `install.sh` gain a `--password-managers` flag that writes
+   `COMPOSE_PROFILES=secrets` up front?

@@ -3,6 +3,10 @@
 //! compose network (`SECRETS_HELPER_URL`, default `http://secrets-helper:8080`) with the shared key
 //! (`SECRETS_HELPER_KEY`, when set). The provider token goes in each request body and nowhere else: not a
 //! header, not a URL, not a log line. Short timeouts: a slow provider fails the call, it never hangs it.
+//!
+//! The sidecar runs only under the `secrets` compose profile ([`PROFILE`]). With it off
+//! (`Settings::secrets_helper_enabled`) the client answers [`Unreachable`] with [`HELPER_DISABLED`] at once
+//! and makes no network call; a sidecar that is on but down or slow is [`HELPER_UNREACHABLE`].
 
 use std::sync::LazyLock;
 use std::time::Duration;
@@ -11,8 +15,16 @@ use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
 pub const DEFAULT_URL: &str = "http://secrets-helper:8080";
+/// The compose profile the sidecar runs under.
+pub const PROFILE: &str = "secrets";
+/// `secret.unavailable` reasons (docs/errors.md): the sidecar is switched off (its profile is not on).
+pub const HELPER_DISABLED: &str = "helper_disabled";
+/// The sidecar is on but did not answer properly (down, starting, slow, refused the key, answered nonsense).
+pub const HELPER_UNREACHABLE: &str = "helper_unreachable";
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
 const TIMEOUT: Duration = Duration::from_secs(12);
+/// `GET /healthz` for the status in Settings: a helper that takes longer is not "running".
+const HEALTH_TIMEOUT: Duration = Duration::from_secs(2);
 
 static HTTP: LazyLock<reqwest::Client> = LazyLock::new(|| {
     reqwest::Client::builder()
@@ -75,21 +87,55 @@ pub struct CheckOut {
     pub ok: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
-    /// `denied`, `provider_error`, `bad_config` or `unreachable` (the sidecar itself) when not ok.
+    /// `denied`, `provider_error` or `bad_config` when not ok. (The sidecar itself not answering is a
+    /// `secret.unavailable` error with reason `helper_disabled` or `helper_unreachable`, not this.)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 }
 
-/// The sidecar could not be asked (down, slow, refused the key, answered nonsense). Never holds a token.
+/// The sidecar could not be asked: switched off ([`HELPER_DISABLED`]) or down, slow, refusing the key or
+/// answering nonsense ([`HELPER_UNREACHABLE`]). Never holds a token.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Unreachable(pub String);
+pub struct Unreachable {
+    /// [`HELPER_DISABLED`] or [`HELPER_UNREACHABLE`].
+    pub reason: &'static str,
+    pub message: String,
+}
+
+impl Unreachable {
+    fn new(message: impl Into<String>) -> Self {
+        Unreachable { reason: HELPER_UNREACHABLE, message: message.into() }
+    }
+
+    pub fn disabled() -> Self {
+        Unreachable {
+            reason: HELPER_DISABLED,
+            message: "the secrets helper is switched off on this server: an instance admin can enable password managers in Settings, Connectors".into(),
+        }
+    }
+
+    /// `secret.unavailable` with this reason.
+    pub fn into_error(self) -> crate::error::AppError {
+        crate::error::AppError::coded(crate::error::ErrorCode::SecretUnavailable, format!("The secrets helper is not available: {}.", self.message)).with_reason(self.reason)
+    }
+}
+
+/// `GET /healthz` of a running helper.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Health {
+    #[serde(default)]
+    pub version: String,
+    #[serde(default)]
+    pub api: u32,
+}
 
 #[derive(Clone)]
 pub struct Client {
     url: String,
     key: Zeroizing<String>,
+    enabled: bool,
 }
 
 impl std::fmt::Debug for Client {
@@ -100,28 +146,53 @@ impl std::fmt::Debug for Client {
 
 impl Client {
     pub fn new(url: &str, key: &str) -> Self {
-        Client { url: url.trim_end_matches('/').to_string(), key: Zeroizing::new(key.to_string()) }
+        Client { url: url.trim_end_matches('/').to_string(), key: Zeroizing::new(key.to_string()), enabled: true }
     }
 
     pub fn from_settings(s: &crate::config::Settings) -> Self {
-        Client::new(&s.secrets_helper_url, &s.secrets_helper_key)
+        Client { enabled: s.secrets_helper_enabled, ..Client::new(&s.secrets_helper_url, &s.secrets_helper_key) }
+    }
+
+    /// Is the helper switched on (its compose profile)? Off, every call fails at once with [`HELPER_DISABLED`].
+    pub fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    /// `GET /healthz` with a 2 second limit. `Err` when switched off, down, starting or slow.
+    pub async fn health(&self) -> Result<Health, Unreachable> {
+        if !self.enabled {
+            return Err(Unreachable::disabled());
+        }
+        let res = HTTP
+            .get(format!("{}/healthz", self.url))
+            .timeout(HEALTH_TIMEOUT)
+            .send()
+            .await
+            .map_err(|e| Unreachable::new(if e.is_timeout() { "the secrets helper timed out" } else { "the secrets helper is not reachable" }))?;
+        if !res.status().is_success() {
+            return Err(Unreachable::new(format!("the secrets helper answered HTTP {}", res.status().as_u16())));
+        }
+        res.json::<Health>().await.map_err(|_| Unreachable::new("the secrets helper sent an unexpected answer"))
     }
 
     async fn post<B: Serialize, T: for<'de> Deserialize<'de>>(&self, path: &str, body: &B) -> Result<T, Unreachable> {
+        if !self.enabled {
+            return Err(Unreachable::disabled());
+        }
         let mut req = HTTP.post(format!("{}{path}", self.url)).json(body);
         if !self.key.is_empty() {
             req = req.bearer_auth(self.key.as_str());
         }
         // reqwest's error text names the URL, never the body; still, keep only its kind
-        let res = req.send().await.map_err(|e| Unreachable(if e.is_timeout() { "the secrets helper timed out".into() } else { "the secrets helper is not reachable".into() }))?;
+        let res = req.send().await.map_err(|e| Unreachable::new(if e.is_timeout() { "the secrets helper timed out" } else { "the secrets helper is not reachable" }))?;
         let status = res.status();
         if status == reqwest::StatusCode::UNAUTHORIZED {
-            return Err(Unreachable("the secrets helper refused the internal key (SECRETS_HELPER_KEY differs)".into()));
+            return Err(Unreachable::new("the secrets helper refused the internal key (SECRETS_HELPER_KEY differs)"));
         }
         if !status.is_success() {
-            return Err(Unreachable(format!("the secrets helper answered HTTP {}", status.as_u16())));
+            return Err(Unreachable::new(format!("the secrets helper answered HTTP {}", status.as_u16())));
         }
-        res.json::<T>().await.map_err(|_| Unreachable("the secrets helper sent an unexpected answer".into()))
+        res.json::<T>().await.map_err(|_| Unreachable::new("the secrets helper sent an unexpected answer"))
     }
 
     /// `POST /v1/resolve`: one answer per reference, in order.
@@ -133,20 +204,18 @@ impl Client {
         }
         let out: ResolveOut = self.post("/v1/resolve", &Body { provider, refs }).await?;
         if out.results.len() != refs.len() || out.results.iter().zip(refs).any(|(r, want)| &r.reference != want) {
-            return Err(Unreachable("the secrets helper answered for other references".into()));
+            return Err(Unreachable::new("the secrets helper answered for other references"));
         }
         Ok(out.results)
     }
 
-    /// `POST /v1/check`: "Test connection".
-    pub async fn check(&self, provider: &ProviderConfig) -> CheckOut {
+    /// `POST /v1/check`: "Test connection". `Err` when the helper itself could not be asked (the route
+    /// answers `secret.unavailable` with the reason); the provider's own refusal is an `Ok` with `ok: false`.
+    pub async fn check(&self, provider: &ProviderConfig) -> Result<CheckOut, Unreachable> {
         #[derive(Serialize)]
         struct Body<'a> {
             provider: &'a ProviderConfig,
         }
-        match self.post::<_, CheckOut>("/v1/check", &Body { provider }).await {
-            Ok(c) => c,
-            Err(Unreachable(m)) => CheckOut { ok: false, detail: None, error: Some("unreachable".into()), message: Some(m) },
-        }
+        self.post::<_, CheckOut>("/v1/check", &Body { provider }).await
     }
 }
