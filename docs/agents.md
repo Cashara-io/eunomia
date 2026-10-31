@@ -199,7 +199,7 @@ No. The connected agent is the model.
 | `vault_set_role` / `vault_transfer_ownership` | Promote or demote a member; hand a vault to another member (owner only, last-owner guard) |
 | `document_upload` / `document_list` / `document_get` | Upload a document (text, Markdown, JSON, CSV, text PDF) and read its extracted text; its passages are found by `search`, `recall` and `get`, each hit naming the document ([documents](documents.md)) |
 | `document_download` / `document_export` / `document_delete` | The HTTP route for the original bytes, the passages-and-vectors manifest, deletion |
-| `skill_save` / `skill_find` / `skill_get` / `skill_delete` | Keep a skill an agent learned, find it later by meaning, read its body, delete it ([agent skills](#agent-skills)) |
+| `skill_save` / `skill_find` / `skill_list` / `skill_get` / `skill_delete` | Keep a skill an agent learned, find it later by meaning, list a vault's skills, read its body, delete it ([agent skills](#agent-skills)) |
 | `vault_share_code` / `vault_join_shared` / `vault_peers` / `vault_peer_sync` | Share a vault with another Eunomia install by a one-time code, join one, see each link's sync status, sync now ([peer vaults](peer-vaults.md)) |
 | `vault_check` / `vault_repair` | Check a vault for broken or leftover data (memories whose entity is gone, relations with a missing end, misfiled memories, a change-log counter behind); repair removes the dangling rows and fixes the counter (owner only). Also `GET`/`POST /api/vaults/{vault}/integrity` |
 | `changes_since` | A vault's numbered change log after a cursor: what was created, updated, merged or deleted, by whom, with no content ([change log](#change-log)) |
@@ -237,6 +237,11 @@ it, and a Markdown body) and any agent can find it later:
 - `skill_find` takes a `query` in plain words (and optionally `vault_id` and `limit`, at most 50). It
   searches every vault you can read, by meaning when embeddings are on, plus a keyword match on name and
   description. It returns each skill's `id`, `name`, `description`, `vault` and `updated_at`, not the body.
+- `skill_list` lists every skill of one vault (your personal vault, or `vault_id`; a token restricted to
+  one vault lists that vault), sorted by name, with the same fields as `skill_find`. It pages: `limit`
+  (default 100, at most 500) and `after`, the `next` of the previous call; `next` is `null` on the last
+  page. It is read-only and needs only `memory:read`. `create-eunomia sync` uses it for the skills that
+  are only on the server ([projects](projects.md#skills-sync)).
 - `skill_get` returns the full body, by `id` or by `name`. If several vaults you can read hold that name,
   it answers with an error naming the ids; pass `vault_id` or an id.
 - `skill_delete` removes one skill by id.
