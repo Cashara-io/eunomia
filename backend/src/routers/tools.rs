@@ -54,7 +54,7 @@ async fn invoke(
     Path(name): Path<String>,
     body: Option<Json<Value>>,
 ) -> Response {
-    if !registry::all_tools().contains_key(name.as_str()) {
+    if registry::find(name.as_str()).is_none() {
         return crate::error::AppError::coded(crate::error::ErrorCode::ToolNotFound, format!("unknown tool {name:?}")).into_response();
     }
     let args = body.map(|Json(v)| v).unwrap_or(Value::Object(serde_json::Map::new()));

@@ -58,6 +58,8 @@ pub fn test_settings() -> Settings {
         documents_backend: "memory".into(),
         documents_max_bytes: 256 * 1024,
         auth: Default::default(),
+        secrets_helper_url: "http://127.0.0.1:9".into(), // nothing listens: a broker test sets its mock
+        secrets_helper_key: String::new(),
     }
 }
 

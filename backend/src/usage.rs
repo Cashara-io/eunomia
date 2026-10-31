@@ -56,6 +56,11 @@ tokio::task_local! {
     static CONTEXT: Context;
 }
 
+/// The channel and session of the call in progress (the defaults outside one).
+pub fn current_context() -> Context {
+    CONTEXT.try_with(Context::clone).unwrap_or_default()
+}
+
 /// Runs `fut` with the channel and session its tool calls are counted under.
 pub async fn with_context<F: std::future::Future>(channel: Channel, session: impl Into<String>, fut: F) -> F::Output {
     CONTEXT.scope(Context { channel, session: session.into() }, fut).await

@@ -4,6 +4,9 @@
 use super::ControlStmt;
 
 pub const ALL: &[&ControlStmt] = &[
+    &MEMBERSHIP_ROLE,
+    &SECRET_LOG,
+    &SECRET_SINCE,
     &READY_PING,
     &READY_VERSION,
     &AUTH_SESSION_CREATE,
@@ -389,3 +392,24 @@ pub const IDENTITY_DELETE_USER: ControlStmt = ControlStmt::new("control.identity
 /// Ends every browser session of a user (linking a provider to an existing account signs its other sessions out).
 pub const AUTH_SESSION_REVOKE_OWNER: ControlStmt =
     ControlStmt::new("control.auth_session_revoke_owner", "UPDATE session SET revoked = true WHERE owner = $owner AND revoked = false");
+
+// the credential broker (routers/secrets.rs)
+
+/// The caller's role in one org.
+pub const MEMBERSHIP_ROLE: ControlStmt = ControlStmt::new("control.membership_role", "SELECT role FROM membership WHERE user = $user AND org = $org");
+
+/// One org's `secret.resolve` events, newest first, older than `$before` when it is set.
+// ponytail: no index on (action, target); a scan of audit_event per page. A control migration adds one
+// if resolution logs grow (spec, open question 4).
+pub const SECRET_LOG: ControlStmt = ControlStmt::new(
+    "control.secret_log",
+    "SELECT id, actor_kind, actor_id, outcome, trace_id, detail, created_at FROM audit_event \
+     WHERE action = 'secret.resolve' AND target = $org AND ($before = NONE OR created_at < $before) ORDER BY created_at DESC LIMIT $limit",
+);
+
+/// One org's `secret.resolve` events since `$since`, for the per-reference counts.
+pub const SECRET_SINCE: ControlStmt = ControlStmt::new(
+    "control.secret_since",
+    "SELECT id, actor_kind, actor_id, outcome, trace_id, detail, created_at FROM audit_event \
+     WHERE action = 'secret.resolve' AND target = $org AND created_at > $since",
+);
