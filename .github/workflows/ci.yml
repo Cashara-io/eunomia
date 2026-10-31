@@ -238,19 +238,34 @@ jobs:
   # scripts/auto-update.sh (only `docker compose pull` is shimmed: the build is tagged v9.9.9-ci,
   # local only, never pushed), then counts, reads, ledgers, health, an idempotent re-run and a
   # rollback (old tag, pre-update backup restored). Compose project eu-update, ports 8251 and 3251.
+  # A row with `from_ref` starts from a release that is not tagged or published yet: its images are
+  # built here from that ref and tagged `from` in this runner's daemon only (never pushed), and the
+  # tag is put on the ref in the test's stand-in GitHub only.
   update-path:
     needs: [frontend]
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60   # a from_ref row builds two releases
     strategy:
       fail-fast: false
       matrix:
-        from: [v2.0.7]
+        include:
+          - from: v2.0.7                        # the published release, pulled from ghcr
+          - from: v2.0.8                        # the release on its way, built from its branch
+            from_ref: origin/release/2.0.8
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0   # the release tags: the stand-in GitHub serves them
-      - run: bash scripts/tests/update-path.test.sh "${{ matrix.from }}"
+      - name: Fetch the from_ref branch
+        if: matrix.from_ref
+        env:
+          FROM_REF: ${{ matrix.from_ref }}
+        run: git fetch --no-tags origin "+refs/heads/${FROM_REF#origin/}:refs/remotes/$FROM_REF"
+      - env:
+          UPDATE_PATH_FROM_REF: ${{ matrix.from_ref }}
+          UPDATE_PATH_FROM_TAG: ${{ matrix.from_ref && matrix.from || '' }}
+          FROM: ${{ matrix.from }}
+        run: bash scripts/tests/update-path.test.sh "$FROM"
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
