@@ -4685,6 +4685,129 @@
         ]
       }
     },
+    "/api/vaults/{vault_id}/changes": {
+      "get": {
+        "tags": [
+          "vaults"
+        ],
+        "summary": "A vault's change log after a cursor",
+        "description": "One row per write that changed the vault (no content: fetch the item). `next` is the cursor for the following page.",
+        "operationId": "listVaultChanges",
+        "parameters": [
+          {
+            "name": "vault_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "description": "Changes with a seq above this one (0, the default, is the whole log).",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "At most this many (default 100, at most 1000).",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangePage"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/vaults/{vault_id}/changes/ws": {
+      "get": {
+        "tags": [
+          "vaults"
+        ],
+        "summary": "Follow a vault's change log over a WebSocket",
+        "description": "Upgrades to a WebSocket that sends each change after `after` as a JSON text message (a `Change`), then every new one as it commits. A browser authenticates with its session cookie from an allowed origin; other clients send a Bearer token.",
+        "operationId": "followVaultChanges",
+        "parameters": [
+          {
+            "name": "vault_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "description": "Send the backlog after this seq first (0, the default, is the whole log).",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "101": {
+            "description": "Switching to the WebSocket protocol"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/vaults/{vault_id}/clone": {
       "post": {
         "tags": [
@@ -5367,6 +5490,65 @@
           },
           "version": {
             "type": "string"
+          }
+        }
+      },
+      "Change": {
+        "type": "object",
+        "description": "One row of a vault's change log.",
+        "required": [
+          "seq",
+          "op",
+          "kind",
+          "id",
+          "actor",
+          "at"
+        ],
+        "properties": {
+          "actor": {
+            "type": "string",
+            "description": "Who wrote it: a user, token or OAuth client id, or `system`."
+          },
+          "at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "description": "The item's id; fetch it to see what changed (it may be gone)."
+          },
+          "kind": {
+            "type": "string",
+            "description": "`memory`, `entity`, `relation`, `skill` or `document`."
+          },
+          "op": {
+            "type": "string",
+            "description": "`created`, `updated`, `deleted` or `merged` (an entity merged into another, which gets `updated`)."
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Strictly increasing per vault, with no gaps."
+          }
+        }
+      },
+      "ChangePage": {
+        "type": "object",
+        "description": "A page of changes and the cursor for the next one.",
+        "required": [
+          "changes",
+          "next"
+        ],
+        "properties": {
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Change"
+            }
+          },
+          "next": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Pass as `after` next time: the last seq returned, or the `after` given when there was none."
           }
         }
       },

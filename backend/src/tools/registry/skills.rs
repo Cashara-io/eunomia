@@ -13,12 +13,14 @@ use surrealdb::types::{Datetime, RecordId, SurrealValue};
 use super::{bad_args, register, to_tool_value, ToolSpec};
 use crate::authz::{self, Action};
 use crate::cache::recall::MIN_SIMILARITY;
+use crate::changes;
 use crate::embeddings::service as embeddings;
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::pool::OrgDb;
 use crate::rid::RecordIdExt;
 use crate::state::OrgState;
 use crate::store;
+use crate::tx::{with_retry, with_retry_dup};
 use crate::vaults::service::{accessible_vault_ids, default_vault_id};
 
 const MAX_DESCRIPTION: usize = 1024;
@@ -134,16 +136,19 @@ async fn embed_skill(state: &OrgState, owner: &RecordId, skill: &Skill) -> bool 
         if vector.len() != embeddings::dim() {
             return Err(AppError::internal(format!("embedding has dimension {}", vector.len())));
         }
-        store::skills::SET_EMBEDDING
-            .on(&state.db)
-            .bind(("id", skill.id.clone()))
-            .bind(("embedding", vector))
-            .bind(("spec", spec))
-            .bind(("vault", skill.vault.clone()))
-            .bind(("name", skill.name.clone()))
-            .bind(("description", skill.description.clone()))
-            .await?
-            .check()?;
+        with_retry(|| async {
+            store::skills::SET_EMBEDDING
+                .on(&state.db)
+                .bind(("id", skill.id.clone()))
+                .bind(("embedding", vector.clone()))
+                .bind(("spec", spec.clone()))
+                .bind(("vault", skill.vault.clone()))
+                .bind(("name", skill.name.clone()))
+                .bind(("description", skill.description.clone()))
+                .await?
+                .check()
+        })
+        .await?;
         AppResult::Ok(())
     };
     match run.await {
@@ -161,16 +166,26 @@ async fn save(state: &OrgState, owner: &RecordId, a: SaveArgs) -> AppResult<Valu
         None => default_vault_id(&state.db, owner).await?,
         Some(v) => authz::authorize(&state.db, owner, Action::WriteMemories, &parse_vault(v)?).await?.vault().clone(),
     };
-    let rows: Vec<Skill> = store::skills::UPSERT
-        .on(&state.db)
-        .bind(("owner", owner.clone()))
-        .bind(("vault", vault))
-        .bind(("name", a.name))
-        .bind(("description", a.description))
-        .bind(("body", a.body))
-        .await?
-        .take(0)?;
+    // for the change log only: two saves of a new name racing may both say `created`
+    let existed: Vec<Skill> = store::skills::BY_NAME.on(&state.db).bind(("vaults", vec![vault.clone()])).bind(("name", a.name.clone())).await?.take(0)?;
+    // a write to the skill table can conflict with SurrealDB's background HNSW compaction of
+    // skill_embedding_idx (a commit conflict, safe to run again); a duplicate is a racing save of the
+    // same new name, and the rerun's WHERE finds that row and replaces it
+    let rows: Vec<Skill> = with_retry_dup(|| async {
+        store::skills::UPSERT
+            .on(&state.db)
+            .bind(("owner", owner.clone()))
+            .bind(("vault", vault.clone()))
+            .bind(("name", a.name.clone()))
+            .bind(("description", a.description.clone()))
+            .bind(("body", a.body.clone()))
+            .await?
+            .take(0)
+    })
+    .await?;
     let skill = rows.into_iter().next().ok_or_else(|| AppError::internal("skill upsert returned no row"))?;
+    let op = if existed.is_empty() { changes::CREATED } else { changes::UPDATED };
+    changes::record(&state.db, &vault, op, changes::SKILL, &skill.id).await;
     let embedded = embed_skill(state, owner, &skill).await;
     Ok(json!({ "id": skill.id.to_string(), "name": skill.name, "vault": skill.vault.to_string(), "embedded": embedded }))
 }
@@ -273,7 +288,9 @@ async fn get(state: &OrgState, owner: &RecordId, a: GetArgs) -> AppResult<Value>
 
 async fn delete(state: &OrgState, owner: &RecordId, id: &str) -> AppResult<Value> {
     let skill = load(state, owner, id, Action::WriteMemories).await?;
-    store::skills::DELETE.on(&state.db).bind(("id", skill.id.clone())).await?.check()?;
+    // retried like the upsert: the HNSW compaction can conflict with it
+    with_retry(|| async { store::skills::DELETE.on(&state.db).bind(("id", skill.id.clone())).await?.check() }).await?;
+    changes::record(&state.db, &skill.vault, changes::DELETED, changes::SKILL, &skill.id).await;
     Ok(json!({ "deleted": skill.id.to_string() }))
 }
 

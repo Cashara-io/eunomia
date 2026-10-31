@@ -179,6 +179,8 @@ async fn goldens() {
     Box::pin(g.snap("skill_find", "skill_find", json!({"query": "anvil"}))).await;
     Box::pin(g.snap("skill_get", "skill_get", json!({"id": s(&skill, "/id")}))).await;
     Box::pin(g.snap("skill_delete", "skill_delete", json!({"id": s(&skill, "/id")}))).await;
+    // -- the change log: the first writes above, oldest first --
+    Box::pin(g.snap("changes_since", "changes_since", json!({"after": 0, "limit": 3}))).await;
 
     let registered: BTreeSet<String> = registry::all_tools().keys().map(|k| k.to_string()).collect();
     let missing: Vec<_> = registered.difference(&g.covered).collect();

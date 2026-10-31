@@ -197,6 +197,7 @@ No. The connected agent is the model.
 | `document_upload` / `document_list` / `document_get` | Upload a document (text, Markdown, JSON, CSV, text PDF) and read its extracted text; its passages are found by `search`, `recall` and `get`, each hit naming the document ([documents](documents.md)) |
 | `document_download` / `document_export` / `document_delete` | The HTTP route for the original bytes, the passages-and-vectors manifest, deletion |
 | `skill_save` / `skill_find` / `skill_get` / `skill_delete` | Keep a skill an agent learned, find it later by meaning, read its body, delete it ([agent skills](#agent-skills)) |
+| `changes_since` | A vault's numbered change log after a cursor: what was created, updated, merged or deleted, by whom, with no content ([change log](#change-log)) |
 
 Destructive tools are flagged `destructiveHint` so clients can ask first.
 
@@ -227,6 +228,18 @@ in a vault like any other memory.
 
 Known gap: `vault_clone` and `vault_merge` do not copy skills yet, and there is no page for them in the
 web app.
+
+### Change log
+
+Every write that changes a vault (a memory or entity created, updated, merged or deleted, a relation
+created, a skill saved or deleted, a document uploaded or deleted, what a vault clone or merge copies; the
+full list and what is not logged are in [projects](projects.md#watching-changes)) adds one numbered row
+to that vault's change log. `changes_since`
+reads it: `after` (the `next` of your previous call, 0 to start), `limit` (at most 1000, default 100) and
+`vault_id` (your personal vault by default). Each row has `seq`, `op`, `kind`, the item's `id`, the `actor`
+(a user, token or OAuth client id, or `system`) and `at`. Rows never hold content: fetch the item to see it.
+The same log is `GET /api/vaults/{vault}/changes` over REST and a WebSocket for live updates
+([projects](projects.md#watching-changes)).
 
 ### Importing a lot at once
 

@@ -1,0 +1,19 @@
+{
+  "name": "create-eunomia",
+  "version": "0.1.0",
+  "description": "Turn a repo into a Eunomia project: one shared vault and skills for every agent on the team.",
+  "type": "module",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "engines": { "node": ">=18" },
+  "bin": { "create-eunomia": "dist/cli.js" },
+  "files": ["dist", "connect-agents.sh"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node -e \"require('fs').copyFileSync('../../scripts/connect-agents.sh','connect-agents.sh')\"",
+    "prepack": "npm run build",
+    "test": "npm run build && tsc -p tsconfig.test.json && node --test dist-test/test/*.test.js"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.6.0"
+  }
+}

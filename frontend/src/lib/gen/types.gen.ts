@@ -98,6 +98,44 @@ export type Capsule = {
     version: string;
 };
 
+/**
+ * One row of a vault's change log.
+ */
+export type Change = {
+    /**
+     * Who wrote it: a user, token or OAuth client id, or `system`.
+     */
+    actor: string;
+    at: string;
+    /**
+     * The item's id; fetch it to see what changed (it may be gone).
+     */
+    id: string;
+    /**
+     * `memory`, `entity`, `relation`, `skill` or `document`.
+     */
+    kind: string;
+    /**
+     * `created`, `updated`, `deleted` or `merged` (an entity merged into another, which gets `updated`).
+     */
+    op: string;
+    /**
+     * Strictly increasing per vault, with no gaps.
+     */
+    seq: number;
+};
+
+/**
+ * A page of changes and the cursor for the next one.
+ */
+export type ChangePage = {
+    changes: Array<Change>;
+    /**
+     * Pass as `after` next time: the last seq returned, or the `after` given when there was none.
+     */
+    next: number;
+};
+
 export type ChatRequest = {
     message: string;
 };
@@ -3611,6 +3649,71 @@ export type RenameVaultResponses = {
 };
 
 export type RenameVaultResponse = RenameVaultResponses[keyof RenameVaultResponses];
+
+export type ListVaultChangesData = {
+    body?: never;
+    path: {
+        vault_id: string;
+    };
+    query?: {
+        /**
+         * Changes with a seq above this one (0, the default, is the whole log).
+         */
+        after?: number;
+        /**
+         * At most this many (default 100, at most 1000).
+         */
+        limit?: number;
+    };
+    url: '/api/vaults/{vault_id}/changes';
+};
+
+export type ListVaultChangesErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListVaultChangesError = ListVaultChangesErrors[keyof ListVaultChangesErrors];
+
+export type ListVaultChangesResponses = {
+    200: ChangePage;
+};
+
+export type ListVaultChangesResponse = ListVaultChangesResponses[keyof ListVaultChangesResponses];
+
+export type FollowVaultChangesData = {
+    body?: never;
+    path: {
+        vault_id: string;
+    };
+    query?: {
+        /**
+         * Send the backlog after this seq first (0, the default, is the whole log).
+         */
+        after?: number;
+    };
+    url: '/api/vaults/{vault_id}/changes/ws';
+};
+
+export type FollowVaultChangesErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type FollowVaultChangesError = FollowVaultChangesErrors[keyof FollowVaultChangesErrors];
+
+export type FollowVaultChangesResponses = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type FollowVaultChangesResponse = FollowVaultChangesResponses[keyof FollowVaultChangesResponses];
 
 export type CloneVaultData = {
     body: VaultClone;
