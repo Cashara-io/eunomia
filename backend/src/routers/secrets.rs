@@ -392,6 +392,7 @@ fn entry(r: EventRow) -> LogEntry {
 }
 
 #[derive(Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 struct LogQuery {
     /// 1 to 200, default 50.
     limit: Option<i64>,
@@ -443,6 +444,7 @@ struct RefCount {
 }
 
 #[derive(Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 struct CountQuery {
     /// Look-back window in hours, 1 to 2160 (90 days), default 168.
     hours: Option<i64>,
