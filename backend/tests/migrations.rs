@@ -518,6 +518,11 @@ fn axis(i: usize) -> Vec<f32> {
     v
 }
 
+/// `table:rNN`, bound rather than built with `type::record` (the hardened server denies that function).
+fn rid(table: &str, i: usize) -> surrealdb::types::RecordId {
+    surrealdb::types::RecordId::new(table, format!("r{i:02}"))
+}
+
 /// Waits (bounded) until every vector index reports its background build `ready`, and returns the
 /// last `INFO FOR INDEX` of each, so a test can see a build happened.
 async fn vector_indexes_ready(db: &Db) -> Vec<Value> {
@@ -557,12 +562,14 @@ async fn rebuild_vector_indexes_in_0022_keeps_rows_and_knn_finds_the_live_ones()
     // 40 rows per table on axes 0..40; then every row on an odd axis is deleted
     for i in 0..40usize {
         db.query(
-            "CREATE type::record('memory', $k) SET owner = user:u, vault = vault:v, subject = person:p, text = $t, embedding = $e, embedding_spec = 'stub';
-             CREATE type::record('skill', $k) SET owner = user:u, vault = vault:v, name = $t, description = 'd', body = 'b', embedding = $e, embedding_spec = 'stub';
-             CREATE type::record('cache_record', $k) SET owner = user:u, source = 'demo', type = 'note', external_id = $t, content_hash = 'h',
+            "CREATE $m SET owner = user:u, vault = vault:v, subject = person:p, text = $t, embedding = $e, embedding_spec = 'stub';
+             CREATE $s SET owner = user:u, vault = vault:v, name = $t, description = 'd', body = 'b', embedding = $e, embedding_spec = 'stub';
+             CREATE $c SET owner = user:u, source = 'demo', type = 'note', external_id = $t, content_hash = 'h',
                  ingested_at = time::now(), updated_at = time::now(), embedding = $e;",
         )
-        .bind(("k", format!("r{i:02}")))
+        .bind(("m", rid("memory", i)))
+        .bind(("s", rid("skill", i)))
+        .bind(("c", rid("cache_record", i)))
         .bind(("t", format!("row {i}")))
         .bind(("e", axis(i)))
         .await
@@ -571,8 +578,10 @@ async fn rebuild_vector_indexes_in_0022_keeps_rows_and_knn_finds_the_live_ones()
         .unwrap();
     }
     for i in (1..40usize).step_by(2) {
-        db.query("DELETE type::record('memory', $k); DELETE type::record('skill', $k); DELETE type::record('cache_record', $k);")
-            .bind(("k", format!("r{i:02}")))
+        db.query("DELETE $m; DELETE $s; DELETE $c;")
+            .bind(("m", rid("memory", i)))
+            .bind(("s", rid("skill", i)))
+            .bind(("c", rid("cache_record", i)))
             .await
             .unwrap()
             .check()
@@ -634,8 +643,8 @@ async fn a_fresh_org_runs_0022_right_after_the_index_definitions() {
     assert_eq!(count(&db, "_migration").await, migrate::MIGRATIONS.len());
     vector_indexes_ready(&db).await;
     for i in 0..5usize {
-        db.query("CREATE type::record('memory', $k) SET owner = user:u, vault = vault:v, subject = person:p, text = 't', embedding = $e")
-            .bind(("k", format!("r{i:02}")))
+        db.query("CREATE $m SET owner = user:u, vault = vault:v, subject = person:p, text = 't', embedding = $e")
+            .bind(("m", rid("memory", i)))
             .bind(("e", axis(i)))
             .await
             .unwrap()
