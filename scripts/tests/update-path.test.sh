@@ -165,19 +165,59 @@ wait_vector_builds() { # wait_vector_builds SECONDS : no background build of the
   log "vector index builds still running after $1 s"; return 1
 }
 knn_live() { # knn_live : in every org, a kNN query (<|K,EF|>) from an embedded row's own vector returns K rows, that row among them
-  local db t n k out seen=0
+  # Prints what it searched and what came back (the caller keeps it: `check` hides stdout).
+  local db t n k out ok=0 seen=0
   for db in $(org_dbs); do
     for t in memory skill; do
       n="$(echo "SELECT count() FROM $t WHERE embedding != NONE GROUP ALL;" | sql "$db" | jq -r '.[0].result[0].count // 0')"
-      [ "$n" -gt 0 ] || continue
+      [ "$n" -gt 0 ] || { echo "$db.$t: no embedded rows"; continue; }
       k=$(( n < 10 ? n : 10 ))
-      out="$(echo "LET \$r = (SELECT id, embedding FROM $t WHERE embedding != NONE ORDER BY id LIMIT 1)[0]; SELECT VALUE id FROM $t WHERE embedding <|$k,64|> \$r.embedding; RETURN \$r.id;" | sql "$db")"
-      printf '%s' "$out" | jq -e --argjson k "$k" '.[2].result as $id | .[1].result | (length == $k) and any(. == $id)' >/dev/null \
-        || { log "   $db.$t: kNN did not return $k rows including its own: $(printf '%s' "$out" | head -c 400)"; return 1; }
+      out="$(echo "LET \$r = (SELECT id, embedding FROM $t WHERE embedding != NONE ORDER BY id LIMIT 1)[0]; SELECT VALUE id FROM $t WHERE embedding <|$k,64|> \$r.embedding; RETURN \$r.id; INFO FOR INDEX ${t}_embedding_idx ON $t;" | sql "$db")"
+      if printf '%s' "$out" | jq -e --argjson k "$k" '.[2].result as $id | .[1].result | (length == $k) and any(. == $id)' >/dev/null 2>&1; then
+        echo "$db.$t: ok, $k of $n rows, own row first-k"
+      else
+        ok=1
+        echo "$db.$t: FAILED: $n embedded rows, K=$k, searched with $(printf '%s' "$out" | jq -c '.[2].result' 2>/dev/null), got $(printf '%s' "$out" | jq -c '.[1].result' 2>/dev/null), index $(printf '%s' "$out" | jq -c '.[3].result' 2>/dev/null)"
+        printf '%s' "$out" | jq -c '[.[] | {status, time}]' 2>/dev/null | sed "s#^#$db.$t: statements #"
+      fi
       seen=$((seen + 1))
     done
   done
-  [ "$seen" -ge 2 ] || { log "   no embedded memory or skill to search"; return 1; }
+  [ "$seen" -ge 2 ] || { echo "no embedded memory or skill to search"; ok=1; }
+  return "$ok"
+}
+embed_backlog() { # embed_backlog : "<db> memory=<n> cache_record=<n> skill_unembedded=<n>" per org: rows still waiting for a vector
+  # The predicates of the backend's own backlog probes (store/jobs.rs MEMORY_EMBED_BACKLOG and EMBED_BACKLOG, under the
+  # one stub model this install uses). Skills are embedded inline at save and have no backlog job: reported only.
+  local db
+  for db in $(org_dbs); do
+    echo "SELECT count() FROM memory WHERE (embedding IS NONE OR embedding_spec IS NONE) AND string::len(string::trim(text)) > 0 GROUP ALL;
+          SELECT count() FROM cache_record WHERE deleted = false AND embedding IS NONE AND string::len(string::trim(string::concat(title, body_text))) > 0 GROUP ALL;
+          SELECT count() FROM skill WHERE embedding IS NONE GROUP ALL;" | sql "$db" \
+      | jq -r --arg db "$db" '"\($db) memory=\(.[0].result[0].count // "?") cache_record=\(.[1].result[0].count // "?") skill_unembedded=\(.[2].result[0].count // "?")"'
+  done
+}
+wait_embeddings() { # wait_embeddings SECONDS : every memory and cache record that should have a vector has one, in every org
+  # The leader enqueues the embed job at most once per owner per 300 s window, on its slow tick (every 10 x 30 s), and
+  # the inline embed after memory_write is best effort, so a vector can land minutes after the job queue is empty, and
+  # a read taken before then misses a semantic hit that a later read finds.
+  local until=$((SECONDS + $1)) b=""
+  while [ $SECONDS -lt $until ]; do
+    b="$(embed_backlog)"
+    if [ -n "$b" ] && ! printf '%s\n' "$b" | grep -qE ' (memory|cache_record)=([1-9]|\?)'; then
+      log "   embeddings complete: $(printf '%s' "$b" | tr '\n' ';')"; return 0
+    fi
+    sleep 5
+  done
+  log "embedding backlog not drained after $1 s: $(printf '%s' "$b" | tr '\n' ';')"; return 1
+}
+expect_ledgers() { # expect_ledgers STABLE-COUNTS LEDGERS : the counts, each _migration count grown by the migrations this build adds
+  # A ledger grows by exactly (latest version of its set) - (its version in LEDGERS); every other count is unchanged.
+  awk -v t="$LATEST_TENANT" -v c="$LATEST_CONTROL" '
+    FNR == NR { maxv[$1] = $3; next }
+    { split($1, a, ".") }
+    a[2] == "_migration" && (a[1] in maxv) { latest = (a[1] == "control") ? c : t; print $1, $2 + (latest - maxv[a[1]]); next }
+    { print }' "$2" "$1"
 }
 reads() { # reads FILE : a fixed set of reads, reduced to what must not change (ids, counts, bodies)
   {
@@ -285,6 +325,10 @@ mcp "$TOKEN_A" skill_save '{"name":"deploy-rollback","description":"How to roll 
 mcp "$TOKEN_A" skill_save '{"name":"release-notes","description":"How to write release notes","body":"Short, plain words."}' >/dev/null
 mcp "$TOKEN_B" memory_write '{"subject_name":"orders_db","subject_kind":"db","text":"Runs Postgres 15 in the other org."}' >/dev/null
 mcp "$TOKEN_B" skill_save '{"name":"other-org","description":"A skill in the second org","body":"b"}' >/dev/null
+# Last: one more fact per user. Its inline embed also embeds that owner's backlog (the memory_update above
+# cleared a vector, and only memory_write embeds straight away); wait_embeddings below waits for the rest.
+mcp "$TOKEN_A" memory_write '{"subject_name":"Cambridge","subject_kind":"location","text":"Home of the Cavendish Laboratory."}' >/dev/null
+mcp "$TOKEN_B" memory_write '{"subject_name":"orders_db","subject_kind":"db","text":"Backed up nightly."}' >/dev/null
 printf '# Notes\n\nThe update path keeps every document.\n' > "$W/notes.md"
 api -f -H "Authorization: Bearer $TOKEN_A" -H 'Content-Type: text/markdown' --data-binary @"$W/notes.md" "$BASE/api/documents?filename=notes.md" >/dev/null
 set +e
@@ -296,6 +340,8 @@ ORG_A="$(echo "SELECT VALUE db FROM tenant;" | sql control | jq -r '.[0].result[
   [ "$(echo "SELECT count() FROM $OLD_FACT GROUP ALL;" | sql "$d" | jq -r '.[0].result[0].count // 0')" = 1 ] && echo "$d"; done | head -1)"
 [ -n "$ORG_A" ] || die "could not find the org database of the first user"
 echo "UPDATE $OLD_FACT SET status = 'superseded';" | sql "$ORG_A" >/dev/null
+wait_embeddings 600; check "every seeded memory and record embedded before the snapshot" test $? -eq 0
+embed_backlog > "$W/embed-backlog-before.txt"
 n_orgs() { [ "$(org_dbs | wc -l | tr -d ' ')" -eq "$1" ]; }
 check "two users, two org databases" n_orgs 2
 
@@ -353,11 +399,14 @@ done
 check "/readyz answers 200" curl -fsS -o /dev/null --max-time 10 "http://127.0.0.1:$BPORT/readyz"
 wait_tenants 300; check "every ledger at the latest migration (tenant $LATEST_TENANT, control $LATEST_CONTROL)" test $? -eq 0
 wait_jobs 180
+wait_embeddings 600; check "no embedding backlog after the update" test $? -eq 0
 counts > "$W/counts-after.txt"; ledgers > "$W/ledgers-after.txt"
 reads "$W/reads-after.txt"; check "the reads answer after the update" test $? -eq 0
 stable "$W/counts-before.txt" > "$W/stable-before.txt"; stable "$W/counts-after.txt" > "$W/stable-after.txt"
-check "per-table row counts unchanged (bar $VOLATILE)" diff "$W/stable-before.txt" "$W/stable-after.txt"
-diff "$W/stable-before.txt" "$W/stable-after.txt" | head -20
+# The ledgers grow by exactly the migrations this build adds (any number, so stacked PRs need no edit); all else is exact.
+expect_ledgers "$W/stable-before.txt" "$W/ledgers-before.txt" > "$W/stable-expected.txt"
+check "per-table row counts unchanged (bar $VOLATILE; _migration grown by the new migrations)" diff "$W/stable-expected.txt" "$W/stable-after.txt"
+diff "$W/stable-expected.txt" "$W/stable-after.txt" | head -20
 check "the same tables before and after" diff <(cut -d' ' -f1 "$W/counts-before.txt") <(cut -d' ' -f1 "$W/counts-after.txt")
 check "the fixed reads unchanged" diff "$W/reads-before.txt" "$W/reads-after.txt"
 diff "$W/reads-before.txt" "$W/reads-after.txt" | head -20
@@ -367,7 +416,9 @@ diff "$W/reads-before.txt" "$W/reads-after.txt" | head -20
 check "every org ledger has 0022_rebuild_vector_indexes" ledger_has 22 rebuild_vector_indexes
 check "every org defines the three HNSW indexes" vector_indexes
 wait_vector_builds 300; check "the rebuilt vector indexes finished building" test $? -eq 0
-check "kNN through the rebuilt memory and skill indexes returns the live rows" knn_live
+knn_live > "$W/knn-after.txt" 2>&1; rc=$?
+sed 's/^/   knn: /' "$W/knn-after.txt"
+check "kNN through the rebuilt memory and skill indexes returns the live rows" test "$rc" -eq 0
 check "no tenant.schema_behind" bash -c "! curl -sS -H 'Authorization: Bearer $TOKEN_A' -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"recall\",\"arguments\":{\"query\":\"algorithm\"}}}' '$BASE/mcp' | grep -q schema_behind"
 
 # ---- 9. idempotent -----------------------------------------------------------------------------
@@ -389,7 +440,8 @@ wait_healthy 300
 ledgers > "$W/ledgers-again.txt"
 check "no new ledger rows" diff "$W/ledgers-after.txt" "$W/ledgers-again.txt"
 counts > "$W/counts-again.txt"; stable "$W/counts-again.txt" > "$W/stable-again.txt"
-check "counts unchanged after the re-run" diff "$W/stable-before.txt" "$W/stable-again.txt"
+check "counts unchanged after the re-run" diff "$W/stable-expected.txt" "$W/stable-again.txt"
+diff "$W/stable-expected.txt" "$W/stable-again.txt" | head -20
 
 # ---- 10. rollback ------------------------------------------------------------------------------
 log "10. rollback to $FROM"
@@ -423,6 +475,7 @@ wait_healthy 300; check "$FROM healthy on the restored data" test $? -eq 0
 check "surrealdb is back on $OLDPIN" bash -c "[ \"\$(docker inspect -f '{{.Config.Image}}' \"\$(cd '$I' && docker compose ps -q surrealdb)\")\" = '$OLDPIN' ]"
 check "backend is back on $FROM" bash -c "[ \"\$(docker inspect -f '{{.Config.Image}}' \"\$(cd '$I' && docker compose ps -q backend)\")\" = ghcr.io/cashara-io/eunomia-backend:$FROM ]"
 wait_jobs 120
+wait_embeddings 600; check "no embedding backlog after the rollback" test $? -eq 0
 counts > "$W/counts-rollback.txt"; stable "$W/counts-rollback.txt" > "$W/stable-rollback.txt"
 check "counts after the rollback match the snapshot" diff "$W/stable-before.txt" "$W/stable-rollback.txt"
 diff "$W/stable-before.txt" "$W/stable-rollback.txt" | head -20
