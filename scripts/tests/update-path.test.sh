@@ -2,11 +2,17 @@
 # The real update path: an install on a released tag takes THIS checkout's build through the old
 # release's own updater, with data intact and every service healthy, then rolls back.
 #   bash scripts/tests/update-path.test.sh [from-tag]        (default v2.0.7; needs Docker and the tag)
+# A release that is not tagged or published yet can be the "from" release, built from a git ref:
+#   UPDATE_PATH_FROM_REF=origin/release/2.0.8 UPDATE_PATH_FROM_TAG=v2.0.8 bash scripts/tests/update-path.test.sh v2.0.8
+# builds that ref's images in a temp worktree, tags them eunomia-{backend,frontend,backup}:<from-tag>
+# in the local daemon only (never pushed), puts <from-tag> on that ref in the stand-in GitHub only
+# (never in this clone), and installs it through the same no-op pull shim the update uses.
 # Steps (docs/testing.md, "Update path"):
 #   1. build this checkout's images and tag them $FAKE, a local-only tag that sorts above every
 #      release and is never pushed;
 #   2. a stand-in GitHub: a local bare repo with the real tags up to <from-tag> plus $FAKE on HEAD;
-#   3. install <from-tag> from it with the PUBLISHED ghcr images (`docker compose pull`);
+#   3. install <from-tag> from it with the PUBLISHED ghcr images (`docker compose pull`), or with the
+#      images built from UPDATE_PATH_FROM_REF;
 #   4. seed real-shaped data through the API (two users in two orgs, vaults, entities of several
 #      kinds, facts, a superseded fact, a deleted fact, relations, skills, a document, a PAT);
 #   5. snapshot per-database, per-table row counts, the migration ledgers and a few reads;
@@ -22,6 +28,13 @@
 # $ROOT/update-path-artifacts on failure. UPDATE_PATH_KEEP=1 leaves the stack and temp dir up.
 set -uo pipefail
 FROM="${1:-v2.0.7}"
+FROM_REF="${UPDATE_PATH_FROM_REF:-}"   # build the "from" release from this ref instead of pulling it
+if [ -n "$FROM_REF" ]; then
+  FROM_TAG="${UPDATE_PATH_FROM_TAG:-${1:-}}"
+  [ -n "$FROM_TAG" ] || { echo "update-path: UPDATE_PATH_FROM_REF needs UPDATE_PATH_FROM_TAG or a from-tag argument" >&2; exit 2; }
+  [ -z "${1:-}" ] || [ "$1" = "$FROM_TAG" ] || { echo "update-path: from-tag $1 differs from UPDATE_PATH_FROM_TAG=$FROM_TAG" >&2; exit 2; }
+  FROM="$FROM_TAG"
+fi
 FAKE="${UPDATE_PATH_FAKE_TAG:-v9.9.9-ci}"
 P="${UPDATE_PATH_PROJECT:-eu-update}"
 BPORT="${UPDATE_PATH_BACKEND_PORT:-8251}" FPORT="${UPDATE_PATH_FRONTEND_PORT:-3251}"
@@ -38,6 +51,7 @@ LATEST_CONTROL="$(find "$ROOT/backend/migrations/control" -name '[0-9]*.surql' |
 # recall in the reads below fills):
 # compared for presence only, not for an exact count.
 VOLATILE="${UPDATE_PATH_VOLATILE:-job job_leader audit_event audit_log tool_usage session failure_capsule _migration_lock rate_limit embed_cache}"
+BUILT_FROM=0
 PASS=0; FAIL=0; T0=$SECONDS
 log() { printf '[update-path %4ss] %s\n' "$((SECONDS - T0))" "$*"; }
 check() { local d="$1"; shift; if "$@" >/dev/null 2>&1; then PASS=$((PASS + 1)); log "ok: $d"; else FAIL=$((FAIL + 1)); log "FAIL: $d"; fi; }
@@ -60,6 +74,13 @@ cleanup() {
   if [ "${UPDATE_PATH_KEEP:-}" = 1 ]; then log "kept: $I (project $P)"; else
     [ -d "$I" ] && dc --profile https down -v --remove-orphans >/dev/null 2>&1
     docker rm -f "$P-oldengine" >/dev/null 2>&1; docker volume rm "$P-oldengine-copy" >/dev/null 2>&1
+    [ -d "$W/from-src" ] && git -C "$ROOT" worktree remove --force "$W/from-src" >/dev/null 2>&1
+    git -C "$ROOT" worktree prune >/dev/null 2>&1
+    # locally built stand-ins for a release must not outlive the test (a later real install would
+    # take them for the published images)
+    if [ "$BUILT_FROM" = 1 ]; then
+      for s in backend frontend backup; do docker image rm "ghcr.io/cashara-io/eunomia-$s:$FROM" >/dev/null 2>&1; done
+    fi
     rm -rf "$W"
   fi
   log "update-path $FROM -> $FAKE: $PASS passed, $FAIL failed"
@@ -237,7 +258,13 @@ reads() { # reads FILE : a fixed set of reads, reduced to what must not change (
 
 BASE="http://127.0.0.1:$FPORT"
 log "from $FROM to $FAKE (this checkout, SurrealDB $PIN, tenant $LATEST_TENANT, control $LATEST_CONTROL), project $P, temp $W"
-git -C "$ROOT" cat-file -e "$FROM^{commit}" 2>/dev/null || die "tag $FROM is not in this clone (CI: actions/checkout with fetch-depth: 0)"
+if [ -n "$FROM_REF" ]; then
+  FROM_SHA="$(git -C "$ROOT" rev-parse -q --verify "$FROM_REF^{commit}")" || die "ref $FROM_REF is not in this clone (CI: fetch-depth: 0 and fetch the branch)"
+  log "   $FROM is built from $FROM_REF ($FROM_SHA), not pulled"
+  git -C "$ROOT" rev-parse -q --verify "refs/tags/$FROM" >/dev/null && log "   INFO: tag $FROM exists in this clone; this run ignores it and uses $FROM_REF"
+else
+  git -C "$ROOT" cat-file -e "$FROM^{commit}" 2>/dev/null || die "tag $FROM is not in this clone (CI: actions/checkout with fetch-depth: 0)"
+fi
 [ -z "$(docker ps -aq --filter "label=com.docker.compose.project=$P")" ] || die "compose project $P already has containers: docker compose -p $P down -v"
 
 # ---- 1. candidate images ----------------------------------------------------------------------
@@ -249,19 +276,52 @@ else
     || { tail -40 "$W/build.txt"; die "docker compose build failed"; }
 fi
 for s in backend frontend backup; do docker image inspect "ghcr.io/cashara-io/eunomia-$s:$FAKE" >/dev/null 2>&1 || die "no image eunomia-$s:$FAKE"; done
+if [ -n "$FROM_REF" ]; then
+  if [ "${UPDATE_PATH_SKIP_BUILD:-}" = 1 ] && docker image inspect "ghcr.io/cashara-io/eunomia-backend:$FROM" >/dev/null 2>&1; then
+    log "1. reusing the local $FROM images (UPDATE_PATH_SKIP_BUILD=1)"
+  else
+    log "1. building $FROM_REF as $FROM in a temp worktree (local images only, never pushed)"
+    git -C "$ROOT" worktree add -q --detach "$W/from-src" "$FROM_SHA" || die "could not check out $FROM_REF in a temp worktree"
+    BUILT_FROM=1
+    (cd "$W/from-src" && EUNOMIA_IMAGE_TAG="$FROM" docker compose --env-file /dev/null -p "$P-build-from" build backend frontend backup) > "$W/build-from.txt" 2>&1 \
+      || { tail -40 "$W/build-from.txt"; die "docker compose build of $FROM_REF failed"; }
+  fi
+  for s in backend frontend backup; do docker image inspect "ghcr.io/cashara-io/eunomia-$s:$FROM" >/dev/null 2>&1 || die "no image eunomia-$s:$FROM"; done
+fi
 
 # ---- 2. stand-in GitHub -----------------------------------------------------------------------
 log "2. local remote with the tags up to $FROM and $FAKE on HEAD"
 git init -q --bare "$W/remote.git"
 for t in $(git -C "$ROOT" for-each-ref --format='%(refname:short)' 'refs/tags/v*' | sort -V); do
+  # stop at the first tag above $FROM; with UPDATE_PATH_FROM_REF, $FROM itself comes from the ref below
+  [ "$t" != "$FROM" ] && [ "$(printf '%s\n%s\n' "$t" "$FROM" | sort -V | tail -1)" = "$t" ] && break
+  [ "$t" = "$FROM" ] && [ -n "$FROM_REF" ] && break
   git -C "$W/remote.git" fetch -q "$ROOT" "refs/tags/$t:refs/tags/$t" || die "could not copy tag $t"
   [ "$t" = "$FROM" ] && break
 done
+if [ -n "$FROM_REF" ]; then
+  # by name (a branch or remote-tracking ref), else by commit id (for a ref like HEAD~1); any failure dies
+  # shellcheck disable=SC2015
+  { git -C "$W/remote.git" fetch -q "$ROOT" "$FROM_REF" 2>/dev/null || git -C "$W/remote.git" fetch -q "$ROOT" "$FROM_SHA"; } \
+    && [ "$(git -C "$W/remote.git" rev-parse FETCH_HEAD)" = "$FROM_SHA" ] \
+    && git -C "$W/remote.git" update-ref "refs/tags/$FROM" "$FROM_SHA" || die "could not put $FROM on $FROM_REF in the stand-in"
+fi
 git -C "$W/remote.git" fetch -q "$ROOT" HEAD && git -C "$W/remote.git" update-ref "refs/tags/$FAKE" FETCH_HEAD || die "could not add $FAKE"
 [ "$(git -C "$W/remote.git" for-each-ref --format='%(refname:short)' 'refs/tags/v*' | sort -V | tail -1)" = "$FAKE" ] || die "$FAKE does not sort above $FROM"
 
+# The no-op pull: the update's `docker compose pull` (and, with UPDATE_PATH_FROM_REF, the install's)
+# would look on ghcr for images that exist only in this daemon. Every other docker call is real.
+mkdir -p "$W/shim"
+cat > "$W/shim/docker" <<EOF
+#!/usr/bin/env bash
+# only \`docker compose pull\` is faked: $FAKE (and a ref-built $FROM) exist in this daemon, not on ghcr
+if [ "\${1:-}" = compose ] && [ "\${2:-}" = pull ]; then echo "shim: docker \$*" >> "$W/shim.log"; exit 0; fi
+exec "$(command -v docker)" "\$@"
+EOF
+chmod +x "$W/shim/docker"
+
 # ---- 3. install the old release for real -------------------------------------------------------
-log "3. installing $FROM with its published images"
+if [ -n "$FROM_REF" ]; then log "3. installing $FROM with the images built from $FROM_REF"; else log "3. installing $FROM with its published images"; fi
 git clone -q --branch "$FROM" "file://$W/remote.git" "$I" 2>/dev/null || die "clone of $FROM failed"
 cat > "$I/.env" <<EOF
 COMPOSE_PROJECT_NAME=$P
@@ -277,12 +337,18 @@ EUNOMIA_SIGNUP_ORG=personal
 RATE_LIMIT_AUTH_PER_MIN=1000
 EOF
 mkdir -p "$I/update-status" && chmod 777 "$I/update-status"   # as the e2e job: the backend (uid 10001) writes here
-dc pull -q > "$W/pull.txt" 2>&1 || { cat "$W/pull.txt"; die "pulling the published $FROM images failed"; }
+if [ -n "$FROM_REF" ]; then
+  # through the shim: compose then pulls only what is missing (surrealdb, the updater's docker image)
+  PATH="$W/shim:$PATH" dc pull -q > "$W/pull.txt" 2>&1 || { cat "$W/pull.txt"; die "the shimmed pull failed"; }
+  rm -f "$W/shim.log"   # step 7 counts the update's pulls only
+else
+  dc pull -q > "$W/pull.txt" 2>&1 || { cat "$W/pull.txt"; die "pulling the published $FROM images failed"; }
+fi
 # `up -d` gives up when the backend is not healthy within compose's wait; retry it like the
 # updater's start_stack does (bounded), then wait for health ourselves.
 for try in 1 2 3; do dc up -d >> "$W/up-old.txt" 2>&1 && break; log "   up -d try $try failed, retrying"; sleep 10; done
 wait_healthy 300 || die "$FROM did not come up healthy"
-check "$FROM runs its published backend image" bash -c "[ \"\$(docker inspect -f '{{.Config.Image}}' \"\$(cd '$I' && docker compose ps -q backend)\")\" = ghcr.io/cashara-io/eunomia-backend:$FROM ]"
+check "$FROM runs its own backend image" bash -c "[ \"\$(docker inspect -f '{{.Config.Image}}' \"\$(cd '$I' && docker compose ps -q backend)\")\" = ghcr.io/cashara-io/eunomia-backend:$FROM ]"
 OLDPIN="$(docker inspect -f '{{.Config.Image}}' "$(dc ps -q surrealdb)")"
 log "   $FROM runs $OLDPIN"
 
@@ -367,14 +433,6 @@ log "7. Update now, then $FROM's scripts/auto-update.sh"
 dc stop updater >/dev/null 2>&1   # the host run below is THE updater for this test; no race with the service
 api -f -b "$JAR_A" -X POST "$BASE/api/update/request" >/dev/null || die "POST /api/update/request failed"
 check "the backend dropped the requested marker" test -f "$I/update-status/requested"
-mkdir -p "$W/shim"
-cat > "$W/shim/docker" <<EOF
-#!/usr/bin/env bash
-# only \`docker compose pull\` is faked: $FAKE exists in this daemon, not on ghcr
-if [ "\${1:-}" = compose ] && [ "\${2:-}" = pull ]; then echo "shim: docker \$*" >> "$W/shim.log"; exit 0; fi
-exec "$(command -v docker)" "\$@"
-EOF
-chmod +x "$W/shim/docker"
 t=$SECONDS
 EUNOMIA_DIR="$I" UP_RETRY_FOR=900 PATH="$W/shim:$PATH" bash "$I/scripts/auto-update.sh" > "$W/auto-update-1.txt" 2>&1; rc=$?
 log "   auto-update.sh exit $rc after $((SECONDS - t)) s"
