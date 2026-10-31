@@ -72,7 +72,7 @@ added by a write.
 
 ### `secret_provider`
 
-One row per provider kind, id `secret_provider:<kind>`.
+One row per provider kind, id `secret_provider:<org key>_<kind>` (the org in the key keeps two orgs' rows apart even in one shared database, the isolation suite's second layer).
 
 | Field | Type | Notes |
 |---|---|---|
@@ -90,13 +90,14 @@ After `authorize()` (scope and restriction checks) and vault-name resolution, be
 
 1. Walk the arguments for `$secret` objects. None: the call goes on unchanged (no extra query).
 2. Parse each. Malformed: the call fails with `secret.unavailable` (outcome `denied`).
-3. Look up `credential_ref` by reference in the caller's org. The ref is allowed only when all hold:
+3. Look up `credential_ref` by reference among the vaults the caller belongs to (`vault IN $vaults`,
+   the app-level isolation filter). The ref is allowed only when all hold:
    a row exists for it; the caller is an active member of `ref.vault`; a vault-restricted credential's
    vault equals `ref.vault`; the tool's name is in `allowed_tools` (or `*`); `allowed_actors` is empty or
    holds the caller's actor id. The first that fails: `secret.unavailable`, outcome `denied`. Several
    rows (the same reference bound to several vaults): the one whose vault is the call's `vault_id`, else
    the first the caller may use.
-4. Load `secret_provider:<ref.provider>`. Absent: `provider_error`. Decrypt the token
+4. Load the org's `secret_provider` row for `ref.provider`. Absent: `provider_error`. Decrypt the token
    (`Zeroizing<String>`).
 5. One `POST /v1/resolve` to the sidecar with every reference of the call for that provider.
 6. Any failure (sidecar down or slow, provider error, a reference not found): the whole call fails with

@@ -373,7 +373,13 @@ pub fn test_tool_takes_secrets(name: &str) -> bool {
 /// anything not in [`READ_ONLY_TOOLS`]. Returns `{"error": "unknown tool
 /// ..."}`` for a name that isn't registered, rather than a 404 -- the REST router is the one that turns an unknown
 /// name into a 404 before ever calling this.
-pub async fn call(app: &AppState, user: &User, name: &str, mut args: Value) -> AppResult<Value> {
+pub async fn call(app: &AppState, user: &User, name: &str, args: Value) -> AppResult<Value> {
+    // boxed: the body (scope checks, the secret broker, the tool, the audit rows) is a large future, and a
+    // caller that awaits it inline (a test, the chat loop) would carry all of it on its own stack
+    Box::pin(call_inner(app, user, name, args)).await
+}
+
+async fn call_inner(app: &AppState, user: &User, name: &str, mut args: Value) -> AppResult<Value> {
     let owner = &user.id;
     let Some(spec) = find(name) else {
         return Ok(AppError::coded(ErrorCode::ToolNotFound, format!("unknown tool {name}")).to_tool_value());
@@ -399,7 +405,7 @@ pub async fn call(app: &AppState, user: &User, name: &str, mut args: Value) -> A
         crate::secrets::broker::Prep::Ready(p) => Some(p),
         crate::secrets::broker::Prep::Failed(e) => {
             if !is_read_only(name) {
-                record_audit(state, owner, name, &args, "error", e.code.as_str()).await;
+                Box::pin(record_audit(state, owner, name, &args, "error", e.code.as_str())).await;
             }
             count_call(app, user, name, true, 0);
             tracing::info!(tool = name, code = e.code.as_str(), "tool call refused: secret unavailable");
@@ -414,11 +420,11 @@ pub async fn call(app: &AppState, user: &User, name: &str, mut args: Value) -> A
     let captured = args.clone();
     // Boxed: the match over every tool is a large future, past a 2 MB stack in debug builds.
     let mut result = match &prepared {
-        None => crate::error::TOOL_SOURCE.scope(Arc::clone(&source), Box::pin(run_tool(state, owner, name, &spec, args.clone(), &args))).instrument(span.clone()).await,
+        None => Box::pin(crate::error::TOOL_SOURCE.scope(Arc::clone(&source), run_tool(state, owner, name, &spec, args.clone(), &args)).instrument(span.clone())).await,
         Some(p) => {
-            let run = Box::pin(run_tool(state, owner, name, &spec, p.args.clone(), &args));
+            let run = run_tool(state, owner, name, &spec, p.args.clone(), &args);
             let scoped = crate::redact::with_exact(Arc::clone(&p.values), crate::error::TOOL_SOURCE.scope(Arc::clone(&source), run));
-            Box::pin(scoped).instrument(span.clone()).await
+            Box::pin(scoped.instrument(span.clone())).await
         }
     };
     if let Some(p) = &prepared {

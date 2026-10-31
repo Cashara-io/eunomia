@@ -262,7 +262,7 @@ fn ref_id(id: &str) -> AppResult<RecordId> {
 )]
 async fn list_refs(State(state): State<AppState>, user: User) -> AppResult<Json<Vec<RefOut>>> {
     let org = owner_org(&state, &user).await?;
-    Ok(Json(secrets::refs(&org.db).await?.into_iter().map(RefOut::from).collect()))
+    Ok(Json(secrets::refs(&org.db, &user.id).await?.into_iter().map(RefOut::from).collect()))
 }
 
 #[utoipa::path(
@@ -300,7 +300,7 @@ async fn update_ref(State(state): State<AppState>, user: User, Path(id): Path<St
     let org = owner_org(&state, &user).await?;
     let id = ref_id(&id)?;
     let f = fields(&org, &user, &body).await?;
-    let row = secrets::update_ref(&org.db, &id, f).await?.ok_or_else(|| AppError::not_found("Reference not found."))?;
+    let row = secrets::update_ref(&org.db, &user.id, &id, f).await?.ok_or_else(|| AppError::not_found("Reference not found."))?;
     audit::record_as_caller(&state.control, &user.id, "secret.ref.update", &row.id.to_string(), "ok").await;
     Ok(Json(row.into()))
 }
@@ -318,7 +318,7 @@ async fn update_ref(State(state): State<AppState>, user: User, Path(id): Path<St
 async fn delete_ref(State(state): State<AppState>, user: User, Path(id): Path<String>) -> AppResult<Json<OkBody>> {
     let org = owner_org(&state, &user).await?;
     let id = ref_id(&id)?;
-    if !secrets::delete_ref(&org.db, &id).await? {
+    if !secrets::delete_ref(&org.db, &user.id, &id).await? {
         return Err(AppError::not_found("Reference not found."));
     }
     audit::record_as_caller(&state.control, &user.id, "secret.ref.delete", &id.to_string(), "ok").await;

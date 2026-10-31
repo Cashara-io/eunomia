@@ -361,7 +361,8 @@ async fn allowed_actors_and_vault_restricted_tokens() {
     let restricted = models::token(&w, Some(&team)).await;
     let out = models::invoke(&w, &restricted.0, json!({"vault_id": team, "text": {"$secret": REF}})).await;
     assert_eq!(out["code"], "secret.unavailable", "{out}");
-    assert!(out["error"].as_str().unwrap().contains("restricted to another vault"), "{out}");
+    // it cannot even see that reference: a restricted token reads only its own vault
+    assert!(out["error"].as_str().unwrap().contains("(denied: "), "{out}");
     let channel = resolutions(&w).await.pop().unwrap();
     let d: Value = serde_json::from_str(channel["detail"].as_str().unwrap()).unwrap();
     assert_eq!(d["channel"], "rest");
