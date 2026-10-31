@@ -35,6 +35,8 @@ const fake = {
   hang: false,
   /** Tokens the server refuses for vault reads (lost access), though they still exist. */
   blind: new Set<string>(),
+  /** The newest seq per vault when retention removed rows (the server's counter outlives them). */
+  head: {} as Record<string, number>,
   /** A server from before `skill_list` (2.0.x): the tool route answers 404 tool.not_found. */
   noSkillList: false,
   n: 0,
@@ -57,6 +59,7 @@ function reset() {
   fake.hang = false;
   fake.blind = new Set();
   fake.noSkillList = false;
+  fake.head = {};
 }
 
 function handle(method: string, path: string, body: any, headers: IncomingMessage["headers"]): [number, unknown, Record<string, string>?] {
@@ -105,7 +108,15 @@ function handle(method: string, path: string, body: any, headers: IncomingMessag
   if (log) {
     const vault = decodeURIComponent(log[1]);
     if (restricted && vault !== restricted) return deny(`this token is restricted to vault ${restricted}`);
-    const page = fake.changes.filter((c) => c.vault === vault && c.seq > +log[2]).slice(0, +log[3]);
+    const after = +log[2];
+    const rows = fake.changes.filter((c) => c.vault === vault);
+    const page = rows.filter((c) => c.seq > after).slice(0, +log[3]);
+    // as the server: rows have no gaps, so a cursor whose next rows are gone, or one past the newest
+    // change (fake.head: what the counter says after rows were pruned), must resync
+    const head = Math.max(0, fake.head[vault] ?? 0, ...rows.map((c) => c.seq));
+    if (after !== 0 && page[0]?.seq !== after + 1 && (after > head || (page.length ? page[0].seq > after + 1 : head > after))) {
+      return [410, { code: "changes.resync", detail: `changes after ${after} are no longer kept; re-read what you need and start again from after=0` }];
+    }
     return [200, { changes: page.map(({ vault: _v, ...c }) => c), next: page.at(-1)?.seq ?? +log[2] }];
   }
   const tool = /^\/api\/tools\/(\w+)$/.exec(path)?.[1];
@@ -775,6 +786,33 @@ describe("watch", () => {
     assert.match(lines[0], /after change 2 \(polling/);
     assert.deepEqual(cursor(), { vault, after: 3 });
     assert.equal(fake.ws.length, 0);
+  });
+
+  it("resyncs from the oldest kept change when the server no longer keeps its cursor's next changes", async () => {
+    await init(opts({ vault: "Acme" }));
+    const vault = vaultId("Acme");
+    fake.changes = [change(1, vault), change(2, vault)];
+    const run = async (until_: number) => {
+      lines = [];
+      const stop = new AbortController();
+      const done = watch({ cwd: repo, env: env(), log: (l) => lines.push(l), signal: stop.signal, WebSocket: null, pollMs: 20 });
+      await until(() => printed().includes(until_));
+      stop.abort();
+      assert.equal(await done, 0);
+      return printed();
+    };
+    assert.deepEqual(await run(2), [1, 2]);
+    // retention removed 1 to 5 while the watch was off: the cursor (2) is below what is kept
+    fake.changes = [change(6, vault), change(7, vault)];
+    assert.deepEqual(await run(7), [6, 7]);
+    assert.ok(lines.some((l) => /can no longer list the changes after #2/.test(l)), lines.join("\n"));
+    assert.ok(lines.some((l) => /Changes in between are not shown/.test(l)));
+    assert.deepEqual(cursor(), { vault, after: 7 });
+    // the server was restored from a backup: its newest change (3) is below the cursor (7)
+    fake.changes = [change(1, vault), change(2, vault), change(3, vault)];
+    assert.deepEqual(await run(3), [1, 2, 3]);
+    assert.ok(lines.some((l) => /after #7/.test(l)), lines.join("\n"));
+    assert.deepEqual(cursor(), { vault, after: 3 });
   });
 
   it("a refused token stops the watch with one clear message", async () => {

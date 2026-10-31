@@ -140,7 +140,7 @@ this vault) cannot read any other vault's log. A live socket checks the credenti
 every 30 seconds, whether or not anything changed, and closes (code 1008) once either is gone. Every
 5 seconds it also sends a ping and reads any rows it has not sent from the database. Live rows come
 from the server the socket is connected to; with several backend replicas, rows written through
-another one arrive within those 5 seconds.
+another one arrive within those 5 seconds (see [several replicas](#several-backend-replicas)).
 
 Not logged:
 
@@ -151,7 +151,40 @@ Not logged:
 
 The row is written right after the write it records, in its own transaction, and retried a few times.
 A crash or a database outage in that moment can lose the row, never a `seq` number: the log is at
-most once. The log is kept for the life of the vault.
+most once.
+
+### Retention
+
+The log does not grow forever. About once an hour, the backend that leads the scheduler trims each
+vault's log to:
+
+- the last `CHANGE_LOG_RETENTION_DAYS` days (default `90`; `0` keeps rows whatever their age), and
+- at most the newest `CHANGE_LOG_MAX_ROWS` rows (default `100000`; `0` means no cap).
+
+Both are read from the backend's environment at each run, and an unset or unreadable value takes the
+default, so an install that sets neither gets both limits. Rows are deleted 5,000 at a time. The
+per-vault counter stays, so `seq` never restarts and a client never sees a number twice.
+
+A client whose cursor falls outside what is kept gets the error code `changes.resync` (HTTP 410,
+[errors](errors.md)) instead of a page that silently skips rows:
+
+- the changes right after its cursor were trimmed (it was away longer than the window, or behind by
+  more than the row cap), or
+- its cursor is past the newest change, because the database was restored from a backup (see below).
+
+`after=0` always works and reads from the oldest row kept. A WebSocket refuses such a cursor with 410
+before it upgrades, and closes with code 4410 if a live follower ever falls behind what is kept. On
+`changes.resync`, `create-eunomia watch` says so, notes that the changes in between are not shown, and
+reads on from the oldest kept change. Another client should re-read the items it cares about, then
+continue from `after=0`.
+
+### Several backend replicas
+
+Live rows travel over an in-process broadcast, so a socket hears at once only the writes made through
+the backend it is connected to. Every socket also reads the database every 5 seconds, so writes through
+another replica arrive within about 5 seconds, in order and without gaps: polling is the fallback, and
+nothing is lost. A shared bus (SurrealDB `LIVE SELECT`, or a pub/sub service) would make them arrive at
+once; it is not built. Whether it is needed, and which one, is an open question.
 
 ### Backups and restores
 
@@ -168,8 +201,8 @@ backup taken before the update that added them (the `pre-update` backup the upda
   then has an empty log whose seqs start from 1.
 
 Any restore winds a vault's log back to what the backup held, so a client's cursor can be above the
-restored log's last seq. Delete `.eunomia/cache/watch.json` (or read from `after=0`) after a restore
-to start that client again from the restored log.
+restored log's last seq. The server answers such a cursor with `changes.resync` (see
+[retention](#retention)), and `create-eunomia watch` starts again from the restored log by itself.
 
 ## Coming next
 
