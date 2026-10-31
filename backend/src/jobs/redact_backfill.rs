@@ -4,8 +4,9 @@
 //! back only the rows it changed. Progress lives in `redact_backfill:v<DETECTOR_VERSION>`: a crashed run
 //! resumes at its cursor, a finished one is never repeated, and a new detector version runs it again.
 //!
-//! Rewrites leave `version` and `updated_at` alone, so a client cache or a change feed keeps the old text
-//! until it refetches the row.
+//! Rewrites leave `version` and `updated_at` alone, but each rewritten memory or skill gets an `updated`
+//! row in its vault's change log (migration 0023, actor `system`), so a client following the vault fetches
+//! the redacted text. Change rows hold no content, so the change log itself has nothing to redact.
 //!
 //! Not covered (not redacted on write either): uploaded documents, synced connector records, chat
 //! messages, entity names, aliases and summaries, relation labels (`relates_to.label`, `linked_to.rel`),
@@ -17,6 +18,7 @@ use surrealdb::types::{Datetime, RecordId, SurrealValue};
 
 use crate::audit::{self, Event};
 use crate::authz::Actor;
+use crate::changes;
 use crate::error::AppResult;
 use crate::redact::{self, DETECTOR_VERSION};
 use crate::rid::RecordIdExt;
@@ -159,6 +161,33 @@ impl Stale {
     }
 }
 
+/// One batch's rewritten memories and skills, by vault, for the change log (migration 0023): a client
+/// following a vault (`create-eunomia watch`, a synced skill on disk) is told the item changed and fetches
+/// the redacted text. A change row holds no content, so it carries nothing to redact itself. Audit rows
+/// are not vault items and are not logged.
+#[derive(Default)]
+struct Changed(Vec<(RecordId, Vec<ChangeRow>)>);
+
+/// (op, kind, item), as [`changes::record_many`] takes them.
+type ChangeRow = (&'static str, &'static str, RecordId);
+
+impl Changed {
+    fn add(&mut self, vault: &RecordId, kind: &'static str, item: &RecordId) {
+        let entry = (changes::UPDATED, kind, item.clone());
+        match self.0.iter_mut().find(|(v, _)| v == vault) {
+            Some((_, items)) => items.push(entry),
+            None => self.0.push((vault.clone(), vec![entry])),
+        }
+    }
+
+    /// As the `system` actor (a job has no caller). Never fails the batch: the rewrite already committed.
+    async fn record(self, state: &OrgState) {
+        for (vault, items) in self.0 {
+            changes::record_many(&state.db, &vault, items).await;
+        }
+    }
+}
+
 /// (last id read, rows changed); no last id once the table is exhausted.
 type Batch = (Option<RecordId>, i64);
 
@@ -172,11 +201,12 @@ async fn memory_batch(state: &OrgState, cursor: &Option<RecordId>) -> AppResult<
     struct Row {
         id: RecordId,
         owner: RecordId,
+        vault: RecordId,
         text: String,
     }
     let stmt = batch_stmt(&q::MEMORY_FIRST, &q::MEMORY_AFTER, cursor);
     let rows: Vec<Row> = stmt.on(&state.db).bind(("cursor", cursor.clone())).bind(("limit", BATCH)).await?.check()?.take(0)?;
-    let (mut changed, mut stale) = (0, Stale::default());
+    let (mut changed, mut stale, mut logged) = (0, Stale::default(), Changed::default());
     for row in &rows {
         let text = redact::redact(&row.text, &mut Vec::new());
         if text == row.text {
@@ -186,9 +216,11 @@ async fn memory_batch(state: &OrgState, cursor: &Option<RecordId>) -> AppResult<
         if wrote(with_retry(set).await?)? {
             changed += 1;
             stale.add(&row.owner, row.text.clone());
+            logged.add(&row.vault, changes::MEMORY, &row.id);
         }
     }
     stale.forget(state).await;
+    logged.record(state).await;
     Ok((rows.last().map(|r| r.id.clone()), changed))
 }
 
@@ -197,13 +229,14 @@ async fn skill_batch(state: &OrgState, cursor: &Option<RecordId>) -> AppResult<B
     struct Row {
         id: RecordId,
         owner: RecordId,
+        vault: RecordId,
         name: String,
         description: String,
         body: String,
     }
     let stmt = batch_stmt(&q::SKILL_FIRST, &q::SKILL_AFTER, cursor);
     let rows: Vec<Row> = stmt.on(&state.db).bind(("cursor", cursor.clone())).bind(("limit", BATCH)).await?.check()?.take(0)?;
-    let (mut changed, mut stale) = (0, Stale::default());
+    let (mut changed, mut stale, mut logged) = (0, Stale::default(), Changed::default());
     for row in &rows {
         let description = redact::redact(&row.description, &mut Vec::new());
         let body = redact::redact(&row.body, &mut Vec::new());
@@ -227,6 +260,7 @@ async fn skill_batch(state: &OrgState, cursor: &Option<RecordId>) -> AppResult<B
             continue;
         }
         changed += 1;
+        logged.add(&row.vault, changes::SKILL, &row.id);
         // only name + description are embedded, so a body-only change keeps its vector. A new description
         // drops it (`skill_text_changed`) and the embed job's skill backlog makes a new one.
         if new_description {
@@ -234,6 +268,7 @@ async fn skill_batch(state: &OrgState, cursor: &Option<RecordId>) -> AppResult<B
         }
     }
     stale.forget(state).await;
+    logged.record(state).await;
     Ok((rows.last().map(|r| r.id.clone()), changed))
 }
 

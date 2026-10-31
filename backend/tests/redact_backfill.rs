@@ -115,6 +115,10 @@ async fn backfill_redacts_stored_secrets_once_and_resumes() {
     let summary = json!({"subject_name": "Alice", "text": format!("note\n{JWT}")}).to_string();
     sql(&app, "UPDATE audit_log SET args_summary = $s WHERE tool_name = 'skill_save'", json!({"s": summary})).await;
 
+    // the change log (migration 0023) before the backfill: the seed logged creates, no updates
+    let system_changes = || sql(&app, "SELECT kind, op, item FROM change WHERE actor = 'system' AND op = 'updated' ORDER BY seq", json!({}));
+    assert_eq!(system_changes().await, Vec::<Value>::new());
+
     // "crash" after one batch: the memories are done, the rest still waits at the saved cursor
     let cached_before = cached().await.len();
     let p = run(&org, Some(1)).await;
@@ -164,6 +168,18 @@ async fn backfill_redacts_stored_secrets_once_and_resumes() {
     let details: Vec<String> = res.take(0).unwrap();
     assert_eq!(details, vec!["version=1 memory=4 skill=1 audit_log=1".to_string()]);
 
+    // each rewritten memory and skill is in its vault's change log as `updated` by `system`, so a client
+    // following the vault fetches the redacted text; audit rows are not vault items. No content in a row.
+    let logged = system_changes().await;
+    let kinds: Vec<(&str, &str)> = logged.iter().map(|c| (c["kind"].as_str().unwrap(), c["op"].as_str().unwrap())).collect();
+    assert_eq!(kinds, [vec![("memory", "updated"); 4], vec![("skill", "updated")]].concat(), "{logged:?}");
+    let rewritten = sql(&app, "SELECT VALUE <string> id FROM memory WHERE text CONTAINS '[redacted: '", json!({})).await;
+    for id in &rewritten {
+        assert!(logged.iter().any(|c| &c["item"] == id), "{id} not in the change log: {logged:?}");
+    }
+    let rows = serde_json::to_string(&sql(&app, "SELECT * FROM change", json!({})).await).unwrap();
+    assert!(!rows.contains("redacted") && !rows.contains(&github()), "a change row carries no text: {rows}");
+
     // a second run (a redelivered job) changes nothing, and the leader stops queueing it
     let before = sql(&app, "SELECT id, text, version, updated_at FROM memory ORDER BY id", json!({})).await;
     let again = run(&org, None).await;
@@ -173,6 +189,7 @@ async fn backfill_redacts_stored_secrets_once_and_resumes() {
     assert_eq!(jobs().await, 0, "a finished org is not queued again");
     let mut res = app.control().test_raw().query("SELECT count() AS n FROM audit_event WHERE action = 'redact.backfill' GROUP ALL").await.unwrap();
     assert_eq!(res.take::<Option<i64>>("n").unwrap(), Some(1));
+    assert_eq!(system_changes().await.len(), 5, "a second run logs no change");
 
     // the embed job (queued by the leader, run by a worker) makes the dropped vectors again
     tick(&app).await;
@@ -191,4 +208,18 @@ async fn backfill_redacts_stored_secrets_once_and_resumes() {
     w.await.unwrap();
     assert_eq!(missing().await, Vec::<Value>::new(), "memories embedded again");
     assert_eq!(skill_missing().await, Vec::<Value>::new(), "the skill embedded again");
+}
+
+/// An org whose schema is still below 0024 (no marker table yet, served at N-1 during a rolling upgrade)
+/// is skipped: on SurrealDB 3.3.5 reading an undefined table is an error, which the leader takes as
+/// "not yet", so no job is queued until the org's migration job has defined the table.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_org_before_the_marker_table_is_not_queued() {
+    let app = TestApp::new().await;
+    let org = app.state.org(&app.user.org).await.unwrap();
+    sql(&app, "REMOVE TABLE redact_backfill", json!({})).await;
+    assert!(Box::pin(redact_backfill::done(&org)).await.is_err(), "an undefined table is an error, not an empty read");
+    Box::pin(leader::reconcile_redact_backfill(&org, 1)).await;
+    let mut res = app.control().test_raw().query("SELECT count() AS n FROM job WHERE kind = $k GROUP ALL").bind(("k", kind::REDACT_BACKFILL)).await.unwrap();
+    assert_eq!(res.take::<Option<i64>>("n").unwrap().unwrap_or(0), 0, "not queued before the migration");
 }
