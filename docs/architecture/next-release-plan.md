@@ -1,6 +1,6 @@
 # Eunomia next release plan
 
-Status: proposed 2026-10-31; decisions D1, D2, D5, D7, D9, D10 recorded 2026-10-31 (section 10). Phase 1 is in progress as the 2.0.8 patch release (branch `release/2.0.8`); nothing else is built yet. Base: `main` at 9a0820b (release 2.0.7, tag `v2.0.7`). Owner decisions that bind this plan: **SurrealDB stays the primary database** and **Rust stays** (both from [foundation-plan.md](foundation-plan.md)); the phase order below was agreed with Avi; **nothing merges without Avi's OK**. Owner decisions, made and open, are collected in section 10; open ones are marked **DECISION FOR AVI** where they come up, and decided ones say **Decided 2026-10-31**.
+Status: proposed 2026-10-31; decisions D1, D2, D5, D7, D9, D10 recorded 2026-10-31 and D3 on 2026-11-01 (section 10). Phase 1 is in progress as the 2.0.8 patch release (branch `release/2.0.8`); nothing else is built yet. Base: `main` at 9a0820b (release 2.0.7, tag `v2.0.7`). Owner decisions that bind this plan: **SurrealDB stays the primary database** and **Rust stays** (both from [foundation-plan.md](foundation-plan.md)); the phase order below was agreed with Avi; **nothing merges without Avi's OK**. Owner decisions, made and open, are collected in section 10; open ones are marked **DECISION FOR AVI** where they come up, and decided ones say **Decided 2026-10-31**.
 
 How this was made: one agent read the repo at 9a0820b (docs, CI, compose files, updater, migration runner, tests) and the open PRs (#109, #111, #112, #114, #115) and merged #102 with read-only `gh`. The external SurrealDB facts (3.3.5, 4.0.0-beta.1, the licence) were checked by the lead (the supervising agent) on 2026-10-31 against the surrealdb.com release notes and licence page, GitHub releases, crates.io and Docker Hub (the `v3.3.5` tag exists). The four workstreams and the phase order come from Avi. Every repo claim cites a path. Where something is inferred rather than read, it says "inferred". Workstream 5 (simulation / what-if, Phase 4) was added by Avi on 2026-10-31, with its research in [specs/simulation-research.md](specs/simulation-research.md). Facts that could not be confirmed are listed in section 11.
 
@@ -8,9 +8,9 @@ How this was made: one agent read the repo at 9a0820b (docs, CI, compose files, 
 
 | # | Workstream | Phase | Size | Rough PRs | Touches migrations |
 |---|---|---|---|---|---|
-| 1 | SurrealDB 3.3.1 to 3.3.5, plus the update-path gate that every later PR uses; ships alone as patch release 2.0.8 | 1 | M | 4 | maybe one (index rebuild, only if the 3.3.x notes ask for it) |
+| 1 | SurrealDB 3.3.1 to 3.3.5, plus the update-path gate that every later PR uses; ships alone as patch release 2.0.8 | 1 | M | 4 | yes (tenant 0022, HNSW index rebuild, decided 2026-11-01) |
 | 2 | Eunomia Projects: finish steps 1 and 2 (#112, #114), then the remaining steps | 2 | M | 5 (2 open) | yes (#114 adds a tenant migration) |
-| 3 | Enterprise password managers: 1Password and Bitwarden Secrets Manager through a credential broker and a provider sidecar | 2 | L | 4 (plus #111, #115 first) | yes (#115, plus broker tables) |
+| 3 | Enterprise password managers: 1Password and Bitwarden Secrets Manager through a credential broker and a provider sidecar | 2 | L | 4 (plus #111, #115) | yes (#115, plus broker tables) |
 | 4 | Ontology foundation: SurrealDB object layer, self-hosted ClickHouse events with an in-app control panel, OpenTelemetry Collector, Square POS connector, data and schema blast radius (plan, apply, rollback), RDF and OWL import and export | 3 | L (upper end) | 15 | yes |
 | 5 | Simulation / what-if: five engines (propagation, Markov, DES, ABM, SD) inside Monte Carlo runs, baseline vs A/B scenarios, an allow-listed generative UI; on assumptions, not trained models (predictions are a later release) | 4 | L (upper end); XL with wave 2 | 16 (S16 later) | yes (one tenant migration plus a ClickHouse table, S1) |
 
@@ -222,16 +222,17 @@ Initial queue for this release, in proposed merge order:
 
 | Set | Number | Name | Lane | PR |
 |---|---|---|---|---|
-| tenant | 0022 | `redact_backfill` | L3 | #115 |
+| tenant | 0022 | `rebuild_vector_indexes` (HNSW rebuild on `memory`, `skill`, `cache_record` after 3.3.5) | L1 | #119 (release 2.0.8) |
 | tenant | 0023 | `changes` | L2 | #114 (renumber from 0022) |
-| tenant | 0024 | `credential_refs` (references, plus the encrypted provider settings, see 6.3) | L3 | broker core |
-| tenant | 0025 | `ontology_core` | L4 | ontology schema |
-| tenant | (0026) | `ontology_change` (blast radius scenarios, change records, backups) | L4 | O10, O12; only if not folded into 0025 (7.8) |
+| tenant | 0024 | `redact_backfill` | L3 | #115 (renumber from 0022) |
+| tenant | 0025 | `credential_refs` (references, plus the encrypted provider settings, see 6.3) | L3 | broker core |
+| tenant | 0026 | `ontology_core` | L4 | ontology schema |
+| tenant | (0027) | `ontology_change` (blast radius scenarios, change records, backups) | L4 | O10, O12; only if not folded into 0026 (7.8) |
 | tenant | (next free) | `simulation_core` (`assumption`, `edge_rule`, `state_model`, `scenario_run`, and the shared `scenario` fields, D15) | L5 | S1 (8.10) |
 
 The control `0007_secret_providers` line from the first draft is gone: under D5 the provider token is stored with the org's connector credentials, not in control (6.3).
 
-**DECISION FOR AVI:** #115 or #114 first. The order above puts the redaction backfill first because the broker depends on it and it fixes plaintext secrets already stored; #114 then only renumbers one file, its `migrate.rs` entry and the snapshot.
+**Decided 2026-11-01 (D3):** #114 first, then #115, reversing this plan's first proposal. The HNSW index rebuild in #119 (4.2 step 2) takes 0022 because 2.0.8 merges first, so #114 renumbers to 0023 and #115 to 0024, and the broker and ontology numbers move up one. The live queue is `backend/migrations/QUEUE.md` (added in #119).
 
 ## 4. Workstream 1: SurrealDB upgrade (Phase 1)
 
@@ -259,7 +260,7 @@ Every pin to move together (from a grep of 9a0820b):
 ### 4.2 Work
 
 1. **Re-verify the hardened flags on 3.3.5.** The `--deny-all` plus `--allow-*` set and "`--deny-guests` is a startup error with `--deny-all`" were verified on 3.3.1 (`docker-compose.yml` comments, foundation-plan.md). Repeat on 3.3.5, including the `--allow-funcs` list (`docs/architecture/surreal-functions.md`) and `--allow-experimental=files` for document buckets.
-2. **Read the 3.3.2 to 3.3.5 release notes for index rebuild instructions.** The 3.3.4 fix is in indexed scans. If the notes say existing indexes may hold wrong entries, add a tenant migration that rebuilds them (`REBUILD INDEX`), which then takes the migration lock. Not known yet.
+2. **Read the 3.3.2 to 3.3.5 release notes for index rebuild instructions.** The 3.3.4 and 3.3.5 notes fix HNSW graphs that deletes could leave with removed points. **Decided 2026-11-01:** rebuild the three HNSW indexes (`memory`, `skill`, `cache_record`) in tenant migration `0022_rebuild_vector_indexes` in the 2.0.8 PR, proven by `update-path`. Also decided: the legacy one-time move keeps skipping invalid rows on 3.3.4+ (where `INSERT ... IGNORE` now raises non-conflict errors), with the skipped rows counted and logged.
 3. **Re-run the upgrade suite with `NEW_IMG=v3.3.5`.** An install that was moved from 2.x lands straight on 3.3.5.
 4. **Run Spike S2's recall goldens and `recall-eval.spec.ts`** on 3.3.5: the floors must hold (the 3.3.4 change touches comparisons that recall's filters use, inferred).
 
@@ -298,7 +299,7 @@ The 2.0.x updater only knows the 3.x hook, so a 4.x release needs a compose-leve
 |---|---|---|---|---|
 | P1.1 #109 isready over `ws://`, run on 3.3.5 | L1 | none | no | in progress: carried in the 2.0.8 PR as a cherry-pick (`release/2.0.8` has it as its first commit) |
 | P1.2 `update-path` job, `scripts/tests/update-path.test.sh`, `scripts/ci/seed-install.sh`, pin check, `workflow_dispatch`, `.github/pull_request_template.md` | L1 with lead | none | no | in progress: lands in the 2.0.8 PR together with P1.3 (the pin check and the update-path test from 2.0.7) |
-| P1.3 Pin 3.3.5 everywhere (table in 4.1), flags re-verified, recall floors | L1 | P1.1, P1.2 | only if 4.2 step 2 says so | in progress: the pin bump lands in the 2.0.8 PR with P1.2 |
+| P1.3 Pin 3.3.5 everywhere (table in 4.1), flags re-verified, recall floors, HNSW rebuild | L1 | P1.1, P1.2 | tenant 0022 (`rebuild_vector_indexes`, decided 2026-11-01) | in progress: the pin bump lands in the 2.0.8 PR with P1.2 |
 | P1.4 Pre-update volume copy and version record in `surreal-upgrade` (4.3), rollback drill | L1 | P1.2 | no | not started |
 | Release `release/2.0.8` and RC matrix (2.3) | Lead | all above | no | in progress |
 
@@ -313,7 +314,7 @@ A project ties a repo to one vault: `.eunomia/eunomia.toml` names the server and
 | Step | State | What |
 |---|---|---|
 | 1 `create-eunomia` | #112 open, base `main` | `cli/create-eunomia` (Node 18+, no runtime deps): `npm create eunomia` init (sign in, pick or create a vault, mint a vault-scoped `memory:write` token stored in `~/.config/eunomia/projects/`), `sync` of skills via `skill_save`. CI: the `scripts` job builds and tests it on Node 18. No migration |
-| 2 change log and `watch` | #114 open, stacks on #112 | tenant migration `0022_changes` (to renumber, 3.2): numbered per-vault change rows without content, `GET /api/vaults/{vault}/changes`, a WebSocket, the `changes_since` MCP tool, `create-eunomia watch` |
+| 2 change log and `watch` | #114 open, stacks on #112 | tenant migration `0022_changes` (renumbered to `0023_changes`, 3.2): numbered per-vault change rows without content, `GET /api/vaults/{vault}/changes`, a WebSocket, the `changes_since` MCP tool, `create-eunomia watch` |
 | 3 publish | not started | publish `create-eunomia` to npm (#112: "can only be tried after publishing"); a `release.yml` job with npm provenance, gated on Avi's OK. Blocked first on two things for Avi: `create-eunomia` is **not registered on npm yet** (recorded 2026-10-31), so Avi registers the package name and chooses the npm owner before this step can start (open item, D7) |
 | 4 `skill_list` | not started | a server `skill_list` tool, so sync's "only on the server" list stops being a best-effort 50-result search (#112) |
 | 5 change log operations | not started | retention or pruning (#114: "never pruned"), and a shared bus for several backend replicas (#114: in-process broadcast; other replicas arrive within 5 seconds by polling) |
@@ -352,7 +353,7 @@ How the providers are reached (**decided 2026-10-31, D5**): the provider client 
 
 - **References.** `op://<vault>/<item>/<field>` (1Password's own format). For Bitwarden, a Eunomia-defined `bws://<secret-id>` (inferred: Bitwarden addresses secrets by id; the scheme is ours). A reference is a string in a tool argument or a connector setting, for example `{"$secret": "op://Ops/Square/access_token"}`.
 - **What is stored.** Tenant table `credential_ref`: reference, provider, vault, allowed tools, allowed actors, created by, created at. No value, ever. The provider's own bootstrap secret (1Password Connect token or service account token, Bitwarden machine account token) is the one secret Eunomia must hold.
-- **Where the bootstrap token lives (decided 2026-10-31, D5).** An admin enters it in the app, under extensions and connectors in Settings, not in `.env` and not as a Docker secret. It is stored **encrypted exactly like connector credentials**: AES-256-GCM under `ENCRYPTION_KEY` with the `enc:v1:` marker (`backend/src/connectors/crypto.rs`), in the org's database next to its connector credentials (a provider settings table in tenant `0024_credential_refs`, inferred; the B1 spec fixes the table). Write-only in the UI: it is never read back to the browser, only replaced or removed.
+- **Where the bootstrap token lives (decided 2026-10-31, D5).** An admin enters it in the app, under extensions and connectors in Settings, not in `.env` and not as a Docker secret. It is stored **encrypted exactly like connector credentials**: AES-256-GCM under `ENCRYPTION_KEY` with the `enc:v1:` marker (`backend/src/connectors/crypto.rs`), in the org's database next to its connector credentials (a provider settings table in tenant `0025_credential_refs`, inferred; the B1 spec fixes the table). Write-only in the UI: it is never read back to the browser, only replaced or removed.
 - **Handing the token to the sidecar.** The backend decrypts the token and passes it to the sidecar either **per request** (recommended: the sidecar stays stateless and a token change applies at once) or **at configure time**, held only in the sidecar's memory and re-sent after a sidecar restart. Either way **the sidecar holds no plaintext at rest**: no volume, no config file, no token in its environment or logs. The sidecar publishes no port; it is reachable only on the internal compose network, and it accepts calls only from the backend (a shared internal key or network-level restriction, to settle in the B3 spec, inferred).
 - **Resolution.** In `registry::call`, after `authorize()` and before the tool runs: find `$secret` references in the arguments, check the reference is allowed for this vault, tool and actor, resolve it through the sidecar, and pass the value only to the outbound request. The value never enters the arguments that are summarised, audited, captured in capsules or logged. Zeroise after use. A short in-memory cache (seconds, per process) is optional and off by default.
 - **Audit of every resolution.** Who (user, token or OAuth client), which reference, which tool, which channel and MCP session, outcome (`ok`, `denied`, `not_found`, `provider_error`), trace id, time; **never the value**. Proposed as a new append-only kind in `audit_event` (`secret.resolve`), plus a per-reference count in Settings next to the tool-usage view. Lives in the same place as #102's usage report so admins see one audit surface.
@@ -376,9 +377,9 @@ Avi named two competitors Eunomia is trying to beat: **Island** (island.io), an 
 | PR | Lane | Depends on | Migrations |
 |---|---|---|---|
 | #111 redact secrets (open) | L3 | Phase 1 | no |
-| #115 redact backfill (open) | L3 | #111 | tenant 0022 |
-| B1 broker core: references, `credential_ref`, resolution in `registry::call`, `audit_event` kind, exact-value scrub, the sidecar's internal API contract | L3 | #115 | tenant 0024 |
-| B2 provider settings under extensions and connectors: token entry, encrypted storage (`connectors/crypto.rs`), the backend's sidecar client, tested against a mock sidecar | L3 | B1 | no (uses 0024) |
+| #115 redact backfill (open) | L3 | #111 | tenant 0024 (renumbered from 0022) |
+| B1 broker core: references, `credential_ref`, resolution in `registry::call`, `audit_event` kind, exact-value scrub, the sidecar's internal API contract | L3 | #115 | tenant 0025 |
+| B2 provider settings under extensions and connectors: token entry, encrypted storage (`connectors/crypto.rs`), the backend's sidecar client, tested against a mock sidecar | L3 | B1 | no (uses 0025) |
 | B3 provider sidecar container for both providers (1Password Connect, 1Password service accounts, Bitwarden Secrets Manager) | L3 | B2 | no (a new compose service: must pass the old-updater `docker compose up -d` rule) |
 | B4 Settings UI: references and resolution log | L3 | B1 | no |
 
@@ -522,7 +523,7 @@ Ideas borrowed from open-ontologies, as in 7.6 (ideas only; no crate, service or
 | PR | Lane | Depends on | Migrations |
 |---|---|---|---|
 | O1 ontology spec (lead); the licence check is already done (7.5) | Lead | Phase 2 merged | no |
-| O2 schema: `object_type`, `asset` and core types, `links`, tools to define and read them | L4 | O1 | tenant 0025 |
+| O2 schema: `object_type`, `asset` and core types, `links`, tools to define and read them | L4 | O1 | tenant 0026 |
 | O3 project ontology in `create-eunomia` (Projects step 6) | L2 or L4 | O2 | no |
 | O4 compose `ontology` profile: ClickHouse and OTel Collector, pinned | L4 | O2 | no (compose only) |
 | O5 ingest auth, tenancy and query tools over ClickHouse | L4 | O4 | maybe control (ingest scope) |
@@ -530,14 +531,14 @@ Ideas borrowed from open-ontologies, as in 7.6 (ideas only; no crate, service or
 | O7 Square connector: locations, catalog, orders, payments, webhooks | L4 | O5, B1 | maybe tenant (connector settings) |
 | O8 docs and a food truck walkthrough | L4 | O7 | no |
 | O9 ontology services control panel: start toggle, restart, monitor (health, disk, ingest rate), open dashboard; start and restart as updater requests through `update-status/` (7.3) | L4 | O4 | no (compose, updater and UI) |
-| O10 data blast radius engine: traversal rules on link types, bounded BFS with node cap and timeout, vault permission checks, REST (OpenAPI) and the `ontology_blast_radius` MCP tool, saved scenarios; money at risk from ClickHouse (7.6.1) | L4 | O2; money at risk after O5 | tenant (traversal rule fields, `scenario`): in 0025 if specced before O2 merges, else 0026 |
+| O10 data blast radius engine: traversal rules on link types, bounded BFS with node cap and timeout, vault permission checks, REST (OpenAPI) and the `ontology_blast_radius` MCP tool, saved scenarios; money at risk from ClickHouse (7.6.1) | L4 | O2; money at risk after O5 | tenant (traversal rule fields, `scenario`): in 0026 if specced before O2 merges, else 0027 |
 | O11 blast radius UI: graph view on `GraphCanvas`, table with paths, save and compare scenarios (7.6.1) | L4 | O10 | no |
-| O12 schema plan, apply, rollback: plan hash and drift check, consequence flags, row snapshot, append-only `ontology_change` record and `audit_event` kinds, REST, MCP and Settings screen (7.6.2) | L4 | O2, O10 (flags traversal changes) | tenant (`ontology_change`, backup table): same 0025 or 0026 as O10 |
+| O12 schema plan, apply, rollback: plan hash and drift check, consequence flags, row snapshot, append-only `ontology_change` record and `audit_event` kinds, REST, MCP and Settings screen (7.6.2) | L4 | O2, O10 (flags traversal changes) | tenant (`ontology_change`, backup table): same 0026 or 0027 as O10 |
 | O13 `eunomia-rdf` crate: `oxrdfio` parse and serialise, staging `Store`, `reasonable` OWL 2 RL, n10s-style mapping to a neutral plan structure, unit and isomorphism tests; ROBOT checks of the GS1, schema.org and IOF packs in CI (7.7.1) | L4 | O2 (mapping target) | no (library, no database) |
 | O14 RDF and OWL import and export: Turtle and JSON-LD through `eunomia-rdf`, imports as plans through O12, export, round-trip tests on the packs (7.7) | L4 | O12, O13 | no (writes rows through O12) |
 | O15 optional SHACL validation with rudof of imported and existing data (7.7, 7.7.1); may slip | L4 | O14 | no |
 
-O10, O12 and O13 need only O2, so they can run while ingest (O4 to O9) is under way; only O10's money at risk waits for O5. Proposed: fold the O10 and O12 tables into 0025 `ontology_core` by writing them into the O1 spec, keeping one tenant migration for Phase 3 (3.2, rule 6); if O2 merges first, they take tenant 0026 through the queue.
+O10, O12 and O13 need only O2, so they can run while ingest (O4 to O9) is under way; only O10's money at risk waits for O5. Proposed: fold the O10 and O12 tables into 0026 `ontology_core` by writing them into the O1 spec, keeping one tenant migration for Phase 3 (3.2, rule 6); if O2 merges first, they take tenant 0027 through the queue.
 
 Size: L (upper end). About 15 PRs.
 
@@ -678,21 +679,21 @@ Rough effort (from the research): S1 to S12 about 5 to 7 weeks, S13 to S15 about
 |---|---|---|---|---|
 | 1 | #109 isready over ws (cherry-picked into the 2.0.8 PR) | L1 | none | no |
 | 1 | P1.2 update-path gate, seed, pin check, PR template (in the 2.0.8 PR) | L1, lead | none | no |
-| 1 | P1.3 3.3.5 pins (in the 2.0.8 PR) | L1 | #109, P1.2 | maybe (index rebuild) |
+| 1 | P1.3 3.3.5 pins and the HNSW rebuild (in the 2.0.8 PR) | L1 | #109, P1.2 | tenant 0022 |
 | 1 | P1.4 pre-update volume copy | L1 | P1.2 | no |
 | 2 | #112 create-eunomia | L2 | Phase 1 | no |
-| 2 | #114 change log and watch | L2 | #112, #115 (queue) | tenant 0023 |
+| 2 | #114 change log and watch | L2 | #112, 2.0.8 (queue) | tenant 0023 |
 | 2 | P2.3 npm publish | L2 | #112, Avi registering `create-eunomia` on npm (D7) | no |
 | 2 | P2.4 skill_list | L2 | #112 | no |
 | 2 | P2.5 change log retention and bus | L2 | #114 | maybe |
 | 2 | #111 redact secrets | L3 | Phase 1 | no |
-| 2 | #115 redact backfill | L3 | #111 | tenant 0022 |
-| 2 | B1 broker core and audit | L3 | #115 | tenant 0024 |
+| 2 | #115 redact backfill | L3 | #111, #114 (queue) | tenant 0024 |
+| 2 | B1 broker core and audit | L3 | #115 | tenant 0025 |
 | 2 | B2 provider settings and sidecar client | L3 | B1 | no |
 | 2 | B3 provider sidecar container | L3 | B2 | no (compose service) |
 | 2 | B4 Settings UI: references and resolution log | L3 | B1 | no |
-| 3 | O1 to O9 | L4 (O1 lead) | Phase 2 | O2 tenant 0025; O5, O7 maybe |
-| 3 | O10 to O15 (blast radius, plan and apply, the `eunomia-rdf` crate, RDF and OWL import and export, SHACL; 7.6, 7.7) | L4 | O2; O10 money at risk after O5 | O10, O12 tenant, folded into 0025 or else 0026 |
+| 3 | O1 to O9 | L4 (O1 lead) | Phase 2 | O2 tenant 0026; O5, O7 maybe |
+| 3 | O10 to O15 (blast radius, plan and apply, the `eunomia-rdf` crate, RDF and OWL import and export, SHACL; 7.6, 7.7) | L4 | O2; O10 money at risk after O5 | O10, O12 tenant, folded into 0026 or else 0027 |
 | 4 | S1 to S12 (schema, Monte Carlo, CEL rules, propagation, Markov, scenario API, low-history fallback, guardrails, generative UI, agent planner; 8.10) | L5 | O5, O10 | S1: tenant `simulation_core` and ClickHouse `sim_results` |
 | 4 | S13 to S15 (DES, wine and logistics templates) | L5 | S2, S11, S12, O7 | none stated |
 | 4 | S16 wave 2 (ABM, SD, MCP Apps), later | L5 | S12 | none stated |
@@ -705,7 +706,7 @@ Total: about 46 PRs (30 for Phases 1 to 3, 16 for Phase 4 with S16 later), 5 of 
 |---|---|---|---|
 | D1 | **3.3.x now vs 4.x** | 4.x converts storage one way and is a pre-release | **Decided 2026-10-31: 3.3.5 now; 4.x parked**, not scheduled (4.4 kept as reference: export and `skv migrate` on a copy if it is ever picked up) |
 | D2 | Ship Phase 1 alone as 2.0.8? | Mixing engine and feature regressions | **Decided 2026-10-31: yes**, now, as the small patch release 2.0.8 (branch `release/2.0.8`, 4.5) |
-| D3 | Merge order of #115 and #114 (both tenant 0022) | One must renumber | #115 first, #114 becomes 0023 |
+| D3 | Merge order of #115 and #114 (both tenant 0022) | One must renumber | **Decided 2026-11-01: #114 first.** The 2.0.8 HNSW rebuild takes 0022, #114 becomes 0023, #115 becomes 0024 (3.2) |
 | D4 | Stop `release.yml` moving `latest` until the post-publish smoke passes | A bad release reaches "Update now" at once | Yes |
 | D5 | Where the password manager bootstrap token lives | It is the one secret the broker must hold | **Decided 2026-10-31:** configured in the app under extensions and connectors (Settings), not in `.env`; stored encrypted like connector credentials (`backend/src/connectors/crypto.rs`) and handed to a separate provider sidecar container per request or at configure time; the sidecar holds no plaintext at rest and the backend never links a provider SDK (6.1, 6.3, B3) |
 | D6 | 1Password service accounts from Rust | No official Rust SDK found | **Resolved 2026-10-31 by D5:** the provider sidecar (TypeScript or similar) talks to both providers; the backend needs no provider SDK |
@@ -742,7 +743,7 @@ Total: about 46 PRs (30 for Phases 1 to 3, 16 for Phase 4 with S16 later), 5 of 
 ## 11. Not confirmed
 
 - The 2.0.5 Projects proposal: not in the repo or in the issue and PR bodies searched; the `v2.0.5` release notes (read by the lead) have no Projects content. It was reviewed with Avi outside the repo; section 5 is built from #112, #114 and `docs/projects.md` on `feat/project-changes` until the lead commits it as `docs/architecture/specs/projects.md`.
-- Whether the 3.3.2 to 3.3.5 notes require an index rebuild, and whether 3.3.1 starts on data 3.3.5 has written.
+- Whether 3.3.1 starts on data 3.3.5 has written (the index rebuild is now decided, 4.2).
 - That the hardened flag set behaves the same on 3.3.5 as on 3.3.1.
 - That `kv-mem` remains available in the 4.x Rust SDK; `MIGRATE EXISTING ROWS` in 4.x (reported, not in the 4.0.0-beta.1 notes). Both only matter if parked 4.x (4.4) is picked up again.
 - The provider sidecar's SDKs (the official 1Password JS SDK for service accounts, and for Connect; the Bitwarden SDK's JS binding) and their licences, both providers' token prefixes, and Square's webhook signature details.
