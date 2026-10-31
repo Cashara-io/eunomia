@@ -523,6 +523,32 @@ fn rid(table: &str, i: usize) -> surrealdb::types::RecordId {
     surrealdb::types::RecordId::new(table, format!("r{i:02}"))
 }
 
+/// Runs `sql` for row `i` (`$m`, `$s`, `$c`: its memory, skill and cache record; `$t` its text; `$e` its
+/// vector) in one transaction, re-run when any statement reports a commit conflict (the app's writers
+/// retry the same way, `tx::with_retry`). A failed transaction marks its other statements "not executed",
+/// so every statement's error is looked at, not just the first.
+async fn retry_conflicts(db: &Db, sql: &str, i: usize) {
+    let sql = format!("BEGIN TRANSACTION; {sql} COMMIT TRANSACTION;");
+    for attempt in 1..=20u64 {
+        let mut res = db
+            .query(sql.as_str())
+            .bind(("m", rid("memory", i)))
+            .bind(("s", rid("skill", i)))
+            .bind(("c", rid("cache_record", i)))
+            .bind(("t", format!("row {i}")))
+            .bind(("e", axis(i)))
+            .await
+            .unwrap();
+        let errors = res.take_errors();
+        if errors.is_empty() {
+            return;
+        }
+        let conflict = errors.values().any(eunomia_backend::tx::is_conflict);
+        assert!(conflict && attempt < 20, "row {i}, attempt {attempt}: {errors:?}");
+        tokio::time::sleep(std::time::Duration::from_millis(20 * attempt)).await;
+    }
+}
+
 /// Waits (bounded) until every vector index reports its background build `ready`, and returns the
 /// last `INFO FOR INDEX` of each, so a test can see a build happened.
 async fn vector_indexes_ready(db: &Db) -> Vec<Value> {
@@ -559,33 +585,20 @@ async fn rebuild_vector_indexes_in_0022_keeps_rows_and_knn_finds_the_live_ones()
     let s = test_settings();
     migrate::apply_up_to(&db, 21).await.unwrap();
     vector_indexes_ready(&db).await;
-    // 40 rows per table on axes 0..40; then every row on an odd axis is deleted
+    // 40 rows per table on axes 0..40; then every row on an odd axis is deleted, once the index is built, so the
+    // deletes hit a built graph (the case 3.3.4 and 3.3.5 fixed). Writes to an HNSW-indexed table can meet a
+    // commit conflict with the index's background work (its pending queue and compaction, even when the build
+    // reports `ready`; seen once in CI's TEST_HARDENED run on a slower runner); they are retried, as the app's writers do.
     for i in 0..40usize {
-        db.query(
-            "CREATE $m SET owner = user:u, vault = vault:v, subject = person:p, text = $t, embedding = $e, embedding_spec = 'stub';
+        retry_conflicts(&db, "CREATE $m SET owner = user:u, vault = vault:v, subject = person:p, text = $t, embedding = $e, embedding_spec = 'stub';
              CREATE $s SET owner = user:u, vault = vault:v, name = $t, description = 'd', body = 'b', embedding = $e, embedding_spec = 'stub';
              CREATE $c SET owner = user:u, source = 'demo', type = 'note', external_id = $t, content_hash = 'h',
-                 ingested_at = time::now(), updated_at = time::now(), embedding = $e;",
-        )
-        .bind(("m", rid("memory", i)))
-        .bind(("s", rid("skill", i)))
-        .bind(("c", rid("cache_record", i)))
-        .bind(("t", format!("row {i}")))
-        .bind(("e", axis(i)))
-        .await
-        .unwrap()
-        .check()
-        .unwrap();
+                 ingested_at = time::now(), updated_at = time::now(), embedding = $e;", i)
+        .await;
     }
+    vector_indexes_ready(&db).await;
     for i in (1..40usize).step_by(2) {
-        db.query("DELETE $m; DELETE $s; DELETE $c;")
-            .bind(("m", rid("memory", i)))
-            .bind(("s", rid("skill", i)))
-            .bind(("c", rid("cache_record", i)))
-            .await
-            .unwrap()
-            .check()
-            .unwrap();
+        retry_conflicts(&db, "DELETE $m; DELETE $s; DELETE $c;", i).await;
     }
     let before: Vec<usize> = futures::future::join_all(VECTOR_INDEXES.iter().map(|(t, _)| count(&db, t))).await;
     assert_eq!(before, [20, 20, 20]);
@@ -643,13 +656,7 @@ async fn a_fresh_org_runs_0022_right_after_the_index_definitions() {
     assert_eq!(count(&db, "_migration").await, migrate::MIGRATIONS.len());
     vector_indexes_ready(&db).await;
     for i in 0..5usize {
-        db.query("CREATE $m SET owner = user:u, vault = vault:v, subject = person:p, text = 't', embedding = $e")
-            .bind(("m", rid("memory", i)))
-            .bind(("e", axis(i)))
-            .await
-            .unwrap()
-            .check()
-            .unwrap();
+        retry_conflicts(&db, "CREATE $m SET owner = user:u, vault = vault:v, subject = person:p, text = 't', embedding = $e;", i).await;
     }
     assert_eq!(knn(&db, "memory", axis(3), 1).await, ["memory:r03"]);
 }
