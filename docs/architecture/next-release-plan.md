@@ -223,16 +223,19 @@ Initial queue for this release, in proposed merge order:
 | Set | Number | Name | Lane | PR |
 |---|---|---|---|---|
 | tenant | 0022 | `rebuild_vector_indexes` (HNSW rebuild on `memory`, `skill`, `cache_record` after 3.3.5) | L1 | #119 (release 2.0.8) |
-| tenant | 0023 | `changes` | L2 | #114 (renumber from 0022) |
-| tenant | 0024 | `redact_backfill` | L3 | #115 (renumber from 0022) |
-| tenant | 0025 | `credential_refs` (references, plus the encrypted provider settings, see 6.3) | L3 | broker core |
-| tenant | 0026 | `ontology_core` | L4 | ontology schema |
-| tenant | (0027) | `ontology_change` (blast radius scenarios, change records, backups) | L4 | O10, O12; only if not folded into 0026 (7.8) |
+| tenant | 0023 | `changes` | L2 | #114 (renumber from 0022), carried in #120 |
+| tenant | 0024 | `redact_backfill` | L3 | #115 (renumber from 0022), carried in #122 |
+| tenant | 0025 | `credential_refs` (references, plus the encrypted provider settings, see 6.3) | L3 | broker core (#123) |
+| tenant | 0026 | `secret_requests` (`secret_request`, `vault_secret`: the secret request pop-up and held secrets, stored only as `enc:v1:`) | L3 | B4, stacked on #125 |
+| tenant | 0027 | `ontology_core` | L4 | ontology schema |
+| tenant | (0028) | `ontology_change` (blast radius scenarios, change records, backups) | L4 | O10, O12; only if not folded into 0027 (7.8) |
 | tenant | (next free) | `simulation_core` (`assumption`, `edge_rule`, `state_model`, `scenario_run`, and the shared `scenario` fields, D15) | L5 | S1 (8.10) |
 
 The control `0007_secret_providers` line from the first draft is gone: under D5 the provider token is stored with the org's connector credentials, not in control (6.3).
 
 **Decided 2026-11-01 (D3):** #114 first, then #115, reversing this plan's first proposal. The HNSW index rebuild in #119 (4.2 step 2) takes 0022 because 2.0.8 merges first, so #114 renumbers to 0023 and #115 to 0024, and the broker and ontology numbers move up one. The live queue is `backend/migrations/QUEUE.md` (added in #119).
+
+**Decided 2026-11-01 (round 2):** the secret request pop-up (B4, Avi's ask for a Grok Bot-style vault) takes tenant 0026 `secret_requests`, so the ontology moves up one more, to 0027 (and 0028 if `ontology_change` is not folded in). The other round 2 decisions: the skill-write conflict retry ships in 2.0.8 (#119) with a regression test; Bitwarden Secrets Manager is marked preview everywhere; the `secrets-helper` sidecar sits behind a `secrets` compose profile, off by default, and the backend answers `secret.unavailable` (`helper_disabled`) while it is off; vault owners manage the credential references of their own vaults; #111, #112, #114 and #115 stay open until the stack merges.
 
 ## 4. Workstream 1: SurrealDB upgrade (Phase 1)
 
@@ -523,7 +526,7 @@ Ideas borrowed from open-ontologies, as in 7.6 (ideas only; no crate, service or
 | PR | Lane | Depends on | Migrations |
 |---|---|---|---|
 | O1 ontology spec (lead); the licence check is already done (7.5) | Lead | Phase 2 merged | no |
-| O2 schema: `object_type`, `asset` and core types, `links`, tools to define and read them | L4 | O1 | tenant 0026 |
+| O2 schema: `object_type`, `asset` and core types, `links`, tools to define and read them | L4 | O1 | tenant 0027 |
 | O3 project ontology in `create-eunomia` (Projects step 6) | L2 or L4 | O2 | no |
 | O4 compose `ontology` profile: ClickHouse and OTel Collector, pinned | L4 | O2 | no (compose only) |
 | O5 ingest auth, tenancy and query tools over ClickHouse | L4 | O4 | maybe control (ingest scope) |
@@ -531,14 +534,14 @@ Ideas borrowed from open-ontologies, as in 7.6 (ideas only; no crate, service or
 | O7 Square connector: locations, catalog, orders, payments, webhooks | L4 | O5, B1 | maybe tenant (connector settings) |
 | O8 docs and a food truck walkthrough | L4 | O7 | no |
 | O9 ontology services control panel: start toggle, restart, monitor (health, disk, ingest rate), open dashboard; start and restart as updater requests through `update-status/` (7.3) | L4 | O4 | no (compose, updater and UI) |
-| O10 data blast radius engine: traversal rules on link types, bounded BFS with node cap and timeout, vault permission checks, REST (OpenAPI) and the `ontology_blast_radius` MCP tool, saved scenarios; money at risk from ClickHouse (7.6.1) | L4 | O2; money at risk after O5 | tenant (traversal rule fields, `scenario`): in 0026 if specced before O2 merges, else 0027 |
+| O10 data blast radius engine: traversal rules on link types, bounded BFS with node cap and timeout, vault permission checks, REST (OpenAPI) and the `ontology_blast_radius` MCP tool, saved scenarios; money at risk from ClickHouse (7.6.1) | L4 | O2; money at risk after O5 | tenant (traversal rule fields, `scenario`): in 0027 if specced before O2 merges, else 0028 |
 | O11 blast radius UI: graph view on `GraphCanvas`, table with paths, save and compare scenarios (7.6.1) | L4 | O10 | no |
-| O12 schema plan, apply, rollback: plan hash and drift check, consequence flags, row snapshot, append-only `ontology_change` record and `audit_event` kinds, REST, MCP and Settings screen (7.6.2) | L4 | O2, O10 (flags traversal changes) | tenant (`ontology_change`, backup table): same 0026 or 0027 as O10 |
+| O12 schema plan, apply, rollback: plan hash and drift check, consequence flags, row snapshot, append-only `ontology_change` record and `audit_event` kinds, REST, MCP and Settings screen (7.6.2) | L4 | O2, O10 (flags traversal changes) | tenant (`ontology_change`, backup table): same 0027 or 0028 as O10 |
 | O13 `eunomia-rdf` crate: `oxrdfio` parse and serialise, staging `Store`, `reasonable` OWL 2 RL, n10s-style mapping to a neutral plan structure, unit and isomorphism tests; ROBOT checks of the GS1, schema.org and IOF packs in CI (7.7.1) | L4 | O2 (mapping target) | no (library, no database) |
 | O14 RDF and OWL import and export: Turtle and JSON-LD through `eunomia-rdf`, imports as plans through O12, export, round-trip tests on the packs (7.7) | L4 | O12, O13 | no (writes rows through O12) |
 | O15 optional SHACL validation with rudof of imported and existing data (7.7, 7.7.1); may slip | L4 | O14 | no |
 
-O10, O12 and O13 need only O2, so they can run while ingest (O4 to O9) is under way; only O10's money at risk waits for O5. Proposed: fold the O10 and O12 tables into 0026 `ontology_core` by writing them into the O1 spec, keeping one tenant migration for Phase 3 (3.2, rule 6); if O2 merges first, they take tenant 0027 through the queue.
+O10, O12 and O13 need only O2, so they can run while ingest (O4 to O9) is under way; only O10's money at risk waits for O5. Proposed: fold the O10 and O12 tables into 0027 `ontology_core` by writing them into the O1 spec, keeping one tenant migration for Phase 3 (3.2, rule 6); if O2 merges first, they take tenant 0028 through the queue.
 
 Size: L (upper end). About 15 PRs.
 
@@ -692,8 +695,8 @@ Rough effort (from the research): S1 to S12 about 5 to 7 weeks, S13 to S15 about
 | 2 | B2 provider settings and sidecar client | L3 | B1 | no |
 | 2 | B3 provider sidecar container | L3 | B2 | no (compose service) |
 | 2 | B4 Settings UI: references and resolution log | L3 | B1 | no |
-| 3 | O1 to O9 | L4 (O1 lead) | Phase 2 | O2 tenant 0026; O5, O7 maybe |
-| 3 | O10 to O15 (blast radius, plan and apply, the `eunomia-rdf` crate, RDF and OWL import and export, SHACL; 7.6, 7.7) | L4 | O2; O10 money at risk after O5 | O10, O12 tenant, folded into 0026 or else 0027 |
+| 3 | O1 to O9 | L4 (O1 lead) | Phase 2 | O2 tenant 0027; O5, O7 maybe |
+| 3 | O10 to O15 (blast radius, plan and apply, the `eunomia-rdf` crate, RDF and OWL import and export, SHACL; 7.6, 7.7) | L4 | O2; O10 money at risk after O5 | O10, O12 tenant, folded into 0027 or else 0028 |
 | 4 | S1 to S12 (schema, Monte Carlo, CEL rules, propagation, Markov, scenario API, low-history fallback, guardrails, generative UI, agent planner; 8.10) | L5 | O5, O10 | S1: tenant `simulation_core` and ClickHouse `sim_results` |
 | 4 | S13 to S15 (DES, wine and logistics templates) | L5 | S2, S11, S12, O7 | none stated |
 | 4 | S16 wave 2 (ABM, SD, MCP Apps), later | L5 | S12 | none stated |
