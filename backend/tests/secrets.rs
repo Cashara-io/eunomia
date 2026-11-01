@@ -444,6 +444,10 @@ async fn bitwarden_is_a_preview_in_the_settings_api() {
     assert_eq!(op["preview"], false);
 }
 
+/// The time bound for "answered at once" with the helper off. A backstop only: that nothing reaches the
+/// mock sidecar is the real proof that no network call was made.
+const OFF_FAST: std::time::Duration = std::time::Duration::from_secs(10);
+
 /// The helper switched off (no `secrets` compose profile): every resolution and test-connection fails at
 /// once with secret.unavailable / helper_disabled, nothing reaches the sidecar, settings still load.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -454,7 +458,9 @@ async fn helper_switched_off_fails_fast_and_settings_still_load() {
 
     let started = std::time::Instant::now();
     let out = call(&w, "test_echo_secret", json!({"text": {"$secret": REF}})).await;
-    assert!(started.elapsed() < std::time::Duration::from_secs(2), "not fast: {:?}", started.elapsed());
+    // "at once" is proven by nothing reaching the sidecar (checked below); the time bound is only a
+    // backstop, loose enough for a loaded CI runner (a 2 s bound failed there with the full suite running)
+    assert!(started.elapsed() < OFF_FAST, "not fast: {:?}", started.elapsed());
     assert_eq!((out["code"].clone(), out["reason"].clone()), (json!("secret.unavailable"), json!("helper_disabled")), "{out}");
     assert!(!out.to_string().contains(CANARY));
     let last = resolutions(&w).await.pop().unwrap();
@@ -468,7 +474,7 @@ async fn helper_switched_off_fails_fast_and_settings_still_load() {
 
     let started = std::time::Instant::now();
     let (status, body) = w.app.http_session("POST", "/api/secrets/providers/onepassword_connect/test", None).await;
-    assert!(started.elapsed() < std::time::Duration::from_secs(2));
+    assert!(started.elapsed() < OFF_FAST, "not fast: {:?}", started.elapsed());
     assert_eq!((status.as_u16(), body["code"].clone(), body["reason"].clone()), (503, json!("secret.unavailable"), json!("helper_disabled")), "{body}");
     assert!(w.mock.seen.lock().unwrap().is_empty(), "nothing reached the sidecar");
 
