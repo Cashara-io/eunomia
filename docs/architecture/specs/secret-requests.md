@@ -85,8 +85,9 @@ At most 10 pending requests per person (`rate.limited` beyond), so an agent cann
   request (header, query, body), and the request's expiry. A masked input (`type=password`,
   `autocomplete=off`, a client-side only Show toggle), **Save** and **Decline**; **Later** hides it for
   this tab. The same form is the standalone page `/secrets/requests/<id>` (the URL the agent shows).
-  The person may remove hosts or placements before saving, and may tick "any agent of mine in this
-  vault" (otherwise only the credential that asked may use it).
+  The person may edit the hosts (remove what the agent asked for, add others) and the placements before
+  saving, and may tick "any agent of mine in this vault" (otherwise only the credential that asked may
+  use it). The person, not the agent, decides where a secret may go.
 - **MCP.** See "MCP" below: a URL-mode elicitation when the client declared it, otherwise the agent shows
   the URL.
 

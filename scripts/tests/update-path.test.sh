@@ -60,10 +60,11 @@ LATEST_CONTROL="$(find "$ROOT/backend/migrations/control" -name '[0-9]*.surql' |
 VOLATILE="${UPDATE_PATH_VOLATILE:-job job_leader audit_event audit_log tool_usage session failure_capsule _migration_lock rate_limit embed_cache}"
 # Tables this checkout's tenant migrations add (0023_changes: the change log and its per-vault
 # counter; 0024_redact_backfill: the backfill's per-org marker; 0025_credential_refs: the credential
-# broker's references and provider settings). Where <from-tag> lacks one, the update must add it to
+# broker's references and provider settings; 0026_secret_requests: secret requests and the secrets
+# Eunomia holds for agents). Where <from-tag> lacks one, the update must add it to
 # every org database, holding only what the backfill writes (new_rows below). Their counts are checked
 # on their own, so they are left out of the before/after diff.
-NEW_TABLES="${UPDATE_PATH_NEW_TABLES:-change change_seq redact_backfill credential_ref secret_provider}"
+NEW_TABLES="${UPDATE_PATH_NEW_TABLES:-change change_seq redact_backfill credential_ref secret_provider secret_request vault_secret}"
 BUILT_FROM=0
 # A fake GitHub token shape (built here, never a real one) in one fact: the backfill must redact it.
 FAKE_GH="ghp_$(printf 'Ab1Cd2Ef3G%.0s' 1 2 3 4)"
@@ -549,6 +550,11 @@ check "the rewrite is in the change log as an update by system" test "$(logged)"
 # the credential broker (tenant 0025): its tables exist in every org and are empty after the update
 broker_rows() { grep -E '^org_[^ ]*\.(credential_ref|secret_provider) ' "$W/new-after.txt" | awk '{ s += $2; n++ } END { print n + 0, s + 0 }'; }
 check "the broker tables are new and empty in every org" test "$(broker_rows)" = "$(( $(org_dbs | wc -l | tr -d ' ') * 2 )) 0"
+# secret requests (tenant 0026): new and empty in every org, where the update added them
+request_rows() { grep -E '^org_[^ ]*\.(secret_request|vault_secret) ' "$W/new-after.txt" | awk '{ s += $2; n++ } END { print n + 0, s + 0 }'; }
+if grep -q '\.vault_secret ' "$W/new-expected.txt"; then
+  check "the secret request tables are new and empty in every org" test "$(request_rows)" = "$(( $(org_dbs | wc -l | tr -d ' ') * 2 )) 0"
+fi
 check "the fixed reads unchanged" diff "$W/reads-before.txt" "$W/reads-after.txt"
 diff "$W/reads-before.txt" "$W/reads-after.txt" | head -20
 # Tenant 0022 (rebuild_vector_indexes): in every org ledger, the three HNSW indexes defined, and the
@@ -668,6 +674,41 @@ if [ -f "$I/secrets-helper/Dockerfile" ]; then
   wait_healthy 300; check "healthy after Disable" test $? -eq 0
   for _ in $(seq 20); do helper > "$W/helper-off2.json" 2>/dev/null && jq -e '.state == "off"' "$W/helper-off2.json" >/dev/null && break; sleep 3; done
   check "the helper's status: off again" jq -e '.state == "off" and .reason == "helper_disabled"' "$W/helper-off2.json"
+fi
+
+# ---- 9d. secret requests on the upgraded stack -------------------------------------------------
+# Only where the update added the tables. An agent asks, the person fills it from their browser session,
+# the agent gets the handle; the value is stored only as enc:v1: and is in no response, table or log.
+# The rollback below restores the pre-update backup, so these rows go with it.
+# shellcheck disable=SC2016 # "$secret" in the jq programs is the handle's key, not a shell variable
+if grep -q '\.vault_secret ' "$W/new-expected.txt"; then
+  log "9d. secret requests on the upgraded stack"
+  check "every org ledger has 0026_secret_requests" ledger_has 26 secret_requests
+  REQ="$(mcp "$TOKEN_A" secret_request '{"name":"update_path_key","label":"Update path key","description":"update-path","target":{"hosts":["api.example.com"]}}')"
+  RID="$(printf '%s' "$REQ" | jq -r .request_id)"
+  check "secret_request answers pending, with a fill URL and an eu:// handle" \
+    jq -e '.status == "pending" and (.fill_url | test("/secrets/requests/")) and (.handle["$secret"] | startswith("eu://"))' <<<"$REQ"
+  UP_SECRET="update-path-$(openssl rand -hex 12)"   # made here, never a real secret
+  code="$(curl -sS -o "$W/fill-token.json" -w '%{http_code}' --max-time 30 -H "Authorization: Bearer $TOKEN_A" -H 'Content-Type: application/json' \
+    -d "{\"value\":\"$UP_SECRET\"}" "$BASE/api/secrets/requests/$RID/fill")"
+  check "an agent's token cannot fill its own request (HTTP $code)" test "$code" = 403
+  code="$(curl -sS -o "$W/fill.json" -w '%{http_code}' --max-time 30 -b "$JAR_A" -H 'Content-Type: application/json' \
+    -d "{\"value\":\"$UP_SECRET\"}" "$BASE/api/secrets/requests/$RID/fill")"
+  check "the person fills it from their browser session (HTTP $code)" test "$code" = 200
+  check "the fill answer is the handle, not the value" bash -c "jq -e '.status == \"filled\"' '$W/fill.json' && ! grep -q '$UP_SECRET' '$W/fill.json'"
+  mcp "$TOKEN_A" secret_request_status "{\"request_id\":\"$RID\"}" > "$W/secret-status.json"
+  check "the agent sees it filled, with the same handle" jq -e --argjson req "$REQ" '.status == "filled" and .handle["$secret"] == $req.handle["$secret"]' "$W/secret-status.json"
+  echo 'SELECT VALUE value_enc FROM vault_secret;' | sql "$ORG_A" > "$W/vault-secret.json"
+  check "the value is held only as enc:v1: ciphertext" jq -e '[.[0].result[] | startswith("enc:v1:")] | (length == 1 and all)' "$W/vault-secret.json"
+  held_leaks() {
+    local db t
+    for db in $(org_dbs); do for t in secret_request vault_secret audit_log memory; do echo "SELECT * FROM $t;" | sql "$db"; done; done | grep -c "$UP_SECRET"
+    for t in audit_event tool_usage failure_capsule; do echo "SELECT * FROM $t;" | sql control; done | grep -c "$UP_SECRET"
+    dc logs backend 2>&1 | grep -c "$UP_SECRET"
+  }
+  check "the value is in no table and no backend log line" test "$(held_leaks | awk '{ s += $1 } END { print s + 0 }')" = 0
+  api -H "Authorization: Bearer $TOKEN_B" "$BASE/api/secrets/requests" > "$W/requests-b.json"
+  check "the other org sees no request" jq -e '. == []' "$W/requests-b.json"
 fi
 
 # ---- 10. rollback ------------------------------------------------------------------------------
