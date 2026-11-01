@@ -3799,6 +3799,67 @@
         ]
       }
     },
+    "/api/secrets/activity": {
+      "get": {
+        "tags": [
+          "secrets"
+        ],
+        "summary": "Every secret request, fill, decline, use, transform and outbound call in this organisation, newest first (never a value)",
+        "description": "As the resolution log: org owners and instance admins see the whole organisation; a vault owner sees the rows of the vaults they own. `code` names the secrets helper's own failure (`helper_disabled`, `helper_unreachable`).",
+        "operationId": "listSecretActivity",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "1 to 200, default 50.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "description": "An RFC 3339 time: entries strictly older.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityPage"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/secrets/counts": {
       "get": {
         "tags": [
@@ -3850,6 +3911,148 @@
           },
           {
             "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/secrets/held": {
+      "get": {
+        "tags": [
+          "secrets"
+        ],
+        "summary": "Secrets Eunomia holds that you filled or manage (never a value)",
+        "operationId": "listHeldSecrets",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HeldOut"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/secrets/held/{id}": {
+      "put": {
+        "tags": [
+          "secrets"
+        ],
+        "summary": "Replace a held secret's value (its derived secrets are deleted)",
+        "operationId": "replaceHeldSecret",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaceBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplaceOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "secrets"
+        ],
+        "summary": "Delete a held secret and every secret derived from it",
+        "operationId": "deleteHeldSecret",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkBody"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
           }
         ]
       }
@@ -4462,6 +4665,212 @@
           },
           {
             "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/secrets/requests": {
+      "get": {
+        "tags": [
+          "secrets"
+        ],
+        "summary": "Secret requests you asked for or manage, newest first (never a value)",
+        "operationId": "listSecretRequests",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "description": "`pending`, `filled`, `declined` or `expired`; absent for all.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RequestOut"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/secrets/requests/{id}": {
+      "get": {
+        "tags": [
+          "secrets"
+        ],
+        "summary": "One secret request (the standalone fill page)",
+        "operationId": "getSecretRequest",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "`secret_request:...` or its key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/secrets/requests/{id}/decline": {
+      "post": {
+        "tags": [
+          "secrets"
+        ],
+        "summary": "Decline a secret request",
+        "operationId": "declineSecretRequest",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeclineOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/secrets/requests/{id}/fill": {
+      "post": {
+        "tags": [
+          "secrets"
+        ],
+        "summary": "Paste the secret for a request (the pop-up's Save)",
+        "description": "Only the person whose agent asked, in a browser session. The value is encrypted (AES-256-GCM under ENCRYPTION_KEY) before it is stored and is never returned; the answer holds the handle only.",
+        "operationId": "fillSecretRequest",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FillBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FillOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
           }
         ]
       }
@@ -5969,6 +6378,108 @@
           }
         }
       },
+      "ActivityEntry": {
+        "type": "object",
+        "required": [
+          "id",
+          "at",
+          "action",
+          "actor_kind",
+          "actor_id",
+          "reference",
+          "ref_id",
+          "tool",
+          "channel",
+          "session",
+          "vault_id",
+          "outcome",
+          "reason",
+          "code",
+          "lineage",
+          "host",
+          "trace_id"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "`secret.resolve`, `secret.request`, `secret.fill`, `secret.decline`, `secret.transform`, `secret.http`, `secret.replace` or `secret.delete`."
+          },
+          "actor_id": {
+            "type": "string"
+          },
+          "actor_kind": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "description": "The stable code when the secrets helper itself failed: `helper_disabled` or `helper_unreachable`\n(on `secret.resolve` rows of op:// and bws:// references; never on an eu:// handle)."
+          },
+          "host": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "lineage": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "For a transform: the held secrets it was derived from; for an outbound call: the host."
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "ref_id": {
+            "type": "string"
+          },
+          "reference": {
+            "type": "string",
+            "description": "The reference or handle concerned (for a request, the handle it will fill)."
+          },
+          "session": {
+            "type": "string"
+          },
+          "tool": {
+            "type": "string"
+          },
+          "trace_id": {
+            "type": "string"
+          },
+          "vault_id": {
+            "type": "string"
+          }
+        }
+      },
+      "ActivityPage": {
+        "type": "object",
+        "required": [
+          "entries"
+        ],
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActivityEntry"
+            }
+          },
+          "next_before": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "AuditEntry": {
         "type": "object",
         "required": [
@@ -6729,6 +7240,17 @@
           }
         }
       },
+      "DeclineOut": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          }
+        }
+      },
       "DeclinedBody": {
         "type": "object",
         "required": [
@@ -7274,6 +7796,63 @@
           }
         }
       },
+      "FillBody": {
+        "type": "object",
+        "description": "What the pop-up sends. `value` is zeroised when this is dropped; Debug never prints it.",
+        "required": [
+          "value"
+        ],
+        "properties": {
+          "allowed_hosts": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "The hosts it may be sent to (defaults to what the agent asked for)."
+          },
+          "any_agent": {
+            "type": "boolean",
+            "description": "Let any credential of a vault member use it, not only the one that asked."
+          },
+          "placements": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "`header`, `query`, `body` (defaults to what the agent asked for)."
+          },
+          "value": {
+            "type": "string",
+            "description": "The secret. Write-only: encrypted at once, never returned, logged or shown again."
+          }
+        }
+      },
+      "FillOut": {
+        "type": "object",
+        "required": [
+          "status",
+          "handle",
+          "secret_id"
+        ],
+        "properties": {
+          "handle": {
+            "type": "string",
+            "description": "`eu://<vault>/<name>`"
+          },
+          "secret_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
       "FinanceAccount": {
         "type": "object",
         "required": [
@@ -7458,6 +8037,99 @@
             "items": {
               "$ref": "#/components/schemas/GraphNode"
             }
+          }
+        }
+      },
+      "HeldOut": {
+        "type": "object",
+        "description": "A held secret as listed. Never its value or ciphertext.",
+        "required": [
+          "id",
+          "handle",
+          "vault_id",
+          "name",
+          "label",
+          "allowed_hosts",
+          "placements",
+          "allowed_tools",
+          "allowed_actors",
+          "derived_from",
+          "created_by",
+          "created_at",
+          "updated_at",
+          "can_manage"
+        ],
+        "properties": {
+          "allowed_actors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "allowed_hosts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "allowed_tools": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "can_manage": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "created_by": {
+            "type": "string"
+          },
+          "derived_from": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The held secrets it was derived from (empty for a pasted one)."
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "handle": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "description": "`vault_secret:...`"
+          },
+          "label": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "op": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "placements": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "vault_id": {
+            "type": "string"
           }
         }
       },
@@ -8703,6 +9375,35 @@
           }
         }
       },
+      "ReplaceBody": {
+        "type": "object",
+        "required": [
+          "value"
+        ],
+        "properties": {
+          "value": {
+            "type": "string",
+            "description": "The new value. Write-only."
+          }
+        }
+      },
+      "ReplaceOut": {
+        "type": "object",
+        "required": [
+          "ok",
+          "removed_derived"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "removed_derived": {
+            "type": "integer",
+            "description": "How many secrets derived from the old value were deleted.",
+            "minimum": 0
+          }
+        }
+      },
       "RepointBody": {
         "type": "object",
         "required": [
@@ -8733,6 +9434,130 @@
             "type": "integer",
             "description": "Connectors whose default or rules changed.",
             "minimum": 0
+          }
+        }
+      },
+      "RequestOut": {
+        "type": "object",
+        "description": "A request as the pop-up and the Connectors page show it. Never a value.",
+        "required": [
+          "id",
+          "vault_id",
+          "name",
+          "handle",
+          "label",
+          "description",
+          "target_hosts",
+          "placements",
+          "requested_by",
+          "actor_kind",
+          "actor_id",
+          "client_name",
+          "channel",
+          "session",
+          "status",
+          "replace",
+          "expires_at",
+          "created_at",
+          "fill_url",
+          "can_fill",
+          "can_decline"
+        ],
+        "properties": {
+          "actor_id": {
+            "type": "string"
+          },
+          "actor_kind": {
+            "type": "string",
+            "description": "`token`, `oauth` or `user`."
+          },
+          "can_decline": {
+            "type": "boolean"
+          },
+          "can_fill": {
+            "type": "boolean",
+            "description": "The signed-in person may paste the value (they asked, it is pending)."
+          },
+          "channel": {
+            "type": "string",
+            "description": "`rest`, `mcp` or `chat`."
+          },
+          "client_name": {
+            "type": "string"
+          },
+          "connector": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "decided_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": "string",
+            "description": "Written by the agent."
+          },
+          "expires_at": {
+            "type": "string"
+          },
+          "fill_url": {
+            "type": "string"
+          },
+          "handle": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "description": "`secret_request:...`"
+          },
+          "label": {
+            "type": "string",
+            "description": "Written by the agent."
+          },
+          "name": {
+            "type": "string"
+          },
+          "placements": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "replace": {
+            "type": "boolean"
+          },
+          "requested_by": {
+            "type": "string"
+          },
+          "secret_ttl_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "session": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "description": "`pending`, `filled`, `declined` or `expired`."
+          },
+          "target_hosts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "vault_id": {
+            "type": "string"
           }
         }
       },
