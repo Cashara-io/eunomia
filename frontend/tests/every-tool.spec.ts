@@ -129,6 +129,15 @@ test("every MCP tool works end to end", async ({ request, baseURL }) => {
   expect([batch.written, batch.failed]).toEqual([1, 1]);
   expect(batch.results[1].code).toBe("validation.invalid");
 
+  // secret requests: the agent gets a request and a handle, never a value; nothing is filled here (only a
+  // person in a browser can, see secret-requests.spec.ts), so the transform and the call are refused
+  const asked = await ok("secret_request", { name: "every_tool_key", description: "coverage", target: { hosts: ["api.example.com"] } });
+  expect(asked.status).toBe("pending");
+  expect((await ok("secret_request_status", { request_id: asked.request_id })).status).toBe("pending");
+  const handle = asked.handle.$secret as string;
+  expect((await call("secret_transform", { op: "base64", inputs: { value: handle } })).data.code).toBe("secret.unavailable");
+  expect((await call("http_request", { url: "https://api.example.com/", headers: { Authorization: { $secret: handle } } })).data.code).toBe("secret.unavailable");
+
   // coverage: every tool the server lists was exercised above
   const list = await request.post("/mcp", {
     headers: { Authorization: `Bearer ${me.token}` },

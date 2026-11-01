@@ -12,6 +12,7 @@ import ErrorLine, { failure } from "@/components/ErrorLine";
 import Tooltip from "@/components/bits/Tooltip";
 import ExtensionsSection from "./ExtensionsSection";
 import PasswordManagersSection from "./PasswordManagersSection";
+import SecretRequestsSection from "./SecretRequestsSection";
 
 type StatusFilter = "all" | "connected" | "disconnected";
 
@@ -222,6 +223,7 @@ export default function ConnectorsPage() {
 
       {statusFilter !== "disconnected" && !q && <ExtensionsSection />}
 
+      {statusFilter !== "disconnected" && !q && <SecretRequestsSection />}
       {statusFilter !== "disconnected" && !q && <PasswordManagersSection />}
 
       {statusFilter !== "connected" && (

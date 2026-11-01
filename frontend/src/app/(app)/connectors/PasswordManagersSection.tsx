@@ -12,7 +12,6 @@ import {
   useSecretAccess,
   useSecretCounts,
   useSecretKinds,
-  useSecretLog,
   useSecretProviders,
   useSecretRefs,
   useSecretsHelper,
@@ -20,6 +19,7 @@ import {
   useUpdateSecretRef,
 } from "@/lib/queries/secrets";
 import { useVaults } from "@/lib/queries/vaults";
+import { useSecretActivity } from "@/lib/queries/secretRequests";
 import { relativeTime } from "@/lib/connectorMeta";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import ConfirmButton from "@/components/ConfirmButton";
@@ -42,6 +42,17 @@ const OUTCOME_COLOUR: Record<string, string> = { ok: "var(--good)", denied: "var
 const OUTCOME_LABEL: Record<string, string> = { ok: "Resolved", denied: "Denied", not_found: "Not found", provider_error: "Provider error" };
 /** The helper itself failed (`LogEntry.code`): clearer than "Provider error". */
 const CODE_LABEL: Record<string, string> = { helper_disabled: "Helper off", helper_unreachable: "Helper not answering" };
+/** The resolution log also shows secret requests and what agents did with held secrets (docs/secret-requests.md). */
+const ACTION_LABEL: Record<string, string> = {
+  "secret.resolve": "Used",
+  "secret.request": "Requested",
+  "secret.fill": "Filled",
+  "secret.decline": "Declined",
+  "secret.transform": "Transformed",
+  "secret.http": "Sent",
+  "secret.replace": "Replaced",
+  "secret.delete": "Deleted",
+};
 
 const list = (s: string) =>
   s
@@ -616,13 +627,13 @@ function References({ vaults }: { vaults: { id: string; name: string }[] }) {
 // ---------------------------------------------------------------- resolution log
 
 function ResolutionLog() {
-  const log = useSecretLog();
+  const log = useSecretActivity();
   const entries = log.data?.entries ?? null;
   return (
     <div className="flex flex-col gap-2">
       <h3 className="text-[13px] font-medium mt-2">Resolution log</h3>
       <p className="text-[12.5px] -mt-1" style={{ color: "var(--ink-dim)" }}>
-        Every time a tool asked for a secret: who, which reference, which tool, and the outcome. Never the value. A vault owner sees the vaults they own. Tool calls themselves are under Settings, Usage.
+        Every time a tool asked for a secret, and every secret request, fill, transform and outbound call: who, which reference or handle, which tool, and the outcome. Never the value. A vault owner sees the vaults they own. Tool calls themselves are under Settings, Usage.
       </p>
       {log.isError && <ErrorLine error={failure(log.error, "Could not load the resolution log.", " Reload the page to try again.")} />}
       <div className="ledger overflow-hidden">
@@ -630,6 +641,7 @@ function ResolutionLog() {
           <thead>
             <tr className="label border-b text-left h-8">
               <th className="px-4 font-medium">When</th>
+              <th className="px-3 font-medium">What</th>
               <th className="px-3 font-medium">Reference</th>
               <th className="px-3 font-medium hidden md:table-cell">Tool</th>
               <th className="px-3 font-medium hidden lg:table-cell">Who</th>
@@ -639,14 +651,14 @@ function ResolutionLog() {
           <tbody className="hairline-rows">
             {entries === null && !log.isError && (
               <tr aria-hidden>
-                <td colSpan={5} className="px-4 h-10">
+                <td colSpan={6} className="px-4 h-10">
                   <span className="skeleton h-3 w-40" />
                 </td>
               </tr>
             )}
             {entries?.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 h-14" style={{ color: "var(--ink-dim)" }}>
+                <td colSpan={6} className="px-4 h-14" style={{ color: "var(--ink-dim)" }}>
                   No secret has been resolved yet.
                 </td>
               </tr>
@@ -656,7 +668,10 @@ function ResolutionLog() {
                 <td className="px-4 whitespace-nowrap" style={{ color: "var(--ink-dim)" }}>
                   {relativeTime(e.at)}
                 </td>
-                <td className="px-3 font-mono text-[12.5px] truncate max-w-[280px]">{e.reference}</td>
+                <td className="px-3 whitespace-nowrap">{ACTION_LABEL[e.action] ?? e.action}</td>
+                <td className="px-3 font-mono text-[12.5px] truncate max-w-[280px]" title={e.host ? `to ${e.host}` : undefined}>
+                  {e.reference || e.lineage.join(", ")}
+                </td>
                 <td className="px-3 hidden md:table-cell font-mono text-[12px]">{e.tool}</td>
                 <td className="px-3 hidden lg:table-cell font-mono text-[12px]" style={{ color: "var(--ink-dim)" }}>
                   {e.actor_id} · {e.channel}
