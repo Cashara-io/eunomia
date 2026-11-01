@@ -260,7 +260,7 @@ pub fn inherit(inputs: &[&HeldMeta], requested_expiry: Option<chrono::DateTime<c
     }
     let expiry = inputs
         .iter()
-        .filter_map(|m| m.expires_at.clone().map(chrono::DateTime::<chrono::Utc>::from))
+        .filter_map(|m| m.expires_at.map(chrono::DateTime::<chrono::Utc>::from))
         .chain(requested_expiry)
         .min();
     Ok(Policy { vault: first.vault.clone(), hosts, placements, tools, actors, expires_at: expiry })
@@ -589,7 +589,7 @@ mod tests {
         assert_eq!(p.placements, ["header"]);
         assert_eq!(p.tools, ["http_request", "secret_transform"]);
         assert_eq!(p.actors, ["api_token:t1", "api_token:t2"]);
-        let b_exp = chrono::DateTime::<chrono::Utc>::from(b.expires_at.clone().unwrap());
+        let b_exp = chrono::DateTime::<chrono::Utc>::from(b.expires_at.unwrap());
         assert_eq!(p.expires_at, Some(b_exp));
         // a sooner requested expiry wins; a later one does not extend it
         let soon = chrono::Utc::now() + chrono::TimeDelta::days(1);

@@ -68,7 +68,7 @@ impl RequestRow {
     }
 
     pub fn expired(&self) -> bool {
-        chrono::DateTime::<chrono::Utc>::from(self.expires_at.clone()) <= chrono::Utc::now()
+        chrono::DateTime::<chrono::Utc>::from(self.expires_at) <= chrono::Utc::now()
     }
 
     /// `expired` for a pending request past its time, even before the next read marks it.
@@ -116,7 +116,7 @@ pub fn fill_url(settings: &crate::config::Settings, id: &RecordId) -> (String, b
 
 fn fill_url_at(front: &str, id: &RecordId) -> (String, bool) {
     let key = crate::rid::key_string(id.key()).unwrap_or_default();
-    let insecure = url::Url::parse(&front).is_ok_and(|u| u.scheme() == "http" && !matches!(u.host_str(), Some("localhost" | "127.0.0.1" | "[::1]")));
+    let insecure = url::Url::parse(front).is_ok_and(|u| u.scheme() == "http" && !matches!(u.host_str(), Some("localhost" | "127.0.0.1" | "[::1]")));
     (format!("{front}/secrets/requests/{key}"), insecure)
 }
 

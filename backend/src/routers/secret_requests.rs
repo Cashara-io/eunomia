@@ -325,6 +325,6 @@ async fn activity(State(state): State<AppState>, user: User, Query(q): Query<Act
         .take(0)?;
     let more = rows.len() as i64 > limit;
     let entries: Vec<ActivityEntry> = rows.into_iter().take(limit as usize).map(entry).collect();
-    let next_before = if more { entries.last().map(|e| chrono::DateTime::<chrono::Utc>::from(e.at.clone()).to_rfc3339()) } else { None };
+    let next_before = if more { entries.last().map(|e| chrono::DateTime::<chrono::Utc>::from(e.at).to_rfc3339()) } else { None };
     Ok(Json(ActivityPage { entries, next_before }))
 }

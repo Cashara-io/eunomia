@@ -58,7 +58,7 @@ impl HeldMeta {
     }
 
     pub fn expired(&self) -> bool {
-        self.expires_at.as_ref().is_some_and(|t| chrono::DateTime::<chrono::Utc>::from(t.clone()) <= chrono::Utc::now())
+        self.expires_at.as_ref().is_some_and(|t| chrono::DateTime::<chrono::Utc>::from(*t) <= chrono::Utc::now())
     }
 }
 

@@ -67,10 +67,12 @@ fn capture_logs() {
 
 // ---- the mock upstream ------------------------------------------------------------------------
 
+/// One request the upstream saw: (path, authorization header, query, body).
+type Seen = (String, String, String, String);
+
 #[derive(Clone, Default)]
 struct Upstream {
-    /// every request seen: (path, authorization header, query, body)
-    seen: Arc<Mutex<Vec<(String, String, String, String)>>>,
+    seen: Arc<Mutex<Vec<Seen>>>,
 }
 
 fn b64(s: &str) -> String {

@@ -421,7 +421,7 @@ are already in `backend/Cargo.toml`.
 ## Tests
 
 - Unit: handle parsing; every transform with known vectors (RFC 4231 HMAC-SHA256 cases 1, 2 and 4;
-  RFC 7515 appendix A.1-style HS256; base64 RFC 4648 vectors; SHA-256 of "abc"); RS256 and ES256 sign and
+  the jwt.io HS256 example token; base64 RFC 4648 vectors; SHA-256 of "abc"); RS256 and ES256 sign and
   verify with a test key; inheritance (intersection, actors, expiry); the SSRF guard (private, loopback,
   link-local, metadata, CGNAT, IPv6 ULA and mapped, IP literals, http, userinfo, ports); placements; the
   encoded-form expansion; MCP session flag and the `-32042` shape.
