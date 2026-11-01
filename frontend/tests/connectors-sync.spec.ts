@@ -54,7 +54,10 @@ test("a connector syncs real API data that the search tool then finds", async ({
     await expect(page.getByRole("heading", { name: "GitHub" })).toBeVisible();
     await expect(page.getByRole("link", { name: "fine-grained token" })).toBeVisible();
 
-    await page.getByPlaceholder("github_pat_… or ghp_…").fill("ghp_e2e_valid");
+    // by its label: the placeholder changes once the saved credentials load
+    const token = page.getByRole("textbox", { name: "Personal access token", exact: true });
+    await expect(token).toHaveAttribute("placeholder", "github_pat_… or ghp_…");
+    await token.fill("ghp_e2e_valid");
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect(page.getByRole("button", { name: "Saved" })).toBeVisible();
     // Point the connector at the mock instead of api.github.com (test-only hook).
@@ -80,7 +83,10 @@ test("a connector syncs real API data that the search tool then finds", async ({
 
     // A revoked token: the provider's 401 is shown, not a silent empty sync.
     await page.goto("/connectors/setup/github");
-    await page.getByPlaceholder("github_pat_… or ghp_…").fill("ghp_revoked");
+    // wait for the saved credentials to load (the placeholder says so), else the fill races the render;
+    // the old placeholder locator only passed when it won that race
+    await expect(token).toHaveAttribute("placeholder", "Saved. Paste a new value to replace it");
+    await token.fill("ghp_revoked");
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await page.getByRole("button", { name: "Sync now" }).click();
     await expect(page.getByRole("status")).toHaveText(/Sync failed: .*HTTP 401.*Bad credentials/);
