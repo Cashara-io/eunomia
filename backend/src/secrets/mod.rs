@@ -6,7 +6,11 @@
 
 pub mod broker;
 pub mod client;
+pub mod held;
+pub mod outbound;
 pub mod reference;
+pub mod requests;
+pub mod transform;
 
 use serde::{Deserialize, Serialize};
 use surrealdb::types::{Datetime, RecordId, SurrealValue};

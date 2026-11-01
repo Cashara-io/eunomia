@@ -48,6 +48,7 @@ mod documents;
 mod entities;
 mod memory;
 mod records;
+mod secret_tools;
 pub(crate) mod skills;
 mod vaults;
 
@@ -93,6 +94,7 @@ pub const READ_ONLY_TOOLS: &[&str] = &[
     "skill_find",
     "skill_get",
     "changes_since",
+    "secret_request_status",
 ];
 
 /// Read-only tools that still get an audit row: they disclose an original file or its vectors. The
@@ -177,6 +179,10 @@ pub fn description(name: &str) -> &'static str {
         "skill_get" => "One saved skill with its full Markdown body, by id (from `skill_find`) or by name (an error names the ids if several vaults hold that name).",
         "skill_delete" => "Delete one saved skill by id. Irreversible.",
         "changes_since" => "A vault's change log after a cursor: one numbered row per write (seq, op created/updated/deleted/merged, kind memory/entity/relation/skill/document, the item's id, who wrote it, when), oldest first, with no content (fetch the item to see it). Pass the returned `next` as `after` to read on. Your personal vault unless `vault_id` is given.",
+        "secret_request" => "Ask the user for a password, API key or token WITHOUT it going through chat: Eunomia shows them a masked pop-up in the Eunomia web app (and, for MCP clients that support it, a URL elicitation), they paste it there, and you get back only a handle, {\"$secret\": \"eu://<vault>/<name>\"}, never the value. Give a stable `name`, a `label`, a `description` of why, and `target.hosts` it will be sent to (the user approves them). Returns `request_id`, `status` (pending, or filled when a secret by that name is already yours to use), `fill_url` to show the user, and the `handle`. Never ask for a secret in chat; use this instead.",
+        "secret_request_status" => "The state of a `secret_request`: pending (with the `fill_url` to remind the user of), filled (with the `handle` to use), declined or expired. Never returns the value.",
+        "secret_transform" => "Make a NEW secret from held ones, server side, and get its handle; you never see a value. `op`: base64, base64url, url_encode, template (params.template such as \"Bearer {{value}}\" or \"{{user}}:{{pass}}\"), basic_auth, hmac_sha256 (key handle, message literal or handle; hex, base64 or base64url), sha256, jwt_hs256, jwt_rs256 or jwt_es256 (key handle, params.claims). `inputs` maps names to eu:// handles. The result may only be sent where every input may (the intersection of their approved hosts). There is no decode, compare or reveal.",
+        "http_request" => "Send one HTTPS request that uses held secrets: put handles ({\"$secret\": \"eu://...\"}) in `headers` (or `query`, `body`, `json` when the user allowed that), and the url's host must be one the user approved for every handle. Returns the status, content type and body (at most 64 KiB, with any secret value scrubbed). No redirects are followed; private and internal addresses are refused; at least one handle is required (it is not a general fetch tool).",
         _ => "",
     }
 }
@@ -332,6 +338,7 @@ fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
     code::register_all(registry);
     vaults::register_all(registry);
     skills::register_all(registry);
+    secret_tools::register_all(registry);
 }
 
 pub fn all_tools() -> &'static HashMap<&'static str, ToolSpec> {
@@ -423,6 +430,7 @@ async fn call_inner(app: &AppState, user: &User, name: &str, mut args: Value) ->
         None => Box::pin(crate::error::TOOL_SOURCE.scope(Arc::clone(&source), run_tool(state, owner, name, &spec, args.clone(), &args)).instrument(span.clone())).await,
         Some(p) => {
             let run = run_tool(state, owner, name, &spec, p.args.clone(), &args);
+            let run = crate::secrets::outbound::with_grants(Arc::clone(&p.grants), run);
             let scoped = crate::redact::with_exact(Arc::clone(&p.values), crate::error::TOOL_SOURCE.scope(Arc::clone(&source), run));
             Box::pin(scoped.instrument(span.clone())).await
         }
@@ -612,6 +620,7 @@ mod tests {
             "skill_find",
             "skill_get",
             "changes_since",
+            "secret_request_status",
         ];
         assert_eq!(READ_ONLY_TOOLS.len(), expected.len());
         for name in expected {
@@ -701,6 +710,7 @@ mod tests {
             "vault_invite", "vault_members", "vault_remove_member", "vault_leave", "vault_rename", "vault_delete",
             "document_upload", "document_list", "document_get", "document_download", "document_export", "document_delete",
             "skill_save", "skill_find", "skill_get", "skill_delete", "changes_since",
+            "secret_request", "secret_request_status", "secret_transform", "http_request",
         ];
         let tools = all_tools();
         for name in expected {

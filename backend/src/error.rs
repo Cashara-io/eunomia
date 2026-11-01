@@ -49,6 +49,10 @@ pub enum ErrorCode {
     DocumentUnsupportedType,
     DocumentStorageUnavailable,
     SecretUnavailable,
+    SecretRequestClosed,
+    SecretHostDenied,
+    SecretOutboundBlocked,
+    SecretOutboundFailed,
     ValidationInvalid,
     DbConflict,
     DbDuplicate,
@@ -92,6 +96,10 @@ impl ErrorCode {
         ErrorCode::DocumentUnsupportedType,
         ErrorCode::DocumentStorageUnavailable,
         ErrorCode::SecretUnavailable,
+        ErrorCode::SecretRequestClosed,
+        ErrorCode::SecretHostDenied,
+        ErrorCode::SecretOutboundBlocked,
+        ErrorCode::SecretOutboundFailed,
         ErrorCode::ValidationInvalid,
         ErrorCode::DbConflict,
         ErrorCode::DbDuplicate,
@@ -135,6 +143,10 @@ impl ErrorCode {
             ErrorCode::DocumentUnsupportedType => "document.unsupported_type",
             ErrorCode::DocumentStorageUnavailable => "document.storage_unavailable",
             ErrorCode::SecretUnavailable => "secret.unavailable",
+            ErrorCode::SecretRequestClosed => "secret.request_closed",
+            ErrorCode::SecretHostDenied => "secret.host_denied",
+            ErrorCode::SecretOutboundBlocked => "secret.outbound_blocked",
+            ErrorCode::SecretOutboundFailed => "secret.outbound_failed",
             ErrorCode::ValidationInvalid => "validation.invalid",
             ErrorCode::DbConflict => "db.conflict",
             ErrorCode::DbDuplicate => "db.duplicate",
@@ -148,9 +160,11 @@ impl ErrorCode {
     pub fn default_status(self) -> StatusCode {
         match self {
             ErrorCode::AuthUnauthorized | ErrorCode::AuthTokenExpired | ErrorCode::AuthSessionExpired => StatusCode::UNAUTHORIZED,
-            ErrorCode::AuthForbidden | ErrorCode::AuthPasswordDisabled | ErrorCode::AuthScope | ErrorCode::TenantDenied | ErrorCode::VaultForbidden | ErrorCode::ExtensionDisabled => {
-                StatusCode::FORBIDDEN
-            }
+            ErrorCode::AuthForbidden | ErrorCode::AuthPasswordDisabled | ErrorCode::AuthScope | ErrorCode::TenantDenied | ErrorCode::VaultForbidden | ErrorCode::ExtensionDisabled
+            | ErrorCode::SecretHostDenied
+            | ErrorCode::SecretOutboundBlocked => StatusCode::FORBIDDEN,
+            ErrorCode::SecretOutboundFailed => StatusCode::BAD_GATEWAY,
+            ErrorCode::SecretRequestClosed => StatusCode::CONFLICT,
             ErrorCode::RateLimited | ErrorCode::ExtensionBufferFull => StatusCode::TOO_MANY_REQUESTS,
             ErrorCode::TenantSchemaBehind | ErrorCode::DocumentStorageUnavailable | ErrorCode::SecretUnavailable => StatusCode::SERVICE_UNAVAILABLE,
             ErrorCode::DocumentTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
@@ -349,7 +363,8 @@ mod tests {
                 | ErrorCode::MemoryNotFound | ErrorCode::ChatThreadNotFound | ErrorCode::ConnectorNotFound
                 | ErrorCode::ConnectorNotConnected | ErrorCode::SourceNotFound | ErrorCode::ExtensionNotFound | ErrorCode::ExtensionDisabled | ErrorCode::ExtensionBufferFull | ErrorCode::ToolNotFound
                 | ErrorCode::ResourceNotFound | ErrorCode::DocumentNotFound | ErrorCode::DocumentTooLarge
-                | ErrorCode::DocumentUnsupportedType | ErrorCode::DocumentStorageUnavailable | ErrorCode::SecretUnavailable | ErrorCode::ValidationInvalid | ErrorCode::DbConflict
+                | ErrorCode::DocumentUnsupportedType | ErrorCode::DocumentStorageUnavailable | ErrorCode::SecretUnavailable | ErrorCode::SecretRequestClosed | ErrorCode::SecretHostDenied
+                | ErrorCode::SecretOutboundBlocked | ErrorCode::SecretOutboundFailed | ErrorCode::ValidationInvalid | ErrorCode::DbConflict
                 | ErrorCode::DbDuplicate | ErrorCode::JobNoHandler | ErrorCode::JobLeaseExpired | ErrorCode::JobPanicked
                 | ErrorCode::Internal => {}
             }

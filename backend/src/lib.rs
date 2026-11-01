@@ -90,6 +90,7 @@ pub fn app_with(state: AppState, limits: ratelimit::RateConfig) -> axum::Router 
         .merge(routers::sources::webhook_router())
         .merge(routers::extensions::router())
         .merge(routers::secrets::router())
+        .merge(routers::secret_requests::router())
         .merge(routers::oauth::router())
         .merge(routers::oidc::router());
 

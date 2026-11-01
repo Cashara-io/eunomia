@@ -150,7 +150,8 @@ async fn respond(state: &AppState, user: &User, message: &Value, initializing: b
     };
     match replies.into_iter().next() {
         Some(reply) if initializing && reply.get("result").is_some() => {
-            ([(header::HeaderName::from_static(SESSION_HEADER), new_session_id())], Json(reply)).into_response()
+            let url_elicitation = declares_url_elicitation(message.get("params").unwrap_or(&Value::Null));
+            ([(header::HeaderName::from_static(SESSION_HEADER), new_session_id(url_elicitation))], Json(reply)).into_response()
         }
         Some(reply) => Json(reply).into_response(),
         // Notifications and client responses get no body.
@@ -181,9 +182,54 @@ fn surface_epoch() -> &'static str {
 }
 
 /// `<surface epoch>.<random>`: visible ASCII, as the transport requires; the random part only keeps
-/// two clients' ids apart in logs.
-fn new_session_id() -> String {
-    format!("{}.{}", surface_epoch(), uuid::Uuid::new_v4().simple())
+/// two clients' ids apart in logs. A client that declared URL-mode elicitation at `initialize` (MCP
+/// 2025-11-25) gets `.u` on the end: the session id is the only state this stateless server keeps, and a
+/// client forging the flag only changes what it is itself told.
+fn new_session_id(url_elicitation: bool) -> String {
+    format!("{}.{}{}", surface_epoch(), uuid::Uuid::new_v4().simple(), if url_elicitation { URL_ELICITATION_FLAG } else { "" })
+}
+
+const URL_ELICITATION_FLAG: &str = ".u";
+/// JSON-RPC error code of the 2025-11-25 `URLElicitationRequiredError`.
+pub const URL_ELICITATION_REQUIRED: i64 = -32042;
+
+/// Whether `initialize` params negotiate 2025-11-25 and declare `capabilities.elicitation.url`.
+fn declares_url_elicitation(params: &Value) -> bool {
+    negotiate_version(params.get("protocolVersion").and_then(Value::as_str)) == "2025-11-25" && params.pointer("/capabilities/elicitation/url").is_some_and(Value::is_object)
+}
+
+/// Whether the session the current call came in on declared URL-mode elicitation.
+fn session_has_url_elicitation() -> bool {
+    let session = crate::usage::current_context().session;
+    session_current(&session) && session.ends_with(URL_ELICITATION_FLAG)
+}
+
+/// `secret_request`'s pending answer as a `URLElicitationRequiredError` (MCP 2025-11-25, URL mode): the
+/// client shows the fill page and retries the call, which then returns `filled` with the handle. The URL
+/// carries no credential; the page needs the person's own browser session.
+fn url_elicitation_required(id: Value, pending: &Value) -> Value {
+    let label = pending.get("label").and_then(Value::as_str).unwrap_or("A secret");
+    let message = format!("{label}: open this page in Eunomia and paste it there, not in chat. Retry when you have saved it.");
+    json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "error": {
+            "code": URL_ELICITATION_REQUIRED,
+            "message": "This request needs a secret from the user, entered in Eunomia.",
+            "data": {
+                "elicitations": [{
+                    "mode": "url",
+                    "elicitationId": pending["request_id"],
+                    "url": pending["fill_url"],
+                    "message": message,
+                }],
+                "request_id": pending["request_id"],
+                "handle": pending["handle"],
+                "code": "secret.request_pending",
+                "trace_id": crate::telemetry::current_trace_id(),
+            },
+        },
+    })
 }
 
 fn session_current(id: &str) -> bool {
@@ -363,6 +409,9 @@ async fn call_tool(state: &AppState, user: &User, id: Value, params: &Value) -> 
         }
         Err(e) => (e.to_tool_value(), true),
     };
+    if name == "secret_request" && !is_error && value.get("status").and_then(Value::as_str) == Some("pending") && session_has_url_elicitation() {
+        return url_elicitation_required(id, &value);
+    }
     let text = serde_json::to_string_pretty(&value).unwrap_or_else(|_| value.to_string());
     result_response(id, json!({ "content": [{ "type": "text", "text": text }], "isError": is_error }))
 }
@@ -381,6 +430,32 @@ fn error_response(id: Value, code: i64, app_code: ErrorCode, message: &str) -> V
 mod tests {
     use super::*;
     use axum::http::HeaderValue;
+
+    #[test]
+    fn url_elicitation_is_flagged_in_the_session_for_2025_11_25_clients_that_declare_it() {
+        let declared = json!({"protocolVersion": "2025-11-25", "capabilities": {"elicitation": {"url": {}, "form": {}}}});
+        assert!(declares_url_elicitation(&declared));
+        assert!(!declares_url_elicitation(&json!({"protocolVersion": "2025-11-25", "capabilities": {"elicitation": {}}})), "empty elicitation is form only");
+        assert!(!declares_url_elicitation(&json!({"protocolVersion": "2025-06-18", "capabilities": {"elicitation": {"url": {}}}})), "URL mode is 2025-11-25");
+        assert!(!declares_url_elicitation(&json!({})));
+        let id = new_session_id(true);
+        assert!(id.ends_with(".u") && session_current(&id) && id.len() <= 64, "{id}");
+        assert!(!new_session_id(false).ends_with(".u"));
+        assert!(crate::usage::session_from_header(Some(&id)) == id, "the usage context keeps the flag");
+    }
+
+    #[test]
+    fn the_url_elicitation_error_has_the_2025_11_25_shape() {
+        let pending = json!({"request_id": "secret_request:k1", "status": "pending", "fill_url": "https://eu.example.com/secrets/requests/k1", "handle": {"$secret": "eu://v/k"}, "label": "Stripe key"});
+        let e = url_elicitation_required(json!(7), &pending);
+        assert_eq!(e["id"], 7);
+        assert_eq!(e["error"]["code"], -32042);
+        let el = &e["error"]["data"]["elicitations"][0];
+        assert_eq!((el["mode"].as_str(), el["elicitationId"].as_str(), el["url"].as_str()), (Some("url"), Some("secret_request:k1"), Some("https://eu.example.com/secrets/requests/k1")));
+        assert!(el["message"].as_str().unwrap().starts_with("Stripe key"));
+        assert_eq!(e["error"]["data"]["handle"]["$secret"], "eu://v/k");
+        assert!(e.get("result").is_none());
+    }
 
     #[test]
     fn negotiates_supported_versions_and_falls_back() {

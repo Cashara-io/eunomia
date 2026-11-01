@@ -198,6 +198,9 @@ No. The connected agent is the model.
 | `document_download` / `document_export` / `document_delete` | The HTTP route for the original bytes, the passages-and-vectors manifest, deletion |
 | `skill_save` / `skill_find` / `skill_get` / `skill_delete` | Keep a skill an agent learned, find it later by meaning, read its body, delete it ([agent skills](#agent-skills)) |
 | `changes_since` | A vault's numbered change log after a cursor: what was created, updated, merged or deleted, by whom, with no content ([change log](#change-log)) |
+| `secret_request` / `secret_request_status` | Ask the user for a password or API key through a masked pop-up in the Eunomia web app instead of the chat; you get a handle, never the value ([secret requests](#secret-requests)) |
+| `secret_transform` | Make a new held secret from others (base64, a Bearer or Basic header, an HMAC, a JWT) and get its handle |
+| `http_request` | Send one HTTPS request with handles in its headers, query or body, to a host the user approved |
 
 Destructive tools are flagged `destructiveHint` so clients can ask first.
 
@@ -219,6 +222,21 @@ Change-log rows hold no content, so there is nothing in them to redact. Uploaded
 documents, synced connector records, chat messages, entity names, aliases and summaries, relation labels,
 sync error messages and extension webhook deliveries are not redacted on write, so the backfill leaves
 them alone too.
+
+### Secret requests
+
+Never ask the user to paste a password, API key or token into the chat. Ask Eunomia for it instead
+([secret requests](secret-requests.md)):
+
+1. `secret_request` with a stable `name` (`stripe_api_key`), a `label`, a `description` of why, and
+   `target.hosts` it will be sent to (`api.stripe.com`). You get a `request_id`, a `fill_url` and the
+   `handle` the secret will have, `{"$secret": "eu://<vault>/<name>"}`. Never a value.
+2. The user sees a pop-up in the Eunomia web app (or opens `fill_url`), pastes the value there and saves.
+   MCP clients that support URL elicitation (protocol 2025-11-25) are sent the page directly.
+3. `secret_request_status` tells you when it is filled.
+4. Use the handle in `http_request` (in a header by default), or derive another with `secret_transform`,
+   for example `{"op": "template", "inputs": {"key": "eu://.../stripe_api_key"}, "params": {"template": "Bearer {{key}}"}}`.
+   Responses come back with the value scrubbed. You never see it, and there is no tool that shows it.
 
 ### Agent skills
 

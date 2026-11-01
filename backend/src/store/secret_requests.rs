@@ -38,7 +38,7 @@ pub const REQ_CREATE: Stmt = Stmt::new(
     "CREATE secret_request SET vault = $vault, name = $name, label = $label, description = $description, \
      target_hosts = $hosts, placements = $placements, connector = $connector, requested_by = $requester, \
      actor_kind = $actor_kind, actor_id = $actor_id, client_name = $client_name, channel = $channel, \
-     session = $session, replace = $replace, secret_ttl_days = $ttl_days, expires_at = $expires_at RETURN AFTER",
+     session = $mcp_session, replace = $replace, secret_ttl_days = $ttl_days, expires_at = $expires_at RETURN AFTER",
 );
 
 /// The same caller's pending request for the same slot (a retried call gets it back).
@@ -127,7 +127,8 @@ pub const HELD_CREATE: Stmt = Stmt::new(
 pub const HELD_CHILDREN: Stmt =
     Stmt::new("secret_requests.held_children", "SELECT VALUE id FROM vault_secret WHERE derived_from CONTAINSANY $ids AND vault IN $vaults");
 
-pub const HELD_DELETE: Stmt = Stmt::new("secret_requests.held_delete", "DELETE vault_secret WHERE id IN $ids AND vault IN $vaults RETURN NONE");
+/// Record targets, not `WHERE id IN $ids` (on 3.x a table scan with an id filter does not match here).
+pub const HELD_DELETE: Stmt = Stmt::new("secret_requests.held_delete", "DELETE $ids WHERE vault IN $vaults RETURN NONE");
 
 pub const HELD_REPLACE: Stmt = Stmt::new(
     "secret_requests.held_replace",

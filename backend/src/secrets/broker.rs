@@ -22,11 +22,12 @@ use crate::models_user::User;
 use crate::rid::RecordIdExt;
 use crate::state::OrgState;
 
-/// Built-in tools that take a resolved secret as an argument. None yet: today's tools write their
-/// arguments into memories, entities, skills, documents and vaults, and #111's redaction covers only some
-/// of those fields, so letting them resolve a secret would let an agent store it. A tool that makes an
-/// outbound call with a credential (the first connectors' tools) is added here.
-pub const SECRET_TOOLS: &[&str] = &[];
+/// Built-in tools that take a resolved secret as an argument. Today's other tools write their arguments
+/// into memories, entities, skills, documents and vaults, and #111's redaction covers only some of those
+/// fields, so letting them resolve a secret would let an agent store it. `http_request` stores nothing:
+/// it sends one outbound call to a host the person approved for every handle in it
+/// (docs/architecture/specs/secret-requests.md).
+pub const SECRET_TOOLS: &[&str] = &["http_request"];
 
 /// A value shorter than this cannot be scrubbed safely (it would match ordinary text), so it is refused.
 pub const MIN_VALUE_LEN: usize = 4;
@@ -43,7 +44,10 @@ pub mod outcome {
 pub struct Prepared {
     /// The arguments the tool runs with (values in). Zeroised when dropped.
     pub args: Value,
+    /// Every resolved value plus its encoded forms (`held::encoded_forms`): what the scrub takes out.
     pub values: Arc<Vec<Zeroizing<String>>>,
+    /// Where each value sits in `args` and what was approved for it (`outbound::with_grants`).
+    pub grants: Arc<Vec<super::outbound::Grant>>,
 }
 
 impl Drop for Prepared {
@@ -102,6 +106,9 @@ struct Item {
     /// The text for the audit row (as normalised when it parsed, else as given, cut short).
     text: String,
     row: Option<CredentialRef>,
+    /// An `eu://` handle: its vault key and name, and once checked, the held secret.
+    eu: Option<(String, String)>,
+    held: Option<super::held::HeldMeta>,
     outcome: &'static str,
     reason: String,
     value: Option<Zeroizing<String>>,
@@ -152,11 +159,12 @@ pub async fn prepare(state: &OrgState, user: &User, tool: &str, args: &Value) ->
     let mut items: Vec<Item> = found
         .into_iter()
         .map(|f| {
-            let (text, outcome, reason) = match f.reference {
-                Ok(r) => (r.text(), outcome::OK, String::new()),
-                Err(m) => (f.raw.chars().take(200).collect(), outcome::DENIED, format!("malformed reference: {}", m.0)),
+            let (text, outcome, reason, eu) = match f.reference {
+                Ok(reference::Reference::Eu { vault, name }) => (reference::handle(&vault, &name), outcome::OK, String::new(), Some((vault, name))),
+                Ok(r) => (r.text(), outcome::OK, String::new(), None),
+                Err(m) => (f.raw.chars().take(200).collect(), outcome::DENIED, format!("malformed reference: {}", m.0), None),
             };
-            Item { pointer: f.pointer, text, row: None, outcome, reason, value: None }
+            Item { pointer: f.pointer, text, row: None, eu, held: None, outcome, reason, value: None }
         })
         .collect();
 
@@ -167,8 +175,20 @@ pub async fn prepare(state: &OrgState, user: &User, tool: &str, args: &Value) ->
         items.iter_mut().for_each(|i| i.fail(outcome::DENIED, format!("the tool {tool} does not take secrets")));
     }
 
+    // an eu:// handle: a secret Eunomia holds, checked and decrypted here (no sidecar)
+    for item in items.iter_mut().filter(|i| i.outcome == outcome::OK && i.eu.is_some()) {
+        let (vault, name) = item.eu.clone().unwrap_or_default();
+        match super::held::for_use(&state.db, &state.settings.encryption_key, &user.id, &who, tool, &vault, &name).await {
+            Ok((meta, value)) => {
+                item.held = Some(meta);
+                item.value = Some(value);
+            }
+            Err((o, why)) => item.fail(o, why),
+        }
+    }
+
     // the registered row each reference may use
-    for item in items.iter_mut().filter(|i| i.outcome == outcome::OK) {
+    for item in items.iter_mut().filter(|i| i.outcome == outcome::OK && i.eu.is_none()) {
         let rows = match refs_named(&state.db, &user.id, &item.text).await {
             Ok(rows) => rows,
             Err(e) => {
@@ -269,11 +289,17 @@ pub async fn prepare(state: &OrgState, user: &User, tool: &str, args: &Value) ->
     for item in &items {
         let detail = json!({
             "ref": item.text.chars().take(200).collect::<String>(),
-            "ref_id": item.row.as_ref().map(|r| r.id.to_string()).unwrap_or_default(),
+            "ref_id": item.row.as_ref().map(|r| r.id.to_string()).or_else(|| item.held.as_ref().map(|h| h.id.to_string())).unwrap_or_default(),
             "tool": tool,
             "channel": ctx.channel.as_str(),
             "session": ctx.session,
-            "vault": item.row.as_ref().map(|r| r.vault.to_string()).or_else(|| call_vault.as_ref().map(|v| v.to_string())).unwrap_or_default(),
+            "vault": item
+                .row
+                .as_ref()
+                .map(|r| r.vault.to_string())
+                .or_else(|| item.held.as_ref().map(|h| h.vault.to_string()))
+                .or_else(|| call_vault.as_ref().map(|v| v.to_string()))
+                .unwrap_or_default(),
             "reason": item.reason.chars().take(120).collect::<String>(),
             // the stable code when the helper itself failed (`helper_disabled`, `helper_unreachable`)
             "code": helper.filter(|_| item.outcome == outcome::PROVIDER_ERROR).unwrap_or_default(),
@@ -292,6 +318,15 @@ pub async fn prepare(state: &OrgState, user: &User, tool: &str, args: &Value) ->
 
     let pairs: Vec<(String, &str)> = items.iter().map(|i| (i.pointer.clone(), i.value.as_ref().map(|v| v.as_str()).unwrap_or_default())).collect();
     let resolved = reference::substitute(args, &pairs);
+    let grants: Vec<super::outbound::Grant> = items
+        .iter()
+        .map(|i| super::outbound::Grant {
+            pointer: i.pointer.clone(),
+            handle: i.text.clone(),
+            hosts: i.held.as_ref().map(|h| h.allowed_hosts.clone()),
+            placements: i.held.as_ref().map(|h| h.placements.clone()),
+        })
+        .collect();
     let values: Vec<Zeroizing<String>> = items.into_iter().filter_map(|i| i.value).collect();
-    Prep::Ready(Prepared { args: resolved, values: Arc::new(values) })
+    Prep::Ready(Prepared { args: resolved, values: Arc::new(super::held::with_encoded_forms(values)), grants: Arc::new(grants) })
 }

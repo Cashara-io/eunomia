@@ -148,6 +148,12 @@ pub async fn with_exact<F: std::future::Future>(values: Arc<Vec<Zeroizing<String
     EXACT.scope(values, fut).await
 }
 
+/// The values the broker resolved for the call in progress (empty outside one), for a tool that must
+/// scrub them from text it builds itself (`secrets::outbound`).
+pub fn current_exact() -> Arc<Vec<Zeroizing<String>>> {
+    EXACT.try_with(Arc::clone).unwrap_or_default()
+}
+
 /// `text` with each exact value replaced by `[redacted: secret]`, longest first (so a value that
 /// contains another is not left half replaced), and how many were replaced.
 pub fn scrub_exact(text: &str, values: &[Zeroizing<String>]) -> (String, usize) {

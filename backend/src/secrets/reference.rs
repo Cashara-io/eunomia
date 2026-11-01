@@ -2,7 +2,9 @@
 //! `op://<vault>/<item>/<section>/<field>` (1Password's own syntax, with an optional `?attribute=<name>`)
 //! and `bws://<secret-id>` (ours: a Bitwarden Secrets Manager secret by its UUID). In tool arguments a
 //! reference is an object with exactly one key, `{"$secret": "<reference>"}`. The sidecar parses the same
-//! grammar (`secrets-helper/src/refs.ts`); keep the two in step.
+//! grammar (`secrets-helper/src/refs.ts`); keep the two in step. A third scheme, `eu://<vault key>/<name>`,
+//! is a handle to a secret Eunomia holds itself (docs/architecture/specs/secret-requests.md); it never
+//! goes to the sidecar, so the sidecar does not parse it.
 
 use serde_json::Value;
 
@@ -17,6 +19,8 @@ const MAX_LEN: usize = 1024;
 pub enum Reference {
     Op { vault: String, item: String, section: Option<String>, field: String, attribute: Option<String> },
     Bws { id: String },
+    /// A secret Eunomia holds (`vault_secret`): the vault's record key and the secret's name.
+    Eu { vault: String, name: String },
 }
 
 impl Reference {
@@ -25,6 +29,7 @@ impl Reference {
         match self {
             Reference::Op { .. } => "op",
             Reference::Bws { .. } => "bws",
+            Reference::Eu { .. } => "eu",
         }
     }
 
@@ -45,6 +50,7 @@ impl Reference {
                 s
             }
             Reference::Bws { id } => format!("bws://{id}"),
+            Reference::Eu { vault, name } => format!("eu://{vault}/{name}"),
         }
     }
 }
@@ -67,13 +73,14 @@ pub fn parse(raw: &str) -> Result<Reference, Malformed> {
         return Err(Malformed("a reference holds no control characters"));
     }
     let Some((scheme, rest)) = raw.split_once("://") else {
-        return Err(Malformed("a reference starts with op:// or bws://"));
+        return Err(Malformed("a reference starts with op://, bws:// or eu://"));
     };
     match scheme.to_ascii_lowercase().as_str() {
         "bws" if is_uuid(rest) => Ok(Reference::Bws { id: rest.to_ascii_lowercase() }),
         "bws" => Err(Malformed("bws:// is followed by a secret id (a UUID) and nothing else")),
         "op" => parse_op(rest),
-        _ => Err(Malformed("a reference starts with op:// or bws://")),
+        "eu" => parse_eu(rest),
+        _ => Err(Malformed("a reference starts with op://, bws:// or eu://")),
     }
 }
 
@@ -104,6 +111,31 @@ fn parse_op(rest: &str) -> Result<Reference, Malformed> {
         3 => Reference::Op { vault: s(0), item: s(1), section: None, field: s(2), attribute },
         _ => Reference::Op { vault: s(0), item: s(1), section: Some(s(2)), field: s(3), attribute },
     })
+}
+
+/// A held secret's name: lowercase, digits, `_`, `.` and `-`, starting with a letter or digit, at most 64.
+pub fn valid_name(name: &str) -> bool {
+    let b = name.as_bytes();
+    (1..=64).contains(&b.len())
+        && (b[0].is_ascii_lowercase() || b[0].is_ascii_digit())
+        && b.iter().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, b'_' | b'.' | b'-'))
+}
+
+/// A vault's record key as it appears in a handle (the id after `vault:`).
+pub fn valid_vault_key(key: &str) -> bool {
+    (1..=64).contains(&key.len()) && key.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
+}
+
+fn parse_eu(rest: &str) -> Result<Reference, Malformed> {
+    match rest.split_once('/') {
+        Some((vault, name)) if valid_vault_key(vault) && valid_name(name) => Ok(Reference::Eu { vault: vault.to_string(), name: name.to_string() }),
+        _ => Err(Malformed("eu:// takes <vault id>/<name>: the vault's id without vault:, and a lowercase name of at most 64 characters")),
+    }
+}
+
+/// The handle text for a held secret.
+pub fn handle(vault_key: &str, name: &str) -> String {
+    format!("eu://{vault_key}/{name}")
 }
 
 /// One `{"$secret": ...}` found in a value: where it is (a JSON pointer) and what it says.
@@ -201,6 +233,38 @@ mod tests {
         assert_eq!(r, Reference::Bws { id: "3f1c2b4a-5d6e-4f70-8a91-b2c3d4e5f607".into() });
         assert_eq!(r.text(), "bws://3f1c2b4a-5d6e-4f70-8a91-b2c3d4e5f607");
         assert_eq!(r.scheme(), "bws");
+    }
+
+    #[test]
+    fn eu_handles() {
+        let h = parse("eu://abc123XYZ/stripe_api_key").unwrap();
+        assert_eq!(h, Reference::Eu { vault: "abc123XYZ".into(), name: "stripe_api_key".into() });
+        assert_eq!(h.text(), "eu://abc123XYZ/stripe_api_key");
+        assert_eq!(h.scheme(), "eu");
+        assert_eq!(parse("EU://v1/a.b-c_9").unwrap().text(), "eu://v1/a.b-c_9");
+        for bad in [
+            "eu://",
+            "eu://v1",
+            "eu://v1/",
+            "eu:///name",
+            "eu://v1/Name",
+            "eu://v1/_name",
+            "eu://v1/a/b",
+            "eu://v-1/name",
+            "eu://v1/na me",
+            "eu://v1/name?x=1",
+            "eu://vault:v1/name",
+        ] {
+            assert!(parse(bad).is_err(), "{bad:?} parsed");
+        }
+        let long = format!("eu://v/{}", "a".repeat(65));
+        assert!(parse(&long).is_err());
+        assert!(parse(&format!("eu://v/{}", "a".repeat(64))).is_ok());
+        assert_eq!(handle("v1", "k"), "eu://v1/k");
+        // a handle is found in arguments like any reference
+        let found = find(&json!({"headers": {"Authorization": {"$secret": "eu://v1/k"}}}));
+        assert_eq!(found[0].pointer, "/headers/Authorization");
+        assert!(matches!(found[0].reference, Ok(Reference::Eu { .. })));
     }
 
     #[test]

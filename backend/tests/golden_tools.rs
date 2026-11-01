@@ -189,6 +189,13 @@ async fn goldens() {
     g.snap("skill_delete", "skill_delete", json!({"id": s(&skill, "/id")})).await;
     // -- the change log: the first writes above, oldest first --
     g.snap("changes_since", "changes_since", json!({"after": 0, "limit": 3})).await;
+    // -- secret requests (after the change log: they add no change rows). Only a person in a browser can
+    // fill a request, so the transform and the outbound call snapshot the unfilled handle's refusal --
+    let req = g.snap("secret_request", "secret_request", json!({"name": "golden_key", "label": "Golden key", "description": "to call the example API", "target": {"hosts": ["api.example.com"]}})).await;
+    g.snap("secret_request_status", "secret_request_status", json!({"request_id": s(&req, "/request_id")})).await;
+    let handle = s(&req, "/handle/$secret");
+    g.snap("secret_transform", "secret_transform", json!({"op": "template", "inputs": {"key": handle}, "params": {"template": "Bearer {{key}}"}})).await;
+    g.snap("http_request", "http_request", json!({"url": "https://api.example.com/v1/ping", "headers": {"Authorization": {"$secret": handle}}})).await;
 
     let registered: BTreeSet<String> = registry::all_tools().keys().map(|k| k.to_string()).collect();
     let missing: Vec<_> = registered.difference(&g.covered).collect();
