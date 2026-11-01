@@ -1,18 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { KeyRound, Pencil, Plus, PlugZap, Trash2, X } from "lucide-react";
-import type { ProviderOut, RefCount, RefOut } from "@/lib/gen";
-import { ApiError } from "@/lib/api";
+import { KeyRound, Pencil, Plus, PlugZap, Power, Trash2, X } from "lucide-react";
+import type { HelperStatus, Kind as KindInfo, ProviderOut, RefCount, RefOut } from "@/lib/gen";
 import {
   useCreateSecretRef,
   useDeleteSecretProvider,
   useDeleteSecretRef,
   usePutSecretProvider,
+  useRequestSecretsHelper,
+  useSecretAccess,
   useSecretCounts,
+  useSecretKinds,
   useSecretLog,
   useSecretProviders,
   useSecretRefs,
+  useSecretsHelper,
   useTestSecretProvider,
   useUpdateSecretRef,
 } from "@/lib/queries/secrets";
@@ -23,17 +26,22 @@ import ConfirmButton from "@/components/ConfirmButton";
 import Select from "@/components/Select";
 import { ICON } from "../settings/shared";
 
-/** The kinds the broker supports, in the order shown (docs/password-managers.md). */
+/**
+ * How each kind is set up here (its form fields), in the order shown. Names, stability and the preview
+ * note come from the API (`GET /api/secrets/kinds`, one source of truth in the backend); `name` is only
+ * the fallback while that loads.
+ */
 const KINDS = [
   { kind: "onepassword_connect", name: "1Password Connect", host: "required", hostLabel: "Connect server URL", hostHint: "https://connect.example.com:8080", scheme: "op" },
   { kind: "onepassword_service_account", name: "1Password service account", host: "none", hostLabel: "", hostHint: "", scheme: "op" },
   { kind: "bitwarden_sm", name: "Bitwarden Secrets Manager", host: "optional", hostLabel: "Server URL (optional)", hostHint: "https://vault.bitwarden.eu, or empty for the US cloud", scheme: "bws" },
 ] as const;
 type Kind = (typeof KINDS)[number]["kind"];
-const kindName = (k: string) => KINDS.find((x) => x.kind === k)?.name ?? k;
 
 const OUTCOME_COLOUR: Record<string, string> = { ok: "var(--good)", denied: "var(--critical)", not_found: "var(--warning)", provider_error: "var(--critical)" };
 const OUTCOME_LABEL: Record<string, string> = { ok: "Resolved", denied: "Denied", not_found: "Not found", provider_error: "Provider error" };
+/** The helper itself failed (`LogEntry.code`): clearer than "Provider error". */
+const CODE_LABEL: Record<string, string> = { helper_disabled: "Helper off", helper_unreachable: "Helper not answering" };
 
 const list = (s: string) =>
   s
@@ -41,9 +49,32 @@ const list = (s: string) =>
     .map((x) => x.trim())
     .filter(Boolean);
 
+/** The API's metadata for a kind, and its display name. */
+function useKindInfo() {
+  const kinds = useSecretKinds().data ?? [];
+  const info = (k: string): KindInfo | undefined => kinds.find((x) => x.kind === k);
+  const name = (k: string) => info(k)?.label ?? KINDS.find((x) => x.kind === k)?.name ?? k;
+  return { info, name };
+}
+
+/** The "Preview" badge for a kind the API marks as one (Bitwarden Secrets Manager). */
+function PreviewBadge({ info }: { info: KindInfo | undefined }) {
+  if (!info?.preview) return null;
+  return (
+    <span
+      data-testid="preview-badge"
+      className="inline-flex items-center rounded-[4px] px-1.5 text-[11px] font-medium leading-[18px]"
+      style={{ color: "var(--warning)", border: "var(--hair) solid var(--warning)" }}
+      title={info.note ?? undefined}
+    >
+      Preview
+    </span>
+  );
+}
+
 export default function PasswordManagersSection() {
-  const providers = useSecretProviders();
-  const forbidden = providers.error instanceof ApiError && providers.error.status === 403;
+  const access = useSecretAccess();
+  const a = access.data;
   return (
     <section className="flex flex-col gap-3" aria-labelledby="password-managers-heading">
       <div className="min-w-0">
@@ -55,37 +86,143 @@ export default function PasswordManagersSection() {
           time, and logs every use. Values are never stored.
         </p>
       </div>
-      {forbidden ? (
+      {access.isError && <ErrorLine error={failure(access.error, "Could not load the password managers.", " Reload the page to try again.")} />}
+      {a && !a.manage_refs ? (
         <p className="ledger px-4 py-4 text-[13px]" style={{ color: "var(--ink-dim)" }}>
-          Only an owner of this organisation or an instance admin can manage password managers.
+          Only an owner of this organisation, an instance admin or a vault owner can manage password managers.
         </p>
-      ) : (
+      ) : a ? (
         <>
-          {providers.isError && <ErrorLine error={failure(providers.error, "Could not load the password managers.", " Reload the page to try again.")} />}
-          <Providers rows={providers.data ?? null} />
-          <References />
+          <Helper admin={a.toggle_helper} />
+          {!a.manage_providers && (
+            <p className="text-[12.5px] max-w-[66ch]" style={{ color: "var(--ink-dim)" }} data-testid="vault-owner-note">
+              Only an owner of this organisation or an instance admin can set up a password manager. As a vault owner you can manage the references of the vaults you own and see their resolution log.
+            </p>
+          )}
+          <Providers manage={a.manage_providers} />
+          <References vaults={a.vaults} />
           <ResolutionLog />
         </>
+      ) : (
+        <div className="ledger p-5 flex flex-col gap-3" aria-hidden>
+          <span className="skeleton h-4 w-48" />
+          <span className="skeleton h-4 w-64" />
+        </div>
       )}
     </section>
   );
 }
 
-// ---------------------------------------------------------------- providers
+// ---------------------------------------------------------------- the secrets helper
 
-function Providers({ rows }: { rows: ProviderOut[] | null }) {
+const HELPER_LINE: Record<string, string> = {
+  off: "Password managers are off on this server.",
+  starting: "Starting the secrets helper…",
+  running: "The secrets helper is running.",
+  unreachable: "The secrets helper is switched on but not answering.",
+};
+const HELPER_TONE: Record<string, string> = { off: "var(--ink-faint)", starting: "var(--warning)", running: "var(--good)", unreachable: "var(--critical)" };
+
+/** The exact `.env` line and command, for a server with no updater service (or an admin who prefers it). */
+function ManualSteps({ profile }: { profile: string }) {
   return (
-    <div className="ledger overflow-hidden">
-      <div className="hairline-rows">
-        {KINDS.map((k) => (
-          <ProviderRow key={k.kind} spec={k} row={rows?.find((r) => r.kind === k.kind) ?? null} loading={rows === null} />
-        ))}
-      </div>
+    <div className="text-[12.5px] flex flex-col gap-1.5" style={{ color: "var(--ink-dim)" }} data-testid="helper-manual">
+      <span>
+        To switch them on by hand, add <code className="font-mono">{profile}</code> to <code className="font-mono">COMPOSE_PROFILES</code> in the server&apos;s <code className="font-mono">.env</code>, then start it:
+      </span>
+      <pre className="field px-3 py-2 font-mono text-[12px] whitespace-pre-wrap">{`COMPOSE_PROFILES=${profile}        # or https,${profile} when HTTPS is on\ndocker compose up -d`}</pre>
     </div>
   );
 }
 
-function ProviderRow({ spec, row, loading }: { spec: (typeof KINDS)[number]; row: ProviderOut | null; loading: boolean }) {
+function Helper({ admin }: { admin: boolean }) {
+  const status = useSecretsHelper();
+  const request = useRequestSecretsHelper();
+  const [error, setError] = useState<Failure | null>(null);
+  const s: HelperStatus | undefined = status.data;
+  if (!s) return status.isError ? <ErrorLine error={failure(status.error, "Could not load the secrets helper's status.")} /> : null;
+
+  async function ask(enabled: boolean) {
+    setError(null);
+    try {
+      await request.mutateAsync(enabled);
+    } catch (e) {
+      setError(failure(e, enabled ? "Could not ask for password managers to be switched on." : "Could not ask for password managers to be switched off."));
+    }
+  }
+
+  const waiting = s.pending === "enable" ? "Waiting for the updater (up to 20 seconds)…" : s.pending === "disable" ? "Switching off: waiting for the updater (up to 20 seconds)…" : null;
+  return (
+    <div className="ledger px-4 py-3 flex flex-col gap-3" data-testid="secrets-helper">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="dot" style={{ background: HELPER_TONE[s.state] ?? "var(--ink-faint)" }} aria-hidden />
+        <div className="min-w-0 flex-1 text-[13px]">
+          <span role="status" data-state={s.state}>
+            {HELPER_LINE[s.state] ?? s.state}
+          </span>
+          {s.state === "running" && s.version && <span style={{ color: "var(--ink-faint)" }}> Version {s.version}.</span>}
+          <div className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+            {waiting ??
+              (s.state === "off"
+                ? "Until they are on, every secret reference fails at once and Test connection says the helper is off. Settings and references still work."
+                : s.state === "unreachable"
+                  ? "Secret references fail until it answers. Check the secrets-helper container and its logs."
+                  : null)}
+          </div>
+        </div>
+        {admin && s.can_request && !s.pending && (
+          <div className="flex items-center gap-2">
+            {(s.state === "off" || s.state === "unreachable") && !s.enabled && (
+              <button type="button" className="btn btn-primary btn-sm" onClick={() => ask(true)} disabled={request.isPending} aria-busy={request.isPending}>
+                <Power {...ICON} aria-hidden />
+                Enable password managers
+              </button>
+            )}
+            {s.enabled && (
+              <ConfirmButton label="Disable password managers" confirmLabel="Disable" className="btn btn-sm" disabled={request.isPending} onConfirm={() => ask(false)}>
+                Disable
+              </ConfirmButton>
+            )}
+          </div>
+        )}
+      </div>
+      {s.message && s.state !== "running" && <ErrorLine error={{ message: s.message }} />}
+      {s.state === "off" && !admin && (
+        <p className="text-[12px]" style={{ color: "var(--ink-faint)" }}>
+          An instance admin can switch them on here.
+        </p>
+      )}
+      {s.state === "off" && admin && !s.can_request && <ManualSteps profile={s.profile} />}
+      {admin && (s.state === "off" || s.state === "starting") && s.can_request && (
+        <p className="text-[12px]" style={{ color: "var(--ink-faint)" }}>
+          Switching them on or off restarts the backend: the app is away for a few seconds.
+        </p>
+      )}
+      {error && <ErrorLine error={error} />}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- providers
+
+function Providers({ manage }: { manage: boolean }) {
+  const providers = useSecretProviders();
+  const rows = providers.data ?? null;
+  return (
+    <>
+      {providers.isError && <ErrorLine error={failure(providers.error, "Could not load the password managers.", " Reload the page to try again.")} />}
+      <div className="ledger overflow-hidden">
+        <div className="hairline-rows">
+          {KINDS.map((k) => (
+            <ProviderRow key={k.kind} spec={k} row={rows?.find((r) => r.kind === k.kind) ?? null} loading={rows === null && !providers.isError} manage={manage} />
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ProviderRow({ spec, row, loading, manage }: { spec: (typeof KINDS)[number]; row: ProviderOut | null; loading: boolean; manage: boolean }) {
   const put = usePutSecretProvider();
   const remove = useDeleteSecretProvider();
   const test = useTestSecretProvider();
@@ -96,6 +233,9 @@ function ProviderRow({ spec, row, loading }: { spec: (typeof KINDS)[number]; row
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
   const configured = !!row;
   const id = `pm-${spec.kind}`;
+  const kinds = useKindInfo();
+  const info = kinds.info(spec.kind);
+  const name = kinds.name(spec.kind);
 
   function open() {
     setHost(row?.host ?? "");
@@ -133,7 +273,10 @@ function ProviderRow({ spec, row, loading }: { spec: (typeof KINDS)[number]; row
       <div className="flex flex-wrap items-center gap-3">
         <KeyRound {...ICON} aria-hidden style={{ color: "var(--ink-faint)" }} />
         <div className="min-w-0 flex-1">
-          <div className="text-[13px] font-medium">{spec.name}</div>
+          <div className="text-[13px] font-medium flex items-center gap-2">
+            {name}
+            <PreviewBadge info={info} />
+          </div>
           <div className="text-[12px] flex items-center gap-1.5" style={{ color: "var(--ink-dim)" }}>
             {loading ? (
               <span className="skeleton h-3 w-24" aria-hidden />
@@ -148,7 +291,7 @@ function ProviderRow({ spec, row, loading }: { spec: (typeof KINDS)[number]; row
             )}
           </div>
         </div>
-        {!editing && (
+        {manage && !editing && (
           <div className="flex items-center gap-2">
             {configured && (
               <button type="button" className="btn btn-sm" onClick={runTest} disabled={test.isPending} aria-busy={test.isPending}>
@@ -161,7 +304,7 @@ function ProviderRow({ spec, row, loading }: { spec: (typeof KINDS)[number]; row
             </button>
             {configured && (
               <ConfirmButton
-                label={`Remove ${spec.name}`}
+                label={`Remove ${name}`}
                 confirmLabel="Remove"
                 className="btn btn-ghost btn-sm btn-icon"
                 disabled={remove.isPending}
@@ -174,6 +317,11 @@ function ProviderRow({ spec, row, loading }: { spec: (typeof KINDS)[number]; row
         )}
       </div>
 
+      {info?.preview && info.note && (
+        <p className="text-[12px] -mt-1" style={{ color: "var(--ink-dim)" }} data-testid="preview-note">
+          {info.note}
+        </p>
+      )}
       {editing && (
         <form
           className="flex flex-col gap-3 pop-in"
@@ -250,11 +398,13 @@ function guessProvider(ref: string, configured: string[]): string {
   return fits.find((k) => configured.includes(k)) ?? fits[0] ?? "";
 }
 
-function References() {
+/** `vaults`: the ones the user may bind references to (all theirs for an org owner, the ones they own for a vault owner). */
+function References({ vaults }: { vaults: { id: string; name: string }[] }) {
   const refs = useSecretRefs();
   const counts = useSecretCounts();
   const providers = useSecretProviders();
-  const vaults = useVaults().data ?? [];
+  const kinds = useKindInfo();
+  const mine = useVaults().data ?? [];
   const create = useCreateSecretRef();
   const update = useUpdateSecretRef();
   const remove = useDeleteSecretRef();
@@ -269,7 +419,8 @@ function References() {
   function startNew() {
     setEditingId(null);
     setError(null);
-    setDraft({ ...emptyDraft, vault_id: vaults.find((v) => v.kind === "personal")?.id ?? vaults[0]?.id ?? "" });
+    const personal = mine.find((v) => v.kind === "personal")?.id;
+    setDraft({ ...emptyDraft, vault_id: vaults.find((v) => v.id === personal)?.id ?? vaults[0]?.id ?? "" });
   }
 
   function startEdit(r: RefOut) {
@@ -349,7 +500,11 @@ function References() {
                 value={draft.provider || guessProvider(draft.reference, configured)}
                 onChange={(provider) => setDraft({ ...draft, provider })}
                 disabled={!!editingId}
-                options={KINDS.map((k) => ({ value: k.kind, label: k.name, hint: configured.includes(k.kind) ? "configured" : undefined }))}
+                options={KINDS.map((k) => ({
+                  value: k.kind,
+                  label: kinds.name(k.kind),
+                  hint: [configured.includes(k.kind) ? "configured" : "", kinds.info(k.kind)?.preview ? "preview" : ""].filter(Boolean).join(", ") || undefined,
+                }))}
                 className="h-8 text-[13px] w-full"
               />
             </div>
@@ -423,7 +578,7 @@ function References() {
                     <div className="font-mono text-[12.5px] truncate">{r.reference}</div>
                     <div className="text-[12px]" style={{ color: "var(--ink-faint)" }}>
                       {r.label !== r.reference ? `${r.label} · ` : ""}
-                      {kindName(r.provider)}
+                      {kinds.name(r.provider)}
                     </div>
                   </td>
                   <td className="px-3 hidden md:table-cell">{vaultName(r.vault_id)}</td>
@@ -467,7 +622,7 @@ function ResolutionLog() {
     <div className="flex flex-col gap-2">
       <h3 className="text-[13px] font-medium mt-2">Resolution log</h3>
       <p className="text-[12.5px] -mt-1" style={{ color: "var(--ink-dim)" }}>
-        Every time a tool asked for a secret: who, which reference, which tool, and the outcome. Never the value. Tool calls themselves are under Settings, Usage.
+        Every time a tool asked for a secret: who, which reference, which tool, and the outcome. Never the value. A vault owner sees the vaults they own. Tool calls themselves are under Settings, Usage.
       </p>
       {log.isError && <ErrorLine error={failure(log.error, "Could not load the resolution log.", " Reload the page to try again.")} />}
       <div className="ledger overflow-hidden">
@@ -509,7 +664,7 @@ function ResolutionLog() {
                 <td className="px-3">
                   <span className="inline-flex items-center gap-1.5" title={e.reason || undefined}>
                     <span className="dot" style={{ background: OUTCOME_COLOUR[e.outcome] ?? "var(--ink-faint)" }} aria-hidden />
-                    {OUTCOME_LABEL[e.outcome] ?? e.outcome}
+                    {CODE_LABEL[e.code] ?? OUTCOME_LABEL[e.outcome] ?? e.outcome}
                   </span>
                 </td>
               </tr>

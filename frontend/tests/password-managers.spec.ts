@@ -2,15 +2,21 @@ import { expect, test, type Page } from "@playwright/test";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { createCipheriv, createHmac, hkdfSync, randomBytes } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import { MOCK_BIND, mockBase, registerAndOnboard, uniqueEmail } from "./helpers";
 
 // Settings, Connectors, Password managers (docs/password-managers.md) against stand-ins for a customer's
 // 1Password Connect server and for Bitwarden's identity and API servers. The browser talks to the
 // backend, the backend to the real secrets-helper container, and the sidecar to these mocks (in CI via
 // E2E_MOCK_HOST=host.docker.internal; docker-compose.ci.yml gives the sidecar the host gateway).
-// Managing password managers is for org owners and instance admins: the spec signs in as the install's
-// first user (E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD); a fresh user plays the member.
+// Setting up a password manager is for org owners and instance admins: the spec signs in as the install's
+// first user (E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD); a fresh user plays a member, who owns their personal
+// vault and so manages that vault's references only (decided by Avi on 2026-11-01). The secrets helper
+// runs under the `secrets` compose profile (CI sets it); E2E_UPDATE_STATUS_DIR, when set, lets the spec
+// check the switch's request file the way the HTTPS spec plays the updater.
 const admin = { email: process.env.E2E_ADMIN_EMAIL, password: process.env.E2E_ADMIN_PASSWORD };
+const statusDir = process.env.E2E_UPDATE_STATUS_DIR;
 const CONNECT_TOKEN = `connect-e2e-${randomBytes(6).toString("hex")}`;
 
 async function listen(server: http.Server): Promise<{ base: string; close: () => void }> {
@@ -74,16 +80,64 @@ async function signInAsAdmin(page: Page) {
   await page.waitForURL((url) => url.pathname === "/");
 }
 
-test("a member who is not an owner is told only an owner or admin can manage password managers", async ({ page }) => {
+test("a member manages their own vault's references but cannot set up a provider or switch the helper", async ({ page }) => {
   await registerAndOnboard(page, uniqueEmail("pm-member"));
   await page.goto("/connectors");
   await expect(page.getByRole("heading", { name: "Password managers" })).toBeVisible();
-  await expect(page.getByText("Only an owner of this organisation or an instance admin can manage password managers.")).toBeVisible();
+  await expect(page.getByTestId("vault-owner-note")).toContainText("Only an owner of this organisation or an instance admin can set up a password manager.");
+  // provider rows are shown, read-only
+  const bw = page.getByTestId("pm-bitwarden_sm");
+  await expect(bw).toBeVisible();
+  await expect(bw.getByRole("button", { name: "Set up" })).toHaveCount(0);
+  await expect(page.getByTestId("secrets-helper").getByRole("button")).toHaveCount(0);
+  // their personal vault: add and remove a reference
+  const ref = `op://Ops/Member-${Date.now()}/key`;
+  await page.getByRole("button", { name: "Add reference" }).click();
+  await page.getByLabel("Reference", { exact: true }).fill(ref);
+  await page.getByLabel(/Allowed tools/).fill("*");
+  await page.getByRole("button", { name: "Add reference" }).last().click();
+  const row = page.getByTestId("secret-ref-row").filter({ hasText: ref });
+  await expect(row).toBeVisible();
+  await row.getByRole("button", { name: `Remove ${ref}` }).click();
+  await row.getByRole("button", { name: "Remove" }).click();
+  await expect(page.getByTestId("secret-ref-row").filter({ hasText: ref })).toHaveCount(0);
+});
+
+test("Bitwarden Secrets Manager is marked Preview, with its note; the 1Password kinds are not", async ({ page }) => {
+  await registerAndOnboard(page, uniqueEmail("pm-preview"));
+  await page.goto("/connectors");
+  const bw = page.getByTestId("pm-bitwarden_sm");
+  await expect(bw.getByTestId("preview-badge")).toHaveText("Preview");
+  await expect(bw.getByTestId("preview-note")).toContainText("Preview: Eunomia's own Bitwarden client is tested against a mock");
+  for (const k of ["onepassword_connect", "onepassword_service_account"]) {
+    await expect(page.getByTestId(`pm-${k}`).getByTestId("preview-badge")).toHaveCount(0);
+  }
+  // the same from the API, the one source of truth
+  const kinds = (await (await page.request.get("/api/secrets/kinds")).json()) as { kind: string; preview: boolean; stability: string }[];
+  expect(kinds.find((k) => k.kind === "bitwarden_sm")).toMatchObject({ preview: true, stability: "preview" });
 });
 
 test.describe("as the instance admin", () => {
   test.skip(!admin.email || !admin.password, "set E2E_ADMIN_EMAIL and E2E_ADMIN_PASSWORD to the first user's login");
   test.describe.configure({ mode: "serial" });
+
+  test("the secrets helper: running, and Disable asks the updater (an admin only)", async ({ page }) => {
+    await signInAsAdmin(page);
+    await page.goto("/connectors");
+    const helper = page.getByTestId("secrets-helper");
+    await expect(helper.getByRole("status")).toHaveText("The secrets helper is running.");
+    test.skip(!statusDir, "set E2E_UPDATE_STATUS_DIR to check the request file");
+    const req = path.join(statusDir!, "secrets.json");
+    fs.rmSync(req, { force: true });
+    await helper.getByRole("button", { name: "Disable password managers" }).click();
+    await helper.getByRole("button", { name: "Disable", exact: true }).click();
+    await expect(helper).toContainText("Switching off: waiting for the updater");
+    expect(JSON.parse(fs.readFileSync(req, "utf8"))).toEqual({ enabled: false });
+    // no updater in this stack: take the request back, and the helper reads as running again
+    fs.rmSync(req, { force: true });
+    await page.reload();
+    await expect(helper.getByRole("status")).toHaveText("The secrets helper is running.");
+  });
 
   test("1Password Connect: a write-only token, Test connection through the sidecar, Replace and Remove", async ({ page }) => {
     const connect = await mockConnect();
