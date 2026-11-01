@@ -16,3 +16,4 @@ Control set: no reservations (control stays at 0006).
 | tenant | 0023 | changes | L2 Projects | #114 (carried in the Phase 2 Projects PR) | locked |
 | tenant | 0024 | redact_backfill | L3 Broker | #115 (carried in the Phase 2 broker stack) | locked |
 | tenant | 0025 | credential_refs | L3 Broker | broker core | locked |
+| tenant | 0026 | secret_requests | L3 Broker | B4 | locked |
