@@ -506,7 +506,9 @@ wait_jobs 180
 # the redaction backfill (tenant 0024) runs as a job after the migrations; wait for its rewrite (it
 # re-embeds what it rewrites, so before the embedding wait) and then the job queue, so the counts and
 # reads below see the backfilled install
-if [ "$PLAIN_SECRET" = 1 ]; then wait_redacted 300; check "the backfill rewrote the seeded token (bounded wait)" test $? -eq 0; fi
+# 900 s: the backfill is queued on the leader's slow tick and runs behind the update's embedding jobs; on a
+# loaded CI runner it finished just after a 300 s bound (PR #122, 2026-11-01; the read then showed the marker)
+if [ "$PLAIN_SECRET" = 1 ]; then wait_redacted 900; check "the backfill rewrote the seeded token (bounded wait)" test $? -eq 0; fi
 wait_jobs 120
 wait_embeddings 600; check "no embedding backlog after the update" test $? -eq 0
 counts > "$W/counts-after.txt"; ledgers > "$W/ledgers-after.txt"
