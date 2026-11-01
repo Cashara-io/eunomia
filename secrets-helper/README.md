@@ -5,6 +5,10 @@ backend calls it over the internal compose network to resolve `op://` and `bws:/
 org's own 1Password (Connect server or service account) or Bitwarden Secrets Manager. The backend never
 links a provider SDK; this service does the provider calls and nothing else.
 
+Off by default: it runs only under the `secrets` compose profile (`COMPOSE_PROFILES=secrets` in `.env`,
+which Settings, Connectors, "Enable password managers" sets through the updater). Without it the backend
+answers every resolution with `secret.unavailable` (`helper_disabled`) at once.
+
 - Stateless: the provider token comes with each request (the backend stores it encrypted) and is gone
   when the request ends. No volume, no config file, no token in the environment or the logs.
 - Internal API v1: `GET /healthz`, `POST /v1/resolve`, `POST /v1/check` (see the spec). Calls must carry

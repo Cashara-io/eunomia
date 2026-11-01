@@ -29,6 +29,8 @@ case "\$*" in
   "compose config --services") cat "$TMP/services" ;;
   "compose ps -q surrealdb") [ -f "$TMP/running" ] && echo fakecid ;;
   inspect*) cat "$TMP/running" 2>/dev/null ;;
+  # \$TMP/sh_up_fails: starting the secrets helper fails
+  "compose up -d backend secrets-helper") [ ! -f "$TMP/sh_up_fails" ] || { echo "pull access denied for eunomia-secrets-helper" >&2; exit 1; } ;;
   "compose ps -a --format"*) cat "$TMP/ps" 2>/dev/null ;;
   # \$TMP/up_fails: how many more \`up --remove-orphans\` calls fail the way a slow first boot does
   "compose up -d --remove-orphans"*)
@@ -207,6 +209,71 @@ check "the secrets-helper image is pulled with the others" grep -q 'compose pull
 check "the secrets-helper key is kept across updates" test "$(sed -n 's/^SECRETS_HELPER_KEY=//p' "$TMP/repo/.env")" = "$SH_KEY"
 check "one secrets-helper key line" test "$(grep -c '^SECRETS_HELPER_KEY=' "$TMP/repo/.env")" = 1
 printf 'surrealdb\nbackend\nfrontend\nupdater\n' > "$TMP/services"
+
+# Password managers (decided by Avi on 2026-11-01): the secrets helper sits behind the `secrets` compose
+# profile; POST /api/secrets/helper writes update-status/secrets.json and this run acts on it.
+sfield() { python3 -c 'import json,sys;print(str(json.load(open(sys.argv[1]))[sys.argv[2]]).lower())' "$S/secrets-status.json" "$1"; }
+profiles() { sed -n 's/^COMPOSE_PROFILES=//p' "$TMP/repo/.env"; }
+sreq() { printf '{\n  "enabled": %s\n}\n' "$1" > "$S/secrets.json"; }
+sed -i.bak '/^SECRETS_HELPER_KEY=/d' "$TMP/repo/.env" && rm -f "$TMP/repo/.env.bak" # as after an OLD updater's update
+check "no request: no profile line" bash -c "! grep -q '^COMPOSE_PROFILES=' '$TMP/repo/.env'"
+: > "$TMP/docker.log"; sreq true; update
+check "enable: secrets added to COMPOSE_PROFILES" test "$(profiles)" = secrets
+check "enable: the shared key is added when missing" grep -Eq '^SECRETS_HELPER_KEY=[0-9a-f]{64}$' "$TMP/repo/.env"
+check "enable: the helper image is pulled" grep -qx 'compose pull secrets-helper' "$TMP/docker.log"
+check "enable: the helper started and the backend recreated for the new profile list" grep -qx 'compose up -d backend secrets-helper' "$TMP/docker.log"
+check "enable: request consumed" test ! -e "$S/secrets.json"
+check "enable: status running" test "$(sfield state)" = running
+check "enable: no update applied" test ! -e "$S/requested"
+KEY2="$(sed -n 's/^SECRETS_HELPER_KEY=//p' "$TMP/repo/.env")"
+sreq true; update
+check "enable again: one profile line, secrets once" test "$(grep -c '^COMPOSE_PROFILES=' "$TMP/repo/.env"):$(profiles)" = 1:secrets
+check "enable again: the key is kept" test "$(sed -n 's/^SECRETS_HELPER_KEY=//p' "$TMP/repo/.env")" = "$KEY2"
+: > "$TMP/docker.log"; update
+check "no request: nothing done" test -z "$(ran)"
+
+# HTTPS and the helper keep each other's profile
+set_profiles() { sed -i.bak '/^COMPOSE_PROFILES=/d' "$TMP/repo/.env" && rm -f "$TMP/repo/.env.bak"; [ -z "$1" ] || echo "COMPOSE_PROFILES=$1" >> "$TMP/repo/.env"; }
+set_profiles https; sreq true; update
+check "enable with HTTPS on: both profiles" test "$(profiles)" = https,secrets
+sreq false; : > "$TMP/docker.log"; update
+check "disable: only secrets removed" test "$(profiles)" = https
+check "disable: the helper stopped and removed" grep -qx 'compose rm -sf secrets-helper' "$TMP/docker.log"
+check "disable: the backend recreated without it" grep -qx 'compose up -d backend' "$TMP/docker.log"
+check "disable: status off" test "$(sfield state)" = off
+set_profiles secrets; sreq false; update
+check "disable, the only profile: the line goes" bash -c "! grep -q '^COMPOSE_PROFILES=' '$TMP/repo/.env'"
+set_profiles 'https, secrets'; printf '{\n  "enabled": false,\n  "domain": "",\n  "email": ""\n}\n' > "$S/https.json"; update
+check "HTTPS off keeps secrets" test "$(profiles)" = secrets
+rm -f "$S/https-status.json"
+
+# a helper that cannot start is switched off again, so later updates' `up -d` never trips on it
+set_profiles ""; touch "$TMP/sh_up_fails"; sreq true; : > "$TMP/docker.log"; update
+check "failed enable: status error with the cause" bash -c "[ \"\$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))[\"state\"])' '$S/secrets-status.json')\" = error ] && grep -q 'pull access denied' '$S/secrets-status.json'"
+check "failed enable: the profile is rolled back" bash -c "! grep -q '^COMPOSE_PROFILES=' '$TMP/repo/.env'"
+check "failed enable: backend recreated without the profile" grep -qx 'compose up -d backend' "$TMP/docker.log"
+rm -f "$TMP/sh_up_fails"
+
+# a malformed request is refused and changes nothing
+cp "$TMP/repo/.env" "$TMP/env.before"
+for bad in '"yes"' '1' 'true; reboot' ''; do
+  printf '{\n  "enabled": %s\n}\n' "$bad" > "$S/secrets.json"; : > "$TMP/docker.log"; update
+  check "refused request ($bad): .env unchanged" cmp -s "$TMP/env.before" "$TMP/repo/.env"
+  check "refused request ($bad): docker not run" test -z "$(ran)"
+  check "refused request ($bad): error status" grep -q '"state": "error"' "$S/secrets-status.json"
+done
+
+# an update with the profile on pulls the helper (compose lists it), with it off does not
+set_profiles secrets
+printf 'surrealdb\nbackend\nfrontend\nsecrets-helper\nupdater\n' > "$TMP/services"
+(cd "$TMP/src" && echo sidecar-profile > compose.yml && git_ commit -qam v2.3 && git tag v2.3.0)
+: > "$TMP/docker.log"; touch "$S/requested"; update
+check "profile on: an update pulls the helper and keeps the profile" bash -c "grep -q 'compose pull backend frontend backup secrets-helper' '$TMP/docker.log' && [ \"\$(sed -n 's/^COMPOSE_PROFILES=//p' '$TMP/repo/.env')\" = secrets ]"
+set_profiles ""
+printf 'surrealdb\nbackend\nfrontend\nupdater\n' > "$TMP/services"
+(cd "$TMP/src" && echo sidecar-off > compose.yml && git_ commit -qam v2.4 && git tag v2.4.0)
+: > "$TMP/docker.log"; touch "$S/requested"; update
+check "profile off: an update leaves the helper alone" bash -c "grep -q 'compose pull backend frontend backup\$' '$TMP/docker.log' && ! grep -q 'secrets-helper' '$TMP/docker.log'"
 
 # installs cloned from the old Qyrhal/Eunomia repo are moved to Cashara-io/eunomia
 (cd "$TMP/repo" && git remote set-url origin https://github.com/Qyrhal/Eunomia.git)

@@ -26,6 +26,9 @@
 #   9. run the updater again, restart the backend, `up -d` again: nothing changes;
 #  9b. the change log (tenant 0023) works on the upgraded stack: a write logs a row that REST and
 #      `changes_since` return, and the new tables hold exactly those rows;
+#  9c. password managers: with the `secrets` profile off (as the old updater leaves it) no helper
+#      container and Test connection answers helper_disabled at once; "Enable password managers" acted
+#      on by the new auto-update.sh turns the helper healthy and keeps it across `up -d`; Disable removes it;
 #  10. rollback: the old tag on a fresh volume, restore the pre-update backup, counts and reads again,
 #      and none of the tables the update added.
 # Own compose project ($P), ports 8251 (backend) and 3251 (frontend). Artifacts (logs, snapshots) in
@@ -498,14 +501,15 @@ wait_healthy 600; check "every service healthy after the update" test $? -eq 0
 check "nothing left Created or exited (bar the one-shot)" bash -c "! (cd '$I' && docker compose ps -a --format '{{.Service}} {{.State}}') | grep -v '^surreal-upgrade ' | grep -v '^updater ' | grep -qE ' (created|exited)'"
 check "surrealdb runs surrealdb/surrealdb:$PIN" bash -c "[ \"\$(docker inspect -f '{{.Config.Image}}' \"\$(cd '$I' && docker compose ps -q surrealdb)\")\" = surrealdb/surrealdb:$PIN ]"
 check "surrealdb healthcheck is isready over ws" bash -c "docker inspect -f '{{json .Config.Healthcheck.Test}}' \"\$(cd '$I' && docker compose ps -q surrealdb)\" | grep -q 'ws://'"
-# the secrets-helper sidecar is new in this build: the OLD updater's plain `up -d --remove-orphans` must
-# have started it (its image was not in that updater's pull list), healthy, with no published port
-sh_health() { docker inspect -f '{{.State.Health.Status}}' "$(dc ps -q secrets-helper)" 2>/dev/null; }
-for _ in $(seq 40); do [ "$(sh_health)" = healthy ] && break; sleep 3; done
-check "secrets-helper started by the old updater and healthy" test "$(sh_health)" = healthy
-check "secrets-helper publishes no port" bash -c "[ -z \"\$(docker port \"\$(cd '$I' && docker compose ps -q secrets-helper)\")\" ]"
-check "the backend reaches secrets-helper" dc exec -T backend curl -fsS --max-time 5 http://secrets-helper:8080/healthz
-for s in backend frontend backup secrets-helper; do
+# the secrets-helper sidecar is new in this build, behind the `secrets` compose profile (decided by Avi on
+# 2026-11-01): the OLD updater's plain `up -d --remove-orphans` leaves an install without the profile
+# exactly as before, with no helper container (its image is not even in that updater's pull list).
+# Step 9c checks that the backend then answers helper_disabled, and switches it on and off.
+# by label: `docker compose ps` does not list a service whose profile is off, even if a container exists
+helper_containers() { docker ps -aq --filter "label=com.docker.compose.project=$P" --filter label=com.docker.compose.service=secrets-helper; }
+check "no secrets-helper container: its profile is off" test -z "$(helper_containers)"
+check ".env does not switch the secrets profile on" bash -c "! grep -q '^COMPOSE_PROFILES=.*secrets' '$I/.env'"
+for s in backend frontend backup; do
   check "$s runs eunomia-$s:$FAKE" bash -c "[ \"\$(docker inspect -f '{{.Config.Image}}' \"\$(cd '$I' && docker compose ps -q $s)\")\" = ghcr.io/cashara-io/eunomia-$s:$FAKE ]"
 done
 check "/readyz answers 200" curl -fsS -o /dev/null --max-time 10 "http://127.0.0.1:$BPORT/readyz"
@@ -565,7 +569,7 @@ EUNOMIA_DIR="$I" PATH="$W/shim:$PATH" bash "$I/scripts/auto-update.sh" > "$W/aut
 check "a second auto-update.sh exits 0" test "$rc" -eq 0
 check "still on $FAKE, no new history line" bash -c "jq -e '.current_version == \"$FAKE\" and .error == null' '$I/update-status/status.json' && [ \"\$(wc -l < '$I/update-status/history.log')\" -eq $hist ]"
 dc restart backend >/dev/null 2>&1; wait_healthy 300; check "healthy after a backend restart" test $? -eq 0
-cids() { local s; for s in surrealdb backend frontend backup secrets-helper; do dc ps -q "$s"; done; }
+cids() { local s; for s in surrealdb backend frontend backup; do dc ps -q "$s"; done; }
 ids1="$(cids)"
 dc up -d > "$W/up-again.txt" 2>&1; check "a second up -d succeeds" test $? -eq 0
 updater_runs() { [ "$(dc ps --format '{{.Service}} {{.State}}' updater)" = "updater running" ]; }
@@ -612,6 +616,58 @@ if grep -q '\.change ' "$W/new-expected.txt"; then
   check "change in $ORG_A holds exactly the Team vault's $N_TEAM rows (and the backfill's $BF_CHANGES)" grep -qx "$ORG_A.change $((N_TEAM + BF_CHANGES))" "$W/counts-changes.txt"
   check "change_seq in $ORG_A holds the Team vault's counter (and the backfill vault's $BF_CHANGES)" grep -qx "$ORG_A.change_seq $((1 + BF_CHANGES))" "$W/counts-changes.txt"
   check "the other org's change log is still empty" others_empty "$W/counts-changes.txt" "$ORG_A"
+fi
+
+# ---- 9c. password managers: off after the update, then on and off through the new updater ---------
+# Decided by Avi on 2026-11-01: the secrets-helper sidecar sits behind the `secrets` profile. (a) Off, as
+# the old updater leaves it: settings load, a provider saves, and "Test connection" answers
+# secret.unavailable / helper_disabled at once. (b) "Enable password managers" as the admin, acted on by
+# THIS release's auto-update.sh (the old one knows nothing of it): the profile goes into .env, the helper
+# turns healthy, Test connection reaches it, and a later plain `up -d` keeps it. (c) Disable: gone again.
+log "9c. password managers: off, then on and off through the new updater"
+if [ -f "$I/secrets-helper/Dockerfile" ]; then
+  helper() { api -f -b "$JAR_A" "$BASE/api/secrets/helper"; }
+  test_conn() { api -b "$JAR_A" -w '\n%{http_code}' -X POST "$BASE/api/secrets/providers/onepassword_connect/test"; }
+  helper > "$W/helper-off.json"
+  check "the helper's status: off, helper_disabled" jq -e '.state == "off" and .reason == "helper_disabled" and .enabled == false and .can_request == true' "$W/helper-off.json"
+  api -f -b "$JAR_A" -X PUT -H 'Content-Type: application/json' -d '{"host":"http://127.0.0.1:9","token":"update-path-connect-token-fixture"}' \
+    "$BASE/api/secrets/providers/onepassword_connect" > "$W/provider-put.json"
+  check "a provider saves with the helper off" jq -e '.ok == true' "$W/provider-put.json"
+  check "the references load with the helper off" bash -c "curl -fsS --max-time 60 -b '$JAR_A' '$BASE/api/secrets/refs' | jq -e 'type == \"array\"'"
+  t=$SECONDS; test_conn > "$W/test-off.txt"; took=$((SECONDS - t))
+  check "Test connection with the helper off: 503 secret.unavailable / helper_disabled" bash -c "[ \"\$(tail -1 '$W/test-off.txt')\" = 503 ] && head -1 '$W/test-off.txt' | jq -e '.code == \"secret.unavailable\" and .reason == \"helper_disabled\"'"
+  check "... at once (${took} s)" test "$took" -le 3
+  check "the other services are healthy with the helper off" wait_healthy 60
+
+  api -f -b "$JAR_A" -X POST -H 'Content-Type: application/json' -d '{"enabled":true}' "$BASE/api/secrets/helper" > "$W/helper-ack.json"
+  check "Enable password managers: the request is dropped for the updater" bash -c "jq -e '.configured and .requested' '$W/helper-ack.json' && [ -f '$I/update-status/secrets.json' ]"
+  EUNOMIA_DIR="$I" PATH="$W/shim:$PATH" bash "$I/scripts/auto-update.sh" > "$W/auto-update-3.txt" 2>&1; rc=$?
+  check "the new release's auto-update.sh acts on it (exit $rc)" test "$rc" -eq 0
+  check "secrets-status.json: running" jq -e '.state == "running"' "$I/update-status/secrets-status.json"
+  check ".env: secrets in COMPOSE_PROFILES" grep -Eq '^COMPOSE_PROFILES=(.*,)?secrets(,.*)?$' "$I/.env"
+  check ".env: the shared key is there" grep -Eq '^SECRETS_HELPER_KEY=.' "$I/.env"
+  sh_health() { docker inspect -f '{{.State.Health.Status}}' "$(dc ps -q secrets-helper)" 2>/dev/null; }
+  for _ in $(seq 40); do [ "$(sh_health)" = healthy ] && break; sleep 3; done
+  check "secrets-helper healthy" test "$(sh_health)" = healthy
+  check "secrets-helper runs eunomia-secrets-helper:$FAKE" bash -c "[ \"\$(docker inspect -f '{{.Config.Image}}' \"\$(cd '$I' && docker compose ps -q secrets-helper)\")\" = ghcr.io/cashara-io/eunomia-secrets-helper:$FAKE ]"
+  check "secrets-helper publishes no port" bash -c "[ -z \"\$(docker port \"\$(cd '$I' && docker compose ps -q secrets-helper)\")\" ]"
+  wait_healthy 300; check "healthy after the backend was recreated with the profile" test $? -eq 0
+  for _ in $(seq 20); do helper > "$W/helper-on.json" 2>/dev/null && jq -e '.state == "running"' "$W/helper-on.json" >/dev/null && break; sleep 3; done
+  check "the helper's status: running" jq -e '.state == "running" and .enabled == true and .reason == null' "$W/helper-on.json"
+  test_conn > "$W/test-on.txt"
+  check "Test connection now reaches the helper (the provider answers, not helper_disabled)" bash -c "[ \"\$(tail -1 '$W/test-on.txt')\" = 200 ] && head -1 '$W/test-on.txt' | jq -e '.ok == false and .error != null'"
+  id1="$(dc ps -q secrets-helper)"
+  dc up -d > "$W/up-secrets.txt" 2>&1; check "a later plain up -d keeps the helper" bash -c "[ -n '$id1' ] && [ \"\$(cd '$I' && docker compose ps -q secrets-helper)\" = '$id1' ]"
+  dc stop updater >/dev/null 2>&1
+
+  api -f -b "$JAR_A" -X POST -H 'Content-Type: application/json' -d '{"enabled":false}' "$BASE/api/secrets/helper" >/dev/null
+  EUNOMIA_DIR="$I" PATH="$W/shim:$PATH" bash "$I/scripts/auto-update.sh" > "$W/auto-update-4.txt" 2>&1
+  check "Disable: secrets-status.json off" jq -e '.state == "off"' "$I/update-status/secrets-status.json"
+  check "Disable: the profile is gone from .env" bash -c "! grep -q '^COMPOSE_PROFILES=.*secrets' '$I/.env'"
+  check "Disable: no secrets-helper container" test -z "$(helper_containers)"
+  wait_healthy 300; check "healthy after Disable" test $? -eq 0
+  for _ in $(seq 20); do helper > "$W/helper-off2.json" 2>/dev/null && jq -e '.state == "off"' "$W/helper-off2.json" >/dev/null && break; sleep 3; done
+  check "the helper's status: off again" jq -e '.state == "off" and .reason == "helper_disabled"' "$W/helper-off2.json"
 fi
 
 # ---- 10. rollback ------------------------------------------------------------------------------

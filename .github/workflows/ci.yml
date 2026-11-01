@@ -115,6 +115,8 @@ jobs:
           echo "JWT_SECRET=$(openssl rand -hex 32)" >> .env
           echo "ENCRYPTION_KEY=$(openssl rand -hex 32)" >> .env
           echo "SECRETS_HELPER_KEY=$(openssl rand -hex 32)" >> .env
+          # the password managers spec needs the secrets helper: its compose profile, as Enable sets it
+          echo "COMPOSE_PROFILES=secrets" >> .env
           # The connectors spec points connectors at its in-test mock provider.
           echo "EUNOMIA_ALLOW_CONNECTOR_BASE_URL=1" >> .env
           # the suite registers many users a minute from one address

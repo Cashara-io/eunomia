@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# The backend and the real secrets-helper container on the real compose networks (CI job
-# secrets-helper-compose; needs Docker with container-to-container networking):
+# The backend and the real secrets-helper container on the real compose networks, with the `secrets`
+# compose profile switched on as "Enable password managers" does it (CI job secrets-helper-compose; needs
+# Docker with container-to-container networking):
+#   - the backend sees the profile and reports the helper running;
 #   - "Test connection" goes backend -> secrets-helper -> a mock 1Password Connect container and back,
 #     with the right token (ok) and a wrong one (denied);
 #   - the sidecar publishes no port, is on the secrets and secrets-egress networks only, answers the
@@ -41,6 +43,7 @@ BACKEND_PORT=$BPORT
 EMBEDDINGS_BACKEND=stub
 RATE_LIMIT_AUTH_PER_MIN=1000
 EUNOMIA_IMAGE_TAG=secrets-ci
+COMPOSE_PROFILES=secrets
 ENV
 
 log "building backend and secrets-helper"
@@ -63,6 +66,8 @@ check "the default network cannot reach it" bash -c "! docker run --rm --network
 B="http://127.0.0.1:$BPORT"; JAR="$W/jar"
 curl -fsS -c "$JAR" -H 'content-type: application/json' -d '{"email":"admin@example.com","password":"correct-horse-battery-staple"}' "$B/api/auth/register" >/dev/null || die "signup failed"
 put() { curl -sS -b "$JAR" -X PUT -H 'content-type: application/json' -d "{\"host\":\"http://mock-connect:8080\",\"token\":\"$1\"}" "$B/api/secrets/providers/onepassword_connect"; }
+curl -fsS -b "$JAR" "$B/api/secrets/helper" > "$W/helper.json"
+check "the backend sees the profile and the helper running" jq -e '.state == "running" and .enabled == true and .version != null' "$W/helper.json"
 put "$TOKEN" > "$W/put.json"
 check "the provider is saved" jq -e '.ok == true' "$W/put.json"
 check "the provider list says configured and holds no token" bash -c "curl -fsS -b '$JAR' '$B/api/secrets/providers' | tee '$W/list.json' | jq -e '.[0].configured == true' && ! grep -q '$TOKEN' '$W/list.json'"
