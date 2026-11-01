@@ -237,6 +237,9 @@ struct ActivityEntry {
     vault_id: String,
     outcome: String,
     reason: String,
+    /// The stable code when the secrets helper itself failed: `helper_disabled` or `helper_unreachable`
+    /// (on `secret.resolve` rows of op:// and bws:// references; never on an eu:// handle).
+    code: String,
     /// For a transform: the held secrets it was derived from; for an outbound call: the host.
     lineage: Vec<String>,
     host: String,
@@ -288,10 +291,40 @@ fn entry(r: EventRow) -> ActivityEntry {
         vault_id: s(&d, "vault"),
         outcome: r.outcome,
         reason: s(&d, "reason"),
+        code: s(&d, "code"),
         lineage,
         host: s(&d, "host"),
         trace_id: r.trace_id,
     }
+}
+
+/// The most rows one activity page reads for a vault owner before it answers (as the resolution log).
+const ACTIVITY_SCAN: usize = 2000;
+
+/// The vault key of an `eu://<vault>/<name>` handle.
+fn handle_vault(h: &str) -> Option<String> {
+    match crate::secrets::reference::parse(h) {
+        Ok(crate::secrets::reference::Reference::Eu { vault, .. }) => Some(vault),
+        _ => None,
+    }
+}
+
+/// Is the row visible under `scope`, and with which lineage? A row is a vault owner's when it names one of
+/// their vaults: its `vault_id`, or the vault of its handle or of a handle it used (an outbound call names
+/// only handles; rows written before the vault was recorded name only the handle). For a vault owner the
+/// lineage keeps only handles of vaults they own, so an outbound call with a co-signer's handle does not
+/// show the other vault's names.
+fn scoped(scope: &crate::routers::secrets::LogScope, owned: &[String], mut e: ActivityEntry) -> Option<ActivityEntry> {
+    if scope.org_manager {
+        return Some(e);
+    }
+    let mine = |h: &str| handle_vault(h).is_some_and(|k| owned.contains(&k));
+    let visible = (!e.vault_id.is_empty() && scope.sees(&e.vault_id)) || mine(&e.reference) || e.lineage.iter().any(|h| mine(h));
+    if !visible {
+        return None;
+    }
+    e.lineage.retain(|h| mine(h));
+    Some(e)
 }
 
 #[utoipa::path(
@@ -300,31 +333,52 @@ fn entry(r: EventRow) -> ActivityEntry {
     path = "/api/secrets/activity",
     tag = "secrets",
     summary = "Every secret request, fill, decline, use, transform and outbound call in this organisation, newest first (never a value)",
+    description = "As the resolution log: org owners and instance admins see the whole organisation; a vault owner sees the rows of the vaults they own. `code` names the secrets helper's own failure (`helper_disabled`, `helper_unreachable`).",
     params(ActivityQuery),
     responses((status = 200, body = ActivityPage), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
 )]
 async fn activity(State(state): State<AppState>, user: User, Query(q): Query<ActivityQuery>) -> AppResult<Json<ActivityPage>> {
-    authz::require_unrestricted()?;
-    if !org_manager(&state, &user).await? {
-        return Err(AppError::coded(crate::error::ErrorCode::AuthForbidden, "Only an owner of this organisation or an instance admin can read the secret activity log."));
-    }
-    let limit = q.limit.unwrap_or(50).clamp(1, 200);
-    let before: Option<Datetime> = match q.before.as_deref() {
+    let scope = crate::routers::secrets::log_scope(&state, &user).await?;
+    let owned: Vec<String> = scope.vaults.iter().map(crate::secrets::held::vault_key).collect();
+    let limit = q.limit.unwrap_or(50).clamp(1, 200) as usize;
+    let mut cursor: Option<Datetime> = match q.before.as_deref() {
         None | Some("") => None,
         Some(b) => Some(Datetime::from(chrono::DateTime::parse_from_rfc3339(b).map_err(|_| AppError::bad_request("before is an RFC 3339 time"))?.with_timezone(&chrono::Utc))),
     };
-    let rows: Vec<EventRow> = store::secret_requests::ACTIVITY
-        .on(&state.control)
-        .bind(("actions", ACTIONS.iter().map(|a| a.to_string()).collect::<Vec<_>>()))
-        .bind(("org", user.org.key()))
-        .bind(("before", before))
-        .bind(("limit", limit + 1))
-        .await?
-        .check()?
-        .take(0)?;
-    let more = rows.len() as i64 > limit;
-    let entries: Vec<ActivityEntry> = rows.into_iter().take(limit as usize).map(entry).collect();
-    let next_before = if more { entries.last().map(|e| chrono::DateTime::<chrono::Utc>::from(e.at).to_rfc3339()) } else { None };
-    Ok(Json(ActivityPage { entries, next_before }))
+    // an org manager keeps every row: one read of limit + 1; a vault owner's rows are picked out in batches
+    let batch = if scope.org_manager { limit + 1 } else { 200 };
+    let actions: Vec<String> = ACTIONS.iter().map(|a| a.to_string()).collect();
+    let (mut entries, mut scanned, mut ended) = (Vec::new(), 0usize, false);
+    while entries.len() <= limit && !ended && scanned < ACTIVITY_SCAN {
+        let rows: Vec<EventRow> = store::secret_requests::ACTIVITY
+            .on(&state.control)
+            .bind(("actions", actions.clone()))
+            .bind(("org", user.org.key()))
+            .bind(("before", cursor))
+            .bind(("limit", batch as i64))
+            .await?
+            .check()?
+            .take(0)?;
+        ended = rows.len() < batch;
+        for r in rows {
+            scanned += 1;
+            cursor = Some(r.created_at);
+            if let Some(e) = scoped(&scope, &owned, entry(r)) {
+                entries.push(e);
+                if entries.len() > limit {
+                    break;
+                }
+            }
+        }
+    }
+    let next_before = if entries.len() > limit {
+        entries.truncate(limit);
+        entries.last().map(|e| e.at)
+    } else if !ended {
+        cursor
+    } else {
+        None
+    };
+    Ok(Json(ActivityPage { entries, next_before: next_before.map(|t| chrono::DateTime::<chrono::Utc>::from(t).to_rfc3339()) }))
 }

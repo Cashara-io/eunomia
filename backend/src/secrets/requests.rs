@@ -567,7 +567,7 @@ pub async fn fill(state: &OrgState, user: &RecordId, org_manager: bool, raw_id: 
         }
     };
     q::REQ_LINK.on(&state.db).bind(("id", id.clone())).bind(("secret", made.id.clone())).bind(("vaults", vaults)).await?.check()?;
-    let detail = json!({"request": id.to_string(), "secret": made.id.to_string(), "handle": made.handle(), "hosts": hosts, "placements": placements, "any_agent": body.any_agent, "replaced": existing.is_some(), "cascade": cascade}).to_string();
+    let detail = json!({"request": id.to_string(), "secret": made.id.to_string(), "handle": made.handle(), "vault": made.vault.to_string(), "hosts": hosts, "placements": placements, "any_agent": body.any_agent, "replaced": existing.is_some(), "cascade": cascade}).to_string();
     audit(state, user, "secret.fill", "ok", &detail).await;
     Ok(FillOut { status: "filled".into(), handle: made.handle(), secret_id: made.id.to_string() })
 }
@@ -678,7 +678,7 @@ pub async fn replace_held(state: &OrgState, user: &RecordId, org_manager: bool, 
     let value = held::check_value(value)?;
     let cascade = held::replace(&state.db, &state.settings.encryption_key, &vaults, &m.id, &value).await?;
     drop(value);
-    audit(state, user, "secret.replace", "ok", &json!({"secret": m.id.to_string(), "handle": m.handle(), "cascade": cascade}).to_string()).await;
+    audit(state, user, "secret.replace", "ok", &json!({"secret": m.id.to_string(), "handle": m.handle(), "vault": m.vault.to_string(), "cascade": cascade}).to_string()).await;
     Ok(cascade)
 }
 
@@ -687,7 +687,7 @@ pub async fn delete_held(state: &OrgState, user: &RecordId, org_manager: bool, r
     authz::require_session()?;
     let (m, vaults) = managed(state, user, org_manager, raw_id).await?;
     let cascade = held::delete_with_descendants(&state.db, &vaults, std::slice::from_ref(&m.id)).await?;
-    audit(state, user, "secret.delete", "ok", &json!({"secret": m.id.to_string(), "handle": m.handle(), "cascade": cascade}).to_string()).await;
+    audit(state, user, "secret.delete", "ok", &json!({"secret": m.id.to_string(), "handle": m.handle(), "vault": m.vault.to_string(), "cascade": cascade}).to_string()).await;
     Ok(cascade)
 }
 

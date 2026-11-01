@@ -137,6 +137,27 @@ async fn ref_access(state: &AppState, user: &User) -> AppResult<Access> {
     Ok(a)
 }
 
+/// Who sees which rows of a secret log (the resolution log here, the activity log in
+/// `secret_requests.rs`): org owners and instance admins every row; a vault owner the rows of the vaults
+/// they own; anyone else is refused (`auth.forbidden`). A vault-restricted token gets `auth.scope`.
+pub(crate) struct LogScope {
+    pub org_manager: bool,
+    /// The vaults whose rows the caller sees (all theirs for an org manager, the owned ones otherwise).
+    pub vaults: Vec<RecordId>,
+}
+
+impl LogScope {
+    /// A row naming `vault_id` (`vault:...`) is visible.
+    pub fn sees(&self, vault_id: &str) -> bool {
+        self.org_manager || self.vaults.iter().any(|v| v.to_string() == vault_id)
+    }
+}
+
+pub(crate) async fn log_scope(state: &AppState, user: &User) -> AppResult<LogScope> {
+    let a = ref_access(state, user).await?;
+    Ok(LogScope { org_manager: a.org_manager, vaults: a.vault_ids() })
+}
+
 // ---------------------------------------------------------------- providers
 
 /// A configured provider. Never the token: only that one is stored.

@@ -29,6 +29,9 @@
 #  9c. password managers: with the `secrets` profile off (as the old updater leaves it) no helper
 #      container and Test connection answers helper_disabled at once; "Enable password managers" acted
 #      on by the new auto-update.sh turns the helper healthy and keeps it across `up -d`; Disable removes it;
+#  9d. secret requests (tenant 0026): the tables are new and empty, then an agent asks, the person fills
+#      it from the browser, the agent gets the eu:// handle and transforms it, with the helper off (as 9c
+#      leaves it: held secrets need no sidecar); the value is only enc:v1: and in no table or log;
 #  10. rollback: the old tag on a fresh volume, restore the pre-update backup, counts and reads again,
 #      and none of the tables the update added.
 # Own compose project ($P), ports 8251 (backend) and 3251 (frontend). Artifacts (logs, snapshots) in
@@ -698,8 +701,15 @@ if grep -q '\.vault_secret ' "$W/new-expected.txt"; then
   check "the fill answer is the handle, not the value" bash -c "jq -e '.status == \"filled\"' '$W/fill.json' && ! grep -q '$UP_SECRET' '$W/fill.json'"
   mcp "$TOKEN_A" secret_request_status "{\"request_id\":\"$RID\"}" > "$W/secret-status.json"
   check "the agent sees it filled, with the same handle" jq -e --argjson req "$REQ" '.status == "filled" and .handle["$secret"] == $req.handle["$secret"]' "$W/secret-status.json"
+  # the helper is off here (9c switches it off again; an old updater never switched it on): an eu://
+  # handle is held by the backend, so a transform still works without the sidecar
+  helper_state="$(api -b "$JAR_A" "$BASE/api/secrets/helper" | jq -r '.state // empty')"
+  log "   the secrets helper is ${helper_state:-unknown} for the transform"
+  mcp "$TOKEN_A" secret_transform "$(jq -c '{op: "base64", inputs: {value: .handle["$secret"]}, name: "update_path_b64"}' <<<"$REQ")" > "$W/transform.json"
+  check "secret_transform on the upgraded stack (helper ${helper_state:-unknown}) makes a new eu:// handle" \
+    jq -e '(.handle["$secret"] // .handle | startswith("eu://")) and .op == "base64"' "$W/transform.json"
   echo 'SELECT VALUE value_enc FROM vault_secret;' | sql "$ORG_A" > "$W/vault-secret.json"
-  check "the value is held only as enc:v1: ciphertext" jq -e '[.[0].result[] | startswith("enc:v1:")] | (length == 1 and all)' "$W/vault-secret.json"
+  check "the values are held only as enc:v1: ciphertext (the pasted one and the derived one)" jq -e '[.[0].result[] | startswith("enc:v1:")] | (length == 2 and all)' "$W/vault-secret.json"
   held_leaks() {
     local db t
     for db in $(org_dbs); do for t in secret_request vault_secret audit_log memory; do echo "SELECT * FROM $t;" | sql "$db"; done; done | grep -c "$UP_SECRET"

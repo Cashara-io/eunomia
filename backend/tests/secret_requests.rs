@@ -130,9 +130,16 @@ struct World {
 }
 
 async fn world() -> World {
+    world_with(|_| {}).await
+}
+
+/// A world with changed settings (the secrets helper switched off).
+async fn world_with(change: impl FnOnce(&mut eunomia_backend::config::Settings)) -> World {
     capture_logs();
     let (port, up) = upstream().await;
-    let app = TestApp::new().await;
+    let mut settings = common::test_settings();
+    change(&mut settings);
+    let app = TestApp::with_settings(settings).await;
     let personal = eunomia_backend::vaults::service::personal_vault_id(&app.db().await, &app.user.id).await.unwrap().to_string();
     World { app, up, port, personal, seen: Mutex::new(Vec::new()) }
 }
@@ -538,10 +545,11 @@ async fn who_may_fill_decline_and_see_and_org_b_sees_nothing() {
     let out = w.agent(&other, "http_request", json!({"url": w.url("/echo"), "headers": {"Authorization": {"$secret": handle(&any)}}})).await;
     assert_eq!(out["status"], 200, "{out}");
 
-    // the activity log is for org owners and admins
+    // the activity log follows the resolution log: the member owns only their personal vault, and
+    // everything they did was in Team (the tester's), so they see none of it
     if let Some(cookie) = &member_cookie {
-        let ((status, _), _) = common::http(&w.app.router, "GET", "/api/secrets/activity", None, None, Some(cookie)).await;
-        assert_eq!(status, 403);
+        let ((status, log), _) = common::http(&w.app.router, "GET", "/api/secrets/activity", None, None, Some(cookie)).await;
+        assert_eq!((status.as_u16(), log["entries"].clone()), (200, json!([])), "{log}");
     }
     let pending_cap: Vec<Value> = futures::future::join_all((0..12).map(|i| w.agent(&w.app.token, "secret_request", json!({"name": format!("cap_{i}"), "description": "d"})))).await;
     assert!(pending_cap.iter().any(|r| r["code"] == "rate.limited"), "at most 10 pending per person");
@@ -651,4 +659,198 @@ async fn mcp_clients_with_url_elicitation_get_the_url_mode_error_and_others_the_
     }
     let responses = w.seen.lock().unwrap().join("\n");
     assert!(!responses.contains(CANARY));
+}
+
+// ---- the secrets helper off ------------------------------------------------------------------------
+
+/// The `secrets` compose profile off: secrets Eunomia holds (eu://, `enc:v1:` in the backend) need no
+/// sidecar, so a request, its fill, a transform and an outbound call all still work; an op:// reference
+/// in the same server answers secret.unavailable / helper_disabled, and the activity log carries the code.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn held_secrets_work_with_the_helper_off_and_password_manager_refs_do_not() {
+    let w = world_with(|s| s.secrets_helper_enabled = false).await;
+    let (_, helper) = w.browser("GET", "/api/secrets/helper", None).await;
+    assert_eq!((helper["state"].clone(), helper["reason"].clone()), (json!("off"), json!("helper_disabled")), "{helper}");
+
+    let req = w.request("off_key", json!({})).await;
+    w.fill(&req, CANARY).await;
+    let h = handle(&req);
+    let out = w.http_get("/echo", &h).await;
+    assert_eq!(out["status"], 200, "http_request with the helper off: {out}");
+    assert_eq!(w.last_auth(), CANARY);
+    let derived = w.agent(&w.app.token, "secret_transform", json!({"op": "template", "inputs": {"k": h}, "params": {"template": "Bearer {{k}}"}, "name": "off_bearer"})).await;
+    assert!(derived.get("error").is_none(), "secret_transform with the helper off: {derived}");
+    let out = w.http_get("/echo", &handle(&derived)).await;
+    assert_eq!(out["status"], 200, "{out}");
+    assert_eq!(w.last_auth(), format!("Bearer {CANARY}"));
+
+    // a password-manager reference, registered for http_request: helper_disabled, nothing sent
+    let (status, body) = w.browser("PUT", "/api/secrets/providers/onepassword_connect", Some(json!({"host": "https://connect.example.com", "token": "connect-token-fixture-0000"}))).await;
+    assert_eq!(status, 200, "{body}");
+    let (status, body) = w
+        .browser("POST", "/api/secrets/refs", Some(json!({"reference": "op://Ops/Mock/key", "provider": "onepassword_connect", "vault_id": w.personal, "allowed_tools": ["http_request"]})))
+        .await;
+    assert_eq!(status, 200, "{body}");
+    // eu:// is not a password manager: not a provider kind, and never registered as a reference
+    let (_, kinds) = w.browser("GET", "/api/secrets/kinds", None).await;
+    let ks: Vec<&str> = kinds.as_array().unwrap().iter().map(|k| k["kind"].as_str().unwrap()).collect();
+    assert_eq!(ks, ["onepassword_connect", "onepassword_service_account", "bitwarden_sm"], "{kinds}");
+    assert!(kinds.as_array().unwrap().iter().any(|k| k["kind"] == "bitwarden_sm" && k["stability"] == "preview"), "{kinds}");
+    let (status, body) =
+        w.browser("POST", "/api/secrets/refs", Some(json!({"reference": h, "provider": "onepassword_connect", "vault_id": w.personal, "allowed_tools": ["http_request"]}))).await;
+    assert_eq!((status.as_u16(), body["code"].clone()), (400, json!("validation.invalid")), "{body}");
+    let sent = w.up.seen.lock().unwrap().len();
+    let out = w.http_get("/echo", "op://Ops/Mock/key").await;
+    assert_eq!((out["code"].clone(), out["reason"].clone()), (json!("secret.unavailable"), json!("helper_disabled")), "{out}");
+    // and mixed with a held one: the call does not run (the held secret is "not used")
+    let out = w.agent(&w.app.token, "http_request", json!({"url": w.url("/echo"), "headers": {"Authorization": {"$secret": h}, "X-Other": {"$secret": "op://Ops/Mock/key"}}})).await;
+    assert_eq!((out["code"].clone(), out["reason"].clone()), (json!("secret.unavailable"), json!("helper_disabled")), "{out}");
+    assert_eq!(w.up.seen.lock().unwrap().len(), sent, "nothing reached the upstream");
+
+    // the activity log: the eu:// rows ok, the op:// row with the helper's code
+    let (_, log) = w.browser("GET", "/api/secrets/activity", None).await;
+    let entries = log["entries"].as_array().unwrap();
+    let op_row = entries.iter().find(|e| e["action"] == "secret.resolve" && e["reference"] == "op://Ops/Mock/key").expect("an op:// row");
+    assert_eq!((op_row["outcome"].clone(), op_row["code"].clone()), (json!("provider_error"), json!("helper_disabled")), "{op_row}");
+    for action in ["secret.request", "secret.fill", "secret.transform", "secret.http"] {
+        assert!(entries.iter().any(|e| e["action"] == action && e["outcome"] == "ok"), "{action} ok in {log}");
+    }
+    assert!(entries.iter().filter(|e| e["reference"].as_str().is_some_and(|r| r.starts_with("eu://"))).all(|e| e["code"] == ""), "an eu:// row never carries a helper code: {log}");
+    let responses = w.seen.lock().unwrap().join("\n");
+    assert!(!responses.contains(CANARY));
+}
+
+// ---- vault owners ------------------------------------------------------------------------------------
+
+async fn login(w: &World, email: &str) -> String {
+    let ((status, body), cookie) = common::http(&w.app.router, "POST", "/api/auth/login", Some(json!({"email": email, "password": common::PASSWORD})), None, None).await;
+    assert_eq!(status, 200, "{body}");
+    cookie.unwrap().split(';').next().unwrap().to_string()
+}
+
+async fn as_user(w: &World, cookie: &str, method: &str, path: &str, body: Option<Value>) -> (u16, Value) {
+    let ((status, out), _) = common::http(&w.app.router, method, path, body, None, Some(cookie)).await;
+    w.keep(&out);
+    (status.as_u16(), out)
+}
+
+/// Vault owners (decided with the base's rule for references, 2026-11-01): the owner of a vault who is not
+/// an org owner sees the requests into that vault, may decline them, lists, replaces and deletes the held
+/// secrets in it, and sees its rows of the activity log (requests, fills, uses, transforms, outbound
+/// calls); never fills another person's request; a plain member of the vault sees none of another
+/// member's; the org owner sees every row; a vault-restricted token never reaches the log; org B nothing.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn vault_owners_manage_their_vaults_requests_and_held_secrets_and_see_their_activity() {
+    let w = world().await;
+    let st = &w.app.state;
+    // bob: a member of the org (not its owner) who owns the vault Shared; carol and dave: members of Shared
+    let bob = common::register(st, "bob@example.com").await;
+    let carol = common::register(st, "carol@example.com").await;
+    let dave = common::register(st, "dave@example.com").await;
+    let (bob_t, _) = pat(&w, &bob, "bob-agent", None).await;
+    let (carol_t, _) = pat(&w, &carol, "carol-agent", None).await;
+    let shared = w.agent(&bob_t, "vault_create", json!({"name": "Shared"})).await["id"].as_str().unwrap().to_string();
+    let shared_id = eunomia_backend::rid::parse(&shared).unwrap();
+    let org = w.app.db().await;
+    for (email, u) in [("carol@example.com", &carol.id), ("dave@example.com", &dave.id)] {
+        let out = w.agent(&bob_t, "vault_invite", json!({"vault_id": shared, "email": email})).await;
+        assert!(out.get("error").is_none(), "{out}");
+        common::sys(eunomia_backend::vaults::service::accept_invitation(&org, u, &shared_id)).await.unwrap();
+    }
+    let (bob_c, carol_c, dave_c) = (login(&w, "bob@example.com").await, login(&w, "carol@example.com").await, login(&w, "dave@example.com").await);
+
+    // carol's agent asks into Shared; carol fills; her agent uses and transforms it
+    let req = w.agent(&carol_t, "secret_request", json!({"name": "carol_key", "description": "d", "vault_id": shared, "target": {"hosts": [w.host()]}})).await;
+    assert_eq!(req["status"], "pending", "{req}");
+    let rid = req["request_id"].as_str().unwrap().to_string();
+    // bob (vault owner) sees it and may decline, may not fill
+    let (status, one) = as_user(&w, &bob_c, "GET", &format!("/api/secrets/requests/{rid}"), None).await;
+    assert_eq!((status, one["can_fill"].clone(), one["can_decline"].clone()), (200, json!(false), json!(true)), "{one}");
+    let (status, body) = as_user(&w, &bob_c, "POST", &format!("/api/secrets/requests/{rid}/fill"), Some(json!({"value": CANARY}))).await;
+    assert_eq!(status, 403, "only the asker fills: {body}");
+    let (status, out) = as_user(&w, &carol_c, "POST", &format!("/api/secrets/requests/{rid}/fill"), Some(json!({"value": CANARY}))).await;
+    assert_eq!(status, 200, "{out}");
+    let h = handle(&req);
+    let out = w.agent(&carol_t, "http_request", json!({"url": w.url("/echo"), "headers": {"Authorization": {"$secret": h}}})).await;
+    assert_eq!(out["status"], 200, "{out}");
+    let derived = w.agent(&carol_t, "secret_transform", json!({"op": "base64", "inputs": {"value": h}, "name": "carol_b64"})).await;
+    assert!(derived.get("error").is_none(), "{derived}");
+    // a second request of carol's, which bob declines
+    let req2 = w.agent(&carol_t, "secret_request", json!({"name": "carol_two", "description": "d", "vault_id": shared})).await;
+    let rid2 = req2["request_id"].as_str().unwrap().to_string();
+    let (status, out) = as_user(&w, &bob_c, "POST", &format!("/api/secrets/requests/{rid2}/decline"), None).await;
+    assert_eq!((status, out["status"].clone()), (200, json!("declined")), "{out}");
+
+    // dave, a plain member of Shared: none of carol's requests or held secrets
+    let (status, list) = as_user(&w, &dave_c, "GET", "/api/secrets/requests", None).await;
+    assert_eq!((status, list), (200, json!([])));
+    let (_, held) = as_user(&w, &dave_c, "GET", "/api/secrets/held", None).await;
+    assert_eq!(held, json!([]), "a plain member does not manage another's held secrets");
+    let (status, _) = as_user(&w, &dave_c, "POST", &format!("/api/secrets/requests/{rid}/decline"), None).await;
+    assert_eq!(status, 404);
+    let (_, log) = as_user(&w, &dave_c, "GET", "/api/secrets/activity", None).await;
+    assert_eq!(log["entries"], json!([]), "dave owns only his personal vault: {log}");
+
+    // bob lists the held secrets of Shared (pasted and derived), with can_manage
+    let (_, held) = as_user(&w, &bob_c, "GET", "/api/secrets/held", None).await;
+    let names: Vec<&str> = held.as_array().unwrap().iter().filter(|m| m["vault_id"] == shared).map(|m| m["name"].as_str().unwrap()).collect();
+    assert!(names.contains(&"carol_key") && names.contains(&"carol_b64"), "{held}");
+    assert!(held.as_array().unwrap().iter().all(|m| m["can_manage"] == true && m.get("value").is_none() && m.get("value_enc").is_none()), "{held}");
+
+    // bob's activity log: Shared's rows, each kind, and nothing of the tester's personal vault
+    let mine = w.request("tester_personal", json!({})).await;
+    w.fill(&mine, SECOND).await;
+    w.http_get("/echo", &handle(&mine)).await;
+    let shared_key = shared.trim_start_matches("vault:").to_string();
+    let in_shared = |e: &Value| e["vault_id"] == shared || e["reference"].as_str().is_some_and(|r| r.starts_with(&format!("eu://{shared_key}/"))) || e["lineage"].as_array().is_some_and(|l| !l.is_empty());
+    let (status, log) = as_user(&w, &bob_c, "GET", "/api/secrets/activity", None).await;
+    assert_eq!(status, 200, "{log}");
+    let entries = log["entries"].as_array().unwrap();
+    assert!(entries.iter().all(in_shared), "only Shared's rows: {log}");
+    for action in ["secret.request", "secret.fill", "secret.decline", "secret.resolve", "secret.transform", "secret.http"] {
+        assert!(entries.iter().any(|e| e["action"] == action), "{action} in bob's log: {log}");
+    }
+    let http = entries.iter().find(|e| e["action"] == "secret.http").unwrap();
+    assert_eq!(http["lineage"], json!([h]), "{http}");
+    assert!(!log.to_string().contains("tester_personal"), "{log}");
+    // a small page still pages through his rows only
+    let (_, page) = as_user(&w, &bob_c, "GET", "/api/secrets/activity?limit=2", None).await;
+    assert_eq!(page["entries"].as_array().unwrap().len(), 2, "{page}");
+    assert!(page["next_before"].is_string(), "{page}");
+    let before = page["next_before"].as_str().unwrap().replace('+', "%2B");
+    let (_, next) = as_user(&w, &bob_c, "GET", &format!("/api/secrets/activity?limit=2&before={before}"), None).await;
+    assert!(next["entries"].as_array().unwrap().iter().all(in_shared), "{next}");
+    // the org owner sees both vaults' rows
+    let (_, all) = w.browser("GET", "/api/secrets/activity?limit=200", None).await;
+    let refs: Vec<&str> = all["entries"].as_array().unwrap().iter().filter_map(|e| e["reference"].as_str()).collect();
+    assert!(refs.iter().any(|r| r.ends_with("/tester_personal")) && refs.iter().any(|r| r.ends_with("/carol_key")), "{all}");
+
+    // bob replaces carol's held secret (its derived one goes) and deletes it
+    let id = held.as_array().unwrap().iter().find(|m| m["name"] == "carol_key").unwrap()["id"].as_str().unwrap().to_string();
+    let (status, out) = as_user(&w, &dave_c, "PUT", &format!("/api/secrets/held/{id}"), Some(json!({"value": SECOND}))).await;
+    assert_eq!(status, 404, "a plain member may not replace it: {out}");
+    let (status, out) = as_user(&w, &bob_c, "PUT", &format!("/api/secrets/held/{id}"), Some(json!({"value": SECOND}))).await;
+    assert_eq!((status, out["removed_derived"].clone()), (200, json!(1)), "{out}");
+    // a token, even bob's own, may not (browser session only)
+    let ((status, _), _) = common::http(&w.app.router, "DELETE", &format!("/api/secrets/held/{id}"), None, Some(&bob_t), None).await;
+    assert_eq!(status, 403);
+    let (status, _) = as_user(&w, &bob_c, "DELETE", &format!("/api/secrets/held/{id}"), None).await;
+    assert_eq!(status, 200);
+    let (_, log) = as_user(&w, &bob_c, "GET", "/api/secrets/activity", None).await;
+    let entries = log["entries"].as_array().unwrap();
+    for action in ["secret.replace", "secret.delete"] {
+        assert!(entries.iter().any(|e| e["action"] == action && e["vault_id"] == shared), "{action} with its vault: {log}");
+    }
+
+    // a token restricted to Shared: auth.scope on the log
+    let (restricted, _) = pat(&w, &bob, "bob-restricted", Some(&shared)).await;
+    let ((status, out), _) = common::http(&w.app.router, "GET", "/api/secrets/activity", None, Some(&restricted), None).await;
+    assert_eq!((status.as_u16(), out["code"].clone()), (403, json!("auth.scope")), "{out}");
+    // org B: nothing
+    let b = common::register_personal(st, "orgb-owner@example.com").await;
+    let (b_t, _) = pat(&w, &b, "b", None).await;
+    let ((_, log), _) = common::http(&w.app.router, "GET", "/api/secrets/activity", None, Some(&b_t), None).await;
+    assert_eq!(log["entries"], json!([]), "{log}");
+    let responses = w.seen.lock().unwrap().join("\n");
+    assert!(!responses.contains(CANARY) && !responses.contains(SECOND));
 }

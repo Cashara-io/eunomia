@@ -226,11 +226,13 @@ pub async fn prepare(state: &OrgState, user: &User, tool: &str, args: &Value) ->
     let mut helper: Option<&'static str> = None;
     if items.iter().all(|i| i.outcome == outcome::OK) {
         let client = Client::from_settings(&state.settings);
-        if !client.enabled() {
-            // the `secrets` profile is off: fail now, no provider token decrypted, no network call
+        // the `secrets` profile is off: the password-manager references fail now, no provider token
+        // decrypted, no network call. An eu:// handle (held by Eunomia, enc:v1:) needs no sidecar, so a
+        // call of eu:// handles only still runs.
+        if !client.enabled() && items.iter().any(|i| i.row.is_some()) {
             let off = Unreachable::disabled();
             helper = Some(off.reason);
-            items.iter_mut().for_each(|i| i.fail(outcome::PROVIDER_ERROR, off.message.clone()));
+            items.iter_mut().filter(|i| i.row.is_some()).for_each(|i| i.fail(outcome::PROVIDER_ERROR, off.message.clone()));
         }
         let mut kinds: Vec<String> = items.iter().filter_map(|i| i.row.as_ref().map(|r| r.provider.clone())).collect();
         kinds.sort();
