@@ -107,7 +107,7 @@ export default function PasswordManagersSection() {
           <Helper admin={a.toggle_helper} />
           {!a.manage_providers && (
             <p className="text-[12.5px] max-w-[66ch]" style={{ color: "var(--ink-dim)" }} data-testid="vault-owner-note">
-              Only an owner of this organisation or an instance admin can set up a password manager. As a vault owner you can manage the references of the vaults you own and see their resolution log.
+              Only an owner of this organisation or an instance admin can set up a password manager. As a vault owner you can manage the references of the vaults you own and see their resolution log; their secret requests and held secrets are under Secrets agents asked for.
             </p>
           )}
           <Providers manage={a.manage_providers} />
@@ -443,6 +443,11 @@ function References({ vaults }: { vaults: { id: string; name: string }[] }) {
   async function save() {
     if (!draft) return;
     setError(null);
+    // eu:// handles are secrets Eunomia holds (no password manager, no reference to register)
+    if (draft.reference.trim().toLowerCase().startsWith("eu://")) {
+      setError({ message: "An eu:// handle is a secret Eunomia holds, not a password manager reference. It needs no reference: find it under Held secrets." });
+      return;
+    }
     const body = {
       reference: draft.reference.trim(),
       provider: draft.provider || guessProvider(draft.reference, configured),

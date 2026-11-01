@@ -38,7 +38,12 @@ Eunomia address.
   approved, and takes it (and its base64, URL-encoded and hex forms) out of whatever comes back before the
   agent sees it.
 - Every request, fill, decline, use, transform and outbound call is in the resolution log on the
-  Connectors page (owners and admins), with who, which handle and the outcome. Never the value.
+  Connectors page, with who, which handle and the outcome. Never the value. Organisation owners and
+  instance admins see every row; a vault owner sees the rows of the vaults they own.
+- Held secrets do not need the secrets helper (the sidecar for 1Password and Bitwarden Secrets Manager,
+  which is a preview). With password managers switched off, requests, fills, transforms and
+  `http_request` with `eu://` handles keep working; only `op://` and `bws://` references answer
+  `secret.unavailable` with reason `helper_disabled`.
 - Replacing or deleting a key also deletes everything derived from it.
 
 ## For agents
@@ -81,5 +86,7 @@ addresses, follows no redirects, and needs at least one handle (it is not a gene
 - A key is 8 to 16384 characters (shorter ones cannot be scrubbed from text safely).
 - At most 10 requests waiting per person; a request waits 60 minutes unless the agent asks for longer (at
   most a week).
-- 1Password and Bitwarden references (`op://`, `bws://`) cannot be sent by `http_request` yet: they have no
-  approved hosts.
+- 1Password and Bitwarden Secrets Manager (preview) references (`op://`, `bws://`) cannot be sent by
+  `http_request` yet: they have no approved hosts.
+- `eu://` is not a password manager: it is not one of the provider kinds (`GET /api/secrets/kinds`) and
+  cannot be registered as a reference under Password managers.

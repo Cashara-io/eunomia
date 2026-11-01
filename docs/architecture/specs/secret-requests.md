@@ -195,7 +195,7 @@ outside the broker's resolution and the transform reads `value_enc`; every list 
 | List held secrets | an owner of the vault, an org owner or admin, and the person who filled it |
 | Replace, delete | the person who filled it, an owner of the vault, an org owner or admin (browser session) |
 | Use (resolve) | as the broker: an active member of the vault, the restricted token's own vault, the tool in `allowed_tools`, the actor in `allowed_actors` (or empty), not expired |
-| Activity log | org owners and instance admins (the existing resolution log's rule; open question 3) |
+| Activity log | as the resolution log (base rule, decided by Avi on 2026-11-01): org owners and instance admins every row; a vault owner the rows of the vaults they own (a row's `vault`, or the vault of its handle or of a handle an outbound call used; an outbound call's `lineage` keeps only their vaults' handles); anyone else `auth.forbidden`; a vault-restricted token `auth.scope` |
 
 **Why only the asker fills.** The MCP specification (2025-11-25, URL mode) says the server MUST verify
 that the user who opens the URL is the user the elicitation was for. More practically: if any vault
@@ -231,7 +231,7 @@ tool in `broker::SECRET_TOOLS`.
 | `GET /api/secrets/held` | held secrets the caller may see: name, handle, label, vault, hosts, placements, tools, actors, lineage, op, created and expiry; never the value or ciphertext |
 | `PUT /api/secrets/held/{id}` | `{value}`: replace (session) |
 | `DELETE /api/secrets/held/{id}` | delete, with derived secrets (session) |
-| `GET /api/secrets/activity?limit=&before=` | every `secret.*` event of the org, newest first (the resolution log's shape plus `action`) |
+| `GET /api/secrets/activity?limit=&before=` | the `secret.*` events the caller may see (as `GET /api/secrets/log`), newest first: the resolution log's shape (with `code`, the helper's `helper_disabled` or `helper_unreachable`) plus `action`, `lineage`, `host` |
 
 ### MCP
 
@@ -275,6 +275,13 @@ lookup and the sidecar: it reads `vault_secret` by `(vault, name)` among the cal
 the same checks plus expiry, then decrypts `value_enc` into a `Zeroizing<String>`. Everything after that
 (all or nothing, the `secret.resolve` audit row, substitution into a copy of the arguments, the
 task-local exact scrub, the result scrub, zeroising) is the broker's, unchanged.
+
+**The secrets helper switched off** (the `secrets` compose profile, decided by Avi on 2026-11-01): only
+the password-manager items (`op://`, `bws://`, those with a `credential_ref`) fail with
+`secret.unavailable` / `helper_disabled`. A call of `eu://` handles only runs as usual: held secrets are
+`enc:v1:` in the backend and never touch the sidecar. A call mixing both fails as a whole (all or
+nothing), with the helper's reason. `eu://` is not a provider kind, so `GET /api/secrets/kinds` does not
+list it and Settings has no "Preview" badge or helper state for it.
 
 Two additions to `Prepared`:
 
@@ -358,12 +365,12 @@ The risks (SSRF, exfiltration) are real, so the tool is narrow:
 | `action` | When | `detail` (compact JSON, never a value) |
 |---|---|---|
 | `secret.request` | `secret_request` created one | `request`, `vault`, `name`, `hosts`, `channel`, `session` |
-| `secret.fill` | filled | `request`, `secret`, `handle`, `hosts`, `placements`, `any_agent` |
-| `secret.decline` | declined | `request` |
+| `secret.fill` | filled | `request`, `secret`, `handle`, `vault`, `hosts`, `placements`, `any_agent` |
+| `secret.decline` | declined | `request`, `vault` |
 | `secret.resolve` | each use, as the broker (eu:// items: `ref` is the handle, `ref_id` the held secret) | the broker's fields |
 | `secret.transform` | a transform | `op`, `handle`, `secret`, `lineage`, `outcome` |
 | `secret.http` | an outbound call | `host`, `method`, `status`, `handles` |
-| `secret.replace`, `secret.delete` | | `secret`, `handle`, `cascade` (how many derived were removed) |
+| `secret.replace`, `secret.delete` | | `secret`, `handle`, `vault`, `cascade` (how many derived were removed) |
 
 The Connectors page's resolution log reads `GET /api/secrets/activity` and shows the action.
 
@@ -448,8 +455,8 @@ are already in `backend/Cargo.toml`.
 2. **MCP 2026-07-28.** The newest revision drops sessions and `-32042` and delivers URL elicitation in an
    `InputRequiredResult`. Supporting it is a protocol upgrade of `/mcp` (no `initialize`, `_meta` on every
    request). Next release?
-3. **Who sees the activity log.** It follows the resolution log (org owners and admins). Should vault
-   owners see their vault's rows (the other lane is giving vault owners their references)?
+3. **Who sees the activity log.** Settled on the restack: it follows the base's resolution log, so a
+   vault owner sees their vaults' rows (see "Who may do what").
 4. **Connectors.** `target.connector` is shown only. Should connector settings accept `eu://` handles
    (the broker's open question 3)?
 5. **Web chat.** The chat agent is not offered these tools yet. The pop-up would appear in the same
