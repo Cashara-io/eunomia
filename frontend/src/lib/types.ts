@@ -31,6 +31,7 @@ export type AppSettings = {
   embedding_model: string;
   /** "" = automatic (OPENAI_CHAT_MODEL, else gpt-4o-mini on OpenAI, else the endpoint's first chat model). */
   chat_model: string;
+  owner_name?: string;
   sync_intervals: Record<string, number>;
   theme: { mode?: "light" | "dark" | "system"; accent?: string };
   openai_api_key_set: boolean;

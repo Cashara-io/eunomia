@@ -114,15 +114,22 @@ Text:\n{text}\n"
 /// The prompt for one Gmail message. Same JSON shape as [`build_prompt`], but far stricter about what
 /// is worth remembering: most email yields nothing. `owner` is the vault owner's name, if known.
 pub(crate) fn build_email_prompt(owner: Option<&str>, date: Option<&str>, labels: &[String], subject: &str, text: &str) -> String {
-    let owner = owner.map(str::trim).filter(|n| !n.is_empty()).unwrap_or("the vault owner");
+    let known_name = owner.map(str::trim).filter(|n| !n.is_empty());
+    let known = known_name.is_some();
+    let owner = known_name.unwrap_or("the mailbox owner");
+    let unknown_owner = if known {
+        ""
+    } else {
+        "If you don't know the owner's name, attach owner facts to the other person or organisation involved, or skip them; never create an entity for 'the mailbox owner'.\n"
+    };
     let date_line = date.unwrap_or("unknown");
     let labels_line = if labels.is_empty() { "none".to_string() } else { labels.join(", ") };
     format!(
         "You extract durable facts from one email for {owner}'s personal memory. Return strict JSON, no prose, with this exact shape:\n\n\
 {{\n  \"people\": [{{\"name\": str, \"aliases\": [str], \"facts\": [str]}}],\n  \"organisations\": [{{\"name\": str, \"aliases\": [str], \"facts\": [str]}}],\n  \"locations\": [{{\"name\": str, \"aliases\": [str], \"facts\": [str]}}],\n  \"relations\": [{{\"from\": str, \"from_kind\": \"person|organisation|location\", \"to\": str, \"to_kind\": \"person|organisation|location\", \"label\": str}}]\n}}\n\n\
 Email date: {date_line}\nGmail labels: {labels_line}\nSubject: {subject}\n\n\
-Facts attach to the entity they are about. Most facts are about {owner}: put them under a person entry named \"{owner}\". \
-Return NOTHING (empty arrays) for most emails; that is correct and expected.\n\n\
+Facts attach to the entity they are about. Most facts are about {owner}{owner_entry}. \
+{unknown_owner}Return NOTHING (empty arrays) for most emails; that is correct and expected.\n\n\
 SAVE at most 3 facts per email, usually 0 or 1:\n\
 - deadlines, due dates, closing times, exam or demo dates that apply to {owner}\n\
 - decisions or approvals about {owner}\n\
@@ -146,6 +153,7 @@ Each fact is one self-contained sentence that names its subject. Time-sensitive 
 Relations only with a label from: {labels}, and only when the email states it outright.\n\n\
 Email:\n{text}\n",
         labels = super::email::EMAIL_RELATION_LABELS.join(", "),
+        owner_entry = if known { format!(": put them under a person entry named \"{owner}\"") } else { String::new() },
     )
 }
 
@@ -174,7 +182,8 @@ fn cap_email(data: &mut ExtractionData) {
 fn is_placeholder(name: &str) -> bool {
     let n = name.trim().to_lowercase().replace('_', " ");
     let rest = n.strip_prefix("speaker").map(str::trim);
-    matches!(n.as_str(), "unknown" | "unknown speaker" | "speaker" | "narrator" | "me" | "you")
+    matches!(n.as_str(), "the mailbox owner" | "the vault owner" | "mailbox owner" | "vault owner")
+        || matches!(n.as_str(), "unknown" | "unknown speaker" | "speaker" | "narrator" | "me" | "you")
         || rest.is_some_and(|r| r.len() <= 3 && r.chars().all(|c| c.is_ascii_alphanumeric()))
 }
 
@@ -186,15 +195,18 @@ fn should_extract(body: &str, embeddings_backend: &str) -> bool {
 }
 
 #[derive(Debug, Deserialize, SurrealValue, Default)]
-pub(super) struct AppSettingsRow {
+pub(crate) struct AppSettingsRow {
     #[serde(default)]
     #[surreal(default)]
     pub observations_mission: String,
+    #[serde(default)]
+    #[surreal(default)]
+    pub owner_name: String,
 }
 
 /// The `app_settings:<owner_id>` row, creating it with (schema-)defaults if
 /// missing. Used by `consolidate.rs`'s mission lookup.
-pub(super) async fn app_settings_row(db: &OrgDb, owner: &RecordId) -> AppResult<AppSettingsRow> {
+pub(crate) async fn app_settings_row(db: &OrgDb, owner: &RecordId) -> AppResult<AppSettingsRow> {
     let rid = RecordId::from_table_key("app_settings", owner.key().clone());
     let row: Option<AppSettingsRow> = store::get(db, &rid).await?;
     match row {
@@ -426,12 +438,12 @@ mod tests {
         assert!(p.contains("Gmail labels: CATEGORY_UPDATES, SENT"));
         assert!(p.contains("Subject: Exam on Friday"));
         assert!(p.contains("SAVE at most 3 facts") && p.contains("NEVER SAVE"));
-        assert!(p.contains("Sam Roberts") && !p.contains("the vault owner"));
+        assert!(p.contains("Sam Roberts") && !p.contains("mailbox owner") && !p.contains("don't know the owner"));
         assert!(p.contains("works_at, studies_at, teaches, manages, member_of, located_in"));
         assert!(p.contains("\"people\"") && p.contains("\"relations\""));
         assert!(p.ends_with("From: a@x.org\nbody\n"));
         let anon = build_email_prompt(None, None, &[], "s", "t");
-        assert!(anon.contains("the vault owner") && anon.contains("Gmail labels: none"));
+        assert!(anon.contains("the mailbox owner") && anon.contains("never create an entity for 'the mailbox owner'") && anon.contains("Gmail labels: none"));
     }
 
     #[test]
@@ -489,6 +501,9 @@ mod tests {
     #[test]
     fn speaker_labels_are_not_people() {
         for p in ["Unknown", "Speaker 2", "SPEAKER_01", "speaker A", "unknown speaker"] {
+            assert!(is_placeholder(p), "{p}");
+        }
+        for p in ["the mailbox owner", "The Vault Owner", "mailbox owner", "vault owner"] {
             assert!(is_placeholder(p), "{p}");
         }
         for n in ["Ada Lovelace", "Speakerman Industries", "Unknown Pleasures Ltd"] {

@@ -123,6 +123,7 @@ async fn extract_record(state: AppState, job: Job) -> Result<(), JobError> {
     }
     let occurred_at = rec.occurred_at.as_ref().and_then(crate::sources::base::datetime_to_chrono).map(|d| d.to_rfc3339());
     // facts go to the vault the record is filed in (routing), the owner's personal vault when none
+    let owner_name = extract::app_settings_row(db, &job.owner).await.map(|r| r.owner_name).unwrap_or_default();
     if rec.source == "gmail" && skip_email(&state, &job.owner, &rec).await {
         return Ok(());
     }
@@ -134,8 +135,7 @@ async fn extract_record(state: AppState, job: Job) -> Result<(), JobError> {
         vault: rec.vault,
         source: rec.source,
         payload: rec.payload,
-        // no display name is stored for a user; the email prompt falls back to "the vault owner"
-        owner_name: None,
+        owner_name: Some(owner_name).filter(|n| !n.trim().is_empty()),
     };
     for subject in extract::extract_entities(db, &state.settings, &job.owner, &record).await {
         if let Ok(subject) = crate::rid::parse(&subject) {

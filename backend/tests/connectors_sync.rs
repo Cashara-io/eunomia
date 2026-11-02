@@ -742,3 +742,15 @@ async fn the_repeat_lookup_finds_earlier_mail_from_the_sender_inside_the_window(
     assert_eq!(rows.len(), 1, "{rows:?}");
     assert_eq!(rows[0]["from"], "Unit <unit@x.org>");
 }
+
+/// `owner_name` defaults to "" and round-trips through PATCH/GET /api/settings.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_owner_name_setting_round_trips() {
+    let (app, _org) = app_with(None).await;
+    let (_, body) = app.http("GET", "/api/settings", None, true).await;
+    assert_eq!(body["owner_name"], json!(""), "{body}");
+    let (status, body) = app.http("PATCH", "/api/settings", Some(json!({"owner_name": "  Sam Roberts "})), true).await;
+    assert_eq!(status.as_u16(), 200, "{body}");
+    let (_, body) = app.http("GET", "/api/settings", None, true).await;
+    assert_eq!(body["owner_name"], json!("Sam Roberts"), "{body}");
+}

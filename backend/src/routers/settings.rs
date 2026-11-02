@@ -60,6 +60,9 @@ struct AppSettingsRow {
     #[serde(default)]
     #[surreal(default)]
     chat_model: String,
+    #[serde(default)]
+    #[surreal(default)]
+    owner_name: String,
 }
 
 #[derive(Debug, Default, Deserialize, utoipa::ToSchema)]
@@ -74,6 +77,8 @@ struct SettingsUpdate {
     memory_skill: Option<String>,
     /// "" = automatic (see embeddings::provider::chat_model)
     chat_model: Option<String>,
+    /// The user's own name, used by email extraction so facts about the mailbox owner have a subject ("" = unknown)
+    owner_name: Option<String>,
 }
 
 fn app_settings_id(owner: &RecordId) -> RecordId {
@@ -84,6 +89,7 @@ fn app_settings_id(owner: &RecordId) -> RecordId {
 struct SettingsOut {
     embedding_model: String,
     chat_model: String,
+    owner_name: String,
     /// Open map of source key to sync interval seconds.
     #[schema(value_type = Object)]
     sync_intervals: Value,
@@ -103,6 +109,7 @@ fn out(row: &AppSettingsRow, server_base_url: &str, model_configured: bool) -> S
     SettingsOut {
         embedding_model: row.embedding_model.clone(),
         chat_model: row.chat_model.clone(),
+        owner_name: row.owner_name.clone(),
         sync_intervals: row.sync_intervals.clone(),
         theme: row.theme.clone(),
         openai_api_key_set: !row.openai_api_key_encrypted.is_empty(),
@@ -153,6 +160,9 @@ async fn update_app_settings(db: &OrgDb, owner: &RecordId, body: &SettingsUpdate
     if body.chat_model.is_some() {
         set_parts.push("chat_model = $chat_model");
     }
+    if body.owner_name.is_some() {
+        set_parts.push("owner_name = $owner_name");
+    }
     if body.embedding_model.is_some() {
         set_parts.push("embedding_model = $embedding_model");
     }
@@ -185,6 +195,9 @@ async fn update_app_settings(db: &OrgDb, owner: &RecordId, body: &SettingsUpdate
     let mut q = store::dynamic(db, "app.settings_update", query_str).bind(("id", rid));
     if let Some(v) = &body.chat_model {
         q = q.bind(("chat_model", v.trim().to_string()));
+    }
+    if let Some(v) = &body.owner_name {
+        q = q.bind(("owner_name", v.trim().to_string()));
     }
     if let Some(v) = &body.embedding_model {
         q = q.bind(("embedding_model", v.clone()));
@@ -366,6 +379,7 @@ mod tests {
             observations_mission: DEFAULT_OBSERVATIONS_MISSION.to_string(),
             memory_skill: String::new(),
             chat_model: String::new(),
+            owner_name: String::new(),
         }
     }
 
