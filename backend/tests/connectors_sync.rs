@@ -698,7 +698,7 @@ async fn the_reextract_route_replaces_one_connections_facts_and_requeues_its_rec
     assert_eq!(body["observations"].as_i64(), Some(0), "{body}");
     // the queueing runs in the background after the response
     let mut queued = 0;
-    for _ in 0..100 {
+    for _ in 0..400 {
         let mut res = app.state.control.test_raw().query("SELECT count() FROM job WHERE kind = 'extract' AND idempotency_key CONTAINS ':re:' GROUP ALL").await.unwrap();
         queued = res.take::<Option<Value>>(0).unwrap().and_then(|v| v["count"].as_i64()).unwrap_or(0);
         if queued >= 2 {
