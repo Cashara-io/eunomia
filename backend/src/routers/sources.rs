@@ -136,6 +136,7 @@ struct SourceOut {
 #[allow(dead_code)]
 struct SyncReport {
     source: String,
+    /// `already_running`, `queued`, or `offline` (the connectivity check found no internet; nothing was attempted).
     status: Option<String>,
     written: Option<i64>,
     skipped: Option<i64>,

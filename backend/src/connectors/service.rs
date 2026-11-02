@@ -34,6 +34,7 @@ pub const CONNECTOR_KINDS: &[&str] = &[
     "spotify",
     "todoist",
     "stripe",
+    "ed",
 ];
 
 #[derive(Debug, Clone, Deserialize, SurrealValue, Serialize)]
@@ -303,8 +304,8 @@ mod tests {
     fn connector_kinds_excludes_demo() {
         assert!(!CONNECTOR_KINDS.contains(&"demo"));
         assert!(!CONNECTOR_KINDS.contains(&"open_connector"));
-        assert_eq!(CONNECTOR_KINDS.len(), 12);
-        for k in ["up_bank", "pocketai", "github", "slack", "notion", "linear", "gmail", "google_calendar", "discord", "spotify", "todoist", "stripe"] {
+        assert_eq!(CONNECTOR_KINDS.len(), 13);
+        for k in ["up_bank", "pocketai", "github", "slack", "notion", "linear", "gmail", "google_calendar", "discord", "spotify", "todoist", "stripe", "ed"] {
             assert!(CONNECTOR_KINDS.contains(&k), "missing {k}");
         }
     }

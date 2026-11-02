@@ -34,6 +34,7 @@ pub const ALL: &[&Stmt] = &[
     &SOURCES_SYNC_OK,
     &SOURCES_SYNC_FAILED,
     &SOURCES_SYNC_INTERVALS,
+    &SOURCES_SYNC_CHECK_CONNECTIVITY,
     &SOURCES_UP_BY_TYPE,
 ];
 
@@ -172,6 +173,11 @@ pub const SOURCES_SYNC_FAILED: Stmt = Stmt::new(
 pub const SOURCES_SYNC_INTERVALS: Stmt = Stmt::new(
     "app.sources_sync_intervals",
     "SELECT sync_intervals FROM app_settings WHERE owner = $owner LIMIT 1",
+);
+
+pub const SOURCES_SYNC_CHECK_CONNECTIVITY: Stmt = Stmt::new(
+    "app.sources_sync_check_connectivity",
+    "SELECT sync_check_connectivity FROM app_settings WHERE owner = $owner LIMIT 1",
 );
 
 pub const SOURCES_UP_BY_TYPE: Stmt = Stmt::new(

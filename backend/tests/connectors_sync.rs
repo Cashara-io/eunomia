@@ -19,7 +19,7 @@ use eunomia_backend::sources::base::owner_key_str;
 use eunomia_backend::sources::mock::{route, serve, Route};
 use eunomia_backend::sources::heypocket::HeyPocketSource;
 use eunomia_backend::sources::registry;
-use eunomia_backend::sources::scheduler::{due_syncs, sync_source};
+use eunomia_backend::sources::scheduler::{check_connectivity_enabled, due_syncs, sync_job, sync_source};
 use eunomia_backend::sources::up_bank::UpBankSource;
 use eunomia_backend::state::{AppState, OrgState};
 use hmac::{Hmac, Mac};
@@ -527,6 +527,166 @@ async fn the_sync_now_route_runs_a_job_and_reports_an_already_running_sync() {
     let _ = stop.send(true);
 }
 
+// -- offline: the connectivity check (`sync_check_connectivity`, on by default) ----------------------
+
+/// An app whose connectivity probe is `spec` (a local `host:port`, so no test touches the network).
+async fn app_probing(spec: &str) -> (TestApp, OrgState) {
+    allow_base_url();
+    let app = TestApp::with_settings(eunomia_backend::config::Settings { connectivity_probe: spec.into(), ..test_settings() }).await;
+    let org = app.state.org(&app.user.org).await.unwrap();
+    (app, org)
+}
+
+/// A local address nothing listens on: the probe finds no connection.
+fn dead_addr() -> String {
+    std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().to_string()
+}
+
+async fn set_check(app: &TestApp, on: bool) {
+    let (status, body) = app.http("PATCH", "/api/settings", Some(json!({"sync_check_connectivity": on})), true).await;
+    assert_eq!(status.as_u16(), 200, "{body}");
+    assert_eq!(body["sync_check_connectivity"], on);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_connectivity_check_defaults_on_and_can_be_switched_off() {
+    let (app, _org) = app_probing("off").await;
+    let (_, body) = app.http("GET", "/api/settings", None, true).await;
+    assert_eq!(body["sync_check_connectivity"], true);
+    set_check(&app, false).await;
+    let (_, body) = app.http("GET", "/api/settings", None, true).await;
+    assert_eq!(body["sync_check_connectivity"], false);
+    // an unrelated patch leaves it alone
+    let (_, body) = app.http("PATCH", "/api/settings", Some(json!({"chat_model": "m"})), true).await;
+    assert_eq!(body["sync_check_connectivity"], false);
+}
+
+/// Settings rows written before the field existed (NONE) must keep accepting saves, and read as on.
+/// Recreates the upgrade: the field undefined-as-optional, the row without it, then the real 0023 file.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_settings_row_from_before_the_field_still_saves_and_reads_as_on() {
+    let (app, org) = app_probing("off").await;
+    let (status, _) = app.http("GET", "/api/settings", None, true).await; // creates the row
+    assert_eq!(status.as_u16(), 200);
+    let raw = org.db.test_raw();
+    // chat_model (0011) had the same gap: its rows from before it are NONE too
+    raw.query(
+        "DEFINE FIELD OVERWRITE sync_check_connectivity ON app_settings TYPE option<bool>; DEFINE FIELD OVERWRITE chat_model ON app_settings TYPE option<string>; \
+         UPDATE app_settings UNSET sync_check_connectivity, chat_model; DEFINE FIELD OVERWRITE chat_model ON app_settings TYPE string DEFAULT \"\";",
+    )
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    raw.query(include_str!("../migrations/tenant/0023_sync_check_connectivity.surql")).await.unwrap().check().unwrap();
+
+    let (status, body) = app.http("PATCH", "/api/settings", Some(json!({"theme": {"mode": "dark"}})), true).await;
+    assert_eq!(status.as_u16(), 200, "{body}");
+    assert_eq!((&body["sync_check_connectivity"], &body["chat_model"]), (&json!(true), &json!("")), "{body}");
+    assert!(check_connectivity_enabled(&org.db, &app.user.id).await);
+    set_check(&app, false).await;
+    assert!(!check_connectivity_enabled(&org.db, &app.user.id).await);
+    // running the backfill again (or on a row that has values) changes nothing
+    app.http("PATCH", "/api/settings", Some(json!({"chat_model": "keep"})), true).await;
+    raw.query(include_str!("../migrations/tenant/0023_sync_check_connectivity.surql")).await.unwrap().check().unwrap();
+    let (_, body) = app.http("GET", "/api/settings", None, true).await;
+    assert_eq!((&body["sync_check_connectivity"], &body["chat_model"]), (&json!(false), &json!("keep")), "{body}");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn online_scheduled_syncs_run() {
+    let up = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let (app, org) = app_probing(&up.local_addr().unwrap().to_string()).await;
+    let owner = app.user.id.clone();
+    let mock = serve(vec![route("GET", "/issues", json!([issue(7, "Importer", "2024-02-01T00:00:00Z")]))]).await;
+    connect_github(&org, &owner, &mock.base).await;
+
+    assert_eq!(due_syncs(&org).await.unwrap().len(), 1);
+    let out = sync_job(&org, &owner, "github", None, false).await;
+    assert_eq!(out["written"], 1, "{out}");
+    assert_eq!(status(&org, &owner, "github").await["last_error"], "");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn offline_scheduled_syncs_are_skipped_without_an_error_a_failure_count_or_a_provider_call() {
+    let (app, org) = app_probing(&dead_addr()).await;
+    let owner = app.user.id.clone();
+    let mock = serve(vec![route("GET", "/issues", json!([issue(7, "Importer", "2024-02-01T00:00:00Z")]))]).await;
+    connect_github(&org, &owner, &mock.base).await;
+
+    assert!(due_syncs(&org).await.unwrap().is_empty(), "nothing is queued while offline");
+    // a job that was queued just before the connection dropped
+    let out = sync_job(&org, &owner, "github", None, false).await;
+    assert_eq!((out["status"].as_str(), out.get("error")), (Some("offline"), None), "{out}");
+    assert!(mock.requests().is_empty(), "the provider is never called");
+    let st = status(&org, &owner, "github").await;
+    assert!(st.is_null() || (st["last_error"] == "" && st["consecutive_failures"] == 0), "no error state: {st}");
+
+    // with the check off the same machine attempts the sync as before
+    set_check(&app, false).await;
+    assert_eq!(due_syncs(&org).await.unwrap().len(), 1);
+    let out = sync_job(&org, &owner, "github", None, false).await;
+    assert_eq!(out["written"], 1, "{out}");
+    assert_eq!(mock.requests().len(), 1);
+}
+
+/// A scheduled job that finds the machine offline ends quietly, and queues a delayed follow-up under a
+/// new key (the finished job's own key blocks its window), which syncs once the connection is back.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_scheduled_job_that_finds_the_machine_offline_queues_a_retry_that_syncs_when_back_online() {
+    let addr = dead_addr();
+    let (app, org) = app_probing(&addr).await;
+    let owner = app.user.id.clone();
+    let mock = serve(vec![route("GET", "/issues", json!([issue(7, "Importer", "2024-02-01T00:00:00Z")]))]).await;
+    connect_github(&org, &owner, &mock.base).await;
+    let stop = spawn_worker(&app.state);
+    let control = app.state.control.test_raw();
+
+    let key = format!("sync:{}:github:window", owner_key_str(&owner));
+    let job = NewJob::new(kind::SYNC, owner.clone(), key.clone()).in_org(org.db.org()).payload(json!({"source": "github"}));
+    jobs::enqueue(&app.state.control, job).await.unwrap();
+    let ready_retries = || async {
+        let mut res = control.query("SELECT idempotency_key, status, run_at > time::now() + 30s AS later FROM job WHERE status = 'ready' AND idempotency_key CONTAINS ':offline:'").await.unwrap();
+        res.take::<Vec<Value>>(0).unwrap()
+    };
+    wait_for("the offline stand-down to queue a retry", 10, || async { !ready_retries().await.is_empty() }).await;
+    let retries = ready_retries().await;
+    assert_eq!(retries.len(), 1, "{retries:?}");
+    assert_eq!(retries[0]["later"], true, "delayed, not immediate: {retries:?}");
+    assert!(retries[0]["idempotency_key"].as_str().unwrap() != key);
+    assert!(mock.requests().is_empty());
+    assert_eq!(count(&org, "SELECT count() FROM sync_status WHERE owner = $owner", &owner).await, 0, "no error state, no failure count");
+
+    // the connection returns (after the probe's short "offline" cache has lapsed) and the retry comes due
+    tokio::time::sleep(Duration::from_secs(11)).await;
+    let _up = tokio::net::TcpListener::bind(&addr).await.unwrap();
+    control.query("UPDATE job SET run_at = time::now() WHERE idempotency_key CONTAINS ':offline:'").await.unwrap().check().unwrap();
+    wait_for("the retry to sync", 15, || async { status(&org, &owner, "github").await["cursor"] == "2024-02-01T00:00:00Z" }).await;
+    assert_eq!(mock.requests().len(), 1);
+    let _ = stop.send(true);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn manual_sync_reports_offline_then_works_once_the_connection_returns() {
+    let addr = dead_addr();
+    let (app, org) = app_probing(&addr).await;
+    let owner = app.user.id.clone();
+    let mock = serve(vec![route("GET", "/issues", json!([issue(7, "Importer", "2024-02-01T00:00:00Z")]))]).await;
+    connect_github(&org, &owner, &mock.base).await;
+    let stop = spawn_worker(&app.state);
+
+    let (code, body) = app.http("POST", "/api/sources/github/sync", None, true).await;
+    assert_eq!((code.as_u16(), body["status"].as_str()), (200, Some("offline")), "{body}");
+    assert!(mock.requests().is_empty());
+    assert_eq!(count(&org, "SELECT count() FROM sync_status WHERE owner = $owner", &owner).await, 0, "no sync_status row, so no error");
+
+    // the connection returns: a manual sync probes afresh (ignoring the cached "offline") and runs
+    let _up = tokio::net::TcpListener::bind(&addr).await.unwrap();
+    let (_, body) = app.http("POST", "/api/sources/github/sync", None, true).await;
+    assert_eq!(body["written"], 1, "{body}");
+    let _ = stop.send(true);
+}
+
 fn b64(s: &str) -> String {
     use base64::Engine;
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(s)
@@ -626,6 +786,16 @@ fn per_connector() -> Vec<(&'static str, &'static str, Value, Value, Vec<Route>)
             vec![route("GET", "/charges", json!({"object": "list", "has_more": false, "data": [{"id": "ch_1", "object": "charge", "amount": 2500, "currency": "aud",
                 "created": 1700000100, "status": "succeeded", "paid": true, "refunded": false, "description": "Pro", "payment_intent": "pi_1"}]}))],
         ),
+        (
+            "ed", "ed", json!({}), json!({"api_token": "ed-tok"}),
+            vec![
+                route("GET", "/user", json!({"user": {"id": 7, "name": "Sam"}, "courses": [{"course": {"id": 10, "code": "X101", "name": "Intro", "status": "active"}, "role": {"role": "student"}}]})),
+                route("GET", "/courses/10/threads", json!({"threads": [{"id": 501, "course_id": 10, "user_id": 7, "title": "Lifetimes?", "updated_at": "2999-01-01T00:00:00.000000+00:00"}]})),
+                route("GET", "/threads/501", json!({"thread": {"id": 501, "course_id": 10, "user_id": 7, "title": "Lifetimes?", "category": "General", "type": "question",
+                    "document": "How do borrows end?", "is_answered": false, "is_anonymous": false, "updated_at": "2999-01-01T00:00:00.000000+00:00", "deleted_at": null,
+                    "answers": [], "comments": []}, "users": [{"id": 7, "name": "Ada"}]})),
+            ],
+        ),
     ]
 }
 
@@ -698,7 +868,7 @@ async fn the_reextract_route_replaces_one_connections_facts_and_requeues_its_rec
     assert_eq!(body["observations"].as_i64(), Some(0), "{body}");
     // the queueing runs in the background after the response
     let mut queued = 0;
-    for _ in 0..400 {
+    for _ in 0..100 {
         let mut res = app.state.control.test_raw().query("SELECT count() FROM job WHERE kind = 'extract' AND idempotency_key CONTAINS ':re:' GROUP ALL").await.unwrap();
         queued = res.take::<Option<Value>>(0).unwrap().and_then(|v| v["count"].as_i64()).unwrap_or(0);
         if queued >= 2 {

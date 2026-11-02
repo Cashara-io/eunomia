@@ -33,6 +33,8 @@ export type AppSettings = {
   chat_model: string;
   owner_name?: string;
   sync_intervals: Record<string, number>;
+  /** Skip scheduled syncs while there is no internet connection (default true). */
+  sync_check_connectivity: boolean;
   theme: { mode?: "light" | "dark" | "system"; accent?: string };
   openai_api_key_set: boolean;
   /** A usable model endpoint resolves for this user, so chat can answer. */
@@ -81,7 +83,8 @@ export type ConnectorKind =
   | "discord"
   | "spotify"
   | "todoist"
-  | "stripe";
+  | "stripe"
+  | "ed";
 
 /** One routing rule: a record whose `field` matches `value` goes to `vault`. */
 export type RoutingRule = { field: string; value: string; vault: string };

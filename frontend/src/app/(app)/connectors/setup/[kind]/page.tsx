@@ -29,11 +29,12 @@ const SYNC_INTERVAL_PRESETS = [
 ];
 
 // Fallback interval a source runs at when the user hasn't set an override,
-// per the backend scheduler (heypocket defaults to 24h there; every other
-// source falls back to the scheduler's generic 900s/15min default).
+// per the backend scheduler (heypocket defaults to 24h there, ed to 30 min;
+// every other source falls back to the scheduler's generic 900s/15min default).
 const SOURCE_DEFAULT_INTERVAL: Record<string, number> = {
   up_bank: 900,
   heypocket: 86400,
+  ed: 1800,
 };
 
 function isConnectorKind(kind: string): kind is ConnectorKind {
@@ -234,9 +235,11 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
           ? { ok: false, text: `Sync failed: ${r.error}` }
           : r.status === "already_running"
             ? { ok: true, text: "A sync is already running; try again in a moment" }
-            : r.status === "queued"
-              ? { ok: true, text: "Sync queued. It will run as soon as a worker is free" }
-              : { ok: true, text: `Synced: ${r.written ?? 0} new or changed, ${r.skipped ?? 0} unchanged` },
+            : r.status === "offline"
+              ? { ok: false, text: "You're offline, so nothing was synced. Try again when you have a connection" }
+              : r.status === "queued"
+                ? { ok: true, text: "Sync queued. It will run as soon as a worker is free" }
+                : { ok: true, text: `Synced: ${r.written ?? 0} new or changed, ${r.skipped ?? 0} unchanged` },
       );
     } catch (e) {
       setSyncMessage({ ok: false, text: `Sync failed: ${failure(e, "unknown error").message}` });

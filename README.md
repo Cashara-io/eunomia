@@ -188,6 +188,7 @@ configuration and the complete tool list.
 | HeyPocket | Meeting recordings and transcripts |
 | GitHub, Linear, Notion, Todoist | Issues, pull requests, documents and tasks |
 | Slack, Discord, Gmail, Google Calendar | Messages, mail and calendar events |
+| Ed Discussion | Course discussion threads, with answers and comments |
 | Spotify | Listening history |
 
 Set credentials and source options on the Connectors page. Connector secrets
