@@ -695,15 +695,30 @@ async fn the_reextract_route_replaces_one_connections_facts_and_requeues_its_rec
     assert_eq!(count(&org, "SELECT count() FROM cache_record WHERE owner = $owner AND source = 'github' AND deleted = false", &owner).await, 2);
     assert_eq!(count(&org, "SELECT count() FROM cache_record WHERE owner = $owner AND source = 'github'", &other).await, 2);
 
-    let mut res = app.state.control.test_raw().query("SELECT count() FROM job WHERE kind = 'extract' AND idempotency_key CONTAINS ':re:' GROUP ALL").await.unwrap();
-    let queued = res.take::<Option<Value>>(0).unwrap().and_then(|v| v["count"].as_i64()).unwrap_or(0);
+    assert_eq!(body["observations"].as_i64(), Some(0), "{body}");
+    // the queueing runs in the background after the response
+    let mut queued = 0;
+    for _ in 0..100 {
+        let mut res = app.state.control.test_raw().query("SELECT count() FROM job WHERE kind = 'extract' AND idempotency_key CONTAINS ':re:' GROUP ALL").await.unwrap();
+        queued = res.take::<Option<Value>>(0).unwrap().and_then(|v| v["count"].as_i64()).unwrap_or(0);
+        if queued >= 2 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
     assert_eq!(queued, 2, "one fresh extract job per record");
+
+    // while those jobs are still waiting, another run is refused
+    let (status, body) = app.http("POST", "/api/sources/github/reextract", Some(json!({"dry_run": false})), true).await;
+    assert_eq!(status.as_u16(), 409, "{body}");
+    let (status, _) = app.http("POST", "/api/sources/github/reextract", Some(json!({})), true).await;
+    assert_eq!(status.as_u16(), 200, "a dry run is never refused");
 
     let (status, _) = app.http("POST", "/api/sources/nope/reextract", Some(json!({})), true).await;
     assert_eq!(status.as_u16(), 404);
 }
 
-/// The repeated-reminder lookup returns earlier mail from the same sender inside 14 days only.
+/// The repeated-reminder lookup returns earlier mail from the same sender inside the 90-day lookback (oldest first).
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_repeat_lookup_finds_earlier_mail_from_the_sender_inside_the_window() {
     let (app, org) = app_with(None).await;
@@ -739,8 +754,9 @@ async fn the_repeat_lookup_finds_earlier_mail_from_the_sender_inside_the_window(
         .await
         .unwrap();
     let rows: Vec<Value> = res.take(0).unwrap();
-    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert_eq!(rows.len(), 2, "both earlier copies from the sender, oldest first: {rows:?}");
     assert_eq!(rows[0]["from"], "Unit <unit@x.org>");
+    assert_eq!(rows[1]["thread_id"], "t");
 }
 
 /// `owner_name` defaults to "" and round-trips through PATCH/GET /api/settings.

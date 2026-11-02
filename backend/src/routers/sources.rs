@@ -268,12 +268,14 @@ fn default_true() -> bool {
     true
 }
 
-/// What a re-extract run replaces: the connection's live records, and the facts and relations drawn from them.
+/// What a re-extract run replaces: the connection's live records, the facts and relations drawn from
+/// them, and the observations resting only on those facts.
 #[derive(Serialize, Deserialize, SurrealValue, utoipa::ToSchema)]
 struct ReextractOut {
     records: i64,
     memories: i64,
     relations: i64,
+    observations: i64,
 }
 
 #[utoipa::path(
@@ -282,10 +284,10 @@ struct ReextractOut {
     path = "/api/sources/{key}/reextract",
     tag = "sources",
     summary = "Re-run entity extraction over a source's records",
-    description = "`key` is a source key or a connection's key, as for sync. Counts the caller's live records of that connection and the facts and relations extracted from them. With `dry_run` false it deletes those facts and relations (their subjects' observations go stale) and queues extraction for every record again.",
+    description = "`key` is a source key or a connection's key, as for sync. Counts the caller's live records of that connection and the facts and relations extracted from them. With `dry_run` false it deletes those facts and relations (their subjects' observations go stale, or go when nothing else backs them) and queues extraction for every record again; it answers 409 while an earlier re-extraction of the source is still queued or running.",
     params(("key" = String, Path)),
     request_body = ReextractIn,
-    responses((status = 200, body = ReextractOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    responses((status = 200, body = ReextractOut), (status = 409, description = "A re-extraction of this source is still queued or running", body = crate::openapi::Problem, content_type = "application/problem+json"), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
 )]
 async fn reextract(State(state): State<AppState>, user: User, Path(key): Path<String>, Json(body): Json<ReextractIn>) -> AppResult<Json<ReextractOut>> {
@@ -306,7 +308,13 @@ async fn reextract(State(state): State<AppState>, user: User, Path(key): Path<St
     if body.dry_run {
         let mut res = scope!(store::cache::REEXTRACT_COUNTS).await?;
         let out = res.take::<Option<ReextractOut>>(store::cache::REEXTRACT_COUNTS.slot)?;
-        return Ok(Json(out.unwrap_or(ReextractOut { records: 0, memories: 0, relations: 0 })));
+        return Ok(Json(out.unwrap_or(ReextractOut { records: 0, memories: 0, relations: 0, observations: 0 })));
+    }
+
+    // a run still working through its records would recreate what this one deletes, twice over
+    let mut res = store::jobs::REEXTRACT_ACTIVE.on(&state.control).bind(("owner", user.id.clone())).bind(("src", key.clone())).await?;
+    if res.take::<Option<RecordId>>(0)?.is_some() {
+        return Err(AppError::coded(ErrorCode::DbConflict, format!("a re-extraction of {key:?} is still queued or running; wait for it to finish")));
     }
 
     #[derive(Deserialize, SurrealValue)]
@@ -314,17 +322,29 @@ async fn reextract(State(state): State<AppState>, user: User, Path(key): Path<St
         id: RecordId,
         content_hash: String,
     }
-    let mut res = scope!(store::cache::REEXTRACT_RECORDS).await?;
-    let records: Vec<Rec> = res.take(0)?;
-    let mut res = crate::tx::with_retry(|| async { scope!(store::cache::REEXTRACT_CLEAR).await }).await?;
-    let out = res.take::<Option<ReextractOut>>(store::cache::REEXTRACT_CLEAR.slot)?.unwrap_or(ReextractOut { records: 0, memories: 0, relations: 0 });
-
-    let nonce = uuid::Uuid::new_v4().simple().to_string();
-    for rec in &records {
-        let id = crate::cache::search::literal(&rec.id);
-        crate::jobs::handlers::enqueue_reextract(&state, &user.id, &id, &rec.content_hash, &nonce).await;
+    #[derive(Deserialize, SurrealValue)]
+    struct Cleared {
+        records: Vec<Rec>,
+        memories: i64,
+        relations: i64,
+        observations: i64,
     }
-    crate::audit::record_as_caller(&state.control, &user.id, "source.reextract", &key, "ok").await;
+    let mut res = crate::tx::with_retry(|| async { scope!(store::cache::REEXTRACT_CLEAR).await }).await?;
+    let cleared = res.take::<Option<Cleared>>(store::cache::REEXTRACT_CLEAR.slot)?;
+    let Some(cleared) = cleared else { return Ok(Json(ReextractOut { records: 0, memories: 0, relations: 0, observations: 0 })) };
+    let out = ReextractOut { records: cleared.records.len() as i64, memories: cleared.memories, relations: cleared.relations, observations: cleared.observations };
+
+    // audited before returning, with the counts; the queueing below carries on in the background
+    let detail = format!("records={} memories={} relations={} observations={}", out.records, out.memories, out.relations, out.observations);
+    crate::audit::record_as_caller_detail(&state.control, &user.id, "source.reextract", &key, "ok", &detail).await;
+
+    let (owner, src, nonce) = (user.id.clone(), key.clone(), uuid::Uuid::new_v4().simple().to_string());
+    tokio::spawn(async move {
+        for rec in &cleared.records {
+            let id = crate::cache::search::literal(&rec.id);
+            crate::jobs::handlers::enqueue_reextract(&state, &owner, &id, &rec.content_hash, &nonce, &src).await;
+        }
+    });
     Ok(Json(out))
 }
 

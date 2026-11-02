@@ -17,6 +17,7 @@ pub const CONTROL_ALL: &[&ControlStmt] = &[
     &LEADER_RELEASE,
     &JOB_STATUS,
     &SYNC_ACTIVE,
+    &REEXTRACT_ACTIVE,
     &SYNC_RUNNING_OTHER,
 ];
 
@@ -129,6 +130,15 @@ pub const JOB_STATUS: ControlStmt = ControlStmt::new("jobs.status", "SELECT VALU
 pub const SYNC_ACTIVE: ControlStmt = ControlStmt::new(
     "jobs.sync_active",
     "SELECT VALUE id FROM job WHERE kind = 'sync' AND owner = $owner AND payload.source = $source \
+     AND (status = 'ready' OR (status = 'running' AND locked_until >= time::now())) LIMIT 1",
+);
+
+/// A re-extraction `extract` job (key carries `:re:`) for this owner and connection `$src` that is
+/// waiting or running: a second re-extract would only queue the same work again.
+pub const REEXTRACT_ACTIVE: ControlStmt = ControlStmt::new(
+    "jobs.reextract_active",
+    "SELECT VALUE id FROM job WHERE kind = 'extract' AND owner = $owner AND payload.src = $src \
+     AND string::contains(idempotency_key, ':re:') \
      AND (status = 'ready' OR (status = 'running' AND locked_until >= time::now())) LIMIT 1",
 );
 

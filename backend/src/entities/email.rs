@@ -30,6 +30,25 @@ fn is_attribution(line: &str, next: Option<&str>) -> bool {
     next.is_some_and(|n| n.trim().ends_with("wrote:") && t.len() + n.trim().len() < MAX_ATTRIBUTION_LEN)
 }
 
+/// Outlook-style quoting starts here: an "Original Message" rule, a line of underscores, or a
+/// `From:` line followed within 4 lines by `Sent:` and then `Subject:` (or `To:`). `i > 0`: line 0 is
+/// our own `From:` header.
+fn is_outlook_quote(lines: &[&str], i: usize) -> bool {
+    let t = lines[i].trim();
+    if t.to_lowercase().starts_with("-----original message") {
+        return true;
+    }
+    if t.len() >= 5 && t.chars().all(|c| c == '_') {
+        return true;
+    }
+    if i == 0 || !t.starts_with("From:") {
+        return false;
+    }
+    let ahead = &lines[i + 1..lines.len().min(i + 5)];
+    let sent = ahead.iter().position(|l| l.trim_start().starts_with("Sent:"));
+    sent.is_some_and(|k| ahead[k + 1..].iter().any(|l| l.trim_start().starts_with("Subject:") || l.trim_start().starts_with("To:")))
+}
+
 /// The body without quoted earlier replies and a trailing signature. Forwarded content is kept; only
 /// the text after an "On ... wrote:" line, `>` lines and a `-- ` signature go. Conservative: if less
 /// than [`MIN_STRIPPED_LEN`] characters would remain (not counting the leading `From:` line) the
@@ -38,7 +57,7 @@ pub fn strip_quoted(body: &str) -> String {
     let lines: Vec<&str> = body.lines().collect();
     let mut kept: Vec<&str> = Vec::with_capacity(lines.len());
     for (i, line) in lines.iter().enumerate() {
-        if is_attribution(line, lines.get(i + 1).copied()) {
+        if is_attribution(line, lines.get(i + 1).copied()) || is_outlook_quote(&lines, i) {
             break;
         }
         if line.trim_start().starts_with('>') {
@@ -121,11 +140,38 @@ pub fn duplicate_connector_kind(from: &str, subject: &str) -> Option<&'static st
     None
 }
 
-/// Whether an earlier email (`candidates` are `(from header, subject)` pairs from the window) is the
-/// same reminder: same sender address and same normalised subject.
-pub fn is_repeat(from: &str, subject: &str, candidates: &[(String, String)]) -> bool {
-    let (addr, subj) = (sender_address(from), normalize_subject(subject));
-    candidates.iter().any(|(f, s)| sender_address(f) == addr && normalize_subject(s) == subj)
+/// One email as the repeat check sees it. `at` is seconds since the epoch.
+#[derive(Debug, Clone)]
+pub struct Copy {
+    pub from: String,
+    pub subject: String,
+    pub thread_id: Option<String>,
+    pub at: i64,
+}
+
+/// Automated or list mail: a Promotions/Updates label or a no-reply style sender.
+pub fn is_bulk(from: &str, labels: &[String]) -> bool {
+    let addr = sender_address(from);
+    let local = addr.split('@').next().unwrap_or("");
+    labels.iter().any(|l| l == "CATEGORY_UPDATES" || l == "CATEGORY_PROMOTIONS")
+        || ["no-reply", "noreply", "donotreply", "do-not-reply", "mailer-daemon"].iter().any(|p| local.contains(p))
+}
+
+/// Whether `this` is a repeat reminder to skip: bulk mail (never `SENT`) with an earlier copy (same
+/// sender address and normalised subject) in a different thread, no more than [`REPEAT_WINDOW_DAYS`]
+/// after the first such copy. Measured from the first copy, so a series of reminders does not chain.
+pub fn is_repeat(this: &Copy, labels: &[String], candidates: &[Copy]) -> bool {
+    if labels.iter().any(|l| l == "SENT") || !is_bulk(&this.from, labels) {
+        return false;
+    }
+    let (addr, subj) = (sender_address(&this.from), normalize_subject(&this.subject));
+    let first = candidates
+        .iter()
+        .filter(|c| c.at < this.at && sender_address(&c.from) == addr && normalize_subject(&c.subject) == subj)
+        .filter(|c| c.thread_id.is_none() || this.thread_id.is_none() || c.thread_id != this.thread_id)
+        .map(|c| c.at)
+        .min();
+    first.is_some_and(|f| this.at - f <= REPEAT_WINDOW_DAYS * 86_400)
 }
 
 #[cfg(test)]
@@ -203,13 +249,63 @@ mod tests {
         assert_eq!(duplicate_connector_kind("a@b.org", "Lunch invitation"), None);
     }
 
+    const DAY: i64 = 86_400;
+
+    fn copy(from: &str, subject: &str, thread: &str, day: i64) -> Copy {
+        Copy { from: from.into(), subject: subject.into(), thread_id: Some(thread.into()), at: day * DAY }
+    }
+
+    fn updates() -> Vec<String> {
+        vec!["CATEGORY_UPDATES".to_string()]
+    }
+
     #[test]
-    fn repeat_matching_needs_same_sender_and_subject() {
-        let earlier = vec![("Unit <unit@x.org>".to_string(), "Reminder: Quiz 2".to_string())];
-        assert!(is_repeat("UNIT@x.org", "RE: reminder:  quiz 2", &earlier));
-        assert!(!is_repeat("other@x.org", "Reminder: Quiz 2", &earlier));
-        assert!(!is_repeat("unit@x.org", "Reminder: Quiz 3", &earlier));
-        assert!(!is_repeat("unit@x.org", "Reminder: Quiz 2", &[]));
+    fn a_bulk_reminder_in_another_thread_inside_the_window_is_skipped() {
+        let earlier = [copy("Unit <unit@x.org>", "Reminder: Quiz 2", "t1", 0)];
+        let now = copy("UNIT@x.org", "RE: reminder:  quiz 2", "t2", 5);
+        assert!(is_repeat(&now, &updates(), &earlier));
+        assert!(is_repeat(&copy("Bot <noreply@x.org>", "Reminder: Quiz 2", "t2", 5), &[], &[copy("Bot <noreply@x.org>", "Reminder: Quiz 2", "t1", 0)]));
+    }
+
+    #[test]
+    fn a_same_thread_reply_is_not_skipped() {
+        let earlier = [copy("Unit <unit@x.org>", "Reminder: Quiz 2", "t1", 0)];
+        assert!(!is_repeat(&copy("Unit <unit@x.org>", "Re: Reminder: Quiz 2", "t1", 1), &updates(), &earlier));
+    }
+
+    #[test]
+    fn sent_and_personal_mail_is_not_skipped() {
+        let earlier = [copy("Unit <unit@x.org>", "Reminder: Quiz 2", "t1", 0)];
+        let now = copy("Unit <unit@x.org>", "Reminder: Quiz 2", "t2", 1);
+        let sent = vec!["CATEGORY_UPDATES".to_string(), "SENT".to_string()];
+        assert!(!is_repeat(&now, &sent, &earlier));
+        assert!(!is_repeat(&now, &[], &earlier), "a person writing twice is not bulk");
+        assert!(!is_repeat(&now, &updates(), &[]));
+        assert!(!is_repeat(&copy("other@x.org", "Reminder: Quiz 2", "t2", 1), &updates(), &earlier));
+        assert!(!is_repeat(&copy("Unit <unit@x.org>", "Reminder: Quiz 3", "t2", 1), &updates(), &earlier));
+    }
+
+    #[test]
+    fn reminders_do_not_chain_past_the_window_from_the_first_copy() {
+        let earlier = [copy("Unit <unit@x.org>", "Reminder", "t1", 0), copy("Unit <unit@x.org>", "Reminder", "t2", 10)];
+        assert!(is_repeat(&copy("Unit <unit@x.org>", "Reminder", "t3", 12), &updates(), &earlier));
+        assert!(!is_repeat(&copy("Unit <unit@x.org>", "Reminder", "t4", 20), &updates(), &earlier), "20 days after the first copy");
+    }
+
+    #[test]
+    fn outlook_quoting_is_cut() {
+        let tail = "From: a@x.org\nPlease confirm the booking by Friday, thanks very much.\n";
+        let orig = format!("{tail}\n-----Original Message-----\nFrom: Sam\nSent: Monday\nSubject: Booking\nold text");
+        assert_eq!(strip_quoted(&orig), tail.trim_end());
+        let rule = format!("{tail}\n________________________________\nFrom: Sam <s@y.org>\nold");
+        assert_eq!(strip_quoted(&rule), tail.trim_end());
+        let block = format!("{tail}\nFrom: Sam Roberts <s@y.org>\nSent: Monday, 3 March 2025 10:00\nTo: Ada\nSubject: Booking\nold text");
+        assert_eq!(strip_quoted(&block), tail.trim_end());
+        let sent_to = format!("{tail}\nFrom: Sam\nSent: Monday\nCc: x\nTo: Ada\nold");
+        assert_eq!(strip_quoted(&sent_to), tail.trim_end());
+        // a forwarded header without "Sent:" is kept
+        let fwd = format!("{tail}From: b@x.org\nSubject: Exam on 5 June");
+        assert_eq!(strip_quoted(&fwd), fwd.trim_end());
     }
 
     #[test]

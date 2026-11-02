@@ -153,28 +153,27 @@ pub const DELETE_SOURCE_DATA: Stmt = Stmt::at(
     12, // BEGIN 0, four LETs 1 to 4, six writes 5 to 10, DELETE 11, RETURN 12
 );
 
-/// The live records of one connection of `$source` (same scoping as [`DELETE_SOURCE_DATA`]), for re-extraction.
-pub const REEXTRACT_RECORDS: Stmt = Stmt::new(
-    "cache.reextract_records",
-    "SELECT id, content_hash FROM cache_record WHERE owner = $owner AND source = $source AND deleted = false \
-     AND (connector = $connector OR ($first AND connector = NONE))",
-);
-
-/// What re-extracting one connection would replace: its live records, the facts (not observations) and
-/// the relations drawn from them. Read only.
+/// What re-extracting one connection would replace: its live records, the facts (not observations),
+/// the relations drawn from them, and the observations that rest only on those facts and would go.
+/// Read only.
 pub const REEXTRACT_COUNTS: Stmt = Stmt::at(
     "cache.reextract_counts",
     r#"LET $records = (SELECT VALUE id FROM cache_record WHERE owner = $owner AND source = $source AND deleted = false
             AND (connector = $connector OR ($first AND connector = NONE)));
-        LET $mems = (SELECT VALUE id FROM memory WHERE source IN $records AND type != "observation");
+        LET $mems = (SELECT id, subject FROM memory WHERE source IN $records AND type != "observation");
+        LET $ids = $mems.id;
+        LET $subjects = array::distinct($mems.subject);
         LET $rels = (SELECT VALUE id FROM relates_to WHERE source IN $records);
-        RETURN { records: array::len($records), memories: array::len($mems), relations: array::len($rels) };"#,
-    3, // three LETs 0 to 2, RETURN 3
+        LET $obs = (SELECT VALUE id FROM memory WHERE type = "observation" AND subject IN $subjects
+            AND array::len(source_memories ?? []) > 0 AND array::len(array::complement(source_memories ?? [], $ids)) = 0);
+        RETURN { records: array::len($records), memories: array::len($ids), relations: array::len($rels), observations: array::len($obs) };"#,
+    6, // six LETs 0 to 5, RETURN 6
 );
 
 /// Removes the facts and relations extracted from one connection's live records, like
 /// [`DELETE_SOURCE_DATA`] does for them: each affected subject's observations lose those facts from
-/// their lineage and go stale (or go, when nothing else backs them). The records themselves stay.
+/// their lineage and go stale (or go, when nothing else backs them). The records themselves stay, and
+/// are returned (`id`, `content_hash`) so they can be queued for extraction again.
 pub const REEXTRACT_CLEAR: Stmt = Stmt::at(
     "cache.reextract_clear",
     r#"BEGIN TRANSACTION;
@@ -184,29 +183,32 @@ pub const REEXTRACT_CLEAR: Stmt = Stmt::at(
         LET $ids = $mems.id;
         LET $subjects = array::distinct($mems.subject);
         LET $rels = (SELECT VALUE id FROM relates_to WHERE source IN $records);
+        LET $obs = (SELECT VALUE id FROM memory WHERE type = "observation" AND subject IN $subjects
+            AND array::len(source_memories ?? []) > 0 AND array::len(array::complement(source_memories ?? [], $ids)) = 0);
         DELETE $ids;
-        DELETE memory WHERE type = "observation" AND subject IN $subjects
-            AND array::len(source_memories ?? []) > 0 AND array::len(array::complement(source_memories ?? [], $ids)) = 0;
+        DELETE $obs;
         UPDATE memory SET status = "stale", updated_at = time::now(),
             source_memories = IF source_memories THEN array::complement(source_memories, $ids) ELSE NONE END
             WHERE type = "observation" AND subject IN $subjects;
         DELETE $rels;
-        RETURN { records: array::len($records), memories: array::len($ids), relations: array::len($rels) };
+        RETURN { records: (SELECT id, content_hash FROM cache_record WHERE id IN $records), memories: array::len($ids),
+                 relations: array::len($rels), observations: array::len($obs) };
         COMMIT TRANSACTION;"#,
-    10, // BEGIN 0, five LETs 1 to 5, four writes 6 to 9, RETURN 10
+    11, // BEGIN 0, six LETs 1 to 6, four writes 7 to 10, RETURN 11
 );
 
-/// Earlier Gmail records from the window before `$at` whose sender contains `$addr`, for the
-/// repeated-reminder check. Bounded: the caller compares sender and subject exactly.
+/// Earlier Gmail records from the 90 days before `$at` (oldest first) whose sender contains `$addr`, for
+/// the repeated-reminder check. Bounded: the caller compares sender and subject exactly and applies
+/// the 14-day rule from the first copy.
 pub const REPEAT_CANDIDATES: Stmt = Stmt::new(
     "cache.repeat_candidates",
-    "SELECT title, payload.from AS from FROM cache_record WHERE owner = $owner AND source = \"gmail\" AND deleted = false \
-     AND id != $id AND occurred_at >= $at - 14d AND occurred_at < $at \
-     AND string::contains(string::lowercase(payload.from ?? \"\"), $addr) LIMIT 200",
+    "SELECT title, occurred_at, payload.from AS from, payload.thread_id AS thread_id FROM cache_record \
+     WHERE owner = $owner AND source = \"gmail\" AND deleted = false \
+     AND id != $id AND occurred_at >= $at - 90d AND occurred_at < $at \
+     AND string::contains(string::lowercase(payload.from ?? \"\"), $addr) ORDER BY occurred_at LIMIT 200",
 );
 
 pub const ALL: &[&Stmt] = &[
-    &REEXTRACT_RECORDS,
     &REEXTRACT_COUNTS,
     &REEXTRACT_CLEAR,
     &REPEAT_CANDIDATES,

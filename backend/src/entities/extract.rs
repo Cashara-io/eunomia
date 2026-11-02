@@ -176,6 +176,17 @@ fn cap_email(data: &mut ExtractionData) {
     data.relations.retain(|r| {
         r.label.as_deref().is_some_and(|l| super::email::EMAIL_RELATION_LABELS.contains(&l.trim().to_lowercase().as_str()))
     });
+    // an entity with no facts is only worth keeping when a kept relation names it
+    let named: HashSet<String> = data
+        .relations
+        .iter()
+        .flat_map(|r| [r.from.as_deref(), r.to.as_deref()])
+        .flatten()
+        .map(|n| n.trim().to_lowercase())
+        .collect();
+    for items in [&mut data.people, &mut data.organisations, &mut data.locations] {
+        items.retain(|e| !e.facts.is_empty() || e.name.as_deref().is_some_and(|n| named.contains(&n.trim().to_lowercase())));
+    }
 }
 
 /// A speaker label rather than a name ("Unknown", "Speaker 2", "SPEAKER_01").
@@ -327,7 +338,15 @@ async fn apply_extraction(
 /// fails the caller. Returns the set of subject ids (as strings) that got a
 /// new raw memory (empty on no-op/failure) -- a future ingest pipeline would
 /// use this to batch-trigger `consolidate.rs` per unique subject touched.
-pub async fn extract_entities(db: &OrgDb, settings: &Settings, owner: &RecordId, record: &ExtractRecord) -> HashSet<String> {
+///
+/// Failures are logged. For email they are also returned, so the job retries (a re-extract has already
+/// deleted the old facts); for other sources a failed model call just yields nothing.
+pub async fn extract_entities(
+    db: &OrgDb,
+    settings: &Settings,
+    owner: &RecordId,
+    record: &ExtractRecord,
+) -> Result<HashSet<String>, AppError> {
     let email = is_email(record);
     let cleaned;
     let body = if email {
@@ -337,7 +356,7 @@ pub async fn extract_entities(db: &OrgDb, settings: &Settings, owner: &RecordId,
         record.body_text.trim()
     };
     if !should_extract(body, &settings.embeddings_backend) {
-        return HashSet::new();
+        return Ok(HashSet::new());
     }
 
     let title = record.title.trim();
@@ -353,7 +372,7 @@ pub async fn extract_entities(db: &OrgDb, settings: &Settings, owner: &RecordId,
         Ok(d) => d,
         Err(e) => {
             tracing::warn!("entity extraction LLM call failed for {}: {}", record.id, e.message);
-            return HashSet::new();
+            return if email { Err(e) } else { Ok(HashSet::new()) };
         }
     };
     if email {
@@ -361,10 +380,10 @@ pub async fn extract_entities(db: &OrgDb, settings: &Settings, owner: &RecordId,
     }
 
     match apply_extraction(db, owner, &record.id, record.vault.as_ref(), &data).await {
-        Ok(touched) => touched,
+        Ok(touched) => Ok(touched),
         Err(e) => {
             tracing::warn!("entity extraction upsert failed for {}: {}", record.id, e.message);
-            HashSet::new()
+            if email { Err(e) } else { Ok(HashSet::new()) }
         }
     }
 }
@@ -467,9 +486,34 @@ mod tests {
         assert_eq!(total, 3);
         assert_eq!(data.people[0].facts, vec!["a", "b"]);
         assert_eq!(data.people[1].facts, vec!["c"]);
-        assert!(data.organisations[0].facts.is_empty());
+        assert!(data.organisations.is_empty(), "Acme has no facts and its relation was dropped");
         let labels: Vec<_> = data.relations.iter().filter_map(|r| r.label.as_deref()).collect();
         assert_eq!(labels, vec!["works_at", "Studies_At"]);
+    }
+
+    #[test]
+    fn cap_email_drops_factless_entities_unless_a_kept_relation_names_them() {
+        let ent = |n: &str, f: &[&str]| EntityExtract {
+            name: Some(n.into()),
+            aliases: vec![],
+            facts: f.iter().map(|s| s.to_string()).collect(),
+        };
+        let mut data = ExtractionData {
+            people: vec![ent("Sam", &["owes a form"]), ent("Noise", &[]), ent("Ada", &[])],
+            organisations: vec![ent("Acme", &[]), ent("Other", &[])],
+            locations: vec![],
+            relations: vec![RelationExtract {
+                from: Some(" ada ".into()),
+                from_kind: Some("person".into()),
+                to: Some("Acme".into()),
+                to_kind: Some("organisation".into()),
+                label: Some("works_at".into()),
+            }],
+        };
+        cap_email(&mut data);
+        let names = |v: &[EntityExtract]| v.iter().filter_map(|e| e.name.clone()).collect::<Vec<_>>();
+        assert_eq!(names(&data.people), vec!["Sam", "Ada"]);
+        assert_eq!(names(&data.organisations), vec!["Acme"]);
     }
 
     #[test]

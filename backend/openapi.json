@@ -4095,7 +4095,7 @@
           "sources"
         ],
         "summary": "Re-run entity extraction over a source's records",
-        "description": "`key` is a source key or a connection's key, as for sync. Counts the caller's live records of that connection and the facts and relations extracted from them. With `dry_run` false it deletes those facts and relations (their subjects' observations go stale) and queues extraction for every record again.",
+        "description": "`key` is a source key or a connection's key, as for sync. Counts the caller's live records of that connection and the facts and relations extracted from them. With `dry_run` false it deletes those facts and relations (their subjects' observations go stale, or go when nothing else backs them) and queues extraction for every record again; it answers 409 while an earlier re-extraction of the source is still queued or running.",
         "operationId": "reextractSource",
         "parameters": [
           {
@@ -4124,6 +4124,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ReextractOut"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A re-extraction of this source is still queued or running",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -7339,14 +7349,19 @@
       },
       "ReextractOut": {
         "type": "object",
-        "description": "What a re-extract run replaces: the connection's live records, and the facts and relations drawn from them.",
+        "description": "What a re-extract run replaces: the connection's live records, the facts and relations drawn from\nthem, and the observations resting only on those facts.",
         "required": [
           "records",
           "memories",
-          "relations"
+          "relations",
+          "observations"
         ],
         "properties": {
           "memories": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "observations": {
             "type": "integer",
             "format": "int64"
           },
