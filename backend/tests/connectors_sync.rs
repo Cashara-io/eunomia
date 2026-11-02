@@ -653,3 +653,92 @@ async fn every_connector_syncs_end_to_end_against_its_mock_provider() {
 
 #[allow(dead_code)]
 fn _types(_: &User) {}
+
+/// Re-extract: a dry run counts what a connection's records produced; a real run deletes just that
+/// (not facts without a source, from another source or from another owner) and queues extraction again.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_reextract_route_replaces_one_connections_facts_and_requeues_its_records() {
+    use eunomia_backend::entities::service as entities;
+    let (app, org) = app_with(None).await;
+    let owner = app.user.id.clone();
+    let other = RecordId::new("user", "other-owner");
+    let gh = registry::get("github").unwrap();
+    let raw = [issue(7, "Importer", "2024-02-01T00:00:00Z"), issue(8, "Exporter", "2024-02-01T00:00:00Z")];
+    registry::ingest(&org, &owner, &raw, gh.as_ref()).await.unwrap();
+    registry::ingest(&org, &other, &raw, gh.as_ref()).await.unwrap();
+    let up = json!({"type": "transactions", "id": "t1",
+        "attributes": {"description": "Coles", "createdAt": "2024-03-01T00:00:00+11:00", "status": "SETTLED",
+                       "amount": {"value": "-5.00", "valueInBaseUnits": -500, "currencyCode": "AUD"}},
+        "relationships": {"account": {"data": {"id": "acc"}}}});
+    registry::ingest(&org, &owner, &[up], &UpBankSource).await.unwrap();
+    let up_before = count(&org, "SELECT count() FROM memory WHERE owner = $owner AND source.source = 'up_bank'", &owner).await;
+
+    let ada = common::sys(entities::upsert_entity(&org.db, &owner, "person", "Ada", None, None)).await.unwrap();
+    let acme = common::sys(entities::upsert_entity(&org.db, &owner, "organisation", "Acme", None, None)).await.unwrap();
+    let (ada_id, acme_id): (RecordId, RecordId) = (eunomia_backend::rid::parse(&ada.id).unwrap(), eunomia_backend::rid::parse(&acme.id).unwrap());
+    common::sys(    entities::add_memory(&org.db, &owner, &ada_id, "Ada reported the importer bug.", Some(ISSUE_7), "world")).await.unwrap();
+    common::sys(    entities::add_memory(&org.db, &owner, &ada_id, "Ada likes tea.", None, "world")).await.unwrap();
+    common::sys(    entities::add_relation(&org.db, &owner, &ada_id, &acme_id, "works_at", Some(ISSUE_7))).await.unwrap();
+    let all_memories = count(&org, "SELECT count() FROM memory WHERE owner = $owner", &owner).await;
+
+    let (status, body) = app.http("POST", "/api/sources/github/reextract", Some(json!({})), true).await;
+    assert_eq!(status.as_u16(), 200, "{body}");
+    assert_eq!((body["records"].as_i64(), body["memories"].as_i64(), body["relations"].as_i64()), (Some(2), Some(1), Some(1)), "{body}");
+    assert_eq!(count(&org, "SELECT count() FROM memory WHERE owner = $owner", &owner).await, all_memories, "dry run changes nothing");
+
+    let (_, body) = app.http("POST", "/api/sources/github/reextract", Some(json!({"dry_run": false})), true).await;
+    assert_eq!((body["records"].as_i64(), body["memories"].as_i64(), body["relations"].as_i64()), (Some(2), Some(1), Some(1)), "{body}");
+    assert_eq!(count(&org, "SELECT count() FROM memory WHERE owner = $owner AND source != NONE AND source.source = 'github'", &owner).await, 0);
+    assert_eq!(count(&org, "SELECT count() FROM memory WHERE owner = $owner AND source = NONE AND type != 'observation'", &owner).await, 1, "the sourceless fact stays");
+    assert_eq!(count(&org, "SELECT count() FROM memory WHERE owner = $owner AND source.source = 'up_bank'", &owner).await, up_before);
+    assert_eq!(count(&org, "SELECT count() FROM relates_to WHERE source.source = 'github' AND source.owner = $owner", &owner).await, 0);
+    assert_eq!(count(&org, "SELECT count() FROM cache_record WHERE owner = $owner AND source = 'github' AND deleted = false", &owner).await, 2);
+    assert_eq!(count(&org, "SELECT count() FROM cache_record WHERE owner = $owner AND source = 'github'", &other).await, 2);
+
+    let mut res = app.state.control.test_raw().query("SELECT count() FROM job WHERE kind = 'extract' AND idempotency_key CONTAINS ':re:' GROUP ALL").await.unwrap();
+    let queued = res.take::<Option<Value>>(0).unwrap().and_then(|v| v["count"].as_i64()).unwrap_or(0);
+    assert_eq!(queued, 2, "one fresh extract job per record");
+
+    let (status, _) = app.http("POST", "/api/sources/nope/reextract", Some(json!({})), true).await;
+    assert_eq!(status.as_u16(), 404);
+}
+
+/// The repeated-reminder lookup returns earlier mail from the same sender inside 14 days only.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_repeat_lookup_finds_earlier_mail_from_the_sender_inside_the_window() {
+    let (app, org) = app_with(None).await;
+    let owner = app.user.id.clone();
+    let msg = |id: &str, from: &str, date: &str| {
+        json!({"id": id, "threadId": "t", "labelIds": ["INBOX"], "snippet": "s", "internalDate": "0",
+            "payload": {"mimeType": "text/plain", "body": {"data": "UmVtaW5kZXI"},
+                "headers": [{"name": "Subject", "value": "Reminder: Quiz"}, {"name": "From", "value": from}, {"name": "Date", "value": date}]}})
+    };
+    let raw = [
+        msg("old", "Unit <unit@x.org>", "Mon, 25 Dec 2023 09:00:00 +0000"),
+        msg("recent", "Unit <unit@x.org>", "Mon, 8 Jan 2024 09:00:00 +0000"),
+        msg("other", "Else <else@y.org>", "Mon, 8 Jan 2024 10:00:00 +0000"),
+        msg("now", "Unit <unit@x.org>", "Mon, 15 Jan 2024 09:00:00 +0000"),
+    ];
+    let src = registry::get("gmail").unwrap();
+    let report = registry::ingest(&org, &owner, &raw, src.as_ref()).await.unwrap();
+    assert_eq!(report.failed, 0, "{:?}", report.errors);
+    use surrealdb::types::SurrealValue;
+    #[derive(serde::Deserialize, SurrealValue)]
+    struct Now {
+        id: RecordId,
+        occurred_at: surrealdb::types::Datetime,
+    }
+    let mut r = org.db.test_raw().query("SELECT id, occurred_at FROM cache_record WHERE owner = $owner AND external_id = 'now'").bind(("owner", owner.clone())).await.unwrap();
+    let now: Now = r.take::<Vec<Now>>(0).unwrap().remove(0);
+    let mut res = eunomia_backend::store::cache::REPEAT_CANDIDATES
+        .on(&org.db)
+        .bind(("owner", owner.clone()))
+        .bind(("id", now.id))
+        .bind(("at", now.occurred_at))
+        .bind(("addr", "unit@x.org"))
+        .await
+        .unwrap();
+    let rows: Vec<Value> = res.take(0).unwrap();
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert_eq!(rows[0]["from"], "Unit <unit@x.org>");
+}

@@ -35,6 +35,7 @@ pub fn router() -> Router<AppState> {
         .route("/sources", get(list_sources))
         .route("/sources/status", get(sources_status))
         .route("/sources/{key}/sync", post(sync_now))
+        .route("/sources/{key}/reextract", post(reextract))
 }
 
 /// No `User` extractor: see this module's doc comment.
@@ -256,6 +257,77 @@ async fn sync_now(State(state): State<AppState>, user: User, Path(key): Path<Str
     Ok(Json(scheduler::sync_now(&state, &user.id, &key).await?))
 }
 
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+struct ReextractIn {
+    /// Only count what would be replaced (the default); `false` deletes it and queues extraction again.
+    #[serde(default = "default_true")]
+    dry_run: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// What a re-extract run replaces: the connection's live records, and the facts and relations drawn from them.
+#[derive(Serialize, Deserialize, SurrealValue, utoipa::ToSchema)]
+struct ReextractOut {
+    records: i64,
+    memories: i64,
+    relations: i64,
+}
+
+#[utoipa::path(
+    operation_id = "reextractSource",
+    post,
+    path = "/api/sources/{key}/reextract",
+    tag = "sources",
+    summary = "Re-run entity extraction over a source's records",
+    description = "`key` is a source key or a connection's key, as for sync. Counts the caller's live records of that connection and the facts and relations extracted from them. With `dry_run` false it deletes those facts and relations (their subjects' observations go stale) and queues extraction for every record again.",
+    params(("key" = String, Path)),
+    request_body = ReextractIn,
+    responses((status = 200, body = ReextractOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = []), ("bearer" = [])),
+)]
+async fn reextract(State(state): State<AppState>, user: User, Path(key): Path<String>, Json(body): Json<ReextractIn>) -> AppResult<Json<ReextractOut>> {
+    let state = state.org(&user.org).await?;
+    let Some((_, conn)) = registry::connection(&state.db, &user.id, &key).await? else {
+        return Err(AppError::coded(ErrorCode::SourceNotFound, format!("no source {key:?}")));
+    };
+    let source = registry::split_key(&key).0.to_string();
+    // scoped like a connection's data delete: its own records, plus a first connection's older ones
+    let first = conn.as_ref().is_none_or(Connector::is_first);
+    let connector = conn.as_ref().map(|c| c.id.clone());
+    macro_rules! scope {
+        ($stmt:expr) => {
+            $stmt.on(&state.db).bind(("owner", user.id.clone())).bind(("source", source.clone())).bind(("connector", connector.clone())).bind(("first", first))
+        };
+    }
+
+    if body.dry_run {
+        let mut res = scope!(store::cache::REEXTRACT_COUNTS).await?;
+        let out = res.take::<Option<ReextractOut>>(store::cache::REEXTRACT_COUNTS.slot)?;
+        return Ok(Json(out.unwrap_or(ReextractOut { records: 0, memories: 0, relations: 0 })));
+    }
+
+    #[derive(Deserialize, SurrealValue)]
+    struct Rec {
+        id: RecordId,
+        content_hash: String,
+    }
+    let mut res = scope!(store::cache::REEXTRACT_RECORDS).await?;
+    let records: Vec<Rec> = res.take(0)?;
+    let mut res = crate::tx::with_retry(|| async { scope!(store::cache::REEXTRACT_CLEAR).await }).await?;
+    let out = res.take::<Option<ReextractOut>>(store::cache::REEXTRACT_CLEAR.slot)?.unwrap_or(ReextractOut { records: 0, memories: 0, relations: 0 });
+
+    let nonce = uuid::Uuid::new_v4().simple().to_string();
+    for rec in &records {
+        let id = crate::cache::search::literal(&rec.id);
+        crate::jobs::handlers::enqueue_reextract(&state, &user.id, &id, &rec.content_hash, &nonce).await;
+    }
+    crate::audit::record_as_caller(&state.control, &user.id, "source.reextract", &key, "ok").await;
+    Ok(Json(out))
+}
+
 /// Largest webhook delivery read into memory. Provider deliveries are a few KiB.
 const MAX_WEBHOOK_BYTES: usize = 1 << 20;
 /// A slow or stalled upload is cut off rather than holding a connection.
@@ -345,6 +417,7 @@ async fn source_webhook(
     list_sources,
     sources_status,
     sync_now,
+    reextract,
     source_webhook,
 ))]
 pub struct Doc;
@@ -352,6 +425,12 @@ pub struct Doc;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reextract_defaults_to_a_dry_run() {
+        assert!(serde_json::from_str::<ReextractIn>("{}").unwrap().dry_run);
+        assert!(!serde_json::from_str::<ReextractIn>(r#"{"dry_run": false}"#).unwrap().dry_run);
+    }
 
     #[test]
     fn status_out_defaults_for_a_missing_row() {

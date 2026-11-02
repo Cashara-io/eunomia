@@ -4089,6 +4089,66 @@
         ]
       }
     },
+    "/api/sources/{key}/reextract": {
+      "post": {
+        "tags": [
+          "sources"
+        ],
+        "summary": "Re-run entity extraction over a source's records",
+        "description": "`key` is a source key or a connection's key, as for sync. Counts the caller's live records of that connection and the facts and relations extracted from them. With `dry_run` false it deletes those facts and relations (their subjects' observations go stale) and queues extraction for every record again.",
+        "operationId": "reextractSource",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReextractIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReextractOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/sources/{key}/sync": {
       "post": {
         "tags": [
@@ -7265,6 +7325,38 @@
           },
           "title": {
             "type": "string"
+          }
+        }
+      },
+      "ReextractIn": {
+        "type": "object",
+        "properties": {
+          "dry_run": {
+            "type": "boolean",
+            "description": "Only count what would be replaced (the default); `false` deletes it and queues extraction again."
+          }
+        }
+      },
+      "ReextractOut": {
+        "type": "object",
+        "description": "What a re-extract run replaces: the connection's live records, and the facts and relations drawn from them.",
+        "required": [
+          "records",
+          "memories",
+          "relations"
+        ],
+        "properties": {
+          "memories": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "records": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "relations": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },

@@ -123,13 +123,71 @@ async fn extract_record(state: AppState, job: Job) -> Result<(), JobError> {
     }
     let occurred_at = rec.occurred_at.as_ref().and_then(crate::sources::base::datetime_to_chrono).map(|d| d.to_rfc3339());
     // facts go to the vault the record is filed in (routing), the owner's personal vault when none
-    let record = extract::ExtractRecord { id: rec.id, title: rec.title, body_text: rec.body_text, occurred_at, vault: rec.vault };
+    if rec.source == "gmail" && skip_email(&state, &job.owner, &rec).await {
+        return Ok(());
+    }
+    let record = extract::ExtractRecord {
+        id: rec.id,
+        title: rec.title,
+        body_text: rec.body_text,
+        occurred_at,
+        vault: rec.vault,
+        source: rec.source,
+        payload: rec.payload,
+        // no display name is stored for a user; the email prompt falls back to "the vault owner"
+        owner_name: None,
+    };
     for subject in extract::extract_entities(db, &state.settings, &job.owner, &record).await {
         if let Ok(subject) = crate::rid::parse(&subject) {
             super::enqueue_lossy(&state.control, super::leader::consolidate_job(state.db.org(), &job.owner, &subject)).await;
         }
     }
     Ok(())
+}
+
+/// Whether a Gmail record is not worth a model call: it duplicates a connector the owner has enabled
+/// (Ed, GitHub, Google Calendar notification mail), or repeats a reminder from the same sender with the
+/// same subject in the previous two weeks. Best effort: a failed lookup skips nothing.
+async fn skip_email(state: &OrgState, owner: &RecordId, rec: &search::CacheRecord) -> bool {
+    use crate::entities::email;
+    let from = email::sender_of(&rec.payload, &rec.body_text);
+    if let Some(kind) = email::duplicate_connector_kind(&from, &rec.title) {
+        let enabled = crate::sources::registry::enabled(&state.db, owner).await.unwrap_or_default();
+        if enabled.iter().any(|(_, c)| c.kind == kind) {
+            tracing::info!(record = rec.id, kind, "extract skipped: duplicates a connector");
+            return true;
+        }
+    }
+    let (Some(at), Some(rid)) = (rec.occurred_at, rec.rid.clone()) else { return false };
+    let addr = email::sender_address(&from);
+    if addr.is_empty() {
+        return false;
+    }
+    #[derive(serde::Deserialize, surrealdb::types::SurrealValue)]
+    struct Earlier {
+        title: String,
+        #[serde(default)]
+        #[surreal(default)]
+        from: Option<String>,
+    }
+    let rows: Vec<Earlier> = match store::cache::REPEAT_CANDIDATES
+        .on(&state.db)
+        .bind(("owner", owner.clone()))
+        .bind(("id", rid))
+        .bind(("at", at))
+        .bind(("addr", addr))
+        .await
+        .and_then(|mut r| r.take(0))
+    {
+        Ok(rows) => rows,
+        Err(_) => return false,
+    };
+    let candidates: Vec<(String, String)> = rows.into_iter().map(|r| (r.from.unwrap_or_default(), r.title)).collect();
+    let repeat = email::is_repeat(&from, &rec.title, &candidates);
+    if repeat {
+        tracing::info!(record = rec.id, "extract skipped: repeated reminder");
+    }
+    repeat
 }
 
 /// Rewrite one entity's observation from its raw facts.
@@ -171,7 +229,20 @@ pub fn supersede_job(org: crate::pool::OrgId, owner: &RecordId, subject: &Record
 /// Queue entity extraction for a freshly written cache record. `hash` is its content hash, so an
 /// unchanged record never extracts twice. Best effort: a lost enqueue only delays enrichment.
 pub async fn enqueue_extract(state: &OrgState, owner: &RecordId, record_id: &str, hash: &str) {
-    let key = format!("{}:{}:{record_id}:{hash}", kind::EXTRACT, crate::sources::base::owner_key_str(owner));
+    enqueue_extract_keyed(state, owner, record_id, hash, "").await;
+}
+
+/// [`enqueue_extract`] again for a record that already extracted: `nonce` (one per re-extract run) makes
+/// the job key new, so the content-hash dedupe does not swallow it.
+pub async fn enqueue_reextract(state: &OrgState, owner: &RecordId, record_id: &str, hash: &str, nonce: &str) {
+    enqueue_extract_keyed(state, owner, record_id, hash, nonce).await;
+}
+
+async fn enqueue_extract_keyed(state: &OrgState, owner: &RecordId, record_id: &str, hash: &str, nonce: &str) {
+    let mut key = format!("{}:{}:{record_id}:{hash}", kind::EXTRACT, crate::sources::base::owner_key_str(owner));
+    if !nonce.is_empty() {
+        key.push_str(&format!(":re:{nonce}"));
+    }
     let job = NewJob::new(kind::EXTRACT, owner.clone(), key).in_org(state.db.org()).payload(json!({ "record": record_id }));
     super::enqueue_lossy(&state.control, job).await;
 }
