@@ -313,7 +313,13 @@ async fn source_webhook(
     let mut delivered = None;
     for row in connections {
         let (src, headers, body) = (&src, &parts.headers, &body_bytes);
-        let records = crate::secrets::connector::with_connection(&state, &owner, Some(&row), |conn| async move { src.webhook(&conn, headers, body).await }).await?;
+        let records = crate::secrets::connector::with_connection(&state, &owner, Some(&row), |conn| async move {
+            let mut records = src.webhook(&conn, headers, body).await?;
+            if let Some(records) = &mut records {
+                records.iter_mut().for_each(crate::redact::redact_value);
+            }
+            Ok(records)
+        }).await?;
         if let Some(records) = records {
             delivered = Some((records, row));
             break;

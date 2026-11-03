@@ -168,7 +168,11 @@ impl Api {
             let resp = req
                 .send()
                 .await
-                .map_err(|e| AppError::new(StatusCode::BAD_GATEWAY, format!("could not reach {}: {e}", host(&url))))?;
+                .map_err(|e| {
+                    let message = format!("could not reach {}: {e}", host(&url));
+                    let message = self.secrets.as_ref().map_or_else(|| message.clone(), |s| s.scrub(&message));
+                    AppError::new(StatusCode::BAD_GATEWAY, message)
+                })?;
             let status = resp.status();
             if status == StatusCode::TOO_MANY_REQUESTS
                 && !retried
