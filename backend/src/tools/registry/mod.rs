@@ -436,9 +436,10 @@ async fn call_inner(app: &AppState, user: &User, name: &str, mut args: Value) ->
         }
     };
     if let Some(p) = &prepared {
-        // http_request scrubs untrusted response text itself. Preserve its fixed result keys:
+        // http_request withholds content for short secrets. Preserve its fixed result keys:
         // a one-character key can also be a letter in "status" or "content_type".
-        if name != "http_request" || result.is_err() {
+        let short = p.values.iter().any(|v| v.chars().count() < 8);
+        if name != "http_request" || result.is_err() || !short {
             p.scrub_result(&mut result);
         }
         let mut s = source.lock().unwrap();
