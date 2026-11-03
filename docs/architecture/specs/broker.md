@@ -411,3 +411,9 @@ detectors may or may not catch.
 6. The sidecar as a compose profile (**decided by Avi on 2026-11-01**, replacing "always on"): fresh
    installs also start with it off. Should `install.sh` gain a `--password-managers` flag that writes
    `COMPOSE_PROFILES=secrets` up front?
+
+## Owner decisions, 2026-11-03
+
+Approved hosts and placements for op:// and bws:// references are a follow-up after the current stack. Until then they remain unavailable to http_request. Vault owners keep seeing only their own keys in mixed-vault activity. Connector settings will accept eu:// handles. Chat access stays gated on real-install testing. Pasted secrets may be 1 to 16384 characters; empty values remain invalid. MCP revision 2026-07-28 is scheduled for the next release. Claude plugin and ChatGPT app packaging follows #126.
+
+Control migration 0007 adds audit_event_secret_idx on action, target and created_at for resolution pages and counts. Tenant 0027 remains reserved for the ontology.
