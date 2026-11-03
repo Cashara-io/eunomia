@@ -398,12 +398,8 @@ detectors may or may not catch.
    preview.
 2. Admins: settings are for org owners and instance admins. Should vault owners manage references bound
    to their own vault? **Decided by Avi on 2026-11-01: yes**, for the vaults they own (see Settings API).
-3. Connector settings: resolving `{"$secret": ...}` inside connector credentials needs the sync jobs to
-   call the broker. A follow-up PR, or in this release?
-4. The resolution log reads `audit_event` without an index on `action` (a control migration would add
-   one; this lane holds only tenant numbers). Fine at today's volumes; worth a control migration later?
-   (A vault owner's log page reads up to 2000 of the org's rows to fill a page, which makes the index
-   more worthwhile.)
+3. **Decided 2026-11-03:** connector settings accept eu:// handles in #126. Password-manager references retain their current restrictions pending the approved-host follow-up.
+4. **Done:** control migration 0007 adds audit_event_secret_idx on action, target and created_at. Vault-owner pages still filter the detail by vault after the indexed organisation query.
 5. Vault owners can register a reference to any item the org's provider token can read (threat model).
    Today the provider token's scope is the boundary, and the docs tell admins to scope it. Should a later
    PR add a per-provider allow-list of reference prefixes for vault owners (a tenant migration), or an
