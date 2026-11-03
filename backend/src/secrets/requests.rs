@@ -548,7 +548,7 @@ pub async fn fill(state: &OrgState, user: &RecordId, org_manager: bool, raw_id: 
             value: &value,
             hosts: hosts.clone(),
             placements: placements.clone(),
-            tools: held::DEFAULT_TOOLS.iter().map(|t| t.to_string()).collect(),
+            tools: held::DEFAULT_TOOLS.iter().map(|t| t.to_string()).chain(r.connector.iter().map(|kind| format!("connector:{kind}"))).collect(),
             actors,
             derived_from: Vec::new(),
             op: None,

@@ -6,6 +6,7 @@
 
 pub mod broker;
 pub mod client;
+pub mod connector;
 pub mod held;
 pub mod outbound;
 pub mod reference;

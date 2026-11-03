@@ -83,10 +83,18 @@ addresses, follows no redirects, and needs at least one handle (it is not a gene
 
 ## Limits
 
-- A key is 8 to 16384 characters (shorter ones cannot be scrubbed from text safely).
+- A key is 1 to 16384 characters (shorter ones cannot be scrubbed from text safely).
 - At most 10 requests waiting per person; a request waits 60 minutes unless the agent asks for longer (at
   most a week).
 - 1Password and Bitwarden Secrets Manager (preview) references (`op://`, `bws://`) cannot be sent by
   `http_request` yet: they have no approved hosts.
 - `eu://` is not a password manager: it is not one of the provider kinds (`GET /api/secrets/kinds`) and
   cannot be registered as a reference under Password managers.
+
+## Connector credentials
+
+A connector credential field accepts a handle such as `eu://<vault>/<name>`. Ask with `target.connector` set to the connector kind, such as `up_bank`, and approve its API hosts and placements in the pop-up. Tick **any agent** if background sync should use it. A handle restricted to the asking agent cannot be used by a background sync. Saving the connector stores the handle; it never copies the resolved value into the connector row.
+
+Every provider request, including pagination and OAuth refresh, must use an approved host. OAuth refresh tokens need body placement as well as approval for the token endpoint. Deleting or expiring the held secret makes the connector fail closed on its next use.
+
+Keys and PINs may be one character long. An HTTP call using a short secret returns status information with its upstream content withheld. Short connector values can also cause broad redaction of ordinary provider text.

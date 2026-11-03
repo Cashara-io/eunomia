@@ -159,13 +159,18 @@ pub fn current_exact() -> Arc<Vec<Zeroizing<String>>> {
 pub fn scrub_exact(text: &str, values: &[Zeroizing<String>]) -> (String, usize) {
     let mut sorted: Vec<&str> = values.iter().map(|v| v.as_str()).filter(|v| !v.is_empty()).collect();
     sorted.sort_by_key(|v| std::cmp::Reverse(v.len()));
-    let mut out = text.to_string();
+    let mut out = String::with_capacity(text.len());
     let mut n = 0;
-    for v in sorted {
-        let c = out.matches(v).count();
-        if c > 0 {
-            n += c;
-            out = out.replace(v, EXACT_MARKER);
+    let mut rest = text;
+    while !rest.is_empty() {
+        if let Some(value) = sorted.iter().find(|value| rest.starts_with(**value)) {
+            out.push_str(EXACT_MARKER);
+            rest = &rest[value.len()..];
+            n += 1;
+        } else {
+            let c = rest.chars().next().expect("non-empty text");
+            out.push(c);
+            rest = &rest[c.len_utf8()..];
         }
     }
     (out, n)
@@ -226,6 +231,12 @@ mod tests {
         for fine in ["ops_team is on call", "ops_dashboard_v2", "version 0.6b2f0a8e-1c3d-4e5f-8a9b-0c1d2e3f4a5b is a uuid", "1.0.3:abc"] {
             assert_eq!(run(fine).0, fine);
         }
+    }
+
+    #[test]
+    fn short_values_do_not_scrub_the_replacement_marker_again() {
+        let values = vec![Zeroizing::new("long-value".into()), Zeroizing::new("e".into())];
+        assert_eq!(scrub_exact("long-value e café", &values), (format!("{EXACT_MARKER} {EXACT_MARKER} café"), 2));
     }
 
     #[tokio::test]

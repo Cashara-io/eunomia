@@ -94,7 +94,7 @@ At most 10 pending requests per person (`rate.limited` beyond), so an agent cann
 ### 3. Fill
 
 `POST /api/secrets/requests/{id}/fill` from the browser session of **the person who asked** (the human
-behind the token or OAuth client). Eunomia trims the value, checks 8 to 16384 characters with no NUL,
+behind the token or OAuth client). Eunomia trims the value, checks 1 to 16384 characters with no NUL,
 encrypts it (AES-256-GCM under `ENCRYPTION_KEY`, `connectors/crypto.rs`), stores the held secret, marks
 the request `filled`, audits `secret.fill`, and answers `{"status": "filled", "handle": ...}`. The
 plaintext is a `Zeroizing<String>` from the moment the JSON is parsed and is dropped right after
@@ -310,7 +310,7 @@ checked exactly as a resolution (`allowed_tools` must include `secret_transform`
 | `jwt_hs256` | `key` | `claims` (a JSON object), `header` (`kid`, `typ` only), `expires_in_seconds` (adds `iat` and `exp`) | a signed JWT |
 | `jwt_rs256`, `jwt_es256` | `key` (a PEM private key) | as above | a signed JWT |
 
-JWTs use `jsonwebtoken` (already a dependency, MIT). Output is 8 to 16384 characters, or the transform
+JWTs use `jsonwebtoken` (already a dependency, MIT). Output is 1 to 16384 characters, or the transform
 fails.
 
 **Inheritance.** All inputs must be in one vault; the derived secret goes there. Its `allowed_hosts`,
@@ -327,9 +327,8 @@ and the existing secret is itself derived: a transform never overwrites a pasted
 
 Every allowed operation is one-way or expanding, and its result is another handle. Decode, compare to a
 literal, length, slice, substring, case changes, regex match or "starts with" would each let an agent
-learn bits of a value it cannot see (a compare is a guessing oracle; a one-character slice is too short
-for the exact scrub, `broker::MIN_VALUE_LEN`, and could then leave through an approved host's echo). The
-output floor of 8 characters keeps every derived value scrubbable. Errors name the input and the rule
+learn bits of a value it cannot see (a compare is a guessing oracle; a slice or predicate would enable repeated guesses about the original value). The
+minimum output of 1 character allows short keys and PINs. Errors name the input and the rule
 broken, never content; the one bit that remains is whether a key parses as a PEM key for `jwt_rs256`.
 
 ## The consumer: `http_request`
@@ -410,7 +409,7 @@ Unchanged: `secret.unavailable` (a handle that does not resolve: unknown, expire
 | **SSRF** through `http_request` | https, named hosts only, approved hosts only, guarded resolver at connect time (rebinding), no redirects, private, loopback, link-local and metadata addresses refused |
 | **Exfiltration through outbound calls**: the agent sends the key to its own server | only hosts the person approved for that handle; derived handles inherit the intersection |
 | Exfiltration by storing the key upstream and reading it back (an approved API that echoes) | exact and encoded-form scrub of the response; #111 detectors; placements default to headers only. A service that transforms it (truncates, reverses) can still leak it to the agent (residual; the person chose to trust that host) |
-| **Exfiltration through transforms** | no oracles (above); every output is a handle; output floor 8 characters |
+| **Exfiltration through transforms** | no oracles (above); every output is a handle; minimum output 1 character |
 | **Replay** of a fill or a request link | a request is filled once (`secret.request_closed` after); the link carries no authority; expiry; a stale MCP retry gets `filled` with the same handle, never a value |
 | Org B sees org A's requests or secrets | per-org database; every statement filters by the caller's vaults; isolation canaries |
 | A restricted token requests into another vault | `authz::authorize` on the vault; tested |
@@ -447,19 +446,14 @@ are already in `backend/Cargo.toml`.
 - Gate: `update-path` from v2.0.7 and v2.0.8 lists `secret_request` and `vault_secret` as new and empty,
   then a request is created on the upgraded stack; idempotent; rollback.
 
-## Open questions for Avi
+## Owner decisions, 2026-11-03
 
-1. **op:// and bws:// in `http_request`.** References have no approved hosts, so `http_request` refuses
-   them. Add `allowed_hosts` to `credential_ref` (a later migration), so password-manager secrets can be
-   used the same way?
-2. **MCP 2026-07-28.** The newest revision drops sessions and `-32042` and delivers URL elicitation in an
-   `InputRequiredResult`. Supporting it is a protocol upgrade of `/mcp` (no `initialize`, `_meta` on every
-   request). Next release?
-3. **Who sees the activity log.** Settled on the restack: it follows the base's resolution log, so a
-   vault owner sees their vaults' rows (see "Who may do what").
-4. **Connectors.** `target.connector` is shown only. Should connector settings accept `eu://` handles
-   (the broker's open question 3)?
-5. **Web chat.** The chat agent is not offered these tools yet. The pop-up would appear in the same
-   window, which makes it the nicest place for them; turn them on in chat?
-6. **Minimum length 8** for a pasted secret (shorter cannot be scrubbed safely). A 4 to 7 digit PIN cannot
-   be stored. Fine?
+1. Approved hosts and placements for op:// and bws:// references are a follow-up after #126. They remain unavailable to http_request until then.
+2. MCP revision 2026-07-28 is scheduled for the next release. The current protocol remains unchanged.
+3. A mixed-vault call remains visible to each vault owner, with only that owner's handles in its lineage.
+4. Connector credential fields accept bare eu:// handles or a $secret object. A request must name the connector kind in target.connector, granting connector:<kind>. Background sync also needs the person to approve any agent. Test, sync, summaries and webhook checks resolve at use time, with the caller's vault and expiry checks. Provider HTTP calls enforce approved hosts and placements through the outbound SSRF guard, including pagination. Hosts must cover both token and API endpoints for OAuth; refresh_token needs body placement. Values and encoded forms are scrubbed before provider data reaches the ingest pipeline.
+5. In-app chat access is approved after testing on real installs. The tools stay unavailable to chat until that gate passes.
+6. Pasted and derived values may contain 1 to 16384 characters. Empty and whitespace-only values remain invalid. For http_request, any resolved form shorter than 8 characters causes the upstream response body and content type to be withheld. This avoids disclosing short keys through encoded echoes. Fixed status metadata remains available. Short connector credentials may cause broad redaction of provider data or a refused response.
+7. Claude plugin and ChatGPT app packaging are a follow-up after #126.
+
+The hosted installer must generate SECRETS_HELPER_KEY. Its source is outside Eunomia, so it remains a separate follow-up. The resolution index is control migration 0007; tenant 0027 remains free for the ontology.

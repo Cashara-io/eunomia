@@ -312,8 +312,9 @@ async fn source_webhook(
     connections.sort_by_key(|c| !c.is_first());
     let mut delivered = None;
     for row in connections {
-        let conn = registry::conn_for(&state.settings.encryption_key, Some(&row))?;
-        if let Some(records) = src.webhook(&conn, &parts.headers, &body_bytes).await? {
+        let (src, headers, body) = (&src, &parts.headers, &body_bytes);
+        let records = crate::secrets::connector::with_connection(&state, &owner, Some(&row), |conn| async move { src.webhook(&conn, headers, body).await }).await?;
+        if let Some(records) = records {
             delivered = Some((records, row));
             break;
         }

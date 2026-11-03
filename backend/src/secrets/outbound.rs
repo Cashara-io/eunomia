@@ -200,7 +200,7 @@ pub fn check_grants(grants: &[Grant], host: &str, port: u16) -> Result<(), Strin
     Ok(())
 }
 
-fn client() -> AppResult<reqwest::Client> {
+pub(crate) fn client() -> AppResult<reqwest::Client> {
     reqwest::Client::builder()
         .dns_resolver(Arc::new(GuardedResolver))
         .redirect(reqwest::redirect::Policy::none())
@@ -244,6 +244,9 @@ fn scalar(v: &Value) -> Option<String> {
 /// The current call's exact values plus their encoded forms, and #111's detectors, over `text`.
 fn scrub(text: &str) -> String {
     let values = crate::redact::current_exact();
+    if values.iter().any(|v| v.chars().count() < 8) {
+        return "[response withheld for a short secret]".into();
+    }
     let all = super::held::with_encoded_forms(values.iter().cloned().collect());
     let (out, _) = crate::redact::scrub_exact(text, &all);
     crate::redact::redact(&out, &mut Vec::new())

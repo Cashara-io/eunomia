@@ -30,10 +30,22 @@ pub struct SyncResult {
 
 /// One connector row's decrypted credentials and plain config -- everything
 /// a source needs to reach its provider.
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Default)]
 pub struct Conn {
     pub credentials: Value,
     pub config: Value,
+}
+
+impl Drop for Conn {
+    fn drop(&mut self) {
+        crate::secrets::broker::zeroize_strings(&mut self.credentials);
+    }
+}
+
+impl std::fmt::Debug for Conn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Conn").field("credentials", &"[secret]").field("config", &self.config).finish()
+    }
 }
 
 /// Database handle + owner for the cache-reading helpers some sources expose

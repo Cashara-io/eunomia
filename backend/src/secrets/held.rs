@@ -16,8 +16,8 @@ use crate::pool::OrgDb;
 use crate::rid::RecordIdExt;
 use crate::store::secret_requests as q;
 
-/// A pasted value must be at least this long: shorter ones cannot be scrubbed from text safely.
-pub const MIN_LEN: usize = 8;
+/// The owner-approved minimum. Empty or whitespace-only values remain invalid.
+pub const MIN_LEN: usize = 1;
 /// The longest value held (a PEM private key fits).
 pub const MAX_LEN: usize = 16384;
 /// The parts of an outbound request a handle may go in.
@@ -218,7 +218,7 @@ pub fn check_value(raw: &str) -> AppResult<Zeroizing<String>> {
 
 /// The encoded forms of a value that an upstream or a tool may echo instead of the value itself: base64
 /// (padded and not), base64url (padded and not), percent- and form-encoded, hex (both cases) and
-/// JSON-escaped. Only forms that differ from the value and are long enough to scrub safely.
+/// JSON-escaped. Include short encoded forms too, so a one-character value stays protected.
 pub fn encoded_forms(value: &str) -> Vec<Zeroizing<String>> {
     let form: String = url::form_urlencoded::byte_serialize(value.as_bytes()).collect();
     let json = serde_json::to_string(value).unwrap_or_default();
@@ -246,7 +246,7 @@ pub fn encoded_forms(value: &str) -> Vec<Zeroizing<String>> {
         hex::encode_upper(value),
         json.get(1..json.len().saturating_sub(1)).unwrap_or_default().to_string(),
     ]) {
-        if f != value && f.chars().count() >= super::broker::MIN_VALUE_LEN && !out.iter().any(|o| o.as_str() == f) {
+        if f != value && !f.is_empty() && !out.iter().any(|o| o.as_str() == f) {
             out.push(Zeroizing::new(f));
         }
     }
@@ -475,7 +475,9 @@ mod tests {
     fn placements_and_values() {
         assert_eq!(check_placements(&["Header".into(), "body".into(), "header".into()]).unwrap(), ["header", "body"]);
         assert!(check_placements(&["url".into()]).is_err());
-        assert!(check_value("short").is_err());
+        assert!(check_value(" \n").is_err());
+        assert!(check_value("7").is_ok_and(|v| v.as_str() == "7"));
+        assert!(check_value("é").is_ok());
         assert!(check_value("  long-enough-value \n").is_ok_and(|v| v.as_str() == "long-enough-value"));
         assert!(check_value("has\0nul-inside").is_err());
         assert!(check_value(&"x".repeat(MAX_LEN + 1)).is_err());

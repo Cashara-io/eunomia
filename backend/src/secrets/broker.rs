@@ -56,7 +56,7 @@ impl Drop for Prepared {
     }
 }
 
-fn zeroize_strings(v: &mut Value) {
+pub(crate) fn zeroize_strings(v: &mut Value) {
     match v {
         Value::String(s) => s.zeroize(),
         Value::Array(items) => items.iter_mut().for_each(zeroize_strings),
@@ -97,7 +97,9 @@ pub enum Prep {
 
 /// Test builds can register extra tools that take secrets (`registry::register_test_tool`).
 pub fn tool_takes_secrets(tool: &str) -> bool {
-    SECRET_TOOLS.contains(&tool) || crate::tools::registry::test_tool_takes_secrets(tool)
+    SECRET_TOOLS.contains(&tool)
+        || tool.strip_prefix("connector:").is_some_and(|kind| crate::connectors::service::CONNECTOR_KINDS.contains(&kind))
+        || crate::tools::registry::test_tool_takes_secrets(tool)
 }
 
 /// One reference of the call, as it goes through the steps.

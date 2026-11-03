@@ -186,24 +186,30 @@ async fn up_bank_finance_summary(
     // ponytail: the kind's first connection; take a `connector` query parameter if a second Up account needs its own summary
     let row = service::get_or_create_connector(&state.db, &user.id, "up_bank").await?;
     let creds = service::credentials_of(&state.settings.encryption_key, &row)?;
-    let has_token = creds.get("personal_access_token").and_then(|v| v.as_str()).map(|s| !s.is_empty()).unwrap_or(false);
+    let has_token = credential_set(&creds, "personal_access_token");
     if !row.enabled || !has_token {
         return Err(AppError::coded(ErrorCode::ConnectorNotConnected, "Up Bank is not connected"));
     }
     let since = Utc::now() - Duration::days(q.days);
-    let summary = UpBankClient::new(&creds, &row.config)?.finance_summary(&since.to_rfc3339()).await?;
+    let summary = crate::secrets::connector::with_connection(&state, &user.id, Some(&row), |conn| async move {
+        UpBankClient::new(&conn.credentials, &conn.config)?.finance_summary(&since.to_rfc3339()).await
+    }).await?;
     Ok(Json(summary))
+}
+
+fn credential_set(credentials: &Value, key: &str) -> bool {
+    credentials.get(key).is_some_and(|v| v.as_str().is_some_and(|s| !s.is_empty()) || v.get("$secret").and_then(Value::as_str).is_some_and(|s| !s.is_empty()))
 }
 
 async fn pocketai_client_or_400(state: &OrgState, user: &User) -> AppResult<PocketAIClient> {
     // ponytail: the kind's first connection, as for the Up summary
     let row = service::get_or_create_connector(&state.db, &user.id, "pocketai").await?;
     let creds = service::credentials_of(&state.settings.encryption_key, &row)?;
-    let has_key = creds.get("api_key").and_then(|v| v.as_str()).map(|s| !s.is_empty()).unwrap_or(false);
+    let has_key = credential_set(&creds, "api_key");
     if !row.enabled || !has_key {
         return Err(AppError::coded(ErrorCode::ConnectorNotConnected, "PocketAI is not connected"));
     }
-    PocketAIClient::new(&creds, &row.config)
+    crate::secrets::connector::with_connection(state, &user.id, Some(&row), |conn| async move { PocketAIClient::new(&conn.credentials, &conn.config) }).await
 }
 
 #[utoipa::path(
@@ -401,8 +407,7 @@ async fn test_one(State(state): State<AppState>, user: User, Path(connector): Pa
     let state = state.org(&user.org).await?;
     let row = service::resolve(&state.db, &user.id, &connector).await?;
     let src = source_of(&row)?;
-    let conn = registry::conn_for(&state.settings.encryption_key, Some(&row))?;
-    match src.check(&conn).await {
+    match crate::secrets::connector::with_connection(&state, &user.id, Some(&row), |conn| async move { src.check(&conn).await }).await {
         Ok(()) => Ok(Json(TestOut { ok: true, error: None })),
         Err(err) => Ok(Json(TestOut { ok: false, error: Some(err.message) })),
     }
@@ -519,10 +524,10 @@ async fn snapshot(State(state): State<AppState>, user: User) -> AppResult<Json<V
     let up_bank = service::get_or_create_connector(&state.db, &user.id, "up_bank").await?;
     let up_bank_creds = service::credentials_of(&state.settings.encryption_key, &up_bank)?;
     let has_token =
-        up_bank_creds.get("personal_access_token").and_then(|v| v.as_str()).map(|s| !s.is_empty()).unwrap_or(false);
+        credential_set(&up_bank_creds, "personal_access_token");
     if up_bank.enabled
         && has_token
-        && let Ok(client) = UpBankClient::new(&up_bank_creds, &up_bank.config)
+        && let Ok(client) = crate::secrets::connector::with_connection(&state, &user.id, Some(&up_bank), |conn| async move { UpBankClient::new(&conn.credentials, &conn.config) }).await
         && let Ok(summary) = client.week_summary(&week_start.to_rfc3339()).await
     {
         result["up_bank"] = summary;
@@ -530,10 +535,10 @@ async fn snapshot(State(state): State<AppState>, user: User) -> AppResult<Json<V
 
     let pocketai = service::get_or_create_connector(&state.db, &user.id, "pocketai").await?;
     let pocketai_creds = service::credentials_of(&state.settings.encryption_key, &pocketai)?;
-    let has_key = pocketai_creds.get("api_key").and_then(|v| v.as_str()).map(|s| !s.is_empty()).unwrap_or(false);
+    let has_key = credential_set(&pocketai_creds, "api_key");
     if pocketai.enabled && has_key {
         let since = (now - Duration::days(7)).date_naive().to_string();
-        if let Ok(client) = PocketAIClient::new(&pocketai_creds, &pocketai.config)
+        if let Ok(client) = pocketai_client_or_400(&state, &user).await
             && let Ok(summary) = client.summary(&since).await
         {
             result["pocketai"] = json!({ "recordings_count": summary["recordings_count"] });

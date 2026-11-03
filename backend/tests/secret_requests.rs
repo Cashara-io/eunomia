@@ -407,12 +407,11 @@ async fn decline_expiry_replace_and_delete() {
     let (_, listed) = w.browser("GET", "/api/secrets/requests?status=expired", None).await;
     assert!(listed.as_array().unwrap().iter().any(|r| r["id"] == bid), "marked expired on read: {listed}");
 
-    // a value too short to scrub is refused, and the message does not echo it
+    // An empty value remains invalid.
     let c = w.request("replaced_key", json!({})).await;
     let cid = c["request_id"].as_str().unwrap();
-    let (status, body) = w.browser("POST", &format!("/api/secrets/requests/{cid}/fill"), Some(json!({"value": "short"}))).await;
+    let (status, body) = w.browser("POST", &format!("/api/secrets/requests/{cid}/fill"), Some(json!({"value": ""}))).await;
     assert_eq!(status, 400, "{body}");
-    assert!(!body.to_string().contains("\"short\""), "{body}");
 
     // replace: the derived secret goes, the new value is used
     w.fill(&c, CANARY).await;
@@ -813,6 +812,16 @@ async fn vault_owners_manage_their_vaults_requests_and_held_secrets_and_see_thei
     let http = entries.iter().find(|e| e["action"] == "secret.http").unwrap();
     assert_eq!(http["lineage"], json!([h]), "{http}");
     assert!(!log.to_string().contains("tester_personal"), "{log}");
+    // One outbound call uses Carol's Shared handle and her personal handle. Bob sees only Shared.
+    let private = w.agent(&carol_t, "secret_request", json!({"name": "carol_private", "description": "d", "target": {"hosts": [w.host()]}})).await;
+    let private_id = private["request_id"].as_str().unwrap();
+    let (status, _) = as_user(&w, &carol_c, "POST", &format!("/api/secrets/requests/{private_id}/fill"), Some(json!({"value": SECOND}))).await;
+    assert_eq!(status, 200);
+    let mixed = w.agent(&carol_t, "http_request", json!({"url": w.url("/echo"), "headers": {"Authorization": {"$secret": h}, "X-Private": {"$secret": handle(&private)}}})).await;
+    assert_eq!(mixed["status"], 200, "{mixed}");
+    let (_, mixed_log) = as_user(&w, &bob_c, "GET", "/api/secrets/activity", None).await;
+    assert!(!mixed_log.to_string().contains("carol_private"), "{mixed_log}");
+    assert!(mixed_log["entries"].as_array().unwrap().iter().filter(|e| e["action"] == "secret.http").all(|e| e["lineage"] == json!([h])), "{mixed_log}");
     // a small page still pages through his rows only
     let (_, page) = as_user(&w, &bob_c, "GET", "/api/secrets/activity?limit=2", None).await;
     assert_eq!(page["entries"].as_array().unwrap().len(), 2, "{page}");
@@ -853,4 +862,55 @@ async fn vault_owners_manage_their_vaults_requests_and_held_secrets_and_see_thei
     assert_eq!(log["entries"], json!([]), "{log}");
     let responses = w.seen.lock().unwrap().join("\n");
     assert!(!responses.contains(CANARY) && !responses.contains(SECOND));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn short_values_fill_transform_and_send_without_returning_upstream_content() {
+    let w = world().await;
+    for (i, value) in ["7", "e", "123", "1234", "1234567", "!"].iter().enumerate() {
+        let req = w.request(&format!("short_key_{i}"), json!({})).await;
+        w.fill(&req, value).await;
+        let h = handle(&req);
+        let out = w.http_get("/echo", &h).await;
+        assert_eq!(out["status"], 200, "{out}");
+        assert_eq!(w.last_auth(), *value);
+        assert!(!out["body"].as_str().unwrap().contains(value), "{out}");
+        let derived = w.agent(&w.app.token, "secret_transform", json!({"op": "url_encode", "inputs": {"value": h}, "name": format!("short_derived_{i}")})).await;
+        assert!(derived.get("error").is_none(), "{derived}");
+        assert!(handle(&derived).starts_with("eu://"));
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn connector_handles_require_explicit_permission_and_guard_every_provider_request() {
+    let w = world().await;
+    let req = w.request("connector_key", json!({"target": {"connector": "up_bank", "hosts": [w.host()], "placements": ["header"]}})).await;
+    let id = req["request_id"].as_str().unwrap();
+    let (status, _) = w.browser("POST", &format!("/api/secrets/requests/{id}/fill"), Some(json!({"value": CANARY, "any_agent": true}))).await;
+    assert_eq!(status, 200);
+    let h = handle(&req);
+    let (status, saved) = w.browser("PUT", "/api/connectors/up_bank", Some(json!({"enabled": true, "credentials": {"personal_access_token": h}}))).await;
+    assert_eq!(status, 200, "{saved}");
+    let state = w.app.state.org(&w.app.user.org).await.unwrap();
+    let row = eunomia_backend::connectors::service::get_or_create_connector(&state.db, &w.app.user.id, "up_bank").await.unwrap();
+    let url = w.url("");
+    let out = eunomia_backend::secrets::connector::with_connection(&state, &w.app.user.id, Some(&row), |conn| async move {
+        let api = eunomia_backend::connectors::clients::Api::new(&json!({}), &url, eunomia_backend::connectors::clients::bearer(conn.credentials["personal_access_token"].as_str().unwrap()));
+        let out = api.get("/echo", &[]).await?;
+        assert!(!out.to_string().contains(CANARY), "{out}");
+        let denied = api.get("https://unapproved.example.com/steal", &[]).await.unwrap_err();
+        assert_eq!(denied.code, eunomia_backend::error::ErrorCode::SecretHostDenied);
+        Ok(out)
+    }).await.unwrap();
+    assert!(!out.to_string().contains(CANARY));
+    assert_eq!(w.last_auth(), format!("Bearer {CANARY}"));
+    let raw = eunomia_backend::connectors::service::credentials_of(&state.settings.encryption_key, &row).unwrap();
+    assert_eq!(raw["personal_access_token"], h, "the saved credential remains a handle");
+    let other = w.request("not_for_connector", json!({})).await;
+    w.fill(&other, CANARY).await;
+    let (_, saved) = w.browser("PUT", "/api/connectors/up_bank", Some(json!({"credentials": {"personal_access_token": handle(&other)}}))).await;
+    assert!(saved.get("error").is_none(), "{saved}");
+    let (status, out) = w.browser("POST", "/api/connectors/up_bank/test", None).await;
+    assert_eq!(status, 200);
+    assert_eq!(out["ok"], false, "{out}");
 }
