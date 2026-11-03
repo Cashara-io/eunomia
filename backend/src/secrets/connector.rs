@@ -79,7 +79,7 @@ where
     let user = User {
         id: owner.clone(),
         email: String::new(),
-        org: state.db.org().clone(),
+        org: state.db.org(),
     };
     let tool = format!("connector:{}", row.kind);
     let prepared = match Box::pin(broker::prepare(state, &user, &tool, &args)).await {
