@@ -874,7 +874,7 @@ async fn short_values_fill_transform_and_send_without_returning_upstream_content
         let out = w.http_get("/echo", &h).await;
         assert_eq!(out["status"], 200, "{out}");
         assert_eq!(w.last_auth(), *value);
-        assert!(!out["body"].as_str().unwrap().contains(value), "{out}");
+        assert_eq!(out["body"], "[response withheld for a short secret]", "the response is independent of the key: {out}");
         let derived = w.agent(&w.app.token, "secret_transform", json!({"op": "url_encode", "inputs": {"value": h}, "name": format!("short_derived_{i}")})).await;
         assert!(derived.get("error").is_none(), "{derived}");
         assert!(handle(&derived).starts_with("eu://"));
