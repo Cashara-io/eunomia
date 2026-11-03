@@ -660,3 +660,21 @@ async fn a_fresh_org_runs_0022_right_after_the_index_definitions() {
     }
     assert_eq!(knn(&db, "memory", axis(3), 1).await, ["memory:r03"]);
 }
+
+#[tokio::test]
+async fn secret_audit_index_preserves_existing_events_and_reapplies() {
+    let db = fresh().await;
+    for (_, _, sql) in migrate::CONTROL_MIGRATIONS.iter().filter(|(version, _, _)| *version < 7) {
+        db.query(*sql).await.unwrap().check().unwrap();
+    }
+    db.query("CREATE audit_event:before_index SET actor_kind = 'user', action = 'secret.resolve', target = 'org_a', outcome = 'ok', detail = 'reference only'").await.unwrap().check().unwrap();
+    let before: Vec<Value> = db.query("SELECT * FROM audit_event").await.unwrap().take(0).unwrap();
+    let sql = migrate::CONTROL_MIGRATIONS.iter().find(|(version, _, _)| *version == 7).unwrap().2;
+    for _ in 0..2 {
+        db.query(sql).await.unwrap().check().unwrap();
+        let after: Vec<Value> = db.query("SELECT * FROM audit_event").await.unwrap().take(0).unwrap();
+        assert_eq!(after, before, "index creation keeps existing audit rows intact");
+        let table: Option<Value> = db.query("INFO FOR TABLE audit_event").await.unwrap().take(0).unwrap();
+        assert!(table.unwrap()["indexes"]["audit_event_secret_idx"].is_string());
+    }
+}
