@@ -83,7 +83,7 @@ addresses, follows no redirects, and needs at least one handle (it is not a gene
 
 ## Limits
 
-- A key is 1 to 16384 characters (shorter ones cannot be scrubbed from text safely).
+- A key is 1 to 16384 characters; empty or whitespace-only values are refused.
 - At most 10 requests waiting per person; a request waits 60 minutes unless the agent asks for longer (at
   most a week).
 - 1Password and Bitwarden Secrets Manager (preview) references (`op://`, `bws://`) cannot be sent by
