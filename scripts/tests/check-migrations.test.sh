@@ -13,6 +13,8 @@ refused() { # refused DESCRIPTION WORDS : the check fails and its output contain
 M="$T/r/backend/migrations"; RS="$T/r/backend/src/migrate.rs"; Q="$T/r/backend/migrations/QUEUE.md"
 last="$(find "$ROOT/backend/migrations/tenant" -name '[0-9]*.surql' | sed 's#.*/0*\([0-9]*\)_.*#\1#' | sort -n | tail -1)"
 next="$(printf %04d $((last + 1)))"
+control_last="$(find "$ROOT/backend/migrations/control" -name '[0-9]*.surql' | sed 's#.*/0*\([0-9]*\)_.*#\1#' | sort -n | tail -1)"
+control_next="$(printf %04d $((control_last + 1)))"
 
 check "this checkout passes" bash "$S" "$ROOT"
 fresh; check "a copy passes" bash "$S" "$T/r"
@@ -21,7 +23,7 @@ fresh; echo "SELECT 1;" > "$M/tenant/${next}_stray.surql"
 refused "an unregistered tenant file" "not registered in MIGRATIONS"
 
 fresh; echo "SELECT 1;" > "$M/control/0099_far.surql"
-refused "a gap in the control files" "no file numbered 0007"
+refused "a gap in the control files" "no file numbered $control_next"
 
 fresh; echo "SELECT 1;" > "$M/tenant/0021_again.surql"
 refused "two tenant files with one number" "two files numbered 0021"
