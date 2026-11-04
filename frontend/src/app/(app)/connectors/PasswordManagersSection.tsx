@@ -38,8 +38,8 @@ const KINDS = [
 ] as const;
 type Kind = (typeof KINDS)[number]["kind"];
 
-const OUTCOME_COLOUR: Record<string, string> = { ok: "var(--good)", denied: "var(--critical)", not_found: "var(--warning)", provider_error: "var(--critical)" };
-const OUTCOME_LABEL: Record<string, string> = { ok: "Resolved", denied: "Denied", not_found: "Not found", provider_error: "Provider error" };
+const OUTCOME_COLOUR: Record<string, string> = { ok: "var(--good)", denied: "var(--critical)", not_found: "var(--warning)", provider_error: "var(--critical)", blocked: "var(--critical)", timeout: "var(--warning)", connect: "var(--warning)" };
+const OUTCOME_LABEL: Record<string, string> = { ok: "Resolved", denied: "Denied", not_found: "Not found", provider_error: "Provider error", blocked: "Blocked", timeout: "Timed out", connect: "Could not connect" };
 /** The helper itself failed (`LogEntry.code`): clearer than "Provider error". */
 const CODE_LABEL: Record<string, string> = { helper_disabled: "Helper off", helper_unreachable: "Helper not answering" };
 /** The resolution log also shows secret requests and what agents did with held secrets (docs/secret-requests.md). */

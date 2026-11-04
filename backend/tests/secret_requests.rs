@@ -583,8 +583,14 @@ async fn http_request_goes_only_where_the_person_approved_and_never_inside() {
         assert_eq!(out["code"], "secret.outbound_blocked", "{host}: {out}");
         assert!(!out.to_string().contains(CANARY));
     }
+    // every refused call is in the log: two bad URLs and the two rebinding names blocked, three denied by the grants
     let blocked = w.raw("control", "SELECT count() FROM audit_event WHERE action = 'secret.http' AND outcome = 'blocked' GROUP ALL").await;
-    assert_eq!(blocked[0]["count"], 2);
+    assert_eq!(blocked[0]["count"], 4);
+    let denied = w.raw("control", "SELECT count() FROM audit_event WHERE action = 'secret.http' AND outcome = 'denied' GROUP ALL").await;
+    assert_eq!(denied[0]["count"], 3);
+    let denied_hosts = Value::from(w.raw("control", "SELECT VALUE detail FROM audit_event WHERE action = 'secret.http' AND outcome = 'denied'").await).to_string();
+    assert!(denied_hosts.contains("evil.example.com"), "{denied_hosts}");
+    assert!(!denied_hosts.contains(CANARY));
 
     // a handle anywhere else in the arguments is refused, the url included
     let out = call(json!({"url": {"$secret": h}})).await;

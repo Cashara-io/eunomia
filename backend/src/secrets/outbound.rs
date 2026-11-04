@@ -263,12 +263,19 @@ pub async fn run(state: &crate::state::OrgState, user: &RecordId, args: Value) -
     if !METHODS.contains(&method.as_str()) {
         return fail(ErrorCode::ValidationInvalid, format!("method is one of {}", METHODS.join(", ")));
     }
+    let grants = grants();
+    let handles: Vec<&str> = grants.iter().map(|g| g.handle.as_str()).collect();
+    // a refused call is audited too, so an attempt to send a secret elsewhere shows in the log (host only)
     let (mut url, host, port) = match check_url(&a.url) {
         Ok(x) => x,
-        Err(m) => return fail(ErrorCode::SecretOutboundBlocked, m),
+        Err(m) => {
+            let host = url::Url::parse(&a.url).ok().and_then(|u| u.host_str().map(str::to_ascii_lowercase)).unwrap_or_default();
+            audit_http(state, user, &host, &method, 0, "blocked", &handles).await;
+            return fail(ErrorCode::SecretOutboundBlocked, m);
+        }
     };
-    let grants = grants();
     if let Err(m) = check_grants(&grants, &host, port) {
+        audit_http(state, user, &host, &method, 0, "denied", &handles).await;
         return fail(ErrorCode::SecretHostDenied, m);
     }
     if a.headers.len() > MAX_HEADERS {
@@ -309,7 +316,6 @@ pub async fn run(state: &crate::state::OrgState, user: &RecordId, args: Value) -
         req = req.body(b);
     }
 
-    let handles: Vec<&str> = grants.iter().map(|g| g.handle.as_str()).collect();
     let started = std::time::Instant::now();
     let sent = req.send().await;
     let mut res = match sent {

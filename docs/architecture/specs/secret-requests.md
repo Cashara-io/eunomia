@@ -357,7 +357,7 @@ The risks (SSRF, exfiltration) are real, so the tool is narrow:
 - The body goes through the exact scrub (values and their encoded forms) and #111's detectors before the
   registry's own result scrub. A transport error is reported by kind only (`timeout`, `connect`,
   `blocked`), never reqwest's text (it can carry the URL with a query value).
-- Each call is audited `secret.http`: the host, method, status, the handles used. Not the path or query.
+- Each call is audited `secret.http`: the host, method, status, the handles used. Not the path or query. A refused call is audited too: `denied` when a handle's grant does not allow the host or placement, `blocked` when the URL or an address it resolves to is refused, with status 0.
 
 ## Audit (control `audit_event`, `target` = the org key)
 
