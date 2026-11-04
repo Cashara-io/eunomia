@@ -273,7 +273,7 @@ function ProviderRow({ spec, row, loading, manage }: { spec: (typeof KINDS)[numb
     setResult(null);
     try {
       const out = await test.mutateAsync(spec.kind);
-      setResult(out.ok ? { ok: true, text: `Connected: ${out.detail ?? "ok"}.` } : { ok: false, text: out.message || `The test failed (${out.error ?? "error"}).` });
+      setResult(out.ok ? { ok: true, text: `Connected: ${out.detail ?? "ok"}.` } : { ok: false, text: sentence(out.message) || `The test failed (${out.error ?? "error"}).` });
     } catch (e) {
       setError(failure(e, "Could not run the test. Try again."));
     }
@@ -558,14 +558,14 @@ function References({ vaults }: { vaults: { id: string; name: string }[] }) {
       {refs.isError && <ErrorLine error={failure(refs.error, "Could not load the references.", " Reload the page to try again.")} />}
 
       <div className="ledger overflow-hidden">
-        <table className="w-full text-[13px]">
+        <table className="w-full text-[13px] table-fixed">
           <thead>
             <tr className="label border-b text-left h-8">
               <th className="px-4 font-medium">Reference</th>
-              <th className="px-3 font-medium hidden md:table-cell">Vault</th>
-              <th className="px-3 font-medium hidden md:table-cell">Tools</th>
-              <th className="px-3 font-medium text-right">Uses (7 days)</th>
-              <th className="px-3">
+              <th className="px-3 font-medium hidden md:table-cell w-[120px]">Vault</th>
+              <th className="px-3 font-medium hidden md:table-cell w-[180px]">Tools</th>
+              <th className="px-3 font-medium text-right whitespace-nowrap w-[120px]">Uses (7 days)</th>
+              <th className="px-3 w-[150px]">
                 <span className="sr-only">Actions</span>
               </th>
             </tr>
@@ -591,14 +591,16 @@ function References({ vaults }: { vaults: { id: string; name: string }[] }) {
               return (
                 <tr key={r.id} className="h-10" data-testid="secret-ref-row">
                   <td className="px-4 min-w-0">
-                    <div className="font-mono text-[12.5px] truncate">{r.reference}</div>
-                    <div className="text-[12px]" style={{ color: "var(--ink-faint)" }}>
+                    <div className="font-mono text-[12.5px] truncate" title={r.reference}>
+                      {r.reference}
+                    </div>
+                    <div className="text-[12px] truncate" style={{ color: "var(--ink-faint)" }}>
                       {r.label !== r.reference ? `${r.label} · ` : ""}
                       {kinds.name(r.provider)}
                     </div>
                   </td>
-                  <td className="px-3 hidden md:table-cell">{vaultName(r.vault_id)}</td>
-                  <td className="px-3 hidden md:table-cell font-mono text-[12px]">{r.allowed_tools.length ? r.allowed_tools.join(", ") : <span style={{ color: "var(--ink-faint)" }}>none</span>}</td>
+                  <td className="px-3 hidden md:table-cell truncate">{vaultName(r.vault_id)}</td>
+                  <td className="px-3 hidden md:table-cell font-mono text-[12px] truncate" title={r.allowed_tools.join(", ")}>{r.allowed_tools.length ? r.allowed_tools.join(", ") : <span style={{ color: "var(--ink-faint)" }}>none</span>}</td>
                   <td className="px-3 text-right tabular-nums">
                     {c?.ok ?? 0}
                     {refused > 0 && <span style={{ color: "var(--critical)" }}> · {refused} refused</span>}
@@ -674,17 +676,24 @@ function ResolutionLog() {
                   {relativeTime(e.at)}
                 </td>
                 <td className="px-3 whitespace-nowrap">{ACTION_LABEL[e.action] ?? e.action}</td>
-                <td className="px-3 font-mono text-[12.5px] truncate max-w-[280px]" title={e.host ? `to ${e.host}` : undefined}>
-                  {e.reference || e.lineage.join(", ")}
+                <td className="px-3 max-w-[280px]">
+                  <div className="font-mono text-[12.5px] truncate" title={e.reference || e.lineage.join(", ")}>
+                    {e.reference || e.lineage.join(", ")}
+                  </div>
+                  {e.host && (
+                    <div className="text-[12px] truncate" style={{ color: "var(--ink-faint)" }}>
+                      to {e.host}
+                    </div>
+                  )}
                 </td>
                 <td className="px-3 hidden md:table-cell font-mono text-[12px]">{e.tool}</td>
                 <td className="px-3 hidden lg:table-cell font-mono text-[12px]" style={{ color: "var(--ink-dim)" }}>
-                  {e.actor_id} · {e.channel}
+                  {e.channel ? `${e.actor_id} · ${e.channel}` : e.actor_id}
                 </td>
                 <td className="px-3">
                   <span className="inline-flex items-center gap-1.5" title={e.reason || undefined}>
                     <span className="dot" style={{ background: OUTCOME_COLOUR[e.outcome] ?? "var(--ink-faint)" }} aria-hidden />
-                    {CODE_LABEL[e.code] ?? OUTCOME_LABEL[e.outcome] ?? e.outcome}
+                    {CODE_LABEL[e.code] ?? (e.outcome === "ok" && e.action !== "secret.resolve" ? "Done" : (OUTCOME_LABEL[e.outcome] ?? e.outcome))}
                   </span>
                 </td>
               </tr>
@@ -694,6 +703,11 @@ function ResolutionLog() {
       </div>
     </div>
   );
+}
+
+/** A message from the helper or a provider, starting with a capital letter. */
+function sentence(text: string | null | undefined): string {
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : "";
 }
 
 export type { Kind };
