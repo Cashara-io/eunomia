@@ -481,7 +481,7 @@ mod tests {
         assert!(check_value("  long-enough-value \n").is_ok_and(|v| v.as_str() == "long-enough-value"));
         assert!(check_value("has\0nul-inside").is_err());
         assert!(check_value(&"x".repeat(MAX_LEN + 1)).is_err());
-        assert!(!check_value("abc").unwrap_err().message.contains("abc"), "the message never echoes the value");
+        assert!(!check_value("abc-refused\0").unwrap_err().message.contains("abc"), "the message never echoes the value");
     }
 
     #[test]

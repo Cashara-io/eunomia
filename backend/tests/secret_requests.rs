@@ -894,14 +894,15 @@ async fn connector_handles_require_explicit_permission_and_guard_every_provider_
     let state = w.app.state.org(&w.app.user.org).await.unwrap();
     let row = eunomia_backend::connectors::service::get_or_create_connector(&state.db, &w.app.user.id, "up_bank").await.unwrap();
     let url = w.url("");
-    let out = eunomia_backend::secrets::connector::with_connection(&state, &w.app.user.id, Some(&row), |conn| async move {
+    // as a background sync runs it: direct service calls have no request credential (common::sys)
+    let out = common::sys(eunomia_backend::secrets::connector::with_connection(&state, &w.app.user.id, Some(&row), |conn| async move {
         let api = eunomia_backend::connectors::clients::Api::new(&json!({}), &url, eunomia_backend::connectors::clients::bearer(conn.credentials["personal_access_token"].as_str().unwrap()));
         let out = api.get("/echo", &[]).await?;
         assert!(!out.to_string().contains(CANARY), "{out}");
         let denied = api.get("https://unapproved.example.com/steal", &[]).await.unwrap_err();
         assert_eq!(denied.code, eunomia_backend::error::ErrorCode::SecretHostDenied);
         Ok(out)
-    }).await.unwrap();
+    })).await.unwrap();
     assert!(!out.to_string().contains(CANARY));
     assert_eq!(w.last_auth(), format!("Bearer {CANARY}"));
     let raw = eunomia_backend::connectors::service::credentials_of(&state.settings.encryption_key, &row).unwrap();
