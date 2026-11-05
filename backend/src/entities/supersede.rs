@@ -120,6 +120,41 @@ pub async fn enabled(db: &OrgDb, settings: &Settings, owner: &RecordId) -> bool 
     settings.embeddings_backend != "stub" && crate::embeddings::service::chat_available(db, settings, owner).await
 }
 
+/// Most older facts embedded on the spot for one check.
+const EMBED_MISSING: i64 = 30;
+
+/// Embeds the subject's live facts that have no vector yet. Their embed job runs after the write, so a fact
+/// that a new one contradicts can still be unembedded, and would otherwise never be a candidate.
+async fn embed_missing(db: &OrgDb, settings: &Settings, owner: &RecordId, subject: &RecordId, new: &[RecordId], spec: &str) -> AppResult<()> {
+    let mut res = q::UNEMBEDDED_LIVE_FACTS
+        .on(db)
+        .bind(("subject", subject.clone()))
+        .bind(("new", new.to_vec()))
+        .bind(("spec", spec.to_string()))
+        .bind(("limit", EMBED_MISSING))
+        .await?;
+    let missing: Vec<FactRow> = res.take(q::UNEMBEDDED_LIVE_FACTS.slot)?;
+    if missing.is_empty() {
+        return Ok(());
+    }
+    let texts: Vec<String> = missing.iter().map(|r| r.text.clone()).collect();
+    let vectors = embeddings::embed(db, settings, &texts, Some(owner)).await?;
+    for (r, vector) in missing.iter().zip(vectors) {
+        if vector.len() != embeddings::dim() {
+            continue;
+        }
+        crate::store::cache::SET_MEMORY_EMBEDDING
+            .on(db)
+            .bind(("id", r.id.clone()))
+            .bind(("embedding", vector))
+            .bind(("spec", spec.to_string()))
+            .bind(("text", r.text.clone()))
+            .await?
+            .check()?;
+    }
+    Ok(())
+}
+
 async fn run(db: &OrgDb, settings: &Settings, owner: &RecordId, subject: &RecordId, new: &[RecordId]) -> AppResult<Vec<RecordId>> {
     let mut res = q::FACTS_BY_ID.on(db).bind(("ids", new.to_vec())).await?;
     let new_rows: Vec<FactRow> = res.take(0)?;
@@ -130,6 +165,7 @@ async fn run(db: &OrgDb, settings: &Settings, owner: &RecordId, subject: &Record
     // New facts usually have no vector yet (the embed job runs later), so embed them here. The vector
     // is saved too, so recall finds the fact by meaning straight away.
     let spec = embeddings::spec_for(db, settings, owner).await?.tag();
+    embed_missing(db, settings, owner, subject, new, &spec).await?;
     let texts: Vec<String> = new_rows.iter().map(|r| r.text.clone()).collect();
     let vectors = embeddings::embed(db, settings, &texts, Some(owner)).await?;
     // Only live facts close in meaning to a new fact are candidates: one fact can't make an unrelated one untrue.

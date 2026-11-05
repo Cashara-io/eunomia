@@ -69,7 +69,10 @@ const useEndAccessMutation = (fn: (id: string) => Promise<unknown>) => {
   return useMutation({
     mutationFn: fn,
     onSuccess: async (_d, id) => {
+      // A list poll already in flight would land after this and put the vault back on screen, remounting
+      // its inspector and asking for members the caller can no longer see.
       await qc.cancelQueries({ queryKey: vaultKeys.members(id) });
+      await qc.cancelQueries({ queryKey: vaultKeys.list() });
       qc.removeQueries({ queryKey: vaultKeys.members(id) });
       await Promise.all([
         qc.invalidateQueries({ queryKey: vaultKeys.all, predicate: (q) => q.queryKey[1] !== "members" || q.queryKey[2] !== id }),
