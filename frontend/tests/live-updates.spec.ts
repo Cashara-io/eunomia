@@ -12,7 +12,7 @@ async function tool(page: import("@playwright/test").Page, name: string, args: R
 test("a space created, renamed and deleted by a tool call appears and disappears on an open Vaults page", async ({ page }) => {
   await registerAndOnboard(page, uniqueEmail("live"));
   await page.goto("/vaults");
-  await expect(page.getByText("Up to date")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("status").filter({ hasText: "Up to date" })).toBeVisible({ timeout: 15_000 });
 
   const name = `Agent space ${Date.now()}`;
   const created = await tool(page, "vault_create", { name });
@@ -30,7 +30,7 @@ test("a change in one tab appears in another tab of the same account", async ({ 
   await registerAndOnboard(page, uniqueEmail("tabs"));
   const other = await context.newPage();
   await other.goto("/vaults");
-  await expect(other.getByText("Up to date")).toBeVisible({ timeout: 15_000 });
+  await expect(other.getByRole("status").filter({ hasText: "Up to date" })).toBeVisible({ timeout: 15_000 });
 
   const name = `Other tab ${Date.now()}`;
   await tool(page, "vault_create", { name });

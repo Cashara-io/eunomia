@@ -22,11 +22,13 @@ function rpc(request: APIRequestContext, token: string | null, body: unknown) {
 }
 
 test.describe("MCP server", () => {
-  test("the dashboard shows this app's /mcp URL and a ready-to-run Claude Code command", async ({ page }) => {
+  test("the Claude Code guide shows this app's /mcp command, and the token method under Advanced", async ({ page }) => {
     await registerAndOnboard(page, uniqueEmail("mcpcard"));
     const url = `${new URL(page.url()).origin}/mcp`;
-    await expect(page.getByText(url, { exact: true })).toBeVisible();
+    await page.goto("/connect/claude-code");
+    await expect(page.getByLabel("Command").filter({ hasText: `claude mcp add --transport http --scope user eunomia ${url}` }).first()).toBeVisible();
 
+    await page.getByText("Advanced: connect with an API token instead").click();
     await page.getByRole("button", { name: "Generate a token" }).click();
     await expect(page.getByText(`claude mcp add --transport http --scope user eunomia ${url} --header`)).toBeVisible();
   });

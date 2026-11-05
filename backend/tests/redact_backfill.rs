@@ -63,6 +63,12 @@ async fn backfill_redacts_stored_secrets_once_and_resumes() {
     let app = TestApp::with_settings(settings).await;
     let org = app.state.org(&app.user.org).await.unwrap();
 
+    // a new org starts marked done (nothing it holds predates write redaction); remove the marker to
+    // stand in for an org upgraded from a release before 2.0.8
+    assert!(redact_backfill::done(&org).await.unwrap(), "a new org needs no backfill");
+    org.db.test_raw().query("DELETE redact_backfill").await.unwrap().check().unwrap();
+    assert!(!redact_backfill::done(&org).await.unwrap());
+
     // what the leader queues before the backfill has run: one job per org per window, and a job that
     // died is queued again in the next window
     let jobs = || async {

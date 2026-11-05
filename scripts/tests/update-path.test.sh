@@ -37,7 +37,7 @@ LATEST_CONTROL="$(find "$ROOT/backend/migrations/control" -name '[0-9]*.surql' |
 # Rows that move by themselves (sessions, jobs, audit and usage rows, and the embedding cache that
 # recall in the reads below fills):
 # compared for presence only, not for an exact count.
-VOLATILE="${UPDATE_PATH_VOLATILE:-job job_leader audit_event audit_log tool_usage session failure_capsule _migration_lock rate_limit embed_cache}"
+VOLATILE="${UPDATE_PATH_VOLATILE:-job job_leader audit_event audit_log tool_usage session failure_capsule _migration_lock rate_limit embed_cache redact_backfill}"
 PASS=0; FAIL=0; T0=$SECONDS
 log() { printf '[update-path %4ss] %s\n' "$((SECONDS - T0))" "$*"; }
 check() { local d="$1"; shift; if "$@" >/dev/null 2>&1; then PASS=$((PASS + 1)); log "ok: $d"; else FAIL=$((FAIL + 1)); log "FAIL: $d"; fi; }
@@ -409,7 +409,7 @@ new_empty() { awk 'NR==FNR { seen[$1] = 1; next } !($1 in seen) && $2 == 0' "$1"
 { expect_ledgers "$W/stable-before.txt" "$W/ledgers-before.txt"; new_empty "$W/counts-before.txt" "$W/stable-after.txt"; } | sort > "$W/stable-expected.txt"
 check "per-table row counts unchanged (bar $VOLATILE; _migration grown by the new migrations)" diff "$W/stable-expected.txt" "$W/stable-after.txt"
 diff "$W/stable-expected.txt" "$W/stable-after.txt" | head -20
-check "no table gone, and every new table empty" diff <(cut -d' ' -f1 "$W/counts-before.txt") <(cut -d' ' -f1 "$W/counts-after.txt" | grep -vxFf <(new_empty "$W/counts-before.txt" "$W/counts-after.txt" | cut -d' ' -f1))
+check "no table gone, and every new table empty" diff <(cut -d' ' -f1 "$W/stable-before.txt") <(cut -d' ' -f1 "$W/stable-after.txt" | grep -vxFf <(new_empty "$W/stable-before.txt" "$W/stable-after.txt" | cut -d' ' -f1))
 check "the fixed reads unchanged" diff "$W/reads-before.txt" "$W/reads-after.txt"
 diff "$W/reads-before.txt" "$W/reads-after.txt" | head -20
 # Tenant 0022 (rebuild_vector_indexes): in every org ledger, the three HNSW indexes defined, and the

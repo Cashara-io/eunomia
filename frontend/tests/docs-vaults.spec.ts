@@ -10,7 +10,7 @@ test("Help page shows the repo docs, the same ones the MCP docs tool serves", as
   await expect(page.getByRole("heading", { name: "Concepts", level: 1 })).toBeVisible();
   await page.getByRole("navigation", { name: "Help topics" }).getByRole("button", { name: "AI agents & MCP" }).click();
   await expect(page.getByRole("heading", { name: "AI agents & MCP", level: 1 })).toBeVisible();
-  await expect(page.getByRole("cell", { name: "`vault_merge`" }).or(page.locator("td code", { hasText: "vault_merge" }))).toBeVisible();
+  await expect(page.getByRole("cell", { name: "`vault_merge`" }).or(page.locator("td code", { hasText: "vault_merge" })).first()).toBeVisible();
 });
 
 test("combining two memory spaces creates a new space and keeps both", async ({ page }) => {

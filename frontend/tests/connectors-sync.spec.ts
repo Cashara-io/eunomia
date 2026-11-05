@@ -65,7 +65,7 @@ test("a connector syncs real API data that the search tool then finds", async ({
     await expect(page.getByRole("button", { name: "Test connection" })).toBeEnabled();
 
     await page.getByRole("button", { name: "Test connection" }).click();
-    await expect(page.getByText("Connection works")).toBeVisible();
+    await expect(page.getByText("Connection works", { exact: true })).toBeVisible();
 
     await page.getByRole("button", { name: "Sync now" }).click();
     // The scheduler may sync a newly connected source before this click does: then the click finds the
@@ -95,9 +95,10 @@ test("every connector offered opens a setup page with instructions", async ({ pa
   await registerAndOnboard(page, uniqueEmail("connector-pages"));
   await page.goto("/connectors");
   const cards = page.locator('a[href^="/connectors/setup/"]');
-  await expect(cards).toHaveCount(12);
+  // 13 since Ed Discussion (#129)
+  await expect(cards).toHaveCount(13);
   const hrefs = await cards.evaluateAll((els) => els.map((e) => e.getAttribute("href")));
-  expect(hrefs).toHaveLength(12);
+  expect(hrefs).toHaveLength(13);
   expect(hrefs).not.toContain("/connectors/setup/open_connector");
   for (const href of hrefs) {
     await page.goto(href!);

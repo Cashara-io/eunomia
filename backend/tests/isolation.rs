@@ -279,6 +279,9 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         UPSERT $sync SET owner = $u, cursor = $c, last_error = $c;
         CREATE embed_cache SET text_hmac = $c, vector = [0.5, 0.25];
         CREATE pocket_recording SET owner = $u, recording_id = 'rec', title = $c, transcript = $c, raw = {note: $c};
+        CREATE peer_share SET vault = $v, role = 'read', secret_enc = $c, created_by = $u, expires_at = time::now() + 1d;
+        CREATE peer_link SET vault = $v, direction = 'host', role = 'read', key_enc = $c, user = $u, peer_instance = $c, peer_name = $c;
+        CREATE peer_item SET link = $c, vault = $v, kind = 'memory', local = $c, hash = $c;
         DELETE vault_member WHERE vault = $v;
         CREATE $vm SET vault = $v, user = $u, role = 'owner';";
     let uid = user.id.clone();
@@ -397,6 +400,8 @@ const NO_SECRET_ROWS: &[&str] = &[
     "job_leader",    // one global lease row
     "change",        // the change log keeps ids, never content (tests/changes.rs)
     "change_seq",    // one counter per vault
+    "peer_instance",  // one random identifier per database (peer vaults), no content
+    "redact_backfill", // one progress row: a stage, a cursor id and counts, never content
 ];
 
 // ---- the attack -----------------------------------------------------------------------------

@@ -49,15 +49,15 @@ test.describe("Entity graph", () => {
 
     // A click (no drag) selects the node; every node is also reachable by keyboard.
     await adaNode.click();
-    await expect(page.getByRole("button", { name: "Edit" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Edit", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Close" }).click();
     await page.getByRole("button", { name: "Charles Babbage" }).press("Enter");
-    await expect(page.getByRole("button", { name: "Edit" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Edit", exact: true })).toBeVisible();
 
     // Switching vault drops the selection from the old vault.
     await page.getByRole("combobox", { name: "Memory space" }).click();
     await page.getByRole("option", { name: "Other vault" }).click();
-    await expect(page.getByRole("button", { name: "Edit" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0);
   });
 
   test("vector cloud layers vaults in one 3D space, including a merge of them", async ({ page }) => {
@@ -94,7 +94,7 @@ test.describe("Command palette", () => {
     await expect(page.getByText("Connected sources", { exact: true })).toBeVisible(); // hydrated
 
     const input = page.getByPlaceholder("Jump to a page…");
-    const palette = page.getByRole("dialog", { name: "Command palette" });
+    const palette = page.getByRole("dialog", { name: "Search", exact: true });
     await page.keyboard.press("ControlOrMeta+k");
     await expect(input).toBeFocused();
 

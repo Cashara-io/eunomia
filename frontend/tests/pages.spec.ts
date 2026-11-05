@@ -16,7 +16,7 @@ test("every page and tab renders cleanly", async ({ page }) => {
   const pages: [string, RegExp | string][] = [
     ["/", "Which AI app do you use?"],
     ["/connect/claude-code", "Copy and run this command"],
-    ["/connect/help", "Let’s get your app connected"],
+    ["/connect/help", "Connection help"],
     ["/chat", "Chat"],
     ["/entities", "People & topics"],
     ["/code", "Code map"],

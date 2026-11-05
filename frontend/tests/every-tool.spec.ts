@@ -92,6 +92,8 @@ test("every MCP tool works end to end", async ({ request, baseURL }) => {
   expect((await ok("vault_members", { vault_id: team.id })).results.length).toBe(2);
   // roles and ownership: promote, demote, hand over and back (an owner always remains)
   expect((await ok("vault_get", { vault_id: team.id })).member_count).toBe(2);
+  expect((await ok("vault_check", { vault_id: team.id })).ok).toBe(true);
+  expect((await ok("vault_repair", { vault_id: team.id })).repaired).toBeTruthy();
   expect((await ok("vault_set_role", { vault_id: team.id, email: friend.email, role: "owner" })).role).toBe("owner");
   expect((await ok("vault_set_role", { vault_id: team.id, email: friend.email, role: "member" })).role).toBe("member");
   expect((await ok("vault_transfer_ownership", { vault_id: team.id, email: friend.email })).role).toBe("owner");
