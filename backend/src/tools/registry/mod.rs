@@ -86,6 +86,8 @@ pub const READ_ONLY_TOOLS: &[&str] = &[
     "entity_types",
     "vault_list",
     "vault_members",
+    "vault_invitations",
+    "vault_get",
     "document_list",
     "document_get",
     "document_download",
@@ -121,7 +123,7 @@ pub fn is_read_only(name: &str) -> bool {
 /// Tools that irreversibly remove data or access -- flagged to MCP clients
 /// (`destructiveHint`) so they can ask before running them.
 pub fn is_destructive(name: &str) -> bool {
-    matches!(name, "memory_delete" | "entity_delete" | "entity_merge" | "vault_delete" | "vault_remove_member" | "vault_leave" | "document_delete" | "skill_delete")
+    matches!(name, "memory_delete" | "entity_delete" | "entity_merge" | "vault_delete" | "vault_remove_member" | "vault_leave" | "vault_set_role" | "vault_transfer_ownership" | "document_delete" | "skill_delete")
 }
 
 /// Tools over the user's raw synced source records, which belong to no vault:
@@ -161,6 +163,12 @@ pub fn description(name: &str) -> &'static str {
         "vault_merge" => "Merge two vaults you belong to into a NEW vault: both are copied into it (the originals are never changed), and entities with the same kind and name are folded together -- aliases unioned, identical facts kept once, relations deduplicated.",
         "vault_invite" => "Invite a registered user by email to a vault (owner only). They must accept the invitation before getting access.",
         "vault_members" => "List a vault's members and their roles.",
+        "vault_get" => "One vault the caller belongs to: id, name, kind, the caller's role, created_at and active member count.",
+        "vault_set_role" => "Promote a member to owner or demote an owner to member (owner only). Cannot demote the last owner.",
+        "vault_transfer_ownership" => "Hand ownership of a vault to another active member (owner only): they become an owner and the caller becomes a member.",
+        "vault_invitations" => "List the pending vault invitations addressed to the caller (vault id, name, kind, role). Accept or decline each with `vault_accept_invitation` / `vault_decline_invitation`.",
+        "vault_accept_invitation" => "Accept a pending invitation (from `vault_invitations`) and join that vault with the invited role.",
+        "vault_decline_invitation" => "Decline a pending invitation (from `vault_invitations`); the invitation is deleted.",
         "vault_remove_member" => "Remove a member from a vault, or withdraw a pending invitation (owner only). Cannot remove the last owner.",
         "vault_leave" => "Leave a vault. The last owner can't leave while others remain.",
         "vault_rename" => "Rename a vault (owner only).",
@@ -533,6 +541,8 @@ mod tests {
             "entity_types",
             "vault_list",
             "vault_members",
+            "vault_invitations",
+            "vault_get",
             "document_list",
             "document_get",
             "document_download",
@@ -613,6 +623,7 @@ mod tests {
             "entities_graph", "entity_types", "code_entity_upsert", "code_relate", "memory_write", "memory_write_batch", "consolidate_observations",
             "memory_update", "entity_update", "memory_delete", "entity_delete", "entity_merge", "vault_create", "vault_list", "vault_clone", "vault_merge",
             "vault_invite", "vault_members", "vault_remove_member", "vault_leave", "vault_rename", "vault_delete",
+            "vault_invitations", "vault_accept_invitation", "vault_decline_invitation", "vault_set_role", "vault_transfer_ownership", "vault_get",
             "document_upload", "document_list", "document_get", "document_download", "document_export", "document_delete",
             "skill_save", "skill_find", "skill_get", "skill_delete",
         ];

@@ -43,10 +43,11 @@ pub enum Action {
     Clone,
     Merge,
     Leave,
+    SetRole,
 }
 
 impl Action {
-    pub const ALL: [Action; 10] = [
+    pub const ALL: [Action; 11] = [
         Action::ReadMemories,
         Action::WriteMemories,
         Action::ListMembers,
@@ -57,6 +58,7 @@ impl Action {
         Action::Clone,
         Action::Merge,
         Action::Leave,
+        Action::SetRole,
     ];
 
     /// The token scope this action needs.
@@ -70,7 +72,8 @@ impl Action {
             | Action::Delete
             | Action::Clone
             | Action::Merge
-            | Action::Leave => scopes::VAULTS_ADMIN,
+            | Action::Leave
+            | Action::SetRole => scopes::VAULTS_ADMIN,
         }
     }
 }
@@ -85,7 +88,7 @@ pub fn permits(role: Role, action: Action) -> bool {
         | Action::Clone
         | Action::Merge
         | Action::Leave => true,
-        Action::ManageMembers | Action::Invite | Action::Rename | Action::Delete => role == Role::Owner,
+        Action::ManageMembers | Action::Invite | Action::Rename | Action::Delete | Action::SetRole => role == Role::Owner,
     }
 }
 
@@ -295,6 +298,7 @@ mod tests {
             (Clone, true, true),
             (Merge, true, true),
             (Leave, true, true),
+            (SetRole, true, false),
         ];
         assert_eq!(table.len(), Action::ALL.len(), "every action is in the table");
         for (action, owner, member) in table {
@@ -307,7 +311,7 @@ mod tests {
     fn action_scopes() {
         assert_eq!(Action::ReadMemories.scope(), scopes::MEMORY_READ);
         assert_eq!(Action::WriteMemories.scope(), scopes::MEMORY_WRITE);
-        for a in [Action::Invite, Action::Rename, Action::Delete, Action::Clone, Action::Merge, Action::ManageMembers] {
+        for a in [Action::Invite, Action::Rename, Action::Delete, Action::Clone, Action::Merge, Action::ManageMembers, Action::SetRole] {
             assert_eq!(a.scope(), scopes::VAULTS_ADMIN, "{a:?}");
         }
     }

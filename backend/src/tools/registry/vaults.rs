@@ -242,6 +242,133 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
     );
 
     #[derive(serde::Deserialize)]
+    struct VaultSetRoleArgs {
+        vault_id: String,
+        email: String,
+        role: String,
+    }
+
+    register(
+        registry,
+        "vault_set_role",
+        json!({
+            "type": "object",
+            "properties": {
+                "vault_id": {"type": "string"},
+                "email": {"type": "string"},
+                "role": {"type": "string", "enum": ["owner", "member"]},
+            },
+            "required": ["vault_id", "email", "role"],
+        }),
+        Arc::new(|state, owner, args| {
+            Box::pin(async move {
+                let a: VaultSetRoleArgs = match serde_json::from_value(args) {
+                    Ok(a) => a,
+                    Err(e) => return Ok(bad_args(e)),
+                };
+                let vault_id = match parse_rid("vault_id", &a.vault_id) {
+                    Ok(v) => v,
+                    Err(e) => return Ok(e),
+                };
+                Ok(vaults_tools::vault_set_role(&state.db, &state.control, owner, &vault_id, &a.email, &a.role).await)
+            })
+        }),
+    );
+
+    #[derive(serde::Deserialize)]
+    struct VaultTransferArgs {
+        vault_id: String,
+        email: String,
+    }
+
+    register(
+        registry,
+        "vault_transfer_ownership",
+        json!({
+            "type": "object",
+            "properties": {"vault_id": {"type": "string"}, "email": {"type": "string", "description": "an active member who becomes an owner"}},
+            "required": ["vault_id", "email"],
+        }),
+        Arc::new(|state, owner, args| {
+            Box::pin(async move {
+                let a: VaultTransferArgs = match serde_json::from_value(args) {
+                    Ok(a) => a,
+                    Err(e) => return Ok(bad_args(e)),
+                };
+                let vault_id = match parse_rid("vault_id", &a.vault_id) {
+                    Ok(v) => v,
+                    Err(e) => return Ok(e),
+                };
+                Ok(vaults_tools::vault_transfer_ownership(&state.db, &state.control, owner, &vault_id, &a.email).await)
+            })
+        }),
+    );
+
+    register(
+        registry,
+        "vault_get",
+        json!({"type": "object", "properties": {"vault_id": {"type": "string"}}, "required": ["vault_id"]}),
+        Arc::new(|state, owner, args| {
+            Box::pin(async move {
+                let a: VaultIdArgs = match serde_json::from_value(args) {
+                    Ok(a) => a,
+                    Err(e) => return Ok(bad_args(e)),
+                };
+                let vault_id = match parse_rid("vault_id", &a.vault_id) {
+                    Ok(v) => v,
+                    Err(e) => return Ok(e),
+                };
+                Ok(vaults_tools::vault_get(&state.db, owner, &vault_id).await)
+            })
+        }),
+    );
+
+    register(
+        registry,
+        "vault_invitations",
+        json!({"type": "object", "properties": {}}),
+        Arc::new(|state, owner, _args| Box::pin(async move { Ok(vaults_tools::vault_invitations(&state.db, owner).await) })),
+    );
+
+    register(
+        registry,
+        "vault_accept_invitation",
+        json!({"type": "object", "properties": {"vault_id": {"type": "string", "description": "id from vault_invitations"}}, "required": ["vault_id"]}),
+        Arc::new(|state, owner, args| {
+            Box::pin(async move {
+                let a: VaultIdArgs = match serde_json::from_value(args) {
+                    Ok(a) => a,
+                    Err(e) => return Ok(bad_args(e)),
+                };
+                let vault_id = match parse_rid("vault_id", &a.vault_id) {
+                    Ok(v) => v,
+                    Err(e) => return Ok(e),
+                };
+                Ok(vaults_tools::vault_accept_invitation(&state.db, owner, &vault_id).await)
+            })
+        }),
+    );
+
+    register(
+        registry,
+        "vault_decline_invitation",
+        json!({"type": "object", "properties": {"vault_id": {"type": "string", "description": "id from vault_invitations"}}, "required": ["vault_id"]}),
+        Arc::new(|state, owner, args| {
+            Box::pin(async move {
+                let a: VaultIdArgs = match serde_json::from_value(args) {
+                    Ok(a) => a,
+                    Err(e) => return Ok(bad_args(e)),
+                };
+                let vault_id = match parse_rid("vault_id", &a.vault_id) {
+                    Ok(v) => v,
+                    Err(e) => return Ok(e),
+                };
+                Ok(vaults_tools::vault_decline_invitation(&state.db, owner, &vault_id).await)
+            })
+        }),
+    );
+
+    #[derive(serde::Deserialize)]
     struct VaultRenameArgs {
         vault_id: String,
         name: String,

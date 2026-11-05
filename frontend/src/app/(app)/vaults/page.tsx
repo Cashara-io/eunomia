@@ -13,6 +13,7 @@ import {
   Mail,
   Pencil,
   Plus,
+  RefreshCw,
   Trash2,
   UserPlus,
   Users,
@@ -1046,6 +1047,7 @@ function useWide() {
 
 export default function VaultsPage() {
   const vaultsQuery = useVaults();
+  const refetchAll = useRefreshVaults();
   const vaults = vaultsQuery.data ?? (vaultsQuery.isError ? [] : null);
   const me = useMe().data?.email ?? null;
   const [creating, setCreating] = useState(false);
@@ -1110,14 +1112,19 @@ export default function VaultsPage() {
             one by inviting people. Agents can refer to a vault by its name.
           </p>
         </div>
-        <button
-          onClick={() => setCreating(true)}
-          disabled={creating}
-          className="btn btn-primary"
-        >
-          <Plus {...ICON} />
-          New vault
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => void refetchAll()} className="btn" aria-label="Refresh vaults" title="Refresh">
+            <RefreshCw {...ICON} className={vaultsQuery.isFetching ? "animate-spin" : undefined} />
+          </button>
+          <button
+            onClick={() => setCreating(true)}
+            disabled={creating}
+            className="btn btn-primary"
+          >
+            <Plus {...ICON} />
+            New vault
+          </button>
+        </div>
       </header>
 
       {vaultsQuery.isError && <ErrorLine error={failure(vaultsQuery.error, "Could not load your vaults.", " Reload the page to try again.")} />}

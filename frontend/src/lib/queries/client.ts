@@ -54,3 +54,6 @@ export const makeQueryClient = () =>
       mutations: { retry: (count, e) => count < 2 && e instanceof ApiError && e.code === "db.conflict" },
     },
   });
+
+/** Poll interval for views an agent can change over MCP while the tab is open. Hidden tabs do not poll (refetchIntervalInBackground defaults to false). */
+export const LIVE_POLL_MS = 12_000;

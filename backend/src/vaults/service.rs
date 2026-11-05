@@ -356,6 +356,36 @@ pub async fn list_my_vaults(db: &OrgDb, user_id: &RecordId) -> AppResult<Vec<Vau
         .collect())
 }
 
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub struct VaultDetail {
+    pub id: String,
+    pub name: String,
+    pub kind: String,
+    #[schema(value_type = Option<String>)]
+    pub created_at: Option<Datetime>,
+    pub role: String,
+    /// active members, owners included
+    pub member_count: usize,
+}
+
+/// One vault the caller belongs to, with its member count.
+pub async fn get_vault(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId) -> AppResult<VaultDetail> {
+    authz::authorize(db, user_id, Action::ListMembers, vault_id).await?;
+    let v = list_my_vaults(db, user_id)
+        .await?
+        .into_iter()
+        .find(|v| v.id == vault_id.to_string())
+        .ok_or_else(|| AppError::bad_request("vault not found"))?;
+    let mut res = store::vaults::LIST_MEMBERS.on(db).bind(("vault", vault_id.clone())).await?;
+    #[derive(Deserialize, SurrealValue)]
+    struct Row {
+        #[allow(dead_code)]
+        role: String,
+    }
+    let rows: Vec<Row> = res.take(0)?;
+    Ok(VaultDetail { id: v.id, name: v.name, kind: v.kind, created_at: v.created_at, role: v.role, member_count: rows.len() })
+}
+
 pub async fn rename_vault(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId, name: &str) -> AppResult<VaultOut> {
     authz::authorize(db, user_id, Action::Rename, vault_id).await?;
     let name = &check_name(db, user_id, name, Some(vault_id)).await?;
@@ -554,6 +584,63 @@ pub async fn remove_member(db: &OrgDb, control: &ControlDb, user_id: &RecordId, 
         if e.to_string().contains("last_owner") { AppError::bad_request("cannot remove the last owner") } else { e.into() }
     })?;
     Ok(())
+}
+
+/// Owner-only. Promote or demote an active member. Demoting the last owner is refused, so a vault
+/// can't be left admin-less.
+pub async fn set_member_role(db: &OrgDb, control: &ControlDb, user_id: &RecordId, vault_id: &RecordId, email: &str, role: &str) -> AppResult<MemberOut> {
+    authz::authorize(db, user_id, Action::SetRole, vault_id).await?;
+    if role != "owner" && role != "member" {
+        return Err(AppError::bad_request("role must be 'owner' or 'member'"));
+    }
+    let target_id = user_in_org(db, control, email).await?.ok_or_else(|| AppError::bad_request(format!("no user with email '{email}'")))?;
+    let m = membership_any_status(db, vault_id, &target_id)
+        .await?
+        .filter(|m| m.status == "active")
+        .ok_or_else(|| AppError::bad_request(format!("{email} is not an active member (invitations must be accepted first)")))?;
+
+    // Owner count check and update in one transaction, so concurrent demotions cannot strand the vault.
+    with_retry(|| async {
+        store::vaults::SET_ROLE.on(db)
+        .bind(("vault", vault_id.clone()))
+        .bind(("demoting", m.role == "owner" && role != "owner"))
+        .bind(("id", m.id.clone()))
+        .bind(("role", role.to_string()))
+        .await?
+        .check()
+    })
+    .await
+    .map_err(|e| {
+        if e.to_string().contains("last_owner") { AppError::bad_request("cannot demote the last owner") } else { e.into() }
+    })?;
+    Ok(MemberOut { email: crate::models_user::normalize_email(email), role: role.to_string() })
+}
+
+/// Owner-only. Make an active member an owner and demote the caller to member, in one transaction.
+pub async fn transfer_ownership(db: &OrgDb, control: &ControlDb, user_id: &RecordId, vault_id: &RecordId, email: &str) -> AppResult<MemberOut> {
+    authz::authorize(db, user_id, Action::SetRole, vault_id).await?;
+    let target_id = user_in_org(db, control, email).await?.ok_or_else(|| AppError::bad_request(format!("no user with email '{email}'")))?;
+    if &target_id == user_id {
+        return Err(AppError::bad_request("you already own this vault"));
+    }
+    let target = membership_any_status(db, vault_id, &target_id)
+        .await?
+        .filter(|m| m.status == "active")
+        .ok_or_else(|| AppError::bad_request(format!("{email} is not an active member (invitations must be accepted first)")))?;
+    let caller = membership_any_status(db, vault_id, user_id)
+        .await?
+        .filter(|m| m.status == "active")
+        .ok_or_else(|| AppError::bad_request("you are not an active member of this vault"))?;
+
+    with_retry(|| async {
+        store::vaults::TRANSFER_OWNERSHIP.on(db)
+        .bind(("target", target.id.clone()))
+        .bind(("caller", caller.id.clone()))
+        .await?
+        .check()
+    })
+    .await?;
+    Ok(MemberOut { email: crate::models_user::normalize_email(email), role: "owner".to_string() })
 }
 
 #[derive(Debug, Deserialize, SurrealValue)]
