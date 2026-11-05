@@ -84,13 +84,18 @@ test("a routing rule files tagged recordings in their own vault", async ({ page 
     expect(connector.routing.rules).toEqual([{ field: "tag", value: "work", vault: expect.stringMatching(/^vault:/) }]);
     expect(connector.routing.default_vault).toBeUndefined();
 
+    // The scheduler syncs a newly saved connector on its next tick, which can land before this click.
+    // Then Sync now finds both recordings unchanged, so check the total, not which sync wrote them.
     await page.getByRole("button", { name: "Sync now" }).click();
-    await expect(page.getByRole("status").filter({ hasText: /Synced|Sync/ })).toHaveText(/Synced: 2 new or changed/);
+    const synced = page.getByRole("status").filter({ hasText: /Synced|Sync/ });
+    await expect(synced).toHaveText(/Synced: \d+ new or changed, \d+ unchanged/);
+    const [written, skipped] = ((await synced.textContent()) ?? "").match(/\d+/g)!.map(Number);
+    expect(written + skipped).toBe(2);
 
     // the work recording is in the work vault, the other one stays personal
-    expect(await search(page, "tamarind", ["Work e2e"])).toEqual(["Paperless standup"]);
+    await expect.poll(() => search(page, "tamarind", ["Work e2e"])).toEqual(["Paperless standup"]);
+    await expect.poll(() => search(page, "rambutan", ["personal"])).toEqual(["Dentist call"]);
     expect(await search(page, "rambutan", ["Work e2e"])).toEqual([]);
-    expect(await search(page, "rambutan", ["personal"])).toEqual(["Dentist call"]);
     expect(await search(page, "tamarind", ["personal"])).toEqual([]);
 
     // already where the rules send it: moving existing data changes nothing
