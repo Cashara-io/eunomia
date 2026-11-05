@@ -24,6 +24,8 @@ pub fn router() -> Router<AppState> {
         .route("/vaults/{vault_id}/clone", post(clone_vault))
         .route("/vaults/{vault_id}/members", get(list_members).post(invite_member))
         .route("/vaults/{vault_id}/members/{email}", axum::routing::delete(remove_member))
+        .route("/vaults/{vault_id}/members/{email}/role", axum::routing::put(set_member_role))
+        .route("/vaults/{vault_id}/transfer", post(transfer_ownership))
         .route("/vaults/{vault_id}/leave", post(leave_vault))
         .route("/vaults/{vault_id}/invitations/accept", post(accept_invitation))
         .route("/vaults/{vault_id}/invitations/decline", post(decline_invitation))
@@ -292,6 +294,62 @@ async fn remove_member(
     Ok(Json(json!({ "removed": true })))
 }
 
+#[derive(Deserialize, utoipa::ToSchema)]
+struct RoleRequest {
+    /// `owner` or `member`
+    role: String,
+}
+
+#[derive(Deserialize, utoipa::ToSchema)]
+struct TransferRequest {
+    /// An active member who becomes an owner; the caller becomes a member.
+    email: String,
+}
+
+#[utoipa::path(
+    operation_id = "setMemberRole",
+    put,
+    path = "/api/vaults/{vault_id}/members/{email}/role",
+    tag = "vaults",
+    summary = "Promote or demote a vault member",
+    params(("vault_id" = String, Path), ("email" = String, Path)),
+    request_body = RoleRequest,
+    responses((status = 200, body = service::MemberOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = []), ("bearer" = [])),
+)]
+async fn set_member_role(
+    State(state): State<AppState>,
+    user: User,
+    Path((vault_id, email)): Path<(String, String)>,
+    Json(body): Json<RoleRequest>,
+) -> AppResult<Json<service::MemberOut>> {
+    let state = state.org(&user.org).await?;
+    let rid = parse_vault_id(&vault_id)?;
+    Ok(Json(service::set_member_role(&state.db, &state.control, &user.id, &rid, &email, &body.role).await?))
+}
+
+#[utoipa::path(
+    operation_id = "transferOwnership",
+    post,
+    path = "/api/vaults/{vault_id}/transfer",
+    tag = "vaults",
+    summary = "Hand a vault to another member",
+    params(("vault_id" = String, Path)),
+    request_body = TransferRequest,
+    responses((status = 200, body = service::MemberOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = []), ("bearer" = [])),
+)]
+async fn transfer_ownership(
+    State(state): State<AppState>,
+    user: User,
+    Path(vault_id): Path<String>,
+    Json(body): Json<TransferRequest>,
+) -> AppResult<Json<service::MemberOut>> {
+    let state = state.org(&user.org).await?;
+    let rid = parse_vault_id(&vault_id)?;
+    Ok(Json(service::transfer_ownership(&state.db, &state.control, &user.id, &rid, &body.email).await?))
+}
+
 #[utoipa::path(
     operation_id = "leaveVault",
     post,
@@ -381,6 +439,8 @@ async fn decline_invitation(
     list_members,
     invite_member,
     remove_member,
+    set_member_role,
+    transfer_ownership,
     leave_vault,
     accept_invitation,
     decline_invitation,

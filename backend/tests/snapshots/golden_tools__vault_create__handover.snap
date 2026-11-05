@@ -1,0 +1,10 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "id": "vault:<id26>",
+  "name": "Handover",
+  "kind": "org",
+  "created_at": "<ts>"
+}

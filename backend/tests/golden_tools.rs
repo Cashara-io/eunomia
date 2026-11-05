@@ -55,11 +55,39 @@ fn s(v: &Value, ptr: &str) -> String {
     v.pointer(ptr).and_then(Value::as_str).unwrap_or_else(|| panic!("no string at {ptr} in {v}")).to_string()
 }
 
-#[tokio::test]
-async fn every_registered_tool_has_a_golden() {
-    // boxed: one await per tool makes this future large, and pinned on the test thread's stack it
-    // overflows a debug build once a few more tools are added
-    Box::pin(goldens()).await
+#[test]
+fn every_registered_tool_has_a_golden() {
+    // One await per tool makes the `goldens` future large; polled on a default 2 MiB test-thread stack
+    // it overflows a debug build once a few more tools are added. Run it on a thread with room instead.
+    std::thread::Builder::new()
+        .name("golden_tools".into())
+        .stack_size(64 * 1024 * 1024)
+        .spawn(|| {
+            let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+            rt.block_on(goldens());
+        })
+        .unwrap()
+        .join()
+        .unwrap_or_else(|e| std::panic::resume_unwind(e));
+}
+
+/// Invitations, roles and ownership, in a vault of their own so the vaults above are untouched.
+/// Its own function: inlined into `goldens` the future is large enough to overflow a debug stack.
+fn role_goldens<'a>(g: &'a mut Golden, bob: &'a eunomia_backend::models_user::User) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + 'a>> {
+    Box::pin(async move {
+    let h = Box::pin(g.snap("vault_create__handover", "vault_create", json!({"name": "Handover", "kind": "org"}))).await;
+    let handover = s(&h, "/id");
+    Box::pin(g.snap("vault_invite__handover", "vault_invite", json!({"vault_id": handover, "email": bob.email}))).await;
+    // the owner has no invitation of their own to answer
+    Box::pin(g.snap("vault_invitations", "vault_invitations", json!({}))).await;
+    Box::pin(g.snap("vault_accept_invitation", "vault_accept_invitation", json!({"vault_id": handover}))).await;
+    Box::pin(g.snap("vault_decline_invitation", "vault_decline_invitation", json!({"vault_id": handover}))).await;
+    Box::pin(g.snap("vault_get", "vault_get", json!({"vault_id": handover}))).await;
+    Box::pin(g.snap("vault_set_role", "vault_set_role", json!({"vault_id": handover, "email": bob.email, "role": "owner"}))).await;
+    Box::pin(g.snap("vault_set_role__last_owner", "vault_set_role", json!({"vault_id": handover, "email": g.app.user.email.clone(), "role": "member"}))).await;
+    Box::pin(g.snap("vault_transfer_ownership", "vault_transfer_ownership", json!({"vault_id": handover, "email": bob.email}))).await;
+
+    })
 }
 
 async fn goldens() {
@@ -169,6 +197,9 @@ async fn goldens() {
     Box::pin(g.snap("skill_find", "skill_find", json!({"query": "anvil"}))).await;
     Box::pin(g.snap("skill_get", "skill_get", json!({"id": s(&skill, "/id")}))).await;
     Box::pin(g.snap("skill_delete", "skill_delete", json!({"id": s(&skill, "/id")}))).await;
+
+    // -- invitations and roles (last, so they change no snapshot above) --
+    role_goldens(&mut g, &bob).await;
 
     let registered: BTreeSet<String> = registry::all_tools().keys().map(|k| k.to_string()).collect();
     let missing: Vec<_> = registered.difference(&g.covered).collect();

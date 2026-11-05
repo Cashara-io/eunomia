@@ -13,6 +13,8 @@ import {
   mergeVaults,
   removeMember,
   renameVault,
+  setMemberRole,
+  transferOwnership,
 } from "@/lib/gen";
 import type { Vault, VaultInvitation, VaultKind, VaultMember, VaultRole } from "@/lib/types";
 import { call, LIVE_POLL_MS } from "./client";
@@ -82,6 +84,12 @@ export const useInviteMember = () =>
   );
 export const useRemoveMember = () =>
   useVaultMutation(({ id, email }: { id: string; email: string }) => call(removeMember({ path: { vault_id: id, email } })));
+export const useSetMemberRole = () =>
+  useVaultMutation(({ id, email, role }: { id: string; email: string; role: VaultRole }) =>
+    call(setMemberRole({ path: { vault_id: id, email }, body: { role } })),
+  );
+export const useTransferOwnership = () =>
+  useVaultMutation(({ id, email }: { id: string; email: string }) => call(transferOwnership({ path: { vault_id: id }, body: { email } })));
 export const useLeaveVault = () => useEndAccessMutation((id: string) => call(leaveVault({ path: { vault_id: id } })));
 // Accepting does not refresh by itself: the page plays its join animation first, then calls `useRefreshVaults()`.
 export const useAcceptInvitation = () => useMutation({ mutationFn: (id: string) => call(acceptInvitation({ path: { vault_id: id } })) });
