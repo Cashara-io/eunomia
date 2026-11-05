@@ -1,7 +1,7 @@
 # Tiny backup image. The surrealdb image is distroless and has no shell, so we
 # copy only its `surreal` binary (dynamic glibc, hence debian-slim, not alpine)
 # and add openssl for encryption. Nothing is downloaded at runtime.
-FROM surrealdb/surrealdb:v3.3.1 AS surreal
+FROM surrealdb/surrealdb:v3.3.5 AS surreal
 
 FROM debian:bookworm-slim
 RUN apt-get update \

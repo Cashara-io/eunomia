@@ -178,7 +178,7 @@ dump_to() {
     x="$(mktemp)" || return 1
     rc=1; again=""
     if export_db "$1" > "$x" && tail -c 4096 "$x" | grep -v '^--' | grep . | tail -n 1 | grep -q ';$' \
-       && "$SURREAL" isready --endpoint "$ENDPOINT" >/dev/null 2>&1; then
+       && "$SURREAL" isready --endpoint "ws://${ENDPOINT#*://}" >/dev/null 2>&1; then
       if ! after="$(row_counts "$1")"; then
         log "could not count the rows of $1 after exporting" >&2
       elif verify_dump "$x" "$before" "$after" "$1"; then

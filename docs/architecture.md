@@ -184,7 +184,7 @@ Every row above except Control lives in the org's own database. SurrealDB
 holds graph relations, one BM25 `FULLTEXT` index per text field and a cosine
 `HNSW` vector index in the same schema; semantic search falls back to an
 exact scan of the caller's records when the index returns too few. Compose
-pins SurrealDB 3.3.1 and starts it hardened: `--deny-all`, with only RPC,
+pins SurrealDB 3.3.5 and starts it hardened: `--deny-all`, with only RPC,
 HTTP and an allow-list of function families re-enabled, and 60-second query
 and transaction limits. The embedding index expects 1,536 dimensions; the
 embedding service rejects wrong-sized or non-finite vectors.

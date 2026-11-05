@@ -533,7 +533,7 @@ const MULTI_JOBS: usize = 6_000;
 /// long and nothing is killed, so any job run twice was claimed twice. Asserts: every job ran exactly
 /// once, the server agrees (every row `done` with `attempts = 1`), none dead. Needs a real server:
 /// `TEST_SURREAL_URL=ws://127.0.0.1:8231/rpc cargo test --release --test jobs job_claims_across_processes -- --nocapture`
-/// against `surrealdb/surrealdb:v3.3.1` on RocksDB (docs/testing.md, "Concurrency ceiling"); skips without one.
+/// against `surrealdb/surrealdb:v3.3.5` on RocksDB (docs/testing.md, "Concurrency ceiling"); skips without one.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn job_claims_across_processes() {
     if std::env::var("TEST_SURREAL_URL").is_err() {

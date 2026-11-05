@@ -27,7 +27,7 @@ Files for `count()`: `routers/audit.rs`, `routers/auth.rs`, `routers/sources.rs`
 
 ## Allow list for `surreal start`
 
-Use this with `--deny-all`, plus `--allow-rpc --allow-http --allow-arbitrary-query=system` (RPC for the backend, HTTP for the `isready` healthcheck and the CLI, arbitrary queries for root; flag names from the 3.3 `surreal start` docs). `--deny-all` has not been run against a live 3.3.1 server yet. The flag syntax is documented at https://surrealdb.com/docs/surrealdb/cli/start: `--allow-funcs` takes a comma-separated list, and each entry is `<family>` or `<family>::<name>`.
+Use this with `--deny-all`, plus `--allow-rpc --allow-http --allow-arbitrary-query=system` (RPC for the backend and the `isready` healthcheck, which must use `ws://` because over `http://` it fails with "Method not allowed", HTTP for the CLI, arbitrary queries for root; flag names from the 3.3 `surreal start` docs). `--deny-all` with this set has since been run on live 3.3.1 (2026-10-09) and 3.3.5 (2026-10-31) servers; see the last section. The flag syntax is documented at https://surrealdb.com/docs/surrealdb/cli/start: `--allow-funcs` takes a comma-separated list, and each entry is `<family>` or `<family>::<name>`.
 
 ```
 surreal start --deny-all --allow-funcs time,string,search,count [other flags]
@@ -55,3 +55,14 @@ The grep above missed some families. The list `docker-compose.yml` ships, and th
 - Removing `vector` from the list makes the suite fail with "Function 'vector::similarity::cosine' is not allowed", so the list is both necessary and sufficient for the code today.
 - `--query-timeout=60s --transaction-timeout=60s` are for the running app only. A dump import or restore runs on a server without them (`docker-compose.import.yml`, used by `scripts/upgrade-surreal-v3.sh` and `backend/scripts/restore.sh`), then the hardened server is started again. The tests do not set the timeouts.
 - Not verified against a running 3.3.1 server (Docker was unavailable): `--deny-all` may also deny the RPC/HTTP surfaces and arbitrary queries for the root user. If the backend cannot connect, add `--allow-rpc --allow-http --allow-arbitrary-query=system` (all exist in 3.3.1 `start --help`). The flag names, not their interaction, were checked.
+
+## Re-checked on SurrealDB 3.3.5 (2026-10-31, release 2.0.8)
+
+The `docker-compose.yml` flags, unchanged, on a throwaway `surrealdb/surrealdb:v3.3.5` container on RocksDB (`--deny-all --allow-rpc --allow-http --allow-arbitrary-query=system --allow-funcs=time,string,search,count,array,vector,math,file,type::file --allow-experimental=files --query-timeout=60s --transaction-timeout=60s`, `SURREAL_BUCKET_FOLDER_ALLOWLIST=/data/documents`):
+
+- The server starts. Adding `--deny-guests` is still a startup error (a usage error, as on 3.3.1).
+- Root queries over HTTP `/sql` work; `/health` and `/status` answer 200.
+- Every allowed family runs (`time::now`, `string::lowercase`, `math::max`, `array::len`, `vector::similarity::cosine`, `count`). Families outside the list are refused with "Function '...' is not allowed to be executed": `crypto`, `rand`, `http`, `object`, `meta`, `record`, `type::string`, `parse`, `duration`, `geo`.
+- `--allow-experimental=files`: `DEFINE BUCKET ... BACKEND 'file:/data/documents'`, `.put()` and `.get()` work; a bucket outside the allow list fails with "File access denied".
+- `surreal isready` passes over `ws://` and, on this throwaway container, also over `http://` (empty, with 2,000 rows, and after a restart; 3.3.1 behaved the same here). The `http://` failure ("Method not allowed") was seen on the live hardened 3.3.1 server and is not reproduced by this setup, so the healthcheck and the backup keep using `ws://`.
+- The whole backend suite under this list (`TEST_HARDENED=1 cargo nextest run`) passes on the 3.3.5 crate.

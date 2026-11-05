@@ -136,6 +136,159 @@ async fn saving_a_name_again_replaces_the_skill_in_that_vault_only() {
     assert_eq!(pick["body"], "t");
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn racing_saves_of_one_new_name_all_succeed_as_one_skill() {
+    let app = TestApp::new().await;
+    let saves = (0..8).map(|i| app.tool("skill_save", json!({"name": "race", "description": "d", "body": format!("v{i}")})));
+    let saved = futures::future::join_all(saves).await;
+    assert!(saved.iter().all(|s| s.get("error").is_none()), "the loser of the unique (vault, name) index replaces the winner: {saved:?}");
+    let ids: std::collections::BTreeSet<String> = saved.iter().map(|s| s["id"].to_string()).collect();
+    assert_eq!(ids.len(), 1, "one skill: {saved:?}");
+}
+
+/// Regression guard for the commit-conflict retry in `skill_save` (its upsert and its embedding write)
+/// and `skill_delete`. On SurrealDB 3.3.5 every write to `skill` queues a background compaction of
+/// `skill_embedding_idx` that commits in its own transaction, and a skill write that commits just after
+/// it fails with a commit conflict (`db.conflict`). Without `tx::with_retry` that reaches the caller.
+///
+/// Concurrent writers cycle save, save again, save a third time (each a new description, so a new
+/// vector) and delete through the tools, while a probe runs the same three statements bare (no retry)
+/// and counts their conflicts. The run lasts until the probe has met `ENOUGH_BARE_CONFLICTS` conflicts
+/// and the tools have done `MIN_CYCLES` cycles (or until `DEADLINE`), so the race provably fired many
+/// times during the run, and every tool call in it must have succeeded and embedded (a lost embedding
+/// write is no error to the caller, only `embedded: false`). The run starts on a fresh org, so it covers
+/// the index's concurrent build as well as the compactions after it.
+///
+/// Measured on 3.3.5: with every retry removed, 20 runs in 20 failed (10 normal, 10 `TEST_HARDENED`),
+/// each within about 60 cycles; with only one retry removed, 4 in 5 (delete), 5 in 5 (embedding) and
+/// 5 in 5 (upsert). With the retry, 40 in 40 passed, a run taking about 9 to 20 s after setup on a loaded box.
+/// `MIN_BARE_CONFLICTS` is only a floor that says the race still fires at all, checked once the run did
+/// `MIN_CYCLES` cycles: a machine so stalled that it did fewer before `DEADLINE` cannot tell.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn skill_writes_retry_conflicts_with_hnsw_index_maintenance() {
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering::SeqCst};
+    use std::sync::{Arc, Mutex};
+    use std::time::{Duration, Instant};
+    use eunomia_backend::store::skills as q;
+    const WORKERS: usize = 4;
+    const ENOUGH_BARE_CONFLICTS: usize = 12;
+    const MIN_CYCLES: usize = 150;
+    const MIN_BARE_CONFLICTS: usize = 3;
+    const DEADLINE: Duration = Duration::from_secs(20);
+
+    let app = semantic_app().await;
+    let seed = app.tool("skill_save", save_args("seed", "deploy the web tier")).await;
+    assert_eq!(seed["embedded"], true, "{seed}");
+    let vault = rid::parse(seed["vault"].as_str().unwrap()).unwrap();
+    let stop = Arc::new(AtomicBool::new(false));
+    let (cycles, bare_conflicts) = (Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)));
+    let failures: Arc<Mutex<Vec<String>>> = Arc::default();
+
+    let mut tasks = Vec::new();
+    for w in 0..WORKERS {
+        let (state, user, stop, cycles, failures) = (app.state.clone(), app.user.clone(), stop.clone(), cycles.clone(), failures.clone());
+        tasks.push(tokio::spawn(async move {
+            let call = |tool: &'static str, args: Value| {
+                let (state, user) = (state.clone(), user.clone());
+                async move { eunomia_backend::authz::as_system(registry::call(&state, &user, tool, args)).await.expect("tool call") }
+            };
+            let mut i = 0;
+            while !stop.load(SeqCst) {
+                let name = format!("w{w}-{i}");
+                let saved = call("skill_save", json!({"name": name, "description": format!("deploy step{w}x{i}"), "body": "b1"})).await;
+                let again = call("skill_save", json!({"name": name, "description": format!("rollback step{w}x{i}"), "body": "b2"})).await;
+                let third = call("skill_save", json!({"name": name, "description": format!("invoice step{w}x{i}"), "body": "b3"})).await;
+                let deleted = call("skill_delete", json!({"id": saved["id"]})).await;
+                let bad = [("save", &saved), ("save again", &again), ("save a third time", &third)]
+                    .into_iter()
+                    .filter(|(_, out)| out.get("error").is_some() || out["embedded"] != true)
+                    .chain(std::iter::once(("delete", &deleted)).filter(|(_, out)| out.get("error").is_some()))
+                    .map(|(what, out)| format!("{what} of {name}: {out}"))
+                    .collect::<Vec<_>>();
+                if !bad.is_empty() {
+                    failures.lock().unwrap().extend(bad);
+                    stop.store(true, SeqCst);
+                }
+                cycles.fetch_add(1, SeqCst);
+                i += 1;
+            }
+        }));
+    }
+    {
+        let (db, owner, stop, bare_conflicts) = (app.db().await, app.user.id.clone(), stop.clone(), bare_conflicts.clone());
+        tasks.push(tokio::spawn(async move {
+            let mut i = 0;
+            let count = |r: Result<(), surrealdb::Error>, what: &str| match r {
+                Err(e) if eunomia_backend::tx::is_conflict(&e) => {
+                    bare_conflicts.fetch_add(1, SeqCst);
+                }
+                Err(e) => panic!("bare {what}: {e}"),
+                Ok(()) => {}
+            };
+            while !stop.load(SeqCst) {
+                let name = format!("probe-{i}");
+                let up: Result<Vec<Value>, _> = async {
+                    q::UPSERT.on(&db).bind(("owner", owner.clone())).bind(("vault", vault.clone())).bind(("name", name.clone())).bind(("description", "d")).bind(("body", "b")).await?.take(0)
+                }
+                .await;
+                let id = match up {
+                    Ok(rows) => rows.first().and_then(|r| r["id"].as_str()).map(|s| rid::parse(s).unwrap()),
+                    Err(e) => {
+                        count(Err(e), "upsert");
+                        None
+                    }
+                };
+                if let Some(id) = id {
+                    let set = async {
+                        q::SET_EMBEDDING
+                            .on(&db)
+                            .bind(("id", id.clone()))
+                            .bind(("embedding", concept_vector(&format!("probe{i}"))))
+                            .bind(("spec", "probe"))
+                            .bind(("vault", vault.clone()))
+                            .bind(("name", name.clone()))
+                            .bind(("description", "d"))
+                            .await?
+                            .check()
+                            .map(|_| ())
+                    };
+                    count(set.await, "set embedding");
+                    let del = async { q::DELETE.on(&db).bind(("id", id.clone())).await?.check().map(|_| ()) };
+                    count(del.await, "delete");
+                }
+                i += 1;
+            }
+        }));
+    }
+
+    let start = Instant::now();
+    while !stop.load(SeqCst) && start.elapsed() < DEADLINE && (bare_conflicts.load(SeqCst) < ENOUGH_BARE_CONFLICTS || cycles.load(SeqCst) < MIN_CYCLES) {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    stop.store(true, SeqCst);
+    for t in tasks {
+        t.await.unwrap();
+    }
+    let (cycles, bare) = (cycles.load(SeqCst), bare_conflicts.load(SeqCst));
+    eprintln!("{cycles} tool cycles, {bare} bare conflicts in {:?}", start.elapsed());
+    let failures = failures.lock().unwrap();
+    assert!(
+        failures.is_empty(),
+        "a skill tool write failed while SurrealDB maintained skill_embedding_idx ({cycles} cycles, {bare} bare conflicts): \
+         the commit-conflict retry (tx::with_retry) around skill_save's upsert, its embedding write or skill_delete has \
+         regressed (an `embedded: false` is a lost embedding write): {failures:#?}"
+    );
+    if cycles < MIN_CYCLES {
+        eprintln!("only {cycles} tool cycles before the deadline: too slow a run to check that the race still fires");
+        return;
+    }
+    assert!(
+        bare >= MIN_BARE_CONFLICTS,
+        "the bare skill statements met only {bare} commit conflicts in {cycles} cycles: the index maintenance race no \
+         longer fires here, so this test no longer guards the retry; re-check skill_embedding_idx and the SurrealDB version"
+    );
+}
+
 #[tokio::test]
 async fn another_user_or_org_cannot_find_get_or_delete_a_skill() {
     let app = TestApp::new().await;
