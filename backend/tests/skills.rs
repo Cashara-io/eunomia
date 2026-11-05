@@ -108,6 +108,14 @@ async fn save_then_find_by_keyword_then_get_the_body() {
     assert_eq!(gone["deleted"], id, "{gone}");
     assert!(app.tool("skill_get", json!({"id": id})).await.get("error").is_some());
     assert!(names(&app.tool("skill_find", json!({"query": "deploy"})).await).is_empty());
+
+    // secrets in the description and body are redacted and reported together
+    let args = json!({"name": "db-login", "description": "log in to postgres://app:hunter2@db", "body": "export KEY=AKIAIOSFODNN7EXAMPLE"});
+    let saved = app.tool("skill_save", args).await;
+    assert_eq!(saved["redacted"], json!([{"kind": "url password", "count": 1}, {"kind": "aws access key", "count": 1}]), "{saved}");
+    let got = app.tool("skill_get", json!({"name": "db-login"})).await;
+    assert_eq!(got["body"], "export KEY=[redacted: aws access key]");
+    assert_eq!(got["description"], "log in to postgres://app:[redacted: url password]@db");
 }
 
 #[tokio::test]

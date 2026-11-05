@@ -292,7 +292,13 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                             )
                             .await;
                             match out {
-                                Ok(o) => json!({"index": index, "ok": true, "entity_id": o.entity.id, "memory_id": o.memory.id}),
+                                Ok(o) => {
+                                    let mut v = json!({"index": index, "ok": true, "entity_id": o.entity.id, "memory_id": o.memory.id});
+                                    if !o.memory.redacted.is_empty() {
+                                        v["redacted"] = json!(o.memory.redacted);
+                                    }
+                                    v
+                                }
                                 Err(e) => {
                                     let v = e.to_tool_value();
                                     json!({"index": index, "ok": false, "error": v["error"], "code": v["code"]})

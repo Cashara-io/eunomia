@@ -723,6 +723,11 @@ export type MemoryOut = {
     owner?: string | null;
     owner_email?: string | null;
     proof_count: number;
+    /**
+     * Secrets this write replaced with `[redacted: <kind>]` markers (kind and count only). Present
+     * only on a write or edit that redacted something.
+     */
+    redacted?: Array<Redaction>;
     source?: string | null;
     source_memories?: Array<string> | null;
     status?: string | null;
@@ -885,6 +890,14 @@ export type RecentRecording = {
     recorded_at?: string | null;
     tags: Array<string>;
     title: string;
+};
+
+/**
+ * What one write had redacted: `count` secrets of `kind` (e.g. "github token").
+ */
+export type Redaction = {
+    count: number;
+    kind: string;
 };
 
 export type RelationCreate = {
