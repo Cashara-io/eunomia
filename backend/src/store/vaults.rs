@@ -95,7 +95,7 @@ pub const RENAME: Stmt = Stmt::new("vaults.rename", "UPDATE $id SET name = $name
 
 pub const DELETE_VAULT: Stmt = Stmt::new(
     "vaults.delete_vault",
-    "BEGIN TRANSACTION; DELETE vault_member WHERE vault = $vault; DELETE $vault; COMMIT TRANSACTION;",
+    "BEGIN TRANSACTION; DELETE vault_member WHERE vault = $vault; DELETE change WHERE vault = $vault; DELETE $counter; DELETE $vault; COMMIT TRANSACTION;",
 );
 
 pub const INVITE: Stmt = Stmt::new(

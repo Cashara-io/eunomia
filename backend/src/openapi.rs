@@ -82,6 +82,7 @@ pub fn spec() -> utoipa::openapi::OpenApi {
     for part in [
         routers::auth::Doc::openapi(),
         routers::audit::Doc::openapi(),
+        routers::changes::Doc::openapi(),
         routers::chat::Doc::openapi(),
         routers::connectors::Doc::openapi(),
         routers::debug::Doc::openapi(),

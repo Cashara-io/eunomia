@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod changes;
 pub mod chat;
 pub mod connectors;
 pub mod documents;
