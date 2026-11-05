@@ -22,6 +22,9 @@
 set -eu
 
 ENDPOINT="${SURREAL_ENDPOINT:-http://surrealdb:8000}"
+# `surreal isready` over http:// is refused by a server started with --deny-all ("Method not allowed"), so the
+# readiness check goes over the websocket form of the same address, which --allow-rpc covers.
+READY_ENDPOINT="$(printf '%s' "$ENDPOINT" | sed -e 's#^https://#wss://#' -e 's#^http://#ws://#')"
 USER_="${SURREAL_USER:-root}"
 PASS_="${SURREAL_PASS:-root}"
 NS="${SURREAL_NS:-eunomia}"
@@ -178,7 +181,7 @@ dump_to() {
     x="$(mktemp)" || return 1
     rc=1; again=""
     if export_db "$1" > "$x" && tail -c 4096 "$x" | grep -v '^--' | grep . | tail -n 1 | grep -q ';$' \
-       && "$SURREAL" isready --endpoint "$ENDPOINT" >/dev/null 2>&1; then
+       && "$SURREAL" isready --endpoint "$READY_ENDPOINT" >/dev/null 2>&1; then
       if ! after="$(row_counts "$1")"; then
         log "could not count the rows of $1 after exporting" >&2
       elif verify_dump "$x" "$before" "$after" "$1"; then
