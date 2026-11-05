@@ -38,8 +38,9 @@ export const useVaultMembers = (id: string, enabled = true) =>
   useQuery({
     queryKey: vaultKeys.members(id),
     queryFn: async () => (await call(listMembers({ path: { vault_id: id } }))).results as VaultMember[],
+    // Not polled: after leaving or deleting a vault the inspector can still be mounted for a moment, and a
+    // poll would hit a vault the caller no longer belongs to (403). Mutations and Refresh keep it current.
     enabled,
-    refetchInterval: LIVE_POLL_MS,
   });
 
 export const useInvitations = () =>

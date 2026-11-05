@@ -29,7 +29,8 @@ function startModel(): Promise<{ base: string; close: () => void }> {
       if (prompt.includes('"superseded"')) {
         const lines = [...prompt.matchAll(/^\[(\d+)\] \S+ \S+(?: \(new\))?: (.*)$/gm)].map((m) => ({ n: Number(m[1]), text: m[2] }));
         const granted = lines.find((l) => l.text.includes("was granted access"));
-        return send({ superseded: granted ? lines.filter((l) => l.n < granted.n && l.text.includes("no access")).map((l) => l.n) : [] });
+        // pairs: the older fact that no longer holds, and the new fact that replaced it
+        return send({ superseded: granted ? lines.filter((l) => l.n < granted.n && l.text.includes("no access")).map((l) => ({ fact: l.n, by: granted.n })) : [] });
       }
       if (prompt.includes("Extract entities")) return send({});
       send({ belief: "consolidated" });

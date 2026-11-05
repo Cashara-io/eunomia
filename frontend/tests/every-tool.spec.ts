@@ -90,8 +90,19 @@ test("every MCP tool works end to end", async ({ request, baseURL }) => {
   await ok("vault_invite", { vault_id: team.id, email: friend.email });
   expect((await other.post(`/api/vaults/${encodeURIComponent(team.id)}/invitations/accept`)).ok()).toBeTruthy();
   expect((await ok("vault_members", { vault_id: team.id })).results.length).toBe(2);
+  // roles and ownership: promote, demote, hand over and back (an owner always remains)
+  expect((await ok("vault_get", { vault_id: team.id })).member_count).toBe(2);
+  expect((await ok("vault_set_role", { vault_id: team.id, email: friend.email, role: "owner" })).role).toBe("owner");
+  expect((await ok("vault_set_role", { vault_id: team.id, email: friend.email, role: "member" })).role).toBe("member");
+  expect((await ok("vault_transfer_ownership", { vault_id: team.id, email: friend.email })).role).toBe("owner");
+  expect((await ok("vault_transfer_ownership", { vault_id: team.id, email: me.email }, friend.token)).role).toBe("owner");
   expect((await ok("vault_leave", { vault_id: team.id }, friend.token)).left).toBe(true);
+  // invitations an agent can answer itself: see it, decline it, be invited again, accept it
   await ok("vault_invite", { vault_id: team.id, email: friend.email });
+  expect((await ok("vault_invitations", {}, friend.token)).results.map((i: { vault_id: string }) => i.vault_id)).toContain(team.id);
+  expect((await ok("vault_decline_invitation", { vault_id: team.id }, friend.token)).declined).toBe(true);
+  await ok("vault_invite", { vault_id: team.id, email: friend.email });
+  expect((await ok("vault_accept_invitation", { vault_id: team.id }, friend.token)).role).toBe("member");
   expect((await ok("vault_remove_member", { vault_id: team.id, email: friend.email })).removed).toBe(true);
   await other.dispose();
   for (const v of [team.id, copy.id, both.id]) expect((await ok("vault_delete", { vault_id: v })).deleted).toBe(true);
