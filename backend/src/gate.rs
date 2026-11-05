@@ -81,8 +81,13 @@ pub fn explicit_class(method: &Method, path: &str) -> Option<Class> {
         ["api", "entities", ..] => Vault(if read { scopes::MEMORY_READ } else { scopes::MEMORY_WRITE }),
         ["api", "documents", ..] => Vault(if read { scopes::MEMORY_READ } else { scopes::MEMORY_WRITE }),
         ["api", "vaults", ..] => Vault(if read { scopes::MEMORY_READ } else { scopes::VAULTS_ADMIN }),
+        // the live stream of what changes in the caller's vaults (#132): read-only, filtered to the token's vault
+        ["api", "events", "ws"] => Vault(scopes::MEMORY_READ),
         ["api", "connectors", ..] | ["api", "snapshot"] => Account(scopes::CONNECTORS),
         ["api", "sources", _, "webhook", _] => Webhook,
+        // another Eunomia (peer vaults): public, authenticated by the share secret or the link key, limited per client address
+        ["api", "peer", ..] => Webhook,
+        ["api", "peers", ..] => Account(scopes::VAULTS_ADMIN),
         // an extension's inbox: public, authenticated by its own secret, limited per client address
         ["hooks", "ext", _] => Webhook,
         ["api", "extensions", _, "events", ..] => Account(if read { scopes::MEMORY_READ } else { scopes::MEMORY_WRITE }),
@@ -362,9 +367,12 @@ mod tests {
         assert_eq!(class(Method::PATCH, "/api/entities/memory/memory:x"), Vault(scopes::MEMORY_WRITE));
         assert_eq!(class(Method::GET, "/api/vaults/vault:x/members"), Vault(scopes::MEMORY_READ));
         assert_eq!(class(Method::DELETE, "/api/vaults/vault:x"), Vault(scopes::VAULTS_ADMIN));
+        assert_eq!(class(Method::GET, "/api/events/ws"), Vault(scopes::MEMORY_READ));
         assert_eq!(class(Method::POST, "/api/sources/github/webhook/user:x"), Webhook);
         assert_eq!(class(Method::POST, "/api/sources/github/sync"), Account(scopes::CONNECTORS));
         assert_eq!(class(Method::POST, "/hooks/ext/abc_def"), Webhook);
+        assert_eq!(class(Method::POST, "/api/peer/v1/abc/links/def"), Webhook);
+        assert_eq!(class(Method::POST, "/api/peers/join"), Account(scopes::VAULTS_ADMIN));
         assert_eq!(class(Method::GET, "/api/extensions"), Account(scopes::CONNECTORS));
         assert_eq!(class(Method::POST, "/api/extensions/extension:x/rotate-secret"), Account(scopes::CONNECTORS));
         assert_eq!(class(Method::POST, "/api/extensions/extension:x/events/claim"), Account(scopes::MEMORY_WRITE));

@@ -326,6 +326,39 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
         }),
     );
 
+    for (name, repair) in [("vault_check", false), ("vault_repair", true)] {
+        register(
+            registry,
+            name,
+            json!({"type": "object", "properties": {"vault_id": {"type": "string"}}, "required": ["vault_id"]}),
+            Arc::new(move |state, owner, args| {
+                Box::pin(async move {
+                    let a: VaultIdArgs = match serde_json::from_value(args) {
+                        Ok(a) => a,
+                        Err(e) => return Ok(bad_args(e)),
+                    };
+                    let vault_id = match parse_rid("vault_id", &a.vault_id) {
+                        Ok(v) => v,
+                        Err(e) => return Ok(e),
+                    };
+                    let report = if repair {
+                        crate::integrity::repair(&state.db, owner, &vault_id).await
+                    } else {
+                        crate::integrity::check(&state.db, owner, &vault_id).await
+                    };
+                    Ok(match report {
+                        Ok(r) => serde_json::to_value(r).unwrap_or_else(|e| json!({ "error": format!("{name}: {e}") })),
+                        Err(e) => {
+                            let mut v = e.to_tool_value();
+                            v["error"] = format!("{name}: {}", e.detail()).into();
+                            v
+                        }
+                    })
+                })
+            }),
+        );
+    }
+
     register(
         registry,
         "vault_invitations",

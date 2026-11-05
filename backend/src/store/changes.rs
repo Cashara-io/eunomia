@@ -4,7 +4,7 @@
 
 use super::Stmt;
 
-pub const ALL: &[&Stmt] = &[&APPEND, &AFTER, &IDS_IN_VAULT];
+pub const ALL: &[&Stmt] = &[&APPEND, &AFTER, &IDS_IN_VAULT, &VAULT_AUDIENCE, &COUNTERS];
 
 /// Takes the next `len($items)` seqs from the vault's counter row and writes the changes, in one
 /// transaction: two writers to one vault conflict on the counter and one retries, so seqs never repeat
@@ -34,3 +34,9 @@ pub const IDS_IN_VAULT: Stmt = Stmt::new(
     "SELECT VALUE id FROM memory WHERE vault = $vault; SELECT VALUE id FROM relates_to WHERE in.vault = $vault; \
      SELECT VALUE id FROM document WHERE vault = $vault",
 );
+
+/// Everyone a vault-level event concerns: its members and invitees, any status (`changes::announce`).
+pub const VAULT_AUDIENCE: Stmt = Stmt::new("changes.vault_audience", "SELECT VALUE user FROM vault_member WHERE vault = $vault");
+
+/// The last seq handed out for each of `$ids` (`change_seq` rows; a vault with no changes has none).
+pub const COUNTERS: Stmt = Stmt::new("changes.counters", "SELECT id, n FROM $ids");

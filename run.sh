@@ -17,6 +17,10 @@ until docker exec "$DB" /surreal isready --endpoint http://localhost:8000 >/dev/
 
 [ -d frontend/node_modules ] || (cd frontend && bun install)
 
+# peer vaults: the LAN addresses a share code advertises (docs/peer-vaults.md)
+: "${EUNOMIA_LAN_ADDRS:=$(sh scripts/lan-addrs.sh 2>/dev/null || true)}"
+export EUNOMIA_LAN_ADDRS
+
 trap 'kill 0' EXIT INT TERM
 (cd backend && cargo run) &
 (cd frontend && bun run dev) &

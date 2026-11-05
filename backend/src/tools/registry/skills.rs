@@ -316,6 +316,16 @@ async fn delete(state: &OrgState, owner: &RecordId, id: &str) -> AppResult<Value
     Ok(json!({ "deleted": skill.id.to_string() }))
 }
 
+/// Peer sync (`peers::sync`): save a skill into `vault` as `owner`, exactly as `skill_save` would.
+pub(crate) async fn save_in(state: &OrgState, owner: &RecordId, vault: &RecordId, name: &str, description: &str, body: &str) -> AppResult<Value> {
+    save(state, owner, SaveArgs { name: name.to_string(), description: description.to_string(), body: body.to_string(), vault_id: Some(vault.to_string()) }).await
+}
+
+/// Peer sync: delete one skill by id, exactly as `skill_delete` would.
+pub(crate) async fn delete_by_id(state: &OrgState, owner: &RecordId, id: &RecordId) -> AppResult<Value> {
+    delete(state, owner, &id.to_string()).await
+}
+
 #[derive(Deserialize)]
 struct SaveArgs {
     name: String,

@@ -145,7 +145,6 @@ test("a Pocket recording is stored whole, embedded, graphed, and deletable", asy
     await page.getByRole("button", { name: "Delete all heypocket data" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toContainText("3 heypocket records");
-    await dialog.getByRole("button", { name: "Continue" }).click();
     const confirm = dialog.getByRole("button", { name: "Delete everything" });
     await expect(confirm).toBeDisabled();
     await dialog.getByRole("textbox").fill("heypocket");

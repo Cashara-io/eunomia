@@ -136,7 +136,7 @@ fn clean_filename(name: &str) -> AppResult<String> {
 }
 
 /// The object key's last segment: only the characters a bucket key allows, never `..`.
-fn safe_segment(name: &str) -> String {
+pub(crate) fn safe_segment(name: &str) -> String {
     let s: String = name.chars().take(100).map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') { c } else { '_' }).collect();
     let s = s.trim_start_matches('.').to_string();
     if s.is_empty() { "file".into() } else { s }
@@ -303,17 +303,17 @@ fn storage_error(e: surrealdb::Error) -> AppError {
         .with_source(e.to_string())
 }
 
-async fn put_object(db: &OrgDb, path: &str, bytes: Vec<u8>) -> AppResult<()> {
+pub(crate) async fn put_object(db: &OrgDb, path: &str, bytes: Vec<u8>) -> AppResult<()> {
     q::OBJECT_PUT.on(db).bind(("path", path.to_string())).bind(("bytes", Bytes::from(bytes))).await.map_err(storage_error)?;
     Ok(())
 }
 
-async fn get_object(db: &OrgDb, path: &str) -> AppResult<Option<Vec<u8>>> {
+pub(crate) async fn get_object(db: &OrgDb, path: &str) -> AppResult<Option<Vec<u8>>> {
     let mut res = q::OBJECT_GET.on(db).bind(("path", path.to_string())).await.map_err(storage_error)?;
     Ok(res.take::<Option<Bytes>>(0).map_err(storage_error)?.map(|b| b.to_vec()))
 }
 
-async fn delete_object(db: &OrgDb, path: &str) -> AppResult<()> {
+pub(crate) async fn delete_object(db: &OrgDb, path: &str) -> AppResult<()> {
     q::OBJECT_DELETE.on(db).bind(("path", path.to_string())).await.map_err(storage_error)?;
     Ok(())
 }

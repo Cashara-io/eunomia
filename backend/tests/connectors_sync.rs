@@ -940,3 +940,96 @@ async fn the_owner_name_setting_round_trips() {
     let (_, body) = app.http("GET", "/api/settings", None, true).await;
     assert_eq!(body["owner_name"], json!("Sam Roberts"), "{body}");
 }
+
+// --- Pocket audio (#117) ----------------------------------------------------------------------------
+
+async fn pocket_conn(org: &OrgState, owner: &RecordId, base: &str, store_audio: bool) -> service::Connector {
+    connect(org, owner, "pocketai", base, json!({"store_audio": store_audio}), json!({"api_key": "pk_test"})).await;
+    service::get_or_create_connector(&org.db, owner, "pocketai").await.unwrap()
+}
+
+async fn audio_row(org: &OrgState, owner: &RecordId, rid: &str) -> Value {
+    let id = RecordId::from_table_key("pocket_recording", format!("{}:{rid}", owner_key_str(owner)));
+    let mut res = org.db.test_raw().query("SELECT audio_path, audio_media_type, audio_bytes FROM ONLY $id").bind(("id", id)).await.unwrap();
+    res.take::<Option<Value>>(0).unwrap().unwrap_or(Value::Null)
+}
+
+async fn bucket_bytes(org: &OrgState, path: &str) -> Option<Vec<u8>> {
+    let mut res = org.db.test_raw().query("file::get(type::file('documents', $p))").bind(("p", path.to_string())).await.unwrap();
+    res.take::<Option<surrealdb::types::Bytes>>(0).unwrap().map(|b| b.to_vec())
+}
+
+fn audio_hits(mock: &eunomia_backend::sources::mock::Mock) -> usize {
+    mock.requests().iter().filter(|r| r.path.ends_with("/audio")).count()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn pocket_audio_is_off_by_default_and_never_requested() {
+    let (app, org) = app_with(None).await;
+    let owner = app.user.id.clone();
+    let mock = serve(vec![route("GET", "/public/recordings/rec_a/audio", json!(null)).raw("AUDIO").header("content-type", "audio/mp4")]).await;
+    let conn = pocket_conn(&org, &owner, &mock.base, false).await;
+    let rec = json!({"id": "rec_a", "title": "Standup", "recording_at": "2024-05-02T09:00:00Z"});
+    let report = registry::ingest_via(&org, &owner, &[rec], &HeyPocketSource, Some(&conn)).await.unwrap();
+    assert_eq!(report.failed, 0, "{:?}", report.errors);
+    assert_eq!(audio_hits(&mock), 0);
+    assert!(audio_row(&org, &owner, "rec_a").await["audio_path"].is_null());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn pocket_audio_not_uploaded_yet_is_fetched_on_a_later_sync_once_and_kept_across_resyncs() {
+    let (app, org) = app_with(None).await;
+    let owner = app.user.id.clone();
+    let rec = json!({"id": "rec_b", "title": "1:1", "recording_at": "2024-05-02T09:00:00Z"});
+
+    // the device has not uploaded it: 404, the sync still succeeds and stores the transcript side
+    let empty = serve(vec![]).await;
+    let conn = pocket_conn(&org, &owner, &empty.base, true).await;
+    let report = registry::ingest_via(&org, &owner, &[rec.clone()], &HeyPocketSource, Some(&conn)).await.unwrap();
+    assert_eq!(report.failed, 0, "{:?}", report.errors);
+    assert_eq!(audio_hits(&empty), 1);
+    assert!(audio_row(&org, &owner, "rec_b").await["audio_path"].is_null());
+
+    // uploaded now: the next sync stores the exact bytes
+    let mock = serve(vec![route("GET", "/public/recordings/rec_b/audio", json!(null)).raw("AUDIO-BYTES").header("content-type", "audio/mpeg")]).await;
+    let conn = pocket_conn(&org, &owner, &mock.base, true).await;
+    registry::ingest_via(&org, &owner, &[rec.clone()], &HeyPocketSource, Some(&conn)).await.unwrap();
+    let row = audio_row(&org, &owner, "rec_b").await;
+    let path = row["audio_path"].as_str().unwrap_or_else(|| panic!("{row}")).to_string();
+    assert!(path.ends_with("/rec_b.mp3"), "{path}");
+    assert_eq!((row["audio_media_type"].clone(), row["audio_bytes"].clone()), (json!("audio/mpeg"), json!(11)));
+    assert_eq!(bucket_bytes(&org, &path).await.as_deref(), Some(&b"AUDIO-BYTES"[..]));
+    assert_eq!(mock.requests()[0].header("authorization"), "Bearer pk_test");
+
+    // a re-sync of the same recording keeps the audio fields and does not download again
+    registry::ingest_via(&org, &owner, &[rec], &HeyPocketSource, Some(&conn)).await.unwrap();
+    assert_eq!(audio_row(&org, &owner, "rec_b").await["audio_path"], json!(path));
+    assert_eq!(audio_hits(&mock), 1);
+
+    // playable over REST by its owner; unknown recordings are 404
+    assert_eq!(app.http("GET", "/api/connectors/pocketai/recordings/rec_b/audio", None, true).await.0, 200);
+    assert_eq!(app.http("GET", "/api/connectors/pocketai/recordings/nope/audio", None, true).await.0, 404);
+
+    // deleting the connection's data removes the file too
+    registry::delete_data(&org.db, &owner, &conn).await.unwrap();
+    assert_eq!(bucket_bytes(&org, &path).await, None);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn pocket_audio_over_the_cap_is_refused_and_a_signed_url_is_followed() {
+    let (_app, _org) = app_with(None).await;
+    let mock = serve(vec![
+        route("GET", "/public/recordings/big/audio", json!(null)).raw("0123456789").header("content-type", "audio/mp4"),
+        route("GET", "/public/recordings/signed/audio", json!({"data": {"url": "{base}/s3/signed.m4a"}})),
+        route("GET", "/s3/signed.m4a", json!(null)).raw("SIGNED").header("content-type", "audio/mp4"),
+    ])
+    .await;
+    let client = eunomia_backend::connectors::clients::PocketAIClient::new(&json!({"api_key": "pk"}), &json!({"base_url": mock.base})).unwrap();
+    let err = client.audio("big", 4).await.expect_err("over the cap");
+    assert!(err.message.contains(eunomia_backend::connectors::clients::TOO_LARGE), "{}", err.message);
+    assert!(client.audio("missing", 4).await.unwrap().is_none(), "404: not uploaded yet");
+    let (bytes, media_type) = client.audio("signed", 100).await.unwrap().unwrap();
+    assert_eq!((bytes.as_slice(), media_type.as_str()), (&b"SIGNED"[..], "audio/mp4"));
+    let signed = mock.requests().into_iter().find(|r| r.path == "/s3/signed.m4a").unwrap();
+    assert_eq!(signed.header("authorization"), "", "our key never goes to the signed URL");
+}

@@ -12,9 +12,12 @@ import {
   listEntities,
   mergeEntities,
   updateEntity,
+  updateMemory,
 } from "@/lib/gen";
 import type { Cloud, CloudSimilarity, EntityDetail, EntityGraph, EntityKind, EntityMemory, EntityRelation, EntitySummary } from "@/lib/types";
-import { call, LIVE_POLL_MS } from "./client";
+import { call } from "./client";
+import { invoke } from "./tools";
+import { livePoll } from "./liveStatus";
 
 export const entityKeys = {
   all: ["entities"] as const,
@@ -44,7 +47,7 @@ export const useEntityGraph = (opts: { kinds?: EntityKind[]; vaultId?: string })
     queryFn: () => call(getEntityGraph({ query: { kinds: opts.kinds, vault_id: opts.vaultId } })) as Promise<EntityGraph>,
     // Switching vault keeps the old graph on screen until the new one lands.
     placeholderData: keepPreviousData,
-    refetchInterval: LIVE_POLL_MS,
+    refetchInterval: livePoll,
   });
 
 export const useEntityCloud = (vaultIds: string[]) =>
@@ -54,7 +57,7 @@ export const useEntityCloud = (vaultIds: string[]) =>
     // Layering another vault keeps the old points until the new cloud lands.
     placeholderData: keepPreviousData,
     enabled: vaultIds.length > 0,
-    refetchInterval: LIVE_POLL_MS,
+    refetchInterval: livePoll,
   });
 
 /** Cosine / distance / correlation between cloud points on their full vectors, computed server-side. */
@@ -94,3 +97,16 @@ export const useMergeEntities = () =>
   useEntityMutation(({ winnerId, loserId }: { winnerId: string; loserId: string }) =>
     call(mergeEntities({ path: { entity_id: winnerId }, body: { loser_id: loserId } })) as Promise<EntitySummary>,
   );
+
+/** Edit a memory's text (the `memory_update` tool's REST twin). */
+export const useUpdateMemory = () =>
+  useEntityMutation(({ memoryId, text }: { memoryId: string; text: string }) =>
+    call(updateMemory({ path: { memory_id: memoryId }, body: { text } })) as Promise<EntityMemory>,
+  );
+
+/** What `consolidate_observations` reports. */
+export type ConsolidateResult = { consolidated?: string[]; skipped?: string[]; errors?: string[]; note?: string; error?: string };
+
+/** Fold an entity's new facts into its summary observation (the `consolidate_observations` tool). Needs a model. */
+export const useConsolidateObservations = () =>
+  useEntityMutation((subjectId: string) => invoke<ConsolidateResult>("consolidate_observations", { subject_id: subjectId }));

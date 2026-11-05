@@ -1,5 +1,5 @@
 // Inspired by React Bits HoldButton (reactbits.dev). Original implementation for Eunomia.
-// Usage: <HoldButton holdMs={900} onConfirm={deleteVault} className="btn-sm"><Trash2 /> Delete vault</HoldButton> renders a .btn.btn-danger.
+// Usage: <HoldButton holdMs={900} onConfirm={revokeAll} className="btn-sm"><Trash2 /> Revoke all</HoldButton> renders a .btn.btn-danger (red edge and text; the hold fill is the soft red wash).
 // Click, Enter or Space confirm at once (no fill); a pointer hold confirms after holdMs. Pass onClick to make the click do something else (e.g. arm a confirm step) while the hold still confirms.
 "use client";
 

@@ -203,6 +203,7 @@ pub async fn create_vault(db: &OrgDb, user_id: &RecordId, name: &str, kind: &str
     })
     .await?
     .ok_or_else(|| AppError::internal("vault insert returned no row"))?;
+    crate::changes::announce(db, &vault.id, crate::changes::VAULT_CREATED, &[]).await;
     Ok(vault.into())
 }
 
@@ -395,6 +396,7 @@ pub async fn rename_vault(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId, n
         .await?;
     let rows: Vec<VaultFullRow> = res.take(0)?;
     let vault = rows.into_iter().next().ok_or_else(|| AppError::internal("vault update returned no row"))?;
+    crate::changes::announce(db, vault_id, crate::changes::VAULT_RENAMED, &[]).await;
     Ok(vault.into())
 }
 
@@ -405,6 +407,8 @@ pub async fn rename_vault(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId, n
 /// cascade if dangling vault data ever becomes a real problem).
 pub async fn delete_vault(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId) -> AppResult<()> {
     authz::authorize(db, user_id, Action::Delete, vault_id).await?;
+    // read before the memberships go, so everyone who had it hears it is gone
+    let audience = crate::changes::audience(db, vault_id).await;
     crate::documents::purge_vault_documents(db, vault_id).await?;
     with_retry(|| async {
         store::vaults::DELETE_VAULT.on(db)
@@ -414,6 +418,7 @@ pub async fn delete_vault(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId) -
             .check()
     })
     .await?;
+    crate::changes::announce(db, vault_id, crate::changes::VAULT_DELETED, &audience).await;
     Ok(())
 }
 
@@ -466,6 +471,7 @@ pub async fn invite_member(
         })?;
     let rows: Vec<MembershipRow> = res.take(0)?;
     let member = rows.into_iter().next().ok_or_else(|| AppError::internal("vault_member insert returned no row"))?;
+    crate::changes::announce(db, vault_id, crate::changes::VAULT_MEMBER_INVITED, &[]).await;
 
     Ok(InviteOut { vault_id: vault_id.to_string(), user_email: email.to_string(), role: member.role })
 }
@@ -542,6 +548,7 @@ pub async fn accept_invitation(db: &OrgDb, user_id: &RecordId, vault_id: &Record
     .await?;
     let rows: Vec<VaultFullRow> = res.take(store::vaults::ACCEPT_INVITATION.slot)?;
     let vault = rows.into_iter().next().ok_or_else(|| AppError::bad_request("no pending invitation for this vault"))?;
+    crate::changes::announce(db, vault_id, crate::changes::VAULT_INVITATION_ACCEPTED, &[]).await;
     let v: VaultOut = vault.into();
     Ok(VaultWithRole { id: v.id, name: v.name, kind: v.kind, created_at: v.created_at, role: m.role })
 }
@@ -555,6 +562,7 @@ pub async fn decline_invitation(db: &OrgDb, user_id: &RecordId, vault_id: &Recor
         .ok_or_else(|| AppError::bad_request("no pending invitation for this vault"))?;
 
     store::vaults::DELETE_RECORD.on(db).bind(("id", m.id)).await?;
+    crate::changes::announce(db, vault_id, crate::changes::VAULT_INVITATION_DECLINED, std::slice::from_ref(user_id)).await;
     Ok(())
 }
 
@@ -584,6 +592,7 @@ pub async fn remove_member(db: &OrgDb, control: &ControlDb, user_id: &RecordId, 
     .map_err(|e| {
         if e.to_string().contains("last_owner") { AppError::bad_request("cannot remove the last owner") } else { e.into() }
     })?;
+    crate::changes::announce(db, vault_id, crate::changes::VAULT_MEMBER_REMOVED, &[target_id]).await;
     Ok(())
 }
 
@@ -614,6 +623,7 @@ pub async fn set_member_role(db: &OrgDb, control: &ControlDb, user_id: &RecordId
     .map_err(|e| {
         if e.to_string().contains("last_owner") { AppError::bad_request("cannot demote the last owner") } else { e.into() }
     })?;
+    crate::changes::announce(db, vault_id, crate::changes::VAULT_ROLE_CHANGED, &[]).await;
     Ok(MemberOut { email: crate::models_user::normalize_email(email), role: role.to_string() })
 }
 
@@ -641,6 +651,7 @@ pub async fn transfer_ownership(db: &OrgDb, control: &ControlDb, user_id: &Recor
         .check()
     })
     .await?;
+    crate::changes::announce(db, vault_id, crate::changes::VAULT_OWNERSHIP_TRANSFERRED, &[]).await;
     Ok(MemberOut { email: crate::models_user::normalize_email(email), role: "owner".to_string() })
 }
 
@@ -983,6 +994,7 @@ pub async fn clone_vault(
     let copied = copy_into(db, user_id, vault_id, &staged.id, false).await;
     let copied = publish_or_discard(db, user_id, &staged.id, copied).await?;
     log_copy(db, &staged.id).await?;
+    crate::changes::announce(db, &staged.id, crate::changes::VAULT_CLONED, &[]).await;
     let clone: VaultOut = staged.into();
 
     Ok(CloneOut {
@@ -1057,6 +1069,7 @@ pub async fn merge_vaults(
     .await;
     let entities = publish_or_discard(db, user_id, &dest, copied).await?;
     log_copy(db, &dest).await?;
+    crate::changes::announce(db, &dest, crate::changes::VAULT_MERGED, &[]).await;
     let merged: VaultOut = staged.into();
     Ok(MergeOut {
         id: merged.id,
@@ -1097,6 +1110,7 @@ pub async fn leave_vault(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId) ->
             e.into()
         }
     })?;
+    crate::changes::announce(db, vault_id, crate::changes::VAULT_LEFT, std::slice::from_ref(user_id)).await;
     Ok(())
 }
 

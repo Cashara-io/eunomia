@@ -86,9 +86,11 @@ test.describe("Onboarding: Connect your AI", () => {
     await page.waitForURL((url) => url.pathname === "/");
     expect(await tokenNames(page)).toEqual([]);
 
-    // The same guides live on the dashboard afterwards.
-    const card = page.locator("#connect");
-    await card.getByRole("tab", { name: "Codex" }).click();
+    // The same token guides live on Home's connection steps afterwards, as the advanced option.
+    await page.getByRole("link", { name: /^Codex/ }).click();
+    await page.getByText("Advanced: connect with an API token instead").click();
+    const card = page.getByRole("tabpanel");
+    await expect(page.getByRole("tab", { name: "Codex" })).toHaveAttribute("aria-selected", "true");
     await card.getByRole("button", { name: "Generate a token" }).click();
     await expect(card.getByLabel("Config", { exact: true })).toContainText(`${new URL(page.url()).origin}/mcp`);
     expect(await tokenNames(page)).toEqual(["Codex"]);

@@ -46,7 +46,7 @@ function computeFit(nodes: { x?: number; y?: number }[], w: number, h: number, i
 function ToolButton({ label, icon, run }: { label: string; icon: React.ReactNode; run: () => void }) {
   return (
     <Tooltip label={label}>
-      <button type="button" className="btn btn-ghost btn-sm btn-icon w-[26px]" aria-label={label} onClick={run}>
+      <button type="button" className="btn btn-ghost btn-sm btn-icon" aria-label={label} onClick={run}>
         {icon}
       </button>
     </Tooltip>
@@ -325,14 +325,14 @@ export default function GraphCanvas({
       </svg>
 
       <TooltipGroup>
-        <div className="panel p-0.5 absolute right-4 md:right-[25.5rem] bottom-4 flex gap-0.5">
-          <ToolButton label="Zoom in" icon={<Plus size={13} strokeWidth={1.75} />} run={() => zoomBy(1 + ZOOM_STEP)} />
-          <ToolButton label="Zoom out" icon={<Minus size={13} strokeWidth={1.75} />} run={() => zoomBy(1 - ZOOM_STEP)} />
-          <ToolButton label="Fit to view" icon={<Maximize2 size={13} strokeWidth={1.75} />} run={fitToView} />
-          <ToolButton label="Reset view" icon={<RotateCcw size={13} strokeWidth={1.75} />} run={resetView} />
+        <div className="panel p-1 absolute right-4 md:right-[25.5rem] bottom-4 flex gap-1">
+          <ToolButton label="Zoom in" icon={<Plus size={16} strokeWidth={1.75} />} run={() => zoomBy(1 + ZOOM_STEP)} />
+          <ToolButton label="Zoom out" icon={<Minus size={16} strokeWidth={1.75} />} run={() => zoomBy(1 - ZOOM_STEP)} />
+          <ToolButton label="Fit to view" icon={<Maximize2 size={16} strokeWidth={1.75} />} run={fitToView} />
+          <ToolButton label="Reset view" icon={<RotateCcw size={16} strokeWidth={1.75} />} run={resetView} />
         </div>
       </TooltipGroup>
-      <p className="label absolute left-10 bottom-4 hidden md:block pointer-events-none">Drag to rearrange, scroll to zoom, click a node to open it</p>
+      <p className="label absolute left-4 sm:left-8 lg:left-12 bottom-4 hidden md:block pointer-events-none">Drag to rearrange · Scroll to zoom · Click a name to open it</p>
     </div>
   );
 }

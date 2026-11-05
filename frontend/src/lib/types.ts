@@ -181,7 +181,15 @@ export type ToolRecord = ToolHit & {
   body_text: string;
   payload: Record<string, unknown>;
   /** A Pocket recording or transcript chunk: the whole stored recording. */
-  recording?: { summary: string; action_items: string[]; transcript: string };
+  recording?: {
+    summary: string;
+    action_items: string[];
+    transcript: string;
+    recording_id?: string;
+    /** Set when Eunomia kept the recording's audio (connector option `store_audio`, #117). */
+    audio_media_type?: string | null;
+    audio_bytes?: number | null;
+  };
 };
 
 export type BuiltInKind = "person" | "organisation" | "location" | "repository" | "file" | "symbol";

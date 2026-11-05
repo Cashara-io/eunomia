@@ -22,7 +22,7 @@ export default function ResolveMark({ size = 36, still = false }: { size?: numbe
         .resolve-mark .bits-draw { --bits-draw-ms: 200ms; }
         @media (prefers-reduced-motion: reduce) { .resolve-mark .resolve-point, .resolve-mark .resolve-core { animation: none; } }
       `}</style>
-      <rect width="24" height="24" rx="6" fill="var(--accent)" />
+      <rect width="24" height="24" rx="4" fill="var(--accent)" />
       <g stroke="var(--on-accent)" strokeWidth="1.5" strokeLinecap="round" opacity="0.55">
         {POINTS.map((p, i) => (
           // Drawn from the outer point toward the centre, after that point lands.

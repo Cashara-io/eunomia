@@ -16,7 +16,9 @@ use axum::{
     Json, Router,
 };
 use serde::Deserialize;
-use surrealdb::types::RecordId;
+use surrealdb::types::{RecordId, SurrealValue};
+
+use crate::rid::RecordIdExt;
 use tokio::sync::broadcast::error::RecvError;
 
 use crate::authz::{self, Action};
@@ -43,7 +45,10 @@ fn recheck_every() -> Duration {
 }
 
 pub fn router() -> Router<AppState> {
-    Router::new().route("/vaults/{vault_id}/changes", get(list_changes)).route("/vaults/{vault_id}/changes/ws", get(follow_changes))
+    Router::new()
+        .route("/vaults/{vault_id}/changes", get(list_changes))
+        .route("/vaults/{vault_id}/changes/ws", get(follow_changes))
+        .route("/events/ws", get(follow_events))
 }
 
 fn default_limit() -> i64 {
@@ -199,6 +204,190 @@ async fn send(socket: &mut WebSocket, change: &Change, last: &mut i64) -> Result
     Ok(())
 }
 
+// --- The per-user live stream (#132) --------------------------------------------------------------
+// One socket per browser tab instead of one per vault: what changed in any vault the user can read
+// (the change log, `change` messages) and what happened to the vaults themselves (`vault` messages,
+// `changes::announce`), so an open page refetches only what an agent, another tab or another member
+// just changed. Messages are JSON text with a `type`:
+//
+// - `hello` {vaults: {vault id: last seq}}: first, and after every reconnect. A client that remembers
+//   an older seq for a vault missed changes there and refetches that vault's views (catch-up without
+//   replaying the log); one that was connected before refetches its vault list (vault events are not
+//   kept).
+// - `change` {vault, seq, op, kind, id, actor, at}: a change-log row, as it commits in this process.
+// - `seq` {vault, seq}: the log moved past what this socket sent (another replica, a missed
+//   broadcast), found by the periodic check; refetch that vault's views.
+// - `vault` {vault, op, actor}: something happened to the vault itself (`changes::VAULT_*` ops).
+// - `vaults`: the set of vaults the user can read changed without an event this process saw.
+// - `resync`: this socket fell behind the in-process bus; refetch everything.
+// - `heartbeat` {at}: every few seconds, so a client can tell a quiet socket from a dead one (a
+//   browser never sees WebSocket pings).
+
+/// How often the per-user stream sends a heartbeat and re-reads the vaults' counters.
+const EVENTS_TICK: Duration = Duration::from_secs(10);
+
+#[utoipa::path(
+    operation_id = "followEvents",
+    get,
+    path = "/api/events/ws",
+    tag = "vaults",
+    summary = "Follow everything that changes in the caller's vaults over one WebSocket",
+    description = "Upgrades to a WebSocket that sends JSON text messages with a `type`: `hello` (each vault's last change seq, first and on every reconnect), `change` (a change-log row of any vault the caller can read), `seq` (a vault's log moved on; refetch it), `vault` (a vault was created, renamed, deleted, cloned, merged, or its members changed), `vaults` (the caller's vault set changed), `resync` (refetch everything) and `heartbeat`. No content: fetch what changed. A browser authenticates with its session cookie from an allowed origin; other clients send a Bearer token.",
+    responses((status = 101, description = "Switching to the WebSocket protocol"), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = []), ("bearer" = [])),
+)]
+async fn follow_events(State(app): State<AppState>, user: User, headers: HeaderMap, ws: WebSocketUpgrade) -> AppResult<Response> {
+    if !super::mcp::origin_allowed(&headers, &app.settings.cors_allowed_origins) {
+        return Err(AppError::coded(ErrorCode::AuthScope, "this origin may not follow changes with a session cookie"));
+    }
+    authz::require_scope(Action::ReadMemories.scope())?;
+    let state = app.org(&user.org).await?;
+    Ok(ws.on_upgrade(move |socket| follow_user(socket, state, headers, user.id)))
+}
+
+/// The vaults the credential in `headers` may read now, as a sorted list of ids; `Denied` once it no
+/// longer verifies (signed out, token revoked, scope gone).
+async fn readable_vaults(state: &OrgState, headers: &HeaderMap) -> Result<Vec<RecordId>, Stop> {
+    let authn = match crate::auth::authenticate(&state.app, headers, false).await {
+        Ok(Some(a)) => a,
+        _ => return Err(Stop::Denied("credential no longer valid".into())),
+    };
+    let user = authn.user.id.clone();
+    let vaults = authz::with_caller(authn.caller, async {
+        authz::require_scope(Action::ReadMemories.scope())?;
+        crate::vaults::service::accessible_vault_ids(&state.db, &user).await
+    })
+    .await;
+    match vaults {
+        Ok(mut v) => {
+            v.sort_by_key(|a| a.to_string());
+            v.dedup();
+            Ok(v)
+        }
+        Err(e) if e.code == ErrorCode::AuthScope || e.code == ErrorCode::AuthUnauthorized => Err(Stop::Denied(e.message)),
+        Err(_) => Err(Stop::Gone),
+    }
+}
+
+/// Each vault's last seq (0 for one with no changes yet), by vault id.
+async fn counters(state: &OrgState, vaults: &[RecordId]) -> Result<std::collections::HashMap<String, i64>, Stop> {
+    #[derive(Deserialize, SurrealValue)]
+    struct Row {
+        id: RecordId,
+        n: i64,
+    }
+    let ids: Vec<RecordId> = vaults.iter().map(changes::counter).collect();
+    let rows: Vec<Row> = crate::store::changes::COUNTERS
+        .on(&state.db)
+        .bind(("ids", ids))
+        .await
+        .and_then(|mut r| r.take(0))
+        .map_err(|_| Stop::Gone)?;
+    let mut out: std::collections::HashMap<String, i64> = vaults.iter().map(|v| (v.to_string(), 0)).collect();
+    for row in rows {
+        out.insert(RecordId::from_table_key("vault", row.id.key().clone()).to_string(), row.n);
+    }
+    Ok(out)
+}
+
+async fn send_json(socket: &mut WebSocket, value: serde_json::Value) -> Result<(), Stop> {
+    socket.send(Message::Text(value.to_string().into())).await.map_err(|_| Stop::Gone)
+}
+
+async fn follow_user(mut socket: WebSocket, state: OrgState, headers: HeaderMap, user: RecordId) {
+    use serde_json::json;
+    // subscribe before reading anything, so an event committed in between is not missed
+    let mut rx = changes::subscribe();
+    let mut vrx = changes::subscribe_vaults();
+    let mut checked = Instant::now();
+    let mut tick = tokio::time::interval_at(tokio::time::Instant::now() + EVENTS_TICK, EVENTS_TICK);
+
+    let start = async {
+        let vaults = readable_vaults(&state, &headers).await?;
+        let last = counters(&state, &vaults).await?;
+        send_json(&mut socket, json!({"type": "hello", "vaults": last})).await?;
+        Ok::<_, Stop>((vaults, last))
+    }
+    .await;
+    let (mut vaults, mut last) = match start {
+        Ok(v) => v,
+        Err(stop) => return close(socket, stop).await,
+    };
+
+    let result: Result<(), Stop> = loop {
+        let step = tokio::select! {
+            msg = socket.recv() => match msg {
+                Some(Ok(Message::Close(_))) | Some(Err(_)) | None => Err(Stop::Gone),
+                _ => Ok(()),
+            },
+            _ = tick.tick() => async {
+                if checked.elapsed() >= recheck_every() {
+                    checked = Instant::now();
+                    let now = readable_vaults(&state, &headers).await?;
+                    if now != vaults {
+                        vaults = now;
+                        send_json(&mut socket, json!({"type": "vaults"})).await?;
+                    }
+                }
+                socket.send(Message::Ping(Default::default())).await.map_err(|_| Stop::Gone)?;
+                send_json(&mut socket, json!({"type": "heartbeat", "at": chrono::Utc::now().to_rfc3339()})).await?;
+                // rows another replica wrote, or a broadcast this socket missed
+                for (vault, seq) in counters(&state, &vaults).await? {
+                    let known = last.get(&vault).copied().unwrap_or(0);
+                    if seq > known {
+                        send_json(&mut socket, json!({"type": "seq", "vault": vault, "seq": seq})).await?;
+                    }
+                    last.insert(vault, seq);
+                }
+                Ok::<(), Stop>(())
+            }.await,
+            ev = rx.recv() => match ev {
+                Ok(ev) if ev.org != state.db.org() || !vaults.contains(&ev.vault) => Ok(()),
+                Ok(ev) => async {
+                    let vault = ev.vault.to_string();
+                    let known = last.entry(vault.clone()).or_insert(0);
+                    if ev.change.seq > *known {
+                        *known = ev.change.seq;
+                    }
+                    let mut msg = serde_json::to_value(&ev.change).map_err(|_| Stop::Gone)?;
+                    msg["type"] = json!("change");
+                    msg["vault"] = json!(vault);
+                    send_json(&mut socket, msg).await
+                }.await,
+                Err(RecvError::Lagged(_)) => send_json(&mut socket, json!({"type": "resync"})).await,
+                Err(RecvError::Closed) => Err(Stop::Gone),
+            },
+            ev = vrx.recv() => match ev {
+                Ok(ev) if ev.org != state.db.org() || !(ev.users.contains(&user) || vaults.contains(&ev.vault)) => Ok(()),
+                Ok(ev) => async {
+                    send_json(&mut socket, json!({"type": "vault", "vault": ev.vault.to_string(), "op": ev.op, "actor": ev.actor})).await?;
+                    // membership may have changed: follow the vaults the user can read now
+                    checked = Instant::now();
+                    vaults = readable_vaults(&state, &headers).await?;
+                    for (vault, seq) in counters(&state, &vaults).await? {
+                        last.entry(vault).or_insert(seq);
+                    }
+                    Ok::<(), Stop>(())
+                }.await,
+                Err(RecvError::Lagged(_)) => send_json(&mut socket, json!({"type": "resync"})).await,
+                Err(RecvError::Closed) => Err(Stop::Gone),
+            },
+        };
+        if let Err(stop) = step {
+            break Err(stop);
+        }
+    };
+    if let Err(stop) = result {
+        close(socket, stop).await;
+    }
+}
+
+async fn close(mut socket: WebSocket, stop: Stop) {
+    if let Stop::Denied(reason) = stop {
+        let _ = socket.send(Message::Close(Some(CloseFrame { code: 1008, reason: reason.into() }))).await;
+    }
+}
+
 #[derive(utoipa::OpenApi)]
-#[openapi(paths(list_changes, follow_changes))]
+#[openapi(paths(list_changes, follow_changes, follow_events))]
 pub struct Doc;

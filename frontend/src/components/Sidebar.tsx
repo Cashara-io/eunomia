@@ -1,34 +1,51 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BookOpen, Brain, FileText, FolderGit2, LayoutDashboard, LogOut, Menu, MessageSquare, Plug, Search, Settings, Share2, Vault, X } from "lucide-react";
+import {
+  BookOpen,
+  BrainCircuit,
+  Code,
+  Files,
+  House,
+  Layers,
+  LogOut,
+  Menu,
+  MessagesSquare,
+  Plug,
+  Search,
+  SlidersHorizontal,
+  Users,
+  X,
+} from "lucide-react";
 import EunomiaMark from "./EunomiaMark";
-import ThemeToggle from "./ThemeToggle";
-import Tooltip, { TooltipGroup } from "./bits/Tooltip";
-import { authorColor } from "./AuthorTag";
 import { openCommandPalette } from "./CommandPalette";
 import { useMe, useLogout } from "@/lib/queries/auth";
 import { useSources } from "@/lib/queries/sources";
 import { useUpdateStatus } from "@/lib/queries/settings";
 import { isLiveSource, sourceHealth, sourceLabel } from "@/lib/sourceState";
 
-const STATIC_NAV = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/chat", label: "Chat", icon: MessageSquare },
-  { href: "/entities", label: "Entities", icon: Share2 },
-  { href: "/code", label: "Code", icon: FolderGit2 },
-  { href: "/vaults", label: "Vaults", icon: Vault },
-  { href: "/documents", label: "Documents", icon: FileText },
-  { href: "/skill", label: "Memory skill", icon: Brain },
-  { href: "/connectors", label: "Connectors", icon: Plug },
-  { href: "/docs", label: "Docs", icon: BookOpen },
-  { href: "/settings", label: "Settings", icon: Settings },
+// Visible labels follow the design spec; the routes stay as they were.
+export const MAIN_NAV = [
+  { href: "/", label: "Home", icon: House },
+  { href: "/chat", label: "Chat", icon: MessagesSquare },
+  { href: "/entities", label: "People & topics", icon: Users },
+  { href: "/vaults", label: "Memory spaces", icon: Layers },
+  { href: "/documents", label: "Documents", icon: Files },
+  { href: "/connectors", label: "Connected sources", icon: Plug },
+  { href: "/docs", label: "Help", icon: BookOpen },
+  { href: "/settings", label: "Settings", icon: SlidersHorizontal },
+];
+
+export const ADVANCED_NAV = [
+  { href: "/skill", label: "AI instructions", icon: BrainCircuit },
+  { href: "/code", label: "Code map", icon: Code },
 ];
 
 function isActive(pathname: string, href: string) {
-  return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
+  // The connection guides (/connect/...) belong to Home.
+  return href === "/" ? pathname === "/" || pathname.startsWith("/connect") : pathname === href || pathname.startsWith(`${href}/`);
 }
 
 function NavLink({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {
@@ -36,10 +53,20 @@ function NavLink({ href, active, children }: { href: string; active: boolean; ch
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
-      className="nav-link flex items-center gap-2.5 h-8 px-2.5 text-[13px] rounded-[7px]"
+      className="nav-link flex items-center gap-3 min-h-10 px-3 text-[14px]"
       data-active={active || undefined}
     >
       {children}
+    </Link>
+  );
+}
+
+/** The wordmark: the mark plus "eunomia", cream on the ink sidebar. */
+function Brand() {
+  return (
+    <Link href="/" className="flex items-center gap-2 min-w-0 rounded-[3px]" aria-label="Eunomia home">
+      <EunomiaMark size={22} />
+      <span className="text-[18px] font-semibold tracking-[-0.03em] truncate">eunomia</span>
     </Link>
   );
 }
@@ -48,7 +75,6 @@ export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const sourcesQuery = useSources();
-  // A failed load reads as nothing connected, as before.
   const rows = sourcesQuery.data ?? (sourcesQuery.isError ? [] : null);
   const me = useMe().data ?? null;
   const status = useUpdateStatus().data;
@@ -58,159 +84,161 @@ export default function Sidebar() {
   // closes it without an effect.
   const [drawerPath, setDrawerPath] = useState<string | null>(null);
   const drawerOpen = drawerPath === pathname;
-  const setDrawerOpen = (open: boolean) => setDrawerPath(open ? pathname : null);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  const wasOpen = useRef(false);
+
+  // Focus moves into the drawer when it opens and back to the menu button when it closes; Escape closes it.
+  useEffect(() => {
+    if (drawerOpen) {
+      wasOpen.current = true;
+      closeButton.current?.focus();
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key === "Escape") setDrawerPath(null);
+      };
+      window.addEventListener("keydown", onKey);
+      return () => window.removeEventListener("keydown", onKey);
+    }
+    if (wasOpen.current) {
+      wasOpen.current = false;
+      menuButton.current?.focus();
+    }
+  }, [drawerOpen]);
 
   const connected = rows?.filter(isLiveSource) ?? [];
+  const failing = connected.filter((s) => sourceHealth(s).label === "Failing");
 
   async function logout() {
     await logoutMutation.mutateAsync().catch(() => {});
     router.replace("/login");
   }
 
-  const brand = (
-    <div className="flex items-center gap-2 min-w-0">
-      <EunomiaMark size={20} />
-      <span className="font-display text-[15px] truncate" style={{ color: "var(--ink)" }}>
-        Eunomia
-      </span>
-      <span className="font-mono text-[10.5px]" style={{ color: "var(--ink-faint)" }}>
-        {process.env.NEXT_PUBLIC_APP_VERSION ?? "dev"}
-      </span>
-    </div>
-  );
+  // Source status, written in words.
+  const sourceStatus =
+    rows === null
+      ? "Checking sources…"
+      : failing.length > 0
+        ? `Source: ${sourceLabel(failing[0])} needs attention`
+        : connected.length === 0
+          ? "No sources connected"
+          : connected.length === 1
+            ? `Source: ${sourceLabel(connected[0])} connected`
+            : `Sources: ${connected.length} connected`;
 
-  // Search / nav / connected sources / account footer -- shared verbatim
-  // between the desktop sidebar and the mobile drawer.
+  const version = process.env.NEXT_PUBLIC_APP_VERSION ?? "dev";
+
   const navBody = (
     <>
-      <div className="px-3">
-        <button
-          onClick={openCommandPalette}
-          className="field w-full h-8 px-2.5 flex items-center gap-2 text-[13px] text-left"
-          style={{ color: "var(--ink-faint)" }}
-        >
-          <Search size={14} />
+      <div className="px-4">
+        <button onClick={openCommandPalette} className="sidebar-search w-full min-h-10 px-3 flex items-center gap-2 text-[14px] text-left">
+          <Search size={18} strokeWidth={1.75} aria-hidden />
           <span className="flex-1">Search</span>
-          <span className="kbd">⌘K</span>
+          <span className="kbd" aria-hidden>
+            ⌘K
+          </span>
+          <span className="sr-only">(Command K)</span>
         </button>
       </div>
 
-      <div className="px-3 flex flex-col gap-px">
-        {STATIC_NAV.map(({ href, label, icon: Icon }) => (
+      <div className="px-4 flex flex-col gap-1">
+        {MAIN_NAV.map(({ href, label, icon: Icon }) => (
           <NavLink key={href} href={href} active={isActive(pathname, href)}>
-            <Icon size={15} strokeWidth={1.75} className="nav-icon shrink-0" />
+            <Icon size={20} strokeWidth={1.75} className="nav-icon shrink-0" aria-hidden />
             <span className="flex-1">{label}</span>
           </NavLink>
         ))}
-        {newVersion && (
-          <Link
-            href="/settings?tab=updates"
-            className="mt-2 flex items-center gap-2 h-8 px-2.5 text-[12.5px] rounded-[7px]"
-            style={{ color: "var(--accent-text)", background: "var(--accent-soft)" }}
-          >
-            <span className="dot" style={{ background: "var(--accent)" }} aria-hidden />
-            Update available · {newVersion}
-          </Link>
-        )}
+        <div className="caps sidebar-muted px-1 pt-4 pb-1.5" id="nav-advanced">
+          Advanced
+        </div>
+        <div role="group" aria-labelledby="nav-advanced" className="flex flex-col gap-1">
+          {ADVANCED_NAV.map(({ href, label, icon: Icon }) => (
+            <NavLink key={href} href={href} active={isActive(pathname, href)}>
+              <Icon size={20} strokeWidth={1.75} className="nav-icon shrink-0" aria-hidden />
+              <span className="flex-1">{label}</span>
+            </NavLink>
+          ))}
+        </div>
       </div>
 
-      <div className="flex-1 min-h-0 flex flex-col gap-1 px-3">
-        <div className="label px-2.5 pb-1">Connected</div>
-        <div className="flex flex-col gap-px overflow-y-auto">
-          {rows === null && (
-            <div className="px-2.5 py-1.5 flex flex-col gap-2" aria-label="Loading sources">
-              <div className="skeleton h-3 w-24" />
-              <div className="skeleton h-3 w-16" />
-            </div>
-          )}
-          {rows !== null && connected.length === 0 && (
-            <Link href="/connectors" className="px-2.5 py-1.5 text-[12.5px]" style={{ color: "var(--ink-faint)" }}>
-              Nothing connected yet. <span style={{ color: "var(--accent-text)" }}>Connect one</span>
+      <div className="flex-1" />
+
+      <div className="px-4 flex flex-col gap-2 text-[12.5px] leading-snug">
+        <Link href="/connectors" className="sidebar-muted hover:underline underline-offset-2 rounded-[3px]">
+          {sourceStatus}
+        </Link>
+        {newVersion ? (
+          <span className="sidebar-muted">
+            v{version.replace(/^v/, "")} ·{" "}
+            <Link href="/settings?tab=updates" className="underline underline-offset-2 rounded-[3px]" style={{ color: "var(--bauhaus-app-yellow)" }}>
+              Update available · {newVersion}
             </Link>
-          )}
-          {connected.map((s) => {
-            const href = `/connectors/${s.key}`;
-            return (
-              <NavLink key={s.key} href={href} active={pathname === href}>
-                <span className="dot" style={{ background: sourceHealth(s).tone }} aria-hidden />
-                <span className="flex-1 truncate">{sourceLabel(s)}</span>
-                <span className="font-mono text-[11px]" style={{ color: "var(--ink-faint)" }}>
-                  {s.record_count.toLocaleString()}
-                </span>
-              </NavLink>
-            );
-          })}
+          </span>
+        ) : (
+          <span className="sidebar-muted">v{version.replace(/^v/, "")} · Up to date</span>
+        )}
+        <div className="flex items-center gap-2 pt-2" style={{ borderTop: "1px solid var(--bauhaus-app-sidebar-line)" }}>
+          <span className="flex-1 min-w-0 truncate" title={me?.email ?? undefined}>
+            <span className="sr-only">Signed in as </span>
+            {me?.email ?? ""}
+          </span>
+          <button
+            onClick={logout}
+            className="nav-link inline-flex items-center gap-1.5 min-h-9 px-2 text-[12.5px] shrink-0"
+            aria-label="Log out"
+          >
+            <LogOut size={16} strokeWidth={1.75} aria-hidden />
+            Log out
+          </button>
         </div>
-      </div>
-
-      <div className="mx-3 pt-3 flex items-center gap-2" style={{ borderTop: "var(--hair) solid var(--border)" }}>
-        <div
-          className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0"
-          style={{ background: me?.email ? authorColor(me.email) : "var(--surface-raised)", color: "var(--on-author)" }}
-          aria-hidden
-        >
-          {me?.email ? me.email[0].toUpperCase() : ""}
-        </div>
-        <span className="flex-1 min-w-0 text-[12px] truncate" style={{ color: "var(--ink-dim)" }}>
-          {me?.email ?? ""}
-        </span>
-        {/* One group: after the first tooltip shows, its neighbour opens at once. */}
-        <TooltipGroup>
-          <Tooltip label="Switch theme">
-            <ThemeToggle />
-          </Tooltip>
-          <Tooltip label="Log out">
-            <button onClick={logout} aria-label="Log out" className="btn btn-ghost btn-icon btn-sm" style={{ width: 26 }}>
-              <LogOut size={14} />
-            </button>
-          </Tooltip>
-        </TooltipGroup>
       </div>
     </>
   );
 
   return (
     <>
-      {/* Mobile top bar -- replaces the sidebar below `md`. */}
-      <div
-        className="md:hidden sticky top-0 z-40 flex items-center gap-2 px-3 h-12 shrink-0"
-        style={{ background: "var(--surface)", borderBottom: "var(--hair) solid var(--border)" }}
-      >
-        <button onClick={() => setDrawerOpen(true)} aria-label="Open menu" className="btn btn-ghost btn-icon">
-          <Menu size={18} />
+      {/* Narrow screens: a top bar with the menu button; the sidebar becomes a drawer. */}
+      <div className="sidebar md:hidden sticky top-0 z-40 flex items-center gap-2 px-3 h-14 shrink-0">
+        <button
+          ref={menuButton}
+          onClick={() => setDrawerPath(pathname)}
+          aria-label="Open menu"
+          aria-expanded={drawerOpen}
+          aria-controls="nav-drawer"
+          className="nav-link inline-flex items-center justify-center w-11 h-11"
+        >
+          <Menu size={22} aria-hidden />
         </button>
-        {brand}
-        <button onClick={openCommandPalette} aria-label="Search" className="btn btn-ghost btn-icon ml-auto">
-          <Search size={16} />
+        <Brand />
+        <button onClick={openCommandPalette} aria-label="Search" className="nav-link inline-flex items-center justify-center w-11 h-11 ml-auto">
+          <Search size={20} aria-hidden />
         </button>
       </div>
 
-      {/* Desktop sidebar */}
-      <nav
-        aria-label="Main"
-        className="hidden md:flex w-[232px] shrink-0 flex-col gap-5 py-4 sticky top-0 h-screen"
-        style={{ background: "var(--surface)", borderRight: "var(--hair) solid var(--border)" }}
-      >
-        <div className="px-5 h-7 flex items-center">{brand}</div>
+      {/* Desktop sidebar: 232px, ink. */}
+      <nav aria-label="Main" className="sidebar hidden md:flex w-[232px] shrink-0 flex-col gap-6 py-6 sticky top-0 h-screen overflow-y-auto">
+        <div className="px-4">
+          <Brand />
+        </div>
         {navBody}
       </nav>
 
-      {/* Mobile drawer -- an overlay, not part of the page flow. */}
       {drawerOpen && (
-        <div className="md:hidden fixed inset-0 z-50 flex fade-in" style={{ background: "var(--scrim)" }} onClick={() => setDrawerOpen(false)}>
+        <div className="md:hidden fixed inset-0 z-50 flex fade-in" style={{ background: "var(--scrim)" }} onClick={() => setDrawerPath(null)}>
           <nav
+            id="nav-drawer"
             aria-label="Main"
-            className="w-[264px] h-full flex flex-col gap-5 py-4 drawer-in"
-            style={{ background: "var(--surface)", borderRight: "var(--hair) solid var(--border)" }}
+            role="dialog"
+            aria-modal="true"
+            className="sidebar w-[280px] max-w-[85vw] h-full flex flex-col gap-6 py-4 drawer-in overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="pl-5 pr-3 flex items-center justify-between">
-              {brand}
-              <button onClick={() => setDrawerOpen(false)} aria-label="Close menu" className="btn btn-ghost btn-icon">
-                <X size={16} />
+            <div className="pl-4 pr-2 flex items-center justify-between">
+              <Brand />
+              <button ref={closeButton} onClick={() => setDrawerPath(null)} aria-label="Close menu" className="nav-link inline-flex items-center justify-center w-11 h-11">
+                <X size={20} aria-hidden />
               </button>
             </div>
-            <div className="flex-1 min-h-0 flex flex-col gap-5">{navBody}</div>
+            {navBody}
           </nav>
         </div>
       )}

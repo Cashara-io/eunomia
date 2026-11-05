@@ -71,6 +71,31 @@ Rules only name vaults you are an active member of (saving another is refused). 
 
 Each recording is stored whole: everything Pocket's API returns, verbatim, plus the full speaker-labelled transcript, so an agent can always read the entire meeting. `get` on a Pocket record (the recording or any of its transcript chunks) returns the whole stored recording. For search and memory, the recording is also cached as a summary record (summary, action items, speakers, tags) plus transcript chunks small enough to embed. With a chat model available (Settings, OpenAI), people, organisations and their relations are extracted from each chunk into the memory graph (as queued jobs).
 
+### Pocket audio
+
+A Pocket connection can also keep each recording's audio. It is off by default: tick **Keep audio
+recordings** on the connection's setup page (it sets `config.store_audio`). Then:
+
+- Audio is stored in the org's `documents` bucket, so it needs `EUNOMIA_DOCUMENTS_BACKEND` (see
+  [documents](documents.md)). Without one, syncs carry on and keep transcripts only, and the server logs
+  why once.
+- It is downloaded once, after the transcript. Recall and search still use the transcript only.
+- Pocket keeps audio on the device first. Until the device uploads it, Pocket answers 404 and Eunomia tries
+  again on the next sync, but only while the recording is inside the sync window (the last day). A
+  recording whose audio arrives later than that keeps its transcript only.
+- Recordings over 200 MiB keep their transcript only. A failed or refused download never fails the sync.
+- An opened Pocket record on the connection's page has an audio player and a **Download** button.
+  API: `GET /api/connectors/pocketai/recordings/{recording_id}/audio` (`?download=true` for an
+  attachment), the caller's own recordings only, logged in the audit log by id as `pocket_audio_download`.
+- **Delete all data** removes the audio files too.
+
+Unverified: the audio endpoint, `GET /public/recordings/{id}/audio` on `https://public.heypocketai.com/api/v1`
+with the same API key, comes from third-party integrations, not from Pocket's documentation, and was not
+checked against a real account. Eunomia accepts either answer: the audio itself (its `Content-Type` is
+kept), or JSON with a signed link (`url`, `audio_url`, `signed_url` or `download_url`, at the top level
+or under `data`), which it then downloads without sending your key. If Pocket answers differently, the
+sync still succeeds and the server logs `pocket audio: not downloaded`.
+
 ## Deleting a connector's data
 
 **Delete all data** on a connection's page (two steps) permanently removes everything synced through that connection: its records and their search index, Pocket's stored recordings, and every fact and relation extracted from them. Observations built on those facts are rebuilt from what remains. Entities themselves, the connection and its sync position are kept, so later syncs bring in new data only. API: `DELETE /api/connectors/{connector}/data` (account-level: a vault-restricted token cannot call it; recorded in the audit log as `connector.delete_data`).

@@ -14,14 +14,16 @@ test("every page and tab renders cleanly", async ({ page }) => {
   await registerAndOnboard(page, uniqueEmail("pages"));
 
   const pages: [string, RegExp | string][] = [
-    ["/", "Connect an MCP client"],
+    ["/", "Which AI app do you use?"],
+    ["/connect/claude-code", "Copy and run this command"],
+    ["/connect/help", "Let’s get your app connected"],
     ["/chat", "Chat"],
-    ["/entities", "Entities"],
-    ["/code", "Code"],
-    ["/vaults", "Vaults"],
-    ["/connectors", "Connectors"],
+    ["/entities", "People & topics"],
+    ["/code", "Code map"],
+    ["/vaults", "Memory spaces"],
+    ["/connectors", "Connected sources"],
     ["/docs", "Quickstart"],
-    ["/skill", "How your agents use memory"],
+    ["/skill", "AI instructions"],
     ["/settings", "Settings"],
   ];
   for (const [path, text] of pages) {
@@ -33,8 +35,8 @@ test("every page and tab renders cleanly", async ({ page }) => {
     await expect(page.getByRole("tab", { name: tab })).toHaveAttribute("aria-selected", "true");
   }
   await page.goto("/entities");
-  await page.getByRole("tab", { name: "Vector cloud" }).click();
-  await expect(page.getByRole("group", { name: "Vault layers" })).toBeVisible();
+  await page.getByRole("tab", { name: "Memory map" }).click();
+  await expect(page.getByRole("group", { name: "Memory space layers" })).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -47,7 +49,7 @@ test("the sidebar's update badge opens Settings → Updates, from any page inclu
   await registerAndOnboard(page, uniqueEmail("badge"));
   const badge = page.getByRole("link", { name: /Update available · v9\.9\.9/ });
 
-  await badge.click(); // from the dashboard
+  await badge.click(); // from Home
   await expect(page.getByRole("tab", { name: "Updates" })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByText("v9.9.9 is available")).toBeVisible();
 

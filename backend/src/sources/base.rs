@@ -90,8 +90,9 @@ pub trait Source: Send + Sync {
     }
 
     /// Stores one raw value outside the cache, before it is ingested (heypocket's own tables). A
-    /// failure counts as a failed record, so the sync cursor holds and the record is retried.
-    async fn persist(&self, _db: &OrgDb, _owner: &RecordId, _raw: &Value) -> AppResult<()> {
+    /// failure counts as a failed record, so the sync cursor holds and the record is retried. `conn` is
+    /// the connection it came through (credentials and config), when there is one.
+    async fn persist(&self, _db: &OrgDb, _owner: &RecordId, _raw: &Value, _conn: Option<&Conn>) -> AppResult<()> {
         Ok(())
     }
 

@@ -363,9 +363,11 @@ export function relativeTime(iso: string | null | undefined): string {
 }
 
 /** Connector identity: a small icon tile in the connector's own tint, never the accent. */
-export function ConnectorTile({ kind, size = 28 }: { kind: Connector["kind"] | null; size?: number }) {
+/** A source's identity mark: its recognisable category icon in the source's colour, on a soft square.
+ * Decorative: the source's name is always written beside it. */
+export function ConnectorTile({ kind, size = 32 }: { kind: Connector["kind"] | null; size?: number }) {
   const meta = kind ? CONNECTOR_META[kind] : null;
-  const tint = meta?.tint ?? "var(--ink-faint)";
+  const tint = meta?.tint ?? "var(--ink-dim)";
   return (
     <span
       aria-hidden
@@ -373,13 +375,12 @@ export function ConnectorTile({ kind, size = 28 }: { kind: Connector["kind"] | n
       style={{
         width: size,
         height: size,
-        borderRadius: size >= 40 ? 10 : 7,
+        borderRadius: 4,
         color: tint,
-        background: `color-mix(in oklab, ${tint} 16%, var(--surface))`,
-        boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${tint} 32%, transparent)`,
+        background: `color-mix(in oklab, ${tint} 12%, var(--surface))`,
       }}
     >
-      <span className="inline-flex" style={{ transform: `scale(${Math.max(0.75, size / 34)})` }}>
+      <span className="inline-flex" style={{ transform: `scale(${Math.max(0.8, size / 28)})` }}>
         {meta?.icon ?? <Database size={18} strokeWidth={1.75} />}
       </span>
     </span>

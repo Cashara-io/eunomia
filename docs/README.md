@@ -12,6 +12,7 @@ operators and contributors.
 | [Projects](projects.md) | `npm create eunomia`: a repo's `.eunomia/` folder, one shared vault, skills sync |
 | [Python and TypeScript SDKs](sdk.md) | Manage vaults and memories from a script with a personal API token |
 | [Documents](documents.md) | Uploading files: what is indexed, the MCP tools, storage (SurrealDB's built-in file buckets, optionally on S3), backups |
+| [Sharing with another Eunomia](peer-vaults.md) | Share a memory space between separate Eunomia installs with a one-time code: addresses (LAN first), the encrypted sync protocol, integrity checks, limits |
 | [Concepts](concepts.md) | Vaults, entities, memories, recall, merging, the graph and the 3D vector cloud |
 | [Connectors](connectors.md) | Credentials, source options and sync setup |
 | [Extensions](extensions.md) | Your own scripts feeding Eunomia: a webhook inbox that buffers events, batch claim/ack, the security model, and the plan for hosted runtimes |

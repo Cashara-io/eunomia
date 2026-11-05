@@ -25,11 +25,11 @@ export function DataSection() {
   return (
     <div className="flex flex-col gap-5">
       <PanelHead title="Your data">
-        Download everything Eunomia holds about you (entities, memory, relations and chat history) as one JSON file.
+        Download everything Eunomia holds about you (people &amp; topics, memories, how they connect, and your chat history) as one file you can keep or move elsewhere.
       </PanelHead>
       <div className="ledger px-5 py-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="text-[13px] font-medium">Export</div>
+          <div className="text-[15px] font-semibold">Export</div>
           <div className="label mt-0.5 font-mono">eunomia-export.json</div>
         </div>
         <button onClick={doExport} disabled={exporting} className="btn">

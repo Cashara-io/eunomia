@@ -93,6 +93,7 @@ pub fn spec() -> utoipa::openapi::OpenApi {
         routers::https::Doc::openapi(),
         routers::oauth::Doc::openapi(),
         routers::oidc::Doc::openapi(),
+        routers::peers::Doc::openapi(),
         routers::settings::Doc::openapi(),
         routers::sources::Doc::openapi(),
         routers::tools::Doc::openapi(),

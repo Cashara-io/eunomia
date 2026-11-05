@@ -153,7 +153,7 @@ impl Source for HeyPocketSource {
         out
     }
 
-    async fn persist(&self, db: &OrgDb, owner: &RecordId, raw: &Value) -> AppResult<()> {
+    async fn persist(&self, db: &OrgDb, owner: &RecordId, raw: &Value, conn: Option<&Conn>) -> AppResult<()> {
         let Some(rid) = id_of(raw) else { return Ok(()) };
         let r = Recording::from(raw);
         let recorded_at = raw
@@ -182,7 +182,113 @@ impl Source for HeyPocketSource {
                 .await
         })
         .await?;
+        if let Some(conn) = conn.filter(|c| store_audio(&c.config)) {
+            store_recording_audio(db, owner, rid, conn).await;
+        }
         Ok(())
+    }
+}
+
+/// Largest recording audio kept (#117). Longer recordings keep their transcript only.
+// ponytail: fixed cap; an env var (like EUNOMIA_DOCUMENTS_MAX_BYTES) if someone records longer
+pub const MAX_AUDIO_BYTES: usize = 200 << 20;
+
+/// Whether a Pocket connection keeps recording audio (`config.store_audio`, off unless set).
+pub fn store_audio(config: &Value) -> bool {
+    config.get("store_audio").and_then(Value::as_bool).unwrap_or(false)
+}
+
+/// Where a recording's audio goes in the org's `documents` bucket.
+pub fn audio_path(owner: &RecordId, recording_id: &str, media_type: &str) -> String {
+    use crate::documents::safe_segment;
+    let ext = match media_type {
+        "audio/mpeg" | "audio/mp3" => "mp3",
+        "audio/wav" | "audio/x-wav" | "audio/wave" => "wav",
+        "audio/ogg" | "audio/opus" => "ogg",
+        "audio/webm" => "webm",
+        "audio/flac" | "audio/x-flac" => "flac",
+        "audio/aac" => "aac",
+        _ => "m4a",
+    };
+    format!("/pocket/{}/{}.{ext}", safe_segment(&owner_key_str(owner)), safe_segment(recording_id))
+}
+
+/// A recording's stored audio: where it is and what it is. `path` is NONE when there is none.
+#[derive(Debug, Deserialize, SurrealValue)]
+pub struct StoredAudio {
+    #[serde(default)]
+    #[surreal(default)]
+    pub audio_path: Option<String>,
+    #[serde(default)]
+    #[surreal(default)]
+    pub audio_media_type: Option<String>,
+    #[serde(default)]
+    #[surreal(default)]
+    pub audio_bytes: Option<i64>,
+}
+
+/// The stored audio of `owner`'s recording `recording_id`, if any was downloaded.
+pub async fn stored_audio(db: &OrgDb, owner: &RecordId, recording_id: &str) -> AppResult<Option<StoredAudio>> {
+    let mut res = store::app::SOURCES_POCKET_AUDIO_GET.on(db).bind(("id", record_id(owner, recording_id))).await?;
+    let row: Option<StoredAudio> = res.take(0)?;
+    Ok(row.filter(|r| r.audio_path.is_some()))
+}
+
+/// Downloads and keeps one recording's audio, once. Never fails the sync: audio Pocket does not have
+/// yet (the device uploads it later) is retried on a later sync while the recording is still inside
+/// the sync window; anything else (too large, provider error, no bucket) is logged and skipped.
+async fn store_recording_audio(db: &OrgDb, owner: &RecordId, rid: &str, conn: &Conn) {
+    static NO_BUCKET_WARNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    match stored_audio(db, owner, rid).await {
+        // audio never changes: downloaded once
+        Ok(Some(_)) => return,
+        Ok(None) => {}
+        Err(e) => {
+            tracing::warn!(recording = rid, error = %e.message, "pocket audio: stored row not read");
+            return;
+        }
+    }
+    let client = match PocketAIClient::new(&conn.credentials, &conn.config) {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!(recording = rid, error = %e.message, "pocket audio: no client");
+            return;
+        }
+    };
+    let (bytes, media_type) = match client.audio(rid, MAX_AUDIO_BYTES).await {
+        Ok(Some(found)) => found,
+        // not uploaded from the device yet: a later sync tries again
+        Ok(None) => return,
+        Err(e) => {
+            tracing::warn!(recording = rid, error = %e.message, "pocket audio: not downloaded");
+            return;
+        }
+    };
+    let media_type = if media_type.starts_with("audio/") || media_type.starts_with("video/") { media_type } else { "audio/mp4".to_string() };
+    let path = audio_path(owner, rid, &media_type);
+    let size = bytes.len() as i64;
+    if let Err(e) = crate::documents::put_object(db, &path, bytes).await {
+        if !NO_BUCKET_WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+            tracing::warn!(error = %e.message, "pocket audio: not stored (is EUNOMIA_DOCUMENTS_BACKEND set?); further failures are logged at debug");
+        } else {
+            tracing::debug!(recording = rid, error = %e.message, "pocket audio: not stored");
+        }
+        return;
+    }
+    let set = crate::tx::with_retry(|| async {
+        store::app::SOURCES_POCKET_AUDIO_SET
+            .on(db)
+            .bind(("id", record_id(owner, rid)))
+            .bind(("path", path.clone()))
+            .bind(("media_type", media_type.clone()))
+            .bind(("size", size))
+            .await?
+            .check()
+    })
+    .await;
+    if let Err(e) = set {
+        tracing::warn!(recording = rid, error = %e, "pocket audio: stored but not recorded; removing the file");
+        let _ = crate::documents::delete_object(db, &path).await;
     }
 }
 

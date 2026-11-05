@@ -70,12 +70,12 @@ test("a routing rule files tagged recordings in their own vault", async ({ page 
     await expect(page.getByRole("button", { name: "Saved" })).toBeVisible();
 
     // destination: personal (the default); one rule: tag "work" -> Work e2e
-    const routing = page.getByRole("region", { name: "Where records go" });
-    await expect(routing.getByRole("combobox", { name: "Destination vault" })).toHaveText(/Personal/);
+    const routing = page.getByRole("region", { name: "Where will my items go?" });
+    await expect(routing.getByRole("combobox", { name: "Destination space" })).toHaveText(/Personal/);
     await routing.getByRole("button", { name: "Add rule" }).click();
     await choose(page, "Rule 1 field", "Tag");
     await routing.getByRole("textbox", { name: "Rule 1 value" }).fill("work");
-    await choose(page, "Rule 1 vault", "Work e2e");
+    await choose(page, "Rule 1 space", "Work e2e");
     await routing.getByRole("button", { name: "Save routing" }).click();
     await expect(routing.getByRole("button", { name: "Saved" })).toBeVisible();
 

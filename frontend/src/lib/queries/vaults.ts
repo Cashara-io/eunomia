@@ -17,7 +17,8 @@ import {
   transferOwnership,
 } from "@/lib/gen";
 import type { Vault, VaultInvitation, VaultKind, VaultMember, VaultRole } from "@/lib/types";
-import { call, LIVE_POLL_MS } from "./client";
+import { call } from "./client";
+import { livePoll } from "./liveStatus";
 import { entityKeys } from "./entities";
 
 export const vaultKeys = {
@@ -31,7 +32,7 @@ export const useVaults = () =>
   useQuery({
     queryKey: vaultKeys.list(),
     queryFn: async () => (await call(listVaults())).results as Vault[],
-    refetchInterval: LIVE_POLL_MS,
+    refetchInterval: livePoll,
   });
 
 export const useVaultMembers = (id: string, enabled = true) =>
@@ -47,7 +48,7 @@ export const useInvitations = () =>
   useQuery({
     queryKey: vaultKeys.invitations(),
     queryFn: async () => (await call(listInvitations())).results as VaultInvitation[],
-    refetchInterval: LIVE_POLL_MS,
+    refetchInterval: livePoll,
   });
 
 // Vault changes reshape what the entity graph and cloud can show (clone, merge, delete, accept), so those refresh too.

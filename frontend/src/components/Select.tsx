@@ -30,7 +30,7 @@ const TYPEAHEAD_MS = 500;
 
 type Place = { left: number; top: number; width: number; maxH: number; up: boolean };
 
-export default function Select({ value, onChange, options, id, placeholder = "Select…", disabled, mono, className = "h-8 text-[13px]", ...rest }: Props) {
+export default function Select({ value, onChange, options, id, placeholder = "Select…", disabled, mono, className = "h-10 text-[14px]", ...rest }: Props) {
   const listId = useId();
   const trigger = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLUListElement>(null);
@@ -164,13 +164,13 @@ export default function Select({ value, onChange, options, id, placeholder = "Se
         disabled={disabled}
         onClick={(e) => (open ? close() : show(e.detail > 0))}
         onKeyDown={onKeyDown}
-        className={`field select-trigger inline-flex items-center gap-2 pl-2.5 pr-2 text-left disabled:opacity-50 ${className}`}
+        className={`field select-trigger inline-flex items-center gap-2 pl-3 pr-2.5 text-left disabled:opacity-50 ${className}`}
         data-open={open || undefined}
       >
         <span className={`flex-1 min-w-0 truncate ${mono ? "font-mono" : ""}`} style={{ color: selected ? "var(--ink)" : "var(--ink-faint)" }}>
           {selected ? selected.label : placeholder}
         </span>
-        <ChevronDown size={14} strokeWidth={1.75} aria-hidden className="select-chevron shrink-0" />
+        <ChevronDown size={16} strokeWidth={1.75} aria-hidden className="select-chevron shrink-0" />
       </button>
       {open &&
         place &&
@@ -209,7 +209,7 @@ export default function Select({ value, onChange, options, id, placeholder = "Se
                     {isSelected && <Check size={14} strokeWidth={2} />}
                   </span>
                   <span className={`flex-1 min-w-0 truncate ${mono ? "font-mono" : ""}`}>{o.label}</span>
-                  {o.hint && <span className="shrink-0 text-[12px]" style={{ color: "var(--ink-faint)" }}>{o.hint}</span>}
+                  {o.hint && <span className="shrink-0 text-[12px]" style={{ color: "var(--ink-dim)" }}>{o.hint}</span>}
                 </li>
               );
             })}

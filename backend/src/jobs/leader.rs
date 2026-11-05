@@ -55,6 +55,8 @@ pub async fn tick(state: &AppState, n: u64) {
         let Ok(org_state) = state.org(&org).await else { continue }; // not ready or behind: the migration job handles it
         reconcile_syncs(&org_state).await;
         reconcile_observations(&org_state).await;
+        // shared vaults this instance holds a copy of: each due one syncs in a task of its own
+        crate::peers::sync::reconcile(&org_state).await;
         if n.is_multiple_of(SLOW_EVERY) {
             reconcile_embeddings(&org_state).await;
             reconcile_redact_backfill(&org_state, super::window(3600)).await;

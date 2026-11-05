@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen, Building2, MapPin, CornerDownLeft, FileText, FolderGit2, LayoutDashboard, MessageSquare, Plug, Search, Settings, Share2, User, Vault } from "lucide-react";
+import { ArrowUpRight, Building2, MapPin, FileText, FolderGit2, Plug, Search, User, X } from "lucide-react";
+import { ADVANCED_NAV, MAIN_NAV } from "./Sidebar";
 import { documentHref, type EntityKind } from "@/lib/types";
 import { useSources } from "@/lib/queries/sources";
 import { usePaletteSearch } from "@/lib/queries/tools";
@@ -20,17 +21,18 @@ export function openCommandPalette() {
 // organisation and location read as a building and a pin, not a person
 const ENTITY_ICON: Record<string, IconType> = { person: User, organisation: Building2, location: MapPin, repository: FolderGit2, file: FileText };
 
-const STATIC_ITEMS: { label: string; href: string; icon: IconType }[] = [
-  { label: "Dashboard", href: "/", icon: LayoutDashboard },
-  { label: "Chat", href: "/chat", icon: MessageSquare },
-  { label: "Entities", href: "/entities", icon: Share2 },
-  { label: "Code", href: "/code", icon: FolderGit2 },
-  { label: "Vaults", href: "/vaults", icon: Vault },
-  { label: "Documents", href: "/documents", icon: FileText },
-  { label: "Connectors", href: "/connectors", icon: Plug },
-  { label: "Docs", href: "/docs", icon: BookOpen },
-  { label: "Settings", href: "/settings", icon: Settings },
-];
+// Pages, with the sidebar's own labels. Read when the palette renders (not at
+// module load), since Sidebar imports this module too.
+const staticNav = (): { label: string; href: string; icon: IconType }[] => [...MAIN_NAV, ...ADVANCED_NAV];
+
+const KIND_WORD: Record<string, string> = {
+  person: "Person",
+  organisation: "Organisation",
+  location: "Place",
+  repository: "Repository",
+  file: "File",
+  symbol: "Function",
+};
 
 const CODE_KINDS = new Set<EntityKind>(["repository", "file", "symbol"]);
 const SEARCH_DEBOUNCE_MS = 250;
@@ -84,7 +86,7 @@ function Palette({ onClose }: { onClose: () => void }) {
   const connectorItems: Item[] = rows
     .filter((r) => r.connected)
     .map((r) => ({ key: `conn:${r.key}`, label: r.label, icon: Plug, go: () => router.push(`/connectors/${r.key}`) }));
-  const staticItems: Item[] = STATIC_ITEMS.map((s) => ({
+  const staticItems: Item[] = staticNav().map((s) => ({
     key: `nav:${s.href}`,
     label: s.label,
     icon: s.icon,
@@ -97,7 +99,7 @@ function Palette({ onClose }: { onClose: () => void }) {
   const entityItems: Item[] = (searching ? entityHits : []).map((e) => ({
     key: `entity:${e.id}`,
     label: e.name,
-    sub: e.kind,
+    sub: KIND_WORD[e.kind] ?? e.kind,
     icon: ENTITY_ICON[e.kind] ?? User,
     go: () => router.push(CODE_KINDS.has(e.kind) ? "/code" : "/entities"),
   }));
@@ -120,8 +122,8 @@ function Palette({ onClose }: { onClose: () => void }) {
 
   const groups: Group[] = [
     { title: "Pages", items: navItems },
-    { title: "Entities", items: entityItems },
-    { title: "Records", items: recordItems },
+    { title: "People & topics", items: entityItems },
+    { title: "Documents and saved items", items: recordItems },
   ].filter((g) => g.items.length > 0);
   const items = groups.flatMap((g) => g.items);
 
@@ -132,45 +134,59 @@ function Palette({ onClose }: { onClose: () => void }) {
 
   let flat = -1;
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-[14vh]" style={{ background: "var(--scrim)" }} onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-[12vh]" style={{ background: "var(--scrim)" }} onClick={onClose}>
       <div
         role="dialog"
-        aria-label="Command palette"
-        className="w-full max-w-[560px] panel overflow-hidden"
-        style={{ boxShadow: "var(--shadow-pop)" }}
+        aria-modal="true"
+        aria-labelledby="palette-title"
+        className="bauhaus-dialog w-full max-w-[560px] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center gap-2.5 px-4 h-12" style={{ borderBottom: "var(--hair) solid var(--border)" }}>
-          <Search size={16} color="var(--ink-faint)" />
-          <input
-            autoFocus
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setIndex(0);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "ArrowDown") {
-                e.preventDefault();
-                setIndex((i) => Math.min(i + 1, items.length - 1));
-              } else if (e.key === "ArrowUp") {
-                e.preventDefault();
-                setIndex((i) => Math.max(i - 1, 0));
-              } else if (e.key === "Enter" && items[index]) {
-                choose(items[index]);
-              }
-            }}
-            placeholder="Jump to a page…"
-            aria-label="Search pages, entities and records"
-            className="flex-1 h-full bg-transparent text-[15px] outline-none"
-            style={{ color: "var(--ink)" }}
-          />
-          <span className="kbd">esc</span>
+        <div className="flex items-center justify-between gap-2 px-5 pt-4">
+          <h2 id="palette-title" className="text-[20px] font-semibold tracking-[-0.01em]">
+            Search
+          </h2>
+          <button type="button" onClick={onClose} aria-label="Close search" className="btn btn-ghost btn-icon btn-sm">
+            <X size={18} strokeWidth={1.75} aria-hidden />
+          </button>
         </div>
-        <div className="max-h-[min(420px,60vh)] overflow-y-auto py-1.5">
+        <div className="px-5 pt-2 pb-3 flex flex-col gap-1.5" style={{ borderBottom: "1px solid var(--border)" }}>
+          <label htmlFor="palette-input" className="text-[13px] font-medium">
+            Search pages, people, topics and documents
+          </label>
+          <div className="field flex items-center gap-2.5 px-3 h-11">
+            <Search size={18} color="var(--ink-dim)" aria-hidden />
+            <input
+              id="palette-input"
+              autoFocus
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setIndex(0);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setIndex((i) => Math.min(i + 1, items.length - 1));
+                } else if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setIndex((i) => Math.max(i - 1, 0));
+                } else if (e.key === "Enter" && items[index]) {
+                  choose(items[index]);
+                }
+              }}
+              placeholder="Jump to a page…"
+              className="flex-1 h-full bg-transparent text-[15px] outline-none"
+              style={{ color: "var(--ink)" }}
+            />
+          </div>
+        </div>
+        <div className="max-h-[min(420px,60vh)] overflow-y-auto py-2">
           {groups.map((g) => (
             <div key={g.title} className="py-1">
-              <div className="label px-4 h-7 flex items-center">{g.title}</div>
+              <div className="caps px-5 h-7 flex items-center" style={{ color: "var(--ink-dim)" }}>
+                {g.title}
+              </div>
               <ul>
                 {g.items.map((item) => {
                   flat += 1;
@@ -178,21 +194,27 @@ function Palette({ onClose }: { onClose: () => void }) {
                   const Icon = item.icon;
                   const active = i === index;
                   return (
-                    <li key={item.key} className="px-1.5">
+                    <li key={item.key} className="px-2">
                       <button
                         onClick={() => choose(item)}
                         onMouseMove={() => setIndex(i)}
-                        className="w-full flex items-center gap-2.5 px-2.5 h-9 text-[13.5px] text-left rounded-[7px]"
-                        style={{ background: active ? "var(--surface-raised)" : "transparent", color: "var(--ink)" }}
+                        className="w-full flex items-center gap-3 px-3 min-h-11 py-1.5 text-[14px] text-left rounded-[3px]"
+                        style={{
+                          background: active ? "var(--accent-soft)" : "transparent",
+                          boxShadow: active ? "inset 3px 0 0 var(--bauhaus-app-blue)" : undefined,
+                          color: "var(--ink)",
+                        }}
                       >
-                        <Icon size={15} color={active ? "var(--accent-text)" : "var(--ink-faint)"} />
-                        <span className="flex-1 truncate">{item.label}</span>
-                        {item.sub && (
-                          <span className="text-[12px] shrink-0" style={{ color: "var(--ink-faint)" }}>
-                            {item.sub}
-                          </span>
-                        )}
-                        {active && <CornerDownLeft size={13} color="var(--ink-faint)" />}
+                        <Icon size={18} color={active ? "var(--accent-text)" : "var(--ink-dim)"} />
+                        <span className="flex-1 min-w-0 flex flex-col">
+                          <span className="truncate">{item.label}</span>
+                          {item.sub && (
+                            <span className="text-[12.5px] truncate" style={{ color: "var(--ink-dim)" }}>
+                              {item.sub}
+                            </span>
+                          )}
+                        </span>
+                        <ArrowUpRight size={16} color="var(--accent-text)" aria-hidden />
                       </button>
                     </li>
                   );
@@ -201,18 +223,23 @@ function Palette({ onClose }: { onClose: () => void }) {
             </div>
           ))}
           {items.length === 0 && (
-            <div className="px-4 py-8 text-center text-[13px]" style={{ color: "var(--ink-faint)" }}>
-              Nothing matches &ldquo;{query}&rdquo;.
+            <div className="px-5 py-8 text-center text-[14px]" style={{ color: "var(--ink-dim)" }}>
+              Nothing matches &ldquo;{query}&rdquo;. Try a shorter word, or a person&apos;s or file&apos;s name.
             </div>
           )}
         </div>
-        <div
-          className="flex items-center gap-4 px-4 h-9 text-[11.5px]"
-          style={{ borderTop: "var(--hair) solid var(--border)", color: "var(--ink-faint)" }}
-        >
-          <span className="flex items-center gap-1.5"><span className="kbd">↑</span><span className="kbd">↓</span> move</span>
-          <span className="flex items-center gap-1.5"><span className="kbd">↵</span> open</span>
-          <span className="ml-auto">Type 2+ letters to search memory</span>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-2.5 text-[12px]" style={{ borderTop: "1px solid var(--border)", color: "var(--ink-dim)" }}>
+          <span className="flex items-center gap-1.5">
+            <span className="kbd">↑</span>
+            <span className="kbd">↓</span> Move
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="kbd">↵</span> Open
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="kbd">Esc</span> Close
+          </span>
+          <span className="ml-auto">Type 2 or more letters to search your memory</span>
         </div>
       </div>
     </div>

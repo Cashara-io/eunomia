@@ -96,13 +96,13 @@ export function HttpsSection() {
       <div className="flex flex-col gap-3 max-w-md">
         <label className="label flex flex-col gap-1.5">
           Domain
-          <input className="field h-8 px-2.5 text-[13px] font-mono" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="eunomia.example.com" />
+          <input className="field h-10 px-3 text-[14px] font-mono" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="eunomia.example.com" />
         </label>
         <label className="label flex flex-col gap-1.5">
           Email for Let&apos;s Encrypt
           <input
             type="email"
-            className="field h-8 px-2.5 text-[13px] font-mono"
+            className="field h-10 px-3 text-[14px] font-mono"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"

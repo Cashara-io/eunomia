@@ -19,4 +19,6 @@ Control set: no reservations (control stays at 0006).
 | tenant | 0026 | sync_check_connectivity | Sources | #129 (via #128) | merged |
 | tenant | 0027 | owner_name | Sources | #128 | merged |
 | tenant | 0028 | peers | Peer vaults | 2.0.8 | merged |
-| tenant | 0029 | credential_refs | L3 Broker | broker core | reserved |
+| tenant | 0029 | pocket_audio | Sources (#117) | 2.0.8 | merged |
+| tenant | 0030 | perf_indexes | Performance | 2.0.8 | merged |
+| tenant | 0031 | credential_refs | L3 Broker | broker core | reserved |

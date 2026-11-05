@@ -126,8 +126,15 @@ pub async fn ingest_via(
     conn: Option<&Connector>,
 ) -> AppResult<IngestReport> {
     let mut persist_errors = Vec::new();
+    // what persist needs to reach the provider again (heypocket's opt-in audio download)
+    let conn_data = match conn {
+        Some(c) => conn_for(&state.settings.encryption_key, Some(c))
+            .inspect_err(|e| tracing::warn!(error = %e.message, "connector credentials unreadable; storing records without them"))
+            .ok(),
+        None => None,
+    };
     for raw in raw_records {
-        if let Err(e) = src.persist(&state.db, owner, raw).await {
+        if let Err(e) = src.persist(&state.db, owner, raw, conn_data.as_ref()).await {
             persist_errors.push(format!("store {}: {}", raw.get("id").and_then(Value::as_str).unwrap_or("?"), e.message));
         }
     }
@@ -160,6 +167,24 @@ pub async fn ingest_via(
 /// kept. Returns how many records and memories went.
 pub async fn delete_data(db: &OrgDb, owner: &RecordId, conn: &Connector) -> AppResult<Value> {
     let src = for_provider(&conn.kind).ok_or_else(|| AppError::coded(ErrorCode::ConnectorNotFound, "unknown connector"))?;
+    // stored Pocket audio (#117) lives in the bucket, outside the transaction below: remove it first,
+    // best effort (a file left behind is only storage; a row left pointing at a missing file is worse)
+    if src.key() == "heypocket" {
+        let paths: Vec<String> = store::app::SOURCES_POCKET_AUDIO_PATHS
+            .on(db)
+            .bind(("owner", owner.clone()))
+            .bind(("source", src.key().to_string()))
+            .bind(("connector", conn.id.clone()))
+            .bind(("first", conn.is_first()))
+            .await
+            .and_then(|mut r| r.take(0))
+            .unwrap_or_default();
+        for path in paths {
+            if let Err(e) = crate::documents::delete_object(db, &path).await {
+                tracing::warn!(path = %path, error = %e.message, "pocket audio: file not deleted");
+            }
+        }
+    }
     let mut res = crate::tx::with_retry(|| async {
         store::cache::DELETE_SOURCE_DATA
             .on(db)

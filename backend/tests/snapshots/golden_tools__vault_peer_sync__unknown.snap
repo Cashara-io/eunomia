@@ -1,0 +1,9 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "error": "No such shared space link.",
+  "code": "resource.not_found",
+  "trace_id": "<trace>"
+}

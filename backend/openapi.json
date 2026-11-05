@@ -1151,6 +1151,65 @@
         ]
       }
     },
+    "/api/connectors/pocketai/recordings/{recording_id}/audio": {
+      "get": {
+        "tags": [
+          "connectors"
+        ],
+        "summary": "A Pocket recording's stored audio",
+        "description": "The audio Eunomia kept for one of the caller's Pocket recordings (connections with `config.store_audio` on). 404 when none was stored.",
+        "operationId": "getPocketaiAudio",
+        "parameters": [
+          {
+            "name": "recording_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "download",
+            "in": "query",
+            "description": "`true` to save the file (an attachment) instead of playing it.",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The audio bytes",
+            "content": {
+              "audio/mp4": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/connectors/pocketai/search": {
       "get": {
         "tags": [
@@ -2875,6 +2934,39 @@
         ]
       }
     },
+    "/api/events/ws": {
+      "get": {
+        "tags": [
+          "vaults"
+        ],
+        "summary": "Follow everything that changes in the caller's vaults over one WebSocket",
+        "description": "Upgrades to a WebSocket that sends JSON text messages with a `type`: `hello` (each vault's last change seq, first and on every reconnect), `change` (a change-log row of any vault the caller can read), `seq` (a vault's log moved on; refetch it), `vault` (a vault was created, renamed, deleted, cloned, merged, or its members changed), `vaults` (the caller's vault set changed), `resync` (refetch everything) and `heartbeat`. No content: fetch what changed. A browser authenticates with its session cookie from an allowed origin; other clients send a Bearer token.",
+        "operationId": "followEvents",
+        "responses": {
+          "101": {
+            "description": "Switching to the WebSocket protocol"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/export": {
       "get": {
         "tags": [
@@ -3796,6 +3888,366 @@
         },
         "security": [
           {}
+        ]
+      }
+    },
+    "/api/peer/v1/{org}/hello": {
+      "get": {
+        "tags": [
+          "peer"
+        ],
+        "summary": "For another Eunomia: which instance answers at this address",
+        "operationId": "peerHello",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such org here",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/peer/v1/{org}/join": {
+      "post": {
+        "tags": [
+          "peer"
+        ],
+        "summary": "For another Eunomia: redeem a share code (the request carries a MAC keyed by the code's secret)",
+        "operationId": "peerJoin",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "share, guest_instance, guest_org, guest_name, guest_addrs, nonce_g, mac",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/peer/v1/{org}/links/{link_id}": {
+      "post": {
+        "tags": [
+          "peer"
+        ],
+        "summary": "For another Eunomia: one sealed request on a link (exchange, verify, leave), one sealed answer",
+        "description": "Body `{link, ts, nonce, data}`: `data` is AES-256-GCM under the link key, with `POST|path|link|ts|nonce` as associated data. Refused outside a 5 minute clock window or for a nonce already seen.",
+        "operationId": "peerExchange",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "link_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "{link, ts, nonce, data}",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/peers/join": {
+      "post": {
+        "tags": [
+          "vaults"
+        ],
+        "summary": "Join a vault another Eunomia shared, with its share code",
+        "description": "Finds the first address in the code that answers as the right instance (LAN first), proves knowledge of the code's secret, and makes a new vault holding this Eunomia's copy. The first sync runs before this returns.",
+        "operationId": "joinSharedVault",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JoinRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JoinOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/peers/links/{link_id}": {
+      "delete": {
+        "tags": [
+          "vaults"
+        ],
+        "summary": "Stop sharing with one other Eunomia (owner only); both sides keep their copy",
+        "operationId": "stopVaultPeer",
+        "parameters": [
+          {
+            "name": "link_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletedBody"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/peers/links/{link_id}/sync": {
+      "post": {
+        "tags": [
+          "vaults"
+        ],
+        "summary": "Sync a shared vault with the other Eunomia now",
+        "operationId": "syncVaultPeer",
+        "parameters": [
+          {
+            "name": "link_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeerOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/peers/links/{link_id}/verify": {
+      "get": {
+        "tags": [
+          "vaults"
+        ],
+        "summary": "Check that both copies of a shared vault hold exactly the same items",
+        "operationId": "verifyVaultPeer",
+        "parameters": [
+          {
+            "name": "link_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifyOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
         ]
       }
     },
@@ -4937,6 +5389,102 @@
         ]
       }
     },
+    "/api/vaults/{vault_id}/integrity": {
+      "get": {
+        "tags": [
+          "vaults"
+        ],
+        "summary": "Check a vault for broken or leftover data",
+        "operationId": "checkVaultIntegrity",
+        "parameters": [
+          {
+            "name": "vault_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrityReport"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "vaults"
+        ],
+        "summary": "Repair what an integrity check found (owner only)",
+        "operationId": "repairVaultIntegrity",
+        "parameters": [
+          {
+            "name": "vault_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrityReport"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/vaults/{vault_id}/invitations/accept": {
       "post": {
         "tags": [
@@ -5289,6 +5837,172 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MemberOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/vaults/{vault_id}/peers": {
+      "get": {
+        "tags": [
+          "vaults"
+        ],
+        "summary": "The other Eunomias a vault is shared with, their sync status, and unused share codes",
+        "operationId": "listVaultPeers",
+        "parameters": [
+          {
+            "name": "vault_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeersOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/vaults/{vault_id}/share-codes": {
+      "post": {
+        "tags": [
+          "vaults"
+        ],
+        "summary": "Make a one-time code to share a vault with another Eunomia (owner only)",
+        "description": "The code carries this instance's addresses (LAN first), a share id and a secret. It works once and expires (default 7 days). Only the secret's ciphertext is kept here.",
+        "operationId": "createVaultShareCode",
+        "parameters": [
+          {
+            "name": "vault_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShareCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareCodeOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/vaults/{vault_id}/share-codes/{code_id}": {
+      "delete": {
+        "tags": [
+          "vaults"
+        ],
+        "summary": "Withdraw a share code that has not been used (owner only)",
+        "operationId": "deleteVaultShareCode",
+        "parameters": [
+          {
+            "name": "vault_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "code_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletedBody"
                 }
               }
             }
@@ -7038,6 +7752,73 @@
           }
         }
       },
+      "IntegrityReport": {
+        "type": "object",
+        "required": [
+          "vault",
+          "ok",
+          "dangling_memories",
+          "misfiled_memories",
+          "dangling_relations",
+          "change_log_top",
+          "change_log_counter",
+          "change_log_behind"
+        ],
+        "properties": {
+          "change_log_behind": {
+            "type": "boolean",
+            "description": "True when the counter is behind the log (the next write's append would collide)."
+          },
+          "change_log_counter": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "change_log_top": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Highest seq in the change log, and the counter the next write continues from."
+          },
+          "dangling_memories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Memories whose subject entity no longer exists."
+          },
+          "dangling_relations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Relations with one end missing."
+          },
+          "misfiled_memories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Memories filed here whose subject is in another vault (not repaired automatically)."
+          },
+          "ok": {
+            "type": "boolean",
+            "description": "True when nothing below needs attention."
+          },
+          "repaired": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Repaired",
+                "description": "Set on a repair: what it removed or fixed."
+              }
+            ]
+          },
+          "vault": {
+            "type": "string"
+          }
+        }
+      },
       "InvitationList": {
         "type": "object",
         "required": [
@@ -7111,6 +7892,41 @@
           },
           "role": {
             "type": "string"
+          }
+        }
+      },
+      "JoinOut": {
+        "type": "object",
+        "required": [
+          "vault",
+          "link"
+        ],
+        "properties": {
+          "link": {
+            "$ref": "#/components/schemas/PeerOut"
+          },
+          "vault": {
+            "$ref": "#/components/schemas/VaultOut",
+            "description": "The new vault holding this Eunomia's copy."
+          }
+        }
+      },
+      "JoinRequestBody": {
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "The share code, `eunomia1:...`."
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "How the other Eunomia will name this one (default: `EUNOMIA_INSTANCE_NAME`, else your email)."
           }
         }
       },
@@ -7542,6 +8358,147 @@
           }
         }
       },
+      "PeerOut": {
+        "type": "object",
+        "required": [
+          "id",
+          "direction",
+          "role",
+          "peer_name",
+          "peer_fingerprint",
+          "status",
+          "integrity_failures"
+        ],
+        "properties": {
+          "address": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The address that answered last (a guest's view of its host)."
+          },
+          "digests_match": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether both copies held the same items at the last check (`None`: not checked yet)."
+          },
+          "direction": {
+            "type": "string",
+            "description": "`host`: this Eunomia holds the original and shares it out; `guest`: this is a copy of another's."
+          },
+          "id": {
+            "type": "string",
+            "description": "The link id."
+          },
+          "integrity_failures": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "last_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_report": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Counts from the last exchange."
+          },
+          "last_sync_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "peer_fingerprint": {
+            "type": "string",
+            "description": "The other Eunomia's fingerprint."
+          },
+          "peer_name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "description": "What the guest may do: `edit` or `read`."
+          },
+          "status": {
+            "type": "string",
+            "description": "`up_to_date`, `syncing`, `unreachable`, `integrity_problem` or `revoked`."
+          }
+        }
+      },
+      "PeersOut": {
+        "type": "object",
+        "required": [
+          "vault",
+          "fingerprint",
+          "links",
+          "codes",
+          "addresses"
+        ],
+        "properties": {
+          "addresses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The addresses a new code would carry, best first."
+          },
+          "codes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PendingCodeOut"
+            },
+            "description": "Codes made for this vault and not used yet (owners only; empty for members)."
+          },
+          "fingerprint": {
+            "type": "string",
+            "description": "This instance's fingerprint."
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PeerOut"
+            },
+            "description": "Other Eunomias this vault is shared with (or copied from)."
+          },
+          "vault": {
+            "type": "string"
+          }
+        }
+      },
+      "PendingCodeOut": {
+        "type": "object",
+        "required": [
+          "id",
+          "role"
+        ],
+        "properties": {
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        }
+      },
       "PocketaiSummary": {
         "type": "object",
         "required": [
@@ -7786,6 +8743,27 @@
           }
         }
       },
+      "Repaired": {
+        "type": "object",
+        "required": [
+          "memories_removed",
+          "relations_removed",
+          "counter_fixed"
+        ],
+        "properties": {
+          "counter_fixed": {
+            "type": "boolean"
+          },
+          "memories_removed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "relations_removed": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
       "RepointBody": {
         "type": "object",
         "required": [
@@ -8016,6 +8994,60 @@
           },
           "sync_intervals": {},
           "theme": {}
+        }
+      },
+      "ShareCodeOut": {
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "role",
+          "expires_at",
+          "addresses",
+          "fingerprint"
+        ],
+        "properties": {
+          "addresses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The addresses in the code, best first."
+          },
+          "code": {
+            "type": "string",
+            "description": "Send this to the person running the other Eunomia. It works once."
+          },
+          "expires_at": {
+            "type": "string"
+          },
+          "fingerprint": {
+            "type": "string",
+            "description": "This instance's fingerprint, to compare by eye."
+          },
+          "id": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        }
+      },
+      "ShareCodeRequest": {
+        "type": "object",
+        "properties": {
+          "expires_in_hours": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "How long the code works, in hours (default 168, at most 720)."
+          },
+          "role": {
+            "type": "string",
+            "description": "`edit` (the other Eunomia can add and change; the default) or `read`."
+          }
         }
       },
       "Similarity": {
@@ -8935,6 +9967,40 @@
           },
           "role": {
             "type": "string"
+          }
+        }
+      },
+      "VerifyOut": {
+        "type": "object",
+        "required": [
+          "link",
+          "local_digest",
+          "local_items"
+        ],
+        "properties": {
+          "link": {
+            "type": "string"
+          },
+          "local_digest": {
+            "type": "string"
+          },
+          "local_items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "matches": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "True when both copies hold exactly the same items."
+          },
+          "remote_digest": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The other side's digest: asked just now (guest), or as of its last exchange (host)."
           }
         }
       },

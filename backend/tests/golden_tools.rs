@@ -91,10 +91,45 @@ fn role_goldens<'a>(g: &'a mut Golden, bob: &'a eunomia_backend::models_user::Us
     Box::pin(g.snap("vault_accept_invitation", "vault_accept_invitation", json!({"vault_id": handover}))).await;
     Box::pin(g.snap("vault_decline_invitation", "vault_decline_invitation", json!({"vault_id": handover}))).await;
     Box::pin(g.snap("vault_get", "vault_get", json!({"vault_id": handover}))).await;
+    Box::pin(g.snap("vault_check", "vault_check", json!({"vault_id": handover}))).await;
+    Box::pin(g.snap("vault_repair", "vault_repair", json!({"vault_id": handover}))).await;
     Box::pin(g.snap("vault_set_role", "vault_set_role", json!({"vault_id": handover, "email": bob.email, "role": "owner"}))).await;
     Box::pin(g.snap("vault_set_role__last_owner", "vault_set_role", json!({"vault_id": handover, "email": g.app.user.email.clone(), "role": "member"}))).await;
     Box::pin(g.snap("vault_transfer_ownership", "vault_transfer_ownership", json!({"vault_id": handover, "email": bob.email}))).await;
 
+    })
+}
+
+/// Peer vault tools without a second instance: a share code (its random parts masked), the vault's
+/// peers, a join with a bad code and a sync of an unknown link (both errors).
+fn peer_goldens<'a>(g: &'a mut Golden) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + 'a>> {
+    Box::pin(async move {
+        // an address the code can carry whatever this machine's network is
+        unsafe { std::env::set_var("EUNOMIA_PEER_ADDRS", "https://golden.example.com") };
+        let v = Box::pin(g.snap("vault_create__peer", "vault_create", json!({"name": "Peer Share", "kind": "org"}))).await;
+        let vault = s(&v, "/id");
+        let mask = |mut out: Value| {
+            for key in ["code", "addresses", "fingerprint", "id"] {
+                if out.get(key).is_some() {
+                    out[key] = json!(format!("<{key}>"));
+                }
+            }
+            if let Some(Value::Array(codes)) = out.get_mut("codes") {
+                for c in codes {
+                    c["id"] = json!("<id>");
+                }
+            }
+            out
+        };
+        let share = g.app.tool("vault_share_code", json!({"vault_id": vault, "role": "read"})).await;
+        assert!(s(&share, "/code").starts_with("eunomia1:"), "{share}");
+        insta::assert_json_snapshot!("vault_share_code", g.norm.apply(&mask(share)));
+        g.covered.insert("vault_share_code".into());
+        let peers = g.app.tool("vault_peers", json!({"vault_id": vault})).await;
+        insta::assert_json_snapshot!("vault_peers", g.norm.apply(&mask(peers)));
+        g.covered.insert("vault_peers".into());
+        Box::pin(g.snap("vault_join_shared__bad_code", "vault_join_shared", json!({"share_code": "eunomia1:nope"}))).await;
+        Box::pin(g.snap("vault_peer_sync__unknown", "vault_peer_sync", json!({"link_id": "0".repeat(32)}))).await;
     })
 }
 
@@ -210,6 +245,8 @@ async fn goldens() {
 
     // -- invitations and roles (last, so they change no snapshot above) --
     role_goldens(&mut g, &bob).await;
+    // -- peer vaults (last; no second instance: what works without one) --
+    peer_goldens(&mut g).await;
 
     let registered: BTreeSet<String> = registry::all_tools().keys().map(|k| k.to_string()).collect();
     let missing: Vec<_> = registered.difference(&g.covered).collect();

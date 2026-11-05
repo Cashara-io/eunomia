@@ -5,21 +5,21 @@ import ErrorLine, { failure } from "@/components/ErrorLine";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight } from "lucide-react";
-import type { ApiToken } from "@/lib/types";
+import { AlertTriangle, ArrowRight, House, Upload, Users } from "lucide-react";
 import type { EntityDetail, EntityKind, EntityMemory, SourceRow } from "@/lib/types";
-import { useTokens } from "@/lib/queries/auth";
 import { entityKeys, type EntityList } from "@/lib/queries/entities";
 import { call } from "@/lib/queries/client";
 import { useSources, useSyncSource } from "@/lib/queries/sources";
 import { getEntity, listEntities } from "@/lib/gen";
 import AuthorTag, { authorColor, CursorGlyph } from "@/components/AuthorTag";
-import CopyButton from "@/components/bits/CopyButton";
 import DigitRoll from "@/components/bits/DigitRoll";
 import SyncMark, { type SyncStatus } from "@/components/bits/SyncMark";
 import { prefersReducedMotion } from "@/components/bits/motion";
 import { kindForSource } from "@/lib/connectorMeta";
-import ConnectAgents, { useMcpUrl } from "@/components/ConnectAgents";
+import PageHeader from "@/components/ui/PageHeader";
+import StatusLabel from "@/components/ui/StatusLabel";
+import { AI_APPS, AppMark, appForConnection, type Connection } from "@/components/connect/apps";
+import { useConnections } from "@/components/connect/useConnections";
 import { FAILURE_ALERT_THRESHOLD, isLiveSource, sourceHealth, sourceLabel } from "@/lib/sourceState";
 
 /** Compact age: "now", "4m", "3h", "2d". */
@@ -44,50 +44,6 @@ function stamp(iso: string | null | undefined): string {
   return new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
-/** Scroll to the MCP card and put focus on its main action. */
-function focusConnect(e: React.MouseEvent) {
-  const card = document.getElementById("connect");
-  if (!card) return;
-  e.preventDefault();
-  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  card.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
-  card.querySelector<HTMLElement>(".btn-primary, button")?.focus({ preventScroll: true });
-}
-
-// ---- MCP connect card ----
-
-function CopyField({ value, children }: { value: string; children?: React.ReactNode }) {
-  return (
-    <div className="field flex items-center gap-2 h-8 pl-2.5 pr-1">
-      <code className="flex-1 min-w-0 truncate text-[12px] font-mono" style={{ color: "var(--ink-dim)" }}>
-        {children ?? value}
-      </code>
-      <CopyButton value={value} className="shrink-0 w-6! h-6!" />
-    </div>
-  );
-}
-
-function McpCard() {
-  const mcpUrl = useMcpUrl();
-  return (
-    <section id="connect" className="ledger p-4 flex flex-col gap-3.5 scroll-mt-6" aria-labelledby="connect-title">
-      <div className="flex flex-col gap-1">
-        <h2 id="connect-title" className="section-title">Connect an MCP client</h2>
-        <p className="text-[12.5px] leading-relaxed" style={{ color: "var(--ink-dim)" }}>
-          MCP and the web app share the same tools. Anything you can do here, a connected agent can do too.
-        </p>
-      </div>
-
-      <label className="label flex flex-col gap-1.5">
-        MCP URL
-        <CopyField value={mcpUrl} />
-      </label>
-
-      <ConnectAgents />
-    </section>
-  );
-}
-
 // ---- failure banner ----
 
 function FailureBanner({ rows, dismissed, onDismiss }: { rows: SourceRow[]; dismissed: Set<string>; onDismiss: (key: string) => void }) {
@@ -99,22 +55,22 @@ function FailureBanner({ rows, dismissed, onDismiss }: { rows: SourceRow[]; dism
         <div
           key={s.key}
           role="alert"
-          className="flex items-center gap-3 rounded-[10px] px-3.5 py-2.5"
-          style={{ background: "var(--critical-soft)", border: "var(--hair) solid var(--critical)" }}
+          className="flex flex-wrap items-center gap-3 rounded-[2px] px-4 py-3"
+          style={{ background: "var(--critical-soft)", border: "1px solid var(--critical)" }}
         >
-          <AlertTriangle size={15} strokeWidth={1.75} color="var(--critical)" className="shrink-0" />
-          <div className="flex-1 min-w-0">
-            <div className="text-[13px] font-medium">
-              {sourceLabel(s)} has failed {s.sync_status.consecutive_failures} syncs in a row
+          <AlertTriangle size={18} strokeWidth={1.75} color="var(--critical)" className="shrink-0" aria-hidden />
+          <div className="flex-1 min-w-[200px]">
+            <div className="text-[14px] font-semibold">
+              {sourceLabel(s)} could not update {s.sync_status.consecutive_failures} times in a row
             </div>
             {s.sync_status.last_error && (
-              <div className="text-[11.5px] font-mono truncate" style={{ color: "var(--ink-dim)" }}>
+              <div className="text-[12.5px] font-mono truncate" style={{ color: "var(--ink-dim)" }}>
                 {s.sync_status.last_error}
               </div>
             )}
           </div>
-          <Link href="/connectors" className="btn btn-sm shrink-0">
-            Review
+          <Link href={`/connectors/${s.key}`} className="btn btn-sm shrink-0">
+            Check the connection
           </Link>
           <button onClick={() => onDismiss(s.key)} className="btn btn-ghost btn-sm shrink-0">
             Dismiss
@@ -226,7 +182,7 @@ function LiveMemory({
   const cursors = new Set(arrived.slice(0, CURSOR_CAP));
   return (
     <section className="ledger" aria-labelledby="live-memory-title">
-      <div className="flex items-center justify-between gap-3 h-11 px-3" style={{ borderBottom: "var(--hair) solid var(--border)" }}>
+      <div className="flex items-center justify-between gap-3 min-h-12 px-4">
         <h2 id="live-memory-title" className="section-title">
           Live memory
         </h2>
@@ -244,10 +200,10 @@ function LiveMemory({
         </div>
       ) : rows.length === 0 ? (
         <div className="px-3 py-8 text-[13px] flex flex-wrap items-center gap-x-3 gap-y-2" style={{ color: "var(--ink-dim)" }}>
-          No memories yet. Connect an agent and what it learns lands here, tagged with who wrote it.
-          <a href="#connect" onClick={focusConnect} className="btn btn-sm">
-            Connect an agent <ArrowRight size={12} strokeWidth={1.75} />
-          </a>
+          No memories yet. Ask your AI app to remember something, or add one yourself. New memories show here with who saved them.
+          <Link href="/entities" className="btn btn-sm">
+            Browse people &amp; topics <ArrowRight size={14} strokeWidth={1.75} aria-hidden />
+          </Link>
         </div>
       ) : (
         <table className="data-table" style={{ tableLayout: "fixed" }}>
@@ -257,7 +213,7 @@ function LiveMemory({
                 Author
               </th>
               <th>Memory</th>
-              <th className="hidden md:table-cell" style={{ width: 160 }}>Entity</th>
+              <th className="hidden md:table-cell" style={{ width: 160 }}>About</th>
               <th className="hidden sm:table-cell text-right" style={{ width: 56 }}>
                 Age
               </th>
@@ -337,7 +293,7 @@ function Inspector({ row }: { row: LiveRow }) {
   const updated = row.updated_at && row.updated_at.slice(0, 16) !== row.created_at?.slice(0, 16) ? row.updated_at : null;
   const fields: { label: string; value: React.ReactNode; show?: boolean }[] = [
     { label: "Author", value: author ? <AuthorTag name={author} /> : <span style={{ color: "var(--ink-faint)" }}>Not recorded</span> },
-    { label: "Entity", value: <span className="truncate">{row.entityName}</span> },
+    { label: "About", value: <span className="truncate">{row.entityName}</span> },
     { label: "Kind", value: <span className="capitalize">{row.entityKind}</span> },
     { label: "Type", value: <span className="capitalize">{row.type}</span>, show: Boolean(row.type) },
     { label: "Written", value: mono(stamp(row.created_at)) },
@@ -346,7 +302,10 @@ function Inspector({ row }: { row: LiveRow }) {
   ];
 
   return (
-    <aside aria-label="Selected memory" className="panel frame-selected p-4 flex flex-col gap-4">
+    <aside aria-label="Selected memory" className="panel p-5 flex flex-col gap-4" style={{ borderTop: "2px solid var(--bauhaus-app-blue)" }}>
+      <span className="caps" style={{ color: "var(--accent-text)" }}>
+        Selected memory
+      </span>
       {/* Re-keyed per row so the content settles in with a short fade, the panel itself stays put. */}
       <div key={row.id} className="fade-in flex flex-col gap-4">
         <h2 className="text-[15px] font-medium leading-snug" style={{ color: "var(--ink)" }}>
@@ -362,7 +321,7 @@ function Inspector({ row }: { row: LiveRow }) {
         </dl>
       </div>
       <Link href="/entities" className="btn btn-sm self-start">
-        Open entities <ArrowRight size={12} strokeWidth={1.75} />
+        Open people &amp; topics <ArrowRight size={14} strokeWidth={1.75} aria-hidden />
       </Link>
     </aside>
   );
@@ -377,7 +336,7 @@ function Stat({ label, value, href, children }: { label: string; value: React.Re
     <>
       <span className="label">{label}</span>
       <span
-        className={`flex items-center gap-2 text-[26px] leading-none tracking-[-0.02em] ${numeric ? "font-mono" : "font-medium"}`}
+        className="flex items-center gap-2 text-[28px] leading-none tracking-[-0.02em] font-medium tabular"
         style={{ color: numeric ? "var(--ink)" : "var(--ink-dim)" }}
       >
         {children}
@@ -385,7 +344,7 @@ function Stat({ label, value, href, children }: { label: string; value: React.Re
       </span>
     </>
   );
-  const cls = "flex flex-col gap-2.5 px-3.5 py-3 min-w-0 bg-[var(--surface)]";
+  const cls = "flex flex-col gap-3 px-4 py-4 min-w-0 bg-[var(--surface)]";
   return href ? (
     <Link href={href} className={`${cls} transition-[background-color,transform] duration-150 ease-[var(--ease-out)] hover:bg-[var(--surface-raised)] active:scale-[0.98]`}>
       {body}
@@ -399,75 +358,122 @@ function Stat({ label, value, href, children }: { label: string; value: React.Re
 const NOT_CONNECTED_SHOWN = 6;
 const SYNC_HOLD_MS = 1200;
 
-// ---- agents presence ----
+// ---- choose your AI app ----
 
-const LIVE_WINDOW_MS = 10 * 60_000;
-const AGENTS_SHOWN = 6;
-// Same pattern as age(): read the clock at render, refreshed by the 60s poll.
-const isLive = (iso: string | null) => iso !== null && Date.now() - new Date(iso).getTime() < LIVE_WINDOW_MS;
-
-// An expired token can no longer write; same clock-at-render pattern as isLive.
-const isExpired = (iso: string | null) => iso !== null && new Date(iso).getTime() <= Date.now();
-
-/** Who can write to this memory right now: the user's API tokens, by name, as multiplayer cursors. */
-function Agents({ tokens }: { tokens: ApiToken[] | null | "error" }) {
-  const sorted = Array.isArray(tokens) ? tokens.filter((t) => !isExpired(t.expires_at)).sort((a, b) => (b.last_used_at ?? "").localeCompare(a.last_used_at ?? "")) : [];
+/** App 02: which AI app do you use? Neutral choices, nothing preselected;
+ * each opens that app's own steps. */
+function AppPicker({ again = false }: { again?: boolean }) {
   return (
-    <section aria-labelledby="agents-title" className="flex flex-wrap items-center gap-x-4 gap-y-2 min-h-8">
-      <span id="agents-title" className="label">
-        Agents
-      </span>
-      {tokens === null ? (
-        <span className="skeleton h-5 w-40" aria-label="Loading agents" />
-      ) : tokens === "error" ? (
-        <span className="text-[12.5px]" style={{ color: "var(--ink-faint)" }}>
-          Could not load agents.
-        </span>
-      ) : sorted.length === 0 ? (
-        <span className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12.5px]" style={{ color: "var(--ink-dim)" }}>
-          No agent has a token yet.
-          <a href="#connect" onClick={focusConnect} className="btn btn-sm">
-            Connect an agent <ArrowRight size={12} strokeWidth={1.75} />
-          </a>
-        </span>
-      ) : (
-        <ul className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          {sorted.slice(0, AGENTS_SHOWN).map((t) => {
-            const live = isLive(t.last_used_at);
-            return (
-              <li key={t.id} className="flex items-center gap-1.5">
-                <AuthorTag name={t.name} cursor title={`${t.name}: API token, ${t.last_used_at ? `last used ${stamp(t.last_used_at)}` : "never used"}`} />
-                {live ? (
-                  <span className="flex items-center gap-1 text-[11.5px]" style={{ color: "var(--ink-dim)" }}>
-                    <span className="dot" style={{ background: "var(--good)" }} aria-hidden />
-                    live
-                  </span>
-                ) : t.last_used_at ? (
-                  <time dateTime={t.last_used_at} className="font-mono text-[11.5px]" style={{ color: "var(--ink-faint)" }}>
-                    {age(t.last_used_at)}
-                  </time>
-                ) : (
-                  <span className="text-[11.5px]" style={{ color: "var(--ink-faint)" }}>
-                    never used
-                  </span>
-                )}
-              </li>
-            );
-          })}
-          {sorted.length > AGENTS_SHOWN && (
-            <li>
-              <Link href="/settings?tab=tokens" className="text-[12px] underline-offset-2 hover:underline" style={{ color: "var(--accent-text)" }}>
-                +{sorted.length - AGENTS_SHOWN} more
-              </Link>
-            </li>
-          )}
-        </ul>
-      )}
+    <section className="task-panel p-6 sm:p-8 flex flex-col gap-5" aria-labelledby="pick-title">
+      <div className="flex flex-col gap-3">
+        <h2 id="pick-title" className="text-[26px] sm:text-[28px] font-semibold tracking-[-0.6px] leading-tight">
+          {again ? "Connect another AI app" : "Which AI app do you use?"}
+        </h2>
+        <p className="text-[16px] leading-relaxed">
+          Choose the app you already use. We&apos;ll show only the steps for that app. You can connect more apps later.
+        </p>
+      </div>
+      <ul className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
+        {AI_APPS.map((a) => (
+          <li key={a.id}>
+            <Link
+              href={`/connect/${a.id}`}
+              className="flex flex-col gap-1.5 h-full min-h-[76px] px-4 py-3.5 rounded-[3px] transition-colors hover:bg-[var(--bauhaus-app-bg)]"
+              style={{ border: "1px solid var(--bauhaus-app-ink)" }}
+            >
+              <span className="flex items-center gap-2.5 text-[16px] font-semibold">
+                <AppMark id={a.id} size={22} />
+                {a.name}
+              </span>
+              <span className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+                {a.hint}
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+        <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+          Not sure which one? Get help choosing. You can also do this later.
+        </p>
+        <Link href="/connect/help#choose" className="btn">
+          Connection help
+        </Link>
+      </div>
     </section>
   );
 }
 
-export default function DashboardPage() {
+/** Or start with your own information: useful before any app is connected. */
+function OwnInformation() {
+  return (
+    <section className="flex flex-col gap-3" aria-labelledby="own-info-title">
+      <h2 id="own-info-title" className="section-title">
+        Or start with your own information
+      </h2>
+      <p className="text-[15px]" style={{ color: "var(--ink-dim)" }}>
+        You can read and organise your memories and documents before connecting an AI app.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <Link href="/documents" className="btn">
+          <Upload size={18} strokeWidth={1.75} aria-hidden /> Upload a document
+        </Link>
+        <Link href="/entities" className="btn">
+          <Users size={18} strokeWidth={1.75} aria-hidden /> Browse people &amp; topics
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+const ago = (iso: string | null) => (iso ? since(iso) : "not used yet");
+
+/** App 02.5: the connected Home. Only rendered from server-confirmed connections. */
+function ConnectedPanel({ connections, onConnectAnother }: { connections: Connection[]; onConnectAnother: () => void }) {
+  const latest = connections[0];
+  const app = appForConnection(latest);
+  return (
+    <section className="p-6 flex flex-col gap-4 rounded-[2px]" style={{ background: "var(--surface)", border: "1px solid var(--bauhaus-app-blue)" }} aria-labelledby="connected-title">
+      <h2 id="connected-title" className="text-[20px] font-semibold tracking-[-0.3px]">
+        {connections.length === 1 ? `${latest.name} is connected` : `${connections.length} AI apps are connected`}
+      </h2>
+      <p className="text-[15px]" style={{ color: "var(--ink-dim)" }}>
+        {app.id === "chatgpt"
+          ? "Your AI app can now use Eunomia. Choose Eunomia in your next ChatGPT conversation."
+          : "Your AI apps can now use Eunomia. Ask one to look for memories about you to try it."}
+      </p>
+      <ul className="flex flex-col gap-1.5">
+        {connections.slice(0, 6).map((c, i) => (
+          <li key={`${c.name}-${i}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[14px]">
+            <span className="font-medium">{c.name}</span>
+            <StatusLabel tone="good">{c.via === "sign-in" ? "Signed in" : "Using an API token"}</StatusLabel>
+            <span style={{ color: "var(--ink-dim)" }}>Last used {ago(c.at)}</span>
+          </li>
+        ))}
+        {connections.length > 6 && (
+          <li className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+            and {connections.length - 6} more
+          </li>
+        )}
+      </ul>
+      <div className="flex flex-wrap gap-2">
+        {app.openUrl && connections.length === 1 && (
+          <a href={app.openUrl} target="_blank" rel="noreferrer" className="btn btn-primary">
+            Open {app.name}
+          </a>
+        )}
+        <Link href="/settings?tab=apps" className="btn">
+          Manage connected apps
+        </Link>
+        <button type="button" className="btn btn-ghost" onClick={onConnectAnother}>
+          Connect another app
+        </button>
+      </div>
+    </section>
+  );
+}
+
+export default function HomePage() {
   // Live: rows and counts refresh in place on fixed layouts, nothing jumps.
   const sourcesQuery = useSources({ refetchInterval: 60_000 });
   const rows = sourcesQuery.data ?? (sourcesQuery.isError ? [] : null);
@@ -482,8 +488,8 @@ export default function DashboardPage() {
   const [arrived, setArrived] = useState<string[]>([]);
   const knownIds = useRef<Set<string> | null>(null);
   const [dismissedFailures, setDismissedFailures] = useState<Set<string>>(new Set());
-  const tokensQuery = useTokens();
-  const tokens: ApiToken[] | null | "error" = tokensQuery.data ?? (tokensQuery.isError ? "error" : null);
+  const { connections } = useConnections();
+  const [picking, setPicking] = useState(false);
 
   const arrivalTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const liveRows = liveQuery.data?.rows;
@@ -530,23 +536,57 @@ export default function DashboardPage() {
   const lastSyncs = connected.map((r) => r.sync_status.last_ok).filter((d): d is string => Boolean(d));
   const lastSync = lastSyncs.length ? lastSyncs.sort().at(-1)! : null;
   const selected = live?.find((m) => m.id === selectedId) ?? live?.[0] ?? null;
+  // Connected only on the server's word: an approved sign-in or a token an app has used.
+  const connected_apps = connections !== null && connections.length > 0;
 
   return (
     <div className="flex flex-col gap-8 max-w-[1240px]">
-      <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="page-title">Dashboard</h1>
-        <Agents tokens={tokens} />
-      </header>
+      <PageHeader
+        icon={House}
+        title="Home"
+        intro={connected_apps ? "Your memory, connected across your AI apps." : "Connect an AI app, or start browsing your saved information."}
+      />
 
+      {connections === null ? (
+        <div className="task-panel p-8 flex flex-col gap-4" aria-busy="true" aria-label="Checking your connected apps">
+          <div className="skeleton h-7 w-72" />
+          <div className="skeleton h-4 w-full max-w-[520px]" />
+        </div>
+      ) : !connected_apps ? (
+        <>
+          <AppPicker />
+          <OwnInformation />
+        </>
+      ) : picking ? (
+        <>
+          <AppPicker again />
+          <button type="button" className="btn self-start" onClick={() => setPicking(false)}>
+            Back to Home
+          </button>
+        </>
+      ) : (
+        <ConnectedPanel connections={connections} onConnectAnother={() => setPicking(true)} />
+      )}
+
+      {rows && (
+        <FailureBanner
+          rows={rows}
+          dismissed={dismissedFailures}
+          onDismiss={(key) => setDismissedFailures((prev) => new Set(prev).add(key))}
+        />
+      )}
+
+      {connected_apps && !picking && (
+      <>
       {sourcesQuery.isError && <ErrorLine error={failure(sourcesQuery.error, "Could not load your sources.")} />}
       {liveQuery.isError && <ErrorLine error={failure(liveQuery.error, "Could not load recent memory.")} />}
 
       <section
         aria-label="Summary"
-        className="grid grid-cols-2 lg:grid-cols-4 overflow-hidden rounded-[10px]"
+        className="grid grid-cols-2 lg:grid-cols-4 overflow-hidden rounded-[2px]"
         style={{ gap: "var(--hair)", background: "var(--border)", border: "var(--hair) solid var(--border)" }}
       >
-        <Stat label="Entities" value={entityCount !== null ? <DigitRoll value={entityCount} /> : "–"} href="/entities" />
+        <Stat label="People & topics" value={entityCount !== null ? <DigitRoll value={entityCount} /> : "–"} href="/entities" />
         <Stat label="Records" value={rows ? <DigitRoll value={totalRecords} /> : "–"} />
         <Stat
           label="Sources healthy"
@@ -559,14 +599,6 @@ export default function DashboardPage() {
         <Stat label="Last sync" value={lastSync ? since(lastSync) : "Never"} />
       </section>
 
-      {rows && (
-        <FailureBanner
-          rows={rows}
-          dismissed={dismissedFailures}
-          onDismiss={(key) => setDismissedFailures((prev) => new Set(prev).add(key))}
-        />
-      )}
-
       {/* Mobile order: live memory, sources, then inspector and connect. From lg the right column is the sticky inspector. */}
       <div className="grid gap-x-6 gap-y-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:grid-rows-[auto_1fr] items-start">
         <div className="min-w-0 lg:col-start-1 lg:row-start-1">
@@ -575,7 +607,6 @@ export default function DashboardPage() {
 
         <div className="order-3 lg:order-none flex flex-col gap-8 min-w-0 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:sticky lg:top-8">
           {selected && <Inspector row={selected} />}
-          <McpCard />
         </div>
 
         <div className="order-2 lg:order-none flex flex-col gap-8 min-w-0 lg:col-start-1 lg:row-start-2">
@@ -590,7 +621,7 @@ export default function DashboardPage() {
               </div>
             ) : connected.length === 0 ? (
               <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
-                Nothing connected yet. Pick one under &ldquo;Add a source&rdquo; below.
+                No sources connected yet. Pick one under &ldquo;Add a source&rdquo; below.
               </p>
             ) : (
               <div className="ledger overflow-x-auto relative">
@@ -674,7 +705,7 @@ export default function DashboardPage() {
                 {disconnected.length > NOT_CONNECTED_SHOWN && (
                   <li className="flex items-center min-h-11 px-3">
                     <Link href="/connectors" className="text-[13px] inline-flex items-center gap-1.5 underline-offset-2 hover:underline" style={{ color: "var(--accent-text)" }}>
-                      See all {disconnected.length} in Connectors <ArrowRight size={12} strokeWidth={1.75} />
+                      See all {disconnected.length} in Connected sources <ArrowRight size={14} strokeWidth={1.75} aria-hidden />
                     </Link>
                   </li>
                 )}
@@ -683,6 +714,8 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

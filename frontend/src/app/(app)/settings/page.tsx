@@ -4,6 +4,8 @@ import ErrorLine, { failure } from "@/components/ErrorLine";
 import { Suspense, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSettings } from "@/lib/queries/settings";
+import { SlidersHorizontal } from "lucide-react";
+import PageHeader from "@/components/ui/PageHeader";
 
 import { TokensSection } from "./TokensSection";
 import { ConnectedAppsSection } from "./ConnectedAppsSection";
@@ -62,18 +64,20 @@ function Settings() {
     tabRefs.current[j]?.focus();
   }
 
+  const current = TABS.find((t) => t.id === tab)!;
+
   return (
     <div className="max-w-5xl flex flex-col gap-7">
-      <h1 className="page-title">Settings</h1>
+      <PageHeader icon={SlidersHorizontal} title="Settings" intro={`Settings / ${current.label}. Change how this Eunomia runs, who can reach it and what is stored.`} />
 
       {!settings ? (
         loadError ? (
           <ErrorLine error={loadError} />
         ) : (
-          <div className="grid gap-8 md:grid-cols-[180px_minmax(0,1fr)]" aria-hidden>
-            <div className="flex md:flex-col gap-2">
+          <div className="flex flex-col gap-6" aria-hidden>
+            <div className="flex flex-wrap gap-2">
               {TABS.map((t) => (
-                <span key={t.id} className="skeleton h-7 w-28" />
+                <span key={t.id} className="skeleton h-9 w-24" />
               ))}
             </div>
             <div className="flex flex-col gap-3">
@@ -83,13 +87,8 @@ function Settings() {
           </div>
         )
       ) : (
-        <div className="grid gap-6 md:gap-10 md:grid-cols-[180px_minmax(0,1fr)] items-start">
-          <div
-            role="tablist"
-            aria-label="Settings sections"
-            aria-orientation="vertical"
-            className="flex md:flex-col gap-0.5 overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0 md:sticky md:top-6"
-          >
+        <div className="flex flex-col gap-7">
+          <div role="tablist" aria-label="Settings sections" className="flex flex-wrap gap-2">
             {TABS.map((t, i) => (
               <button
                 key={t.id}
@@ -103,15 +102,14 @@ function Settings() {
                 tabIndex={tab === t.id ? 0 : -1}
                 onClick={() => choose(t.id)}
                 onKeyDown={(e) => onKey(e, i)}
-                data-active={tab === t.id ? "" : undefined}
-                className="nav-link shrink-0 h-8 px-2.5 rounded-[7px] text-[13px] text-left whitespace-nowrap transition-transform active:scale-[0.97]"
+                className="pill min-h-10! px-4! text-[14px]! font-semibold whitespace-nowrap"
               >
                 {t.label}
               </button>
             ))}
           </div>
 
-          <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="min-w-0 max-w-3xl">
+          <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="min-w-0 max-w-4xl pt-6" style={{ borderTop: "1px solid var(--border)" }}>
             {tab === "general" && <GeneralSection settings={settings} />}
             {tab === "updates" && <UpdateSection />}
             {tab === "https" && <HttpsSection />}

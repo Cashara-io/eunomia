@@ -86,14 +86,14 @@ export default function MemoryRows({ points, vaultIds, nameOf, selection, focusI
   return (
     <div className="flex flex-col min-h-0 flex-1">
       <div className="p-3 pb-2 flex flex-col gap-2">
-        <div className="field flex items-center gap-2 h-8 px-2.5">
+        <div className="field flex items-center gap-2 h-10 px-3">
           <Search size={13} strokeWidth={1.75} style={{ color: "var(--ink-faint)" }} aria-hidden />
           <input
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             placeholder="Filter memories"
             aria-label="Filter memories"
-            className="bg-transparent outline-none text-[13px] flex-1 min-w-0"
+            className="bg-transparent outline-none text-[14px] flex-1 min-w-0"
           />
         </div>
         <div className="flex items-center justify-between gap-2 min-h-[22px]">
@@ -101,7 +101,7 @@ export default function MemoryRows({ points, vaultIds, nameOf, selection, focusI
             {n === 0 ? "Select two or more rows to compare them." : full && n === MAX_COMPARE ? `${n} selected (the most you can compare)` : `${n} selected`}
           </span>
           {n > 0 && (
-            <button type="button" className="btn btn-ghost btn-sm" style={{ height: 22, padding: "0 6px" }} onClick={onClear}>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={onClear}>
               Clear
             </button>
           )}
@@ -131,7 +131,7 @@ export default function MemoryRows({ points, vaultIds, nameOf, selection, focusI
               aria-disabled={blocked}
               title={blocked ? `Compare up to ${MAX_COMPARE} at a time` : undefined}
               onClick={() => !blocked && onToggle(p.id)}
-              className="flex items-start gap-2.5 w-full text-left px-3 py-2 hover:bg-[var(--surface-hover)]"
+              className="flex items-start gap-2.5 w-full text-left px-3 py-2.5 min-h-11 hover:bg-[var(--surface-hover)]"
               style={{
                 background: on ? "var(--accent-soft)" : undefined,
                 opacity: blocked ? 0.5 : 1,
@@ -152,7 +152,7 @@ export default function MemoryRows({ points, vaultIds, nameOf, selection, focusI
                 {on ? num : ""}
               </span>
               <span className="min-w-0 flex-1 flex flex-col gap-0.5">
-                <span className="text-[12.5px] leading-snug line-clamp-2" style={{ color: "var(--ink)" }}>
+                <span className="text-[13.5px] leading-snug line-clamp-2" style={{ color: "var(--ink)" }}>
                   {p.label}
                 </span>
                 <span className="label flex items-center gap-1.5 min-w-0">
@@ -175,7 +175,7 @@ export default function MemoryRows({ points, vaultIds, nameOf, selection, focusI
           aria-label="Comparison"
         >
           <div className="flex items-baseline justify-between gap-2">
-            <h3 className="text-[13px] font-semibold" style={{ color: "var(--ink)" }}>
+            <h3 className="text-[15px] font-semibold" style={{ color: "var(--ink)" }}>
               Comparing {n}
             </h3>
             {sim.data && <span className="label">{sim.data.space === "semantic" ? "Full embedding vectors" : "Word-hash vectors"}</span>}

@@ -11,10 +11,10 @@ import Tooltip from "@/components/bits/Tooltip";
 import { ICON, CopyField, relativeTime, expiryLabel, PanelHead, RevokeButton, TableSkeleton } from "./shared";
 
 const SCOPES: { id: Scope; label: string; hint: string }[] = [
-  { id: "memory:read", label: "Read memories", hint: "Recall, search and read entities and vaults" },
-  { id: "memory:write", label: "Write memories", hint: "Add, edit and delete memories and entities" },
-  { id: "vaults:admin", label: "Manage vaults", hint: "Create, rename, share and delete vaults; settings, tokens and chat" },
-  { id: "connectors", label: "Connectors", hint: "View and sync connected sources" },
+  { id: "memory:read", label: "Read memories", hint: "Look up and read memories, people & topics and memory spaces" },
+  { id: "memory:write", label: "Save memories", hint: "Add, change and delete memories and people & topics" },
+  { id: "vaults:admin", label: "Manage memory spaces", hint: "Create, rename, share and delete memory spaces; settings, tokens and chat" },
+  { id: "connectors", label: "Connected sources", hint: "View and sync connected sources" },
 ];
 
 // Same limit as the API (and as a vault name).
@@ -108,8 +108,8 @@ export function TokensSection() {
   return (
     <div className="flex flex-col gap-5">
       <PanelHead title="API tokens">
-        Personal tokens for MCP clients and scripts. They act as you; narrow one to the scopes it needs, to a single vault,
-        or give it an expiry. Each is shown once, at creation.
+        A token lets an AI app or script use Eunomia as you. Give each one only the access it needs, limit it to one memory
+        space, or let it expire. A token is a secret: it is shown once, when you create it, and never again.
       </PanelHead>
 
       <form
@@ -125,8 +125,8 @@ export function TokensSection() {
           </label>
           <input
             id="token-name"
-            className="field h-8 px-3 text-[13px] w-full"
-            placeholder="Name this token (e.g. laptop, MCP)"
+            className="field h-10 px-3 text-[14px] w-full"
+            placeholder="For example: work laptop"
             maxLength={NAME_MAX}
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -135,7 +135,7 @@ export function TokensSection() {
 
         <div className="flex flex-col gap-1.5">
           <span id="token-scopes" className="label">
-            Scopes
+            What it can do
           </span>
           <div className="flex flex-wrap gap-2" role="group" aria-labelledby="token-scopes">
             {SCOPES.map((s) => {
@@ -164,17 +164,17 @@ export function TokensSection() {
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1.5 w-full sm:w-[220px]">
             <span className="label">
-              Vault
+              Memory space
             </span>
             <Select
-              aria-label="Restrict to vault"
+              aria-label="Restrict to a memory space"
               value={vaultId}
               onChange={setVaultId}
               options={[
-                { value: "", label: "All my vaults" },
+                { value: "", label: "All my memory spaces" },
                 ...vaultList.map((v) => ({ value: v.id, label: v.name })),
               ]}
-              className="h-8 text-[13px] w-full"
+              className="h-10 text-[14px] w-full"
             />
           </div>
           <div className="flex flex-col gap-1.5 w-full sm:w-[160px]">
@@ -186,28 +186,28 @@ export function TokensSection() {
               value={expiryDays}
               onChange={setExpiryDays}
               options={EXPIRY_OPTIONS}
-              className="h-8 text-[13px] w-full"
+              className="h-10 text-[14px] w-full"
             />
           </div>
           <button type="submit" disabled={busy || scopes.length === 0} className="btn btn-primary">
             <KeyRound {...ICON} />
-            {busy ? "Creating…" : "Create"}
+            {busy ? "Creating…" : "Create token"}
           </button>
         </div>
         {vaultId && (
           <p className="text-[12px] -mt-1" style={{ color: "var(--ink-faint)" }}>
-            A vault-restricted token works only in that vault. It can&apos;t create vaults or change account settings.
+            A token limited to one memory space works only there. It can&apos;t create memory spaces or change account settings.
           </p>
         )}
       </form>
 
       {minted && (
-        <div className="panel pop-in p-4 flex flex-col gap-2" style={{ transformOrigin: "top center" }}>
+        <div role="status" className="task-panel pop-in p-5 flex flex-col gap-3" style={{ transformOrigin: "top center" }}>
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="text-[13px] font-medium">Token “{minted.name}” created</div>
-              <p className="text-[12.5px] mt-0.5" style={{ color: "var(--ink-dim)" }}>
-                Copy it now and store it somewhere safe. It won&apos;t be shown again.
+              <div className="text-[16px] font-semibold">Token “{minted.name}” created</div>
+              <p className="text-[14px] mt-0.5" style={{ color: "var(--ink)" }}>
+                Copy it now and keep it somewhere safe, like a password manager. It won&apos;t be shown again.
               </p>
             </div>
             <button onClick={() => setMinted(null)} aria-label="Dismiss" className="btn btn-ghost btn-sm btn-icon">
@@ -226,7 +226,7 @@ export function TokensSection() {
           <thead>
             <tr>
               <th>Name</th>
-              <th>Access</th>
+              <th>Can</th>
               <th className="w-[100px]">Last used</th>
               <th className="w-[90px]">Expires</th>
               <th className="w-[110px]">
@@ -239,7 +239,7 @@ export function TokensSection() {
             {tokens?.length === 0 && (
               <tr>
                 <td colSpan={5} style={{ color: "var(--ink-dim)", height: 56 }}>
-                  No tokens yet. Create one above to connect an agent over MCP.
+                  No tokens yet. Create one above to connect an AI app with a token.
                 </td>
               </tr>
             )}
@@ -254,7 +254,7 @@ export function TokensSection() {
                         aria-label="New token name"
                         autoFocus
                         maxLength={NAME_MAX}
-                        className="field h-7 px-2 text-[13px] w-full min-w-[140px]"
+                        className="field h-9 px-2 text-[14px] w-full min-w-[140px]"
                         value={draft}
                         disabled={renameToken.isPending}
                         onChange={(e) => setDraft(e.target.value)}
@@ -291,10 +291,10 @@ export function TokensSection() {
                       {full ? (
                         <span>Full access</span>
                       ) : (
-                        <span className="font-mono text-[12px]">{t.scopes.join(" ")}</span>
+                        <span>{t.scopes.map((sc) => SCOPES.find((x) => x.id === sc)?.label ?? sc).join(", ")}</span>
                       )}
                       <span className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
-                        {t.vault_id ? `Vault: ${vaultName(t.vault_id)}` : "All vaults"}
+                        {t.vault_id ? `Memory space: ${vaultName(t.vault_id)}` : "All memory spaces"}
                       </span>
                     </span>
                   </td>
@@ -306,7 +306,7 @@ export function TokensSection() {
                     style={{ color: exp.expired ? "var(--critical)" : "var(--ink-dim)" }}
                     title={t.expires_at ? new Date(t.expires_at).toLocaleString() : undefined}
                   >
-                    {exp.text}
+                    {exp.expired ? "Expired" : exp.text === "Never" ? "Never" : `Expires ${exp.text}`}
                   </td>
                   <td className="text-right">
                     <RevokeButton label={t.name} onRevoke={() => revoke(t.id)} />

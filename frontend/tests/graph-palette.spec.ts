@@ -55,7 +55,7 @@ test.describe("Entity graph", () => {
     await expect(page.getByRole("button", { name: "Edit" })).toBeVisible();
 
     // Switching vault drops the selection from the old vault.
-    await page.getByRole("combobox", { name: "Vault" }).click();
+    await page.getByRole("combobox", { name: "Memory space" }).click();
     await page.getByRole("option", { name: "Other vault" }).click();
     await expect(page.getByRole("button", { name: "Edit" })).toHaveCount(0);
   });
@@ -70,12 +70,12 @@ test.describe("Entity graph", () => {
     expect(merged.entities).toBe(3);
 
     await page.goto("/entities");
-    await page.getByRole("tab", { name: "Vector cloud" }).click();
-    const cloud = page.getByRole("img", { name: "Vector cloud" });
+    await page.getByRole("tab", { name: "Memory map" }).click();
+    const cloud = page.getByRole("img", { name: "Memory map" });
     await expect(cloud.locator("canvas")).toBeVisible();
     await expect(cloud.getByText("PC1")).toBeAttached();
 
-    const layers = page.getByRole("group", { name: "Vault layers" });
+    const layers = page.getByRole("group", { name: "Memory space layers" });
     await layers.getByRole("button", { name: /Team/ }).click();
     await layers.getByRole("button", { name: /Everything/ }).click();
     await expect(layers.getByRole("button", { name: /Everything/ })).toContainText("3"); // one point per memory

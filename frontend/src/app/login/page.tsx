@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import { useLogin } from "@/lib/queries/auth";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import { keepNext, nextPath } from "@/lib/nextPath";
@@ -30,6 +30,8 @@ export default function LoginPage() {
       router.replace(nextPath());
     } catch (err) {
       setError(failure(err, "Could not sign in. Check your email and password, then try again."));
+      // Keep the email; clear only the password, so nothing secret lingers on screen.
+      setPassword("");
       setBusy(false);
     }
   }
@@ -38,16 +40,16 @@ export default function LoginPage() {
     <AuthShell>
       <div className="flex flex-col gap-4">
         <div className="mb-3">
-          <h1 className="page-title">Sign in to Eunomia</h1>
-          <p className="mt-1.5 text-[13.5px]" style={{ color: "var(--ink-dim)" }}>
-            {mode === "oidc" ? `Use your ${provider} account.` : "Use the account you made on this Eunomia instance."}
+          <h1 className="connect-title">Sign in to Eunomia</h1>
+          <p className="mt-3 text-[16px]" style={{ color: "var(--ink-dim)" }}>
+            {mode === "oidc" ? `Use your ${provider} account.` : "Use your Eunomia email and password."}
           </p>
         </div>
 
         {oidcError && <ErrorLine error={oidcError} />}
 
         {pending ? (
-          <div className="h-9" aria-hidden />
+          <div className="h-10" aria-hidden />
         ) : mode === "oidc" ? (
           <SsoButton provider={provider ?? ""} primary />
         ) : (
@@ -60,7 +62,7 @@ export default function LoginPage() {
             )}
             <form onSubmit={submit} className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="email" className={LABEL} style={{ color: "var(--ink-dim)" }}>
+                <label htmlFor="email" className={LABEL}>
                   Email
                 </label>
                 <input
@@ -70,14 +72,16 @@ export default function LoginPage() {
                   autoFocus={!provider}
                   autoComplete="email"
                   spellCheck={false}
-                  className="field h-9 px-3 text-[13.5px]"
+                  className="field h-11 px-3 text-[15px]"
+                  placeholder="you@example.com"
+                  aria-invalid={error ? true : undefined}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="password" className={LABEL} style={{ color: "var(--ink-dim)" }}>
+                <label htmlFor="password" className={LABEL}>
                   Password
                 </label>
                 <div className="relative">
@@ -86,7 +90,8 @@ export default function LoginPage() {
                     type={show ? "text" : "password"}
                     required
                     autoComplete="current-password"
-                    className="field h-9 w-full pl-3 pr-14 text-[13.5px]"
+                    className="field h-11 w-full pl-3 pr-16 text-[15px]"
+                    aria-invalid={error ? true : undefined}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                   />
@@ -96,12 +101,13 @@ export default function LoginPage() {
 
               {error && <ErrorLine error={error} />}
 
-              <button type="submit" disabled={busy} aria-busy={busy} className="btn btn-primary mt-1 h-9 w-full">
+              <button type="submit" disabled={busy} aria-busy={busy} className="btn btn-primary mt-1 min-h-11 w-full">
                 {busy && <Loader2 size={14} strokeWidth={1.75} className="animate-spin" aria-hidden />}
                 {busy ? "Signing in…" : "Sign in"}
+                {!busy && <ArrowRight size={16} strokeWidth={1.75} aria-hidden />}
               </button>
 
-              <p className="mt-2 text-[13px]" style={{ color: "var(--ink-faint)" }}>
+              <p className="mt-2 text-[14px]" style={{ color: "var(--ink-dim)" }}>
                 No account yet?{" "}
                 <Link href="/register" onClick={(e) => { e.preventDefault(); router.push(keepNext("/register")); }} className="font-medium underline" style={{ color: "var(--accent-text)" }}>
                   Create one

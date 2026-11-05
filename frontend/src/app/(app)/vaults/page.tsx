@@ -9,7 +9,9 @@ import {
   ChevronRight,
   Combine,
   Copy,
+  ChevronDown,
   Crown,
+  Layers,
   Lock,
   LogOut,
   Mail,
@@ -19,8 +21,10 @@ import {
   Trash2,
   UserPlus,
   Users,
-  X,
 } from "lucide-react";
+import PageHeader from "@/components/ui/PageHeader";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import StatusLabel from "@/components/ui/StatusLabel";
 import AuthorTag from "@/components/AuthorTag";
 import type { Vault, VaultMember, VaultRole } from "@/lib/types";
 import { useMe } from "@/lib/queries/auth";
@@ -43,13 +47,15 @@ import {
   useVaultMembers,
   useVaults,
 } from "@/lib/queries/vaults";
-import HoldButton from "@/components/bits/HoldButton";
 import SyncMark from "@/components/bits/SyncMark";
 import { spark } from "@/components/bits/Spark";
 import Tooltip from "@/components/bits/Tooltip";
+import LiveStatusBadge from "@/components/live/LiveStatusBadge";
+import TransferOwnershipPanel from "@/components/live/TransferOwnershipPanel";
+import PeerSharing, { JoinSharedSpace } from "@/components/PeerSharing";
 import { cssVar, prefersReducedMotion } from "@/components/bits/motion";
 
-const ICON = { size: 14, strokeWidth: 1.75 } as const;
+const ICON = { size: 18, strokeWidth: 1.75 } as const;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function ago(iso: string | null): string | null {
@@ -65,14 +71,31 @@ function ago(iso: string | null): string | null {
 function RoleChip({ role }: { role: VaultRole }) {
   return (
     <span
-      className="inline-flex items-center h-5 px-1.5 rounded-[4px] text-[11.5px] font-medium shrink-0"
+      className="inline-flex items-center h-6 px-2 rounded-[3px] text-[12px] font-medium shrink-0"
       style={{
-        border: "var(--hair) solid var(--border-strong)",
+        border: "1px solid var(--border-strong)",
         color: role === "owner" ? "var(--ink)" : "var(--ink-dim)",
       }}
     >
       {role === "owner" ? "Owner" : "Member"}
     </span>
+  );
+}
+
+/* The space's identity: a red circle for the personal space, a square in one
+   of the three Bauhaus colours for shared spaces. Decorative; the name and the
+   "Personal"/"Shared space" words carry the meaning. */
+const SWATCHES = ["var(--bauhaus-app-yellow)", "var(--bauhaus-app-blue)", "var(--bauhaus-app-red)"];
+function SpaceSwatch({ vault }: { vault: Vault }) {
+  const personal = vault.kind === "personal";
+  let h = 0;
+  for (const ch of vault.id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return (
+    <span
+      aria-hidden
+      className="inline-block w-3.5 h-3.5 shrink-0"
+      style={{ background: personal ? "var(--bauhaus-app-red)" : SWATCHES[h % SWATCHES.length], borderRadius: personal ? 999 : 1 }}
+    />
   );
 }
 
@@ -165,6 +188,8 @@ function VaultInspector({
     (m) => m.email.toLowerCase() === trimmed.toLowerCase(),
   );
   const created = ago(vault.created_at);
+  // Last-owner rule: a shared space always needs an owner, so its only owner can't leave.
+  const lastOwner = isOwner && isOrg && members !== null && members.filter((m) => m.role === "owner").length <= 1;
 
   async function invite() {
     setTouched(true);
@@ -175,7 +200,7 @@ function VaultInspector({
     try {
       await inviteMember.mutateAsync({ id: vault.id, email: trimmed, role });
       setSent(
-        `Invite sent. It shows up on their Vaults page until they join or decline.`,
+        `Invite sent. It waits on their Memory spaces page until they join or decline. They can't see anything here until they join.`,
       );
       setEmail("");
       setTouched(false);
@@ -210,7 +235,7 @@ function VaultInspector({
       setRenaming(false);
       return;
     }
-    await run(() => renameVault.mutateAsync({ id: vault.id, name }), "Could not rename this vault. Try a different name.", () => setRenaming(false));
+    await run(() => renameVault.mutateAsync({ id: vault.id, name }), "Could not rename this space. Try a different name.", () => setRenaming(false));
   }
 
   async function doClone() {
@@ -222,7 +247,7 @@ function VaultInspector({
       setCloned(true);
       onVaultsChanged();
     } catch (e) {
-      setError(failure(e, "Could not clone this vault. Try a different name."));
+      setError(failure(e, "Could not copy this space. Try a different name."));
     } finally {
       setCloneBusy(false);
     }
@@ -232,7 +257,7 @@ function VaultInspector({
     <aside
       className={inline ? "flex flex-col" : "panel flex flex-col"}
       style={
-        inline ? { borderTop: "var(--hair) solid var(--border)" } : undefined
+        inline ? { borderTop: "1px solid var(--border)", background: "var(--surface)" } : undefined
       }
       aria-label={`${vault.name} details`}
     >
@@ -246,10 +271,10 @@ function VaultInspector({
             }}
           >
             <input
-              aria-label="Vault name"
+              aria-label="Space name"
               autoFocus
               maxLength={80}
-              className="field h-8 px-3 text-[14px] flex-1 min-w-0"
+              className="field h-10 px-3 text-[14px] flex-1 min-w-0"
               value={renameValue}
               onChange={(e) => setRenameValue(e.target.value)}
               onKeyDown={(e) => e.key === "Escape" && setRenaming(false)}
@@ -263,19 +288,20 @@ function VaultInspector({
           </form>
         ) : (
           <div className="flex items-center gap-2 min-w-0">
-            <h2 className="text-[17px] font-semibold tracking-[-0.015em] truncate">
+            <SpaceSwatch vault={vault} />
+            <h2 className="text-[22px] font-semibold tracking-[-0.02em] truncate">
               {vault.name}
             </h2>
             <RoleChip role={vault.role} />
             {isOwner && (
-              <Tooltip label="Rename vault">
+              <Tooltip label="Rename space">
                 <button
                   onClick={() => {
                     setRenameValue(vault.name);
                     setError(null);
                     setRenaming(true);
                   }}
-                  aria-label="Rename vault"
+                  aria-label="Rename space"
                   className="btn btn-ghost btn-sm btn-icon shrink-0"
                 >
                   <Pencil {...ICON} />
@@ -286,24 +312,24 @@ function VaultInspector({
         )}
         <span className="label">
           {isOrg
-            ? "Org vault · shared with every member below"
-            : "Personal vault · private to you, nobody else can be added"}
+            ? "Shared space · only the members listed below can read it"
+            : "Personal space · private to you; nobody else can be added"}
           {created ? ` · created ${created}` : ""}
         </span>
       </div>
 
       <div
         className="px-5 pb-4 flex flex-col gap-2"
-        style={{ borderTop: "var(--hair) solid var(--border)" }}
+        style={{ borderTop: "1px solid var(--border)" }}
       >
-        <h3 className="label pt-4 flex items-center gap-1.5">
+        <h3 className="caps pt-4 flex items-center gap-1.5" style={{ color: "var(--ink-dim)" }}>
           Members
           {members && <span className="font-mono">{members.length}</span>}
         </h3>
         <ul className="hairline-rows">
           {members === null &&
             [0, 1].map((i) => (
-              <li key={i} className="flex items-center gap-2 h-10">
+              <li key={i} className="flex items-center gap-2 h-11">
                 <span className="skeleton h-5 w-16" />
                 <span className="skeleton h-4 flex-1" />
               </li>
@@ -314,62 +340,21 @@ function VaultInspector({
             return (
               <li
                 key={m.email}
-                className="flex items-center gap-2 min-h-10 py-1.5"
+                className="flex flex-wrap items-center gap-2 min-h-11 py-1.5"
               >
                 <span className="flex max-w-[96px] min-w-0 shrink-0">
                   <AuthorTag name={m.email} />
                 </span>
                 <span
-                  className="flex-1 min-w-0 truncate text-[12.5px]"
-                  style={{ color: "var(--ink-dim)" }}
+                  className="flex-1 min-w-0 truncate text-[13px]"
+                  style={{ color: "var(--ink)" }}
                 >
                   {m.email}
                   {isMe && (
-                    <span style={{ color: "var(--ink-faint)" }}> (you)</span>
+                    <span style={{ color: "var(--ink-dim)" }}> (you)</span>
                   )}
                 </span>
-                {removing === m.email ? (
-                  <span className="inline-flex items-center gap-1 shrink-0">
-                    <button
-                      onClick={() =>
-                        run(
-                          () => removeMember.mutateAsync({ id: vault.id, email: m.email }),
-                          "Could not remove that member. Reload and try again.",
-                          () => setRemoving(null),
-                        )
-                      }
-                      className="btn btn-danger btn-sm"
-                    >
-                      Remove
-                    </button>
-                    <button
-                      onClick={() => setRemoving(null)}
-                      className="btn btn-ghost btn-sm btn-icon"
-                      aria-label="Keep member"
-                    >
-                      <X {...ICON} />
-                    </button>
-                  </span>
-                ) : handing === m.email ? (
-                  <span className="inline-flex items-center gap-1 shrink-0">
-                    <button
-                      onClick={() =>
-                        run(
-                          () => transfer.mutateAsync({ id: vault.id, email: m.email }),
-                          "Could not hand over the vault. Reload and try again.",
-                          () => setHanding(null),
-                        )
-                      }
-                      className="btn btn-danger btn-sm"
-                    >
-                      Hand over
-                    </button>
-                    <button onClick={() => setHanding(null)} className="btn btn-ghost btn-sm btn-icon" aria-label="Keep ownership">
-                      <X {...ICON} />
-                    </button>
-                  </span>
-                ) : (
-                  <>
+                <>
                     <RoleChip role={m.role} />
                     {isOwner && !isMe && (
                       <Tooltip label={m.role === "owner" ? `Make ${m.email} a member` : `Make ${m.email} an owner`}>
@@ -389,10 +374,10 @@ function VaultInspector({
                       </Tooltip>
                     )}
                     {isOwner && !isMe && (
-                      <Tooltip label={`Hand this vault to ${m.email}`}>
+                      <Tooltip label={`Make ${m.email} the owner instead of you`}>
                         <button
                           onClick={() => setHanding(m.email)}
-                          aria-label="Hand over vault"
+                          aria-label="Hand over space"
                           className="btn btn-ghost btn-sm btn-icon shrink-0"
                         >
                           <ArrowRightLeft {...ICON} />
@@ -405,13 +390,13 @@ function VaultInspector({
                           onClick={() => setRemoving(m.email)}
                           aria-label="Remove member"
                           className="btn btn-ghost btn-sm btn-icon shrink-0"
+                          style={{ color: "var(--critical)" }}
                         >
                           <Trash2 {...ICON} />
                         </button>
                       </Tooltip>
                     )}
-                  </>
-                )}
+                </>
               </li>
             );
           })}
@@ -426,14 +411,15 @@ function VaultInspector({
             }}
             noValidate
           >
-            <label htmlFor={`invite-${vault.id}`} className="label">
-              Invite by email
+            <h3 className="section-title text-[15px]">Invite by email</h3>
+            <label htmlFor={`invite-${vault.id}`} className="text-[13px] font-medium">
+              Email address
             </label>
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-2">
               <input
                 id={`invite-${vault.id}`}
                 type="email"
-                className="field h-8 px-3 text-[13px] flex-1 min-w-0"
+                className="field h-10 px-3 text-[14px] flex-1 min-w-[180px]"
                 placeholder="person@example.com"
                 value={email}
                 aria-invalid={invalid || undefined}
@@ -446,7 +432,7 @@ function VaultInspector({
                 style={invalid ? { borderColor: "var(--critical)" } : undefined}
               />
               <Select
-                className="h-8 text-[12.5px] w-28 shrink-0"
+                className="h-10 text-[13px] w-32 shrink-0"
                 value={role}
                 aria-label="Role for invite"
                 onChange={(v) => setRole(v as VaultRole)}
@@ -459,9 +445,9 @@ function VaultInspector({
             <div className="flex items-start justify-between gap-2">
               <span
                 id={`invite-help-${vault.id}`}
-                className="text-[12px] pt-1.5"
+                className="text-[13px] pt-1.5"
                 style={{
-                  color: invalid ? "var(--critical)" : "var(--ink-faint)",
+                  color: invalid ? "var(--critical)" : "var(--ink-dim)",
                 }}
               >
                 {invalid
@@ -469,25 +455,27 @@ function VaultInspector({
                   : already
                     ? "Already a member."
                     : (sent ??
-                      "They join once they accept. Owners can invite and remove.")}
+                      "An invitation gives no access until they accept it. Owners can invite and remove members; members can read and add memories.")}
               </span>
               <button
                 type="submit"
                 disabled={busy || !trimmed}
-                className="btn btn-sm shrink-0"
+                className="btn btn-primary shrink-0"
               >
                 {busy || sent ? <SyncMark status={busy ? "running" : "done"} /> : <UserPlus {...ICON} />}
-                {busy ? "Inviting…" : "Invite"}
+                {busy ? "Sending…" : "Send invite"}
               </button>
             </div>
           </form>
         )}
+        {isOwner && <TransferOwnershipPanel vault={vault} members={members} me={me} />}
       </div>
 
       <div
         className="px-5 py-4 flex flex-col gap-2"
-        style={{ borderTop: "var(--hair) solid var(--border)" }}
+        style={{ borderTop: "1px solid var(--border)" }}
       >
+        <PeerSharing vault={vault} />
         {cloning ? (
           <form
             className="flex flex-col gap-1.5"
@@ -496,13 +484,16 @@ function VaultInspector({
               doClone();
             }}
           >
-            <label htmlFor={`clone-${vault.id}`} className="label">
-              Name for the copy. {vault.name} stays exactly as it is.
+            <label htmlFor={`clone-${vault.id}`} className="text-[13px] font-medium">
+              Name for the copy
             </label>
+            <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+              Copying creates a new space with the same memories and you as its only member. {vault.name} stays exactly as it is.
+            </p>
             <input
               id={`clone-${vault.id}`}
               autoFocus
-              className="field h-8 px-3 text-[13px]"
+              className="field h-10 px-3 text-[14px]"
               value={cloneName}
               onChange={(e) => setCloneName(e.target.value)}
               onKeyDown={(e) => e.key === "Escape" && setCloning(false)}
@@ -511,104 +502,128 @@ function VaultInspector({
               <button
                 type="button"
                 onClick={() => setCloning(false)}
-                className="btn btn-ghost btn-sm"
+                className="btn"
               >
                 Cancel
               </button>
-              <button type="submit" disabled={cloneBusy} className="btn btn-sm">
-                {cloneBusy ? "Cloning…" : "Clone"}
+              <button type="submit" disabled={cloneBusy} className="btn btn-primary">
+                {cloneBusy ? "Copying…" : "Create copy"}
               </button>
             </div>
           </form>
-        ) : confirm ? (
-          <div
-            className="flex flex-col gap-2 rounded-[7px] p-3"
-            style={{ background: "var(--critical-soft)" }}
-          >
-            <p className="text-[12.5px]" style={{ color: "var(--ink)" }}>
-              {confirm === "delete"
-                ? `Delete ${vault.name}? Its entities and memory are removed for every member. This can't be undone.`
-                : `Leave ${vault.name}? You lose access until an owner invites you again.`}
-            </p>
-            <div className="flex justify-end gap-1.5">
-              <button
-                onClick={() => setConfirm(null)}
-                className="btn btn-ghost btn-sm"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() =>
-                  confirm === "delete"
-                    ? run(
-                        () => deleteVault.mutateAsync(vault.id),
-                        "Could not delete this vault. Reload and try again.",
-                        onVaultsChanged,
-                      )
-                    : run(
-                        () => leaveVault.mutateAsync(vault.id),
-                        "Could not leave this vault. It needs an owner, so make someone else owner first.",
-                        onVaultsChanged,
-                      )
-                }
-                disabled={leaveVault.isPending || deleteVault.isPending}
-                className="btn btn-danger btn-sm"
-              >
-                {confirm === "delete" ? (
-                  <Trash2 {...ICON} />
-                ) : (
-                  <LogOut {...ICON} />
-                )}
-                {confirm === "delete" ? "Delete vault" : "Leave"}
-              </button>
-            </div>
-          </div>
         ) : (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <button
-              onClick={() => {
-                setCloneName(`${vault.name} (copy)`);
-                setCloning(true);
-              }}
-              className="btn btn-sm"
-            >
-              {cloned ? <DrawnCheck /> : <Copy {...ICON} />}
-              Clone vault
-            </button>
-            <span className="flex-1" />
-            {isOrg && (
+          <>
+            <div className="flex flex-wrap items-center gap-2">
               <button
-                onClick={() => setConfirm("leave")}
-                className="btn btn-ghost btn-sm"
+                onClick={() => {
+                  setCloneName(`${vault.name} (copy)`);
+                  setCloning(true);
+                }}
+                className="btn btn-sm"
               >
-                <LogOut {...ICON} />
-                Leave this vault
+                {cloned ? <DrawnCheck /> : <Copy {...ICON} />}
+                Copy space
               </button>
+              {isOrg && (
+                <button
+                  onClick={() => setConfirm("leave")}
+                  disabled={lastOwner}
+                  aria-describedby={lastOwner ? `last-owner-${vault.id}` : undefined}
+                  className="btn btn-sm"
+                >
+                  <LogOut {...ICON} />
+                  Leave space…
+                </button>
+              )}
+              {isOrg && isOwner && (
+                <button onClick={() => setConfirm("delete")} className="btn btn-danger btn-sm">
+                  <Trash2 {...ICON} />
+                  Delete space…
+                </button>
+              )}
+            </div>
+            {lastOwner && (
+              <p id={`last-owner-${vault.id}`} className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+                You are the only owner. Make another member an owner before leaving this space.
+              </p>
             )}
-            {isOrg && isOwner && (
-              // Click still opens the confirm step; holding 900ms is the accelerator.
-              <Tooltip label="Hold to delete now">
-              <HoldButton
-                holdMs={900}
-                onClick={() => setConfirm("delete")}
-                onConfirm={() =>
-                  run(
-                    () => deleteVault.mutateAsync(vault.id),
-                    "Could not delete this vault. Reload and try again.",
-                    onVaultsChanged,
-                  )
-                }
-                className="btn-sm"
-                aria-label="Delete vault"
-              >
-                <Trash2 {...ICON} />
-                Delete
-              </HoldButton>
-              </Tooltip>
-            )}
-          </div>
+          </>
         )}
-        {membersQuery.isError && <ErrorLine error={failure(membersQuery.error, "Could not load the members of this vault.")} />}
+        <ConfirmDialog
+          open={confirm !== null}
+          danger
+          title={confirm === "delete" ? `Delete ${vault.name}?` : `Leave ${vault.name}?`}
+          confirmLabel={confirm === "delete" ? `Delete ${vault.name}` : `Leave ${vault.name}`}
+          busy={leaveVault.isPending || deleteVault.isPending}
+          onCancel={() => setConfirm(null)}
+          onConfirm={() =>
+            confirm === "delete"
+              ? run(
+                  () => deleteVault.mutateAsync(vault.id),
+                  "Could not delete this space. Reload and try again.",
+                  () => {
+                    setConfirm(null);
+                    onVaultsChanged();
+                  },
+                )
+              : run(
+                  () => leaveVault.mutateAsync(vault.id),
+                  "Could not leave this space. It needs an owner, so make someone else an owner first.",
+                  () => {
+                    setConfirm(null);
+                    onVaultsChanged();
+                  },
+                )
+          }
+        >
+          {confirm === "delete" ? (
+            <p>
+              Everyone in {vault.name} will lose access to this space and its saved memories, people and topics. This can&apos;t be
+              undone. Copy the space first if you want to keep anything.
+            </p>
+          ) : (
+            <p>
+              You will lose access to the memories in this space. Other members keep access. To return, an owner will need to
+              invite you again.
+            </p>
+          )}
+        </ConfirmDialog>
+        <ConfirmDialog
+          open={removing !== null}
+          danger
+          title={`Remove ${removing ?? ""} from ${vault.name}?`}
+          confirmLabel="Remove member"
+          busy={removeMember.isPending}
+          onCancel={() => setRemoving(null)}
+          onConfirm={() =>
+            removing &&
+            run(
+              () => removeMember.mutateAsync({ id: vault.id, email: removing }),
+              "Could not remove that member. Reload and try again.",
+              () => setRemoving(null),
+            )
+          }
+        >
+          <p>They lose access to this space and its memories straight away. What they added stays in the space. You can invite them again later.</p>
+        </ConfirmDialog>
+        <ConfirmDialog
+          open={handing !== null}
+          title={`Make ${handing ?? ""} the owner of ${vault.name}?`}
+          confirmLabel="Hand over"
+          busy={transfer.isPending}
+          onCancel={() => setHanding(null)}
+          onConfirm={() =>
+            handing &&
+            run(
+              () => transfer.mutateAsync({ id: vault.id, email: handing }),
+              "Could not hand over the space. Reload and try again.",
+              () => setHanding(null),
+            )
+          }
+        >
+          <p>They become an owner and you become a member. Only an owner can make you an owner again.</p>
+        </ConfirmDialog>
+        {membersQuery.isError && <ErrorLine error={failure(membersQuery.error, "Could not load the members of this space.")} />}
         {error && <ErrorLine error={error} />}
       </div>
     </aside>
@@ -668,10 +683,13 @@ function InvitationsPanel() {
   return (
     <section className="flex flex-col gap-2.5" aria-labelledby="invites-title">
       <h2 id="invites-title" className="section-title flex items-center gap-2">
-        <Mail {...ICON} aria-hidden style={{ color: "var(--ink-faint)" }} />
+        <Mail {...ICON} aria-hidden />
         Pending invitations
         <span className="label font-mono">{invitations.length}</span>
       </h2>
+      <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+        An invitation gives you no access until you join. Joining lets you read and add to that space.
+      </p>
       {invitations.map((inv) => (
         <div
           key={inv.vault_id}
@@ -680,12 +698,12 @@ function InvitationsPanel() {
         >
           {joined === inv.vault_id && <JoinFlash />}
           <div className="flex-1 min-w-[160px]">
-            <div className="text-[13.5px] font-medium truncate">
+            <div className="text-[15px] font-semibold truncate">
               {inv.vault_name}
             </div>
             <div className="label mt-0.5">
               Invited as {inv.role === "owner" ? "an owner" : "a member"}
-              {inv.vault_kind === "org" ? " of an org vault" : ""}
+              {inv.vault_kind === "org" ? " of a shared space" : ""}
               {ago(inv.created_at) ? ` · ${ago(inv.created_at)}` : ""}
             </div>
           </div>
@@ -694,9 +712,8 @@ function InvitationsPanel() {
               onClick={() => decline(inv.vault_id)}
               disabled={busyId === inv.vault_id}
               aria-label="Decline invitation"
-              className="btn btn-ghost btn-sm"
+              className="btn btn-sm"
             >
-              <X {...ICON} />
               Decline
             </button>
             <button
@@ -747,18 +764,19 @@ function VaultRow({
     <button
       onClick={onSelect}
       aria-current={selected || undefined}
-      className={`w-full first:rounded-t-[10px] last:rounded-b-[10px] flex items-center gap-3 px-4 py-3 text-left transition-[background-color,transform] duration-[120ms] active:scale-[0.995] hover:bg-[var(--surface-raised)] ${selected ? "frame-selected" : ""}`}
-      style={selected ? { background: "var(--accent-soft)" } : undefined}
+      className="w-full flex items-center gap-3 px-4 py-4 min-h-[64px] text-left transition-[background-color] duration-[120ms] hover:bg-[var(--bauhaus-app-soft)]"
+      style={selected ? { background: "var(--bauhaus-app-soft)", boxShadow: "inset 3px 0 0 var(--bauhaus-app-ink)" } : undefined}
     >
       <span className="flex-1 min-w-0">
-        <span className="flex items-center gap-2 min-w-0">
-          <span className="text-[13.5px] font-medium truncate">
+        <span className="flex items-center gap-2.5 min-w-0">
+          <span className="text-[17px] font-medium truncate">
             {vault.name}
           </span>
+          <SpaceSwatch vault={vault} />
           <RoleChip role={vault.role} />
         </span>
-        <span className="label block mt-0.5 truncate">
-          {vault.kind === "personal" ? "Private to you" : "Org vault"}
+        <span className="label block mt-1 truncate">
+          {vault.kind === "personal" ? "Private to you" : "Shared space"}
           {members
             ? ` · ${members.length} ${members.length === 1 ? "member" : "members"}`
             : ""}
@@ -769,7 +787,7 @@ function VaultRow({
         {...ICON}
         aria-hidden
         className="shrink-0"
-        style={{ color: selected ? "var(--accent-text)" : "var(--ink-faint)" }}
+        style={{ color: selected ? "var(--ink)" : "var(--ink-dim)" }}
       />
     </button>
   );
@@ -798,7 +816,7 @@ function CreateVaultForm({
       onCreated();
     } catch (e) {
       setError(
-        failure(e, "Could not create that vault. Try a different name."),
+        failure(e, "Could not create that space. Try a different name."),
       );
     } finally {
       setBusy(false);
@@ -807,22 +825,22 @@ function CreateVaultForm({
 
   return (
     <form
-      className="ledger pop-in flex flex-col gap-1.5 px-4 py-3"
+      className="task-panel pop-in flex flex-col gap-2 px-5 py-4"
       style={{ transformOrigin: "top right" }}
       onSubmit={(e) => {
         e.preventDefault();
         create();
       }}
     >
-      <label htmlFor="new-vault-name" className="label">
-        Name the vault. You become its owner and can invite people next.
+      <label htmlFor="new-vault-name" className="text-[14px] font-medium">
+        Name the space. You become its owner and can invite people next.
       </label>
       <div className="flex flex-wrap items-center gap-2">
         <input
           id="new-vault-name"
           autoFocus
-          className="field h-8 px-3 text-[13px] flex-1 min-w-[180px]"
-          placeholder="Vault name, e.g. a project, service, client, team or homelab"
+          className="field h-10 px-3 text-[14px] flex-1 min-w-[180px]"
+          placeholder="Space name, e.g. a project, client, team or household"
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => e.key === "Escape" && onCancel()}
@@ -830,14 +848,14 @@ function CreateVaultForm({
         <button
           type="button"
           onClick={onCancel}
-          className="btn btn-ghost btn-sm"
+          className="btn"
         >
           Cancel
         </button>
         <button
           type="submit"
           disabled={busy || !name.trim()}
-          className="btn btn-sm"
+          className="btn btn-primary"
         >
           {busy ? "Creating…" : "Create"}
         </button>
@@ -862,6 +880,7 @@ function MergeVaultsCard({
   const [result, setResult] = useState<string | null>(null);
   const [chips, setChips] = useState<{ from: [string, string]; to: string; id: number } | null>(null);
   const [error, setError] = useState<Failure | null>(null);
+  const [open, setOpen] = useState(false);
   // the last merge, so connectors that filed into either vault can be pointed at the new one
   const [mergedInto, setMergedInto] = useState<{ from: string[]; id: string; name: string } | null>(null);
   const [repointed, setRepointed] = useState<{ ok: boolean; text: string } | null>(null);
@@ -876,9 +895,9 @@ function MergeVaultsCard({
     setRepointed(null);
     try {
       const r = await repoint.mutateAsync({ from: mergedInto.from, to: mergedInto.id });
-      setRepointed({ ok: true, text: `${r.connectors === 1 ? "1 connector now files" : `${r.connectors} connectors now file`} into “${mergedInto.name}”. Records already synced stay put until you move them from the connector's page.` });
+      setRepointed({ ok: true, text: `${r.connectors === 1 ? "1 connected source now saves" : `${r.connectors} connected sources now save`} into “${mergedInto.name}” from its next sync. Items already imported stay where they are until you move them from that source's page.` });
     } catch (e) {
-      setRepointed({ ok: false, text: failure(e, "Could not point the connectors at the new vault.", " Try again.").message });
+      setRepointed({ ok: false, text: failure(e, "Could not point the connected sources at the new space.", " Try again.").message });
     }
   }
 
@@ -901,7 +920,7 @@ function MergeVaultsCard({
       setError(
         failure(
           e,
-          "Could not merge those vaults. Check you are a member of both and try again.",
+          "Could not combine those spaces. Check you are a member of both and try again.",
         ),
       );
     } finally {
@@ -910,10 +929,10 @@ function MergeVaultsCard({
   }
 
   const select = (value: string, set: (v: string) => void, label: string) => (
-    <div className="flex flex-col gap-1.5 flex-1 min-w-[140px]">
-      <span className="label">{label}</span>
+    <div className="flex flex-col gap-1.5 flex-1 min-w-[160px]">
+      <span className="text-[13px] font-medium">{label}</span>
       <Select
-        className="h-8 text-[13px] w-full"
+        className="h-10 text-[14px] w-full"
         value={value}
         onChange={set}
         aria-label={label}
@@ -923,37 +942,42 @@ function MergeVaultsCard({
   );
 
   return (
-    <section className="flex flex-col gap-2.5" aria-labelledby="merge-title">
-      <div>
-        <h2 id="merge-title" className="section-title">
-          Merge two vaults
-        </h2>
-        <p
-          className="text-[13px] mt-1 max-w-[62ch]"
-          style={{ color: "var(--ink-dim)" }}
-        >
-          Copies both into a brand new vault. The originals are never changed.
-          Matching entities (same kind and name) are combined, and duplicate
-          facts are kept once.
+    <section className="flex flex-col gap-3 items-start" aria-labelledby="merge-title">
+      <button
+        type="button"
+        className="btn"
+        aria-expanded={open}
+        aria-controls="merge-panel"
+        onClick={() => setOpen((o) => !o)}
+        id="merge-title"
+      >
+        <Combine {...ICON} />
+        Advanced: combine two spaces
+        <ChevronDown {...ICON} aria-hidden style={{ transform: open ? "rotate(180deg)" : undefined }} />
+      </button>
+      {open && (
+      <div id="merge-panel" className="ledger p-5 flex flex-col gap-4 w-full">
+        <p className="text-[14px] max-w-[66ch]" style={{ color: "var(--ink-dim)" }}>
+          Combining creates a brand new space with everything from both. The two originals stay exactly as they are,
+          with the same members. Matching people and topics (same kind and name) are combined, and repeated facts are kept
+          once. Only you are a member of the new space until you invite others.
         </p>
-      </div>
-      <div className="ledger p-4 flex flex-col gap-3">
         <div className="flex items-end gap-2 flex-wrap">
-          {select(a, setA, "First vault")}
+          {select(a, setA, "First space")}
           <Plus
             {...ICON}
             aria-hidden
-            className="mb-2 hidden sm:block"
-            style={{ color: "var(--ink-faint)" }}
+            className="mb-3 hidden sm:block"
+            style={{ color: "var(--ink-dim)" }}
           />
-          {select(b, setB, "Second vault")}
+          {select(b, setB, "Second space")}
         </div>
         <div className="flex items-end gap-2 flex-wrap">
           <label className="flex flex-col gap-1.5 flex-1 min-w-[180px]">
-            <span className="label">New vault name</span>
+            <span className="text-[13px] font-medium">Name for the new space</span>
             <input
-              className="field h-8 px-3 text-[13px]"
-              placeholder="New vault name (optional)"
+              className="field h-10 px-3 text-[14px]"
+              placeholder="New space name (optional)"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
@@ -961,36 +985,27 @@ function MergeVaultsCard({
           <button
             onClick={merge}
             disabled={busy || !a || a === b}
-            className="btn"
+            className="btn btn-primary"
           >
             <Combine {...ICON} />
-            {busy ? "Merging…" : "Merge"}
+            {busy ? "Combining…" : "Merge into a new space"}
           </button>
         </div>
         {a === b && (
-          <p className="label">Pick two different vaults to merge.</p>
+          <p className="label">Pick two different spaces to combine.</p>
         )}
         {result && (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <p
-              role="status"
-              className="text-[12.5px] flex items-center gap-2"
-              style={{ color: "var(--ink)" }}
-            >
-              <span
-                className="dot"
-                style={{ background: "var(--good)" }}
-                aria-hidden
-              />
-              {result}
+            <p role="status" className="text-[14px]">
+              <StatusLabel tone="good">{result}</StatusLabel>
             </p>
             {chips && <MergeChips key={chips.id} from={chips.from} to={chips.to} />}
           </div>
         )}
         {mergedInto && affected > 0 && !repointed?.ok && (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <span className="text-[12.5px]" style={{ color: "var(--ink-dim)" }}>
-              {affected === 1 ? "A connector still files" : `${affected} connectors still file`} into the vaults you merged.
+            <span className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+              {affected === 1 ? "A connected source still saves" : `${affected} connected sources still save`} into the spaces you combined. Pointing them at the new space only changes future syncs.
             </span>
             <button type="button" className="btn btn-sm" onClick={pointConnectors} disabled={repoint.isPending}>
               {repoint.isPending ? "Pointing…" : `Point ${affected === 1 ? "it" : "them"} at “${mergedInto.name}”`}
@@ -998,12 +1013,13 @@ function MergeVaultsCard({
           </div>
         )}
         {repointed && (
-          <p role="status" className="text-[12.5px] fade-in" style={{ color: repointed.ok ? "var(--good)" : "var(--critical)" }}>
+          <p role="status" className="text-[14px] fade-in" style={{ color: repointed.ok ? "var(--ink)" : "var(--critical)" }}>
             {repointed.text}
           </p>
         )}
         {error && <ErrorLine error={error} />}
       </div>
+      )}
     </section>
   );
 }
@@ -1072,7 +1088,7 @@ function SkeletonRows() {
   return (
     <div className="ledger hairline-rows" aria-hidden>
       {[0, 1].map((i) => (
-        <div key={i} className="flex items-center gap-3 px-4 py-3">
+        <div key={i} className="flex items-center gap-3 px-4 py-4">
           <div className="flex-1 flex flex-col gap-1.5">
             <span className="skeleton h-4 w-40" />
             <span className="skeleton h-3 w-56 max-w-full" />
@@ -1151,36 +1167,37 @@ export default function VaultsPage() {
   );
 
   return (
-    <div className="max-w-6xl flex flex-col gap-9">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">
-          <h1 className="page-title">Vaults</h1>
-          <p
-            className="text-[13px] mt-1.5 max-w-[62ch]"
-            style={{ color: "var(--ink-dim)" }}
-          >
-            A vault is a separate scope of entities and memory. Your personal
-            vault is always private. Make more for anything you want kept apart
-            (a project or service, a client, a team, your homelab), and share
-            one by inviting people. Agents can refer to a vault by its name.
-          </p>
-        </div>
+    <div className="max-w-6xl flex flex-col gap-7">
+      <PageHeader
+        icon={Layers}
+        title="Memory spaces"
+        intro="Keep each project's memories in its own space. Your personal space is private; other spaces can be shared with people you invite. AI apps can use a space by its name."
+      />
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+          {vaults
+            ? `${org.length} shared ${org.length === 1 ? "space" : "spaces"} · ${personal.length} personal`
+            : "Loading your spaces…"}
+        </p>
         <div className="flex items-center gap-2">
-          <button onClick={() => void refetchAll()} className="btn" aria-label="Refresh vaults" title="Refresh">
+          <LiveStatusBadge />
+          <button onClick={() => void refetchAll()} className="btn btn-icon" aria-label="Refresh spaces" title="Refresh">
             <RefreshCw {...ICON} />
           </button>
+          <JoinSharedSpace onJoined={(id) => setSelectedId(id)} />
           <button
             onClick={() => setCreating(true)}
             disabled={creating}
             className="btn btn-primary"
           >
             <Plus {...ICON} />
-            New vault
+            Create space
           </button>
         </div>
-      </header>
+      </div>
 
-      {vaultsQuery.isError && <ErrorLine error={failure(vaultsQuery.error, "Could not load your vaults.", " Reload the page to try again.")} />}
+      {vaultsQuery.isError && <ErrorLine error={failure(vaultsQuery.error, "Could not load your memory spaces.", " Reload the page to try again.")} />}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px] items-start">
         <div className="flex flex-col gap-9 min-w-0">
@@ -1197,9 +1214,8 @@ export default function VaultsPage() {
               <Users
                 {...ICON}
                 aria-hidden
-                style={{ color: "var(--ink-faint)" }}
               />
-              Other vaults
+              Shared spaces
               {vaults && <span className="label font-mono">{org.length}</span>}
             </h2>
             {creating && (
@@ -1212,20 +1228,20 @@ export default function VaultsPage() {
               <SkeletonRows />
             ) : org.length === 0 ? (
               !creating && (
-                <div className="ledger px-4 py-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="ledger px-5 py-5 flex flex-wrap items-center justify-between gap-3">
                   <p
-                    className="text-[13px]"
+                    className="text-[14px]"
                     style={{ color: "var(--ink-dim)" }}
                   >
-                    No other vaults yet. Create one for anything you want kept
-                    apart, or accept an invite.
+                    No shared spaces yet. Create one for anything you want kept
+                    apart, such as a project or a team, or join one you were invited to.
                   </p>
                   <button
                     onClick={() => setCreating(true)}
-                    className="btn btn-sm"
+                    className="btn"
                   >
                     <Plus {...ICON} />
-                    Create a vault
+                    Create a space
                   </button>
                 </div>
               )
@@ -1245,7 +1261,6 @@ export default function VaultsPage() {
               <Lock
                 {...ICON}
                 aria-hidden
-                style={{ color: "var(--ink-faint)" }}
               />
               Personal
             </h2>
@@ -1258,7 +1273,7 @@ export default function VaultsPage() {
         </div>
 
         {wide && (
-          <div className="sticky top-6">
+          <div className="sticky top-8">
             {inspectorFor(false) ?? (
               <div className="panel p-5 flex flex-col gap-3" aria-hidden>
                 <span className="skeleton h-4 w-24" />

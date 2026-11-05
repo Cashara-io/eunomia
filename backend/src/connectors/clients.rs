@@ -189,6 +189,71 @@ impl Api {
             return Ok((value, headers));
         }
     }
+
+    /// A binary download (Pocket audio): the body and its media type, or `None` on a 404 (not there
+    /// yet). Like [`Api::send`] (guarded client, one short 429 retry, readable provider errors), with a
+    /// longer timeout, and refused once the body passes `max_bytes` without buffering the rest.
+    pub async fn get_bytes(&self, path: &str, max_bytes: usize) -> AppResult<Option<(Vec<u8>, String)>> {
+        download(&self.url(path), &self.headers, max_bytes).await
+    }
+}
+
+/// How long one binary download may take (an hour of audio is tens of MiB).
+const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(300);
+
+/// Marks the error [`download`] returns for a body over its cap.
+pub const TOO_LARGE: &str = "is larger than the size limit";
+
+/// GET `url` with `headers` as bytes; see [`Api::get_bytes`]. Also fetches a provider's signed URL
+/// (with no auth headers of ours), which stays behind the same guard: redirects are never followed.
+pub async fn download(url: &str, headers: &HeaderMap, max_bytes: usize) -> AppResult<Option<(Vec<u8>, String)>> {
+    let mut retried = false;
+    loop {
+        let http = guarded(url).await?;
+        let mut resp = http
+            .get(url)
+            .headers(headers.clone())
+            .timeout(DOWNLOAD_TIMEOUT)
+            .send()
+            .await
+            .map_err(|e| AppError::new(StatusCode::BAD_GATEWAY, format!("could not reach {}: {e}", host(url))))?;
+        let status = resp.status();
+        if status == StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if status == StatusCode::TOO_MANY_REQUESTS
+            && !retried
+            && let Some(wait) = retry_after(resp.headers()).filter(|w| *w <= MAX_RETRY_AFTER_SECS)
+        {
+            retried = true;
+            tokio::time::sleep(Duration::from_secs(wait)).await;
+            continue;
+        }
+        if !status.is_success() {
+            let text = resp.text().await.unwrap_or_default();
+            return Err(provider_error(url, status, &text));
+        }
+        let too_large = || AppError::new(StatusCode::BAD_GATEWAY, format!("the download from {} {TOO_LARGE} ({max_bytes} bytes)", host(url)));
+        if resp.content_length().is_some_and(|n| n > max_bytes as u64) {
+            return Err(too_large());
+        }
+        let media_type = resp
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.split(';').next())
+            .map(|v| v.trim().to_ascii_lowercase())
+            .filter(|v| !v.is_empty())
+            .unwrap_or_else(|| "application/octet-stream".to_string());
+        let mut body = Vec::new();
+        while let Some(chunk) = resp.chunk().await.map_err(|e| AppError::new(StatusCode::BAD_GATEWAY, format!("download from {} failed: {e}", host(url))))? {
+            if body.len() + chunk.len() > max_bytes {
+                return Err(too_large());
+            }
+            body.extend_from_slice(&chunk);
+        }
+        return Ok(Some((body, media_type)));
+    }
 }
 
 /// Exchanges a long-lived refresh token (`credentials.refresh_token`, issued
@@ -434,6 +499,31 @@ impl PocketAIClient {
         self.api.get(&format!("/public/recordings/{recording_id}"), &[]).await
     }
 
+    /// A recording's audio, at most `max_bytes`: `None` while Pocket has none for it (a 404: the
+    /// device has not uploaded it yet). The endpoint is not in Pocket's public docs we could check, so
+    /// both shapes are handled: the audio bytes themselves, or JSON naming a signed URL, which is then
+    /// fetched (behind the same guard, without our key). See docs/connectors.md, "Pocket audio".
+    pub async fn audio(&self, recording_id: &str, max_bytes: usize) -> AppResult<Option<(Vec<u8>, String)>> {
+        let Some((body, media_type)) = self.api.get_bytes(&format!("/public/recordings/{recording_id}/audio"), max_bytes).await? else {
+            return Ok(None);
+        };
+        if !media_type.contains("json") {
+            return Ok(Some((body, media_type)));
+        }
+        let v: Value = serde_json::from_slice(&body)
+            .map_err(|e| AppError::new(StatusCode::BAD_GATEWAY, format!("the Pocket audio answer is not valid JSON: {e}")))?;
+        match signed_audio_url(&v) {
+            // a signed URL carries its own authorization; ours must not travel to another host
+            Some(url) => {
+                let mut headers = HeaderMap::new();
+                headers.insert(USER_AGENT, HeaderValue::from_static("eunomia"));
+                download(&url, &headers, max_bytes).await
+            }
+            // JSON without a link: nothing to download yet
+            None => Ok(None),
+        }
+    }
+
     /// Recording count/duration/tags since a given date. Every field comes
     /// straight off the recording resource (`duration`, `tags`).
     pub async fn summary(&self, since_iso_date: &str) -> AppResult<Value> {
@@ -442,6 +532,19 @@ impl PocketAIClient {
             .await?;
         Ok(compute_pocketai_summary(&recordings))
     }
+}
+
+/// The audio link in a JSON answer from Pocket's audio endpoint: `url`, `audio_url`, `signed_url` or
+/// `download_url`, at the top level or under `data`. Only http(s).
+pub fn signed_audio_url(v: &Value) -> Option<String> {
+    const KEYS: [&str; 4] = ["url", "audio_url", "signed_url", "download_url"];
+    [v, &v["data"]]
+        .into_iter()
+        .flat_map(|o| KEYS.iter().map(move |k| &o[*k]))
+        .filter_map(Value::as_str)
+        .map(str::trim)
+        .find(|u| u.starts_with("https://") || u.starts_with("http://"))
+        .map(str::to_string)
 }
 
 pub fn compute_pocketai_summary(recordings: &Value) -> Value {
@@ -496,6 +599,14 @@ pub fn compute_pocketai_summary(recordings: &Value) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn signed_audio_url_reads_the_usual_shapes_and_only_http() {
+        assert_eq!(signed_audio_url(&json!({"url": "https://s3.example/a.m4a?sig=1"})).as_deref(), Some("https://s3.example/a.m4a?sig=1"));
+        assert_eq!(signed_audio_url(&json!({"data": {"audio_url": " https://cdn.example/b.mp3 "}})).as_deref(), Some("https://cdn.example/b.mp3"));
+        assert_eq!(signed_audio_url(&json!({"signed_url": "file:///etc/passwd"})), None);
+        assert_eq!(signed_audio_url(&json!({"status": "processing"})), None);
+    }
 
     #[test]
     fn bearer_sets_authorization() {

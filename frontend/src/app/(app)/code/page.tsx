@@ -1,30 +1,31 @@
 "use client";
 
 import Link from "next/link";
+import { Code } from "lucide-react";
 import EntityGraph from "@/components/EntityGraph";
+import PageHeader from "@/components/ui/PageHeader";
+import RefreshEverythingButton from "@/components/live/RefreshEverythingButton";
 
 export default function CodePage() {
   return (
-    <div className="relative -mx-4 -my-6 md:-mx-10 md:-my-8 h-[calc(100dvh-3rem)] md:h-dvh">
+    <div className="relative -mx-4 -my-6 sm:-mx-8 lg:-mx-12 lg:-my-[38px] h-[calc(100dvh-3.5rem)] md:h-dvh">
       <EntityGraph
         kinds={["repository", "file", "symbol"]}
         guide={
           <>
             <p>
-              Agents map code as they work, with <code className="font-mono text-[12px]">code_entity_upsert</code> and{" "}
-              <code className="font-mono text-[12px]">code_relate</code>.
+              Coding apps such as Claude Code and Codex add repositories, files and functions here as they work. Nothing to set up: they learn
+              how from the AI instructions.
             </p>
             <Link href="/skill" className="btn btn-sm">
-              Open the Memory skill
+              Open AI instructions
             </Link>
           </>
         }
         header={
-          <div>
-            <h1 className="page-title">Code</h1>
-            <p className="text-[13px] mt-1" style={{ color: "var(--ink-dim)" }}>
-              Repositories, files and symbols your agents have mapped.
-            </p>
+          <div className="w-full flex flex-col gap-4">
+            <PageHeader icon={Code} title="Code map" intro="Repositories, files and functions your coding apps have mapped, and how they connect." />
+            <RefreshEverythingButton />
           </div>
         }
       />

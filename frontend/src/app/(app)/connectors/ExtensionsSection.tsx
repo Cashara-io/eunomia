@@ -7,7 +7,8 @@ import { useCreateExtension, useDeleteExtension, useExtensions, useRotateExtensi
 import { useVaults } from "@/lib/queries/vaults";
 import { relativeTime } from "@/lib/connectorMeta";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
-import ConfirmButton from "@/components/ConfirmButton";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import StatusLabel from "@/components/ui/StatusLabel";
 import Select from "@/components/Select";
 import CopyButton from "@/components/bits/CopyButton";
 import Tooltip from "@/components/bits/Tooltip";
@@ -56,14 +57,15 @@ export default function ExtensionsSection() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <h2 id="extensions-heading" className="section-title">
-            Extensions
+            Custom integrations
           </h2>
-          <p className="text-[12.5px] mt-1 max-w-[62ch]" style={{ color: "var(--ink-dim)" }}>
-            Your own scripts, run wherever you like. Each extension has a webhook inbox that buffers deliveries so a script can claim them in batches over the API.
+          <p className="text-[14px] mt-1 max-w-[62ch]" style={{ color: "var(--ink-dim)" }}>
+            For developers. An extension connects a script you run yourself, on your own computer or server. Eunomia gives it a webhook address
+            that holds incoming data until the script collects it over the API. Eunomia does not host or run the script.
           </p>
         </div>
         {!creating && (
-          <button type="button" className="btn btn-sm" onClick={() => { setCreating(true); setMinted(null); }}>
+          <button type="button" className="btn" onClick={() => { setCreating(true); setMinted(null); }}>
             <Plus {...ICON} aria-hidden />
             New extension
           </button>
@@ -72,28 +74,27 @@ export default function ExtensionsSection() {
 
       {creating && (
         <form
-          className="panel pop-in p-4 flex flex-col gap-3"
-          style={{ transformOrigin: "top center" }}
+          className="task-panel p-5 flex flex-col gap-4"
           onSubmit={(e) => {
             e.preventDefault();
             submit();
           }}
         >
           <div className="flex items-start justify-between gap-3">
-            <div className="text-[13px] font-medium">New extension</div>
+            <h3 className="text-[17px] font-semibold">New extension</h3>
             <button type="button" onClick={() => setCreating(false)} aria-label="Cancel" className="btn btn-ghost btn-sm btn-icon -mt-1 -mr-1">
               <X {...ICON} />
             </button>
           </div>
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="ext-name" className="label">
+            <label htmlFor="ext-name" className="text-[14px] font-medium">
               Name
             </label>
             <input
               id="ext-name"
               autoFocus
               required
-              className="field h-8 px-3 text-[13px] w-full"
+              className="field h-10 px-3 text-[14px] w-full"
               placeholder="e.g. Notes importer"
               maxLength={NAME_MAX}
               value={name}
@@ -101,13 +102,13 @@ export default function ExtensionsSection() {
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="ext-description" className="label">
+            <label htmlFor="ext-description" className="text-[14px] font-medium">
               Description (optional)
             </label>
             <input
               id="ext-description"
-              className="field h-8 px-3 text-[13px] w-full"
-              placeholder="What it ingests and where it runs"
+              className="field h-10 px-3 text-[14px] w-full"
+              placeholder="What it brings in and where it runs"
               maxLength={500}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -115,13 +116,13 @@ export default function ExtensionsSection() {
           </div>
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex flex-col gap-1.5 w-full sm:w-[240px]">
-              <span className="label">Writes to vault</span>
+              <span className="text-[14px] font-medium">Saves to memory space</span>
               <Select
-                aria-label="Target vault"
+                aria-label="Target memory space"
                 value={vaultId}
                 onChange={setVaultId}
-                options={[{ value: "", label: "My personal vault" }, ...vaults.map((v) => ({ value: v.id, label: v.name }))]}
-                className="h-8 text-[13px] w-full"
+                options={[{ value: "", label: "My personal space" }, ...vaults.map((v) => ({ value: v.id, label: v.name }))]}
+                className="h-10 text-[14px] w-full"
               />
             </div>
             <button type="submit" disabled={create.isPending || !name.trim()} className="btn btn-primary">
@@ -129,8 +130,8 @@ export default function ExtensionsSection() {
               {create.isPending ? "Creating…" : "Create extension"}
             </button>
           </div>
-          <p className="text-[12px]" style={{ color: "var(--ink-faint)" }}>
-            The vault is where the script is expected to write; it gets it from each claim. Nothing is hosted here: the script runs on your side.
+          <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+            The memory space is where the script is expected to save; it is told with each batch it collects. Nothing is hosted here: the script runs on your side.
           </p>
         </form>
       )}
@@ -141,13 +142,17 @@ export default function ExtensionsSection() {
       {error && <ErrorLine error={error} />}
 
       <div className="ledger overflow-hidden">
-        <div className={`hidden md:grid ${COLS} gap-x-4 px-4 h-8 items-center label border-b`} aria-hidden>
+        <div
+          className={`hidden md:grid ${COLS} gap-x-4 px-4 h-[34px] items-center caps`}
+          style={{ background: "var(--bauhaus-app-ink)", color: "var(--bauhaus-app-cream)" }}
+          aria-hidden
+        >
           <span>Extension</span>
           <span>Status</span>
           <span className="text-right">Pending</span>
-          <span className="text-right">Leased</span>
+          <span className="text-right">Collecting</span>
           <span className="text-right">Done</span>
-          <span className="text-right">Dead</span>
+          <span className="text-right">Failed</span>
           <span>Last delivery</span>
           <span />
         </div>
@@ -163,7 +168,7 @@ export default function ExtensionsSection() {
           </div>
         )}
         {rows?.length === 0 && (
-          <p className="px-4 py-5 text-[13px]" style={{ color: "var(--ink-dim)" }}>
+          <p className="px-4 py-5 text-[14px]" style={{ color: "var(--ink-dim)" }}>
             No extensions yet. Create one to get a webhook URL and a secret for a script of your own.
           </p>
         )}
@@ -187,11 +192,11 @@ export default function ExtensionsSection() {
 function MintedCard({ minted, onDismiss }: { minted: Minted; onDismiss: () => void }) {
   const { ext, secret } = minted;
   return (
-    <div className="panel pop-in p-4 flex flex-col gap-3" style={{ transformOrigin: "top center" }} role="status">
+    <div className="task-panel p-5 flex flex-col gap-3" role="status">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-[13px] font-medium">{minted.title}</div>
-          <p className="text-[12.5px] mt-0.5" style={{ color: "var(--ink-dim)" }}>
+          <div className="text-[15px] font-semibold">{minted.title}</div>
+          <p className="text-[14px] mt-0.5" style={{ color: "var(--ink-dim)" }}>
             Copy the secret now and store it somewhere safe. It won&apos;t be shown again; you can rotate it for a new one.
           </p>
         </div>
@@ -252,7 +257,8 @@ function ExtensionRow({
   const rotate = useRotateExtensionSecret();
   const del = useDeleteExtension();
   const vaults = useVaults().data ?? [];
-  const vaultName = ext.vault_id ? (vaults.find((v) => v.id === ext.vault_id)?.name ?? ext.vault_id) : "Personal vault";
+  const vaultName = ext.vault_id ? (vaults.find((v) => v.id === ext.vault_id)?.name ?? ext.vault_id) : "Personal space";
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   async function toggleEnabled() {
     onError(null);
@@ -272,6 +278,7 @@ function ExtensionRow({
     }
   }
   async function doDelete() {
+    setConfirmDelete(false);
     onError(null);
     try {
       await del.mutateAsync(ext.id);
@@ -296,10 +303,9 @@ function ExtensionRow({
             style={{
               width: 28,
               height: 28,
-              borderRadius: 7,
+              borderRadius: 4,
               color: "var(--ink-dim)",
-              background: "color-mix(in oklab, var(--ink-dim) 14%, var(--surface))",
-              boxShadow: "inset 0 0 0 1px color-mix(in oklab, var(--ink-dim) 28%, transparent)",
+              background: "var(--bauhaus-app-soft)",
             }}
           >
             <Webhook size={15} strokeWidth={1.75} />
@@ -309,16 +315,15 @@ function ExtensionRow({
             <span className="text-[12px] truncate" style={{ color: "var(--ink-dim)" }}>
               <span className="md:hidden font-mono">
                 {ext.pending} pending · {ext.done} done
-                {ext.dead > 0 ? ` · ${ext.dead} dead` : ""}
+                {ext.dead > 0 ? ` · ${ext.dead} failed` : ""}
                 {" · "}
               </span>
               {ext.description || vaultName}
             </span>
           </span>
         </button>
-        <span className="hidden md:flex items-center gap-2">
-          <span className="dot" style={{ background: ext.enabled ? "var(--good)" : "var(--ink-faint)" }} aria-hidden />
-          {ext.enabled ? "On" : "Off"}
+        <span className="hidden md:flex">
+          <StatusLabel tone={ext.enabled ? "good" : "neutral"}>{ext.enabled ? "On" : "Off"}</StatusLabel>
         </span>
         <span className="hidden md:block text-right">
           <Count n={ext.pending} />
@@ -347,8 +352,8 @@ function ExtensionRow({
             <CopyField value={ext.webhook_url} />
           </div>
           <Curl url={ext.webhook_url} secret="$EXTENSION_SECRET" />
-          <p className="text-[12px]" style={{ color: "var(--ink-faint)" }}>
-            Secret ending <span className="font-mono">{ext.secret_hint}</span>, rotated {relativeTime(ext.secret_rotated_at)}. Writes to: {vaultName}. Claim batches with{" "}
+          <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+            Secret ending <span className="font-mono">{ext.secret_hint}</span>, rotated {relativeTime(ext.secret_rotated_at)}. Saves to: {vaultName}. Collect batches with{" "}
             <span className="font-mono">POST /api/extensions/{ext.id}/events/claim</span> using an API token.
           </p>
           <div className="flex flex-wrap items-center gap-2">
@@ -363,11 +368,25 @@ function ExtensionRow({
               </button>
             </Tooltip>
             <span className="ml-auto">
-              <ConfirmButton label={`Delete ${ext.name}`} confirmLabel="Delete extension" onConfirm={doDelete} disabled={del.isPending} className="btn btn-sm btn-danger">
+              <button type="button" aria-label={`Delete ${ext.name}`} onClick={() => setConfirmDelete(true)} disabled={del.isPending} className="btn btn-sm btn-danger">
                 <Trash2 {...ICON} aria-hidden />
                 Delete
-              </ConfirmButton>
+              </button>
             </span>
+            <ConfirmDialog
+              open={confirmDelete}
+              danger
+              title={`Delete the extension \u201c${ext.name}\u201d?`}
+              confirmLabel="Delete extension"
+              busy={del.isPending}
+              onConfirm={doDelete}
+              onCancel={() => setConfirmDelete(false)}
+            >
+              <p>
+                Its webhook address stops accepting data and any deliveries still waiting are discarded. Your script will no longer be able to
+                collect from it. Memories it already saved stay.
+              </p>
+            </ConfirmDialog>
           </div>
         </div>
       )}

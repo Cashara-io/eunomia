@@ -16,27 +16,20 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Eunomia",
-  description: "Shared long-term memory for your team's AI agents",
+  description: "Shared memory for the AI apps you already use",
 };
 
-// Runs before paint so a saved light theme never flashes dark.
-const THEME_SCRIPT = `try{var t=localStorage.getItem("eunomia-theme");if(t==="light")document.documentElement.dataset.theme="light"}catch(e){}`;
-
 const DIRECTION_CONTRACT = `
-THESIS: Eunomia is a multiplayer canvas: a team's agents and people write to one memory, and every memory shows who wrote it. Refuses the generic SaaS card-grid dashboard.
-OWN-WORLD: Figma/tldraw grammar. Near-black (or white) ground with a faint dot grid, floating 1px hairline panels, small 7-10px radii, Geist + Geist Mono, felt green #3fa873 only on what you can press or have selected, author tags in a separate presence palette, square selection handles.
-STORY: People see what their agents know, who added it and how fresh it is, then inspect, correct and govern it.
-FIRST VIEWPORT: Slim sidebar left, dot-grid canvas, page title top left with the Cmd-K search, dense live table of memories with author tags, a floating inspector on the right for the selected item.
-FORM: Multiplayer Canvas, grounded list position 5, seed key dcdcf93f.
-FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
+THESIS: Eunomia is shared memory for the AI apps people already use. Make the next step obvious for people who should not need to understand MCP.
+OWN-WORLD: Eunomia Bauhaus app design (spec v1.0, 05 Nov 2026). Warm paper #FAFAF7, ink #171717, 232px ink sidebar, blue #3159B6 primary actions and selected nav, red only for destructive or failing, yellow only as a fill. Geist. Lucide icons. 4px corners. Tokens prefixed --bauhaus-app-.
+STORY: Choose your AI app, follow its own steps, sign in and approve, then try a recall. Then bring in knowledge, find it, and control who can see it.
+FIRST VIEWPORT: Ink sidebar left; Home asks "Which AI app do you use?" with ChatGPT, Claude Code, Codex and Other apps, nothing preselected.
+FINISH: status in words, confirmations name target and consequence, success only from real backend state. DESIGN.md is the source of truth.
 `;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${geist.variable} ${geistMono.variable} h-full antialiased`} suppressHydrationWarning>
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
-      </head>
+    <html lang="en" className={`${geist.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="min-h-full flex">
         <div hidden dangerouslySetInnerHTML={{ __html: `<!--${DIRECTION_CONTRACT}-->` }} />
         <Providers>{children}</Providers>

@@ -72,7 +72,7 @@ export default function VectorInsights({ points, vaultOrder, nameOf, colorOf, se
         <dl className="grid grid-cols-3 gap-2">
           {[
             [String(ins.total), ins.total === 1 ? "point" : "points"],
-            [String(ins.vaults.length), ins.vaults.length === 1 ? "vault" : "vaults"],
+            [String(ins.vaults.length), ins.vaults.length === 1 ? "memory space" : "memory spaces"],
             [String(ins.clusters.length), ins.clusters.length === 1 ? "group" : "groups"],
           ].map(([v, l]) => (
             <div key={l} className="flex flex-col">
@@ -92,7 +92,7 @@ export default function VectorInsights({ points, vaultOrder, nameOf, colorOf, se
         </p>
       </Section>
 
-      <Section title="By vault" hint="kind mix">
+      <Section title="By memory space" hint="kind mix">
         <ul className="flex flex-col gap-3">
           {ins.vaults.map((v) => (
             <li key={v.vault} className="flex flex-col gap-1.5">
@@ -118,7 +118,7 @@ export default function VectorInsights({ points, vaultOrder, nameOf, colorOf, se
               <p className="label font-mono">{typeOf(v.kinds)}</p>
               {v.count > 1 && (
                 <p className="label">
-                  Spread <span className="font-mono">{fmt(v.spread)}</span> from the vault centre
+                  Spread <span className="font-mono">{fmt(v.spread)}</span> from the space&apos;s centre
                 </p>
               )}
             </li>
@@ -144,7 +144,7 @@ export default function VectorInsights({ points, vaultOrder, nameOf, colorOf, se
           {dense && (
             <p className="label leading-snug">
               Each group is memories lying close together; the row shows the one nearest its centre
-              {dense.vaults > 1 ? ", and the largest spans several vaults" : ""}.
+              {dense.vaults > 1 ? ", and the largest spans several memory spaces" : ""}.
             </p>
           )}
         </Section>
@@ -164,7 +164,7 @@ export default function VectorInsights({ points, vaultOrder, nameOf, colorOf, se
       )}
 
       {ins.outliers.length > 0 && (
-        <Section title="Outliers" hint="vs vault spread">
+        <Section title="Outliers" hint="vs memory space spread">
           <ul className="flex flex-col gap-1.5">
             {ins.outliers.map((o) => (
               <li key={o.point.id}>
@@ -172,12 +172,12 @@ export default function VectorInsights({ points, vaultOrder, nameOf, colorOf, se
               </li>
             ))}
           </ul>
-          <p className="label leading-snug">Memories far from the rest of their own vault: likely off-topic, or the only note on a subject.</p>
+          <p className="label leading-snug">Memories far from the rest of their own memory space: likely off-topic, or the only note on a subject.</p>
         </Section>
       )}
 
       {ins.gaps.length > 0 && (
-        <Section title="Vault overlap" hint="centre gap · mixed">
+        <Section title="Memory space overlap" hint="centre gap · mixed">
           <ul className="flex flex-col gap-2">
             {ins.gaps.map((g) => (
               <li key={g.a + g.b} className="flex items-center gap-2 min-w-0">
@@ -192,7 +192,7 @@ export default function VectorInsights({ points, vaultOrder, nameOf, colorOf, se
               </li>
             ))}
           </ul>
-          <p className="label leading-snug">Centre gap is the distance between the vaults&apos; centres; mixed is how many points have their closest neighbour in the other vault.</p>
+          <p className="label leading-snug">Centre gap is the distance between the memory spaces&apos; centres; mixed is how many points have their closest neighbour in the other memory space.</p>
         </Section>
       )}
     </div>

@@ -30,10 +30,12 @@ pub struct Route {
     status: u16,
     body: Value,
     headers: Vec<(&'static str, String)>,
+    /// Answer with this text verbatim (and `content-type` from [`Route::header`]) instead of `body`.
+    raw: Option<String>,
 }
 
 pub fn route(method: &str, path: &str, body: Value) -> Route {
-    Route { method: method.parse().unwrap(), path: path.to_string(), query: vec![], body_has: vec![], delay_ms: 0, status: 200, body, headers: vec![] }
+    Route { method: method.parse().unwrap(), path: path.to_string(), query: vec![], body_has: vec![], delay_ms: 0, status: 200, body, headers: vec![], raw: None }
 }
 
 impl Route {
@@ -57,6 +59,12 @@ impl Route {
 
     pub fn status(mut self, status: u16) -> Self {
         self.status = status;
+        self
+    }
+
+    /// Answer with `text` as is (a binary download), not the JSON body.
+    pub fn raw(mut self, text: &str) -> Self {
+        self.raw = Some(text.to_string());
         self
     }
 
@@ -128,7 +136,7 @@ async fn handle(State(st): State<MockState>, method: Method, uri: Uri, headers: 
         return (StatusCode::NOT_FOUND, format!("mock: no route for {method} {uri}")).into_response();
     };
     tokio::time::sleep(std::time::Duration::from_millis(r.delay_ms)).await;
-    let out = r.body.to_string().replace("{base}", &st.base);
+    let out = r.raw.clone().unwrap_or_else(|| r.body.to_string().replace("{base}", &st.base));
     let mut resp = (StatusCode::from_u16(r.status).unwrap(), [("content-type", "application/json")], out).into_response();
     for (k, v) in &r.headers {
         resp.headers_mut().insert(*k, v.replace("{base}", &st.base).parse().unwrap());

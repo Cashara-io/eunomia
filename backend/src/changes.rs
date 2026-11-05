@@ -198,3 +198,74 @@ pub async fn after(db: &OrgDb, vault: &RecordId, after: i64, limit: i64) -> AppR
     let next = changes.last().map_or(after, |c| c.seq);
     Ok(ChangePage { changes, next })
 }
+
+// --- Vault-level events (#132) ---------------------------------------------------------------------
+// What happens to a vault itself (created, renamed, deleted, a member invited or removed, ...) is not
+// in its change log: the log is about what the vault holds, and is deleted with it. These events go
+// to the per-user live stream (`GET /api/events/ws`, routers/changes.rs) only; a client that missed
+// one (reconnect, another replica) refetches its vault list, which is one cheap request.
+
+pub const VAULT_CREATED: &str = "created";
+pub const VAULT_RENAMED: &str = "renamed";
+pub const VAULT_DELETED: &str = "deleted";
+pub const VAULT_CLONED: &str = "cloned";
+pub const VAULT_MERGED: &str = "merged";
+pub const VAULT_MEMBER_INVITED: &str = "member_invited";
+pub const VAULT_MEMBER_REMOVED: &str = "member_removed";
+pub const VAULT_ROLE_CHANGED: &str = "role_changed";
+pub const VAULT_OWNERSHIP_TRANSFERRED: &str = "ownership_transferred";
+pub const VAULT_INVITATION_ACCEPTED: &str = "invitation_accepted";
+pub const VAULT_INVITATION_DECLINED: &str = "invitation_declined";
+pub const VAULT_LEFT: &str = "left";
+
+/// Something happened to a vault (not to what it holds), for the users it concerns.
+#[derive(Debug, Clone)]
+pub struct VaultEvent {
+    pub org: OrgId,
+    pub vault: RecordId,
+    /// One of the `VAULT_*` ops.
+    pub op: &'static str,
+    /// Who it concerns: the vault's members and invitees when it happened, plus anyone it just let go.
+    pub users: Vec<RecordId>,
+    /// Who did it: a user, token or OAuth client id, or `system`.
+    pub actor: String,
+}
+
+// ponytail: in-process, like `bus()`; a follower on another replica notices on its periodic recheck.
+fn vault_bus() -> &'static broadcast::Sender<VaultEvent> {
+    static BUS: OnceLock<broadcast::Sender<VaultEvent>> = OnceLock::new();
+    BUS.get_or_init(|| broadcast::channel(256).0)
+}
+
+/// Every vault-level event announced in this process from now on.
+pub fn subscribe_vaults() -> broadcast::Receiver<VaultEvent> {
+    vault_bus().subscribe()
+}
+
+/// The users a vault-level event about `vault` concerns right now: its members and invitees.
+/// Read it before a write that takes them away (a delete).
+pub async fn audience(db: &OrgDb, vault: &RecordId) -> Vec<RecordId> {
+    let res = store::changes::VAULT_AUDIENCE.on(db).bind(("vault", vault.clone())).await;
+    match res.and_then(|mut r| r.take::<Vec<RecordId>>(0)) {
+        Ok(users) => users,
+        Err(e) => {
+            tracing::warn!(vault = %vault.to_string(), error = %e, "vault event: audience not read");
+            Vec::new()
+        }
+    }
+}
+
+/// Tells the live stream that `op` happened to `vault`, as the current caller: for the vault's current
+/// members and invitees plus `also` (whom the op just removed, or the audience read before a delete).
+/// Never fails the write it follows.
+pub async fn announce(db: &OrgDb, vault: &RecordId, op: &'static str, also: &[RecordId]) {
+    let mut users = audience(db, vault).await;
+    for u in also {
+        if !users.contains(u) {
+            users.push(u.clone());
+        }
+    }
+    let actor = authz::current().map_or_else(|| "system".to_string(), |c| c.actor.id);
+    // no receivers is fine
+    let _ = vault_bus().send(VaultEvent { org: db.org(), vault: vault.clone(), op, users, actor });
+}

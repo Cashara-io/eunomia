@@ -4,7 +4,7 @@
 export default function EunomiaMark({ size = 20 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <rect width="24" height="24" rx="6" fill="var(--accent)" />
+      <rect width="24" height="24" rx="4" fill="var(--accent)" />
       <g stroke="var(--on-accent)" strokeWidth="1.5" strokeLinecap="round" opacity="0.55">
         <line x1="12.5" y1="12.5" x2="6.5" y2="7" />
         <line x1="12.5" y1="12.5" x2="18" y2="8.5" />
