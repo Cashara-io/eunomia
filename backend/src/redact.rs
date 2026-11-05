@@ -9,6 +9,10 @@ use regex::Regex;
 use serde::Serialize;
 use serde_json::Value;
 
+/// Bump when a detector is added or widened: each org's stored text is then redacted again once
+/// (`jobs::redact_backfill`), so rows written before the new shape was known lose it too.
+pub const DETECTOR_VERSION: i64 = 1;
+
 /// What one write had redacted: `count` secrets of `kind` (e.g. "github token").
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, utoipa::ToSchema)]
 pub struct Redaction {

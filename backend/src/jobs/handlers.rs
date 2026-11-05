@@ -26,6 +26,7 @@ pub fn registry() -> Registry {
         .register(kind::MIGRATE_TENANT, migrate_tenant)
         .register(kind::INDEX_DOCUMENT, crate::documents::index_job)
         .register(kind::SUPERSEDE, supersede)
+        .register(kind::REDACT_BACKFILL, redact_backfill)
 }
 
 /// The org database a job works in. A missing org is permanent; a database that is not ready or is
@@ -105,6 +106,8 @@ async fn embed(state: AppState, job: Job) -> Result<(), JobError> {
             break;
         }
     }
+    // and skills (name + description) left without a vector
+    crate::tools::registry::skills::embed_backlog(&state, &job.owner, EMBED_BATCH as usize).await?;
     Ok(())
 }
 
@@ -157,6 +160,13 @@ async fn supersede(state: AppState, job: Job) -> Result<(), JobError> {
     };
     let (subject, memory) = (parse("subject")?, parse("memory")?);
     crate::entities::supersede::check(&state.db, &state.settings, &job.owner, &subject, &[memory]).await;
+    Ok(())
+}
+
+/// The org's secret backfill, from its saved cursor to the end. A crash or a lost lease resumes it there.
+async fn redact_backfill(state: AppState, job: Job) -> Result<(), JobError> {
+    let state = org_state(&state, &job).await?;
+    super::redact_backfill::run(&state, None).await?;
     Ok(())
 }
 
