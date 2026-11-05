@@ -22,6 +22,9 @@
 set -eu
 
 ENDPOINT="${SURREAL_ENDPOINT:-http://surrealdb:8000}"
+# `surreal isready` over http:// is refused by a server started with --deny-all ("Method not allowed"), so the
+# readiness check goes over the websocket form of the same address, which --allow-rpc covers.
+READY_ENDPOINT="$(printf '%s' "$ENDPOINT" | sed -e 's#^https://#wss://#' -e 's#^http://#ws://#')"
 USER_="${SURREAL_USER:-root}"
 PASS_="${SURREAL_PASS:-root}"
 NS="${SURREAL_NS:-eunomia}"

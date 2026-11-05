@@ -15,8 +15,8 @@ cat > "$TMP/bin/surreal" <<'SHIM'
 # pop FILE: the first line of FILE (removed), or fail when it is empty: per-call answers queued by a test
 pop() { [ -s "$1" ] || return 1; head -n1 "$1"; sed -i.bak 1d "$1" && rm -f "$1.bak"; }
 cmd="$1"; shift
-db=""; file=""
-while [ $# -gt 0 ]; do case "$1" in --db) db="$2"; shift ;; --ns|--endpoint|--user|--pass|--log) shift ;; --*) ;; *) file="$1" ;; esac; shift; done
+db=""; file=""; ep=""
+while [ $# -gt 0 ]; do case "$1" in --db) db="$2"; shift ;; --endpoint) ep="$2"; shift ;; --ns|--user|--pass|--log) shift ;; --*) ;; *) file="$1" ;; esac; shift; done
 case "$cmd" in
   export) if [ -f "$SHIM_FAIL" ] && grep -q "$db" "$SHIM_FAIL"; then
             rm -f "$SHIM_FAIL"; echo "OPTION IMPORT; -- dump of $db -- padding padding padding padding padding padding"; printf 'CREATE half'
@@ -37,7 +37,10 @@ case "$cmd" in
           n="$(pop "$SHIM_ROWS" || echo 5)"; [ "$n" -gt 0 ] || exit 0; rows="{ id: t:\`a}{\`, nested: { a: [ { b: 1 } ] }, s: 'it''s }, { id: t:9 }', q: \"[{\\\"}\" }"
           i=2; while [ "$i" -le "$n" ]; do rows="$rows, { id: t:$i }"; i=$((i + 1)); done
           echo "INSERT [ $rows ];" ;;
-  isready) [ -z "${MOCK_DEAD:-}" ] ;;
+  # A server started with --deny-all (the real compose file) refuses isready over http(s):// with
+  # "Method not allowed" while ws(s):// passes, so the script must ask over the websocket form.
+  isready) case "$ep" in http://*|https://*) echo "ERROR surrealdb_server::cli: Method not allowed" >&2; exit 1 ;; esac
+           [ -z "${MOCK_DEAD:-}" ] ;;
   import) echo "import $db: $(cat "$file")" >> "$SHIM_LOG" ;;
   sql) in="$(cat)"; echo "sql: $in" >> "$SHIM_LOG"
        case "$in" in
