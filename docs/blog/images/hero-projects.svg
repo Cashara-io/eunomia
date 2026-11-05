@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" width="1200" height="420" role="img" aria-labelledby="t d" font-family="Geist, Inter, 'Helvetica Neue', Arial, sans-serif">
+<title id="t">Projects: a small memory in every repo, linked to the big one</title>
+<desc id="d">A card labelled Eunomia Cloud lists the company, team and customer vaults, with three repositories below, each with its own .eunomia folder linked to the team vault.</desc>
+<defs><clipPath id="frame"><rect width="1200" height="420" rx="28"/></clipPath></defs>
+<g clip-path="url(#frame)">
+  <rect width="1200" height="420" fill="#F0F0EB"/>
+  <circle cx="1150" cy="40" r="150" fill="#E8BE39"/>
+  <path d="M1200 420 L1010 420 A190 190 0 0 1 1200 230z" fill="#3159B6"/>
+  <circle cx="640" cy="372" r="20" fill="#CF412F"/>
+  <path d="M612 60 L640 110 L584 110z" fill="#171717"/>
+  <rect x="1130" y="196" width="34" height="34" fill="#CF412F" transform="rotate(14 1147 213)"/>
+  <text x="56" y="76" font-size="20" fill="#171717" letter-spacing="-0.5"><tspan font-weight="600">eunomia</tspan><tspan font-weight="400" fill="#61615D"> projects</tspan></text>
+  <circle cx="60.5" cy="102.5" r="4.5" fill="#CF412F"/><rect x="67.7" y="98" width="9" height="9" fill="#E8BE39"/><path d="M79.4 107 L83.9 98 L88.4 107z" fill="#3159B6"/>
+  <text x="56" y="200" font-size="42" fill="#171717" font-weight="500" text-anchor="start" letter-spacing="-1.6">A small memory in every repo.</text>
+<text x="56" y="252" font-size="42" fill="#171717" font-weight="500" text-anchor="start" letter-spacing="-1.6">Linked to the big one.</text>
+  <text x="56" y="310" font-size="17" fill="#61615D" font-weight="400" text-anchor="start">Projects, coming soon to Eunomia.</text>
+  <rect x="704" y="92" width="420" height="252" rx="16" fill="#ffffff" stroke="#171717" stroke-width="1.5"/><rect x="728.0" y="78" width="107.4" height="28" rx="14" fill="#171717"/><text x="781.6800000000001" y="96.5" font-size="12" fill="#ffffff" font-weight="500" text-anchor="middle">Eunomia Cloud</text><rect x="728.0" y="126" width="372.0" height="40" rx="8" fill="#F0F0EB"/><text x="914.0" y="151" font-size="14" fill="#171717" font-weight="400" text-anchor="middle">Company vault</text><rect x="728.0" y="176" width="372.0" height="40" rx="8" fill="#E8BE39"/><text x="914.0" y="201" font-size="14" fill="#171717" font-weight="500" text-anchor="middle">Team vault</text><rect x="728.0" y="226" width="372.0" height="40" rx="8" fill="#F0F0EB"/><text x="914.0" y="251" font-size="14" fill="#171717" font-weight="400" text-anchor="middle">Customer vaults</text><rect x="728.0" y="276" width="117.3" height="40" rx="8" fill="#F0F0EB"/><text x="786.6666666666666" y="301" font-size="13" fill="#171717" font-weight="400" text-anchor="middle" font-family="'SF Mono', Menlo, monospace">api/.eunomia</text><rect x="855.3" y="276" width="117.3" height="40" rx="8" fill="#E8BE39"/><text x="914.0" y="301" font-size="13" fill="#171717" font-weight="500" text-anchor="middle" font-family="'SF Mono', Menlo, monospace">web/.eunomia</text><rect x="982.7" y="276" width="117.3" height="40" rx="8" fill="#F0F0EB"/><text x="1041.3333333333333" y="301" font-size="13" fill="#171717" font-weight="400" text-anchor="middle" font-family="'SF Mono', Menlo, monospace">infra/.eunomia</text>
+</g>
+</svg>

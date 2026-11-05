@@ -2,63 +2,61 @@
 name: Eunomia
 description: Shared long-term memory for your team's AI agents, drawn as a multiplayer canvas.
 colors:
-  canvas: "#0b0c0e"
-  surface: "#121316"
-  surface-raised: "#1a1b1f"
-  surface-hover: "#212328"
-  ink: "#ededef"
-  ink-dim: "#a3a7ae"
-  ink-faint: "#80858e"
-  border: "rgba(237, 237, 239, 0.08)"
-  border-strong: "rgba(237, 237, 239, 0.15)"
-  grid-dot: "rgba(237, 237, 239, 0.07)"
-  felt-green: "#3fa873"
-  felt-green-text: "#52bd87"
-  felt-green-soft: "rgba(63, 168, 115, 0.14)"
-  on-accent: "#04140b"
-  good: "#3fa873"
-  warning: "#d0a651"
-  critical: "#d4705f"
-  critical-soft: "rgba(212, 112, 95, 0.12)"
-  scrim: "rgba(4, 5, 6, 0.6)"
-  author-1: "#f0815e"
-  author-2: "#5fa6f2"
-  author-3: "#b48cf0"
-  author-4: "#e2b04f"
-  author-5: "#e77fa9"
-  author-6: "#4fc1c7"
-  on-author: "#0b0c0e"
+  canvas: "#FAFAF7"
+  surface: "#FFFFFF"
+  surface-raised: "#F0F0EB"
+  surface-hover: "#E8E8E1"
+  ink: "#171717"
+  ink-dim: "#61615D"
+  ink-faint: "#6F6F68"
+  border: "#E2E2DC"
+  border-strong: "#CBCBC4"
+  grid-dot: "rgba(23, 23, 23, 0.08)"
+  accent: "#171717"
+  accent-text: "#171717"
+  accent-soft: "rgba(23, 23, 23, 0.06)"
+  on-accent: "#FFFFFF"
+  focus: "#3159B6"
+  vault-personal: "#CF412F"
+  vault-project: "#E8BE39"
+  vault-company: "#3159B6"
+  on-vault-personal: "#FFFFFF"
+  on-vault-project: "#171717"
+  on-vault-company: "#FFFFFF"
+  good: "#2F7A4E"
+  warning: "#9A6B12"
+  critical: "#B83A28"
+  critical-soft: "rgba(207, 65, 47, 0.10)"
+  scrim: "rgba(23, 23, 23, 0.32)"
+  author-1: "#D9694A"
+  author-2: "#4F7FCF"
+  author-3: "#8D63B8"
+  author-4: "#C9A030"
+  author-5: "#C95A82"
+  author-6: "#2F8F8A"
+  on-author: "#FFFFFF"
   kind-person: "#6f9bc9"
   kind-organisation: "#a692c9"
   kind-location: "#c98a5a"
   kind-repository: "#5a9e8f"
   kind-file: "#9e9150"
   kind-symbol: "#9e5a7a"
-  canvas-light: "#f5f6f7"
-  surface-light: "#ffffff"
-  surface-raised-light: "#f0f1f3"
-  surface-hover-light: "#e8e9ec"
-  ink-light: "#111214"
-  ink-dim-light: "#4f545c"
-  ink-faint-light: "#676c75"
-  border-light: "rgba(17, 18, 20, 0.1)"
-  border-strong-light: "rgba(17, 18, 20, 0.18)"
-  grid-dot-light: "rgba(17, 18, 20, 0.1)"
-  felt-green-light: "#2b7d53"
-  felt-green-text-light: "#23744b"
-  felt-green-soft-light: "rgba(43, 125, 83, 0.1)"
-  on-accent-light: "#ffffff"
-  warning-light: "#9a6b12"
-  critical-light: "#b4432f"
-  critical-soft-light: "rgba(180, 67, 47, 0.08)"
-  scrim-light: "rgba(17, 18, 20, 0.28)"
-  author-1-light: "#e0623c"
-  author-2-light: "#2f7fd8"
-  author-3-light: "#8a5ad8"
-  author-4-light: "#c48a14"
-  author-5-light: "#cf4f84"
-  author-6-light: "#1f9aa1"
-  on-author-light: "#ffffff"
+  canvas-dark: "#121211"
+  surface-dark: "#1A1A18"
+  surface-raised-dark: "#23231F"
+  surface-hover-dark: "#2C2C27"
+  ink-dark: "#F0F0EB"
+  ink-dim-dark: "#A9A9A2"
+  ink-faint-dark: "#8A8A83"
+  border-dark: "rgba(240, 240, 235, 0.09)"
+  border-strong-dark: "rgba(240, 240, 235, 0.16)"
+  accent-dark: "#F0F0EB"
+  on-accent-dark: "#171717"
+  focus-dark: "#7C9BE6"
+  vault-personal-dark: "#DD5743"
+  vault-project-dark: "#ECC64C"
+  vault-company-dark: "#5A80D8"
+  on-vault-company-dark: "#171717"
 typography:
   display:
     fontFamily: "Geist, system-ui, sans-serif"
@@ -138,7 +136,7 @@ components:
   button-hover:
     backgroundColor: "{colors.surface-hover}"
   button-primary:
-    backgroundColor: "{colors.felt-green}"
+    backgroundColor: "{colors.accent}"
     textColor: "{colors.on-accent}"
     rounded: "{rounded.control}"
     padding: "0 12px"
@@ -181,7 +179,7 @@ components:
     backgroundColor: "{colors.surface-hover}"
     textColor: "{colors.ink}"
   pill-selected:
-    backgroundColor: "{colors.felt-green-soft}"
+    backgroundColor: "{colors.accent-soft}"
     textColor: "{colors.ink}"
   author-tag:
     textColor: "{colors.on-author}"
@@ -241,62 +239,73 @@ components:
 
 ## Overview
 
-**Creative North Star: "The Multiplayer Canvas"**
+> **Re-theme in progress (November 2026).** This file now describes the new "Bauhaus Memory" theme that the landing page ships. The app in `frontend/` still runs the old felt-green, dark-first theme until the rollout in `docs/design/retheme-brief.md` is done. When code and this file disagree on colour, shape or button style, follow this file and the brief. Component behaviour, motion, accessibility and recipes below are unchanged.
 
-Eunomia is drawn as the shared canvas a team's agents and people write to, in the grammar of Figma and tldraw. A near-black ground (paper-white in the light theme) carries a faint 20px dot grid; on it float hairline panels with small radii, dense tabular data, and Geist type. Every memory says who wrote it through a Figma-style author tag, and the selected thing wears a green outline with four square handles. Dark is the default; `data-theme="light"` on `<html>` flips every token, and a saved light theme is applied before first paint.
+**Creative North Star: "Bauhaus Memory"**
 
-Density is high and quiet. The page is a slim 232px sidebar plus a dot-grid canvas holding one page title, hairline ledgers and tables, and (on the dashboard) a floating inspector for the selected item. Lists of things are tables with hairline rows, not card grids. Colour is rationed into three separate vocabularies that never borrow from each other: one felt-green accent for what you can press or have selected, a six-colour presence palette for authorship, and muted kind and connector hues for categorising entities and sources.
+Eunomia is printed paper with three flat colours. A warm cream ground carries black ink, white work surfaces and a faint dot grid. Three solid colours each mean one kind of memory: red is personal, yellow is project, blue is company, and each has a shape (circle, square, triangle). Together the three shapes are the brand mark.
 
-Motion is small, fast and earned. Press feedback, popover entrances and a handful of authored moments (live memory arrival, token decrypt, digit roll, the theme wipe) are gated by frequency, by input device, and by reduced-motion preference. Real text is always in the DOM at its final value from the first frame.
+Work areas stay dense and quiet: hairline tables, small Geist type, ink buttons. The playfulness lives in empty space: empty states, onboarding, auth, banners and the nav chips, where big flat shapes run off the edges and small shapes move on hover. Light is the default; `data-theme="dark"` flips every token to warm "ink paper".
+
+Motion is small, fast and earned, exactly as before.
 
 **Key Characteristics:**
-- Dot-grid canvas ground, hairline (1px, 0.5px on 2x screens) borders everywhere.
-- One accent, felt green, only on pressable or selected things.
-- Author tags in a separate presence palette mark who wrote what, and nothing else.
-- Figma selection frame: 1px accent outline plus four 6px square handles.
+- Cream canvas (`#FAFAF7`) with white surfaces and a faint ink dot grid.
+- Ink is the accent: a black pill is the primary button. Focus is blue.
+- Red, yellow and blue mean personal, project and company vaults, always flat, always with their shape.
+- The shape trio (red circle, yellow square, blue triangle) is the brand mark and the decorative motif.
+- Pill buttons and nav chips; 12px cards; 4px vault blocks.
 - Dense tables with tabular numerals; mono only for numbers, ids, code and timestamps.
-- Motion under 300ms for UI, pointer-only flourishes, nothing on keyboard or high-frequency actions.
 
 ## Colors
 
-A near-neutral graphite (or paper) ground with a single felt-green accent and a separate, louder presence palette reserved for authorship.
+A warm paper ground, black ink, and three flat vault colours that carry meaning. Full values for both themes are in the front matter and in `docs/design/retheme-brief.md`.
 
-### Primary
-- **Felt Green** (`felt-green`, `--accent`): fills of the primary button, the selection frame and its handles, focus rings (2px, offset 2px), the field focus border, text selection, caret, the active nav icon, selected tabs (`pill[aria-selected]`), the brand mark tile. Light theme uses the deeper `felt-green-light`.
-- **Felt Green Text** (`felt-green-text`, `--accent-text`): the green used as text on the ground: links, "Connect one" calls to action, the active nav icon, the update-available notice.
-- **Felt Green Wash** (`felt-green-soft`, `--accent-soft`): the fill behind a selected table row and a selected tab pill, and the update notice background.
-- **On Felt** (`on-accent`): ink that sits on a green fill.
+### Primary: ink
+- **Accent** (`accent`, `--accent`): ink. Fills the primary button, the selected tab, the selection frame and its handles, the active nav chip. Dark theme uses cream with ink text.
+- **Accent Text** (`accent-text`): ink, always underlined. Links and "Connect one" calls to action.
+- **Accent Wash** (`accent-soft`): ink at 6%, behind a selected row or selected pill.
+- **On Accent** (`on-accent`): white on an ink fill.
+- **Focus** (`focus`, `--focus`): blue, the 2px focus ring at 2px offset. Never used for selection, so focused and selected never look alike.
 
-### Secondary: the presence palette
-- **Author 1 to 6** (`author-1` coral, `author-2` sky, `author-3` lilac, `author-4` ochre, `author-5` rose, `author-6` teal): the background of author tags, the author cursor glyph, the account avatar, and the 16% arrival wash on newly arrived rows. Assigned by `authorColor(name)`: known agents get fixed slots (Claude and Claude Code 1, Gemini 2, Cursor 3, Windsurf 4, Eunomia 5, Codex 6); any other name hashes stably into one of the six. Text on a tag is `on-author` (canvas ink in dark, white in light).
+### Secondary: the vault colours (signature)
+- **Personal** (`vault-personal`, red `#CF412F`, white text, circle).
+- **Project** (`vault-project`, yellow `#E8BE39`, ink text, square).
+- **Company** (`vault-company`, blue `#3159B6`, white text, triangle).
+- Used as flat fills on vault chips, a 4px bar on vault rows, the shape trio and large decorative shapes in empty space. No tints, gradients or glows.
 
-### Tertiary: categorical hues
-- **Entity kinds** (`kind-person`, `kind-organisation`, `kind-location`, `kind-repository`, `kind-file`, `kind-symbol`): muted, desaturated hues for the kind dot beside an entity and the nodes of the entity graph. A custom kind an agent created has no hue of its own: it uses `ink-faint` and a plain circle node.
-- **Connector and series hues** (`--connector-*`, `--series-1..4` in globals.css): per-source identity dots and chart series. Same muted register as the kinds; never as fills behind text.
-- Kind, connector and series hues are defined once on `:root` and are **not** redefined for the light theme; they are mid-tone on purpose so they hold on both grounds.
+### Tertiary: presence and categorical hues
+- **Author 1 to 6** (`author-1` coral, `author-2` sky, `author-3` plum, `author-4` ochre, `author-5` rose, `author-6` teal): author tags, the author cursor, the account avatar and the 16% arrival wash. Assigned by `authorColor(name)` as before. Never the exact vault hues. White text, except ink on ochre.
+- **Entity kinds, connector and series hues:** unchanged muted values, defined once on `:root`.
 
 ### Status
-- **Good** (`good`): healthy status dots and the drawn "done" check. Shares the felt-green value but carries status meaning, not action.
-- **Warning** (`warning`) and **Critical** (`critical`, with `critical-soft` wash): status dots, error text, danger buttons, the hold-to-delete fill.
+- **Good** (`good`, `#2F7A4E`): healthy dots and the drawn done check. The only green left, and status only.
+- **Warning** (`warning`) and **Critical** (`critical`, with `critical-soft`): status dots, error text, danger buttons, hold-to-delete. Status always comes with an icon or a word so it is never read as a vault.
 
 ### Neutral
-- **Canvas** (`canvas`): the page ground under the dot grid, and the outline stroke around the author cursor.
-- **Surface** (`surface`): ledgers, panels, the sidebar and mobile top bar.
-- **Surface Raised** (`surface-raised`): buttons, fields, pills, tooltips, table-row hover, the active nav row, code blocks.
-- **Surface Hover** (`surface-hover`): button hover, pressed filter pills, the skeleton shimmer peak.
-- **Ink / Ink Dim / Ink Faint** (`ink`, `ink-dim`, `ink-faint`): primary text; secondary text and descriptions; labels, placeholders, table headers, kbd glyphs, idle nav icons.
-- **Border / Border Strong** (`border`, `border-strong`): hairline rules and container edges; button and kbd edges and the scrollbar thumb.
-- **Grid Dot** (`grid-dot`): the 1px dots of the canvas grid. Light theme is a touch stronger (0.10 versus 0.07) so the grid still reads on white.
-- **Scrim** (`scrim`): behind the command palette and the mobile drawer.
+- **Canvas** (`canvas`): the cream page ground under the dot grid.
+- **Surface** (`surface`): white ledgers, panels, cards, the sidebar.
+- **Surface Raised** (`surface-raised`): buttons at rest, fields' hover, pills, tooltips, hovered rows, code blocks, and the ground behind decorative shapes.
+- **Surface Hover** (`surface-hover`): hover on raised things, pressed filters, skeleton peak.
+- **Ink / Ink Dim / Ink Faint:** primary text; secondary text; labels, placeholders and table headers.
+- **Border / Border Strong:** hairlines; button, field and kbd edges.
+- **Grid Dot** (`grid-dot`): ink at 8% on a 20px pitch.
+- **Scrim** (`scrim`): behind the palette and the drawer.
 
 ### Named Rules
-**The Felt Rule.** Felt green appears only on something you can press or something that is selected (primary button, focus ring, selection frame, selected tab, link). Never on headings, decoration, or icons at rest.
+**The Ink Rule.** "Press me" and "selected" are ink. Colour is never used to say "this is a button".
 
-**The Presence Rule.** Author colours mark who wrote something and nothing else. Never use them for actions, status or decoration, and never invent an author: if the data has none, show no tag.
+**The Vault Colour Rule.** Red, yellow and blue mean personal, project and company, and nothing else. Never on buttons, links, status or headings. Always flat, always paired with its shape.
 
-**The Quiet Filter Rule.** Multi-select filters that are on (`aria-pressed="true"`) go neutral (raised fill, strong border, full ink), so a row of them never becomes a wall of green. Only single-choice selection (`aria-selected`) takes the accent.
+**The Blue Focus Rule.** Focus is blue, selection is ink. They never share a colour.
 
-**The Two Theme Rule.** Every colour is a variable with a dark and a light value. Never hard-code black, white or rgba shadows; use `scrim`, `--shadow-panel`, `--shadow-pop`.
+**The Presence Rule.** Author colours mark who wrote something and nothing else. Never invent an author.
+
+**The Quiet Filter Rule.** Multi-select filters that are on go neutral (raised fill, strong border, full ink). Only single-choice selection takes the accent.
+
+**The Two Theme Rule.** Every colour is a variable with a light and a dark value. Never hard-code black, white or rgba shadows.
+
+**The No Numbers Rule.** Section labels are words, never "01 / The project".
 
 ## Typography
 
@@ -354,15 +363,26 @@ Hybrid and restrained. In-flow containers (ledgers, surfaces) are flat: a hairli
 
 ## Shapes
 
-Small, consistent radii and one-device-pixel lines. Tags and kbd keys 4px (the author tag is 4px with a 1px bottom-left corner, so it points at its cursor like a Figma name tag); pills, tooltips and select options 6px; skeleton blocks 5px; buttons, fields and nav rows 7px; code blocks 8px; ledgers, panels and the inspector 10px; status dots and avatars fully round. Every border and rule is `--hair` (1px, 0.5px on 2x displays). The selection frame is the one recurring silhouette: a 1px accent outline inset by 1px with four 6px square handles at the corners, 3px outside the box. The brand mark is a 6px-radius green tile where three scattered points resolve into one off-centre node.
+Round where you press, square where you read. Buttons, nav chips and pills are full pills (999px). Fields 10px; ledgers, panels and cards 12px (16px on marketing pages); tags and kbd keys 4px (the author tag keeps its 1px pointer corner); vault blocks 4px; skeleton blocks 5px; status dots and avatars fully round. Every border and rule is `--hair` (1px, 0.5px on 2x displays).
+
+**The shape trio** is the recurring silhouette: a red circle, a yellow square and a blue triangle in a row, one unit apart. It is the brand mark (20px in the sidebar, 28px on auth and onboarding), the glyph inside nav chips, the signature in a diagram's corner, and, large and cropped by the container edge, the decoration in empty states, onboarding and auth. Shapes are flat fills with no outline, shadow or gradient, they never sit behind text or inside tables and forms, and they only move on hover.
+
+The selection frame stays: a 1px ink outline inset by 1px with four 6px square ink handles 3px outside the box.
 
 ## Components
+
+### Icons
+**Phosphor Icons, duotone weight, everywhere Eunomia appears:** the app, the landing page, the blog, diagrams and docs. MIT licence; React package `@phosphor-icons/react` (`<Icon weight="duotone" />`); raw SVGs from phosphoricons.com or Iconify (`ph:*-duotone`).
+- **The Eunomia twist:** Phosphor draws the duotone layer as the line colour at 20% opacity. We draw it as a solid vault colour instead: line in `ink`, back layer in `vault-personal`, `vault-project` or `vault-company`. In CSS: `.duo path[opacity] { opacity: 1; fill: var(--duo); }` with `--duo` set per icon. On a vault-coloured tile, the back layer goes white and the line stays ink.
+- **Sizes:** 16px in dense UI (buttons, table rows, nav), 20 to 22px in tiles and chips, 28px and up in empty states. Never mix with Lucide or another set in the same view; Lucide is being phased out (`lucide-react` stays only until each screen is moved).
+- **Brand marks** for third-party agents (Claude, Codex, Cursor and so on) come from `AssistantMarks`, not from Phosphor.
+- **Colour choice:** pick the back-layer colour for meaning when there is one (a vault, a scope); otherwise vary red, yellow and blue across a row so no two neighbours match. Never colour the line itself.
 
 ### Buttons
 Compact and tactile, with a press you can feel.
 - **Shape:** gently squared (7px radius), 30px tall, 12px side padding, 13px weight 500, 6px icon gap, hairline `border-strong` edge.
 - **Default:** `surface-raised` fill, `ink` text. Hover (fine pointers only) moves to `surface-hover`.
-- **Primary:** felt-green fill, no border, `on-accent` text; hover mixes 12% ink into the green (`color-mix(in oklab, var(--accent) 88%, var(--ink))`). One per view, the main action. It also sets `--bits-done: currentColor` so draw-in checks inside it use the button ink.
+- **Primary:** ink pill (`accent` fill, 999px radius, 36px tall, 16px padding), no border, `on-accent` text; hover goes to pure black (cream to white in dark). One per view, the main action. It also sets `--bits-done: currentColor` so draw-in checks inside it use the button ink.
 - **Ghost:** transparent, `ink-dim` text, hover to `ink`. Used for icon buttons in the sidebar footer, mobile bar and toolbars.
 - **Danger:** transparent with `critical` text and a strong hairline; hover fills `critical-soft`. Destructive vault and token actions use the HoldButton variant (below).
 - **Sizes:** small 26px tall, 9px padding, 12px text; icon-only is a 30px (or 26px small) square.
@@ -372,7 +392,7 @@ Compact and tactile, with a press you can feel.
 ### Chips (pills)
 - **Style:** 24px tall, 6px radius, 9px padding, 12px `ink-dim` text on `surface-raised` with a hairline border. Pressable pills share the 0.97 press.
 - **Elements:** `.pill` on a `<span>` is a static chip; on a `<button>` it also gets the press (`button.pill:active`).
-- **State:** filter off (`aria-pressed="false"`) drops to 70% opacity; filter on goes neutral (strong border, `surface-hover`, `ink`); single-choice selected (`aria-selected="true"`) takes the accent border and `felt-green-soft` fill.
+- **State:** filter off (`aria-pressed="false"`) drops to 70% opacity; filter on goes neutral (strong border, `surface-hover`, `ink`); single-choice selected (`aria-selected="true"`) takes the accent border and `accent-soft` fill.
 
 ### Author Tag (signature)
 The multiplayer presence grammar.
@@ -383,7 +403,7 @@ The multiplayer presence grammar.
 
 ### Selection Frame (signature)
 - **In-flow and floating items:** 1px accent outline at -1px offset plus four 6px square accent handles 3px outside the corners. The dashboard inspector wears it to show what is selected.
-- **Table rows:** outline plus `felt-green-soft` row fill, no handles (a pseudo-element would become an extra cell).
+- **Table rows:** outline plus `accent-soft` row fill, no handles (a pseudo-element would become an extra cell).
 - **Motion:** when a pointer picked the frame, the handles grow from 3.6px to 6px and fade in over 120ms `--ease-out`; keyboard selection shows them at once.
 
 ### Cards / Containers
@@ -393,12 +413,12 @@ The multiplayer presence grammar.
 
 ### Inputs / Fields
 - **Style:** `surface-raised`, hairline border, 7px radius, 32px tall single-line, 12px padding, 13px text (mono for URLs, keys and tokens), `ink-faint` placeholder.
-- **Focus:** the border turns felt green; no glow, no outline. Border and fill transition over 120ms.
+- **Focus:** the border turns ink and a 2px `focus` (blue) ring sits outside it; no glow. Border and fill transition over 120ms.
 - **Errors:** `critical` text naming the problem and the recovery, on a `critical-soft` wash.
 
 ### Navigation
 - **Sidebar:** brand row (20px mark, "Eunomia" in display 15px, mono version), a search field that opens the palette with a ⌘K kbd, nav rows, a "Connected" label over live sources (status dot, name, mono record count), and an account footer above a hairline.
-- **Nav row:** 32px tall, 7px radius, 13px `ink-dim` text with a 15px icon in `ink-faint` (stroke 1.75). Hover (fine pointers) and active both use `surface-raised` with `ink`; active adds weight 500 and turns the icon felt green. No motion beyond the 120ms colour fade.
+- **Nav row:** 32px tall, 7px radius, 13px `ink-dim` text with a 15px icon in `ink-faint` (stroke 1.75). Hover (fine pointers) and active both use `surface-raised` with `ink`; active adds weight 500 and turns the icon ink. Target: nav chips with per-section shape glyphs (see the brief). No motion beyond the 120ms colour fade.
 - **Mobile:** 48px top bar; the drawer slides from the left over 260ms `--ease-drawer` with the scrim fading in 180ms, and closes on navigation.
 
 ### Command Palette
@@ -606,21 +626,21 @@ const row = "grid gap-1.5 md:grid-cols-[180px_minmax(0,1fr)] md:gap-6 px-5 py-4 
 ### Do:
 - **Do** build from the tokens and classes in `globals.css` (`.ledger`, `.panel`, `.btn`, `.field`, `.pill`, `.data-table`, `.label`, `.page-title`, `.section-title`, `.frame-selected`); add a token rather than a raw hex.
 - **Do** show authorship with the author tag and a real author (owner email, source key, or an agent name the API returns).
-- **Do** mark the selected item with the selection frame (outline plus four 6px handles), or the outline plus green wash on a table row.
+- **Do** mark the selected item with the selection frame (outline plus four 6px handles), or the outline plus the ink wash on a table row.
 - **Do** put lists of things in dense tables with hairline rows, tabular numerals and columns that hide rather than wrap on small screens.
 - **Do** give every pressable thing the 0.97 press over 140ms `--ease-out`, and every floating thing the pop-in from scale 0.96.
-- **Do** check every screen in both themes; dark is the default.
+- **Do** check every screen in both themes; light is the default.
 - **Do** keep real text in the DOM at its final value from the first frame, and render final states under reduced motion.
 - **Do** reuse `Select`, `CopyButton`, `Tooltip`, `AuthorTag` and the `bits` components before writing a new control; add a prop, not a sibling.
-- **Do** use lucide-react icons at 14 to 16px with stroke 1.75.
+- **Do** use Phosphor duotone icons with a solid vault-colour back layer (see Icons); 16px in dense UI.
 
 ### Don't:
-- **Don't** put felt green on headings, decoration or idle icons; it means "press me" or "selected".
+- **Don't** put the vault colours on buttons, links, status or headings, or bring back the felt green.
 - **Don't** use author colours for actions, status or decoration, or invent an author.
 - **Don't** set a small label or kicker above a heading.
 - **Don't** give in-flow blocks a shadow or nest a card inside a card.
 - **Don't** animate keyboard-driven or high-frequency actions (palette, nav, tabs, typing), use `transition: all`, `ease-in`, or scale from 0.
 - **Don't** add hover styles outside `(hover: hover) and (pointer: fine)`.
-- **Don't** use mono for prose or labels, gradient text, or emoji and unicode glyphs as icons.
+- **Don't** use mono for prose or labels, gradient text, or emoji and unicode glyphs as icons. Don't mix icon sets or add new Lucide icons.
 - **Don't** use a native `<select>`, `title` as the only tooltip, or a new radius, colour, font or easing; the tokens above are the whole vocabulary.
 - **Don't** copy React Bits source into `bits/`.
