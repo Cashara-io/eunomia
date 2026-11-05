@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" width="1200" height="420" role="img" aria-labelledby="t d" font-family="Geist, Inter, 'Helvetica Neue', Arial, sans-serif">
+<title id="t">Ontologies: model the whole business, find the bottleneck</title>
+<desc id="d">A card labelled Ontology vault shows four stages, farms, distribution centres, transport and stores, with transport highlighted as the bottleneck.</desc>
+<defs><clipPath id="frame"><rect width="1200" height="420" rx="28"/></clipPath></defs>
+<g clip-path="url(#frame)">
+  <rect width="1200" height="420" fill="#F0F0EB"/>
+  <circle cx="1150" cy="40" r="150" fill="#E8BE39"/>
+  <path d="M1200 420 L1010 420 A190 190 0 0 1 1200 230z" fill="#3159B6"/>
+  <circle cx="640" cy="372" r="20" fill="#CF412F"/>
+  <path d="M612 60 L640 110 L584 110z" fill="#171717"/>
+  <rect x="1130" y="196" width="34" height="34" fill="#CF412F" transform="rotate(14 1147 213)"/>
+  <text x="56" y="76" font-size="20" fill="#171717" letter-spacing="-0.5"><tspan font-weight="600">eunomia</tspan><tspan font-weight="400" fill="#61615D"> ontologies</tspan></text>
+  <circle cx="60.5" cy="102.5" r="4.5" fill="#CF412F"/><rect x="67.7" y="98" width="9" height="9" fill="#E8BE39"/><path d="M79.4 107 L83.9 98 L88.4 107z" fill="#3159B6"/>
+  <text x="56" y="200" font-size="42" fill="#171717" font-weight="500" text-anchor="start" letter-spacing="-1.6">Model the whole business.</text>
+<text x="56" y="252" font-size="42" fill="#171717" font-weight="500" text-anchor="start" letter-spacing="-1.6">Find the bottleneck.</text>
+  <text x="56" y="310" font-size="17" fill="#61615D" font-weight="400" text-anchor="start">Ontologies, coming soon to Eunomia.</text>
+  <rect x="704" y="92" width="420" height="252" rx="16" fill="#ffffff" stroke="#171717" stroke-width="1.5"/><rect x="728.0" y="78" width="114.1" height="28" rx="14" fill="#171717"/><text x="785.04" y="96.5" font-size="12" fill="#ffffff" font-weight="500" text-anchor="middle">Ontology vault</text><rect x="728.0" y="126" width="85.5" height="40" rx="8" fill="#F0F0EB"/><text x="770.75" y="151" font-size="14" fill="#171717" font-weight="400" text-anchor="middle">Farms</text><rect x="823.5" y="126" width="85.5" height="40" rx="8" fill="#F0F0EB"/><text x="866.25" y="151" font-size="14" fill="#171717" font-weight="400" text-anchor="middle">DCs</text><rect x="919.0" y="126" width="85.5" height="40" rx="8" fill="#CF412F"/><text x="961.75" y="151" font-size="14" fill="#ffffff" font-weight="500" text-anchor="middle">Transport</text><rect x="1014.5" y="126" width="85.5" height="40" rx="8" fill="#F0F0EB"/><text x="1057.25" y="151" font-size="14" fill="#171717" font-weight="400" text-anchor="middle">Stores</text><rect x="728.0" y="176" width="372.0" height="40" rx="8" fill="#F0F0EB"/><text x="914.0" y="201" font-size="14" fill="#171717" font-weight="400" text-anchor="middle">Demand signal: what sold, what spoiled</text><rect x="728.0" y="226" width="372.0" height="40" rx="8" fill="#F0F0EB"/><text x="914.0" y="251" font-size="14" fill="#171717" font-weight="400" text-anchor="middle">An entity for every stage</text><rect x="728.0" y="276" width="372.0" height="40" rx="8" fill="#F0F0EB"/><text x="914.0" y="301" font-size="14" fill="#171717" font-weight="400" text-anchor="middle">Remembered delays and decisions</text>
+</g>
+</svg>
