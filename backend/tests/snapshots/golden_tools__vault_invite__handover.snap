@@ -1,0 +1,9 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "vault_id": "vault:<id26>",
+  "user_email": "bob@example.com",
+  "role": "member"
+}

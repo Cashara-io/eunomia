@@ -73,6 +73,8 @@ flowchart TD
 |---|---|
 | **Create** | A named space for a project, client, team or service; your personal vault is created with your account |
 | **Share** | Invite collaborators with owner/member roles; access begins when an invitation is accepted |
+| **Invitations** | See the invitations addressed to you and accept or decline them, from the app or as an agent |
+| **Roles and ownership** | Promote or demote members, or hand a vault to another member; a vault always keeps at least one owner |
 | **Scope** | Pass a vault name or ID as `vault_id` to target its memory; membership is checked on every read and write |
 | **Clone** | Copy a vault's entities, memories and relationships into a new vault you own |
 | **Merge** | Combine two vaults into a new one, folding matching entities and deduplicating facts and relations; both originals stay intact |
@@ -91,6 +93,8 @@ vault as its default and cannot reach any other.
 Vaults live inside an org. A self-hosted install is one org by default, so
 everyone who signs up can be invited to its vaults; each org's data sits in
 its own database.
+
+Vault management works from the app and from your agents' tools alike. Open vault and entity views refresh periodically, so an agent's changes show up without a reload.
 
 Explore [vault concepts](docs/concepts.md#vaults) and the
 [source-linked vault architecture](docs/architecture.md#vaults-define-the-memory-boundary).

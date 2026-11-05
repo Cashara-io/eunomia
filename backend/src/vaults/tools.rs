@@ -33,6 +33,13 @@ pub async fn vault_list(db: &OrgDb, owner: &RecordId) -> Value {
     }
 }
 
+pub async fn vault_get(db: &OrgDb, owner: &RecordId, vault_id: &RecordId) -> Value {
+    match service::get_vault(db, owner, vault_id).await {
+        Ok(v) => serde_json::to_value(v).unwrap_or_else(|e| err("vault_get", &e.to_string())),
+        Err(e) => err_app("vault_get", &e),
+    }
+}
+
 pub async fn vault_clone(db: &OrgDb, owner: &RecordId, vault_id: &RecordId, name: Option<&str>, kind: &str) -> Value {
     match service::clone_vault(db, owner, vault_id, name, kind).await {
         Ok(v) => serde_json::to_value(v).unwrap_or_else(|e| err("vault_clone", &e.to_string())),
@@ -68,10 +75,45 @@ pub async fn vault_remove_member(db: &OrgDb, control: &ControlDb, owner: &Record
     }
 }
 
+pub async fn vault_set_role(db: &OrgDb, control: &ControlDb, owner: &RecordId, vault_id: &RecordId, email: &str, role: &str) -> Value {
+    match service::set_member_role(db, control, owner, vault_id, email, role).await {
+        Ok(v) => serde_json::to_value(v).unwrap_or_else(|e| err("vault_set_role", &e.to_string())),
+        Err(e) => err_app("vault_set_role", &e),
+    }
+}
+
+pub async fn vault_transfer_ownership(db: &OrgDb, control: &ControlDb, owner: &RecordId, vault_id: &RecordId, email: &str) -> Value {
+    match service::transfer_ownership(db, control, owner, vault_id, email).await {
+        Ok(v) => serde_json::to_value(v).unwrap_or_else(|e| err("vault_transfer_ownership", &e.to_string())),
+        Err(e) => err_app("vault_transfer_ownership", &e),
+    }
+}
+
 pub async fn vault_leave(db: &OrgDb, owner: &RecordId, vault_id: &RecordId) -> Value {
     match service::leave_vault(db, owner, vault_id).await {
         Ok(()) => json!({ "left": true }),
         Err(e) => err_app("vault_leave", &e),
+    }
+}
+
+pub async fn vault_invitations(db: &OrgDb, owner: &RecordId) -> Value {
+    match service::list_my_invitations(db, owner).await {
+        Ok(v) => json!({ "results": v }),
+        Err(e) => err_app("vault_invitations", &e),
+    }
+}
+
+pub async fn vault_accept_invitation(db: &OrgDb, owner: &RecordId, vault_id: &RecordId) -> Value {
+    match service::accept_invitation(db, owner, vault_id).await {
+        Ok(v) => serde_json::to_value(v).unwrap_or_else(|e| err("vault_accept_invitation", &e.to_string())),
+        Err(e) => err_app("vault_accept_invitation", &e),
+    }
+}
+
+pub async fn vault_decline_invitation(db: &OrgDb, owner: &RecordId, vault_id: &RecordId) -> Value {
+    match service::decline_invitation(db, owner, vault_id).await {
+        Ok(()) => json!({ "declined": true }),
+        Err(e) => err_app("vault_decline_invitation", &e),
     }
 }
 

@@ -14,7 +14,7 @@ import {
   updateEntity,
 } from "@/lib/gen";
 import type { Cloud, CloudSimilarity, EntityDetail, EntityGraph, EntityKind, EntityMemory, EntityRelation, EntitySummary } from "@/lib/types";
-import { call } from "./client";
+import { call, LIVE_POLL_MS } from "./client";
 
 export const entityKeys = {
   all: ["entities"] as const,
@@ -44,6 +44,7 @@ export const useEntityGraph = (opts: { kinds?: EntityKind[]; vaultId?: string })
     queryFn: () => call(getEntityGraph({ query: { kinds: opts.kinds, vault_id: opts.vaultId } })) as Promise<EntityGraph>,
     // Switching vault keeps the old graph on screen until the new one lands.
     placeholderData: keepPreviousData,
+    refetchInterval: LIVE_POLL_MS,
   });
 
 export const useEntityCloud = (vaultIds: string[]) =>
@@ -53,6 +54,7 @@ export const useEntityCloud = (vaultIds: string[]) =>
     // Layering another vault keeps the old points until the new cloud lands.
     placeholderData: keepPreviousData,
     enabled: vaultIds.length > 0,
+    refetchInterval: LIVE_POLL_MS,
   });
 
 /** Cosine / distance / correlation between cloud points on their full vectors, computed server-side. */

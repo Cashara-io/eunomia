@@ -189,6 +189,15 @@ pub const FACTS_BY_ID: Stmt = Stmt::new(
     r#"SELECT id, text, updated_at ?? created_at AS at FROM $ids
        WHERE type IN ["world","experience"] AND status != "superseded""#,
 );
+/// The subject's live raw facts with no vector for `$spec` yet (their embed job has not run), newest first.
+/// The supersede check embeds these itself, or a contradiction written right after a fact would miss it.
+pub const UNEMBEDDED_LIVE_FACTS: Stmt = Stmt::new(
+    "entities.unembedded_live_facts",
+    r#"SELECT id, text, updated_at ?? created_at AS at FROM memory
+       WHERE subject = $subject AND id NOTINSIDE $new AND type IN ["world","experience"]
+       AND status != "superseded" AND (embedding_spec = NONE OR embedding_spec != $spec)
+       ORDER BY at DESC LIMIT $limit"#,
+);
 /// The subject's live raw facts most similar to one new fact's `$vector` (same embedding `$spec`), best first.
 /// Only these can be superseded by it: a fact about something else can't be made untrue by it.
 pub const SIMILAR_LIVE_FACTS: Stmt = Stmt::new(
@@ -269,6 +278,7 @@ pub const ALL: &[&Stmt] = &[
     &SET_SUMMARY,
     &RAW_MEMORIES,
     &FACTS_BY_ID,
+    &UNEMBEDDED_LIVE_FACTS,
     &SIMILAR_LIVE_FACTS,
     &MARK_SUPERSEDED,
     &OBSERVATION_OF,

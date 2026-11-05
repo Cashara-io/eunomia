@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useIsFetching, useQueryClient } from "@tanstack/react-query";
+import { RefreshCw } from "lucide-react";
+import { entityKeys } from "@/lib/queries/entities";
 import EntityGraph from "@/components/EntityGraph";
 import VectorCloud from "@/components/VectorCloud";
 
@@ -11,6 +14,8 @@ const VIEWS = [
 
 export default function EntitiesPage() {
   const [view, setView] = useState<(typeof VIEWS)[number]["id"]>("graph");
+  const qc = useQueryClient();
+  const fetching = useIsFetching({ queryKey: entityKeys.all }) > 0;
   const current = VIEWS.find((v) => v.id === view)!;
 
   // Same header in both views, so switching tabs never moves it.
@@ -25,6 +30,14 @@ export default function EntitiesPage() {
             </button>
           ))}
         </div>
+        <button
+          className="btn"
+          aria-label="Refresh entities"
+          title="Refresh"
+          onClick={() => void qc.invalidateQueries({ queryKey: entityKeys.all })}
+        >
+          <RefreshCw size={14} strokeWidth={1.75} className={fetching ? "animate-spin" : undefined} />
+        </button>
       </div>
       <p className="text-[13px] -mt-1.5" style={{ color: "var(--ink-dim)" }}>
         {current.blurb}

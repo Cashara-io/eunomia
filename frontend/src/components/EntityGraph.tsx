@@ -25,15 +25,7 @@ import {
   useUpdateEntity,
 } from "@/lib/queries/entities";
 import { useVaults } from "@/lib/queries/vaults";
-
-const KIND_COLOR: Record<BuiltInKind, string> = {
-  person: "var(--kind-person)",
-  organisation: "var(--kind-organisation)",
-  location: "var(--kind-location)",
-  repository: "var(--kind-repository)",
-  file: "var(--kind-file)",
-  symbol: "var(--kind-symbol)",
-};
+import { defaultKindHex, isCustomKind, kindColor, setKindColor, shuffleKindColor, useKindColor } from "@/lib/kindColors";
 
 const KIND_LABEL: Record<BuiltInKind, string> = {
   person: "Person",
@@ -46,8 +38,8 @@ const KIND_LABEL: Record<BuiltInKind, string> = {
 
 const ALL_KINDS: EntityKind[] = ["person", "organisation", "location", "repository", "file", "symbol"];
 
-// An agent's own kind ("db", "decision") has no token of its own: a neutral dot and its name as written.
-const kindColor = (kind: EntityKind) => KIND_COLOR[kind as BuiltInKind] ?? "var(--ink-faint)";
+// An agent's own kind ("db", "decision") has no token of its own: it gets a stable colour from its name
+// (or the one the person picked, see lib/kindColors.ts) and its name as written.
 const kindLabel = (kind: EntityKind) => KIND_LABEL[kind as BuiltInKind] ?? kind;
 
 // Compact age for a timestamp: "now", "4m", "3h", "2d", then a date.
@@ -93,6 +85,7 @@ export default function EntityGraph({
   /** one sentence plus one action, shown while the graph is empty or sparse */
   guide?: ReactNode;
 } = {}) {
+  const colorOf = useKindColor();
   const shownKinds = kinds ?? ALL_KINDS;
   const queryClient = useQueryClient();
   const [vaultId, setVaultId] = useState<string | undefined>(undefined);
@@ -456,7 +449,7 @@ export default function EntityGraph({
             <button key={kind} type="button" className="pill shrink-0" aria-pressed={active} onClick={() => toggleKind(kind)}>
               <span
                 className="w-2 h-2 rounded-full shrink-0"
-                style={{ background: kindColor(kind), opacity: active ? 1 : 0.35 }}
+                style={{ background: colorOf(kind), opacity: active ? 1 : 0.35 }}
                 aria-hidden
               />
               {kindLabel(kind)}
@@ -556,6 +549,20 @@ export default function EntityGraph({
             <span className="text-[12px] inline-flex items-center gap-1.5 mt-0.5" style={{ color: "var(--ink-dim)" }}>
               <span className="w-2 h-2 rounded-full" style={{ background: kindColor(selected.kind) }} aria-hidden />
               {kindLabel(selected.kind)}
+              {isCustomKind(selected.kind) && (
+                <span className="inline-flex items-center gap-1 ml-1">
+                  <input
+                    type="color"
+                    aria-label={`Colour for ${selected.kind}`}
+                    className="w-4 h-4 p-0 border-0 bg-transparent cursor-pointer"
+                    value={/^#[0-9a-f]{6}$/i.test(kindColor(selected.kind)) ? kindColor(selected.kind) : defaultKindHex(selected.kind)}
+                    onChange={(e) => setKindColor(selected.kind, e.target.value)}
+                  />
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => shuffleKindColor(selected.kind)}>
+                    Shuffle
+                  </button>
+                </span>
+              )}
             </span>
           </div>
         </div>
@@ -778,7 +785,7 @@ export default function EntityGraph({
           <GraphCanvas
             nodes={graph.nodes}
             edges={graph.edges}
-            kindColor={kindColor}
+            kindColor={colorOf}
             visibleKinds={visibleKinds}
             insets={insets}
             selectedId={selected?.id}

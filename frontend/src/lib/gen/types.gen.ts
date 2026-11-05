@@ -888,6 +888,13 @@ export type RepointOut = {
     connectors: number;
 };
 
+export type RoleRequest = {
+    /**
+     * `owner` or `member`
+     */
+    role: string;
+};
+
 export type Routing = {
     /**
      * Where records no rule matches go (`vault:...`); absent: your personal vault.
@@ -1147,6 +1154,13 @@ export type ToolUsageReport = {
     series_step: string;
     since: string;
     totals: UsageCounts;
+};
+
+export type TransferRequest = {
+    /**
+     * An active member who becomes an owner; the caller becomes a member.
+     */
+    email: string;
 };
 
 /**
@@ -3780,6 +3794,55 @@ export type RemoveMemberResponses = {
 };
 
 export type RemoveMemberResponse = RemoveMemberResponses[keyof RemoveMemberResponses];
+
+export type SetMemberRoleData = {
+    body: RoleRequest;
+    path: {
+        vault_id: string;
+        email: string;
+    };
+    query?: never;
+    url: '/api/vaults/{vault_id}/members/{email}/role';
+};
+
+export type SetMemberRoleErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type SetMemberRoleError = SetMemberRoleErrors[keyof SetMemberRoleErrors];
+
+export type SetMemberRoleResponses = {
+    200: MemberOut;
+};
+
+export type SetMemberRoleResponse = SetMemberRoleResponses[keyof SetMemberRoleResponses];
+
+export type TransferOwnershipData = {
+    body: TransferRequest;
+    path: {
+        vault_id: string;
+    };
+    query?: never;
+    url: '/api/vaults/{vault_id}/transfer';
+};
+
+export type TransferOwnershipErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type TransferOwnershipError = TransferOwnershipErrors[keyof TransferOwnershipErrors];
+
+export type TransferOwnershipResponses = {
+    200: MemberOut;
+};
+
+export type TransferOwnershipResponse = TransferOwnershipResponses[keyof TransferOwnershipResponses];
 
 export type ReceiveExtensionWebhookData = {
     body?: never;

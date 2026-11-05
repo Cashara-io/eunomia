@@ -194,6 +194,9 @@ No. The connected agent is the model.
 | `consolidate_observations` | Fold new facts into each entity's belief |
 | `vault_list` / `vault_create` / `vault_clone` / `vault_merge` | Manage vaults (separate scopes for projects, clients, teams, …); merge two into a new one. Any tool's `vault_id` also accepts a vault's name |
 | `vault_invite` / `vault_members` / `vault_remove_member` / `vault_leave` / `vault_rename` / `vault_delete` | Sharing |
+| `vault_get` | One vault: role, kind, created_at, member count |
+| `vault_invitations` / `vault_accept_invitation` / `vault_decline_invitation` | See and answer invitations addressed to you |
+| `vault_set_role` / `vault_transfer_ownership` | Promote or demote a member; hand a vault to another member (owner only, last-owner guard) |
 | `document_upload` / `document_list` / `document_get` | Upload a document (text, Markdown, JSON, CSV, text PDF) and read its extracted text; its passages are found by `search`, `recall` and `get`, each hit naming the document ([documents](documents.md)) |
 | `document_download` / `document_export` / `document_delete` | The HTTP route for the original bytes, the passages-and-vectors manifest, deletion |
 | `skill_save` / `skill_find` / `skill_get` / `skill_delete` | Keep a skill an agent learned, find it later by meaning, read its body, delete it ([agent skills](#agent-skills)) |

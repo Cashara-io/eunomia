@@ -1,0 +1,9 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "error": "vault_set_role: cannot demote the last owner",
+  "code": "validation.invalid",
+  "trace_id": "<trace>"
+}

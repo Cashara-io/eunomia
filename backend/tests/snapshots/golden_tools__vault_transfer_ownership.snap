@@ -1,0 +1,9 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "error": "vault_transfer_ownership: bob@example.com is not an active member (invitations must be accepted first)",
+  "code": "validation.invalid",
+  "trace_id": "<trace>"
+}

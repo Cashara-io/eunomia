@@ -5054,6 +5054,132 @@
         ]
       }
     },
+    "/api/vaults/{vault_id}/members/{email}/role": {
+      "put": {
+        "tags": [
+          "vaults"
+        ],
+        "summary": "Promote or demote a vault member",
+        "operationId": "setMemberRole",
+        "parameters": [
+          {
+            "name": "vault_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "email",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/vaults/{vault_id}/transfer": {
+      "post": {
+        "tags": [
+          "vaults"
+        ],
+        "summary": "Hand a vault to another member",
+        "operationId": "transferOwnership",
+        "parameters": [
+          {
+            "name": "vault_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransferRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/hooks/ext/{key}": {
       "post": {
         "tags": [
@@ -7380,6 +7506,18 @@
           }
         }
       },
+      "RoleRequest": {
+        "type": "object",
+        "required": [
+          "role"
+        ],
+        "properties": {
+          "role": {
+            "type": "string",
+            "description": "`owner` or `member`"
+          }
+        }
+      },
       "Routing": {
         "type": "object",
         "properties": {
@@ -8066,6 +8204,18 @@
           },
           "totals": {
             "$ref": "#/components/schemas/UsageCounts"
+          }
+        }
+      },
+      "TransferRequest": {
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "An active member who becomes an owner; the caller becomes a member."
           }
         }
       },

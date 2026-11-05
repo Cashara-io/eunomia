@@ -4,15 +4,18 @@ import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
+  ArrowRightLeft,
   Check,
   ChevronRight,
   Combine,
   Copy,
+  Crown,
   Lock,
   LogOut,
   Mail,
   Pencil,
   Plus,
+  RefreshCw,
   Trash2,
   UserPlus,
   Users,
@@ -35,6 +38,8 @@ import {
   useRefreshVaults,
   useRemoveMember,
   useRenameVault,
+  useSetMemberRole,
+  useTransferOwnership,
   useVaultMembers,
   useVaults,
 } from "@/lib/queries/vaults";
@@ -123,6 +128,8 @@ function VaultInspector({
   const members = membersQuery.data ?? (membersQuery.isError ? [] : null);
   const inviteMember = useInviteMember();
   const removeMember = useRemoveMember();
+  const changeRole = useSetMemberRole();
+  const transfer = useTransferOwnership();
   const deleteVault = useDeleteVault();
   const leaveVault = useLeaveVault();
   const cloneVault = useCloneVault();
@@ -136,6 +143,7 @@ function VaultInspector({
   const [error, setError] = useState<Failure | null>(null);
   const [busy, setBusy] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
+  const [handing, setHanding] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<"leave" | "delete" | null>(null);
   const [cloning, setCloning] = useState(false);
   const [cloneName, setCloneName] = useState(`${vault.name} (copy)`);
@@ -342,9 +350,55 @@ function VaultInspector({
                       <X {...ICON} />
                     </button>
                   </span>
+                ) : handing === m.email ? (
+                  <span className="inline-flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() =>
+                        run(
+                          () => transfer.mutateAsync({ id: vault.id, email: m.email }),
+                          "Could not hand over the vault. Reload and try again.",
+                          () => setHanding(null),
+                        )
+                      }
+                      className="btn btn-danger btn-sm"
+                    >
+                      Hand over
+                    </button>
+                    <button onClick={() => setHanding(null)} className="btn btn-ghost btn-sm btn-icon" aria-label="Keep ownership">
+                      <X {...ICON} />
+                    </button>
+                  </span>
                 ) : (
                   <>
                     <RoleChip role={m.role} />
+                    {isOwner && !isMe && (
+                      <Tooltip label={m.role === "owner" ? `Make ${m.email} a member` : `Make ${m.email} an owner`}>
+                        <button
+                          onClick={() =>
+                            run(
+                              () => changeRole.mutateAsync({ id: vault.id, email: m.email, role: m.role === "owner" ? "member" : "owner" }),
+                              "Could not change that role. Reload and try again.",
+                              () => {},
+                            )
+                          }
+                          aria-label={m.role === "owner" ? "Make member" : "Make owner"}
+                          className="btn btn-ghost btn-sm btn-icon shrink-0"
+                        >
+                          <Crown {...ICON} />
+                        </button>
+                      </Tooltip>
+                    )}
+                    {isOwner && !isMe && (
+                      <Tooltip label={`Hand this vault to ${m.email}`}>
+                        <button
+                          onClick={() => setHanding(m.email)}
+                          aria-label="Hand over vault"
+                          className="btn btn-ghost btn-sm btn-icon shrink-0"
+                        >
+                          <ArrowRightLeft {...ICON} />
+                        </button>
+                      </Tooltip>
+                    )}
                     {isOwner && !isMe && (
                       <Tooltip label={`Remove ${m.email}`}>
                         <button
@@ -1046,6 +1100,7 @@ function useWide() {
 
 export default function VaultsPage() {
   const vaultsQuery = useVaults();
+  const refetchAll = useRefreshVaults();
   const vaults = vaultsQuery.data ?? (vaultsQuery.isError ? [] : null);
   const me = useMe().data?.email ?? null;
   const [creating, setCreating] = useState(false);
@@ -1110,14 +1165,19 @@ export default function VaultsPage() {
             one by inviting people. Agents can refer to a vault by its name.
           </p>
         </div>
-        <button
-          onClick={() => setCreating(true)}
-          disabled={creating}
-          className="btn btn-primary"
-        >
-          <Plus {...ICON} />
-          New vault
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => void refetchAll()} className="btn" aria-label="Refresh vaults" title="Refresh">
+            <RefreshCw {...ICON} />
+          </button>
+          <button
+            onClick={() => setCreating(true)}
+            disabled={creating}
+            className="btn btn-primary"
+          >
+            <Plus {...ICON} />
+            New vault
+          </button>
+        </div>
       </header>
 
       {vaultsQuery.isError && <ErrorLine error={failure(vaultsQuery.error, "Could not load your vaults.", " Reload the page to try again.")} />}

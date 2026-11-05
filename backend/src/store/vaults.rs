@@ -133,6 +133,23 @@ pub const REMOVE_MEMBER: Stmt = Stmt::new(
             COMMIT TRANSACTION;"#,
 );
 
+pub const SET_ROLE: Stmt = Stmt::new(
+    "vaults.set_role",
+    r#"BEGIN TRANSACTION;
+            LET $owners = (SELECT VALUE id FROM vault_member WHERE vault = $vault AND role = "owner" AND status = "active");
+            IF $demoting AND array::len($owners) <= 1 { THROW "last_owner" };
+            UPDATE $id SET role = $role WHERE status = "active";
+            COMMIT TRANSACTION;"#,
+);
+
+pub const TRANSFER_OWNERSHIP: Stmt = Stmt::new(
+    "vaults.transfer_ownership",
+    r#"BEGIN TRANSACTION;
+            UPDATE $target SET role = "owner" WHERE status = "active";
+            UPDATE $caller SET role = "member" WHERE status = "active";
+            COMMIT TRANSACTION;"#,
+);
+
 pub const LEAVE: Stmt = Stmt::new(
     "vaults.leave",
     r#"BEGIN TRANSACTION;
@@ -203,6 +220,8 @@ pub const ALL: &[&Stmt] = &[
     &ACCEPT_INVITATION,
     &DELETE_RECORD,
     &REMOVE_MEMBER,
+    &SET_ROLE,
+    &TRANSFER_OWNERSHIP,
     &LEAVE,
     &OBSERVATION_OF,
     &APPEND_OBSERVATION,

@@ -1,0 +1,9 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "error": "vault_accept_invitation: no pending invitation for this vault",
+  "code": "validation.invalid",
+  "trace_id": "<trace>"
+}

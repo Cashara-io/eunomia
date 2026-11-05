@@ -38,6 +38,12 @@ struct FactRow {
     sim: f64,
 }
 
+/// `(date, fact, is_new)` oldest first. Dates are to the minute, so a fact and the one that replaces it often
+/// tie: on a tie the older fact goes first, as the prompt says "oldest first".
+fn oldest_first<T>(rows: &mut [(String, T, bool)]) {
+    rows.sort_by(|a, b| a.0.cmp(&b.0).then(a.2.cmp(&b.2)));
+}
+
 /// `(date, text, is_new)`, oldest first -> the prompt.
 fn build_prompt(facts: &[(String, &str, bool)]) -> String {
     let list = facts
@@ -120,6 +126,41 @@ pub async fn enabled(db: &OrgDb, settings: &Settings, owner: &RecordId) -> bool 
     settings.embeddings_backend != "stub" && crate::embeddings::service::chat_available(db, settings, owner).await
 }
 
+/// Most older facts embedded on the spot for one check.
+const EMBED_MISSING: i64 = 30;
+
+/// Embeds the subject's live facts that have no vector yet. Their embed job runs after the write, so a fact
+/// that a new one contradicts can still be unembedded, and would otherwise never be a candidate.
+async fn embed_missing(db: &OrgDb, settings: &Settings, owner: &RecordId, subject: &RecordId, new: &[RecordId], spec: &str) -> AppResult<()> {
+    let mut res = q::UNEMBEDDED_LIVE_FACTS
+        .on(db)
+        .bind(("subject", subject.clone()))
+        .bind(("new", new.to_vec()))
+        .bind(("spec", spec.to_string()))
+        .bind(("limit", EMBED_MISSING))
+        .await?;
+    let missing: Vec<FactRow> = res.take(q::UNEMBEDDED_LIVE_FACTS.slot)?;
+    if missing.is_empty() {
+        return Ok(());
+    }
+    let texts: Vec<String> = missing.iter().map(|r| r.text.clone()).collect();
+    let vectors = embeddings::embed(db, settings, &texts, Some(owner)).await?;
+    for (r, vector) in missing.iter().zip(vectors) {
+        if vector.len() != embeddings::dim() {
+            continue;
+        }
+        crate::store::cache::SET_MEMORY_EMBEDDING
+            .on(db)
+            .bind(("id", r.id.clone()))
+            .bind(("embedding", vector))
+            .bind(("spec", spec.to_string()))
+            .bind(("text", r.text.clone()))
+            .await?
+            .check()?;
+    }
+    Ok(())
+}
+
 async fn run(db: &OrgDb, settings: &Settings, owner: &RecordId, subject: &RecordId, new: &[RecordId]) -> AppResult<Vec<RecordId>> {
     let mut res = q::FACTS_BY_ID.on(db).bind(("ids", new.to_vec())).await?;
     let new_rows: Vec<FactRow> = res.take(0)?;
@@ -130,6 +171,7 @@ async fn run(db: &OrgDb, settings: &Settings, owner: &RecordId, subject: &Record
     // New facts usually have no vector yet (the embed job runs later), so embed them here. The vector
     // is saved too, so recall finds the fact by meaning straight away.
     let spec = embeddings::spec_for(db, settings, owner).await?.tag();
+    embed_missing(db, settings, owner, subject, new, &spec).await?;
     let texts: Vec<String> = new_rows.iter().map(|r| r.text.clone()).collect();
     let vectors = embeddings::embed(db, settings, &texts, Some(owner)).await?;
     // Only live facts close in meaning to a new fact are candidates: one fact can't make an unrelated one untrue.
@@ -175,7 +217,7 @@ async fn run(db: &OrgDb, settings: &Settings, owner: &RecordId, subject: &Record
             (date, r, !old)
         })
         .collect();
-    rows.sort_by(|a, b| a.0.cmp(&b.0));
+    oldest_first(&mut rows);
     let facts: Vec<(String, &str, bool)> = rows.iter().map(|(d, r, n)| (d.clone(), r.text.as_str(), *n)).collect();
     let ids: Vec<RecordId> = rows.iter().map(|(_, r, _)| r.id.clone()).collect();
     let marked = pick(&call_llm(db, settings, owner, build_prompt(&facts)).await?, &facts, &ids);
@@ -200,6 +242,17 @@ mod tests {
             ("2026-09-02 10:00".into(), "X prefers tea", false),
             ("2026-10-05 09:00".into(), "X was granted access", true),
         ]
+    }
+
+    #[test]
+    fn a_tie_on_the_minute_puts_the_older_fact_first() {
+        let mut rows = vec![
+            ("2026-10-05 09:00".to_string(), "granted", true),
+            ("2026-10-05 09:00".to_string(), "no access", false),
+            ("2026-10-05 08:59".to_string(), "earlier", false),
+        ];
+        oldest_first(&mut rows);
+        assert_eq!(rows.iter().map(|r| r.1).collect::<Vec<_>>(), ["earlier", "no access", "granted"]);
     }
 
     #[test]
