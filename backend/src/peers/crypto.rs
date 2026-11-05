@@ -121,8 +121,11 @@ pub enum Refused {
 /// accept its replay, but only within the window, and every write a replay causes is idempotent.
 #[derive(Default)]
 pub struct Replay {
-    seen: Mutex<HashMap<String, (VecDeque<(i64, String)>, std::collections::HashSet<String>)>>,
+    seen: Mutex<HashMap<String, SeenNonces>>,
 }
+
+/// One link's nonces: in arrival order with their time (to expire them), and as a set (to look up).
+type SeenNonces = (VecDeque<(i64, String)>, std::collections::HashSet<String>);
 
 impl Replay {
     /// Accepts (and remembers) `nonce` from `link` sent at `ts`, as of `now` (both unix seconds).

@@ -985,7 +985,7 @@ async fn pocket_audio_not_uploaded_yet_is_fetched_on_a_later_sync_once_and_kept_
     // the device has not uploaded it: 404, the sync still succeeds and stores the transcript side
     let empty = serve(vec![]).await;
     let conn = pocket_conn(&org, &owner, &empty.base, true).await;
-    let report = registry::ingest_via(&org, &owner, &[rec.clone()], &HeyPocketSource, Some(&conn)).await.unwrap();
+    let report = registry::ingest_via(&org, &owner, std::slice::from_ref(&rec), &HeyPocketSource, Some(&conn)).await.unwrap();
     assert_eq!(report.failed, 0, "{:?}", report.errors);
     assert_eq!(audio_hits(&empty), 1);
     assert!(audio_row(&org, &owner, "rec_b").await["audio_path"].is_null());
@@ -993,7 +993,7 @@ async fn pocket_audio_not_uploaded_yet_is_fetched_on_a_later_sync_once_and_kept_
     // uploaded now: the next sync stores the exact bytes
     let mock = serve(vec![route("GET", "/public/recordings/rec_b/audio", json!(null)).raw("AUDIO-BYTES").header("content-type", "audio/mpeg")]).await;
     let conn = pocket_conn(&org, &owner, &mock.base, true).await;
-    registry::ingest_via(&org, &owner, &[rec.clone()], &HeyPocketSource, Some(&conn)).await.unwrap();
+    registry::ingest_via(&org, &owner, std::slice::from_ref(&rec), &HeyPocketSource, Some(&conn)).await.unwrap();
     let row = audio_row(&org, &owner, "rec_b").await;
     let path = row["audio_path"].as_str().unwrap_or_else(|| panic!("{row}")).to_string();
     assert!(path.ends_with("/rec_b.mp3"), "{path}");
