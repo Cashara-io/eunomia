@@ -1167,7 +1167,7 @@ export default function VaultsPage() {
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => void refetchAll()} className="btn" aria-label="Refresh vaults" title="Refresh">
-            <RefreshCw {...ICON} className={vaultsQuery.isFetching ? "animate-spin" : undefined} />
+            <RefreshCw {...ICON} />
           </button>
           <button
             onClick={() => setCreating(true)}

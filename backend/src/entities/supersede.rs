@@ -38,6 +38,12 @@ struct FactRow {
     sim: f64,
 }
 
+/// `(date, fact, is_new)` oldest first. Dates are to the minute, so a fact and the one that replaces it often
+/// tie: on a tie the older fact goes first, as the prompt says "oldest first".
+fn oldest_first<T>(rows: &mut [(String, T, bool)]) {
+    rows.sort_by(|a, b| a.0.cmp(&b.0).then(a.2.cmp(&b.2)));
+}
+
 /// `(date, text, is_new)`, oldest first -> the prompt.
 fn build_prompt(facts: &[(String, &str, bool)]) -> String {
     let list = facts
@@ -211,7 +217,7 @@ async fn run(db: &OrgDb, settings: &Settings, owner: &RecordId, subject: &Record
             (date, r, !old)
         })
         .collect();
-    rows.sort_by(|a, b| a.0.cmp(&b.0));
+    oldest_first(&mut rows);
     let facts: Vec<(String, &str, bool)> = rows.iter().map(|(d, r, n)| (d.clone(), r.text.as_str(), *n)).collect();
     let ids: Vec<RecordId> = rows.iter().map(|(_, r, _)| r.id.clone()).collect();
     let marked = pick(&call_llm(db, settings, owner, build_prompt(&facts)).await?, &facts, &ids);
@@ -236,6 +242,17 @@ mod tests {
             ("2026-09-02 10:00".into(), "X prefers tea", false),
             ("2026-10-05 09:00".into(), "X was granted access", true),
         ]
+    }
+
+    #[test]
+    fn a_tie_on_the_minute_puts_the_older_fact_first() {
+        let mut rows = vec![
+            ("2026-10-05 09:00".to_string(), "granted", true),
+            ("2026-10-05 09:00".to_string(), "no access", false),
+            ("2026-10-05 08:59".to_string(), "earlier", false),
+        ];
+        oldest_first(&mut rows);
+        assert_eq!(rows.iter().map(|r| r.1).collect::<Vec<_>>(), ["earlier", "no access", "granted"]);
     }
 
     #[test]
