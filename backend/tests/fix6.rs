@@ -87,6 +87,7 @@ fn only_allow_listed_files_build_http_clients() {
     const ALLOWED: &[(&str, &str)] = &[
         ("llm_net.rs", "the guarded client itself"),
         ("oauth/cimd.rs", "fetches a public client metadata URL with its own resolve-then-pin check and no redirects"),
+        ("peers/net.rs", "reaches another Eunomia the user chose by pasting its share code, usually on the LAN, which the guarded client refuses by design: no redirects, short timeouts, capped bodies, and nothing is used unless the answer opens under the link key or matches the code's instance id"),
         ("oidc.rs", "calls only the operator-configured OpenID Connect provider and the endpoints its discovery document names: https (loopback http for development), 10 s timeout, no redirects, capped bodies"),
     ];
     fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {

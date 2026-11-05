@@ -67,6 +67,24 @@ async fn in_process(method: &str, url: &str, body: Option<String>) -> Option<Res
     Some(Ok(Reply { status, body }))
 }
 
+/// Most bytes a hello answer may have.
+const HELLO_MAX_BYTES: usize = 16 << 10;
+/// Most bytes any other answer may have: a sealed exchange page is under the host's 1 MiB request
+/// limit plus base64, so this leaves room without letting a hostile address fill memory.
+const REPLY_MAX_BYTES: usize = 8 << 20;
+
+/// Reads `resp`'s body, refusing it once it passes `max` bytes instead of buffering all of it.
+async fn capped(mut resp: reqwest::Response, max: usize) -> Result<Vec<u8>, String> {
+    let mut body = Vec::new();
+    while let Some(chunk) = resp.chunk().await.map_err(|e| e.to_string())? {
+        if body.len() + chunk.len() > max {
+            return Err(format!("the answer was larger than {max} bytes"));
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body)
+}
+
 pub async fn get(url: &str, timeout: Duration) -> Result<Reply, String> {
     #[cfg(feature = "test-support")]
     if let Some(r) = in_process("GET", url, None).await {
@@ -75,7 +93,7 @@ pub async fn get(url: &str, timeout: Duration) -> Result<Reply, String> {
     let resp = client().get(url).timeout(timeout).send().await.map_err(|e| e.to_string())?;
     let status = resp.status().as_u16();
     // a hello is tiny; anything big is not a peer
-    let body = resp.bytes().await.map_err(|e| e.to_string())?.to_vec();
+    let body = capped(resp, HELLO_MAX_BYTES).await?;
     Ok(Reply { status, body })
 }
 
@@ -86,6 +104,6 @@ pub async fn post(url: &str, body: String, timeout: Duration) -> Result<Reply, S
     }
     let resp = client().post(url).header("content-type", "application/json").body(body).timeout(timeout).send().await.map_err(|e| e.to_string())?;
     let status = resp.status().as_u16();
-    let body = resp.bytes().await.map_err(|e| e.to_string())?.to_vec();
+    let body = capped(resp, REPLY_MAX_BYTES).await?;
     Ok(Reply { status, body })
 }

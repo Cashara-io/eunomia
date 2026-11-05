@@ -404,10 +404,12 @@ counts > "$W/counts-after.txt"; ledgers > "$W/ledgers-after.txt"
 reads "$W/reads-after.txt"; check "the reads answer after the update" test $? -eq 0
 stable "$W/counts-before.txt" > "$W/stable-before.txt"; stable "$W/counts-after.txt" > "$W/stable-after.txt"
 # The ledgers grow by exactly the migrations this build adds (any number, so stacked PRs need no edit); all else is exact.
-expect_ledgers "$W/stable-before.txt" "$W/ledgers-before.txt" > "$W/stable-expected.txt"
+# A table a new migration defines appears empty: expected, and nothing else about it may differ.
+new_empty() { awk 'NR==FNR { seen[$1] = 1; next } !($1 in seen) && $2 == 0' "$1" "$2"; }
+{ expect_ledgers "$W/stable-before.txt" "$W/ledgers-before.txt"; new_empty "$W/counts-before.txt" "$W/stable-after.txt"; } | sort > "$W/stable-expected.txt"
 check "per-table row counts unchanged (bar $VOLATILE; _migration grown by the new migrations)" diff "$W/stable-expected.txt" "$W/stable-after.txt"
 diff "$W/stable-expected.txt" "$W/stable-after.txt" | head -20
-check "the same tables before and after" diff <(cut -d' ' -f1 "$W/counts-before.txt") <(cut -d' ' -f1 "$W/counts-after.txt")
+check "no table gone, and every new table empty" diff <(cut -d' ' -f1 "$W/counts-before.txt") <(cut -d' ' -f1 "$W/counts-after.txt" | grep -vxFf <(new_empty "$W/counts-before.txt" "$W/counts-after.txt" | cut -d' ' -f1))
 check "the fixed reads unchanged" diff "$W/reads-before.txt" "$W/reads-after.txt"
 diff "$W/reads-before.txt" "$W/reads-after.txt" | head -20
 # Tenant 0022 (rebuild_vector_indexes): in every org ledger, the three HNSW indexes defined, and the
