@@ -15,4 +15,8 @@ Control set: no reservations (control stays at 0006).
 | tenant | 0022 | rebuild_vector_indexes | L1 | #119 | merged |
 | tenant | 0023 | changes | L2 Projects | #114 | merged |
 | tenant | 0024 | redact_backfill | L3 Broker | #115 | merged |
-| tenant | 0025 | credential_refs | L3 Broker | broker core | reserved |
+| tenant | 0025 | connector_kind_ed | Sources | #129 (via #128) | merged |
+| tenant | 0026 | sync_check_connectivity | Sources | #129 (via #128) | merged |
+| tenant | 0027 | owner_name | Sources | #128 | merged |
+| tenant | 0028 | peers | Peer vaults | 2.0.8 | merged |
+| tenant | 0029 | credential_refs | L3 Broker | broker core | reserved |

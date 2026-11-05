@@ -51,6 +51,12 @@ pub struct ExtractRecord {
     /// The vault the record is filed in (routing); `None`: the owner's personal vault. Its entities,
     /// facts and relations are written there.
     pub vault: Option<RecordId>,
+    /// The record's source key (`gmail`, ...): Gmail messages get their own prompt.
+    pub source: String,
+    /// The record's payload (for Gmail: `from`, `to`, `label_ids`).
+    pub payload: Value,
+    /// The vault owner's display name, when known; the email prompt says "the vault owner" otherwise.
+    pub owner_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -105,11 +111,90 @@ Text:\n{text}\n"
     )
 }
 
+/// The prompt for one Gmail message. Same JSON shape as [`build_prompt`], but far stricter about what
+/// is worth remembering: most email yields nothing. `owner` is the vault owner's name, if known.
+pub(crate) fn build_email_prompt(owner: Option<&str>, date: Option<&str>, labels: &[String], subject: &str, text: &str) -> String {
+    let known_name = owner.map(str::trim).filter(|n| !n.is_empty());
+    let known = known_name.is_some();
+    let owner = known_name.unwrap_or("the mailbox owner");
+    let unknown_owner = if known {
+        ""
+    } else {
+        "If you don't know the owner's name, attach owner facts to the other person or organisation involved, or skip them; never create an entity for 'the mailbox owner'.\n"
+    };
+    let date_line = date.unwrap_or("unknown");
+    let labels_line = if labels.is_empty() { "none".to_string() } else { labels.join(", ") };
+    format!(
+        "You extract durable facts from one email for {owner}'s personal memory. Return strict JSON, no prose, with this exact shape:\n\n\
+{{\n  \"people\": [{{\"name\": str, \"aliases\": [str], \"facts\": [str]}}],\n  \"organisations\": [{{\"name\": str, \"aliases\": [str], \"facts\": [str]}}],\n  \"locations\": [{{\"name\": str, \"aliases\": [str], \"facts\": [str]}}],\n  \"relations\": [{{\"from\": str, \"from_kind\": \"person|organisation|location\", \"to\": str, \"to_kind\": \"person|organisation|location\", \"label\": str}}]\n}}\n\n\
+Email date: {date_line}\nGmail labels: {labels_line}\nSubject: {subject}\n\n\
+Facts attach to the entity they are about. Most facts are about {owner}{owner_entry}. \
+{unknown_owner}Return NOTHING (empty arrays) for most emails; that is correct and expected.\n\n\
+SAVE at most 3 facts per email, usually 0 or 1:\n\
+- deadlines, due dates, closing times, exam or demo dates that apply to {owner}\n\
+- decisions or approvals about {owner}\n\
+- things {owner} was asked to do or agreed to do, and by whom\n\
+- meetings, interviews or events {owner} is invited to, with the date\n\
+- a person's role relative to {owner}, only when that person wrote to {owner} personally or {owner} wrote to them\n\
+- an account or service {owner} signed up for (one fact)\n\
+- \"action required\" or overdue notices addressed to {owner} or a role they hold, with what is due\n\
+- receipts for applications or requests {owner} made (extension, reimbursement, job), with their status\n\
+- the role of a staff member or teammate in a thread {owner} is part of (sender, recipient or cc), once per person\n\n\
+NEVER SAVE:\n\
+- marketing or product claims, newsletter content\n\
+- organisation boilerplate or policies\n\
+- who emailed or thanked whom\n\
+- signature details, quoted earlier replies\n\
+- survey or research blurbs\n\
+- cohort-wide announcements with no date or action for {owner}\n\
+- notifications that only point at a post elsewhere (Ed, GitHub, Moodle)\n\n\
+Bulk or automated mail (Promotions or Updates labels, no-reply senders, mailing lists) gets at most 1 fact, usually none.\n\
+Each fact is one self-contained sentence that names its subject. Time-sensitive facts start with \"On {date_line},\" or give the absolute date.\n\
+Relations only with a label from: {labels}, and only when the email states it outright.\n\n\
+Email:\n{text}\n",
+        labels = super::email::EMAIL_RELATION_LABELS.join(", "),
+        owner_entry = if known { format!(": put them under a person entry named \"{owner}\"") } else { String::new() },
+    )
+}
+
+/// Whether a record is a Gmail message, and so gets the email prompt and the email caps.
+fn is_email(record: &ExtractRecord) -> bool {
+    record.source == "gmail"
+}
+
+/// Applies the email limits in code: at most [`email::MAX_EMAIL_FACTS`] facts across all entities (in
+/// order) and only the allowed relation labels.
+fn cap_email(data: &mut ExtractionData) {
+    let mut left = super::email::MAX_EMAIL_FACTS;
+    for items in [&mut data.people, &mut data.organisations, &mut data.locations] {
+        for item in items.iter_mut() {
+            item.facts.retain(|f| !f.trim().is_empty());
+            item.facts.truncate(left);
+            left -= item.facts.len();
+        }
+    }
+    data.relations.retain(|r| {
+        r.label.as_deref().is_some_and(|l| super::email::EMAIL_RELATION_LABELS.contains(&l.trim().to_lowercase().as_str()))
+    });
+    // an entity with no facts is only worth keeping when a kept relation names it
+    let named: HashSet<String> = data
+        .relations
+        .iter()
+        .flat_map(|r| [r.from.as_deref(), r.to.as_deref()])
+        .flatten()
+        .map(|n| n.trim().to_lowercase())
+        .collect();
+    for items in [&mut data.people, &mut data.organisations, &mut data.locations] {
+        items.retain(|e| !e.facts.is_empty() || e.name.as_deref().is_some_and(|n| named.contains(&n.trim().to_lowercase())));
+    }
+}
+
 /// A speaker label rather than a name ("Unknown", "Speaker 2", "SPEAKER_01").
 fn is_placeholder(name: &str) -> bool {
     let n = name.trim().to_lowercase().replace('_', " ");
     let rest = n.strip_prefix("speaker").map(str::trim);
-    matches!(n.as_str(), "unknown" | "unknown speaker" | "speaker" | "narrator" | "me" | "you")
+    matches!(n.as_str(), "the mailbox owner" | "the vault owner" | "mailbox owner" | "vault owner")
+        || matches!(n.as_str(), "unknown" | "unknown speaker" | "speaker" | "narrator" | "me" | "you")
         || rest.is_some_and(|r| r.len() <= 3 && r.chars().all(|c| c.is_ascii_alphanumeric()))
 }
 
@@ -121,15 +206,18 @@ fn should_extract(body: &str, embeddings_backend: &str) -> bool {
 }
 
 #[derive(Debug, Deserialize, SurrealValue, Default)]
-pub(super) struct AppSettingsRow {
+pub(crate) struct AppSettingsRow {
     #[serde(default)]
     #[surreal(default)]
     pub observations_mission: String,
+    #[serde(default)]
+    #[surreal(default)]
+    pub owner_name: String,
 }
 
 /// The `app_settings:<owner_id>` row, creating it with (schema-)defaults if
 /// missing. Used by `consolidate.rs`'s mission lookup.
-pub(super) async fn app_settings_row(db: &OrgDb, owner: &RecordId) -> AppResult<AppSettingsRow> {
+pub(crate) async fn app_settings_row(db: &OrgDb, owner: &RecordId) -> AppResult<AppSettingsRow> {
     let rid = RecordId::from_table_key("app_settings", owner.key().clone());
     let row: Option<AppSettingsRow> = store::get(db, &rid).await?;
     match row {
@@ -145,13 +233,13 @@ pub(super) async fn app_settings_row(db: &OrgDb, owner: &RecordId) -> AppResult<
     }
 }
 
-async fn call_llm(db: &OrgDb, settings: &Settings, owner: &RecordId, text: &str, date: Option<&str>) -> AppResult<ExtractionData> {
+async fn call_llm(db: &OrgDb, settings: &Settings, owner: &RecordId, prompt: String) -> AppResult<ExtractionData> {
     let p = provider::resolve(db, settings, owner).await?;
 
     let body = json!({
         "model": provider::chat_model(&p).await,
         "response_format": {"type": "json_object"},
-        "messages": [{"role": "user", "content": build_prompt(text, date)}],
+        "messages": [{"role": "user", "content": prompt}],
     });
 
     let resp = p
@@ -250,29 +338,52 @@ async fn apply_extraction(
 /// fails the caller. Returns the set of subject ids (as strings) that got a
 /// new raw memory (empty on no-op/failure) -- a future ingest pipeline would
 /// use this to batch-trigger `consolidate.rs` per unique subject touched.
-pub async fn extract_entities(db: &OrgDb, settings: &Settings, owner: &RecordId, record: &ExtractRecord) -> HashSet<String> {
-    let body = record.body_text.trim();
+///
+/// Failures are logged. For email they are also returned, so the job retries (a re-extract has already
+/// deleted the old facts); for other sources a failed model call just yields nothing.
+pub async fn extract_entities(
+    db: &OrgDb,
+    settings: &Settings,
+    owner: &RecordId,
+    record: &ExtractRecord,
+) -> Result<HashSet<String>, AppError> {
+    let email = is_email(record);
+    let cleaned;
+    let body = if email {
+        cleaned = super::email::strip_quoted(record.body_text.trim());
+        cleaned.trim()
+    } else {
+        record.body_text.trim()
+    };
     if !should_extract(body, &settings.embeddings_backend) {
-        return HashSet::new();
+        return Ok(HashSet::new());
     }
 
     let title = record.title.trim();
     let text = if title.is_empty() { body.to_string() } else { format!("{title}\n{body}") };
 
     let date = record.occurred_at.as_deref().map(|d| d.get(..10).unwrap_or(d));
-    let data = match call_llm(db, settings, owner, &text, date).await {
+    let prompt = if email {
+        build_email_prompt(record.owner_name.as_deref(), date, &super::email::labels_of(&record.payload), title, body)
+    } else {
+        build_prompt(&text, date)
+    };
+    let mut data = match call_llm(db, settings, owner, prompt).await {
         Ok(d) => d,
         Err(e) => {
             tracing::warn!("entity extraction LLM call failed for {}: {}", record.id, e.message);
-            return HashSet::new();
+            return if email { Err(e) } else { Ok(HashSet::new()) };
         }
     };
+    if email {
+        cap_email(&mut data);
+    }
 
     match apply_extraction(db, owner, &record.id, record.vault.as_ref(), &data).await {
-        Ok(touched) => touched,
+        Ok(touched) => Ok(touched),
         Err(e) => {
             tracing::warn!("entity extraction upsert failed for {}: {}", record.id, e.message);
-            HashSet::new()
+            if email { Err(e) } else { Ok(HashSet::new()) }
         }
     }
 }
@@ -318,6 +429,93 @@ mod tests {
         assert!(prompt.contains("\"relations\""));
     }
 
+    fn email_record(source: &str) -> ExtractRecord {
+        ExtractRecord {
+            id: "gmail:gmail.message:1".into(),
+            title: "s".into(),
+            body_text: "b".into(),
+            occurred_at: None,
+            vault: None,
+            source: source.into(),
+            payload: Value::Null,
+            owner_name: None,
+        }
+    }
+
+    #[test]
+    fn only_gmail_records_use_the_email_prompt() {
+        assert!(is_email(&email_record("gmail")));
+        assert!(!is_email(&email_record("github")));
+        assert!(!is_email(&email_record("")));
+    }
+
+    #[test]
+    fn email_prompt_has_header_rules_and_shape() {
+        let labels = vec!["CATEGORY_UPDATES".to_string(), "SENT".to_string()];
+        let p = build_email_prompt(Some("Sam Roberts"), Some("2026-03-04"), &labels, "Exam on Friday", "From: a@x.org\nbody");
+        assert!(p.contains("Email date: 2026-03-04"));
+        assert!(p.contains("Gmail labels: CATEGORY_UPDATES, SENT"));
+        assert!(p.contains("Subject: Exam on Friday"));
+        assert!(p.contains("SAVE at most 3 facts") && p.contains("NEVER SAVE"));
+        assert!(p.contains("Sam Roberts") && !p.contains("mailbox owner") && !p.contains("don't know the owner"));
+        assert!(p.contains("works_at, studies_at, teaches, manages, member_of, located_in"));
+        assert!(p.contains("\"people\"") && p.contains("\"relations\""));
+        assert!(p.ends_with("From: a@x.org\nbody\n"));
+        let anon = build_email_prompt(None, None, &[], "s", "t");
+        assert!(anon.contains("the mailbox owner") && anon.contains("never create an entity for 'the mailbox owner'") && anon.contains("Gmail labels: none"));
+    }
+
+    #[test]
+    fn email_caps_facts_and_relation_labels() {
+        let ent = |n: &str, facts: &[&str]| EntityExtract { name: Some(n.into()), facts: facts.iter().map(|f| f.to_string()).collect(), ..Default::default() };
+        let rel = |l: &str| RelationExtract {
+            from: Some("A".into()),
+            from_kind: Some("person".into()),
+            to: Some("B".into()),
+            to_kind: Some("organisation".into()),
+            label: Some(l.into()),
+        };
+        let mut data = ExtractionData {
+            people: vec![ent("Sam", &["a", "", "b"]), ent("Ada", &["c", "d"])],
+            organisations: vec![ent("Acme", &["e"])],
+            locations: vec![],
+            relations: vec![rel("works_at"), rel("Studies_At"), rel("thanked"), RelationExtract::default()],
+        };
+        cap_email(&mut data);
+        let total: usize = data.people.iter().chain(&data.organisations).map(|e| e.facts.len()).sum();
+        assert_eq!(total, 3);
+        assert_eq!(data.people[0].facts, vec!["a", "b"]);
+        assert_eq!(data.people[1].facts, vec!["c"]);
+        assert!(data.organisations.is_empty(), "Acme has no facts and its relation was dropped");
+        let labels: Vec<_> = data.relations.iter().filter_map(|r| r.label.as_deref()).collect();
+        assert_eq!(labels, vec!["works_at", "Studies_At"]);
+    }
+
+    #[test]
+    fn cap_email_drops_factless_entities_unless_a_kept_relation_names_them() {
+        let ent = |n: &str, f: &[&str]| EntityExtract {
+            name: Some(n.into()),
+            aliases: vec![],
+            facts: f.iter().map(|s| s.to_string()).collect(),
+        };
+        let mut data = ExtractionData {
+            people: vec![ent("Sam", &["owes a form"]), ent("Noise", &[]), ent("Ada", &[])],
+            organisations: vec![ent("Acme", &[]), ent("Other", &[])],
+            locations: vec![],
+            relations: vec![RelationExtract {
+                from: Some(" ada ".into()),
+                from_kind: Some("person".into()),
+                to: Some("Acme".into()),
+                to_kind: Some("organisation".into()),
+                label: Some("works_at".into()),
+            }],
+        };
+        cap_email(&mut data);
+        let names = |v: &[EntityExtract]| v.iter().filter_map(|e| e.name.clone()).collect::<Vec<_>>();
+        assert_eq!(names(&data.people), vec!["Sam", "Ada"]);
+        assert_eq!(names(&data.organisations), vec!["Acme"]);
+    }
+
     #[test]
     fn extraction_data_parses_full_shape() {
         let json = r#"{
@@ -347,6 +545,9 @@ mod tests {
     #[test]
     fn speaker_labels_are_not_people() {
         for p in ["Unknown", "Speaker 2", "SPEAKER_01", "speaker A", "unknown speaker"] {
+            assert!(is_placeholder(p), "{p}");
+        }
+        for p in ["the mailbox owner", "The Vault Owner", "mailbox owner", "vault owner"] {
             assert!(is_placeholder(p), "{p}");
         }
         for n in ["Ada Lovelace", "Speakerman Industries", "Unknown Pleasures Ltd"] {

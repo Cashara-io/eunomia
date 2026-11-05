@@ -4089,6 +4089,76 @@
         ]
       }
     },
+    "/api/sources/{key}/reextract": {
+      "post": {
+        "tags": [
+          "sources"
+        ],
+        "summary": "Re-run entity extraction over a source's records",
+        "description": "`key` is a source key or a connection's key, as for sync. Counts the caller's live records of that connection and the facts and relations extracted from them. With `dry_run` false it deletes those facts and relations (their subjects' observations go stale, or go when nothing else backs them) and queues extraction for every record again; it answers 409 while an earlier re-extraction of the source is still queued or running.",
+        "operationId": "reextractSource",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReextractIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReextractOut"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A re-extraction of this source is still queued or running",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/sources/{key}/sync": {
       "post": {
         "tags": [
@@ -7600,6 +7670,43 @@
           }
         }
       },
+      "ReextractIn": {
+        "type": "object",
+        "properties": {
+          "dry_run": {
+            "type": "boolean",
+            "description": "Only count what would be replaced (the default); `false` deletes it and queues extraction again."
+          }
+        }
+      },
+      "ReextractOut": {
+        "type": "object",
+        "description": "What a re-extract run replaces: the connection's live records, the facts and relations drawn from\nthem, and the observations resting only on those facts.",
+        "required": [
+          "records",
+          "memories",
+          "relations",
+          "observations"
+        ],
+        "properties": {
+          "memories": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "observations": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "records": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "relations": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "RelationCreate": {
         "type": "object",
         "required": [
@@ -7798,7 +7905,9 @@
         "required": [
           "embedding_model",
           "chat_model",
+          "owner_name",
           "sync_intervals",
+          "sync_check_connectivity",
           "theme",
           "openai_api_key_set",
           "model_configured",
@@ -7832,6 +7941,13 @@
           },
           "openai_base_url": {
             "type": "string"
+          },
+          "owner_name": {
+            "type": "string"
+          },
+          "sync_check_connectivity": {
+            "type": "boolean",
+            "description": "Probe for an internet connection before a scheduled sync and skip it quietly while offline.\nDefault true. \"Sync now\" reports `status: \"offline\"` instead of failing."
           },
           "sync_intervals": {
             "type": "object",
@@ -7883,6 +7999,20 @@
               "string",
               "null"
             ]
+          },
+          "owner_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The user's own name, used by email extraction so facts about the mailbox owner have a subject (\"\" = unknown)"
+          },
+          "sync_check_connectivity": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Skip scheduled syncs while there is no internet connection (default true)."
           },
           "sync_intervals": {},
           "theme": {}
@@ -8097,7 +8227,8 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "`already_running`, `queued`, or `offline` (the connectivity check found no internet; nothing was attempted)."
           },
           "written": {
             "type": [

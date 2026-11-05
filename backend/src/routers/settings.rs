@@ -1,4 +1,5 @@
-//! Per-user app settings: embedding model, sync intervals, theme, and the
+//! Per-user app settings: embedding model, sync intervals, whether syncs wait for an internet
+//! connection (`sync_check_connectivity`, default on), theme, and the
 //! OpenAI(-compatible) base URL + optional API key.
 //!
 //! `openai_api_key` is stored AES-GCM-encrypted (`connectors::crypto`) in
@@ -42,6 +43,10 @@ struct AppSettingsRow {
     #[serde(default)]
     #[surreal(default)]
     sync_intervals: Value,
+    /// NONE on rows from before the field existed: treated as on.
+    #[serde(default)]
+    #[surreal(default)]
+    sync_check_connectivity: Option<bool>,
     #[serde(default)]
     #[surreal(default)]
     theme: Value,
@@ -60,12 +65,17 @@ struct AppSettingsRow {
     #[serde(default)]
     #[surreal(default)]
     chat_model: String,
+    #[serde(default)]
+    #[surreal(default)]
+    owner_name: String,
 }
 
 #[derive(Debug, Default, Deserialize, utoipa::ToSchema)]
 struct SettingsUpdate {
     embedding_model: Option<String>,
     sync_intervals: Option<Value>,
+    /// Skip scheduled syncs while there is no internet connection (default true).
+    sync_check_connectivity: Option<bool>,
     theme: Option<Value>,
     openai_api_key: Option<String>,
     openai_base_url: Option<String>,
@@ -74,6 +84,8 @@ struct SettingsUpdate {
     memory_skill: Option<String>,
     /// "" = automatic (see embeddings::provider::chat_model)
     chat_model: Option<String>,
+    /// The user's own name, used by email extraction so facts about the mailbox owner have a subject ("" = unknown)
+    owner_name: Option<String>,
 }
 
 fn app_settings_id(owner: &RecordId) -> RecordId {
@@ -84,9 +96,13 @@ fn app_settings_id(owner: &RecordId) -> RecordId {
 struct SettingsOut {
     embedding_model: String,
     chat_model: String,
+    owner_name: String,
     /// Open map of source key to sync interval seconds.
     #[schema(value_type = Object)]
     sync_intervals: Value,
+    /// Probe for an internet connection before a scheduled sync and skip it quietly while offline.
+    /// Default true. "Sync now" reports `status: "offline"` instead of failing.
+    sync_check_connectivity: bool,
     /// Open UI theme preferences.
     #[schema(value_type = Object)]
     theme: Value,
@@ -103,7 +119,9 @@ fn out(row: &AppSettingsRow, server_base_url: &str, model_configured: bool) -> S
     SettingsOut {
         embedding_model: row.embedding_model.clone(),
         chat_model: row.chat_model.clone(),
+        owner_name: row.owner_name.clone(),
         sync_intervals: row.sync_intervals.clone(),
+        sync_check_connectivity: row.sync_check_connectivity.unwrap_or(true),
         theme: row.theme.clone(),
         openai_api_key_set: !row.openai_api_key_encrypted.is_empty(),
         model_configured,
@@ -153,11 +171,17 @@ async fn update_app_settings(db: &OrgDb, owner: &RecordId, body: &SettingsUpdate
     if body.chat_model.is_some() {
         set_parts.push("chat_model = $chat_model");
     }
+    if body.owner_name.is_some() {
+        set_parts.push("owner_name = $owner_name");
+    }
     if body.embedding_model.is_some() {
         set_parts.push("embedding_model = $embedding_model");
     }
     if body.sync_intervals.is_some() {
         set_parts.push("sync_intervals = $sync_intervals");
+    }
+    if body.sync_check_connectivity.is_some() {
+        set_parts.push("sync_check_connectivity = $sync_check_connectivity");
     }
     if body.theme.is_some() {
         set_parts.push("theme = $theme");
@@ -186,11 +210,17 @@ async fn update_app_settings(db: &OrgDb, owner: &RecordId, body: &SettingsUpdate
     if let Some(v) = &body.chat_model {
         q = q.bind(("chat_model", v.trim().to_string()));
     }
+    if let Some(v) = &body.owner_name {
+        q = q.bind(("owner_name", v.trim().to_string()));
+    }
     if let Some(v) = &body.embedding_model {
         q = q.bind(("embedding_model", v.clone()));
     }
     if let Some(v) = &body.sync_intervals {
         q = q.bind(("sync_intervals", v.clone()));
+    }
+    if let Some(v) = body.sync_check_connectivity {
+        q = q.bind(("sync_check_connectivity", v));
     }
     if let Some(v) = &body.theme {
         q = q.bind(("theme", v.clone()));
@@ -360,12 +390,14 @@ mod tests {
         AppSettingsRow {
             embedding_model: embeddings::DEFAULT_MODEL.to_string(),
             sync_intervals: json!({ "heypocket": 86400 }),
+            sync_check_connectivity: None,
             theme: json!({}),
             openai_api_key_encrypted: if key_set { "sk-very-secret-123".to_string() } else { String::new() },
             openai_base_url: String::new(),
             observations_mission: DEFAULT_OBSERVATIONS_MISSION.to_string(),
             memory_skill: String::new(),
             chat_model: String::new(),
+            owner_name: String::new(),
         }
     }
 
@@ -383,6 +415,14 @@ mod tests {
     }
 
     const SERVER: &str = "http://llm.internal/v1";
+
+    #[test]
+    fn out_reports_the_connectivity_check_on_unless_switched_off() {
+        let mut r = row(false);
+        assert_eq!(serde_json::to_value(out(&r, SERVER, false)).unwrap()["sync_check_connectivity"], json!(true), "a row from before the field reads as on");
+        r.sync_check_connectivity = Some(false);
+        assert_eq!(serde_json::to_value(out(&r, SERVER, false)).unwrap()["sync_check_connectivity"], json!(false));
+    }
 
     #[test]
     fn out_shows_the_servers_base_url_when_the_user_has_none() {

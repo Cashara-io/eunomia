@@ -900,6 +900,24 @@ export type Redaction = {
     kind: string;
 };
 
+export type ReextractIn = {
+    /**
+     * Only count what would be replaced (the default); `false` deletes it and queues extraction again.
+     */
+    dry_run?: boolean;
+};
+
+/**
+ * What a re-extract run replaces: the connection's live records, the facts and relations drawn from
+ * them, and the observations resting only on those facts.
+ */
+export type ReextractOut = {
+    memories: number;
+    observations: number;
+    records: number;
+    relations: number;
+};
+
 export type RelationCreate = {
     label: string;
     to_id: string;
@@ -995,6 +1013,12 @@ export type SettingsOut = {
     observations_mission: string;
     openai_api_key_set: boolean;
     openai_base_url: string;
+    owner_name: string;
+    /**
+     * Probe for an internet connection before a scheduled sync and skip it quietly while offline.
+     * Default true. "Sync now" reports `status: "offline"` instead of failing.
+     */
+    sync_check_connectivity: boolean;
     /**
      * Open map of source key to sync interval seconds.
      */
@@ -1022,6 +1046,14 @@ export type SettingsUpdate = {
     observations_mission?: string | null;
     openai_api_key?: string | null;
     openai_base_url?: string | null;
+    /**
+     * The user's own name, used by email extraction so facts about the mailbox owner have a subject ("" = unknown)
+     */
+    owner_name?: string | null;
+    /**
+     * Skip scheduled syncs while there is no internet connection (default true).
+     */
+    sync_check_connectivity?: boolean | null;
     sync_intervals?: unknown;
     theme?: unknown;
 };
@@ -1102,6 +1134,9 @@ export type SyncReport = {
     failed?: number | null;
     skipped?: number | null;
     source: string;
+    /**
+     * `already_running`, `queued`, or `offline` (the connectivity check found no internet; nothing was attempted).
+     */
     status?: string | null;
     written?: number | null;
 };
@@ -3372,6 +3407,34 @@ export type GetSourcesStatusResponses = {
 };
 
 export type GetSourcesStatusResponse = GetSourcesStatusResponses[keyof GetSourcesStatusResponses];
+
+export type ReextractSourceData = {
+    body: ReextractIn;
+    path: {
+        key: string;
+    };
+    query?: never;
+    url: '/api/sources/{key}/reextract';
+};
+
+export type ReextractSourceErrors = {
+    /**
+     * A re-extraction of this source is still queued or running
+     */
+    409: Problem;
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ReextractSourceError = ReextractSourceErrors[keyof ReextractSourceErrors];
+
+export type ReextractSourceResponses = {
+    200: ReextractOut;
+};
+
+export type ReextractSourceResponse = ReextractSourceResponses[keyof ReextractSourceResponses];
 
 export type SyncSourceData = {
     body?: never;

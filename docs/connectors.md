@@ -4,6 +4,8 @@ Connectors pull your data from other services into Eunomia, where agents read it
 
 After the first sync, each connector syncs again on its interval (changeable on its setup page). A failed sync shows the provider's error on the connector's page and the dashboard, and retries with backoff (15 min → 6 h).
 
+When the machine has no internet connection, scheduled syncs are skipped quietly instead of failing: no error is shown, no failure is counted and the backoff does not grow, and the sources sync again on the first scheduler tick after the connection returns. This is the **Skip syncs while offline** switch under Settings, General (on by default, per user). "Sync now" checks afresh and answers that you are offline rather than attempting a sync that cannot work. The check is a short TCP connect to a few well-known addresses; see `EUNOMIA_CONNECTIVITY_PROBE` in [deployment](deployment.md) to change them.
+
 Every sync is a `sync` job in the background job queue (see `docs/architecture/jobs.md`): scheduled syncs and **Sync now** share it, so only one sync of a connector runs at a time. If one is already waiting or running, **Sync now** says so instead of starting another.
 
 | Connector | What it syncs | Credential (where to get it) | Scopes / permissions | Default interval |
@@ -20,6 +22,7 @@ Every sync is a `sync` job in the background job queue (see `docs/architecture/j
 | Spotify | Recently played tracks (Spotify keeps only the last 50, so history builds up from when you connect) | Your own Spotify app's client ID + secret and a refresh token (below) | `user-read-recently-played` | 15 min |
 | Todoist | Active tasks with project, due date, labels | API token — Todoist → Settings → Integrations → Developer | Full API token (Todoist has no read-only token) | 15 min |
 | Stripe | Charges (incremental) | [Restricted key](https://dashboard.stripe.com/apikeys) `rk_…` | Charges: Read only | 15 min |
+| Ed Discussion | One record per thread, with its answers and comments in the text (30 days back, then every thread that changed; 100 threads per sync, oldest first). Active courses, or the course IDs you list; region `us` (default), `au` (edstem.org/au, served from `edstem.org/api`) or `eu`. Only the newest 5,000 threads per course are scanned; threads deeper than that are never synced | API token from [edstem.org/us/settings/api-tokens](https://edstem.org/us/settings/api-tokens) | Ed's API is unofficial and has no scopes; the token reads what you can | 30 min |
 
 ## More than one connection of a kind
 
@@ -53,6 +56,7 @@ Every record a connector syncs is filed in one vault, and only that vault's memb
 | Notion | `database` (parent database ID), `page` (parent page ID), `title` |
 | Linear | `team` (name), `title` |
 | Todoist | `project` (ID or name), `title` |
+| Ed Discussion | `course` (ID or name), `category`, `title` |
 | Up Bank, Spotify, Stripe | `title` |
 
 Example: one Pocket account with both work calls and personal conversations. Make a "Build Paperless" vault, add the rule *tag* `work` → Build Paperless, and leave the destination as your personal vault: recordings tagged `work` (their summary, transcript and every fact extracted from them) are read by Build Paperless's members; the rest stay yours.

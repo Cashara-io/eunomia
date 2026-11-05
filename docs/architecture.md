@@ -131,7 +131,7 @@ flowchart TD
 
 Each source implements a common adapter interface. The registry contains
 Up Bank, HeyPocket, GitHub, Slack, Notion, Linear, Gmail, Google Calendar,
-Discord, Spotify, Todoist and Stripe. The demo adapter is resolved on demand
+Discord, Spotify, Todoist, Stripe and Ed Discussion. The demo adapter is resolved on demand
 and is excluded from scheduled sources.
 
 Background work runs on a durable job queue in the `control` database.

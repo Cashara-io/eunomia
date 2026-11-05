@@ -1,4 +1,4 @@
-//! The per-vault change log (docs/projects.md, migration 0022): every write that changes what a vault
+//! The per-vault change log (docs/projects.md, migration 0023): every write that changes what a vault
 //! holds appends one numbered row (`seq`, `op`, `kind`, `id`, `actor`, `at`), with no content, so a
 //! client catches up from a cursor and fetches the items it cares about. Read over REST
 //! (`GET /api/vaults/{vault}/changes`), the `changes_since` tool, or live over a WebSocket
@@ -129,7 +129,7 @@ pub async fn record_many(db: &OrgDb, vault: &RecordId, items: Vec<(&'static str,
     }
 }
 
-/// The vault's counter row (migration 0022).
+/// The vault's counter row (migration 0023).
 pub fn counter(vault: &RecordId) -> RecordId {
     RecordId::from_table_key("change_seq", vault.key().clone())
 }

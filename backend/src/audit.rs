@@ -50,8 +50,13 @@ pub async fn record(db: &ControlDb, e: Event<'_>) {
 /// Records an event for the current request's credential (the gate's caller), or
 /// a plain user actor outside a request.
 pub async fn record_as_caller(db: &ControlDb, user: &RecordId, action: &str, target: &str, outcome: &str) {
+    record_as_caller_detail(db, user, action, target, outcome, "").await;
+}
+
+/// [`record_as_caller`] with a short free-text `detail` (counts, say).
+pub async fn record_as_caller_detail(db: &ControlDb, user: &RecordId, action: &str, target: &str, outcome: &str, detail: &str) {
     let actor = crate::authz::current().map(|c| c.actor).unwrap_or_else(|| Actor { kind: "user", id: user.to_string() });
-    record(db, Event { user: Some(user), actor: &actor, action, target, outcome, detail: "" }).await;
+    record(db, Event { user: Some(user), actor: &actor, action, target, outcome, detail }).await;
 }
 
 fn days_from_env(key: &str, default: u32) -> u32 {

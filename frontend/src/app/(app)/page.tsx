@@ -514,7 +514,8 @@ export default function DashboardPage() {
     setSyncMark({ key, status: "running" });
     let status: SyncStatus = "done";
     try {
-      await syncSource.mutateAsync(key);
+      // offline: nothing was attempted, so it must not read as a successful sync
+      if ((await syncSource.mutateAsync(key)).status === "offline") status = "failed";
     } catch {
       status = "failed";
     }
