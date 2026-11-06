@@ -124,37 +124,6 @@
   --dur-shape: 320ms;
 }
 
-/* Legacy aliases from the earlier blue-accent pass. Components move off
-   these step by step; the clean-up step deletes this block. */
-:root {
-  --bauhaus-app-bg: var(--canvas);
-  --bauhaus-app-ink: var(--ink);
-  --bauhaus-app-muted: var(--ink-dim);
-  --bauhaus-app-line: var(--border);
-  --bauhaus-app-soft: var(--surface-raised);
-  --bauhaus-app-red: var(--vault-personal);
-  --bauhaus-app-blue: var(--accent);
-  --bauhaus-app-yellow: var(--vault-project);
-  --bauhaus-app-white: var(--surface);
-  --bauhaus-app-cream: var(--canvas);
-  --bauhaus-app-red-text: var(--critical);
-  --bauhaus-app-blue-hover: var(--accent-hover);
-  --bauhaus-app-blue-soft: var(--accent-soft);
-  --bauhaus-app-red-soft: var(--critical-soft);
-  --bauhaus-app-yellow-soft: transparent;
-  --bauhaus-app-sidebar: var(--surface);
-  --bauhaus-app-sidebar-text: var(--ink);
-  --bauhaus-app-sidebar-muted: var(--ink-dim);
-  --bauhaus-app-sidebar-line: var(--border);
-  --bauhaus-app-sidebar-hover: var(--surface-raised);
-  --bauhaus-app-title-size: 44px;
-  --bauhaus-app-title-tracking: -1.4px;
-  --bauhaus-app-heading-size: 34px;
-  --bauhaus-app-heading-tracking: -1px;
-  --bauhaus-app-focus: var(--focus);
-  --felt: var(--accent);
-}
-
 /* Dark: "ink paper", warm near-black, never blue-black. Opt-in, saved per
    browser (localStorage "eunomia-theme"); layout.tsx applies it before paint. */
 :root[data-theme="dark"] {

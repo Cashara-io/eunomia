@@ -117,7 +117,7 @@ function DropZone({ maxBytes, disabled, onFiles }: { maxBytes: number | null; di
         if (!disabled && e.dataTransfer.files.length) onFiles(e.dataTransfer.files);
       }}
     >
-      <UploadSimpleIcon weight="duotone" size={24} aria-hidden style={{ color: "var(--bauhaus-app-blue)" }} />
+      <UploadSimpleIcon weight="duotone" size={24} aria-hidden style={{ color: "var(--ink)" }} />
       <p className="text-[16px]" style={{ color: "var(--ink)" }}>
         Drop files here, or choose files
       </p>
