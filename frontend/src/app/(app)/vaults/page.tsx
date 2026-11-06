@@ -129,7 +129,7 @@ function InvitationsPanel() {
             <button
               onClick={(e) => accept(inv.vault_id, inv.vault_name, e.currentTarget, e.detail > 0)}
               disabled={busyId === inv.vault_id}
-              className="btn btn-primary btn-sm"
+              className="btn btn-sm"
             >
               <Check {...ICON} />
               Join
@@ -389,7 +389,7 @@ function MergeVaultsCard({
           <button
             onClick={merge}
             disabled={busy || !a || a === b}
-            className="btn btn-primary"
+            className="btn"
           >
             <Combine {...ICON} />
             {busy ? "Combining…" : "Merge into a new space"}
@@ -578,7 +578,8 @@ export default function VaultsPage() {
           <RefreshCw {...ICON} />
         </button>
         <JoinSharedSpace onJoined={(id) => open(id)} />
-        <button onClick={() => setCreating(true)} disabled={creating} className="btn btn-primary">
+        {/* While the create form is open, its own Create button is the one primary action. */}
+        <button onClick={() => setCreating(true)} disabled={creating} className={`btn ${creating ? "" : "btn-primary"}`}>
           <Plus {...ICON} />
           Create space
         </button>

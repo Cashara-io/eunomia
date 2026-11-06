@@ -447,7 +447,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     Ok(v) => v,
                     Err(e) => return Ok(e),
                 };
-                Ok(vaults_tools::vault_delete(&state.db, owner, &vault_id).await)
+                Ok(vaults_tools::vault_delete(&state.db, &state.control, owner, &vault_id).await)
             })
         }),
     );

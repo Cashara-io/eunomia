@@ -119,7 +119,7 @@ async fn vault_operations_matrix() {
                 "rename" => allowed(common::sys(vaults::rename_vault(&w.db, &u.id, &v, "Renamed")).await),
                 "invite" => allowed(common::sys(vaults::invite_member(&w.db, &w.control, &u.id, &v, &w.spare.email, "member")).await),
                 "remove member" => allowed(common::sys(vaults::remove_member(&w.db, &w.control, &u.id, &v, &w.pending.email)).await),
-                "delete" => allowed(common::sys(vaults::delete_vault(&w.db, &u.id, &v)).await),
+                "delete" => allowed(common::sys(vaults::delete_vault(&w.db, &w.control, &u.id, &v)).await),
                 "clone" => allowed(common::sys(vaults::clone_vault(&w.db, &u.id, &v, None, "org")).await),
                 "merge" => {
                     let own = common::sys(vaults::default_vault_id(&w.db, &u.id)).await.unwrap();

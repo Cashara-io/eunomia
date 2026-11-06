@@ -2,11 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowUpRight, Building2, MapPin, FileText, FolderGit2, Plug, Search, User, X } from "lucide-react";
+import { ArrowUpRight, Building2, MapPin, FileText, FolderGit2, KeyRound, Plug, Plus, Search, Settings, Upload, User, X } from "lucide-react";
 import { ADVANCED_NAV, MAIN_NAV } from "./Sidebar";
 import { documentHref, type EntityKind } from "@/lib/types";
 import { useSources } from "@/lib/queries/sources";
 import { usePaletteSearch } from "@/lib/queries/tools";
+import { useMe } from "@/lib/queries/auth";
+import { useVaults } from "@/lib/queries/vaults";
+import { modKey } from "@/lib/platform";
 
 type IconType = React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
 type Item = { key: string; label: string; sub?: string; icon: IconType; go: () => void };
@@ -33,6 +36,29 @@ const KIND_WORD: Record<string, string> = {
   file: "File",
   symbol: "Function",
 };
+
+// Settings tabs, by the ids settings/page.tsx reads from `?tab=`. Admin tabs are listed for admins only.
+const SETTINGS_TABS: { id: string; label: string; admin?: boolean }[] = [
+  { id: "general", label: "General" },
+  { id: "apps", label: "Connected apps" },
+  { id: "tokens", label: "API tokens" },
+  { id: "sessions", label: "Sessions" },
+  { id: "data", label: "Your data" },
+  { id: "people", label: "People", admin: true },
+  { id: "audit", label: "Audit log", admin: true },
+  { id: "usage", label: "Usage", admin: true },
+  { id: "https", label: "HTTPS", admin: true },
+  { id: "updates", label: "Updates", admin: true },
+  { id: "model", label: "AI provider", admin: true },
+];
+
+// Things to do, each found by its label or a few plain words people might type instead.
+const ACTIONS: { label: string; href: string; icon: IconType; words: string }[] = [
+  { label: "Create a memory space", href: "/vaults", icon: Plus, words: "new space vault team share" },
+  { label: "Upload a document", href: "/documents", icon: Upload, words: "add file pdf import" },
+  { label: "New API token", href: "/settings?tab=tokens", icon: KeyRound, words: "create key access token" },
+  { label: "Connect an AI app", href: "/", icon: Plug, words: "claude chatgpt cursor codex mcp setup" },
+];
 
 const CODE_KINDS = new Set<EntityKind>(["repository", "file", "symbol"]);
 const SEARCH_DEBOUNCE_MS = 250;
@@ -71,6 +97,12 @@ function Palette({ onClose }: { onClose: () => void }) {
   const rows = useSources().data ?? [];
   const [debounced, setDebounced] = useState("");
   const router = useRouter();
+  const isAdmin = useMe().data?.is_admin ?? false;
+  const vaults = useVaults().data ?? [];
+  const spaceName = (id?: string) => {
+    const v = id ? vaults.find((x) => x.id === id) : undefined;
+    return v ? (v.kind === "personal" ? "Personal" : v.name) : null;
+  };
 
   // Data search, debounced -- only fires once the nav/connector match is
   // worth supplementing, i.e. the query is long enough to be meaningful.
@@ -92,14 +124,30 @@ function Palette({ onClose }: { onClose: () => void }) {
     icon: s.icon,
     go: () => router.push(s.href),
   }));
-  const navItems = [...staticItems, ...connectorItems].filter((item) =>
-    item.label.toLowerCase().includes(query.toLowerCase())
-  );
+  const needle = query.trim().toLowerCase();
+  const navItems = [...staticItems, ...connectorItems].filter((item) => item.label.toLowerCase().includes(needle));
+  // Settings tabs only once something is typed, so the empty palette stays short.
+  const settingsItems: Item[] = needle
+    ? SETTINGS_TABS.filter((t) => (!t.admin || isAdmin) && `${t.label} settings`.toLowerCase().includes(needle)).map((t) => ({
+        key: `settings:${t.id}`,
+        label: t.label,
+        sub: "Settings",
+        icon: Settings,
+        go: () => router.push(t.id === "general" ? "/settings" : `/settings?tab=${t.id}`),
+      }))
+    : [];
+  const actionItems: Item[] = ACTIONS.filter((a) => !needle || `${a.label} ${a.words}`.toLowerCase().includes(needle)).map((a) => ({
+    key: `action:${a.label}`,
+    label: a.label,
+    icon: a.icon,
+    go: () => router.push(a.href),
+  }));
 
   const entityItems: Item[] = (searching ? entityHits : []).map((e) => ({
     key: `entity:${e.id}`,
     label: e.name,
-    sub: KIND_WORD[e.kind] ?? e.kind,
+    // the space tells apart two "Priya Nair"s from different spaces
+    sub: [KIND_WORD[e.kind] ?? e.kind, spaceName((e as { vault?: string }).vault)].filter(Boolean).join(" · "),
     icon: ENTITY_ICON[e.kind] ?? User,
     // opens the entity's inspector, in its own space (see EntityGraph's deep links)
     go: () => {
@@ -128,6 +176,8 @@ function Palette({ onClose }: { onClose: () => void }) {
 
   const groups: Group[] = [
     { title: "Pages", items: navItems },
+    { title: "Actions", items: actionItems },
+    { title: "Settings", items: settingsItems },
     { title: "People & topics", items: entityItems },
     { title: "Documents and saved items", items: recordItems },
   ].filter((g) => g.items.length > 0);
@@ -244,6 +294,10 @@ function Palette({ onClose }: { onClose: () => void }) {
           </span>
           <span className="flex items-center gap-1.5">
             <span className="kbd">Esc</span> Close
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="kbd">{modKey()}</span>
+            <span className="kbd">K</span> Search from anywhere
           </span>
           <span className="ml-auto">Type 2 or more letters to search your memory</span>
         </div>

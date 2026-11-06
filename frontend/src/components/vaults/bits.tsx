@@ -20,13 +20,28 @@ export function ago(iso: string | null): string | null {
 
 export const sameEmail = (a: string | null, b: string | null) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
 
-/** Who is in a space, in one plain line: "Not shared yet", "You and 2 others", "Private to you". */
+/** Who is in a space, in one plain line: "Not shared yet", "3 members", "Private to you". */
 export function peopleLine(vault: Vault, members: VaultMember[] | null): string {
   if (vault.kind === "personal") return "Private to you";
   if (!members) return "Shared space";
-  const others = members.length - 1;
-  if (others <= 0) return "Not shared yet";
-  return `You and ${others} ${others === 1 ? "other" : "others"}`;
+  if (members.length <= 1) return "Not shared yet";
+  return `${members.length} members`;
+}
+
+/** A small neutral circle with someone's initials, for member rows. Decorative: the email beside it is the name. */
+export function Initials({ email }: { email: string }) {
+  const local = email.split("@")[0] ?? "";
+  const parts = local.split(/[._-]+/).filter(Boolean);
+  const letters = (parts.length > 1 ? parts[0][0] + parts[1][0] : local.slice(0, 2)).toUpperCase();
+  return (
+    <span
+      aria-hidden
+      className="inline-grid place-items-center shrink-0 w-7 h-7 rounded-full text-[12px] font-medium"
+      style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", color: "var(--ink-dim)" }}
+    >
+      {letters || "?"}
+    </span>
+  );
 }
 
 export function RoleChip({ role }: { role: VaultRole }) {
@@ -40,11 +55,11 @@ export function RoleChip({ role }: { role: VaultRole }) {
   );
 }
 
-/* The space's identity: a red circle for the personal space, a square in one
-   of the three Bauhaus colours for shared spaces. Decorative; the name and the
-   words beside it carry the meaning. */
-const SWATCHES = ["var(--bauhaus-app-yellow)", "var(--bauhaus-app-blue)", "var(--bauhaus-app-red)"];
-export function SpaceSwatch({ vault, size = 14 }: { vault: Vault; size?: number }) {
+/* The space's identity: a small dot, neutral grey for the personal space and one
+   of a few calm colours for shared spaces (never the danger red). Decorative; the
+   name and the words beside it carry the meaning. */
+const SWATCHES = ["var(--bauhaus-app-yellow)", "var(--bauhaus-app-blue)", "var(--good)"];
+export function SpaceSwatch({ vault, size = 8 }: { vault: Vault; size?: number }) {
   const personal = vault.kind === "personal";
   let h = 0;
   for (const ch of vault.id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
@@ -55,8 +70,8 @@ export function SpaceSwatch({ vault, size = 14 }: { vault: Vault; size?: number 
       style={{
         width: size,
         height: size,
-        background: personal ? "var(--bauhaus-app-red)" : SWATCHES[h % SWATCHES.length],
-        borderRadius: personal ? 999 : 1,
+        background: personal ? "var(--ink-faint)" : SWATCHES[h % SWATCHES.length],
+        borderRadius: 999,
       }}
     />
   );

@@ -238,14 +238,19 @@ function UpdateSteps({ current, detail }: { current: number; detail: string | nu
   );
 }
 
-/* No API reports on the backup service yet, so this only explains what it does and where to read more. */
+/* The backup service writes only to its own volume, which the backend never mounts, so this page has no
+   evidence that a backup ran. It says so instead of claiming one did. */
 export function BackupsNote() {
   return (
     <div className="flex flex-col gap-3 border-t pt-6" style={{ borderColor: "var(--border)" }}>
       <PanelHead title="Backups">
-        Eunomia&apos;s backup service saves an encrypted copy of your data every night at 03:00, server time. Keep a copy of the
-        backup key somewhere off this machine: without it the backups can&apos;t be read.
+        Eunomia can&apos;t see the backup service from here, so it can&apos;t tell you when the last backup ran. Check{" "}
+        <code className="font-mono text-[13px]">docker compose logs backup</code> on the server.
       </PanelHead>
+      <p className="text-[13px] max-w-[68ch]" style={{ color: "var(--ink-dim)" }}>
+        When it runs, the backup service saves an encrypted copy every night at 03:00, server time. Keep the backup key somewhere
+        off this machine: without it the backups can&apos;t be read.
+      </p>
       <a
         href="https://github.com/Cashara-io/eunomia/blob/main/INSTALLATION.md#backups"
         target="_blank"

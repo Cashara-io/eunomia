@@ -9,6 +9,7 @@ import { pointKindLabel } from "@/lib/memoryKinds";
 import VectorInsights from "./VectorInsights";
 import { useEntityCloud } from "@/lib/queries/entities";
 import { useVaults } from "@/lib/queries/vaults";
+import { chooseSpace, useSharedSpace } from "./graph/space";
 
 // One colour per layered vault, in pick order.
 // Series colours, never the accent: the accent marks only what is pressable or selected.
@@ -24,10 +25,13 @@ export { pointKindLabel };
 export default function VectorCloud() {
   const vaultsQuery = useVaults();
   const vaults = vaultsQuery.data ?? [];
-  // Until the user toggles a layer, the personal vault (or the first one) is picked.
+  // Until the user toggles a layer, the map shows the space the List and Connections views show
+  // (shared, see graph/space.ts; `undefined` there is Personal). The first layer picked here becomes that space.
   const [userPicked, setPicked] = useState<string[] | null>(null);
-  const defaultVault = vaults.find((v) => v.kind === "personal") ?? vaults[0];
-  const picked = userPicked ?? (defaultVault ? [defaultVault.id] : []);
+  const shared = useSharedSpace();
+  const personal = vaults.find((v) => v.kind === "personal");
+  const sharedVault = shared.vaultId ? vaults.find((v) => v.id === shared.vaultId) : personal;
+  const picked = userPicked ?? (shared.ready && sharedVault ? [sharedVault.id] : []);
   const cloudQuery = useEntityCloud(picked);
   const data = cloudQuery.data ?? null;
   const error = vaultsQuery.isError
@@ -71,7 +75,9 @@ export default function VectorCloud() {
   function toggle(id: string) {
     setSelectedId(null);
     setSelection([]);
-    setPicked(picked.includes(id) ? picked.filter((x) => x !== id) : [...picked, id]);
+    const next = picked.includes(id) ? picked.filter((x) => x !== id) : [...picked, id];
+    setPicked(next);
+    if (next[0]) chooseSpace(next[0] === personal?.id ? undefined : next[0]);
   }
 
   return (
@@ -115,7 +121,7 @@ export default function VectorCloud() {
           <div className="m-4">
             <ErrorLine error={error} />
           </div>
-        ) : picked.length === 0 ? (
+        ) : picked.length === 0 && (userPicked !== null || shared.ready) ? (
           <div className="p-10 text-center text-[13px]" style={{ color: "var(--ink-dim)" }}>
             Turn on at least one memory space above to see its memories.
           </div>

@@ -417,7 +417,14 @@ pub async fn rename_vault(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId, n
 /// rows already in the vault in place (orphaned-but-inaccessible, same
 /// accepted tradeoff as the rest of this codebase's delete paths -- add a
 /// cascade if dangling vault data ever becomes a real problem).
-pub async fn delete_vault(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId) -> AppResult<()> {
+pub async fn delete_vault(db: &OrgDb, control: &ControlDb, user_id: &RecordId, vault_id: &RecordId) -> AppResult<()> {
+    let space = space_name(db, vault_id).await;
+    let res = delete_vault_inner(db, user_id, vault_id).await;
+    audit_vault(control, user_id, "vault.delete", &space, None, None, &res).await;
+    res
+}
+
+async fn delete_vault_inner(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId) -> AppResult<()> {
     authz::authorize(db, user_id, Action::Delete, vault_id).await?;
     // read before the memberships go, so everyone who had it hears it is gone
     let audience = crate::changes::audience(db, vault_id).await;
@@ -432,6 +439,35 @@ pub async fn delete_vault(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId) -
     .await?;
     crate::changes::announce(db, vault_id, crate::changes::VAULT_DELETED, &audience).await;
     Ok(())
+}
+
+/// The space's name for the audit ledger (its id when the row is gone or unreadable).
+async fn space_name(db: &OrgDb, vault_id: &RecordId) -> String {
+    match store::get::<VaultFullRow>(db, vault_id).await {
+        Ok(Some(v)) if !v.name.is_empty() => v.name,
+        _ => vault_id.to_string(),
+    }
+}
+
+/// One `audit_event` row per membership or lifecycle change of a space: the target is the space's
+/// name; the detail carries the affected email and role as `email=... role=...` (see
+/// `routers::admin::describe`). A refused or failed attempt is recorded with its error code.
+async fn audit_vault<T>(control: &ControlDb, user_id: &RecordId, action: &str, space: &str, email: Option<&str>, role: Option<&str>, res: &AppResult<T>) {
+    let mut detail = String::new();
+    if let Some(e) = email {
+        detail.push_str(&format!("email={}", crate::models_user::normalize_email(e)));
+    }
+    if let Some(r) = role {
+        if !detail.is_empty() {
+            detail.push(' ');
+        }
+        detail.push_str(&format!("role={r}"));
+    }
+    let outcome = match res {
+        Ok(_) => "ok",
+        Err(e) => e.code.as_str(),
+    };
+    crate::audit::record_as_caller_detail(control, user_id, action, space, outcome, &detail).await;
 }
 
 /// Add `email` to `vault_id`. Caller must already be an owner (so admin
@@ -450,6 +486,19 @@ async fn user_in_org(db: &OrgDb, control: &ControlDb, email: &str) -> AppResult<
 }
 
 pub async fn invite_member(
+    db: &OrgDb,
+    control: &ControlDb,
+    user_id: &RecordId,
+    vault_id: &RecordId,
+    email: &str,
+    role: &str,
+) -> AppResult<InviteOut> {
+    let res = invite_member_inner(db, control, user_id, vault_id, email, role).await;
+    audit_vault(control, user_id, "vault.invite", &space_name(db, vault_id).await, Some(email), Some(role), &res).await;
+    res
+}
+
+async fn invite_member_inner(
     db: &OrgDb,
     control: &ControlDb,
     user_id: &RecordId,
@@ -643,6 +692,15 @@ pub async fn decline_invitation(db: &OrgDb, user_id: &RecordId, vault_id: &Recor
 /// Owner-only. Refuses to remove the last owner, so a vault can't be left
 /// admin-less.
 pub async fn remove_member(db: &OrgDb, control: &ControlDb, user_id: &RecordId, vault_id: &RecordId, email: &str) -> AppResult<()> {
+    let res = remove_member_inner(db, control, user_id, vault_id, email).await;
+    // withdrawing a pending invitation reads differently from removing someone who had joined
+    let action = if matches!(res, Ok(true)) { "vault.revoke" } else { "vault.member_remove" };
+    audit_vault(control, user_id, action, &space_name(db, vault_id).await, Some(email), None, &res).await;
+    res.map(|_| ())
+}
+
+/// Returns true when the removed membership was a pending invitation.
+async fn remove_member_inner(db: &OrgDb, control: &ControlDb, user_id: &RecordId, vault_id: &RecordId, email: &str) -> AppResult<bool> {
     authz::authorize(db, user_id, Action::ManageMembers, vault_id).await?;
 
     let target_id = user_in_org(db, control, email).await?.ok_or_else(|| AppError::bad_request(format!("no user with email '{email}'")))?;
@@ -668,12 +726,18 @@ pub async fn remove_member(db: &OrgDb, control: &ControlDb, user_id: &RecordId, 
         if e.to_string().contains("last_owner") { AppError::bad_request("cannot remove the last owner") } else { e.into() }
     })?;
     crate::changes::announce(db, vault_id, crate::changes::VAULT_MEMBER_REMOVED, &[target_id]).await;
-    Ok(())
+    Ok(target_membership.status != "active")
 }
 
 /// Owner-only. Promote or demote an active member. Demoting the last owner is refused, so a vault
 /// can't be left admin-less.
 pub async fn set_member_role(db: &OrgDb, control: &ControlDb, user_id: &RecordId, vault_id: &RecordId, email: &str, role: &str) -> AppResult<MemberOut> {
+    let res = set_member_role_inner(db, control, user_id, vault_id, email, role).await;
+    audit_vault(control, user_id, "vault.role", &space_name(db, vault_id).await, Some(email), Some(role), &res).await;
+    res
+}
+
+async fn set_member_role_inner(db: &OrgDb, control: &ControlDb, user_id: &RecordId, vault_id: &RecordId, email: &str, role: &str) -> AppResult<MemberOut> {
     authz::authorize(db, user_id, Action::SetRole, vault_id).await?;
     if role != "owner" && role != "member" {
         return Err(AppError::bad_request("role must be 'owner' or 'member'"));
@@ -704,6 +768,12 @@ pub async fn set_member_role(db: &OrgDb, control: &ControlDb, user_id: &RecordId
 
 /// Owner-only. Make an active member an owner and demote the caller to member, in one transaction.
 pub async fn transfer_ownership(db: &OrgDb, control: &ControlDb, user_id: &RecordId, vault_id: &RecordId, email: &str) -> AppResult<MemberOut> {
+    let res = transfer_ownership_inner(db, control, user_id, vault_id, email).await;
+    audit_vault(control, user_id, "vault.transfer", &space_name(db, vault_id).await, Some(email), None, &res).await;
+    res
+}
+
+async fn transfer_ownership_inner(db: &OrgDb, control: &ControlDb, user_id: &RecordId, vault_id: &RecordId, email: &str) -> AppResult<MemberOut> {
     authz::authorize(db, user_id, Action::SetRole, vault_id).await?;
     let target_id = user_in_org(db, control, email).await?.ok_or_else(|| AppError::bad_request(format!("no user with email '{email}'")))?;
     if &target_id == user_id {

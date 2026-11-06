@@ -1,7 +1,7 @@
 "use client";
 
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Loader2, X } from "lucide-react";
 import { nextPath } from "@/lib/nextPath";
@@ -12,6 +12,7 @@ import { spark } from "@/components/bits/Spark";
 import { InputModeTracker } from "@/components/bits/motion";
 import ConnectAgents from "@/components/ConnectAgents";
 import AppChoices from "@/components/connect/AppChoices";
+import InvitationBanner from "@/components/vaults/InvitationBanner";
 import type { AppId } from "@/components/connect/apps";
 
 const STEP_LABELS = ["Connect your AI app", "OpenAI key"];
@@ -33,15 +34,20 @@ export default function OnboardingPage() {
   // Skip turns into Continue once a token was minted on the Connect step.
   const [connected, setConnected] = useState(false);
 
+  // Set while this page navigates on its own (to an app's guide), so the "already onboarded" redirect
+  // below doesn't race it to Home once finishing setup refreshes `me`.
+  const navigating = useRef(false);
   const { isError, data } = meQuery;
   useEffect(() => {
+    if (navigating.current) return;
     if (isError) router.replace("/login");
     else if (data?.onboarded) router.replace(nextPath());
   }, [isError, data, router]);
 
-  // The OpenAI step is pointless if a key is already configured
-  // server-wide (env var) or was already set earlier by this user.
-  const skipOpenAiStep = Boolean(appSettings?.openai_api_key_set);
+  // The OpenAI step is pointless if a key is already configured server-wide or was set earlier,
+  // and members can't set it at all (it is a server setting for admins).
+  const isAdmin = Boolean(data?.is_admin);
+  const skipOpenAiStep = !isAdmin || Boolean(appSettings?.openai_api_key_set);
   const steps = skipOpenAiStep ? STEP_LABELS.slice(0, 1) : STEP_LABELS;
 
   /** `from` is the button a pointer click started this from; it sparks on success. Navigation is never delayed. */
@@ -70,6 +76,7 @@ export default function OnboardingPage() {
 
   /** Choosing an app finishes setup and opens that app's guide, the same one Home links to. */
   async function pickApp(id: AppId) {
+    navigating.current = true;
     setBusy(true);
     try {
       await completeOnboarding.mutateAsync();
@@ -126,6 +133,7 @@ export default function OnboardingPage() {
             </div>
           ) : (
             <>
+              {!isAdmin && <InvitationBanner className="mb-6" />}
               {steps.length > 1 && (
               <ol className="flex gap-2 mb-7" aria-label="Setup progress">
                 {steps.map((label, i) => (

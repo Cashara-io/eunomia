@@ -6,10 +6,11 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, Check, Plus, Upload, Users } from "lucide-react";
-import type { EntityDetail, EntityKind, SourceRow } from "@/lib/types";
+import type { EntityDetail, EntityKind, SourceRow, Vault } from "@/lib/types";
 import { entityKeys, type EntityList } from "@/lib/queries/entities";
 import { call } from "@/lib/queries/client";
 import { useSources } from "@/lib/queries/sources";
+import { useDocuments } from "@/lib/queries/documents";
 import { useVaults } from "@/lib/queries/vaults";
 import { getEntity, listEntities } from "@/lib/gen";
 import PageHeader from "@/components/ui/PageHeader";
@@ -77,29 +78,46 @@ function FailureBanner({ rows, dismissed, onDismiss }: { rows: SourceRow[]; dism
 
 // ---- overview data ----
 
-// ponytail: no "recent activity" endpoint exists, so this fans out one
-// entities.get per entity on the first page. Ceiling: memory counts and recency
-// only cover the first ENTITY_CAP entities (the count then reads "N+").
+// ponytail: no "recent activity" endpoint exists, so this lists each space and fans out
+// one entities.get per entity on its first page. Ceiling: memory counts and recency only
+// cover about ENTITY_CAP entities across all spaces (the count then reads "N+").
 // Upgrade path: a backend summary endpoint with totals and recent entities.
 const ENTITY_CAP = 24;
 const RECENT_SHOWN = 6;
 // Code-map entities are not what a team member means by "people and projects".
 const CODE_KINDS = new Set<EntityKind>(["repository", "file", "symbol"]);
 
-type RecentEntity = { id: string; name: string; kind: EntityKind; memories: number; lastAt: string | null };
+type RecentEntity = { id: string; name: string; kind: EntityKind; memories: number; lastAt: string | null; vault: Vault };
 type Overview = { entities: number; memories: number; memoriesCapped: boolean; lastActivity: string | null; recent: RecentEntity[] };
 
-async function loadOverview(): Promise<Overview> {
-  const list = (await call(listEntities())) as EntityList;
-  const firstPage = list.results.slice(0, ENTITY_CAP);
-  const details = await Promise.all(
-    firstPage.map((e) => call(getEntity({ path: { entity_id: e.id } })).catch(() => null) as Promise<EntityDetail | null>),
+/** Totals and recent entities summed over every space the caller belongs to (one list call per space). */
+async function loadOverview(vaults: Vault[]): Promise<Overview> {
+  // No space list (it failed to load): fall back to the personal space, which is the default.
+  const spaces: Vault[] = vaults.length > 0 ? vaults : [{ id: "", name: "Personal", kind: "personal", created_at: null, role: "owner" }];
+  const lists = await Promise.all(
+    spaces.map(async (v) => ({
+      vault: v,
+      list: (await call(listEntities(v.id ? { query: { vault_id: v.id } } : undefined))) as EntityList,
+    })),
   );
-  const loaded = details.filter((d): d is EntityDetail => d !== null);
-  const withTimes = loaded.map((d) => ({
+  const perSpace = Math.max(4, Math.ceil(ENTITY_CAP / Math.max(1, lists.length)));
+  const firstPages = lists.map(({ vault, list }) => ({ vault, rows: list.results.slice(0, perSpace) }));
+  const details = await Promise.all(
+    firstPages.flatMap(({ vault, rows }) =>
+      rows.map((e) =>
+        (call(getEntity({ path: { entity_id: e.id } })) as Promise<EntityDetail>).then(
+          (d) => ({ d, vault }),
+          () => null,
+        ),
+      ),
+    ),
+  );
+  const loaded = details.filter((x): x is { d: EntityDetail; vault: Vault } => x !== null);
+  const withTimes = loaded.map(({ d, vault }) => ({
     id: d.id,
     name: d.name,
     kind: d.kind,
+    vault,
     memories: d.memory.length,
     lastAt: d.memory.reduce<string | null>((max, m) => (m.created_at && (!max || m.created_at > max) ? m.created_at : max), null),
   }));
@@ -108,10 +126,11 @@ async function loadOverview(): Promise<Overview> {
     .filter((e) => !CODE_KINDS.has(e.kind))
     .sort((a, b) => (b.lastAt ?? "").localeCompare(a.lastAt ?? ""))
     .slice(0, RECENT_SHOWN);
+  const total = lists.reduce((sum, { list }) => sum + list.total, 0);
   return {
-    entities: list.total,
+    entities: total,
     memories: withTimes.reduce((sum, e) => sum + e.memories, 0),
-    memoriesCapped: list.total > firstPage.length,
+    memoriesCapped: lists.some(({ list }) => list.total > perSpace),
     lastActivity,
     recent,
   };
@@ -133,7 +152,11 @@ function StatLine({ spaces, overview }: { spaces: number | null; overview: Overv
   );
 }
 
-function RecentlyUpdated({ rows }: { rows: RecentEntity[] }) {
+const entityHref = (e: RecentEntity) =>
+  `/entities?id=${encodeURIComponent(e.id)}${e.vault.kind === "personal" ? "" : `&vault=${encodeURIComponent(e.vault.id)}`}`;
+const spaceName = (v: Vault) => (v.kind === "personal" ? "Personal" : v.name);
+
+function RecentlyUpdated({ rows, showSpace }: { rows: RecentEntity[]; showSpace: boolean }) {
   return (
     <section className="flex flex-col gap-2 min-w-0" aria-labelledby="recent-title">
       <div className="flex items-center justify-between gap-3">
@@ -152,10 +175,11 @@ function RecentlyUpdated({ rows }: { rows: RecentEntity[] }) {
         <ul className="hairline-rows border-t">
           {rows.map((e) => (
             <li key={e.id}>
-              <Link href={`/entities?id=${encodeURIComponent(e.id)}`} className="flex items-center gap-3 min-h-11 py-2 hover:bg-[var(--surface-raised)]">
+              <Link href={entityHref(e)} className="flex items-center gap-3 min-h-11 py-2 hover:bg-[var(--surface-raised)]">
                 <span className="dot shrink-0" style={{ background: kindColor(e.kind) }} aria-hidden />
                 <span className="flex-1 min-w-0 truncate text-[14px] font-medium">{e.name}</span>
                 <span className="shrink-0 text-[12px]" style={{ color: "var(--ink-dim)" }}>
+                  {showSpace && <>{spaceName(e.vault)} · </>}
                   {plural(e.memories, "memory", "memories")}
                   {e.lastAt && <> · {since(e.lastAt)}</>}
                 </span>
@@ -227,7 +251,7 @@ function AppPicker({ again = false }: { again?: boolean }) {
 }
 
 /** Or start with your own information: shown while there is nothing saved yet. */
-function OwnInformation() {
+function OwnInformation({ canUpload }: { canUpload: boolean }) {
   return (
     <section className="flex flex-col gap-3" aria-labelledby="own-info-title">
       <h2 id="own-info-title" className="section-title">
@@ -237,9 +261,11 @@ function OwnInformation() {
         You can read and organise your memories and documents before connecting an AI app.
       </p>
       <div className="flex flex-wrap gap-2">
-        <Link href="/documents" className="btn">
-          <Upload size={18} strokeWidth={1.75} aria-hidden /> Upload a document
-        </Link>
+        {canUpload && (
+          <Link href="/documents" className="btn">
+            <Upload size={18} strokeWidth={1.75} aria-hidden /> Upload a document
+          </Link>
+        )}
         <Link href="/entities" className="btn">
           <Users size={18} strokeWidth={1.75} aria-hidden /> Browse people &amp; topics
         </Link>
@@ -326,9 +352,18 @@ function ConnectedPanel({ connections, onConnectAnother }: { connections: Connec
 export default function HomePage() {
   const sourcesQuery = useSources({ refetchInterval: 60_000 });
   const rows = sourcesQuery.data ?? (sourcesQuery.isError ? [] : null);
-  const overviewQuery = useQuery({ queryKey: [...entityKeys.live(), "overview"], queryFn: loadOverview, refetchInterval: 60_000 });
+  const vaultsQuery = useVaults();
+  const vaults = vaultsQuery.data;
+  const overviewQuery = useQuery({
+    queryKey: [...entityKeys.live(), "overview", (vaults ?? []).map((v) => v.id).join(",")],
+    queryFn: () => loadOverview(vaults ?? []),
+    enabled: vaults !== undefined || vaultsQuery.isError,
+    refetchInterval: 60_000,
+  });
   const overview = overviewQuery.data ?? null;
-  const vaults = useVaults().data;
+  const documents = useDocuments().data;
+  // Hide the upload shortcut while document storage is off (or unknown).
+  const canUpload = documents !== undefined && Boolean(documents.storage);
   const [dismissedFailures, setDismissedFailures] = useState<Set<string>>(new Set());
   const { connections } = useConnections();
   const [picking, setPicking] = useState(false);
@@ -368,7 +403,7 @@ export default function HomePage() {
               <StatLine spaces={spaceCount} overview={overview} />
             </div>
             <div className={`grid gap-x-10 gap-y-8 ${liveSources.length > 0 ? "lg:grid-cols-2" : ""}`}>
-              <RecentlyUpdated rows={overview.recent} />
+              <RecentlyUpdated rows={overview.recent} showSpace={(vaults?.length ?? 0) > 1} />
               {liveSources.length > 0 && <SourcesHealth rows={liveSources} />}
             </div>
           </section>
@@ -393,7 +428,7 @@ export default function HomePage() {
         <ConnectedPanel connections={connections} onConnectAnother={() => setPicking(true)} />
       )}
 
-      {overview && !hasData && !connectedApps && <OwnInformation />}
+      {overview && !hasData && !connectedApps && <OwnInformation canUpload={canUpload} />}
     </div>
   );
 }

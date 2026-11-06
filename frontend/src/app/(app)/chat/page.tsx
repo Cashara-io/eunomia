@@ -312,6 +312,25 @@ function EmptyState({ onPick }: { onPick: (text: string) => void }) {
   );
 }
 
+/** Chat without a model: just what to do next, with no conversations or composer to type into. */
+function NoModel({ isAdmin }: { isAdmin: boolean }) {
+  return (
+    <div role="status" className="flex flex-col gap-3 max-w-[560px] py-6">
+      <h2 className="text-[20px] font-semibold tracking-[-0.015em]">{isAdmin ? "Set up a model to use Chat" : "Chat isn\u2019t turned on yet"}</h2>
+      <p className="text-[14px] leading-relaxed" style={{ color: "var(--ink-dim)" }}>
+        {isAdmin
+          ? "Chat answers questions from your saved memories and documents. It needs an OpenAI key or a local model endpoint."
+          : "Ask your Eunomia admin to turn on Chat. Your connected AI apps can still look things up in the meantime."}
+      </p>
+      {isAdmin && (
+        <Link href="/settings?tab=model" className="btn btn-primary self-start">
+          Set up a model
+        </Link>
+      )}
+    </div>
+  );
+}
+
 function LoadingTurns() {
   return (
     <div className="flex flex-col gap-7" aria-hidden>
@@ -369,8 +388,12 @@ export default function ChatPage() {
   useEffect(() => {
     queryClient
       .fetchQuery({ ...threadsQuery(), staleTime: 0 })
-      .then(async (list: ChatThread[]) => {
-        if (list.length === 0) list = [await createThreadMutation.mutateAsync(undefined)];
+      .then((list: ChatThread[]) => {
+        // No conversations yet: start on an unsaved draft; the thread is created with the first message.
+        if (list.length === 0) {
+          setMessages([]);
+          return;
+        }
         setActiveId(list[0].id);
         loadHistory(list[0].id);
       })
@@ -378,8 +401,7 @@ export default function ChatPage() {
         setMessages([]);
         setLoadError(failure(e, "Could not load your conversations."));
       });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadHistory]);
+  }, [loadHistory, queryClient]);
 
   // Follow new content only while the reader is at the bottom; scrolling up
   // to reread something holds the view still.
@@ -398,9 +420,9 @@ export default function ChatPage() {
     loadHistory(id);
   }
 
-  async function createThread() {
-    const created = await createThreadMutation.mutateAsync(undefined);
-    setActiveId(created.id);
+  /** "New chat" opens an unsaved draft; nothing is stored until its first message is sent. */
+  function createThread() {
+    setActiveId(null);
     setMessages([]);
     setError(null);
     setNeedsKey(false);
@@ -415,9 +437,7 @@ export default function ChatPage() {
       setActiveId(remaining[0].id);
       loadHistory(remaining[0].id);
     } else {
-      const created = await createThreadMutation.mutateAsync(undefined);
-      setActiveId(created.id);
-      setMessages([]);
+      createThread();
     }
   }
 
@@ -426,8 +446,7 @@ export default function ChatPage() {
 
   async function send(raw: string = input, retry = false) {
     const text = raw.trim();
-    if (!text || sending || !activeId || !modelReady) return;
-    const threadId = activeId;
+    if (!text || sending || !modelReady) return;
     if (!retry) setInput("");
     setError(null);
     setNeedsKey(false);
@@ -435,6 +454,17 @@ export default function ChatPage() {
     stickRef.current = true;
     if (!retry) setMessages((prev) => [...(prev ?? []), { role: "user", content: text, created_at: new Date().toISOString() }]);
     setSending(true);
+    let threadId = activeId;
+    if (!threadId) {
+      try {
+        threadId = (await createThreadMutation.mutateAsync(undefined)).id;
+        setActiveId(threadId);
+      } catch (e) {
+        setError(failure(e, "Could not start a new conversation."));
+        setSending(false);
+        return;
+      }
+    }
     setStreamingText("");
     setLiveSteps([]);
     const start = performance.now();
@@ -488,7 +518,7 @@ export default function ChatPage() {
 
   const turns = messages ? toTurns(messages) : null;
   const activeTool = liveSteps.find((s) => s.running)?.name;
-  const canSend = !!input.trim() && !sending && !!activeId && modelReady;
+  const canSend = !!input.trim() && !sending && messages !== null && modelReady;
 
   return (
     <TooltipGroup>
@@ -499,6 +529,9 @@ export default function ChatPage() {
         intro="Ask a question about your saved memories and documents. Eunomia shows where each answer came from."
       />
 
+      {!modelReady ? (
+        <NoModel isAdmin={isAdmin} />
+      ) : (
       <div className="flex-1 min-h-0 flex gap-4">
         <ThreadList threads={threads} activeId={activeId} onSelect={selectThread} onCreate={createThread} onDelete={deleteThread} />
 
@@ -509,8 +542,8 @@ export default function ChatPage() {
               aria-label="Conversation"
               className="h-10 text-[14px] flex-1 min-w-0"
               value={activeId ?? ""}
-              onChange={selectThread}
-              options={(threads ?? []).map((t) => ({ value: t.id, label: t.title }))}
+              onChange={(id) => id && selectThread(id)}
+              options={[...(activeId ? [] : [{ value: "", label: "New chat" }]), ...(threads ?? []).map((t) => ({ value: t.id, label: t.title }))]}
             />
             <Tooltip label="New chat">
               <button onClick={createThread} aria-label="New chat" className="btn btn-icon">
@@ -539,22 +572,6 @@ export default function ChatPage() {
               {loadError && <ErrorLine error={loadError} />}
               {turns === null && <LoadingTurns />}
               {turns !== null && turns.length === 0 && !sending && !loadError && modelReady && <EmptyState onPick={(text) => send(text)} />}
-              {!modelReady && (
-                <div role="status" className="soft-panel flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 text-[14px]">
-                  {isAdmin ? (
-                    <>
-                      <p className="flex-1 min-w-[220px]" style={{ color: "var(--ink-dim)" }}>
-                        No model is configured, so the assistant can&apos;t answer yet. Chat needs an OpenAI key or a local model endpoint.
-                      </p>
-                      <Link href="/settings?tab=model" className="btn btn-primary btn-sm">Set up a model</Link>
-                    </>
-                  ) : (
-                    <p className="flex-1 min-w-[220px]" style={{ color: "var(--ink-dim)" }}>
-                      Chat isn&apos;t turned on yet. Ask your Eunomia admin.
-                    </p>
-                  )}
-                </div>
-              )}
               {turns?.map((t, i) => <TurnView key={i} turn={t} me={me} />)}
               {sending && (
                 <article className="fade-in">
@@ -669,6 +686,7 @@ export default function ChatPage() {
           </form>
         </section>
       </div>
+      )}
 
       <style>{`
         .composer { field-sizing: content; min-height: 24px; max-height: 200px; }

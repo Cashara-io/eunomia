@@ -31,7 +31,7 @@ test("every page and tab renders cleanly", async ({ page }) => {
     await page.goto(path);
     await expect(page.getByText(text).first(), path).toBeVisible();
   }
-  for (const tab of ["General", "Connected apps", "API tokens", "Sessions", "Your data", "Audit log", "Usage", "HTTPS", "Updates", "AI provider"]) {
+  for (const tab of ["General", "Connected apps", "API tokens", "Sessions", "Your data", "People", "Audit log", "Usage", "HTTPS", "Updates", "AI provider"]) {
     await page.getByRole("tab", { name: tab }).click();
     await expect(page.getByRole("tab", { name: tab })).toHaveAttribute("aria-selected", "true");
   }

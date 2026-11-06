@@ -7,7 +7,6 @@ import { Copy, LogOut, Pencil, Settings2, Trash2, UserPlus, Users } from "lucide
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import AuthorTag from "@/components/AuthorTag";
 import SyncMark from "@/components/bits/SyncMark";
 import Tooltip from "@/components/bits/Tooltip";
 import TransferOwnershipPanel from "@/components/live/TransferOwnershipPanel";
@@ -25,7 +24,7 @@ import {
   useVaultCounts,
   useVaultMembers,
 } from "@/lib/queries/vaults";
-import { DetailSection, DrawnCheck, ICON, RoleChip, SpaceSwatch, ago, peopleLine, sameEmail } from "./bits";
+import { DetailSection, DrawnCheck, ICON, Initials, RoleChip, SpaceSwatch, ago, peopleLine, sameEmail } from "./bits";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -212,7 +211,7 @@ export default function SpaceDetail({
           </form>
         ) : (
           <div className="flex items-center gap-2.5 min-w-0">
-            <SpaceSwatch vault={vault} size={16} />
+            <SpaceSwatch vault={vault} size={10} />
             <h2 className="text-[24px] font-semibold tracking-[-0.02em] truncate">{vault.name}</h2>
             {!isOwner && <RoleChip role={vault.role} />}
             {isOwner && (
@@ -240,7 +239,7 @@ export default function SpaceDetail({
         </p>
         {counts && (
           <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
-            {plural(counts.people, "person", "people")} · {plural(counts.topics, "topic", "topics")}
+            {plural(counts.people + counts.topics, "person or topic", "people & topics")} saved
           </p>
         )}
       </header>
@@ -248,7 +247,7 @@ export default function SpaceDetail({
       {/* People */}
       {isOrg && (
         <DetailSection
-          title="People"
+          title="Members"
           icon={<Users {...ICON} aria-hidden />}
           aside={members && <span className="label font-mono">{members.length}</span>}
         >
@@ -264,9 +263,7 @@ export default function SpaceDetail({
               const isMe = sameEmail(m.email, me);
               return (
                 <li key={m.email} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 min-h-12 py-2">
-                  <span className="flex max-w-[96px] min-w-0 shrink-0" aria-hidden>
-                    <AuthorTag name={m.email} />
-                  </span>
+                  <Initials email={m.email} />
                   <span className="flex-1 min-w-[140px] truncate text-[14px]" style={{ color: "var(--ink)" }}>
                     {m.email}
                     {isMe && <span style={{ color: "var(--ink-dim)" }}> (you)</span>}
@@ -377,7 +374,7 @@ export default function SpaceDetail({
                   onChange={(v) => setRole(v as VaultRole)}
                   options={ROLE_OPTIONS}
                 />
-                <button type="submit" disabled={busy || !trimmed} className="btn btn-primary shrink-0">
+                <button type="submit" disabled={busy || !trimmed} className="btn shrink-0">
                   {busy || sent ? <SyncMark status={busy ? "running" : "done"} /> : <UserPlus {...ICON} />}
                   {busy ? "Sending…" : "Send invite"}
                 </button>
@@ -426,7 +423,7 @@ export default function SpaceDetail({
               <button type="button" onClick={() => setCloning(false)} className="btn">
                 Cancel
               </button>
-              <button type="submit" disabled={cloneBusy} className="btn btn-primary">
+              <button type="submit" disabled={cloneBusy} className="btn">
                 {cloneBusy ? "Copying…" : "Create copy"}
               </button>
             </div>

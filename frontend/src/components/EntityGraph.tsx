@@ -12,25 +12,27 @@ import SyncMark from "./bits/SyncMark";
 import Tooltip, { TooltipGroup } from "./bits/Tooltip";
 import { cssVar, prefersReducedMotion } from "./bits/motion";
 import Monogram from "./graph/Monogram";
-import { useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { BuiltInKind, EntityDetail, EntityGraph as EntityGraphData, EntityKind } from "@/lib/types";
 import { useMe } from "@/lib/queries/auth";
 import {
   entityDetailQuery,
+  entityListQuery,
   findEntityVault,
   useAddMemory,
   useAddRelation,
   useCreateEntity as useCreateEntityMutation,
   useDeleteEntity,
   useDeleteMemory,
-  useEntityCounts,
   useEntityGraph,
   useUpdateEntity,
 } from "@/lib/queries/entities";
 import { useVaults } from "@/lib/queries/vaults";
 import EditableMemoryText from "@/components/live/EditableMemoryText";
-import TidyObservationsButton from "@/components/live/TidyObservationsButton";
-import { defaultKindHex, isCustomKind, kindColor, setKindColor, shuffleKindColor, useKindColor } from "@/lib/kindColors";
+import TidyUp from "./graph/TidyUp";
+import EntityList from "./graph/EntityList";
+import { chooseSpace, useSharedSpace } from "./graph/space";
+import { defaultKindHex, isCustomKind, kindColor, setKindColor, useKindColor } from "@/lib/kindColors";
 
 const KIND_LABEL: Record<BuiltInKind, string> = {
   person: "Person",
@@ -76,6 +78,7 @@ function Author({ email, me }: { email: string | null; me: string | null }) {
 
 const ICON = { size: 18, strokeWidth: 1.75 } as const;
 
+const LIST_LIMIT = 500; // rows the List view reads in one go
 const SPARSE = 3; // fewer nodes than this shows the `guide`
 
 // A memory row that just arrived from "Add memory" settles in from a slight blur, once.
@@ -102,20 +105,16 @@ function readChromeHidden() {
   }
 }
 
-// The memory space last opened on People & topics ("" is Personal), so the page reopens where you were.
-const SPACE_KEY = "eunomia.graph.space";
-function readSpace(): string | null {
-  try {
-    return window.localStorage.getItem(SPACE_KEY);
-  } catch {
-    return null;
-  }
+// px of the canvas the desktop inspector covers (22rem wide, 1.5rem from the edge, plus a gap)
+const INSPECTOR_RESERVE = 400;
+
+// Phones (below md) get the inspector as a full-screen sheet.
+function subscribeWidth(l: () => void) {
+  const mq = window.matchMedia("(max-width: 767px)");
+  mq.addEventListener("change", l);
+  return () => mq.removeEventListener("change", l);
 }
-function storeSpace(id: string | undefined) {
-  try {
-    window.localStorage.setItem(SPACE_KEY, id ?? "");
-  } catch {}
-}
+const readPhone = () => window.matchMedia("(max-width: 767px)").matches;
 
 /** `?id=<entity>` and `?vault=<space>` from the URL. Its own component so that only it waits on the URL (Suspense). */
 function UrlFocus({ onChange }: { onChange: (id: string | null, vault: string | null) => void }) {
@@ -130,8 +129,11 @@ export default function EntityGraph({
   kinds,
   header,
   guide,
+  mode = "graph",
 }: {
   kinds?: EntityKind[];
+  /** "list": the same toolbar and inspector over a plain table instead of the canvas */
+  mode?: "graph" | "list";
   header?: ReactNode;
   /** one sentence plus one action, shown while the graph is empty or sparse */
   guide?: ReactNode;
@@ -139,36 +141,35 @@ export default function EntityGraph({
   const colorOf = useKindColor();
   const shownKinds = kinds ?? ALL_KINDS;
   const queryClient = useQueryClient();
-  const myEmail = useMe().data?.email ?? null;
+  const me = useMe().data;
+  const myEmail = me?.email ?? null;
+  const isAdmin = me?.is_admin ?? false;
+  // Deleting is offered to whoever wrote the thing, and to admins; the server checks again.
+  const canDelete = (author: string | null | undefined) => isAdmin || (!!author && author === myEmail);
   const vaultsQuery = useVaults();
   const myVaults = vaultsQuery.data ?? [];
-  // The graph endpoint reads one space at a time (no "all my spaces"), so People & topics opens on
-  // the space last used here, else the newest shared space that has anything in it, else Personal.
-  // Code map (`kinds` given) opens on Personal as before.
-  const [vaultChoice, setVaultChoice] = useState<{ id: string | undefined } | null>(null);
-  const [storedSpace] = useState(() => (kinds || typeof window === "undefined" ? null : readSpace()));
-  const sharedVaults = [...myVaults.filter((v) => v.kind !== "personal")].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
-  const pickDefault = !kinds && !vaultChoice;
-  const storedValid = storedSpace !== null && (storedSpace === "" || myVaults.some((v) => v.id === storedSpace));
-  const spaceCounts = useEntityCounts(
-    sharedVaults.map((v) => v.id),
-    pickDefault && vaultsQuery.isSuccess && !storedValid,
-  );
-  const vaultId: string | undefined = vaultChoice
-    ? vaultChoice.id
-    : !pickDefault
-      ? undefined
-      : storedValid
-        ? storedSpace || undefined
-        : sharedVaults.find((v) => (spaceCounts.counts.get(v.id) ?? 0) > 0)?.id;
-  const defaultReady = !pickDefault || storedValid || (vaultsQuery.isFetched && !spaceCounts.pending);
-  const graphQuery = useEntityGraph({ kinds, vaultId, enabled: defaultReady });
-  const graph: EntityGraphData | null = graphQuery.data ?? null;
+  const isPhone = useSyncExternalStore(subscribeWidth, readPhone, () => false);
+  // The graph endpoint reads one space at a time (no "all my spaces"). People & topics shares its
+  // space with the List and Memory map views (see graph/space.ts); Code map (`kinds` given) opens on Personal.
+  const shared = useSharedSpace(!kinds);
+  const [codeVault, setCodeVault] = useState<string | undefined>(undefined);
+  const vaultId: string | undefined = kinds ? codeVault : shared.vaultId;
+  const defaultReady = kinds ? true : shared.ready;
+  const graphQuery = useEntityGraph({ kinds, vaultId, enabled: defaultReady && mode === "graph" });
+  const listQuery = useQuery({ ...entityListQuery(undefined, vaultId, LIST_LIMIT), enabled: defaultReady && mode === "list", placeholderData: keepPreviousData });
+  // The list has no relations, so it stands in for the graph's nodes (find, "Relate to", names).
+  const graph: EntityGraphData | null =
+    mode === "graph"
+      ? (graphQuery.data ?? null)
+      : listQuery.data
+        ? { nodes: listQuery.data.results.map((e) => ({ id: e.id, kind: e.kind, name: e.name, owner_email: null })), edges: [] }
+        : null;
+  const activeQuery = mode === "graph" ? graphQuery : listQuery;
   const error =
-    graphQuery.error && !graph ? failure(graphQuery.error, "Could not load your people and topics.") : null;
+    activeQuery.error && !graph ? failure(activeQuery.error, "Could not load your people and topics.") : null;
   function chooseVault(id: string | undefined) {
-    setVaultChoice({ id });
-    if (!kinds) storeSpace(id);
+    if (kinds) setCodeVault(id);
+    else chooseSpace(id);
   }
   const createEntityMutation = useCreateEntityMutation();
   const updateEntityMutation = useUpdateEntity();
@@ -211,14 +212,17 @@ export default function EntityGraph({
   }
 
   const [insets, setInsets] = useState<CanvasInsets>({ top: 0, right: 0, bottom: 0, left: 0 });
+  const inspectorOpen = !!selected;
+  const hasGraph = !!graph && graph.nodes.length > 0;
   useEffect(() => {
     const el = chromeRef.current;
     const measure = () => {
       const md = window.matchMedia("(min-width: 768px)").matches;
-      // below md the controls sit above the canvas in the page flow, so they cover none of it
+      // below md the controls sit above the canvas in the page flow, so they cover none of it,
+      // and the inspector is a full-screen sheet; on desktop it covers the right column only while open
       const top = md && el ? el.offsetTop + el.offsetHeight : 0;
       setInsets((prev) => {
-        const next = { top, right: md ? 400 : 0, bottom: md ? 48 : 64, left: 0 };
+        const next = { top, right: md && inspectorOpen ? INSPECTOR_RESERVE : 0, bottom: md ? 48 : 64, left: 0 };
         return prev.top === next.top && prev.right === next.right && prev.bottom === next.bottom ? prev : next;
       });
     };
@@ -230,7 +234,7 @@ export default function EntityGraph({
       ro.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, [graph, chromeHidden]);
+  }, [hasGraph, chromeHidden, inspectorOpen, mode]);
 
   function toggleKind(kind: EntityKind) {
     setHiddenKinds((prev) => {
@@ -446,30 +450,49 @@ export default function EntityGraph({
     }
   }
 
-  // Desktop: everything floats over one full-bleed canvas. Header and toolbar top left at the same
-  // page inset as every other route (main's px-4 py-6, sm px-8, lg px-12 py-38), inspector top
-  // right, zoom and "Hide controls" bottom right (inside GraphCanvas). Below md the header and
-  // toolbar sit in the page flow above the canvas instead, so nothing covers the title or the graph.
+  // Graph, desktop: everything floats over one full-bleed canvas. Header and toolbar run the full
+  // content width at the same page inset as every other route (main's px-4 py-6, sm px-8, lg px-12
+  // py-38) and give up the right column only while the inspector is open; zoom and "Hide controls"
+  // sit bottom right (inside GraphCanvas). Below md the header and toolbar sit in the page flow above
+  // the canvas instead, so nothing covers the title or the graph.
+  // List: header and toolbar on top, the table scrolling below, the inspector in the same place.
   // `alwaysShow`: states with no canvas (loading, error, empty) have nowhere to put "Show controls".
   const frame = (toolbar: ReactNode, content: ReactNode, inspector?: ReactNode, aside?: ReactNode, alwaysShow = false) => {
-    const showChrome = alwaysShow || !chromeHidden;
+    const list = mode === "list";
+    const showChrome = list || alwaysShow || !chromeHidden;
+    // inline, so it wins over the responsive page padding
+    const reserve = inspector && !isPhone ? { paddingRight: "25rem" } : undefined;
     return (
       <div className="absolute inset-0 overflow-hidden flex flex-col md:block">
         <Suspense fallback={null}>
           <UrlFocus onChange={(id, vault) => setPendingFocus({ id, vault })} />
         </Suspense>
-        {showChrome && (
-          <div
-            ref={chromeRef}
-            // the inspector column is always kept clear, so opening it never reflows the toolbar or moves the camera
-            className="relative shrink-0 md:absolute md:left-0 md:top-0 md:z-10 px-4 pt-6 sm:px-8 lg:px-12 lg:pt-[38px] pb-3 flex flex-col gap-3 items-start w-full md:w-[calc(100%-25rem)] md:pointer-events-none md:select-none md:[&>*]:pointer-events-auto md:[background:linear-gradient(var(--canvas)_85%,transparent)]"
-          >
-            {header}
-            {toolbar}
-            {aside}
+        {list ? (
+          <div className="absolute inset-0 flex flex-col">
+            <div ref={chromeRef} className="shrink-0 px-4 pt-6 sm:px-8 lg:px-12 lg:pt-[38px] pb-3 flex flex-col gap-3 items-start w-full" style={reserve}>
+              {header}
+              {toolbar}
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-8 lg:px-12 pb-8" style={reserve}>
+              {content}
+            </div>
           </div>
+        ) : (
+          <>
+            {showChrome && (
+              <div
+                ref={chromeRef}
+                className={"relative shrink-0 md:absolute md:left-0 md:top-0 md:z-10 px-4 pt-6 sm:px-8 lg:px-12 lg:pt-[38px] pb-3 flex flex-col gap-3 items-start w-full md:pointer-events-none md:select-none md:[&>*]:pointer-events-auto md:[background:linear-gradient(var(--canvas)_85%,transparent)]"}
+                style={reserve}
+              >
+                {header}
+                {toolbar}
+                {aside}
+              </div>
+            )}
+            <div className="relative flex-1 min-h-0 md:absolute md:inset-0">{content}</div>
+          </>
         )}
-        <div className="relative flex-1 min-h-0 md:absolute md:inset-0">{content}</div>
         {inspector}
       </div>
     );
@@ -499,6 +522,13 @@ export default function EntityGraph({
           <span key={w} className="skeleton h-6" style={{ width: w }} />
         ))}
       </div>,
+      mode === "list" ? (
+        <div className="flex flex-col gap-3 pt-2" aria-hidden>
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <span key={i} className="skeleton h-10 w-full" />
+          ))}
+        </div>
+      ) : (
       <div className="h-full flex items-center justify-center" aria-hidden>
         <div className="relative w-48 h-48">
           {[
@@ -511,7 +541,8 @@ export default function EntityGraph({
             <span key={`${x}${y}`} className="skeleton absolute w-3 h-3 rounded-full" style={{ left: `${x}%`, top: `${y}%`, borderRadius: 999 }} />
           ))}
         </div>
-      </div>,
+      </div>
+      ),
       undefined,
       undefined,
       true
@@ -715,9 +746,26 @@ export default function EntityGraph({
   const inspector = selected && (
     <aside
       aria-label={`${selected.name} details`}
-      className="panel pop-in absolute z-20 flex flex-col inset-x-2 bottom-2 max-h-[62%] md:inset-x-auto md:bottom-auto md:right-6 md:top-6 md:w-[22rem] md:max-h-[calc(100%-5rem)]"
-      style={{ transformOrigin: "top right", borderTop: "3px solid var(--bauhaus-app-blue)" }}
+      // phones: a full-screen sheet with Back; desktop: a card in the right column
+      className={
+        isPhone
+          ? "panel fixed inset-0 z-50 flex flex-col"
+          : "panel pop-in absolute z-20 flex flex-col right-6 top-6 w-[22rem] max-h-[calc(100%-5rem)]"
+      }
+      style={
+        isPhone
+          ? { borderRadius: 0, border: 0 }
+          : { transformOrigin: "top right", borderTop: "3px solid var(--bauhaus-app-blue)" }
+      }
     >
+      {isPhone && (
+        <div className="shrink-0 px-2 pt-2" style={{ borderBottom: "1px solid var(--border)" }}>
+          <button type="button" className="btn btn-ghost btn-sm mb-2" onClick={() => setSelected(null)}>
+            <ArrowLeft size={16} strokeWidth={1.75} aria-hidden />
+            Back
+          </button>
+        </div>
+      )}
       <div className="flex items-start justify-between gap-2 p-5 pb-3">
         <div className="flex items-center gap-3 min-w-0">
           {selected.kind === "person" && <Monogram name={selected.name || selected.id} size={36} color={colorOf("person")} />}
@@ -730,18 +778,15 @@ export default function EntityGraph({
               <span className="w-2 h-2 rounded-full" style={{ background: kindColor(selected.kind) }} aria-hidden />
               {kindLabel(selected.kind)}
               {isCustomKind(selected.kind) && (
-                <span className="inline-flex items-center gap-1 ml-1">
-                  <input
-                    type="color"
-                    aria-label={`Colour for ${selected.kind}`}
-                    className="w-4 h-4 p-0 border-0 bg-transparent cursor-pointer"
-                    value={/^#[0-9a-f]{6}$/i.test(kindColor(selected.kind)) ? kindColor(selected.kind) : defaultKindHex(selected.kind)}
-                    onChange={(e) => setKindColor(selected.kind, e.target.value)}
-                  />
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => shuffleKindColor(selected.kind)}>
-                    Shuffle
-                  </button>
-                </span>
+                // the dot doubles as the colour picker for an agent's own kind
+                <input
+                  type="color"
+                  aria-label={`Colour for ${kindLabel(selected.kind)}`}
+                  title="Change this kind's colour"
+                  className="w-3.5 h-3.5 p-0 border-0 bg-transparent cursor-pointer opacity-70 hover:opacity-100"
+                  value={/^#[0-9a-f]{6}$/i.test(kindColor(selected.kind)) ? kindColor(selected.kind) : defaultKindHex(selected.kind)}
+                  onChange={(e) => setKindColor(selected.kind, e.target.value)}
+                />
               )}
             </span>
           </div>
@@ -753,16 +798,20 @@ export default function EntityGraph({
                 <Pencil {...ICON} />
               </button>
             </Tooltip>
-            <Tooltip label="Delete. Also removes its memories and connections">
-              <ConfirmButton label="Delete" confirmLabel="Delete" onConfirm={deleteSelected} disabled={busy} className="btn btn-ghost btn-sm btn-icon">
-                <Trash2 {...ICON} />
-              </ConfirmButton>
-            </Tooltip>
-            <Tooltip label="Close" shortcut="Esc">
-              <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setSelected(null)} aria-label="Close">
-                <X {...ICON} />
-              </button>
-            </Tooltip>
+            {canDelete(selected.owner_email) && (
+              <Tooltip label="Delete. Also removes its memories and connections">
+                <ConfirmButton label="Delete" confirmLabel="Delete" onConfirm={deleteSelected} disabled={busy} className="btn btn-ghost btn-sm btn-icon">
+                  <Trash2 {...ICON} />
+                </ConfirmButton>
+              </Tooltip>
+            )}
+            {!isPhone && (
+              <Tooltip label="Close" shortcut="Esc">
+                <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setSelected(null)} aria-label="Close">
+                  <X {...ICON} />
+                </button>
+              </Tooltip>
+            )}
           </div>
         </TooltipGroup>
       </div>
@@ -774,7 +823,7 @@ export default function EntityGraph({
             {selected.owner_email ? <Author email={selected.owner_email} me={myEmail} /> : <span style={{ color: "var(--ink-faint)" }}>Not recorded</span>}
           </dd>
           <dt className="label">Last memory</dt>
-          <dd className="font-mono text-[12px]" style={{ color: "var(--ink-dim)" }}>
+          <dd style={{ color: "var(--ink-dim)" }}>
             {lastTouched ? `${age(lastTouched)} ago`.replace("now ago", "just now") : "None yet"}
           </dd>
           {selected.aliases.length > 0 && (
@@ -828,7 +877,7 @@ export default function EntityGraph({
         <section className="flex flex-col gap-2">
           <h3 className="section-title flex items-baseline gap-2">
             Memory
-            <span className="font-mono text-[12px] font-normal" style={{ color: "var(--ink-faint)" }}>
+            <span className="text-[12px] font-normal tabular-nums" style={{ color: "var(--ink-faint)" }}>
               {selected.memory.length}
             </span>
           </h3>
@@ -846,24 +895,26 @@ export default function EntityGraph({
                       <div className="flex items-center gap-2 min-w-0">
                         <Author email={m.owner_email} me={myEmail} />
                         {age(m.created_at) && (
-                          <time className="font-mono text-[11.5px]" style={{ color: "var(--ink-faint)" }} dateTime={m.created_at} title={m.created_at}>
+                          <time className="text-[12px]" style={{ color: "var(--ink-faint)" }} dateTime={m.created_at} title={m.created_at}>
                             {age(m.created_at)}
                           </time>
                         )}
                       </div>
                     )}
                   </div>
-                  <Tooltip label="Delete memory">
-                    <ConfirmButton
-                      label="Delete memory"
-                      confirmLabel="Delete"
-                      onConfirm={() => deleteMemory(m.id)}
-                      disabled={busy}
-                      className="btn btn-ghost btn-sm btn-icon shrink-0 -mr-1"
-                    >
-                      <X size={16} strokeWidth={1.75} />
-                    </ConfirmButton>
-                  </Tooltip>
+                  {canDelete(m.owner_email) && (
+                    <Tooltip label="Delete memory">
+                      <ConfirmButton
+                        label="Delete memory"
+                        confirmLabel="Delete"
+                        onConfirm={() => deleteMemory(m.id)}
+                        disabled={busy}
+                        className="btn btn-ghost btn-sm btn-icon shrink-0 -mr-1"
+                      >
+                        <X size={16} strokeWidth={1.75} />
+                      </ConfirmButton>
+                    </Tooltip>
+                  )}
                 </li>
               ))}
             </ul>
@@ -889,13 +940,13 @@ export default function EntityGraph({
               )}
             </div>
           </form>
-          {selected.memory.length > 1 && <TidyObservationsButton entityId={selected.id} disabled={busy} onDone={() => void selectNode(selected.id)} />}
+          {selected.memory.length > 1 && <TidyUp entityId={selected.id} disabled={busy} onDone={() => void selectNode(selected.id)} />}
         </section>
 
         <section className="flex flex-col gap-2">
           <h3 className="section-title flex items-baseline gap-2">
             Connections
-            <span className="font-mono text-[12px] font-normal" style={{ color: "var(--ink-faint)" }}>
+            <span className="text-[12px] font-normal tabular-nums" style={{ color: "var(--ink-faint)" }}>
               {selected.relations.length}
             </span>
           </h3>
@@ -914,8 +965,8 @@ export default function EntityGraph({
                     ) : (
                       <ArrowLeft size={13} strokeWidth={1.75} className="shrink-0" style={{ color: "var(--ink-dim)" }} aria-label="incoming" />
                     )}
-                    <span className="font-mono text-[11.5px] shrink-0" style={{ color: "var(--ink-faint)" }}>
-                      {r.label}
+                    <span className="text-[12px] shrink-0" style={{ color: "var(--ink-faint)" }}>
+                      {r.label.replace(/_/g, " ")}
                     </span>
                     <button
                       type="button"
@@ -946,7 +997,7 @@ export default function EntityGraph({
             />
             <input
               className="field h-10 px-3 text-[14px]"
-              placeholder="How they connect, e.g. works_at"
+              placeholder="How they connect, e.g. works at"
               aria-label="Relation label"
               value={relForm.label}
               onChange={(e) => setRelForm((f) => ({ ...f, label: e.target.value }))}
@@ -964,7 +1015,16 @@ export default function EntityGraph({
     <>
       {frame(
         toolbar,
-        <>
+        mode === "list" ? (
+          <EntityList
+            entities={(listQuery.data?.results ?? []).filter((e) => visibleKinds.has(e.kind))}
+            total={listQuery.data?.has_more ? listQuery.data.total : undefined}
+            kindLabel={kindLabel}
+            kindColor={colorOf}
+            selectedId={selected?.id}
+            onSelect={selectNode}
+          />
+        ) : (
           <GraphCanvas
             nodes={graph.nodes}
             edges={graph.edges}
@@ -977,9 +1037,9 @@ export default function EntityGraph({
             ariaLabel="Entity relationship graph"
             chrome={{ hidden: chromeHidden, toggle: toggleChrome }}
           />
-        </>,
+        ),
         inspector,
-        guide && graph.nodes.length < SPARSE && (
+        mode === "graph" && guide && graph.nodes.length < SPARSE && (
           <div className="soft-panel px-4 py-3 max-w-sm text-[14px] flex flex-col gap-2 items-start" style={{ color: "var(--ink-dim)" }}>
             {guide}
           </div>

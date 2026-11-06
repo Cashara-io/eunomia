@@ -233,7 +233,7 @@ async fn delete_vault(
 ) -> AppResult<Json<Value>> {
     let state = state.org(&user.org).await?;
     let rid = parse_vault_id(&vault_id)?;
-    service::delete_vault(&state.db, &user.id, &rid).await?;
+    service::delete_vault(&state.db, &state.control, &user.id, &rid).await?;
     Ok(Json(json!({ "deleted": true })))
 }
 

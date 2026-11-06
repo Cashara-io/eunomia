@@ -8,7 +8,7 @@ import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import { useAcceptInvitation, useDeclineInvitation, useInvitations, useRefreshVaults } from "@/lib/queries/vaults";
 import { ICON, JoinedNotice, inviterWords } from "./bits";
 
-export default function InvitationBanner() {
+export default function InvitationBanner({ className = "" }: { className?: string } = {}) {
   const invitations = useInvitations().data ?? [];
   const accept = useAcceptInvitation();
   const decline = useDeclineInvitation();
@@ -40,7 +40,7 @@ export default function InvitationBanner() {
   if (invitations.length === 0 && !joined && !error) return null;
 
   return (
-    <section aria-label="Invitations" className="flex flex-col">
+    <section aria-label="Invitations" className={`flex flex-col ${className}`}>
       {invitations.map((inv) => (
         <div
           key={inv.vault_id}

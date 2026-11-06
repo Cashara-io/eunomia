@@ -17,6 +17,8 @@ const SCOPES: { id: Scope; label: string; hint: string }[] = [
   { id: "connectors", label: "Connected sources", hint: "View and sync connected sources" },
 ];
 
+const DEFAULT_SCOPES: Scope[] = ["memory:read", "memory:write"];
+
 // Same limit as the API (and as a vault name).
 const NAME_MAX = 80;
 
@@ -36,7 +38,8 @@ export function TokensSection() {
   const renameToken = useRenameToken();
   const vaultList: Vault[] = useVaults().data ?? [];
   const [name, setName] = useState("");
-  const [scopes, setScopes] = useState<Scope[]>(SCOPES.map((s) => s.id));
+  // Least privilege: a new token reads and saves memories only. Managing spaces and sources is opt-in.
+  const [scopes, setScopes] = useState<Scope[]>(DEFAULT_SCOPES);
   // Untouched (null) means the safer default: your personal space, not every space. "All my memory spaces" stays one click away.
   const [vaultChoice, setVaultChoice] = useState<string | null>(null);
   const personal = vaultList.find((v) => v.kind === "personal" && v.role === "owner");
@@ -142,20 +145,25 @@ export function TokensSection() {
           <span id="token-scopes" className="label">
             What it can do
           </span>
-          <div className="flex flex-wrap gap-2" role="group" aria-labelledby="token-scopes">
+          <div className="flex flex-col gap-2" role="group" aria-labelledby="token-scopes">
             {SCOPES.map((s) => {
               const on = scopes.includes(s.id);
               return (
-                <Tooltip key={s.id} label={s.hint}>
-                  <button
-                    type="button"
-                    className="pill"
-                    aria-pressed={on}
-                    onClick={() => setScopes((cur) => (on ? cur.filter((x) => x !== s.id) : [...cur, s.id]))}
-                  >
-                    {s.label}
-                  </button>
-                </Tooltip>
+                <label key={s.id} className="flex items-start gap-2.5 cursor-pointer text-[14px]">
+                  <input
+                    type="checkbox"
+                    className="mt-[3px] h-4 w-4 shrink-0 cursor-pointer"
+                    style={{ accentColor: "var(--accent)" }}
+                    checked={on}
+                    onChange={() => setScopes((cur) => (on ? cur.filter((x) => x !== s.id) : [...cur, s.id]))}
+                  />
+                  <span className="flex flex-col">
+                    <span style={{ color: "var(--ink)" }}>{s.label}</span>
+                    <span className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+                      {s.hint}
+                    </span>
+                  </span>
+                </label>
               );
             })}
           </div>

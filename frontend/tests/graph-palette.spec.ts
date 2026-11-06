@@ -69,6 +69,8 @@ test.describe("Entity graph", () => {
     const merged = await tool(page, "vault_merge", { vault_id_a: personal.id, vault_id_b: team.id, name: "Everything" });
     expect(merged.entities).toBe(3);
 
+    // All three views share one memory space; start this one on Personal (else it opens on the newest shared space).
+    await page.addInitScript(() => window.localStorage.setItem("eunomia.graph.space", ""));
     await page.goto("/entities");
     await page.getByRole("tab", { name: "Memory map" }).click();
     const cloud = page.getByRole("img", { name: "Memory map" });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -25,6 +25,9 @@ import { useMe, useLogout } from "@/lib/queries/auth";
 import { useSources } from "@/lib/queries/sources";
 import { useUpdateStatus } from "@/lib/queries/settings";
 import { useInvitations } from "@/lib/queries/vaults";
+import { modKey } from "@/lib/platform";
+
+const noSubscribe = () => () => {};
 import { isLiveSource, sourceHealth, sourceLabel } from "@/lib/sourceState";
 
 // Visible labels follow the design spec; the routes stay as they were.
@@ -79,7 +82,7 @@ function Brand() {
       >
         <span aria-hidden>by</span>
         {/* eslint-disable-next-line @next/next/no-img-element -- a fixed 560x192 PNG, nothing to optimise */}
-        <img src="/paperless-logo-light.png" alt="" width={70} height={24} className="block h-[18px] w-auto opacity-90" />
+        <img src="/paperless-logo-light.png" alt="" width={64} height={22} className="block h-[22px] w-auto" />
       </a>
     </div>
   );
@@ -121,6 +124,9 @@ export default function Sidebar() {
   }, [drawerOpen]);
 
   const invites = useInvitations().data?.length ?? 0;
+  const isAdmin = me?.is_admin ?? false;
+  // The platform's shortcut key, read after hydration (the server can't know it).
+  const mod = useSyncExternalStore(noSubscribe, modKey, () => "⌘" as const);
   const connected = rows?.filter(isLiveSource) ?? [];
   const failing = connected.filter((s) => sourceHealth(s).label === "Failing");
 
@@ -150,9 +156,9 @@ export default function Sidebar() {
           <Search size={18} strokeWidth={1.75} aria-hidden />
           <span className="flex-1">Search</span>
           <span className="kbd" aria-hidden>
-            ⌘K
+            {mod === "⌘" ? "⌘K" : "Ctrl K"}
           </span>
-          <span className="sr-only">(Command K)</span>
+          <span className="sr-only">({mod === "⌘" ? "Command" : "Control"} K)</span>
         </button>
       </div>
 
@@ -168,26 +174,34 @@ export default function Sidebar() {
             )}
           </NavLink>
         ))}
-        <div className="caps sidebar-muted px-1 pt-4 pb-1.5" id="nav-advanced">
-          Advanced
-        </div>
-        <div role="group" aria-labelledby="nav-advanced" className="flex flex-col gap-1">
-          {ADVANCED_NAV.map(({ href, label, icon: Icon }) => (
-            <NavLink key={href} href={href} active={isActive(pathname, href)}>
-              <Icon size={18} strokeWidth={1.75} className="nav-icon shrink-0" aria-hidden />
-              <span className="flex-1">{label}</span>
-            </NavLink>
-          ))}
-        </div>
+        {/* Developer tools: shown to admins, and to anyone already on one of these pages. */}
+        {(isAdmin || ADVANCED_NAV.some(({ href }) => isActive(pathname, href))) && (
+          <>
+            <div className="caps sidebar-muted px-1 pt-4 pb-1.5" id="nav-advanced">
+              Advanced
+            </div>
+            <div role="group" aria-labelledby="nav-advanced" className="flex flex-col gap-1">
+              {ADVANCED_NAV.map(({ href, label, icon: Icon }) => (
+                <NavLink key={href} href={href} active={isActive(pathname, href)}>
+                  <Icon size={18} strokeWidth={1.75} className="nav-icon shrink-0" aria-hidden />
+                  <span className="flex-1">{label}</span>
+                </NavLink>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       <div className="flex-1" />
 
       <div className="px-4 flex flex-col gap-2 text-[12px] leading-snug">
-        <Link href="/connectors" className="sidebar-muted hover:underline underline-offset-2 rounded-[3px]">
-          {sourceStatus}
-        </Link>
-        {!status?.configured ? (
+        {/* Server status is for whoever runs this Eunomia; members get a clean footer. */}
+        {isAdmin && (
+          <Link href="/connectors" className="sidebar-muted hover:underline underline-offset-2 rounded-[3px]">
+            {sourceStatus}
+          </Link>
+        )}
+        {!isAdmin ? null : !status?.configured ? (
           <Link href="/settings?tab=updates" className="sidebar-muted hover:underline underline-offset-2 rounded-[3px]">
             v{version.replace(/^v/, "")} · Automatic updates off
           </Link>

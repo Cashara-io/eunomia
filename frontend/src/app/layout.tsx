@@ -1,18 +1,14 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+// Self-hosted (the geist package wraps next/font/local): builds and pages never reach out to Google,
+// so firewalled and air-gapped installs get the real typeface (issue #155).
+import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 import "blobatar/motion.css";
 import Providers from "@/components/Providers";
 
-const geist = Geist({
-  variable: "--font-geist",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+const geist = GeistSans;
+const geistMono = GeistMono;
 
 export const metadata: Metadata = {
   title: "Eunomia",

@@ -124,8 +124,8 @@ pub async fn vault_rename(db: &OrgDb, owner: &RecordId, vault_id: &RecordId, nam
     }
 }
 
-pub async fn vault_delete(db: &OrgDb, owner: &RecordId, vault_id: &RecordId) -> Value {
-    match service::delete_vault(db, owner, vault_id).await {
+pub async fn vault_delete(db: &OrgDb, control: &ControlDb, owner: &RecordId, vault_id: &RecordId) -> Value {
+    match service::delete_vault(db, control, owner, vault_id).await {
         Ok(()) => json!({ "deleted": true }),
         Err(e) => err_app("vault_delete", &e),
     }

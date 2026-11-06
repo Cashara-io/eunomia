@@ -21,7 +21,7 @@ import { livePoll } from "./liveStatus";
 
 export const entityKeys = {
   all: ["entities"] as const,
-  list: (kind?: EntityKind, vaultId?: string) => [...entityKeys.all, "list", kind ?? null, vaultId ?? null] as const,
+  list: (kind?: EntityKind, vaultId?: string, limit?: number) => [...entityKeys.all, "list", kind ?? null, vaultId ?? null, limit ?? null] as const,
   detail: (id: string) => [...entityKeys.all, "detail", id] as const,
   graph: (kinds: EntityKind[] | undefined, vaultId: string | undefined) => [...entityKeys.all, "graph", kinds ?? null, vaultId ?? null] as const,
   cloud: (vaultIds: string[]) => [...entityKeys.all, "cloud", vaultIds] as const,
@@ -31,10 +31,21 @@ export const entityKeys = {
 
 export type EntityList = { results: EntitySummary[]; total: number; has_more: boolean };
 
-export const entityListQuery = (kind?: EntityKind, vaultId?: string) => ({
-  queryKey: entityKeys.list(kind, vaultId),
-  queryFn: () => call(listEntities({ query: { kind, vault_id: vaultId } })) as Promise<EntityList>,
+export const entityListQuery = (kind?: EntityKind, vaultId?: string, limit?: number) => ({
+  queryKey: entityKeys.list(kind, vaultId, limit),
+  queryFn: () => call(listEntities({ query: { kind, vault_id: vaultId, limit } })) as Promise<EntityList>,
+  refetchInterval: livePoll,
 });
+
+/**
+ * Details (memories, relations) for each of `ids`, for the List view's memory count, latest memory and
+ * last update. The list endpoint carries none of these, so this is one detail read per row.
+ */
+export const useEntityDetails = (ids: string[]) =>
+  useQueries({
+    queries: ids.map((id) => ({ ...entityDetailQuery(id), staleTime: 30_000 })),
+    combine: (results) => new Map(ids.map((id, i) => [id, results[i]?.data])),
+  });
 export const entityDetailQuery = (id: string) => ({
   queryKey: entityKeys.detail(id),
   queryFn: () => call(getEntity({ path: { entity_id: id } })) as Promise<EntityDetail>,

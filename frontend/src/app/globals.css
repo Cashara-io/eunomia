@@ -114,8 +114,8 @@
   --connector-stripe: #6a4fb0;
   --connector-ed: #237c72;
 
-  --font-display: var(--font-geist);
-  --font-sans: var(--font-geist);
+  --font-display: var(--font-geist-sans);
+  --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 
   --radius-card: var(--bauhaus-app-radius);
@@ -553,6 +553,12 @@ button.pill:active {
   border-bottom: 1px solid var(--border);
 }
 
+/* A header that ends in tabs lets the tab rule be its rule: one line, not two. */
+.page-header:has(.tabs) {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
 /* Underline tabs for switching views (Connections / Memory map, Settings on
    phones). Selected: ink text and a 2px ink underline; never a filled box. */
 .tabs {
@@ -647,20 +653,19 @@ dialog.bauhaus-dialog::backdrop {
   border-collapse: collapse;
   font-size: 13px;
 }
+/* Quiet column heads: muted 12px on a hairline, so the data leads, not the header. */
 .data-table th {
-  height: 34px;
+  height: 32px;
   padding: 0 12px;
   text-align: left;
-  font-weight: 600;
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--bauhaus-app-cream);
-  background: var(--bauhaus-app-ink);
-  border-bottom: 0;
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--ink-dim);
+  background: transparent;
+  border-bottom: 1px solid var(--border);
 }
 .data-table td {
-  height: 44px;
+  height: 40px;
   padding: 0 12px;
   border-bottom: 1px solid var(--border);
   font-variant-numeric: tabular-nums;

@@ -41,10 +41,10 @@ cd eunomia
 
 ## Connecting one agent by hand
 
-The onboarding wizard's **Connect your AI** step, and the **Connect an MCP
-client** card on the dashboard, do this for you: pick the client, generate a
-token named after it, and copy the command or config with your URL and token
-already filled in. The steps it shows are these. Use the address you open
+The onboarding wizard's **Connect your AI app** step, and the app picker on
+**Home**, do this for you: pick the app and copy the command or config with
+your address already filled in (an API token, if you need one, is under
+Advanced). The steps it shows are these. Use the address you open
 Eunomia at, plus `/mcp` (for example `http://localhost:3000/mcp`, or
 `https://eunomia.example.com/mcp`). A `localhost` or LAN address only works
 for agents on that computer or network. Agents learn when to recall and what
@@ -107,7 +107,7 @@ with read-only tools, which can `recall` but not save. Sources:
 
 ## The memory skill
 
-The **Memory skill** page (sidebar) holds the instructions that tell agents
+The **AI instructions** page (under Advanced in the sidebar) holds the instructions that tell agents
 when to recall and what to remember. You can view it, edit it, or reset it to the
 built-in default. It reaches agents three ways:
 

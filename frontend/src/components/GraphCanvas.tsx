@@ -24,23 +24,41 @@ const DRAG_THRESHOLD = 4; // px before a pointerdown counts as a drag, not a cli
 const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 2.5;
 const ZOOM_STEP = 0.2;
-const FIT_PADDING = 50;
+const FIT_PADDING = 24; // screen px kept clear around the outermost label
+const FIT_ZOOM_MAX = 1.4; // an auto-fit never blows a small graph up past this
+// Labels stay 12px on screen at any zoom (the font is divided by the zoom); they sit LABEL_Y layout
+// units under the node's centre.
+const LABEL_FONT = 12;
+const LABEL_Y = 26;
+const LABEL_MAX = 18; // characters before the label is cut with an ellipsis
+const NODE_R = 16;
+const labelText = (name: string) => (name.length > LABEL_MAX ? `${name.slice(0, LABEL_MAX - 1)}…` : name);
+// screen px from a node's centre to its label's edge: ~0.6em per character of a UI sans, generous so it never clips
+const labelHalfWidth = (name: string) => (labelText(name).length * LABEL_FONT * 0.6) / 2 + 2;
 const PRE_TICKS = 120; // layout steps run before the first frame, so the first fit is close to the settled shape
 
 // Zoom/pan that centres `nodes` inside the part of the w x h canvas the
 // floating UI leaves free. Shared by auto-fit and the Fit button.
-function computeFit(nodes: { x?: number; y?: number }[], w: number, h: number, ins: CanvasInsets): View {
-  const pts = nodes.filter((n): n is { x: number; y: number } => typeof n.x === "number" && typeof n.y === "number");
+function computeFit(nodes: { x?: number; y?: number; name: string }[], w: number, h: number, ins: CanvasInsets): View {
+  const pts = nodes.filter((n): n is { x: number; y: number; name: string } => typeof n.x === "number" && typeof n.y === "number");
   if (pts.length === 0) return { zoom: 1, x: 0, y: 0 };
   const xs = pts.map((p) => p.x);
   const ys = pts.map((p) => p.y);
   const [minX, maxX, minY, maxY] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  // Labels are a fixed screen size, so they are kept clear in screen px around the box of centres:
+  // the widest label at each side, the node above, the node and its label below (at the largest zoom).
+  const side = Math.max(NODE_R * FIT_ZOOM_MAX, ...pts.map((p) => labelHalfWidth(p.name))) + FIT_PADDING;
+  const above = NODE_R * FIT_ZOOM_MAX + FIT_PADDING;
+  const below = LABEL_Y * FIT_ZOOM_MAX + LABEL_FONT + FIT_PADDING;
   const freeW = Math.max(w - ins.left - ins.right, 100);
   const freeH = Math.max(h - ins.top - ins.bottom, 100);
-  const fit = Math.min((freeW - 2 * FIT_PADDING) / Math.max(maxX - minX, 1), (freeH - 2 * FIT_PADDING) / Math.max(maxY - minY, 1));
-  const zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, fit));
+  const fit = Math.min(
+    Math.max(freeW - 2 * side, 40) / Math.max(maxX - minX, 1),
+    Math.max(freeH - above - below, 40) / Math.max(maxY - minY, 1),
+  );
+  const zoom = Math.min(FIT_ZOOM_MAX, Math.max(ZOOM_MIN, fit));
   const cx = ins.left + freeW / 2;
-  const cy = ins.top + freeH / 2;
+  const cy = ins.top + above + (freeH - above - below) / 2;
   // screen = w/2 + zoom * (p - w/2 + view.x), so solve for the view that puts the box centre on (cx, cy)
   return { zoom, x: (cx - w / 2) / zoom + w / 2 - (minX + maxX) / 2, y: (cy - h / 2) / zoom + h / 2 - (minY + maxY) / 2 };
 }
@@ -106,6 +124,13 @@ export default function GraphCanvas({
   // the free area: as the layout settles, and when that area or the shown kinds change.
   const autoFit = useRef(true);
   const visibleKey = [...visibleKinds].sort().join(",");
+  // Opening or closing the inspector changes the free area: fit again even after a pan or zoom.
+  const lastRight = useRef(insets.right);
+  useEffect(() => {
+    if (lastRight.current === insets.right) return;
+    lastRight.current = insets.right;
+    autoFit.current = true;
+  }, [insets.right]);
   useEffect(() => {
     if (!autoFit.current) return;
     const s = simRef.current;
@@ -324,13 +349,13 @@ export default function GraphCanvas({
                   <circle r={r * 0.7} {...shape} />
                 )}
                 <text
-                  y={24}
+                  y={LABEL_Y}
                   textAnchor="middle"
-                  fontSize={10.5}
-                  fontFamily="var(--font-mono), ui-monospace, monospace"
+                  fontSize={LABEL_FONT / view.zoom}
+                  fontFamily="var(--font-sans), ui-sans-serif, system-ui, sans-serif"
                   fill={hot || picked ? "var(--ink)" : "var(--ink-dim)"}
                 >
-                  {n.name.length > 16 ? `${n.name.slice(0, 15)}…` : n.name}
+                  {labelText(n.name)}
                 </text>
               </g>
             );
@@ -339,7 +364,7 @@ export default function GraphCanvas({
       </svg>
 
       <TooltipGroup>
-        <div className="panel p-1 absolute right-4 md:right-[25.5rem] bottom-4 flex gap-1">
+        <div className="panel p-1 absolute bottom-4 flex gap-1" style={{ right: insets.right ? insets.right + 8 : 16 }}>
           <ToolButton label="Zoom in" icon={<Plus size={16} strokeWidth={1.75} />} run={() => zoomBy(1 + ZOOM_STEP)} />
           <ToolButton label="Zoom out" icon={<Minus size={16} strokeWidth={1.75} />} run={() => zoomBy(1 - ZOOM_STEP)} />
           <ToolButton label="Fit to view" icon={<Maximize2 size={16} strokeWidth={1.75} />} run={fitToView} />

@@ -116,8 +116,9 @@ test.describe("Click-through fixes", () => {
     test.skip(settings.model_configured, "this stack has a model configured");
     await page.goto("/chat");
     // Admins are told what to set up; members are told to ask an admin.
-    await expect(page.getByText(/No model is configured|Chat isn't turned on yet/)).toBeVisible();
-    await expect(page.getByLabel("Message")).toBeDisabled();
+    await expect(page.getByText(/Set up a model to use Chat|Chat isn.t turned on yet/)).toBeVisible();
+    // Only the empty state: no composer and no conversation list to type into.
+    await expect(page.getByLabel("Message")).toHaveCount(0);
     expect(await page.locator("article").count()).toBe(0);
   });
 

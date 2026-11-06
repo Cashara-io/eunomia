@@ -11,6 +11,11 @@ export type AckOut = {
     acked: number;
 };
 
+/**
+ * Which kind of event a filter chip asks for.
+ */
+export type AuditCategory = 'all' | 'spaces' | 'signins' | 'tokens' | 'apps';
+
 export type AuditEntry = {
     args_summary: string;
     created_at?: string | null;
@@ -992,6 +997,29 @@ export type PendingInviteOut = {
     role: string;
 };
 
+export type PeopleReport = {
+    people: Array<Person>;
+    signup: SignupPolicy;
+};
+
+export type Person = {
+    /**
+     * `creator` (the first account), `operator` (listed in the server's admin emails), or empty.
+     */
+    admin: string;
+    created_at?: string | null;
+    email: string;
+    id: string;
+    /**
+     * Latest browser session activity or API token use, RFC 3339; none if never seen.
+     */
+    last_active?: string | null;
+    /**
+     * Shared spaces this person is an active member of (their personal space not counted).
+     */
+    shared_spaces: number;
+};
+
 export type PocketaiSummary = {
     recent_recordings: Array<RecentRecording>;
     recordings_count: number;
@@ -1230,6 +1258,25 @@ export type ShareCodeRequest = {
      * `edit` (the other Eunomia can add and change; the default) or `read`.
      */
     role?: string;
+};
+
+export type SignupPolicy = {
+    /**
+     * The emails that may sign up when `mode` is `invite`.
+     */
+    allowlist: Array<string>;
+    /**
+     * `open`, `invite` or `closed`.
+     */
+    mode: string;
+    /**
+     * Emails the server lists as admins (`EUNOMIA_ADMIN_EMAILS`).
+     */
+    operators: Array<string>;
+    /**
+     * The policy in words.
+     */
+    summary: string;
 };
 
 /**
@@ -1591,6 +1638,96 @@ export type WeekSummary = {
     spent: number;
     transaction_count: number;
 };
+
+export type WorkspaceAuditEntry = {
+    /**
+     * The raw action code, such as `vault.invite`.
+     */
+    action: string;
+    /**
+     * The person who acted; for a failed sign-in, the email that was tried. Empty for the system.
+     */
+    actor_email: string;
+    category: AuditCategory;
+    created_at?: string | null;
+    id: string;
+    ok: boolean;
+    /**
+     * `ok`, or the code that ended the action.
+     */
+    outcome: string;
+    /**
+     * The outcome in words: "Done", "Not allowed", "Declined", "Refused" or "Failed".
+     */
+    result: string;
+    /**
+     * What happened, in plain words ("Invited user@acme.test to acme-engineering").
+     */
+    summary: string;
+    /**
+     * How they acted: empty for the browser, `API token`, `app` (an OAuth client) or `system`.
+     */
+    via: string;
+};
+
+export type WorkspaceAuditPage = {
+    has_more: boolean;
+    results: Array<WorkspaceAuditEntry>;
+};
+
+export type ListWorkspaceAuditData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Rows per page (1 to 200, default 50).
+         */
+        limit?: number;
+        offset?: number;
+        /**
+         * Which kind of event a filter chip asks for.
+         */
+        category?: 'all' | 'spaces' | 'signins' | 'tokens' | 'apps';
+    };
+    url: '/api/admin/audit';
+};
+
+export type ListWorkspaceAuditErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListWorkspaceAuditError = ListWorkspaceAuditErrors[keyof ListWorkspaceAuditErrors];
+
+export type ListWorkspaceAuditResponses = {
+    200: WorkspaceAuditPage;
+};
+
+export type ListWorkspaceAuditResponse = ListWorkspaceAuditResponses[keyof ListWorkspaceAuditResponses];
+
+export type ListPeopleData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/admin/people';
+};
+
+export type ListPeopleErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListPeopleError = ListPeopleErrors[keyof ListPeopleErrors];
+
+export type ListPeopleResponses = {
+    200: PeopleReport;
+};
+
+export type ListPeopleResponse = ListPeopleResponses[keyof ListPeopleResponses];
 
 export type ListAuditData = {
     body?: never;

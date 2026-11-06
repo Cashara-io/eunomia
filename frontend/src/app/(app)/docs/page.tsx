@@ -13,6 +13,40 @@ import Tooltip from "@/components/bits/Tooltip";
 
 type Topic = { topic: string; title: string };
 
+// A short, people-first start page that lives here rather than in docs/: what a team member does day to day.
+const USING_TOPIC = "using";
+const USING_TITLE = "Using Eunomia";
+const USING_MARKDOWN = `# Using Eunomia
+
+Eunomia is your team's shared memory. Your AI app looks things up in it and saves what is worth keeping, so you don't have to repeat yourself.
+
+## Using Eunomia with ChatGPT
+
+1. On **Home**, choose ChatGPT under *Which AI app do you use?* and follow the steps. Other apps (Claude, Codex and more) work the same way.
+2. In a new ChatGPT conversation, type \`@\` and choose Eunomia, then ask your question, for example *What do we know about the billing rewrite?*
+3. Ask it to remember things too: *Remember that Priya owns the billing rewrite.*
+
+If ChatGPT can't reach Eunomia, the steps say so. Ask your Eunomia admin to give the server a public address.
+
+## Finding what your team knows
+
+- **Home** shows what was updated recently across every space you belong to.
+- **People & topics** shows who and what is saved, and how they connect. Choose a space at the top.
+- **Chat** answers questions from your saved memories and documents, when your admin has turned it on.
+- **Documents** holds files your team uploaded, so AI apps can quote them.
+
+## Memory spaces
+
+Everything is saved in a space. **Personal** is yours alone; a team space is shared with everyone in it. When someone invites you, the invitation appears on Home. See [Concepts](concepts.md) for how spaces work.
+
+## Changing what your AI remembers
+
+**AI instructions** (under Advanced in the sidebar) holds the instructions AI apps follow, for example *always remember project deadlines*.
+`;
+
+/** Help topics, people first: reading and using Eunomia, then installation and running it. */
+const ADMIN_TOPICS = new Set(["quickstart", "installation", "deployment"]);
+
 function textOf(node: ReactNode): string {
   if (typeof node === "string" || typeof node === "number") return String(node);
   if (Array.isArray(node)) return node.map(textOf).join("");
@@ -66,11 +100,20 @@ function Heading({ level, children }: { level: 2 | 3; children?: ReactNode }) {
 // The repo's docs/ folder, served by the same `docs` tool agents call over MCP.
 export default function DocsPage() {
   const topicsQuery = useDocs();
-  const topics: Topic[] = topicsQuery.data?.docs ?? [];
-  const [topic, setTopic] = useState("quickstart");
-  const docQuery = useDoc(topic);
-  const body = docQuery.data?.markdown ?? null;
-  const error = docQuery.isError
+  const served: Topic[] = topicsQuery.data?.docs ?? [];
+  const using: Topic[] = served.length > 0 ? [{ topic: USING_TOPIC, title: USING_TITLE }, ...served.filter((t) => !ADMIN_TOPICS.has(t.topic))] : [];
+  const forAdmins: Topic[] = served.filter((t) => ADMIN_TOPICS.has(t.topic));
+  const groups = [
+    { label: "Using Eunomia", topics: using },
+    { label: "For admins", topics: forAdmins },
+  ].filter((g) => g.topics.length > 0);
+  const topics: Topic[] = [...using, ...forAdmins];
+  const [topic, setTopic] = useState(USING_TOPIC);
+  const local = topic === USING_TOPIC;
+  // The start page is local; meanwhile fetch the next topic people usually open.
+  const docQuery = useDoc(local ? "agents" : topic);
+  const body = local ? USING_MARKDOWN : (docQuery.data?.markdown ?? null);
+  const error = !local && docQuery.isError
     ? failure(docQuery.error, "Could not load that help page.", " Check that Eunomia is running, then reload the page.")
     : topicsQuery.isError
       ? failure(topicsQuery.error, "Could not load the help pages.", " Check that Eunomia is running, then reload the page.")
@@ -139,29 +182,41 @@ export default function DocsPage() {
     <PageHeader icon={BookOpen} title={docTitle} intro={<>Help <span aria-hidden>/</span> {docTitle}</>} />
     <div className="grid gap-5 md:grid-cols-[184px_minmax(0,1fr)] md:gap-10 xl:grid-cols-[184px_minmax(0,760px)_184px]">
       <nav aria-label="Help topics" className="md:sticky md:top-8 md:self-start">
-        <ul className="hidden md:flex flex-col gap-1">
-          {topics.length === 0 &&
-            [64, 80, 72, 92, 60].map((w) => (
+        {topics.length === 0 && (
+          <ul className="hidden md:flex flex-col gap-1">
+            {[64, 80, 72, 92, 60].map((w) => (
               <li key={w} className="h-10 flex items-center px-3">
                 <span className="skeleton h-3" style={{ width: `${w}%` }} />
               </li>
             ))}
-          {topics.map((t) => {
-            const current = t.topic === topic;
-            return (
-              <li key={t.topic}>
-                <button
-                  onClick={() => setTopic(t.topic)}
-                  aria-current={current ? "page" : undefined}
-                  className={`w-full text-left min-h-10 px-3 rounded-[4px] text-[14px] truncate transition-colors duration-150 ${current ? "font-semibold" : "hover:bg-[var(--bauhaus-app-soft)]"}`}
-                  style={current ? { background: "var(--bauhaus-app-blue)", color: "#fff" } : { color: "var(--ink)" }}
-                >
-                  {t.title}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+          </ul>
+        )}
+        <div className="hidden md:flex flex-col gap-5">
+          {groups.map((g) => (
+            <div key={g.label} className="flex flex-col gap-1">
+              <h2 className="text-[12px] font-semibold px-3" style={{ color: "var(--ink-dim)" }}>
+                {g.label}
+              </h2>
+              <ul className="flex flex-col gap-1">
+                {g.topics.map((t) => {
+                  const current = t.topic === topic;
+                  return (
+                    <li key={t.topic}>
+                      <button
+                        onClick={() => setTopic(t.topic)}
+                        aria-current={current ? "page" : undefined}
+                        className={`w-full text-left min-h-10 px-3 rounded-[4px] text-[14px] truncate transition-colors duration-150 ${current ? "font-semibold" : "hover:bg-[var(--bauhaus-app-soft)]"}`}
+                        style={current ? { background: "var(--bauhaus-app-blue)", color: "#fff" } : { color: "var(--ink)" }}
+                      >
+                        {t.title}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </div>
         <div className="md:hidden flex flex-col gap-1.5">
           <span className="text-[14px] font-medium" aria-hidden>Help topic</span>
           <Select
@@ -170,7 +225,7 @@ export default function DocsPage() {
             value={topic}
             onChange={setTopic}
             placeholder="Loading help"
-            options={topics.map((t) => ({ value: t.topic, label: t.title }))}
+            options={groups.flatMap((g) => g.topics.map((t) => ({ value: t.topic, label: t.title, hint: g.label === "For admins" ? "For admins" : undefined })))}
           />
         </div>
       </nav>

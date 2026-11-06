@@ -16,6 +16,7 @@ import { GeneralSection, ModelSection } from "./GeneralSection";
 import { DataSection } from "./DataSection";
 import { UsageSection } from "./UsageSection";
 import { AuditSection } from "./AuditSection";
+import { PeopleSection } from "./PeopleSection";
 
 // Account is everyone's; Workspace and Server are for instance admins only.
 const GROUPS = [
@@ -34,6 +35,7 @@ const GROUPS = [
     label: "Workspace",
     admin: true,
     tabs: [
+      { id: "people", label: "People" },
       { id: "audit", label: "Audit log" },
       { id: "usage", label: "Usage" },
     ],
@@ -192,6 +194,7 @@ function Settings() {
             {tab === "tokens" && <TokensSection />}
             {tab === "sessions" && <SessionsSection />}
             {tab === "data" && <DataSection />}
+            {tab === "people" && <PeopleSection />}
             {tab === "audit" && <AuditSection />}
             {tab === "usage" && <UsageSection />}
             {tab === "https" && <HttpsSection />}

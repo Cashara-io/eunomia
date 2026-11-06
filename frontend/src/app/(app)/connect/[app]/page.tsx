@@ -3,6 +3,7 @@
 import { use, useState } from "react";
 import Link from "next/link";
 import CopyButton from "@/components/bits/CopyButton";
+import { useMe } from "@/lib/queries/auth";
 import ConnectAgents from "@/components/ConnectAgents";
 import { appById, connectionFor, type AiApp, type Connection } from "@/components/connect/apps";
 import { useConnections } from "@/components/connect/useConnections";
@@ -31,23 +32,31 @@ function reachableFromInternet(url: string): boolean {
 }
 
 function LocalNote({ url }: { url: string }) {
+  const isAdmin = useMe().data?.is_admin ?? false;
   if (!url) return null;
   const host = new URL(url).hostname;
   if (!isPrivateHost(host)) return null;
   return (
     <Note>
-      This address only works for apps on this {host === "localhost" || host.startsWith("127.") ? "computer" : "network"}. To connect an app on another
-      computer, give Eunomia a public address under{" "}
-      <Link href="/settings?tab=https" className="underline" style={{ color: "var(--accent-text)" }}>
-        Settings, HTTPS
-      </Link>
-      .
+      This address only works for apps on this {host === "localhost" || host.startsWith("127.") ? "computer" : "network"}.{" "}
+      {isAdmin ? (
+        <>
+          To connect an app on another computer, give Eunomia a public address under{" "}
+          <Link href="/settings?tab=https" className="underline" style={{ color: "var(--accent-text)" }}>
+            Settings, HTTPS
+          </Link>
+          .
+        </>
+      ) : (
+        "To connect an app on another computer, ask your Eunomia admin for a public address."
+      )}
     </Note>
   );
 }
 
 /** ChatGPT cannot reach this server: say only that, with a message to pass on. */
 function NotReachable({ url }: { url: string }) {
+  const isAdmin = useMe().data?.is_admin ?? false;
   const address = url.replace(/\/mcp$/, "");
   const message =
     `Hi, I'd like to connect ChatGPT to our Eunomia server, but ChatGPT can't reach it yet. ` +
@@ -70,11 +79,17 @@ function NotReachable({ url }: { url: string }) {
         <CopyButton value={message} label="Copy message" size="sm" className="btn-primary self-start" />
       </div>
       <Note>
-        If you are the admin, set it up under{" "}
-        <Link href="/settings?tab=https" className="underline" style={{ color: "var(--accent-text)" }}>
-          Settings, HTTPS
-        </Link>
-        . Or{" "}
+        {isAdmin ? (
+          <>
+            As an admin, you can set it up under{" "}
+            <Link href="/settings?tab=https" className="underline" style={{ color: "var(--accent-text)" }}>
+              Settings, HTTPS
+            </Link>
+            . Or{" "}
+          </>
+        ) : (
+          "While you wait, you can "
+        )}
         <Link href="/" className="underline" style={{ color: "var(--accent-text)" }}>
           choose a different AI app
         </Link>

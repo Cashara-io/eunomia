@@ -4,6 +4,9 @@ import { registerAndOnboard, uniqueEmail } from "./helpers";
 test("Help page shows the repo docs, the same ones the MCP docs tool serves", async ({ page }) => {
   await registerAndOnboard(page, uniqueEmail("docs"));
   await page.getByRole("link", { name: "Help", exact: true }).click();
+  // Help opens on the people-first start page; installation sits under "For admins".
+  await expect(page.getByRole("heading", { name: "Using Eunomia", level: 1 })).toBeVisible();
+  await page.getByRole("navigation", { name: "Help topics" }).getByRole("button", { name: "Quickstart" }).click();
   await expect(page.getByRole("heading", { name: "Quickstart", level: 1 })).toBeVisible();
   // a link to a sibling doc navigates in-app
   await page.getByRole("article").getByRole("link", { name: "Concepts" }).click();

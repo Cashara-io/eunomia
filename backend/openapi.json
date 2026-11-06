@@ -9,6 +9,123 @@
     "version": "1"
   },
   "paths": {
+    "/api/admin/audit": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Workspace activity log: sign-ins, tokens, app connections and space changes (admin only)",
+        "description": "Reads the security ledger for the admin's workspace, newest first. Per-tool-call rows are left out (see `/api/audit/tool-usage`).",
+        "operationId": "listWorkspaceAudit",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Rows per page (1 to 200, default 50).",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "description": "Only this kind of event (default `all`).",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Which kind of event a filter chip asks for.",
+              "enum": [
+                "all",
+                "spaces",
+                "signins",
+                "tokens",
+                "apps"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceAuditPage"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/people": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Every account in the workspace and the sign-up policy (admin only)",
+        "operationId": "listPeople",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeopleReport"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/audit": {
       "get": {
         "tags": [
@@ -6232,6 +6349,17 @@
           }
         }
       },
+      "AuditCategory": {
+        "type": "string",
+        "description": "Which kind of event a filter chip asks for.",
+        "enum": [
+          "all",
+          "spaces",
+          "signins",
+          "tokens",
+          "apps"
+        ]
+      },
       "AuditEntry": {
         "type": "object",
         "required": [
@@ -8597,6 +8725,63 @@
           }
         }
       },
+      "PeopleReport": {
+        "type": "object",
+        "required": [
+          "people",
+          "signup"
+        ],
+        "properties": {
+          "people": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Person"
+            }
+          },
+          "signup": {
+            "$ref": "#/components/schemas/SignupPolicy"
+          }
+        }
+      },
+      "Person": {
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "shared_spaces",
+          "admin"
+        ],
+        "properties": {
+          "admin": {
+            "type": "string",
+            "description": "`creator` (the first account), `operator` (listed in the server's admin emails), or empty."
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_active": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Latest browser session activity or API token use, RFC 3339; none if never seen."
+          },
+          "shared_spaces": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Shared spaces this person is an active member of (their personal space not counted)."
+          }
+        }
+      },
       "PocketaiSummary": {
         "type": "object",
         "required": [
@@ -9145,6 +9330,39 @@
           "role": {
             "type": "string",
             "description": "`edit` (the other Eunomia can add and change; the default) or `read`."
+          }
+        }
+      },
+      "SignupPolicy": {
+        "type": "object",
+        "required": [
+          "mode",
+          "summary",
+          "allowlist",
+          "operators"
+        ],
+        "properties": {
+          "allowlist": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The emails that may sign up when `mode` is `invite`."
+          },
+          "mode": {
+            "type": "string",
+            "description": "`open`, `invite` or `closed`."
+          },
+          "operators": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Emails the server lists as admins (`EUNOMIA_ADMIN_EMAILS`)."
+          },
+          "summary": {
+            "type": "string",
+            "description": "The policy in words."
           }
         }
       },
@@ -10164,6 +10382,79 @@
           "transaction_count": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "WorkspaceAuditEntry": {
+        "type": "object",
+        "required": [
+          "id",
+          "actor_email",
+          "via",
+          "action",
+          "category",
+          "summary",
+          "outcome",
+          "ok",
+          "result"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "The raw action code, such as `vault.invite`."
+          },
+          "actor_email": {
+            "type": "string",
+            "description": "The person who acted; for a failed sign-in, the email that was tried. Empty for the system."
+          },
+          "category": {
+            "$ref": "#/components/schemas/AuditCategory"
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "outcome": {
+            "type": "string",
+            "description": "`ok`, or the code that ended the action."
+          },
+          "result": {
+            "type": "string",
+            "description": "The outcome in words: \"Done\", \"Not allowed\", \"Declined\", \"Refused\" or \"Failed\"."
+          },
+          "summary": {
+            "type": "string",
+            "description": "What happened, in plain words (\"Invited user@acme.test to acme-engineering\")."
+          },
+          "via": {
+            "type": "string",
+            "description": "How they acted: empty for the browser, `API token`, `app` (an OAuth client) or `system`."
+          }
+        }
+      },
+      "WorkspaceAuditPage": {
+        "type": "object",
+        "required": [
+          "results",
+          "has_more"
+        ],
+        "properties": {
+          "has_more": {
+            "type": "boolean"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceAuditEntry"
+            }
           }
         }
       }

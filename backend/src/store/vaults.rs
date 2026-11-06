@@ -210,7 +210,14 @@ pub const SAME_RELATION: Stmt = Stmt::new(
 pub const COPY_RELATION: Stmt =
     Stmt::new("vaults.copy_relation", "RELATE $in->relates_to->$out SET label = $label, owner = $owner");
 
+/// Workspace admin (People tab): how many shared spaces each person is an active member of.
+pub const SHARED_COUNTS: Stmt = Stmt::new(
+    "vaults.shared_counts",
+    r#"SELECT user, count() AS spaces FROM vault_member WHERE status = "active" AND vault.kind = "org" GROUP BY user"#,
+);
+
 pub const ALL: &[&Stmt] = &[
+    &SHARED_COUNTS,
     &CREATE_PERSONAL,
     &CREATE_VAULT,
     &STAGE_COPY,

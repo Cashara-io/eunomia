@@ -6,6 +6,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { LogIn, RefreshCw, Share2, Unlink, X } from "lucide-react";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import Select from "@/components/Select";
 import StatusLabel, { type StatusTone } from "@/components/ui/StatusLabel";
 import CopyButton from "@/components/bits/CopyButton";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
@@ -172,7 +173,12 @@ export default function PeerSharing({ vault }: { vault: { id: string; name: stri
       hint={inUse ? undefined : "Keep a copy of this space on someone else's Eunomia, kept in step."}
     >
       <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
-        The other Eunomia gets a full copy of this space, and changes travel both ways. Documents aren&apos;t shared yet.
+        {isOwner
+          ? role === "read"
+            ? "The other Eunomia gets a full copy of this space that stays in step with changes made here. It can read but not change anything."
+            : "The other Eunomia gets a full copy of this space, and changes made on either side travel both ways."
+          : "The other Eunomia keeps a full copy of this space in step with this one."}{" "}
+        Documents aren&apos;t shared yet.
       </p>
 
       {links.length > 0 && (
@@ -190,13 +196,19 @@ export default function PeerSharing({ vault }: { vault: { id: string; name: stri
             What the other Eunomia can do
           </label>
           <div className="flex flex-wrap items-center gap-2">
-            <select id={roleId} className="field h-10 px-3 text-[14px]" value={role} onChange={(e) => setRole(e.target.value as PeerRole)}>
-              <option value="read">{ROLE_WORDS.read}</option>
-              <option value="edit">{ROLE_WORDS.edit}</option>
-            </select>
+            <Select
+              id={roleId}
+              className="h-10 text-[14px] w-[200px]"
+              value={role}
+              onChange={(v) => setRole(v as PeerRole)}
+              options={[
+                { value: "read", label: ROLE_WORDS.read },
+                { value: "edit", label: ROLE_WORDS.edit },
+              ]}
+            />
             <button
               type="button"
-              className="btn btn-primary"
+              className="btn"
               disabled={create.isPending}
               aria-busy={create.isPending}
               onClick={() => {
