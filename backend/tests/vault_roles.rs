@@ -16,7 +16,7 @@ async fn roles_ownership_and_invitations() {
         let db = common::org_db(&state, &alice).await;
         let control = state.control.clone();
 
-        let v = vaults::create_vault(&db, &alice.id, "Handover", "org").await.unwrap();
+        let v = vaults::create_vault(&db, &control, &alice.id, "Handover", "org").await.unwrap();
         let v = rid::parse(&v.id).unwrap();
         for u in [&bob, &carol] {
             vaults::invite_member(&db, &control, &alice.id, &v, &u.email, "member").await.unwrap();
@@ -26,10 +26,10 @@ async fn roles_ownership_and_invitations() {
         let inv = vaults::list_my_invitations(&db, &bob.id).await.unwrap();
         assert_eq!(inv.len(), 1);
         assert_eq!(inv[0].vault_name, "Handover");
-        vaults::accept_invitation(&db, &bob.id, &v).await.unwrap();
+        vaults::accept_invitation(&db, &control, &bob.id, &v).await.unwrap();
         assert!(vaults::list_my_invitations(&db, &bob.id).await.unwrap().is_empty());
-        vaults::decline_invitation(&db, &carol.id, &v).await.unwrap();
-        assert!(vaults::accept_invitation(&db, &carol.id, &v).await.is_err(), "declined invitation is gone");
+        vaults::decline_invitation(&db, &control, &carol.id, &v).await.unwrap();
+        assert!(vaults::accept_invitation(&db, &control, &carol.id, &v).await.is_err(), "declined invitation is gone");
 
         // vault_get: caller's role and the active member count.
         let got = vaults::get_vault(&db, &bob.id, &v).await.unwrap();

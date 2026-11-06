@@ -22,7 +22,7 @@ export async function registerAndOnboard(page: Page, email: string, password = "
   await page.getByRole("button", { name: "Create account" }).click();
 
   await page.waitForURL(/\/onboarding/);
-  await page.getByRole("button", { name: "Skip", exact: true }).click(); // Connect your AI app
+  await page.getByRole("button", { name: "Set up later" }).click(); // Connect your AI app
 
   // The OpenAI-key step only appears when no key is configured server-side.
   const skipFinish = page.getByRole("button", { name: "Skip & finish" });

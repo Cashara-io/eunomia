@@ -6,7 +6,9 @@ test.describe("Connectors", () => {
     await registerAndOnboard(page, uniqueEmail("connectors"));
     await page.goto("/connectors");
 
-    // Not connected yet: listed under "Add a source" as a "Connect Up Bank" row.
+    // Not connected yet: listed under "Add a source", folded under the personal sources, as a "Connect Up Bank" row.
+    await expect(page.getByRole("link", { name: "Connect Up Bank" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Personal sources (3)" }).click();
     const upBankCard = page.getByRole("link", { name: "Connect Up Bank" });
     await expect(upBankCard).toBeVisible();
     await upBankCard.click();

@@ -21,7 +21,7 @@ export type AdminChange = {
 /**
  * Which kind of event a filter chip asks for.
  */
-export type AuditCategory = 'all' | 'changes' | 'spaces' | 'signins' | 'tokens' | 'apps' | 'admin';
+export type AuditCategory = 'all' | 'changes' | 'spaces' | 'signins' | 'tokens' | 'apps' | 'admin' | 'sharing' | 'server';
 
 export type AuditEntry = {
     args_summary: string;
@@ -1714,7 +1714,7 @@ export type ListWorkspaceAuditData = {
         /**
          * Which kind of event a filter chip asks for.
          */
-        category?: 'all' | 'changes' | 'spaces' | 'signins' | 'tokens' | 'apps' | 'admin';
+        category?: 'all' | 'changes' | 'spaces' | 'signins' | 'tokens' | 'apps' | 'admin' | 'sharing' | 'server';
     };
     url: '/api/admin/audit';
 };

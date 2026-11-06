@@ -133,7 +133,7 @@ async fn create_vault(
     if !valid_vault_kind(&body.kind) {
         return Err(AppError::bad_request("kind must be 'org' or 'personal'"));
     }
-    Ok(Json(service::create_vault(&state.db, &user.id, &body.name, &body.kind).await?))
+    Ok(Json(service::create_vault(&state.db, &state.control, &user.id, &body.name, &body.kind).await?))
 }
 
 #[utoipa::path(
@@ -158,7 +158,7 @@ async fn clone_vault(
         return Err(AppError::bad_request("kind must be 'org' or 'personal'"));
     }
     let rid = parse_vault_id(&vault_id)?;
-    Ok(Json(service::clone_vault(&state.db, &user.id, &rid, body.name.as_deref(), &body.kind).await?))
+    Ok(Json(service::clone_vault(&state.db, &state.control, &user.id, &rid, body.name.as_deref(), &body.kind).await?))
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]
@@ -191,7 +191,7 @@ async fn merge_vaults(
     }
     let a = parse_vault_id(&body.vault_ids[0])?;
     let b = parse_vault_id(&body.vault_ids[1])?;
-    Ok(Json(service::merge_vaults(&state.db, &user.id, &a, &b, body.name.as_deref(), &body.kind).await?))
+    Ok(Json(service::merge_vaults(&state.db, &state.control, &user.id, &a, &b, body.name.as_deref(), &body.kind).await?))
 }
 
 #[utoipa::path(
@@ -213,7 +213,7 @@ async fn rename_vault(
 ) -> AppResult<Json<service::VaultOut>> {
     let state = state.org(&user.org).await?;
     let rid = parse_vault_id(&vault_id)?;
-    Ok(Json(service::rename_vault(&state.db, &user.id, &rid, &body.name).await?))
+    Ok(Json(service::rename_vault(&state.db, &state.control, &user.id, &rid, &body.name).await?))
 }
 
 #[utoipa::path(
@@ -433,7 +433,7 @@ async fn accept_invitation(
 ) -> AppResult<Json<service::VaultWithRole>> {
     let state = state.org(&user.org).await?;
     let rid = parse_vault_id(&vault_id)?;
-    Ok(Json(service::accept_invitation(&state.db, &user.id, &rid).await?))
+    Ok(Json(service::accept_invitation(&state.db, &state.control, &user.id, &rid).await?))
 }
 
 #[utoipa::path(
@@ -453,7 +453,7 @@ async fn decline_invitation(
 ) -> AppResult<Json<Value>> {
     let state = state.org(&user.org).await?;
     let rid = parse_vault_id(&vault_id)?;
-    service::decline_invitation(&state.db, &user.id, &rid).await?;
+    service::decline_invitation(&state.db, &state.control, &user.id, &rid).await?;
     Ok(Json(json!({ "declined": true })))
 }
 

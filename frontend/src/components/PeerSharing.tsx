@@ -4,7 +4,7 @@
 // to send, the other Eunomias this space is shared with and how syncing is going, and a dialog to
 // join a space someone else shared.
 import { useEffect, useId, useRef, useState } from "react";
-import { LogIn, RefreshCw, Share2, Unlink, X } from "lucide-react";
+import { LogIn, RefreshCw, Unlink, X } from "lucide-react";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Select from "@/components/Select";
 import StatusLabel, { type StatusTone } from "@/components/ui/StatusLabel";
@@ -167,7 +167,6 @@ export default function PeerSharing({ vault }: { vault: { id: string; name: stri
   return (
     <Disclosure
       title="Share with another Eunomia"
-      icon={<Share2 {...ICON} />}
       hint={
         links.length > 0
           ? `Shared with ${links.length === 1 ? "1 other Eunomia" : `${links.length} other Eunomias`}.`

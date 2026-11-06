@@ -4,6 +4,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Download, FileJson, Files, FileText, RotateCw, Trash2, Upload, X } from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
+import EmptyState from "@/components/ui/EmptyState";
 import StatusLabel, { type StatusTone } from "@/components/ui/StatusLabel";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
@@ -558,19 +559,22 @@ function Documents() {
 /* Storage is off: one calm empty state instead of a disabled upload, an empty table and an idle side panel. */
 function StorageOff({ isAdmin }: { isAdmin: boolean }) {
   return (
-    <div className="flex flex-col items-center text-center gap-3 py-16 px-4" data-testid="documents-storage-off">
-      <Files size={28} strokeWidth={1.5} aria-hidden style={{ color: "var(--ink-faint)" }} />
-      <h2 className="text-[16px] font-semibold">Document storage isn&apos;t turned on</h2>
-      {isAdmin ? (
-        <p className="text-[14px] max-w-[52ch]" style={{ color: "var(--ink-dim)" }}>
-          To let people upload files, set <code className="font-mono text-[13px]">EUNOMIA_DOCUMENTS_BACKEND</code> in the server&apos;s
-          settings and restart Eunomia.
-        </p>
-      ) : (
-        <p className="text-[14px] max-w-[52ch]" style={{ color: "var(--ink-dim)" }}>
-          Ask your admin.
-        </p>
-      )}
+    <div data-testid="documents-storage-off">
+      <EmptyState
+        title="Document storage isn’t turned on."
+        action={
+          isAdmin && (
+            <details className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+              <summary className="cursor-pointer min-h-10 flex items-center">Details</summary>
+              <p>
+                The server setting is <code className="font-mono">EUNOMIA_DOCUMENTS_BACKEND</code>.
+              </p>
+            </details>
+          )
+        }
+      >
+        {isAdmin ? "To let people upload files, turn on document storage in the server’s settings and restart Eunomia." : "Ask your admin."}
+      </EmptyState>
     </div>
   );
 }

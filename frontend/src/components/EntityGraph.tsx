@@ -29,6 +29,7 @@ import {
 import { useVaults } from "@/lib/queries/vaults";
 import EditableMemoryText from "@/components/live/EditableMemoryText";
 import TidyUp from "./graph/TidyUp";
+import EmptyState from "./ui/EmptyState";
 import EntityList from "./graph/EntityList";
 import { chooseSpace, useSharedSpace } from "./graph/space";
 import SpaceSelect from "./graph/SpaceSelect";
@@ -146,8 +147,8 @@ export default function EntityGraph({
   /** "list": the same toolbar and inspector over a plain table instead of the canvas */
   mode?: "graph" | "list";
   header?: ReactNode;
-  /** one sentence plus one action, shown while the graph is empty or sparse */
-  guide?: ReactNode;
+  /** one sentence plus at most one action, shown while the graph is empty */
+  guide?: { text: ReactNode; action?: ReactNode };
 } = {}) {
   const colorOf = useKindColor();
   const shownKinds = kinds ?? ALL_KINDS;
@@ -713,44 +714,46 @@ export default function EntityGraph({
             onClick={() => setShowCreate(true)}
           >
             <Plus size={18} strokeWidth={1.75} aria-hidden />
-            <span className="max-sm:sr-only">Add person or topic</span>
+            {/* phones keep a short label rather than a bare + */}
+            <span className="sm:hidden" aria-hidden>
+              Add
+            </span>
+            <span className="max-sm:hidden">Add person or topic</span>
           </button>
         )}
       </div>
-      <div
-        className="flex gap-2 items-center max-md:flex-nowrap max-md:overflow-x-auto max-md:[scrollbar-width:none] max-md:py-1 max-sm:-mx-4 max-sm:px-4 sm:max-md:-mx-8 sm:max-md:px-8 md:flex-wrap"
-        role="group"
-        aria-label="Show kinds"
-      >
-        {chipKinds.map((kind) => chip(kind, kindLabel(kind), colorOf(kind), counts.get(kind) ?? 0, visibleKinds.has(kind), () => toggleKind(kind)))}
-        {groupCode && codeCount > 0 && chip("code", "Code", colorOf("repository"), codeCount, codeShown, () => toggleCode(!codeShown))}
-      </div>
+      {/* a chip only for a kind that has something in it; no row at all while everything is empty */}
+      {graph.nodes.length > 0 && (
+        <div
+          className="flex gap-2 items-center max-md:flex-nowrap max-md:overflow-x-auto max-md:[scrollbar-width:none] max-md:py-1 max-sm:-mx-4 max-sm:px-4 sm:max-md:-mx-8 sm:max-md:px-8 md:flex-wrap"
+          role="group"
+          aria-label="Show kinds"
+        >
+          {chipKinds
+            .filter((kind) => (counts.get(kind) ?? 0) > 0)
+            .map((kind) => chip(kind, kindLabel(kind), colorOf(kind), counts.get(kind) ?? 0, visibleKinds.has(kind), () => toggleKind(kind)))}
+          {groupCode && codeCount > 0 && chip("code", "Code", colorOf("repository"), codeCount, codeShown, () => toggleCode(!codeShown))}
+        </div>
+      )}
     </div>
   );
 
   if (graph.nodes.length === 0) {
+    // the empty message sits right under the toolbar, where the first row would be, not mid-canvas
+    const empty = guide ? (
+      <EmptyState title="Nothing mapped yet." action={guide.action}>
+        {guide.text}
+      </EmptyState>
+    ) : (
+      <EmptyState title="No people or topics yet.">
+        {vaultId
+          ? "People and topics appear here as your team's AI apps save memories in this space, or you can add one yourself."
+          : "They appear as your connected sources sync and your AI apps save memories, or you can add one yourself."}
+      </EmptyState>
+    );
     return (
       <>
-        {frame(
-          toolbar,
-          <div className="h-full flex items-center justify-center p-6">
-            {guide ? (
-              <div className="soft-panel flex flex-col items-center gap-3 text-center max-w-sm text-[14px] px-6 py-5" style={{ color: "var(--ink-dim)" }}>
-                <p className="font-medium" style={{ color: "var(--ink)" }}>Nothing mapped yet.</p>
-                {guide}
-              </div>
-            ) : (
-              <p className="text-[14px] text-center max-w-sm" style={{ color: "var(--ink-dim)" }}>
-                {vaultId
-                  ? "Nothing in this memory space yet. People and topics appear here as your team's AI apps save memories, or you can add one yourself."
-                  : "No people or topics yet. They appear as your connected sources sync and your AI apps save memories, or you can add one yourself."}
-              </p>
-            )}
-          </div>,
-          undefined,
-          undefined,
-          true
-        )}
+        {mode === "list" ? frame(toolbar, empty, undefined, undefined, true) : frame(toolbar, null, undefined, empty, true)}
         {createModal}
       </>
     );
@@ -772,7 +775,7 @@ export default function EntityGraph({
       style={
         isPhone
           ? { borderRadius: 0, border: 0 }
-          : { transformOrigin: "top right", borderTop: "3px solid var(--bauhaus-app-blue)" }
+          : { transformOrigin: "top right" }
       }
     >
       {isPhone && (
@@ -1071,8 +1074,9 @@ export default function EntityGraph({
         ),
         inspector,
         mode === "graph" && guide && graph.nodes.length < SPARSE && (
-          <div className="soft-panel px-4 py-3 max-w-sm text-[14px] flex flex-col gap-2 items-start" style={{ color: "var(--ink-dim)" }}>
-            {guide}
+          <div className="max-w-sm text-[13px] flex flex-col gap-2 items-start" style={{ color: "var(--ink-dim)" }}>
+            <p>{guide.text}</p>
+            {guide.action}
           </div>
         )
       )}

@@ -199,7 +199,14 @@ async fn free_name(db: &OrgDb, user_id: &RecordId, base: String) -> AppResult<St
 
 /// Create a new vault (org, or an extra personal-style one -- a user can have
 /// several, per the product ask); creator becomes its owner.
-pub async fn create_vault(db: &OrgDb, user_id: &RecordId, name: &str, kind: &str) -> AppResult<VaultOut> {
+pub async fn create_vault(db: &OrgDb, control: &ControlDb, user_id: &RecordId, name: &str, kind: &str) -> AppResult<VaultOut> {
+    let res = create_vault_inner(db, user_id, name, kind).await;
+    let space = res.as_ref().map(|v| v.name.clone()).unwrap_or_else(|_| name.trim().to_string());
+    audit_vault(control, user_id, "vault.create", &space, None, None, &res).await;
+    res
+}
+
+async fn create_vault_inner(db: &OrgDb, user_id: &RecordId, name: &str, kind: &str) -> AppResult<VaultOut> {
     authz::require_unrestricted()?;
     let name = &check_name(db, user_id, name, None).await?;
     let vault = with_retry(|| async {
@@ -399,7 +406,15 @@ pub async fn get_vault(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId) -> A
     Ok(VaultDetail { id: v.id, name: v.name, kind: v.kind, created_at: v.created_at, role: v.role, member_count: rows.len() })
 }
 
-pub async fn rename_vault(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId, name: &str) -> AppResult<VaultOut> {
+pub async fn rename_vault(db: &OrgDb, control: &ControlDb, user_id: &RecordId, vault_id: &RecordId, name: &str) -> AppResult<VaultOut> {
+    let before = space_name(db, vault_id).await;
+    let res = rename_vault_inner(db, user_id, vault_id, name).await;
+    let space = res.as_ref().map(|v| v.name.clone()).unwrap_or_else(|_| name.trim().to_string());
+    audit_vault_from(control, user_id, "vault.rename", &space, &before, &res).await;
+    res
+}
+
+async fn rename_vault_inner(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId, name: &str) -> AppResult<VaultOut> {
     authz::authorize(db, user_id, Action::Rename, vault_id).await?;
     let name = &check_name(db, user_id, name, Some(vault_id)).await?;
     let mut res = store::vaults::RENAME.on(db)
@@ -463,11 +478,21 @@ async fn audit_vault<T>(control: &ControlDb, user_id: &RecordId, action: &str, s
         }
         detail.push_str(&format!("role={r}"));
     }
-    let outcome = match res {
+    crate::audit::record_as_caller_detail(control, user_id, action, space, outcome(res), &detail).await;
+}
+
+/// `ok` or the error code that ended the attempt.
+fn outcome<T>(res: &AppResult<T>) -> &str {
+    match res {
         Ok(_) => "ok",
         Err(e) => e.code.as_str(),
-    };
-    crate::audit::record_as_caller_detail(control, user_id, action, space, outcome, &detail).await;
+    }
+}
+
+/// [`audit_vault`] for an event that names other spaces too (a rename's old name, the sources of a
+/// copy or merge): the detail is `from=<names>`, read to the end of the line, so names with spaces survive.
+async fn audit_vault_from<T>(control: &ControlDb, user_id: &RecordId, action: &str, space: &str, from: &str, res: &AppResult<T>) {
+    crate::audit::record_as_caller_detail(control, user_id, action, space, outcome(res), &format!("from={from}")).await;
 }
 
 /// Add `email` to `vault_id`. Caller must already be an owner (so admin
@@ -652,7 +677,13 @@ pub async fn list_pending_invites(db: &OrgDb, control: &ControlDb, user_id: &Rec
 
 /// Accept a pending invitation into `vault_id`. Only the invitee can accept
 /// their own invite.
-pub async fn accept_invitation(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId) -> AppResult<VaultWithRole> {
+pub async fn accept_invitation(db: &OrgDb, control: &ControlDb, user_id: &RecordId, vault_id: &RecordId) -> AppResult<VaultWithRole> {
+    let res = accept_invitation_inner(db, user_id, vault_id).await;
+    audit_vault(control, user_id, "vault.join", &space_name(db, vault_id).await, None, res.as_ref().ok().map(|v| v.role.as_str()), &res).await;
+    res
+}
+
+async fn accept_invitation_inner(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId) -> AppResult<VaultWithRole> {
     authz::check_vault(vault_id)?;
     let m = membership_any_status(db, vault_id, user_id)
         .await?
@@ -677,7 +708,14 @@ pub async fn accept_invitation(db: &OrgDb, user_id: &RecordId, vault_id: &Record
 }
 
 /// Decline (delete) a pending invitation into `vault_id`.
-pub async fn decline_invitation(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId) -> AppResult<()> {
+pub async fn decline_invitation(db: &OrgDb, control: &ControlDb, user_id: &RecordId, vault_id: &RecordId) -> AppResult<()> {
+    let space = space_name(db, vault_id).await;
+    let res = decline_invitation_inner(db, user_id, vault_id).await;
+    audit_vault(control, user_id, "vault.decline", &space, None, None, &res).await;
+    res
+}
+
+async fn decline_invitation_inner(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId) -> AppResult<()> {
     authz::check_vault(vault_id)?;
     let m = membership_any_status(db, vault_id, user_id)
         .await?
@@ -1119,11 +1157,20 @@ async fn copy_into(db: &OrgDb, user_id: &RecordId, src: &RecordId, dest: &Record
 /// something `user_id` can't read) is skipped rather than left dangling.
 pub async fn clone_vault(
     db: &OrgDb,
+    control: &ControlDb,
     user_id: &RecordId,
     vault_id: &RecordId,
     name: Option<&str>,
     kind: &str,
 ) -> AppResult<CloneOut> {
+    let source = space_name(db, vault_id).await;
+    let res = clone_vault_inner(db, user_id, vault_id, name, kind).await;
+    let space = res.as_ref().map(|c| c.name.clone()).unwrap_or_else(|_| name.unwrap_or_default().trim().to_string());
+    audit_vault_from(control, user_id, "vault.clone", &space, &source, &res).await;
+    res
+}
+
+async fn clone_vault_inner(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId, name: Option<&str>, kind: &str) -> AppResult<CloneOut> {
     authz::authorize(db, user_id, Action::Clone, vault_id).await?;
     authz::require_unrestricted()?;
 
@@ -1170,12 +1217,21 @@ pub struct MergeOut {
 /// deduplicated, a second observation appended to the first).
 pub async fn merge_vaults(
     db: &OrgDb,
+    control: &ControlDb,
     user_id: &RecordId,
     a: &RecordId,
     b: &RecordId,
     name: Option<&str>,
     kind: &str,
 ) -> AppResult<MergeOut> {
+    let sources = format!("{} and {}", space_name(db, a).await, space_name(db, b).await);
+    let res = merge_vaults_inner(db, user_id, a, b, name, kind).await;
+    let space = res.as_ref().map(|m| m.name.clone()).unwrap_or_else(|_| name.unwrap_or_default().trim().to_string());
+    audit_vault_from(control, user_id, "vault.merge", &space, &sources, &res).await;
+    res
+}
+
+async fn merge_vaults_inner(db: &OrgDb, user_id: &RecordId, a: &RecordId, b: &RecordId, name: Option<&str>, kind: &str) -> AppResult<MergeOut> {
     if a == b {
         return Err(AppError::bad_request("pick two different vaults to merge"));
     }

@@ -93,7 +93,7 @@ pub fn explicit_class(method: &Method, path: &str) -> Option<Class> {
         ["api", "extensions", _, "events", ..] => Account(if read { scopes::MEMORY_READ } else { scopes::MEMORY_WRITE }),
         ["api", "extensions", ..] => Account(scopes::CONNECTORS),
         ["api", "sources", ..] => Account(scopes::CONNECTORS),
-        ["api", "settings" | "debug" | "export" | "update" | "https" | "audit" | "chat" | "oauth", ..] => Account(scopes::VAULTS_ADMIN),
+        ["api", "settings" | "debug" | "export" | "update" | "https" | "audit" | "admin" | "chat" | "oauth", ..] => Account(scopes::VAULTS_ADMIN),
         // OAuth endpoints for MCP clients: public, so limited per client address like login
         ["oauth", "token" | "register" | "revoke"] => AuthAttempt,
         ["api", ..] => return None,

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { X } from "lucide-react";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Tooltip from "@/components/bits/Tooltip";
+import CopyButton from "@/components/bits/CopyButton";
 import { usePeople, useSetAdmin, useSetSuspended } from "@/lib/queries/admin";
 import type { Person } from "@/lib/gen";
 import { ICON, PanelHead, TableSkeleton, relativeTime } from "./shared";
@@ -13,6 +14,14 @@ const LOCKED: Record<string, string> = {
   creator: "This account set up the workspace, so it is always an admin.",
   operator: "The server's settings list this account as an admin. Change it there.",
 };
+
+const SIGNUP_DOCS = "https://github.com/Cashara-io/eunomia/blob/main/docs/deployment.md#2-env-vars-that-need-real-values";
+
+/* What each confirmation says and does: suspending signs them out, making an admin hands over the keys. */
+const CONFIRM = {
+  suspend: { note: "Signs them out everywhere", go: "Suspend", going: "Suspending…", danger: true },
+  admin: { note: "Can see everyone's account and change server settings.", go: "Make admin", going: "Saving…", danger: false },
+} as const;
 
 const date = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : "—");
 
@@ -32,7 +41,7 @@ function Locked({ label, reason }: { label: string; reason: string }) {
 function RowActions({ p, onError }: { p: Person; onError: (f: Failure | null) => void }) {
   const setAdmin = useSetAdmin();
   const setSuspended = useSetSuspended();
-  const [confirming, setConfirming] = useState(false);
+  const [confirming, setConfirming] = useState<keyof typeof CONFIRM | null>(null);
   const busy = setAdmin.isPending || setSuspended.isPending;
   const suspended = !!p.suspended_at;
   const locked = LOCKED[p.admin];
@@ -44,7 +53,7 @@ function RowActions({ p, onError }: { p: Person; onError: (f: Failure | null) =>
     } catch (e) {
       onError(failure(e, fallback));
     } finally {
-      setConfirming(false);
+      setConfirming(null);
     }
   }
 
@@ -59,30 +68,41 @@ function RowActions({ p, onError }: { p: Person; onError: (f: Failure | null) =>
       suspended ? `Could not restore ${p.email}.` : `Could not suspend ${p.email}.`
     );
 
-  if (confirming)
+  if (confirming) {
+    const c = CONFIRM[confirming];
     return (
-      <span className="inline-flex flex-wrap items-center justify-end gap-1">
-        <span className="text-[13px] mr-1" style={{ color: "var(--ink-dim)" }}>
-          Signs them out everywhere
+      <span className="inline-flex flex-wrap items-center justify-start sm:justify-end gap-1">
+        <span className="text-[13px] mr-1 whitespace-normal" style={{ color: "var(--ink-dim)" }}>
+          {c.note}
         </span>
-        <button type="button" className="btn btn-danger btn-sm" disabled={busy} onClick={toggleSuspended}>
-          {busy ? "Suspending…" : "Suspend"}
+        <button
+          type="button"
+          className={c.danger ? "btn btn-danger btn-sm" : "btn btn-sm"}
+          disabled={busy}
+          onClick={confirming === "suspend" ? toggleSuspended : toggleAdmin}
+        >
+          {busy ? c.going : c.go}
         </button>
-        <button type="button" className="btn btn-ghost btn-sm btn-icon" aria-label="Keep access" onClick={() => setConfirming(false)}>
+        <button type="button" className="btn btn-ghost btn-sm btn-icon" aria-label="Cancel" onClick={() => setConfirming(null)}>
           <X {...ICON} />
         </button>
       </span>
     );
+  }
 
   return (
-    <span className="inline-flex flex-wrap items-center justify-end gap-1">
+    <span className="inline-flex flex-wrap items-center justify-start sm:justify-end gap-1">
       {locked ? (
         <Locked label="Remove admin" reason={locked} />
       ) : p.is_you && p.role === "admin" ? (
         <Locked label="Remove admin" reason="You can't remove your own admin rights. Ask another admin." />
-      ) : (
+      ) : p.role === "admin" ? (
         <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={toggleAdmin}>
-          {p.role === "admin" ? "Remove admin" : "Make admin"}
+          Remove admin
+        </button>
+      ) : suspended ? null : (
+        <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => setConfirming("admin")}>
+          Make admin
         </button>
       )}
       {p.is_you ? (
@@ -94,9 +114,36 @@ function RowActions({ p, onError }: { p: Person; onError: (f: Failure | null) =>
           Restore
         </button>
       ) : (
-        <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => setConfirming(true)}>
+        <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => setConfirming("suspend")}>
           Suspend
         </button>
+      )}
+    </span>
+  );
+}
+
+/* The email (with "(you)") and, for a suspended account, a red "Suspended" line under it. */
+function Email({ p }: { p: Person }) {
+  const suspended = !!p.suspended_at;
+  return (
+    <span className="flex flex-col min-w-0">
+      <span className="truncate" title={p.email} style={suspended ? { color: "var(--ink-dim)" } : undefined}>
+        {p.email}
+        {p.is_you && (
+          <span className="ml-1.5" style={{ color: "var(--ink-faint)" }}>
+            (you)
+          </span>
+        )}
+      </span>
+      {suspended && (
+        <span
+          className="text-[12px] inline-flex items-center gap-1.5"
+          style={{ color: "var(--critical)" }}
+          title={`Suspended ${new Date(p.suspended_at!).toLocaleString()}`}
+        >
+          <span className="dot" style={{ background: "var(--critical)" }} aria-hidden />
+          Suspended
+        </span>
       )}
     </span>
   );
@@ -121,6 +168,25 @@ export function PeopleSection() {
             <span className="label mr-2">Who can sign up</span>
             <span>{signup.summary}</span>
           </div>
+          {signup.mode === "open" && (
+            <div className="flex flex-col gap-1.5 text-[13px]" data-testid="signup-open-warning">
+              <p className="inline-flex items-center gap-1.5" style={{ color: "var(--warning)" }}>
+                <span className="dot" style={{ background: "var(--warning)" }} aria-hidden />
+                Anyone who can reach this server can create an account.
+              </p>
+              <p style={{ color: "var(--ink-dim)" }}>
+                To allow only the people you invite, set this in the server&apos;s <code className="font-mono">.env</code> file and restart
+                Eunomia:
+              </p>
+              <span className="inline-flex items-center gap-2">
+                <code className="font-mono text-[13px]">SIGNUP=invite</code>
+                <CopyButton value="SIGNUP=invite" label="Copy setting" size="sm" className="btn-ghost" />
+                <a href={SIGNUP_DOCS} target="_blank" rel="noopener noreferrer" className="text-[13px] underline">
+                  Sign-up settings
+                </a>
+              </span>
+            </div>
+          )}
           {signup.mode === "invite" && (
             <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
               {signup.allowlist.length ? `Allowed: ${signup.allowlist.join(", ")}` : "No emails are on the allowlist yet."}
@@ -139,7 +205,37 @@ export function PeopleSection() {
 
       {actionError && <ErrorLine error={actionError} />}
 
-      <div className="overflow-x-auto">
+      {/* Phones: one stacked entry per person (email, then the facts, then the actions), no sideways scroll. */}
+      <ul className="sm:hidden hairline-rows text-[13px]" aria-label="People">
+        {people === null ? (
+          <li className="py-3" style={{ color: "var(--ink-dim)" }}>
+            Loading…
+          </li>
+        ) : people.length === 0 ? (
+          <li className="py-6 text-center" style={{ color: "var(--ink-dim)" }}>
+            No accounts yet.
+          </li>
+        ) : (
+          people.map((p) => (
+            <li key={p.id} className="py-3 flex flex-col gap-1 min-w-0" data-testid={`person-card-${p.email}`}>
+              <Email p={p} />
+              <span className="text-[12px] tabular-nums" style={{ color: "var(--ink-dim)" }}>
+                {[
+                  p.role === "admin" ? "Admin" : "Member",
+                  `joined ${date(p.created_at)}`,
+                  `active ${relativeTime(p.last_active ?? null)}`,
+                  `${p.shared_spaces} ${p.shared_spaces === 1 ? "space" : "spaces"}`,
+                ].join(" · ")}
+              </span>
+              <div className="pt-1">
+                <RowActions p={p} onError={setActionError} />
+              </div>
+            </li>
+          ))
+        )}
+      </ul>
+
+      <div className="hidden sm:block overflow-x-auto">
         <table className="data-table w-full text-[13px]">
           <thead>
             <tr>
@@ -163,31 +259,10 @@ export function PeopleSection() {
                 </td>
               </tr>
             ) : (
-              people.map((p) => {
-                const suspended = !!p.suspended_at;
-                return (
+              people.map((p) => (
                   <tr key={p.id} data-testid={`person-${p.email}`}>
                     <td className="max-w-[300px]">
-                      <span className="flex flex-col min-w-0">
-                        <span className="truncate" title={p.email} style={suspended ? { color: "var(--ink-dim)" } : undefined}>
-                          {p.email}
-                          {p.is_you && (
-                            <span className="ml-1.5" style={{ color: "var(--ink-faint)" }}>
-                              (you)
-                            </span>
-                          )}
-                        </span>
-                        {suspended && (
-                          <span
-                            className="text-[12px] inline-flex items-center gap-1.5"
-                            style={{ color: "var(--critical)" }}
-                            title={`Suspended ${new Date(p.suspended_at!).toLocaleString()}`}
-                          >
-                            <span className="dot" style={{ background: "var(--critical)" }} aria-hidden />
-                            Suspended
-                          </span>
-                        )}
-                      </span>
+                      <Email p={p} />
                     </td>
                     <td className="whitespace-nowrap">{p.role === "admin" ? "Admin" : "Member"}</td>
                     <td className="whitespace-nowrap hidden md:table-cell tabular-nums" style={{ color: "var(--ink-dim)" }}>
@@ -205,8 +280,7 @@ export function PeopleSection() {
                       <RowActions p={p} onError={setActionError} />
                     </td>
                   </tr>
-                );
-              })
+              ))
             )}
           </tbody>
         </table>

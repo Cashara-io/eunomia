@@ -16,6 +16,8 @@ const CATEGORIES: { id: AuditCategory; label: string }[] = [
   { id: "spaces", label: "Spaces" },
   { id: "tokens", label: "Tokens" },
   { id: "apps", label: "Apps" },
+  { id: "sharing", label: "Sharing" },
+  { id: "server", label: "Server" },
   { id: "admin", label: "Admin" },
   { id: "signins", label: "Sign-ins" },
   { id: "all", label: "Everything" },
@@ -209,8 +211,9 @@ function WorkspaceLog() {
   const rows: LogRow[] = (page?.results ?? []).map((r) => ({
     id: r.id,
     at: r.created_at ?? null,
-    who: r.actor_email || (r.via === "system" ? "Eunomia" : "Unknown"),
-    whoNote: r.via && r.via !== "system" ? `with an ${r.via}` : undefined,
+    // another Eunomia acting on a share code: the sentence names it, so the actor is just "Another Eunomia"
+    who: r.via === "another Eunomia" ? "Another Eunomia" : r.actor_email || (r.via === "system" ? "Eunomia" : "Unknown"),
+    whoNote: r.via && r.via !== "system" && r.via !== "another Eunomia" ? `with an ${r.via}` : undefined,
     what: r.summary,
     failed: r.ok ? undefined : r.result,
   }));

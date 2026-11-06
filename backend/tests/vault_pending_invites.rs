@@ -16,7 +16,7 @@ async fn owners_list_and_revoke_pending_invitations() {
         let db = common::org_db(&state, &alice).await;
         let control = state.control.clone();
 
-        let v = vaults::create_vault(&db, &alice.id, "Team", "org").await.unwrap();
+        let v = vaults::create_vault(&db, &control, &alice.id, "Team", "org").await.unwrap();
         let v = rid::parse(&v.id).unwrap();
         assert!(vaults::list_pending_invites(&db, &control, &alice.id, &v).await.unwrap().is_empty());
 
@@ -40,10 +40,10 @@ async fn owners_list_and_revoke_pending_invitations() {
         vaults::remove_member(&db, &control, &alice.id, &v, &carol.email).await.unwrap();
         let pending = vaults::list_pending_invites(&db, &control, &alice.id, &v).await.unwrap();
         assert_eq!(pending.iter().map(|p| p.email.as_str()).collect::<Vec<_>>(), vec!["bob@example.com"]);
-        assert!(vaults::accept_invitation(&db, &carol.id, &v).await.is_err(), "a revoked invitation cannot be accepted");
+        assert!(vaults::accept_invitation(&db, &control, &carol.id, &v).await.is_err(), "a revoked invitation cannot be accepted");
 
         // Once Bob joins, he is no longer pending, and as a plain member he cannot read the list.
-        vaults::accept_invitation(&db, &bob.id, &v).await.unwrap();
+        vaults::accept_invitation(&db, &control, &bob.id, &v).await.unwrap();
         assert!(vaults::list_pending_invites(&db, &control, &alice.id, &v).await.unwrap().is_empty());
         assert!(vaults::list_pending_invites(&db, &control, &bob.id, &v).await.is_err(), "members cannot list invitations");
         // Nor can someone outside the space.

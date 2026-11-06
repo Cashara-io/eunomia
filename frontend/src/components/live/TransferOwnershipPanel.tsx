@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRightLeft } from "lucide-react";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
 import { useTransferOwnership } from "@/lib/queries/vaults";
@@ -35,7 +34,6 @@ export default function TransferOwnershipPanel({ vault, members, me }: { vault: 
   return (
     <section className="flex flex-col gap-2" aria-labelledby={`handover-${vault.id}`}>
       <h3 id={`handover-${vault.id}`} className="section-title flex items-center gap-2">
-        <ArrowRightLeft size={16} strokeWidth={1.75} aria-hidden />
         Hand over this space
       </h3>
       <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>

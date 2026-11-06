@@ -86,13 +86,12 @@ export function DrawnCheck() {
 }
 
 /** One section of the space detail: a heading and its content, separated by a hairline. */
-export function DetailSection({ title, icon, aside, children }: { title: ReactNode; icon?: ReactNode; aside?: ReactNode; children: ReactNode }) {
+export function DetailSection({ title, aside, children }: { title: ReactNode; aside?: ReactNode; children: ReactNode }) {
   const id = useId();
   return (
     <section className="px-5 sm:px-6 py-5 flex flex-col gap-3" style={{ borderTop: "1px solid var(--border)" }} aria-labelledby={id}>
       <div className="flex items-center justify-between gap-2">
         <h3 id={id} className="section-title flex items-center gap-2">
-          {icon}
           {title}
         </h3>
         {aside}
@@ -105,13 +104,11 @@ export function DetailSection({ title, icon, aside, children }: { title: ReactNo
 /** A section that stays folded behind its heading until someone opens it. */
 export function Disclosure({
   title,
-  icon,
   hint,
   defaultOpen = false,
   children,
 }: {
   title: string;
-  icon?: ReactNode;
   hint?: string;
   defaultOpen?: boolean;
   children: ReactNode;
@@ -128,7 +125,6 @@ export function Disclosure({
           onClick={() => setOpen((o) => !o)}
           className="w-full flex items-center gap-2 min-h-10 text-left rounded-[4px]"
         >
-          {icon}
           <span className="flex-1 min-w-0 flex flex-col">
             <span className="section-title">{title}</span>
             {hint && !open && (

@@ -16,6 +16,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{json, Value};
 use surrealdb::types::RecordId;
+use crate::rid::RecordIdExt;
 
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::models_user::User;
@@ -96,7 +97,23 @@ async fn create_share_code(State(state): State<AppState>, user: User, headers: H
     let state = state.org(&user.org).await?;
     let vault = parse_vault_id(&vault_id)?;
     let addrs = my_addrs(&state, &headers);
-    Ok(Json(peers::create_share(&state, &user.id, &vault, &body.role, body.expires_in_hours, addrs).await?))
+    let res = peers::create_share(&state, &user.id, &vault, &body.role, body.expires_in_hours, addrs).await;
+    audit(&state, &user, "peer.share_code", &space_of(&state, &vault).await, &format!("role={}", body.role), &res).await;
+    Ok(Json(res?))
+}
+
+/// The space's name for the ledger (its id when it can't be read).
+async fn space_of(state: &OrgState, vault: &RecordId) -> String {
+    peers::vault_name(&state.db, vault).await.ok().flatten().unwrap_or_else(|| vault.to_string())
+}
+
+/// One ledger row per sharing change: these copy data to, or stop copying it to, another server.
+async fn audit<T>(state: &OrgState, user: &User, action: &str, space: &str, detail: &str, res: &AppResult<T>) {
+    let outcome = match res {
+        Ok(_) => "ok",
+        Err(e) => e.code.as_str(),
+    };
+    crate::audit::record_as_caller_detail(&state.control, &user.id, action, space, outcome, detail).await;
 }
 
 #[utoipa::path(
@@ -112,7 +129,11 @@ async fn create_share_code(State(state): State<AppState>, user: User, headers: H
 async fn delete_share_code(State(state): State<AppState>, user: User, Path((vault_id, code_id)): Path<(String, String)>) -> AppResult<Json<crate::openapi::DeletedBody>> {
     let state = state.org(&user.org).await?;
     let vault = parse_vault_id(&vault_id)?;
-    Ok(Json(crate::openapi::DeletedBody { deleted: peers::delete_share(&state, &user.id, &vault, &code_id).await? }))
+    let res = peers::delete_share(&state, &user.id, &vault, &code_id).await;
+    if !matches!(res, Ok(false)) {
+        audit(&state, &user, "peer.share_code_withdraw", &space_of(&state, &vault).await, "", &res).await;
+    }
+    Ok(Json(crate::openapi::DeletedBody { deleted: res? }))
 }
 
 #[utoipa::path(
@@ -147,7 +168,13 @@ async fn join_shared(State(state): State<AppState>, user: User, headers: HeaderM
     let state = state.org(&user.org).await?;
     let addrs = my_addrs(&state, &headers);
     let name = my_name(&user, body.name.as_deref());
-    Ok(Json(peers::join(&state, &user.id, &body.code, addrs, &name).await?))
+    let res = peers::join(&state, &user.id, &body.code, addrs, &name).await;
+    let (space, detail) = match &res {
+        Ok(out) => (out.vault.name.clone(), format!("role={} from={}", out.link.role, out.link.peer_name)),
+        Err(_) => (peers::decode_code(&body.code).map(|c| c.vault).unwrap_or_default(), String::new()),
+    };
+    audit(&state, &user, "peer.join", &space, &detail, &res).await;
+    Ok(Json(res?))
 }
 
 #[utoipa::path(
@@ -162,7 +189,13 @@ async fn join_shared(State(state): State<AppState>, user: User, headers: HeaderM
 )]
 async fn stop_sharing(State(state): State<AppState>, user: User, Path(link_id): Path<String>) -> AppResult<Json<crate::openapi::DeletedBody>> {
     let state = state.org(&user.org).await?;
-    peers::stop(&state, &user.id, &link_id).await?;
+    let link = if peers::valid_key(&link_id) { peers::load_link(&state.db, &link_id).await.ok().flatten() } else { None };
+    let res = peers::stop(&state, &user.id, &link_id).await;
+    if let Some(link) = link {
+        let peer = if link.peer_name.trim().is_empty() { "another Eunomia" } else { link.peer_name.trim() };
+        audit(&state, &user, "peer.stop", &space_of(&state, &link.vault).await, &format!("from={peer}"), &res).await;
+    }
+    res?;
     Ok(Json(crate::openapi::DeletedBody { deleted: true }))
 }
 

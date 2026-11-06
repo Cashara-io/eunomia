@@ -5,8 +5,10 @@ import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import { useConsolidateObservations } from "@/lib/queries/entities";
 
 /**
- * "Tidy up": folds new facts about one person or topic into its short summary of what is known (the
- * `consolidate_observations` tool). Uses the configured AI model; says so plainly when there is none.
+ * "Summarise memories": the AI model writes one short statement of what is known about this person
+ * or topic from its separate memories, or brings that statement up to date with the newest ones (the
+ * `consolidate_observations` tool). Nothing is merged or deleted. Says so plainly when there is no model.
+ * (Was "Tidy up", which sounded like it removed things.)
  */
 export default function TidyUp({ entityId, onDone, disabled }: { entityId: string; onDone?: () => void; disabled?: boolean }) {
   const tidy = useConsolidateObservations();
@@ -19,13 +21,13 @@ export default function TidyUp({ entityId, onDone, disabled }: { entityId: strin
     try {
       const out = await tidy.mutateAsync(entityId);
       if (out.error) throw new Error(out.error);
-      if (out.note) setMessage("Tidying up needs an AI model. Add one in Settings, then try again.");
-      else if (out.errors?.length) setError({ message: `Could not tidy up: ${out.errors[0]}` });
-      else if (out.consolidated?.length) setMessage("Done. The summary now includes the newest facts.");
-      else setMessage("Already tidy. There are no new facts to fold in.");
+      if (out.note) setMessage("Summarising needs an AI model. Add one in Settings, then try again.");
+      else if (out.errors?.length) setError({ message: `Could not summarise: ${out.errors[0]}` });
+      else if (out.consolidated?.length) setMessage("Done. The summary now includes the newest memories.");
+      else setMessage("Already up to date. No new memories to add to the summary.");
       onDone?.();
     } catch (e) {
-      setError(failure(e, "Could not tidy up these memories."));
+      setError(failure(e, "Could not summarise these memories."));
     }
   }
 
@@ -38,9 +40,9 @@ export default function TidyUp({ entityId, onDone, disabled }: { entityId: strin
           style={{ color: "var(--accent-text)" }}
           disabled={disabled || tidy.isPending}
           onClick={() => void run()}
-          title="Combine new facts into one short summary of what is known"
+          title="Write one short summary of what these memories say. Nothing is deleted."
         >
-          {tidy.isPending ? "Tidying up…" : "Tidy up"}
+          {tidy.isPending ? "Summarising…" : "Summarise memories"}
         </button>
         {message && (
           <span className="text-[13px]" role="status" style={{ color: "var(--ink-dim)" }}>

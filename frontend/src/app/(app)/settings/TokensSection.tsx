@@ -134,7 +134,7 @@ export function TokensSection() {
           </label>
           <input
             id="token-name"
-            className="field h-10 px-3 text-[14px] w-full"
+            className="field h-10 px-3 text-[14px] w-full max-w-[360px]"
             placeholder="For example: work laptop"
             maxLength={NAME_MAX}
             value={name}
@@ -323,11 +323,12 @@ export function TokensSection() {
                     {relativeTime(t.last_used_at)}
                   </td>
                   <td
-                    className="tabular-nums text-[13px]"
+                    className="tabular-nums text-[13px] whitespace-nowrap"
                     style={{ color: exp.expired ? "var(--critical)" : "var(--ink-dim)" }}
                     title={t.expires_at ? new Date(t.expires_at).toLocaleString() : undefined}
                   >
-                    {exp.expired ? "Expired" : exp.text === "Never" ? "Never" : `Expires ${exp.text}`}
+                    {/* the column head says "Expires": the cell is just "in 90d", which never wraps */}
+                    {exp.text}
                   </td>
                   <td className="text-right">
                     <RevokeButton label={t.name} onRevoke={() => revoke(t.id)} />

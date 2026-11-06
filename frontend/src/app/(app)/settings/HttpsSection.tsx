@@ -76,7 +76,7 @@ export function HttpsSection() {
           <span className="dot" style={{ background: tone }} aria-hidden />
           <span role="status">{line}</span>
           {status.state === "active" && status.domain && (
-            <a href={`https://${status.domain}`} className="font-mono text-[12px] underline" style={{ color: "var(--accent-text)" }}>
+            <a href={`https://${status.domain}`} className="text-[13px] underline" style={{ color: "var(--accent-text)" }}>
               https://{status.domain}
             </a>
           )}
@@ -88,7 +88,7 @@ export function HttpsSection() {
         )}
       </div>
       {status.message && (
-        <p className="text-[12.5px]" style={{ color: status.state === "error" ? "var(--critical)" : "var(--ink-dim)" }}>
+        <p className="text-[13px]" style={{ color: status.state === "error" ? "var(--critical)" : "var(--ink-dim)" }}>
           {status.message}
         </p>
       )}
@@ -96,13 +96,13 @@ export function HttpsSection() {
       <div className="flex flex-col gap-3 max-w-md">
         <label className="label flex flex-col gap-1.5">
           Domain
-          <input className="field h-10 px-3 text-[14px] font-mono" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="eunomia.example.com" />
+          <input className="field h-10 px-3 text-[14px] tabular-nums" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="eunomia.example.com" />
         </label>
         <label className="label flex flex-col gap-1.5">
           Email for Let&apos;s Encrypt
           <input
             type="email"
-            className="field h-10 px-3 text-[14px] font-mono"
+            className="field h-10 px-3 text-[14px] tabular-nums"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"

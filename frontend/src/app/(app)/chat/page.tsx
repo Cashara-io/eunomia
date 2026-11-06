@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AlertCircle, ArrowUp, Square, ChevronRight, CornerDownLeft, MessagesSquare, RotateCcw, Plus, Trash2, Wrench } from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
+import EmptyNote from "@/components/ui/EmptyState";
 import Markdown from "@/components/Markdown";
 import AuthorTag from "@/components/AuthorTag";
 import SyncMark from "@/components/bits/SyncMark";
@@ -315,18 +316,21 @@ function EmptyState({ onPick }: { onPick: (text: string) => void }) {
 /** Chat without a model: just what to do next, with no conversations or composer to type into. */
 function NoModel({ isAdmin }: { isAdmin: boolean }) {
   return (
-    <div role="status" className="flex flex-col gap-3 max-w-[560px] py-6">
-      <h2 className="text-[20px] font-semibold tracking-[-0.015em]">{isAdmin ? "Set up a model to use Chat" : "Chat isn\u2019t turned on yet"}</h2>
-      <p className="text-[14px] leading-relaxed" style={{ color: "var(--ink-dim)" }}>
+    <div role="status">
+      <EmptyNote
+        title={isAdmin ? "Set up a model to use Chat." : "Chat isn\u2019t turned on yet."}
+        action={
+          isAdmin && (
+            <Link href="/settings?tab=model" className="btn btn-primary">
+              Set up a model
+            </Link>
+          )
+        }
+      >
         {isAdmin
           ? "Chat answers questions from your saved memories and documents. It needs an OpenAI key or a local model endpoint."
           : "Ask your Eunomia admin to turn on Chat. Your connected AI apps can still look things up in the meantime."}
-      </p>
-      {isAdmin && (
-        <Link href="/settings?tab=model" className="btn btn-primary self-start">
-          Set up a model
-        </Link>
-      )}
+      </EmptyNote>
     </div>
   );
 }

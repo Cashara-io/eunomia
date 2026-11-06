@@ -1096,6 +1096,9 @@ pub async fn host_rpc(state: &OrgState, org: &str, key: &str, env: &Value) -> Re
             }
             "leave" => {
                 let _ = super::forget(&state.db, &row).await;
+                let space = super::vault_name(&state.db, &row.vault).await.ok().flatten().unwrap_or_default();
+                let peer = if row.peer_name.trim().is_empty() { "another Eunomia" } else { row.peer_name.trim() };
+                super::audit_from_peer(state, &row.user, &row.peer_instance, "peer.left", &space, &format!("from={peer}")).await;
                 json!({ "left": true })
             }
             _ => return Err((400, "unknown op")),

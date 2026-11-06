@@ -48,6 +48,10 @@ pub enum AuditCategory {
     Apps,
     /// Admin rights granted or taken back, accounts suspended or restored.
     Admin,
+    /// Spaces shared with another Eunomia: share codes, joins, links stopped. These copy data off the server.
+    Sharing,
+    /// Server settings: HTTPS, updates, the AI provider.
+    Server,
 }
 
 const SIGNIN_ACTIONS: &[&str] = &["auth.login", "auth.register", "auth.oidc_login", "auth.oidc_link", "auth.failed"];
@@ -64,6 +68,8 @@ impl AuditCategory {
             AuditCategory::Tokens => ("auth.token_", &[], &[]),
             AuditCategory::Apps => ("oauth.", &[], &[]),
             AuditCategory::Admin => ("", ADMIN_ACTIONS, &[]),
+            AuditCategory::Sharing => ("peer.", &[], &[]),
+            AuditCategory::Server => ("server.", &[], &[]),
         }
     }
 
@@ -76,6 +82,10 @@ impl AuditCategory {
             AuditCategory::Tokens
         } else if action.starts_with("oauth.") {
             AuditCategory::Apps
+        } else if action.starts_with("peer.") {
+            AuditCategory::Sharing
+        } else if action.starts_with("server.") {
+            AuditCategory::Server
         } else if SIGNIN_ACTIONS.contains(&action) {
             AuditCategory::Signins
         } else {
@@ -172,6 +182,13 @@ fn kv<'a>(detail: &'a str, key: &str) -> Option<&'a str> {
     detail.split_whitespace().find_map(|p| p.strip_prefix(key).and_then(|r| r.strip_prefix('=')))
 }
 
+/// The value of the last `from=` in `detail`, read to the end of the line: the names it carries
+/// (spaces, another Eunomia) may hold spaces.
+fn from_rest(detail: &str) -> Option<&str> {
+    let i = if detail.starts_with("from=") { 0 } else { detail.find(" from=")? + 1 };
+    Some(detail[i + 5..].trim()).filter(|v| !v.is_empty())
+}
+
 /// One ledger row as a sentence an admin can read without knowing the action codes.
 fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<String, String>) -> String {
     let email = kv(detail, "email").unwrap_or("someone");
@@ -191,6 +208,38 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
         },
         "vault.transfer" => format!("Handed {space} over to {email}"),
         "vault.delete" => format!("Deleted the space {space}"),
+        "vault.create" => format!("Created the space {space}"),
+        "vault.rename" => format!("Renamed {} to {space}", from_rest(detail).unwrap_or("a space")),
+        "vault.join" => match kv(detail, "role") {
+            Some("owner") => format!("Joined {space} as an owner"),
+            _ => format!("Joined {space}"),
+        },
+        "vault.decline" => format!("Declined the invitation to {space}"),
+        "vault.clone" => format!("Copied {} into a new space, {space}", from_rest(detail).unwrap_or("a space")),
+        "vault.merge" => format!("Merged {} into a new space, {space}", from_rest(detail).unwrap_or("two spaces")),
+        "peer.share_code" => match kv(detail, "role") {
+            Some("read") => format!("Made a code that lets another Eunomia copy {space} (read only)"),
+            _ => format!("Made a code that lets another Eunomia copy and edit {space}"),
+        },
+        "peer.share_code_withdraw" => format!("Withdrew an unused share code for {space}"),
+        "peer.joined" => match kv(detail, "role") {
+            Some("read") => format!("{} joined {space} and got a copy (read only)", peer(detail, true)),
+            _ => format!("{} joined {space} and got a copy it can edit", peer(detail, true)),
+        },
+        "peer.join" => format!("Joined {space}, shared from {}", peer(detail, false)),
+        "peer.stop" => format!("Stopped sharing {space} with {}", peer(detail, false)),
+        "peer.left" => format!("{} stopped syncing {space} (it keeps its copy)", peer(detail, true)),
+        "server.https" => match kv(detail, "domain") {
+            Some(d) => format!("Turned on HTTPS for {d}"),
+            None => "Turned off HTTPS".into(),
+        },
+        "server.update" => "Started a server update".into(),
+        "server.ai_provider" => match (kv(detail, "host"), detail.split_whitespace().any(|p| p == "key")) {
+            (Some(h), true) => format!("Replaced the key for the AI provider at {h}"),
+            (Some(h), false) => format!("Changed the AI provider to {h}"),
+            (None, true) => "Replaced the AI provider's key".into(),
+            (None, false) => "Changed the AI provider".into(),
+        },
         "admin.grant" => format!("Made {email} an admin"),
         "admin.revoke" => format!("Took admin rights away from {email}"),
         "user.suspend" => format!("Suspended {email}"),
@@ -224,6 +273,16 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
     format!("{tried}{s}")
 }
 
+/// The other Eunomia a sharing event names, quoted; `start` puts it at the head of a sentence
+/// (capitalized, and closed with a comma when it carries a name).
+fn peer(detail: &str, start: bool) -> String {
+    let lead = if start { "Another Eunomia" } else { "another Eunomia" };
+    match from_rest(detail) {
+        Some(n) if !n.eq_ignore_ascii_case("another eunomia") => format!("{lead}, \u{201c}{n}\u{201d}{}", if start { "," } else { "" }),
+        _ => lead.to_string(),
+    }
+}
+
 fn result_words(outcome: &str) -> &'static str {
     match outcome {
         "ok" => "Done",
@@ -239,6 +298,7 @@ fn via_words(actor_kind: &str) -> &'static str {
         "token" => "API token",
         "oauth" => "app",
         "system" => "system",
+        "peer" => "another Eunomia",
         _ => "",
     }
 }
@@ -648,6 +708,37 @@ mod tests {
         assert_eq!(AuditCategory::of("auth.login"), AuditCategory::Signins);
         assert_eq!(AuditCategory::of("oauth.grant_revoke"), AuditCategory::Apps);
         assert_eq!(result_words("vault.forbidden"), "Not allowed");
+    }
+
+    #[test]
+    fn space_sharing_and_server_events_read_as_sentences() {
+        let n = HashMap::new();
+        let d = |a: &str, t: &str, detail: &str| describe(a, t, detail, true, &n);
+        assert_eq!(d("vault.create", "Team", ""), "Created the space Team");
+        assert_eq!(d("vault.rename", "Team B", "from=Team A"), "Renamed Team A to Team B");
+        assert_eq!(d("vault.join", "Team", "role=member"), "Joined Team");
+        assert_eq!(d("vault.decline", "Team", ""), "Declined the invitation to Team");
+        assert_eq!(d("vault.clone", "Team (copy)", "from=Team"), "Copied Team into a new space, Team (copy)");
+        assert_eq!(d("vault.merge", "A + B", "from=A and B"), "Merged A and B into a new space, A + B");
+        assert_eq!(d("peer.share_code", "Team", "role=read"), "Made a code that lets another Eunomia copy Team (read only)");
+        assert_eq!(d("peer.share_code", "Team", "role=edit"), "Made a code that lets another Eunomia copy and edit Team");
+        assert_eq!(d("peer.share_code_withdraw", "Team", ""), "Withdrew an unused share code for Team");
+        assert_eq!(d("peer.joined", "Team", "role=read from=Lab box"), "Another Eunomia, \u{201c}Lab box\u{201d}, joined Team and got a copy (read only)");
+        assert_eq!(d("peer.joined", "Team", "role=edit from=another Eunomia"), "Another Eunomia joined Team and got a copy it can edit");
+        assert_eq!(d("peer.join", "Team", "role=edit from=Office"), "Joined Team, shared from another Eunomia, \u{201c}Office\u{201d}");
+        assert_eq!(d("peer.stop", "Team", "from=Office"), "Stopped sharing Team with another Eunomia, \u{201c}Office\u{201d}");
+        assert_eq!(d("peer.left", "Team", "from=Office"), "Another Eunomia, \u{201c}Office\u{201d}, stopped syncing Team (it keeps its copy)");
+        assert_eq!(d("server.https", "", "domain=mem.example.com"), "Turned on HTTPS for mem.example.com");
+        assert_eq!(d("server.https", "", "off"), "Turned off HTTPS");
+        assert_eq!(d("server.update", "", ""), "Started a server update");
+        assert_eq!(d("server.ai_provider", "", "host=api.openai.com"), "Changed the AI provider to api.openai.com");
+        assert_eq!(d("server.ai_provider", "", "host=api.openai.com key"), "Replaced the key for the AI provider at api.openai.com");
+        for (action, cat) in [("peer.joined", AuditCategory::Sharing), ("peer.share_code", AuditCategory::Sharing), ("server.https", AuditCategory::Server), ("vault.merge", AuditCategory::Spaces)] {
+            assert_eq!(AuditCategory::of(action), cat, "{action}");
+            // "Changes" leaves out sign-ins only, so it shows every one of these
+            assert!(!AuditCategory::Changes.filter().2.contains(&action));
+        }
+        assert_eq!(via_words("peer"), "another Eunomia");
     }
 
     #[test]

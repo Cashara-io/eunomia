@@ -18,39 +18,9 @@ import { DataSection } from "./DataSection";
 import { UsageSection } from "./UsageSection";
 import { AuditSection } from "./AuditSection";
 import { PeopleSection } from "./PeopleSection";
+import { SETTINGS_GROUPS } from "@/lib/settingsTabs";
 
-// Account is everyone's; Workspace and Server are for instance admins only.
-const GROUPS = [
-  {
-    label: "Account",
-    admin: false,
-    tabs: [
-      { id: "apps", label: "Connected apps" },
-      { id: "tokens", label: "API tokens" },
-      { id: "sessions", label: "Sessions" },
-      { id: "data", label: "Your data" },
-    ],
-  },
-  {
-    label: "Workspace",
-    admin: true,
-    tabs: [
-      { id: "people", label: "People" },
-      { id: "audit", label: "Audit log" },
-      { id: "usage", label: "Usage" },
-    ],
-  },
-  {
-    label: "Server",
-    admin: true,
-    tabs: [
-      { id: "https", label: "HTTPS" },
-      { id: "updates", label: "Updates" },
-      { id: "backups", label: "Backups" },
-      { id: "model", label: "AI provider" },
-    ],
-  },
-] as const;
+const GROUPS = SETTINGS_GROUPS;
 
 type TabId = (typeof GROUPS)[number]["tabs"][number]["id"];
 const DEFAULT_TAB: TabId = "apps";

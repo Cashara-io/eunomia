@@ -11,9 +11,10 @@ import { usePaletteSearch } from "@/lib/queries/tools";
 import { useMe } from "@/lib/queries/auth";
 import { useVaults } from "@/lib/queries/vaults";
 import { modKey } from "@/lib/platform";
+import { SETTINGS_GROUPS } from "@/lib/settingsTabs";
 
 type IconType = React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
-type Item = { key: string; label: string; sub?: string; icon: IconType; go: () => void };
+type Item = { key: string; label: string; sub?: string; icon: IconType; go: () => void; score?: number };
 type Group = { title: string; items: Item[] };
 
 const OPEN_EVENT = "eunomia:open-palette";
@@ -58,26 +59,30 @@ const KIND_WORD: Record<string, string> = {
   symbol: "Function",
 };
 
-// Settings tabs, by the ids settings/page.tsx reads from `?tab=`. Admin tabs are listed for admins only.
-const SETTINGS_TABS: { id: string; label: string; admin?: boolean }[] = [
-  { id: "general", label: "General" },
-  { id: "apps", label: "Connected apps" },
-  { id: "tokens", label: "API tokens" },
-  { id: "sessions", label: "Sessions" },
-  { id: "data", label: "Your data" },
-  { id: "people", label: "People", admin: true },
-  { id: "audit", label: "Audit log", admin: true },
-  { id: "usage", label: "Usage", admin: true },
-  { id: "https", label: "HTTPS", admin: true },
-  { id: "updates", label: "Updates", admin: true },
-  { id: "model", label: "AI provider", admin: true },
-];
+// Settings tabs come from the one list the Settings page also reads; admin groups are for admins only.
+type SettingsEntry = { id: string; label: string; group: string; admin: boolean; words: string };
+const SETTINGS_ENTRIES: SettingsEntry[] = SETTINGS_GROUPS.flatMap((g) =>
+  g.tabs.map((t) => ({ id: t.id, label: t.label, group: g.label, admin: g.admin, words: t.keywords }))
+);
+
+/** How well `label` (plus extra `words`) matches `needle`: 0 is best, null is no match. Exact and
+ * prefix matches on the label beat a keyword hit, which beats a match in the middle of a word. */
+function matchScore(needle: string, label: string, words = ""): number | null {
+  const l = label.toLowerCase();
+  if (!needle) return 3;
+  if (l === needle) return 0;
+  if (l.startsWith(needle)) return 1;
+  if (l.split(/[^a-z0-9]+/).some((w) => w.startsWith(needle))) return 2;
+  if (words.toLowerCase().split(/\s+/).some((w) => w.startsWith(needle))) return 2;
+  if (`${l} ${words.toLowerCase()}`.includes(needle)) return 3;
+  return null;
+}
 
 // Things to do, each found by its label or a few plain words people might type instead.
 const ACTIONS: { label: string; href: string; icon: IconType; words: string; admin?: boolean }[] = [
   { label: "Create a memory space", href: "/vaults", icon: Plus, words: "new space vault team share" },
   { label: "Upload a document", href: "/documents", icon: Upload, words: "add file pdf import" },
-  { label: "New API token", href: "/settings?tab=tokens", icon: KeyRound, words: "create key access token", admin: true },
+  { label: "New API token", href: "/settings?tab=tokens", icon: KeyRound, words: "create key access token" },
   { label: "Connect an AI app", href: "/", icon: Plug, words: "claude chatgpt cursor codex mcp setup" },
 ];
 
@@ -153,23 +158,32 @@ function Palette({ onClose }: { onClose: () => void }) {
     go: () => router.push(s.href),
   }));
   const needle = query.trim().toLowerCase();
-  const navItems = [...staticItems, ...connectorItems].filter((item) => item.label.toLowerCase().includes(needle));
+  // best match first within each group; a stable sort keeps the sidebar's order among equals
+  const ranked = (list: Item[]) => list.filter((i) => i.score !== undefined).sort((a, b) => a.score! - b.score!);
+  const scored = (item: Item, words?: string): Item => ({ ...item, score: matchScore(needle, item.label, words) ?? undefined });
+  const navItems = ranked([...staticItems, ...connectorItems].map((item) => scored(item)));
   // Settings tabs only once something is typed, so the empty palette stays short.
   const settingsItems: Item[] = needle
-    ? SETTINGS_TABS.filter((t) => (!t.admin || isAdmin) && `${t.label} settings`.toLowerCase().includes(needle)).map((t) => ({
-        key: `settings:${t.id}`,
-        label: t.label,
-        sub: "Settings",
-        icon: Settings,
-        go: () => router.push(t.id === "general" ? "/settings" : `/settings?tab=${t.id}`),
-      }))
+    ? ranked(
+        SETTINGS_ENTRIES.filter((t) => !t.admin || isAdmin).map((t) =>
+          scored(
+            {
+              key: `settings:${t.id}`,
+              label: t.label,
+              sub: `Settings › ${t.group}`,
+              icon: Settings,
+              go: () => router.push(`/settings?tab=${t.id}`),
+            },
+            `${t.words} settings`
+          )
+        )
+      )
     : [];
-  const actionItems: Item[] = ACTIONS.filter((a) => (!a.admin || isAdmin) && (!needle || `${a.label} ${a.words}`.toLowerCase().includes(needle))).map((a) => ({
-    key: `action:${a.label}`,
-    label: a.label,
-    icon: a.icon,
-    go: () => router.push(a.href),
-  }));
+  const actionItems: Item[] = ranked(
+    ACTIONS.map((a) =>
+      scored({ key: `action:${a.label}`, label: a.label, icon: a.icon, go: () => router.push(a.href) }, a.words)
+    )
+  );
 
   const entityItems: Item[] = (searching ? entityHits : []).map((e) => ({
     key: `entity:${e.id}`,
@@ -202,10 +216,18 @@ function Palette({ onClose }: { onClose: () => void }) {
     },
   }));
 
-  const groups: Group[] = [
+  // Pages, Settings and Actions are ordered by their best match, so "backup" leads with
+  // Settings › Backups; people, topics and documents always come after them.
+  const best = (g: Group) => Math.min(...g.items.map((i) => i.score ?? 3));
+  const navGroups: Group[] = [
     { title: "Pages", items: navItems },
     { title: "Actions", items: actionItems },
     { title: "Settings", items: settingsItems },
+  ]
+    .filter((g) => g.items.length > 0)
+    .sort((a, b) => best(a) - best(b));
+  const groups: Group[] = [
+    ...navGroups,
     { title: "People & topics", items: entityItems },
     { title: "Documents and saved items", items: recordItems },
   ].filter((g) => g.items.length > 0);
@@ -253,7 +275,7 @@ function Palette({ onClose }: { onClose: () => void }) {
             // the dialog edge is the field; no focus ring or border inside it
             style={{ color: "var(--ink)", outline: "none", boxShadow: "none", border: 0 }}
           />
-          <span className="kbd shrink-0 max-sm:hidden" aria-hidden>
+          <span className="kbd shrink-0 max-sm:hidden pointer-coarse:hidden" aria-hidden>
             Esc
           </span>
           <button type="button" onClick={onClose} aria-label="Close search" className="btn btn-ghost btn-icon btn-sm sm:hidden">
@@ -308,24 +330,27 @@ function Palette({ onClose }: { onClose: () => void }) {
           )}
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-2.5 text-[12px]" style={{ borderTop: "1px solid var(--border)", color: "var(--ink-dim)" }}>
-          <span className="flex items-center gap-1.5">
-            <span className="kbd">↑</span>
-            <span className="kbd">↓</span> Move
+          {/* keyboard hints mean nothing on a touch screen: hidden on coarse pointers */}
+          <span className="contents pointer-coarse:hidden">
+            <span className="flex items-center gap-1.5">
+              <span className="kbd">↑</span>
+              <span className="kbd">↓</span> Move
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="kbd">↵</span> Open
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="kbd">Esc</span> Close
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="kbd">{modKey()}</span>
+              <span className="kbd">K</span> Search from anywhere
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="kbd">?</span> All shortcuts
+            </span>
           </span>
-          <span className="flex items-center gap-1.5">
-            <span className="kbd">↵</span> Open
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="kbd">Esc</span> Close
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="kbd">{modKey()}</span>
-            <span className="kbd">K</span> Search from anywhere
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="kbd">?</span> All shortcuts
-          </span>
-          <span className="ml-auto">Type 2 or more letters to search your memory</span>
+          <span className="ml-auto pointer-coarse:ml-0">Type 2 or more letters to search your memory</span>
         </div>
       </div>
     </div>

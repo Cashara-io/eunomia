@@ -3,7 +3,7 @@
 import { kindColor } from "@/lib/kindColors";
 import ErrorLine, { failure } from "@/components/ErrorLine";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, Check, Upload, Users } from "lucide-react";
 import type { EntityDetail, EntityKind, SourceRow, Vault } from "@/lib/types";
@@ -11,8 +11,12 @@ import { entityKeys, type EntityList } from "@/lib/queries/entities";
 import { call } from "@/lib/queries/client";
 import { useSources } from "@/lib/queries/sources";
 import { useDocuments } from "@/lib/queries/documents";
-import { useVaults } from "@/lib/queries/vaults";
-import { getEntity, listEntities } from "@/lib/gen";
+import { vaultKeys, useVaults, type PendingInvite } from "@/lib/queries/vaults";
+import { useMe } from "@/lib/queries/auth";
+import { adminKeys } from "@/lib/queries/admin";
+import { settingsKeys } from "@/lib/queries/settings";
+import { getEntity, getHttpsStatus, listEntities, listPeople, listVaultPendingInvitations } from "@/lib/gen";
+import type { HttpsStatus } from "@/lib/types";
 import PageHeader from "@/components/ui/PageHeader";
 import InvitationBanner from "@/components/vaults/InvitationBanner";
 import AppChoices from "@/components/connect/AppChoices";
@@ -231,6 +235,44 @@ function SourcesHealth({ rows }: { rows: SourceRow[] }) {
   );
 }
 
+// ---- admin signals ----
+
+/** Admins only: one quiet line of things worth a look (unanswered space invitations, open sign-up,
+ * HTTPS off), each a link to where it is changed. Renders nothing when none apply. */
+function AdminSignals({ vaults }: { vaults: Vault[] | undefined }) {
+  const owned = (vaults ?? []).filter((v) => v.kind === "org" && v.role === "owner");
+  // Same keys and endpoints as the Settings and Memory spaces pages, so the caches are shared.
+  const people = useQuery({ queryKey: adminKeys.people(), queryFn: () => call(listPeople()) });
+  const https = useQuery({ queryKey: settingsKeys.httpsStatus(), queryFn: () => call(getHttpsStatus()) as Promise<HttpsStatus> });
+  const pending = useQueries({
+    queries: owned.map((v) => ({
+      queryKey: vaultKeys.pending(v.id),
+      queryFn: async () => (await call(listVaultPendingInvitations({ path: { vault_id: v.id } }))).results as PendingInvite[],
+    })),
+  });
+  const pendingCount = pending.reduce((n, q) => n + (q.data?.length ?? 0), 0);
+
+  const signals: { href: string; text: string }[] = [];
+  if (pendingCount > 0) signals.push({ href: "/vaults", text: plural(pendingCount, "pending invitation", "pending invitations") });
+  if (people.data?.signup.mode === "open") signals.push({ href: "/settings?tab=people", text: "Sign-up is open" });
+  if (https.data && (!https.data.configured || https.data.state === "off")) signals.push({ href: "/settings?tab=https", text: "HTTPS is off" });
+  else if (https.data?.state === "error") signals.push({ href: "/settings?tab=https", text: "HTTPS has a problem" });
+  if (signals.length === 0) return null;
+
+  return (
+    <p className="text-[13px] -mt-4" aria-label="Workspace notes" style={{ color: "var(--ink-dim)" }}>
+      {signals.map((s, i) => (
+        <span key={s.href + s.text}>
+          {i > 0 && " · "}
+          <Link href={s.href} className="underline-offset-2 hover:underline" style={{ color: "var(--accent-text)" }}>
+            {s.text}
+          </Link>
+        </span>
+      ))}
+    </p>
+  );
+}
+
 // ---- choose your AI app ----
 
 /** Which AI app do you use? Neutral choices, nothing preselected; each opens that app's own steps. */
@@ -388,6 +430,7 @@ export default function HomePage() {
   const canUpload = documents !== undefined && Boolean(documents.storage);
   const [dismissedFailures, setDismissedFailures] = useState<Set<string>>(new Set());
   const { connections } = useConnections();
+  const isAdmin = Boolean(useMe().data?.is_admin);
 
   const liveSources = rows?.filter(isLiveSource) ?? [];
   // Shared spaces plus the personal space every account has.
@@ -396,15 +439,35 @@ export default function HomePage() {
   // Connected only on the server's word: an approved sign-in or a token an app has used.
   const connectedApps = connections !== null && connections.length > 0;
 
+  const appBlock =
+    connections === null ? (
+      <div className="task-panel p-8 flex flex-col gap-4" aria-busy="true" aria-label="Checking your connected apps">
+        <div className="skeleton h-7 w-72" />
+        <div className="skeleton h-4 w-full max-w-[520px]" />
+      </div>
+    ) : !connectedApps ? (
+      <AppPicker />
+    ) : (
+      <>
+        <ConnectedPanel connections={connections} />
+        <ConnectAnother />
+      </>
+    );
+
   return (
     <div className="flex flex-col gap-8 max-w-[1240px]">
       <PageHeader title="Home" intro="Your shared memory. ChatGPT, Claude and other AI apps can look things up here." />
+
+      {isAdmin && <AdminSignals vaults={vaults} />}
 
       <InvitationBanner />
 
       {rows && (
         <FailureBanner rows={rows} dismissed={dismissedFailures} onDismiss={(key) => setDismissedFailures((prev) => new Set(prev).add(key))} />
       )}
+
+      {/* Until an AI app is connected, choosing one is the main task, so it comes before what's saved. */}
+      {!connectedApps && appBlock}
 
       {overviewQuery.isError && <ErrorLine error={failure(overviewQuery.error, "Could not load what has been saved.")} />}
 
@@ -431,19 +494,7 @@ export default function HomePage() {
         )
       )}
 
-      {connections === null ? (
-        <div className="task-panel p-8 flex flex-col gap-4" aria-busy="true" aria-label="Checking your connected apps">
-          <div className="skeleton h-7 w-72" />
-          <div className="skeleton h-4 w-full max-w-[520px]" />
-        </div>
-      ) : !connectedApps ? (
-        <AppPicker />
-      ) : (
-        <>
-          <ConnectedPanel connections={connections} />
-          <ConnectAnother />
-        </>
-      )}
+      {connectedApps && appBlock}
 
       {overview && !hasData && !connectedApps && <OwnInformation canUpload={canUpload} />}
     </div>

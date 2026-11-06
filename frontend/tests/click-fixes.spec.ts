@@ -41,7 +41,7 @@ test.describe("Click-through fixes", () => {
     await page.getByLabel("Confirm password").fill(PASSWORD);
     await page.getByRole("button", { name: "Create account" }).click();
     await page.waitForURL(/\/onboarding\?next=%2Fvaults/);
-    await page.getByRole("button", { name: "Skip", exact: true }).click();
+    await page.getByRole("button", { name: "Set up later" }).click();
     const skip = page.getByRole("button", { name: "Skip & finish" });
     if (await skip.isVisible({ timeout: 2000 }).catch(() => false)) await skip.click();
     await page.waitForURL((url) => url.pathname === "/vaults");

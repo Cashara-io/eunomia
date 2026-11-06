@@ -49,6 +49,8 @@ const PAGE_ORDER: Connector["kind"][] = [
   "up_bank",
   "spotify",
 ];
+/** Consumer sources: listed under "Add a source" behind their own fold, after the work tools. */
+const PERSONAL_KINDS = new Set<Connector["kind"]>(["stripe", "up_bank", "spotify"]);
 const ORDERED_KINDS = [...PAGE_ORDER.filter((k) => CONNECTOR_ORDER.includes(k)), ...CONNECTOR_ORDER.filter((k) => !PAGE_ORDER.includes(k))];
 
 /* "up.transaction", "gcal.event" -> "transactions, events": what a source brings in, in words. */
@@ -92,6 +94,8 @@ export default function ConnectorsPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   // Custom integrations are an advanced path: closed until asked for.
   const [showCustom, setShowCustom] = useState(false);
+  // Personal sources (bank, payments, music) are folded away until asked for, or while a search matches one.
+  const [showPersonal, setShowPersonal] = useState(false);
   const isAdmin = useMe().data?.is_admin ?? false;
 
   const load = () => {
@@ -140,6 +144,9 @@ export default function ConnectorsPage() {
 
   const shownConnected = connected.filter((r) => matches(q, `${r.label} ${r.account}`, r.kind ? CONNECTOR_META[r.kind].description : ""));
   const shownAvailable = available.filter((k) => matches(q, CONNECTOR_META[k].label, CONNECTOR_META[k].description));
+  const workAvailable = shownAvailable.filter((k) => !PERSONAL_KINDS.has(k));
+  const personalAvailable = shownAvailable.filter((k) => PERSONAL_KINDS.has(k));
+  const personalOpen = showPersonal || Boolean(q);
   const loading = connectors === null && !error;
 
   const filters: { value: StatusFilter; label: string; count: number }[] = [
@@ -298,33 +305,34 @@ export default function ConnectorsPage() {
               )}
             </div>
           )}
-          {/* A compact list: one row per source, each row one link. */}
-          {shownAvailable.length > 0 && (
-            <ul className="hairline-rows border-y" style={{ borderColor: "var(--border)" }}>
-              {shownAvailable.map((kind) => {
-                const meta = CONNECTOR_META[kind];
-                return (
-                  <li key={kind} className="min-w-0">
-                    <Link
-                      href={`/connectors/setup/${kind}`}
-                      aria-label={`Connect ${meta.label}`}
-                      className="flex items-center gap-3 px-2 py-2.5 min-w-0 transition-colors hover:bg-[var(--surface-hover)]"
-                    >
-                      <SourceMark kind={kind} size={24} />
-                      <span className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-baseline sm:gap-3">
-                        <span className="text-[14px] font-semibold shrink-0">{meta.label}</span>
-                        <span className="text-[13px] truncate" style={{ color: "var(--ink-dim)" }}>
-                          {meta.description}
-                        </span>
-                      </span>
-                      <span className="btn btn-ghost btn-sm shrink-0" aria-hidden>
-                        Connect
-                      </span>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
+          {/* Compact lists: one row per source, each row one link. Work first; personal sources folded below. */}
+          {workAvailable.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <h3 className="text-[13px] font-medium" style={{ color: "var(--ink-dim)" }}>
+                Work
+              </h3>
+              <CatalogueList kinds={workAvailable} />
+            </div>
+          )}
+          {personalAvailable.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                className="self-start inline-flex items-center gap-1 min-h-10 text-[13px] font-medium"
+                style={{ color: "var(--ink-dim)" }}
+                aria-expanded={personalOpen}
+                aria-controls="personal-sources"
+                onClick={() => setShowPersonal((v) => !v)}
+              >
+                {personalOpen ? <ChevronDown size={16} strokeWidth={1.75} aria-hidden /> : <ChevronRight size={16} strokeWidth={1.75} aria-hidden />}
+                Personal sources ({personalAvailable.length})
+              </button>
+              {personalOpen && (
+                <div id="personal-sources">
+                  <CatalogueList kinds={personalAvailable} />
+                </div>
+              )}
+            </div>
           )}
         </section>
       )}
@@ -347,6 +355,36 @@ export default function ConnectorsPage() {
 
       <SyncSettings />
     </div>
+  );
+}
+
+function CatalogueList({ kinds }: { kinds: Connector["kind"][] }) {
+  return (
+    <ul className="hairline-rows border-y" style={{ borderColor: "var(--border)" }}>
+      {kinds.map((kind) => {
+        const meta = CONNECTOR_META[kind];
+        return (
+          <li key={kind} className="min-w-0">
+            <Link
+              href={`/connectors/setup/${kind}`}
+              aria-label={`Connect ${meta.label}`}
+              className="flex items-center gap-3 px-2 py-2.5 min-w-0 transition-colors hover:bg-[var(--surface-hover)]"
+            >
+              <SourceMark kind={kind} size={24} />
+              <span className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-baseline sm:gap-3">
+                <span className="text-[14px] font-semibold shrink-0">{meta.label}</span>
+                <span className="text-[13px] truncate" style={{ color: "var(--ink-dim)" }}>
+                  {meta.description}
+                </span>
+              </span>
+              <span className="btn btn-ghost btn-sm shrink-0" aria-hidden>
+                Connect
+              </span>
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

@@ -52,7 +52,9 @@
                 "signins",
                 "tokens",
                 "apps",
-                "admin"
+                "admin",
+                "sharing",
+                "server"
               ]
             }
           }
@@ -6487,7 +6489,9 @@
           "signins",
           "tokens",
           "apps",
-          "admin"
+          "admin",
+          "sharing",
+          "server"
         ]
       },
       "AuditEntry": {

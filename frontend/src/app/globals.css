@@ -429,14 +429,24 @@ button.pill:active {
 }
 /* Multi-select filters that are on: quiet, so a row of them never turns
    into a wall of accent. Single-choice selection (tabs) keeps the accent. */
+/* Multi-select filters: "on" is an outlined chip with a check, "off" is plain
+   muted text, so the state reads at a glance without a wall of pressed boxes. */
 .pill[aria-pressed="true"] {
   border-color: var(--border-strong);
-  background: var(--bauhaus-app-soft);
+  background: var(--surface);
   color: var(--ink);
 }
-.pill[aria-pressed="false"] {
+.pill[aria-pressed="true"]::before {
+  content: "✓";
+  font-size: 11px;
   color: var(--ink-dim);
 }
+.pill[aria-pressed="false"] {
+  border-color: transparent;
+  background: transparent;
+  color: var(--ink-dim);
+}
+
 /* Single choice (OS picker, segmented choices): ink edge on soft ground. Blue
    stays for primary actions only; view switches use .tabs. */
 .pill[aria-selected="true"],
@@ -854,4 +864,11 @@ pre,
 .cmd {
   white-space: pre;
   overflow-x: auto;
+}
+
+/* Keyboard hints are noise on touch screens. */
+@media (pointer: coarse) {
+  .kbd-hint {
+    display: none;
+  }
 }

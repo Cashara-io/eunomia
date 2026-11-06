@@ -18,17 +18,20 @@ async fn admin_sees_space_events_and_people() {
     let owner = app.user.id.clone();
 
     common::sys(Box::pin(async {
-        let v = vaults::create_vault(&db, &owner, "acme-engineering", "org").await.unwrap();
+        let v = vaults::create_vault(&db, &control, &owner, "acme-engineering", "org").await.unwrap();
         let v = rid::parse(&v.id).unwrap();
         vaults::invite_member(&db, &control, &owner, &v, &bob.email, "member").await.unwrap();
         vaults::invite_member(&db, &control, &owner, &v, &carol.email, "member").await.unwrap();
-        vaults::accept_invitation(&db, &bob.id, &v).await.unwrap();
+        vaults::accept_invitation(&db, &control, &bob.id, &v).await.unwrap();
         vaults::set_member_role(&db, &control, &owner, &v, &bob.email, "owner").await.unwrap();
         // carol never accepted: removing her withdraws the invitation
         vaults::remove_member(&db, &control, &owner, &v, &carol.email).await.unwrap();
         // a non-owner is refused, and the refusal is recorded too
         assert!(vaults::invite_member(&db, &control, &carol.id, &v, &carol.email, "member").await.is_err());
-        let gone = vaults::create_vault(&db, &owner, "scratch", "org").await.unwrap();
+        vaults::rename_vault(&db, &control, &owner, &v, "acme-eng").await.unwrap();
+        let copy = vaults::clone_vault(&db, &control, &owner, &v, Some("acme-copy"), "org").await.unwrap();
+        vaults::merge_vaults(&db, &control, &owner, &v, &rid::parse(&copy.id).unwrap(), Some("acme-all"), "org").await.unwrap();
+        let gone = vaults::create_vault(&db, &control, &owner, "scratch", "org").await.unwrap();
         vaults::delete_vault(&db, &control, &owner, &rid::parse(&gone.id).unwrap()).await.unwrap();
     }))
     .await;
@@ -39,9 +42,15 @@ async fn admin_sees_space_events_and_people() {
     let summaries: Vec<&str> = rows.iter().map(|r| r["summary"].as_str().unwrap()).collect();
     for want in [
         "Deleted the space scratch",
+        "Created the space scratch",
+        "Merged acme-eng and acme-copy into a new space, acme-all",
+        "Copied acme-eng into a new space, acme-copy",
+        "Renamed acme-engineering to acme-eng",
         "Withdrew the invitation for carol@example.com to acme-engineering",
         "Made bob@example.com an owner of acme-engineering",
+        "Joined acme-engineering",
         "Invited bob@example.com to acme-engineering",
+        "Created the space acme-engineering",
     ] {
         assert!(summaries.contains(&want), "missing {want:?} in {summaries:?}");
     }
@@ -58,6 +67,16 @@ async fn admin_sees_space_events_and_people() {
     let (_, signins) = app.http("GET", "/api/admin/audit?category=signins&limit=5", None, true).await;
     let signins = signins["results"].as_array().unwrap();
     assert!(!signins.is_empty() && signins.iter().all(|r| r["category"] == "signins"), "{signins:?}");
+    // a server setting change reads in plain words, under "Server" and "Changes"
+    let (status, _) = app.http("PATCH", "/api/settings", Some(serde_json::json!({ "openai_api_key": "sk-test" })), true).await;
+    assert_eq!(status, StatusCode::OK);
+    for category in ["server", "changes"] {
+        let (_, page) = app.http("GET", &format!("/api/admin/audit?category={category}&limit=5"), None, true).await;
+        let row = &page["results"][0];
+        assert_eq!(row["action"], "server.ai_provider", "{category}: {page}");
+        assert!(row["summary"].as_str().unwrap().starts_with("Replaced the"), "{row}");
+        assert!(!row.to_string().contains("sk-test"), "the key never reaches the log");
+    }
     let (_, all) = app.http("GET", "/api/admin/audit?limit=200", None, true).await;
     assert!(all["results"].as_array().unwrap().iter().all(|r| !r["action"].as_str().unwrap().starts_with("tool.")));
 

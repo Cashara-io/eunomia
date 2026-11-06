@@ -301,7 +301,25 @@ async fn patch_settings(
     }
     validate_update(&state.db, &state.settings, &user.id, &body).await?;
     let row = update_app_settings(&state.db, &user.id, &body, &state.settings.encryption_key).await?;
+    if let Some(detail) = provider_change(&body, &state.settings.openai_base_url, &row.openai_base_url) {
+        crate::audit::record_as_caller_detail(&state.control, &user.id, "server.ai_provider", "", "ok", &detail).await;
+    }
     respond(&state, &user, &row).await
+}
+
+/// The ledger detail for a change of AI provider (the endpoint, or its key), or `None` when the
+/// patch touches neither. Names only the endpoint's host, never the key.
+fn provider_change(body: &SettingsUpdate, server_base_url: &str, saved_base_url: &str) -> Option<String> {
+    if body.openai_base_url.is_none() && body.openai_api_key.is_none() {
+        return None;
+    }
+    let base = provider::effective_base_url(server_base_url, saved_base_url);
+    let host = url::Url::parse(base).ok().and_then(|u| u.host_str().map(str::to_string)).unwrap_or_default();
+    let mut detail = if host.is_empty() { String::new() } else { format!("host={host}") };
+    if body.openai_base_url.is_none() {
+        detail.push_str(if detail.is_empty() { "key" } else { " key" });
+    }
+    Some(detail)
 }
 
 #[utoipa::path(

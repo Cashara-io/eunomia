@@ -31,7 +31,7 @@ export default function OnboardingPage() {
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Failure | null>(null);
-  // Skip turns into Continue once a token was minted on the Connect step.
+  // A Continue appears once a token was minted on the Connect step (admins only); otherwise "Set up later" is the one exit.
   const [connected, setConnected] = useState(false);
 
   // Set while this page navigates on its own (to an app's guide), so the "already onboarded" redirect
@@ -113,7 +113,7 @@ export default function OnboardingPage() {
         </span>
         <div className="flex items-center gap-1">
           {me && (
-            <button onClick={() => skip()} disabled={busy} aria-label="Skip setup" className="btn btn-ghost btn-sm">
+            <button onClick={() => skip()} disabled={busy} className="btn btn-ghost btn-sm">
               <X size={16} strokeWidth={1.75} aria-hidden />
               Set up later
             </button>
@@ -156,29 +156,35 @@ export default function OnboardingPage() {
                 <div className="flex flex-col gap-2">
                   <h1 className="connect-title">Connect your AI app</h1>
                   <p className="text-[14px] leading-relaxed" style={{ color: "var(--ink-dim)" }}>
+                    Eunomia is your shared memory: ChatGPT, Claude and other AI apps can look things up in it.
+                  </p>
+                  <p className="text-[14px] leading-relaxed" style={{ color: "var(--ink-dim)" }}>
                     You&apos;re signed in as <span className="font-medium" style={{ color: "var(--ink)" }}>{me.email}</span>. Choose the app you use and
                     we&apos;ll show its steps. You can also do this later from Home.
                   </p>
                 </div>
                 <AppChoices onPick={pickApp} disabled={busy} />
-                <details className="border-t pt-3">
-                  <summary className="cursor-pointer text-[14px] font-semibold min-h-11 flex items-center">Advanced: use an API token</summary>
-                  <div className="pt-3">
-                    <ConnectAgents onToken={() => setConnected(true)} />
+                {isAdmin && (
+                  <details className="border-t pt-3">
+                    <summary className="cursor-pointer text-[14px] font-semibold min-h-11 flex items-center">Advanced: use an API token</summary>
+                    <div className="pt-3">
+                      <ConnectAgents onToken={() => setConnected(true)} />
+                    </div>
+                  </details>
+                )}
+                {connected && (
+                  <div className="flex items-center justify-end">
+                    <button
+                      onClick={(e) => (skipOpenAiStep ? skip(e.detail > 0 ? e.currentTarget : null) : setStep(1))}
+                      disabled={busy}
+                      aria-busy={busy}
+                      className="btn btn-primary"
+                    >
+                      {busy && <Loader2 size={14} strokeWidth={1.75} className="animate-spin" aria-hidden />}
+                      {skipOpenAiStep ? "Finish" : "Continue"}
+                    </button>
                   </div>
-                </details>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1" />
-                  <button
-                    onClick={(e) => (skipOpenAiStep ? skip(e.detail > 0 ? e.currentTarget : null) : setStep(1))}
-                    disabled={busy}
-                    aria-busy={busy}
-                    className={`btn ${connected ? "btn-primary" : ""}`}
-                  >
-                    {busy && <Loader2 size={14} strokeWidth={1.75} className="animate-spin" aria-hidden />}
-                    {connected ? (skipOpenAiStep ? "Finish" : "Continue") : "Skip"}
-                  </button>
-                </div>
+                )}
               </div>
 
               {step === 1 && !skipOpenAiStep && (

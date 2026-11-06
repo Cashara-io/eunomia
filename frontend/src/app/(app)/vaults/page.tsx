@@ -3,8 +3,9 @@
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ArrowLeft, Check, ChevronRight, Combine, ChevronDown, Layers, Lock, Mail, Plus, RefreshCw, Users } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, Combine, ChevronDown, Layers, Plus } from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
+import EmptyState from "@/components/ui/EmptyState";
 import StatusLabel from "@/components/ui/StatusLabel";
 import type { Vault } from "@/lib/types";
 import { useMe } from "@/lib/queries/auth";
@@ -93,7 +94,6 @@ function InvitationsPanel() {
     <section className="flex flex-col gap-2.5" aria-labelledby="invites-title">
       {welcome && <JoinedNotice id={welcome.id} name={welcome.name} onDismiss={() => setWelcome(null)} />}
       <h2 id="invites-title" className="section-title flex items-center gap-2">
-        <Mail {...ICON} aria-hidden />
         Pending invitations
         <span className="label font-mono">{invitations.length}</span>
       </h2>
@@ -523,7 +523,6 @@ function useWide() {
 
 export default function VaultsPage() {
   const vaultsQuery = useVaults();
-  const refetchAll = useRefreshVaults();
   const vaults = vaultsQuery.data ?? (vaultsQuery.isError ? [] : null);
   const meQuery = useMe();
   const me = meQuery.data?.email ?? null;
@@ -582,9 +581,6 @@ export default function VaultsPage() {
 
       <div className="flex flex-wrap items-center justify-end gap-2">
         <LiveStatusBadge />
-        <button onClick={() => void refetchAll()} className="btn btn-icon" aria-label="Refresh spaces" title="Refresh">
-          <RefreshCw {...ICON} />
-        </button>
         {/* While the create form is open, its own Create button is the one primary action. */}
         <button onClick={() => setCreating(true)} disabled={creating} className={`btn ${creating ? "" : "btn-primary"}`}>
           <Plus {...ICON} />
@@ -603,24 +599,13 @@ export default function VaultsPage() {
           <div className="flex flex-col gap-7 min-w-0">
             <section className="flex flex-col gap-2.5" aria-labelledby="org-title">
               <h2 id="org-title" className="section-title flex items-center gap-2">
-                <Users {...ICON} aria-hidden />
                 Shared spaces
                 {vaults && <span className="label font-mono">{org.length}</span>}
               </h2>
               {!vaults ? (
                 <SkeletonRows />
               ) : org.length === 0 ? (
-                !creating && (
-                  <div className="ledger px-4 py-4 flex flex-col items-start gap-3">
-                    <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
-                      No shared spaces yet. Create one for a project or a team, or join one you were invited to.
-                    </p>
-                    <button onClick={() => setCreating(true)} className="btn btn-sm">
-                      <Plus {...ICON} />
-                      Create a space
-                    </button>
-                  </div>
-                )
+                !creating && <EmptyState>No shared spaces yet.</EmptyState>
               ) : (
                 list(org)
               )}
@@ -628,7 +613,6 @@ export default function VaultsPage() {
 
             <section className="flex flex-col gap-2.5" aria-labelledby="personal-title">
               <h2 id="personal-title" className="section-title flex items-center gap-2">
-                <Lock {...ICON} aria-hidden />
                 Personal
               </h2>
               {!vaults ? <SkeletonRows /> : list(personal)}

@@ -34,14 +34,14 @@ export function UsageSection() {
       <PanelHead
         title="Tool usage"
         action={
-          <div role="tablist" aria-label="Time range" className="flex gap-1.5">
+          <div role="tablist" aria-label="Time range" className="tabs">
             {RANGES.map((r) => (
               <button
                 key={r.id}
                 role="tab"
                 aria-selected={range === r.id}
                 onClick={() => setRange(r.id)}
-                className="pill"
+                className="tab"
               >
                 {r.id}
               </button>
@@ -56,8 +56,7 @@ export function UsageSection() {
 
       {usage.isError && <ErrorLine error={failure(usage.error, "Could not load tool usage.", " Reload the page to try again.")} />}
 
-      <Summary report={report} />
-      <Chart report={report} />
+      <Chart report={report} rangeLabel={RANGES.find((r) => r.id === range)!.label} />
 
       {org && (
         <Table title="By person" empty="No tool calls in this range." cols={["Person", "Calls", "Errors", "Avg time"]} loading={!report}>
@@ -132,7 +131,7 @@ export function UsageSection() {
           <tr key={t.tool}>
             <td>
               <span className="flex items-center gap-2">
-                <span className="font-mono text-[12.5px]">{t.tool}</span>
+                <span className="font-mono text-[12px]">{t.tool}</span>
                 {!t.read_only && <span className="pill">writes</span>}
               </span>
             </td>
@@ -144,30 +143,12 @@ export function UsageSection() {
   );
 }
 
-function Summary({ report }: { report: ToolUsageReport | null }) {
-  const t = report?.totals;
-  const cells: { label: string; value: string }[] = [
-    { label: "Tool calls", value: t ? fmt(t.calls) : "–" },
-    { label: "Errors", value: t ? fmt(t.errors) : "–" },
-    { label: "Error rate", value: t ? pct(t.errors, t.calls) : "–" },
-    { label: "Avg time", value: t && t.calls > 0 ? ms(t.avg_ms) : "–" },
-  ];
-  return (
-    <section
-      aria-label="Totals"
-      className="grid grid-cols-2 lg:grid-cols-4 overflow-hidden rounded-[10px]"
-      style={{ gap: "var(--hair)", background: "var(--border)", border: "var(--hair) solid var(--border)" }}
-    >
-      {cells.map((c) => (
-        <div key={c.label} className="flex flex-col gap-2.5 px-3.5 py-3 min-w-0 bg-[var(--surface)]">
-          <span className="label">{c.label}</span>
-          <span className="text-[26px] leading-none tracking-[-0.02em] font-mono" style={{ color: report ? "var(--ink)" : "var(--ink-faint)" }}>
-            {c.value}
-          </span>
-        </div>
-      ))}
-    </section>
-  );
+/** "1,204 tool calls in the last 7 days · 0.2% failed · average 23 ms": the totals as one line. */
+function summaryLine(report: ToolUsageReport, rangeLabel: string) {
+  const t = report.totals;
+  const parts = [`${fmt(t.calls)} tool ${t.calls === 1 ? "call" : "calls"} in the last ${rangeLabel}`];
+  if (t.calls > 0) parts.push(`${pct(t.errors, t.calls)} failed`, `average ${ms(t.avg_ms)}`);
+  return parts.join(" · ");
 }
 
 function bucketLabel(iso: string, step: string) {
@@ -177,7 +158,7 @@ function bucketLabel(iso: string, step: string) {
     : d.toLocaleDateString("en", { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
-function Chart({ report }: { report: ToolUsageReport | null }) {
+function Chart({ report, rangeLabel }: { report: ToolUsageReport | null; rangeLabel: string }) {
   const data = (report?.series ?? []).map((p) => ({
     bucket: p.bucket,
     ok: p.calls - p.errors,
@@ -185,7 +166,10 @@ function Chart({ report }: { report: ToolUsageReport | null }) {
   }));
   const empty = report && report.totals.calls === 0;
   return (
-    <div className="ledger p-4 flex flex-col gap-3">
+    <div className="flex flex-col gap-3">
+      <p className="text-[14px] tabular-nums" aria-live="polite" style={{ color: report ? "var(--ink)" : "var(--ink-faint)" }}>
+        {report ? summaryLine(report, rangeLabel.toLowerCase()) : "Loading tool calls…"}
+      </p>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="section-title">Calls over time</h3>
         <span className="flex items-center gap-3 text-[12px]" style={{ color: "var(--ink-dim)" }}>
@@ -235,9 +219,9 @@ function Chart({ report }: { report: ToolUsageReport | null }) {
                           ? new Date(p.bucket).toLocaleString("en", { month: "short", day: "numeric", hour: "numeric" })
                           : new Date(p.bucket).toLocaleDateString("en", { month: "short", day: "numeric", timeZone: "UTC" })}
                       </span>
-                      <span className="font-mono">{fmt(p.ok + p.errors)} calls</span>
+                      <span className="tabular-nums">{fmt(p.ok + p.errors)} calls</span>
                       {p.errors > 0 && (
-                        <span className="font-mono" style={{ color: "var(--critical)" }}>
+                        <span className="tabular-nums" style={{ color: "var(--critical)" }}>
                           {fmt(p.errors)} errors
                         </span>
                       )}
@@ -268,7 +252,7 @@ function Swatch({ color, label }: { color: string; label: string }) {
 function Counts({ c, max }: { c: { calls: number; errors: number; avg_ms: number }; max: number }) {
   return (
     <>
-      <td className="font-mono text-[12.5px] w-[150px]">
+      <td className="tabular-nums text-[13px] w-[150px]">
         <span className="flex items-center gap-2">
           <span className="w-[52px] text-right">{fmt(c.calls)}</span>
           <span aria-hidden className="h-1 flex-1 rounded-full overflow-hidden" style={{ background: "var(--surface-raised)" }}>
@@ -276,10 +260,10 @@ function Counts({ c, max }: { c: { calls: number; errors: number; avg_ms: number
           </span>
         </span>
       </td>
-      <td className="font-mono text-[12.5px] w-[90px]" style={{ color: c.errors > 0 ? "var(--critical)" : "var(--ink-faint)" }}>
+      <td className="tabular-nums text-[13px] w-[90px]" style={{ color: c.errors > 0 ? "var(--critical)" : "var(--ink-faint)" }}>
         {fmt(c.errors)}
       </td>
-      <td className="font-mono text-[12.5px] w-[90px]" style={{ color: "var(--ink-dim)" }}>
+      <td className="tabular-nums text-[13px] w-[90px]" style={{ color: "var(--ink-dim)" }}>
         {ms(c.avg_ms)}
       </td>
     </>
@@ -307,7 +291,7 @@ function Table({
       <div>
         <h3 className="section-title">{title}</h3>
         {hint && (
-          <p className="text-[12.5px] mt-0.5 max-w-[62ch]" style={{ color: "var(--ink-dim)" }}>
+          <p className="text-[13px] mt-0.5 max-w-[62ch]" style={{ color: "var(--ink-dim)" }}>
             {hint}
           </p>
         )}

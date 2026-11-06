@@ -19,8 +19,8 @@ fn err_app(tool_name: &str, e: &crate::error::AppError) -> Value {
     v
 }
 
-pub async fn vault_create(db: &OrgDb, owner: &RecordId, name: &str, kind: &str) -> Value {
-    match service::create_vault(db, owner, name, kind).await {
+pub async fn vault_create(db: &OrgDb, control: &ControlDb, owner: &RecordId, name: &str, kind: &str) -> Value {
+    match service::create_vault(db, control, owner, name, kind).await {
         Ok(v) => serde_json::to_value(v).unwrap_or_else(|e| err("vault_create", &e.to_string())),
         Err(e) => err_app("vault_create", &e),
     }
@@ -40,15 +40,15 @@ pub async fn vault_get(db: &OrgDb, owner: &RecordId, vault_id: &RecordId) -> Val
     }
 }
 
-pub async fn vault_clone(db: &OrgDb, owner: &RecordId, vault_id: &RecordId, name: Option<&str>, kind: &str) -> Value {
-    match service::clone_vault(db, owner, vault_id, name, kind).await {
+pub async fn vault_clone(db: &OrgDb, control: &ControlDb, owner: &RecordId, vault_id: &RecordId, name: Option<&str>, kind: &str) -> Value {
+    match service::clone_vault(db, control, owner, vault_id, name, kind).await {
         Ok(v) => serde_json::to_value(v).unwrap_or_else(|e| err("vault_clone", &e.to_string())),
         Err(e) => err_app("vault_clone", &e),
     }
 }
 
-pub async fn vault_merge(db: &OrgDb, owner: &RecordId, a: &RecordId, b: &RecordId, name: Option<&str>, kind: &str) -> Value {
-    match service::merge_vaults(db, owner, a, b, name, kind).await {
+pub async fn vault_merge(db: &OrgDb, control: &ControlDb, owner: &RecordId, a: &RecordId, b: &RecordId, name: Option<&str>, kind: &str) -> Value {
+    match service::merge_vaults(db, control, owner, a, b, name, kind).await {
         Ok(v) => serde_json::to_value(v).unwrap_or_else(|e| err("vault_merge", &e.to_string())),
         Err(e) => err_app("vault_merge", &e),
     }
@@ -103,22 +103,22 @@ pub async fn vault_invitations(db: &OrgDb, owner: &RecordId) -> Value {
     }
 }
 
-pub async fn vault_accept_invitation(db: &OrgDb, owner: &RecordId, vault_id: &RecordId) -> Value {
-    match service::accept_invitation(db, owner, vault_id).await {
+pub async fn vault_accept_invitation(db: &OrgDb, control: &ControlDb, owner: &RecordId, vault_id: &RecordId) -> Value {
+    match service::accept_invitation(db, control, owner, vault_id).await {
         Ok(v) => serde_json::to_value(v).unwrap_or_else(|e| err("vault_accept_invitation", &e.to_string())),
         Err(e) => err_app("vault_accept_invitation", &e),
     }
 }
 
-pub async fn vault_decline_invitation(db: &OrgDb, owner: &RecordId, vault_id: &RecordId) -> Value {
-    match service::decline_invitation(db, owner, vault_id).await {
+pub async fn vault_decline_invitation(db: &OrgDb, control: &ControlDb, owner: &RecordId, vault_id: &RecordId) -> Value {
+    match service::decline_invitation(db, control, owner, vault_id).await {
         Ok(()) => json!({ "declined": true }),
         Err(e) => err_app("vault_decline_invitation", &e),
     }
 }
 
-pub async fn vault_rename(db: &OrgDb, owner: &RecordId, vault_id: &RecordId, name: &str) -> Value {
-    match service::rename_vault(db, owner, vault_id, name).await {
+pub async fn vault_rename(db: &OrgDb, control: &ControlDb, owner: &RecordId, vault_id: &RecordId, name: &str) -> Value {
+    match service::rename_vault(db, control, owner, vault_id, name).await {
         Ok(v) => serde_json::to_value(v).unwrap_or_else(|e| err("vault_rename", &e.to_string())),
         Err(e) => err_app("vault_rename", &e),
     }

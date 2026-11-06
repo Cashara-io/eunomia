@@ -1,10 +1,10 @@
 "use client";
 
 // Everything you can do with one memory space, in plain sections: who is in it, sharing it with
-// another Eunomia (folded away), then a danger zone (hand over, leave, delete) at the very bottom.
+// another Eunomia (folded away), then "Leave or delete" (hand over, leave, delete) at the very bottom.
 // "Make a copy" is a quiet action in the header.
 import { useEffect, useRef, useState } from "react";
-import { Copy, LogOut, Pencil, Trash2, UserPlus, Users } from "lucide-react";
+import { Copy, LogOut, Pencil, Trash2, UserPlus } from "lucide-react";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
@@ -36,6 +36,11 @@ function inviteProblem(e: unknown): string {
   if (/already a member or has a pending invite/i.test(text)) return "They're already in this space or have an invitation waiting.";
   return "Could not send that invite. Check the address and try again.";
 }
+
+/** A destructive action that stays quiet at rest and turns red on hover or focus; its confirm says the rest. */
+// `!` because the .btn styles sit outside Tailwind's layers.
+const RED_ON_HOVER = "hover:text-[var(--critical)]! focus-visible:text-[var(--critical)]!";
+const QUIET_DANGER = `btn btn-ghost btn-sm text-[var(--ink-dim)]! ${RED_ON_HOVER}`;
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 const ROLE_OPTIONS = [
@@ -293,7 +298,6 @@ export default function SpaceDetail({
       {isOrg && (
         <DetailSection
           title="Members"
-          icon={<Users {...ICON} aria-hidden />}
           aside={members && <span className="label font-mono">{members.length}</span>}
         >
           <ul className="hairline-rows" aria-label="People in this space">
@@ -334,8 +338,7 @@ export default function SpaceDetail({
                         type="button"
                         onClick={() => setRemoving(m.email)}
                         aria-label={`Remove ${m.email}`}
-                        className="btn btn-ghost btn-sm hover:text-[var(--critical)] focus-visible:text-[var(--critical)]"
-                        style={{ color: "var(--ink-dim)" }}
+                        className={QUIET_DANGER}
                       >
                         Remove
                       </button>
@@ -365,7 +368,7 @@ export default function SpaceDetail({
                     </span>
                     <button
                       type="button"
-                      className="btn btn-ghost btn-sm"
+                      className={QUIET_DANGER}
                       disabled={revoking === p.email}
                       aria-label={`Revoke invitation to ${p.email}`}
                       onClick={() => revoke(p.email)}
@@ -442,7 +445,7 @@ export default function SpaceDetail({
 
       {/* Hand over, leave, delete: last, under their own heading. */}
       {(canHandOver || canLeave || (lastOwner && others.length > 0) || (isOrg && isOwner)) && (
-        <DetailSection title="Danger zone">
+        <DetailSection title="Leave or delete">
           {canHandOver && (
             <TransferOwnershipPanel vault={vault} members={members} me={me} />
           )}
@@ -470,7 +473,7 @@ export default function SpaceDetail({
               title="Delete this space"
               body="Removes it and everything in it, for everyone. This can't be undone."
               action={
-                <button onClick={() => setConfirm("delete")} className="btn btn-danger btn-sm">
+                <button onClick={() => setConfirm("delete")} className={`btn btn-sm ${RED_ON_HOVER}`}>
                   <Trash2 {...ICON} />
                   Delete space…
                 </button>

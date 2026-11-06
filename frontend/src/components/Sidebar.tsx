@@ -23,8 +23,12 @@ import EunomiaMark from "./EunomiaMark";
 import { openCommandPalette } from "./CommandPalette";
 import { useMe, useLogout } from "@/lib/queries/auth";
 import { useSources } from "@/lib/queries/sources";
-import { useUpdateStatus } from "@/lib/queries/settings";
 import { useInvitations } from "@/lib/queries/vaults";
+import { useQuery } from "@tanstack/react-query";
+import { useSettings, useUpdateStatus } from "@/lib/queries/settings";
+import { documentKeys } from "@/lib/queries/documents";
+import { call } from "@/lib/queries/client";
+import { listDocuments } from "@/lib/gen";
 import { modKey } from "@/lib/platform";
 
 const noSubscribe = () => () => {};
@@ -66,13 +70,14 @@ function NavLink({ href, active, children }: { href: string; active: boolean; ch
 }
 
 /** The wordmark: the mark plus "eunomia", cream on the ink sidebar, and "by Paperless" under it. */
-function Brand() {
+function Brand({ compact = false }: { compact?: boolean }) {
   return (
     <div className="flex flex-col gap-1.5 min-w-0">
       <Link href="/" className="flex items-center gap-2 min-w-0 rounded-[3px]" aria-label="Eunomia home">
         <EunomiaMark size={22} />
         <span className="text-[18px] font-semibold tracking-[-0.03em] truncate">eunomia</span>
       </Link>
+      {!compact && (
       <a
         href="https://www.buildpaperless.com.au/eunomia"
         target="_blank"
@@ -84,6 +89,7 @@ function Brand() {
         {/* eslint-disable-next-line @next/next/no-img-element -- a fixed 560x192 PNG, nothing to optimise */}
         <img src="/paperless-logo-light.png" alt="" width={64} height={22} className="block h-[22px] w-auto" />
       </a>
+      )}
     </div>
   );
 }
@@ -125,6 +131,17 @@ export default function Sidebar() {
 
   const invites = useInvitations().data?.length ?? 0;
   const isAdmin = me?.is_admin ?? false;
+  // Features the server has switched off are dead ends for members: leave them out of their nav.
+  // Admins keep them, since that's where they turn them on. Neither query polls.
+  const member = !isAdmin && me !== null;
+  const settingsData = useSettings(member).data;
+  const docsData = useQuery({
+    queryKey: documentKeys.list(),
+    queryFn: () => call(listDocuments({ query: { limit: 200 } })),
+    enabled: member,
+  }).data;
+  const chatOff = member && settingsData?.model_configured === false;
+  const docsOff = member && docsData?.storage === false;
   // The platform's shortcut key, read after hydration (the server can't know it).
   const mod = useSyncExternalStore(noSubscribe, modKey, () => "⌘" as const);
   const connected = rows?.filter(isLiveSource) ?? [];
@@ -155,7 +172,7 @@ export default function Sidebar() {
         <button onClick={openCommandPalette} className="sidebar-search w-full min-h-9 px-3 flex items-center gap-2 text-[13px] text-left">
           <Search size={18} strokeWidth={1.75} aria-hidden />
           <span className="flex-1">Search</span>
-          <span className="kbd" aria-hidden>
+          <span className="kbd kbd-hint" aria-hidden>
             {mod === "⌘" ? "⌘K" : "Ctrl K"}
           </span>
           <span className="sr-only">({mod === "⌘" ? "Command" : "Control"} K)</span>
@@ -163,7 +180,7 @@ export default function Sidebar() {
       </div>
 
       <div className="px-4 flex flex-col gap-1">
-        {MAIN_NAV.map(({ href, label, icon: Icon }) => (
+        {MAIN_NAV.filter(({ href }) => !(href === "/chat" && chatOff) && !(href === "/documents" && docsOff)).map(({ href, label, icon: Icon }) => (
           <NavLink key={href} href={href} active={isActive(pathname, href)}>
             <Icon size={18} strokeWidth={1.75} className="nav-icon shrink-0" aria-hidden />
             <span className="flex-1">{label}</span>
@@ -238,7 +255,7 @@ export default function Sidebar() {
   return (
     <>
       {/* Narrow screens: a top bar with the menu button; the sidebar becomes a drawer. */}
-      <div className="sidebar md:hidden sticky top-0 z-40 flex items-center gap-2 px-3 h-14 shrink-0">
+      <div className="sidebar md:hidden sticky top-0 z-40 flex items-center gap-2 px-3 h-12 shrink-0">
         <button
           ref={menuButton}
           onClick={() => setDrawerPath(pathname)}
@@ -249,7 +266,7 @@ export default function Sidebar() {
         >
           <Menu size={22} aria-hidden />
         </button>
-        <Brand />
+        <Brand compact />
         <button onClick={openCommandPalette} aria-label="Search" className="nav-link inline-flex items-center justify-center w-11 h-11 ml-auto">
           <Search size={20} aria-hidden />
         </button>

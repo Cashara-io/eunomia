@@ -41,11 +41,11 @@ export default function InvitationBanner({ className = "" }: { className?: strin
 
   return (
     <section aria-label="Invitations" className={`flex flex-col ${className}`}>
-      {invitations.map((inv) => (
+      {invitations.map((inv, i) => (
         <div
           key={inv.vault_id}
           className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5"
-          style={{ borderTop: "1px solid var(--border)" }}
+          style={i > 0 ? { borderTop: "1px solid var(--border)" } : undefined}
         >
           <Mail {...ICON} aria-hidden className="shrink-0" style={{ color: "var(--ink-dim)" }} />
           <p className="flex-1 min-w-[180px] text-[14px]">

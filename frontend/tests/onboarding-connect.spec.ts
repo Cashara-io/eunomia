@@ -1,9 +1,11 @@
 import { test, expect, type Page } from "@playwright/test";
-import { uniqueEmail } from "./helpers";
+import { showAdminSettings, uniqueEmail } from "./helpers";
 
 const PASSWORD = "correct-horse-battery-staple";
 
-async function registerToConnectStep(page: Page) {
+/** `admin` shows the admin-only token method (members connect through an app's guide). */
+async function registerToConnectStep(page: Page, { admin = false } = {}) {
+  if (admin) await showAdminSettings(page);
   await page.goto("/register");
   await page.getByLabel("Email").fill(uniqueEmail("connect"));
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
@@ -20,7 +22,7 @@ test.describe("Onboarding: Connect your AI", () => {
   test.use({ permissions: ["clipboard-read", "clipboard-write"] });
 
   test("lands on the app picker with nothing preselected, and an app opens its own guide", async ({ page }) => {
-    await registerToConnectStep(page);
+    await registerToConnectStep(page, { admin: true });
     for (const app of ["ChatGPT", "Claude Code", "Codex", "Other apps"]) await expect(page.getByRole("link", { name: new RegExp(`^${app}`) })).toBeVisible();
     // The token method waits behind the Advanced disclosure, with no app chosen.
     await expect(page.getByRole("button", { name: "Generate a token" })).toBeHidden();
@@ -35,7 +37,7 @@ test.describe("Onboarding: Connect your AI", () => {
   });
 
   test("each client gets its own token and a ready-to-paste setup with this URL", async ({ page }) => {
-    await registerToConnectStep(page);
+    await registerToConnectStep(page, { admin: true });
     const mcpUrl = `${new URL(page.url()).origin}/mcp`;
     await page.getByText("Advanced: use an API token").click();
     const panel = page.getByRole("tabpanel");
@@ -81,14 +83,15 @@ test.describe("Onboarding: Connect your AI", () => {
     // A token minted here survives the trip there and back.
     await expect(panel.getByLabel("Config", { exact: true })).toContainText("Bearer ");
 
-    // Once something is connected, Skip becomes Continue.
+    // Once something is connected, a Continue (or Finish) appears beside the one "Set up later" exit.
     await page.getByRole("button", { name: /^(Continue|Finish)$/ }).click();
     await expect(page.getByRole("heading", { name: "Connect your AI app" })).toBeHidden();
   });
 
-  test("skip leaves without minting a token", async ({ page }) => {
+  test("set up later leaves without minting a token, and members see no token method", async ({ page }) => {
     await registerToConnectStep(page);
-    await page.getByRole("button", { name: "Skip", exact: true }).click();
+    await expect(page.getByText("Advanced: use an API token")).toHaveCount(0);
+    await page.getByRole("button", { name: "Set up later" }).click();
     await expect(page.getByRole("heading", { name: "Connect your AI app" })).toBeHidden();
     const skipFinish = page.getByRole("button", { name: "Skip & finish" });
     if (await skipFinish.isVisible({ timeout: 2000 }).catch(() => false)) await skipFinish.click();

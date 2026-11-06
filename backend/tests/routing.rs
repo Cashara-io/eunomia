@@ -118,7 +118,7 @@ async fn world() -> W {
     w.work = w.ok(&w.owner, "vault_create", json!({"name": "Build Paperless", "kind": "org"})).await["id"].as_str().unwrap().into();
     w.side = w.ok(&w.owner, "vault_create", json!({"name": "Side", "kind": "org"})).await["id"].as_str().unwrap().into();
     w.ok(&w.owner, "vault_invite", json!({"vault_id": w.work, "email": "member@example.com"})).await;
-    common::sys(vaults::accept_invitation(&w.org.db, &w.member.user.id, &rid::parse(&w.work).unwrap())).await.unwrap();
+    common::sys(vaults::accept_invitation(&w.org.db, &w.app.state.control, &w.member.user.id, &rid::parse(&w.work).unwrap())).await.unwrap();
     w.personal = common::sys(vaults::personal_vault_id(&w.org.db, &w.owner.user.id)).await.unwrap().to_string();
     w
 }

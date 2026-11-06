@@ -379,9 +379,18 @@ pub async fn accept_join(state: &OrgState, req: JoinRequest) -> AppResult<JoinRe
         .bind(("addr", None::<String>))
         .await?
         .check()?;
+    let guest = if req.guest_name.trim().is_empty() { "another Eunomia" } else { req.guest_name.trim() };
+    audit_from_peer(state, &share.created_by, &req.guest_instance, "peer.joined", &vault_name, &format!("role={} from={guest}", share.role)).await;
     let mut out = JoinResponse { link, nonce_h, vault_name, role: share.role, host_instance, host_name: instance_name(), mac: String::new() };
     out.mac = crypto::mac(&secret, &refs(&out.parts(&req)));
     Ok(out)
+}
+
+/// A ledger row for something another Eunomia did here (redeemed a code, left a link): it counts
+/// against `user`, who made the code, so it shows in that workspace's log; the actor is the peer.
+pub(crate) async fn audit_from_peer(state: &OrgState, user: &RecordId, peer_instance: &str, action: &str, space: &str, detail: &str) {
+    let actor = authz::Actor { kind: "peer", id: peer_instance.to_string() };
+    crate::audit::record(&state.control, crate::audit::Event { user: Some(user), actor: &actor, action, target: space, outcome: "ok", detail }).await;
 }
 
 // --- the guest side of a join ------------------------------------------------------------------
@@ -470,7 +479,7 @@ pub async fn join(state: &OrgState, user: &RecordId, code: &str, my_addrs: Vec<S
     let key = crypto::link_key(&secret, &resp.link, &req.nonce_g, &resp.nonce_h);
     let vault_label = if resp.vault_name.trim().is_empty() { body.vault.clone() } else { resp.vault_name.clone() };
     let vname = free_vault_name(&state.db, user, &vault_label).await?;
-    let vault = crate::vaults::service::create_vault(&state.db, user, &vname, "org").await?;
+    let vault = crate::vaults::service::create_vault(&state.db, &state.control, user, &vname, "org").await?;
     let vault_id = crate::rid::parse(&vault.id).map_err(|_| AppError::internal("vault id did not round-trip"))?;
     let peer_name = if resp.host_name.trim().is_empty() {
         url::Url::parse(&addr).ok().and_then(|u| u.host_str().map(|h| format!("Eunomia at {h}"))).unwrap_or_else(|| "The other Eunomia".into())
