@@ -9,6 +9,7 @@ import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import StatusLabel, { type StatusTone } from "@/components/ui/StatusLabel";
 import CopyButton from "@/components/bits/CopyButton";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
+import { Disclosure } from "@/components/vaults/bits";
 import {
   useCreateShareCode,
   useDeleteShareCode,
@@ -144,7 +145,7 @@ function PeerRow({ link, isOwner, vaultId, vaultName }: { link: PeerLink; isOwne
   );
 }
 
-/** "Share with another Eunomia", for the selected space's inspector. */
+/** "Share with another Eunomia", for the selected space's detail. Folded away until it is in use. */
 export default function PeerSharing({ vault }: { vault: { id: string; name: string; role: string } }) {
   const isOwner = vault.role === "owner";
   const peers = useVaultPeers(vault.id);
@@ -157,15 +158,21 @@ export default function PeerSharing({ vault }: { vault: { id: string; name: stri
   const codeId = useId();
   const links = peers.data?.links ?? [];
   const codes = (peers.data?.codes ?? []).filter((c) => c.id !== made?.id);
+  const inUse = links.length > 0 || codes.length > 0;
+
+  // Members can't share a space themselves; only show them links that already exist.
+  if (!isOwner && !inUse && !peers.isError) return null;
 
   return (
-    <section className="flex flex-col gap-2 pt-4" aria-labelledby={`${roleId}-title`}>
-      <h3 id={`${roleId}-title`} className="section-title text-[15px] flex items-center gap-1.5">
-        <ShareNetworkIcon {...ICON} />
-        Share with another Eunomia
-      </h3>
+    <Disclosure
+      key={inUse ? "in-use" : "unused"}
+      defaultOpen={inUse}
+      title="Share with another Eunomia"
+      icon={<ShareNetworkIcon {...ICON} />}
+      hint={inUse ? undefined : "Keep a copy of this space on someone else's Eunomia, kept in step."}
+    >
       <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
-        Keep a full copy of this space on another Eunomia, and keep both copies in step. Documents aren&apos;t shared yet.
+        The other Eunomia gets a full copy of this space, and changes travel both ways. Documents aren&apos;t shared yet.
       </p>
 
       {links.length > 0 && (
@@ -180,10 +187,10 @@ export default function PeerSharing({ vault }: { vault: { id: string; name: stri
       {isOwner && (
         <div className="flex flex-col gap-2 pt-1">
           <label htmlFor={roleId} className="text-[13px] font-medium">
-            The other Eunomia
+            What the other Eunomia can do
           </label>
           <div className="flex flex-wrap items-center gap-2">
-            <select id={roleId} className="field h-11 px-3 text-[14px]" value={role} onChange={(e) => setRole(e.target.value as PeerRole)}>
+            <select id={roleId} className="field h-10 px-3 text-[14px]" value={role} onChange={(e) => setRole(e.target.value as PeerRole)}>
               <option value="edit">{ROLE_WORDS.edit}</option>
               <option value="read">{ROLE_WORDS.read}</option>
             </select>
@@ -196,7 +203,7 @@ export default function PeerSharing({ vault }: { vault: { id: string; name: stri
                 setError(null);
                 create.mutate(role, {
                   onSuccess: (c) => setMade(c),
-                  onError: (e) => setError(failure(e, "Couldn't create a share code.")),
+                  onError: (e) => setError({ message: failure(e, "Couldn't create a share code. Try again in a moment.").message }),
                 });
               }}
             >
@@ -248,7 +255,7 @@ export default function PeerSharing({ vault }: { vault: { id: string; name: stri
           )}
         </div>
       )}
-    </section>
+    </Disclosure>
   );
 }
 

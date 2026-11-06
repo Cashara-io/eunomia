@@ -25,7 +25,8 @@ type ConnectedRow = {
   account: string;
   /** The last connection of its kind: an "Add another" row follows it. */
   addAfter: boolean;
-  status: "connected" | "demo";
+  /** "paused": disconnected on purpose, its imported items kept */
+  status: "connected" | "demo" | "paused";
   source: SourceRow | undefined;
   href: string;
 };
@@ -63,13 +64,18 @@ export default function ConnectorsPage() {
   for (const kind of CONNECTOR_ORDER) {
     const meta = CONNECTOR_META[kind];
     // A kind can be connected more than once (two Gmail accounts): one row per live connection.
-    const live = (connectors ?? []).filter((c) => c.kind === kind && connectorStatus(c) !== "disconnected");
+    // A disconnected connection that still has its key was paused on purpose: list it, so its data stays reachable.
+    // One row per source key: two rows for the same key would show the same data twice.
+    const live = (connectors ?? []).filter(
+      (c, i, all) => c.kind === kind && (connectorStatus(c) !== "disconnected" || c.credentials_set) && all.findIndex((o) => o.source_key === c.source_key) === i,
+    );
     if (live.length === 0) {
       available.push(kind);
       continue;
     }
     live.forEach((c, i) => {
-      const status = connectorStatus(c) as ConnectedRow["status"];
+      const cs = connectorStatus(c);
+      const status: ConnectedRow["status"] = cs === "disconnected" ? "paused" : cs;
       connected.push({
         id: c.id,
         kind,
@@ -177,7 +183,7 @@ export default function ConnectorsPage() {
               {shownConnected.map((r) => {
                 const s = r.source;
                 const fails = s?.sync_status.consecutive_failures ?? 0;
-                const health = sourceHealth(s);
+                const health = r.status === "paused" ? { tone: "var(--ink-dim)", label: "Disconnected" } : sourceHealth(s);
                 return (
                   <Fragment key={r.id}>
                   <Link href={r.href} className={`${ROW_LINK} ${CONNECTED_COLS}`}>

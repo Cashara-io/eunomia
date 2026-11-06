@@ -104,6 +104,21 @@ main() {
     sed -i.bak '/^BACKUP_ENCRYPTION_KEY=/d' .env && rm -f .env.bak
     echo "BACKUP_ENCRYPTION_KEY=$bkey" >> .env
   fi
+  # Peer vaults: share codes carry the host's LAN address, which the backend cannot see from inside
+  # its container. The installer writes EUNOMIA_LAN_ADDRS; installs from before 2.0.8 have none, so
+  # work it out here from a throwaway container on the host's network. Docker Desktop's "host"
+  # network is its VM's, not the machine's: leave those to the browser-address fallback.
+  if ! grep -q '^EUNOMIA_LAN_ADDRS=.' .env \
+    && [ -f scripts/lan-addrs.sh ] \
+    && ! docker info --format '{{.OperatingSystem}}' 2>/dev/null | grep -qi 'docker desktop'; then
+    local lan port
+    port="$(sed -n 's/^FRONTEND_PORT=//p' .env | tail -1)"
+    lan="$(docker run --rm -i --network host -e FRONTEND_PORT="${port:-3000}" docker:27-cli sh -s < scripts/lan-addrs.sh 2>/dev/null | tail -1)"
+    if [[ "$lan" =~ ^[0-9.:,]+$ ]]; then
+      sed -i.bak '/^EUNOMIA_LAN_ADDRS=/d' .env && rm -f .env.bak
+      echo "EUNOMIA_LAN_ADDRS=$lan" >> .env
+    fi
+  fi
   # A release that pins SurrealDB 3.x over 2.x (running, or stopped: the script finds the volume itself) needs its data moved
   # first (export, fresh volume, verify; see docs/upgrading-to-surrealdb-3.md).
   # The script rolls itself back on failure, so here we only undo the checkout

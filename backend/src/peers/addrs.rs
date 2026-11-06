@@ -65,7 +65,24 @@ fn is_loopback_url(u: &str) -> bool {
 
 /// This instance's addresses, best first, without duplicates.
 pub fn advertised(public_url: &str) -> Vec<String> {
+    advertised_with(public_url, None)
+}
+
+/// The address a browser on this network used to open the app (`Host` / `X-Forwarded-Host`, e.g.
+/// `192.168.1.20:3000`), as a base URL, when it is a private IPv4 address: another Eunomia on the
+/// same network can reach this one there too. `None` for a domain name, a public or loopback address.
+pub fn browser_lan_addr(host: &str) -> Option<String> {
+    let host = host.split(',').next()?.trim();
+    let ip = host.rsplit_once(':').map_or(host, |(h, _)| h);
+    let ip: Ipv4Addr = ip.parse().ok()?;
+    is_lan(ip).then(|| format!("http://{host}"))
+}
+
+/// [`advertised`], plus `browser` (from [`browser_lan_addr`]) after the configured LAN addresses, so
+/// sharing works on an install that never set `EUNOMIA_LAN_ADDRS`.
+pub fn advertised_with(public_url: &str, browser: Option<String>) -> Vec<String> {
     let mut out: Vec<String> = split_list("EUNOMIA_LAN_ADDRS");
+    out.extend(browser);
     // inside a container the routed address is the container's own: only the installer knows the host's
     if !in_container()
         && let Some(ip) = routed_ipv4().filter(|ip| is_lan(*ip))
@@ -110,6 +127,17 @@ mod tests {
         for ip in ["8.8.8.8", "100.128.0.1", "1.1.1.1"] {
             assert!(!is_lan(ip.parse().unwrap()), "{ip}");
         }
+    }
+
+    #[test]
+    fn browser_address_only_when_private_ipv4() {
+        assert_eq!(browser_lan_addr("192.168.8.196:3000").as_deref(), Some("http://192.168.8.196:3000"));
+        assert_eq!(browser_lan_addr("10.0.0.5").as_deref(), Some("http://10.0.0.5"));
+        assert_eq!(browser_lan_addr("192.168.1.2:3000, 10.0.0.1").as_deref(), Some("http://192.168.1.2:3000"));
+        assert_eq!(browser_lan_addr("localhost:3000"), None);
+        assert_eq!(browser_lan_addr("127.0.0.1:3000"), None);
+        assert_eq!(browser_lan_addr("8.8.8.8:3000"), None);
+        assert_eq!(browser_lan_addr("eunomia.example.com"), None);
     }
 
     #[test]
