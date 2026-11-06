@@ -407,7 +407,7 @@ export default function SpaceDetail({
       )}
 
       {(isOwner || canLeave || (lastOwner && others.length > 0)) && (
-        <DetailSection title={isOrg ? "Leave or delete" : "Copy this space"}>
+        <DetailSection title={isOrg ? "Leave or delete" : "More"}>
           {isOwner &&
             (cloning ? (
               <form
@@ -455,7 +455,7 @@ export default function SpaceDetail({
                     className="btn btn-ghost btn-sm"
                   >
                     {cloned ? <DrawnCheck /> : <Copy {...ICON} />}
-                    Copy space
+                    Copy
                   </button>
                 }
               />

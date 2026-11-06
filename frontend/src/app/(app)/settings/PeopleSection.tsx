@@ -28,11 +28,10 @@ const date = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString(un
 /* A disabled button with a reason: the tooltip sits on a wrapper because a disabled button gets no hover. */
 function Locked({ label, reason }: { label: string; reason: string }) {
   return (
+    // faint text, not a disabled button: it never stretches the row, and the tooltip says why
     <Tooltip label={reason}>
-      <span tabIndex={0} aria-label={`${label}: ${reason}`} className="inline-flex">
-        <button type="button" className="btn btn-ghost btn-sm" disabled aria-hidden tabIndex={-1}>
-          {label}
-        </button>
+      <span tabIndex={0} aria-label={`${label}: ${reason}`} className="inline-flex px-2 text-[13px] whitespace-nowrap" style={{ color: "var(--ink-faint)" }}>
+        {label}
       </span>
     </Tooltip>
   );
@@ -89,6 +88,9 @@ function RowActions({ p, onError }: { p: Person; onError: (f: Failure | null) =>
       </span>
     );
   }
+
+  // your own row: one quiet note instead of two locked actions
+  if (p.is_you) return <Locked label="That's you" reason="You can't change your own admin rights or suspend yourself. Ask another admin." />;
 
   return (
     <span className="inline-flex flex-wrap items-center justify-start sm:justify-end gap-1">
@@ -237,15 +239,17 @@ export function PeopleSection() {
 
       {signup && (
         <div className="flex flex-col gap-1.5 text-[14px]">
-          <div>
-            <span className="label mr-2">Who can sign up</span>
-            <span>{signup.summary}</span>
-          </div>
+          {signup.mode !== "open" && (
+            <div>
+              <span className="label mr-2">Who can sign up</span>
+              <span>{signup.summary}</span>
+            </div>
+          )}
           {signup.mode === "open" && (
             <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]" data-testid="signup-open-warning">
               <span className="inline-flex items-center gap-1.5">
                 <span className="dot" style={{ background: "var(--warning)" }} aria-hidden />
-                Anyone who can reach this server can create an account.
+                Anyone who can reach this server can sign up. To require invites, set
               </span>
               <span className="inline-flex items-center gap-1">
                 <code className="font-mono text-[13px]">SIGNUP=invite</code>

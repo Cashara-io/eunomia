@@ -577,16 +577,17 @@ export default function VaultsPage() {
         icon={Layers}
         title="Memory spaces"
         intro="Keep each project's memories in its own space. Share a space with the people you invite."
+        actions={
+          <>
+            <LiveStatusBadge />
+            {/* While the create form is open, its own Create button is the one primary action. */}
+            <button onClick={() => setCreating(true)} disabled={creating} className={`btn ${creating ? "" : "btn-primary"}`}>
+              <Plus {...ICON} />
+              Create space
+            </button>
+          </>
+        }
       />
-
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <LiveStatusBadge />
-        {/* While the create form is open, its own Create button is the one primary action. */}
-        <button onClick={() => setCreating(true)} disabled={creating} className={`btn ${creating ? "" : "btn-primary"}`}>
-          <Plus {...ICON} />
-          Create space
-        </button>
-      </div>
 
       {creating && (
         <CreateVaultForm onCancel={() => setCreating(false)} onCreated={(id) => {
@@ -605,13 +606,13 @@ export default function VaultsPage() {
           <div className="flex flex-col gap-7 min-w-0">
             <section className="flex flex-col gap-2.5" aria-labelledby="org-title">
               <h2 id="org-title" className="section-title flex items-center gap-2">
-                Team spaces
-                {vaults && <span className="label font-mono">{org.length}</span>}
+                Spaces
+                {vaults && <span className="label tabular">{org.length}</span>}
               </h2>
               {!vaults ? (
                 <SkeletonRows />
               ) : org.length === 0 ? (
-                !creating && <EmptyState>No team spaces yet.</EmptyState>
+                !creating && <EmptyState>No shared spaces yet.</EmptyState>
               ) : (
                 list(org)
               )}

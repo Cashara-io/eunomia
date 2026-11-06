@@ -18,6 +18,13 @@ export default function LiveStatusBadge() {
   const status = useLiveStatus();
   // Only worth a word when something is off: a working live link is the normal case, and a
   // "Connecting…" that sits there for a second reads as broken (issue #146).
+  // A working live link says so only to screen readers (and tests): nothing to look at when all is well.
+  if (status === "live")
+    return (
+      <span className="sr-only" role="status" aria-live="polite">
+        {WORDS.live.word}
+      </span>
+    );
   if (status !== "offline") return null;
   const { word, hint, color } = WORDS[status];
   return (

@@ -128,14 +128,18 @@ function subscribeWidth(l: () => void) {
 }
 const readPhone = () => window.matchMedia("(max-width: 767px)").matches;
 
-/** `?id=<entity>` and `?vault=<space>` from the URL. Its own component so that only it waits on the URL (Suspense). */
-function UrlFocus({ onChange }: { onChange: (id: string | null, vault: string | null) => void }) {
+/** `?id=<entity>`, `?vault=<space>` and `?memory=<memory>` from the URL. Its own component so that only it waits on the URL (Suspense). */
+function UrlFocus({ onChange }: { onChange: (id: string | null, vault: string | null, memory: string | null) => void }) {
   const params = useSearchParams();
   const id = params.get("id");
   const vault = params.get("vault");
-  useEffect(() => onChange(id, vault), [id, vault]); // eslint-disable-line react-hooks/exhaustive-deps
+  const memory = params.get("memory");
+  useEffect(() => onChange(id, vault, memory), [id, vault, memory]); // eslint-disable-line react-hooks/exhaustive-deps
   return null;
 }
+
+/** Scrolls a memory a search result pointed at into view, once, as it mounts. */
+const scrollToMemory = (el: HTMLElement | null) => el?.scrollIntoView({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
 
 export default function EntityGraph({
   kinds,
@@ -208,6 +212,8 @@ export default function EntityGraph({
   // "Add memory" progress: spinner while saving, a drawn check for 1.2s after
   const [memoryStatus, setMemoryStatus] = useState<"idle" | "running" | "done">("idle");
   const [freshMemory, setFreshMemory] = useState<string | null>(null);
+  // the memory a search result pointed at (`?memory=`): tinted until the inspector moves on
+  const [pointedMemory, setPointedMemory] = useState<string | null>(null);
   const memoryTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(memoryTimer.current), []);
 
@@ -342,6 +348,7 @@ export default function EntityGraph({
     if (id) url.searchParams.set("id", id);
     else url.searchParams.delete("id");
     url.searchParams.delete("vault");
+    url.searchParams.delete("memory");
     window.history.replaceState(null, "", url.pathname + url.search);
   }, [selected?.id]);
 
@@ -480,7 +487,12 @@ export default function EntityGraph({
     return (
       <div className="absolute inset-0 overflow-hidden flex flex-col md:block">
         <Suspense fallback={null}>
-          <UrlFocus onChange={(id, vault) => setPendingFocus({ id, vault })} />
+          <UrlFocus
+            onChange={(id, vault, memory) => {
+              setPendingFocus({ id, vault });
+              setPointedMemory(memory);
+            }}
+          />
         </Suspense>
         {list ? (
           <div className="absolute inset-0 flex flex-col">
@@ -908,7 +920,13 @@ export default function EntityGraph({
           ) : (
             <ul className="hairline-rows">
               {selected.memory.map((m) => (
-                <li key={m.id} ref={m.id === freshMemory ? blurIn : undefined} className="group py-2.5 flex items-start justify-between gap-2">
+                <li
+                  key={m.id}
+                  ref={m.id === freshMemory ? blurIn : m.id === pointedMemory ? scrollToMemory : undefined}
+                  className="group py-2.5 flex items-start justify-between gap-2"
+                  style={m.id === pointedMemory ? { background: "var(--accent-soft)", boxShadow: "-8px 0 0 var(--accent-soft), 8px 0 0 var(--accent-soft)" } : undefined}
+                  aria-current={m.id === pointedMemory ? "true" : undefined}
+                >
                   <div className="min-w-0 flex flex-col gap-1">
                     {/* edit and delete follow one rule: whoever wrote it, and admins */}
                     {canDelete(m.owner_email) ? (

@@ -336,6 +336,15 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
 const SELF_EXPLAINED: &[&str] = &["auth.login", "auth.oidc_login", "auth.failed", "oauth.consent", "authz.denied"];
 
 /// Why an action failed, from the error code it ended with, in words; empty when it worked.
+/// The exact cause a failed attempt recorded in its detail (`why=...`), when it recorded one.
+fn why_words(detail: &str) -> Option<&'static str> {
+    match detail.split_whitespace().find_map(|kv| kv.strip_prefix("why="))? {
+        "no_account" => Some("No account has that email yet"),
+        "already" => Some("Already a member, or already invited"),
+        _ => None,
+    }
+}
+
 fn reason_words(action: &str, outcome: &str) -> String {
     if outcome == "ok" || outcome.is_empty() || SELF_EXPLAINED.contains(&action) {
         return String::new();
@@ -460,7 +469,7 @@ async fn get_workspace_audit(State(state): State<AppState>, user: User, Query(q)
                 summary: describe(&r.action, &r.target, &r.detail, ok, &names),
                 category: AuditCategory::of(&r.action),
                 result: result_words(&r.outcome).into(),
-                reason: reason_words(&r.action, &r.outcome),
+                reason: why_words(&r.detail).map(str::to_string).unwrap_or_else(|| reason_words(&r.action, &r.outcome)),
                 ok,
                 outcome: r.outcome,
                 action: r.action,
@@ -879,6 +888,9 @@ mod tests {
         assert_eq!(describe("vault.invite", "Team", "email=a@b.c role=member", false, &n), "Couldn't invite a@b.c to Team");
         assert_eq!(describe("peer.left", "Team", "", false, &n), "Another Eunomia stopped syncing Team (it keeps its copy) (didn't go through)");
         assert_eq!(reason_words("vault.invite", "validation.invalid"), "Already a member or invited, or no account has that email");
+        assert_eq!(why_words("email=a@b.c role=member why=no_account"), Some("No account has that email yet"));
+        assert_eq!(why_words("email=a@b.c why=already"), Some("Already a member, or already invited"));
+        assert_eq!(why_words("email=a@b.c"), None);
         assert_eq!(reason_words("vault.role", "vault.forbidden"), "Not allowed");
         assert_eq!(reason_words("vault.create", "rate.limited"), "Too many attempts (rate limited)");
         assert_eq!(reason_words("vault.create", "ok"), "");

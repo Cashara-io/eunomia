@@ -33,6 +33,8 @@ export function UsageSection() {
   const report = usage.data ?? null;
   const org = report?.scope === "org";
 
+  const credentialsRepeat = Boolean(report && report.by_credential.length > 0 && report.by_credential.every((c) => c.kind === "session"));
+
   return (
     <div className="flex flex-col gap-7">
       <PanelHead
@@ -75,6 +77,9 @@ export function UsageSection() {
         </Table>
       )}
 
+      {/* A breakdown that can only repeat another (every call from a browser session, or one
+          channel) says nothing new: leave it out until it does. */}
+      {!credentialsRepeat && (
       <Table
         title="By credential"
         hint="The token, OAuth app or browser session a call was made with."
@@ -97,7 +102,9 @@ export function UsageSection() {
           </tr>
         ))}
       </Table>
+      )}
 
+      {(!report || report.by_channel.length > 1) && (
       <Table title="By channel" empty="No tool calls in this range." cols={["Channel", "Calls", "Errors", "Avg time"]} loading={!report}>
         {report?.by_channel.map((c: UsageByChannel) => (
           <tr key={c.channel}>
@@ -106,6 +113,7 @@ export function UsageSection() {
           </tr>
         ))}
       </Table>
+      )}
 
       <Table
         title="By session"

@@ -478,6 +478,22 @@ async fn audit_vault<T>(control: &ControlDb, user_id: &RecordId, action: &str, s
         }
         detail.push_str(&format!("role={r}"));
     }
+    // A refused invite shares one error code for two different causes: say which, so the audit log can.
+    if let Err(e) = res {
+        let why = if e.message.starts_with("no user with email") {
+            Some("no_account")
+        } else if e.message.contains("already a member or has a pending invite") {
+            Some("already")
+        } else {
+            None
+        };
+        if let Some(w) = why {
+            if !detail.is_empty() {
+                detail.push(' ');
+            }
+            detail.push_str(&format!("why={w}"));
+        }
+    }
     crate::audit::record_as_caller_detail(control, user_id, action, space, outcome(res), &detail).await;
 }
 

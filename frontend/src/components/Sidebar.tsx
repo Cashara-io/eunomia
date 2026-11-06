@@ -30,6 +30,7 @@ import { documentKeys } from "@/lib/queries/documents";
 import { call } from "@/lib/queries/client";
 import { listDocuments } from "@/lib/gen";
 import { modKey } from "@/lib/platform";
+import { UPDATER_OFF, versionLabel } from "@/lib/version";
 
 const noSubscribe = () => () => {};
 import { isLiveSource, sourceHealth, sourceLabel } from "@/lib/sourceState";
@@ -164,7 +165,6 @@ export default function Sidebar() {
             ? `Source: ${sourceLabel(connected[0])} connected`
             : `Sources: ${connected.length} connected`;
 
-  const version = process.env.NEXT_PUBLIC_APP_VERSION ?? "dev";
 
   const navBody = (
     <>
@@ -220,18 +220,18 @@ export default function Sidebar() {
         )}
         {!isAdmin ? null : !status?.configured ? (
           <Link href="/settings?tab=updates" className="sidebar-muted hover:underline underline-offset-2 rounded-[3px]">
-            v{version.replace(/^v/, "")} · Automatic updates off
+            {versionLabel()} · {UPDATER_OFF}
           </Link>
         ) : newVersion ? (
           <span className="sidebar-muted">
-            v{version.replace(/^v/, "")} ·{" "}
+            {versionLabel()} ·{" "}
             <Link href="/settings?tab=updates" className="underline underline-offset-2 rounded-[3px]" style={{ color: "var(--bauhaus-app-yellow)" }}>
               Update available · {newVersion}
             </Link>
           </span>
         ) : (
           <span className="sidebar-muted" title={status.checked_at ? `Checked ${new Date(status.checked_at).toLocaleString()}` : undefined}>
-            v{version.replace(/^v/, "")} · Up to date
+            {versionLabel()} · Up to date
           </span>
         )}
         <div className="flex items-center gap-2 pt-2" style={{ borderTop: "1px solid var(--bauhaus-app-sidebar-line)" }}>

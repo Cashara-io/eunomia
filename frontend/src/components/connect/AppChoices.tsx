@@ -8,7 +8,9 @@ import { AI_APPS, AppMark, type AppId } from "./apps";
  * `onPick` runs first (onboarding finishes setup) and then navigates itself. */
 export default function AppChoices({ onPick, disabled = false }: { onPick?: (id: AppId) => void; disabled?: boolean }) {
   return (
-    <ul className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4" aria-label="AI apps">
+    // Columns follow the space the grid sits in, not the window: four across on Home, two in the
+    // narrower onboarding panel, one on a phone. Each card is at least 220px, so names never cut and the panel never strands one card.
+    <ul className="grid gap-3 grid-cols-[repeat(auto-fit,minmax(220px,1fr))]" aria-label="AI apps">
       {AI_APPS.map((a) => (
         <li key={a.id} className="min-w-0">
           <Link
@@ -22,12 +24,12 @@ export default function AppChoices({ onPick, disabled = false }: { onPick?: (id:
             className="flex flex-col gap-1.5 h-full min-w-0 min-h-[76px] px-4 py-3.5 rounded-[3px] transition-colors hover:bg-[var(--bauhaus-app-bg)]"
             style={{ border: "1px solid var(--bauhaus-app-ink)" }}
           >
-            {/* one line each: the name never wraps, the hint is cut short rather than wrapping */}
-            <span className="flex items-center gap-2.5 text-[16px] font-semibold whitespace-nowrap min-w-0">
+            {/* the name stays whole on one line; the short hint may wrap */}
+            <span className="flex items-center gap-2.5 text-[16px] font-semibold whitespace-nowrap">
               <AppMark id={a.id} size={22} />
-              <span className="truncate">{a.name}</span>
+              {a.name}
             </span>
-            <span className="text-[13px] truncate" style={{ color: "var(--ink-dim)" }} title={a.hint}>
+            <span className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
               {a.hint}
             </span>
           </Link>

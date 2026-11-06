@@ -1,5 +1,6 @@
 "use client";
 
+import { APP_VERSION, UPDATER_OFF, versionLabel } from "@/lib/version";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -10,13 +11,13 @@ import SyncMark from "@/components/bits/SyncMark";
 import { ICON, CopyField, relativeTime, PanelHead, StatusLine, type Tone } from "./shared";
 
 // The version this frontend was built as; the updater's report, when there is one, wins.
-const BUILT_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? null;
+const BUILT_VERSION = versionLabel(APP_VERSION);
 
 /* "Running 2.0.9 · latest 2.1.0": always the running version, and the latest when known. */
 function Versions({ running, latest }: { running: string | null; latest?: string | null }) {
   return (
     <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
-      Running <span className="font-mono" style={{ color: "var(--ink)" }}>{running ?? "unknown"}</span>
+      Running <span className="font-mono" style={{ color: "var(--ink)" }}>{running ? versionLabel(running) : BUILT_VERSION}</span>
       {latest && latest !== running && (
         <>
           {" · latest "}
@@ -127,7 +128,7 @@ export function UpdateSection() {
   if (!status.configured) {
     return (
       <div className="flex flex-col gap-5">
-        <PanelHead title="Updates" status={<StatusLine tone="warning">Waiting for the updater</StatusLine>} />
+        <PanelHead title="Updates" status={<StatusLine tone="warning">{UPDATER_OFF}</StatusLine>} />
         <Versions running={BUILT_VERSION} />
         <div className="flex flex-col gap-3 max-w-[62ch]">
           <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>

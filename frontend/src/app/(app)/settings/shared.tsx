@@ -81,8 +81,11 @@ export function PanelHead({
     // phones: the action (tabs, a button) goes under the heading instead of squeezing it
     <div className="flex flex-col items-start gap-3 sm:flex-row sm:flex-wrap sm:justify-between">
       <div className="min-w-0 flex-1 self-stretch sm:self-auto">
-        <h2 className="section-title">{title}</h2>
-        {status && <div className="mt-1.5">{status}</div>}
+        {/* the status sits on the heading line ("HTTPS · Off"), never floating on its own row */}
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h2 className="section-title">{title}</h2>
+          {status}
+        </div>
         {children && (
           <p className="text-[15px] leading-relaxed mt-1.5 max-w-[68ch]" style={{ color: "var(--ink-dim)" }}>
             {children}

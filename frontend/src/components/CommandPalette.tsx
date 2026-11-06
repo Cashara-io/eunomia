@@ -229,7 +229,8 @@ function Palette({ onClose }: { onClose: () => void }) {
     icon: MessageSquareText,
     // opens the inspector of the entity the memory is about, in the memory's space
     go: () => {
-      const q = new URLSearchParams({ id: m.entity, vault: m.vault });
+      // `memory` points the inspector at the memory that matched, which it highlights
+      const q = new URLSearchParams({ id: m.entity, vault: m.vault, memory: m.id });
       router.push(`${CODE_KINDS.has(m.entityKind as EntityKind) ? "/code" : "/entities"}?${q}`);
     },
   }));
@@ -368,7 +369,11 @@ function Palette({ onClose }: { onClose: () => void }) {
             </div>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-2.5 text-[12px]" style={{ borderTop: "1px solid var(--border)", color: "var(--ink-dim)" }}>
+        {/* On a touch screen the footer would only hold the "type 2 letters" hint: show it only then, and no empty band after. */}
+        <div
+          className={`flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-2.5 text-[12px] ${searching ? "pointer-coarse:hidden" : ""}`}
+          style={{ borderTop: "1px solid var(--border)", color: "var(--ink-dim)" }}
+        >
           {/* keyboard hints mean nothing on a touch screen: hidden on coarse pointers */}
           <span className="contents pointer-coarse:hidden">
             <span className="flex items-center gap-1.5">
