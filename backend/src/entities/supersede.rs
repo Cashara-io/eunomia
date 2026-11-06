@@ -112,11 +112,21 @@ pub async fn check(db: &OrgDb, settings: &Settings, owner: &RecordId, subject: &
     if new.is_empty() || !enabled(db, settings, owner).await {
         return Vec::new();
     }
-    match run(db, settings, owner, subject, new).await {
-        Ok(marked) => marked,
-        Err(e) => {
-            tracing::warn!("supersede check failed for {}: {}", subject.to_string(), e.message);
-            Vec::new()
+    // The check runs right after the write, beside that write's own background work (its embed_soon),
+    // so a commit conflict is likely and says nothing about the facts: run it again. It is safe to
+    // repeat (embedding and marking are idempotent).
+    let mut attempt = 1;
+    loop {
+        match run(db, settings, owner, subject, new).await {
+            Ok(marked) => return marked,
+            Err(e) if e.code == crate::error::ErrorCode::DbConflict && attempt < CHECK_ATTEMPTS => {
+                attempt += 1;
+                tokio::time::sleep(Duration::from_millis(50 * attempt as u64)).await;
+            }
+            Err(e) => {
+                tracing::warn!("supersede check failed for {}: {}", subject.to_string(), e.message);
+                return Vec::new();
+            }
         }
     }
 }
@@ -125,6 +135,9 @@ pub async fn check(db: &OrgDb, settings: &Settings, owner: &RecordId, subject: &
 pub async fn enabled(db: &OrgDb, settings: &Settings, owner: &RecordId) -> bool {
     settings.embeddings_backend != "stub" && crate::embeddings::service::chat_available(db, settings, owner).await
 }
+
+/// Runs of one check when a commit conflict interrupts it.
+const CHECK_ATTEMPTS: u32 = 3;
 
 /// Most older facts embedded on the spot for one check.
 const EMBED_MISSING: i64 = 30;

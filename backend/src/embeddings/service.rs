@@ -303,12 +303,21 @@ pub async fn embed(db: &OrgDb, settings: &Settings, texts: &[String], owner: Opt
 
         for (i, v) in missing_idx.into_iter().zip(vecs) {
             let k = keys[i].clone();
-            store::cache::EMBED_CACHE_PUT
-                .on(db)
-                .bind(("id", RecordId::from_table_key("embed_cache", k.clone())))
-                .bind(("hmac", k.clone()))
-                .bind(("vector", v.clone()))
-                .await?;
+            // Two callers embedding the same text at once (a write's embed_soon and its supersede check)
+            // put the same cache row: retry the conflict. The cache is only a memo, so a put that still
+            // fails is logged and the vector is returned anyway.
+            let put = || async {
+                store::cache::EMBED_CACHE_PUT
+                    .on(db)
+                    .bind(("id", RecordId::from_table_key("embed_cache", k.clone())))
+                    .bind(("hmac", k.clone()))
+                    .bind(("vector", v.clone()))
+                    .await?
+                    .check()
+            };
+            if let Err(e) = crate::tx::with_retry(put).await {
+                tracing::warn!(error = %e, "embedding cache: not stored");
+            }
             cached.insert(k, v);
         }
     }
