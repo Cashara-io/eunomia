@@ -49,6 +49,11 @@ pub enum ErrorCode {
     DocumentUnsupportedType,
     DocumentStorageUnavailable,
     ChangesResync,
+    SecretUnavailable,
+    SecretRequestClosed,
+    SecretHostDenied,
+    SecretOutboundBlocked,
+    SecretOutboundFailed,
     ValidationInvalid,
     DbConflict,
     DbDuplicate,
@@ -92,6 +97,11 @@ impl ErrorCode {
         ErrorCode::DocumentUnsupportedType,
         ErrorCode::DocumentStorageUnavailable,
         ErrorCode::ChangesResync,
+        ErrorCode::SecretUnavailable,
+        ErrorCode::SecretRequestClosed,
+        ErrorCode::SecretHostDenied,
+        ErrorCode::SecretOutboundBlocked,
+        ErrorCode::SecretOutboundFailed,
         ErrorCode::ValidationInvalid,
         ErrorCode::DbConflict,
         ErrorCode::DbDuplicate,
@@ -135,6 +145,11 @@ impl ErrorCode {
             ErrorCode::DocumentUnsupportedType => "document.unsupported_type",
             ErrorCode::DocumentStorageUnavailable => "document.storage_unavailable",
             ErrorCode::ChangesResync => "changes.resync",
+            ErrorCode::SecretUnavailable => "secret.unavailable",
+            ErrorCode::SecretRequestClosed => "secret.request_closed",
+            ErrorCode::SecretHostDenied => "secret.host_denied",
+            ErrorCode::SecretOutboundBlocked => "secret.outbound_blocked",
+            ErrorCode::SecretOutboundFailed => "secret.outbound_failed",
             ErrorCode::ValidationInvalid => "validation.invalid",
             ErrorCode::DbConflict => "db.conflict",
             ErrorCode::DbDuplicate => "db.duplicate",
@@ -148,11 +163,13 @@ impl ErrorCode {
     pub fn default_status(self) -> StatusCode {
         match self {
             ErrorCode::AuthUnauthorized | ErrorCode::AuthTokenExpired | ErrorCode::AuthSessionExpired => StatusCode::UNAUTHORIZED,
-            ErrorCode::AuthForbidden | ErrorCode::AuthPasswordDisabled | ErrorCode::AuthScope | ErrorCode::TenantDenied | ErrorCode::VaultForbidden | ErrorCode::ExtensionDisabled => {
-                StatusCode::FORBIDDEN
-            }
+            ErrorCode::AuthForbidden | ErrorCode::AuthPasswordDisabled | ErrorCode::AuthScope | ErrorCode::TenantDenied | ErrorCode::VaultForbidden | ErrorCode::ExtensionDisabled
+            | ErrorCode::SecretHostDenied
+            | ErrorCode::SecretOutboundBlocked => StatusCode::FORBIDDEN,
+            ErrorCode::SecretOutboundFailed => StatusCode::BAD_GATEWAY,
+            ErrorCode::SecretRequestClosed => StatusCode::CONFLICT,
             ErrorCode::RateLimited | ErrorCode::ExtensionBufferFull => StatusCode::TOO_MANY_REQUESTS,
-            ErrorCode::TenantSchemaBehind | ErrorCode::DocumentStorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+            ErrorCode::TenantSchemaBehind | ErrorCode::DocumentStorageUnavailable | ErrorCode::SecretUnavailable => StatusCode::SERVICE_UNAVAILABLE,
             ErrorCode::DocumentTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
             ErrorCode::DocumentUnsupportedType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             ErrorCode::ChangesResync => StatusCode::GONE,
@@ -207,15 +224,18 @@ pub struct AppError {
     pub message: String,
     /// Raw cause (database or upstream text). Logged, never sent.
     pub source: Option<String>,
+    /// A stable machine-readable reason under `code`, sent as `reason` when set (for example
+    /// `helper_disabled` under `secret.unavailable`; the values are listed in docs/errors.md).
+    pub reason: Option<&'static str>,
 }
 
 impl AppError {
     pub fn coded(code: ErrorCode, message: impl Into<String>) -> Self {
-        AppError { code, status: code.default_status(), message: message.into(), source: None }
+        AppError { code, status: code.default_status(), message: message.into(), source: None, reason: None }
     }
 
     pub fn new(status: StatusCode, message: impl Into<String>) -> Self {
-        AppError { code: ErrorCode::from_status(status), status, message: message.into(), source: None }
+        AppError { code: ErrorCode::from_status(status), status, message: message.into(), source: None, reason: None }
     }
 
     pub fn unauthorized(message: impl Into<String>) -> Self {
@@ -239,6 +259,11 @@ impl AppError {
         self
     }
 
+    pub fn with_reason(mut self, reason: &'static str) -> Self {
+        self.reason = Some(reason);
+        self
+    }
+
     /// The message that is safe to show a client or agent.
     pub fn detail(&self) -> &str {
         if self.code.hides_message() {
@@ -253,7 +278,11 @@ impl AppError {
         if let Some(s) = &self.source {
             let _ = TOOL_SOURCE.try_with(|c| *c.lock().unwrap() = Some(s.clone()));
         }
-        json!({ "error": self.detail(), "code": self.code.as_str(), "trace_id": crate::telemetry::current_trace_id() })
+        let mut v = json!({ "error": self.detail(), "code": self.code.as_str(), "trace_id": crate::telemetry::current_trace_id() });
+        if let Some(r) = self.reason {
+            v["reason"] = json!(r);
+        }
+        v
     }
 
     /// Logs the cause on the current span. Called once, where the error leaves the process.
@@ -273,7 +302,7 @@ impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         self.log();
         let info = crate::capsules::FailureInfo { code: self.code, source: self.source.clone().unwrap_or_else(|| self.message.clone()) };
-        let body = json!({
+        let mut body = json!({
             "type": "about:blank",
             "title": self.status.canonical_reason().unwrap_or("Error"),
             "status": self.status.as_u16(),
@@ -281,6 +310,9 @@ impl IntoResponse for AppError {
             "code": self.code.as_str(),
             "trace_id": crate::telemetry::current_trace_id(),
         });
+        if let Some(r) = self.reason {
+            body["reason"] = json!(r);
+        }
         let mut resp = (self.status, [(header::CONTENT_TYPE, "application/problem+json")], body.to_string()).into_response();
         resp.extensions_mut().insert(info);
         resp
@@ -335,7 +367,8 @@ mod tests {
                 | ErrorCode::MemoryNotFound | ErrorCode::ChatThreadNotFound | ErrorCode::ConnectorNotFound
                 | ErrorCode::ConnectorNotConnected | ErrorCode::SourceNotFound | ErrorCode::ExtensionNotFound | ErrorCode::ExtensionDisabled | ErrorCode::ExtensionBufferFull | ErrorCode::ToolNotFound
                 | ErrorCode::ResourceNotFound | ErrorCode::DocumentNotFound | ErrorCode::DocumentTooLarge
-                | ErrorCode::DocumentUnsupportedType | ErrorCode::DocumentStorageUnavailable | ErrorCode::ChangesResync | ErrorCode::ValidationInvalid | ErrorCode::DbConflict
+                | ErrorCode::DocumentUnsupportedType | ErrorCode::DocumentStorageUnavailable | ErrorCode::SecretUnavailable | ErrorCode::SecretRequestClosed | ErrorCode::SecretHostDenied
+                | ErrorCode::SecretOutboundBlocked | ErrorCode::SecretOutboundFailed | ErrorCode::ChangesResync | ErrorCode::ValidationInvalid | ErrorCode::DbConflict
                 | ErrorCode::DbDuplicate | ErrorCode::JobNoHandler | ErrorCode::JobLeaseExpired | ErrorCode::JobPanicked
                 | ErrorCode::Internal => {}
             }

@@ -73,7 +73,7 @@ Every process with the worker role tries `UPDATE job_leader:scheduler ... WHERE 
 | embeddings | `cache_record` with `embedding` NONE, memories and skills without a vector from the current model, when an embeddings key exists | `embed` per owner | `embed:<owner>:<5 min window>` | every 10 ticks |
 | consolidation | `memory` observations with `status = 'stale'` (set by fact writes), when an LLM key exists | `consolidate` per entity | `consolidate:<subject>:<10 min window>` | every tick |
 | tenant schema | `tenant.schema_version` below the schema this code writes | `migrate_tenant` per org | `migrate_tenant:<org>:<version>` | every tick |
-| secret backfill | the org's `redact_backfill:v<version>` row has no `done_at` (org at schema 22 or later) | `redact_backfill` per org | `redact_backfill:<org>:<detector version>:<1 h window>` (a dead one is queued again next window) | every 10 ticks |
+| secret backfill | the org's `redact_backfill:v<version>` row has no `done_at` (org at schema 24 or later) | `redact_backfill` per org | `redact_backfill:<org>:<detector version>:<1 h window>` (a dead one is queued again next window) | every 10 ticks |
 | extraction | queued by ingest for each changed record (not polled) | `extract` per record | `extract:<owner>:<record>:<content hash>` | on ingest |
 | supersession | queued by `memory_write` for each raw fact, when an LLM key exists (not polled) | `supersede` per fact | `supersede:<org>:<memory>` | on write |
 

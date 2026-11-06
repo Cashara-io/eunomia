@@ -49,6 +49,7 @@ mod entities;
 mod memory;
 mod peers;
 mod records;
+mod secret_tools;
 pub(crate) mod skills;
 mod vaults;
 
@@ -99,6 +100,7 @@ pub const READ_ONLY_TOOLS: &[&str] = &[
     "skill_get",
     "changes_since",
     "vault_peers",
+    "secret_request_status",
 ];
 
 /// Read-only tools that still get an audit row: they disclose an original file or its vectors. The
@@ -196,6 +198,10 @@ pub fn description(name: &str) -> &'static str {
         "vault_join_shared" => "Join a vault another Eunomia shared, with the share code its owner sent (`eunomia1:...`). Makes a new vault here holding a full copy, kept in step automatically about every 30 seconds while the other Eunomia can be reached.",
         "vault_peers" => "List the other Eunomias a vault is shared with (or copied from): each link's id, direction (host: this one has the original; guest: a copy), role, status (up_to_date, syncing, unreachable, integrity_problem, revoked), last sync time and whether both copies match; plus unused share codes.",
         "vault_peer_sync" => "Sync a shared vault with the other Eunomia now (a `link_id` from `vault_peers`). Returns the link's status after.",
+        "secret_request" => "Ask the user for a password, API key or token WITHOUT it going through chat: Eunomia shows them a masked pop-up in the Eunomia web app (and, for MCP clients that support it, a URL elicitation), they paste it there, and you get back only a handle, {\"$secret\": \"eu://<vault>/<name>\"}, never the value. Give a stable `name`, a `label`, a `description` of why, and `target.hosts` it will be sent to (the user approves them). Returns `request_id`, `status` (pending, or filled when a secret by that name is already yours to use), `fill_url` to show the user, and the `handle`. Never ask for a secret in chat; use this instead.",
+        "secret_request_status" => "The state of a `secret_request`: pending (with the `fill_url` to remind the user of), filled (with the `handle` to use), declined or expired. Never returns the value.",
+        "secret_transform" => "Make a NEW secret from held ones, server side, and get its handle; you never see a value. `op`: base64, base64url, url_encode, template (params.template such as \"Bearer {{value}}\" or \"{{user}}:{{pass}}\"), basic_auth, hmac_sha256 (key handle, message literal or handle; hex, base64 or base64url), sha256, jwt_hs256, jwt_rs256 or jwt_es256 (key handle, params.claims). `inputs` maps names to eu:// handles. The result may only be sent where every input may (the intersection of their approved hosts). There is no decode, compare or reveal.",
+        "http_request" => "Send one HTTPS request that uses held secrets: put handles ({\"$secret\": \"eu://...\"}) in `headers` (or `query`, `body`, `json` when the user allowed that), and the url's host must be one the user approved for every handle. Returns the status, content type and body (at most 64 KiB, with any secret value scrubbed). No redirects are followed; private and internal addresses are refused; at least one handle is required (it is not a general fetch tool).",
         _ => "",
     }
 }
@@ -352,20 +358,57 @@ fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
     vaults::register_all(registry);
     skills::register_all(registry);
     peers::register_all(registry);
+    secret_tools::register_all(registry);
 }
 
 pub fn all_tools() -> &'static HashMap<&'static str, ToolSpec> {
     REGISTRY.get_or_init(build_registry)
 }
 
+/// A registered tool by name: the built-in ones, then (test builds) the test tools.
+pub fn find(name: &str) -> Option<ToolSpec> {
+    all_tools().get(name).cloned().or_else(|| test_tool(name))
+}
+
+/// Tools a test registered at runtime ([`register_test_tool`]). They are not in [`all_tools`], so the
+/// suites that walk every tool (goldens, scopes, isolation) never see them, and production builds have none.
+#[cfg(feature = "test-support")]
+static TEST_TOOLS: std::sync::LazyLock<std::sync::Mutex<HashMap<&'static str, ToolSpec>>> = std::sync::LazyLock::new(Default::default);
+
+/// Test builds: registers a mutating tool that takes `$secret` references (the credential broker's tests).
+#[cfg(feature = "test-support")]
+pub fn register_test_tool(name: &'static str, handler: ToolFn) {
+    TEST_TOOLS.lock().unwrap().insert(name, ToolSpec { read_only: false, schema: json!({"type": "object"}), handler });
+}
+
+#[cfg(feature = "test-support")]
+fn test_tool(name: &str) -> Option<ToolSpec> {
+    TEST_TOOLS.lock().unwrap().get(name).cloned()
+}
+
+#[cfg(not(feature = "test-support"))]
+fn test_tool(_name: &str) -> Option<ToolSpec> {
+    None
+}
+
+/// Whether `name` is a test tool (they all take secrets).
+pub fn test_tool_takes_secrets(name: &str) -> bool {
+    test_tool(name).is_some()
+}
+
 /// Calls a registered tool by name, applying the audit-log side effect for
 /// anything not in [`READ_ONLY_TOOLS`]. Returns `{"error": "unknown tool
 /// ..."}`` for a name that isn't registered, rather than a 404 -- the REST router is the one that turns an unknown
 /// name into a 404 before ever calling this.
-pub async fn call(app: &AppState, user: &User, name: &str, mut args: Value) -> AppResult<Value> {
+pub async fn call(app: &AppState, user: &User, name: &str, args: Value) -> AppResult<Value> {
+    // boxed: the body (scope checks, the secret broker, the tool, the audit rows) is a large future, and a
+    // caller that awaits it inline (a test, the chat loop) would carry all of it on its own stack
+    Box::pin(call_inner(app, user, name, args)).await
+}
+
+async fn call_inner(app: &AppState, user: &User, name: &str, mut args: Value) -> AppResult<Value> {
     let owner = &user.id;
-    let tools = all_tools();
-    let Some(spec) = tools.get(name) else {
+    let Some(spec) = find(name) else {
         return Ok(AppError::coded(ErrorCode::ToolNotFound, format!("unknown tool {name}")).to_tool_value());
     };
 
@@ -382,13 +425,48 @@ pub async fn call(app: &AppState, user: &User, name: &str, mut args: Value) -> A
         return Ok(json!({ "error": e }));
     }
 
+    // `$secret` references: resolved for this one execution (secrets::broker). `args` keeps the references
+    // for everything the call leaves behind; only the tool sees the values.
+    let prepared = match Box::pin(crate::secrets::broker::prepare(state, user, name, &args)).await {
+        crate::secrets::broker::Prep::None => None,
+        crate::secrets::broker::Prep::Ready(p) => Some(p),
+        crate::secrets::broker::Prep::Failed(e) => {
+            if !is_read_only(name) {
+                Box::pin(record_audit(state, owner, name, &args, "error", e.code.as_str())).await;
+            }
+            count_call(app, user, name, true, 0);
+            tracing::info!(tool = name, code = e.code.as_str(), "tool call refused: secret unavailable");
+            return Ok(e.to_tool_value());
+        }
+    };
+
     let vault = args.get("vault_id").and_then(Value::as_str).unwrap_or("personal").to_string();
     let span = tracing::info_span!("tool.call", tool = name, vault = %vault, outcome = Empty, duration_ms = Empty);
     let started = Instant::now();
     let source = Default::default();
     let captured = args.clone();
     // Boxed: the match over every tool is a large future, past a 2 MB stack in debug builds.
-    let mut result = crate::error::TOOL_SOURCE.scope(Arc::clone(&source), Box::pin(run_tool(state, owner, name, spec, args))).instrument(span.clone()).await;
+    let mut result = match &prepared {
+        None => Box::pin(crate::error::TOOL_SOURCE.scope(Arc::clone(&source), run_tool(state, owner, name, &spec, args.clone(), &args)).instrument(span.clone())).await,
+        Some(p) => {
+            let run = run_tool(state, owner, name, &spec, p.args.clone(), &args);
+            let run = crate::secrets::outbound::with_grants(Arc::clone(&p.grants), run);
+            let scoped = crate::redact::with_exact(Arc::clone(&p.values), crate::error::TOOL_SOURCE.scope(Arc::clone(&source), run));
+            Box::pin(scoped.instrument(span.clone())).await
+        }
+    };
+    if let Some(p) = &prepared {
+        // http_request withholds content for short secrets. Preserve its fixed result keys:
+        // a one-character key can also be a letter in "status" or "content_type".
+        let short = p.values.iter().any(|v| v.chars().count() < 8);
+        if name != "http_request" || result.is_err() || !short {
+            p.scrub_result(&mut result);
+        }
+        let mut s = source.lock().unwrap();
+        if let Some(text) = s.as_mut() {
+            *text = p.scrub_text(text);
+        }
+    }
 
     // Every failed tool value carries a stable `code` and the request's `trace_id`.
     if let Ok(Value::Object(map)) = &mut result
@@ -493,18 +571,20 @@ async fn record_failure(state: &OrgState, owner: &RecordId, name: &str, args: Va
     crate::capsules::record(&state.control, failure).await;
 }
 
-async fn run_tool(state: &OrgState, owner: &RecordId, name: &str, spec: &ToolSpec, args: Value) -> AppResult<Value> {
+/// Runs the tool with `args` (secret values in, when the call had references) and audits it with
+/// `audited` (the references, never the values).
+async fn run_tool(state: &OrgState, owner: &RecordId, name: &str, spec: &ToolSpec, args: Value, audited: &Value) -> AppResult<Value> {
     if is_read_only(name) && !DISCLOSURE_TOOLS.contains(&name) {
         return (spec.handler)(state, owner, args).await;
     }
 
-    let result = (spec.handler)(state, owner, args.clone()).await;
+    let result = (spec.handler)(state, owner, args).await;
     let (outcome, code) = match &result {
         Ok(v) if v.get("error").is_some() => ("error", v.get("code").and_then(Value::as_str).unwrap_or("error")),
         Ok(_) => ("ok", "ok"),
         Err(e) => ("error", e.code.as_str()),
     };
-    record_audit(state, owner, name, &args, outcome, code).await;
+    record_audit(state, owner, name, audited, outcome, code).await;
     result
 }
 
@@ -570,6 +650,7 @@ mod tests {
             "skill_get",
             "changes_since",
             "vault_peers",
+            "secret_request_status",
         ];
         assert_eq!(READ_ONLY_TOOLS.len(), expected.len());
         for name in expected {
@@ -661,6 +742,7 @@ mod tests {
             "document_upload", "document_list", "document_get", "document_download", "document_export", "document_delete",
             "skill_save", "skill_find", "skill_list", "skill_get", "skill_delete", "changes_since",
             "vault_share_code", "vault_join_shared", "vault_peers", "vault_peer_sync",
+            "secret_request", "secret_request_status", "secret_transform", "http_request",
         ];
         let tools = all_tools();
         for name in expected {

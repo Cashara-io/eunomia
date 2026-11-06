@@ -288,7 +288,12 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         DELETE vault_member WHERE vault = $v;
         CREATE $vm SET vault = $v, user = $u, role = 'owner';
         CREATE change SET vault = $v, seq = 1000000, op = 'created', kind = 'memory', item = $c, actor = $c;
-        CREATE $cs SET n = 0;";
+        CREATE $cs SET n = 0;
+        CREATE $rb SET stage = 'done', done_at = time::now();
+        CREATE credential_ref SET reference = 'op://Ops/Item/field', provider = 'onepassword_connect', vault = $v, label = $c, created_by = $u;
+        CREATE $sp SET kind = 'onepassword_connect', host = $c, token_enc = 'enc:v1:planted', created_by = $u, updated_by = $u;
+        CREATE secret_request SET vault = $v, name = 'planted', label = $c, description = $c, target_hosts = ['api.example.com'], requested_by = $u, actor_id = $c, client_name = $c, expires_at = time::now() + 1d;
+        CREATE vault_secret SET vault = $v, name = 'planted', label = $c, value_enc = $senc, allowed_hosts = ['api.example.com'], allowed_actors = [$c], created_by = $u;";
     let uid = user.id.clone();
     db.test_raw()
         .query(sql)
@@ -296,11 +301,17 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         .bind(("thread", eunomia_backend::rid::parse(&ids.thread).unwrap()))
         .bind(("c", canary.clone()))
         .bind(("enc", enc))
+        // a held secret whose value is the canary, encrypted as the fill route stores it
+        .bind(("senc", crypto::encrypt(&state.settings.encryption_key, &canary)))
         .bind(("settings", surrealdb::types::RecordId::new("app_settings", uid.key().clone())))
         .bind(("sync", surrealdb::types::RecordId::new("sync_status", format!("{}:github", eunomia_backend::rid::key_string(uid.key()).unwrap()))))
         .bind(("v", eunomia_backend::rid::parse(&vault).unwrap()))
         .bind(("vm", surrealdb::types::RecordId::new("vault_member", canary.clone())))
         .bind(("cs", surrealdb::types::RecordId::new("change_seq", canary.clone())))
+        // the backfill marker holds counts only; the canary is its key (a real marker is `v<version>`)
+        .bind(("rb", surrealdb::types::RecordId::new("redact_backfill", canary.clone())))
+        // keyed by the canary, not the kind: the shared-database mode plants both orgs in one database
+        .bind(("sp", surrealdb::types::RecordId::new("secret_provider", canary.clone())))
         .await
         .unwrap()
         .check()

@@ -60,6 +60,9 @@ pub fn test_settings() -> Settings {
         // never probe the network from tests: a sandbox with no route would otherwise skip every sync
         connectivity_probe: "off".into(),
         auth: Default::default(),
+        secrets_helper_url: "http://127.0.0.1:9".into(), // nothing listens: a broker test sets its mock
+        secrets_helper_key: String::new(),
+        secrets_helper_enabled: true,
     }
 }
 

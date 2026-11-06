@@ -15,7 +15,7 @@ use crate::pool::OrgDb;
 use crate::rid::RecordIdExt;
 use crate::state::OrgState;
 use crate::store;
-use crate::sources::base::{owner_key_str, Conn, Source, SourceCtx};
+use crate::sources::base::{owner_key_str, Source, SourceCtx};
 use crate::sources::routing;
 use crate::sources::demo::DemoSource;
 use crate::sources::discord::DiscordSource;
@@ -90,12 +90,6 @@ pub async fn connection(db: &OrgDb, owner: &RecordId, key: &str) -> AppResult<Op
         return Ok(None);
     }
     Ok(Some((src, conn)))
-}
-
-/// The decrypted credentials + config of one connection (empty when there is none).
-pub fn conn_for(encryption_key: &str, row: Option<&Connector>) -> AppResult<Conn> {
-    let Some(row) = row else { return Ok(Conn::default()) };
-    Ok(Conn { credentials: service::credentials_of(encryption_key, row)?, config: row.config.clone() })
 }
 
 /// Every enabled connection of `owner` with its source (excluding connectors left in the old demo mode).
@@ -229,10 +223,12 @@ pub async fn run_sync(
     let (src, row) = connection(&state.db, owner, key)
         .await?
         .ok_or_else(|| AppError::coded(ErrorCode::SourceNotFound, format!("no source {key:?}")))?;
-    let conn = conn_for(&state.settings.encryption_key, row.as_ref())?;
-    let result = src.fetch(&conn, cursor).await?;
-    let report = ingest_via(state, owner, &result.records, src.as_ref(), row.as_ref()).await?;
-    Ok((report, result.cursor))
+    let row = row.as_ref();
+    crate::secrets::connector::with_connection(state, owner, row, |conn| async move {
+        let result = src.fetch(&conn, cursor).await?;
+        let report = ingest_via(state, owner, &result.records, src.as_ref(), row).await?;
+        Ok((report, result.cursor))
+    }).await
 }
 
 #[cfg(test)]

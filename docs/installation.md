@@ -77,6 +77,7 @@ you aren't detected. Then:
 ```bash
 git clone https://github.com/Cashara-io/eunomia.git && cd Eunomia
 cp .env.example .env   # set JWT_SECRET, ENCRYPTION_KEY, SURREAL_PASS: openssl rand -base64 32
+# Set SECRETS_HELPER_KEY using: openssl rand -hex 32
 docker compose pull && docker compose up -d
 ./scripts/connect-agents.sh --email you@example.com --password '…'   # optional
 ```
@@ -94,3 +95,9 @@ docker compose ps     # from the install dir: three services up
 cd eunomia && docker compose down -v   # -v also deletes the database
 rm -rf ~/.config/eunomia ~/.claude/skills/eunomia-memory   # hook + skill files, if connected
 ```
+
+### Password-manager helper key
+
+Set `SECRETS_HELPER_KEY` to `openssl rand -hex 32` output before enabling the `secrets` profile on a manual install. Keep the same value for the backend and helper. The updater generates a missing key and preserves an existing one.
+
+The hosted installer must also write this key on a fresh install. Its source is outside this repository, so that change remains a separate installer follow-up.

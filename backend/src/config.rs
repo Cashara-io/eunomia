@@ -37,6 +37,23 @@ pub struct Settings {
     pub connectivity_probe: String,
     /// `AUTH_MODE` and `OIDC_*`: how users sign in (password, an OpenID Connect provider, or both).
     pub auth: crate::oidc::AuthConfig,
+    /// `SECRETS_HELPER_URL`: the credential broker's sidecar on the internal compose network
+    /// (docs/architecture/specs/broker.md), default `http://secrets-helper:8080`.
+    pub secrets_helper_url: String,
+    /// `SECRETS_HELPER_KEY`: the shared key the sidecar checks; empty when an old updater has not
+    /// written one yet (the dedicated internal network is then the only gate).
+    pub secrets_helper_key: String,
+    /// Whether the sidecar is switched on. Compose passes `EUNOMIA_COMPOSE_PROFILES` (its own
+    /// `COMPOSE_PROFILES` from `.env`): the helper runs only under the `secrets` profile, so it is on when
+    /// that list names `secrets`. Unset (the backend not run by this compose file: `cargo run`, tests,
+    /// another orchestrator) it is on, and `SECRETS_HELPER_URL` is simply tried. Off, every resolution and
+    /// "Test connection" fails at once with `secret.unavailable` (`helper_disabled`), with no network call.
+    pub secrets_helper_enabled: bool,
+}
+
+/// `EUNOMIA_COMPOSE_PROFILES` -> is the `secrets` profile on (see `Settings::secrets_helper_enabled`).
+pub fn secrets_profile_on(profiles: Option<&str>) -> bool {
+    profiles.is_none_or(|p| p.split(',').any(|x| x.trim() == crate::secrets::client::PROFILE))
 }
 
 fn env_or(key: &str, default: &str) -> String {
@@ -79,10 +96,32 @@ impl Settings {
             documents_max_bytes: env::var("EUNOMIA_DOCUMENTS_MAX_BYTES").ok().and_then(|v| v.trim().parse().ok()).filter(|n| *n > 0).unwrap_or(25 << 20),
             connectivity_probe: env_or("EUNOMIA_CONNECTIVITY_PROBE", "").trim().to_string(),
             auth: crate::oidc::AuthConfig::from_vars(|k| env::var(k).ok()).unwrap_or_else(|e| {
+
                 // refuse to start rather than fall back to a sign-in method the operator did not choose
                 eprintln!("invalid sign-in configuration: {e}");
                 std::process::exit(2);
             }),
+            secrets_helper_url: env_or("SECRETS_HELPER_URL", crate::secrets::client::DEFAULT_URL).trim_end_matches('/').to_string(),
+            secrets_helper_key: env_or("SECRETS_HELPER_KEY", "").trim().to_string(),
+            secrets_helper_enabled: secrets_profile_on(env::var("EUNOMIA_COMPOSE_PROFILES").ok().as_deref()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::secrets_profile_on;
+
+    #[test]
+    fn the_secrets_profile() {
+        // not run by compose: try the URL
+        assert!(secrets_profile_on(None));
+        // run by compose: only with the profile listed
+        assert!(!secrets_profile_on(Some("")));
+        assert!(!secrets_profile_on(Some("https")));
+        assert!(!secrets_profile_on(Some("secretsx,https")));
+        assert!(secrets_profile_on(Some("secrets")));
+        assert!(secrets_profile_on(Some("https,secrets")));
+        assert!(secrets_profile_on(Some("https, secrets ")));
     }
 }

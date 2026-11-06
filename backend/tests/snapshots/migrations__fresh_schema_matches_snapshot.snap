@@ -279,6 +279,39 @@ expression: info(&db).await
       "kind": {
         "kind": "NORMAL"
       },
+      "name": "credential_ref",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "reference"
+          ],
+          "index": "",
+          "name": "credential_ref_reference_idx",
+          "table": "credential_ref"
+        },
+        {
+          "cols": [
+            "vault",
+            "reference"
+          ],
+          "index": "UNIQUE",
+          "name": "credential_ref_vault_reference_idx",
+          "table": "credential_ref"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
       "name": "document",
       "permissions": {
         "create": false,
@@ -1031,6 +1064,56 @@ expression: info(&db).await
       "kind": {
         "kind": "NORMAL"
       },
+      "name": "secret_provider",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": []
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
+      "name": "secret_request",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "requested_by",
+            "status"
+          ],
+          "index": "",
+          "name": "secret_request_requested_by_idx",
+          "table": "secret_request"
+        },
+        {
+          "cols": [
+            "vault",
+            "name",
+            "status"
+          ],
+          "index": "",
+          "name": "secret_request_vault_name_idx",
+          "table": "secret_request"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
       "name": "skill",
       "permissions": {
         "create": false,
@@ -1169,6 +1252,39 @@ expression: info(&db).await
           "index": "",
           "name": "vault_member_user_idx",
           "table": "vault_member"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
+      "name": "vault_secret",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "derived_from"
+          ],
+          "index": "",
+          "name": "vault_secret_derived_from_idx",
+          "table": "vault_secret"
+        },
+        {
+          "cols": [
+            "vault",
+            "name"
+          ],
+          "index": "UNIQUE",
+          "name": "vault_secret_vault_name_idx",
+          "table": "vault_secret"
         }
       ]
     }

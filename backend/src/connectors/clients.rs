@@ -56,7 +56,8 @@ pub fn bearer(token: &str) -> HeaderMap {
 }
 
 /// The guarded client for one request (see the module docs). Its error already says why a URL is refused.
-async fn guarded(url: &str) -> AppResult<reqwest::Client> {
+async fn guarded(url: &str, secrets: Option<&crate::secrets::connector::Context>) -> AppResult<reqwest::Client> {
+    if let Some(secrets) = secrets { return secrets.client(url).await; }
     crate::llm_net::client(url).await.map_err(|e| AppError::new(StatusCode::BAD_GATEWAY, format!("{} is not allowed: {}", host(url), e.message)))
 }
 
@@ -107,6 +108,7 @@ pub fn base_url_override_allowed() -> bool {
 pub struct Api {
     base: String,
     headers: HeaderMap,
+    secrets: Option<crate::secrets::connector::Context>,
 }
 
 impl Api {
@@ -121,7 +123,7 @@ impl Api {
             .unwrap_or(default_base);
         // GitHub rejects requests without a User-Agent; harmless elsewhere.
         headers.insert(USER_AGENT, HeaderValue::from_static("eunomia"));
-        Self { base: base.trim_end_matches('/').to_string(), headers }
+        Self { base: base.trim_end_matches('/').to_string(), headers, secrets: crate::secrets::connector::current() }
     }
 
     pub fn with_header(mut self, name: &'static str, value: &'static str) -> Self {
@@ -156,7 +158,7 @@ impl Api {
         let url = self.url(path);
         let mut retried = false;
         loop {
-            let http = guarded(&url).await?;
+            let http = guarded(&url, self.secrets.as_ref()).await?;
             let full = if query.is_empty() { reqwest::Url::parse(&url) } else { reqwest::Url::parse_with_params(&url, query) }
                 .map_err(|e| AppError::internal(format!("invalid connector url: {e}")))?;
             let mut req = http.request(method.clone(), full).headers(self.headers.clone()).timeout(TIMEOUT);
@@ -166,7 +168,11 @@ impl Api {
             let resp = req
                 .send()
                 .await
-                .map_err(|e| AppError::new(StatusCode::BAD_GATEWAY, format!("could not reach {}: {e}", host(&url))))?;
+                .map_err(|e| {
+                    let message = format!("could not reach {}: {e}", host(&url));
+                    let message = self.secrets.as_ref().map_or_else(|| message.clone(), |s| s.scrub(&message));
+                    AppError::new(StatusCode::BAD_GATEWAY, message)
+                })?;
             let status = resp.status();
             if status == StatusCode::TOO_MANY_REQUESTS
                 && !retried
@@ -176,8 +182,16 @@ impl Api {
                 tokio::time::sleep(Duration::from_secs(wait)).await;
                 continue;
             }
-            let headers = resp.headers().clone();
+            let mut headers = resp.headers().clone();
             let text = resp.text().await.unwrap_or_default();
+            let text = if let Some(secrets) = &self.secrets {
+                for value in headers.values_mut() {
+                    if let Ok(raw) = value.to_str() {
+                        *value = HeaderValue::from_str(&secrets.scrub(raw)).unwrap_or_else(|_| HeaderValue::from_static("[redacted]"));
+                    }
+                }
+                secrets.scrub(&text)
+            } else { text };
             if !status.is_success() {
                 return Err(provider_error(&url, status, &text));
             }
@@ -270,7 +284,8 @@ pub async fn refresh_access_token(config: &Value, default_token_url: &str, crede
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty() && base_url_override_allowed())
         .unwrap_or(default_token_url);
-    let resp = guarded(url)
+    let secrets = crate::secrets::connector::current();
+    let resp = guarded(url, secrets.as_ref())
         .await?
         .post(url)
         .basic_auth(client_id, Some(client_secret))
@@ -282,6 +297,7 @@ pub async fn refresh_access_token(config: &Value, default_token_url: &str, crede
     let status = resp.status();
     let text = resp.text().await.unwrap_or_default();
     if !status.is_success() {
+        let text = secrets.as_ref().map_or_else(|| text.clone(), |s| s.scrub(&text));
         return Err(provider_error(url, status, &text));
     }
     serde_json::from_str::<Value>(&text)

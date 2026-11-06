@@ -17,7 +17,8 @@
 # Everything runs inside main() so bash has parsed the whole script before
 # `git checkout` replaces this file with the new release's copy.
 #
-# Every run also applies Settings, HTTPS (see https_apply below).
+# Every run also applies Settings, HTTPS (see https_apply below) and the password managers' switch
+# (secrets_apply: the `secrets` compose profile).
 set -uo pipefail
 # cron/launchd start with a bare PATH; appended so an existing PATH still wins
 export PATH="$PATH:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin"
@@ -42,6 +43,7 @@ main() {
   trap "rmdir '$status_dir/.lock' 2>/dev/null" EXIT
 
   https_apply "$status_dir"
+  secrets_apply "$status_dir"
   heal_stack "$status_dir"
 
   # Eunomia moved from Qyrhal/Eunomia: installs cloned from there follow it.
@@ -156,12 +158,19 @@ main() {
     echo "JWT_SECRET=$(head -c 32 /dev/urandom | base64 | tr -d '\n')" >> .env
   fi
 
+  ensure_secrets_key
+
   # Everything except the updater itself (recreating it here would kill this
   # run); it is refreshed last, after the status is written.
   local services
   services="$(docker compose config --services 2>/dev/null | grep -vx updater | tr '\n' ' ')"
   touch "$status_dir/heal" # cleared once the stack is up; until then each run starts what is left
-  if ! docker compose pull backend frontend backup >/dev/null 2>"$status_dir/.last-error" \
+  # the images this release publishes; secrets-helper only when its profile (`secrets`) is on, and never
+  # for a compose file without it (an older tag)
+  local images="backend frontend backup"
+  printf '%s\n' $services | grep -qx secrets-helper && images="$images secrets-helper"
+  # shellcheck disable=SC2086 # a list of service names
+  if ! docker compose pull $images >/dev/null 2>"$status_dir/.last-error" \
     || ! start_stack "$status_dir" "$current" "$latest" $services; then
     write_status "$status_dir" "$latest" "$latest" false "restart failed: $(tail -5 "$status_dir/.last-error")"
     exit 1
@@ -243,6 +252,94 @@ unset_env() {
   for k in "$@"; do sed -i.bak "/^$k=/d" .env && rm -f .env.bak; done
 }
 
+# has_profile <name>: is <name> in COMPOSE_PROFILES in .env?
+has_profile() {
+  sed -n 's/^COMPOSE_PROFILES=//p' .env 2>/dev/null | tail -1 | tr ',' '\n' | tr -d ' ' | grep -qx "$1"
+}
+
+# add_profile <name> / remove_profile <name>: COMPOSE_PROFILES is a comma-separated list (https, secrets,
+# later ontology). Each switch adds or removes only its own name; the line goes when the list is empty.
+add_profile() {
+  has_profile "$1" && return 0
+  local list
+  list="$(sed -n 's/^COMPOSE_PROFILES=//p' .env 2>/dev/null | tail -1 | tr -d ' ')"
+  set_env COMPOSE_PROFILES "${list:+$list,}$1"
+}
+
+remove_profile() {
+  local list
+  list="$(sed -n 's/^COMPOSE_PROFILES=//p' .env 2>/dev/null | tail -1 | tr ',' '\n' | tr -d ' ' | grep . | grep -vx "$1" | paste -sd, -)"
+  if [ -n "$list" ]; then set_env COMPOSE_PROFILES "$list"; else unset_env COMPOSE_PROFILES; fi
+}
+
+# ensure_secrets_key: the key the backend and the secrets-helper sidecar share
+# (docs/architecture/specs/broker.md), added when missing. Without one the sidecar still only answers on
+# its internal network; hex, so it needs no quoting anywhere.
+ensure_secrets_key() {
+  if ! grep -q '^SECRETS_HELPER_KEY=.' .env; then
+    sed -i.bak '/^SECRETS_HELPER_KEY=/d' .env && rm -f .env.bak
+    echo "SECRETS_HELPER_KEY=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')" >> .env
+  fi
+}
+
+# --- Password managers (Settings, Connectors) -------------------------------
+# POST /api/secrets/helper writes update-status/secrets.json ({"enabled": true|false}). Enable: add
+# `secrets` to COMPOSE_PROFILES in .env, so every later plain `docker compose up -d` keeps the sidecar,
+# make sure the shared key exists, pull and start it, and recreate the backend (it reads the profile list
+# from EUNOMIA_COMPOSE_PROFILES). Disable: the reverse. A failed enable is rolled back, so a sidecar that
+# cannot start never makes a later update's `up -d` fail. Progress in update-status/secrets-status.json:
+# starting, running, off or error. See docs/password-managers.md.
+secrets_apply() {
+  local dir="$1" req="$1/secrets.json" enabled why
+  [ -f "$req" ] || return 0
+  enabled="$(json_field enabled "$req")"
+  rm -f "$req"
+  case "$enabled" in
+    true)
+      write_secrets_status "$dir" starting ""
+      ensure_secrets_key
+      add_profile secrets
+      # a pull failure is left to `up`, which reports it (or builds, on a checkout with no published image)
+      docker compose pull secrets-helper >/dev/null 2>&1 || true
+      if docker compose up -d backend secrets-helper >/dev/null 2>"$dir/.secrets-error"; then
+        write_secrets_status "$dir" running ""
+      else
+        why="$(tail -3 "$dir/.secrets-error")"
+        remove_profile secrets
+        docker compose rm -sf secrets-helper >/dev/null 2>&1
+        docker compose up -d backend >/dev/null 2>&1
+        write_secrets_status "$dir" error "could not start the secrets helper, so it was switched off again: $why"
+      fi
+      ;;
+    false)
+      remove_profile secrets
+      if docker compose rm -sf secrets-helper >/dev/null 2>"$dir/.secrets-error" && docker compose up -d backend >/dev/null 2>>"$dir/.secrets-error"; then
+        write_secrets_status "$dir" off ""
+      else
+        write_secrets_status "$dir" error "could not stop the secrets helper: $(tail -3 "$dir/.secrets-error")"
+      fi
+      ;;
+    *) write_secrets_status "$dir" error 'refused: the request is not {"enabled": true} or {"enabled": false}' ;;
+  esac
+  rm -f "$dir/.secrets-error"
+}
+
+# write_secrets_status <dir> <state> <message>
+write_secrets_status() {
+  local message=null
+  if [ -n "$3" ]; then
+    message="\"$(printf '%s' "$3" | tr '\n\r\t' '   ' | sed 's/\\/\\\\/g; s/"/\\"/g')\""
+  fi
+  cat > "$1/secrets-status.json.tmp" <<EOF
+{
+  "state": "$2",
+  "message": $message,
+  "checked_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+EOF
+  mv "$1/secrets-status.json.tmp" "$1/secrets-status.json"
+}
+
 # --- HTTPS (Settings, HTTPS) ----------------------------------------------
 # POST /api/https writes update-status/https.json ({"enabled", "domain",
 # "email"}). This validates it again (untrusted input), points .env at the
@@ -265,7 +362,8 @@ https_apply() {
     if [ "$enabled" != true ]; then
       domain="$(sed -n 's/^EUNOMIA_DOMAIN=//p' .env | tail -1)"
       [ "$(sed -n 's/^PUBLIC_URL=//p' .env | tail -1)" = "https://$domain" ] && unset_env PUBLIC_URL
-      unset_env COMPOSE_PROFILES FRONTEND_TRUST_FORWARDED FRONTEND_BIND
+      remove_profile https
+      unset_env FRONTEND_TRUST_FORWARDED FRONTEND_BIND
       if docker compose rm -sf caddy >/dev/null 2>"$dir/.https-error" && docker compose up -d backend frontend >/dev/null 2>>"$dir/.https-error"; then
         write_https_status "$dir" off "" ""
       else
@@ -279,7 +377,7 @@ https_apply() {
     fi
     set_env EUNOMIA_DOMAIN "$domain"
     set_env EUNOMIA_ACME_EMAIL "$email"
-    set_env COMPOSE_PROFILES https
+    add_profile https
     set_env FRONTEND_TRUST_FORWARDED 1
     set_env FRONTEND_BIND 127.0.0.1
     set_env PUBLIC_URL "https://$domain"
@@ -293,7 +391,7 @@ https_apply() {
   # Waiting for the certificate (after the request above, or an install with
   # --domain): probe until it answers. Through the caddy container itself, so
   # a router without NAT loopback doesn't make a working setup look broken.
-  grep -qx 'COMPOSE_PROFILES=https' .env 2>/dev/null || return 0
+  has_profile https || return 0
   case "$(json_field state "$dir/https-status.json" 2>/dev/null)" in ""|pending) ;; *) return 0 ;; esac
   domain="$(sed -n 's/^EUNOMIA_DOMAIN=//p' .env | tail -1)"
   local target=127.0.0.1
