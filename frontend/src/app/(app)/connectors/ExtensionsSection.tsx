@@ -1,5 +1,6 @@
 "use client";
 
+import VaultChip, { vaultTone } from "@/components/VaultChip";
 import { useState } from "react";
 import { ChevronDown, Plus, Power, RotateCw, Trash2, Webhook, X } from "lucide-react";
 import type { ExtensionOut } from "@/lib/gen";
@@ -257,7 +258,9 @@ function ExtensionRow({
   const rotate = useRotateExtensionSecret();
   const del = useDeleteExtension();
   const vaults = useVaults().data ?? [];
-  const vaultName = ext.vault_id ? (vaults.find((v) => v.id === ext.vault_id)?.name ?? ext.vault_id) : "Personal space";
+  const dest = ext.vault_id ? vaults.find((v) => v.id === ext.vault_id) : undefined;
+  const vaultName = ext.vault_id ? (dest?.name ?? ext.vault_id) : "Personal space";
+  const vaultChip = <VaultChip tone={ext.vault_id ? vaultTone(dest?.kind) : "personal"} name={vaultName} />;
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   async function toggleEnabled() {
@@ -353,7 +356,7 @@ function ExtensionRow({
           </div>
           <Curl url={ext.webhook_url} secret="$EXTENSION_SECRET" />
           <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
-            Secret ending <span className="font-mono">{ext.secret_hint}</span>, rotated {relativeTime(ext.secret_rotated_at)}. Saves to: {vaultName}. Collect batches with{" "}
+            Secret ending <span className="font-mono">{ext.secret_hint}</span>, rotated {relativeTime(ext.secret_rotated_at)}. Saves to: {vaultChip}. Collect batches with{" "}
             <span className="font-mono">POST /api/extensions/{ext.id}/events/claim</span> using an API token.
           </p>
           <div className="flex flex-wrap items-center gap-2">

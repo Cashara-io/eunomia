@@ -615,6 +615,27 @@ button.pill:active {
   white-space: nowrap;
 }
 
+/* Vault chip (components/VaultChip.tsx): the vault's solid colour as a pill,
+   its shape before the name. Flat: no tint, gradient or glow. */
+.vault-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  max-width: 100%;
+  padding: 0 9px 0 8px;
+  border-radius: var(--radius-control);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.vault-chip[data-tone="personal"] { background: var(--vault-personal); }
+.vault-chip[data-tone="project"] { background: var(--vault-project); }
+.vault-chip[data-tone="company"] { background: var(--vault-company); }
+.vault-chip[data-tone="mixed"] { background: transparent; box-shadow: inset 0 0 0 1px var(--ink); }
+
 /* ---- the sidebar and its nav chips ----
    A white sidebar with a right hairline. Each nav link is a pill chip with a
    small glyph built from the three shapes; the glyph moves on hover with a

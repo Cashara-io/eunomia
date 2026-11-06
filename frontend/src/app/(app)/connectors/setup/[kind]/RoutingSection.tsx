@@ -1,5 +1,6 @@
 "use client";
 
+import VaultChip, { vaultTone } from "@/components/VaultChip";
 import { useState } from "react";
 import { ArrowDown, ArrowUp, Plus, X } from "lucide-react";
 import Select from "@/components/Select";
@@ -133,9 +134,14 @@ export default function RoutingSection({ label, connector }: { label: string; co
           {(() => {
             const dest = vaults?.find((v) => v.id === (routing.default_vault ?? personal?.id));
             const shared = dest && !(dest.kind === "personal" && dest.role === "owner");
-            return dest
-              ? `New ${label} items are saved in ${vaultLabel(dest)}. ${shared ? "Its members can read them." : "Only you can read them."}`
-              : `New ${label} items are saved in one memory space, and only its members can read them.`;
+            return dest ? (
+              <>
+                New {label} items are saved in <VaultChip tone={vaultTone(dest.kind)} name={vaultLabel(dest)} />.{" "}
+                {shared ? "Its members can read them." : "Only you can read them."}
+              </>
+            ) : (
+              `New ${label} items are saved in one memory space, and only its members can read them.`
+            );
           })()}{" "}
           Changing this affects future updates only; moving items you already imported is a separate step below.
         </p>

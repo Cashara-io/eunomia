@@ -1,5 +1,6 @@
 "use client";
 
+import VaultChip, { VaultShape, vaultTone } from "@/components/VaultChip";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -71,7 +72,7 @@ function ago(iso: string | null): string | null {
 function RoleChip({ role }: { role: VaultRole }) {
   return (
     <span
-      className="inline-flex items-center h-6 px-2 rounded-[3px] text-[12px] font-medium shrink-0"
+      className="inline-flex items-center h-6 px-2 rounded-[4px] text-[12px] font-medium shrink-0"
       style={{
         border: "1px solid var(--border-strong)",
         color: role === "owner" ? "var(--ink)" : "var(--ink-dim)",
@@ -82,21 +83,11 @@ function RoleChip({ role }: { role: VaultRole }) {
   );
 }
 
-/* The space's identity: a red circle for the personal space, a square in one
-   of the three Bauhaus colours for shared spaces. Decorative; the name and the
-   "Personal"/"Shared space" words carry the meaning. */
-const SWATCHES = ["var(--bauhaus-app-yellow)", "var(--bauhaus-app-blue)", "var(--bauhaus-app-red)"];
-function SpaceSwatch({ vault }: { vault: Vault }) {
-  const personal = vault.kind === "personal";
-  let h = 0;
-  for (const ch of vault.id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return (
-    <span
-      aria-hidden
-      className="inline-block w-3.5 h-3.5 shrink-0"
-      style={{ background: personal ? "var(--bauhaus-app-red)" : SWATCHES[h % SWATCHES.length], borderRadius: personal ? 999 : 1 }}
-    />
-  );
+/* The space's identity: its vault shape in its vault colour (a red circle
+   for the personal space, a blue triangle for a shared space). Decorative;
+   the name and the "Private to you"/"Shared space" words carry the meaning. */
+function SpaceSwatch({ vault, size = 12 }: { vault: Vault; size?: number }) {
+  return <VaultShape tone={vaultTone(vault.kind)} size={size} />;
 }
 
 /* A check that draws itself once on mount (the shared .bits-draw grammar, loaded by the bits imports above; reduced motion is handled there). */
@@ -287,8 +278,8 @@ function VaultInspector({
             </button>
           </form>
         ) : (
-          <div className="flex items-center gap-2 min-w-0">
-            <SpaceSwatch vault={vault} />
+          <div className="flex items-center gap-2.5 min-w-0">
+            <SpaceSwatch vault={vault} size={16} />
             <h2 className="text-[22px] font-medium truncate tracking-[-0.03em]">
               {vault.name}
             </h2>
@@ -698,8 +689,8 @@ function InvitationsPanel() {
         >
           {joined === inv.vault_id && <JoinFlash />}
           <div className="flex-1 min-w-[160px]">
-            <div className="text-[15px] font-semibold truncate">
-              {inv.vault_name}
+            <div className="text-[15px] font-medium min-w-0">
+              <VaultChip tone={vaultTone(inv.vault_kind)} name={inv.vault_name} />
             </div>
             <div className="label mt-0.5">
               Invited as {inv.role === "owner" ? "an owner" : "a member"}
@@ -769,10 +760,10 @@ function VaultRow({
     >
       <span className="flex-1 min-w-0">
         <span className="flex items-center gap-2.5 min-w-0">
+          <SpaceSwatch vault={vault} />
           <span className="text-[17px] font-medium truncate">
             {vault.name}
           </span>
-          <SpaceSwatch vault={vault} />
           <RoleChip role={vault.role} />
         </span>
         <span className="label block mt-1 truncate">

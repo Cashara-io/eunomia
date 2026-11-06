@@ -1,5 +1,6 @@
 "use client";
 
+import { VaultShape, type VaultTone } from "./VaultChip";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import ErrorLine, { failure } from "./ErrorLine";
@@ -14,6 +15,8 @@ type Props = {
   points: Row[];
   vaultIds: string[];
   nameOf: (vaultId: string) => string;
+  /** The vault identity of a memory space, for the shape before each row's kind. */
+  toneOf: (vaultId: string) => VaultTone;
   /** ids of the compared rows, in selection order (the numbers in the graph) */
   selection: string[];
   focusId: string | null;
@@ -30,7 +33,7 @@ const MODES = [
 ] as const;
 type Mode = (typeof MODES)[number]["id"];
 
-export default function MemoryRows({ points, vaultIds, nameOf, selection, focusId, onToggle, onClear }: Props) {
+export default function MemoryRows({ points, vaultIds, nameOf, toneOf, selection, focusId, onToggle, onClear }: Props) {
   const [filter, setFilter] = useState("");
   const [mode, setMode] = useState<Mode>("cosine");
   const rowRefs = useRef(new Map<string, HTMLElement>());
@@ -156,7 +159,7 @@ export default function MemoryRows({ points, vaultIds, nameOf, selection, focusI
                   {p.label}
                 </span>
                 <span className="label flex items-center gap-1.5 min-w-0">
-                  <span className="dot shrink-0" style={{ background: p.color }} aria-hidden />
+                  <VaultShape tone={toneOf(p.vault)} size={9} fill={p.color} />
                   <span className="truncate">
                     {vaultIds.length > 1 ? `${nameOf(p.vault)} · ` : ""}
                     {p.kind}
