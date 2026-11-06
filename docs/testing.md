@@ -28,12 +28,12 @@ CI (`.github/workflows/ci.yml`) runs on every push to `main` and on every pull r
 - `scripts`: `scripts/ci/check-surreal-pins.sh` (every SurrealDB pin on the same patch), every `scripts/tests/*.test.sh` except the two that need Docker, plus `bash -n` on the scripts, then `npm test` for `cli/create-eunomia` on Node 18.
 - `upgrade-surreal-v3`: `scripts/tests/upgrade-surreal-v3.test.sh` (real 2.x to 3.3 move; the large-table case `UPGRADE_TEST_LARGE=1` is not run in CI).
 - `restore-drill`: `scripts/restore-drill.sh` then `scripts/restore-drill-tenancy.sh`.
-- `update-path`: an install on a previous release updated to this build through the real updater (below), in two rows: from `v2.0.7` (the published release, `scripts/tests/update-path.test.sh v2.0.7`) and from `v2.0.8` built from `origin/release/2.0.8` (not tagged or published yet, `UPDATE_PATH_FROM_REF=origin/release/2.0.8 UPDATE_PATH_FROM_TAG=v2.0.8 scripts/tests/update-path.test.sh v2.0.8`).
+- `update-path`: an install on a previous release updated to this build through the real updater (below), in two rows, from the published `v2.0.7` and `v2.0.8` (`scripts/tests/update-path.test.sh v2.0.8`). A row for a release that is not published yet adds `from_ref` (below).
 - Not in CI: Chaos, k6, fuzz.
 
 ## Update path
 
-`bash scripts/tests/update-path.test.sh <from-tag>` (CI job `update-path`, rows `v2.0.7` and `v2.0.8` from its branch; needs Docker, `jq` and a clone with the release tags) proves that an install on a released tag takes the current checkout through the real update path:
+`bash scripts/tests/update-path.test.sh <from-tag>` (CI job `update-path`, rows `v2.0.7` and `v2.0.8`; needs Docker, `jq` and a clone with the release tags) proves that an install on a released tag takes the current checkout through the real update path:
 
 1. Builds this checkout's backend, frontend and backup images and tags them `v9.9.9-ci`, a local-only tag that sorts above every release. It is never pushed: pushing any `v*` tag publishes images and offers it to every install.
 2. A local bare repo stands in for GitHub: the real tags up to `<from-tag>`, plus `v9.9.9-ci` on HEAD.
@@ -49,7 +49,7 @@ CI (`.github/workflows/ci.yml`) runs on every push to `main` and on every pull r
 
 **From a release that is not published yet.** `UPDATE_PATH_FROM_REF=<git ref>` with `UPDATE_PATH_FROM_TAG=<tag>` (or the tag as the argument) installs the "from" release from a ref instead of ghcr: the script checks the ref out in a temp `git worktree`, builds its backend, frontend and backup images there and tags them `ghcr.io/cashara-io/eunomia-{backend,frontend,backup}:<tag>` in the local daemon only (never pushed, and removed again at the end unless `UPDATE_PATH_KEEP=1`), puts `<tag>` on that ref in the stand-in bare repo only (never in this clone), and runs the install's `docker compose pull` through the same no-op shim as the update. Every assertion is the same. In CI it needs `fetch-depth: 0` and the branch fetched as `refs/remotes/origin/<branch>`.
 
-On failure, logs, `docker compose ps`, the snapshots and `update-status/` go to `update-path-artifacts/` (uploaded by CI). `UPDATE_PATH_KEEP=1` leaves the stack up, `UPDATE_PATH_SKIP_BUILD=1` reuses existing `v9.9.9-ci` images. Waits are bounded; the job's timeout is 45 minutes.
+On failure, logs, `docker compose ps`, the snapshots and `update-status/` go to `update-path-artifacts/` (uploaded by CI). `UPDATE_PATH_KEEP=1` leaves the stack up, `UPDATE_PATH_SKIP_BUILD=1` reuses existing `v9.9.9-ci` images. Waits are bounded; the job's timeout is 60 minutes.
 
 ## Safety
 

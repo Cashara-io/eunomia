@@ -249,9 +249,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - from: v2.0.7                        # the published release, pulled from ghcr
-          - from: v2.0.8                        # the release on its way, built from its branch
-            from_ref: origin/release/2.0.8
+          - from: v2.0.7                        # published releases, pulled from ghcr
+          - from: v2.0.8
     steps:
       - uses: actions/checkout@v4
         with:
