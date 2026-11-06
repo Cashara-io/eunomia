@@ -2,14 +2,34 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowUpRight, Building2, MapPin, FileText, FolderGit2, Plug, Search, User, X } from "lucide-react";
-import { ADVANCED_NAV, MAIN_NAV } from "./Sidebar";
+import {
+  ArrowUpRight,
+  BookOpen,
+  Brain,
+  Buildings,
+  ChatsCircle,
+  Code,
+  FileText,
+  Files,
+  FolderSimple,
+  House,
+  MagnifyingGlass,
+  MapPin,
+  Plug,
+  SlidersHorizontal,
+  Stack,
+  User,
+  Users,
+  X,
+} from "@phosphor-icons/react/ssr";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
+import { ADVANCED_NAV, MAIN_NAV, type NavGlyph } from "./Sidebar";
+import Duo, { type DuoTone } from "./ui/Duo";
 import { documentHref, type EntityKind } from "@/lib/types";
 import { useSources } from "@/lib/queries/sources";
 import { usePaletteSearch } from "@/lib/queries/tools";
 
-type IconType = React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
-type Item = { key: string; label: string; sub?: string; icon: IconType; go: () => void };
+type Item = { key: string; label: string; sub?: string; icon: PhosphorIcon; tone: DuoTone; go: () => void };
 type Group = { title: string; items: Item[] };
 
 const OPEN_EVENT = "eunomia:open-palette";
@@ -19,11 +39,26 @@ export function openCommandPalette() {
 }
 
 // organisation and location read as a building and a pin, not a person
-const ENTITY_ICON: Record<string, IconType> = { person: User, organisation: Building2, location: MapPin, repository: FolderGit2, file: FileText };
+const ENTITY_ICON: Record<string, PhosphorIcon> = { person: User, organisation: Buildings, location: MapPin, repository: FolderSimple, file: FileText };
+
+// The palette is a dense list, so pages get icons, not the sidebar's shapes.
+const PAGE_ICON: Record<NavGlyph, PhosphorIcon> = {
+  home: House,
+  chat: ChatsCircle,
+  people: Users,
+  spaces: Stack,
+  docs: Files,
+  sources: Plug,
+  help: BookOpen,
+  settings: SlidersHorizontal,
+  instructions: Brain,
+  code: Code,
+};
+const TONES: DuoTone[] = ["personal", "project", "company"];
 
 // Pages, with the sidebar's own labels. Read when the palette renders (not at
 // module load), since Sidebar imports this module too.
-const staticNav = (): { label: string; href: string; icon: IconType }[] => [...MAIN_NAV, ...ADVANCED_NAV];
+const staticNav = () => [...MAIN_NAV, ...ADVANCED_NAV].map((n, i) => ({ label: n.label, href: n.href, icon: PAGE_ICON[n.glyph], tone: TONES[i % 3] }));
 
 const KIND_WORD: Record<string, string> = {
   person: "Person",
@@ -85,11 +120,12 @@ function Palette({ onClose }: { onClose: () => void }) {
 
   const connectorItems: Item[] = rows
     .filter((r) => r.connected)
-    .map((r) => ({ key: `conn:${r.key}`, label: r.label, icon: Plug, go: () => router.push(`/connectors/${r.key}`) }));
+    .map((r) => ({ key: `conn:${r.key}`, label: r.label, icon: Plug, tone: "project" as DuoTone, go: () => router.push(`/connectors/${r.key}`) }));
   const staticItems: Item[] = staticNav().map((s) => ({
     key: `nav:${s.href}`,
     label: s.label,
     icon: s.icon,
+    tone: s.tone,
     go: () => router.push(s.href),
   }));
   const navItems = [...staticItems, ...connectorItems].filter((item) =>
@@ -101,6 +137,7 @@ function Palette({ onClose }: { onClose: () => void }) {
     label: e.name,
     sub: KIND_WORD[e.kind] ?? e.kind,
     icon: ENTITY_ICON[e.kind] ?? User,
+    tone: "personal" as DuoTone,
     go: () => router.push(CODE_KINDS.has(e.kind) ? "/code" : "/entities"),
   }));
   const recordItems: Item[] = (searching ? recordHits : []).map((h) => ({
@@ -108,6 +145,7 @@ function Palette({ onClose }: { onClose: () => void }) {
     label: h.title || h.snippet,
     sub: h.document ? h.document.filename : h.source,
     icon: FileText,
+    tone: "company" as DuoTone,
     go: () => {
       // a passage of an uploaded document opens that document at the passage
       if (h.document) {
@@ -147,7 +185,7 @@ function Palette({ onClose }: { onClose: () => void }) {
             Search
           </h2>
           <button type="button" onClick={onClose} aria-label="Close search" className="btn btn-ghost btn-icon btn-sm">
-            <X size={18} strokeWidth={1.75} aria-hidden />
+            <X size={18} aria-hidden />
           </button>
         </div>
         <div className="px-5 pt-2 pb-3 flex flex-col gap-1.5" style={{ borderBottom: "1px solid var(--border)" }}>
@@ -155,7 +193,7 @@ function Palette({ onClose }: { onClose: () => void }) {
             Search pages, people, topics and documents
           </label>
           <div className="field flex items-center gap-2.5 px-3 h-11">
-            <Search size={18} color="var(--ink-dim)" aria-hidden />
+            <Duo icon={MagnifyingGlass} size={18} tone="project" />
             <input
               id="palette-input"
               autoFocus
@@ -184,14 +222,13 @@ function Palette({ onClose }: { onClose: () => void }) {
         <div className="max-h-[min(420px,60vh)] overflow-y-auto py-2">
           {groups.map((g) => (
             <div key={g.title} className="py-1">
-              <div className="caps px-5 h-7 flex items-center" style={{ color: "var(--ink-dim)" }}>
+              <div className="label px-5 h-7 flex items-center">
                 {g.title}
               </div>
               <ul>
                 {g.items.map((item) => {
                   flat += 1;
                   const i = flat;
-                  const Icon = item.icon;
                   const active = i === index;
                   return (
                     <li key={item.key} className="px-2">
@@ -200,12 +237,11 @@ function Palette({ onClose }: { onClose: () => void }) {
                         onMouseMove={() => setIndex(i)}
                         className="w-full flex items-center gap-3 px-3 min-h-11 py-1.5 text-[14px] text-left rounded-[8px]"
                         style={{
-                          background: active ? "var(--accent-soft)" : "transparent",
-                          
+                          background: active ? "var(--surface-raised)" : "transparent",
                           color: "var(--ink)",
                         }}
                       >
-                        <Icon size={18} color={active ? "var(--accent-text)" : "var(--ink-dim)"} />
+                        <Duo icon={item.icon} size={18} tone={item.tone} />
                         <span className="flex-1 min-w-0 flex flex-col">
                           <span className="truncate">{item.label}</span>
                           {item.sub && (
@@ -214,7 +250,7 @@ function Palette({ onClose }: { onClose: () => void }) {
                             </span>
                           )}
                         </span>
-                        <ArrowUpRight size={16} color="var(--accent-text)" aria-hidden />
+                        <ArrowUpRight size={16} aria-hidden style={{ color: active ? "var(--ink)" : "var(--ink-faint)" }} />
                       </button>
                     </li>
                   );

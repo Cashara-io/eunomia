@@ -336,19 +336,11 @@ body {
 
 /* ---- icons: Phosphor Duotone, the Eunomia twist ----
    Phosphor draws the back layer as the line colour at 20%. We fill it with a
-   solid vault colour and keep the line ink. Set --duo per icon. */
-.duo {
-  color: var(--ink);
-}
+   solid vault colour and keep the line in the text colour. Set --duo per
+   icon (components/ui/Duo.tsx does it for you). */
 .duo path[opacity] {
   opacity: 1;
   fill: var(--duo, var(--vault-project));
-}
-/* On an ink, cream or vault-coloured fill the back layer goes to the fill's
-   own text colour family, so it never disappears into the button. */
-.btn-primary .duo,
-[aria-current="page"] .duo {
-  color: currentColor;
 }
 
 /* ---- the canvas: cream with a faint 20px ink dot grid ---- */
@@ -623,55 +615,171 @@ button.pill:active {
   white-space: nowrap;
 }
 
-/* Sidebar nav row on the ink sidebar. Selected = blue fill + aria-current.
-   Focus is a cream outline, so it never looks like the selected fill. */
-.nav-link {
-  color: var(--bauhaus-app-sidebar-text);
-  border-radius: 3px;
-  transition: background-color var(--dur-hover) ease, color var(--dur-hover) ease;
-}
-.nav-link .nav-icon {
-  color: currentColor;
-}
-.nav-link[data-active] {
-  background: var(--bauhaus-app-blue);
-  color: #ffffff;
-  font-weight: 600;
-}
-.nav-link:focus-visible,
-.sidebar :focus-visible {
-  outline: 2px solid var(--bauhaus-app-yellow);
-  outline-offset: 2px;
-}
-@media (hover: hover) and (pointer: fine) {
-  .nav-link:not([data-active]):hover {
-    background: var(--bauhaus-app-sidebar-hover);
-  }
-}
-
-/* The ink sidebar and its drawer. */
+/* ---- the sidebar and its nav chips ----
+   A white sidebar with a right hairline. Each nav link is a pill chip with a
+   small glyph built from the three shapes; the glyph moves on hover with a
+   fine pointer only. The current page is an ink chip. */
 .sidebar {
-  background: var(--bauhaus-app-sidebar);
-  color: var(--bauhaus-app-sidebar-text);
+  background: var(--surface);
+  color: var(--ink);
+}
+.sidebar-rail {
+  border-right: 1px solid var(--border);
 }
 .sidebar .sidebar-muted {
-  color: var(--bauhaus-app-sidebar-muted);
+  color: var(--ink-dim);
 }
 .sidebar .sidebar-search {
-  border: 1px solid var(--bauhaus-app-sidebar-line);
-  border-radius: var(--radius-field);
-  color: var(--bauhaus-app-sidebar-text);
-  background: transparent;
+  border: 1px solid var(--border-field);
+  border-radius: var(--radius-control);
+  color: var(--ink-dim);
+  background: var(--surface);
+  transition: border-color var(--dur-hover) ease, background-color var(--dur-hover) ease;
 }
 @media (hover: hover) and (pointer: fine) {
   .sidebar .sidebar-search:hover {
-    border-color: var(--bauhaus-app-sidebar-muted);
+    border-color: var(--ink);
+    color: var(--ink);
   }
 }
-.sidebar .kbd {
-  background: transparent;
-  color: var(--bauhaus-app-sidebar-muted);
-  border-color: var(--bauhaus-app-sidebar-line);
+
+.nav-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  padding: 0 12px 0 10px;
+  border-radius: var(--radius-control);
+  border: 1px solid transparent;
+  color: var(--ink);
+  font-size: 13.5px;
+  line-height: 1.2;
+  transition:
+    background-color var(--dur-hover) ease,
+    border-color var(--dur-hover) ease,
+    color var(--dur-hover) ease,
+    transform var(--dur-press) var(--ease-out);
+}
+.nav-chip:active {
+  transform: scale(0.97);
+}
+.nav-chip[aria-current="page"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  font-weight: 500;
+}
+@media (hover: hover) and (pointer: fine) {
+  .nav-chip:not([aria-current="page"]):hover {
+    background: var(--surface-raised);
+    border-color: var(--ink);
+  }
+}
+@media (pointer: coarse) {
+  .nav-chip {
+    min-height: 44px;
+  }
+}
+
+/* A plain sidebar control (menu, close, log out). */
+.side-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: var(--radius-control);
+  color: var(--ink);
+  transition: background-color var(--dur-hover) ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  .side-button:hover {
+    background: var(--surface-raised);
+  }
+}
+
+/* The glyph: three absolutely placed shapes in a 20 x 14 box. Shape classes
+   give the fill and silhouette; each data-glyph places them and says how they
+   move. Flat fills, no outline, nothing loops. */
+.nav-glyph {
+  position: relative;
+  width: 20px;
+  height: 14px;
+  flex: none;
+}
+.nav-glyph > span {
+  position: absolute;
+  display: block;
+  transition: transform var(--dur-shape) var(--ease-shape), border-radius var(--dur-shape) var(--ease-shape);
+}
+.g-c { background: var(--vault-personal); border-radius: 999px; }
+.g-s { background: var(--vault-project); }
+.g-t { background: var(--vault-company); clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+
+/* Home: a yellow house with a blue roof and a red sun. */
+[data-glyph="home"] .g-s { left: 4px; top: 7px; width: 9px; height: 7px; }
+[data-glyph="home"] .g-t { left: 2px; top: 1px; width: 13px; height: 6px; }
+[data-glyph="home"] .g-c { left: 15px; top: 1px; width: 5px; height: 5px; }
+/* Chat: two speech bubbles and a small square. */
+[data-glyph="chat"] .g-c { left: 0; top: 1px; width: 10px; height: 10px; }
+[data-glyph="chat"] .g-t { left: 2px; top: 9px; width: 5px; height: 5px; transform: rotate(180deg); }
+[data-glyph="chat"] .g-s { left: 12px; top: 5px; width: 8px; height: 8px; border-radius: 3px; }
+/* People and topics: a head, a body and a second person. */
+[data-glyph="people"] .g-c { left: 2px; top: 0; width: 7px; height: 7px; }
+[data-glyph="people"] .g-s { left: 1px; top: 8px; width: 9px; height: 6px; border-radius: 4px 4px 0 0; }
+[data-glyph="people"] .g-t { left: 11px; top: 4px; width: 9px; height: 10px; }
+/* Memory spaces: the trio itself, in a row. */
+[data-glyph="spaces"] > span { top: 4px; width: 6px; height: 6px; }
+[data-glyph="spaces"] .g-c { left: 0; }
+[data-glyph="spaces"] .g-s { left: 7px; }
+[data-glyph="spaces"] .g-t { left: 14px; }
+/* Documents: a yellow page with a red half moon (the landing page's Blog). */
+[data-glyph="docs"] .g-s { left: 3px; top: 0; width: 11px; height: 13px; border-radius: 2px 6px 2px 2px; }
+[data-glyph="docs"] .g-c { left: 10px; top: 5px; width: 9px; height: 9px; border-radius: 0 0 9px 9px; }
+[data-glyph="docs"] .g-t { left: 0; top: 8px; width: 6px; height: 6px; }
+/* Connected sources: a triangle plugging into a square, a red cable end. */
+[data-glyph="sources"] .g-s { left: 9px; top: 2px; width: 10px; height: 10px; }
+[data-glyph="sources"] .g-t { left: 1px; top: 3px; width: 8px; height: 8px; transform: rotate(90deg); }
+[data-glyph="sources"] .g-c { left: 0; top: 10px; width: 4px; height: 4px; }
+/* Help: a red ring-like half circle over a small blue dot. */
+[data-glyph="help"] .g-c { left: 4px; top: 0; width: 12px; height: 7px; border-radius: 12px 12px 0 0; }
+[data-glyph="help"] .g-s { left: 8px; top: 7px; width: 4px; height: 4px; }
+[data-glyph="help"] .g-t { left: 7px; top: 11px; width: 6px; height: 3px; }
+/* Settings: a yellow square dial with a blue pointer and a red knob. */
+[data-glyph="settings"] .g-s { left: 4px; top: 1px; width: 12px; height: 12px; border-radius: 3px; }
+[data-glyph="settings"] .g-c { left: 7px; top: 4px; width: 6px; height: 6px; }
+[data-glyph="settings"] .g-t { left: 0; top: 4px; width: 5px; height: 6px; transform: rotate(90deg); }
+/* AI instructions: a play triangle reading a stacked note. */
+[data-glyph="instructions"] .g-t { left: 0; top: 2px; width: 9px; height: 10px; transform: rotate(90deg); }
+[data-glyph="instructions"] .g-s { left: 11px; top: 1px; width: 9px; height: 5px; }
+[data-glyph="instructions"] .g-c { left: 11px; top: 8px; width: 5px; height: 5px; }
+/* Code map: two brackets facing each other around a square. */
+[data-glyph="code"] .g-t { left: 0; top: 3px; width: 7px; height: 8px; transform: rotate(-90deg); }
+[data-glyph="code"] .g-s { left: 8px; top: 4px; width: 5px; height: 5px; }
+[data-glyph="code"] .g-c { left: 14px; top: 3px; width: 6px; height: 8px; border-radius: 0 8px 8px 0; }
+
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .nav-chip:hover [data-glyph="home"] .g-t { transform: translateY(-2px); }
+  .nav-chip:hover [data-glyph="home"] .g-c { transform: translate(-1px, 2px); }
+  .nav-chip:hover [data-glyph="chat"] .g-c { transform: translateY(-2px); }
+  .nav-chip:hover [data-glyph="chat"] .g-s { transform: translateY(-3px); border-radius: 999px; }
+  .nav-chip:hover [data-glyph="people"] .g-t { transform: translateX(-2px); }
+  .nav-chip:hover [data-glyph="people"] .g-c { transform: translateY(-1px); }
+  .nav-chip:hover [data-glyph="spaces"] .g-c { transform: translateY(4px); }
+  .nav-chip:hover [data-glyph="spaces"] .g-t { transform: translateY(-4px); }
+  .nav-chip:hover [data-glyph="docs"] .g-s { transform: rotate(-12deg); }
+  .nav-chip:hover [data-glyph="docs"] .g-c { transform: rotate(180deg); }
+  .nav-chip:hover [data-glyph="docs"] .g-t { transform: translate(2px, -2px); }
+  .nav-chip:hover [data-glyph="sources"] .g-t { transform: translateX(2px) rotate(90deg); }
+  .nav-chip:hover [data-glyph="sources"] .g-c { transform: translateX(2px); }
+  .nav-chip:hover [data-glyph="help"] .g-c { transform: rotate(-14deg); }
+  .nav-chip:hover [data-glyph="help"] .g-s { transform: translateY(-1px); border-radius: 999px; }
+  .nav-chip:hover [data-glyph="settings"] .g-s { transform: rotate(45deg); }
+  .nav-chip:hover [data-glyph="settings"] .g-t { transform: translateX(2px) rotate(90deg); }
+  .nav-chip:hover [data-glyph="instructions"] .g-t { transform: translateX(2px) rotate(90deg); }
+  .nav-chip:hover [data-glyph="instructions"] .g-c { transform: translateX(4px); }
+  .nav-chip:hover [data-glyph="code"] .g-t { transform: translateX(-2px) rotate(-90deg); }
+  .nav-chip:hover [data-glyph="code"] .g-c { transform: translateX(2px); }
+  .nav-chip:hover [data-glyph="code"] .g-s { transform: rotate(45deg); }
 }
 
 /* Page header: icon + title, a hairline, then the introduction. */
