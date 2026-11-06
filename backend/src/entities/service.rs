@@ -500,6 +500,7 @@ pub async fn upsert_entity_created(
     // A decorated name ("Jane Doe (Acme/JD)") whose base name already exists resolves to it, the
     // suffix parts becoming aliases.
     let decorated = split_decorated(name);
+    let variants = if kind == "person" { person_variants(name) } else { Vec::new() };
     // Read-then-write: a concurrent upsert of the same name (in any case) loses on the
     // `(vault, name_key)` unique index, and the retry's re-read finds the winner. Both lookups are
     // index reads (`name_key`, `alias_keys`), however large the vault.
@@ -507,9 +508,12 @@ pub async fn upsert_entity_created(
         let mut found = None;
         let mut aliases = aliases.clone();
         let needles = std::iter::once((needle.clone(), None)).chain(decorated.as_ref().map(|(base, extra)| (base.to_lowercase(), Some(extra))));
-        for (key, extra) in needles {
-            let mut res =
-                q::find_by_key(db, table).bind(("vault", vault.clone())).bind(("kind", kind.to_string())).bind(("needle", key)).await?.check()?;
+        for (i, (key, extra)) in needles.enumerate() {
+            // A person under a different honorific ("Dr. X" for "Dr X", or plain "X"): the variant keys
+            // ride along with the name's own lookup, in the same round trip. The name's own key wins.
+            let with_variants = i == 0 && !variants.is_empty();
+            let lookup = if with_variants { q::find_by_key_or_variants(db, table).bind(("needles", variants.clone())) } else { q::find_by_key(db, table) };
+            let mut res = lookup.bind(("vault", vault.clone())).bind(("kind", kind.to_string())).bind(("needle", key)).await?.check()?;
             let by_name: Vec<EntityRow> = res.take(0)?;
             let by_alias: Vec<EntityRow> = res.take(1)?;
             if let Some(row) = by_name.into_iter().chain(by_alias).next() {
@@ -517,27 +521,16 @@ pub async fn upsert_entity_created(
                 found = Some(row);
                 break;
             }
-        }
-
-        // A person under a different honorific ("Dr. X" for "Dr X", or plain "X"): plain lookups of the
-        // variant keys, no schema change.
-        if found.is_none() && kind == "person" {
-            let variants = person_variants(name);
-            if !variants.is_empty() {
-                let mut res = q::find_by_keys(db, table)
-                    .bind(("vault", vault.clone()))
-                    .bind(("kind", kind.to_string()))
-                    .bind(("needles", variants))
-                    .await?
-                    .check()?;
-                let by_name: Vec<EntityRow> = res.take(0)?;
-                let by_alias: Vec<EntityRow> = res.take(1)?;
-                found = by_name.into_iter().chain(by_alias).next();
-                if let Some(row) = &found {
+            if with_variants {
+                let by_name: Vec<EntityRow> = res.take(2)?;
+                let by_alias: Vec<EntityRow> = res.take(3)?;
+                if let Some(row) = by_name.into_iter().chain(by_alias).next() {
                     let spelled = name.split_whitespace().collect::<Vec<_>>().join(" ");
                     if spelled != row.name {
                         aliases.push(spelled);
                     }
+                    found = Some(row);
+                    break;
                 }
             }
         }
