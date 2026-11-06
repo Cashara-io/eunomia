@@ -208,12 +208,9 @@ async fn run(db: &OrgDb, settings: &Settings, owner: &RecordId, subject: &Record
     let ids: Vec<RecordId> = rows.iter().map(|(_, r, _)| r.id.clone()).collect();
     let marked = pick(&call_llm(db, settings, owner, build_prompt(&facts)).await?, &facts, &ids);
     if !marked.is_empty() {
-        q::MARK_SUPERSEDED
-            .on(db)
-            .bind(("ids", marked.clone()))
-            .bind(("subject", subject.clone()))
-            .await?
-            .check()?;
+        // the subject's other writers (consolidation, a new fact's embed) can touch these rows too
+        let mark = || async { q::MARK_SUPERSEDED.on(db).bind(("ids", marked.clone())).bind(("subject", subject.clone())).await?.check() };
+        crate::tx::with_retry(mark).await?;
     }
     Ok(marked)
 }
