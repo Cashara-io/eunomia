@@ -103,11 +103,42 @@ export interface SyncResult {
   results: { file: string; name?: string; outcome: Outcome; error?: string }[];
   /** Skill names in the vault with no file in the folder. Never deleted. */
   serverOnly: string[];
+  /** The server has no `skill_list` (before Eunomia 2.1): `serverOnly` came from a 50-result search and may miss some. */
+  serverOnlyPartial?: boolean;
 }
 
-/** Common letter pairs: `skill_find` has no list-all, but its keyword arm matches any name or description holding one. */
-// ponytail: best effort, at most 50 skills; a server-side skill_list would make "only on the server" exact.
+/** `skill_list` page size (the server's maximum). */
+const LIST_PAGE = 500;
+/** Pages read at most (a vault of 50,000 skills): a server that keeps answering `next` cannot loop sync forever. */
+const LIST_MAX_PAGES = 100;
+/**
+ * Common letter pairs, for a server without `skill_list`: `skill_find`'s keyword arm matches any name or
+ * description holding one. Best effort, at most 50 skills.
+ */
 const LIST_QUERY = "an ar at de ed en er es in it le nd on or re se st te th ti to";
+
+/**
+ * Every skill name in the vault: `skill_list`, page by page; `partial` when the server has no such tool
+ * and the names come from the old best-effort search.
+ */
+export async function serverSkillNames(api: Api, vaultId: string): Promise<{ names: string[]; partial: boolean }> {
+  const names: string[] = [];
+  let after: string | undefined;
+  try {
+    for (let page = 0; page < LIST_MAX_PAGES; page++) {
+      const r = await api.tool<{ skills: { name: string }[]; next: string | null }>("skill_list", { vault_id: vaultId, limit: LIST_PAGE, ...(after === undefined ? {} : { after }) });
+      names.push(...r.skills.map((s) => s.name));
+      // a cursor must move on, or a broken server would hand the same page back forever
+      if (!r.next || r.next === after) return { names, partial: false };
+      after = r.next;
+    }
+    return { names, partial: true };
+  } catch (e) {
+    if (!(e instanceof ApiError && e.code === "tool.not_found")) throw e;
+  }
+  const found = await api.tool<{ skills: { name: string }[] }>("skill_find", { query: LIST_QUERY, vault_id: vaultId, limit: 50 });
+  return { names: found.skills.map((s) => s.name), partial: true };
+}
 
 /** Thrown when the server refuses the token: the whole sync stops with one message. */
 export class TokenRejected extends Error {}
@@ -178,13 +209,15 @@ export async function syncSkills(api: Api, dir: string, vaultId: string): Promis
     }
   }
   let serverOnly: string[] = [];
+  let serverOnlyPartial: boolean | undefined;
   try {
-    const found = await api.tool<{ skills: { name: string }[] }>("skill_find", { query: LIST_QUERY, vault_id: vaultId, limit: 50 });
-    serverOnly = [...new Set(found.skills.map((s) => s.name))].filter((n) => !seen.has(n)).sort();
+    const listed = await serverSkillNames(api, vaultId);
+    serverOnly = [...new Set(listed.names)].filter((n) => !seen.has(n)).sort();
+    serverOnlyPartial = listed.partial || undefined;
   } catch {
     // only a report; the sync itself is done
   }
-  return { results, serverOnly };
+  return { results, serverOnly, serverOnlyPartial };
 }
 
 async function upsert(api: Api, s: Skill, vaultId: string): Promise<Outcome> {
@@ -204,5 +237,6 @@ export function formatSync(r: SyncResult, cwd: string): string {
   const lines = r.results.map((x) => `  ${x.outcome.padEnd(9)} ${x.name ?? "-"}  ${rel(x.file)}${x.error ? `: ${x.error}` : ""}`);
   if (!r.results.length) lines.push("  no skills yet: add .eunomia/skills/<name>.md and run sync again");
   if (r.serverOnly.length) lines.push(`  on the server only (kept, not deleted): ${r.serverOnly.join(", ")}`);
+  if (r.serverOnlyPartial) lines.push("  (this server has no skill_list, so the list above may miss some skills)");
   return lines.join("\n");
 }

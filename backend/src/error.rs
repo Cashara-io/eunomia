@@ -48,6 +48,7 @@ pub enum ErrorCode {
     DocumentTooLarge,
     DocumentUnsupportedType,
     DocumentStorageUnavailable,
+    ChangesResync,
     ValidationInvalid,
     DbConflict,
     DbDuplicate,
@@ -90,6 +91,7 @@ impl ErrorCode {
         ErrorCode::DocumentTooLarge,
         ErrorCode::DocumentUnsupportedType,
         ErrorCode::DocumentStorageUnavailable,
+        ErrorCode::ChangesResync,
         ErrorCode::ValidationInvalid,
         ErrorCode::DbConflict,
         ErrorCode::DbDuplicate,
@@ -132,6 +134,7 @@ impl ErrorCode {
             ErrorCode::DocumentTooLarge => "document.too_large",
             ErrorCode::DocumentUnsupportedType => "document.unsupported_type",
             ErrorCode::DocumentStorageUnavailable => "document.storage_unavailable",
+            ErrorCode::ChangesResync => "changes.resync",
             ErrorCode::ValidationInvalid => "validation.invalid",
             ErrorCode::DbConflict => "db.conflict",
             ErrorCode::DbDuplicate => "db.duplicate",
@@ -152,6 +155,7 @@ impl ErrorCode {
             ErrorCode::TenantSchemaBehind | ErrorCode::DocumentStorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
             ErrorCode::DocumentTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
             ErrorCode::DocumentUnsupportedType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            ErrorCode::ChangesResync => StatusCode::GONE,
             ErrorCode::TenantProvisioningDisabled => StatusCode::NOT_IMPLEMENTED,
             ErrorCode::AuthEmailTaken | ErrorCode::VaultNameTaken | ErrorCode::DbConflict | ErrorCode::DbDuplicate => StatusCode::CONFLICT,
             ErrorCode::AuthNotFound
@@ -331,7 +335,7 @@ mod tests {
                 | ErrorCode::MemoryNotFound | ErrorCode::ChatThreadNotFound | ErrorCode::ConnectorNotFound
                 | ErrorCode::ConnectorNotConnected | ErrorCode::SourceNotFound | ErrorCode::ExtensionNotFound | ErrorCode::ExtensionDisabled | ErrorCode::ExtensionBufferFull | ErrorCode::ToolNotFound
                 | ErrorCode::ResourceNotFound | ErrorCode::DocumentNotFound | ErrorCode::DocumentTooLarge
-                | ErrorCode::DocumentUnsupportedType | ErrorCode::DocumentStorageUnavailable | ErrorCode::ValidationInvalid | ErrorCode::DbConflict
+                | ErrorCode::DocumentUnsupportedType | ErrorCode::DocumentStorageUnavailable | ErrorCode::ChangesResync | ErrorCode::ValidationInvalid | ErrorCode::DbConflict
                 | ErrorCode::DbDuplicate | ErrorCode::JobNoHandler | ErrorCode::JobLeaseExpired | ErrorCode::JobPanicked
                 | ErrorCode::Internal => {}
             }
