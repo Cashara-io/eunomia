@@ -1,11 +1,11 @@
 "use client";
 
+import { ArrowRightIcon, HouseIcon, UploadSimpleIcon, UsersIcon, WarningIcon } from "@phosphor-icons/react/ssr";
 import { kindColor } from "@/lib/kindColors";
 import ErrorLine, { failure } from "@/components/ErrorLine";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, House, Upload, Users } from "lucide-react";
 import type { EntityDetail, EntityKind, EntityMemory, SourceRow } from "@/lib/types";
 import { entityKeys, type EntityList } from "@/lib/queries/entities";
 import { call } from "@/lib/queries/client";
@@ -17,6 +17,7 @@ import SyncMark, { type SyncStatus } from "@/components/bits/SyncMark";
 import { prefersReducedMotion } from "@/components/bits/motion";
 import { kindForSource } from "@/lib/connectorMeta";
 import PageHeader from "@/components/ui/PageHeader";
+import { EmptyState } from "@/components/Shapes";
 import StatusLabel from "@/components/ui/StatusLabel";
 import { AI_APPS, AppMark, appForConnection, type Connection } from "@/components/connect/apps";
 import { useConnections } from "@/components/connect/useConnections";
@@ -55,10 +56,10 @@ function FailureBanner({ rows, dismissed, onDismiss }: { rows: SourceRow[]; dism
         <div
           key={s.key}
           role="alert"
-          className="flex flex-wrap items-center gap-3 rounded-[2px] px-4 py-3"
+          className="flex flex-wrap items-center gap-3 rounded-[12px] px-4 py-3"
           style={{ background: "var(--critical-soft)", border: "1px solid var(--critical)" }}
         >
-          <AlertTriangle size={18} strokeWidth={1.75} color="var(--critical)" className="shrink-0" aria-hidden />
+          <WarningIcon weight="duotone" size={18} color="var(--critical)" className="shrink-0" aria-hidden />
           <div className="flex-1 min-w-[200px]">
             <div className="text-[14px] font-semibold">
               {sourceLabel(s)} could not update {s.sync_status.consecutive_failures} times in a row
@@ -199,12 +200,18 @@ function LiveMemory({
           ))}
         </div>
       ) : rows.length === 0 ? (
-        <div className="px-3 py-8 text-[13px] flex flex-wrap items-center gap-x-3 gap-y-2" style={{ color: "var(--ink-dim)" }}>
-          No memories yet. Ask your AI app to remember something, or add one yourself. New memories show here with who saved them.
-          <Link href="/entities" className="btn btn-sm">
-            Browse people &amp; topics <ArrowRight size={14} strokeWidth={1.75} aria-hidden />
-          </Link>
-        </div>
+        <EmptyState
+          bare
+          variant="memory"
+          title="No memories yet"
+          action={
+            <Link href="/entities" className="btn btn-sm">
+              Browse people &amp; topics <ArrowRightIcon weight="duotone" size={14} aria-hidden />
+            </Link>
+          }
+        >
+          Ask your AI app to remember something, or add one yourself. New memories show here with who saved them.
+        </EmptyState>
       ) : (
         <table className="data-table" style={{ tableLayout: "fixed" }}>
           <thead>
@@ -302,7 +309,7 @@ function Inspector({ row }: { row: LiveRow }) {
   ];
 
   return (
-    <aside aria-label="Selected memory" className="panel p-5 flex flex-col gap-4" style={{ borderTop: "2px solid var(--bauhaus-app-blue)" }}>
+    <aside aria-label="Selected memory" className="panel p-5 flex flex-col gap-4" >
       <span className="caps" style={{ color: "var(--accent-text)" }}>
         Selected memory
       </span>
@@ -321,7 +328,7 @@ function Inspector({ row }: { row: LiveRow }) {
         </dl>
       </div>
       <Link href="/entities" className="btn btn-sm self-start">
-        Open people &amp; topics <ArrowRight size={14} strokeWidth={1.75} aria-hidden />
+        Open people &amp; topics <ArrowRightIcon weight="duotone" size={14} aria-hidden />
       </Link>
     </aside>
   );
@@ -366,7 +373,7 @@ function AppPicker({ again = false }: { again?: boolean }) {
   return (
     <section className="task-panel p-6 sm:p-8 flex flex-col gap-5" aria-labelledby="pick-title">
       <div className="flex flex-col gap-3">
-        <h2 id="pick-title" className="text-[26px] sm:text-[28px] font-semibold tracking-[-0.6px] leading-tight">
+        <h2 id="pick-title" className="text-[26px] sm:text-[28px] font-medium leading-tight tracking-[-0.03em]">
           {again ? "Connect another AI app" : "Which AI app do you use?"}
         </h2>
         <p className="text-[16px] leading-relaxed">
@@ -378,8 +385,8 @@ function AppPicker({ again = false }: { again?: boolean }) {
           <li key={a.id}>
             <Link
               href={`/connect/${a.id}`}
-              className="flex flex-col gap-1.5 h-full min-h-[76px] px-4 py-3.5 rounded-[3px] transition-colors hover:bg-[var(--bauhaus-app-bg)]"
-              style={{ border: "1px solid var(--bauhaus-app-ink)" }}
+              className="flex flex-col gap-1.5 h-full min-h-[76px] px-4 py-3.5 rounded-[12px] transition-colors hover:bg-[var(--surface-raised)] hover:border-[var(--ink)]"
+              style={{ background: "var(--surface)", border: "1px solid var(--border-strong)" }}
             >
               <span className="flex items-center gap-2.5 text-[16px] font-semibold">
                 <AppMark id={a.id} size={22} />
@@ -416,10 +423,10 @@ function OwnInformation() {
       </p>
       <div className="flex flex-wrap gap-2">
         <Link href="/documents" className="btn">
-          <Upload size={18} strokeWidth={1.75} aria-hidden /> Upload a document
+          <UploadSimpleIcon weight="duotone" size={18} aria-hidden /> Upload a document
         </Link>
         <Link href="/entities" className="btn">
-          <Users size={18} strokeWidth={1.75} aria-hidden /> Browse people &amp; topics
+          <UsersIcon weight="duotone" size={18} aria-hidden /> Browse people &amp; topics
         </Link>
       </div>
     </section>
@@ -433,8 +440,8 @@ function ConnectedPanel({ connections, onConnectAnother }: { connections: Connec
   const latest = connections[0];
   const app = appForConnection(latest);
   return (
-    <section className="p-6 flex flex-col gap-4 rounded-[2px]" style={{ background: "var(--surface)", border: "1px solid var(--bauhaus-app-blue)" }} aria-labelledby="connected-title">
-      <h2 id="connected-title" className="text-[20px] font-semibold tracking-[-0.3px]">
+    <section className="ledger p-6 flex flex-col gap-4" aria-labelledby="connected-title">
+      <h2 id="connected-title" className="text-[20px] font-medium tracking-[-0.025em]">
         {connections.length === 1 ? `${latest.name} is connected` : `${connections.length} AI apps are connected`}
       </h2>
       <p className="text-[15px]" style={{ color: "var(--ink-dim)" }}>
@@ -542,7 +549,7 @@ export default function HomePage() {
   return (
     <div className="flex flex-col gap-8 max-w-[1240px]">
       <PageHeader
-        icon={House}
+        icon={HouseIcon} tone="project"
         title="Home"
         intro={connected_apps ? "Your memory, connected across your AI apps." : "Connect an AI app, or start browsing your saved information."}
       />
@@ -583,7 +590,7 @@ export default function HomePage() {
 
       <section
         aria-label="Summary"
-        className="grid grid-cols-2 lg:grid-cols-4 overflow-hidden rounded-[2px]"
+        className="grid grid-cols-2 lg:grid-cols-4 overflow-hidden rounded-[12px]"
         style={{ gap: "var(--hair)", background: "var(--border)", border: "var(--hair) solid var(--border)" }}
       >
         <Stat label="People & topics" value={entityCount !== null ? <DigitRoll value={entityCount} /> : "–"} href="/entities" />
@@ -697,7 +704,7 @@ export default function HomePage() {
                         </span>
                       </div>
                       <Link href={kind ? `/connectors/setup/${kind}` : "/connectors"} className="btn btn-sm shrink-0">
-                        Connect <ArrowRight size={12} strokeWidth={1.75} />
+                        Connect <ArrowRightIcon weight="duotone" size={12} />
                       </Link>
                     </li>
                   );
@@ -705,7 +712,7 @@ export default function HomePage() {
                 {disconnected.length > NOT_CONNECTED_SHOWN && (
                   <li className="flex items-center min-h-11 px-3">
                     <Link href="/connectors" className="text-[13px] inline-flex items-center gap-1.5 underline-offset-2 hover:underline" style={{ color: "var(--accent-text)" }}>
-                      See all {disconnected.length} in Connected sources <ArrowRight size={14} strokeWidth={1.75} aria-hidden />
+                      See all {disconnected.length} in Connected sources <ArrowRightIcon weight="duotone" size={14} aria-hidden />
                     </Link>
                   </li>
                 )}

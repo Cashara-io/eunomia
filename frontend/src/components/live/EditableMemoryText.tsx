@@ -1,7 +1,7 @@
 "use client";
 
+import { PencilSimpleIcon } from "@phosphor-icons/react/ssr";
 import { useState } from "react";
-import { Pencil } from "lucide-react";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import { useUpdateMemory } from "@/lib/queries/entities";
 import type { EntityMemory } from "@/lib/types";
@@ -29,7 +29,7 @@ export default function EditableMemoryText({ memory, onSaved, disabled }: { memo
             setEditing(true);
           }}
         >
-          <Pencil size={12} strokeWidth={1.75} aria-hidden />
+          <PencilSimpleIcon weight="duotone" size={12} aria-hidden />
         </button>
       </span>
     );

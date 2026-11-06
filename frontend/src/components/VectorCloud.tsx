@@ -1,7 +1,8 @@
 "use client";
 
+import { XIcon } from "@phosphor-icons/react/ssr";
+import { VaultShape, vaultTone } from "./VaultChip";
 import { useMemo, useState } from "react";
-import { X } from "lucide-react";
 import ErrorLine, { failure } from "./ErrorLine";
 import Scene3D from "./Scene3D";
 import MemoryRows, { MAX_COMPARE } from "./MemoryRows";
@@ -11,7 +12,10 @@ import { useVaults } from "@/lib/queries/vaults";
 
 // One colour per layered vault, in pick order.
 // Series colours, never the accent: the accent marks only what is pressable or selected.
-const LAYER_COLORS = ["var(--series-2)", "var(--series-1)", "var(--series-3)", "var(--series-4)", "var(--kind-repository)", "var(--kind-location)"];
+// Point colours per memory space. The vault colours mean vault identity and
+// nothing else: the personal space is red, the first shared space is the
+// company blue, and any further shared spaces take the muted series hues.
+const EXTRA_LAYER_COLORS = ["var(--kind-repository)", "var(--kind-location)", "var(--kind-organisation)", "var(--kind-symbol)", "var(--kind-file)"];
 const PANELS = [
   { id: "rows", label: "Memories" },
   { id: "insights", label: "Insights" },
@@ -34,7 +38,13 @@ export default function VectorCloud() {
       : null;
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const colorOf = (vaultId: string) => LAYER_COLORS[Math.max(0, picked.indexOf(vaultId)) % LAYER_COLORS.length];
+  const shared = vaults.filter((v) => v.kind !== "personal");
+  const colorOf = (vaultId: string) => {
+    const v = vaults.find((x) => x.id === vaultId);
+    if (!v || v.kind === "personal") return "var(--vault-personal)";
+    const i = shared.indexOf(v);
+    return i === 0 ? "var(--vault-company)" : EXTRA_LAYER_COLORS[(i - 1) % EXTRA_LAYER_COLORS.length];
+  };
   const points = useMemo(
     () => (picked.length ? data?.points ?? [] : []).map((p) => ({ ...p, color: colorOf(p.vault) })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -80,7 +90,7 @@ export default function VectorCloud() {
             const count = on ? points.filter((p) => p.vault === v.id).length : null;
             return (
               <button key={v.id} type="button" className="pill min-h-10" aria-pressed={on} onClick={() => toggle(v.id)}>
-                <span className="dot" style={{ background: on ? colorOf(v.id) : "var(--border-strong)" }} aria-hidden />
+                <VaultShape tone={vaultTone(v.kind)} size={10} fill={on ? colorOf(v.id) : "var(--border-strong)"} />
                 {nameOf(v.id)}
                 {count !== null && <span className="font-mono" style={{ color: "var(--ink-dim)" }}>{count}</span>}
                 <span className="sr-only">{on ? "(shown)" : "(hidden)"}</span>
@@ -133,7 +143,7 @@ export default function VectorCloud() {
             style={{ transformOrigin: "top right" }}
           >
             <div className="flex items-center gap-2 label">
-              <span className="dot" style={{ background: selected.color }} aria-hidden />
+              <VaultShape tone={vaultTone(vaults.find((v) => v.id === selected.vault)?.kind)} size={10} fill={selected.color} />
               <span className="truncate">
                 {nameOf(selected.vault)} · {selected.kind}
               </span>
@@ -143,7 +153,7 @@ export default function VectorCloud() {
                 aria-label="Close"
                 onClick={() => setSelectedId(null)}
               >
-                <X size={16} strokeWidth={1.75} />
+                <XIcon weight="duotone" size={16} />
               </button>
             </div>
             <p className="text-[14px] leading-snug" style={{ color: "var(--ink)" }}>{selected.label}</p>
@@ -167,6 +177,7 @@ export default function VectorCloud() {
               points={points}
               vaultIds={picked}
               nameOf={nameOf}
+              toneOf={(id) => vaultTone(vaults.find((v) => v.id === id)?.kind)}
               selection={selection}
               focusId={selectedId}
               onToggle={toggleRow}

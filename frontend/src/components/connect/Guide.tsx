@@ -1,8 +1,8 @@
 "use client";
 
+import { CheckCircleIcon } from "@phosphor-icons/react/ssr";
 import { useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { CircleCheck } from "lucide-react";
 import CopyButton from "@/components/bits/CopyButton";
 import PageHeader from "@/components/ui/PageHeader";
 import { AppMark, appById, appForConnection, connectionFor, type AiApp, type AppId, type Connection } from "./apps";
@@ -25,7 +25,7 @@ export function Trail({ here }: { here: string }) {
 export function GuideStep({ n, title, children }: { n?: number; title: React.ReactNode; children: React.ReactNode }) {
   return (
     <li className="guide-step flex flex-col gap-3 py-6">
-      <h3 className="text-[17px] font-semibold leading-snug">
+      <h3 className="text-[17px] font-medium leading-snug tracking-[-0.015em]">
         {n !== undefined && <span>{n}. </span>}
         {title}
       </h3>
@@ -42,16 +42,16 @@ export const Note = ({ children }: { children: React.ReactNode }) => (
   </p>
 );
 
-export const Kbd = ({ children }: { children: React.ReactNode }) => <code className="font-mono text-[0.92em] px-1 rounded-[3px]" style={{ background: "var(--bauhaus-app-soft)" }}>{children}</code>;
+export const Kbd = ({ children }: { children: React.ReactNode }) => <code className="font-mono text-[0.92em] px-1 rounded-[4px]" style={{ background: "var(--surface-raised)" }}>{children}</code>;
 
-/** A command to paste into a terminal: ink block, then one primary copy button. */
+/** A command to paste into a terminal: a raised code block, then one primary copy button. */
 export function CommandBlock({ value, label = "Command" }: { value: string; label?: string }) {
   return (
     <div className="flex flex-col gap-3 items-start">
       <pre
         aria-label={label}
-        className="w-full font-mono text-[13px] leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere] px-4 py-3.5 rounded-[2px]"
-        style={{ background: "var(--bauhaus-app-ink)", color: "var(--bauhaus-app-cream)" }}
+        className="w-full font-mono text-[13px] leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere] px-4 py-3.5 rounded-[10px]"
+        style={{ background: "var(--surface-raised)", color: "var(--ink)", border: "1px solid var(--border)" }}
       >
         {value}
       </pre>
@@ -187,7 +187,7 @@ export function Approved({ connection, onShowSteps }: { connection: Connection; 
         : `Start a new ${app.name} session and paste the question.`;
   return (
     <div className="flex flex-col gap-8 max-w-[960px]">
-      <PageHeader icon={CircleCheck} title="Connection approved" intro={<Trail here="Ready to use" />} />
+      <PageHeader icon={CheckCircleIcon} tone="project" title="Connection approved" intro={<Trail here="Ready to use" />} />
       <section className="task-panel p-6 sm:p-8 flex flex-col gap-5" aria-labelledby="approved-title">
         <h2 id="approved-title" className="connect-title">
           Your AI app is connected
@@ -203,7 +203,7 @@ export function Approved({ connection, onShowSteps }: { connection: Connection; 
             Your connection is ready. If no memories have been saved yet, a search can return no results. That is normal.
           </p>
         </div>
-        <div className="flex flex-col gap-3 items-start px-5 py-4" style={{ border: "1px solid var(--bauhaus-app-blue)", borderRadius: 2 }}>
+        <div className="flex flex-col gap-3 items-start px-5 py-4" style={{ border: "1px solid var(--border-strong)", borderRadius: 12 }}>
           <p className="text-[16px]">{EXAMPLE_QUESTION}</p>
           <CopyButton value={EXAMPLE_QUESTION} label="Copy example question" size="sm" className="btn-primary" />
         </div>

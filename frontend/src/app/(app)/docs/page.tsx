@@ -1,10 +1,10 @@
 "use client";
 
+import { ArrowLeftIcon, ArrowRightIcon, BookOpenIcon, LinkIcon } from "@phosphor-icons/react/ssr";
 import Select from "@/components/Select";
-import { isValidElement, useEffect, useRef, useState, type ReactNode } from "react";
+import { isValidElement, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowLeft, ArrowRight, BookOpen, Link2 } from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
 import { useDoc, useDocs } from "@/lib/queries/tools";
 import ErrorLine, { failure } from "@/components/ErrorLine";
@@ -57,7 +57,7 @@ function Heading({ level, children }: { level: 2 | 3; children?: ReactNode }) {
         className="ml-2 inline-flex align-middle opacity-0 transition-opacity duration-150 group-hover:opacity-100"
         style={{ color: "var(--ink-dim)", textDecoration: "none" }}
       >
-        <Link2 size={14} strokeWidth={1.75} />
+        <LinkIcon weight="duotone" size={14} />
       </a>
     </Tag>
   );
@@ -85,28 +85,52 @@ export default function DocsPage() {
     else window.scrollTo({ top: 0 });
   }, [topic]);
 
-  // "On this page": read the h2s back out of the rendered article.
+  // "On this page": read the h2s back out of the rendered article, then mark the section being
+  // read: the last h2 above a line 30% down the screen, or the last h2 once the page hits bottom.
   useEffect(() => {
     const el = articleRef.current;
     if (!el || body === null) return;
     const hs = [...el.querySelectorAll<HTMLHeadingElement>("h2[id]")];
     setOutline(hs.map((h) => ({ id: h.id, text: h.textContent ?? "" })));
-    setActive(hs[0]?.id ?? null);
-    const io = new IntersectionObserver(
-      (entries) => {
-        const hit = entries.find((e) => e.isIntersecting);
-        if (hit) setActive(hit.target.id);
-      },
-      { rootMargin: "0px 0px -70% 0px" },
-    );
-    hs.forEach((h) => io.observe(h));
-    return () => io.disconnect();
+    let scroller: Element | null = document.scrollingElement;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      // Re-read the headings each time: a re-render can swap them for new elements.
+      const hs = [...el.querySelectorAll<HTMLHeadingElement>("h2[id]")];
+      const line = window.innerHeight * 0.3;
+      let current = hs[0]?.id ?? null;
+      for (const h of hs) {
+        if (h.getBoundingClientRect().top > line) break;
+        current = h.id;
+      }
+      if (scroller && hs.length && scroller.scrollTop > 0 && scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2)
+        current = hs[hs.length - 1].id;
+      setActive(current);
+    };
+    const onScroll = (e: Event) => {
+      // A code block or the topic list scrolling sideways is not the page scrolling.
+      if (e.target instanceof Element) {
+        if (!e.target.contains(el)) return;
+        scroller = e.target;
+      } else if (e.type === "scroll") scroller = document.scrollingElement;
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    update();
+    document.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      document.removeEventListener("scroll", onScroll, { capture: true });
+      window.removeEventListener("resize", onScroll);
+      cancelAnimationFrame(frame);
+    };
   }, [body]);
 
   // The doc's own "# Title" becomes the page title, so the page has one h1.
   const docTitle = body?.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? topics.find((t) => t.topic === topic)?.title ?? "Help";
 
-  const components: Components = {
+  // Memoised so a re-render keeps the same heading elements (new component functions would remount them).
+  const components = useMemo<Components>(() => ({
     h1: () => null,
     h2: ({ children }) => <Heading level={2}>{children}</Heading>,
     h3: ({ children }) => <Heading level={3}>{children}</Heading>,
@@ -128,7 +152,7 @@ export default function DocsPage() {
       if (href.startsWith("#")) return <a {...props} href={href} />;
       return <a {...props} href={href} target="_blank" rel="noopener noreferrer" />;
     },
-  };
+  }), []);
 
   const index = topics.findIndex((t) => t.topic === topic);
   const prev = index > 0 ? topics[index - 1] : null;
@@ -136,7 +160,7 @@ export default function DocsPage() {
 
   return (
     <div className="flex flex-col gap-7 max-w-[1200px]">
-    <PageHeader icon={BookOpen} title={docTitle} intro={<>Help <span aria-hidden>/</span> {docTitle}</>} />
+    <PageHeader icon={BookOpenIcon} tone="project" title={docTitle} intro={<>Help <span aria-hidden>/</span> {docTitle}</>} />
     <div className="grid gap-5 md:grid-cols-[184px_minmax(0,1fr)] md:gap-10 xl:grid-cols-[184px_minmax(0,760px)_184px]">
       <nav aria-label="Help topics" className="md:sticky md:top-8 md:self-start">
         <ul className="hidden md:flex flex-col gap-1">
@@ -153,8 +177,8 @@ export default function DocsPage() {
                 <button
                   onClick={() => setTopic(t.topic)}
                   aria-current={current ? "page" : undefined}
-                  className={`w-full text-left min-h-10 px-3 rounded-[4px] text-[14px] truncate transition-colors duration-150 ${current ? "font-semibold" : "hover:bg-[var(--bauhaus-app-soft)]"}`}
-                  style={current ? { background: "var(--bauhaus-app-blue)", color: "#fff" } : { color: "var(--ink)" }}
+                  className={`w-full text-left min-h-10 px-3 rounded-full text-[14px] truncate transition-colors duration-150 ${current ? "font-medium" : "hover:bg-[var(--surface-raised)]"}`}
+                  style={current ? { background: "var(--accent)", color: "var(--on-accent)" } : { color: "var(--ink)" }}
                 >
                   {t.title}
                 </button>
@@ -200,7 +224,7 @@ export default function DocsPage() {
             {prev ? (
               <button onClick={() => setTopic(prev.topic)} className="btn h-auto py-2.5 flex-col items-start gap-1 text-left min-w-0 font-medium">
                 <span className="label inline-flex items-center gap-1">
-                  <ArrowLeft size={12} strokeWidth={1.75} /> Previous
+                  <ArrowLeftIcon weight="duotone" size={12} /> Previous
                 </span>
                 <span className="truncate max-w-full">{prev.title}</span>
               </button>
@@ -210,7 +234,7 @@ export default function DocsPage() {
             {next && (
               <button onClick={() => setTopic(next.topic)} className="btn h-auto py-2.5 flex-col items-end gap-1 text-right min-w-0 font-medium">
                 <span className="label inline-flex items-center gap-1">
-                  Next <ArrowRight size={12} strokeWidth={1.75} />
+                  Next <ArrowRightIcon weight="duotone" size={12} />
                 </span>
                 <span className="truncate max-w-full">{next.title}</span>
               </button>
@@ -229,7 +253,7 @@ export default function DocsPage() {
                   href={`#${h.id}`}
                   className="block py-1 pl-3 -ml-px transition-colors duration-150"
                   style={{
-                    borderLeft: `2px solid ${active === h.id ? "var(--bauhaus-app-blue)" : "transparent"}`,
+                    borderLeft: `1px solid ${active === h.id ? "var(--ink)" : "transparent"}`,
                     color: active === h.id ? "var(--ink)" : "var(--ink-dim)",
                   }}
                 >

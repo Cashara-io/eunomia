@@ -1,7 +1,8 @@
 "use client";
 
+import { MagnifyingGlassIcon, XIcon } from "@phosphor-icons/react/ssr";
+import { VaultShape, type VaultTone } from "./VaultChip";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Search, X } from "lucide-react";
 import ErrorLine, { failure } from "./ErrorLine";
 import { useCloudSimilarity } from "@/lib/queries/entities";
 import type { InsightPoint } from "@/lib/vectorInsights";
@@ -14,6 +15,8 @@ type Props = {
   points: Row[];
   vaultIds: string[];
   nameOf: (vaultId: string) => string;
+  /** The vault identity of a memory space, for the shape before each row's kind. */
+  toneOf: (vaultId: string) => VaultTone;
   /** ids of the compared rows, in selection order (the numbers in the graph) */
   selection: string[];
   focusId: string | null;
@@ -30,7 +33,7 @@ const MODES = [
 ] as const;
 type Mode = (typeof MODES)[number]["id"];
 
-export default function MemoryRows({ points, vaultIds, nameOf, selection, focusId, onToggle, onClear }: Props) {
+export default function MemoryRows({ points, vaultIds, nameOf, toneOf, selection, focusId, onToggle, onClear }: Props) {
   const [filter, setFilter] = useState("");
   const [mode, setMode] = useState<Mode>("cosine");
   const rowRefs = useRef(new Map<string, HTMLElement>());
@@ -87,7 +90,7 @@ export default function MemoryRows({ points, vaultIds, nameOf, selection, focusI
     <div className="flex flex-col min-h-0 flex-1">
       <div className="p-3 pb-2 flex flex-col gap-2">
         <div className="field flex items-center gap-2 h-10 px-3">
-          <Search size={13} strokeWidth={1.75} style={{ color: "var(--ink-faint)" }} aria-hidden />
+          <MagnifyingGlassIcon weight="duotone" size={13} style={{ color: "var(--ink-faint)" }} aria-hidden />
           <input
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
@@ -156,7 +159,7 @@ export default function MemoryRows({ points, vaultIds, nameOf, selection, focusI
                   {p.label}
                 </span>
                 <span className="label flex items-center gap-1.5 min-w-0">
-                  <span className="dot shrink-0" style={{ background: p.color }} aria-hidden />
+                  <VaultShape tone={toneOf(p.vault)} size={9} fill={p.color} />
                   <span className="truncate">
                     {vaultIds.length > 1 ? `${nameOf(p.vault)} · ` : ""}
                     {p.kind}
@@ -175,7 +178,7 @@ export default function MemoryRows({ points, vaultIds, nameOf, selection, focusI
           aria-label="Comparison"
         >
           <div className="flex items-baseline justify-between gap-2">
-            <h3 className="text-[15px] font-semibold" style={{ color: "var(--ink)" }}>
+            <h3 className="text-[15px] font-medium tracking-[-0.015em]" style={{ color: "var(--ink)" }}>
               Comparing {n}
             </h3>
             {sim.data && <span className="label">{sim.data.space === "semantic" ? "Full embedding vectors" : "Word-hash vectors"}</span>}
@@ -257,7 +260,7 @@ export default function MemoryRows({ points, vaultIds, nameOf, selection, focusI
                       {label(id)}
                     </span>
                     <button type="button" className="shrink-0 mt-0.5" aria-label={`Remove ${label(id)} from the comparison`} onClick={() => onToggle(id)} style={{ color: "var(--ink-faint)" }}>
-                      <X size={12} strokeWidth={1.75} />
+                      <XIcon weight="duotone" size={12} />
                     </button>
                   </li>
                 ))}

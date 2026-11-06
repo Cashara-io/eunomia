@@ -1,13 +1,13 @@
 "use client";
 
+import { TrashIcon, XIcon } from "@phosphor-icons/react/ssr";
 import { useState } from "react";
-import { Trash2, X } from "lucide-react";
 import CopyButton from "@/components/bits/CopyButton";
 import DecryptReveal from "@/components/bits/DecryptReveal";
 import Tooltip from "@/components/bits/Tooltip";
 import HoldButton from "@/components/bits/HoldButton";
 
-export const ICON = { size: 14, strokeWidth: 1.75 } as const;
+export const ICON = { size: 14, weight: "duotone" } as const;
 
 /* reveal: a freshly minted secret decrypts in once (the token, never a command). */
 export function CopyField({ value, reveal = false }: { value: string; reveal?: boolean }) {
@@ -83,7 +83,7 @@ export function RevokeButton({ label, onRevoke, warn }: { label: string; onRevok
         aria-label="Revoke"
         className="btn-sm"
       >
-        <Trash2 {...ICON} aria-hidden />
+        <TrashIcon {...ICON} aria-hidden />
         Revoke
       </HoldButton>
       </Tooltip>
@@ -99,7 +99,7 @@ export function RevokeButton({ label, onRevoke, warn }: { label: string; onRevok
         {busy ? "Revoking…" : "Revoke"}
       </button>
       <button onClick={() => setArmed(false)} aria-label="Keep" className="btn btn-ghost btn-sm btn-icon">
-        <X {...ICON} />
+        <XIcon {...ICON} />
       </button>
     </span>
   );

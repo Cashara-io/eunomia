@@ -22,7 +22,7 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
   return (
     <section className="flex flex-col gap-2 py-3">
       <div className="flex items-baseline justify-between gap-2">
-        <h3 className="text-[13px] font-semibold" style={{ color: "var(--ink)" }}>
+        <h3 className="text-[13px] font-medium" style={{ color: "var(--ink)" }}>
           {title}
         </h3>
         {hint && <span className="label">{hint}</span>}

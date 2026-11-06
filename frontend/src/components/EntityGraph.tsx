@@ -1,10 +1,11 @@
 "use client";
 
+import { EmptyArt } from "./Shapes";
+import { ArrowLeftIcon, ArrowRightIcon, PencilSimpleIcon, PlusIcon, TrashIcon, XIcon } from "@phosphor-icons/react/ssr";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import ConfirmButton from "@/components/ConfirmButton";
-import { ArrowLeft, ArrowRight, Pencil, Plus, Trash2, X } from "lucide-react";
 import GraphCanvas, { type CanvasInsets } from "./GraphCanvas";
 import AuthorTag from "./AuthorTag";
 import SyncMark from "./bits/SyncMark";
@@ -64,7 +65,7 @@ function Author({ email, me }: { email: string | null; me: string | null }) {
   return <AuthorTag name={email} title={email === me ? `${email} (you)` : email} />;
 }
 
-const ICON = { size: 18, strokeWidth: 1.75 } as const;
+const ICON = { size: 18, weight: "duotone" } as const;
 
 const SPARSE = 3; // fewer nodes than this shows the `guide`
 
@@ -378,11 +379,11 @@ export default function EntityGraph({
         aria-labelledby="new-entity-title"
       >
         <div className="flex items-center justify-between">
-          <h2 id="new-entity-title" className="text-[20px] font-semibold tracking-[-0.01em]">
+          <h2 id="new-entity-title" className="text-[20px] font-medium tracking-[-0.025em]">
             Add a person or topic
           </h2>
           <button type="button" className="btn btn-ghost btn-icon" onClick={() => setShowCreate(false)} aria-label="Close">
-            <X {...ICON} />
+            <XIcon {...ICON} />
           </button>
         </div>
         <p className="text-[14px] -mt-1" style={{ color: "var(--ink-dim)" }}>
@@ -500,7 +501,7 @@ export default function EntityGraph({
         </form>
       )}
       <button type="button" className="btn btn-primary shrink-0" onClick={() => setShowCreate(true)}>
-        <Plus size={18} strokeWidth={1.75} aria-hidden />
+        <PlusIcon weight="duotone" size={18} aria-hidden />
         Add person or topic
       </button>
     </div>
@@ -513,18 +514,20 @@ export default function EntityGraph({
           toolbar,
           <div className="h-full flex items-center justify-center p-6">
             {guide ? (
-              <div className="soft-panel flex flex-col items-center gap-3 text-center max-w-sm text-[14px] px-6 py-5" style={{ color: "var(--ink-dim)" }}>
-                <p className="font-medium" style={{ color: "var(--ink)" }}>Nothing mapped yet.</p>
+              <div className="panel flex flex-col items-center gap-3 text-center max-w-sm text-[14px] p-3 pb-5" style={{ color: "var(--ink-dim)" }}>
+                <EmptyArt variant="people" className="w-full h-[140px]" />
+                <p className="font-medium px-3" style={{ color: "var(--ink)" }}>Nothing mapped yet.</p>
                 {guide}
               </div>
             ) : (
-              <div className="soft-panel flex flex-col items-center gap-3 text-center max-w-sm px-6 py-5">
-                <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+              <div className="panel flex flex-col items-center gap-3 text-center max-w-sm p-3 pb-5">
+                <EmptyArt variant="people" className="w-full h-[140px]" />
+                <p className="text-[14px] px-3" style={{ color: "var(--ink-dim)" }}>
                   No people or topics yet. They appear as your connected sources sync and your AI apps save memories, or you can add one
                   yourself.
                 </p>
                 <button type="button" className="btn btn-primary" onClick={() => setShowCreate(true)}>
-                  <Plus size={18} strokeWidth={1.75} aria-hidden />
+                  <PlusIcon weight="duotone" size={18} aria-hidden />
                   Add person or topic
                 </button>
               </div>
@@ -544,7 +547,7 @@ export default function EntityGraph({
     <aside
       aria-label={`${selected.name} details`}
       className="panel pop-in absolute z-20 flex flex-col inset-x-2 bottom-2 max-h-[62%] md:inset-x-auto md:bottom-auto md:right-6 md:top-6 md:w-[22rem] md:max-h-[calc(100%-5rem)]"
-      style={{ transformOrigin: "top right", borderTop: "3px solid var(--bauhaus-app-blue)" }}
+      style={{ transformOrigin: "top right" }}
     >
       <div className="flex items-start justify-between gap-2 p-5 pb-3">
         <div className="flex items-center gap-3 min-w-0">
@@ -553,7 +556,7 @@ export default function EntityGraph({
             <span className="caps block" style={{ color: "var(--accent-text)" }}>
               Selected {kindLabel(selected.kind).toLowerCase()}
             </span>
-            <h2 className="text-[20px] font-semibold tracking-[-0.015em] truncate">{selected.name}</h2>
+            <h2 className="text-[20px] font-medium truncate tracking-[-0.025em]">{selected.name}</h2>
             <span className="text-[13px] inline-flex items-center gap-1.5 mt-0.5" style={{ color: "var(--ink-dim)" }}>
               <span className="w-2 h-2 rounded-full" style={{ background: kindColor(selected.kind) }} aria-hidden />
               {kindLabel(selected.kind)}
@@ -578,17 +581,17 @@ export default function EntityGraph({
           <div className="flex items-center gap-0.5 shrink-0 -mr-1">
             <Tooltip label="Edit">
               <button className="btn btn-ghost btn-sm btn-icon" onClick={startEditing} aria-label="Edit">
-                <Pencil {...ICON} />
+                <PencilSimpleIcon {...ICON} />
               </button>
             </Tooltip>
             <Tooltip label="Delete. Also removes its memories and connections">
               <ConfirmButton label="Delete" confirmLabel="Delete" onConfirm={deleteSelected} disabled={busy} className="btn btn-ghost btn-sm btn-icon">
-                <Trash2 {...ICON} />
+                <TrashIcon {...ICON} />
               </ConfirmButton>
             </Tooltip>
             <Tooltip label="Close" shortcut="Esc">
               <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setSelected(null)} aria-label="Close">
-                <X {...ICON} />
+                <XIcon {...ICON} />
               </button>
             </Tooltip>
           </div>
@@ -689,7 +692,7 @@ export default function EntityGraph({
                       disabled={busy}
                       className="btn btn-ghost btn-sm btn-icon shrink-0 -mr-1"
                     >
-                      <X size={16} strokeWidth={1.75} />
+                      <XIcon weight="duotone" size={16} />
                     </ConfirmButton>
                   </Tooltip>
                 </li>
@@ -738,9 +741,9 @@ export default function EntityGraph({
                 return (
                   <li key={r.id} className="py-2 flex items-center gap-2 min-w-0">
                     {r.direction === "out" ? (
-                      <ArrowRight size={13} strokeWidth={1.75} className="shrink-0" style={{ color: "var(--ink-dim)" }} aria-label="outgoing" />
+                      <ArrowRightIcon weight="duotone" size={13} className="shrink-0" style={{ color: "var(--ink-dim)" }} aria-label="outgoing" />
                     ) : (
-                      <ArrowLeft size={13} strokeWidth={1.75} className="shrink-0" style={{ color: "var(--ink-dim)" }} aria-label="incoming" />
+                      <ArrowLeftIcon weight="duotone" size={13} className="shrink-0" style={{ color: "var(--ink-dim)" }} aria-label="incoming" />
                     )}
                     <span className="font-mono text-[11.5px] shrink-0" style={{ color: "var(--ink-faint)" }}>
                       {r.label}

@@ -1,8 +1,8 @@
 "use client";
 
+import { ArrowRightIcon, CaretDownIcon, CaretRightIcon, MagnifyingGlassIcon, PlugIcon, PlusIcon, XIcon } from "@phosphor-icons/react/ssr";
 import { Fragment, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, ChevronDown, ChevronRight, Plug, Plus, Search, X } from "lucide-react";
 import type { Connector, SourceRow } from "@/lib/types";
 import { useConnectors } from "@/lib/queries/connectors";
 import { useSources } from "@/lib/queries/sources";
@@ -32,7 +32,7 @@ type ConnectedRow = {
 
 const CONNECTED_COLS = "grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1.4fr)_130px_76px_110px_minmax(0,1fr)_16px]";
 const ROW_LINK =
-  "grid items-center gap-x-4 px-4 min-h-14 py-2 text-[14px] transition-[background-color] duration-[120ms] ease-[var(--ease-out)] hover:bg-[var(--bauhaus-app-bg)] focus-visible:outline-offset-[-2px]";
+  "grid items-center gap-x-4 px-4 min-h-14 py-2 text-[14px] transition-[background-color] duration-[120ms] ease-[var(--ease-out)] hover:bg-[var(--surface-raised)] focus-visible:outline-offset-[-2px]";
 
 function matches(q: string, label: string, description = "") {
   return !q || label.toLowerCase().includes(q) || description.toLowerCase().includes(q);
@@ -102,14 +102,14 @@ export default function ConnectorsPage() {
   return (
     <div className="max-w-5xl flex flex-col gap-8">
       <PageHeader
-        icon={Plug}
+        icon={PlugIcon} tone="personal"
         title="Connected sources"
         intro="Bring meeting notes, emails and other information into Eunomia. Choose a source below to connect it. Your sign-in details are stored encrypted and only sent to the service they belong to."
       />
 
       <div className="flex items-center gap-2 flex-wrap">
         <div className="field flex items-center gap-2 h-10 px-3 w-full sm:w-72">
-          <Search size={18} strokeWidth={1.75} color="var(--ink-dim)" aria-hidden />
+          <MagnifyingGlassIcon weight="duotone" size={18} color="var(--ink-dim)" aria-hidden />
           <input
             type="text"
             aria-label="Search sources"
@@ -121,7 +121,7 @@ export default function ConnectorsPage() {
           {query && (
             <Tooltip label="Clear search">
               <button type="button" aria-label="Clear search" className="btn btn-ghost btn-sm -mr-1.5 w-6 px-0" onClick={() => setQuery("")}>
-                <X size={13} strokeWidth={1.75} aria-hidden />
+                <XIcon weight="duotone" size={13} aria-hidden />
               </button>
             </Tooltip>
           )}
@@ -157,7 +157,7 @@ export default function ConnectorsPage() {
           <div className="ledger overflow-hidden">
             <div
               className={`hidden md:grid ${CONNECTED_COLS} gap-x-4 px-4 h-[34px] items-center caps`}
-              style={{ background: "var(--bauhaus-app-ink)", color: "var(--bauhaus-app-cream)" }}
+              style={{ background: "var(--surface-raised)", color: "var(--ink)", border: "1px solid var(--border)" }}
               aria-hidden
             >
               <span>Source</span>
@@ -202,7 +202,7 @@ export default function ConnectorsPage() {
                     <span className="hidden md:block font-mono text-[12px] truncate" style={{ color: "var(--ink-dim)" }}>
                       {s?.record_types.join(", ") || "Tool calls only"}
                     </span>
-                    <ChevronRight size={16} strokeWidth={1.75} color="var(--ink-dim)" className="hidden md:block" aria-hidden />
+                    <CaretRightIcon weight="duotone" size={16} color="var(--ink-dim)" className="hidden md:block" aria-hidden />
                   </Link>
                   {r.addAfter && r.kind && (
                     <Link
@@ -210,7 +210,7 @@ export default function ConnectorsPage() {
                       className="flex items-center gap-2 px-4 min-h-10 pl-[60px] text-[13px] font-medium underline-offset-2 hover:underline"
                       style={{ color: "var(--accent-text)" }}
                     >
-                      <Plus size={14} strokeWidth={1.75} aria-hidden />
+                      <PlusIcon weight="duotone" size={14} aria-hidden />
                       Add another {r.label} connection
                     </Link>
                   )}
@@ -251,14 +251,14 @@ export default function ConnectorsPage() {
                 <li key={kind} className="min-w-0">
                   <Link
                     href={`/connectors/setup/${kind}`}
-                    className="ledger h-full p-5 flex flex-col gap-3.5 transition-[border-color] duration-[120ms] hover:border-[var(--bauhaus-app-ink)]"
-                    style={{ borderColor: "#8f8f87" }}
+                    className="ledger h-full p-5 flex flex-col gap-3.5 transition-[border-color] duration-[120ms] hover:border-[var(--ink)]"
+                    style={{ borderColor: "var(--border-strong)" }}
                   >
                     <span className="flex items-center gap-3 min-w-0">
                       <ConnectorTile kind={kind} size={32} />
                       <span className="flex-1 min-w-0 text-[16px] font-semibold truncate">{meta.label}</span>
                       <span className="btn btn-primary btn-sm shrink-0" aria-hidden>
-                        Connect <ArrowRight size={16} strokeWidth={1.75} />
+                        Connect <ArrowRightIcon weight="duotone" size={16} />
                       </span>
                     </span>
                     <span className="text-[14px] leading-snug" style={{ color: "var(--ink)" }}>
@@ -281,7 +281,7 @@ export default function ConnectorsPage() {
           <div>
             <button type="button" className="btn" aria-expanded={showCustom} aria-controls="custom-integrations" onClick={() => setShowCustom((v) => !v)}>
               Advanced: custom integrations
-              <ChevronDown size={16} strokeWidth={1.75} aria-hidden style={{ transform: showCustom ? "rotate(180deg)" : undefined }} />
+              <CaretDownIcon weight="duotone" size={16} aria-hidden style={{ transform: showCustom ? "rotate(180deg)" : undefined }} />
             </button>
           </div>
           {showCustom && (

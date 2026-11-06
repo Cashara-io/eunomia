@@ -1,7 +1,7 @@
 "use client";
 
+import { SparkleIcon } from "@phosphor-icons/react/ssr";
 import { useState } from "react";
-import { Sparkles } from "lucide-react";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import { useConsolidateObservations } from "@/lib/queries/entities";
 
@@ -40,7 +40,7 @@ export default function TidyObservationsButton({ entityId, onDone, disabled }: {
           onClick={() => void run()}
           title="Combine new facts into one short summary of what is known"
         >
-          <Sparkles size={13} strokeWidth={1.75} aria-hidden />
+          <SparkleIcon weight="duotone" size={13} aria-hidden />
           {tidy.isPending ? "Tidying up…" : "Tidy up"}
         </button>
         {message && (

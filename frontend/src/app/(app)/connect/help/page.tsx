@@ -1,7 +1,7 @@
 "use client";
 
+import { LifebuoyIcon } from "@phosphor-icons/react/ssr";
 import Link from "next/link";
-import { LifeBuoy } from "lucide-react";
 import CopyButton from "@/components/bits/CopyButton";
 import PageHeader from "@/components/ui/PageHeader";
 import { EXAMPLE_QUESTION, Kbd, Note, useMcpAddress } from "@/components/connect/Guide";
@@ -9,7 +9,7 @@ import { EXAMPLE_QUESTION, Kbd, Note, useMcpAddress } from "@/components/connect
 function Problem({ id, title, children }: { id?: string; title: string; children: React.ReactNode }) {
   return (
     <section id={id} className="guide-step flex flex-col gap-3 py-6 scroll-mt-6" aria-labelledby={id ? `${id}-title` : undefined}>
-      <h3 id={id ? `${id}-title` : undefined} className="text-[17px] font-semibold">
+      <h3 id={id ? `${id}-title` : undefined} className="text-[17px] font-medium tracking-[-0.015em]">
         {title}
       </h3>
       {children}
@@ -22,7 +22,7 @@ export default function ConnectionHelpPage() {
   const url = useMcpAddress();
   return (
     <div className="flex flex-col gap-8 max-w-[960px]">
-      <PageHeader icon={LifeBuoy} title="Connection help" intro="Help with connecting your AI app." />
+      <PageHeader icon={LifebuoyIcon} tone="personal" title="Connection help" intro="Help with connecting your AI app." />
       <div className="task-panel p-6 sm:p-8 flex flex-col">
         <div className="flex flex-col gap-3 pb-6" style={{ borderBottom: "1px solid var(--border)" }}>
           <h2 className="connect-title">Let&apos;s get your app connected</h2>
@@ -90,7 +90,7 @@ export default function ConnectionHelpPage() {
         </Problem>
 
         <section className="soft-panel px-5 py-5 mt-2 flex flex-col gap-3" aria-labelledby="unfinished-title">
-          <h3 id="unfinished-title" className="text-[17px] font-semibold">
+          <h3 id="unfinished-title" className="text-[17px] font-medium tracking-[-0.015em]">
             Sign-in did not finish?
           </h3>
           <Note>

@@ -1,9 +1,9 @@
 "use client";
 
+import { ArrowRightIcon, CircleNotchIcon } from "@phosphor-icons/react/ssr";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Loader2 } from "lucide-react";
 import { useLogin } from "@/lib/queries/auth";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import { keepNext, nextPath } from "@/lib/nextPath";
@@ -102,9 +102,9 @@ export default function LoginPage() {
               {error && <ErrorLine error={error} />}
 
               <button type="submit" disabled={busy} aria-busy={busy} className="btn btn-primary mt-1 min-h-11 w-full">
-                {busy && <Loader2 size={14} strokeWidth={1.75} className="animate-spin" aria-hidden />}
+                {busy && <CircleNotchIcon weight="duotone" size={14} className="animate-spin" aria-hidden />}
                 {busy ? "Signing in…" : "Sign in"}
-                {!busy && <ArrowRight size={16} strokeWidth={1.75} aria-hidden />}
+                {!busy && <ArrowRightIcon weight="duotone" size={16} aria-hidden />}
               </button>
 
               <p className="mt-2 text-[14px]" style={{ color: "var(--ink-dim)" }}>
