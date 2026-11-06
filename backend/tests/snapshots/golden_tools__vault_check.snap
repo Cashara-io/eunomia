@@ -1,0 +1,14 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "vault": "vault:<id26>",
+  "ok": true,
+  "dangling_memories": [],
+  "misfiled_memories": [],
+  "dangling_relations": [],
+  "change_log_top": 0,
+  "change_log_counter": 0,
+  "change_log_behind": false
+}

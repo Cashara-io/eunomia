@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ArrowDown, ArrowUp, Plus, X } from "lucide-react";
 import Select from "@/components/Select";
-import ConfirmButton from "@/components/ConfirmButton";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import SyncMark from "@/components/bits/SyncMark";
 import Tooltip from "@/components/bits/Tooltip";
@@ -11,7 +11,7 @@ import { useVaults } from "@/lib/queries/vaults";
 import { useMoveConnectorData, useUpdateConnector } from "@/lib/queries/connectors";
 import type { Connector, MoveReport, Routing, Vault } from "@/lib/types";
 
-const ICON = { size: 14, strokeWidth: 1.75 } as const;
+const ICON = { size: 18, strokeWidth: 1.75 } as const;
 
 /** How each routing field reads, and an example value. */
 const FIELDS: Record<string, { label: string; placeholder: string }> = {
@@ -35,8 +35,8 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 
 function moved(r: MoveReport): string {
   if (r.records === 0 && r.memories === 0 && r.relations === 0) return "Everything is already where these rules send it.";
-  const parts = [plural(r.records, "record", "records"), plural(r.memories, "fact", "facts"), plural(r.relations, "relation", "relations")];
-  const left = r.left ? ` ${plural(r.left, "fact stays", "facts stay")} in a vault you have left.` : "";
+  const parts = [plural(r.records, "item", "items"), plural(r.memories, "fact", "facts"), plural(r.relations, "relation", "relations")];
+  const left = r.left ? ` ${plural(r.left, "fact stays", "facts stay")} in a memory space you have left.` : "";
   return `Moved ${parts.join(", ")}.${left}`;
 }
 
@@ -54,6 +54,7 @@ export default function RoutingSection({ label, connector }: { label: string; co
   const [error, setError] = useState<Failure | null>(null);
   const [moving, setMoving] = useState(false);
   const [moveResult, setMoveResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [confirmMove, setConfirmMove] = useState(false);
 
   const saved: Routing = { default_vault: connector.routing?.default_vault, rules: connector.routing?.rules ?? [] };
   const routing = draft ?? saved;
@@ -103,13 +104,14 @@ export default function RoutingSection({ label, connector }: { label: string; co
       setSavedFlash(true);
       setTimeout(() => setSavedFlash(false), 1400);
     } catch (e) {
-      setError(failure(e, "Could not save the routing.", " Check every rule names a value and a vault you belong to."));
+      setError(failure(e, "Could not save the routing.", " Check every rule names a value and a memory space you belong to."));
     } finally {
       setSaving(false);
     }
   }
 
   async function moveExisting() {
+    setConfirmMove(false);
     setMoving(true);
     setMoveResult(null);
     try {
@@ -122,38 +124,49 @@ export default function RoutingSection({ label, connector }: { label: string; co
   }
 
   return (
-    <section className="flex flex-col gap-3" aria-labelledby="routing-heading">
-      <div className="flex flex-col gap-1">
+    <section className="soft-panel p-5 flex flex-col gap-4" aria-labelledby="routing-heading">
+      <div className="flex flex-col gap-1.5">
         <h2 id="routing-heading" className="section-title">
-          Where records go
+          Where will my items go?
         </h2>
-        <p className="text-[13px] max-w-[62ch]" style={{ color: "var(--ink-dim)" }}>
-          Each record {label} syncs is filed in one vault, and only that vault&apos;s members can read it. The first rule that matches wins; anything else goes to the destination vault.
+        <p className="text-[14px] leading-relaxed" style={{ color: "var(--ink-dim)" }}>
+          {(() => {
+            const dest = vaults?.find((v) => v.id === (routing.default_vault ?? personal?.id));
+            const shared = dest && !(dest.kind === "personal" && dest.role === "owner");
+            return dest
+              ? `New ${label} items are saved in ${vaultLabel(dest)}. ${shared ? "Its members can read them." : "Only you can read them."}`
+              : `New ${label} items are saved in one memory space, and only its members can read them.`;
+          })()}{" "}
+          Changing this affects future updates only; moving items you already imported is a separate step below.
         </p>
       </div>
       <div className="ledger flex flex-col hairline-rows">
-        <div className="p-5 flex items-center justify-between gap-4 flex-wrap">
-          <label htmlFor="routing-destination" className="flex flex-col gap-0.5 text-[13px]">
-            Destination vault
-            <span className="label">Records no rule matches go here.</span>
+        <div className="p-4 flex flex-col gap-1.5">
+          <label htmlFor="routing-destination" className="text-[14px] font-medium">
+            Destination space
           </label>
           {vaults ? (
             <Select
               id="routing-destination"
-              className="h-8 text-[13px] w-56"
+              className="h-10 text-[14px] w-full"
               value={routing.default_vault ?? personal?.id ?? ""}
               onChange={(v) => edit({ ...routing, default_vault: v })}
               options={vaultOptions}
             />
           ) : (
-            <span className="skeleton h-8 w-56" aria-hidden />
+            <span className="skeleton h-10 w-full" aria-hidden />
           )}
+          <span className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+            Items no rule matches go here.
+          </span>
         </div>
 
-        <div className="p-5 flex flex-col gap-3">
+        <div className="p-4 flex flex-col gap-3">
           <div className="flex flex-col gap-0.5">
-            <span className="text-[13px]">Rules</span>
-            <span className="label">{routing.rules.length ? "Checked top to bottom." : `No rules: every ${label} record goes to the destination vault.`}</span>
+            <span className="text-[14px] font-medium">Advanced: rules</span>
+            <span className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+              {routing.rules.length ? "Send matching items to another space. Checked top to bottom; the first match wins." : `No rules: every ${label} item goes to the destination space.`}
+            </span>
           </div>
           {routing.rules.length > 0 && (
             <ol className="flex flex-col gap-2">
@@ -163,12 +176,12 @@ export default function RoutingSection({ label, connector }: { label: string; co
                 return (
                   <li key={i} className="flex flex-col gap-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono text-[12px] w-4 text-right" style={{ color: "var(--ink-faint)" }} aria-hidden>
+                      <span className="text-[13px] w-4 text-right" style={{ color: "var(--ink-dim)" }} aria-hidden>
                         {n}
                       </span>
                       <Select
                         aria-label={`Rule ${n} field`}
-                        className="h-8 text-[13px] w-36"
+                        className="h-10 text-[14px] w-36"
                         value={rule.field}
                         onChange={(v) => setRule(i, { field: v })}
                         options={fields.map((f) => ({ value: f, label: fieldInfo(f).label }))}
@@ -179,18 +192,18 @@ export default function RoutingSection({ label, connector }: { label: string; co
                         aria-invalid={bad || undefined}
                         aria-describedby={bad ? `rule-err-${i}` : undefined}
                         spellCheck={false}
-                        className="field h-8 px-2.5 text-[13px] flex-1 min-w-[120px]"
+                        className="field h-10 px-3 text-[14px] flex-1 min-w-[120px]"
                         style={bad ? { borderColor: "var(--critical)" } : undefined}
                         placeholder={fieldInfo(rule.field).placeholder}
                         value={rule.value}
                         onChange={(e) => setRule(i, { value: e.target.value })}
                       />
-                      <span className="text-[12.5px]" style={{ color: "var(--ink-faint)" }} aria-hidden>
+                      <span className="text-[13px]" style={{ color: "var(--ink-dim)" }} aria-hidden>
                         to
                       </span>
                       <Select
-                        aria-label={`Rule ${n} vault`}
-                        className="h-8 text-[13px] w-40"
+                        aria-label={`Rule ${n} space`}
+                        className="h-10 text-[14px] w-40"
                         value={rule.vault}
                         onChange={(v) => setRule(i, { vault: v })}
                         options={vaultOptions}
@@ -220,7 +233,7 @@ export default function RoutingSection({ label, connector }: { label: string; co
                       </span>
                     </div>
                     {bad && (
-                      <p id={`rule-err-${i}`} className="text-[12px] pl-6" style={{ color: "var(--critical)" }}>
+                      <p id={`rule-err-${i}`} className="text-[13px] pl-6" style={{ color: "var(--critical)" }}>
                         Enter a {fieldInfo(rule.field).label.toLowerCase()} for this rule, or remove it.
                       </p>
                     )}
@@ -238,37 +251,48 @@ export default function RoutingSection({ label, connector }: { label: string; co
         </div>
 
         {error && (
-          <div className="px-5 py-3">
+          <div className="px-4 py-3">
             <ErrorLine error={error} />
           </div>
         )}
 
-        <div className="px-5 py-3 flex items-center gap-3 flex-wrap rounded-b-[10px]" style={{ background: "var(--surface-raised)" }}>
+        <div className="px-4 py-3 flex items-center gap-3 flex-wrap">
           <button type="button" className="btn btn-primary min-w-[112px]" onClick={save} disabled={saving || draft === null} aria-busy={saving || undefined}>
             {savedFlash ? "Saved" : saving ? "Saving…" : "Save routing"}
           </button>
-          <span className="text-[12.5px]" style={{ color: "var(--ink-dim)" }}>
-            Applies to records synced from now on.
+          <span className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+            Applies to items imported from now on.
           </span>
         </div>
       </div>
 
-      <div className="ledger p-5 flex items-center justify-between gap-4 flex-wrap text-[13px]">
-        <span className="flex flex-col gap-0.5 max-w-[48ch]">
-          Move existing data
-          <span className="label">
-            {draft !== null
-              ? "Save the routing first."
-              : `Re-file the ${label} records already synced, with the facts drawn from them, to where the current routing sends them.`}
-          </span>
-        </span>
-        <ConfirmButton label="Move existing data" confirmLabel="Move now" onConfirm={moveExisting} disabled={moving || draft !== null} className="btn btn-sm">
-          <SyncMark status={moving ? "running" : moveResult ? (moveResult.ok ? "done" : "failed") : "idle"} />
+      <div className="flex flex-col gap-2 pt-1" style={{ borderTop: "1px solid var(--border)" }}>
+        <h3 className="text-[15px] font-semibold pt-3">Move previously imported items</h3>
+        <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+          {draft !== null
+            ? "Save the routing first."
+            : `Re-file the ${label} items already imported, with the facts drawn from them, to where the current routing sends them.`}
+        </p>
+        <button type="button" className="btn self-start" onClick={() => setConfirmMove(true)} disabled={moving || draft !== null}>
+          <SyncMark status={moving ? "running" : moveResult ? (moveResult.ok ? "done" : "failed") : "idle"} size={18} />
           {moving ? "Moving…" : "Move existing data"}
-        </ConfirmButton>
+        </button>
       </div>
+      <ConfirmDialog
+        open={confirmMove}
+        title={`Move ${label} items to where your routing sends them?`}
+        confirmLabel="Move now"
+        onConfirm={moveExisting}
+        onCancel={() => setConfirmMove(false)}
+      >
+        <p>
+          Items already imported from {label}, and the memories drawn from them, move to the memory spaces your current routing names. Members of
+          those spaces will be able to read them, and members of the spaces they leave will not.
+        </p>
+        <p style={{ color: "var(--ink-dim)" }}>The originals in {label} stay unchanged.</p>
+      </ConfirmDialog>
       {moveResult && (
-        <p role="status" className="text-[12.5px] fade-in" style={{ color: moveResult.ok ? "var(--good)" : "var(--critical)" }}>
+        <p role="status" className="text-[14px] fade-in" style={{ color: moveResult.ok ? "var(--good)" : "var(--critical)" }}>
           {moveResult.text}
         </p>
       )}

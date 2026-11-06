@@ -1,6 +1,6 @@
 [package]
 name = "eunomia-backend"
-version = "2.0.7"
+version = "2.0.8"
 edition = "2024"
 
 [features]
@@ -12,14 +12,14 @@ provisioning = []
 test-support = []
 
 [dependencies]
-axum = { version = "0.8", features = ["macros"] }
+axum = { version = "0.8", features = ["macros", "ws"] }
 tokio = { version = "1", features = ["full"] }
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 tower-http = { version = "0.6", features = ["cors", "limit"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
-surrealdb = { version = "=3.3.1", features = ["protocol-ws", "kv-mem"] }
+surrealdb = { version = "=3.3.5", features = ["protocol-ws", "kv-mem"] }
 jsonwebtoken = "9"
 bcrypt = "0.15"
 sha2 = "0.10"
@@ -46,10 +46,12 @@ utoipa = "5"
 url = "2"
 # text out of text-based PDF uploads (documents/)
 pdf-extract = "0.12"
+# secret redaction on memory writes (redact.rs)
+regex = "1"
 
 [dev-dependencies]
 tokio-test = "0.4"
-regex = "1"
 insta = { version = "1", features = ["json", "redactions"] }
+tokio-tungstenite = "0.29"
 jsonschema = { version = "0.58.6", default-features = false }
 eunomia-backend = { path = ".", features = ["test-support"] }

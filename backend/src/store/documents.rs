@@ -91,7 +91,7 @@ pub const DELETE_CHUNKS: Stmt = Stmt::at(
         LET $records = (SELECT VALUE id FROM cache_record WHERE owner = $owner AND source = "documents"
             AND payload.document_id = $document AND payload.revision != $keep AND ($only < 0 OR payload.revision = $only)
             AND ($below < 0 OR payload.revision < $below));
-        LET $mems = (SELECT id, subject FROM memory WHERE source IN $records);
+        LET $mems = (SELECT id, subject, vault FROM memory WHERE source IN $records);
         LET $ids = $mems.id;
         LET $subjects = array::distinct($mems.subject);
         DELETE $ids;
@@ -103,7 +103,7 @@ pub const DELETE_CHUNKS: Stmt = Stmt::at(
         DELETE relates_to WHERE source IN $records;
         DELETE linked_to WHERE in IN $records OR out IN $records;
         DELETE $records;
-        RETURN { records: array::len($records), memories: array::len($ids) };
+        RETURN { records: array::len($records), memories: array::len($ids), deleted: (SELECT VALUE [<string> id, <string> vault] FROM $mems) };
         COMMIT TRANSACTION;"#,
     11, // BEGIN 0, four LETs 1 to 4, six writes 5 to 10, RETURN 11
 );

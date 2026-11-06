@@ -67,19 +67,18 @@ test.describe("Documents", () => {
     // the palette's record search finds the passage and opens the document at it
     await page.keyboard.press("ControlOrMeta+k");
     await page.getByPlaceholder("Jump to a page…").fill("heron census");
-    const hit = page.getByRole("dialog", { name: "Command palette" }).getByText("field-notes.md").first();
+    const hit = page.getByRole("dialog", { name: "Search" }).getByText("field-notes.md").first();
     await expect(hit).toBeVisible({ timeout: 10_000 });
     await hit.click();
     await expect(page).toHaveURL(/\/documents\?id=document%3A.*&chunk=/);
     await expect(page.getByTestId("document-passage").first()).toHaveClass(/frame-selected/);
 
-    // two-step delete: confirm, then type the name
+    // delete asks first, naming the file, and unlocks only once its name is typed
     await panel.getByRole("button", { name: "Delete" }).click();
     const dialog = page.getByRole("dialog", { name: "Delete field-notes.md?" });
-    await dialog.getByRole("button", { name: "Continue" }).click();
-    const confirm = page.getByRole("button", { name: "Delete document" });
+    const confirm = dialog.getByRole("button", { name: "Delete document" });
     await expect(confirm).toBeDisabled();
-    await page.getByLabel("Document name").fill("field-notes.md");
+    await dialog.getByLabel("Type field-notes.md to confirm").fill("field-notes.md");
     await confirm.click();
     await expect(page.getByTestId("document-row")).toHaveCount(0);
     await expect(page.getByText("No documents yet.")).toBeVisible();

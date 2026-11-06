@@ -41,8 +41,9 @@
   --bits-draw-ms: 180ms;
   color: var(--bits-done, var(--good));
 }
-/* On a green primary button the green tick would vanish: use the button's ink. */
-.btn-primary {
+/* On a blue primary or red danger fill the green tick would not read: use the button's text colour. */
+.btn-primary,
+.btn-danger-solid {
   --bits-done: currentColor;
 }
 
@@ -173,11 +174,10 @@
   gap: 6px;
   max-width: 240px;
   padding: 4px 8px;
-  border-radius: 6px;
-  background: var(--surface-raised);
-  box-shadow: var(--shadow-pop);
-  color: var(--ink);
-  font-size: 12px;
+  border-radius: 4px;
+  background: var(--bauhaus-app-ink);
+  color: var(--bauhaus-app-cream);
+  font-size: 12.5px;
   line-height: 1.3;
   white-space: nowrap;
   pointer-events: none;
@@ -192,6 +192,9 @@
   transition: none;
 }
 .bits-tip .kbd {
+  background: transparent;
+  color: var(--bauhaus-app-sidebar-muted);
+  border-color: var(--bauhaus-app-sidebar-line);
   height: 16px;
   min-width: 16px;
   font-size: 11.5px;
@@ -206,22 +209,6 @@ html[data-input="pointer"] .frame-selected:not(tr)::after {
   }
 }
 
-/* ---- Theme toggle: Sun and Moon share a cell and blur-crossfade ---- */
-.bits-theme-icon {
-  display: grid;
-}
-.bits-theme-icon > svg {
-  grid-area: 1 / 1;
-}
-.bits-theme-icon > svg:not([data-on]) {
-  opacity: 0;
-  filter: blur(4px);
-  transform: scale(0.6);
-}
-html[data-input="pointer"] .bits-theme-icon > svg {
-  transition: opacity 200ms var(--ease-out), filter 200ms var(--ease-out), transform 200ms var(--ease-out);
-}
-
 @media (prefers-reduced-motion: reduce) {
   .bits-draw[data-animate],
   .bits-spin,
@@ -232,8 +219,7 @@ html[data-input="pointer"] .bits-theme-icon > svg {
   .bits-tip,
   .bits-hold-fill,
   .bits-hold[data-holding] .bits-hold-fill,
-  html[data-input="pointer"] .frame-selected:not(tr)::after,
-  html[data-input="pointer"] .bits-theme-icon > svg {
+  html[data-input="pointer"] .frame-selected:not(tr)::after {
     transition: none;
   }
   .bits-hold[data-holding] .bits-hold-fill {

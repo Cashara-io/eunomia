@@ -16,7 +16,7 @@ cat > "$T/bin/docker" <<SHIM
 echo "COMPOSE_FILE=\${COMPOSE_FILE:-} :: \$@" >> "$T/docker.log"
 case "\$*" in
   "compose ps -q"*) ;;
-  "compose config --images") echo surrealdb/surrealdb:v3.3.1 ;;
+  "compose config --images") echo surrealdb/surrealdb:v3.3.5 ;;
   "volume ls"*) echo proj_eunomia-surreal-data ;;
   "inspect -f {{.State.Running}} "*) echo true ;;
   "create"*) echo cid ;;

@@ -36,6 +36,7 @@ pub fn router() -> Router<AppState> {
         .route("/connectors/pocketai/all", get(pocketai_all))
         .route("/connectors/pocketai/search", get(pocketai_search))
         .route("/connectors/pocketai/detail/{recording_id}", get(pocketai_detail))
+        .route("/connectors/pocketai/recordings/{recording_id}/audio", get(pocketai_audio))
         .route("/connectors/{connector}", get(get_one).put(put_one).delete(delete_one))
         .route("/connectors/{connector}/test", axum::routing::post(test_one))
         .route("/connectors/{connector}/data", axum::routing::delete(delete_data))
@@ -288,6 +289,66 @@ async fn pocketai_detail(
     let state = state.org(&user.org).await?;
     let client = pocketai_client_or_400(&state, &user).await?;
     Ok(Json(client.recording(&recording_id).await?))
+}
+
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
+struct AudioQuery {
+    /// `true` to save the file (an attachment) instead of playing it.
+    #[serde(default)]
+    download: bool,
+}
+
+// open body: the stored audio bytes, for an <audio> player or a download
+#[utoipa::path(
+    operation_id = "getPocketaiAudio",
+    get,
+    path = "/api/connectors/pocketai/recordings/{recording_id}/audio",
+    tag = "connectors",
+    summary = "A Pocket recording's stored audio",
+    description = "The audio Eunomia kept for one of the caller's Pocket recordings (connections with `config.store_audio` on). 404 when none was stored.",
+    params(("recording_id" = String, Path), AudioQuery),
+    responses((status = 200, description = "The audio bytes", content_type = "audio/mp4", body = String), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = []), ("bearer" = [])),
+)]
+async fn pocketai_audio(
+    State(state): State<AppState>,
+    user: User,
+    Path(recording_id): Path<String>,
+    Query(q): Query<AudioQuery>,
+) -> AppResult<axum::response::Response> {
+    use axum::http::{header, HeaderValue};
+    use axum::response::IntoResponse;
+    let state = state.org(&user.org).await?;
+    let out = async {
+        let not_found = || AppError::coded(ErrorCode::SourceNotFound, "No audio is stored for this recording.");
+        let stored = crate::sources::heypocket::stored_audio(&state.db, &user.id, &recording_id).await?.ok_or_else(not_found)?;
+        let path = stored.audio_path.clone().ok_or_else(not_found)?;
+        let bytes = crate::documents::get_object(&state.db, &path).await?.ok_or_else(not_found)?;
+        AppResult::Ok((stored, path, bytes))
+    }
+    .await;
+    // by id only, like document downloads
+    let (outcome, code) = match &out {
+        Ok(_) => ("ok", "ok"),
+        Err(e) => ("error", e.code.as_str()),
+    };
+    crate::tools::registry::record_audit(&state, &user.id, "pocket_audio_download", &json!({"id": recording_id, "via": "http"}), outcome, code).await;
+    let (stored, path, bytes) = out?;
+    let media_type = stored.audio_media_type.unwrap_or_else(|| "audio/mp4".to_string());
+    let filename = path.rsplit('/').next().unwrap_or("recording.m4a").to_string();
+    let mut resp = bytes.into_response();
+    let headers = resp.headers_mut();
+    if let Ok(v) = HeaderValue::from_str(&media_type) {
+        headers.insert(header::CONTENT_TYPE, v);
+    }
+    let disposition = format!("{}; filename=\"{filename}\"", if q.download { "attachment" } else { "inline" });
+    if let Ok(v) = HeaderValue::from_str(&disposition) {
+        headers.insert(header::CONTENT_DISPOSITION, v);
+    }
+    headers.insert(header::X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
+    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
+    Ok(resp)
 }
 
 #[utoipa::path(
@@ -551,6 +612,7 @@ async fn snapshot(State(state): State<AppState>, user: User) -> AppResult<Json<V
     pocketai_all,
     pocketai_search,
     pocketai_detail,
+    pocketai_audio,
     get_one,
     create_one,
     delete_one,

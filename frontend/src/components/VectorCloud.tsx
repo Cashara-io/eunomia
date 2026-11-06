@@ -28,7 +28,7 @@ export default function VectorCloud() {
   const cloudQuery = useEntityCloud(picked);
   const data = cloudQuery.data ?? null;
   const error = vaultsQuery.isError
-    ? failure(vaultsQuery.error, "Could not load your vaults.", " Reload the page to try again.")
+    ? failure(vaultsQuery.error, "Could not load your memory spaces.", " Reload the page to try again.")
     : cloudQuery.isError
       ? failure(cloudQuery.error, "Could not load the vector cloud.", " Reload the page to try again.")
       : null;
@@ -74,15 +74,16 @@ export default function VectorCloud() {
   return (
     <div className="flex flex-col gap-3 flex-1 min-h-0">
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex gap-2 flex-wrap items-center" role="group" aria-label="Vault layers">
+        <div className="flex gap-2 flex-wrap items-center" role="group" aria-label="Memory space layers">
           {vaults.map((v) => {
             const on = picked.includes(v.id);
             const count = on ? points.filter((p) => p.vault === v.id).length : null;
             return (
-              <button key={v.id} type="button" className="pill" aria-pressed={on} onClick={() => toggle(v.id)}>
+              <button key={v.id} type="button" className="pill min-h-10" aria-pressed={on} onClick={() => toggle(v.id)}>
                 <span className="dot" style={{ background: on ? colorOf(v.id) : "var(--border-strong)" }} aria-hidden />
                 {nameOf(v.id)}
-                {count !== null && <span className="font-mono" style={{ color: "var(--ink-faint)" }}>{count}</span>}
+                {count !== null && <span className="font-mono" style={{ color: "var(--ink-dim)" }}>{count}</span>}
+                <span className="sr-only">{on ? "(shown)" : "(hidden)"}</span>
               </button>
             );
           })}
@@ -90,19 +91,19 @@ export default function VectorCloud() {
         {data && picked.length > 0 && (
           <span
             className="label"
-            style={{ color: "var(--ink-faint)" }}
             title={
               data.space === "semantic"
                 ? "Model embeddings: nearby points mean similar meaning."
                 : "No model key: points are placed by shared words. Add a key in Settings for a semantic space."
             }
           >
-            {data.space === "semantic" ? "Semantic space" : "Lexical space"}, PCA to 3D
+            {data.space === "semantic" ? "Placed by meaning" : "Placed by shared words"}
           </span>
         )}
       </div>
-      <p className="text-[12px] -mt-1" style={{ color: "var(--ink-faint)" }}>
-        Each point is a memory or synced record. Layer vaults into one shared space, drag to orbit, click a point to read it and add it to the comparison.
+      <p className="text-[14px] -mt-1" style={{ color: "var(--ink-dim)" }}>
+        Each point is a memory or an item from a connected source. Turn memory spaces on or off above, drag to turn the map, and click a point
+        to read it and add it to the comparison.
       </p>
 
       <div className="flex flex-col lg:flex-row gap-3 flex-1 min-h-0">
@@ -113,16 +114,16 @@ export default function VectorCloud() {
           </div>
         ) : picked.length === 0 ? (
           <div className="p-10 text-center text-[13px]" style={{ color: "var(--ink-dim)" }}>
-            Pick at least one vault above to plot its memories.
+            Turn on at least one memory space above to see its memories.
           </div>
         ) : !data ? (
-          <div className="absolute inset-4 skeleton" aria-busy="true" aria-label="Loading the vector cloud" />
+          <div className="absolute inset-4 skeleton" aria-busy="true" aria-label="Loading the memory map" />
         ) : points.length === 0 ? (
           <div className="p-10 text-center text-[13px]" style={{ color: "var(--ink-dim)" }}>
-            Nothing stored in these vaults yet.
+            Nothing saved in these memory spaces yet.
           </div>
         ) : (
-          <Scene3D points={points} axes={AXES} selectedId={selectedId} highlightIds={selection} onSelect={pickPoint} ariaLabel="Vector cloud" />
+          <Scene3D points={points} axes={AXES} selectedId={selectedId} highlightIds={selection} onSelect={pickPoint} ariaLabel="Memory map" />
         )}
         {selected && (
           <aside
@@ -138,26 +139,25 @@ export default function VectorCloud() {
               </span>
               <button
                 type="button"
-                className="btn btn-ghost btn-sm ml-auto"
-                style={{ width: 22, height: 22, padding: 0 }}
+                className="btn btn-ghost btn-sm btn-icon ml-auto"
                 aria-label="Close"
                 onClick={() => setSelectedId(null)}
               >
-                <X size={13} strokeWidth={1.75} />
+                <X size={16} strokeWidth={1.75} />
               </button>
             </div>
-            <p className="text-[13px] leading-snug" style={{ color: "var(--ink)" }}>{selected.label}</p>
+            <p className="text-[14px] leading-snug" style={{ color: "var(--ink)" }}>{selected.label}</p>
           </aside>
         )}
       </div>
       {data && points.length > 0 && !error && (
         <aside className="ledger max-lg:shrink-0 lg:w-[340px] lg:shrink-0 lg:min-h-0 flex flex-col overflow-hidden" aria-label="Analysis">
           <div className="p-2 pb-0 shrink-0">
-            <div className="flex gap-0.5 p-0.5 rounded-lg" style={{ background: "var(--surface-raised)" }} role="tablist" aria-label="Analysis view">
+            <div className="flex gap-2" role="tablist" aria-label="Analysis view">
               {PANELS.map((t) => (
                 <button key={t.id} role="tab" aria-selected={tab === t.id} className="pill flex-1 justify-center" onClick={() => setTab(t.id)}>
                   {t.label}
-                  {t.id === "rows" && selection.length > 0 && <span className="font-mono" style={{ color: "var(--ink-faint)" }}>{selection.length}</span>}
+                  {t.id === "rows" && selection.length > 0 && <span className="font-mono">{selection.length}</span>}
                 </button>
               ))}
             </div>

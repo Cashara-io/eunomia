@@ -32,6 +32,15 @@ pub const MIGRATIONS: &[(u32, &str, &str)] = &[
     (19, "memory_recall", include_str!("../migrations/tenant/0019_memory_recall.surql")),
     (20, "extensions", include_str!("../migrations/tenant/0020_extensions.surql")),
     (21, "skills", include_str!("../migrations/tenant/0021_skills.surql")),
+    (22, "rebuild_vector_indexes", include_str!("../migrations/tenant/0022_rebuild_vector_indexes.surql")),
+    (23, "changes", include_str!("../migrations/tenant/0023_changes.surql")),
+    (24, "redact_backfill", include_str!("../migrations/tenant/0024_redact_backfill.surql")),
+    (25, "connector_kind_ed", include_str!("../migrations/tenant/0025_connector_kind_ed.surql")),
+    (26, "sync_check_connectivity", include_str!("../migrations/tenant/0026_sync_check_connectivity.surql")),
+    (27, "owner_name", include_str!("../migrations/tenant/0027_owner_name.surql")),
+    (28, "peers", include_str!("../migrations/tenant/0028_peers.surql")),
+    (29, "pocket_audio", include_str!("../migrations/tenant/0029_pocket_audio.surql")),
+    (30, "perf_indexes", include_str!("../migrations/tenant/0030_perf_indexes.surql")),
 ];
 
 /// The tenant schema version this code writes. An org database is current at this version.

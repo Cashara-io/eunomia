@@ -47,8 +47,9 @@ mod docs;
 mod documents;
 mod entities;
 mod memory;
+mod peers;
 mod records;
-mod skills;
+pub(crate) mod skills;
 mod vaults;
 
 pub use admin::list_audit;
@@ -88,12 +89,15 @@ pub const READ_ONLY_TOOLS: &[&str] = &[
     "vault_members",
     "vault_invitations",
     "vault_get",
+    "vault_check",
     "document_list",
     "document_get",
     "document_download",
     "document_export",
     "skill_find",
     "skill_get",
+    "changes_since",
+    "vault_peers",
 ];
 
 /// Read-only tools that still get an audit row: they disclose an original file or its vectors. The
@@ -123,7 +127,7 @@ pub fn is_read_only(name: &str) -> bool {
 /// Tools that irreversibly remove data or access -- flagged to MCP clients
 /// (`destructiveHint`) so they can ask before running them.
 pub fn is_destructive(name: &str) -> bool {
-    matches!(name, "memory_delete" | "entity_delete" | "entity_merge" | "vault_delete" | "vault_remove_member" | "vault_leave" | "vault_set_role" | "vault_transfer_ownership" | "document_delete" | "skill_delete")
+    matches!(name, "memory_delete" | "entity_delete" | "entity_merge" | "vault_delete" | "vault_remove_member" | "vault_leave" | "vault_set_role" | "vault_transfer_ownership" | "document_delete" | "skill_delete" | "vault_repair")
 }
 
 /// Tools over the user's raw synced source records, which belong to no vault:
@@ -164,6 +168,8 @@ pub fn description(name: &str) -> &'static str {
         "vault_invite" => "Invite a registered user by email to a vault (owner only). They must accept the invitation before getting access.",
         "vault_members" => "List a vault's members and their roles.",
         "vault_get" => "One vault the caller belongs to: id, name, kind, the caller's role, created_at and active member count.",
+        "vault_check" => "Check one vault for broken or leftover data: memories whose entity is gone, relations with a missing end, memories filed in a different vault from their entity, and a change log counter that fell behind. Read-only; `ok` is true when nothing needs attention.",
+        "vault_repair" => "Repair what vault_check found in one vault (owner only): removes memories whose entity is gone and relations with a missing end, and fixes the change log counter. Misfiled memories are only reported. Returns the report taken after the repair.",
         "vault_set_role" => "Promote a member to owner or demote an owner to member (owner only). Cannot demote the last owner.",
         "vault_transfer_ownership" => "Hand ownership of a vault to another active member (owner only): they become an owner and the caller becomes a member.",
         "vault_invitations" => "List the pending vault invitations addressed to the caller (vault id, name, kind, role). Accept or decline each with `vault_accept_invitation` / `vault_decline_invitation`.",
@@ -183,13 +189,18 @@ pub fn description(name: &str) -> &'static str {
         "skill_find" => "Find saved skills by what you need to do: by meaning when embeddings are on, and by keyword in a skill's name or description. Searches every vault you can read, or one `vault_id`. Returns id, name, description, vault and updated_at, not the body: `skill_get` reads it.",
         "skill_get" => "One saved skill with its full Markdown body, by id (from `skill_find`) or by name (an error names the ids if several vaults hold that name).",
         "skill_delete" => "Delete one saved skill by id. Irreversible.",
+        "changes_since" => "A vault's change log after a cursor: one numbered row per write (seq, op created/updated/deleted/merged, kind memory/entity/relation/skill/document, the item's id, who wrote it, when), oldest first, with no content (fetch the item to see it). Pass the returned `next` as `after` to read on. Your personal vault unless `vault_id` is given.",
+        "vault_share_code" => "Make a one-time share code for a vault you own, to share it with another Eunomia (a separate install, e.g. a teammate's or another machine of yours). Send the code to whoever runs the other Eunomia; it works once and expires (default 7 days). `role` edit (default) lets the other side add and change; read lets it only receive. The code carries this Eunomia's addresses, local network first. Documents are not shared.",
+        "vault_join_shared" => "Join a vault another Eunomia shared, with the share code its owner sent (`eunomia1:...`). Makes a new vault here holding a full copy, kept in step automatically about every 30 seconds while the other Eunomia can be reached.",
+        "vault_peers" => "List the other Eunomias a vault is shared with (or copied from): each link's id, direction (host: this one has the original; guest: a copy), role, status (up_to_date, syncing, unreachable, integrity_problem, revoked), last sync time and whether both copies match; plus unused share codes.",
+        "vault_peer_sync" => "Sync a shared vault with the other Eunomia now (a `link_id` from `vault_peers`). Returns the link's status after.",
         _ => "",
     }
 }
 
 // args keys that look like secrets -- redacted rather than written to the
 // audit log's args_summary.
-const SECRET_KEY_HINTS: &[&str] = &["password", "token", "secret", "credential", "api_key", "apikey"];
+const SECRET_KEY_HINTS: &[&str] = &["password", "token", "secret", "credential", "api_key", "apikey", "share_code"];
 const ARGS_SUMMARY_MAX: usize = 500;
 
 // a document's or skill's content, kept out of the audit summary (its size stands in for it)
@@ -205,7 +216,10 @@ fn summarize_args(tool_name: &str, args: &Value) -> String {
             } else if SECRET_KEY_HINTS.iter().any(|hint| lower.contains(hint)) {
                 redacted.insert(k.clone(), json!("***"));
             } else {
-                redacted.insert(k.clone(), v.clone());
+                // each string before serializing: JSON escapes (`\n` before a key) would hide a secret's start
+                let mut v = v.clone();
+                crate::redact::redact_value(&mut v);
+                redacted.insert(k.clone(), v);
             }
         }
     }
@@ -335,6 +349,7 @@ fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
     code::register_all(registry);
     vaults::register_all(registry);
     skills::register_all(registry);
+    peers::register_all(registry);
 }
 
 pub fn all_tools() -> &'static HashMap<&'static str, ToolSpec> {
@@ -543,12 +558,15 @@ mod tests {
             "vault_members",
             "vault_invitations",
             "vault_get",
+            "vault_check",
             "document_list",
             "document_get",
             "document_download",
             "document_export",
             "skill_find",
             "skill_get",
+            "changes_since",
+            "vault_peers",
         ];
         assert_eq!(READ_ONLY_TOOLS.len(), expected.len());
         for name in expected {
@@ -588,6 +606,19 @@ mod tests {
     }
 
     #[test]
+    fn summarize_args_redacts_secrets_after_a_newline_or_tab() {
+        let token = format!("ghp_{}", "a1B2c3D4e5".repeat(4));
+        for (tool, args) in [
+            ("memory_write", json!({ "text": format!("line1\n{token}\tand\t{token}") })),
+            ("skill_save", json!({ "description": format!("use\n{token}"), "nested": [{ "x": format!("\t{token}") }] })),
+        ] {
+            let summary = summarize_args(tool, &args);
+            assert!(!summary.contains(&token), "{summary}");
+            assert!(summary.contains("[redacted: github token]"), "{summary}");
+        }
+    }
+
+    #[test]
     fn summarize_args_truncates_long_summaries() {
         let long_value = "x".repeat(1000);
         let args = json!({ "q": long_value });
@@ -623,9 +654,10 @@ mod tests {
             "entities_graph", "entity_types", "code_entity_upsert", "code_relate", "memory_write", "memory_write_batch", "consolidate_observations",
             "memory_update", "entity_update", "memory_delete", "entity_delete", "entity_merge", "vault_create", "vault_list", "vault_clone", "vault_merge",
             "vault_invite", "vault_members", "vault_remove_member", "vault_leave", "vault_rename", "vault_delete",
-            "vault_invitations", "vault_accept_invitation", "vault_decline_invitation", "vault_set_role", "vault_transfer_ownership", "vault_get",
+            "vault_invitations", "vault_accept_invitation", "vault_decline_invitation", "vault_set_role", "vault_transfer_ownership", "vault_get", "vault_check", "vault_repair",
             "document_upload", "document_list", "document_get", "document_download", "document_export", "document_delete",
-            "skill_save", "skill_find", "skill_get", "skill_delete",
+            "skill_save", "skill_find", "skill_get", "skill_delete", "changes_since",
+            "vault_share_code", "vault_join_shared", "vault_peers", "vault_peer_sync",
         ];
         let tools = all_tools();
         for name in expected {

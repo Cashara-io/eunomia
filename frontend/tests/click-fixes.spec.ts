@@ -52,22 +52,22 @@ test.describe("Click-through fixes", () => {
     const { page } = await newUser(browser, "rename");
     await page.goto("/vaults");
     const create = async (name: string) => {
-      await page.getByRole("button", { name: "New vault" }).click();
-      await page.getByLabel(/^Name the vault/).fill(name);
+      await page.getByRole("button", { name: "Create space" }).click();
+      await page.getByLabel(/^Name the space/).fill(name);
       await page.getByRole("button", { name: "Create", exact: true }).click();
     };
     await create("Alpha");
     await page.getByRole("button", { name: /^Alpha/ }).click();
 
-    await page.getByRole("button", { name: "Rename vault" }).click();
-    await page.getByRole("textbox", { name: "Vault name", exact: true }).fill("Beta");
+    await page.getByRole("button", { name: "Rename space" }).click();
+    await page.getByRole("textbox", { name: "Space name", exact: true }).fill("Beta");
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Beta", level: 2 })).toBeVisible();
 
     // a duplicate (any case) and the personal vault's own name are taken
     await create("beta");
     await expect(page.getByRole("alert").filter({ hasText: "vault.name_taken" })).toBeVisible();
-    await page.getByLabel(/^Name the vault/).fill("Personal");
+    await page.getByLabel(/^Name the space/).fill("Personal");
     await page.getByRole("button", { name: "Create", exact: true }).click();
     await expect(page.getByRole("alert").filter({ hasText: "vault.name_taken" })).toBeVisible();
   });
@@ -126,8 +126,8 @@ test.describe("Click-through fixes", () => {
     const bob = await newUser(browser, "leaver");
     const vaultName = `Leave ${Date.now()}`;
     await owner.page.goto("/vaults");
-    await owner.page.getByRole("button", { name: "New vault" }).click();
-    await owner.page.getByLabel(/^Name the vault/).fill(vaultName);
+    await owner.page.getByRole("button", { name: "Create space" }).click();
+    await owner.page.getByLabel(/^Name the space/).fill(vaultName);
     await owner.page.getByRole("button", { name: "Create", exact: true }).click();
     await owner.page.getByRole("button", { name: new RegExp(`^${vaultName}`) }).click();
     await owner.page.getByPlaceholder("person@example.com").fill(bob.email);
@@ -142,8 +142,8 @@ test.describe("Click-through fixes", () => {
     bob.page.on("response", (r) => {
       if (r.status() === 403) forbidden.push(r.url());
     });
-    await bob.page.getByRole("button", { name: "Leave this vault" }).click();
-    await bob.page.getByRole("button", { name: "Leave", exact: true }).dblclick();
+    await bob.page.getByRole("button", { name: "Leave space…" }).click();
+    await bob.page.getByRole("dialog").getByRole("button", { name: `Leave ${vaultName}`, exact: true }).dblclick();
     await expect(bob.page.getByRole("button", { name: new RegExp(`^${vaultName}`) })).toHaveCount(0);
     await bob.page.waitForTimeout(500);
     expect(forbidden).toEqual([]);

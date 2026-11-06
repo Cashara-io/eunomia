@@ -2,14 +2,17 @@
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Download, FileJson, FileText, RotateCw, Trash2, Upload, X } from "lucide-react";
+import { Download, FileJson, Files, FileText, RotateCw, Trash2, Upload, X } from "lucide-react";
+import PageHeader from "@/components/ui/PageHeader";
+import StatusLabel, { type StatusTone } from "@/components/ui/StatusLabel";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import CopyButton from "@/components/bits/CopyButton";
 import { downloadDocumentFile, uploadDocumentFile } from "@/lib/api";
 import type { DocumentOut } from "@/lib/gen";
 import { useDeleteDocument, useDocument, useDocuments, useRefreshDocuments, useReindexDocument } from "@/lib/queries/documents";
 
-const ICON = { size: 14, strokeWidth: 1.75 } as const;
+const ICON = { size: 18, strokeWidth: 1.75 } as const;
 const ACCEPT = ".txt,.text,.md,.markdown,.json,.csv,.pdf,text/plain,text/markdown,application/json,text/csv,application/pdf";
 const EXTENSIONS = ["txt", "text", "log", "md", "markdown", "json", "csv", "pdf"];
 const TYPE_LABEL: Record<string, string> = {
@@ -36,20 +39,19 @@ function ago(iso: string): string {
   return days < 30 ? `${days}d ago` : new Date(iso).toLocaleDateString();
 }
 
-const STATUS: Record<string, { color: string; label: string }> = {
-  ready: { color: "var(--good)", label: "Ready" },
-  indexing: { color: "var(--warning)", label: "Indexing" },
-  failed: { color: "var(--critical)", label: "Failed" },
-  deleted: { color: "var(--ink-faint)", label: "Deleting" },
+const STATUS: Record<string, { tone: StatusTone; label: string }> = {
+  ready: { tone: "good", label: "Ready" },
+  indexing: { tone: "warning", label: "Indexing" },
+  failed: { tone: "critical", label: "Failed" },
+  deleted: { tone: "neutral", label: "Deleting" },
 };
 
 function Status({ status }: { status: string }) {
   const s = STATUS[status] ?? STATUS.failed;
   return (
-    <span className="inline-flex items-center gap-1.5 whitespace-nowrap" style={{ color: "var(--ink-dim)" }}>
-      <span className="dot" style={{ background: s.color }} aria-hidden />
+    <StatusLabel tone={s.tone} className="whitespace-nowrap">
       {s.label}
-    </span>
+    </StatusLabel>
   );
 }
 
@@ -96,11 +98,10 @@ function DropZone({ maxBytes, disabled, onFiles }: { maxBytes: number | null; di
   const [over, setOver] = useState(false);
   return (
     <div
-      className="ledger flex flex-col items-center justify-center gap-2 px-4 py-7 text-center"
+      className="flex flex-col items-center justify-center gap-3 px-4 py-8 text-center rounded-[2px]"
       style={{
-        borderStyle: "dashed",
-        borderColor: over ? "var(--border-strong)" : undefined,
-        background: over ? "var(--surface-raised)" : undefined,
+        border: "1.5px solid var(--bauhaus-app-blue)",
+        background: over ? "var(--bauhaus-app-blue-soft)" : "var(--surface)",
         transition: "background-color var(--dur-hover) ease, border-color var(--dur-hover) ease",
       }}
       onDragOver={(e) => {
@@ -115,16 +116,16 @@ function DropZone({ maxBytes, disabled, onFiles }: { maxBytes: number | null; di
         if (!disabled && e.dataTransfer.files.length) onFiles(e.dataTransfer.files);
       }}
     >
-      <Upload size={18} strokeWidth={1.75} aria-hidden style={{ color: "var(--ink-faint)" }} />
-      <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
-        Drop files here, or{" "}
-        <button type="button" disabled={disabled} onClick={() => input.current?.click()} className="underline underline-offset-[3px]" style={{ color: "var(--accent-text)" }}>
-          choose files
-        </button>
+      <Upload size={24} strokeWidth={1.75} aria-hidden style={{ color: "var(--bauhaus-app-blue)" }} />
+      <p className="text-[16px]" style={{ color: "var(--ink)" }}>
+        Drop files here, or choose files
       </p>
       <p id="upload-guidance" className="label">
         Text, Markdown, JSON, CSV or a text-based PDF{maxBytes !== null ? `, up to ${size(maxBytes)} each` : ""}.
       </p>
+      <button type="button" disabled={disabled} onClick={() => input.current?.click()} className="btn btn-primary">
+        Choose files
+      </button>
       <input
         ref={input}
         type="file"
@@ -171,10 +172,10 @@ function UploadRows({ rows, onDismiss }: { rows: UploadRow[]; onDismiss: (key: s
               aria-valuenow={Math.round(r.progress * 100)}
               aria-valuemin={0}
               aria-valuemax={100}
-              className="h-1 rounded-full overflow-hidden"
+              className="h-1.5 rounded-full overflow-hidden"
               style={{ background: "var(--surface-raised)" }}
             >
-              <div className="h-full" style={{ width: `${Math.round(r.progress * 100)}%`, background: "var(--ink-dim)", transition: "width 120ms linear" }} />
+              <div className="h-full" style={{ width: `${Math.round(r.progress * 100)}%`, background: "var(--bauhaus-app-blue)", transition: "width 120ms linear" }} />
             </div>
           )}
         </div>
@@ -187,74 +188,51 @@ function UploadRows({ rows, onDismiss }: { rows: UploadRow[]; onDismiss: (key: s
 
 function DeleteDocument({ doc, onDeleted }: { doc: DocumentOut; onDeleted: () => void }) {
   const del = useDeleteDocument();
-  const dialog = useRef<HTMLDialogElement>(null);
-  const [step, setStep] = useState<1 | 2>(1);
-  const [typed, setTyped] = useState("");
+  const [open, setOpen] = useState(false);
   const [error, setError] = useState<Failure | null>(null);
-
-  function open() {
-    setStep(1);
-    setTyped("");
-    setError(null);
-    dialog.current?.showModal();
-  }
 
   async function run() {
     setError(null);
     try {
       await del.mutateAsync(doc.id);
-      dialog.current?.close();
+      setOpen(false);
       onDeleted();
     } catch (e) {
       setError(failure(e, `Could not delete ${doc.filename}. Try again.`));
     }
   }
 
+  const passages = doc.chunk_count === 1 ? "its passage" : `its ${doc.chunk_count.toLocaleString()} passages`;
   return (
     <>
-      <button type="button" onClick={open} className="btn btn-danger btn-sm">
+      <button
+        type="button"
+        onClick={() => {
+          setError(null);
+          setOpen(true);
+        }}
+        className="btn btn-danger btn-sm"
+      >
         <Trash2 {...ICON} aria-hidden />
         Delete
       </button>
-      <dialog
-        ref={dialog}
-        aria-labelledby="delete-document-title"
-        className="panel pop-in m-auto w-[calc(100%-32px)] max-w-md p-5 backdrop:bg-black/40"
-        style={{ color: "var(--ink)" }}
+      <ConfirmDialog
+        open={open}
+        title={`Delete ${doc.filename}?`}
+        confirmLabel={del.isPending ? "Deleting…" : "Delete document"}
+        danger
+        busy={del.isPending}
+        typeToConfirm={doc.filename}
+        error={error?.message}
+        onConfirm={run}
+        onCancel={() => setOpen(false)}
       >
-        <h3 id="delete-document-title" className="text-[15px] font-medium mb-2">
-          {step === 1 ? `Delete ${doc.filename}?` : "Are you sure?"}
-        </h3>
-        {step === 1 ? (
-          <p className="text-[12.5px] mb-4" style={{ color: "var(--ink-dim)" }}>
-            This permanently deletes the stored file, its {doc.chunk_count === 1 ? "passage" : `${doc.chunk_count.toLocaleString()} passages`} (they leave
-            search and recall at once) and every fact extracted from them. Download it first if you may need it again.
-          </p>
-        ) : (
-          <label className="text-[12.5px] flex flex-col gap-1.5 mb-4" style={{ color: "var(--ink-dim)" }}>
-            <span>
-              Type <span className="font-mono" style={{ color: "var(--ink)" }}>{doc.filename}</span> to confirm. This can&apos;t be undone.
-            </span>
-            <input autoFocus className="field h-8 px-2.5 text-[13px] font-mono" value={typed} onChange={(e) => setTyped(e.target.value)} aria-label="Document name" />
-          </label>
-        )}
-        {error && <ErrorLine error={error} />}
-        <div className="flex justify-end gap-1.5 mt-2">
-          <button type="button" onClick={() => dialog.current?.close()} className="btn btn-ghost btn-sm">
-            Cancel
-          </button>
-          {step === 1 ? (
-            <button type="button" onClick={() => setStep(2)} className="btn btn-danger btn-sm">
-              Continue
-            </button>
-          ) : (
-            <button type="button" onClick={run} disabled={typed !== doc.filename || del.isPending} className="btn btn-danger btn-sm">
-              <Trash2 {...ICON} aria-hidden />
-              {del.isPending ? "Deleting…" : "Delete document"}
-            </button>
-          )}
-        </div>
-      </dialog>
+        <p>
+          This permanently deletes the stored file, {passages} and every fact your AI apps learned from it. It disappears from search and recall at
+          once. This can&apos;t be undone.
+        </p>
+        <p style={{ color: "var(--ink-dim)" }}>Download it first if you may need it again.</p>
+      </ConfirmDialog>
     </>
   );
 }
@@ -315,10 +293,10 @@ function DocumentPanel({ id, chunk, onClose }: { id: string; chunk: string | nul
   const doc = detail.document;
   const chars = Array.from(detail.text);
   return (
-    <section className="panel frame-selected p-4 flex flex-col gap-4 min-w-0" aria-labelledby="document-title" data-testid="document-panel">
+    <section className="task-panel p-5 flex flex-col gap-4 min-w-0" aria-labelledby="document-title" data-testid="document-panel">
       <div className="flex items-start gap-2">
         <div className="flex-1 min-w-0">
-          <h2 id="document-title" className="text-[17px] font-semibold tracking-[-0.015em] break-words">
+          <h2 id="document-title" className="text-[20px] font-semibold tracking-[-0.015em] break-words">
             {doc.filename}
           </h2>
           <p className="label mt-1">
@@ -353,7 +331,7 @@ function DocumentPanel({ id, chunk, onClose }: { id: string; chunk: string | nul
         </span>
       </div>
 
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap gap-2">
         <button type="button" onClick={() => save("download")} disabled={busy !== null} aria-busy={busy === "download"} className="btn btn-sm">
           <Download {...ICON} aria-hidden />
           {busy === "download" ? "Downloading…" : "Download"}
@@ -362,7 +340,7 @@ function DocumentPanel({ id, chunk, onClose }: { id: string; chunk: string | nul
           <FileJson {...ICON} aria-hidden />
           {busy === "export" ? "Preparing…" : "Export"}
         </button>
-        <button type="button" onClick={runReindex} disabled={reindex.isPending || doc.status === "indexing"} className="btn btn-ghost btn-sm">
+        <button type="button" onClick={runReindex} disabled={reindex.isPending || doc.status === "indexing"} className="btn btn-sm">
           <RotateCw {...ICON} aria-hidden />
           Re-index
         </button>
@@ -396,7 +374,7 @@ function DocumentPanel({ id, chunk, onClose }: { id: string; chunk: string | nul
                     <span className="label font-mono shrink-0">
                       {c.part + 1} · {c.char_start.toLocaleString()}–{c.char_end.toLocaleString()}
                     </span>
-                    {!c.has_embedding && <span className="label">no vector</span>}
+                    {!c.has_embedding && <span className="label">not in meaning search</span>}
                     <span className="flex-1" />
                     <CopyButton value={c.chunk_id} label="Copy passage id" />
                   </span>
@@ -441,19 +419,19 @@ function Documents() {
   const input = useRef<HTMLInputElement>(null);
 
   return (
-    <div className="max-w-6xl flex flex-col gap-9">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">
-          <h1 className="page-title">Documents</h1>
-          <p className="text-[13px] mt-1.5 max-w-[62ch]" style={{ color: "var(--ink-dim)" }}>
-            Upload notes, specs and exports. Eunomia keeps the original for download and indexes its text, so search, recall and your agents find
-            its passages, each pointing back to the file. Documents are private to you.
-          </p>
-        </div>
-        <button type="button" onClick={() => input.current?.click()} disabled={storageOff} className="btn btn-primary">
-          <Upload {...ICON} aria-hidden />
-          Upload
-        </button>
+    <div className="max-w-6xl flex flex-col gap-8">
+      <PageHeader
+        icon={Files}
+        title="Documents"
+        intro="Upload notes, specs and exports. Your AI apps can find each passage and trace it back to the file. Only you can read your documents."
+        actions={
+          <button type="button" onClick={() => input.current?.click()} disabled={storageOff} className="btn btn-primary">
+            <Upload {...ICON} aria-hidden />
+            Upload
+          </button>
+        }
+      />
+      <>
         <input
           ref={input}
           type="file"
@@ -467,13 +445,13 @@ function Documents() {
             e.target.value = "";
           }}
         />
-      </header>
+      </>
 
       {listQuery.isError && <ErrorLine error={failure(listQuery.error, "Could not load your documents.", " Reload the page to try again.")} />}
       {storageOff && (
         <div className="ledger px-4 py-3 text-[13px]" style={{ color: "var(--ink-dim)" }}>
-          Document storage is off on this server. An administrator turns it on with <code className="font-mono text-[12px]">EUNOMIA_DOCUMENTS_BACKEND</code>{" "}
-          (see the Documents page of the docs).
+          Document storage is turned off on this server, so files can&apos;t be uploaded yet. Ask the person who installed Eunomia to turn it on with <code className="font-mono text-[12px]">EUNOMIA_DOCUMENTS_BACKEND</code>{" "}
+          (see Documents in Help).
         </div>
       )}
 
@@ -483,11 +461,16 @@ function Documents() {
           <UploadRows rows={uploads.rows} onDismiss={uploads.dismiss} />
 
           <section className="flex flex-col gap-2.5" aria-labelledby="documents-title">
-            <h2 id="documents-title" className="section-title flex items-center gap-2">
-              <FileText {...ICON} aria-hidden style={{ color: "var(--ink-faint)" }} />
-              Your documents
-              {docs && <span className="label font-mono">{list?.total ?? docs.length}</span>}
-            </h2>
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 id="documents-title" className="section-title">
+                Your documents
+              </h2>
+              {docs && (
+                <span className="label">
+                  {(list?.total ?? docs.length).toLocaleString()} {(list?.total ?? docs.length) === 1 ? "document" : "documents"} · Only you can read these
+                </span>
+              )}
+            </div>
             <div className="ledger overflow-x-auto">
               <table className="data-table">
                 <thead>
@@ -497,7 +480,7 @@ function Documents() {
                     <th className="hidden md:table-cell text-right">Size</th>
                     <th className="hidden md:table-cell">Uploaded</th>
                     <th>Status</th>
-                    <th className="hidden sm:table-cell text-right">Passages</th>
+                    <th className="hidden sm:table-cell text-right">Sections</th>
                   </tr>
                 </thead>
                 <tbody aria-busy={docs === null}>
@@ -515,22 +498,23 @@ function Documents() {
                   {docs?.length === 0 && (
                     <tr>
                       <td colSpan={6} style={{ color: "var(--ink-dim)", height: 56 }}>
-                        No documents yet. Drop a file above, or ask your agent to save one with document_upload.
+                        No documents yet. Drop a file above, or ask your AI app to save one for you.
                       </td>
                     </tr>
                   )}
                   {docs?.map((d) => {
                     const on = d.id === selected;
                     return (
-                      <tr key={d.id} className={on ? "frame-selected" : undefined} style={on ? { background: "var(--accent-soft)" } : undefined} data-testid="document-row">
+                      <tr key={d.id} style={on ? { background: "var(--accent-soft)", boxShadow: "inset 3px 0 0 var(--bauhaus-app-blue)" } : undefined} data-testid="document-row">
                         <td className="max-w-0 w-full">
                           <button
                             type="button"
                             onClick={() => select(on ? null : d.id)}
                             aria-current={on || undefined}
-                            className="flex items-center gap-2 min-w-0 max-w-full text-left font-medium"
+                            className="flex items-center gap-2 min-h-11 min-w-0 max-w-full text-left font-medium hover:underline underline-offset-2"
+                            style={{ color: "var(--accent-text)" }}
                           >
-                            <FileText {...ICON} aria-hidden className="shrink-0" style={{ color: "var(--ink-faint)" }} />
+                            <FileText {...ICON} aria-hidden className="shrink-0" />
                             <span className="truncate">{d.filename}</span>
                           </button>
                         </td>
@@ -562,8 +546,8 @@ function Documents() {
           {selected ? (
             <DocumentPanel key={selected} id={selected} chunk={chunk} onClose={() => select(null)} />
           ) : (
-            <p className="text-[13px] px-1" style={{ color: "var(--ink-dim)" }}>
-              Select a document to read its passages, download it, export its vectors or delete it.
+            <p className="soft-panel text-[14px] px-4 py-3" style={{ color: "var(--ink-dim)" }}>
+              Choose a document to read its passages, download it, export it or delete it.
             </p>
           )}
         </aside>

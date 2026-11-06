@@ -1,10 +1,12 @@
 pub mod auth;
+pub mod changes;
 pub mod chat;
 pub mod connectors;
 pub mod documents;
 mod schemas;
 pub mod entities;
 pub mod vaults;
+pub mod peers;
 pub mod settings;
 pub mod audit;
 pub mod debug;

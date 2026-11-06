@@ -55,8 +55,8 @@ export function SsoButton({ provider, primary }: { provider: string; primary: bo
   // the query string only exists in the browser; until hydration the link points at the dashboard
   const next = useSyncExternalStore(noSubscribe, nextPath, () => "/");
   return (
-    <a href={`/api/auth/oidc/start?next=${encodeURIComponent(next)}`} className={`btn ${primary ? "btn-primary" : ""} h-9 w-full`}>
-      <KeyRound size={14} strokeWidth={1.75} aria-hidden />
+    <a href={`/api/auth/oidc/start?next=${encodeURIComponent(next)}`} className={`btn ${primary ? "btn-primary" : ""} min-h-11 w-full`}>
+      <KeyRound size={16} strokeWidth={1.75} aria-hidden />
       Continue with {provider}
     </a>
   );

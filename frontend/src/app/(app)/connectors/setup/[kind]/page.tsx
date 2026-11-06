@@ -16,7 +16,11 @@ import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import CopyButton from "@/components/bits/CopyButton";
 import SyncMark from "@/components/bits/SyncMark";
 import Tooltip from "@/components/bits/Tooltip";
+import PageHeader from "@/components/ui/PageHeader";
+import StatusLabel, { toneFromVar } from "@/components/ui/StatusLabel";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import RoutingSection from "./RoutingSection";
+import PocketAudioSetting from "@/components/pocket/PocketAudioSetting";
 
 // Presets for the sync-interval select, in seconds.
 const SYNC_INTERVAL_PRESETS = [
@@ -29,11 +33,12 @@ const SYNC_INTERVAL_PRESETS = [
 ];
 
 // Fallback interval a source runs at when the user hasn't set an override,
-// per the backend scheduler (heypocket defaults to 24h there; every other
-// source falls back to the scheduler's generic 900s/15min default).
+// per the backend scheduler (heypocket defaults to 24h there, ed to 30 min;
+// every other source falls back to the scheduler's generic 900s/15min default).
 const SOURCE_DEFAULT_INTERVAL: Record<string, number> = {
   up_bank: 900,
   heypocket: 86400,
+  ed: 1800,
 };
 
 function isConnectorKind(kind: string): kind is ConnectorKind {
@@ -58,9 +63,9 @@ function validate(f: FieldDef, value: string, required: boolean, connector: stri
 
 function Breadcrumb({ label }: { label: string }) {
   return (
-    <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-[12.5px]" style={{ color: "var(--ink-faint)" }}>
-      <Link href="/connectors" className="hover:underline" style={{ color: "var(--ink-dim)" }}>
-        Connectors
+    <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-[13px]" style={{ color: "var(--ink-dim)" }}>
+      <Link href="/connectors" className="underline-offset-2 hover:underline" style={{ color: "var(--accent-text)" }}>
+        Connected sources
       </Link>
       <ChevronRight size={12} strokeWidth={1.75} aria-hidden />
       <span aria-current="page">{label}</span>
@@ -75,11 +80,11 @@ export default function ConnectorSetupPage({ params }: { params: Promise<{ kind:
     return (
       <div className="max-w-2xl flex flex-col gap-6">
         <Breadcrumb label={kind} />
-        <h1 className="page-title">Unknown connector</h1>
-        <div className="ledger px-5 py-4 flex items-center justify-between gap-4 flex-wrap text-[13px]">
-          <span style={{ color: "var(--ink-dim)" }}>There is no connector called &ldquo;{kind}&rdquo;.</span>
-          <Link href="/connectors" className="btn btn-sm">
-            Browse connectors
+        <PageHeader title="Unknown connector" />
+        <div className="ledger px-5 py-4 flex items-center justify-between gap-4 flex-wrap text-[14px]">
+          <span style={{ color: "var(--ink-dim)" }}>There is no source called &ldquo;{kind}&rdquo;.</span>
+          <Link href="/connectors" className="btn">
+            Browse connected sources
           </Link>
         </div>
       </div>
@@ -93,8 +98,8 @@ function SecretToggle({ shown, onToggle, label }: { shown: boolean; onToggle: ()
   const name = shown ? `Hide ${label}` : `Show ${label}`;
   return (
     <Tooltip label={name}>
-      <button type="button" onClick={onToggle} aria-label={name} aria-pressed={shown} className="btn btn-ghost btn-sm w-6 px-0 -mr-1.5">
-        {shown ? <EyeOff size={14} strokeWidth={1.75} aria-hidden /> : <Eye size={14} strokeWidth={1.75} aria-hidden />}
+      <button type="button" onClick={onToggle} aria-label={name} aria-pressed={shown} className="btn btn-ghost btn-sm btn-icon -mr-2">
+        {shown ? <EyeOff size={18} strokeWidth={1.75} aria-hidden /> : <Eye size={18} strokeWidth={1.75} aria-hidden />}
       </button>
     </Tooltip>
   );
@@ -121,7 +126,7 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
   const deleteConnector = useDeleteConnector();
   const [name, setName] = useState<string | null>(null);
   const [nameError, setNameError] = useState("");
-  const loadError = connectorsQuery.isError ? failure(connectorsQuery.error, "Could not load this connector.", " Reload the page once the backend is reachable.") : null;
+  const loadError = connectorsQuery.isError ? failure(connectorsQuery.error, "Could not load this connector.", " Reload the page once Eunomia is reachable.") : null;
   const updateConnector = useUpdateConnector();
   const testConnector = useTestConnector();
   const updateSettings = useUpdateSettings();
@@ -143,6 +148,8 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
   const [editedWebhookUrl, setWebhookUrl] = useState<string | null>(null);
   const webhookUrl = editedWebhookUrl ?? (me ? `${apiOrigin()}/api/sources/${kind}/webhook/${me.id}` : null);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  // The key instructions start open until the source is connected; then they fold away.
+  const [helpChoice, setHelpChoice] = useState<boolean | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
 
   const status = connectorStatus(connector ?? undefined);
@@ -233,10 +240,12 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
         r.error
           ? { ok: false, text: `Sync failed: ${r.error}` }
           : r.status === "already_running"
-            ? { ok: true, text: "A sync is already running; try again in a moment" }
-            : r.status === "queued"
-              ? { ok: true, text: "Sync queued. It will run as soon as a worker is free" }
-              : { ok: true, text: `Synced: ${r.written ?? 0} new or changed, ${r.skipped ?? 0} unchanged` },
+            ? { ok: true, text: "An update is already running. Its items appear when it finishes" }
+            : r.status === "offline"
+              ? { ok: false, text: "You're offline, so nothing was synced. Try again when you have a connection" }
+              : r.status === "queued"
+                ? { ok: true, text: "Update queued. It starts as soon as Eunomia is free; items appear when it finishes" }
+                : { ok: true, text: `Synced: ${r.written ?? 0} new or changed, ${r.skipped ?? 0} unchanged` },
       );
     } catch (e) {
       setSyncMessage({ ok: false, text: `Sync failed: ${failure(e, "unknown error").message}` });
@@ -279,264 +288,329 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
 
   // Credentials the provider just turned down are not "Connected", whatever was saved.
   const rejected = connected && testResult !== null && !testResult.ok;
-  const statusText = connector === null ? "Checking…" : isNew ? "New connection" : isDemo ? "Demo data" : rejected ? "Credentials rejected" : connected ? "Connected" : "Not connected";
+  const statusText =
+    connector === null
+      ? "Checking…"
+      : isNew
+        ? "New connection"
+        : isDemo
+          ? "Example data"
+          : rejected
+            ? "Sign-in details rejected"
+            : testResult?.ok
+              ? "Connected · connection works"
+              : connected
+                ? "Connected"
+                : "Not connected";
   const statusTone = isDemo ? "var(--warning)" : rejected ? "var(--critical)" : connected ? "var(--good)" : "var(--ink-faint)";
   const sourceKey = meta.sourceKey;
   const override = sourceKey ? appSettings?.sync_intervals?.[sourceKey] : undefined;
   const defaultInterval = sourceKey ? SOURCE_DEFAULT_INTERVAL[sourceKey] ?? 900 : 900;
 
+  const showHelp = helpChoice ?? !(connected || isDemo);
+  const stepTitle = "text-[18px] font-semibold tracking-[-0.01em]";
+  const fieldBox = "field flex items-center gap-2 h-10 px-3";
+
   return (
-    <div className="max-w-2xl flex flex-col gap-8">
-      <header className="flex flex-col gap-3">
+    <div className="max-w-5xl flex flex-col gap-8">
+      <div className="flex flex-col gap-3">
         <Breadcrumb label={connector?.label ? `${meta.label} (${connector.label})` : meta.label} />
-        <div className="flex items-center gap-3 flex-wrap">
-          <ConnectorTile kind={kind} size={40} />
-          <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-            <h1 className="page-title">{isNew ? `Add another ${meta.label} connection` : connector?.label ? `${meta.label}: ${connector.label}` : meta.label}</h1>
-            <span className="text-[12.5px] flex items-center gap-1.5" style={{ color: "var(--ink-dim)" }}>
-              {connector === null ? <span className="skeleton w-1.5 h-1.5" /> : <span className="dot" style={{ background: statusTone }} aria-hidden />}
-              {statusText}
-            </span>
-          </div>
-          {(connected || isDemo) && sourceKey && connector && (
-            <Link href={`/connectors/${connector.source_key}`} className="btn">
-              View synced data <ArrowRight size={14} strokeWidth={1.75} aria-hidden />
-            </Link>
+        <PageHeader
+          mark={<ConnectorTile kind={kind} size={32} />}
+          title={isNew ? `Add another ${meta.label} connection` : connector?.label ? `${meta.label}: ${connector.label}` : meta.label}
+          intro={meta.description}
+          actions={
+            (connected || isDemo) && sourceKey && connector ? (
+              <Link href={`/connectors/${connector.source_key}`} className="btn">
+                View synced data <ArrowRight size={18} strokeWidth={1.75} aria-hidden />
+              </Link>
+            ) : undefined
+          }
+        >
+          {connector === null ? (
+            <span className="skeleton h-4 w-24" aria-label="Checking status" />
+          ) : (
+            <StatusLabel tone={toneFromVar(statusTone)}>{statusText}</StatusLabel>
           )}
-        </div>
-        <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
-          {meta.description}
-        </p>
-      </header>
+        </PageHeader>
+      </div>
 
       {loadError && <ErrorLine error={loadError} />}
 
       {isDemo && (
-        <p className="text-[13px] rounded-[10px] px-4 py-3" style={{ background: "var(--surface-raised)", color: "var(--ink-dim)" }}>
-          Running on demo data. Save a real token below to switch over.
+        <p className="soft-panel text-[14px] px-4 py-3" style={{ color: "var(--ink-dim)" }}>
+          This source is showing example data. Save your own key below to switch over.
         </p>
       )}
 
-      <form onSubmit={save} noValidate className="ledger flex flex-col">
-        <div className="p-5 flex flex-col gap-5">
-          <div className="flex flex-col gap-1">
-            <h2 className="section-title">Credentials</h2>
-            {meta.help && (
-              <div className="text-[12.5px] break-words" style={{ color: "var(--ink-dim)" }}>
-                {meta.help}
-              </div>
-            )}
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="field-connection-name" className="text-[12.5px] font-medium flex items-baseline gap-2">
-              Connection name
-              {!isNew && <span className="label font-normal">Optional</span>}
-            </label>
-            <div className="field flex items-center gap-2 h-8 px-2.5" style={nameError ? { borderColor: "var(--critical)" } : undefined}>
-              <input
-                id="field-connection-name"
-                type="text"
-                autoComplete="off"
-                maxLength={100}
-                className="flex-1 min-w-0 bg-transparent outline-none text-[13px]"
-                placeholder="For example work@example.com or Kitchen Pocket"
-                value={name ?? connector?.label ?? ""}
-                onChange={(e) => {
-                  setName(e.target.value);
-                  if (nameError) setNameError("");
-                }}
-                aria-invalid={nameError ? true : undefined}
-                aria-describedby={nameError ? "err-connection-name" : "help-connection-name"}
-              />
-            </div>
-            {nameError ? (
-              <p id="err-connection-name" className="text-[12px]" style={{ color: "var(--critical)" }}>
-                {nameError}
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,340px)] items-start">
+        <div className="flex flex-col gap-8 min-w-0">
+          <form onSubmit={save} noValidate className="flex flex-col gap-8">
+            <section className="flex flex-col gap-3" aria-labelledby="step-key">
+              <h2 id="step-key" className={stepTitle}>
+                1. Get your connection key
+              </h2>
+              <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+                {meta.label} gives you a key that lets Eunomia read your items. It is stored encrypted and only sent to {meta.label}.
               </p>
-            ) : (
-              <p id="help-connection-name" className="text-[12px]" style={{ color: "var(--ink-faint)" }}>
-                Tells this {meta.label} connection apart from others of the same kind.
-              </p>
-            )}
-          </div>
+              {meta.help && (
+                <>
+                  <button type="button" className="btn self-start" aria-expanded={showHelp} aria-controls="key-help" onClick={() => setHelpChoice(!showHelp)}>
+                    {showHelp ? `Hide ${meta.label} instructions` : `Show ${meta.label} instructions`}
+                  </button>
+                  <div id="key-help" hidden={!showHelp} className="soft-panel p-4 text-[14px] leading-relaxed break-words">
+                    {meta.help}
+                  </div>
+                </>
+              )}
+            </section>
 
-          {meta.fields.map((f) => {
-            const err = errors[f.key];
-            const reveal = shown[f.key];
-            const describedBy = err ? `err-${f.key}` : undefined;
-            return (
-              <div key={f.key} className="flex flex-col gap-1.5">
-                <label htmlFor={`field-${f.key}`} className="text-[12.5px] font-medium flex items-baseline gap-2">
-                  {f.label}
-                  {isOptional(f) && <span className="label font-normal">Optional</span>}
+            <section className="flex flex-col gap-5 pt-6 border-t" aria-labelledby="step-save">
+              <h2 id="step-save" className={stepTitle}>
+                2. Paste your details and save
+              </h2>
+
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="field-connection-name" className="text-[14px] font-medium">
+                  Connection name {!isNew && <span style={{ color: "var(--ink-dim)" }}>(optional)</span>}
                 </label>
-                <div className="field flex items-center gap-2 h-8 px-2.5" style={err ? { borderColor: "var(--critical)" } : undefined}>
+                <div className={fieldBox} style={nameError ? { borderColor: "var(--critical)" } : undefined}>
                   <input
-                    id={`field-${f.key}`}
-                    type={f.secret && !reveal ? "password" : "text"}
+                    id="field-connection-name"
+                    type="text"
                     autoComplete="off"
-                    spellCheck={false}
-                    className="flex-1 min-w-0 bg-transparent outline-none text-[13px] font-mono"
-                    placeholder={connected && f.secret ? "Saved. Paste a new value to replace it" : f.placeholder}
-                    value={values[f.key] || ""}
-                    onChange={(e) => setField(f.key, e.target.value)}
-                    aria-invalid={err ? true : undefined}
-                    aria-describedby={describedBy}
+                    maxLength={100}
+                    className="flex-1 min-w-0 bg-transparent outline-none text-[14px]"
+                    placeholder="For example work@example.com or Kitchen Pocket"
+                    value={name ?? connector?.label ?? ""}
+                    onChange={(e) => {
+                      setName(e.target.value);
+                      if (nameError) setNameError("");
+                    }}
+                    aria-invalid={nameError ? true : undefined}
+                    aria-describedby={nameError ? "err-connection-name" : "help-connection-name"}
                   />
-                  {f.secret && <SecretToggle shown={!!reveal} label={f.label} onToggle={() => setShown((s) => ({ ...s, [f.key]: !s[f.key] }))} />}
                 </div>
-                {err && (
-                  <p id={describedBy} className="text-[12px]" style={{ color: "var(--critical)" }}>
-                    {err}
+                {nameError ? (
+                  <p id="err-connection-name" className="text-[13px]" style={{ color: "var(--critical)" }}>
+                    {nameError}
+                  </p>
+                ) : (
+                  <p id="help-connection-name" className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+                    Tells this {meta.label} connection apart from others of the same kind.
                   </p>
                 )}
               </div>
-            );
-          })}
 
-          {meta.webhooks && webhookUrl !== null && (
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="field-webhook-url" className="text-[12.5px] font-medium">
-                Webhook URL
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  id="field-webhook-url"
-                  type="text"
-                  spellCheck={false}
-                  className="field flex-1 min-w-0 h-8 px-2.5 text-[12.5px] font-mono"
-                  value={webhookUrl}
-                  onChange={(e) => setWebhookUrl(e.target.value)}
-                  aria-describedby="webhook-help"
-                />
-                <CopyButton value={() => webhookUrl} size="sm" className="h-8 w-[84px]" />
-              </div>
-              <p id="webhook-help" className="text-[12px]" style={{ color: "var(--ink-faint)" }}>
-                Register this with {meta.label} so updates arrive instantly instead of on the next poll. If {meta.label} needs a public address, replace{" "}
-                <span className="font-mono">{new URL(apiOrigin()).host}</span> with your tunnel host before copying.
-              </p>
-            </div>
-          )}
-        </div>
+              {meta.fields.map((f) => {
+                const err = errors[f.key];
+                const reveal = shown[f.key];
+                const describedBy = err ? `err-${f.key}` : undefined;
+                return (
+                  <div key={f.key} className="flex flex-col gap-1.5">
+                    <label htmlFor={`field-${f.key}`} className="text-[14px] font-medium">
+                      {f.label} {isOptional(f) && <span style={{ color: "var(--ink-dim)" }}>(optional)</span>}
+                    </label>
+                    <div className={fieldBox} style={err ? { borderColor: "var(--critical)" } : undefined}>
+                      <input
+                        id={`field-${f.key}`}
+                        type={f.secret && !reveal ? "password" : "text"}
+                        autoComplete="off"
+                        spellCheck={false}
+                        className="flex-1 min-w-0 bg-transparent outline-none text-[14px] font-mono"
+                        placeholder={connected && f.secret ? "Saved. Paste a new value to replace it" : f.placeholder}
+                        value={values[f.key] || ""}
+                        onChange={(e) => setField(f.key, e.target.value)}
+                        aria-invalid={err ? true : undefined}
+                        aria-describedby={describedBy}
+                      />
+                      {f.secret && <SecretToggle shown={!!reveal} label={f.label} onToggle={() => setShown((s) => ({ ...s, [f.key]: !s[f.key] }))} />}
+                    </div>
+                    {err && (
+                      <p id={describedBy} className="text-[13px]" style={{ color: "var(--critical)" }}>
+                        {err}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
 
-        {saveError && (
-          <div className="mx-5 mb-4">
-            <ErrorLine error={saveError} />
-          </div>
-        )}
-
-        <div className="px-5 py-3 flex items-center gap-2 flex-wrap border-t">
-          <button type="submit" disabled={saving} className="btn btn-primary min-w-[72px]">
-            {savedFlash ? "Saved" : saving ? "Saving…" : "Save"}
-          </button>
-          <button type="button" onClick={test} disabled={testing || !(connected || isDemo)} className="btn" title={connected || isDemo ? undefined : "Save credentials first"}>
-            <SyncMark status={testing ? "running" : testResult ? (testResult.ok ? "done" : "failed") : "idle"} />
-            {testing ? "Testing…" : "Test connection"}
-          </button>
-          <span className="text-[12.5px] flex items-center gap-1.5 min-w-0" aria-live="polite">
-            {testResult?.ok && "Connection works"}
-          </span>
-        </div>
-
-        {testResult && !testResult.ok && (
-          <div className="mx-5 mb-4">
-            <ErrorLine error={testResult.error}>
-              <span className="font-medium">{meta.label} rejected the connection.</span> {testResult.error?.message}{" "}
-              <span style={{ color: "var(--ink-dim)" }}>Check the token is current and has the scope described above, then save it again.</span>
-            </ErrorLine>
-          </div>
-        )}
-      </form>
-
-      {sourceKey && (
-        <section className="flex flex-col gap-3" aria-labelledby="sync-heading">
-          <h2 id="sync-heading" className="section-title">
-            Sync
-          </h2>
-          <div className="ledger p-5 flex items-center justify-between gap-4 flex-wrap">
-            <label htmlFor="sync-interval" className="flex flex-col gap-0.5 text-[13px]">
-              Sync interval
-              <span className="label">How often Eunomia pulls new records from {meta.label}.</span>
-            </label>
-            <div className="flex items-center gap-2">
-              <span className="text-[12px] w-12 text-right" aria-live="polite" style={{ color: intervalState === "error" ? "var(--critical)" : "var(--good)" }}>
-                {intervalState === "saved" ? "Saved" : intervalState === "error" ? "Not saved" : ""}
-              </span>
-              <Select
-                id="sync-interval"
-                className="h-8 text-[13px] w-44"
-                value={String(override ?? defaultInterval)}
-                onChange={(v) => saveInterval(Number(v))}
-                options={SYNC_INTERVAL_PRESETS.map((p) => ({
-                  value: String(p.value),
-                  label: p.label,
-                  hint: override === undefined && p.value === defaultInterval ? "default" : undefined,
-                }))}
-              />
-            </div>
-          </div>
-          {connected && (
-            <div className="flex items-center gap-3 flex-wrap">
-              <button type="button" onClick={syncNow} disabled={syncing} className="btn">
-                <SyncMark status={syncing ? "running" : syncMessage ? (syncMessage.ok ? "done" : "failed") : "idle"} />
-                {syncing ? "Syncing…" : "Sync now"}
-              </button>
-              {syncMessage && (
-                <span role="status" className="text-[12.5px] font-mono break-all" style={{ color: syncMessage.ok ? "var(--good)" : "var(--critical)" }}>
-                  {syncMessage.text}
-                </span>
+              {meta.webhooks && webhookUrl !== null && (
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="field-webhook-url" className="text-[14px] font-medium">
+                    Webhook URL <span style={{ color: "var(--ink-dim)" }}>(optional, for instant updates)</span>
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="field-webhook-url"
+                      type="text"
+                      spellCheck={false}
+                      className="field flex-1 min-w-0 h-10 px-3 text-[13px] font-mono"
+                      value={webhookUrl}
+                      onChange={(e) => setWebhookUrl(e.target.value)}
+                      aria-describedby="webhook-help"
+                    />
+                    <CopyButton value={() => webhookUrl} size="sm" className="h-10 w-[84px]" />
+                  </div>
+                  <p id="webhook-help" className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+                    Register this with {meta.label} so updates arrive straight away instead of on the next scheduled update. If {meta.label} needs a
+                    public address, replace <span className="font-mono">{new URL(apiOrigin()).host}</span> with your tunnel host before copying.
+                  </p>
+                </div>
               )}
-            </div>
-          )}
-        </section>
-      )}
 
-      {connector && <RoutingSection label={meta.label} connector={connector} />}
+              {saveError && <ErrorLine error={saveError} />}
 
-      {(connected || added) && (
-        <section className="flex flex-col gap-3" aria-labelledby="danger-heading">
-          <h2 id="danger-heading" className="section-title">
-            {added ? "Remove" : "Disconnect"}
-          </h2>
-          <div className="ledger p-5 flex items-center justify-between gap-4 flex-wrap text-[13px]">
-            <span style={{ color: "var(--ink-dim)" }}>
-              {added
-                ? confirmDisconnect
-                  ? `Remove this ${meta.label} connection? Everything synced through it is deleted too.`
-                  : `Removes this connection and everything synced through it. Other ${meta.label} connections stay.`
-                : confirmDisconnect
-                  ? `Stop syncing ${meta.label}? Records already synced stay in memory.`
-                  : `Stops syncing. Records already synced stay in memory.`}
-            </span>
-            <div className="flex items-center gap-2">
-              {confirmDisconnect && (
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirmDisconnect(false)}>
-                  Cancel
+              <div>
+                <button type="submit" disabled={saving} className="btn btn-primary min-w-[96px]">
+                  {savedFlash ? "Saved" : saving ? "Saving…" : "Save"}
                 </button>
-              )}
-              <button
-                type="button"
-                className="btn btn-danger btn-sm"
-                disabled={disconnecting}
-                onClick={() => (confirmDisconnect ? disconnect() : setConfirmDisconnect(true))}
-              >
-                {disconnecting
-                  ? added
-                    ? "Removing…"
-                    : "Disconnecting…"
-                  : confirmDisconnect
-                    ? added
-                      ? "Remove connection"
-                      : `Disconnect ${meta.label}`
-                    : added
-                      ? "Remove"
-                      : "Disconnect"}
+              </div>
+            </section>
+          </form>
+
+          <section className="flex flex-col gap-4 pt-6 border-t" aria-labelledby="step-check">
+            <h2 id="step-check" className={stepTitle}>
+              3. Check and import your items
+            </h2>
+            <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+              After saving, choose Test connection to check that {meta.label} accepts your details.
+              {sourceKey ? " Then choose Sync now to bring in your items. You can leave this page while Eunomia imports them." : ""}
+            </p>
+            <div className="flex items-center gap-3 flex-wrap">
+              <button type="button" onClick={test} disabled={testing || !(connected || isDemo)} className="btn" title={connected || isDemo ? undefined : "Save credentials first"}>
+                <SyncMark status={testing ? "running" : testResult ? (testResult.ok ? "done" : "failed") : "idle"} size={18} />
+                {testing ? "Testing…" : "Test connection"}
               </button>
+              <span className="text-[14px] flex items-center gap-1.5 min-w-0" aria-live="polite">
+                {testResult?.ok && <StatusLabel tone="good">Connection works</StatusLabel>}
+              </span>
             </div>
-          </div>
-        </section>
-      )}
+            {!(connected || isDemo) && (
+              <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+                Save your details first; then you can check the connection.
+              </p>
+            )}
+            {testResult && !testResult.ok && (
+              <ErrorLine error={testResult.error}>
+                <span className="font-medium">{meta.label} did not accept the sign-in details.</span> {testResult.error?.message}{" "}
+                <span style={{ color: "var(--ink-dim)" }}>Check the key is current and has the access described in step 1, then save it again.</span>
+              </ErrorLine>
+            )}
+
+            {sourceKey && connected && (
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <button type="button" onClick={syncNow} disabled={syncing} className="btn btn-primary">
+                    <SyncMark status={syncing ? "running" : syncMessage ? (syncMessage.ok ? "done" : "failed") : "idle"} size={18} />
+                    {syncing ? "Syncing…" : "Sync now"}
+                  </button>
+                  {syncing && (
+                    <span className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+                      Importing from {meta.label}…
+                    </span>
+                  )}
+                </div>
+                {syncMessage && (
+                  <span role="status" className="text-[14px] break-words" style={{ color: syncMessage.ok ? "var(--good)" : "var(--critical)" }}>
+                    {syncMessage.text}
+                  </span>
+                )}
+                {syncMessage && !syncMessage.ok && (
+                  <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+                    If this mentions sign-in or permission (HTTP 401 or 403), update your key in step 2. Otherwise try Sync now again; items already
+                    imported are kept.
+                  </p>
+                )}
+              </div>
+            )}
+          </section>
+
+          {sourceKey && (
+            <section className="flex flex-col gap-3 pt-6 border-t" aria-labelledby="sync-heading">
+              <h2 id="sync-heading" className="section-title">
+                Automatic updates
+              </h2>
+              <div className="flex items-end justify-between gap-4 flex-wrap">
+                <label htmlFor="sync-interval" className="flex flex-col gap-0.5 text-[14px] font-medium">
+                  Sync interval
+                  <span className="text-[13px] font-normal" style={{ color: "var(--ink-dim)" }}>
+                    How often Eunomia checks {meta.label} for new items.
+                  </span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className="text-[13px] w-16 text-right" aria-live="polite" style={{ color: intervalState === "error" ? "var(--critical)" : "var(--good)" }}>
+                    {intervalState === "saved" ? "Saved" : intervalState === "error" ? "Not saved" : ""}
+                  </span>
+                  <Select
+                    id="sync-interval"
+                    className="h-10 text-[14px] w-48"
+                    value={String(override ?? defaultInterval)}
+                    onChange={(v) => saveInterval(Number(v))}
+                    options={SYNC_INTERVAL_PRESETS.map((p) => ({
+                      value: String(p.value),
+                      label: p.label,
+                      hint: override === undefined && p.value === defaultInterval ? "default" : undefined,
+                    }))}
+                  />
+                </div>
+              </div>
+            </section>
+          )}
+
+          {kind === "pocketai" && connector && <PocketAudioSetting connector={connector} />}
+
+          {(connected || added) && (
+            <section className="flex flex-col gap-3 pt-6 border-t" aria-labelledby="danger-heading">
+              <h2 id="danger-heading" className="section-title">
+                {added ? "Remove this connection" : `Disconnect ${meta.label}`}
+              </h2>
+              <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+                {added
+                  ? `Removes this connection and everything imported through it. Other ${meta.label} connections stay.`
+                  : `Stops importing from ${meta.label}. Items already imported stay in your memory.`}
+              </p>
+              <button type="button" className="btn btn-danger self-start" disabled={disconnecting} onClick={() => setConfirmDisconnect(true)}>
+                {added ? "Remove" : "Disconnect"}
+              </button>
+              <ConfirmDialog
+                open={confirmDisconnect}
+                danger={added}
+                title={added ? `Remove ${connector?.label ? `${meta.label} (${connector.label})` : `this ${meta.label} connection`}?` : `Disconnect ${meta.label}?`}
+                confirmLabel={added ? "Remove connection" : `Disconnect ${meta.label}`}
+                busy={disconnecting}
+                error={saveError?.message}
+                onConfirm={disconnect}
+                onCancel={() => setConfirmDisconnect(false)}
+              >
+                {added ? (
+                  <p>
+                    This connection and every item imported through it are deleted. Your AI apps will no longer find them. Other {meta.label}{" "}
+                    connections stay. This can&apos;t be undone.
+                  </p>
+                ) : (
+                  <p>
+                    Eunomia stops importing from {meta.label}. Items already imported stay in your memory, and you can connect again at any time.
+                  </p>
+                )}
+              </ConfirmDialog>
+            </section>
+          )}
+        </div>
+
+        {connector ? (
+          <RoutingSection label={meta.label} connector={connector} />
+        ) : (
+          <aside className="soft-panel p-5 flex flex-col gap-2" aria-labelledby="routing-pending">
+            <h2 id="routing-pending" className="section-title">
+              Where will my items go?
+            </h2>
+            <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+              New items are saved in your Personal memory space, where only you can read them. After saving you can choose a shared space instead.
+            </p>
+          </aside>
+        )}
+      </div>
     </div>
   );
 }

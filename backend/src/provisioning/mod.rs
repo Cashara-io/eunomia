@@ -121,8 +121,24 @@ impl Provisioner {
         let (db, pass) = self.claim_tenant(control, &org, "provisioning").await?;
         let rt = self.open().await?;
         self.build_database(&rt, &db, &pass).await?;
+        self.mark_redacted(&rt, &db).await;
         self.write_tenant(control, &org, &db, &pass, crate::migrate::LATEST_TENANT, "ready").await?;
         Ok(())
+    }
+
+    /// A new org has nothing stored before write redaction: mark its secret backfill done, so the leader
+    /// queues no backfill job for it (one per org per hour until done, which crowded the job queue when
+    /// many orgs are created at once). Best effort: without the marker the backfill just runs once.
+    async fn mark_redacted(&self, rt: &Db, db: &str) {
+        let id = surrealdb::types::RecordId::new("redact_backfill", format!("v{}", crate::redact::DETECTOR_VERSION));
+        let done = async {
+            let s = self.session(rt, db).await?;
+            root(&s, "provisioning.redact_done", "UPSERT $id SET stage = 'done', done_at = time::now(), updated_at = time::now()").bind(("id", id)).await?.check()?;
+            AppResult::Ok(())
+        };
+        if let Err(e) = done.await {
+            tracing::warn!(db, error = %e.message, "could not mark a new org's secret backfill done; it will run once");
+        }
     }
 
     /// Point `org` at an existing database (the isolation suite's shared-database mode).

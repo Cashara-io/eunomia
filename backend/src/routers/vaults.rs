@@ -27,6 +27,7 @@ pub fn router() -> Router<AppState> {
         .route("/vaults/{vault_id}/members/{email}/role", axum::routing::put(set_member_role))
         .route("/vaults/{vault_id}/transfer", post(transfer_ownership))
         .route("/vaults/{vault_id}/leave", post(leave_vault))
+        .route("/vaults/{vault_id}/integrity", get(check_integrity).post(repair_integrity))
         .route("/vaults/{vault_id}/invitations/accept", post(accept_invitation))
         .route("/vaults/{vault_id}/invitations/decline", post(decline_invitation))
 }
@@ -427,6 +428,38 @@ async fn decline_invitation(
     Ok(Json(json!({ "declined": true })))
 }
 
+#[utoipa::path(
+    operation_id = "checkVaultIntegrity",
+    get,
+    path = "/api/vaults/{vault_id}/integrity",
+    tag = "vaults",
+    summary = "Check a vault for broken or leftover data",
+    params(("vault_id" = String, Path)),
+    responses((status = 200, body = crate::integrity::IntegrityReport), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = []), ("bearer" = [])),
+)]
+async fn check_integrity(State(state): State<AppState>, user: User, Path(vault_id): Path<String>) -> AppResult<Json<crate::integrity::IntegrityReport>> {
+    let state = state.org(&user.org).await?;
+    let rid = parse_vault_id(&vault_id)?;
+    Ok(Json(crate::integrity::check(&state.db, &user.id, &rid).await?))
+}
+
+#[utoipa::path(
+    operation_id = "repairVaultIntegrity",
+    post,
+    path = "/api/vaults/{vault_id}/integrity",
+    tag = "vaults",
+    summary = "Repair what an integrity check found (owner only)",
+    params(("vault_id" = String, Path)),
+    responses((status = 200, body = crate::integrity::IntegrityReport), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = []), ("bearer" = [])),
+)]
+async fn repair_integrity(State(state): State<AppState>, user: User, Path(vault_id): Path<String>) -> AppResult<Json<crate::integrity::IntegrityReport>> {
+    let state = state.org(&user.org).await?;
+    let rid = parse_vault_id(&vault_id)?;
+    Ok(Json(crate::integrity::repair(&state.db, &user.id, &rid).await?))
+}
+
 #[derive(utoipa::OpenApi)]
 #[openapi(paths(
     list_vaults,
@@ -442,6 +475,8 @@ async fn decline_invitation(
     set_member_role,
     transfer_ownership,
     leave_vault,
+    check_integrity,
+    repair_integrity,
     accept_invitation,
     decline_invitation,
 ))]

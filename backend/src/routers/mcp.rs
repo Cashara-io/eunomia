@@ -208,7 +208,7 @@ fn gate_user(authn: Option<Extension<Authn>>) -> Option<(User, Option<Vec<String
 /// connect). Any request that carries a cookie, or no bearer, must come from no
 /// browser at all, the same origin (directly or via the frontend's proxy, which
 /// forwards the original host) or an allowed CORS origin.
-fn origin_allowed(headers: &HeaderMap, cors_allowed_origins: &str) -> bool {
+pub(crate) fn origin_allowed(headers: &HeaderMap, cors_allowed_origins: &str) -> bool {
     let Some(origin) = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok()) else {
         return true;
     };
@@ -320,26 +320,39 @@ fn initialize_result(params: &Value, skill: &str) -> Value {
 /// either way, but a client should not be offered what it cannot use. No credential lists none.
 fn tool_list() -> Vec<Value> {
     let caller = crate::authz::current();
-    let mut names: Vec<&&str> = registry::all_tools().keys().collect();
-    names.sort();
-    names
-        .into_iter()
-        .filter(|name| caller.as_ref().is_some_and(|c| c.allows(crate::scopes::for_tool(name, registry::is_read_only(name)))))
-        .map(|name| {
-            let spec = &registry::all_tools()[*name];
-            let schema = if spec.schema.is_object() { spec.schema.clone() } else { json!({ "type": "object", "properties": {} }) };
-            json!({
-                "name": name,
-                "description": registry::description(name),
-                "inputSchema": schema,
-                "annotations": {
-                    "readOnlyHint": spec.read_only,
-                    "destructiveHint": registry::is_destructive(name),
-                    "openWorldHint": false,
-                },
-            })
-        })
+    every_tool()
+        .iter()
+        .filter(|(name, _)| caller.as_ref().is_some_and(|c| c.allows(crate::scopes::for_tool(name, registry::is_read_only(name)))))
+        .map(|(_, tool)| tool.clone())
         .collect()
+}
+
+/// Every tool's `tools/list` entry, sorted by name, built once: the registry is fixed at startup, and
+/// rebuilding every schema on each `tools/list` (sent on every agent connect) was wasted work.
+fn every_tool() -> &'static [(&'static str, Value)] {
+    static TOOLS: std::sync::OnceLock<Vec<(&'static str, Value)>> = std::sync::OnceLock::new();
+    TOOLS.get_or_init(|| {
+        let mut names: Vec<&'static str> = registry::all_tools().keys().copied().collect();
+        names.sort_unstable();
+        names
+            .into_iter()
+            .map(|name| {
+                let spec = &registry::all_tools()[name];
+                let schema = if spec.schema.is_object() { spec.schema.clone() } else { json!({ "type": "object", "properties": {} }) };
+                let entry = json!({
+                    "name": name,
+                    "description": registry::description(name),
+                    "inputSchema": schema,
+                    "annotations": {
+                        "readOnlyHint": spec.read_only,
+                        "destructiveHint": registry::is_destructive(name),
+                        "openWorldHint": false,
+                    },
+                });
+                (name, entry)
+            })
+            .collect()
+    })
 }
 
 async fn call_tool(state: &AppState, user: &User, id: Value, params: &Value) -> Value {
@@ -363,7 +376,9 @@ async fn call_tool(state: &AppState, user: &User, id: Value, params: &Value) -> 
         }
         Err(e) => (e.to_tool_value(), true),
     };
-    let text = serde_json::to_string_pretty(&value).unwrap_or_else(|_| value.to_string());
+    // compact, not pretty: the text goes into the model's context, and indentation was a quarter to
+    // a third of every result's tokens (and bytes on the wire) with nothing for the model to read
+    let text = value.to_string();
     result_response(id, json!({ "content": [{ "type": "text", "text": text }], "isError": is_error }))
 }
 
@@ -495,6 +510,7 @@ mod tests {
             public_url: "http://localhost:8001".into(),
             documents_backend: String::new(),
             documents_max_bytes: 1 << 20,
+            connectivity_probe: "off".into(),
             auth: Default::default(),
         };
         AppState::build(&settings, surrealdb::opt::Config::new()).await.unwrap()

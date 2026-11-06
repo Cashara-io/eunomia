@@ -2,7 +2,9 @@
 
 // Setup guides for the AI clients people connect most: one tab each, a token
 // minted for that client, and the exact command or config with this instance's
-// URL and the token filled in. Used by onboarding and the dashboard.
+// URL and the token filled in. Used by onboarding and, as the advanced
+// "connect with an API token" option, by the Home connection guides (which
+// lead with sign-in instead).
 
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import { useRef, useState, useSyncExternalStore } from "react";
@@ -53,38 +55,42 @@ const otherConfig = (url: string, token: string) =>
 
 function Code({ value, label }: { value: string; label: string }) {
   return (
-    <div className="field relative px-2.5 py-2 pr-9">
-      <pre aria-label={label} className="text-[12px] font-mono whitespace-pre-wrap [overflow-wrap:anywhere]" style={{ color: "var(--ink)" }}>
+    <div className="flex flex-col gap-2 items-start">
+      <pre
+        aria-label={label}
+        className="w-full text-[13px] font-mono whitespace-pre-wrap [overflow-wrap:anywhere] px-4 py-3 rounded-[2px]"
+        style={{ background: "var(--bauhaus-app-ink)", color: "var(--bauhaus-app-cream)" }}
+      >
         {value}
       </pre>
-      <CopyButton value={value} label={`Copy ${label.toLowerCase()}`} className="absolute top-1 right-1" />
+      <CopyButton value={value} label={`Copy ${label.toLowerCase()}`} size="sm" />
     </div>
   );
 }
 
 function Step({ n, title, children }: { n: number; title: React.ReactNode; children?: React.ReactNode }) {
   return (
-    <li className="grid grid-cols-[18px_minmax(0,1fr)] gap-x-2 gap-y-1.5">
-      <span className="font-mono text-[12px] leading-[20px]" style={{ color: "var(--ink-faint)" }} aria-hidden>
-        {n}
+    <li className="grid grid-cols-[22px_minmax(0,1fr)] gap-x-2 gap-y-2">
+      <span className="text-[15px] font-semibold leading-[22px]" aria-hidden>
+        {n}.
       </span>
-      <div className="text-[13px] leading-[20px]">{title}</div>
+      <div className="text-[15px] font-semibold leading-[22px]">{title}</div>
       {children && <div className="col-start-2 flex flex-col gap-1.5 min-w-0">{children}</div>}
     </li>
   );
 }
 
-const Mono = ({ children }: { children: React.ReactNode }) => <code className="font-mono text-[12px]">{children}</code>;
+const Mono = ({ children }: { children: React.ReactNode }) => <code className="font-mono text-[0.92em]">{children}</code>;
 const Hint = ({ children }: { children: React.ReactNode }) => (
-  <p className="text-[12px] leading-relaxed" style={{ color: "var(--ink-dim)" }}>
+  <p className="text-[14px] leading-relaxed" style={{ color: "var(--ink-dim)" }}>
     {children}
   </p>
 );
 
 /** `onToken` fires after a token is minted, so a wizard can turn Skip into Continue. */
-export default function ConnectAgents({ onToken }: { onToken?: () => void }) {
+export default function ConnectAgents({ onToken, initialClient = "claude" }: { onToken?: () => void; initialClient?: ClientId }) {
   const mcpUrl = useMcpUrl();
-  const [client, setClient] = useState<ClientId>("claude");
+  const [client, setClient] = useState<ClientId>(initialClient);
   // One token per client, shown once; kept while the guide stays mounted.
   const [tokens, setTokens] = useState<Partial<Record<ClientId, string>>>({});
   const [busy, setBusy] = useState(false);
@@ -130,8 +136,8 @@ export default function ConnectAgents({ onToken }: { onToken?: () => void }) {
   const mintStep = (
     <Step n={1} title={token ? "Your token, shown once" : "Generate a token for " + current.label}>
       {token ? (
-        <div className="field flex items-center gap-2 h-8 pl-2.5 pr-1">
-          <code className="flex-1 min-w-0 truncate text-[12px] font-mono" style={{ color: "var(--ink)" }}>
+        <div className="field flex items-center gap-2 min-h-10 pl-3 pr-1">
+          <code className="flex-1 min-w-0 truncate text-[13px] font-mono" style={{ color: "var(--ink)" }}>
             <DecryptReveal key={token} text={token} />
           </code>
           <CopyButton value={token} label="Copy token" className="shrink-0" />
@@ -139,7 +145,7 @@ export default function ConnectAgents({ onToken }: { onToken?: () => void }) {
       ) : (
         <button onClick={mint} disabled={busy} aria-busy={busy} className="btn btn-primary self-start">
           <KeyRound size={14} strokeWidth={1.75} aria-hidden />
-          {busy ? "Generating…" : "Generate a token"}
+          {busy ? "Creating…" : "Generate a token"}
         </button>
       )}
       <Hint>
@@ -153,8 +159,8 @@ export default function ConnectAgents({ onToken }: { onToken?: () => void }) {
   );
 
   return (
-    <div className="flex flex-col gap-4">
-      <div role="tablist" aria-label="AI client" className="flex flex-wrap gap-1.5">
+    <div className="flex flex-col gap-5">
+      <div role="tablist" aria-label="AI client" className="flex flex-wrap gap-2">
         {CLIENTS.map((c, i) => (
           <button
             key={c.id}
@@ -168,7 +174,7 @@ export default function ConnectAgents({ onToken }: { onToken?: () => void }) {
             tabIndex={client === c.id ? 0 : -1}
             onClick={() => choose(c.id)}
             onKeyDown={(e) => onKey(e, i)}
-            className="pill"
+            className="pill min-h-10 px-4"
           >
             {c.label}
           </button>
@@ -244,7 +250,7 @@ export default function ConnectAgents({ onToken }: { onToken?: () => void }) {
           Or connect every agent on this machine at once (Claude Code, Codex, Cursor, Gemini CLI, …) from the install
           folder.{" "}
           <Link href="/docs" className="underline" style={{ color: "var(--accent-text)" }}>
-            Read the docs
+            Read Help
           </Link>
         </Hint>
         <Code label="Script" value="./scripts/connect-agents.sh --email you@… --password …" />
@@ -255,8 +261,8 @@ export default function ConnectAgents({ onToken }: { onToken?: () => void }) {
 
 function Pending() {
   return (
-    <div className="field px-2.5 py-2 text-[12px]" style={{ color: "var(--ink-faint)" }}>
-      Generate the token first and it appears here, filled in.
+    <div className="soft-panel px-4 py-3 text-[14px]" style={{ color: "var(--ink-dim)" }}>
+      Generate the token first and the command appears here, filled in.
     </div>
   );
 }
@@ -265,7 +271,7 @@ function ChatGptGuide({ mcpUrl, reachable }: { mcpUrl: string; reachable: boolea
   return (
     <>
       {!reachable && (
-        <div className="rounded-[7px] px-3 py-2 text-[12.5px] leading-relaxed" style={{ background: "var(--surface-raised)", color: "var(--ink-dim)" }}>
+        <div className="soft-panel px-4 py-3 text-[14px] leading-relaxed">
           ChatGPT calls Eunomia from OpenAI&apos;s servers, so it needs a public <Mono>https://</Mono> address, not{" "}
           <Mono>{mcpUrl.replace(/\/mcp$/, "")}</Mono>. Set one up under{" "}
           <Link href="/settings?tab=https" className="underline" style={{ color: "var(--accent-text)" }}>
@@ -276,8 +282,8 @@ function ChatGptGuide({ mcpUrl, reachable }: { mcpUrl: string; reachable: boolea
       )}
       <ol className="flex flex-col gap-4">
         <Step n={1} title="Copy the server URL">
-          <div className="field flex items-center gap-2 h-8 pl-2.5 pr-1">
-            <code className="flex-1 min-w-0 truncate text-[12px] font-mono" style={{ color: "var(--ink)" }}>
+          <div className="field flex items-center gap-2 min-h-10 pl-3 pr-1">
+            <code className="flex-1 min-w-0 truncate text-[13px] font-mono" style={{ color: "var(--ink)" }}>
               {mcpUrl}
             </code>
             <CopyButton value={mcpUrl} label="Copy URL" className="shrink-0" />

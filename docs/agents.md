@@ -200,8 +200,28 @@ No. The connected agent is the model.
 | `document_upload` / `document_list` / `document_get` | Upload a document (text, Markdown, JSON, CSV, text PDF) and read its extracted text; its passages are found by `search`, `recall` and `get`, each hit naming the document ([documents](documents.md)) |
 | `document_download` / `document_export` / `document_delete` | The HTTP route for the original bytes, the passages-and-vectors manifest, deletion |
 | `skill_save` / `skill_find` / `skill_get` / `skill_delete` | Keep a skill an agent learned, find it later by meaning, read its body, delete it ([agent skills](#agent-skills)) |
+| `vault_share_code` / `vault_join_shared` / `vault_peers` / `vault_peer_sync` | Share a vault with another Eunomia install by a one-time code, join one, see each link's sync status, sync now ([peer vaults](peer-vaults.md)) |
+| `vault_check` / `vault_repair` | Check a vault for broken or leftover data (memories whose entity is gone, relations with a missing end, misfiled memories, a change-log counter behind); repair removes the dangling rows and fixes the counter (owner only). Also `GET`/`POST /api/vaults/{vault}/integrity` |
+| `changes_since` | A vault's numbered change log after a cursor: what was created, updated, merged or deleted, by whom, with no content ([change log](#change-log)) |
 
 Destructive tools are flagged `destructiveHint` so clients can ask first.
+
+Secrets are never stored: `memory_write`, `memory_write_batch`, `memory_update`, `skill_save` and the REST
+memory routes replace API keys, tokens, private keys, JWTs and passwords in URLs with a marker such as
+`[redacted: github token]`, still save the rest, and return `redacted: [{"kind", "count"}]` so the agent
+knows what was dropped.
+
+Secrets saved before redaction existed are redacted once after the upgrade, by a background job in each
+org (`redact_backfill`). It rewrites memories (facts, observations and superseded facts), skill
+descriptions and bodies, and audit-log argument summaries, and drops the vectors made from the old text,
+so the embed job makes new ones. It runs once per org, resumes where it stopped after a crash, and runs
+again when the detectors gain new shapes. When it finishes, the server logs `secret backfill finished`
+with how many rows of each kind changed, and the instance audit log gets a `redact.backfill` event with
+the same counts. It never logs the text. A rewrite leaves a memory's `version` and `updated_at` as they
+were, so a client cache or a change feed shows the old text until it fetches the row again. Uploaded
+documents, synced connector records, chat messages, entity names, aliases and summaries, relation labels,
+sync error messages and extension webhook deliveries are not redacted on write, so the backfill leaves
+them alone too.
 
 ### Agent skills
 
@@ -230,6 +250,67 @@ in a vault like any other memory.
 
 Known gap: `vault_clone` and `vault_merge` do not copy skills yet, and there is no page for them in the
 web app.
+
+### Change log
+
+Every write that changes a vault (a memory or entity created, updated, merged or deleted, a relation
+created, a skill saved or deleted, a document uploaded or deleted, what a vault clone or merge copies; the
+full list and what is not logged are in [projects](projects.md#watching-changes)) adds one numbered row
+to that vault's change log. `changes_since`
+reads it: `after` (the `next` of your previous call, 0 to start), `limit` (at most 1000, default 100) and
+`vault_id` (your personal vault by default). Each row has `seq`, `op`, `kind`, the item's `id`, the `actor`
+(a user, token or OAuth client id, or `system`) and `at`. Rows never hold content: fetch the item to see it.
+The same log is `GET /api/vaults/{vault}/changes` over REST and a WebSocket for live updates
+([projects](projects.md#watching-changes)).
+
+### Changes show up in the web app by themselves
+
+What an agent does over MCP shows in every open Eunomia tab within a few seconds, without a reload: a vault
+created, renamed, cloned, merged or deleted, a member invited, removed or promoted, ownership handed over,
+an invitation accepted or declined, and any memory, entity, relation or document written, edited, merged
+or deleted. The same goes for changes made in chat, in another tab, or by another member of a shared vault.
+
+Each tab opens one WebSocket, `GET /api/events/ws` (session cookie from an allowed origin, or a Bearer
+token with read access). It sends JSON messages with a `type`: `hello` (each readable vault's last
+change-log seq, on every connect), `change` (a [change-log](#change-log) row of any vault you can read),
+`vault` (something happened to a vault itself: `op` is `created`, `renamed`, `deleted`, `cloned`,
+`merged`, `member_invited`, `member_removed`, `role_changed`, `ownership_transferred`,
+`invitation_accepted`, `invitation_declined` or `left`), `seq` (a vault's log moved on: refetch it),
+`vaults` (the set of vaults you can read changed), `resync` (refetch everything) and `heartbeat` (every
+10 seconds). Messages carry ids, never content. After a reconnect, `hello` tells the page which vaults
+changed while it was away, so it refetches only those, plus the vault list.
+
+The web app refetches only the views a message affects. While the socket is down, the vault list, the
+graph, the memory map and the documents list check every 12 seconds instead (never in a hidden tab), and
+the pages show **Up to date** or **Checking every 12 s** next to a **Refresh** button.
+
+Limits: vault events are sent from the server process that made the change. With several backend
+replicas, a page connected to another replica learns of a change to what a vault holds within about 10
+seconds (its periodic check of the change logs), and of a vault-level change within about 30 seconds (its
+membership recheck).
+
+### What you can do in the app and what agents can do
+
+Every tool that changes a vault has a matching action in the web app, except where noted.
+
+| Tool | In the web app |
+|---|---|
+| `vault_create` / `vault_rename` / `vault_delete` / `vault_clone` / `vault_merge` | Memory spaces page |
+| `vault_invite` / `vault_remove_member` / `vault_set_role` / `vault_leave` | Memory spaces page, a space's panel |
+| `vault_transfer_ownership` | A space's panel: **Hand over this space** (owners), or the hand-over icon on a member |
+| `vault_invitations` / `vault_accept_invitation` / `vault_decline_invitation` | Memory spaces page: **Join**, or the decline button next to it |
+| `memory_write` / `memory_update` / `memory_delete` | People & topics: a person or topic's panel (**Add memory**, the pencil to edit, the cross to delete) |
+| `entity_update` / `entity_merge` / `entity_delete` | People & topics: a person or topic's panel |
+| `consolidate_observations` | People & topics: **Tidy up** in a person or topic's panel (one at a time; needs an AI model) |
+| `document_*` | Documents page |
+| `memory_write_batch` | None: bulk import is for agents and scripts. Upload a document instead |
+| `code_entity_upsert` / `code_relate` | Code map shows them; only coding agents write them |
+| `skill_*` | None yet (see [agent skills](#agent-skills)) |
+
+The other direction has one deliberate gap: the built-in **chat** may only read and call `memory_write`
+and `memory_update`. It cannot delete, merge, share, invite or change vaults, even when you ask it to,
+because a chat reply should never be able to destroy or expose data (`CHAT_WRITE_TOOLS` in
+`backend/src/chat/service.rs`). Do those from the pages above, or from an agent you connected.
 
 ### Importing a lot at once
 

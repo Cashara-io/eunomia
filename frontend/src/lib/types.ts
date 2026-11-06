@@ -31,7 +31,10 @@ export type AppSettings = {
   embedding_model: string;
   /** "" = automatic (OPENAI_CHAT_MODEL, else gpt-4o-mini on OpenAI, else the endpoint's first chat model). */
   chat_model: string;
+  owner_name?: string;
   sync_intervals: Record<string, number>;
+  /** Skip scheduled syncs while there is no internet connection (default true). */
+  sync_check_connectivity: boolean;
   theme: { mode?: "light" | "dark" | "system"; accent?: string };
   openai_api_key_set: boolean;
   /** A usable model endpoint resolves for this user, so chat can answer. */
@@ -80,7 +83,8 @@ export type ConnectorKind =
   | "discord"
   | "spotify"
   | "todoist"
-  | "stripe";
+  | "stripe"
+  | "ed";
 
 /** One routing rule: a record whose `field` matches `value` goes to `vault`. */
 export type RoutingRule = { field: string; value: string; vault: string };
@@ -177,7 +181,15 @@ export type ToolRecord = ToolHit & {
   body_text: string;
   payload: Record<string, unknown>;
   /** A Pocket recording or transcript chunk: the whole stored recording. */
-  recording?: { summary: string; action_items: string[]; transcript: string };
+  recording?: {
+    summary: string;
+    action_items: string[];
+    transcript: string;
+    recording_id?: string;
+    /** Set when Eunomia kept the recording's audio (connector option `store_audio`, #117). */
+    audio_media_type?: string | null;
+    audio_bytes?: number | null;
+  };
 };
 
 export type BuiltInKind = "person" | "organisation" | "location" | "repository" | "file" | "symbol";

@@ -25,6 +25,8 @@ import {
   useUpdateEntity,
 } from "@/lib/queries/entities";
 import { useVaults } from "@/lib/queries/vaults";
+import EditableMemoryText from "@/components/live/EditableMemoryText";
+import TidyObservationsButton from "@/components/live/TidyObservationsButton";
 import { defaultKindHex, isCustomKind, kindColor, setKindColor, shuffleKindColor, useKindColor } from "@/lib/kindColors";
 
 const KIND_LABEL: Record<BuiltInKind, string> = {
@@ -62,7 +64,7 @@ function Author({ email, me }: { email: string | null; me: string | null }) {
   return <AuthorTag name={email} title={email === me ? `${email} (you)` : email} />;
 }
 
-const ICON = { size: 14, strokeWidth: 1.75 } as const;
+const ICON = { size: 18, strokeWidth: 1.75 } as const;
 
 const SPARSE = 3; // fewer nodes than this shows the `guide`
 
@@ -91,7 +93,7 @@ export default function EntityGraph({
   const [vaultId, setVaultId] = useState<string | undefined>(undefined);
   const graphQuery = useEntityGraph({ kinds, vaultId });
   const graph: EntityGraphData | null = graphQuery.data ?? null;
-  const error = graphQuery.error && !graph ? failure(graphQuery.error, "Could not load the entity graph.") : null;
+  const error = graphQuery.error && !graph ? failure(graphQuery.error, "Could not load your people and topics.") : null;
   const myEmail = useMe().data?.email ?? null;
   const myVaults = useVaults().data ?? [];
   const createEntityMutation = useCreateEntityMutation();
@@ -196,7 +198,7 @@ export default function EntityGraph({
       setCreateForm({ kind: shownKinds[0], name: "", aliases: "" });
       await selectNode(created.id);
     } catch (err) {
-      setCreateError(failure(err, "Could not create the entity."));
+      setCreateError(failure(err, "Could not add that person or topic. Check the name and try again."));
     } finally {
       setCreating(false);
     }
@@ -237,7 +239,7 @@ export default function EntityGraph({
       await deleteEntityMutation.mutateAsync(selected.id);
       setSelected(null);
     } catch (err) {
-      setActionError(failure(err, "Could not delete this entity."));
+      setActionError(failure(err, "Could not delete this person or topic. Try again."));
       setBusy(false);
     }
   }
@@ -296,15 +298,16 @@ export default function EntityGraph({
   }
 
   // Everything floats over one full-bleed canvas: header and toolbar top left
-  // at the same page inset as every other route (main's px-4 py-6, md px-10
-  // py-8), inspector top right, zoom bottom right (inside GraphCanvas).
+  // at the same page inset as every other route (main's px-4 py-6, sm px-8,
+  // lg px-12 py-38), inspector top right, zoom bottom right (inside GraphCanvas).
   const frame = (toolbar: ReactNode, content: ReactNode, inspector?: ReactNode, aside?: ReactNode) => (
     <div className="absolute inset-0 overflow-hidden">
       <div className="absolute inset-0">{content}</div>
       <div
         ref={chromeRef}
         // the inspector column is always kept clear, so opening it never reflows the toolbar or moves the camera
-        className="absolute left-0 top-0 right-0 md:right-auto px-4 pt-6 md:px-10 md:pt-8 flex flex-col gap-3 items-start pointer-events-none max-w-full md:max-w-[calc(100%-25rem)] [&>*]:pointer-events-auto"
+        className="absolute left-0 top-0 right-0 md:right-auto px-4 pt-6 sm:px-8 lg:px-12 lg:pt-[38px] pb-3 flex flex-col gap-3 items-start pointer-events-none w-full md:w-[calc(100%-25rem)] [&>*]:pointer-events-auto"
+        style={{ background: "linear-gradient(var(--canvas) 85%, transparent)" }}
       >
         {header}
         {toolbar}
@@ -320,7 +323,7 @@ export default function EntityGraph({
       <div className="h-full flex items-center justify-center p-4">
         <div className="max-w-sm flex flex-col gap-2">
           <ErrorLine error={error} />
-          <button type="button" className="btn btn-sm self-start" onClick={() => window.location.reload()}>
+          <button type="button" className="btn btn-primary btn-sm self-start" onClick={() => window.location.reload()}>
             Try again
           </button>
         </div>
@@ -330,7 +333,7 @@ export default function EntityGraph({
 
   if (!graph) {
     return frame(
-      <div className="panel p-1.5 flex gap-1.5" aria-busy="true" aria-label="Loading entity graph">
+      <div className="flex gap-2" aria-busy="true" aria-label="Loading people and topics">
         {[64, 92, 80, 112].map((w) => (
           <span key={w} className="skeleton h-6" style={{ width: w }} />
         ))}
@@ -369,44 +372,46 @@ export default function EntityGraph({
       <form
         onSubmit={createEntity}
         onClick={(e) => e.stopPropagation()}
-        className="panel pop-in p-5 w-full max-w-sm flex flex-col gap-3.5"
-        style={{ boxShadow: "var(--shadow-pop)" }}
+        className="bauhaus-dialog pop-in p-6 w-full max-w-md flex flex-col gap-4"
         role="dialog"
         aria-modal="true"
         aria-labelledby="new-entity-title"
       >
         <div className="flex items-center justify-between">
-          <h2 id="new-entity-title" className="section-title">
-            New entity
+          <h2 id="new-entity-title" className="text-[20px] font-semibold tracking-[-0.01em]">
+            Add a person or topic
           </h2>
-          <button type="button" className="btn btn-ghost btn-sm btn-icon w-[26px]" onClick={() => setShowCreate(false)} aria-label="Close">
+          <button type="button" className="btn btn-ghost btn-icon" onClick={() => setShowCreate(false)} aria-label="Close">
             <X {...ICON} />
           </button>
         </div>
-        <div className="label flex flex-col gap-1.5">
+        <p className="text-[14px] -mt-1" style={{ color: "var(--ink-dim)" }}>
+          Your AI apps also add people and topics on their own as they learn. Add one here to start saving memories about it.
+        </p>
+        <div className="text-[14px] font-medium flex flex-col gap-1.5">
           Kind
           <Select
             aria-label="Kind"
-            className="h-8 text-[13px] w-full"
+            className="h-10 text-[14px] w-full"
             value={createForm.kind}
             onChange={(v) => setCreateForm((f) => ({ ...f, kind: v as EntityKind }))}
             options={filterKinds.map((k) => ({ value: k, label: kindLabel(k) }))}
           />
         </div>
-        <label className="label flex flex-col gap-1.5">
+        <label className="text-[14px] font-medium flex flex-col gap-1.5">
           Name
           <input
             autoFocus
-            className="field h-8 px-2.5 text-[13px]"
+            className="field h-10 px-3 text-[14px] font-normal"
             value={createForm.name}
             onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))}
             placeholder="e.g. Jordan Blake"
           />
         </label>
-        <label className="label flex flex-col gap-1.5">
-          Aliases (optional, comma-separated)
+        <label className="text-[14px] font-medium flex flex-col gap-1.5">
+          Other names (optional, separate with commas)
           <input
-            className="field h-8 px-2.5 text-[13px]"
+            className="field h-10 px-3 text-[14px] font-normal"
             value={createForm.aliases}
             onChange={(e) => setCreateForm((f) => ({ ...f, aliases: e.target.value }))}
             placeholder="e.g. JB, Jordy"
@@ -414,11 +419,11 @@ export default function EntityGraph({
         </label>
         {createError && <ErrorLine error={createError} />}
         <div className="flex justify-end gap-2 pt-1">
-          <button type="button" className="btn btn-ghost" onClick={() => setShowCreate(false)}>
+          <button type="button" className="btn" onClick={() => setShowCreate(false)}>
             Cancel
           </button>
           <button type="submit" disabled={creating || !createForm.name.trim()} className="btn btn-primary">
-            {creating ? "Creating…" : "Create"}
+            {creating ? "Adding…" : "Add"}
           </button>
         </div>
       </form>
@@ -427,22 +432,21 @@ export default function EntityGraph({
 
   const vaultSwitcher = myVaults.length > 1 && (
     <Select
-      className="h-6 text-[12px] w-36"
+      className="h-10 text-[14px] w-44"
       value={vaultId ?? ""}
       onChange={(v) => {
         setVaultId(v || undefined);
         setSelected(null);
       }}
-      aria-label="Vault"
+      aria-label="Memory space"
       options={myVaults.map((v) => ({ value: v.kind === "personal" ? "" : v.id, label: v.kind === "personal" ? "Personal" : v.name }))}
     />
   );
 
   const toolbar = (
-    <div className="panel p-1.5 flex flex-wrap items-center gap-1.5 max-w-full">
+    <div className="flex flex-wrap items-center gap-2 max-w-full">
       {vaultSwitcher}
-      {vaultSwitcher && <span className="w-px h-4 shrink-0" style={{ background: "var(--border)" }} aria-hidden />}
-      <div className="flex flex-wrap gap-1 items-center" role="group" aria-label="Entity kinds">
+      <div className="flex flex-wrap gap-2 items-center" role="group" aria-label="Show kinds">
         {filterKinds.map((kind) => {
           const active = visibleKinds.has(kind);
           return (
@@ -453,14 +457,14 @@ export default function EntityGraph({
                 aria-hidden
               />
               {kindLabel(kind)}
-              <span className="font-mono" style={{ color: "var(--ink-faint)" }}>
+              <span className="font-mono" style={{ color: "var(--ink-dim)" }}>
                 {counts.get(kind) ?? 0}
               </span>
+              <span className="sr-only">{active ? "(shown)" : "(hidden)"}</span>
             </button>
           );
         })}
       </div>
-      <span className="w-px h-4 shrink-0" style={{ background: "var(--border)" }} aria-hidden />
       {graph.nodes.length > 0 && (
         <form
           className="shrink-0"
@@ -483,9 +487,9 @@ export default function EntityGraph({
           <input
             name="find"
             list="entity-names"
-            className="field h-6 w-36 px-2 text-[12px]"
-            placeholder="Find entity…"
-            aria-label="Find entity"
+            className="field h-10 w-52 px-3 text-[14px]"
+            placeholder="Find a person or topic…"
+            aria-label="Find a person or topic"
             autoComplete="off"
           />
           <datalist id="entity-names">
@@ -495,9 +499,9 @@ export default function EntityGraph({
           </datalist>
         </form>
       )}
-      <button type="button" className="btn btn-sm shrink-0" onClick={() => setShowCreate(true)}>
-        <Plus size={13} strokeWidth={1.75} />
-        New entity
+      <button type="button" className="btn btn-primary shrink-0" onClick={() => setShowCreate(true)}>
+        <Plus size={18} strokeWidth={1.75} aria-hidden />
+        Add person or topic
       </button>
     </div>
   );
@@ -509,18 +513,19 @@ export default function EntityGraph({
           toolbar,
           <div className="h-full flex items-center justify-center p-6">
             {guide ? (
-              <div className="flex flex-col items-center gap-3 text-center max-w-xs text-[13px]" style={{ color: "var(--ink-dim)" }}>
-                <p>No entities yet.</p>
+              <div className="soft-panel flex flex-col items-center gap-3 text-center max-w-sm text-[14px] px-6 py-5" style={{ color: "var(--ink-dim)" }}>
+                <p className="font-medium" style={{ color: "var(--ink)" }}>Nothing mapped yet.</p>
                 {guide}
               </div>
             ) : (
-              <div className="flex flex-col items-center gap-3 text-center max-w-xs">
-                <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
-                  No entities yet. They appear as sources sync and agents write memory, or add one yourself.
+              <div className="soft-panel flex flex-col items-center gap-3 text-center max-w-sm px-6 py-5">
+                <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+                  No people or topics yet. They appear as your connected sources sync and your AI apps save memories, or you can add one
+                  yourself.
                 </p>
-                <button type="button" className="btn btn-primary btn-sm" onClick={() => setShowCreate(true)}>
-                  <Plus size={13} strokeWidth={1.75} />
-                  New entity
+                <button type="button" className="btn btn-primary" onClick={() => setShowCreate(true)}>
+                  <Plus size={18} strokeWidth={1.75} aria-hidden />
+                  Add person or topic
                 </button>
               </div>
             )}
@@ -538,15 +543,18 @@ export default function EntityGraph({
   const inspector = selected && (
     <aside
       aria-label={`${selected.name} details`}
-      className="panel frame-selected pop-in absolute z-20 flex flex-col inset-x-2 bottom-2 max-h-[62%] md:inset-x-auto md:bottom-auto md:right-6 md:top-6 md:w-[22rem] md:max-h-[calc(100%-5rem)]"
-      style={{ transformOrigin: "top right", boxShadow: "var(--shadow-pop)" }}
+      className="panel pop-in absolute z-20 flex flex-col inset-x-2 bottom-2 max-h-[62%] md:inset-x-auto md:bottom-auto md:right-6 md:top-6 md:w-[22rem] md:max-h-[calc(100%-5rem)]"
+      style={{ transformOrigin: "top right", borderTop: "3px solid var(--bauhaus-app-blue)" }}
     >
-      <div className="flex items-start justify-between gap-2 p-4 pb-3">
+      <div className="flex items-start justify-between gap-2 p-5 pb-3">
         <div className="flex items-center gap-3 min-w-0">
           {selected.kind === "person" && <Blobatar name={selected.name || selected.id} animate="hover" size={36} background="circle" />}
           <div className="min-w-0">
-            <h2 className="text-[16px] font-semibold tracking-[-0.015em] truncate">{selected.name}</h2>
-            <span className="text-[12px] inline-flex items-center gap-1.5 mt-0.5" style={{ color: "var(--ink-dim)" }}>
+            <span className="caps block" style={{ color: "var(--accent-text)" }}>
+              Selected {kindLabel(selected.kind).toLowerCase()}
+            </span>
+            <h2 className="text-[20px] font-semibold tracking-[-0.015em] truncate">{selected.name}</h2>
+            <span className="text-[13px] inline-flex items-center gap-1.5 mt-0.5" style={{ color: "var(--ink-dim)" }}>
               <span className="w-2 h-2 rounded-full" style={{ background: kindColor(selected.kind) }} aria-hidden />
               {kindLabel(selected.kind)}
               {isCustomKind(selected.kind) && (
@@ -569,17 +577,17 @@ export default function EntityGraph({
         <TooltipGroup>
           <div className="flex items-center gap-0.5 shrink-0 -mr-1">
             <Tooltip label="Edit">
-              <button className="btn btn-ghost btn-sm btn-icon w-[26px]" onClick={startEditing} aria-label="Edit">
+              <button className="btn btn-ghost btn-sm btn-icon" onClick={startEditing} aria-label="Edit">
                 <Pencil {...ICON} />
               </button>
             </Tooltip>
-            <Tooltip label="Delete. Also removes its memory and relations">
-              <ConfirmButton label="Delete" confirmLabel="Delete" onConfirm={deleteSelected} disabled={busy} className="btn btn-ghost btn-sm btn-icon w-[26px]">
+            <Tooltip label="Delete. Also removes its memories and connections">
+              <ConfirmButton label="Delete" confirmLabel="Delete" onConfirm={deleteSelected} disabled={busy} className="btn btn-ghost btn-sm btn-icon">
                 <Trash2 {...ICON} />
               </ConfirmButton>
             </Tooltip>
             <Tooltip label="Close" shortcut="Esc">
-              <button className="btn btn-ghost btn-sm btn-icon w-[26px]" onClick={() => setSelected(null)} aria-label="Close">
+              <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setSelected(null)} aria-label="Close">
                 <X {...ICON} />
               </button>
             </Tooltip>
@@ -587,7 +595,7 @@ export default function EntityGraph({
         </TooltipGroup>
       </div>
 
-      <div className="overflow-y-auto px-4 pb-4 flex flex-col gap-6">
+      <div className="overflow-y-auto px-5 pb-5 flex flex-col gap-6">
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-[13px] items-center">
           <dt className="label">Added by</dt>
           <dd className="min-w-0">
@@ -599,7 +607,7 @@ export default function EntityGraph({
           </dd>
           {selected.aliases.length > 0 && (
             <>
-              <dt className="label">Aliases</dt>
+              <dt className="label">Other names</dt>
               <dd className="truncate" style={{ color: "var(--ink-dim)" }}>
                 {selected.aliases.join(", ")}
               </dd>
@@ -611,18 +619,18 @@ export default function EntityGraph({
 
         {editing ? (
           <form onSubmit={saveEdit} className="flex flex-col gap-2.5">
-            <label className="label flex flex-col gap-1">
+            <label className="text-[13px] font-medium flex flex-col gap-1">
               Name
-              <input className="field h-8 px-2.5 text-[13px]" value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} />
+              <input className="field h-10 px-3 text-[14px] font-normal" value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} />
             </label>
-            <label className="label flex flex-col gap-1">
-              Aliases (comma-separated)
-              <input className="field h-8 px-2.5 text-[13px]" value={editForm.aliases} onChange={(e) => setEditForm((f) => ({ ...f, aliases: e.target.value }))} />
+            <label className="text-[13px] font-medium flex flex-col gap-1">
+              Other names (separate with commas)
+              <input className="field h-10 px-3 text-[14px] font-normal" value={editForm.aliases} onChange={(e) => setEditForm((f) => ({ ...f, aliases: e.target.value }))} />
             </label>
-            <label className="label flex flex-col gap-1">
+            <label className="text-[13px] font-medium flex flex-col gap-1">
               Summary
               <textarea
-                className="field px-2.5 py-1.5 text-[13px]"
+                className="field px-3 py-2 text-[14px] font-normal"
                 rows={3}
                 value={editForm.summary}
                 onChange={(e) => setEditForm((f) => ({ ...f, summary: e.target.value }))}
@@ -632,14 +640,14 @@ export default function EntityGraph({
               <button type="submit" disabled={busy} className="btn btn-primary btn-sm">
                 Save
               </button>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(false)}>
+              <button type="button" className="btn btn-sm" onClick={() => setEditing(false)}>
                 Cancel
               </button>
             </div>
           </form>
         ) : (
           selected.summary && (
-            <p className="text-[13px] leading-relaxed -mt-2" style={{ color: "var(--ink-dim)" }}>
+            <p className="text-[14px] leading-relaxed -mt-2" style={{ color: "var(--ink-dim)" }}>
               {selected.summary}
             </p>
           )
@@ -653,15 +661,15 @@ export default function EntityGraph({
             </span>
           </h3>
           {selected.memory.length === 0 ? (
-            <p className="text-[12.5px]" style={{ color: "var(--ink-faint)" }}>
-              Nothing recorded yet. Add the first fact below.
+            <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+              Nothing saved yet. Add the first memory below.
             </p>
           ) : (
             <ul className="hairline-rows">
               {selected.memory.map((m) => (
                 <li key={m.id} ref={m.id === freshMemory ? blurIn : undefined} className="group py-2.5 flex items-start justify-between gap-2">
                   <div className="min-w-0 flex flex-col gap-1.5">
-                    <span className="text-[13px] leading-snug">{m.text}</span>
+                    <EditableMemoryText memory={m} disabled={busy} onSaved={() => void selectNode(selected.id)} />
                     {(m.owner_email || m.created_at) && (
                       <div className="flex items-center gap-2 min-w-0">
                         <Author email={m.owner_email} me={myEmail} />
@@ -679,9 +687,9 @@ export default function EntityGraph({
                       confirmLabel="Delete"
                       onConfirm={() => deleteMemory(m.id)}
                       disabled={busy}
-                      className="btn btn-ghost btn-sm btn-icon w-[24px] h-[24px] shrink-0 -mr-1"
+                      className="btn btn-ghost btn-sm btn-icon shrink-0 -mr-1"
                     >
-                      <X size={13} strokeWidth={1.75} />
+                      <X size={16} strokeWidth={1.75} />
                     </ConfirmButton>
                   </Tooltip>
                 </li>
@@ -690,9 +698,10 @@ export default function EntityGraph({
           )}
           <form onSubmit={submitMemory} className="flex flex-col gap-2">
             <textarea
-              className="field px-2.5 py-1.5 text-[13px]"
+              className="field px-3 py-2 text-[14px]"
               rows={2}
-              placeholder="Add a memory about this entity…"
+              aria-label={`New memory about ${selected.name}`}
+              placeholder="Add a memory about this person or topic…"
               value={memoryText}
               onChange={(e) => setMemoryText(e.target.value)}
             />
@@ -701,24 +710,26 @@ export default function EntityGraph({
                 Add memory
               </button>
               {memoryStatus !== "idle" && (
-                <span style={{ color: "var(--ink-faint)" }}>
+                <span className="inline-flex items-center gap-1.5 text-[13px]" style={{ color: "var(--ink-dim)" }} role="status">
                   <SyncMark status={memoryStatus} />
+                  {memoryStatus === "running" ? "Saving…" : "Saved"}
                 </span>
               )}
             </div>
           </form>
+          {selected.memory.length > 1 && <TidyObservationsButton entityId={selected.id} disabled={busy} onDone={() => void selectNode(selected.id)} />}
         </section>
 
         <section className="flex flex-col gap-2">
           <h3 className="section-title flex items-baseline gap-2">
-            Relations
+            Connections
             <span className="font-mono text-[12px] font-normal" style={{ color: "var(--ink-faint)" }}>
               {selected.relations.length}
             </span>
           </h3>
           {selected.relations.length === 0 ? (
-            <p className="text-[12.5px]" style={{ color: "var(--ink-faint)" }}>
-              No known relations.
+            <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+              No connections saved yet.
             </p>
           ) : (
             <ul className="hairline-rows">
@@ -727,9 +738,9 @@ export default function EntityGraph({
                 return (
                   <li key={r.id} className="py-2 flex items-center gap-2 min-w-0">
                     {r.direction === "out" ? (
-                      <ArrowRight size={13} strokeWidth={1.75} className="shrink-0" style={{ color: "var(--ink-faint)" }} aria-label="outgoing" />
+                      <ArrowRight size={13} strokeWidth={1.75} className="shrink-0" style={{ color: "var(--ink-dim)" }} aria-label="outgoing" />
                     ) : (
-                      <ArrowLeft size={13} strokeWidth={1.75} className="shrink-0" style={{ color: "var(--ink-faint)" }} aria-label="incoming" />
+                      <ArrowLeft size={13} strokeWidth={1.75} className="shrink-0" style={{ color: "var(--ink-dim)" }} aria-label="incoming" />
                     )}
                     <span className="font-mono text-[11.5px] shrink-0" style={{ color: "var(--ink-faint)" }}>
                       {r.label}
@@ -754,7 +765,7 @@ export default function EntityGraph({
             <Select
               aria-label="Relate to"
               placeholder="Relate to…"
-              className="h-8 text-[13px] w-full"
+              className="h-10 text-[14px] w-full"
               value={relForm.to}
               onChange={(v) => setRelForm((f) => ({ ...f, to: v }))}
               options={graph.nodes
@@ -762,14 +773,14 @@ export default function EntityGraph({
                 .map((n) => ({ value: n.id, label: n.name, hint: kindLabel(n.kind) }))}
             />
             <input
-              className="field h-8 px-2.5 text-[13px]"
-              placeholder="Relation label, e.g. works_at"
+              className="field h-10 px-3 text-[14px]"
+              placeholder="How they connect, e.g. works_at"
               aria-label="Relation label"
               value={relForm.label}
               onChange={(e) => setRelForm((f) => ({ ...f, label: e.target.value }))}
             />
             <button type="submit" disabled={busy || !relForm.to || !relForm.label.trim()} className="btn btn-sm self-start">
-              Add relation
+              Add connection
             </button>
           </form>
         </section>
@@ -796,7 +807,7 @@ export default function EntityGraph({
         </>,
         inspector,
         guide && graph.nodes.length < SPARSE && (
-          <div className="panel px-3 py-2.5 max-w-sm text-[13px] flex flex-col gap-2 items-start" style={{ color: "var(--ink-dim)" }}>
+          <div className="soft-panel px-4 py-3 max-w-sm text-[14px] flex flex-col gap-2 items-start" style={{ color: "var(--ink-dim)" }}>
             {guide}
           </div>
         )

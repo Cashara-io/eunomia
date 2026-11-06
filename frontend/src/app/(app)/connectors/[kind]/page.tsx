@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, use, useRef, useState } from "react";
+import { Fragment, use, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, ChevronRight, ExternalLink, Search, Settings2, Trash2, X } from "lucide-react";
 import type { ConnectorKind, SourceRow, ToolHit } from "@/lib/types";
@@ -12,7 +12,11 @@ import AuthorTag from "@/components/AuthorTag";
 import DigitRoll from "@/components/bits/DigitRoll";
 import SyncMark, { type SyncStatus } from "@/components/bits/SyncMark";
 import Tooltip from "@/components/bits/Tooltip";
+import PageHeader from "@/components/ui/PageHeader";
+import StatusLabel, { toneFromVar } from "@/components/ui/StatusLabel";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { ConnectorTile, kindForSource, relativeTime } from "@/lib/connectorMeta";
+import PocketAudioPlayer from "@/components/pocket/PocketAudioPlayer";
 
 const DATE_KEY = /(_at|date|time)$/i;
 const MONEY_KEY = /(amount|balance|price|cost|total|spent|fee)/i;
@@ -153,6 +157,9 @@ function RecordRow({ hit }: { hit: ToolHit }) {
                     </div>
                   ))}
                   {payload.length === 0 && <p style={{ color: "var(--ink-faint)" }}>This record has no payload fields.</p>}
+                  {detail.recording?.audio_bytes && detail.recording.recording_id ? (
+                    <PocketAudioPlayer recordingId={detail.recording.recording_id} title={hit.title} />
+                  ) : null}
                   {detail.recording?.transcript && (
                     <details>
                       <summary className="cursor-pointer" style={{ color: "var(--ink-dim)" }}>
@@ -188,9 +195,9 @@ function rangeLabel(offset: number, count: number, total: number | null, hasMore
 
 function Breadcrumb({ label }: { label: string }) {
   return (
-    <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-[12.5px]" style={{ color: "var(--ink-faint)" }}>
-      <Link href="/connectors" className="hover:underline" style={{ color: "var(--ink-dim)" }}>
-        Connectors
+    <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-[13px]" style={{ color: "var(--ink-dim)" }}>
+      <Link href="/connectors" className="underline-offset-2 hover:underline" style={{ color: "var(--accent-text)" }}>
+        Connected sources
       </Link>
       <ChevronRight size={12} strokeWidth={1.75} aria-hidden />
       <span aria-current="page">{label}</span>
@@ -200,31 +207,22 @@ function Breadcrumb({ label }: { label: string }) {
 
 function health(row: SourceRow): { tone: string; text: string } {
   const { consecutive_failures: fails, last_ok } = row.sync_status;
-  if (fails > 0) return { tone: fails > 2 ? "var(--critical)" : "var(--warning)", text: `${fails} failed sync${fails === 1 ? "" : "s"} in a row` };
-  if (!last_ok) return { tone: "var(--ink-faint)", text: "Waiting for first sync" };
+  if (fails > 0) return { tone: fails > 2 ? "var(--critical)" : "var(--warning)", text: `${fails} failed update${fails === 1 ? "" : "s"} in a row` };
+  if (!last_ok) return { tone: "var(--ink-faint)", text: "Waiting for the first import" };
   return { tone: "var(--good)", text: "Healthy" };
 }
 
-/** "Delete all data" in a modal with two confirmations: what goes, then type the connector's name. */
+/** "Delete all data": a named confirmation that says what goes and what stays, then the source's name typed to unlock it. */
 function DeleteData({ row, kind }: { row: SourceRow; kind: ConnectorKind }) {
   const del = useDeleteConnectorData();
-  const dialog = useRef<HTMLDialogElement>(null);
-  const [step, setStep] = useState<1 | 2>(1);
-  const [typed, setTyped] = useState("");
+  const [open, setOpen] = useState(false);
   const [error, setError] = useState<Failure | null>(null);
-
-  function open() {
-    setStep(1);
-    setTyped("");
-    setError(null);
-    dialog.current?.showModal();
-  }
 
   async function run() {
     setError(null);
     try {
       await del.mutateAsync(row.connector ?? kind);
-      dialog.current?.close();
+      setOpen(false);
     } catch (e) {
       setError(failure(e, `Could not delete the ${row.label} data. Try again.`));
     }
@@ -233,51 +231,39 @@ function DeleteData({ row, kind }: { row: SourceRow; kind: ConnectorKind }) {
   return (
     <section className="flex flex-col gap-3" aria-labelledby="delete-data-heading">
       <h2 id="delete-data-heading" className="section-title">
-        Data
+        Imported items
       </h2>
-      <button type="button" onClick={open} className="btn btn-danger btn-sm self-start">
-        <Trash2 size={14} strokeWidth={1.75} aria-hidden />
+      <p className="text-[14px] max-w-[62ch]" style={{ color: "var(--ink-dim)" }}>
+        Remove everything Eunomia brought in from {row.label}. The connection stays, so later updates bring in new items only.
+      </p>
+      <button
+        type="button"
+        onClick={() => {
+          setError(null);
+          setOpen(true);
+        }}
+        className="btn btn-danger self-start"
+      >
+        <Trash2 size={18} strokeWidth={1.75} aria-hidden />
         Delete all {row.label} data
       </button>
-      <dialog
-        ref={dialog}
-        aria-labelledby="delete-data-title"
-        className="panel pop-in m-auto w-[calc(100%-32px)] max-w-md p-5 backdrop:bg-black/40"
-        style={{ color: "var(--ink)" }}
+      <ConfirmDialog
+        open={open}
+        danger
+        title={`Delete ${row.record_count.toLocaleString()} imported ${row.label} items?`}
+        confirmLabel="Delete everything"
+        typeToConfirm={row.label}
+        busy={del.isPending}
+        error={error?.message}
+        onConfirm={run}
+        onCancel={() => setOpen(false)}
       >
-        <h3 id="delete-data-title" className="text-[15px] font-medium mb-2">
-          {step === 1 ? `Delete all ${row.label} data?` : "Are you sure?"}
-        </h3>
-        {step === 1 ? (
-          <p className="text-[12.5px] mb-4" style={{ color: "var(--ink-dim)" }}>
-            This permanently deletes the {row.record_count.toLocaleString()} {row.label} records Eunomia has synced, their links, and every fact and
-            relation extracted from them. The connection itself stays, so later syncs bring in new data only.
-          </p>
-        ) : (
-          <label className="text-[12.5px] flex flex-col gap-1.5 mb-4" style={{ color: "var(--ink-dim)" }}>
-            <span>
-              Type <span className="font-mono" style={{ color: "var(--ink)" }}>{row.label}</span> to confirm. This can&apos;t be undone.
-            </span>
-            <input autoFocus className="field h-8 px-2.5 text-[13px] font-mono" value={typed} onChange={(e) => setTyped(e.target.value)} />
-          </label>
-        )}
-        {error && <ErrorLine error={error} />}
-        <div className="flex justify-end gap-1.5 mt-2">
-          <button type="button" onClick={() => dialog.current?.close()} className="btn btn-ghost btn-sm">
-            Cancel
-          </button>
-          {step === 1 ? (
-            <button type="button" onClick={() => setStep(2)} className="btn btn-danger btn-sm">
-              Continue
-            </button>
-          ) : (
-            <button type="button" onClick={run} disabled={typed !== row.label || del.isPending} className="btn btn-danger btn-sm">
-              <Trash2 size={14} strokeWidth={1.75} aria-hidden />
-              {del.isPending ? "Deleting…" : "Delete everything"}
-            </button>
-          )}
-        </div>
-      </dialog>
+        <p>
+          This permanently deletes the {row.record_count.toLocaleString()} {row.label} records Eunomia has imported, their links, and every fact and
+          relation learned from them. Your AI apps will no longer find them. This can&apos;t be undone.
+        </p>
+        <p style={{ color: "var(--ink-dim)" }}>The connection itself stays, so later updates bring in new items only.</p>
+      </ConfirmDialog>
     </section>
   );
 }
@@ -344,7 +330,10 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
     setSyncError(null);
     let result: "done" | "failed" = "done";
     try {
-      await syncSource.mutateAsync(kind);
+      if ((await syncSource.mutateAsync(kind)).status === "offline") {
+        result = "failed";
+        setSyncError({ message: "You're offline, so nothing was synced. Try again when you have a connection." });
+      }
     } catch (e) {
       result = "failed";
       setSyncError(failure(e, "The sync could not start."));
@@ -382,11 +371,11 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
     return (
       <div className="max-w-5xl flex flex-col gap-6">
         <Breadcrumb label={kind} />
-        <h1 className="page-title">{formatKey(kind)}</h1>
-        <div className="ledger px-5 py-4 flex items-center justify-between gap-4 flex-wrap text-[13px]">
-          <span style={{ color: "var(--ink-dim)" }}>This source was removed: &ldquo;{kind}&rdquo; is not a connector any more and has no records left.</span>
-          <Link href="/connectors" className="btn btn-sm">
-            Back to connectors
+        <PageHeader title={formatKey(kind)} mark={<ConnectorTile kind={null} size={32} />} />
+        <div className="ledger px-5 py-4 flex items-center justify-between gap-4 flex-wrap text-[14px]">
+          <span style={{ color: "var(--ink-dim)" }}>This source was removed: &ldquo;{kind}&rdquo; is not connected any more and has no items left.</span>
+          <Link href="/connectors" className="btn">
+            Back to connected sources
           </Link>
         </div>
       </div>
@@ -400,19 +389,16 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
     return (
       <div className="max-w-5xl flex flex-col gap-6">
         <Breadcrumb label={row.label} />
-        <div className="flex items-center gap-3">
-          <ConnectorTile kind={connectorKind ?? null} size={40} />
-          <h1 className="page-title">{row.label}</h1>
-        </div>
-        <div className="ledger px-5 py-4 flex items-center justify-between gap-4 flex-wrap text-[13px]">
-          <span style={{ color: "var(--ink-dim)" }}>{row.label} is not connected, so it has no records yet.</span>
+        <PageHeader title={row.label} mark={<ConnectorTile kind={connectorKind ?? null} size={32} />} />
+        <div className="ledger px-5 py-4 flex items-center justify-between gap-4 flex-wrap text-[14px]">
+          <span style={{ color: "var(--ink-dim)" }}>{row.label} is not connected, so nothing has been imported yet.</span>
           {settingsHref ? (
-            <Link href={settingsHref} className="btn btn-primary btn-sm">
+            <Link href={settingsHref} className="btn btn-primary">
               Connect {row.label}
             </Link>
           ) : (
-            <Link href="/connectors" className="btn btn-sm">
-              Back to connectors
+            <Link href="/connectors" className="btn">
+              Back to connected sources
             </Link>
           )}
         </div>
@@ -425,51 +411,57 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
 
   return (
     <div className="max-w-5xl flex flex-col gap-8">
-      <header className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3">
         <Breadcrumb label={row.label} />
-        <div className="flex items-center gap-3 flex-wrap">
-          <ConnectorTile kind={connectorKind ?? null} size={40} />
-          <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-            <h1 className="page-title">{row.account ? `${row.label}: ${row.account}` : row.label}</h1>
-            <span className="text-[12.5px] flex items-center gap-1.5" style={{ color: "var(--ink-dim)" }}>
-              <span className="dot" style={{ background: h.tone }} aria-hidden />
-              {row.connected ? "Connected" : orphaned ? "Source no longer connected, records kept" : "Seeded data, no live connection"}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            {settingsHref && (
-              <Link href={settingsHref} className="btn">
-                <Settings2 size={14} strokeWidth={1.75} aria-hidden /> Setup
-              </Link>
-            )}
-            {!orphaned && (
-              <button type="button" onClick={sync} disabled={syncing} className="btn btn-primary" aria-live="polite">
-                <SyncMark status={syncStatus} />
-                {syncing ? "Syncing…" : "Sync now"}
-              </button>
-            )}
-          </div>
-        </div>
-      </header>
+        <PageHeader
+          mark={<ConnectorTile kind={connectorKind ?? null} size={32} />}
+          title={row.account ? `${row.label}: ${row.account}` : row.label}
+          intro={
+            row.connected
+              ? `Items Eunomia has imported from ${row.account ? `${row.label} (${row.account})` : row.label}. They update on their own; use Sync now to fetch the latest straight away.`
+              : orphaned
+                ? "This source is no longer connected. The items it imported are kept and can still be found."
+                : "Example data with no live connection."
+          }
+          actions={
+            <>
+              {settingsHref && (
+                <Link href={settingsHref} className="btn">
+                  <Settings2 size={18} strokeWidth={1.75} aria-hidden /> Setup
+                </Link>
+              )}
+              {!orphaned && (
+                <button type="button" onClick={sync} disabled={syncing} className="btn btn-primary" aria-live="polite">
+                  <SyncMark status={syncStatus} size={18} />
+                  {syncing ? "Syncing…" : "Sync now"}
+                </button>
+              )}
+            </>
+          }
+        >
+          <StatusLabel tone={row.connected ? toneFromVar(h.tone) : "neutral"}>
+            {row.connected ? "Connected" : orphaned ? "Source no longer connected, items kept" : "Example data, no live connection"}
+          </StatusLabel>
+        </PageHeader>
+      </div>
 
       <dl className="ledger grid grid-cols-2 md:grid-cols-4">
         {[
-          { label: "Health", value: <span style={{ color: h.tone === "var(--good)" ? "var(--ink)" : h.tone }}>{h.text}</span> },
-          { label: "Records", value: <span className="font-mono"><DigitRoll value={row.record_count} /></span> },
+          { label: "Status", value: <StatusLabel tone={toneFromVar(h.tone)}>{h.text}</StatusLabel> },
+          { label: "Items imported", value: <span className="text-[24px] tabular"><DigitRoll value={row.record_count} /></span> },
           {
-            label: "Last sync",
+            label: "Last updated",
             value: (
               <span className="font-mono" title={row.sync_status.last_ok ? formatDate(row.sync_status.last_ok) : undefined}>
                 {relativeTime(row.sync_status.last_ok)}
               </span>
             ),
           },
-          { label: "Writes as", value: <AuthorTag name={sourceKey} title={`Records from this connector carry the source key ${sourceKey}`} /> },
+          { label: "Saved as", value: <AuthorTag name={sourceKey} title={`Records from this connector carry the source key ${sourceKey}`} /> },
         ].map((s, i) => (
           <div
             key={s.label}
-            className="px-4 py-3 flex flex-col gap-1.5 min-w-0 text-[13px]"
-            style={{ borderLeft: i % 2 ? "var(--hair) solid var(--border)" : undefined, borderTop: i > 1 ? "var(--hair) solid var(--border)" : undefined }}
+            className={`px-4 py-3 flex flex-col gap-1.5 min-w-0 text-[14px] ${i % 2 ? "border-l" : ""} ${i > 1 ? "border-t md:border-t-0" : ""} ${i === 2 ? "md:border-l" : ""}`}
           >
             <dt className="label">{s.label}</dt>
             <dd className="min-w-0 truncate">{s.value}</dd>
@@ -480,16 +472,20 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
       {(syncError || row.sync_status.last_error) && (
         <div className="flex flex-col gap-1.5">
           <ErrorLine error={syncError}>
-            <span className="font-medium">{syncError ? "Sync could not start." : "The last sync failed."}</span>{" "}
+            <span className="font-medium">{syncError ? "The update could not start." : "The last update failed."}</span>{" "}
             <span className="font-mono text-[12px] break-words">{syncError?.message ?? row.sync_status.last_error}</span>
           </ErrorLine>
-          <p className="text-[12.5px]" style={{ color: "var(--ink-dim)" }}>
+          <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
             {settingsHref ? (
               <>
-                Check the credentials in the <Link href={settingsHref} className="underline" style={{ color: "var(--accent-text)" }}>connector setup</Link>, then sync again.
+                If it mentions sign-in or permission (for example HTTP 401 or 403), check the details in{" "}
+                <Link href={settingsHref} className="underline" style={{ color: "var(--accent-text)" }}>
+                  {row.label} setup
+                </Link>
+                . Otherwise choose Sync now to try again; items already imported are kept.
               </>
             ) : (
-              "Try syncing again in a moment."
+              "Choose Sync now to try again in a moment. Items already imported are kept."
             )}
           </p>
         </div>
@@ -501,20 +497,20 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
         )}
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <h2 id="records-heading" className="section-title">
-            Records{" "}
-            <span className="font-mono font-normal" style={{ color: "var(--ink-faint)" }}>
+            Imported items{" "}
+            <span className="font-normal text-[14px]" style={{ color: "var(--ink-dim)" }}>
               {results && shown && results.length > 0 && rangeLabel(shown.offset, results.length, activeQuery ? null : total, shown.has_more)}
             </span>
           </h2>
-          <form onSubmit={runSearch} className="field flex items-center gap-2 h-8 px-2.5 w-full sm:w-72" role="search">
-            <Search size={14} strokeWidth={1.75} color="var(--ink-faint)" aria-hidden />
+          <form onSubmit={runSearch} className="field flex items-center gap-2 h-10 px-3 w-full sm:w-80" role="search">
+            <Search size={18} strokeWidth={1.75} color="var(--ink-dim)" aria-hidden />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Escape" && query && clearSearch()}
               placeholder={`Search ${row.label}…`}
               aria-label={`Search ${row.label} records`}
-              className="flex-1 min-w-0 text-[13px] bg-transparent outline-none"
+              className="flex-1 min-w-0 text-[14px] bg-transparent outline-none"
             />
             {searching ? (
               <span className="label">Searching…</span>
@@ -536,7 +532,7 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
               <tr>
                 <th>Title</th>
                 <th className="hidden sm:table-cell w-44">Type</th>
-                <th className="w-24 text-right">Occurred</th>
+                <th className="w-28 text-right">Date</th>
               </tr>
             </thead>
             <tbody>
@@ -567,7 +563,7 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
                           </button>
                         </>
                       ) : (
-                        <>No records yet. Run a sync to pull the latest from {row.label}.</>
+                        <>No records yet. Choose Sync now to bring in the latest from {row.label}. A first import can take a few minutes.</>
                       )}
                     </div>
                   </td>

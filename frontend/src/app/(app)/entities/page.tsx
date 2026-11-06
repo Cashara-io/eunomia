@@ -2,14 +2,16 @@
 
 import { useState } from "react";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Users } from "lucide-react";
 import { entityKeys } from "@/lib/queries/entities";
 import EntityGraph from "@/components/EntityGraph";
+import LiveStatusBadge from "@/components/live/LiveStatusBadge";
 import VectorCloud from "@/components/VectorCloud";
+import PageHeader from "@/components/ui/PageHeader";
 
 const VIEWS = [
-  { id: "graph", label: "Graph", blurb: "People, organisations and places, and how they relate." },
-  { id: "cloud", label: "Vector cloud", blurb: "Every memory, projected from vector space to 3D." },
+  { id: "graph", label: "Connections", blurb: "People, organisations, places and projects, and how they connect." },
+  { id: "cloud", label: "Memory map", blurb: "Every saved memory, placed so that similar memories sit close together." },
 ] as const;
 
 export default function EntitiesPage() {
@@ -20,37 +22,31 @@ export default function EntitiesPage() {
 
   // Same header in both views, so switching tabs never moves it.
   const header = (
-    <div className="flex flex-col gap-3 items-start">
-      <div className="flex items-center gap-3 flex-wrap">
-        <h1 className="page-title">Entities</h1>
-        <div className="panel p-0.5 flex gap-0.5" role="tablist" aria-label="View">
+    <div className="w-full flex flex-col gap-4">
+      <PageHeader icon={Users} title="People & topics" intro={current.blurb} />
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex gap-2" role="tablist" aria-label="View">
           {VIEWS.map((v) => (
-            <button key={v.id} role="tab" aria-selected={view === v.id} className="pill" onClick={() => setView(v.id)}>
+            <button key={v.id} role="tab" aria-selected={view === v.id} className="pill min-h-10" onClick={() => setView(v.id)}>
               {v.label}
             </button>
           ))}
         </div>
-        <button
-          className="btn"
-          aria-label="Refresh entities"
-          title="Refresh"
-          onClick={() => void qc.invalidateQueries({ queryKey: entityKeys.all })}
-        >
-          <RefreshCw size={14} strokeWidth={1.75} className={fetching ? "animate-spin" : undefined} />
+        <button className="btn" aria-label="Refresh people and topics" title="Refresh" onClick={() => void qc.invalidateQueries({ queryKey: entityKeys.all })}>
+          <RefreshCw size={18} strokeWidth={1.75} className={fetching ? "animate-spin" : undefined} aria-hidden />
+          Refresh
         </button>
+        <LiveStatusBadge />
       </div>
-      <p className="text-[13px] -mt-1.5" style={{ color: "var(--ink-dim)" }}>
-        {current.blurb}
-      </p>
     </div>
   );
 
   return (
-    <div className="relative -mx-4 -my-6 md:-mx-10 md:-my-8 h-[calc(100dvh-3rem)] md:h-dvh">
+    <div className="relative -mx-4 -my-6 sm:-mx-8 lg:-mx-12 lg:-my-[38px] h-[calc(100dvh-3.5rem)] md:h-dvh">
       {view === "graph" ? (
         <EntityGraph header={header} />
       ) : (
-        <div className="absolute inset-0 px-4 py-6 md:px-10 md:py-8 flex flex-col gap-4 overflow-y-auto">
+        <div className="absolute inset-0 px-4 py-6 sm:px-8 lg:px-12 lg:py-[38px] flex flex-col gap-4 overflow-y-auto">
           {header}
           <VectorCloud />
         </div>

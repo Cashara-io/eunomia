@@ -1,5 +1,7 @@
 # Design pass plan
 
+> **Superseded.** This was the plan for the earlier "Multiplayer Canvas" pass. The app now follows the Eunomia Bauhaus app design (release 2.0.8); see [DESIGN.md](DESIGN.md). Kept for history only.
+
 Branch: `design-pass`. Goal: make the Eunomia frontend look and feel like a top San Francisco startup product (think Linear, Vercel, Raycast, Anthropic). Calm, sharp, fast, expensive-looking. Same features, same copy facts, same routes.
 
 Tools: `/impeccable` owns direction, tokens and review. `/emil-design-eng` owns motion and the small touches. `/pstack:swarm` fans the page work out in parallel.

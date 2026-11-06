@@ -4,6 +4,8 @@ Connectors pull your data from other services into Eunomia, where agents read it
 
 After the first sync, each connector syncs again on its interval (changeable on its setup page). A failed sync shows the provider's error on the connector's page and the dashboard, and retries with backoff (15 min → 6 h).
 
+When the machine has no internet connection, scheduled syncs are skipped quietly instead of failing: no error is shown, no failure is counted and the backoff does not grow, and the sources sync again on the first scheduler tick after the connection returns. This is the **Skip syncs while offline** switch under Settings, General (on by default, per user). "Sync now" checks afresh and answers that you are offline rather than attempting a sync that cannot work. The check is a short TCP connect to a few well-known addresses; see `EUNOMIA_CONNECTIVITY_PROBE` in [deployment](deployment.md) to change them.
+
 Every sync is a `sync` job in the background job queue (see `docs/architecture/jobs.md`): scheduled syncs and **Sync now** share it, so only one sync of a connector runs at a time. If one is already waiting or running, **Sync now** says so instead of starting another.
 
 | Connector | What it syncs | Credential (where to get it) | Scopes / permissions | Default interval |
@@ -20,6 +22,7 @@ Every sync is a `sync` job in the background job queue (see `docs/architecture/j
 | Spotify | Recently played tracks (Spotify keeps only the last 50, so history builds up from when you connect) | Your own Spotify app's client ID + secret and a refresh token (below) | `user-read-recently-played` | 15 min |
 | Todoist | Active tasks with project, due date, labels | API token — Todoist → Settings → Integrations → Developer | Full API token (Todoist has no read-only token) | 15 min |
 | Stripe | Charges (incremental) | [Restricted key](https://dashboard.stripe.com/apikeys) `rk_…` | Charges: Read only | 15 min |
+| Ed Discussion | One record per thread, with its answers and comments in the text (30 days back, then every thread that changed; 100 threads per sync, oldest first). Active courses, or the course IDs you list; region `us` (default), `au` (edstem.org/au, served from `edstem.org/api`) or `eu`. Only the newest 5,000 threads per course are scanned; threads deeper than that are never synced | API token from [edstem.org/us/settings/api-tokens](https://edstem.org/us/settings/api-tokens) | Ed's API is unofficial and has no scopes; the token reads what you can | 30 min |
 
 ## More than one connection of a kind
 
@@ -53,6 +56,7 @@ Every record a connector syncs is filed in one vault, and only that vault's memb
 | Notion | `database` (parent database ID), `page` (parent page ID), `title` |
 | Linear | `team` (name), `title` |
 | Todoist | `project` (ID or name), `title` |
+| Ed Discussion | `course` (ID or name), `category`, `title` |
 | Up Bank, Spotify, Stripe | `title` |
 
 Example: one Pocket account with both work calls and personal conversations. Make a "Build Paperless" vault, add the rule *tag* `work` → Build Paperless, and leave the destination as your personal vault: recordings tagged `work` (their summary, transcript and every fact extracted from them) are read by Build Paperless's members; the rest stay yours.
@@ -66,6 +70,31 @@ Rules only name vaults you are an active member of (saving another is refused). 
 ## Pocket recordings
 
 Each recording is stored whole: everything Pocket's API returns, verbatim, plus the full speaker-labelled transcript, so an agent can always read the entire meeting. `get` on a Pocket record (the recording or any of its transcript chunks) returns the whole stored recording. For search and memory, the recording is also cached as a summary record (summary, action items, speakers, tags) plus transcript chunks small enough to embed. With a chat model available (Settings, OpenAI), people, organisations and their relations are extracted from each chunk into the memory graph (as queued jobs).
+
+### Pocket audio
+
+A Pocket connection can also keep each recording's audio. It is off by default: tick **Keep audio
+recordings** on the connection's setup page (it sets `config.store_audio`). Then:
+
+- Audio is stored in the org's `documents` bucket, so it needs `EUNOMIA_DOCUMENTS_BACKEND` (see
+  [documents](documents.md)). Without one, syncs carry on and keep transcripts only, and the server logs
+  why once.
+- It is downloaded once, after the transcript. Recall and search still use the transcript only.
+- Pocket keeps audio on the device first. Until the device uploads it, Pocket answers 404 and Eunomia tries
+  again on the next sync, but only while the recording is inside the sync window (the last day). A
+  recording whose audio arrives later than that keeps its transcript only.
+- Recordings over 200 MiB keep their transcript only. A failed or refused download never fails the sync.
+- An opened Pocket record on the connection's page has an audio player and a **Download** button.
+  API: `GET /api/connectors/pocketai/recordings/{recording_id}/audio` (`?download=true` for an
+  attachment), the caller's own recordings only, logged in the audit log by id as `pocket_audio_download`.
+- **Delete all data** removes the audio files too.
+
+Unverified: the audio endpoint, `GET /public/recordings/{id}/audio` on `https://public.heypocketai.com/api/v1`
+with the same API key, comes from third-party integrations, not from Pocket's documentation, and was not
+checked against a real account. Eunomia accepts either answer: the audio itself (its `Content-Type` is
+kept), or JSON with a signed link (`url`, `audio_url`, `signed_url` or `download_url`, at the top level
+or under `data`), which it then downloads without sending your key. If Pocket answers differently, the
+sync still succeeds and the server logs `pocket audio: not downloaded`.
 
 ## Deleting a connector's data
 

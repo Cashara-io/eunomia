@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, ServerSentEventsResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AcceptInvitationData, AcceptInvitationErrors, AcceptInvitationResponses, AckExtensionEventsData, AckExtensionEventsErrors, AckExtensionEventsResponses, AddMemoryData, AddMemoryErrors, AddMemoryResponses, AddRelationData, AddRelationErrors, AddRelationResponses, CheckForUpdateData, CheckForUpdateErrors, CheckForUpdateResponses, ClaimExtensionEventsData, ClaimExtensionEventsErrors, ClaimExtensionEventsResponses, CloneVaultData, CloneVaultErrors, CloneVaultResponses, CompleteOnboardingData, CompleteOnboardingErrors, CompleteOnboardingResponses, CreateConnectorData, CreateConnectorErrors, CreateConnectorResponses, CreateEntityData, CreateEntityErrors, CreateEntityResponses, CreateExtensionData, CreateExtensionErrors, CreateExtensionResponses, CreateThreadData, CreateThreadErrors, CreateThreadResponses, CreateTokenData, CreateTokenErrors, CreateTokenResponses, CreateVaultData, CreateVaultErrors, CreateVaultResponses, DecideOauthConsentData, DecideOauthConsentErrors, DecideOauthConsentResponses, DeclineInvitationData, DeclineInvitationErrors, DeclineInvitationResponses, DeleteConnectorData, DeleteConnectorDataData, DeleteConnectorDataErrors, DeleteConnectorDataResponses, DeleteConnectorErrors, DeleteConnectorResponses, DeleteDocumentData, DeleteDocumentErrors, DeleteDocumentResponses, DeleteEntityData, DeleteEntityErrors, DeleteEntityResponses, DeleteExtensionData, DeleteExtensionErrors, DeleteExtensionResponses, DeleteMemoryData, DeleteMemoryErrors, DeleteMemoryResponses, DeleteThreadData, DeleteThreadErrors, DeleteThreadResponses, DeleteTokenData, DeleteTokenErrors, DeleteTokenResponses, DeleteVaultData, DeleteVaultErrors, DeleteVaultResponses, DownloadDocumentData, DownloadDocumentErrors, DownloadDocumentResponses, ExportDataData, ExportDataErrors, ExportDataResponses, ExportDocumentData, ExportDocumentErrors, ExportDocumentResponses, GetBootstrapData, GetBootstrapErrors, GetBootstrapResponses, GetCloudSimilarityData, GetCloudSimilarityErrors, GetCloudSimilarityResponses, GetConnectorData, GetConnectorErrors, GetConnectorResponses, GetDocumentData, GetDocumentErrors, GetDocumentResponses, GetEntityData, GetEntityErrors, GetEntityGraphData, GetEntityGraphErrors, GetEntityGraphResponses, GetEntityResponses, GetExtensionData, GetExtensionErrors, GetExtensionResponses, GetFailureCapsuleData, GetFailureCapsuleErrors, GetFailureCapsuleResponses, GetHttpsStatusData, GetHttpsStatusErrors, GetHttpsStatusResponses, GetMeData, GetMeErrors, GetMeResponses, GetMetricsData, GetMetricsErrors, GetMetricsResponses, GetOauthConsentData, GetOauthConsentErrors, GetOauthConsentResponses, GetOpenapiData, GetOpenapiResponses, GetPocketaiAllData, GetPocketaiAllErrors, GetPocketaiAllResponses, GetPocketaiDetailData, GetPocketaiDetailErrors, GetPocketaiDetailResponses, GetPocketaiSummaryData, GetPocketaiSummaryErrors, GetPocketaiSummaryResponses, GetReadyzData, GetReadyzErrors, GetReadyzResponses, GetSettingsData, GetSettingsErrors, GetSettingsResponses, GetSnapshotData, GetSnapshotErrors, GetSnapshotResponses, GetSourcesStatusData, GetSourcesStatusErrors, GetSourcesStatusResponses, GetThreadHistoryData, GetThreadHistoryErrors, GetThreadHistoryResponses, GetToolUsageData, GetToolUsageErrors, GetToolUsageResponses, GetUpBankFinanceSummaryData, GetUpBankFinanceSummaryErrors, GetUpBankFinanceSummaryResponses, GetUpdateStatusData, GetUpdateStatusErrors, GetUpdateStatusResponses, GetVectorCloudData, GetVectorCloudErrors, GetVectorCloudResponses, InviteMemberData, InviteMemberErrors, InviteMemberResponses, InvokeToolData, InvokeToolErrors, InvokeToolResponses, LeaveVaultData, LeaveVaultErrors, LeaveVaultResponses, ListAuditData, ListAuditErrors, ListAuditResponses, ListConnectorsData, ListConnectorsErrors, ListConnectorsResponses, ListDocumentsData, ListDocumentsErrors, ListDocumentsResponses, ListEntitiesData, ListEntitiesErrors, ListEntitiesResponses, ListExtensionEventsData, ListExtensionEventsErrors, ListExtensionEventsResponses, ListExtensionsData, ListExtensionsErrors, ListExtensionsResponses, ListInvitationsData, ListInvitationsErrors, ListInvitationsResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListOauthGrantsData, ListOauthGrantsErrors, ListOauthGrantsResponses, ListOpenaiModelsData, ListOpenaiModelsErrors, ListOpenaiModelsResponses, ListSessionsData, ListSessionsErrors, ListSessionsResponses, ListSourcesData, ListSourcesErrors, ListSourcesResponses, ListThreadsData, ListThreadsErrors, ListThreadsResponses, ListTokensData, ListTokensErrors, ListTokensResponses, ListToolsData, ListToolsErrors, ListToolsResponses, ListVaultsData, ListVaultsErrors, ListVaultsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, MergeEntitiesData, MergeEntitiesErrors, MergeEntitiesResponses, MergeVaultsData, MergeVaultsErrors, MergeVaultsResponses, MoveConnectorDataData, MoveConnectorDataErrors, MoveConnectorDataResponses, NackExtensionEventsData, NackExtensionEventsErrors, NackExtensionEventsResponses, OidcCallbackData, OidcCallbackErrors, OidcCallbackResponses, OidcStartData, OidcStartErrors, OidcStartResponses, ReceiveExtensionWebhookData, ReceiveExtensionWebhookErrors, ReceiveExtensionWebhookResponses, ReceiveSourceWebhookData, ReceiveSourceWebhookErrors, ReceiveSourceWebhookResponses, RegisterData, RegisterErrors, RegisterResponses, ReindexDocumentData, ReindexDocumentErrors, ReindexDocumentResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, RenameTokenData, RenameTokenErrors, RenameTokenResponses, RenameVaultData, RenameVaultErrors, RenameVaultResponses, RepointConnectorsData, RepointConnectorsErrors, RepointConnectorsResponses, RequestHttpsData, RequestHttpsErrors, RequestHttpsResponses, RequestUpdateData, RequestUpdateErrors, RequestUpdateResponses, RevokeOauthGrantData, RevokeOauthGrantErrors, RevokeOauthGrantResponses, RevokeSessionData, RevokeSessionErrors, RevokeSessionResponses, RotateExtensionSecretData, RotateExtensionSecretErrors, RotateExtensionSecretResponses, SearchPocketaiData, SearchPocketaiErrors, SearchPocketaiResponses, SendMessageData, SendMessageErrors, SendMessageResponse, SendMessageResponses, SetMemberRoleData, SetMemberRoleErrors, SetMemberRoleResponses, SyncSourceData, SyncSourceErrors, SyncSourceResponses, TestConnectorData, TestConnectorErrors, TestConnectorResponses, TransferOwnershipData, TransferOwnershipErrors, TransferOwnershipResponses, UpdateConnectorData, UpdateConnectorErrors, UpdateConnectorResponses, UpdateEntityData, UpdateEntityErrors, UpdateEntityResponses, UpdateExtensionData, UpdateExtensionErrors, UpdateExtensionResponses, UpdateMemoryData, UpdateMemoryErrors, UpdateMemoryResponses, UpdateSettingsData, UpdateSettingsErrors, UpdateSettingsResponses, UploadDocumentData, UploadDocumentErrors, UploadDocumentResponses } from './types.gen';
+import type { AcceptInvitationData, AcceptInvitationErrors, AcceptInvitationResponses, AckExtensionEventsData, AckExtensionEventsErrors, AckExtensionEventsResponses, AddMemoryData, AddMemoryErrors, AddMemoryResponses, AddRelationData, AddRelationErrors, AddRelationResponses, CheckForUpdateData, CheckForUpdateErrors, CheckForUpdateResponses, CheckVaultIntegrityData, CheckVaultIntegrityErrors, CheckVaultIntegrityResponses, ClaimExtensionEventsData, ClaimExtensionEventsErrors, ClaimExtensionEventsResponses, CloneVaultData, CloneVaultErrors, CloneVaultResponses, CompleteOnboardingData, CompleteOnboardingErrors, CompleteOnboardingResponses, CreateConnectorData, CreateConnectorErrors, CreateConnectorResponses, CreateEntityData, CreateEntityErrors, CreateEntityResponses, CreateExtensionData, CreateExtensionErrors, CreateExtensionResponses, CreateThreadData, CreateThreadErrors, CreateThreadResponses, CreateTokenData, CreateTokenErrors, CreateTokenResponses, CreateVaultData, CreateVaultErrors, CreateVaultResponses, CreateVaultShareCodeData, CreateVaultShareCodeErrors, CreateVaultShareCodeResponses, DecideOauthConsentData, DecideOauthConsentErrors, DecideOauthConsentResponses, DeclineInvitationData, DeclineInvitationErrors, DeclineInvitationResponses, DeleteConnectorData, DeleteConnectorDataData, DeleteConnectorDataErrors, DeleteConnectorDataResponses, DeleteConnectorErrors, DeleteConnectorResponses, DeleteDocumentData, DeleteDocumentErrors, DeleteDocumentResponses, DeleteEntityData, DeleteEntityErrors, DeleteEntityResponses, DeleteExtensionData, DeleteExtensionErrors, DeleteExtensionResponses, DeleteMemoryData, DeleteMemoryErrors, DeleteMemoryResponses, DeleteThreadData, DeleteThreadErrors, DeleteThreadResponses, DeleteTokenData, DeleteTokenErrors, DeleteTokenResponses, DeleteVaultData, DeleteVaultErrors, DeleteVaultResponses, DeleteVaultShareCodeData, DeleteVaultShareCodeErrors, DeleteVaultShareCodeResponses, DownloadDocumentData, DownloadDocumentErrors, DownloadDocumentResponses, ExportDataData, ExportDataErrors, ExportDataResponses, ExportDocumentData, ExportDocumentErrors, ExportDocumentResponses, FollowEventsData, FollowEventsErrors, FollowEventsResponses, FollowVaultChangesData, FollowVaultChangesErrors, FollowVaultChangesResponses, GetBootstrapData, GetBootstrapErrors, GetBootstrapResponses, GetCloudSimilarityData, GetCloudSimilarityErrors, GetCloudSimilarityResponses, GetConnectorData, GetConnectorErrors, GetConnectorResponses, GetDocumentData, GetDocumentErrors, GetDocumentResponses, GetEntityData, GetEntityErrors, GetEntityGraphData, GetEntityGraphErrors, GetEntityGraphResponses, GetEntityResponses, GetExtensionData, GetExtensionErrors, GetExtensionResponses, GetFailureCapsuleData, GetFailureCapsuleErrors, GetFailureCapsuleResponses, GetHttpsStatusData, GetHttpsStatusErrors, GetHttpsStatusResponses, GetMeData, GetMeErrors, GetMeResponses, GetMetricsData, GetMetricsErrors, GetMetricsResponses, GetOauthConsentData, GetOauthConsentErrors, GetOauthConsentResponses, GetOpenapiData, GetOpenapiResponses, GetPocketaiAllData, GetPocketaiAllErrors, GetPocketaiAllResponses, GetPocketaiAudioData, GetPocketaiAudioErrors, GetPocketaiAudioResponses, GetPocketaiDetailData, GetPocketaiDetailErrors, GetPocketaiDetailResponses, GetPocketaiSummaryData, GetPocketaiSummaryErrors, GetPocketaiSummaryResponses, GetReadyzData, GetReadyzErrors, GetReadyzResponses, GetSettingsData, GetSettingsErrors, GetSettingsResponses, GetSnapshotData, GetSnapshotErrors, GetSnapshotResponses, GetSourcesStatusData, GetSourcesStatusErrors, GetSourcesStatusResponses, GetThreadHistoryData, GetThreadHistoryErrors, GetThreadHistoryResponses, GetToolUsageData, GetToolUsageErrors, GetToolUsageResponses, GetUpBankFinanceSummaryData, GetUpBankFinanceSummaryErrors, GetUpBankFinanceSummaryResponses, GetUpdateStatusData, GetUpdateStatusErrors, GetUpdateStatusResponses, GetVectorCloudData, GetVectorCloudErrors, GetVectorCloudResponses, InviteMemberData, InviteMemberErrors, InviteMemberResponses, InvokeToolData, InvokeToolErrors, InvokeToolResponses, JoinSharedVaultData, JoinSharedVaultErrors, JoinSharedVaultResponses, LeaveVaultData, LeaveVaultErrors, LeaveVaultResponses, ListAuditData, ListAuditErrors, ListAuditResponses, ListConnectorsData, ListConnectorsErrors, ListConnectorsResponses, ListDocumentsData, ListDocumentsErrors, ListDocumentsResponses, ListEntitiesData, ListEntitiesErrors, ListEntitiesResponses, ListExtensionEventsData, ListExtensionEventsErrors, ListExtensionEventsResponses, ListExtensionsData, ListExtensionsErrors, ListExtensionsResponses, ListInvitationsData, ListInvitationsErrors, ListInvitationsResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListOauthGrantsData, ListOauthGrantsErrors, ListOauthGrantsResponses, ListOpenaiModelsData, ListOpenaiModelsErrors, ListOpenaiModelsResponses, ListSessionsData, ListSessionsErrors, ListSessionsResponses, ListSourcesData, ListSourcesErrors, ListSourcesResponses, ListThreadsData, ListThreadsErrors, ListThreadsResponses, ListTokensData, ListTokensErrors, ListTokensResponses, ListToolsData, ListToolsErrors, ListToolsResponses, ListVaultChangesData, ListVaultChangesErrors, ListVaultChangesResponses, ListVaultPeersData, ListVaultPeersErrors, ListVaultPeersResponses, ListVaultsData, ListVaultsErrors, ListVaultsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, MergeEntitiesData, MergeEntitiesErrors, MergeEntitiesResponses, MergeVaultsData, MergeVaultsErrors, MergeVaultsResponses, MoveConnectorDataData, MoveConnectorDataErrors, MoveConnectorDataResponses, NackExtensionEventsData, NackExtensionEventsErrors, NackExtensionEventsResponses, OidcCallbackData, OidcCallbackErrors, OidcCallbackResponses, OidcStartData, OidcStartErrors, OidcStartResponses, PeerExchangeData, PeerExchangeErrors, PeerExchangeResponses, PeerHelloData, PeerHelloErrors, PeerHelloResponses, PeerJoinData, PeerJoinErrors, PeerJoinResponses, ReceiveExtensionWebhookData, ReceiveExtensionWebhookErrors, ReceiveExtensionWebhookResponses, ReceiveSourceWebhookData, ReceiveSourceWebhookErrors, ReceiveSourceWebhookResponses, ReextractSourceData, ReextractSourceErrors, ReextractSourceResponses, RegisterData, RegisterErrors, RegisterResponses, ReindexDocumentData, ReindexDocumentErrors, ReindexDocumentResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, RenameTokenData, RenameTokenErrors, RenameTokenResponses, RenameVaultData, RenameVaultErrors, RenameVaultResponses, RepairVaultIntegrityData, RepairVaultIntegrityErrors, RepairVaultIntegrityResponses, RepointConnectorsData, RepointConnectorsErrors, RepointConnectorsResponses, RequestHttpsData, RequestHttpsErrors, RequestHttpsResponses, RequestUpdateData, RequestUpdateErrors, RequestUpdateResponses, RevokeOauthGrantData, RevokeOauthGrantErrors, RevokeOauthGrantResponses, RevokeSessionData, RevokeSessionErrors, RevokeSessionResponses, RotateExtensionSecretData, RotateExtensionSecretErrors, RotateExtensionSecretResponses, SearchPocketaiData, SearchPocketaiErrors, SearchPocketaiResponses, SendMessageData, SendMessageErrors, SendMessageResponse, SendMessageResponses, SetMemberRoleData, SetMemberRoleErrors, SetMemberRoleResponses, StopVaultPeerData, StopVaultPeerErrors, StopVaultPeerResponses, SyncSourceData, SyncSourceErrors, SyncSourceResponses, SyncVaultPeerData, SyncVaultPeerErrors, SyncVaultPeerResponses, TestConnectorData, TestConnectorErrors, TestConnectorResponses, TransferOwnershipData, TransferOwnershipErrors, TransferOwnershipResponses, UpdateConnectorData, UpdateConnectorErrors, UpdateConnectorResponses, UpdateEntityData, UpdateEntityErrors, UpdateEntityResponses, UpdateExtensionData, UpdateExtensionErrors, UpdateExtensionResponses, UpdateMemoryData, UpdateMemoryErrors, UpdateMemoryResponses, UpdateSettingsData, UpdateSettingsErrors, UpdateSettingsResponses, UploadDocumentData, UploadDocumentErrors, UploadDocumentResponses, VerifyVaultPeerData, VerifyVaultPeerErrors, VerifyVaultPeerResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -321,6 +321,21 @@ export const getPocketaiDetail = <ThrowOnError extends boolean = false>(options:
             type: 'apiKey'
         }, { scheme: 'bearer', type: 'http' }],
     url: '/api/connectors/pocketai/detail/{recording_id}',
+    ...options
+});
+
+/**
+ * A Pocket recording's stored audio
+ *
+ * The audio Eunomia kept for one of the caller's Pocket recordings (connections with `config.store_audio` on). 404 when none was stored.
+ */
+export const getPocketaiAudio = <ThrowOnError extends boolean = false>(options: Options<GetPocketaiAudioData, ThrowOnError>): RequestResult<GetPocketaiAudioResponses, GetPocketaiAudioErrors, ThrowOnError> => (options.client ?? client).get<GetPocketaiAudioResponses, GetPocketaiAudioErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/connectors/pocketai/recordings/{recording_id}/audio',
     ...options
 });
 
@@ -788,6 +803,21 @@ export const addRelation = <ThrowOnError extends boolean = false>(options: Optio
 });
 
 /**
+ * Follow everything that changes in the caller's vaults over one WebSocket
+ *
+ * Upgrades to a WebSocket that sends JSON text messages with a `type`: `hello` (each vault's last change seq, first and on every reconnect), `change` (a change-log row of any vault the caller can read), `seq` (a vault's log moved on; refetch it), `vault` (a vault was created, renamed, deleted, cloned, merged, or its members changed), `vaults` (the caller's vault set changed), `resync` (refetch everything) and `heartbeat`. No content: fetch what changed. A browser authenticates with its session cookie from an allowed origin; other clients send a Bearer token.
+ */
+export const followEvents = <ThrowOnError extends boolean = false>(options?: Options<FollowEventsData, ThrowOnError>): RequestResult<FollowEventsResponses, FollowEventsErrors, ThrowOnError> => (options?.client ?? client).get<FollowEventsResponses, FollowEventsErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/events/ws',
+    ...options
+});
+
+/**
  * Download the personal vault as JSON
  */
 export const exportData = <ThrowOnError extends boolean = false>(options?: Options<ExportDataData, ThrowOnError>): RequestResult<ExportDataResponses, ExportDataErrors, ThrowOnError> => (options?.client ?? client).get<ExportDataResponses, ExportDataErrors, ThrowOnError>({
@@ -1048,6 +1078,95 @@ export const revokeOauthGrant = <ThrowOnError extends boolean = false>(options: 
 export const getOpenapi = <ThrowOnError extends boolean = false>(options?: Options<GetOpenapiData, ThrowOnError>): RequestResult<GetOpenapiResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetOpenapiResponses, unknown, ThrowOnError>({ url: '/api/openapi.json', ...options });
 
 /**
+ * For another Eunomia: which instance answers at this address
+ */
+export const peerHello = <ThrowOnError extends boolean = false>(options: Options<PeerHelloData, ThrowOnError>): RequestResult<PeerHelloResponses, PeerHelloErrors, ThrowOnError> => (options.client ?? client).get<PeerHelloResponses, PeerHelloErrors, ThrowOnError>({ url: '/api/peer/v1/{org}/hello', ...options });
+
+/**
+ * For another Eunomia: redeem a share code (the request carries a MAC keyed by the code's secret)
+ */
+export const peerJoin = <ThrowOnError extends boolean = false>(options: Options<PeerJoinData, ThrowOnError>): RequestResult<PeerJoinResponses, PeerJoinErrors, ThrowOnError> => (options.client ?? client).post<PeerJoinResponses, PeerJoinErrors, ThrowOnError>({
+    url: '/api/peer/v1/{org}/join',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * For another Eunomia: one sealed request on a link (exchange, verify, leave), one sealed answer
+ *
+ * Body `{link, ts, nonce, data}`: `data` is AES-256-GCM under the link key, with `POST|path|link|ts|nonce` as associated data. Refused outside a 5 minute clock window or for a nonce already seen.
+ */
+export const peerExchange = <ThrowOnError extends boolean = false>(options: Options<PeerExchangeData, ThrowOnError>): RequestResult<PeerExchangeResponses, PeerExchangeErrors, ThrowOnError> => (options.client ?? client).post<PeerExchangeResponses, PeerExchangeErrors, ThrowOnError>({
+    url: '/api/peer/v1/{org}/links/{link_id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Join a vault another Eunomia shared, with its share code
+ *
+ * Finds the first address in the code that answers as the right instance (LAN first), proves knowledge of the code's secret, and makes a new vault holding this Eunomia's copy. The first sync runs before this returns.
+ */
+export const joinSharedVault = <ThrowOnError extends boolean = false>(options: Options<JoinSharedVaultData, ThrowOnError>): RequestResult<JoinSharedVaultResponses, JoinSharedVaultErrors, ThrowOnError> => (options.client ?? client).post<JoinSharedVaultResponses, JoinSharedVaultErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/peers/join',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Stop sharing with one other Eunomia (owner only); both sides keep their copy
+ */
+export const stopVaultPeer = <ThrowOnError extends boolean = false>(options: Options<StopVaultPeerData, ThrowOnError>): RequestResult<StopVaultPeerResponses, StopVaultPeerErrors, ThrowOnError> => (options.client ?? client).delete<StopVaultPeerResponses, StopVaultPeerErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/peers/links/{link_id}',
+    ...options
+});
+
+/**
+ * Sync a shared vault with the other Eunomia now
+ */
+export const syncVaultPeer = <ThrowOnError extends boolean = false>(options: Options<SyncVaultPeerData, ThrowOnError>): RequestResult<SyncVaultPeerResponses, SyncVaultPeerErrors, ThrowOnError> => (options.client ?? client).post<SyncVaultPeerResponses, SyncVaultPeerErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/peers/links/{link_id}/sync',
+    ...options
+});
+
+/**
+ * Check that both copies of a shared vault hold exactly the same items
+ */
+export const verifyVaultPeer = <ThrowOnError extends boolean = false>(options: Options<VerifyVaultPeerData, ThrowOnError>): RequestResult<VerifyVaultPeerResponses, VerifyVaultPeerErrors, ThrowOnError> => (options.client ?? client).get<VerifyVaultPeerResponses, VerifyVaultPeerErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/peers/links/{link_id}/verify',
+    ...options
+});
+
+/**
  * Read app settings
  */
 export const getSettings = <ThrowOnError extends boolean = false>(options?: Options<GetSettingsData, ThrowOnError>): RequestResult<GetSettingsResponses, GetSettingsErrors, ThrowOnError> => (options?.client ?? client).get<GetSettingsResponses, GetSettingsErrors, ThrowOnError>({
@@ -1140,6 +1259,25 @@ export const getSourcesStatus = <ThrowOnError extends boolean = false>(options?:
         }, { scheme: 'bearer', type: 'http' }],
     url: '/api/sources/status',
     ...options
+});
+
+/**
+ * Re-run entity extraction over a source's records
+ *
+ * `key` is a source key or a connection's key, as for sync. Counts the caller's live records of that connection and the facts and relations extracted from them. With `dry_run` false it deletes those facts and relations (their subjects' observations go stale, or go when nothing else backs them) and queues extraction for every record again; it answers 409 while an earlier re-extraction of the source is still queued or running.
+ */
+export const reextractSource = <ThrowOnError extends boolean = false>(options: Options<ReextractSourceData, ThrowOnError>): RequestResult<ReextractSourceResponses, ReextractSourceErrors, ThrowOnError> => (options.client ?? client).post<ReextractSourceResponses, ReextractSourceErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/sources/{key}/reextract',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
 });
 
 /**
@@ -1314,6 +1452,36 @@ export const renameVault = <ThrowOnError extends boolean = false>(options: Optio
 });
 
 /**
+ * A vault's change log after a cursor
+ *
+ * One row per write that changed the vault (no content: fetch the item). `next` is the cursor for the following page.
+ */
+export const listVaultChanges = <ThrowOnError extends boolean = false>(options: Options<ListVaultChangesData, ThrowOnError>): RequestResult<ListVaultChangesResponses, ListVaultChangesErrors, ThrowOnError> => (options.client ?? client).get<ListVaultChangesResponses, ListVaultChangesErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/vaults/{vault_id}/changes',
+    ...options
+});
+
+/**
+ * Follow a vault's change log over a WebSocket
+ *
+ * Upgrades to a WebSocket that sends each change after `after` as a JSON text message (a `Change`), then every new one as it commits. A browser authenticates with its session cookie from an allowed origin; other clients send a Bearer token.
+ */
+export const followVaultChanges = <ThrowOnError extends boolean = false>(options: Options<FollowVaultChangesData, ThrowOnError>): RequestResult<FollowVaultChangesResponses, FollowVaultChangesErrors, ThrowOnError> => (options.client ?? client).get<FollowVaultChangesResponses, FollowVaultChangesErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/vaults/{vault_id}/changes/ws',
+    ...options
+});
+
+/**
  * Clone a vault
  */
 export const cloneVault = <ThrowOnError extends boolean = false>(options: Options<CloneVaultData, ThrowOnError>): RequestResult<CloneVaultResponses, CloneVaultErrors, ThrowOnError> => (options.client ?? client).post<CloneVaultResponses, CloneVaultErrors, ThrowOnError>({
@@ -1328,6 +1496,32 @@ export const cloneVault = <ThrowOnError extends boolean = false>(options: Option
         'Content-Type': 'application/json',
         ...options.headers
     }
+});
+
+/**
+ * Check a vault for broken or leftover data
+ */
+export const checkVaultIntegrity = <ThrowOnError extends boolean = false>(options: Options<CheckVaultIntegrityData, ThrowOnError>): RequestResult<CheckVaultIntegrityResponses, CheckVaultIntegrityErrors, ThrowOnError> => (options.client ?? client).get<CheckVaultIntegrityResponses, CheckVaultIntegrityErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/vaults/{vault_id}/integrity',
+    ...options
+});
+
+/**
+ * Repair what an integrity check found (owner only)
+ */
+export const repairVaultIntegrity = <ThrowOnError extends boolean = false>(options: Options<RepairVaultIntegrityData, ThrowOnError>): RequestResult<RepairVaultIntegrityResponses, RepairVaultIntegrityErrors, ThrowOnError> => (options.client ?? client).post<RepairVaultIntegrityResponses, RepairVaultIntegrityErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/vaults/{vault_id}/integrity',
+    ...options
 });
 
 /**
@@ -1427,6 +1621,51 @@ export const setMemberRole = <ThrowOnError extends boolean = false>(options: Opt
         'Content-Type': 'application/json',
         ...options.headers
     }
+});
+
+/**
+ * The other Eunomias a vault is shared with, their sync status, and unused share codes
+ */
+export const listVaultPeers = <ThrowOnError extends boolean = false>(options: Options<ListVaultPeersData, ThrowOnError>): RequestResult<ListVaultPeersResponses, ListVaultPeersErrors, ThrowOnError> => (options.client ?? client).get<ListVaultPeersResponses, ListVaultPeersErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/vaults/{vault_id}/peers',
+    ...options
+});
+
+/**
+ * Make a one-time code to share a vault with another Eunomia (owner only)
+ *
+ * The code carries this instance's addresses (LAN first), a share id and a secret. It works once and expires (default 7 days). Only the secret's ciphertext is kept here.
+ */
+export const createVaultShareCode = <ThrowOnError extends boolean = false>(options: Options<CreateVaultShareCodeData, ThrowOnError>): RequestResult<CreateVaultShareCodeResponses, CreateVaultShareCodeErrors, ThrowOnError> => (options.client ?? client).post<CreateVaultShareCodeResponses, CreateVaultShareCodeErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/vaults/{vault_id}/share-codes',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Withdraw a share code that has not been used (owner only)
+ */
+export const deleteVaultShareCode = <ThrowOnError extends boolean = false>(options: Options<DeleteVaultShareCodeData, ThrowOnError>): RequestResult<DeleteVaultShareCodeResponses, DeleteVaultShareCodeErrors, ThrowOnError> => (options.client ?? client).delete<DeleteVaultShareCodeResponses, DeleteVaultShareCodeErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/vaults/{vault_id}/share-codes/{code_id}',
+    ...options
 });
 
 /**

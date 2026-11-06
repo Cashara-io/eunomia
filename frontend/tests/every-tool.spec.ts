@@ -92,6 +92,8 @@ test("every MCP tool works end to end", async ({ request, baseURL }) => {
   expect((await ok("vault_members", { vault_id: team.id })).results.length).toBe(2);
   // roles and ownership: promote, demote, hand over and back (an owner always remains)
   expect((await ok("vault_get", { vault_id: team.id })).member_count).toBe(2);
+  expect((await ok("vault_check", { vault_id: team.id })).ok).toBe(true);
+  expect((await ok("vault_repair", { vault_id: team.id })).repaired).toBeTruthy();
   expect((await ok("vault_set_role", { vault_id: team.id, email: friend.email, role: "owner" })).role).toBe("owner");
   expect((await ok("vault_set_role", { vault_id: team.id, email: friend.email, role: "member" })).role).toBe("member");
   expect((await ok("vault_transfer_ownership", { vault_id: team.id, email: friend.email })).role).toBe("owner");
@@ -124,6 +126,14 @@ test("every MCP tool works end to end", async ({ request, baseURL }) => {
   expect((await call("skill_save", { name: "Bad Name", description: "d", body: "b" })).isError).toBe(true);
   expect((await ok("skill_delete", { id: skill.id })).deleted).toBe(skill.id);
 
+  // the change log has the skill's save, save again and delete, in order, and none of its content
+  const log = await ok("changes_since", { limit: 1000 });
+  const rows: { seq: number; op: string; kind: string; id: string }[] = log.changes;
+  expect(rows.filter((c) => c.id === skill.id).map((c) => `${c.op} ${c.kind}`)).toEqual(["created skill", "updated skill", "deleted skill"]);
+  expect(rows.map((c) => c.seq)).toEqual(rows.map((_, i) => i + 1));
+  expect(log.next).toBe(rows.length);
+  expect(JSON.stringify(log)).not.toContain("Roll back");
+
   // bulk writes: one result per fact, a bad one fails alone
   const batch = await ok("memory_write_batch", { items: [
     { subject_name: "Import page 1", subject_kind: "file", text: "Page one of the import." },
@@ -131,6 +141,14 @@ test("every MCP tool works end to end", async ({ request, baseURL }) => {
   ] });
   expect([batch.written, batch.failed]).toEqual([1, 1]);
   expect(batch.results[1].code).toBe("validation.invalid");
+
+  // peer vaults (no second Eunomia here): a share code (an error when this install knows no address), the
+  // vault's peers, and a bad code or an unknown link are errors
+  const shared = await ok("vault_create", { name: `Peer share ${Date.now()}` });
+  await call("vault_share_code", { vault_id: shared.id, role: "read" });
+  expect((await ok("vault_peers", { vault_id: shared.id })).links).toEqual([]);
+  expect((await call("vault_join_shared", { share_code: "eunomia1:nope" })).isError).toBe(true);
+  expect((await call("vault_peer_sync", { link_id: "0".repeat(32) })).isError).toBe(true);
 
   // coverage: every tool the server lists was exercised above
   const list = await request.post("/mcp", {

@@ -9,6 +9,8 @@
 mod common;
 
 use std::collections::BTreeSet;
+use std::future::Future;
+use std::pin::Pin;
 
 use common::{Normalizer, TestApp};
 use eunomia_backend::sources::registry as sources;
@@ -23,31 +25,37 @@ struct Golden {
 
 impl Golden {
     /// Call `tool`, snapshot the normalized output as `label`, return the raw output.
-    async fn snap(&mut self, label: &str, tool: &str, args: Value) -> Value {
-        let out = self.app.tool(tool, args).await;
-        let mut stable = self.norm.apply(&out);
-        // Equal-scored hits come back in random-id order; sort them so the golden is stable.
-        for key in ["results", "memories"] {
-            if let Some(Value::Array(items)) = stable.get_mut(key) {
-                for field in ["text", "name"] {
-                    if items.iter().all(|i| i.get(field).is_some()) {
-                        items.sort_by_key(|i| i[field].to_string());
-                        break;
+    ///
+    /// Not an `async fn`: the future is built in this short frame and handed back boxed, so the long
+    /// `goldens` poll frame holds a pointer per call. As an `async fn`, a debug build kept a copy of every
+    /// call's future (~5 KB each) in that frame, ~550 KiB on top of the tool call's own stack.
+    fn snap<'a>(&'a mut self, label: &'a str, tool: &'a str, args: Value) -> Pin<Box<dyn Future<Output = Value> + 'a>> {
+        Box::pin(async move {
+            let out = self.app.tool(tool, args).await;
+            let mut stable = self.norm.apply(&out);
+            // Equal-scored hits come back in random-id order; sort them so the golden is stable.
+            for key in ["results", "memories"] {
+                if let Some(Value::Array(items)) = stable.get_mut(key) {
+                    for field in ["text", "name"] {
+                        if items.iter().all(|i| i.get(field).is_some()) {
+                            items.sort_by_key(|i| i[field].to_string());
+                            break;
+                        }
                     }
-                }
-                // Scores and indexes depend on the (random-id) tie-break rank, so they are not stable.
-                for item in items.iter_mut() {
-                    for noisy in ["score", "index"] {
-                        if let Some(sc) = item.get_mut(noisy) {
-                            *sc = json!("<unstable>");
+                    // Scores and indexes depend on the (random-id) tie-break rank, so they are not stable.
+                    for item in items.iter_mut() {
+                        for noisy in ["score", "index"] {
+                            if let Some(sc) = item.get_mut(noisy) {
+                                *sc = json!("<unstable>");
+                            }
                         }
                     }
                 }
             }
-        }
-        insta::assert_json_snapshot!(label, stable);
-        self.covered.insert(tool.to_string());
-        out
+            insta::assert_json_snapshot!(label, stable);
+            self.covered.insert(tool.to_string());
+            out
+        })
     }
 }
 
@@ -83,10 +91,45 @@ fn role_goldens<'a>(g: &'a mut Golden, bob: &'a eunomia_backend::models_user::Us
     Box::pin(g.snap("vault_accept_invitation", "vault_accept_invitation", json!({"vault_id": handover}))).await;
     Box::pin(g.snap("vault_decline_invitation", "vault_decline_invitation", json!({"vault_id": handover}))).await;
     Box::pin(g.snap("vault_get", "vault_get", json!({"vault_id": handover}))).await;
+    Box::pin(g.snap("vault_check", "vault_check", json!({"vault_id": handover}))).await;
+    Box::pin(g.snap("vault_repair", "vault_repair", json!({"vault_id": handover}))).await;
     Box::pin(g.snap("vault_set_role", "vault_set_role", json!({"vault_id": handover, "email": bob.email, "role": "owner"}))).await;
     Box::pin(g.snap("vault_set_role__last_owner", "vault_set_role", json!({"vault_id": handover, "email": g.app.user.email.clone(), "role": "member"}))).await;
     Box::pin(g.snap("vault_transfer_ownership", "vault_transfer_ownership", json!({"vault_id": handover, "email": bob.email}))).await;
 
+    })
+}
+
+/// Peer vault tools without a second instance: a share code (its random parts masked), the vault's
+/// peers, a join with a bad code and a sync of an unknown link (both errors).
+fn peer_goldens<'a>(g: &'a mut Golden) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + 'a>> {
+    Box::pin(async move {
+        // an address the code can carry whatever this machine's network is
+        unsafe { std::env::set_var("EUNOMIA_PEER_ADDRS", "https://golden.example.com") };
+        let v = Box::pin(g.snap("vault_create__peer", "vault_create", json!({"name": "Peer Share", "kind": "org"}))).await;
+        let vault = s(&v, "/id");
+        let mask = |mut out: Value| {
+            for key in ["code", "addresses", "fingerprint", "id"] {
+                if out.get(key).is_some() {
+                    out[key] = json!(format!("<{key}>"));
+                }
+            }
+            if let Some(Value::Array(codes)) = out.get_mut("codes") {
+                for c in codes {
+                    c["id"] = json!("<id>");
+                }
+            }
+            out
+        };
+        let share = g.app.tool("vault_share_code", json!({"vault_id": vault, "role": "read"})).await;
+        assert!(s(&share, "/code").starts_with("eunomia1:"), "{share}");
+        insta::assert_json_snapshot!("vault_share_code", g.norm.apply(&mask(share)));
+        g.covered.insert("vault_share_code".into());
+        let peers = g.app.tool("vault_peers", json!({"vault_id": vault})).await;
+        insta::assert_json_snapshot!("vault_peers", g.norm.apply(&mask(peers)));
+        g.covered.insert("vault_peers".into());
+        Box::pin(g.snap("vault_join_shared__bad_code", "vault_join_shared", json!({"share_code": "eunomia1:nope"}))).await;
+        Box::pin(g.snap("vault_peer_sync__unknown", "vault_peer_sync", json!({"link_id": "0".repeat(32)}))).await;
     })
 }
 
@@ -197,9 +240,13 @@ async fn goldens() {
     Box::pin(g.snap("skill_find", "skill_find", json!({"query": "anvil"}))).await;
     Box::pin(g.snap("skill_get", "skill_get", json!({"id": s(&skill, "/id")}))).await;
     Box::pin(g.snap("skill_delete", "skill_delete", json!({"id": s(&skill, "/id")}))).await;
+    // -- the change log: the first writes above, oldest first --
+    Box::pin(g.snap("changes_since", "changes_since", json!({"after": 0, "limit": 3}))).await;
 
     // -- invitations and roles (last, so they change no snapshot above) --
     role_goldens(&mut g, &bob).await;
+    // -- peer vaults (last; no second instance: what works without one) --
+    peer_goldens(&mut g).await;
 
     let registered: BTreeSet<String> = registry::all_tools().keys().map(|k| k.to_string()).collect();
     let missing: Vec<_> = registered.difference(&g.covered).collect();

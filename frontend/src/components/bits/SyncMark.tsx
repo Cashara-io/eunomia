@@ -19,6 +19,7 @@ export default function SyncMark({ status, size = 14 }: { status: SyncStatus; si
   }
   const animate = changed || undefined;
 
+  // On a primary (blue) button both marks take the button text colour (--bits-done), so they stay readable.
   // At rest it is a plain refresh icon, so it never reads as a frozen spinner
   // (and under reduced motion "running" still differs from idle).
   if (status === "idle") return <RefreshCw size={size} strokeWidth={1.75} aria-hidden style={{ flexShrink: 0 }} />;
@@ -35,7 +36,7 @@ export default function SyncMark({ status, size = 14 }: { status: SyncStatus; si
       )}
       {status === "done" && <path d="M3.5 8.4 6.6 11.3 12.5 4.9" stroke="var(--bits-done, var(--good))" pathLength={1} className="bits-draw" data-animate={animate} />}
       {status === "failed" && (
-        <path d="M4.5 4.5 11.5 11.5M11.5 4.5 4.5 11.5" stroke="var(--critical)" pathLength={1} className="bits-draw" data-animate={animate} />
+        <path d="M4.5 4.5 11.5 11.5M11.5 4.5 4.5 11.5" stroke="var(--bits-done, var(--critical))" pathLength={1} className="bits-draw" data-animate={animate} />
       )}
     </svg>
   );

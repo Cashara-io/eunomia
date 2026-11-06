@@ -154,6 +154,46 @@ expression: info(&db).await
       "kind": {
         "kind": "NORMAL"
       },
+      "name": "change",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "vault",
+            "seq"
+          ],
+          "index": "UNIQUE",
+          "name": "change_vault_seq_idx",
+          "table": "change"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
+      "name": "change_seq",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": []
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
       "name": "chat_message",
       "permissions": {
         "create": false,
@@ -473,6 +513,15 @@ expression: info(&db).await
       "indexes": [
         {
           "cols": [
+            "out",
+            "rel"
+          ],
+          "index": "",
+          "name": "linked_to_out_idx",
+          "table": "linked_to"
+        },
+        {
+          "cols": [
             "in",
             "out",
             "rel"
@@ -583,6 +632,15 @@ expression: info(&db).await
         },
         {
           "cols": [
+            "subject",
+            "type"
+          ],
+          "index": "",
+          "name": "memory_subject_type_idx",
+          "table": "memory"
+        },
+        {
+          "cols": [
             "text"
           ],
           "index": "FULLTEXT ANALYZER cache_text_analyzer BM25(1.2,0.75)",
@@ -665,6 +723,112 @@ expression: info(&db).await
       "kind": {
         "kind": "NORMAL"
       },
+      "name": "peer_instance",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": []
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
+      "name": "peer_item",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "link",
+            "remote"
+          ],
+          "index": "",
+          "name": "peer_item_link_remote_idx",
+          "table": "peer_item"
+        },
+        {
+          "cols": [
+            "vault",
+            "local"
+          ],
+          "index": "",
+          "name": "peer_item_vault_local_idx",
+          "table": "peer_item"
+        },
+        {
+          "cols": [
+            "vault",
+            "origin"
+          ],
+          "index": "",
+          "name": "peer_item_vault_origin_idx",
+          "table": "peer_item"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
+      "name": "peer_link",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "vault"
+          ],
+          "index": "",
+          "name": "peer_link_vault_idx",
+          "table": "peer_link"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
+      "name": "peer_share",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "vault"
+          ],
+          "index": "",
+          "name": "peer_share_vault_idx",
+          "table": "peer_share"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
       "name": "person",
       "permissions": {
         "create": false,
@@ -738,6 +902,21 @@ expression: info(&db).await
       "drop": false,
       "schemafull": true,
       "kind": {
+        "kind": "NORMAL"
+      },
+      "name": "redact_backfill",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": []
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
         "enforced": false,
         "in": [
           "person",
@@ -767,6 +946,14 @@ expression: info(&db).await
         "update": false
       },
       "indexes": [
+        {
+          "cols": [
+            "out"
+          ],
+          "index": "",
+          "name": "relates_to_out_idx",
+          "table": "relates_to"
+        },
         {
           "cols": [
             "source"

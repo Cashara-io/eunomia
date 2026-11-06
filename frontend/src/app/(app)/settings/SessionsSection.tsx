@@ -24,7 +24,7 @@ export function SessionsSection() {
 
   return (
     <div className="flex flex-col gap-5">
-      <PanelHead title="Active sessions">Browser sign-ins. Revoking one signs that browser out immediately.</PanelHead>
+      <PanelHead title="Active sessions">The browsers where you are signed in to Eunomia. Revoking one signs that browser out immediately.</PanelHead>
       {me?.oidc_provider && (
         <div className="flex items-center gap-2 text-[13px]" style={{ color: "var(--ink-dim)" }}>
           <KeyRound {...ICON} className="shrink-0" aria-hidden />
@@ -43,8 +43,8 @@ export function SessionsSection() {
               <th>Device</th>
               <th className="w-[120px]">Signed in</th>
               <th className="w-[120px]">Last seen</th>
-              <th className="w-[220px]">
-                <span className="sr-only">Actions</span>
+              <th className="w-[240px]">
+                Action
               </th>
             </tr>
           </thead>
@@ -65,7 +65,7 @@ export function SessionsSection() {
                     <span className="truncate max-w-[360px]" title={s.user_agent}>
                       {s.user_agent || "Unknown device"}
                     </span>
-                    {s.current && <span className="pill shrink-0">This device</span>}
+                    {s.current && <span className="pill shrink-0 min-h-6! font-semibold">This device</span>}
                   </span>
                 </td>
                 <td className="font-mono text-[12px]" style={{ color: "var(--ink-dim)" }}>

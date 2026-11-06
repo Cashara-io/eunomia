@@ -1,0 +1,33 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "changes": [
+    {
+      "seq": 1,
+      "op": "created",
+      "kind": "entity",
+      "id": "person:<id1>",
+      "actor": "system",
+      "at": "<ts>"
+    },
+    {
+      "seq": 2,
+      "op": "created",
+      "kind": "memory",
+      "id": "memory:<id3>",
+      "actor": "system",
+      "at": "<ts>"
+    },
+    {
+      "seq": 3,
+      "op": "created",
+      "kind": "memory",
+      "id": "memory:<id5>",
+      "actor": "system",
+      "at": "<ts>"
+    }
+  ],
+  "next": 3
+}

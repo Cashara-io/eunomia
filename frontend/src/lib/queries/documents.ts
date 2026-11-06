@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { deleteDocument, getDocument, listDocuments, reindexDocument } from "@/lib/gen";
 import type { DocumentDetail, DocumentList } from "@/lib/gen";
 import { call } from "./client";
+import { livePoll } from "./liveStatus";
 import { toolKeys } from "./tools";
 
 export const documentKeys = {
@@ -12,12 +13,12 @@ export const documentKeys = {
 
 const indexing = (list?: DocumentList) => list?.results.some((d) => d.status === "indexing") ?? false;
 
-/** The user's documents. Polls every 2s while one is still indexing, so its status and passage count arrive on their own. */
+/** The user's documents. Polls every 2s while one is still indexing, so its status and passage count arrive on their own; otherwise only while live updates are down. */
 export const useDocuments = () =>
   useQuery({
     queryKey: documentKeys.list(),
     queryFn: () => call(listDocuments({ query: { limit: 200 } })),
-    refetchInterval: (q) => (indexing(q.state.data) ? 2000 : false),
+    refetchInterval: (q) => (indexing(q.state.data) ? 2000 : livePoll()),
   });
 
 export const useDocument = (id: string | null) =>

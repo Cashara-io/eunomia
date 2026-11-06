@@ -12,11 +12,11 @@ export const ICON = { size: 14, strokeWidth: 1.75 } as const;
 /* reveal: a freshly minted secret decrypts in once (the token, never a command). */
 export function CopyField({ value, reveal = false }: { value: string; reveal?: boolean }) {
   return (
-    <div className="field flex items-center gap-2 h-8 pl-3 pr-1">
-      <code className="flex-1 min-w-0 truncate text-[12px] font-mono" style={{ color: "var(--ink)" }}>
+    <div className="field flex items-center gap-2 min-h-10 pl-3 pr-1">
+      <code className="flex-1 min-w-0 truncate text-[13px] font-mono" style={{ color: "var(--ink)" }}>
         {reveal ? <DecryptReveal key={value} text={value} /> : value}
       </code>
-      <CopyButton value={value} size="sm" className="btn-ghost shrink-0" />
+      <CopyButton value={value} size="sm" className="shrink-0" />
     </div>
   );
 }
@@ -49,7 +49,7 @@ export function PanelHead({ title, children, action }: { title: string; children
       <div className="min-w-0 flex-1">
         <h2 className="section-title">{title}</h2>
         {children && (
-          <p className="text-[13px] mt-1 max-w-[62ch]" style={{ color: "var(--ink-dim)" }}>
+          <p className="text-[15px] leading-relaxed mt-1.5 max-w-[68ch]" style={{ color: "var(--ink-dim)" }}>
             {children}
           </p>
         )}
@@ -81,21 +81,20 @@ export function RevokeButton({ label, onRevoke, warn }: { label: string; onRevok
         onConfirm={confirm}
         disabled={busy}
         aria-label="Revoke"
-        className="btn-sm btn-icon"
-        // Quiet at rest like the ghost icon it replaces; the critical fill shows while held.
-        style={{ borderColor: "transparent", color: "var(--ink-dim)" }}
+        className="btn-sm"
       >
-        <Trash2 {...ICON} />
+        <Trash2 {...ICON} aria-hidden />
+        Revoke
       </HoldButton>
       </Tooltip>
     );
   return (
     <span className="inline-flex items-center gap-1">
-      {warn && <span className="text-[12px] mr-1" style={{ color: "var(--critical)" }}>{warn}</span>}
+      {warn && <span className="text-[13px] mr-1" style={{ color: "var(--critical)" }}>{warn}</span>}
       <button
         onClick={confirm}
         disabled={busy}
-        className="btn btn-danger btn-sm"
+        className="btn btn-danger-solid btn-sm"
       >
         {busy ? "Revoking…" : "Revoke"}
       </button>

@@ -10,8 +10,8 @@ async function newUser(browser: Browser, prefix: string): Promise<{ page: Page; 
 
 async function createVaultAndInvite(owner: Page, vaultName: string, inviteeEmail: string) {
   await owner.goto("/vaults");
-  await owner.getByRole("button", { name: "New vault" }).click();
-  await owner.getByPlaceholder(/^Vault name/).fill(vaultName);
+  await owner.getByRole("button", { name: "Create space" }).click();
+  await owner.getByPlaceholder(/^Space name/).fill(vaultName);
   await owner.getByRole("button", { name: "Create", exact: true }).click();
 
   await owner.getByRole("button", { name: new RegExp(`^${vaultName}`) }).click();
@@ -33,10 +33,10 @@ test.describe("Vault invitations", () => {
 
     await invitee.page.goto("/vaults");
     const invite = invitee.page.locator(".ledger", { hasText: vaultName });
-    await expect(invite.getByRole("button", { name: "Join" })).toBeVisible();
-    await invite.getByRole("button", { name: "Join" }).click();
+    await expect(invite.getByRole("button", { name: "Join", exact: true })).toBeVisible();
+    await invite.getByRole("button", { name: "Join", exact: true }).click();
 
-    await expect(invitee.page.getByRole("button", { name: "Join" })).toHaveCount(0);
+    await expect(invitee.page.getByRole("button", { name: "Join", exact: true })).toHaveCount(0);
     await expect(invitee.page.getByRole("button", { name: new RegExp(`^${vaultName}`) })).toBeVisible();
 
     await owner.page.reload();

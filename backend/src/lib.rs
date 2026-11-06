@@ -3,6 +3,7 @@ pub mod auth;
 pub mod authz;
 pub mod cache;
 pub mod capsules;
+pub mod changes;
 pub mod chat;
 pub mod config;
 pub mod connectors;
@@ -14,6 +15,7 @@ pub mod entities;
 pub mod error;
 pub mod extensions;
 pub mod gate;
+pub mod integrity;
 #[cfg(feature = "test-support")]
 pub mod isolation;
 pub mod jobs;
@@ -23,8 +25,10 @@ pub mod models_user;
 pub mod oauth;
 pub mod oidc;
 pub mod openapi;
+pub mod peers;
 pub mod pool;
 pub mod provisioning;
+pub mod redact;
 pub mod rid;
 pub mod ratelimit;
 pub mod replay;
@@ -78,6 +82,8 @@ pub fn app_with(state: AppState, limits: ratelimit::RateConfig) -> axum::Router 
         .merge(routers::update::router())
         .merge(routers::https::router())
         .merge(routers::vaults::router())
+        .merge(routers::peers::router())
+        .merge(routers::changes::router())
         .merge(routers::connectors::router())
         .merge(routers::connectors::snapshot_router())
         .merge(routers::entities::router())

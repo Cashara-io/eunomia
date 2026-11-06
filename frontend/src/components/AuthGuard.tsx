@@ -34,7 +34,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       .catch(async (e) => {
         if (cancelled) return;
         if (!isSessionEnded(e)) {
-          setError(failure(e, "Could not check your session."));
+          setError(failure(e, "Could not check your sign-in. Eunomia may be restarting."));
           return;
         }
         const next = encodeURIComponent(pathname);
@@ -49,13 +49,13 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
   if (error)
     return (
-      <div className="p-6">
+      <div className="p-6 flex flex-col items-start gap-3 max-w-xl">
         <ErrorLine error={error} />
-        <button type="button" className="btn btn-sm mt-3" onClick={() => {
+        <button type="button" className="btn" onClick={() => {
             setError(null);
             setAttempt((n) => n + 1);
           }}>
-          Retry
+          Try again
         </button>
       </div>
     );

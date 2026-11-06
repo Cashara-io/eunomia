@@ -8,7 +8,6 @@ import { nextPath } from "@/lib/nextPath";
 import { useMe } from "@/lib/queries/auth";
 import { useCompleteOnboarding, useSettings, useUpdateSettings } from "@/lib/queries/settings";
 import EunomiaMark from "@/components/EunomiaMark";
-import ThemeToggle from "@/components/ThemeToggle";
 import BlurWords from "@/components/bits/BlurWords";
 import { spark } from "@/components/bits/Spark";
 import { InputModeTracker } from "@/components/bits/motion";
@@ -84,7 +83,7 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="canvas-grid min-h-screen w-full flex flex-col px-6 py-6 sm:px-10">
+    <div className="min-h-screen w-full flex flex-col px-6 py-6 sm:px-10" style={{ background: "var(--bauhaus-app-bg)" }}>
       <InputModeTracker />
       {/* Progress fills slide in when a pointer moved the step; keyboard steps swap instantly. */}
       <style>{`
@@ -92,22 +91,22 @@ export default function OnboardingPage() {
         html[data-input="pointer"] .onb-fill { transition: transform 260ms var(--ease-out); }
       `}</style>
       <header className="flex items-center justify-between">
-        <span className="inline-flex items-center gap-2 text-[14px] font-semibold tracking-[-0.01em]">
-          <EunomiaMark size={22} />
-          Eunomia
+        <span className="inline-flex items-center gap-2 text-[20px] font-semibold tracking-[-0.03em]">
+          <EunomiaMark size={24} />
+          eunomia
         </span>
         <div className="flex items-center gap-1">
-          <ThemeToggle />
           {me && (
-            <button onClick={() => skip()} disabled={busy} aria-label="Skip setup" title="Skip setup" className="btn btn-ghost btn-icon btn-sm" style={{ width: 26 }}>
-              <X size={14} strokeWidth={1.75} />
+            <button onClick={() => skip()} disabled={busy} aria-label="Skip setup" className="btn btn-ghost btn-sm">
+              <X size={16} strokeWidth={1.75} aria-hidden />
+              Set up later
             </button>
           )}
         </div>
       </header>
 
       <main className="flex-1 flex items-center justify-center py-10">
-        <div className="panel w-full max-w-[520px] p-7">
+        <div className="task-panel w-full max-w-[680px] p-6 sm:p-8">
           {!me ? (
             <div className="flex flex-col gap-4" aria-busy="true" aria-label="Loading">
               <div className="skeleton h-1 w-full" />
@@ -121,13 +120,13 @@ export default function OnboardingPage() {
               <ol className="flex gap-2 mb-7" aria-label="Setup progress">
                 {steps.map((label, i) => (
                   <li key={label} className="flex-1" aria-current={i === step ? "step" : undefined}>
-                    <span className="block h-[3px] rounded-full overflow-hidden" style={{ background: "var(--border-strong)" }}>
+                    <span className="block h-[4px] overflow-hidden" style={{ background: "var(--bauhaus-app-line)" }}>
                       <span className="onb-fill block h-full" style={{ background: "var(--accent)", transform: i <= step ? "none" : "scaleX(0)" }} />
                     </span>
-                    <span className="mt-2 flex items-center gap-1.5 whitespace-nowrap text-[12px]" style={{ color: i === step ? "var(--ink)" : "var(--ink-faint)" }}>
+                    <span className="mt-2 flex items-center gap-1.5 whitespace-nowrap text-[13px]" style={{ color: i === step ? "var(--ink)" : "var(--ink-dim)", fontWeight: i === step ? 600 : 400 }}>
                       <span className="font-mono">{i + 1}</span>
                       {label}
-                      {i === 2 && <span className="hidden sm:inline" style={{ color: "var(--ink-faint)" }}>(optional)</span>}
+                      {i === 2 && <span className="hidden sm:inline" style={{ color: "var(--ink-dim)" }}>(optional)</span>}
                     </span>
                   </li>
                 ))}
@@ -136,16 +135,16 @@ export default function OnboardingPage() {
               {step === 0 && (
                 <div className="flex flex-col gap-4">
                   <ResolveMark size={36} still={welcomed} />
-                  {welcomed ? <h1 className="page-title">Welcome to Eunomia</h1> : <BlurWords text="Welcome to Eunomia" as="h1" className="page-title" />}
-                  <p className="text-[14px] leading-[1.6]" style={{ color: "var(--ink-dim)" }}>
+                  {welcomed ? <h1 className="connect-title">Welcome to Eunomia</h1> : <BlurWords text="Welcome to Eunomia" as="h1" className="connect-title" />}
+                  <p className="text-[16px] leading-[1.6]" style={{ color: "var(--ink)" }}>
                     You&apos;re signed in as{" "}
                     <span className="font-medium" style={{ color: "var(--ink)" }}>
                       {me.email}
                     </span>
-                    . Next, connect the AI you work with{skipOpenAiStep ? "" : ", then optionally add a model key"}. It can all
-                    wait: the dashboard keeps the setup guides, and Connectors adds data sources any time.
+                    . Next, connect the AI app you already use{skipOpenAiStep ? "" : ", then, if you like, add an OpenAI key"}. It
+                    can all wait: Home keeps the step-by-step guides, and Connected sources adds your other information any time.
                   </p>
-                  <button onClick={() => setStep(1)} className="btn btn-primary h-9 self-start mt-2 px-4">
+                  <button onClick={() => setStep(1)} className="btn btn-primary min-h-11 self-start mt-2 px-5">
                     Let&apos;s go
                   </button>
                 </div>
@@ -153,10 +152,10 @@ export default function OnboardingPage() {
 
               {/* Hidden, not unmounted, so a minted token survives Back. */}
               <div hidden={step !== 1} className="flex flex-col gap-4">
-                <h1 className="page-title">Connect your AI</h1>
-                <p className="text-[13.5px] leading-[1.6]" style={{ color: "var(--ink-dim)" }}>
-                  Your agent recalls and saves memories through Eunomia&apos;s MCP server. It learns when to from the
-                  server itself, so there are no skills or hooks to install.
+                <h1 className="connect-title">Connect your AI</h1>
+                <p className="text-[16px] leading-[1.6]" style={{ color: "var(--ink-dim)" }}>
+                  Choose the AI app you use and follow its steps. Once it is connected, it can look up and save memories in
+                  Eunomia on its own. There is nothing else to install.
                 </p>
                 <ConnectAgents onToken={() => setConnected(true)} />
                 <div className="flex items-center gap-2 mt-2">
@@ -166,7 +165,7 @@ export default function OnboardingPage() {
                       setStep(0);
                     }}
                     disabled={busy}
-                    className="btn btn-ghost h-9 px-2.5"
+                    className="btn btn-ghost"
                   >
                     <ArrowLeft size={14} strokeWidth={1.75} aria-hidden />
                     Back
@@ -176,7 +175,7 @@ export default function OnboardingPage() {
                     onClick={(e) => (skipOpenAiStep ? skip(e.detail > 0 ? e.currentTarget : null) : setStep(2))}
                     disabled={busy}
                     aria-busy={busy}
-                    className={`btn h-9 px-4 ${connected ? "" : "btn-ghost"}`}
+                    className={`btn ${connected ? "btn-primary" : ""}`}
                   >
                     {busy && <Loader2 size={14} strokeWidth={1.75} className="animate-spin" aria-hidden />}
                     {connected ? (skipOpenAiStep ? "Finish" : "Continue") : "Skip"}
@@ -186,14 +185,13 @@ export default function OnboardingPage() {
 
               {step === 2 && !skipOpenAiStep && (
                 <div className="flex flex-col gap-4">
-                  <h1 className="page-title">Add an OpenAI key</h1>
-                  <p className="text-[13.5px] leading-[1.6]" style={{ color: "var(--ink-dim)" }}>
-                    Connected agents like Claude Code and Codex can recall and write memory with their own model. An
-                    OpenAI-compatible endpoint lets Eunomia run embeddings and answers itself, which saves your
-                    agents&apos; tokens. You can add it later in Settings.
+                  <h1 className="connect-title">Add an OpenAI key</h1>
+                  <p className="text-[16px] leading-[1.6]" style={{ color: "var(--ink-dim)" }}>
+                    This is optional. Your connected AI app can already look up and save memories on its own. A key lets
+                    Eunomia also search by meaning and answer questions in Chat itself. You can add it later in Settings.
                   </p>
                   <div className="flex flex-col gap-1.5">
-                    <label htmlFor="base-url" className="text-[12.5px] font-medium" style={{ color: "var(--ink-dim)" }}>
+                    <label htmlFor="base-url" className="text-[14px] font-semibold">
                       Base URL
                     </label>
                     <input
@@ -201,14 +199,14 @@ export default function OnboardingPage() {
                       type="url"
                       autoComplete="off"
                       spellCheck={false}
-                      className="field h-9 px-3 text-[13px] font-mono"
+                      className="field h-11 px-3 text-[14px] font-mono"
                       placeholder="https://api.openai.com/v1"
                       value={baseUrlInput}
                       onChange={(e) => setBaseUrlInput(e.target.value)}
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <label htmlFor="api-key" className="text-[12.5px] font-medium" style={{ color: "var(--ink-dim)" }}>
+                    <label htmlFor="api-key" className="text-[14px] font-semibold">
                       API key
                     </label>
                     <input
@@ -216,7 +214,7 @@ export default function OnboardingPage() {
                       type="password"
                       autoComplete="off"
                       spellCheck={false}
-                      className="field h-9 px-3 text-[13px] font-mono"
+                      className="field h-11 px-3 text-[14px] font-mono"
                       placeholder="sk-…"
                       value={apiKeyInput}
                       onChange={(e) => setApiKeyInput(e.target.value)}
@@ -228,15 +226,15 @@ export default function OnboardingPage() {
                   <div className="flex items-center gap-2 mt-2">
                     <button
                       onClick={() => setStep(1)}
-                      disabled={busy} className="btn btn-ghost h-9 px-2.5">
+                      disabled={busy} className="btn btn-ghost">
                       <ArrowLeft size={14} strokeWidth={1.75} aria-hidden />
                       Back
                     </button>
                     <div className="flex-1" />
-                    <button onClick={() => skip()} disabled={busy} className="btn btn-ghost h-9">
+                    <button onClick={() => skip()} disabled={busy} className="btn">
                       Skip &amp; finish
                     </button>
-                    <button onClick={saveApiKey} disabled={busy} aria-busy={busy} className="btn btn-primary h-9 px-4">
+                    <button onClick={saveApiKey} disabled={busy} aria-busy={busy} className="btn btn-primary">
                       {busy && <Loader2 size={14} strokeWidth={1.75} className="animate-spin" aria-hidden />}
                       {busy ? "Finishing…" : "Finish"}
                     </button>

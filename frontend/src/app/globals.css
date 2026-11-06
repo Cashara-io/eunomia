@@ -1,86 +1,127 @@
 @import "tailwindcss";
 
-/* ---- Eunomia: Multiplayer Canvas ----
-   The shared canvas a team's agents and people work on. Near-black (or
-   paper-white) ground with a faint dot grid, floating 1px panels, Figma-style
-   author tags. One accent, felt green, reserved for what you can press or
-   have selected. Author colours only ever mark who wrote something.
-   Dark is the default; `data-theme="light"` on <html> flips it. */
+/* ---- Eunomia: Bauhaus app ----
+   Source of truth: DESIGN.md (Eunomia Bauhaus app design spec, v1.0).
+   Warm paper ground, ink text, a dark ink sidebar, blue for actions and the
+   selected place, red only for destructive or failing things, yellow only as
+   a fill (never as small text). Status is always written in words; colour
+   only supports it. One light theme: the spec defines no dark variant.
+
+   The spec tokens are the --bauhaus-app-* set below. The older semantic
+   tokens (--canvas, --ink, --accent, ...) every component already uses are
+   mapped onto them, so the whole app follows one palette. The older eu-*
+   landing-page tokens, if any page defines them, are left untouched. */
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 
-  --canvas: #0b0c0e;
-  --surface: #121316;
-  --surface-raised: #1a1b1f;
-  --surface-hover: #212328;
-  --ink: #ededef;
-  --ink-dim: #a3a7ae;
-  --ink-faint: #80858e;
-  --border: rgba(237, 237, 239, 0.08);
-  --border-strong: rgba(237, 237, 239, 0.15);
-  --grid-dot: rgba(237, 237, 239, 0.07);
+  /* ---- spec tokens (exact canvas values) ---- */
+  --bauhaus-app-bg: #fafaf7;
+  --bauhaus-app-ink: #171717;
+  --bauhaus-app-muted: #61615d;
+  --bauhaus-app-line: #dadad2;
+  --bauhaus-app-soft: #edede6;
+  --bauhaus-app-red: #cf412f;
+  --bauhaus-app-blue: #3159b6;
+  --bauhaus-app-yellow: #e8be39;
+  --bauhaus-app-white: #ffffff;
+  --bauhaus-app-cream: #fafaf7;
+  /* text-safe variants (WCAG AA on white and on --bauhaus-app-bg) */
+  --bauhaus-app-red-text: #b2382a;
+  --bauhaus-app-blue-hover: #284a98;
+  --bauhaus-app-blue-soft: rgba(49, 89, 182, 0.09);
+  --bauhaus-app-red-soft: rgba(207, 65, 47, 0.09);
+  --bauhaus-app-yellow-soft: rgba(232, 190, 57, 0.22);
+  /* the sidebar is ink; its text is cream */
+  --bauhaus-app-sidebar: #171717;
+  --bauhaus-app-sidebar-text: #f2f2ec;
+  --bauhaus-app-sidebar-muted: #b9b9b1;
+  --bauhaus-app-sidebar-line: rgba(250, 250, 247, 0.16);
+  --bauhaus-app-sidebar-hover: #262624;
+  /* type scale */
+  --bauhaus-app-title-size: 44px;
+  --bauhaus-app-title-tracking: -1.4px;
+  --bauhaus-app-heading-size: 34px;
+  --bauhaus-app-heading-tracking: -1px;
+  /* layout */
+  --bauhaus-app-sidebar-width: 232px;
+  --bauhaus-app-pad-y: 38px;
+  --bauhaus-app-pad-x: 48px;
+  --bauhaus-app-radius: 4px;
+  --bauhaus-app-focus: #3159b6;
 
-  /* the one accent: fills, text-on-dark, and the ink that sits on a fill */
-  --accent: #3fa873;
-  --accent-text: #52bd87;
-  --accent-soft: rgba(63, 168, 115, 0.14);
-  --on-accent: #04140b;
+  /* ---- semantic tokens used across components ---- */
+  --canvas: var(--bauhaus-app-bg);
+  --surface: var(--bauhaus-app-white);
+  --surface-raised: var(--bauhaus-app-soft);
+  --surface-hover: #e4e4dc;
+  --ink: var(--bauhaus-app-ink);
+  --ink-dim: var(--bauhaus-app-muted);
+  --ink-faint: #66665f;
+  --border: var(--bauhaus-app-line);
+  --border-strong: #a6a69d;
+  --grid-dot: transparent;
+
+  /* the action colour: fills, links, the selected place */
+  --accent: var(--bauhaus-app-blue);
+  --accent-text: var(--bauhaus-app-blue);
+  --accent-soft: var(--bauhaus-app-blue-soft);
+  --on-accent: var(--bauhaus-app-cream);
   --felt: var(--accent);
 
-  --good: #3fa873;
-  --warning: #d0a651;
-  --critical: #d4705f;
-  --critical-soft: rgba(212, 112, 95, 0.12);
+  --good: #2b7a4b;
+  --warning: #8a6510;
+  --critical: var(--bauhaus-app-red-text);
+  --critical-soft: var(--bauhaus-app-red-soft);
 
-  /* author tags (multiplayer presence). Never used for actions or status. */
-  --author-1: #f0815e;
-  --author-2: #5fa6f2;
-  --author-3: #b48cf0;
-  --author-4: #e2b04f;
-  --author-5: #e77fa9;
-  --author-6: #4fc1c7;
-  --on-author: #0b0c0e;
+  /* author tags: who wrote a memory. Never actions or status. */
+  --author-1: #c4522f;
+  --author-2: #3159b6;
+  --author-3: #7a4fae;
+  --author-4: #8a6510;
+  --author-5: #b0436f;
+  --author-6: #237c78;
+  --on-author: #ffffff;
 
-  --shadow-panel: 0 0 0 1px var(--border), 0 1px 1px rgba(0, 0, 0, 0.25), 0 12px 32px -12px rgba(0, 0, 0, 0.6);
-  --shadow-pop: 0 0 0 1px var(--border-strong), 0 4px 12px -2px rgba(0, 0, 0, 0.4), 0 24px 64px -16px rgba(0, 0, 0, 0.7);
-  --scrim: rgba(4, 5, 6, 0.6);
+  --shadow-panel: 0 0 0 1px var(--border);
+  --shadow-pop: 0 0 0 1px var(--bauhaus-app-ink), 0 12px 32px -12px rgba(23, 23, 23, 0.28);
+  --scrim: rgba(23, 23, 23, 0.42);
 
-  /* entity kinds -- muted, distinct from the accent */
-  --kind-person: #6f9bc9;
-  --kind-organisation: #a692c9;
-  --kind-location: #c98a5a;
-  --kind-repository: #5a9e8f;
-  --kind-file: #9e9150;
-  --kind-symbol: #9e5a7a;
+  /* entity kinds: muted, distinct from the action blue */
+  --kind-person: #4f7fb0;
+  --kind-organisation: #8061b0;
+  --kind-location: #b06a35;
+  --kind-repository: #2f7f70;
+  --kind-file: #857626;
+  --kind-symbol: #9a3f69;
 
-  --series-1: #8b7fc9;
-  --series-2: #6f9bc9;
-  --series-3: #c98aa0;
-  --series-4: #c9a35c;
+  --series-1: #3159b6;
+  --series-2: #cf412f;
+  --series-3: #e8be39;
+  --series-4: #171717;
 
-  --connector-up-bank: #5a8fc9;
-  --connector-pocketai: #a85ec9;
-  --connector-github: #8a8f98;
-  --connector-slack: #c95ea8;
-  --connector-notion: #a8a29e;
-  --connector-linear: #6f7fc9;
-  --connector-gmail: #c9685a;
-  --connector-google-calendar: #5a9ec9;
-  --connector-discord: #7289c9;
-  --connector-spotify: #4fc9a0;
-  --connector-todoist: #c9825a;
-  --connector-stripe: #8f6fc9;
+  --connector-up-bank: #3d6fb0;
+  --connector-pocketai: #8a45ad;
+  --connector-github: #4a4f57;
+  --connector-slack: #a8457f;
+  --connector-notion: #4a4744;
+  --connector-linear: #4f5fb0;
+  --connector-gmail: #b0483a;
+  --connector-google-calendar: #3a7eb0;
+  --connector-discord: #5468b0;
+  --connector-spotify: #237c5f;
+  --connector-todoist: #b0602f;
+  --connector-stripe: #6a4fb0;
+  --connector-ed: #237c72;
 
   --font-display: var(--font-geist);
   --font-sans: var(--font-geist);
   --font-mono: var(--font-geist-mono);
 
-  --radius-card: 10px;
-  --radius-field: 7px;
-  --radius-control: 7px;
+  --radius-card: var(--bauhaus-app-radius);
+  --radius-field: var(--bauhaus-app-radius);
+  --radius-control: var(--bauhaus-app-radius);
 
-  /* one device pixel for every rule and border */
   --hair: 1px;
 
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
@@ -90,49 +131,6 @@
   --dur-hover: 120ms;
   --dur-pop: 180ms;
   --dur-drawer: 260ms;
-}
-
-@media (min-resolution: 2dppx) {
-  :root {
-    --hair: 0.5px;
-  }
-}
-
-:root[data-theme="light"] {
-  color-scheme: light;
-
-  --canvas: #f5f6f7;
-  --surface: #ffffff;
-  --surface-raised: #f0f1f3;
-  --surface-hover: #e8e9ec;
-  --ink: #111214;
-  --ink-dim: #4f545c;
-  --ink-faint: #676c75;
-  --border: rgba(17, 18, 20, 0.1);
-  --border-strong: rgba(17, 18, 20, 0.18);
-  --grid-dot: rgba(17, 18, 20, 0.1);
-
-  --accent: #2b7d53;
-  --accent-text: #23744b;
-  --accent-soft: rgba(43, 125, 83, 0.1);
-  --on-accent: #ffffff;
-
-  --good: #2b7d53;
-  --warning: #9a6b12;
-  --critical: #b4432f;
-  --critical-soft: rgba(180, 67, 47, 0.08);
-
-  --author-1: #e0623c;
-  --author-2: #2f7fd8;
-  --author-3: #8a5ad8;
-  --author-4: #c48a14;
-  --author-5: #cf4f84;
-  --author-6: #1f9aa1;
-  --on-author: #ffffff;
-
-  --shadow-panel: 0 0 0 1px var(--border), 0 1px 2px rgba(17, 18, 20, 0.04), 0 12px 32px -14px rgba(17, 18, 20, 0.16);
-  --shadow-pop: 0 0 0 1px var(--border-strong), 0 4px 12px -2px rgba(17, 18, 20, 0.08), 0 24px 64px -16px rgba(17, 18, 20, 0.25);
-  --scrim: rgba(17, 18, 20, 0.28);
 }
 
 @layer base {
@@ -174,22 +172,42 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* A page title: one per page, top left of the canvas. */
+/* A page title: one per page. 44/600/1.1, -1.4px tracking (spec). Scales
+   down on narrow screens instead of overflowing. */
 .page-title {
   font-family: var(--font-display), system-ui, sans-serif;
-  font-size: 22px;
-  line-height: 1.2;
+  font-size: clamp(32px, 5vw + 12px, var(--bauhaus-app-title-size));
+  line-height: 1.1;
   font-weight: 600;
-  letter-spacing: -0.025em;
+  letter-spacing: var(--bauhaus-app-title-tracking);
   color: var(--ink);
   text-wrap: balance;
 }
 
+/* The heading of a connection guide or a framed task panel (34/600, -1px). */
+.connect-title {
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-size: clamp(24px, 3vw + 10px, var(--bauhaus-app-heading-size));
+  line-height: 1.15;
+  font-weight: 600;
+  letter-spacing: var(--bauhaus-app-heading-tracking);
+  color: var(--ink);
+}
+
+/* The introduction sentence under a page title. */
+.page-intro {
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+  max-width: 72ch;
+}
+
 /* A section heading inside a page. */
 .section-title {
-  font-size: 13px;
+  font-size: 17px;
+  line-height: 1.3;
   font-weight: 600;
-  letter-spacing: -0.005em;
+  letter-spacing: -0.01em;
   color: var(--ink);
 }
 
@@ -197,17 +215,23 @@ body {
    a heading -- headings carry their own weight. */
 .eyebrow,
 .label {
-  font-size: 12px;
-  line-height: 1.3;
-  color: var(--ink-faint);
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--ink-dim);
+}
+
+/* Upper-case group label: the sidebar's ADVANCED, table heads. */
+.caps {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 /* ---- the canvas ---- */
 
 .canvas-grid {
   background-color: var(--canvas);
-  background-image: radial-gradient(circle at 1px 1px, var(--grid-dot) 1px, transparent 0);
-  background-size: 20px 20px;
 }
 
 /* ---- containers ---- */
@@ -215,15 +239,28 @@ body {
 .surface,
 .ledger {
   background: var(--surface);
-  border: var(--hair) solid var(--border);
+  border: 1px solid var(--border);
   border-radius: var(--radius-card);
+}
+
+/* A framed task panel: the one thing to do on this screen (spec: ink edge). */
+.task-panel {
+  background: var(--surface);
+  border: 1.5px solid var(--bauhaus-app-ink);
+  border-radius: 2px;
+}
+
+/* Quiet information block on soft ground (details to copy, help asides). */
+.soft-panel {
+  background: var(--bauhaus-app-soft);
+  border-radius: 2px;
 }
 
 /* A floating panel: the inspector, popovers, the palette. */
 .panel {
   background: var(--surface);
   border-radius: var(--radius-card);
-  box-shadow: var(--shadow-panel);
+  border: 1px solid var(--border);
 }
 
 .hairline-rows > * + * {
@@ -256,17 +293,21 @@ tr.frame-selected::after {
 /* ---- controls ---- */
 
 .field {
-  background: var(--surface-raised);
-  border: var(--hair) solid var(--border);
+  background: var(--surface);
+  border: 1px solid #8f8f87;
   border-radius: var(--radius-field);
   color: var(--ink);
   font-family: var(--font-sans), system-ui, sans-serif;
-  transition: border-color var(--dur-hover) ease, background-color var(--dur-hover) ease;
+  transition: border-color var(--dur-hover) ease, box-shadow var(--dur-hover) ease;
 }
 .field:focus-within,
 .field:focus {
-  border-color: var(--accent);
+  border-color: var(--bauhaus-app-blue);
+  box-shadow: 0 0 0 1px var(--bauhaus-app-blue);
   outline: none;
+}
+.field[aria-invalid="true"] {
+  border-color: var(--critical);
 }
 
 .field::placeholder,
@@ -279,17 +320,17 @@ textarea::placeholder {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  height: 30px;
-  padding: 0 12px;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 16px;
   border-radius: var(--radius-control);
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
   white-space: nowrap;
-  border: var(--hair) solid var(--border-strong);
-  background: var(--surface-raised);
-  color: var(--ink);
+  border: 1px solid var(--bauhaus-app-ink);
+  background: var(--bauhaus-app-white);
+  color: var(--bauhaus-app-ink);
   transition:
     transform var(--dur-press) var(--ease-out),
     background-color var(--dur-hover) ease,
@@ -303,42 +344,67 @@ textarea::placeholder {
   cursor: not-allowed;
 }
 .btn-primary {
-  background: var(--accent);
-  border-color: transparent;
-  color: var(--on-accent);
+  background: var(--bauhaus-app-blue);
+  border-color: var(--bauhaus-app-blue);
+  color: var(--bauhaus-app-cream);
 }
 .btn-ghost {
   background: transparent;
   border-color: transparent;
-  color: var(--ink-dim);
+  color: var(--ink);
 }
+/* Danger is only for destructive actions: red edge and text on the trigger,
+   a solid red fill on the final confirm (.btn-danger-solid). */
 .btn-danger {
-  background: transparent;
-  border-color: var(--border-strong);
+  background: var(--bauhaus-app-white);
+  border-color: var(--critical);
   color: var(--critical);
 }
+.btn-danger-solid {
+  background: var(--bauhaus-app-red-text);
+  border-color: var(--bauhaus-app-red-text);
+  color: #ffffff;
+}
 .btn-sm {
-  height: 26px;
-  padding: 0 9px;
-  font-size: 12px;
+  min-height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
 }
 .btn-icon {
-  width: 30px;
+  width: 40px;
   padding: 0;
+}
+.btn-sm.btn-icon {
+  width: 32px;
+}
+/* Practical touch targets on coarse pointers. */
+@media (pointer: coarse) {
+  .btn,
+  .btn-sm {
+    min-height: 44px;
+  }
+  .btn-icon,
+  .btn-sm.btn-icon {
+    width: 44px;
+  }
 }
 
 @media (hover: hover) and (pointer: fine) {
   .btn:hover:not(:disabled) {
-    background: var(--surface-hover);
+    background: var(--bauhaus-app-soft);
   }
   .btn-primary:hover:not(:disabled) {
-    background: color-mix(in oklab, var(--accent) 88%, var(--ink));
+    background: var(--bauhaus-app-blue-hover);
+    border-color: var(--bauhaus-app-blue-hover);
   }
   .btn-ghost:hover:not(:disabled) {
-    color: var(--ink);
+    background: var(--bauhaus-app-soft);
   }
   .btn-danger:hover:not(:disabled) {
     background: var(--critical-soft);
+  }
+  .btn-danger-solid:hover:not(:disabled) {
+    background: #96301f;
   }
 }
 
@@ -346,14 +412,15 @@ textarea::placeholder {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 24px;
-  padding: 0 9px;
-  border-radius: 6px;
-  border: var(--hair) solid var(--border);
-  background: var(--surface-raised);
-  color: var(--ink-dim);
-  font-size: 12px;
-  line-height: 1;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: var(--radius-control);
+  border: 1px solid #8f8f87;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
   transition: transform var(--dur-press) var(--ease-out), border-color var(--dur-hover) ease, color var(--dur-hover) ease;
 }
 button.pill:active {
@@ -362,17 +429,20 @@ button.pill:active {
 /* Multi-select filters that are on: quiet, so a row of them never turns
    into a wall of accent. Single-choice selection (tabs) keeps the accent. */
 .pill[aria-pressed="true"] {
-  border-color: var(--border-strong);
-  background: var(--surface-hover);
+  border-color: var(--bauhaus-app-ink);
+  background: var(--bauhaus-app-soft);
   color: var(--ink);
 }
 .pill[aria-pressed="false"] {
-  opacity: 0.7;
+  color: var(--ink-dim);
 }
-.pill[aria-selected="true"] {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--ink);
+/* Single choice (tabs, OS picker): blue fill, like the selected nav item. */
+.pill[aria-selected="true"],
+.pill[aria-checked="true"],
+.pill[aria-current="page"] {
+  border-color: var(--bauhaus-app-blue);
+  background: var(--bauhaus-app-blue);
+  color: var(--bauhaus-app-cream);
 }
 
 .kbd {
@@ -407,27 +477,107 @@ button.pill:active {
   white-space: nowrap;
 }
 
-/* Sidebar nav row. Selected = raised fill + accent icon. */
+/* Sidebar nav row on the ink sidebar. Selected = blue fill + aria-current.
+   Focus is a cream outline, so it never looks like the selected fill. */
 .nav-link {
-  color: var(--ink-dim);
+  color: var(--bauhaus-app-sidebar-text);
+  border-radius: 3px;
   transition: background-color var(--dur-hover) ease, color var(--dur-hover) ease;
 }
 .nav-link .nav-icon {
-  color: var(--ink-faint);
+  color: currentColor;
 }
 .nav-link[data-active] {
-  background: var(--surface-raised);
-  color: var(--ink);
-  font-weight: 500;
+  background: var(--bauhaus-app-blue);
+  color: #ffffff;
+  font-weight: 600;
 }
-.nav-link[data-active] .nav-icon {
-  color: var(--accent-text);
+.nav-link:focus-visible,
+.sidebar :focus-visible {
+  outline: 2px solid var(--bauhaus-app-yellow);
+  outline-offset: 2px;
 }
 @media (hover: hover) and (pointer: fine) {
-  .nav-link:hover {
-    background: var(--surface-raised);
-    color: var(--ink);
+  .nav-link:not([data-active]):hover {
+    background: var(--bauhaus-app-sidebar-hover);
   }
+}
+
+/* The ink sidebar and its drawer. */
+.sidebar {
+  background: var(--bauhaus-app-sidebar);
+  color: var(--bauhaus-app-sidebar-text);
+}
+.sidebar .sidebar-muted {
+  color: var(--bauhaus-app-sidebar-muted);
+}
+.sidebar .sidebar-search {
+  border: 1px solid var(--bauhaus-app-sidebar-line);
+  border-radius: var(--radius-field);
+  color: var(--bauhaus-app-sidebar-text);
+  background: transparent;
+}
+@media (hover: hover) and (pointer: fine) {
+  .sidebar .sidebar-search:hover {
+    border-color: var(--bauhaus-app-sidebar-muted);
+  }
+}
+.sidebar .kbd {
+  background: transparent;
+  color: var(--bauhaus-app-sidebar-muted);
+  border-color: var(--bauhaus-app-sidebar-line);
+}
+
+/* Page header: icon + title, a 2px ink rule, then the introduction. */
+.page-header {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid var(--bauhaus-app-ink);
+}
+
+/* Status in words with a small shape (StatusLabel). */
+.status-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--ink);
+}
+.status-label[data-tone="good"] .status-shape { background: var(--good); }
+.status-label[data-tone="warning"] .status-shape { background: var(--bauhaus-app-yellow); box-shadow: inset 0 0 0 1px #8a6510; }
+.status-label[data-tone="critical"] .status-shape { background: var(--bauhaus-app-red); }
+.status-label[data-tone="info"] .status-shape { background: var(--bauhaus-app-blue); }
+.status-label[data-tone="neutral"] .status-shape { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-dim); }
+.status-shape {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+/* Modal dialog (ConfirmDialog and the native <dialog>s). */
+dialog.bauhaus-dialog,
+.bauhaus-dialog {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1.5px solid var(--bauhaus-app-ink);
+  border-radius: 4px;
+  padding: 0;
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+}
+dialog.bauhaus-dialog::backdrop {
+  background: var(--scrim);
+}
+
+/* Step list inside a connection guide. */
+.guide-step + .guide-step {
+  border-top: 1px solid var(--border);
 }
 
 /* Status dot. */
@@ -445,18 +595,21 @@ button.pill:active {
   font-size: 13px;
 }
 .data-table th {
-  height: 32px;
+  height: 34px;
   padding: 0 12px;
   text-align: left;
-  font-weight: 500;
-  font-size: 12px;
-  color: var(--ink-faint);
-  border-bottom: var(--hair) solid var(--border);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bauhaus-app-cream);
+  background: var(--bauhaus-app-ink);
+  border-bottom: 0;
 }
 .data-table td {
-  height: 40px;
+  height: 44px;
   padding: 0 12px;
-  border-bottom: var(--hair) solid var(--border);
+  border-bottom: 1px solid var(--border);
   font-variant-numeric: tabular-nums;
 }
 .data-table tr:last-child td {
@@ -464,7 +617,7 @@ button.pill:active {
 }
 @media (hover: hover) and (pointer: fine) {
   .data-table tbody tr:hover td {
-    background: var(--surface-raised);
+    background: var(--bauhaus-app-bg);
   }
 }
 
@@ -496,7 +649,7 @@ button.pill:active {
   cursor: default;
 }
 .select-trigger[data-open] {
-  border-color: var(--accent);
+  border-color: var(--bauhaus-app-blue);
 }
 .select-chevron {
   color: var(--ink-faint);
@@ -513,7 +666,7 @@ button.pill:active {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 32px;
+  min-height: 40px;
   padding: 0 8px;
   border-radius: 6px;
   font-size: 13px;
@@ -528,7 +681,7 @@ button.pill:active {
   color: var(--accent-text);
 }
 .select-option[data-active] {
-  background: var(--surface-raised);
+  background: var(--bauhaus-app-soft);
   color: var(--ink);
 }
 
@@ -561,14 +714,6 @@ button.pill:active {
 
 }
 
-/* Theme wipe (ThemeToggle): the new theme grows as a circle from the toggle.
-   Only while the toggle runs a pointer-started View Transition; no crossfade. */
-html[data-theme-wipe]::view-transition-old(root),
-html[data-theme-wipe]::view-transition-new(root) {
-  animation: none;
-  mix-blend-mode: normal;
-}
-
 @layer base {
 /* ---- browser surfaces ---- */
 
@@ -578,8 +723,9 @@ html[data-theme-wipe]::view-transition-new(root) {
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--bauhaus-app-focus);
   outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--bauhaus-app-yellow-soft);
 }
 
 * {
@@ -614,6 +760,7 @@ a {
 .md li + li { margin-top: 0.2em; }
 .md li::marker { color: var(--ink-faint); }
 .md a { color: var(--accent-text); text-decoration: underline; }
+.md pre { background: var(--bauhaus-app-ink) !important; color: var(--bauhaus-app-cream); border-color: var(--bauhaus-app-ink) !important; }
 .md strong { font-weight: 600; }
 .md hr { border: 0; border-top: var(--hair) solid var(--border); margin: 1em 0; }
 .md blockquote { border-left: 1px solid var(--border-strong); padding-left: 0.9em; color: var(--ink-dim); }
@@ -637,7 +784,7 @@ a {
 
 /* Long-form docs: more air than chat bubbles, held to a reading measure. */
 .docs .md { max-width: 70ch; }
-.docs .md h1 { font-size: 1.75em; margin-bottom: 0.6em; letter-spacing: -0.025em; }
+.docs .md h1 { font-size: 2em; margin-bottom: 0.6em; letter-spacing: -0.025em; }
 .docs .md h2 { font-size: 1.2em; margin-top: 1.8em; }
 .docs .md p, .docs .md ul, .docs .md ol, .docs .md table, .docs .md pre { margin-bottom: 0.95em; }
 .docs .md td, .docs .md th { font-size: 0.92em; }

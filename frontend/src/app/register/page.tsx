@@ -47,16 +47,16 @@ export default function RegisterPage() {
     <AuthShell>
       <div className="flex flex-col gap-4">
         <div className="mb-3">
-          <h1 className="page-title">Create your account</h1>
-          <p className="mt-1.5 text-[13.5px]" style={{ color: "var(--ink-dim)" }}>
-            {mode === "oidc" ? `Sign in with your ${provider} account and Eunomia creates yours.` : "One account for the web app. Your agents connect with tokens later."}
+          <h1 className="connect-title">Create your account</h1>
+          <p className="mt-3 text-[16px]" style={{ color: "var(--ink-dim)" }}>
+            {mode === "oidc" ? `Sign in with your ${provider} account and Eunomia creates yours.` : "Your Eunomia account. You will use the same email and password to approve your AI apps later."}
           </p>
         </div>
 
         {oidcError && <ErrorLine error={oidcError} />}
 
         {pending ? (
-          <div className="h-9" aria-hidden />
+          <div className="h-10" aria-hidden />
         ) : mode === "oidc" ? (
           <SsoButton provider={provider ?? ""} primary />
         ) : (
@@ -69,7 +69,7 @@ export default function RegisterPage() {
             )}
             <form onSubmit={submit} className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="email" className={LABEL} style={{ color: "var(--ink-dim)" }}>
+                <label htmlFor="email" className={LABEL}>
                   Email
                 </label>
                 <input
@@ -79,7 +79,8 @@ export default function RegisterPage() {
                   autoFocus={!provider}
                   autoComplete="email"
                   spellCheck={false}
-                  className="field h-9 px-3 text-[13.5px]"
+                  className="field h-11 px-3 text-[15px]"
+                  placeholder="you@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
@@ -87,10 +88,10 @@ export default function RegisterPage() {
 
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-baseline justify-between">
-                  <label htmlFor="password" className={LABEL} style={{ color: "var(--ink-dim)" }}>
+                  <label htmlFor="password" className={LABEL}>
                     Password
                   </label>
-                  <span id="password-hint" className="label">
+                  <span id="password-hint" className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
                     8 to 72 characters
                   </span>
                 </div>
@@ -103,7 +104,7 @@ export default function RegisterPage() {
                     maxLength={72}
                     autoComplete="new-password"
                     aria-describedby="password-hint"
-                    className="field h-9 w-full pl-3 pr-14 text-[13.5px]"
+                    className="field h-11 w-full pl-3 pr-16 text-[15px]"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                   />
@@ -112,7 +113,7 @@ export default function RegisterPage() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="confirm-password" className={LABEL} style={{ color: "var(--ink-dim)" }}>
+                <label htmlFor="confirm-password" className={LABEL}>
                   Confirm password
                 </label>
                 <input
@@ -123,7 +124,8 @@ export default function RegisterPage() {
                   maxLength={72}
                   autoComplete="new-password"
                   aria-invalid={mismatch || undefined}
-                  className="field h-9 px-3 text-[13.5px]"
+                  className="field h-11 px-3 text-[15px]"
+                  aria-describedby={mismatch ? "register-error" : undefined}
                   style={mismatch ? { borderColor: "var(--critical)" } : undefined}
                   value={confirmPassword}
                   onChange={(e) => {
@@ -133,14 +135,18 @@ export default function RegisterPage() {
                 />
               </div>
 
-              {error && <ErrorLine error={error} />}
+              {error && (
+                <div id="register-error">
+                  <ErrorLine error={error} />
+                </div>
+              )}
 
-              <button type="submit" disabled={busy} aria-busy={busy} className="btn btn-primary mt-1 h-9 w-full">
+              <button type="submit" disabled={busy} aria-busy={busy} className="btn btn-primary mt-1 min-h-11 w-full">
                 {busy && <Loader2 size={14} strokeWidth={1.75} className="animate-spin" aria-hidden />}
                 {busy ? "Creating account…" : "Create account"}
               </button>
 
-              <p className="mt-2 text-[13px]" style={{ color: "var(--ink-faint)" }}>
+              <p className="mt-2 text-[14px]" style={{ color: "var(--ink-dim)" }}>
                 Already have an account?{" "}
                 <Link href="/login" onClick={(e) => { e.preventDefault(); router.push(keepNext("/login")); }} className="font-medium underline" style={{ color: "var(--accent-text)" }}>
                   Sign in

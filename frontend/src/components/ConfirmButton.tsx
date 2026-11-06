@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { X } from "lucide-react";
 
 /** Inline two-step confirm (DESIGN.md): the first click arms it, the second does the thing. No native dialog. */
 export default function ConfirmButton({
@@ -29,7 +28,7 @@ export default function ConfirmButton({
       </button>
     );
   return (
-    <span className="inline-flex items-center gap-1 shrink-0">
+    <span className="inline-flex items-center gap-1.5 shrink-0">
       <button
         type="button"
         autoFocus
@@ -38,12 +37,12 @@ export default function ConfirmButton({
           onConfirm();
         }}
         disabled={disabled}
-        className="btn btn-danger btn-sm"
+        className="btn btn-danger-solid btn-sm"
       >
         {confirmLabel}
       </button>
-      <button type="button" onClick={() => setArmed(false)} aria-label="Keep" className="btn btn-ghost btn-sm btn-icon">
-        <X size={14} strokeWidth={1.75} />
+      <button type="button" onClick={() => setArmed(false)} aria-label="Keep" className="btn btn-sm">
+        Cancel
       </button>
     </span>
   );

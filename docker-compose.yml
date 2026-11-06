@@ -6,7 +6,7 @@ services:
     # capability is denied except the function families the backend's SQL uses
     # (docs/architecture/surreal-functions.md), guests are refused, and a runaway query or
     # transaction is cut off. tests run the suite under the same --allow-funcs list.
-    image: surrealdb/surrealdb:v3.3.1
+    image: surrealdb/surrealdb:v3.3.5
     user: root
     entrypoint:
       - /surreal
@@ -16,10 +16,8 @@ services:
       - --pass
       - ${SURREAL_PASS:-root}
       - --deny-all
-      # --deny-all also refuses guests (adding --deny-guests is a startup error on 3.3.1) but denies RPC,
-      # HTTP and root queries too: allow those explicitly. `surreal isready` over http:// is still refused under
-      # --deny-all ("Method not allowed", seen on a live 3.3.1 server), so the healthcheck below uses ws://, which
-      # --allow-rpc covers. Keep it on ws:// or every service that waits for a healthy database never starts.
+      # --deny-all also refuses guests (adding --deny-guests is a startup error on 3.3.1 and 3.3.5) but denies RPC,
+      # HTTP and root queries too: allow those explicitly. Verified on live 3.3.1 and 3.3.5 servers.
       - --allow-rpc
       - --allow-http
       - --allow-arbitrary-query=system
@@ -45,7 +43,9 @@ services:
       surreal-upgrade:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "/surreal", "isready", "--endpoint", "ws://127.0.0.1:8000"]
+      # ws, not http: under --deny-all, isready over http fails with "Method not allowed" while the
+      # server is fine, and the backend (service_healthy) then never starts after an update
+      test: ["CMD", "/surreal", "isready", "--endpoint", "ws://localhost:8000"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -124,6 +124,15 @@ services:
       # (docs/documents.md)
       - EUNOMIA_DOCUMENTS_BACKEND=${EUNOMIA_DOCUMENTS_BACKEND:-file:/data/documents}
       - EUNOMIA_DOCUMENTS_MAX_BYTES=${EUNOMIA_DOCUMENTS_MAX_BYTES:-26214400}
+      # peer vaults (docs/peer-vaults.md): the addresses a share code advertises, best first. The
+      # installer writes EUNOMIA_LAN_ADDRS (scripts/lan-addrs.sh --env .env): inside a container the
+      # backend cannot see the host's LAN address. EUNOMIA_PEER_ADDRS adds others (a tunnel hostname).
+      - EUNOMIA_LAN_ADDRS=${EUNOMIA_LAN_ADDRS:-}
+      - EUNOMIA_PEER_ADDRS=${EUNOMIA_PEER_ADDRS:-}
+      - EUNOMIA_PEER_PORT=${FRONTEND_PORT:-3000}
+      - EUNOMIA_INSTANCE_NAME=${EUNOMIA_INSTANCE_NAME:-}
+      # with HTTPS on, share codes also carry https://<domain>
+      - EUNOMIA_DOMAIN=${EUNOMIA_DOMAIN:-}
     # Read/write access to ONE small status directory -- not the repo, not
     # the docker socket. The `updater` service below does the actual update.
     volumes:

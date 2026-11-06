@@ -98,6 +98,44 @@ export type Capsule = {
     version: string;
 };
 
+/**
+ * One row of a vault's change log.
+ */
+export type Change = {
+    /**
+     * Who wrote it: a user, token or OAuth client id, or `system`.
+     */
+    actor: string;
+    at: string;
+    /**
+     * The item's id; fetch it to see what changed (it may be gone).
+     */
+    id: string;
+    /**
+     * `memory`, `entity`, `relation`, `skill` or `document`.
+     */
+    kind: string;
+    /**
+     * `created`, `updated`, `deleted` or `merged` (an entity merged into another, which gets `updated`).
+     */
+    op: string;
+    /**
+     * Strictly increasing per vault, with no gaps.
+     */
+    seq: number;
+};
+
+/**
+ * A page of changes and the cursor for the next one.
+ */
+export type ChangePage = {
+    changes: Array<Change>;
+    /**
+     * Pass as `after` next time: the last seq returned, or the `after` given when there was none.
+     */
+    next: number;
+};
+
 export type ChatRequest = {
     message: string;
 };
@@ -632,6 +670,36 @@ export type IdsBody = {
     ids: Array<string>;
 };
 
+export type IntegrityReport = {
+    /**
+     * True when the counter is behind the log (the next write's append would collide).
+     */
+    change_log_behind: boolean;
+    change_log_counter: number;
+    /**
+     * Highest seq in the change log, and the counter the next write continues from.
+     */
+    change_log_top: number;
+    /**
+     * Memories whose subject entity no longer exists.
+     */
+    dangling_memories: Array<string>;
+    /**
+     * Relations with one end missing.
+     */
+    dangling_relations: Array<string>;
+    /**
+     * Memories filed here whose subject is in another vault (not repaired automatically).
+     */
+    misfiled_memories: Array<string>;
+    /**
+     * True when nothing below needs attention.
+     */
+    ok: boolean;
+    repaired?: null | Repaired;
+    vault: string;
+};
+
 export type InvitationList = {
     results: Array<InvitationOut>;
 };
@@ -653,6 +721,25 @@ export type InviteOut = {
 export type InviteRequest = {
     email: string;
     role?: string;
+};
+
+export type JoinOut = {
+    link: PeerOut;
+    /**
+     * The new vault holding this Eunomia's copy.
+     */
+    vault: VaultOut;
+};
+
+export type JoinRequestBody = {
+    /**
+     * The share code, `eunomia1:...`.
+     */
+    code: string;
+    /**
+     * How the other Eunomia will name this one (default: `EUNOMIA_INSTANCE_NAME`, else your email).
+     */
+    name?: string | null;
 };
 
 export type LeftBody = {
@@ -685,6 +772,11 @@ export type MemoryOut = {
     owner?: string | null;
     owner_email?: string | null;
     proof_count: number;
+    /**
+     * Secrets this write replaced with `[redacted: <kind>]` markers (kind and count only). Present
+     * only on a write or edit that redacted something.
+     */
+    redacted?: Array<Redaction>;
     source?: string | null;
     source_memories?: Array<string> | null;
     status?: string | null;
@@ -810,6 +902,74 @@ export type PatchBody = {
     vault_id?: string | null;
 };
 
+export type PeerOut = {
+    /**
+     * The address that answered last (a guest's view of its host).
+     */
+    address?: string | null;
+    /**
+     * Whether both copies held the same items at the last check (`None`: not checked yet).
+     */
+    digests_match?: boolean | null;
+    /**
+     * `host`: this Eunomia holds the original and shares it out; `guest`: this is a copy of another's.
+     */
+    direction: string;
+    /**
+     * The link id.
+     */
+    id: string;
+    integrity_failures: number;
+    last_error?: string | null;
+    /**
+     * Counts from the last exchange.
+     */
+    last_report?: {
+        [key: string]: unknown;
+    } | null;
+    last_sync_at?: string | null;
+    /**
+     * The other Eunomia's fingerprint.
+     */
+    peer_fingerprint: string;
+    peer_name: string;
+    /**
+     * What the guest may do: `edit` or `read`.
+     */
+    role: string;
+    /**
+     * `up_to_date`, `syncing`, `unreachable`, `integrity_problem` or `revoked`.
+     */
+    status: string;
+};
+
+export type PeersOut = {
+    /**
+     * The addresses a new code would carry, best first.
+     */
+    addresses: Array<string>;
+    /**
+     * Codes made for this vault and not used yet (owners only; empty for members).
+     */
+    codes: Array<PendingCodeOut>;
+    /**
+     * This instance's fingerprint.
+     */
+    fingerprint: string;
+    /**
+     * Other Eunomias this vault is shared with (or copied from).
+     */
+    links: Array<PeerOut>;
+    vault: string;
+};
+
+export type PendingCodeOut = {
+    created_at?: string | null;
+    expires_at?: string | null;
+    id: string;
+    role: string;
+};
+
 export type PocketaiSummary = {
     recent_recordings: Array<RecentRecording>;
     recordings_count: number;
@@ -849,6 +1009,32 @@ export type RecentRecording = {
     title: string;
 };
 
+/**
+ * What one write had redacted: `count` secrets of `kind` (e.g. "github token").
+ */
+export type Redaction = {
+    count: number;
+    kind: string;
+};
+
+export type ReextractIn = {
+    /**
+     * Only count what would be replaced (the default); `false` deletes it and queues extraction again.
+     */
+    dry_run?: boolean;
+};
+
+/**
+ * What a re-extract run replaces: the connection's live records, the facts and relations drawn from
+ * them, and the observations resting only on those facts.
+ */
+export type ReextractOut = {
+    memories: number;
+    observations: number;
+    records: number;
+    relations: number;
+};
+
 export type RelationCreate = {
     label: string;
     to_id: string;
@@ -868,6 +1054,12 @@ export type RelationOut = {
 
 export type RemovedBody = {
     removed: boolean;
+};
+
+export type Repaired = {
+    counter_fixed: boolean;
+    memories_removed: number;
+    relations_removed: number;
 };
 
 export type RepointBody = {
@@ -944,6 +1136,12 @@ export type SettingsOut = {
     observations_mission: string;
     openai_api_key_set: boolean;
     openai_base_url: string;
+    owner_name: string;
+    /**
+     * Probe for an internet connection before a scheduled sync and skip it quietly while offline.
+     * Default true. "Sync now" reports `status: "offline"` instead of failing.
+     */
+    sync_check_connectivity: boolean;
     /**
      * Open map of source key to sync interval seconds.
      */
@@ -971,8 +1169,45 @@ export type SettingsUpdate = {
     observations_mission?: string | null;
     openai_api_key?: string | null;
     openai_base_url?: string | null;
+    /**
+     * The user's own name, used by email extraction so facts about the mailbox owner have a subject ("" = unknown)
+     */
+    owner_name?: string | null;
+    /**
+     * Skip scheduled syncs while there is no internet connection (default true).
+     */
+    sync_check_connectivity?: boolean | null;
     sync_intervals?: unknown;
     theme?: unknown;
+};
+
+export type ShareCodeOut = {
+    /**
+     * The addresses in the code, best first.
+     */
+    addresses: Array<string>;
+    /**
+     * Send this to the person running the other Eunomia. It works once.
+     */
+    code: string;
+    expires_at: string;
+    /**
+     * This instance's fingerprint, to compare by eye.
+     */
+    fingerprint: string;
+    id: string;
+    role: string;
+};
+
+export type ShareCodeRequest = {
+    /**
+     * How long the code works, in hours (default 168, at most 720).
+     */
+    expires_in_hours?: number | null;
+    /**
+     * `edit` (the other Eunomia can add and change; the default) or `read`.
+     */
+    role?: string;
 };
 
 /**
@@ -1051,6 +1286,9 @@ export type SyncReport = {
     failed?: number | null;
     skipped?: number | null;
     source: string;
+    /**
+     * `already_running`, `queued`, or `offline` (the connectivity check found no internet; nothing was attempted).
+     */
     status?: string | null;
     written?: number | null;
 };
@@ -1298,6 +1536,20 @@ export type VaultWithRole = {
     kind: string;
     name: string;
     role: string;
+};
+
+export type VerifyOut = {
+    link: string;
+    local_digest: string;
+    local_items: number;
+    /**
+     * True when both copies hold exactly the same items.
+     */
+    matches?: boolean | null;
+    /**
+     * The other side's digest: asked just now (guest), or as of its last exchange (host).
+     */
+    remote_digest?: string | null;
 };
 
 /**
@@ -1908,6 +2160,38 @@ export type GetPocketaiDetailResponses = {
 };
 
 export type GetPocketaiDetailResponse = GetPocketaiDetailResponses[keyof GetPocketaiDetailResponses];
+
+export type GetPocketaiAudioData = {
+    body?: never;
+    path: {
+        recording_id: string;
+    };
+    query?: {
+        /**
+         * `true` to save the file (an attachment) instead of playing it.
+         */
+        download?: boolean;
+    };
+    url: '/api/connectors/pocketai/recordings/{recording_id}/audio';
+};
+
+export type GetPocketaiAudioErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetPocketaiAudioError = GetPocketaiAudioErrors[keyof GetPocketaiAudioErrors];
+
+export type GetPocketaiAudioResponses = {
+    /**
+     * The audio bytes
+     */
+    200: string;
+};
+
+export type GetPocketaiAudioResponse = GetPocketaiAudioResponses[keyof GetPocketaiAudioResponses];
 
 export type SearchPocketaiData = {
     body?: never;
@@ -2736,6 +3020,31 @@ export type AddRelationResponses = {
 
 export type AddRelationResponse = AddRelationResponses[keyof AddRelationResponses];
 
+export type FollowEventsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/events/ws';
+};
+
+export type FollowEventsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type FollowEventsError = FollowEventsErrors[keyof FollowEventsErrors];
+
+export type FollowEventsResponses = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type FollowEventsResponse = FollowEventsResponses[keyof FollowEventsResponses];
+
 export type ExportDataData = {
     body?: never;
     path?: never;
@@ -3166,6 +3475,193 @@ export type GetOpenapiResponses = {
 
 export type GetOpenapiResponse = GetOpenapiResponses[keyof GetOpenapiResponses];
 
+export type PeerHelloData = {
+    body?: never;
+    path: {
+        org: string;
+    };
+    query?: never;
+    url: '/api/peer/v1/{org}/hello';
+};
+
+export type PeerHelloErrors = {
+    /**
+     * No such org here
+     */
+    404: {
+        [key: string]: unknown;
+    };
+};
+
+export type PeerHelloError = PeerHelloErrors[keyof PeerHelloErrors];
+
+export type PeerHelloResponses = {
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type PeerHelloResponse = PeerHelloResponses[keyof PeerHelloResponses];
+
+export type PeerJoinData = {
+    /**
+     * share, guest_instance, guest_org, guest_name, guest_addrs, nonce_g, mac
+     */
+    body: {
+        [key: string]: unknown;
+    };
+    path: {
+        org: string;
+    };
+    query?: never;
+    url: '/api/peer/v1/{org}/join';
+};
+
+export type PeerJoinErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type PeerJoinError = PeerJoinErrors[keyof PeerJoinErrors];
+
+export type PeerJoinResponses = {
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type PeerJoinResponse = PeerJoinResponses[keyof PeerJoinResponses];
+
+export type PeerExchangeData = {
+    /**
+     * {link, ts, nonce, data}
+     */
+    body: {
+        [key: string]: unknown;
+    };
+    path: {
+        org: string;
+        link_id: string;
+    };
+    query?: never;
+    url: '/api/peer/v1/{org}/links/{link_id}';
+};
+
+export type PeerExchangeErrors = {
+    /**
+     * Not authenticated
+     */
+    401: {
+        [key: string]: unknown;
+    };
+};
+
+export type PeerExchangeError = PeerExchangeErrors[keyof PeerExchangeErrors];
+
+export type PeerExchangeResponses = {
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type PeerExchangeResponse = PeerExchangeResponses[keyof PeerExchangeResponses];
+
+export type JoinSharedVaultData = {
+    body: JoinRequestBody;
+    path?: never;
+    query?: never;
+    url: '/api/peers/join';
+};
+
+export type JoinSharedVaultErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type JoinSharedVaultError = JoinSharedVaultErrors[keyof JoinSharedVaultErrors];
+
+export type JoinSharedVaultResponses = {
+    200: JoinOut;
+};
+
+export type JoinSharedVaultResponse = JoinSharedVaultResponses[keyof JoinSharedVaultResponses];
+
+export type StopVaultPeerData = {
+    body?: never;
+    path: {
+        link_id: string;
+    };
+    query?: never;
+    url: '/api/peers/links/{link_id}';
+};
+
+export type StopVaultPeerErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type StopVaultPeerError = StopVaultPeerErrors[keyof StopVaultPeerErrors];
+
+export type StopVaultPeerResponses = {
+    200: DeletedBody;
+};
+
+export type StopVaultPeerResponse = StopVaultPeerResponses[keyof StopVaultPeerResponses];
+
+export type SyncVaultPeerData = {
+    body?: never;
+    path: {
+        link_id: string;
+    };
+    query?: never;
+    url: '/api/peers/links/{link_id}/sync';
+};
+
+export type SyncVaultPeerErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type SyncVaultPeerError = SyncVaultPeerErrors[keyof SyncVaultPeerErrors];
+
+export type SyncVaultPeerResponses = {
+    200: PeerOut;
+};
+
+export type SyncVaultPeerResponse = SyncVaultPeerResponses[keyof SyncVaultPeerResponses];
+
+export type VerifyVaultPeerData = {
+    body?: never;
+    path: {
+        link_id: string;
+    };
+    query?: never;
+    url: '/api/peers/links/{link_id}/verify';
+};
+
+export type VerifyVaultPeerErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type VerifyVaultPeerError = VerifyVaultPeerErrors[keyof VerifyVaultPeerErrors];
+
+export type VerifyVaultPeerResponses = {
+    200: VerifyOut;
+};
+
+export type VerifyVaultPeerResponse = VerifyVaultPeerResponses[keyof VerifyVaultPeerResponses];
+
 export type GetSettingsData = {
     body?: never;
     path?: never;
@@ -3321,6 +3817,34 @@ export type GetSourcesStatusResponses = {
 };
 
 export type GetSourcesStatusResponse = GetSourcesStatusResponses[keyof GetSourcesStatusResponses];
+
+export type ReextractSourceData = {
+    body: ReextractIn;
+    path: {
+        key: string;
+    };
+    query?: never;
+    url: '/api/sources/{key}/reextract';
+};
+
+export type ReextractSourceErrors = {
+    /**
+     * A re-extraction of this source is still queued or running
+     */
+    409: Problem;
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ReextractSourceError = ReextractSourceErrors[keyof ReextractSourceErrors];
+
+export type ReextractSourceResponses = {
+    200: ReextractOut;
+};
+
+export type ReextractSourceResponse = ReextractSourceResponses[keyof ReextractSourceResponses];
 
 export type SyncSourceData = {
     body?: never;
@@ -3626,6 +4150,71 @@ export type RenameVaultResponses = {
 
 export type RenameVaultResponse = RenameVaultResponses[keyof RenameVaultResponses];
 
+export type ListVaultChangesData = {
+    body?: never;
+    path: {
+        vault_id: string;
+    };
+    query?: {
+        /**
+         * Changes with a seq above this one (0, the default, is the whole log).
+         */
+        after?: number;
+        /**
+         * At most this many (default 100, at most 1000).
+         */
+        limit?: number;
+    };
+    url: '/api/vaults/{vault_id}/changes';
+};
+
+export type ListVaultChangesErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListVaultChangesError = ListVaultChangesErrors[keyof ListVaultChangesErrors];
+
+export type ListVaultChangesResponses = {
+    200: ChangePage;
+};
+
+export type ListVaultChangesResponse = ListVaultChangesResponses[keyof ListVaultChangesResponses];
+
+export type FollowVaultChangesData = {
+    body?: never;
+    path: {
+        vault_id: string;
+    };
+    query?: {
+        /**
+         * Send the backlog after this seq first (0, the default, is the whole log).
+         */
+        after?: number;
+    };
+    url: '/api/vaults/{vault_id}/changes/ws';
+};
+
+export type FollowVaultChangesErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type FollowVaultChangesError = FollowVaultChangesErrors[keyof FollowVaultChangesErrors];
+
+export type FollowVaultChangesResponses = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type FollowVaultChangesResponse = FollowVaultChangesResponses[keyof FollowVaultChangesResponses];
+
 export type CloneVaultData = {
     body: VaultClone;
     path: {
@@ -3649,6 +4238,54 @@ export type CloneVaultResponses = {
 };
 
 export type CloneVaultResponse = CloneVaultResponses[keyof CloneVaultResponses];
+
+export type CheckVaultIntegrityData = {
+    body?: never;
+    path: {
+        vault_id: string;
+    };
+    query?: never;
+    url: '/api/vaults/{vault_id}/integrity';
+};
+
+export type CheckVaultIntegrityErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type CheckVaultIntegrityError = CheckVaultIntegrityErrors[keyof CheckVaultIntegrityErrors];
+
+export type CheckVaultIntegrityResponses = {
+    200: IntegrityReport;
+};
+
+export type CheckVaultIntegrityResponse = CheckVaultIntegrityResponses[keyof CheckVaultIntegrityResponses];
+
+export type RepairVaultIntegrityData = {
+    body?: never;
+    path: {
+        vault_id: string;
+    };
+    query?: never;
+    url: '/api/vaults/{vault_id}/integrity';
+};
+
+export type RepairVaultIntegrityErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type RepairVaultIntegrityError = RepairVaultIntegrityErrors[keyof RepairVaultIntegrityErrors];
+
+export type RepairVaultIntegrityResponses = {
+    200: IntegrityReport;
+};
+
+export type RepairVaultIntegrityResponse = RepairVaultIntegrityResponses[keyof RepairVaultIntegrityResponses];
 
 export type AcceptInvitationData = {
     body?: never;
@@ -3819,6 +4456,79 @@ export type SetMemberRoleResponses = {
 };
 
 export type SetMemberRoleResponse = SetMemberRoleResponses[keyof SetMemberRoleResponses];
+
+export type ListVaultPeersData = {
+    body?: never;
+    path: {
+        vault_id: string;
+    };
+    query?: never;
+    url: '/api/vaults/{vault_id}/peers';
+};
+
+export type ListVaultPeersErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListVaultPeersError = ListVaultPeersErrors[keyof ListVaultPeersErrors];
+
+export type ListVaultPeersResponses = {
+    200: PeersOut;
+};
+
+export type ListVaultPeersResponse = ListVaultPeersResponses[keyof ListVaultPeersResponses];
+
+export type CreateVaultShareCodeData = {
+    body: ShareCodeRequest;
+    path: {
+        vault_id: string;
+    };
+    query?: never;
+    url: '/api/vaults/{vault_id}/share-codes';
+};
+
+export type CreateVaultShareCodeErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type CreateVaultShareCodeError = CreateVaultShareCodeErrors[keyof CreateVaultShareCodeErrors];
+
+export type CreateVaultShareCodeResponses = {
+    200: ShareCodeOut;
+};
+
+export type CreateVaultShareCodeResponse = CreateVaultShareCodeResponses[keyof CreateVaultShareCodeResponses];
+
+export type DeleteVaultShareCodeData = {
+    body?: never;
+    path: {
+        vault_id: string;
+        code_id: string;
+    };
+    query?: never;
+    url: '/api/vaults/{vault_id}/share-codes/{code_id}';
+};
+
+export type DeleteVaultShareCodeErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type DeleteVaultShareCodeError = DeleteVaultShareCodeErrors[keyof DeleteVaultShareCodeErrors];
+
+export type DeleteVaultShareCodeResponses = {
+    200: DeletedBody;
+};
+
+export type DeleteVaultShareCodeResponse = DeleteVaultShareCodeResponses[keyof DeleteVaultShareCodeResponses];
 
 export type TransferOwnershipData = {
     body: TransferRequest;

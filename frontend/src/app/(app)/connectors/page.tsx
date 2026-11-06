@@ -2,7 +2,7 @@
 
 import { Fragment, useState } from "react";
 import Link from "next/link";
-import { ChevronRight, Plus, Search, X } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronRight, Plug, Plus, Search, X } from "lucide-react";
 import type { Connector, SourceRow } from "@/lib/types";
 import { useConnectors } from "@/lib/queries/connectors";
 import { useSources } from "@/lib/queries/sources";
@@ -10,6 +10,8 @@ import { CONNECTOR_META, CONNECTOR_ORDER, ConnectorTile, connectorStatus, kindFo
 import { isLiveSource, sourceHealth } from "@/lib/sourceState";
 import ErrorLine, { failure } from "@/components/ErrorLine";
 import Tooltip from "@/components/bits/Tooltip";
+import PageHeader from "@/components/ui/PageHeader";
+import StatusLabel, { toneFromVar } from "@/components/ui/StatusLabel";
 import ExtensionsSection from "./ExtensionsSection";
 
 type StatusFilter = "all" | "connected" | "disconnected";
@@ -28,10 +30,9 @@ type ConnectedRow = {
   href: string;
 };
 
-const CONNECTED_COLS = "grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1.4fr)_120px_76px_96px_minmax(0,1fr)_16px]";
-const AVAILABLE_COLS = "grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_96px_16px]";
+const CONNECTED_COLS = "grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1.4fr)_130px_76px_110px_minmax(0,1fr)_16px]";
 const ROW_LINK =
-  "grid items-center gap-x-4 px-4 min-h-12 py-2 text-[13px] transition-[background-color,transform] duration-[120ms] ease-[var(--ease-out)] hover:bg-[var(--surface-raised)] active:scale-[0.995] focus-visible:outline-offset-[-2px]";
+  "grid items-center gap-x-4 px-4 min-h-14 py-2 text-[14px] transition-[background-color] duration-[120ms] ease-[var(--ease-out)] hover:bg-[var(--bauhaus-app-bg)] focus-visible:outline-offset-[-2px]";
 
 function matches(q: string, label: string, description = "") {
   return !q || label.toLowerCase().includes(q) || description.toLowerCase().includes(q);
@@ -43,9 +44,11 @@ export default function ConnectorsPage() {
   const connectors = connectorsQuery.data ?? null;
   // Sources only add sync health; the page still works if that call fails.
   const sourceRows: SourceRow[] = sourcesQuery.data ?? [];
-  const error = connectorsQuery.isError ? failure(connectorsQuery.error, "Could not load connectors.", " Check the backend is running, then retry.") : null;
+  const error = connectorsQuery.isError ? failure(connectorsQuery.error, "Could not load your sources.", " Check that Eunomia is running, then try again.") : null;
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  // Custom integrations are an advanced path: closed until asked for.
+  const [showCustom, setShowCustom] = useState(false);
 
   const load = () => {
     connectorsQuery.refetch();
@@ -98,21 +101,20 @@ export default function ConnectorsPage() {
 
   return (
     <div className="max-w-5xl flex flex-col gap-8">
-      <header className="flex flex-col gap-1.5">
-        <h1 className="page-title">Connectors</h1>
-        <p className="text-[13px] max-w-[62ch]" style={{ color: "var(--ink-dim)" }}>
-          Sources that write records into your memory. Credentials are encrypted at rest and only ever sent to the provider they belong to.
-        </p>
-      </header>
+      <PageHeader
+        icon={Plug}
+        title="Connected sources"
+        intro="Bring meeting notes, emails and other information into Eunomia. Choose a source below to connect it. Your sign-in details are stored encrypted and only sent to the service they belong to."
+      />
 
       <div className="flex items-center gap-2 flex-wrap">
-        <div className="field flex items-center gap-2 h-8 px-2.5 w-full sm:w-64">
-          <Search size={14} strokeWidth={1.75} color="var(--ink-faint)" aria-hidden />
+        <div className="field flex items-center gap-2 h-10 px-3 w-full sm:w-72">
+          <Search size={18} strokeWidth={1.75} color="var(--ink-dim)" aria-hidden />
           <input
             type="text"
-            aria-label="Search connectors"
-            className="flex-1 min-w-0 bg-transparent outline-none text-[13px]"
-            placeholder="Search connectors"
+            aria-label="Search sources"
+            className="flex-1 min-w-0 bg-transparent outline-none text-[14px]"
+            placeholder="Search sources"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -124,14 +126,12 @@ export default function ConnectorsPage() {
             </Tooltip>
           )}
         </div>
-        <div className="flex gap-1.5" role="group" aria-label="Filter by status">
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by status">
           {filters.map((f) => (
             <button key={f.value} type="button" className="pill" aria-pressed={statusFilter === f.value} onClick={() => setStatusFilter(f.value)}>
               {f.label}
               {!loading && (
-                <span className="font-mono text-[11px]" style={{ color: "var(--ink-faint)" }}>
-                  {f.count}
-                </span>
+                <span className="tabular">{f.count}</span>
               )}
             </button>
           ))}
@@ -144,7 +144,7 @@ export default function ConnectorsPage() {
             <ErrorLine error={error} />
           </div>
           <button type="button" className="btn btn-sm" onClick={load}>
-            Retry
+            Try again
           </button>
         </div>
       )}
@@ -155,18 +155,22 @@ export default function ConnectorsPage() {
             Connected
           </h2>
           <div className="ledger overflow-hidden">
-            <div className={`hidden md:grid ${CONNECTED_COLS} gap-x-4 px-4 h-8 items-center label border-b`} aria-hidden>
-              <span>Connector</span>
+            <div
+              className={`hidden md:grid ${CONNECTED_COLS} gap-x-4 px-4 h-[34px] items-center caps`}
+              style={{ background: "var(--bauhaus-app-ink)", color: "var(--bauhaus-app-cream)" }}
+              aria-hidden
+            >
+              <span>Source</span>
               <span>Status</span>
-              <span className="text-right">Records</span>
-              <span>Last sync</span>
-              <span>Writes</span>
+              <span className="text-right">Items</span>
+              <span>Last updated</span>
+              <span>Brings in</span>
               <span />
             </div>
             {loading && <SkeletonRows count={2} />}
             {!loading && shownConnected.length === 0 && (
-              <p className="px-4 py-5 text-[13px]" style={{ color: "var(--ink-dim)" }}>
-                {q ? `No connected source matches "${query.trim()}".` : "Nothing connected yet. Pick a source from the catalogue below to start syncing records."}
+              <p className="px-4 py-5 text-[14px]" style={{ color: "var(--ink-dim)" }}>
+                {q ? `No connected source matches "${query.trim()}".` : "Nothing connected yet. Choose a source under \u201cAdd a source\u201d to bring its information in."}
               </p>
             )}
             <div className="hairline-rows">
@@ -178,36 +182,35 @@ export default function ConnectorsPage() {
                   <Fragment key={r.id}>
                   <Link href={r.href} className={`${ROW_LINK} ${CONNECTED_COLS}`}>
                     <span className="flex items-center gap-3 min-w-0">
-                      <ConnectorTile kind={r.kind} />
+                      <ConnectorTile kind={r.kind} size={32} />
                       <span className="min-w-0 flex flex-col">
                         <span className="font-medium truncate">{r.label}</span>
                         {r.account && (
-                          <span className="text-[12px] truncate" style={{ color: "var(--ink-dim)" }}>
+                          <span className="text-[13px] truncate" style={{ color: "var(--ink-dim)" }}>
                             {r.account}
                           </span>
                         )}
                       </span>
                     </span>
-                    <span className="flex items-center gap-2" title={s?.sync_status.last_error || undefined}>
-                      <span className="dot" style={{ background: health.tone }} aria-hidden />
-                      <span>{health.label}</span>
+                    <span title={s?.sync_status.last_error || undefined}>
+                      <StatusLabel tone={toneFromVar(health.tone)}>{health.label}</StatusLabel>
                     </span>
                     <span className="hidden md:block font-mono text-right">{s ? s.record_count.toLocaleString() : "n/a"}</span>
-                    <span className="hidden md:block font-mono text-[12px]" style={{ color: fails ? "var(--critical)" : "var(--ink-dim)" }}>
-                      {fails ? `${fails} failed` : s ? relativeTime(s.sync_status.last_ok) : "n/a"}
+                    <span className="hidden md:block text-[13px]" style={{ color: fails ? "var(--critical)" : "var(--ink-dim)" }}>
+                      {fails ? `${fails} failed in a row` : s ? relativeTime(s.sync_status.last_ok) : "n/a"}
                     </span>
-                    <span className="hidden md:block font-mono text-[12px] truncate" style={{ color: "var(--ink-faint)" }}>
+                    <span className="hidden md:block font-mono text-[12px] truncate" style={{ color: "var(--ink-dim)" }}>
                       {s?.record_types.join(", ") || "Tool calls only"}
                     </span>
-                    <ChevronRight size={14} strokeWidth={1.75} color="var(--ink-faint)" className="hidden md:block" aria-hidden />
+                    <ChevronRight size={16} strokeWidth={1.75} color="var(--ink-dim)" className="hidden md:block" aria-hidden />
                   </Link>
                   {r.addAfter && r.kind && (
                     <Link
                       href={`/connectors/setup/${r.kind}?new=1`}
-                      className="flex items-center gap-2 px-4 h-9 pl-14 text-[12.5px] transition-colors duration-[120ms] ease-[var(--ease-out)] hover:bg-[var(--surface-raised)]"
-                      style={{ color: "var(--ink-dim)" }}
+                      className="flex items-center gap-2 px-4 min-h-10 pl-[60px] text-[13px] font-medium underline-offset-2 hover:underline"
+                      style={{ color: "var(--accent-text)" }}
                     >
-                      <Plus size={13} strokeWidth={1.75} aria-hidden />
+                      <Plus size={14} strokeWidth={1.75} aria-hidden />
                       Add another {r.label} connection
                     </Link>
                   )}
@@ -219,58 +222,91 @@ export default function ConnectorsPage() {
         </section>
       )}
 
-      {statusFilter !== "disconnected" && !q && <ExtensionsSection />}
-
       {statusFilter !== "connected" && (
-        <section className="flex flex-col gap-3" aria-labelledby="catalogue-heading">
+        <section className="flex flex-col gap-4" aria-labelledby="catalogue-heading">
           <h2 id="catalogue-heading" className="section-title">
-            Catalogue
+            Add a source
           </h2>
-          <div className="ledger overflow-hidden">
-            {loading && <SkeletonRows count={6} />}
-            {!loading && shownAvailable.length === 0 && (
-              <div className="px-4 py-4 text-[13px] flex items-center gap-3" style={{ color: "var(--ink-dim)" }}>
-                {q ? (
-                  <>
-                    No connector matches &ldquo;{query.trim()}&rdquo;.
-                    <button type="button" className="btn btn-sm" onClick={() => setQuery("")}>
-                      Clear search
-                    </button>
-                  </>
-                ) : (
-                  "Every connector is set up."
-                )}
-              </div>
-            )}
-            <div className="hairline-rows">
-              {shownAvailable.map((kind) => {
-                const meta = CONNECTOR_META[kind];
-                const types = meta.sourceKey ? bySource[meta.sourceKey]?.record_types : undefined;
-                return (
-                  <Link key={kind} href={`/connectors/setup/${kind}`} className={`${ROW_LINK} ${AVAILABLE_COLS}`}>
+          {loading && <SkeletonCards count={6} />}
+          {!loading && shownAvailable.length === 0 && (
+            <div className="text-[14px] flex flex-wrap items-center gap-3" style={{ color: "var(--ink-dim)" }}>
+              {q ? (
+                <>
+                  No source matches &ldquo;{query.trim()}&rdquo;.
+                  <button type="button" className="btn btn-sm" onClick={() => setQuery("")}>
+                    Clear search
+                  </button>
+                </>
+              ) : (
+                "Every source is set up. Use \u201cAdd another connection\u201d above to connect a second account."
+              )}
+            </div>
+          )}
+          {/* Two columns with a 36px gap; one column on narrow screens. Each card is one link. */}
+          <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-9 gap-y-5">
+            {shownAvailable.map((kind) => {
+              const meta = CONNECTOR_META[kind];
+              const types = meta.sourceKey ? bySource[meta.sourceKey]?.record_types : undefined;
+              return (
+                <li key={kind} className="min-w-0">
+                  <Link
+                    href={`/connectors/setup/${kind}`}
+                    className="ledger h-full p-5 flex flex-col gap-3.5 transition-[border-color] duration-[120ms] hover:border-[var(--bauhaus-app-ink)]"
+                    style={{ borderColor: "#8f8f87" }}
+                  >
                     <span className="flex items-center gap-3 min-w-0">
-                      <ConnectorTile kind={kind} />
-                      <span className="min-w-0 flex flex-col">
-                        <span className="font-medium truncate">{meta.label}</span>
-                        <span className="text-[12px] truncate" style={{ color: "var(--ink-dim)" }}>
-                          {meta.description}
-                        </span>
+                      <ConnectorTile kind={kind} size={32} />
+                      <span className="flex-1 min-w-0 text-[16px] font-semibold truncate">{meta.label}</span>
+                      <span className="btn btn-primary btn-sm shrink-0" aria-hidden>
+                        Connect <ArrowRight size={16} strokeWidth={1.75} />
                       </span>
                     </span>
-                    <span className="hidden md:block font-mono text-[12px] truncate" style={{ color: "var(--ink-faint)" }}>
-                      {types?.join(", ") || "Tool calls only"}
+                    <span className="text-[14px] leading-snug" style={{ color: "var(--ink)" }}>
+                      {meta.description}
                     </span>
-                    <span className="text-[12px] whitespace-nowrap" style={{ color: "var(--ink-faint)" }}>
-                      Not connected
+                    <span className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[13px]" style={{ color: "var(--ink-dim)" }}>
+                      <StatusLabel tone="neutral">Not connected yet</StatusLabel>
+                      {types && types.length > 0 && <span className="font-mono text-[12px] truncate">{types.join(", ")}</span>}
                     </span>
-                    <ChevronRight size={14} strokeWidth={1.75} color="var(--ink-faint)" className="hidden md:block" aria-hidden />
                   </Link>
-                );
-              })}
-            </div>
-          </div>
+                </li>
+              );
+            })}
+          </ul>
         </section>
       )}
+
+      {statusFilter !== "disconnected" && !q && (
+        <section className="flex flex-col gap-4">
+          <div>
+            <button type="button" className="btn" aria-expanded={showCustom} aria-controls="custom-integrations" onClick={() => setShowCustom((v) => !v)}>
+              Advanced: custom integrations
+              <ChevronDown size={16} strokeWidth={1.75} aria-hidden style={{ transform: showCustom ? "rotate(180deg)" : undefined }} />
+            </button>
+          </div>
+          {showCustom && (
+            <div id="custom-integrations">
+              <ExtensionsSection />
+            </div>
+          )}
+        </section>
+      )}
+    </div>
+  );
+}
+
+function SkeletonCards({ count }: { count: number }) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-9 gap-y-5" aria-hidden>
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="ledger p-5 flex flex-col gap-3.5">
+          <span className="flex items-center gap-3">
+            <span className="skeleton w-8 h-8" />
+            <span className="skeleton h-3.5 w-28" />
+          </span>
+          <span className="skeleton h-3 w-3/4" />
+        </div>
+      ))}
     </div>
   );
 }

@@ -13,11 +13,12 @@
 curl -fsSL https://www.buildpaperless.com.au/eunomia/install.sh | bash
 ```
 
-**Vaults for persistent, shared AI memory.**
+**Shared memory for the AI apps you already use.**
 
-Give each project, client or team its own memory vault. Keep its people,
-facts and decisions together, share it with collaborators, and let your
-agents pick up that context across sessions.
+Tell one AI app something once, and every app you connect can remember it.
+Eunomia keeps your people, projects, decisions and documents in one place
+that you own, and lets ChatGPT, Claude Code, Codex and other AI apps look
+things up there. You don't need to know what MCP is to set it up.
 
 [![CI](https://github.com/Cashara-io/eunomia/actions/workflows/ci.yml/badge.svg)](https://github.com/Cashara-io/eunomia/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/Cashara-io/eunomia?label=release)](https://github.com/Cashara-io/eunomia/releases/latest)
@@ -25,7 +26,7 @@ agents pick up that context across sessions.
 
 ![Scattered knowledge becoming a connected memory graph](docs/images/eunomia-cover.png)
 
-[Vaults](#vaults-are-the-core) · [Get started](#get-started) · [How it works](#how-it-works) · [Connect an agent](docs/agents.md) · [Documentation](docs/README.md)
+[Connect your AI app](#connect-your-ai-app-in-four-steps) · [Memory spaces](#memory-spaces) · [Get started](#get-started) · [How it works](#how-it-works) · [Documentation](docs/README.md)
 
 </div>
 
@@ -35,22 +36,101 @@ agents pick up that context across sessions.
 
 **Watch the launch film** (with sound) in [1080p](docs/media/eunomia-launch-film.mp4) (27 MB) or [720p](docs/media/eunomia-launch-film-720p.mp4) (4 MB): your agents forget, Eunomia remembers, and every agent recalls what the team decided.
 
+## What's new in 2.0.8: a calmer, clearer app
+
+Release 2.0.8 brings the **Eunomia Bauhaus app design**: one obvious next step
+on every screen, written for people who are not technical.
+
+- **Home asks one question first: "Which AI app do you use?"** Pick ChatGPT,
+  Claude Code, Codex or Other apps (nothing is chosen for you) and you see only
+  that app's steps. Browser setup and terminal setup are kept separate.
+- **Plain names everywhere.** The sidebar reads Home, Chat, People & topics,
+  Memory spaces, Documents, Connected sources, Help and Settings, with AI
+  instructions and Code map under *Advanced*.
+- **Honest status.** "Connected" only appears after Eunomia itself has seen your
+  app sign in. Every status is written in words, not just a coloured dot, and
+  anything you can't undo asks first, naming exactly what will change.
+- **Works for everyone.** Keyboard and screen-reader friendly, large touch
+  targets, readable contrast, a menu drawer on small screens, and less motion
+  when your device asks for it.
+
+The design system (colours, type, layout and component rules) is documented in
+[DESIGN.md](DESIGN.md).
+
+## Connect your AI app in four steps
+
+1. **Choose your AI app.** Open Eunomia; Home shows ChatGPT, Claude Code, Codex
+   and Other apps.
+2. **Follow its steps.** ChatGPT is set up in your browser (it needs Eunomia on a
+   public `https://` address). Claude Code and Codex are set up with one command
+   you copy into your computer's command window; the guide tells you how to open
+   it on Mac, Windows or Linux.
+3. **Sign in and approve.** Your app opens Eunomia's sign-in page. Use your
+   Eunomia email and password, read what the app is asking to do, and choose
+   **Allow**.
+4. **Try it.** Start a new conversation and ask *"Use Eunomia to look for
+   memories about me."* Press **Check connection** in Eunomia to confirm.
+   Finding no memories on a new account is normal: the connection works, there
+   is simply nothing saved yet.
+
+Stuck? **Connection help** (linked from every guide) covers the usual problems:
+not sure which app, ChatGPT has no custom-connection option, "command not
+found", no sign-in page, or no memories found.
+
+Prefer to do it from a terminal? The installer connects the AI apps it finds on
+your computer, and `./scripts/connect-agents.sh` does it again later. Exact
+commands and config for each app are in [AI agents & MCP](docs/agents.md).
+
+## Memory spaces
+
+A **memory space** keeps one part of your life or work together: your own
+notes, a client, a project, a team. Everything your AI apps remember goes into a
+space, and only the people in that space can read it.
+
+- **Your personal space** is created with your account and is private to you.
+- **Shared spaces** are for projects and teams. Invite people by email; they get
+  access only after they accept. Every space always keeps at least one owner.
+- **Copy or combine.** *Copy space* makes a new space with the same memories.
+  *Combine two spaces* makes a new space with both, and leaves the two originals
+  unchanged.
+- **Share with another Eunomia on your network.** An owner can make a one-time
+  share code; someone running their own Eunomia joins with it and gets a full
+  copy of that space that stays in step with yours (changes are exchanged every
+  half minute over an encrypted, authenticated link). Only the owner's Eunomia
+  needs to be reachable.
+
+In the API and agent tools a memory space is called a **vault**; the technical
+details are below.
+
+## Connected sources
+
+Bring in what you already have. Choose a source, check that the connection
+works, then import: Eunomia shows where items will go before it starts, honest
+progress while it runs, and how many items arrived when it is done. Sign-in
+problems and import problems are reported separately, each with a way to retry.
+
+Built-in sources include GitHub, Slack, Notion, Linear, Gmail, Google Calendar,
+Discord, Todoist, Stripe, Up Bank, Spotify, Ed Discussion and PocketAI. You can
+also **upload documents** (text, Markdown, JSON, CSV and text PDFs); their
+passages are found by the same search your AI apps use. See
+[Connectors](#connect-your-agents-and-apps) for the full table.
+
 ## Why Eunomia?
 
 An agent's conversation ends; the things it learned should stay useful.
-Eunomia is a self-hosted memory service built around **vaults**: separate
-spaces for the knowledge your agents read and update over MCP or REST.
-Each vault holds its own entities, memories and relationships, with access
-controlled by membership.
+Eunomia is a self-hosted memory service built around **vaults** (memory spaces
+in the app): separate spaces for the knowledge your agents read and update over
+MCP or REST. Each vault holds its own entities (people & topics), memories and
+relationships, with access controlled by membership.
 
 - **Choose the memory scope.** Use a personal vault or a named project/team vault; share access through invitations.
 - **Remember across sessions.** Save facts and experiences about people, organisations, locations and code.
 - **Find context in several ways.** Recall combines semantic search, keywords, memory text, graph links and explicit date ranges.
-- **Bring in your apps.** Sync records from 12 built-in sources, then search them alongside remembered facts.
+- **Bring in your apps.** Sync records from the built-in sources, then search them alongside remembered facts.
 - **Run it for a team.** Each org gets its own database, and tokens can be scoped, limited to one vault and set to expire.
-- **See what's stored.** Explore entity and code graphs, inspect memories, or compare vaults in a 3D vector cloud.
+- **See what's stored.** Explore people & topics and code maps, inspect memories, or compare vaults in a 3D vector cloud.
 
-## Vaults are the core
+## Vaults (memory spaces) in detail
 
 A vault is the unit of organisation and sharing in Eunomia. Keep a client's
 facts, a project's decisions or a team's working knowledge in its own vault.
@@ -126,6 +206,9 @@ work without a key; embeddings must return 1,536-dimensional vectors.
 See [Quickstart](docs/quickstart.md) for the first run and
 [Installation](docs/installation.md) for manual setup and installer options.
 
+To give a repo's agents one shared vault and skills, run `npm create eunomia` in
+it. See [Projects](docs/projects.md).
+
 ### Upgrading from 1.x
 
 2.0 moves to SurrealDB 3.3 and gives each org its own database. Any 1.x
@@ -192,9 +275,10 @@ configuration and the complete tool list.
 | HeyPocket | Meeting recordings and transcripts |
 | GitHub, Linear, Notion, Todoist | Issues, pull requests, documents and tasks |
 | Slack, Discord, Gmail, Google Calendar | Messages, mail and calendar events |
+| Ed Discussion | Course discussion threads, with answers and comments |
 | Spotify | Listening history |
 
-Set credentials and source options on the Connectors page. Connector secrets
+Set credentials and source options on the Connected sources page (`/connectors`). Connector secrets
 are encrypted at rest with AES-256-GCM. Up Bank supports signed webhooks;
 other sources use their sync adapters. A synthetic demo source is available
 for on-demand test data. See [Connectors](docs/connectors.md) for setup details.
@@ -216,7 +300,7 @@ if you want browser sessions to survive backend restarts. Then run:
 ./run.sh
 ```
 
-This starts SurrealDB 3.3.1 in Docker, the Rust backend on `:8001`, and Next.js
+This starts SurrealDB 3.3.5 in Docker, the Rust backend on `:8001`, and Next.js
 on `:3000`. The frontend proxies `/api/*` and `/mcp` to the backend. A dev
 volume last used with SurrealDB 2.x must be removed or upgraded first.
 The Compose stack uses prebuilt images; see [Installation](docs/installation.md)
@@ -241,7 +325,7 @@ With the stack running and system Chrome installed:
 [CI](.github/workflows/ci.yml) runs clippy and the backend tests (also under
 the hardened SurrealDB settings, plus the org isolation proof), every script
 test, the frontend checks, Playwright against the Compose stack built from
-the repository with SurrealDB 3.3.1, the 2.x to 3.3 upgrade, and restore
+the repository with SurrealDB 3.3.5, the 2.x to 3.3 upgrade, and restore
 drills. The [recall evaluation](frontend/tests/recall-eval.spec.ts) measures
 Recall@5 and MRR on a fixed corpus, and checks for cross-vault and cross-user
 leaks. See [Testing](docs/testing.md) for every layer.
@@ -277,13 +361,14 @@ database. See [Backups](INSTALLATION.md#backups).
 | [Quickstart](docs/quickstart.md) | Install, sign in and remember your first fact |
 | [Installation](docs/installation.md) | Installer flags, manual setup and supported platforms |
 | [AI agents & MCP](docs/agents.md) | Agent configuration, tokens, OAuth and every tool |
+| [Projects](docs/projects.md) | `npm create eunomia`: one vault and shared skills per repo |
 | [Concepts](docs/concepts.md) | Vaults, facts, observations, graphs and the vector cloud |
 | [Underlying workings](docs/architecture.md) | Source-linked architecture, tenancy, jobs, ingestion, retrieval and access checks |
 | [Connectors](docs/connectors.md) | Source credentials and sync setup |
 | [Deployment](docs/deployment.md) | HTTPS, secrets, updates, org databases and backups |
 | [Upgrading to SurrealDB 3](docs/upgrading-to-surrealdb-3.md) | The 1.x to 2.0 database upgrade, rollback and recovery |
 
-The core user guides are also available on the app's Docs page and through
+The core user guides are also available on the app's Help page and through
 the `docs` MCP tool. Developer references are listed in the
 [docs index](docs/README.md).
 

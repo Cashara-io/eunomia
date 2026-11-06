@@ -4,6 +4,7 @@ import {
   CreditCard,
   Database,
   GitBranch,
+  GraduationCap,
   Landmark,
   Mail,
   MessageCircle,
@@ -298,6 +299,27 @@ export const CONNECTOR_META: Record<Connector["kind"], ConnectorMeta> = {
     sourceKey: "stripe",
     webhooks: false,
   },
+  ed: {
+    label: "Ed Discussion",
+    description: "Threads, answers and comments from your Ed Discussion courses.",
+    icon: <GraduationCap size={18} strokeWidth={1.75} />,
+    tint: "var(--connector-ed)",
+    help: (
+      <>
+        Create an API token at <A href="https://edstem.org/us/settings/api-tokens">edstem.org/us/settings/api-tokens</A>.
+        Ed&apos;s API is unofficial and may change. Set the region to <C>au</C> if your Ed is at edstem.org/au (Australian
+        universities), or <C>eu</C> for Europe (default <C>us</C>). Leave course IDs empty to sync every active course, or list course IDs separated by
+        commas (the number in a course&apos;s URL). The first sync reads the last 30 days.
+      </>
+    ),
+    fields: [
+      { key: "api_token", label: "API token", placeholder: "…", secret: true },
+      { key: "region", label: "Region (optional)", placeholder: "us, au or eu", secret: false },
+      { key: "course_id", label: "Course IDs (optional)", placeholder: "12345, 67890", secret: false },
+    ],
+    sourceKey: "ed",
+    webhooks: false,
+  },
 };
 
 export const CONNECTOR_ORDER: Connector["kind"][] = [
@@ -313,6 +335,7 @@ export const CONNECTOR_ORDER: Connector["kind"][] = [
   "spotify",
   "todoist",
   "stripe",
+  "ed",
 ];
 
 export function connectorStatus(c: Connector | undefined): "demo" | "connected" | "disconnected" {
@@ -340,9 +363,11 @@ export function relativeTime(iso: string | null | undefined): string {
 }
 
 /** Connector identity: a small icon tile in the connector's own tint, never the accent. */
-export function ConnectorTile({ kind, size = 28 }: { kind: Connector["kind"] | null; size?: number }) {
+/** A source's identity mark: its recognisable category icon in the source's colour, on a soft square.
+ * Decorative: the source's name is always written beside it. */
+export function ConnectorTile({ kind, size = 32 }: { kind: Connector["kind"] | null; size?: number }) {
   const meta = kind ? CONNECTOR_META[kind] : null;
-  const tint = meta?.tint ?? "var(--ink-faint)";
+  const tint = meta?.tint ?? "var(--ink-dim)";
   return (
     <span
       aria-hidden
@@ -350,13 +375,12 @@ export function ConnectorTile({ kind, size = 28 }: { kind: Connector["kind"] | n
       style={{
         width: size,
         height: size,
-        borderRadius: size >= 40 ? 10 : 7,
+        borderRadius: 4,
         color: tint,
-        background: `color-mix(in oklab, ${tint} 16%, var(--surface))`,
-        boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${tint} 32%, transparent)`,
+        background: `color-mix(in oklab, ${tint} 12%, var(--surface))`,
       }}
     >
-      <span className="inline-flex" style={{ transform: `scale(${Math.max(0.75, size / 34)})` }}>
+      <span className="inline-flex" style={{ transform: `scale(${Math.max(0.8, size / 28)})` }}>
         {meta?.icon ?? <Database size={18} strokeWidth={1.75} />}
       </span>
     </span>

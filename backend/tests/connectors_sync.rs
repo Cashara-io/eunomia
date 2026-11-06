@@ -19,7 +19,7 @@ use eunomia_backend::sources::base::owner_key_str;
 use eunomia_backend::sources::mock::{route, serve, Route};
 use eunomia_backend::sources::heypocket::HeyPocketSource;
 use eunomia_backend::sources::registry;
-use eunomia_backend::sources::scheduler::{due_syncs, sync_source};
+use eunomia_backend::sources::scheduler::{check_connectivity_enabled, due_syncs, sync_job, sync_source};
 use eunomia_backend::sources::up_bank::UpBankSource;
 use eunomia_backend::state::{AppState, OrgState};
 use hmac::{Hmac, Mac};
@@ -527,6 +527,166 @@ async fn the_sync_now_route_runs_a_job_and_reports_an_already_running_sync() {
     let _ = stop.send(true);
 }
 
+// -- offline: the connectivity check (`sync_check_connectivity`, on by default) ----------------------
+
+/// An app whose connectivity probe is `spec` (a local `host:port`, so no test touches the network).
+async fn app_probing(spec: &str) -> (TestApp, OrgState) {
+    allow_base_url();
+    let app = TestApp::with_settings(eunomia_backend::config::Settings { connectivity_probe: spec.into(), ..test_settings() }).await;
+    let org = app.state.org(&app.user.org).await.unwrap();
+    (app, org)
+}
+
+/// A local address nothing listens on: the probe finds no connection.
+fn dead_addr() -> String {
+    std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().to_string()
+}
+
+async fn set_check(app: &TestApp, on: bool) {
+    let (status, body) = app.http("PATCH", "/api/settings", Some(json!({"sync_check_connectivity": on})), true).await;
+    assert_eq!(status.as_u16(), 200, "{body}");
+    assert_eq!(body["sync_check_connectivity"], on);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_connectivity_check_defaults_on_and_can_be_switched_off() {
+    let (app, _org) = app_probing("off").await;
+    let (_, body) = app.http("GET", "/api/settings", None, true).await;
+    assert_eq!(body["sync_check_connectivity"], true);
+    set_check(&app, false).await;
+    let (_, body) = app.http("GET", "/api/settings", None, true).await;
+    assert_eq!(body["sync_check_connectivity"], false);
+    // an unrelated patch leaves it alone
+    let (_, body) = app.http("PATCH", "/api/settings", Some(json!({"chat_model": "m"})), true).await;
+    assert_eq!(body["sync_check_connectivity"], false);
+}
+
+/// Settings rows written before the field existed (NONE) must keep accepting saves, and read as on.
+/// Recreates the upgrade: the field undefined-as-optional, the row without it, then the real 0023 file.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_settings_row_from_before_the_field_still_saves_and_reads_as_on() {
+    let (app, org) = app_probing("off").await;
+    let (status, _) = app.http("GET", "/api/settings", None, true).await; // creates the row
+    assert_eq!(status.as_u16(), 200);
+    let raw = org.db.test_raw();
+    // chat_model (0011) had the same gap: its rows from before it are NONE too
+    raw.query(
+        "DEFINE FIELD OVERWRITE sync_check_connectivity ON app_settings TYPE option<bool>; DEFINE FIELD OVERWRITE chat_model ON app_settings TYPE option<string>; \
+         UPDATE app_settings UNSET sync_check_connectivity, chat_model; DEFINE FIELD OVERWRITE chat_model ON app_settings TYPE string DEFAULT \"\";",
+    )
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    raw.query(include_str!("../migrations/tenant/0026_sync_check_connectivity.surql")).await.unwrap().check().unwrap();
+
+    let (status, body) = app.http("PATCH", "/api/settings", Some(json!({"theme": {"mode": "dark"}})), true).await;
+    assert_eq!(status.as_u16(), 200, "{body}");
+    assert_eq!((&body["sync_check_connectivity"], &body["chat_model"]), (&json!(true), &json!("")), "{body}");
+    assert!(check_connectivity_enabled(&org.db, &app.user.id).await);
+    set_check(&app, false).await;
+    assert!(!check_connectivity_enabled(&org.db, &app.user.id).await);
+    // running the backfill again (or on a row that has values) changes nothing
+    app.http("PATCH", "/api/settings", Some(json!({"chat_model": "keep"})), true).await;
+    raw.query(include_str!("../migrations/tenant/0026_sync_check_connectivity.surql")).await.unwrap().check().unwrap();
+    let (_, body) = app.http("GET", "/api/settings", None, true).await;
+    assert_eq!((&body["sync_check_connectivity"], &body["chat_model"]), (&json!(false), &json!("keep")), "{body}");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn online_scheduled_syncs_run() {
+    let up = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let (app, org) = app_probing(&up.local_addr().unwrap().to_string()).await;
+    let owner = app.user.id.clone();
+    let mock = serve(vec![route("GET", "/issues", json!([issue(7, "Importer", "2024-02-01T00:00:00Z")]))]).await;
+    connect_github(&org, &owner, &mock.base).await;
+
+    assert_eq!(due_syncs(&org).await.unwrap().len(), 1);
+    let out = sync_job(&org, &owner, "github", None, false).await;
+    assert_eq!(out["written"], 1, "{out}");
+    assert_eq!(status(&org, &owner, "github").await["last_error"], "");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn offline_scheduled_syncs_are_skipped_without_an_error_a_failure_count_or_a_provider_call() {
+    let (app, org) = app_probing(&dead_addr()).await;
+    let owner = app.user.id.clone();
+    let mock = serve(vec![route("GET", "/issues", json!([issue(7, "Importer", "2024-02-01T00:00:00Z")]))]).await;
+    connect_github(&org, &owner, &mock.base).await;
+
+    assert!(due_syncs(&org).await.unwrap().is_empty(), "nothing is queued while offline");
+    // a job that was queued just before the connection dropped
+    let out = sync_job(&org, &owner, "github", None, false).await;
+    assert_eq!((out["status"].as_str(), out.get("error")), (Some("offline"), None), "{out}");
+    assert!(mock.requests().is_empty(), "the provider is never called");
+    let st = status(&org, &owner, "github").await;
+    assert!(st.is_null() || (st["last_error"] == "" && st["consecutive_failures"] == 0), "no error state: {st}");
+
+    // with the check off the same machine attempts the sync as before
+    set_check(&app, false).await;
+    assert_eq!(due_syncs(&org).await.unwrap().len(), 1);
+    let out = sync_job(&org, &owner, "github", None, false).await;
+    assert_eq!(out["written"], 1, "{out}");
+    assert_eq!(mock.requests().len(), 1);
+}
+
+/// A scheduled job that finds the machine offline ends quietly, and queues a delayed follow-up under a
+/// new key (the finished job's own key blocks its window), which syncs once the connection is back.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_scheduled_job_that_finds_the_machine_offline_queues_a_retry_that_syncs_when_back_online() {
+    let addr = dead_addr();
+    let (app, org) = app_probing(&addr).await;
+    let owner = app.user.id.clone();
+    let mock = serve(vec![route("GET", "/issues", json!([issue(7, "Importer", "2024-02-01T00:00:00Z")]))]).await;
+    connect_github(&org, &owner, &mock.base).await;
+    let stop = spawn_worker(&app.state);
+    let control = app.state.control.test_raw();
+
+    let key = format!("sync:{}:github:window", owner_key_str(&owner));
+    let job = NewJob::new(kind::SYNC, owner.clone(), key.clone()).in_org(org.db.org()).payload(json!({"source": "github"}));
+    jobs::enqueue(&app.state.control, job).await.unwrap();
+    let ready_retries = || async {
+        let mut res = control.query("SELECT idempotency_key, status, run_at > time::now() + 30s AS later FROM job WHERE status = 'ready' AND idempotency_key CONTAINS ':offline:'").await.unwrap();
+        res.take::<Vec<Value>>(0).unwrap()
+    };
+    wait_for("the offline stand-down to queue a retry", 10, || async { !ready_retries().await.is_empty() }).await;
+    let retries = ready_retries().await;
+    assert_eq!(retries.len(), 1, "{retries:?}");
+    assert_eq!(retries[0]["later"], true, "delayed, not immediate: {retries:?}");
+    assert!(retries[0]["idempotency_key"].as_str().unwrap() != key);
+    assert!(mock.requests().is_empty());
+    assert_eq!(count(&org, "SELECT count() FROM sync_status WHERE owner = $owner", &owner).await, 0, "no error state, no failure count");
+
+    // the connection returns (after the probe's short "offline" cache has lapsed) and the retry comes due
+    tokio::time::sleep(Duration::from_secs(11)).await;
+    let _up = tokio::net::TcpListener::bind(&addr).await.unwrap();
+    control.query("UPDATE job SET run_at = time::now() WHERE idempotency_key CONTAINS ':offline:'").await.unwrap().check().unwrap();
+    wait_for("the retry to sync", 15, || async { status(&org, &owner, "github").await["cursor"] == "2024-02-01T00:00:00Z" }).await;
+    assert_eq!(mock.requests().len(), 1);
+    let _ = stop.send(true);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn manual_sync_reports_offline_then_works_once_the_connection_returns() {
+    let addr = dead_addr();
+    let (app, org) = app_probing(&addr).await;
+    let owner = app.user.id.clone();
+    let mock = serve(vec![route("GET", "/issues", json!([issue(7, "Importer", "2024-02-01T00:00:00Z")]))]).await;
+    connect_github(&org, &owner, &mock.base).await;
+    let stop = spawn_worker(&app.state);
+
+    let (code, body) = app.http("POST", "/api/sources/github/sync", None, true).await;
+    assert_eq!((code.as_u16(), body["status"].as_str()), (200, Some("offline")), "{body}");
+    assert!(mock.requests().is_empty());
+    assert_eq!(count(&org, "SELECT count() FROM sync_status WHERE owner = $owner", &owner).await, 0, "no sync_status row, so no error");
+
+    // the connection returns: a manual sync probes afresh (ignoring the cached "offline") and runs
+    let _up = tokio::net::TcpListener::bind(&addr).await.unwrap();
+    let (_, body) = app.http("POST", "/api/sources/github/sync", None, true).await;
+    assert_eq!(body["written"], 1, "{body}");
+    let _ = stop.send(true);
+}
+
 fn b64(s: &str) -> String {
     use base64::Engine;
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(s)
@@ -626,6 +786,16 @@ fn per_connector() -> Vec<(&'static str, &'static str, Value, Value, Vec<Route>)
             vec![route("GET", "/charges", json!({"object": "list", "has_more": false, "data": [{"id": "ch_1", "object": "charge", "amount": 2500, "currency": "aud",
                 "created": 1700000100, "status": "succeeded", "paid": true, "refunded": false, "description": "Pro", "payment_intent": "pi_1"}]}))],
         ),
+        (
+            "ed", "ed", json!({}), json!({"api_token": "ed-tok"}),
+            vec![
+                route("GET", "/user", json!({"user": {"id": 7, "name": "Sam"}, "courses": [{"course": {"id": 10, "code": "X101", "name": "Intro", "status": "active"}, "role": {"role": "student"}}]})),
+                route("GET", "/courses/10/threads", json!({"threads": [{"id": 501, "course_id": 10, "user_id": 7, "title": "Lifetimes?", "updated_at": "2999-01-01T00:00:00.000000+00:00"}]})),
+                route("GET", "/threads/501", json!({"thread": {"id": 501, "course_id": 10, "user_id": 7, "title": "Lifetimes?", "category": "General", "type": "question",
+                    "document": "How do borrows end?", "is_answered": false, "is_anonymous": false, "updated_at": "2999-01-01T00:00:00.000000+00:00", "deleted_at": null,
+                    "answers": [], "comments": []}, "users": [{"id": 7, "name": "Ada"}]})),
+            ],
+        ),
     ]
 }
 
@@ -653,3 +823,213 @@ async fn every_connector_syncs_end_to_end_against_its_mock_provider() {
 
 #[allow(dead_code)]
 fn _types(_: &User) {}
+
+/// Re-extract: a dry run counts what a connection's records produced; a real run deletes just that
+/// (not facts without a source, from another source or from another owner) and queues extraction again.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_reextract_route_replaces_one_connections_facts_and_requeues_its_records() {
+    use eunomia_backend::entities::service as entities;
+    let (app, org) = app_with(None).await;
+    let owner = app.user.id.clone();
+    let other = RecordId::new("user", "other-owner");
+    let gh = registry::get("github").unwrap();
+    let raw = [issue(7, "Importer", "2024-02-01T00:00:00Z"), issue(8, "Exporter", "2024-02-01T00:00:00Z")];
+    registry::ingest(&org, &owner, &raw, gh.as_ref()).await.unwrap();
+    registry::ingest(&org, &other, &raw, gh.as_ref()).await.unwrap();
+    let up = json!({"type": "transactions", "id": "t1",
+        "attributes": {"description": "Coles", "createdAt": "2024-03-01T00:00:00+11:00", "status": "SETTLED",
+                       "amount": {"value": "-5.00", "valueInBaseUnits": -500, "currencyCode": "AUD"}},
+        "relationships": {"account": {"data": {"id": "acc"}}}});
+    registry::ingest(&org, &owner, &[up], &UpBankSource).await.unwrap();
+    let up_before = count(&org, "SELECT count() FROM memory WHERE owner = $owner AND source.source = 'up_bank'", &owner).await;
+
+    let ada = common::sys(entities::upsert_entity(&org.db, &owner, "person", "Ada", None, None)).await.unwrap();
+    let acme = common::sys(entities::upsert_entity(&org.db, &owner, "organisation", "Acme", None, None)).await.unwrap();
+    let (ada_id, acme_id): (RecordId, RecordId) = (eunomia_backend::rid::parse(&ada.id).unwrap(), eunomia_backend::rid::parse(&acme.id).unwrap());
+    common::sys(    entities::add_memory(&org.db, &owner, &ada_id, "Ada reported the importer bug.", Some(ISSUE_7), "world")).await.unwrap();
+    common::sys(    entities::add_memory(&org.db, &owner, &ada_id, "Ada likes tea.", None, "world")).await.unwrap();
+    common::sys(    entities::add_relation(&org.db, &owner, &ada_id, &acme_id, "works_at", Some(ISSUE_7))).await.unwrap();
+    let all_memories = count(&org, "SELECT count() FROM memory WHERE owner = $owner", &owner).await;
+
+    let (status, body) = app.http("POST", "/api/sources/github/reextract", Some(json!({})), true).await;
+    assert_eq!(status.as_u16(), 200, "{body}");
+    assert_eq!((body["records"].as_i64(), body["memories"].as_i64(), body["relations"].as_i64()), (Some(2), Some(1), Some(1)), "{body}");
+    assert_eq!(count(&org, "SELECT count() FROM memory WHERE owner = $owner", &owner).await, all_memories, "dry run changes nothing");
+
+    let (_, body) = app.http("POST", "/api/sources/github/reextract", Some(json!({"dry_run": false})), true).await;
+    assert_eq!((body["records"].as_i64(), body["memories"].as_i64(), body["relations"].as_i64()), (Some(2), Some(1), Some(1)), "{body}");
+    assert_eq!(count(&org, "SELECT count() FROM memory WHERE owner = $owner AND source != NONE AND source.source = 'github'", &owner).await, 0);
+    assert_eq!(count(&org, "SELECT count() FROM memory WHERE owner = $owner AND source = NONE AND type != 'observation'", &owner).await, 1, "the sourceless fact stays");
+    assert_eq!(count(&org, "SELECT count() FROM memory WHERE owner = $owner AND source.source = 'up_bank'", &owner).await, up_before);
+    assert_eq!(count(&org, "SELECT count() FROM relates_to WHERE source.source = 'github' AND source.owner = $owner", &owner).await, 0);
+    assert_eq!(count(&org, "SELECT count() FROM cache_record WHERE owner = $owner AND source = 'github' AND deleted = false", &owner).await, 2);
+    assert_eq!(count(&org, "SELECT count() FROM cache_record WHERE owner = $owner AND source = 'github'", &other).await, 2);
+
+    assert_eq!(body["observations"].as_i64(), Some(0), "{body}");
+    // the queueing runs in the background after the response
+    let mut queued = 0;
+    for _ in 0..100 {
+        let mut res = app.state.control.test_raw().query("SELECT count() FROM job WHERE kind = 'extract' AND idempotency_key CONTAINS ':re:' GROUP ALL").await.unwrap();
+        queued = res.take::<Option<Value>>(0).unwrap().and_then(|v| v["count"].as_i64()).unwrap_or(0);
+        if queued >= 2 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    assert_eq!(queued, 2, "one fresh extract job per record");
+
+    // while those jobs are still waiting, another run is refused
+    let (status, body) = app.http("POST", "/api/sources/github/reextract", Some(json!({"dry_run": false})), true).await;
+    assert_eq!(status.as_u16(), 409, "{body}");
+    let (status, _) = app.http("POST", "/api/sources/github/reextract", Some(json!({})), true).await;
+    assert_eq!(status.as_u16(), 200, "a dry run is never refused");
+
+    let (status, _) = app.http("POST", "/api/sources/nope/reextract", Some(json!({})), true).await;
+    assert_eq!(status.as_u16(), 404);
+}
+
+/// The repeated-reminder lookup returns earlier mail from the same sender inside the 90-day lookback (oldest first).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_repeat_lookup_finds_earlier_mail_from_the_sender_inside_the_window() {
+    let (app, org) = app_with(None).await;
+    let owner = app.user.id.clone();
+    let msg = |id: &str, from: &str, date: &str| {
+        json!({"id": id, "threadId": "t", "labelIds": ["INBOX"], "snippet": "s", "internalDate": "0",
+            "payload": {"mimeType": "text/plain", "body": {"data": "UmVtaW5kZXI"},
+                "headers": [{"name": "Subject", "value": "Reminder: Quiz"}, {"name": "From", "value": from}, {"name": "Date", "value": date}]}})
+    };
+    let raw = [
+        msg("old", "Unit <unit@x.org>", "Mon, 25 Dec 2023 09:00:00 +0000"),
+        msg("recent", "Unit <unit@x.org>", "Mon, 8 Jan 2024 09:00:00 +0000"),
+        msg("other", "Else <else@y.org>", "Mon, 8 Jan 2024 10:00:00 +0000"),
+        msg("now", "Unit <unit@x.org>", "Mon, 15 Jan 2024 09:00:00 +0000"),
+    ];
+    let src = registry::get("gmail").unwrap();
+    let report = registry::ingest(&org, &owner, &raw, src.as_ref()).await.unwrap();
+    assert_eq!(report.failed, 0, "{:?}", report.errors);
+    use surrealdb::types::SurrealValue;
+    #[derive(serde::Deserialize, SurrealValue)]
+    struct Now {
+        id: RecordId,
+        occurred_at: surrealdb::types::Datetime,
+    }
+    let mut r = org.db.test_raw().query("SELECT id, occurred_at FROM cache_record WHERE owner = $owner AND external_id = 'now'").bind(("owner", owner.clone())).await.unwrap();
+    let now: Now = r.take::<Vec<Now>>(0).unwrap().remove(0);
+    let mut res = eunomia_backend::store::cache::REPEAT_CANDIDATES
+        .on(&org.db)
+        .bind(("owner", owner.clone()))
+        .bind(("id", now.id))
+        .bind(("at", now.occurred_at))
+        .bind(("addr", "unit@x.org"))
+        .await
+        .unwrap();
+    let rows: Vec<Value> = res.take(0).unwrap();
+    assert_eq!(rows.len(), 2, "both earlier copies from the sender, oldest first: {rows:?}");
+    assert_eq!(rows[0]["from"], "Unit <unit@x.org>");
+    assert_eq!(rows[1]["thread_id"], "t");
+}
+
+/// `owner_name` defaults to "" and round-trips through PATCH/GET /api/settings.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_owner_name_setting_round_trips() {
+    let (app, _org) = app_with(None).await;
+    let (_, body) = app.http("GET", "/api/settings", None, true).await;
+    assert_eq!(body["owner_name"], json!(""), "{body}");
+    let (status, body) = app.http("PATCH", "/api/settings", Some(json!({"owner_name": "  Sam Roberts "})), true).await;
+    assert_eq!(status.as_u16(), 200, "{body}");
+    let (_, body) = app.http("GET", "/api/settings", None, true).await;
+    assert_eq!(body["owner_name"], json!("Sam Roberts"), "{body}");
+}
+
+// --- Pocket audio (#117) ----------------------------------------------------------------------------
+
+async fn pocket_conn(org: &OrgState, owner: &RecordId, base: &str, store_audio: bool) -> service::Connector {
+    connect(org, owner, "pocketai", base, json!({"store_audio": store_audio}), json!({"api_key": "pk_test"})).await;
+    service::get_or_create_connector(&org.db, owner, "pocketai").await.unwrap()
+}
+
+async fn audio_row(org: &OrgState, owner: &RecordId, rid: &str) -> Value {
+    let id = RecordId::from_table_key("pocket_recording", format!("{}:{rid}", owner_key_str(owner)));
+    let mut res = org.db.test_raw().query("SELECT audio_path, audio_media_type, audio_bytes FROM ONLY $id").bind(("id", id)).await.unwrap();
+    res.take::<Option<Value>>(0).unwrap().unwrap_or(Value::Null)
+}
+
+async fn bucket_bytes(org: &OrgState, path: &str) -> Option<Vec<u8>> {
+    let mut res = org.db.test_raw().query("file::get(type::file('documents', $p))").bind(("p", path.to_string())).await.unwrap();
+    res.take::<Option<surrealdb::types::Bytes>>(0).unwrap().map(|b| b.to_vec())
+}
+
+fn audio_hits(mock: &eunomia_backend::sources::mock::Mock) -> usize {
+    mock.requests().iter().filter(|r| r.path.ends_with("/audio")).count()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn pocket_audio_is_off_by_default_and_never_requested() {
+    let (app, org) = app_with(None).await;
+    let owner = app.user.id.clone();
+    let mock = serve(vec![route("GET", "/public/recordings/rec_a/audio", json!(null)).raw("AUDIO").header("content-type", "audio/mp4")]).await;
+    let conn = pocket_conn(&org, &owner, &mock.base, false).await;
+    let rec = json!({"id": "rec_a", "title": "Standup", "recording_at": "2024-05-02T09:00:00Z"});
+    let report = registry::ingest_via(&org, &owner, &[rec], &HeyPocketSource, Some(&conn)).await.unwrap();
+    assert_eq!(report.failed, 0, "{:?}", report.errors);
+    assert_eq!(audio_hits(&mock), 0);
+    assert!(audio_row(&org, &owner, "rec_a").await["audio_path"].is_null());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn pocket_audio_not_uploaded_yet_is_fetched_on_a_later_sync_once_and_kept_across_resyncs() {
+    let (app, org) = app_with(None).await;
+    let owner = app.user.id.clone();
+    let rec = json!({"id": "rec_b", "title": "1:1", "recording_at": "2024-05-02T09:00:00Z"});
+
+    // the device has not uploaded it: 404, the sync still succeeds and stores the transcript side
+    let empty = serve(vec![]).await;
+    let conn = pocket_conn(&org, &owner, &empty.base, true).await;
+    let report = registry::ingest_via(&org, &owner, std::slice::from_ref(&rec), &HeyPocketSource, Some(&conn)).await.unwrap();
+    assert_eq!(report.failed, 0, "{:?}", report.errors);
+    assert_eq!(audio_hits(&empty), 1);
+    assert!(audio_row(&org, &owner, "rec_b").await["audio_path"].is_null());
+
+    // uploaded now: the next sync stores the exact bytes
+    let mock = serve(vec![route("GET", "/public/recordings/rec_b/audio", json!(null)).raw("AUDIO-BYTES").header("content-type", "audio/mpeg")]).await;
+    let conn = pocket_conn(&org, &owner, &mock.base, true).await;
+    registry::ingest_via(&org, &owner, std::slice::from_ref(&rec), &HeyPocketSource, Some(&conn)).await.unwrap();
+    let row = audio_row(&org, &owner, "rec_b").await;
+    let path = row["audio_path"].as_str().unwrap_or_else(|| panic!("{row}")).to_string();
+    assert!(path.ends_with("/rec_b.mp3"), "{path}");
+    assert_eq!((row["audio_media_type"].clone(), row["audio_bytes"].clone()), (json!("audio/mpeg"), json!(11)));
+    assert_eq!(bucket_bytes(&org, &path).await.as_deref(), Some(&b"AUDIO-BYTES"[..]));
+    assert_eq!(mock.requests()[0].header("authorization"), "Bearer pk_test");
+
+    // a re-sync of the same recording keeps the audio fields and does not download again
+    registry::ingest_via(&org, &owner, &[rec], &HeyPocketSource, Some(&conn)).await.unwrap();
+    assert_eq!(audio_row(&org, &owner, "rec_b").await["audio_path"], json!(path));
+    assert_eq!(audio_hits(&mock), 1);
+
+    // playable over REST by its owner; unknown recordings are 404
+    assert_eq!(app.http("GET", "/api/connectors/pocketai/recordings/rec_b/audio", None, true).await.0, 200);
+    assert_eq!(app.http("GET", "/api/connectors/pocketai/recordings/nope/audio", None, true).await.0, 404);
+
+    // deleting the connection's data removes the file too
+    registry::delete_data(&org.db, &owner, &conn).await.unwrap();
+    assert_eq!(bucket_bytes(&org, &path).await, None);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn pocket_audio_over_the_cap_is_refused_and_a_signed_url_is_followed() {
+    let (_app, _org) = app_with(None).await;
+    let mock = serve(vec![
+        route("GET", "/public/recordings/big/audio", json!(null)).raw("0123456789").header("content-type", "audio/mp4"),
+        route("GET", "/public/recordings/signed/audio", json!({"data": {"url": "{base}/s3/signed.m4a"}})),
+        route("GET", "/s3/signed.m4a", json!(null)).raw("SIGNED").header("content-type", "audio/mp4"),
+    ])
+    .await;
+    let client = eunomia_backend::connectors::clients::PocketAIClient::new(&json!({"api_key": "pk"}), &json!({"base_url": mock.base})).unwrap();
+    let err = client.audio("big", 4).await.expect_err("over the cap");
+    assert!(err.message.contains(eunomia_backend::connectors::clients::TOO_LARGE), "{}", err.message);
+    assert!(client.audio("missing", 4).await.unwrap().is_none(), "404: not uploaded yet");
+    let (bytes, media_type) = client.audio("signed", 100).await.unwrap().unwrap();
+    assert_eq!((bytes.as_slice(), media_type.as_str()), (&b"SIGNED"[..], "audio/mp4"));
+    let signed = mock.requests().into_iter().find(|r| r.path == "/s3/signed.m4a").unwrap();
+    assert_eq!(signed.header("authorization"), "", "our key never goes to the signed URL");
+}

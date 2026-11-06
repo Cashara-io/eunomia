@@ -1,0 +1,12 @@
+---
+source: tests/golden_tools.rs
+expression: g.norm.apply(&mask(share))
+---
+{
+  "id": "<id>",
+  "code": "<code>",
+  "role": "read",
+  "expires_at": "<ts>",
+  "addresses": "<addresses>",
+  "fingerprint": "<fingerprint>"
+}

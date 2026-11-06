@@ -1,0 +1,9 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "error": "That doesn't look like a share code. Copy the whole code, starting with eunomia1:",
+  "code": "validation.invalid",
+  "trace_id": "<trace>"
+}

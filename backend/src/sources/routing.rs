@@ -72,6 +72,7 @@ pub fn fields(source: &str) -> &'static [&'static str] {
         "notion" => &["database", "page", "title"],
         "linear" => &["team", "title"],
         "todoist" => &["project", "title"],
+        "ed" => &["course", "category", "title"],
         _ => &["title"],
     }
 }
@@ -135,6 +136,11 @@ pub fn route_keys(source: &str, raw: &Value, title: &str) -> Vec<String> {
         "todoist" => {
             add("project", s(raw, "/project_id"));
             add("project", s(raw, "/_project_name"));
+        }
+        "ed" => {
+            add("course", &raw.get("course_id").and_then(Value::as_i64).map(|id| id.to_string()).unwrap_or_default());
+            add("course", s(raw, "/_course_name"));
+            add("category", s(raw, "/category"));
         }
         _ => {}
     }
@@ -587,6 +593,17 @@ mod tests {
         let keys = route_keys("todoist", &json!({"project_id": "p1", "_project_name": "Home"}), "Buy milk");
         assert_eq!(routed(&[("project", "home")], &keys), Some(0));
         assert_eq!(routed(&[("project", "p1")], &keys), Some(0));
+    }
+
+    #[test]
+    fn ed_routes_on_course_id_or_name_and_category() {
+        let raw = json!({"course_id": 4242, "_course_name": "Intro to Rust", "category": "Lectures"});
+        let keys = route_keys("ed", &raw, "Borrow checker question");
+        assert_eq!(routed(&[("course", "4242")], &keys), Some(0), "the course id is an integer in Ed's JSON");
+        assert_eq!(routed(&[("course", "intro to RUST")], &keys), Some(0));
+        assert_eq!(routed(&[("category", "lectures")], &keys), Some(0));
+        assert_eq!(routed(&[("category", "exams"), ("title", "borrow")], &keys), Some(1));
+        assert_eq!(fields("ed"), &["course", "category", "title"]);
     }
 
     #[test]

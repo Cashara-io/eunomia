@@ -3,8 +3,10 @@
 //! that decides what is due. See `docs/connectors.md` for the user-facing list.
 
 pub mod base;
+pub mod connectivity;
 pub mod demo;
 pub mod discord;
+pub mod ed;
 pub mod github;
 pub mod gmail;
 pub mod google_calendar;

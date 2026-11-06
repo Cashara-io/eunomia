@@ -29,11 +29,15 @@ pub const ALL: &[&Stmt] = &[
     &SOURCES_HEYPOCKET_RECENT,
     &SOURCES_POCKET_RECORDING_PUT,
     &SOURCES_POCKET_RECORDING_GET,
+    &SOURCES_POCKET_AUDIO_SET,
+    &SOURCES_POCKET_AUDIO_GET,
+    &SOURCES_POCKET_AUDIO_PATHS,
     &SOURCES_HEYPOCKET_SEARCH,
     &SOURCES_SYNC_STATUS_UPSERT,
     &SOURCES_SYNC_OK,
     &SOURCES_SYNC_FAILED,
     &SOURCES_SYNC_INTERVALS,
+    &SOURCES_SYNC_CHECK_CONNECTIVITY,
     &SOURCES_UP_BY_TYPE,
 ];
 
@@ -130,17 +134,41 @@ pub const SOURCES_HEYPOCKET_RECENT: Stmt = Stmt::new(
 /// transcript's length. Written before the recording's cache records are ingested.
 pub const SOURCES_POCKET_RECORDING_PUT: Stmt = Stmt::new(
     "app.sources_pocket_recording_put",
-    "UPSERT $id CONTENT { owner: $owner, recording_id: $rid, title: $title, recorded_at: $recorded_at, \
+    // CONTENT replaces the row, so the stored audio (#117, set once by SOURCES_POCKET_AUDIO_SET) is
+    // carried over: it never changes, and a re-sync must not forget it was downloaded
+    "LET $keep = (SELECT audio_path, audio_media_type, audio_bytes FROM ONLY $id); \
+     UPSERT $id CONTENT { owner: $owner, recording_id: $rid, title: $title, recorded_at: $recorded_at, \
      duration_seconds: $duration, tags: $tags, speakers: $speakers, summary: $summary, \
-     action_items: $action_items, transcript: $transcript, raw: $raw, synced_at: time::now() }; \
+     action_items: $action_items, transcript: $transcript, raw: $raw, synced_at: time::now(), \
+     audio_path: $keep.audio_path, audio_media_type: $keep.audio_media_type, audio_bytes: $keep.audio_bytes }; \
      UPDATE cache_record SET deleted = true, updated_at = time::now() WHERE owner = $owner \
      AND type = 'heypocket.transcript_chunk' AND payload.recording_id = $rid AND payload.part >= $parts;",
+);
+
+/// Where a recording's audio was stored (#117): `$path` in the `documents` bucket.
+pub const SOURCES_POCKET_AUDIO_SET: Stmt = Stmt::new(
+    "app.sources_pocket_audio_set",
+    "UPDATE $id SET audio_path = $path, audio_media_type = $media_type, audio_bytes = $size",
+);
+
+/// A recording's stored audio (`audio_path` NONE when there is none), or no row.
+pub const SOURCES_POCKET_AUDIO_GET: Stmt =
+    Stmt::new("app.sources_pocket_audio_get", "SELECT recording_id, audio_path, audio_media_type, audio_bytes FROM ONLY $id");
+
+/// The audio files of the recordings a connection's data delete is about to remove (the same records
+/// `cache::DELETE_SOURCE_DATA` picks), so they can be removed from the bucket first.
+pub const SOURCES_POCKET_AUDIO_PATHS: Stmt = Stmt::new(
+    "app.sources_pocket_audio_paths",
+    r#"SELECT VALUE audio_path FROM pocket_recording WHERE owner = $owner AND audio_path != NONE
+        AND recording_id IN (SELECT VALUE external_id FROM cache_record WHERE owner = $owner AND source = $source
+            AND (connector = $connector OR ($first AND connector = NONE)) AND type = "heypocket.recording")"#,
 );
 
 /// The stored recording without the verbatim `raw` (which can be large and stays in the table).
 pub const SOURCES_POCKET_RECORDING_GET: Stmt = Stmt::new(
     "app.sources_pocket_recording_get",
-    "SELECT recording_id, title, recorded_at, duration_seconds, tags, speakers, summary, action_items, transcript \
+    "SELECT recording_id, title, recorded_at, duration_seconds, tags, speakers, summary, action_items, transcript, \
+     audio_media_type, audio_bytes \
      FROM ONLY $id",
 );
 
@@ -172,6 +200,11 @@ pub const SOURCES_SYNC_FAILED: Stmt = Stmt::new(
 pub const SOURCES_SYNC_INTERVALS: Stmt = Stmt::new(
     "app.sources_sync_intervals",
     "SELECT sync_intervals FROM app_settings WHERE owner = $owner LIMIT 1",
+);
+
+pub const SOURCES_SYNC_CHECK_CONNECTIVITY: Stmt = Stmt::new(
+    "app.sources_sync_check_connectivity",
+    "SELECT sync_check_connectivity FROM app_settings WHERE owner = $owner LIMIT 1",
 );
 
 pub const SOURCES_UP_BY_TYPE: Stmt = Stmt::new(

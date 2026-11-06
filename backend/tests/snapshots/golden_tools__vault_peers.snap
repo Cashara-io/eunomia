@@ -1,0 +1,18 @@
+---
+source: tests/golden_tools.rs
+expression: g.norm.apply(&mask(peers))
+---
+{
+  "vault": "vault:<id27>",
+  "fingerprint": "<fingerprint>",
+  "links": [],
+  "codes": [
+    {
+      "id": "<id>",
+      "role": "read",
+      "created_at": "<ts>",
+      "expires_at": "<ts>"
+    }
+  ],
+  "addresses": "<addresses>"
+}
