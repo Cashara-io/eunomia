@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { KeyRound, RefreshCw, Trash2 } from "lucide-react";
+import { ArrowsClockwiseIcon, KeyIcon, TrashIcon } from "@phosphor-icons/react/ssr";
 import type { HeldOut, RequestOut } from "@/lib/gen";
 import { useDeclineSecretRequest, useDeleteHeldSecret, useHeldSecrets, useReplaceHeldSecret, useSecretRequests } from "@/lib/queries/secretRequests";
 import { useVaults } from "@/lib/queries/vaults";
@@ -145,7 +145,7 @@ function HeldRow({ s, vault, parents, onError, removing, onRemove }: { s: HeldOu
     <tr className="align-top" data-testid="held-secret-row">
       <td className="px-4 py-2.5 min-w-0">
         <div className="flex items-center gap-1.5 font-mono text-[12.5px] break-all">
-          <KeyRound {...ICON} aria-hidden style={{ color: "var(--ink-faint)", flexShrink: 0 }} />
+          <KeyIcon {...ICON} aria-hidden style={{ color: "var(--ink-faint)", flexShrink: 0 }} />
           {s.handle}
         </div>
         <div className="text-[12px]" style={{ color: "var(--ink-faint)" }}>
@@ -177,11 +177,11 @@ function HeldRow({ s, vault, parents, onError, removing, onRemove }: { s: HeldOu
           <div className="flex items-center justify-end gap-1">
             {!s.op && (
               <button type="button" className="btn btn-ghost btn-sm btn-icon" aria-label={`Replace ${s.name}`} onClick={() => setEditing(true)}>
-                <RefreshCw {...ICON} />
+                <ArrowsClockwiseIcon {...ICON} />
               </button>
             )}
             <ConfirmButton label={`Delete ${s.name}`} confirmLabel="Delete" className="btn btn-ghost btn-sm btn-icon" disabled={removing} onConfirm={() => onRemove().catch((e) => onError(failure(e, "Could not delete it. Try again.")))}>
-              <Trash2 {...ICON} />
+              <TrashIcon {...ICON} />
             </ConfirmButton>
           </div>
         )}

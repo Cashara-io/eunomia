@@ -15,7 +15,7 @@ use crate::pool::OrgDb;
 use crate::rid::RecordIdExt;
 use crate::state::OrgState;
 use crate::store;
-use crate::sources::base::{owner_key_str, Source, SourceCtx};
+use crate::sources::base::{owner_key_str, Conn, Source, SourceCtx};
 use crate::sources::routing;
 use crate::sources::demo::DemoSource;
 use crate::sources::discord::DiscordSource;
@@ -90,6 +90,13 @@ pub async fn connection(db: &OrgDb, owner: &RecordId, key: &str) -> AppResult<Op
         return Ok(None);
     }
     Ok(Some((src, conn)))
+}
+
+/// The decrypted credentials + config of one connection (empty when there is none). A held credential
+/// stays its `eu://` handle here; only [`crate::secrets::connector::with_connection`] resolves it.
+pub fn conn_for(encryption_key: &str, row: Option<&Connector>) -> AppResult<Conn> {
+    let Some(row) = row else { return Ok(Conn::default()) };
+    Ok(Conn { credentials: service::credentials_of(encryption_key, row)?, config: row.config.clone() })
 }
 
 /// Every enabled connection of `owner` with its source (excluding connectors left in the old demo mode).

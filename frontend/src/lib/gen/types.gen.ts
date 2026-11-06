@@ -4,11 +4,68 @@ export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});
 };
 
+export type AccessOut = {
+    /**
+     * An org owner or instance admin: may set up providers and manage every vault's references.
+     */
+    manage_providers: boolean;
+    /**
+     * May manage references at all (an org manager, or the owner of a vault).
+     */
+    manage_refs: boolean;
+    /**
+     * An instance admin: may switch the secrets helper on or off.
+     */
+    toggle_helper: boolean;
+    /**
+     * The vaults the caller may bind references to.
+     */
+    vaults: Array<VaultRef>;
+};
+
 export type AckOut = {
     /**
      * Ids that were leased and are now done. Ids that are unknown, already done or not leased are skipped.
      */
     acked: number;
+};
+
+export type ActivityEntry = {
+    /**
+     * `secret.resolve`, `secret.request`, `secret.fill`, `secret.decline`, `secret.transform`, `secret.http`, `secret.replace` or `secret.delete`.
+     */
+    action: string;
+    actor_id: string;
+    actor_kind: string;
+    at: string;
+    channel: string;
+    /**
+     * The stable code when the secrets helper itself failed: `helper_disabled` or `helper_unreachable`
+     * (on `secret.resolve` rows of op:// and bws:// references; never on an eu:// handle).
+     */
+    code: string;
+    host: string;
+    id: string;
+    /**
+     * For a transform: the held secrets it was derived from; for an outbound call: the host.
+     */
+    lineage: Array<string>;
+    outcome: string;
+    reason: string;
+    ref_id: string;
+    /**
+     * The reference or handle concerned (for a request, the handle it will fill).
+     */
+    reference: string;
+    session: string;
+    tool: string;
+    trace_id: string;
+    vault_id: string;
+};
+
+export type ActivityPage = {
+    entries: Array<ActivityEntry>;
+    next_before?: string | null;
 };
 
 export type AuditEntry = {
@@ -138,6 +195,17 @@ export type ChangePage = {
 
 export type ChatRequest = {
     message: string;
+};
+
+export type CheckOut = {
+    detail?: string | null;
+    /**
+     * `denied`, `provider_error` or `bad_config` when not ok. (The sidecar itself not answering is a
+     * `secret.unavailable` error with reason `helper_disabled` or `helper_unreachable`, not this.)
+     */
+    error?: string | null;
+    message?: string | null;
+    ok: boolean;
 };
 
 /**
@@ -330,6 +398,10 @@ export type CreateBody = {
 export type Credentials = {
     email: string;
     password: string;
+};
+
+export type DeclineOut = {
+    status: string;
 };
 
 export type DeclinedBody = {
@@ -562,6 +634,37 @@ export type ExtensionWithSecret = {
     secret: string;
 };
 
+/**
+ * What the pop-up sends. `value` is zeroised when this is dropped; Debug never prints it.
+ */
+export type FillBody = {
+    /**
+     * The hosts it may be sent to (defaults to what the agent asked for).
+     */
+    allowed_hosts?: Array<string> | null;
+    /**
+     * Let any credential of a vault member use it, not only the one that asked.
+     */
+    any_agent?: boolean;
+    /**
+     * `header`, `query`, `body` (defaults to what the agent asked for).
+     */
+    placements?: Array<string> | null;
+    /**
+     * The secret. Write-only: encrypted at once, never returned, logged or shown again.
+     */
+    value: string;
+};
+
+export type FillOut = {
+    /**
+     * `eu://<vault>/<name>`
+     */
+    handle: string;
+    secret_id: string;
+    status: string;
+};
+
 export type FinanceAccount = {
     balance: string;
     name: string;
@@ -608,6 +711,87 @@ export type GraphNode = {
 export type GraphOut = {
     edges: Array<GraphEdge>;
     nodes: Array<GraphNode>;
+};
+
+/**
+ * A held secret as listed. Never its value or ciphertext.
+ */
+export type HeldOut = {
+    allowed_actors: Array<string>;
+    allowed_hosts: Array<string>;
+    allowed_tools: Array<string>;
+    can_manage: boolean;
+    created_at: string;
+    created_by: string;
+    /**
+     * The held secrets it was derived from (empty for a pasted one).
+     */
+    derived_from: Array<string>;
+    expires_at?: string | null;
+    handle: string;
+    /**
+     * `vault_secret:...`
+     */
+    id: string;
+    label: string;
+    name: string;
+    op?: string | null;
+    placements: Array<string>;
+    updated_at: string;
+    vault_id: string;
+};
+
+export type HelperAck = {
+    /**
+     * `false`: there is no updater on this server (no `update-status/`); switch the profile on by hand.
+     */
+    configured: boolean;
+    requested: boolean;
+};
+
+export type HelperRequest = {
+    enabled: boolean;
+};
+
+/**
+ * The secrets helper's status for Settings.
+ */
+export type HelperStatus = {
+    /**
+     * The updater's request channel is there (`update-status/`): "Enable password managers" works.
+     * When `false`, Settings shows the manual steps instead.
+     */
+    can_request: boolean;
+    /**
+     * The profile is on for this backend (`EUNOMIA_COMPOSE_PROFILES` names `secrets`).
+     */
+    enabled: boolean;
+    /**
+     * Why, for people (the updater's error, or why the helper is not answering).
+     */
+    message?: string | null;
+    /**
+     * `enable` or `disable` while a request waits for the updater.
+     */
+    pending?: string | null;
+    /**
+     * The compose profile to switch on by hand: `secrets`.
+     */
+    profile: string;
+    /**
+     * `helper_disabled` (off or starting) or `helper_unreachable` (unreachable): what a resolution
+     * gets now; absent when running.
+     */
+    reason?: string | null;
+    /**
+     * `off` (the `secrets` profile is not on), `starting` (asked for, or started and not answering yet),
+     * `running` (answers its health check) or `unreachable` (on, but not answering).
+     */
+    state: string;
+    /**
+     * The helper's version when running.
+     */
+    version?: string | null;
 };
 
 export type HookOut = {
@@ -742,6 +926,30 @@ export type JoinRequestBody = {
     name?: string | null;
 };
 
+/**
+ * One provider kind and what Settings says about it. The one source of truth for the kinds, their
+ * names and their stability (the settings API serves it; the UI and the docs follow it).
+ */
+export type Kind = {
+    /**
+     * As stored and as the sidecar names it.
+     */
+    kind: string;
+    /**
+     * For people.
+     */
+    label: string;
+    /**
+     * One line for Settings when the kind is in preview.
+     */
+    note?: string | null;
+    /**
+     * `true` exactly when `stability` is `preview`.
+     */
+    preview: boolean;
+    stability: Stability;
+};
+
 export type LeftBody = {
     left: boolean;
 };
@@ -750,6 +958,49 @@ export type ListEntitiesOut = {
     has_more: boolean;
     results: Array<EntityOut>;
     total: number;
+};
+
+export type LogEntry = {
+    actor_id: string;
+    /**
+     * `user`, `token` or `oauth`.
+     */
+    actor_kind: string;
+    at: string;
+    /**
+     * `rest`, `mcp` or `chat`.
+     */
+    channel: string;
+    /**
+     * The stable code when the secrets helper itself failed: `helper_disabled` or `helper_unreachable`.
+     */
+    code: string;
+    /**
+     * `audit_event:...`
+     */
+    id: string;
+    /**
+     * `ok`, `denied`, `not_found` or `provider_error`.
+     */
+    outcome: string;
+    reason: string;
+    /**
+     * `credential_ref:...`, empty when the reference was not registered.
+     */
+    ref_id: string;
+    reference: string;
+    session: string;
+    tool: string;
+    trace_id: string;
+    vault_id: string;
+};
+
+export type LogPage = {
+    entries: Array<LogEntry>;
+    /**
+     * Pass as `before` for the next (older) page; absent on the last page.
+     */
+    next_before?: string | null;
 };
 
 export type MemberList = {
@@ -990,6 +1241,10 @@ export type Problem = {
      */
     code: string;
     detail: string;
+    /**
+     * A stable machine-readable reason under `code`, when there is one (docs/errors.md).
+     */
+    reason?: string | null;
     status: number;
     /**
      * The HTTP reason phrase.
@@ -1000,6 +1255,53 @@ export type Problem = {
      * Always `about:blank`.
      */
     type: string;
+};
+
+export type ProviderBody = {
+    /**
+     * Connect: the Connect server URL (required). Bitwarden: the server URL (optional; the US cloud when
+     * empty, `https://vault.bitwarden.eu` for the EU cloud). Service accounts: none.
+     */
+    host?: string | null;
+    /**
+     * The bootstrap token. Required when none is stored; omit to keep the stored one. Write-only.
+     */
+    token?: string | null;
+};
+
+/**
+ * A configured provider. Never the token: only that one is stored.
+ */
+export type ProviderOut = {
+    /**
+     * Always `true` in a listed row: a token is stored (encrypted). It is never returned.
+     */
+    configured: boolean;
+    /**
+     * The server URL; shown to org managers only (a vault owner sees `null`).
+     */
+    host?: string | null;
+    /**
+     * `onepassword_connect`, `onepassword_service_account` or `bitwarden_sm`.
+     */
+    kind: string;
+    /**
+     * For people (`GET /api/secrets/kinds`).
+     */
+    label: string;
+    /**
+     * `true` for a kind in preview (Bitwarden Secrets Manager).
+     */
+    preview: boolean;
+    /**
+     * `stable` or `preview` (`GET /api/secrets/kinds`).
+     */
+    stability: Stability;
+    updated_at: string;
+    /**
+     * `user:...`
+     */
+    updated_by: string;
 };
 
 export type RecentRecording = {
@@ -1035,6 +1337,56 @@ export type ReextractOut = {
     relations: number;
 };
 
+export type RefBody = {
+    /**
+     * `user:...`, `api_token:...` or `oauth_client:...`; empty: any member of the vault.
+     */
+    allowed_actors?: Array<string>;
+    /**
+     * Tools that may resolve it; `*` is any tool that takes secrets.
+     */
+    allowed_tools?: Array<string>;
+    label?: string | null;
+    /**
+     * The provider kind that resolves it. Ignored on update.
+     */
+    provider?: string | null;
+    /**
+     * `op://<vault>/<item>/[<section>/]<field>` or `bws://<secret-id>`. Ignored on update.
+     */
+    reference?: string | null;
+    /**
+     * The vault the reference is bound to: only its members may use it.
+     */
+    vault_id: string;
+};
+
+export type RefCount = {
+    denied: number;
+    last_at?: string | null;
+    not_found: number;
+    ok: number;
+    provider_error: number;
+    ref_id: string;
+    reference: string;
+};
+
+export type RefOut = {
+    allowed_actors: Array<string>;
+    allowed_tools: Array<string>;
+    created_at: string;
+    created_by: string;
+    /**
+     * `credential_ref:...`
+     */
+    id: string;
+    label: string;
+    provider: string;
+    reference: string;
+    updated_at: string;
+    vault_id: string;
+};
+
 export type RelationCreate = {
     label: string;
     to_id: string;
@@ -1062,6 +1414,21 @@ export type Repaired = {
     relations_removed: number;
 };
 
+export type ReplaceBody = {
+    /**
+     * The new value. Write-only.
+     */
+    value: string;
+};
+
+export type ReplaceOut = {
+    ok: boolean;
+    /**
+     * How many secrets derived from the old value were deleted.
+     */
+    removed_derived: number;
+};
+
 export type RepointBody = {
     /**
      * Vaults connectors may name now (e.g. the two vaults just merged).
@@ -1078,6 +1445,57 @@ export type RepointOut = {
      * Connectors whose default or rules changed.
      */
     connectors: number;
+};
+
+/**
+ * A request as the pop-up and the Connectors page show it. Never a value.
+ */
+export type RequestOut = {
+    actor_id: string;
+    /**
+     * `token`, `oauth` or `user`.
+     */
+    actor_kind: string;
+    can_decline: boolean;
+    /**
+     * The signed-in person may paste the value (they asked, it is pending).
+     */
+    can_fill: boolean;
+    /**
+     * `rest`, `mcp` or `chat`.
+     */
+    channel: string;
+    client_name: string;
+    connector?: string | null;
+    created_at: string;
+    decided_at?: string | null;
+    /**
+     * Written by the agent.
+     */
+    description: string;
+    expires_at: string;
+    fill_url: string;
+    handle: string;
+    /**
+     * `secret_request:...`
+     */
+    id: string;
+    /**
+     * Written by the agent.
+     */
+    label: string;
+    name: string;
+    placements: Array<string>;
+    replace: boolean;
+    requested_by: string;
+    secret_ttl_days?: number | null;
+    session: string;
+    /**
+     * `pending`, `filled`, `declined` or `expired`.
+     */
+    status: string;
+    target_hosts: Array<string>;
+    vault_id: string;
 };
 
 export type RoleRequest = {
@@ -1273,6 +1691,12 @@ export type SpendByDay = {
     amount: number;
     day: string;
 };
+
+/**
+ * How far a provider kind is proven. `Preview`: works against our mock of the provider's API, not yet
+ * checked against the provider's own service; shown with a "Preview" badge in Settings.
+ */
+export type Stability = 'stable' | 'preview';
 
 /**
  * Outcome of a sync or webhook ingest: an ingest report, `source` + `error` when the sync failed, or
@@ -1523,6 +1947,14 @@ export type VaultOut = {
     created_at?: string | null;
     id: string;
     kind: string;
+    name: string;
+};
+
+export type VaultRef = {
+    /**
+     * `vault:...`
+     */
+    id: string;
     name: string;
 };
 
@@ -3661,6 +4093,541 @@ export type VerifyVaultPeerResponses = {
 };
 
 export type VerifyVaultPeerResponse = VerifyVaultPeerResponses[keyof VerifyVaultPeerResponses];
+
+export type ListSecretActivityData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * 1 to 200, default 50.
+         */
+        limit?: number;
+        /**
+         * An RFC 3339 time: entries strictly older.
+         */
+        before?: string;
+    };
+    url: '/api/secrets/activity';
+};
+
+export type ListSecretActivityErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListSecretActivityError = ListSecretActivityErrors[keyof ListSecretActivityErrors];
+
+export type ListSecretActivityResponses = {
+    200: ActivityPage;
+};
+
+export type ListSecretActivityResponse = ListSecretActivityResponses[keyof ListSecretActivityResponses];
+
+export type GetSecretCountsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Look-back window in hours, 1 to 2160 (90 days), default 168.
+         */
+        hours?: number;
+    };
+    url: '/api/secrets/counts';
+};
+
+export type GetSecretCountsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetSecretCountsError = GetSecretCountsErrors[keyof GetSecretCountsErrors];
+
+export type GetSecretCountsResponses = {
+    200: Array<RefCount>;
+};
+
+export type GetSecretCountsResponse = GetSecretCountsResponses[keyof GetSecretCountsResponses];
+
+export type ListHeldSecretsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/secrets/held';
+};
+
+export type ListHeldSecretsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListHeldSecretsError = ListHeldSecretsErrors[keyof ListHeldSecretsErrors];
+
+export type ListHeldSecretsResponses = {
+    200: Array<HeldOut>;
+};
+
+export type ListHeldSecretsResponse = ListHeldSecretsResponses[keyof ListHeldSecretsResponses];
+
+export type DeleteHeldSecretData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/secrets/held/{id}';
+};
+
+export type DeleteHeldSecretErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type DeleteHeldSecretError = DeleteHeldSecretErrors[keyof DeleteHeldSecretErrors];
+
+export type DeleteHeldSecretResponses = {
+    200: OkBody;
+};
+
+export type DeleteHeldSecretResponse = DeleteHeldSecretResponses[keyof DeleteHeldSecretResponses];
+
+export type ReplaceHeldSecretData = {
+    body: ReplaceBody;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/secrets/held/{id}';
+};
+
+export type ReplaceHeldSecretErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ReplaceHeldSecretError = ReplaceHeldSecretErrors[keyof ReplaceHeldSecretErrors];
+
+export type ReplaceHeldSecretResponses = {
+    200: ReplaceOut;
+};
+
+export type ReplaceHeldSecretResponse = ReplaceHeldSecretResponses[keyof ReplaceHeldSecretResponses];
+
+export type GetSecretsHelperData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/secrets/helper';
+};
+
+export type GetSecretsHelperErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetSecretsHelperError = GetSecretsHelperErrors[keyof GetSecretsHelperErrors];
+
+export type GetSecretsHelperResponses = {
+    200: HelperStatus;
+};
+
+export type GetSecretsHelperResponse = GetSecretsHelperResponses[keyof GetSecretsHelperResponses];
+
+export type RequestSecretsHelperData = {
+    body: HelperRequest;
+    path?: never;
+    query?: never;
+    url: '/api/secrets/helper';
+};
+
+export type RequestSecretsHelperErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type RequestSecretsHelperError = RequestSecretsHelperErrors[keyof RequestSecretsHelperErrors];
+
+export type RequestSecretsHelperResponses = {
+    200: HelperAck;
+};
+
+export type RequestSecretsHelperResponse = RequestSecretsHelperResponses[keyof RequestSecretsHelperResponses];
+
+export type ListSecretKindsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/secrets/kinds';
+};
+
+export type ListSecretKindsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListSecretKindsError = ListSecretKindsErrors[keyof ListSecretKindsErrors];
+
+export type ListSecretKindsResponses = {
+    200: Array<Kind>;
+};
+
+export type ListSecretKindsResponse = ListSecretKindsResponses[keyof ListSecretKindsResponses];
+
+export type ListSecretResolutionsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * 1 to 200, default 50.
+         */
+        limit?: number;
+        /**
+         * An RFC 3339 time: entries strictly older (the `next_before` of the previous page).
+         */
+        before?: string;
+    };
+    url: '/api/secrets/log';
+};
+
+export type ListSecretResolutionsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListSecretResolutionsError = ListSecretResolutionsErrors[keyof ListSecretResolutionsErrors];
+
+export type ListSecretResolutionsResponses = {
+    200: LogPage;
+};
+
+export type ListSecretResolutionsResponse = ListSecretResolutionsResponses[keyof ListSecretResolutionsResponses];
+
+export type GetSecretAccessData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/secrets/me';
+};
+
+export type GetSecretAccessErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetSecretAccessError = GetSecretAccessErrors[keyof GetSecretAccessErrors];
+
+export type GetSecretAccessResponses = {
+    200: AccessOut;
+};
+
+export type GetSecretAccessResponse = GetSecretAccessResponses[keyof GetSecretAccessResponses];
+
+export type ListSecretProvidersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/secrets/providers';
+};
+
+export type ListSecretProvidersErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListSecretProvidersError = ListSecretProvidersErrors[keyof ListSecretProvidersErrors];
+
+export type ListSecretProvidersResponses = {
+    200: Array<ProviderOut>;
+};
+
+export type ListSecretProvidersResponse = ListSecretProvidersResponses[keyof ListSecretProvidersResponses];
+
+export type DeleteSecretProviderData = {
+    body?: never;
+    path: {
+        kind: string;
+    };
+    query?: never;
+    url: '/api/secrets/providers/{kind}';
+};
+
+export type DeleteSecretProviderErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type DeleteSecretProviderError = DeleteSecretProviderErrors[keyof DeleteSecretProviderErrors];
+
+export type DeleteSecretProviderResponses = {
+    200: OkBody;
+};
+
+export type DeleteSecretProviderResponse = DeleteSecretProviderResponses[keyof DeleteSecretProviderResponses];
+
+export type PutSecretProviderData = {
+    body: ProviderBody;
+    path: {
+        kind: string;
+    };
+    query?: never;
+    url: '/api/secrets/providers/{kind}';
+};
+
+export type PutSecretProviderErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type PutSecretProviderError = PutSecretProviderErrors[keyof PutSecretProviderErrors];
+
+export type PutSecretProviderResponses = {
+    200: OkBody;
+};
+
+export type PutSecretProviderResponse = PutSecretProviderResponses[keyof PutSecretProviderResponses];
+
+export type TestSecretProviderData = {
+    body?: never;
+    path: {
+        kind: string;
+    };
+    query?: never;
+    url: '/api/secrets/providers/{kind}/test';
+};
+
+export type TestSecretProviderErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type TestSecretProviderError = TestSecretProviderErrors[keyof TestSecretProviderErrors];
+
+export type TestSecretProviderResponses = {
+    200: CheckOut;
+};
+
+export type TestSecretProviderResponse = TestSecretProviderResponses[keyof TestSecretProviderResponses];
+
+export type ListSecretRefsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/secrets/refs';
+};
+
+export type ListSecretRefsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListSecretRefsError = ListSecretRefsErrors[keyof ListSecretRefsErrors];
+
+export type ListSecretRefsResponses = {
+    200: Array<RefOut>;
+};
+
+export type ListSecretRefsResponse = ListSecretRefsResponses[keyof ListSecretRefsResponses];
+
+export type CreateSecretRefData = {
+    body: RefBody;
+    path?: never;
+    query?: never;
+    url: '/api/secrets/refs';
+};
+
+export type CreateSecretRefErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type CreateSecretRefError = CreateSecretRefErrors[keyof CreateSecretRefErrors];
+
+export type CreateSecretRefResponses = {
+    200: RefOut;
+};
+
+export type CreateSecretRefResponse = CreateSecretRefResponses[keyof CreateSecretRefResponses];
+
+export type DeleteSecretRefData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/secrets/refs/{id}';
+};
+
+export type DeleteSecretRefErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type DeleteSecretRefError = DeleteSecretRefErrors[keyof DeleteSecretRefErrors];
+
+export type DeleteSecretRefResponses = {
+    200: OkBody;
+};
+
+export type DeleteSecretRefResponse = DeleteSecretRefResponses[keyof DeleteSecretRefResponses];
+
+export type UpdateSecretRefData = {
+    body: RefBody;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/secrets/refs/{id}';
+};
+
+export type UpdateSecretRefErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type UpdateSecretRefError = UpdateSecretRefErrors[keyof UpdateSecretRefErrors];
+
+export type UpdateSecretRefResponses = {
+    200: RefOut;
+};
+
+export type UpdateSecretRefResponse = UpdateSecretRefResponses[keyof UpdateSecretRefResponses];
+
+export type ListSecretRequestsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * `pending`, `filled`, `declined` or `expired`; absent for all.
+         */
+        status?: string;
+    };
+    url: '/api/secrets/requests';
+};
+
+export type ListSecretRequestsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListSecretRequestsError = ListSecretRequestsErrors[keyof ListSecretRequestsErrors];
+
+export type ListSecretRequestsResponses = {
+    200: Array<RequestOut>;
+};
+
+export type ListSecretRequestsResponse = ListSecretRequestsResponses[keyof ListSecretRequestsResponses];
+
+export type GetSecretRequestData = {
+    body?: never;
+    path: {
+        /**
+         * `secret_request:...` or its key
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/secrets/requests/{id}';
+};
+
+export type GetSecretRequestErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetSecretRequestError = GetSecretRequestErrors[keyof GetSecretRequestErrors];
+
+export type GetSecretRequestResponses = {
+    200: RequestOut;
+};
+
+export type GetSecretRequestResponse = GetSecretRequestResponses[keyof GetSecretRequestResponses];
+
+export type DeclineSecretRequestData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/secrets/requests/{id}/decline';
+};
+
+export type DeclineSecretRequestErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type DeclineSecretRequestError = DeclineSecretRequestErrors[keyof DeclineSecretRequestErrors];
+
+export type DeclineSecretRequestResponses = {
+    200: DeclineOut;
+};
+
+export type DeclineSecretRequestResponse = DeclineSecretRequestResponses[keyof DeclineSecretRequestResponses];
+
+export type FillSecretRequestData = {
+    body: FillBody;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/secrets/requests/{id}/fill';
+};
+
+export type FillSecretRequestErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type FillSecretRequestError = FillSecretRequestErrors[keyof FillSecretRequestErrors];
+
+export type FillSecretRequestResponses = {
+    200: FillOut;
+};
+
+export type FillSecretRequestResponse = FillSecretRequestResponses[keyof FillSecretRequestResponses];
 
 export type GetSettingsData = {
     body?: never;

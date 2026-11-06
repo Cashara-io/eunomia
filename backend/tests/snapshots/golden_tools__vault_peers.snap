@@ -3,7 +3,7 @@ source: tests/golden_tools.rs
 expression: g.norm.apply(&mask(peers))
 ---
 {
-  "vault": "vault:<id27>",
+  "vault": "vault:<id28>",
   "fingerprint": "<fingerprint>",
   "links": [],
   "codes": [

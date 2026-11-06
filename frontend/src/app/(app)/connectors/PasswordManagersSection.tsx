@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { KeyRound, Pencil, Plus, PlugZap, Power, Trash2, X } from "lucide-react";
+import { KeyIcon, PencilSimpleIcon, PlugsConnectedIcon, PlusIcon, PowerIcon, TrashIcon, XIcon } from "@phosphor-icons/react/ssr";
 import type { HelperStatus, Kind as KindInfo, ProviderOut, RefCount, RefOut } from "@/lib/gen";
 import {
   useCreateSecretRef,
@@ -185,7 +185,7 @@ function Helper({ admin }: { admin: boolean }) {
           <div className="flex items-center gap-2">
             {(s.state === "off" || s.state === "unreachable") && !s.enabled && (
               <button type="button" className="btn btn-primary btn-sm" onClick={() => ask(true)} disabled={request.isPending} aria-busy={request.isPending}>
-                <Power {...ICON} aria-hidden />
+                <PowerIcon {...ICON} aria-hidden />
                 Enable password managers
               </button>
             )}
@@ -282,7 +282,7 @@ function ProviderRow({ spec, row, loading, manage }: { spec: (typeof KINDS)[numb
   return (
     <div className="px-4 py-3 flex flex-col gap-3" data-testid={id}>
       <div className="flex flex-wrap items-center gap-3">
-        <KeyRound {...ICON} aria-hidden style={{ color: "var(--ink-faint)" }} />
+        <KeyIcon {...ICON} aria-hidden style={{ color: "var(--ink-faint)" }} />
         <div className="min-w-0 flex-1">
           <div className="text-[13px] font-medium flex items-center gap-2">
             {name}
@@ -306,7 +306,7 @@ function ProviderRow({ spec, row, loading, manage }: { spec: (typeof KINDS)[numb
           <div className="flex items-center gap-2">
             {configured && (
               <button type="button" className="btn btn-sm" onClick={runTest} disabled={test.isPending} aria-busy={test.isPending}>
-                <PlugZap {...ICON} aria-hidden />
+                <PlugsConnectedIcon {...ICON} aria-hidden />
                 {test.isPending ? "Testing…" : "Test connection"}
               </button>
             )}
@@ -321,7 +321,7 @@ function ProviderRow({ spec, row, loading, manage }: { spec: (typeof KINDS)[numb
                 disabled={remove.isPending}
                 onConfirm={() => remove.mutateAsync(spec.kind).catch((e) => setError(failure(e, "Could not remove it. Try again.")))}
               >
-                <Trash2 {...ICON} />
+                <TrashIcon {...ICON} />
               </ConfirmButton>
             )}
           </div>
@@ -472,7 +472,7 @@ function References({ vaults }: { vaults: { id: string; name: string }[] }) {
         <h3 className="text-[13px] font-medium">References</h3>
         {!draft && (
           <button type="button" className="btn btn-sm" onClick={startNew}>
-            <Plus {...ICON} aria-hidden />
+            <PlusIcon {...ICON} aria-hidden />
             Add reference
           </button>
         )}
@@ -491,7 +491,7 @@ function References({ vaults }: { vaults: { id: string; name: string }[] }) {
           <div className="flex items-start justify-between gap-3">
             <div className="text-[13px] font-medium">{editingId ? "Edit reference" : "New reference"}</div>
             <button type="button" onClick={() => setDraft(null)} aria-label="Cancel" className="btn btn-ghost btn-sm btn-icon -mt-1 -mr-1">
-              <X {...ICON} />
+              <XIcon {...ICON} />
             </button>
           </div>
           <div className="flex flex-col gap-1.5">
@@ -608,7 +608,7 @@ function References({ vaults }: { vaults: { id: string; name: string }[] }) {
                   <td className="px-3">
                     <div className="flex items-center justify-end gap-1">
                       <button type="button" className="btn btn-ghost btn-sm btn-icon" aria-label={`Edit ${r.reference}`} onClick={() => startEdit(r)}>
-                        <Pencil {...ICON} />
+                        <PencilSimpleIcon {...ICON} />
                       </button>
                       <ConfirmButton
                         label={`Remove ${r.reference}`}
@@ -617,7 +617,7 @@ function References({ vaults }: { vaults: { id: string; name: string }[] }) {
                         disabled={remove.isPending}
                         onConfirm={() => remove.mutateAsync(r.id).catch((e) => setError(failure(e, "Could not remove the reference. Try again.")))}
                       >
-                        <Trash2 {...ICON} />
+                        <TrashIcon {...ICON} />
                       </ConfirmButton>
                     </div>
                   </td>

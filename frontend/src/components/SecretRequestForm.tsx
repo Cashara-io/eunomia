@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Eye, EyeOff, KeyRound, ShieldCheck, X } from "lucide-react";
+import { EyeIcon, EyeSlashIcon, KeyIcon, ShieldCheckIcon, XIcon } from "@phosphor-icons/react/ssr";
 import type { RequestOut } from "@/lib/gen";
 import { useDeclineSecretRequest, useFillSecretRequest } from "@/lib/queries/secretRequests";
 import { useVaults } from "@/lib/queries/vaults";
@@ -81,7 +81,7 @@ export default function SecretRequestForm({ request, onDone, onLater }: { reques
       }}
     >
       <div className="flex items-start gap-3">
-        <KeyRound size={18} aria-hidden style={{ color: "var(--accent-text)", marginTop: 2 }} />
+        <KeyIcon weight="duotone" size={18} aria-hidden style={{ color: "var(--accent-text)", marginTop: 2 }} />
         <div className="min-w-0 flex-1">
           <div className="text-[15px] font-medium" data-testid="secret-request-label">
             {request.label || request.name}
@@ -146,11 +146,11 @@ export default function SecretRequestForm({ request, onDone, onLater }: { reques
                 onChange={(e) => setValue(e.target.value)}
               />
               <button type="button" className="btn btn-ghost btn-sm btn-icon" aria-label={show ? "Hide the secret" : "Show the secret"} aria-pressed={show} onClick={() => setShow(!show)}>
-                {show ? <EyeOff size={15} /> : <Eye size={15} />}
+                {show ? <EyeSlashIcon weight="duotone" size={15} /> : <EyeIcon weight="duotone" size={15} />}
               </button>
             </div>
             <span className="text-[12px] flex items-center gap-1.5" style={{ color: "var(--ink-faint)" }}>
-              <ShieldCheck size={13} aria-hidden />
+              <ShieldCheckIcon weight="duotone" size={13} aria-hidden />
               Encrypted before it is stored. Nobody can read it back, you included; the agent only gets the handle.
             </span>
           </div>
@@ -167,7 +167,7 @@ export default function SecretRequestForm({ request, onDone, onLater }: { reques
                 <li key={h} className="inline-flex items-center gap-1 rounded px-2 h-7 text-[12.5px] font-mono" style={{ background: "var(--surface-raised)" }}>
                   {h}
                   <button type="button" className="btn btn-ghost btn-icon" style={{ height: 20, width: 20 }} aria-label={`Remove ${h}`} onClick={() => setHosts(hosts.filter((x) => x !== h))}>
-                    <X size={12} />
+                    <XIcon weight="duotone" size={12} />
                   </button>
                 </li>
               ))}

@@ -222,8 +222,11 @@ pub const TOO_LARGE: &str = "is larger than the size limit";
 /// (with no auth headers of ours), which stays behind the same guard: redirects are never followed.
 pub async fn download(url: &str, headers: &HeaderMap, max_bytes: usize) -> AppResult<Option<(Vec<u8>, String)>> {
     let mut retried = false;
+    // a held credential only goes to the hosts it was approved for; a provider's signed URL carries
+    // no headers of ours, so it needs no such check
+    let secrets = if headers.is_empty() { None } else { crate::secrets::connector::current() };
     loop {
-        let http = guarded(url).await?;
+        let http = guarded(url, secrets.as_ref()).await?;
         let mut resp = http
             .get(url)
             .headers(headers.clone())
