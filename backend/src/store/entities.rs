@@ -340,6 +340,25 @@ pub fn find_by_key<'a>(db: &'a OrgDb, table: &str) -> Q<'a> {
     )
 }
 
+/// [`find_by_key`] for `$needle` (statements 0 and 1), then the same name and alias lookups for the
+/// other lowercase keys in `$needles` (statements 2 and 3), all in one round trip. Every lookup is an
+/// index read.
+pub fn find_by_key_or_variants<'a>(db: &'a OrgDb, table: &str) -> Q<'a> {
+    let k = kind_clause(table);
+    dynamic(
+        db,
+        "entities.find_by_key_or_variants",
+        format!(
+            "SELECT * FROM {table} WHERE vault = $vault{k} AND name_key = $needle LIMIT 1; \
+             SELECT * FROM {table} WITH INDEX {table}_alias_keys_idx WHERE alias_keys CONTAINS $needle AND vault = $vault{k} \
+             ORDER BY created_at LIMIT 1; \
+             SELECT * FROM {table} WHERE vault = $vault{k} AND name_key IN $needles ORDER BY created_at LIMIT 1; \
+             SELECT * FROM {table} WITH INDEX {table}_alias_keys_idx WHERE alias_keys CONTAINSANY $needles AND vault = $vault{k} \
+             ORDER BY created_at LIMIT 1;"
+        ),
+    )
+}
+
 /// Other `table` entities in `$vault` (not `$id`) whose name or an alias shares one of `$words`.
 pub fn sharing_a_word<'a>(db: &'a OrgDb, table: &str) -> Q<'a> {
     dynamic(
