@@ -474,7 +474,7 @@ async fn who_may_fill_decline_and_see_and_org_b_sees_nothing() {
     assert_eq!(member.org, w.app.user.org);
     w.app.tool("vault_invite", json!({"vault_id": team, "email": "member@example.com"})).await;
     let org = w.app.db().await;
-    common::sys(eunomia_backend::vaults::service::accept_invitation(&org, &member.id, &eunomia_backend::rid::parse(&team).unwrap())).await.unwrap();
+    common::sys(eunomia_backend::vaults::service::accept_invitation(&org, &w.app.state.control, &member.id, &eunomia_backend::rid::parse(&team).unwrap())).await.unwrap();
     let (m_token, _) = pat(&w, &member, "member-agent", None).await;
     let member_cookie = {
         let body = json!({"email": "member@example.com", "password": common::PASSWORD});
@@ -760,7 +760,7 @@ async fn vault_owners_manage_their_vaults_requests_and_held_secrets_and_see_thei
     for (email, u) in [("carol@example.com", &carol.id), ("dave@example.com", &dave.id)] {
         let out = w.agent(&bob_t, "vault_invite", json!({"vault_id": shared, "email": email})).await;
         assert!(out.get("error").is_none(), "{out}");
-        common::sys(eunomia_backend::vaults::service::accept_invitation(&org, u, &shared_id)).await.unwrap();
+        common::sys(eunomia_backend::vaults::service::accept_invitation(&org, &st.control, u, &shared_id)).await.unwrap();
     }
     let (bob_c, carol_c, dave_c) = (login(&w, "bob@example.com").await, login(&w, "carol@example.com").await, login(&w, "dave@example.com").await);
 
