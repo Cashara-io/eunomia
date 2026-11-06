@@ -15,7 +15,7 @@ import AuthorTag, { authorColor, CursorGlyph } from "@/components/AuthorTag";
 import DigitRoll from "@/components/bits/DigitRoll";
 import SyncMark, { type SyncStatus } from "@/components/bits/SyncMark";
 import { prefersReducedMotion } from "@/components/bits/motion";
-import { kindForSource } from "@/lib/connectorMeta";
+import { kindForSource, sourceRecordLabel } from "@/lib/connectorMeta";
 import PageHeader from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/Shapes";
 import StatusLabel from "@/components/ui/StatusLabel";
@@ -305,7 +305,15 @@ function Inspector({ row }: { row: LiveRow }) {
     { label: "Type", value: <span className="capitalize">{row.type}</span>, show: Boolean(row.type) },
     { label: "Written", value: mono(stamp(row.created_at)) },
     { label: "Updated", value: mono(stamp(updated)), show: Boolean(updated) },
-    { label: "Source", value: mono(row.source ?? ""), show: Boolean(row.source && row.source !== author) },
+    {
+      label: "Source",
+      value: (
+        <span className="truncate" title={row.source ?? undefined}>
+          {sourceRecordLabel(row.source ?? "")}
+        </span>
+      ),
+      show: Boolean(row.source && row.source !== author),
+    },
   ];
 
   return (
