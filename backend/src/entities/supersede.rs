@@ -149,14 +149,7 @@ async fn embed_missing(db: &OrgDb, settings: &Settings, owner: &RecordId, subjec
         if vector.len() != embeddings::dim() {
             continue;
         }
-        crate::store::cache::SET_MEMORY_EMBEDDING
-            .on(db)
-            .bind(("id", r.id.clone()))
-            .bind(("embedding", vector))
-            .bind(("spec", spec.to_string()))
-            .bind(("text", r.text.clone()))
-            .await?
-            .check()?;
+        embeddings::set_memory_embedding(db, &r.id, vector, spec, &r.text).await?;
     }
     Ok(())
 }
@@ -180,14 +173,7 @@ async fn run(db: &OrgDb, settings: &Settings, owner: &RecordId, subject: &Record
         if vector.len() != embeddings::dim() {
             return Err(AppError::internal(format!("embedding for {} has dimension {}", n.id.to_string(), vector.len())));
         }
-        crate::store::cache::SET_MEMORY_EMBEDDING
-            .on(db)
-            .bind(("id", n.id.clone()))
-            .bind(("embedding", vector.clone()))
-            .bind(("spec", spec.clone()))
-            .bind(("text", n.text.clone()))
-            .await?
-            .check()?;
+        embeddings::set_memory_embedding(db, &n.id, vector.clone(), &spec, &n.text).await?;
         let mut res = q::SIMILAR_LIVE_FACTS
             .on(db)
             .bind(("new", n.id.clone()))
