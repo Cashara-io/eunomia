@@ -20,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import EunomiaMark from "./EunomiaMark";
+import ThemeToggle from "./ThemeToggle";
 import { openCommandPalette } from "./CommandPalette";
 import { useMe, useLogout } from "@/lib/queries/auth";
 import { useSources } from "@/lib/queries/sources";
@@ -181,6 +182,7 @@ export default function Sidebar() {
             <span className="sr-only">Signed in as </span>
             {me?.email ?? ""}
           </span>
+          <ThemeToggle />
           <button
             onClick={logout}
             className="nav-link inline-flex items-center gap-1.5 min-h-9 px-2 text-[12.5px] shrink-0"

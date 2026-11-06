@@ -15,12 +15,16 @@ const KNOWN: Record<string, number> = {
   windsurf: 4,
 };
 
-export function authorColor(name: string): string {
+function authorSlot(name: string): number {
   const known = KNOWN[name.trim().toLowerCase()];
-  if (known) return `var(--author-${known})`;
+  if (known) return known;
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
-  return `var(--author-${(h % AUTHOR_COLORS) + 1})`;
+  return (h % AUTHOR_COLORS) + 1;
+}
+
+export function authorColor(name: string): string {
+  return `var(--author-${authorSlot(name)})`;
 }
 
 export function authorLabel(name: string): string {
@@ -36,9 +40,10 @@ export function CursorGlyph({ color, size = 14 }: { color: string; size?: number
 }
 
 export default function AuthorTag({ name, cursor = false, title }: { name: string; cursor?: boolean; title?: string }) {
-  const color = authorColor(name);
+  const slot = authorSlot(name);
+  const color = `var(--author-${slot})`;
   const tag = (
-    <span className="author-tag" style={{ ["--author" as string]: color }} title={title ?? name}>
+    <span className="author-tag" style={{ ["--author" as string]: color, ["--author-on" as string]: `var(--on-author-${slot})` }} title={title ?? name}>
       <span className="truncate">{authorLabel(name)}</span>
     </span>
   );
