@@ -209,8 +209,17 @@ function Palette({ onClose }: { onClose: () => void }) {
   const entityItems: Item[] = (searching ? entityHits : []).map((e) => ({
     key: `entity:${e.id}`,
     label: e.name,
-    // the space tells apart two "Priya Nair"s from different spaces
-    sub: [kindWord(e.kind), spaceName((e as { vault?: string }).vault)].filter(Boolean).join(" · "),
+    // the space, right by the name, tells apart two "Acme Corp"s from different spaces
+    rich: (() => {
+      const space = spaceName((e as { vault?: string }).vault);
+      return (
+        <>
+          {e.name}
+          {space && <span className="space-chip ml-2">{space}</span>}
+        </>
+      );
+    })(),
+    sub: kindWord(e.kind),
     icon: entityIcon(e.kind),
     // opens the entity's inspector, in its own space (see EntityGraph's deep links)
     go: () => {

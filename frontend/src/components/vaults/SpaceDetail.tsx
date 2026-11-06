@@ -33,7 +33,8 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 function inviteProblem(e: unknown): string {
   const text = e instanceof Error ? e.message : "";
   if (/no user with email/i.test(text)) return "No one with this email has an account here yet. Ask them to sign up first, then invite them again.";
-  if (/already a member or has a pending invite/i.test(text)) return "They're already in this space or have an invitation waiting.";
+  if (/is already a member/i.test(text)) return "They're already in this space.";
+  if (/already has a pending invite|already a member or has a pending invite/i.test(text)) return "They already have an invitation waiting.";
   return "Could not send that invite. Check the address and try again.";
 }
 

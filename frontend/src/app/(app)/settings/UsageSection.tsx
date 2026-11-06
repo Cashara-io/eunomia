@@ -115,9 +115,11 @@ export function UsageSection() {
       </Table>
       )}
 
+      {/* sessions only exist when a client sends a session id: no rows, no table */}
+      {(!report || report.by_session.length > 0) && (
       <Table
         title="By session"
-        hint="One MCP session per connection, when the client sends an Mcp-Session-Id. In-app chat counts per thread."
+        hint="One row per AI app conversation, and per chat thread in the app."
         empty="No session ids seen in this range. Clients that do not send an Mcp-Session-Id are counted under their credential only."
         cols={[...(org ? ["Person"] : []), "Session", "Channel", "Calls", "Errors", "Avg time"]}
         loading={!report}
@@ -137,6 +139,7 @@ export function UsageSection() {
           </tr>
         ))}
       </Table>
+      )}
 
       <Table title="By tool" empty="No tool calls in this range." cols={["Tool", "Calls", "Errors", "Avg time"]} loading={!report}>
         {report?.by_tool.map((t) => (

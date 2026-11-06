@@ -482,8 +482,10 @@ async fn audit_vault<T>(control: &ControlDb, user_id: &RecordId, action: &str, s
     if let Err(e) = res {
         let why = if e.message.starts_with("no user with email") {
             Some("no_account")
-        } else if e.message.contains("already a member or has a pending invite") {
-            Some("already")
+        } else if e.message.contains("is already a member") {
+            Some("member")
+        } else if e.message.contains("already has a pending invite") {
+            Some("pending")
         } else {
             None
         };
@@ -553,8 +555,12 @@ async fn invite_member_inner(
         .await?
         .ok_or_else(|| AppError::bad_request(format!("no user with email '{email}'")))?;
 
-    if membership_any_status(db, vault_id, &invitee).await?.is_some() {
-        return Err(AppError::bad_request(format!("{email} is already a member or has a pending invite")));
+    if let Some(m) = membership_any_status(db, vault_id, &invitee).await? {
+        return Err(AppError::bad_request(if m.status == "active" {
+            format!("{email} is already a member of this space")
+        } else {
+            format!("{email} already has a pending invite to this space")
+        }));
     }
 
     let mut res = store::vaults::INVITE.on(db)
@@ -566,7 +572,7 @@ async fn invite_member_inner(
         .map_err(|e| {
             // lost the race against a concurrent invite of the same user
             if e.to_string().contains("already contains") {
-                AppError::bad_request(format!("{email} is already a member or has a pending invite"))
+                AppError::bad_request(format!("{email} already has a pending invite to this space"))
             } else {
                 e.into()
             }

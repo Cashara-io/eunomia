@@ -607,7 +607,7 @@ export default function VaultsPage() {
             <section className="flex flex-col gap-2.5" aria-labelledby="org-title">
               <h2 id="org-title" className="section-title flex items-center gap-2">
                 Spaces
-                {vaults && <span className="label tabular">{org.length}</span>}
+                {vaults && org.length > 0 && <span className="label tabular">{org.length}</span>}
               </h2>
               {!vaults ? (
                 <SkeletonRows />
@@ -656,10 +656,12 @@ export default function VaultsPage() {
         )}
       </div>
 
-      {canManage && showList && (
+      {showList && (
+        // Anyone who can create a space can accept one shared from another Eunomia; combining
+        // spaces stays with admins and owners.
         <div className="flex flex-col gap-2 items-start pt-2" style={{ borderTop: "1px solid var(--border)" }}>
           <JoinSharedSpace onJoined={(id) => open(id)} />
-          {vaults && vaults.length > 1 && <MergeVaultsCard vaults={vaults} />}
+          {canManage && vaults && vaults.length > 1 && <MergeVaultsCard vaults={vaults} />}
         </div>
       )}
     </div>

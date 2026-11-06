@@ -898,3 +898,42 @@ summary::before {
 details[open] > summary::before {
   transform: translateY(-3px) rotate(45deg);
 }
+
+/* Which space a row belongs to: a quiet label beside a name, one style everywhere. */
+.space-chip {
+  display: inline-block;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 400;
+  color: var(--ink-dim);
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+
+/* The colour picker for an agent's own kind, drawn as a plain round swatch rather than the
+   browser's raw control. */
+.kind-swatch {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+}
+.kind-swatch::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.kind-swatch::-webkit-color-swatch {
+  border: 0;
+  border-radius: 999px;
+}
+.kind-swatch::-moz-color-swatch {
+  border: 0;
+  border-radius: 999px;
+}

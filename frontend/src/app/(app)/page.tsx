@@ -189,9 +189,12 @@ function RecentlyUpdated({ rows, showSpace }: { rows: RecentEntity[]; showSpace:
             <li key={e.id}>
               <Link href={entityHref(e)} className={ROW}>
                 <span className="dot shrink-0" style={{ background: kindColor(e.kind) }} aria-hidden />
-                <span className={ROW_NAME}>{e.name}</span>
+                <span className={ROW_NAME}>
+                  {e.name}
+                  {/* the space right by the name, so the same name in two spaces reads as two things */}
+                  {showSpace && <span className="space-chip ml-2">{spaceName(e.vault)}</span>}
+                </span>
                 <span className={ROW_META} style={{ color: "var(--ink-dim)" }}>
-                  {showSpace && <>{spaceName(e.vault)} · </>}
                   {plural(e.memories, "memory", "memories")}
                   {e.lastAt && <> · {since(e.lastAt)}</>}
                 </span>
@@ -301,10 +304,15 @@ function AppPicker() {
 }
 
 /** Once an app is connected, the picker shrinks to one line that opens the choices in place. */
-function ConnectAnother() {
+function ConnectAnother({ none = false }: { none?: boolean }) {
   const [open, setOpen] = useState(false);
   return (
-    <section className="flex flex-col gap-4" aria-label="Connect another AI app">
+    <section className="flex flex-col gap-4" aria-label={none ? "Connect an AI app" : "Connect another AI app"}>
+      {none && (
+        <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+          No AI app has used Eunomia yet. What you see here was added in the browser or by a connected source.
+        </p>
+      )}
       <button
         type="button"
         aria-expanded={open}
@@ -312,7 +320,7 @@ function ConnectAnother() {
         className="self-start inline-flex items-center gap-1 min-h-11 text-[14px] font-medium underline-offset-2 hover:underline"
         style={{ color: "var(--accent-text)" }}
       >
-        Connect another app <ArrowRight size={14} strokeWidth={1.75} aria-hidden className={open ? "rotate-90" : undefined} />
+        {none ? "Connect an AI app" : "Connect another app"} <ArrowRight size={14} strokeWidth={1.75} aria-hidden className={open ? "rotate-90" : undefined} />
       </button>
       {open && <AppChoices />}
     </section>
@@ -445,6 +453,9 @@ export default function HomePage() {
         <div className="skeleton h-7 w-72" />
         <div className="skeleton h-4 w-full max-w-[520px]" />
       </div>
+    ) : !connectedApps && hasData ? (
+      // Someone already working in Eunomia gets one honest line, not the first-run card.
+      <ConnectAnother none />
     ) : !connectedApps ? (
       <AppPicker />
     ) : (
@@ -466,7 +477,8 @@ export default function HomePage() {
         <FailureBanner rows={rows} dismissed={dismissedFailures} onDismiss={(key) => setDismissedFailures((prev) => new Set(prev).add(key))} />
       )}
 
-      {/* Until an AI app is connected, choosing one is the main task, so it comes before what's saved. */}
+      {/* Until an app is connected, connecting one comes first: the full picker on a fresh account,
+          one line for someone who already has things saved. */}
       {!connectedApps && appBlock}
 
       {overviewQuery.isError && <ErrorLine error={failure(overviewQuery.error, "Could not load what has been saved.")} />}

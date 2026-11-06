@@ -5,7 +5,7 @@ import Select from "@/components/Select";
 import { Suspense, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import ConfirmButton from "@/components/ConfirmButton";
-import { ArrowLeft, ArrowRight, Pencil, Plus, Trash2, X } from "lucide-react";
+import { ArrowLeft, Pencil, Plus, Trash2, X } from "lucide-react";
 import GraphCanvas, { type CanvasInsets } from "./GraphCanvas";
 import SyncMark from "./bits/SyncMark";
 import Tooltip, { TooltipGroup } from "./bits/Tooltip";
@@ -719,9 +719,10 @@ export default function EntityGraph({
         )}
         {!kinds && (
           // Code map is filled by coding apps only: nothing to add by hand there
+          // Most people come here to read: adding is a secondary action for members, primary for admins.
           <button
             type="button"
-            className="btn btn-primary shrink-0 ml-auto md:ml-0"
+            className={`btn ${isAdmin ? "btn-primary" : ""} shrink-0 ml-auto md:ml-0`}
             aria-label="Add person or topic"
             onClick={() => setShowCreate(true)}
           >
@@ -812,13 +813,13 @@ export default function EntityGraph({
             <span className="text-[13px] inline-flex items-center gap-1.5 mt-0.5" style={{ color: "var(--ink-dim)" }}>
               <span className="w-2 h-2 rounded-full" style={{ background: kindColor(selected.kind) }} aria-hidden />
               {kindLabel(selected.kind)}
-              {isCustomKind(selected.kind) && (
-                // the dot doubles as the colour picker for an agent's own kind
+              {isCustomKind(selected.kind) && canDelete(selected.owner_email) && (
+                // the dot doubles as the colour picker for an agent's own kind (for whoever can edit it)
                 <input
                   type="color"
                   aria-label={`Colour for ${kindLabel(selected.kind)}`}
                   title="Change this kind's colour"
-                  className="w-3.5 h-3.5 p-0 border-0 bg-transparent cursor-pointer opacity-70 hover:opacity-100"
+                  className="kind-swatch"
                   value={/^#[0-9a-f]{6}$/i.test(kindColor(selected.kind)) ? kindColor(selected.kind) : defaultKindHex(selected.kind)}
                   onChange={(e) => setKindColor(selected.kind, e.target.value)}
                 />
@@ -1006,23 +1007,28 @@ export default function EntityGraph({
               {selected.relations.map((r) => {
                 const other = r.direction === "out" ? r.out : r.in;
                 return (
-                  <li key={r.id} className="py-2 flex items-center gap-2 min-w-0" title={r.owner_email ? `Added by ${r.owner_email}` : undefined}>
+                  // each connection reads as a sentence: "works on Billing Rewrite" (outgoing) or
+                  // "Tom Becker works on this" (incoming), never a bare arrow
+                  <li key={r.id} className="py-2 flex items-baseline gap-1.5 min-w-0 text-[13px]" title={r.owner_email ? `Added by ${r.owner_email}` : undefined}>
                     {r.direction === "out" ? (
-                      <ArrowRight size={13} strokeWidth={1.75} className="shrink-0" style={{ color: "var(--ink-dim)" }} aria-label="outgoing" />
+                      <>
+                        <span className="shrink-0" style={{ color: "var(--ink-dim)" }}>
+                          {r.label.replace(/_/g, " ")}
+                        </span>
+                        <button type="button" className="truncate text-left min-w-0 hover:underline" style={{ color: "var(--accent-text)" }} onClick={() => selectNode(other)}>
+                          {nameOf(other)}
+                        </button>
+                      </>
                     ) : (
-                      <ArrowLeft size={13} strokeWidth={1.75} className="shrink-0" style={{ color: "var(--ink-dim)" }} aria-label="incoming" />
+                      <>
+                        <button type="button" className="truncate text-left min-w-0 hover:underline" style={{ color: "var(--accent-text)" }} onClick={() => selectNode(other)}>
+                          {nameOf(other)}
+                        </button>
+                        <span className="shrink-0" style={{ color: "var(--ink-dim)" }}>
+                          {r.label.replace(/_/g, " ")} this
+                        </span>
+                      </>
                     )}
-                    <span className="text-[12px] shrink-0" style={{ color: "var(--ink-faint)" }}>
-                      {r.label.replace(/_/g, " ")}
-                    </span>
-                    <button
-                      type="button"
-                      className="text-[13px] truncate text-left min-w-0 hover:underline"
-                      style={{ color: "var(--accent-text)" }}
-                      onClick={() => selectNode(other)}
-                    >
-                      {nameOf(other)}
-                    </button>
                   </li>
                 );
               })}

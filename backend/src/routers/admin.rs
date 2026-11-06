@@ -340,6 +340,9 @@ const SELF_EXPLAINED: &[&str] = &["auth.login", "auth.oidc_login", "auth.failed"
 fn why_words(detail: &str) -> Option<&'static str> {
     match detail.split_whitespace().find_map(|kv| kv.strip_prefix("why="))? {
         "no_account" => Some("No account has that email yet"),
+        "member" => Some("Already a member"),
+        "pending" => Some("Already invited, not answered yet"),
+        // rows recorded before the two were told apart
         "already" => Some("Already a member, or already invited"),
         _ => None,
     }
@@ -890,6 +893,8 @@ mod tests {
         assert_eq!(reason_words("vault.invite", "validation.invalid"), "Already a member or invited, or no account has that email");
         assert_eq!(why_words("email=a@b.c role=member why=no_account"), Some("No account has that email yet"));
         assert_eq!(why_words("email=a@b.c why=already"), Some("Already a member, or already invited"));
+        assert_eq!(why_words("email=a@b.c why=member"), Some("Already a member"));
+        assert_eq!(why_words("email=a@b.c why=pending"), Some("Already invited, not answered yet"));
         assert_eq!(why_words("email=a@b.c"), None);
         assert_eq!(reason_words("vault.role", "vault.forbidden"), "Not allowed");
         assert_eq!(reason_words("vault.create", "rate.limited"), "Too many attempts (rate limited)");
