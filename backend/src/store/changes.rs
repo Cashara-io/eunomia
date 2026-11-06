@@ -4,7 +4,7 @@
 
 use super::Stmt;
 
-pub const ALL: &[&Stmt] = &[&APPEND, &AFTER, &BOUNDS, &COUNTERS, &CUT_BY_AGE, &PRUNE_RANGE, &IDS_IN_VAULT, &VAULT_AUDIENCE];
+pub const ALL: &[&Stmt] = &[&APPEND, &AFTER, &BOUNDS, &ALL_COUNTERS, &COUNTERS, &CUT_BY_AGE, &PRUNE_RANGE, &IDS_IN_VAULT, &VAULT_AUDIENCE];
 
 /// Takes the next `len($items)` seqs from the vault's counter row and writes the changes, in one
 /// transaction: two writers to one vault conflict on the counter and one retries, so seqs never repeat
@@ -35,7 +35,7 @@ pub const BOUNDS: Stmt = Stmt::new(
 );
 
 /// Every vault's counter (keyed by the vault's key) and its last seq: what retention walks.
-pub const COUNTERS: Stmt = Stmt::new("changes.counters", "SELECT id, n FROM change_seq");
+pub const ALL_COUNTERS: Stmt = Stmt::new("changes.all_counters", "SELECT id, n FROM change_seq");
 
 /// The newest seq of the vault's rows older than `$age`: rows up to it go. `at` follows `seq` (both
 /// are set in the append's transaction), so everything below it is at least as old.

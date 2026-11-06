@@ -279,7 +279,7 @@ pub async fn prune(db: &OrgDb, r: Retention) -> AppResult<i64> {
         id: RecordId,
         n: i64,
     }
-    let counters: Vec<Counter> = store::changes::COUNTERS.on(db).await?.take(0)?;
+    let counters: Vec<Counter> = store::changes::ALL_COUNTERS.on(db).await?.take(0)?;
     let mut gone = 0;
     for c in counters {
         let vault = RecordId::from_table_key("vault", c.id.key().clone());
