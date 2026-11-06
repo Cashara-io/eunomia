@@ -61,13 +61,26 @@ function NavLink({ href, active, children }: { href: string; active: boolean; ch
   );
 }
 
-/** The wordmark: the mark plus "eunomia", cream on the ink sidebar. */
+/** The wordmark: the mark plus "eunomia", cream on the ink sidebar, and "by Paperless" under it. */
 function Brand() {
   return (
-    <Link href="/" className="flex items-center gap-2 min-w-0 rounded-[3px]" aria-label="Eunomia home">
-      <EunomiaMark size={22} />
-      <span className="text-[18px] font-semibold tracking-[-0.03em] truncate">eunomia</span>
-    </Link>
+    <div className="flex flex-col gap-1.5 min-w-0">
+      <Link href="/" className="flex items-center gap-2 min-w-0 rounded-[3px]" aria-label="Eunomia home">
+        <EunomiaMark size={22} />
+        <span className="text-[18px] font-semibold tracking-[-0.03em] truncate">eunomia</span>
+      </Link>
+      <a
+        href="https://www.buildpaperless.com.au/eunomia"
+        target="_blank"
+        rel="noreferrer"
+        className="flex items-center gap-1.5 self-start rounded-[3px] text-[11px] opacity-60 hover:opacity-100 transition-opacity"
+        aria-label="Made by Paperless (opens in a new tab)"
+      >
+        <span aria-hidden>by</span>
+        {/* eslint-disable-next-line @next/next/no-img-element -- a fixed 560x192 PNG, nothing to optimise */}
+        <img src="/paperless-logo-light.png" alt="" width={56} height={19} className="block h-[14px] w-auto" />
+      </a>
+    </div>
   );
 }
 

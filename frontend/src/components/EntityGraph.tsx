@@ -2,9 +2,9 @@
 
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import ConfirmButton from "@/components/ConfirmButton";
-import { ArrowLeft, ArrowRight, Pencil, Plus, Trash2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Eye, EyeOff, Pencil, Plus, Trash2, X } from "lucide-react";
 import GraphCanvas, { type CanvasInsets } from "./GraphCanvas";
 import AuthorTag from "./AuthorTag";
 import SyncMark from "./bits/SyncMark";
@@ -77,6 +77,21 @@ function blurIn(el: HTMLElement | null) {
   });
 }
 
+const CHROME_KEY = "eunomia.graph.chromeHidden";
+const chromeListeners = new Set<() => void>();
+let chromeFallback = false; // when the browser blocks storage, remembered for this visit only
+function subscribeChrome(l: () => void) {
+  chromeListeners.add(l);
+  return () => chromeListeners.delete(l);
+}
+function readChromeHidden() {
+  try {
+    return window.localStorage.getItem(CHROME_KEY) === "1";
+  } catch {
+    return chromeFallback;
+  }
+}
+
 export default function EntityGraph({
   kinds,
   header,
@@ -125,6 +140,17 @@ export default function EntityGraph({
   // px of canvas covered by the floating header/toolbar (top) and, on desktop,
   // the inspector column (right), so the camera fits nodes into what is left.
   const chromeRef = useRef<HTMLDivElement>(null);
+  // "Hide controls" leaves the whole canvas to the graph; remembered in this browser
+  const chromeHidden = useSyncExternalStore(subscribeChrome, readChromeHidden, () => false);
+  function toggleChrome() {
+    try {
+      window.localStorage.setItem(CHROME_KEY, chromeHidden ? "0" : "1");
+    } catch {
+      chromeFallback = !chromeHidden;
+    }
+    chromeListeners.forEach((l) => l());
+  }
+
   const [insets, setInsets] = useState<CanvasInsets>({ top: 0, right: 0, bottom: 0, left: 0 });
   useEffect(() => {
     const el = chromeRef.current;
@@ -306,12 +332,25 @@ export default function EntityGraph({
       <div
         ref={chromeRef}
         // the inspector column is always kept clear, so opening it never reflows the toolbar or moves the camera
-        className="absolute left-0 top-0 right-0 md:right-auto px-4 pt-6 sm:px-8 lg:px-12 lg:pt-[38px] pb-3 flex flex-col gap-3 items-start pointer-events-none w-full md:w-[calc(100%-25rem)] [&>*]:pointer-events-auto"
-        style={{ background: "linear-gradient(var(--canvas) 85%, transparent)" }}
+        className="absolute left-0 top-0 right-0 md:right-auto px-4 pt-6 sm:px-8 lg:px-12 lg:pt-[38px] pb-3 flex flex-col gap-3 items-start pointer-events-none select-none w-full md:w-[calc(100%-25rem)] [&>*]:pointer-events-auto"
+        style={chromeHidden ? undefined : { background: "linear-gradient(var(--canvas) 85%, transparent)" }}
       >
-        {header}
-        {toolbar}
-        {aside}
+        <button
+          type="button"
+          className={chromeHidden ? "btn btn-sm" : "btn btn-sm absolute right-4 sm:right-8 top-6 lg:top-[38px]"}
+          aria-pressed={chromeHidden}
+          onClick={toggleChrome}
+        >
+          {chromeHidden ? <Eye size={16} strokeWidth={1.75} aria-hidden /> : <EyeOff size={16} strokeWidth={1.75} aria-hidden />}
+          {chromeHidden ? "Show controls" : "Hide controls"}
+        </button>
+        {!chromeHidden && (
+          <>
+            {header}
+            {toolbar}
+            {aside}
+          </>
+        )}
       </div>
       {inspector}
     </div>

@@ -148,6 +148,7 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
   const [editedWebhookUrl, setWebhookUrl] = useState<string | null>(null);
   const webhookUrl = editedWebhookUrl ?? (me ? `${apiOrigin()}/api/sources/${kind}/webhook/${me.id}` : null);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   // The key instructions start open until the source is connected; then they fold away.
   const [helpChoice, setHelpChoice] = useState<boolean | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
@@ -267,20 +268,42 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
     }
   }
 
+  /** Stops importing; credentials and everything already imported stay, so connecting again is one click. */
   async function disconnect() {
     setDisconnecting(true);
     setSaveError(null);
     try {
-      if (added) {
-        await deleteConnector.mutateAsync(ref);
-        router.push("/connectors");
-        return;
-      }
       await updateConnector.mutateAsync({ connector: ref, body: { enabled: false } });
       setConfirmDisconnect(false);
       setTestResult(null);
     } catch (err) {
       setSaveError(failure(err, "Could not disconnect.", " Try again."));
+    } finally {
+      setDisconnecting(false);
+    }
+  }
+
+  /** An added connection only: deletes it and everything imported through it. */
+  async function remove() {
+    setDisconnecting(true);
+    setSaveError(null);
+    try {
+      await deleteConnector.mutateAsync(ref);
+      router.push("/connectors");
+    } catch (err) {
+      setSaveError(failure(err, "Could not remove this connection.", " Try again."));
+      setDisconnecting(false);
+    }
+  }
+
+  /** Switches a disconnected connection back on with the key it already has. */
+  async function reconnect() {
+    setDisconnecting(true);
+    setSaveError(null);
+    try {
+      await updateConnector.mutateAsync({ connector: ref, body: { enabled: true } });
+    } catch (err) {
+      setSaveError(failure(err, "Could not connect again.", " Try again."));
     } finally {
       setDisconnecting(false);
     }
@@ -560,39 +583,74 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
 
           {kind === "pocketai" && connector && <PocketAudioSetting connector={connector} />}
 
+          {connector && !connected && !isDemo && connector.credentials_set && !connector.enabled && (
+            <section className="flex flex-col gap-3 pt-6 border-t" aria-labelledby="paused-heading">
+              <h2 id="paused-heading" className="section-title">
+                Disconnected
+              </h2>
+              <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+                Eunomia isn&apos;t importing from {meta.label} right now. Everything it already brought in is still here.
+              </p>
+              <button type="button" className="btn btn-primary self-start" disabled={disconnecting} onClick={reconnect}>
+                Connect again
+              </button>
+            </section>
+          )}
+
           {(connected || added) && (
             <section className="flex flex-col gap-3 pt-6 border-t" aria-labelledby="danger-heading">
               <h2 id="danger-heading" className="section-title">
-                {added ? "Remove this connection" : `Disconnect ${meta.label}`}
+                Stop using this connection
               </h2>
-              <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
-                {added
-                  ? `Removes this connection and everything imported through it. Other ${meta.label} connections stay.`
-                  : `Stops importing from ${meta.label}. Items already imported stay in your memory.`}
-              </p>
-              <button type="button" className="btn btn-danger self-start" disabled={disconnecting} onClick={() => setConfirmDisconnect(true)}>
-                {added ? "Remove" : "Disconnect"}
-              </button>
+              <div className="flex flex-col gap-4">
+                {connected && (
+                  <div className="flex flex-col gap-2">
+                    <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+                      <strong style={{ color: "var(--ink)" }}>Disconnect</strong> stops importing from {meta.label}. Everything already imported stays,
+                      and you can connect again any time.
+                    </p>
+                    <button type="button" className="btn self-start" disabled={disconnecting} onClick={() => setConfirmDisconnect(true)}>
+                      Disconnect
+                    </button>
+                  </div>
+                )}
+                {added && (
+                  <div className="flex flex-col gap-2">
+                    <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+                      <strong style={{ color: "var(--ink)" }}>Remove</strong> deletes this connection and everything imported through it. Other{" "}
+                      {meta.label} connections stay.
+                    </p>
+                    <button type="button" className="btn btn-danger self-start" disabled={disconnecting} onClick={() => setConfirmRemove(true)}>
+                      Remove and delete its data
+                    </button>
+                  </div>
+                )}
+              </div>
               <ConfirmDialog
                 open={confirmDisconnect}
-                danger={added}
-                title={added ? `Remove ${connector?.label ? `${meta.label} (${connector.label})` : `this ${meta.label} connection`}?` : `Disconnect ${meta.label}?`}
-                confirmLabel={added ? "Remove connection" : `Disconnect ${meta.label}`}
+                title={`Disconnect ${connector?.label ? `${meta.label} (${connector.label})` : meta.label}?`}
+                confirmLabel="Disconnect"
                 busy={disconnecting}
                 error={saveError?.message}
                 onConfirm={disconnect}
                 onCancel={() => setConfirmDisconnect(false)}
               >
-                {added ? (
-                  <p>
-                    This connection and every item imported through it are deleted. Your AI apps will no longer find them. Other {meta.label}{" "}
-                    connections stay. This can&apos;t be undone.
-                  </p>
-                ) : (
-                  <p>
-                    Eunomia stops importing from {meta.label}. Items already imported stay in your memory, and you can connect again at any time.
-                  </p>
-                )}
+                <p>Eunomia stops importing from {meta.label}. Items already imported stay in your memory, and you can connect again at any time.</p>
+              </ConfirmDialog>
+              <ConfirmDialog
+                open={confirmRemove}
+                danger
+                title={`Remove ${connector?.label ? `${meta.label} (${connector.label})` : `this ${meta.label} connection`}?`}
+                confirmLabel="Remove and delete data"
+                busy={disconnecting}
+                error={saveError?.message}
+                onConfirm={remove}
+                onCancel={() => setConfirmRemove(false)}
+              >
+                <p>
+                  This connection and every item imported through it are deleted. Your AI apps will no longer find them. Other {meta.label} connections
+                  stay. This can&apos;t be undone. To keep the items, choose Disconnect instead.
+                </p>
               </ConfirmDialog>
             </section>
           )}
