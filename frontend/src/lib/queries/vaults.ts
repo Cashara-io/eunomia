@@ -114,11 +114,14 @@ const useEndAccessMutation = (fn: (id: string) => Promise<unknown>) => {
     onSuccess: async (_d, id) => {
       // A list poll already in flight would land after this and put the vault back on screen, remounting
       // its inspector and asking for members the caller can no longer see.
-      await qc.cancelQueries({ queryKey: vaultKeys.members(id) });
+      // Every per-space query for the space just lost (members, counts, pending invitations) goes:
+      // a refetch would answer 403.
+      const ofThisSpace = (q: { queryKey: readonly unknown[] }) => q.queryKey[0] === vaultKeys.all[0] && q.queryKey[2] === id;
+      await qc.cancelQueries({ predicate: ofThisSpace });
       await qc.cancelQueries({ queryKey: vaultKeys.list() });
-      qc.removeQueries({ queryKey: vaultKeys.members(id) });
+      qc.removeQueries({ predicate: ofThisSpace });
       await Promise.all([
-        qc.invalidateQueries({ queryKey: vaultKeys.all, predicate: (q) => q.queryKey[1] !== "members" || q.queryKey[2] !== id }),
+        qc.invalidateQueries({ queryKey: vaultKeys.all, predicate: (q) => !ofThisSpace(q) }),
         qc.invalidateQueries({ queryKey: entityKeys.all }),
       ]);
     },

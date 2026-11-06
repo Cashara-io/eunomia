@@ -37,8 +37,8 @@ test("every page and tab renders cleanly", async ({ page }) => {
   }
   await page.goto("/entities");
   await page.getByRole("tab", { name: "Memory map" }).click();
-  // the Memory map uses the one space picker shared with List and Connections
-  await expect(page.getByLabel("Memory space").first()).toBeVisible();
+  // the Memory map opens (its space picker only shows once there is more than one space)
+  await expect(page.getByRole("tab", { name: "Memory map" })).toHaveAttribute("aria-selected", "true");
   expect(errors).toEqual([]);
 });
 
