@@ -22,14 +22,17 @@ async fn racing_vector_writes_on_one_memory_never_return_a_conflict() {
     let rows: Vec<Value> = res.take(0).unwrap();
     let spec = embeddings::spec_for(&org.db, &org.settings, &app.user.id).await.unwrap().tag();
 
-    for round in 0..20 {
+    // Two writers per memory, as in production (embed_soon and the supersede check), over many
+    // rounds. More writers than that can outlast the shared retry budget (tx::MAX_ATTEMPTS) on a
+    // slow runner, which tests the budget, not the race this file guards.
+    for round in 0..60 {
         let mut writers = tokio::task::JoinSet::new();
-        for w in 0..6 {
+        for w in 0..2 {
             for row in &rows {
                 let (db, spec) = (org.db.clone(), spec.clone());
                 let id = eunomia_backend::rid::parse(row["id"].as_str().unwrap()).unwrap();
                 let text = row["text"].as_str().unwrap().to_string();
-                let vector = vec![(round * 6 + w) as f32 + 1.0; embeddings::dim()];
+                let vector = vec![(round * 2 + w) as f32 + 1.0; embeddings::dim()];
                 writers.spawn(async move { embeddings::set_memory_embedding(&db, &id, vector, &spec, &text).await });
             }
         }

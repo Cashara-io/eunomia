@@ -135,10 +135,16 @@ ledgers() { # "<db> <rows> <max version>" for every _migration ledger
 }
 api() { curl -sS --max-time 60 "$@"; }
 mcp() { # mcp TOKEN TOOL ARGS-JSON : the tool's result object; fails on a protocol or tool error
-  local out
-  out="$(api -H "Authorization: Bearer $1" -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
-    -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"$2\",\"arguments\":$3}}" "$BASE/mcp")" || return 1
-  out="$(printf '%s' "$out" | sed -n 's/^data: //p;/^{/p' | head -1)"
+  # A db.conflict is a commit that rolled back (the server's own jobs write at the same time), so the
+  # call is safe to repeat. The old release under test does not retry it itself, so retry it here.
+  local out try
+  for try in 1 2 3 4 5; do
+    out="$(api -H "Authorization: Bearer $1" -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+      -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"$2\",\"arguments\":$3}}" "$BASE/mcp")" || return 1
+    out="$(printf '%s' "$out" | sed -n 's/^data: //p;/^{/p' | head -1)"
+    case "$out" in *'db.conflict'*) [ "$try" -lt 5 ] && { sleep "$try"; continue; } ;; esac
+    break
+  done
   printf '%s' "$out" | jq -e '(.result != null) and (.result.isError != true)' >/dev/null 2>&1 || { echo "mcp $2 failed: $out" >&2; return 1; }
   printf '%s' "$out" | jq -c '.result.content[0].text | fromjson'
 }
