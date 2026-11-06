@@ -58,7 +58,7 @@ export default function ConsentPage() {
   }
 
   return (
-    <div className="min-h-screen w-full flex flex-col px-6 py-6 sm:px-10" style={{ background: "var(--bauhaus-app-bg)" }}>
+    <div className="min-h-screen w-full flex flex-col px-6 py-6 sm:px-10" style={{ background: "var(--canvas)" }}>
       <InputModeTracker />
       <header className="flex items-center justify-between">
         <span className="inline-flex items-center gap-2 text-[20px] font-semibold tracking-[-0.03em]">
@@ -138,7 +138,7 @@ export default function ConsentPage() {
 
               {info.loopback && (
                 <div
-                  className="flex items-start gap-2 rounded-[4px] px-3 py-2.5 text-[14px] leading-[1.45]"
+                  className="flex items-start gap-2 rounded-[10px] px-3 py-2.5 text-[14px] leading-[1.45]"
                   style={{ background: "var(--critical-soft)", color: "var(--critical)" }}
                 >
                   <ShieldAlert size={18} strokeWidth={1.75} className="mt-[2px] shrink-0" aria-hidden />

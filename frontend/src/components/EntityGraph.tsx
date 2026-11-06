@@ -378,7 +378,7 @@ export default function EntityGraph({
         aria-labelledby="new-entity-title"
       >
         <div className="flex items-center justify-between">
-          <h2 id="new-entity-title" className="text-[20px] font-semibold tracking-[-0.01em]">
+          <h2 id="new-entity-title" className="text-[20px] font-medium tracking-[-0.025em]">
             Add a person or topic
           </h2>
           <button type="button" className="btn btn-ghost btn-icon" onClick={() => setShowCreate(false)} aria-label="Close">
@@ -544,7 +544,7 @@ export default function EntityGraph({
     <aside
       aria-label={`${selected.name} details`}
       className="panel pop-in absolute z-20 flex flex-col inset-x-2 bottom-2 max-h-[62%] md:inset-x-auto md:bottom-auto md:right-6 md:top-6 md:w-[22rem] md:max-h-[calc(100%-5rem)]"
-      style={{ transformOrigin: "top right", borderTop: "3px solid var(--bauhaus-app-blue)" }}
+      style={{ transformOrigin: "top right" }}
     >
       <div className="flex items-start justify-between gap-2 p-5 pb-3">
         <div className="flex items-center gap-3 min-w-0">
@@ -553,7 +553,7 @@ export default function EntityGraph({
             <span className="caps block" style={{ color: "var(--accent-text)" }}>
               Selected {kindLabel(selected.kind).toLowerCase()}
             </span>
-            <h2 className="text-[20px] font-semibold tracking-[-0.015em] truncate">{selected.name}</h2>
+            <h2 className="text-[20px] font-medium truncate tracking-[-0.025em]">{selected.name}</h2>
             <span className="text-[13px] inline-flex items-center gap-1.5 mt-0.5" style={{ color: "var(--ink-dim)" }}>
               <span className="w-2 h-2 rounded-full" style={{ background: kindColor(selected.kind) }} aria-hidden />
               {kindLabel(selected.kind)}

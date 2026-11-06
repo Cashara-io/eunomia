@@ -81,7 +81,7 @@ export default function ExtensionsSection() {
           }}
         >
           <div className="flex items-start justify-between gap-3">
-            <h3 className="text-[17px] font-semibold">New extension</h3>
+            <h3 className="text-[17px] font-medium tracking-[-0.015em]">New extension</h3>
             <button type="button" onClick={() => setCreating(false)} aria-label="Cancel" className="btn btn-ghost btn-sm btn-icon -mt-1 -mr-1">
               <X {...ICON} />
             </button>
@@ -144,7 +144,7 @@ export default function ExtensionsSection() {
       <div className="ledger overflow-hidden">
         <div
           className={`hidden md:grid ${COLS} gap-x-4 px-4 h-[34px] items-center caps`}
-          style={{ background: "var(--bauhaus-app-ink)", color: "var(--bauhaus-app-cream)" }}
+          style={{ background: "var(--surface-raised)", color: "var(--ink)", border: "1px solid var(--border)" }}
           aria-hidden
         >
           <span>Extension</span>
@@ -305,7 +305,7 @@ function ExtensionRow({
               height: 28,
               borderRadius: 4,
               color: "var(--ink-dim)",
-              background: "var(--bauhaus-app-soft)",
+              background: "var(--surface-raised)",
             }}
           >
             <Webhook size={15} strokeWidth={1.75} />

@@ -82,7 +82,7 @@ export default function ConfirmDialog({
           if (!locked && !busy) confirm();
         }}
       >
-        <h2 id={titleId} className="text-[20px] font-semibold leading-tight tracking-[-0.01em]">
+        <h2 id={titleId} className="text-[20px] font-medium leading-tight tracking-[-0.025em]">
           {title}
         </h2>
         <div id={bodyId} className="text-[14px] leading-relaxed flex flex-col gap-2" style={{ color: "var(--ink)" }}>

@@ -153,8 +153,8 @@ export default function DocsPage() {
                 <button
                   onClick={() => setTopic(t.topic)}
                   aria-current={current ? "page" : undefined}
-                  className={`w-full text-left min-h-10 px-3 rounded-[4px] text-[14px] truncate transition-colors duration-150 ${current ? "font-semibold" : "hover:bg-[var(--bauhaus-app-soft)]"}`}
-                  style={current ? { background: "var(--bauhaus-app-blue)", color: "#fff" } : { color: "var(--ink)" }}
+                  className={`w-full text-left min-h-10 px-3 rounded-full text-[14px] truncate transition-colors duration-150 ${current ? "font-medium" : "hover:bg-[var(--surface-raised)]"}`}
+                  style={current ? { background: "var(--accent)", color: "var(--on-accent)" } : { color: "var(--ink)" }}
                 >
                   {t.title}
                 </button>
@@ -229,7 +229,7 @@ export default function DocsPage() {
                   href={`#${h.id}`}
                   className="block py-1 pl-3 -ml-px transition-colors duration-150"
                   style={{
-                    borderLeft: `2px solid ${active === h.id ? "var(--bauhaus-app-blue)" : "transparent"}`,
+                    borderLeft: `1px solid ${active === h.id ? "var(--ink)" : "transparent"}`,
                     color: active === h.id ? "var(--ink)" : "var(--ink-dim)",
                   }}
                 >

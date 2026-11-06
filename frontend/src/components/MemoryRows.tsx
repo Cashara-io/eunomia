@@ -175,7 +175,7 @@ export default function MemoryRows({ points, vaultIds, nameOf, selection, focusI
           aria-label="Comparison"
         >
           <div className="flex items-baseline justify-between gap-2">
-            <h3 className="text-[15px] font-semibold" style={{ color: "var(--ink)" }}>
+            <h3 className="text-[15px] font-medium tracking-[-0.015em]" style={{ color: "var(--ink)" }}>
               Comparing {n}
             </h3>
             {sim.data && <span className="label">{sim.data.space === "semantic" ? "Full embedding vectors" : "Word-hash vectors"}</span>}

@@ -143,7 +143,7 @@ function Palette({ onClose }: { onClose: () => void }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-2 px-5 pt-4">
-          <h2 id="palette-title" className="text-[20px] font-semibold tracking-[-0.01em]">
+          <h2 id="palette-title" className="text-[20px] font-medium tracking-[-0.025em]">
             Search
           </h2>
           <button type="button" onClick={onClose} aria-label="Close search" className="btn btn-ghost btn-icon btn-sm">
@@ -198,10 +198,10 @@ function Palette({ onClose }: { onClose: () => void }) {
                       <button
                         onClick={() => choose(item)}
                         onMouseMove={() => setIndex(i)}
-                        className="w-full flex items-center gap-3 px-3 min-h-11 py-1.5 text-[14px] text-left rounded-[3px]"
+                        className="w-full flex items-center gap-3 px-3 min-h-11 py-1.5 text-[14px] text-left rounded-[8px]"
                         style={{
                           background: active ? "var(--accent-soft)" : "transparent",
-                          boxShadow: active ? "inset 3px 0 0 var(--bauhaus-app-blue)" : undefined,
+                          
                           color: "var(--ink)",
                         }}
                       >

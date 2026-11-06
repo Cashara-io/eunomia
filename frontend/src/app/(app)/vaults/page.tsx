@@ -289,7 +289,7 @@ function VaultInspector({
         ) : (
           <div className="flex items-center gap-2 min-w-0">
             <SpaceSwatch vault={vault} />
-            <h2 className="text-[22px] font-semibold tracking-[-0.02em] truncate">
+            <h2 className="text-[22px] font-medium truncate tracking-[-0.03em]">
               {vault.name}
             </h2>
             <RoleChip role={vault.role} />
@@ -764,8 +764,8 @@ function VaultRow({
     <button
       onClick={onSelect}
       aria-current={selected || undefined}
-      className="w-full flex items-center gap-3 px-4 py-4 min-h-[64px] text-left transition-[background-color] duration-[120ms] hover:bg-[var(--bauhaus-app-soft)]"
-      style={selected ? { background: "var(--bauhaus-app-soft)", boxShadow: "inset 3px 0 0 var(--bauhaus-app-ink)" } : undefined}
+      className="w-full flex items-center gap-3 px-4 py-4 min-h-[64px] text-left transition-[background-color] duration-[120ms] hover:bg-[var(--surface-raised)]"
+      style={selected ? { background: "var(--accent-soft)" } : undefined}
     >
       <span className="flex-1 min-w-0">
         <span className="flex items-center gap-2.5 min-w-0">

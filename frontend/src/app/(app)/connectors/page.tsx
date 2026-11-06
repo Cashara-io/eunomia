@@ -32,7 +32,7 @@ type ConnectedRow = {
 
 const CONNECTED_COLS = "grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1.4fr)_130px_76px_110px_minmax(0,1fr)_16px]";
 const ROW_LINK =
-  "grid items-center gap-x-4 px-4 min-h-14 py-2 text-[14px] transition-[background-color] duration-[120ms] ease-[var(--ease-out)] hover:bg-[var(--bauhaus-app-bg)] focus-visible:outline-offset-[-2px]";
+  "grid items-center gap-x-4 px-4 min-h-14 py-2 text-[14px] transition-[background-color] duration-[120ms] ease-[var(--ease-out)] hover:bg-[var(--surface-raised)] focus-visible:outline-offset-[-2px]";
 
 function matches(q: string, label: string, description = "") {
   return !q || label.toLowerCase().includes(q) || description.toLowerCase().includes(q);
@@ -157,7 +157,7 @@ export default function ConnectorsPage() {
           <div className="ledger overflow-hidden">
             <div
               className={`hidden md:grid ${CONNECTED_COLS} gap-x-4 px-4 h-[34px] items-center caps`}
-              style={{ background: "var(--bauhaus-app-ink)", color: "var(--bauhaus-app-cream)" }}
+              style={{ background: "var(--surface-raised)", color: "var(--ink)", border: "1px solid var(--border)" }}
               aria-hidden
             >
               <span>Source</span>
@@ -251,8 +251,8 @@ export default function ConnectorsPage() {
                 <li key={kind} className="min-w-0">
                   <Link
                     href={`/connectors/setup/${kind}`}
-                    className="ledger h-full p-5 flex flex-col gap-3.5 transition-[border-color] duration-[120ms] hover:border-[var(--bauhaus-app-ink)]"
-                    style={{ borderColor: "#8f8f87" }}
+                    className="ledger h-full p-5 flex flex-col gap-3.5 transition-[border-color] duration-[120ms] hover:border-[var(--ink)]"
+                    style={{ borderColor: "var(--border-strong)" }}
                   >
                     <span className="flex items-center gap-3 min-w-0">
                       <ConnectorTile kind={kind} size={32} />

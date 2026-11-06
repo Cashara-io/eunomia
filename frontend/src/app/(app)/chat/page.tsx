@@ -212,8 +212,8 @@ function TurnView({ turn, me }: { turn: Turn; me: string | null }) {
       <article>
         {me ? <TurnHeader name={me} at={turn.at} /> : <div className="h-5 mb-2" />}
         <div
-          className="whitespace-pre-wrap break-words text-[15px] leading-relaxed px-4 py-3 rounded-[2px]"
-          style={{ background: "var(--bauhaus-app-soft)", color: "var(--ink)" }}
+          className="whitespace-pre-wrap break-words text-[15px] leading-relaxed px-4 py-3 rounded-[12px]"
+          style={{ background: "var(--surface-raised)", color: "var(--ink)" }}
         >
           {turn.content}
         </div>
@@ -259,7 +259,7 @@ function ThreadList({
         {threads?.map((t) => {
           const active = t.id === activeId;
           return (
-            <div key={t.id} className="thread-row group flex items-center rounded-[3px]" data-active={active || undefined}>
+            <div key={t.id} className="thread-row group flex items-center rounded-full" data-active={active || undefined}>
               <button
                 onClick={() => onSelect(t.id)}
                 aria-current={active ? "true" : undefined}
@@ -291,7 +291,7 @@ function ThreadList({
 function EmptyState({ onPick }: { onPick: (text: string) => void }) {
   return (
     <div className="flex-1 flex flex-col justify-center w-full max-w-[560px] mx-auto py-8">
-      <h2 className="text-[22px] font-semibold tracking-[-0.015em]" style={{ color: "var(--ink)" }}>
+      <h2 className="text-[22px] font-medium tracking-[-0.03em]" style={{ color: "var(--ink)" }}>
         Ask your memory anything
       </h2>
       <p className="text-[15px] mt-2 mb-5 leading-relaxed" style={{ color: "var(--ink-dim)" }}>
@@ -570,8 +570,8 @@ export default function ChatPage() {
               {error && (
                 <div
                   role="alert"
-                  className="flex items-start gap-2.5 px-4 py-3 rounded-[2px] text-[14px]"
-                  style={{ background: "var(--critical-soft)", color: "var(--critical)", borderLeft: "3px solid var(--bauhaus-app-red)" }}
+                  className="flex items-start gap-2.5 px-4 py-3 rounded-[10px] text-[14px]"
+                  style={{ background: "var(--critical-soft)", color: "var(--critical)" }}
                 >
                   <AlertCircle size={18} strokeWidth={1.75} className="shrink-0 mt-px" aria-hidden />
                   <div className="min-w-0 break-words">
@@ -658,7 +658,7 @@ export default function ChatPage() {
       <style>{`
         .composer { field-sizing: content; min-height: 24px; max-height: 200px; }
         .thread-row { color: var(--ink); transition: background-color var(--dur-hover) ease, color var(--dur-hover) ease; }
-        .thread-row[data-active] { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--bauhaus-app-blue); font-weight: 600; }
+        .thread-row[data-active] { background: var(--surface-raised); font-weight: 500; }
         .thread-delete { display: none; color: var(--ink-dim); }
         .thread-row:focus-within .thread-delete { display: inline-flex; }
         .thread-row:focus-within .thread-time { display: none; }

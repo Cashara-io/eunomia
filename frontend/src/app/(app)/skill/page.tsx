@@ -125,7 +125,7 @@ export default function SkillPage() {
           {error && <ErrorLine error={error} />}
         </div>
 
-        <div className="soft-panel min-w-0 overflow-hidden" style={editing ? { boxShadow: "inset 0 0 0 1.5px var(--bauhaus-app-blue)" } : undefined}>
+        <div className="soft-panel min-w-0 overflow-hidden" style={editing ? { boxShadow: "inset 0 0 0 1px var(--ink)" } : undefined}>
           {skill === null ? (
             !error && (
               <div className="flex flex-col gap-3 p-6 md:p-10" aria-busy="true" aria-label="Loading instructions">
@@ -220,7 +220,7 @@ export default function SkillPage() {
       </section>
 
       <section className="flex flex-col gap-2">
-        <h2 className="text-[14px] font-semibold">Refresh file copies</h2>
+        <h2 className="text-[14px] font-medium">Refresh file copies</h2>
         <p className="text-[14px] leading-relaxed" style={{ color: "var(--ink-dim)" }}>
           Only needed for the file copies. Run this from the Eunomia install folder with a token from{" "}
           <Link href="/settings?tab=tokens" style={{ color: "var(--accent-text)" }} className="underline">

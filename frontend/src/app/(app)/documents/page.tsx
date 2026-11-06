@@ -98,10 +98,10 @@ function DropZone({ maxBytes, disabled, onFiles }: { maxBytes: number | null; di
   const [over, setOver] = useState(false);
   return (
     <div
-      className="flex flex-col items-center justify-center gap-3 px-4 py-8 text-center rounded-[2px]"
+      className="flex flex-col items-center justify-center gap-3 px-4 py-8 text-center rounded-[12px]"
       style={{
-        border: "1.5px solid var(--bauhaus-app-blue)",
-        background: over ? "var(--bauhaus-app-blue-soft)" : "var(--surface)",
+        border: over ? "1px solid var(--ink)" : "1px dashed var(--border-field)",
+        background: over ? "var(--surface-raised)" : "var(--surface)",
         transition: "background-color var(--dur-hover) ease, border-color var(--dur-hover) ease",
       }}
       onDragOver={(e) => {
@@ -175,7 +175,7 @@ function UploadRows({ rows, onDismiss }: { rows: UploadRow[]; onDismiss: (key: s
               className="h-1.5 rounded-full overflow-hidden"
               style={{ background: "var(--surface-raised)" }}
             >
-              <div className="h-full" style={{ width: `${Math.round(r.progress * 100)}%`, background: "var(--bauhaus-app-blue)", transition: "width 120ms linear" }} />
+              <div className="h-full" style={{ width: `${Math.round(r.progress * 100)}%`, background: "var(--ink)", transition: "width 120ms linear" }} />
             </div>
           )}
         </div>
@@ -296,7 +296,7 @@ function DocumentPanel({ id, chunk, onClose }: { id: string; chunk: string | nul
     <section className="task-panel p-5 flex flex-col gap-4 min-w-0" aria-labelledby="document-title" data-testid="document-panel">
       <div className="flex items-start gap-2">
         <div className="flex-1 min-w-0">
-          <h2 id="document-title" className="text-[20px] font-semibold tracking-[-0.015em] break-words">
+          <h2 id="document-title" className="text-[20px] font-medium break-words tracking-[-0.025em]">
             {doc.filename}
           </h2>
           <p className="label mt-1">
@@ -505,7 +505,7 @@ function Documents() {
                   {docs?.map((d) => {
                     const on = d.id === selected;
                     return (
-                      <tr key={d.id} style={on ? { background: "var(--accent-soft)", boxShadow: "inset 3px 0 0 var(--bauhaus-app-blue)" } : undefined} data-testid="document-row">
+                      <tr key={d.id} style={on ? { background: "var(--accent-soft)" } : undefined} data-testid="document-row">
                         <td className="max-w-0 w-full">
                           <button
                             type="button"

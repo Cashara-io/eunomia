@@ -267,7 +267,7 @@ export default function RoutingSection({ label, connector }: { label: string; co
       </div>
 
       <div className="flex flex-col gap-2 pt-1" style={{ borderTop: "1px solid var(--border)" }}>
-        <h3 className="text-[15px] font-semibold pt-3">Move previously imported items</h3>
+        <h3 className="text-[15px] font-medium pt-3 tracking-[-0.015em]">Move previously imported items</h3>
         <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
           {draft !== null
             ? "Save the routing first."

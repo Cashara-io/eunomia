@@ -313,7 +313,7 @@ export function JoinSharedSpace({ onJoined }: { onJoined?: (vaultId: string) => 
             });
           }}
         >
-          <h2 id={titleId} className="text-[20px] font-semibold leading-tight tracking-[-0.01em]">
+          <h2 id={titleId} className="text-[20px] font-medium leading-tight tracking-[-0.025em]">
             Join a shared space
           </h2>
           {joined ? (

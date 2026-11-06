@@ -29,8 +29,8 @@ export default function ErrorLine({
   return (
     <div
       role="alert"
-      className="flex flex-wrap items-start gap-x-3 gap-y-2 px-3.5 py-2.5 rounded-[2px]"
-      style={{ background: "var(--critical-soft)", borderLeft: "3px solid var(--bauhaus-app-red)" }}
+      className="flex flex-wrap items-start gap-x-3 gap-y-2 px-3.5 py-2.5 rounded-[10px]"
+      style={{ background: "var(--critical-soft)" }}
     >
       <AlertCircle size={18} strokeWidth={1.75} aria-hidden className="shrink-0 mt-px" style={{ color: "var(--critical)" }} />
       <div className="flex-1 min-w-[200px] flex flex-col gap-1">

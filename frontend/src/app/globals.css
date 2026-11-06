@@ -51,6 +51,7 @@
   --critical: #b83a28;
   --critical-hover: #9c3020;
   --critical-soft: rgba(207, 65, 47, 0.1);
+  --on-critical: #ffffff;
 
   /* ---- authors: who wrote a memory. Never the exact vault hues. ---- */
   --author-1: #d9694a;
@@ -191,6 +192,7 @@
   --critical: #ec7a68;
   --critical-hover: #f29484;
   --critical-soft: rgba(221, 87, 67, 0.16);
+  --on-critical: #171717;
 
   --author-1: #e07a5c;
   --author-2: #6b93d8;
@@ -256,12 +258,14 @@ body {
 }
 
 @layer components {
-/* ---- type ---- */
+/* ---- type ----
+   Headings are big and calm: weight 500 with tight tracking. App sizes stay
+   dense (13px body, 14px root, 22px page title). */
 
 .font-display {
   font-family: var(--font-display), system-ui, sans-serif;
-  font-weight: 600;
-  letter-spacing: -0.025em;
+  font-weight: 500;
+  letter-spacing: -0.03em;
 }
 
 .font-mono {
@@ -274,60 +278,60 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* A page title: one per page. 44/600/1.1, -1.4px tracking (spec). Scales
-   down on narrow screens instead of overflowing. */
+/* A page title: one per page. */
 .page-title {
   font-family: var(--font-display), system-ui, sans-serif;
-  font-size: clamp(32px, 5vw + 12px, var(--bauhaus-app-title-size));
-  line-height: 1.1;
-  font-weight: 600;
-  letter-spacing: var(--bauhaus-app-title-tracking);
+  font-size: 22px;
+  line-height: 1.2;
+  font-weight: 500;
+  letter-spacing: -0.03em;
   color: var(--ink);
   text-wrap: balance;
 }
 
-/* The heading of a connection guide or a framed task panel (34/600, -1px). */
+/* The heading of a connection guide or a framed task panel. */
 .connect-title {
   font-family: var(--font-display), system-ui, sans-serif;
-  font-size: clamp(24px, 3vw + 10px, var(--bauhaus-app-heading-size));
-  line-height: 1.15;
-  font-weight: 600;
-  letter-spacing: var(--bauhaus-app-heading-tracking);
+  font-size: 20px;
+  line-height: 1.25;
+  font-weight: 500;
+  letter-spacing: -0.03em;
   color: var(--ink);
+  text-wrap: balance;
 }
 
 /* The introduction sentence under a page title. */
 .page-intro {
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.5;
   color: var(--ink-dim);
-  max-width: 72ch;
+  max-width: 62ch;
 }
 
 /* A section heading inside a page. */
 .section-title {
-  font-size: 17px;
+  font-size: 15px;
   line-height: 1.3;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  font-weight: 500;
+  letter-spacing: -0.015em;
   color: var(--ink);
 }
 
 /* Small quiet label for a field, table column or stat. Never a kicker above
-   a heading -- headings carry their own weight. */
+   a heading: headings carry their own weight. */
 .eyebrow,
 .label {
-  font-size: 12.5px;
-  line-height: 1.35;
-  color: var(--ink-dim);
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--ink-faint);
 }
 
-/* Upper-case group label: the sidebar's ADVANCED, table heads. */
+/* Group label (the sidebar's Advanced group). Sentence case: uppercase
+   labels are a marketing-only device. */
 .caps {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-faint);
 }
 
 /* ---- icons: Phosphor Duotone, the Eunomia twist ----
@@ -347,13 +351,15 @@ body {
   color: currentColor;
 }
 
-/* ---- the canvas ---- */
+/* ---- the canvas: cream with a faint 20px ink dot grid ---- */
 
 .canvas-grid {
   background-color: var(--canvas);
+  background-image: radial-gradient(circle at 1px 1px, var(--grid-dot) 1px, transparent 0);
+  background-size: 20px 20px;
 }
 
-/* ---- containers ---- */
+/* ---- containers: in-flow is a hairline and no shadow ---- */
 
 .surface,
 .ledger {
@@ -362,32 +368,33 @@ body {
   border-radius: var(--radius-card);
 }
 
-/* A framed task panel: the one thing to do on this screen (spec: ink edge). */
+/* A framed task panel: the one thing to do on this screen. */
 .task-panel {
   background: var(--surface);
-  border: 1.5px solid var(--bauhaus-app-ink);
-  border-radius: 2px;
+  border: 1px solid var(--ink);
+  border-radius: var(--radius-card);
 }
 
-/* Quiet information block on soft ground (details to copy, help asides). */
+/* Quiet information block on raised ground (details to copy, help asides). */
 .soft-panel {
-  background: var(--bauhaus-app-soft);
-  border-radius: 2px;
+  background: var(--surface-raised);
+  border-radius: var(--radius-card);
 }
 
-/* A floating panel: the inspector, popovers, the palette. */
+/* A floating panel: the inspector, popovers, the palette. One soft shadow. */
 .panel {
   background: var(--surface);
   border-radius: var(--radius-card);
-  border: 1px solid var(--border);
+  box-shadow: var(--shadow-panel);
 }
 
 .hairline-rows > * + * {
   border-top: var(--hair) solid var(--border);
 }
 
-/* Figma-style selection: accent outline with four square handles. Table rows
-   get the outline only (a pseudo-element would become an extra cell). */
+/* Selection: a 1px ink outline with four 6px ink handles. Table rows get the
+   outline and the ink wash (a pseudo-element would become an extra cell).
+   Focus stays blue, so selected and focused never look the same. */
 .frame-selected {
   position: relative;
   outline: 1px solid var(--accent);
@@ -395,6 +402,9 @@ body {
 }
 tr.frame-selected::after {
   content: none;
+}
+tr.frame-selected > td {
+  background: var(--accent-soft);
 }
 .frame-selected:not(tr)::after {
   content: "";
@@ -411,18 +421,24 @@ tr.frame-selected::after {
 
 /* ---- controls ---- */
 
+/* Fields: white, a visible edge, 10px corners. On focus the edge turns ink
+   and the blue focus ring sits outside it. */
 .field {
   background: var(--surface);
-  border: 1px solid #8f8f87;
+  border: 1px solid var(--border-field);
   border-radius: var(--radius-field);
   color: var(--ink);
   font-family: var(--font-sans), system-ui, sans-serif;
   transition: border-color var(--dur-hover) ease, box-shadow var(--dur-hover) ease;
 }
+input.field,
+button.field {
+  min-height: 36px;
+}
 .field:focus-within,
 .field:focus {
-  border-color: var(--bauhaus-app-blue);
-  box-shadow: 0 0 0 1px var(--bauhaus-app-blue);
+  border-color: var(--ink);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--focus);
   outline: none;
 }
 .field[aria-invalid="true"] {
@@ -435,25 +451,28 @@ textarea::placeholder {
   color: var(--ink-faint);
 }
 
+/* Buttons are pills. Secondary (the default) is an ink outline; primary is
+   an ink fill, one per view. Colour is saved for meaning, never "press me". */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 40px;
+  min-height: 36px;
   padding: 0 16px;
   border-radius: var(--radius-control);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.2;
   white-space: nowrap;
-  border: 1px solid var(--bauhaus-app-ink);
-  background: var(--bauhaus-app-white);
-  color: var(--bauhaus-app-ink);
+  border: 1px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
   transition:
     transform var(--dur-press) var(--ease-out),
     background-color var(--dur-hover) ease,
-    border-color var(--dur-hover) ease;
+    border-color var(--dur-hover) ease,
+    color var(--dur-hover) ease;
 }
 .btn:active:not(:disabled) {
   transform: scale(0.97);
@@ -463,9 +482,10 @@ textarea::placeholder {
   cursor: not-allowed;
 }
 .btn-primary {
-  background: var(--bauhaus-app-blue);
-  border-color: var(--bauhaus-app-blue);
-  color: var(--bauhaus-app-cream);
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  --bits-done: currentColor;
 }
 .btn-ghost {
   background: transparent;
@@ -475,26 +495,27 @@ textarea::placeholder {
 /* Danger is only for destructive actions: red edge and text on the trigger,
    a solid red fill on the final confirm (.btn-danger-solid). */
 .btn-danger {
-  background: var(--bauhaus-app-white);
+  background: transparent;
   border-color: var(--critical);
   color: var(--critical);
 }
 .btn-danger-solid {
-  background: var(--bauhaus-app-red-text);
-  border-color: var(--bauhaus-app-red-text);
-  color: #ffffff;
+  background: var(--critical);
+  border-color: var(--critical);
+  color: var(--on-critical);
 }
 .btn-sm {
-  min-height: 32px;
+  min-height: 30px;
   padding: 0 12px;
   font-size: 13px;
+  gap: 6px;
 }
 .btn-icon {
-  width: 40px;
+  width: 36px;
   padding: 0;
 }
 .btn-sm.btn-icon {
-  width: 32px;
+  width: 30px;
 }
 /* Practical touch targets on coarse pointers. */
 @media (pointer: coarse) {
@@ -510,23 +531,25 @@ textarea::placeholder {
 
 @media (hover: hover) and (pointer: fine) {
   .btn:hover:not(:disabled) {
-    background: var(--bauhaus-app-soft);
+    background: var(--surface-raised);
   }
   .btn-primary:hover:not(:disabled) {
-    background: var(--bauhaus-app-blue-hover);
-    border-color: var(--bauhaus-app-blue-hover);
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
   }
   .btn-ghost:hover:not(:disabled) {
-    background: var(--bauhaus-app-soft);
+    background: var(--surface-raised);
   }
   .btn-danger:hover:not(:disabled) {
     background: var(--critical-soft);
   }
   .btn-danger-solid:hover:not(:disabled) {
-    background: #96301f;
+    background: var(--critical-hover);
+    border-color: var(--critical-hover);
   }
 }
 
+/* Pills: filters, tabs and static chips. Fully round. */
 .pill {
   display: inline-flex;
   align-items: center;
@@ -534,34 +557,38 @@ textarea::placeholder {
   min-height: 32px;
   padding: 0 12px;
   border-radius: var(--radius-control);
-  border: 1px solid #8f8f87;
+  border: 1px solid var(--border-strong);
   background: var(--surface);
   color: var(--ink);
   font-size: 13px;
   font-weight: 500;
   line-height: 1.2;
-  transition: transform var(--dur-press) var(--ease-out), border-color var(--dur-hover) ease, color var(--dur-hover) ease;
+  transition: transform var(--dur-press) var(--ease-out), border-color var(--dur-hover) ease, background-color var(--dur-hover) ease, color var(--dur-hover) ease;
 }
 button.pill:active {
   transform: scale(0.97);
 }
-/* Multi-select filters that are on: quiet, so a row of them never turns
-   into a wall of accent. Single-choice selection (tabs) keeps the accent. */
+@media (hover: hover) and (pointer: fine) {
+  button.pill:hover {
+    background: var(--surface-raised);
+  }
+}
+/* Multi-select filters that are on go neutral, so a row of them never turns
+   into a wall of ink. Only single choice (tabs) takes the accent. */
 .pill[aria-pressed="true"] {
-  border-color: var(--bauhaus-app-ink);
-  background: var(--bauhaus-app-soft);
+  border-color: var(--ink);
+  background: var(--surface-hover);
   color: var(--ink);
 }
 .pill[aria-pressed="false"] {
   color: var(--ink-dim);
 }
-/* Single choice (tabs, OS picker): blue fill, like the selected nav item. */
 .pill[aria-selected="true"],
 .pill[aria-checked="true"],
 .pill[aria-current="page"] {
-  border-color: var(--bauhaus-app-blue);
-  background: var(--bauhaus-app-blue);
-  color: var(--bauhaus-app-cream);
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 .kbd {
@@ -571,7 +598,7 @@ button.pill:active {
   min-width: 18px;
   height: 18px;
   padding: 0 4px;
-  border-radius: 4px;
+  border-radius: var(--radius-tag);
   border: var(--hair) solid var(--border-strong);
   background: var(--surface);
   color: var(--ink-faint);
@@ -647,16 +674,17 @@ button.pill:active {
   border-color: var(--bauhaus-app-sidebar-line);
 }
 
-/* Page header: icon + title, a 2px ink rule, then the introduction. */
+/* Page header: icon + title, a hairline, then the introduction. */
 .page-header {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding-bottom: 20px;
-  border-bottom: 2px solid var(--bauhaus-app-ink);
+  gap: 8px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
 }
 
-/* Status in words with a small shape (StatusLabel). */
+/* Status in words with a small dot (StatusLabel). Status colours are
+   deeper than the vault fills and always come with a word. */
 .status-label {
   display: inline-flex;
   align-items: center;
@@ -667,9 +695,9 @@ button.pill:active {
   color: var(--ink);
 }
 .status-label[data-tone="good"] .status-shape { background: var(--good); }
-.status-label[data-tone="warning"] .status-shape { background: var(--bauhaus-app-yellow); box-shadow: inset 0 0 0 1px #8a6510; }
-.status-label[data-tone="critical"] .status-shape { background: var(--bauhaus-app-red); }
-.status-label[data-tone="info"] .status-shape { background: var(--bauhaus-app-blue); }
+.status-label[data-tone="warning"] .status-shape { background: var(--warning); }
+.status-label[data-tone="critical"] .status-shape { background: var(--critical); }
+.status-label[data-tone="info"] .status-shape { background: var(--ink); }
 .status-label[data-tone="neutral"] .status-shape { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-dim); }
 .status-shape {
   width: 8px;
@@ -683,8 +711,9 @@ dialog.bauhaus-dialog,
 .bauhaus-dialog {
   background: var(--surface);
   color: var(--ink);
-  border: 1.5px solid var(--bauhaus-app-ink);
-  border-radius: 4px;
+  border: 0;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-pop);
   padding: 0;
   width: min(520px, calc(100vw - 32px));
   max-height: calc(100dvh - 32px);
@@ -707,26 +736,23 @@ dialog.bauhaus-dialog::backdrop {
   flex-shrink: 0;
 }
 
-/* Data tables: tabular numerals, hairline rows, quiet headers. */
+/* Data tables: tabular numerals, hairline rows, quiet sentence-case headers. */
 .data-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
 }
 .data-table th {
-  height: 34px;
+  height: 32px;
   padding: 0 12px;
   text-align: left;
-  font-weight: 600;
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--bauhaus-app-cream);
-  background: var(--bauhaus-app-ink);
-  border-bottom: 0;
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--ink-faint);
+  border-bottom: 1px solid var(--border);
 }
 .data-table td {
-  height: 44px;
+  height: 40px;
   padding: 0 12px;
   border-bottom: 1px solid var(--border);
   font-variant-numeric: tabular-nums;
@@ -736,7 +762,7 @@ dialog.bauhaus-dialog::backdrop {
 }
 @media (hover: hover) and (pointer: fine) {
   .data-table tbody tr:hover td {
-    background: var(--bauhaus-app-bg);
+    background: var(--surface-raised);
   }
 }
 
@@ -768,7 +794,7 @@ dialog.bauhaus-dialog::backdrop {
   cursor: default;
 }
 .select-trigger[data-open] {
-  border-color: var(--bauhaus-app-blue);
+  border-color: var(--ink);
 }
 .select-chevron {
   color: var(--ink-faint);
@@ -800,7 +826,7 @@ dialog.bauhaus-dialog::backdrop {
   color: var(--accent-text);
 }
 .select-option[data-active] {
-  background: var(--bauhaus-app-soft);
+  background: var(--surface-raised);
   color: var(--ink);
 }
 
@@ -842,9 +868,8 @@ dialog.bauhaus-dialog::backdrop {
 }
 
 :focus-visible {
-  outline: 2px solid var(--bauhaus-app-focus);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
-  box-shadow: 0 0 0 4px var(--bauhaus-app-yellow-soft);
 }
 
 * {
@@ -879,7 +904,6 @@ a {
 .md li + li { margin-top: 0.2em; }
 .md li::marker { color: var(--ink-faint); }
 .md a { color: var(--accent-text); text-decoration: underline; }
-.md pre { background: var(--bauhaus-app-ink) !important; color: var(--bauhaus-app-cream); border-color: var(--bauhaus-app-ink) !important; }
 .md strong { font-weight: 600; }
 .md hr { border: 0; border-top: var(--hair) solid var(--border); margin: 1em 0; }
 .md blockquote { border-left: 1px solid var(--border-strong); padding-left: 0.9em; color: var(--ink-dim); }

@@ -9,7 +9,7 @@ import { EXAMPLE_QUESTION, Kbd, Note, useMcpAddress } from "@/components/connect
 function Problem({ id, title, children }: { id?: string; title: string; children: React.ReactNode }) {
   return (
     <section id={id} className="guide-step flex flex-col gap-3 py-6 scroll-mt-6" aria-labelledby={id ? `${id}-title` : undefined}>
-      <h3 id={id ? `${id}-title` : undefined} className="text-[17px] font-semibold">
+      <h3 id={id ? `${id}-title` : undefined} className="text-[17px] font-medium tracking-[-0.015em]">
         {title}
       </h3>
       {children}
@@ -90,7 +90,7 @@ export default function ConnectionHelpPage() {
         </Problem>
 
         <section className="soft-panel px-5 py-5 mt-2 flex flex-col gap-3" aria-labelledby="unfinished-title">
-          <h3 id="unfinished-title" className="text-[17px] font-semibold">
+          <h3 id="unfinished-title" className="text-[17px] font-medium tracking-[-0.015em]">
             Sign-in did not finish?
           </h3>
           <Note>

@@ -55,7 +55,7 @@ function FailureBanner({ rows, dismissed, onDismiss }: { rows: SourceRow[]; dism
         <div
           key={s.key}
           role="alert"
-          className="flex flex-wrap items-center gap-3 rounded-[2px] px-4 py-3"
+          className="flex flex-wrap items-center gap-3 rounded-[12px] px-4 py-3"
           style={{ background: "var(--critical-soft)", border: "1px solid var(--critical)" }}
         >
           <AlertTriangle size={18} strokeWidth={1.75} color="var(--critical)" className="shrink-0" aria-hidden />
@@ -302,7 +302,7 @@ function Inspector({ row }: { row: LiveRow }) {
   ];
 
   return (
-    <aside aria-label="Selected memory" className="panel p-5 flex flex-col gap-4" style={{ borderTop: "2px solid var(--bauhaus-app-blue)" }}>
+    <aside aria-label="Selected memory" className="panel p-5 flex flex-col gap-4" >
       <span className="caps" style={{ color: "var(--accent-text)" }}>
         Selected memory
       </span>
@@ -366,7 +366,7 @@ function AppPicker({ again = false }: { again?: boolean }) {
   return (
     <section className="task-panel p-6 sm:p-8 flex flex-col gap-5" aria-labelledby="pick-title">
       <div className="flex flex-col gap-3">
-        <h2 id="pick-title" className="text-[26px] sm:text-[28px] font-semibold tracking-[-0.6px] leading-tight">
+        <h2 id="pick-title" className="text-[26px] sm:text-[28px] font-medium leading-tight tracking-[-0.03em]">
           {again ? "Connect another AI app" : "Which AI app do you use?"}
         </h2>
         <p className="text-[16px] leading-relaxed">
@@ -378,8 +378,8 @@ function AppPicker({ again = false }: { again?: boolean }) {
           <li key={a.id}>
             <Link
               href={`/connect/${a.id}`}
-              className="flex flex-col gap-1.5 h-full min-h-[76px] px-4 py-3.5 rounded-[3px] transition-colors hover:bg-[var(--bauhaus-app-bg)]"
-              style={{ border: "1px solid var(--bauhaus-app-ink)" }}
+              className="flex flex-col gap-1.5 h-full min-h-[76px] px-4 py-3.5 rounded-[12px] transition-colors hover:bg-[var(--surface-raised)] hover:border-[var(--ink)]"
+              style={{ background: "var(--surface)", border: "1px solid var(--border-strong)" }}
             >
               <span className="flex items-center gap-2.5 text-[16px] font-semibold">
                 <AppMark id={a.id} size={22} />
@@ -433,8 +433,8 @@ function ConnectedPanel({ connections, onConnectAnother }: { connections: Connec
   const latest = connections[0];
   const app = appForConnection(latest);
   return (
-    <section className="p-6 flex flex-col gap-4 rounded-[2px]" style={{ background: "var(--surface)", border: "1px solid var(--bauhaus-app-blue)" }} aria-labelledby="connected-title">
-      <h2 id="connected-title" className="text-[20px] font-semibold tracking-[-0.3px]">
+    <section className="ledger p-6 flex flex-col gap-4" aria-labelledby="connected-title">
+      <h2 id="connected-title" className="text-[20px] font-medium tracking-[-0.025em]">
         {connections.length === 1 ? `${latest.name} is connected` : `${connections.length} AI apps are connected`}
       </h2>
       <p className="text-[15px]" style={{ color: "var(--ink-dim)" }}>
@@ -583,7 +583,7 @@ export default function HomePage() {
 
       <section
         aria-label="Summary"
-        className="grid grid-cols-2 lg:grid-cols-4 overflow-hidden rounded-[2px]"
+        className="grid grid-cols-2 lg:grid-cols-4 overflow-hidden rounded-[12px]"
         style={{ gap: "var(--hair)", background: "var(--border)", border: "var(--hair) solid var(--border)" }}
       >
         <Stat label="People & topics" value={entityCount !== null ? <DigitRoll value={entityCount} /> : "–"} href="/entities" />
