@@ -213,16 +213,27 @@ pub async fn embed_memory_backlog(db: &OrgDb, settings: &Settings, owner: &Recor
         if vector.len() != DIM {
             return Err(AppError::internal(format!("embedding for {} has dimension {}", row.id.to_string(), vector.len())));
         }
-        store::cache::SET_MEMORY_EMBEDDING
-            .on(db)
-            .bind(("id", row.id.clone()))
-            .bind(("embedding", vector))
-            .bind(("spec", spec.clone()))
-            .bind(("text", row.text.clone()))
-            .await?
-            .check()?;
+        set_memory_embedding(db, &row.id, vector, &spec, &row.text).await?;
     }
     Ok(rows.len())
+}
+
+/// Save `vector` as memory `id`'s embedding under `spec`, unless its text is no longer `text`. More
+/// than one writer sets vectors on the same memory (this backlog job, and a new fact's supersede
+/// check), so a commit conflict between them is retried, not returned.
+pub async fn set_memory_embedding(db: &OrgDb, id: &RecordId, vector: Vec<f32>, spec: &str, text: &str) -> AppResult<()> {
+    let set = || async {
+        store::cache::SET_MEMORY_EMBEDDING
+            .on(db)
+            .bind(("id", id.clone()))
+            .bind(("embedding", vector.clone()))
+            .bind(("spec", spec.to_string()))
+            .bind(("text", text.to_string()))
+            .await?
+            .check()
+    };
+    crate::tx::with_retry(set).await?;
+    Ok(())
 }
 
 /// Whether embeddings can run for `owner` right now. Without them the
