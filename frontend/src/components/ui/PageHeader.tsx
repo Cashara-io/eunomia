@@ -1,10 +1,10 @@
 import type { LucideIcon } from "lucide-react";
 
-/** The spec page header: a 30-32px identity icon (or provider mark) beside the
- * 44px title, actions on the right, a 2px ink rule, then one introduction
- * sentence that says what this page is for. */
+/** The page header: a 26px title (a provider mark beside it when there is
+ * one), actions on the right, a hairline rule, then at most one short line
+ * that says what the page is for. `icon` is accepted but not drawn: the nav
+ * already carries the page's icon. */
 export default function PageHeader({
-  icon: Icon,
   mark,
   title,
   intro,
@@ -24,7 +24,7 @@ export default function PageHeader({
     <header className="page-header">
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
         <div className="flex items-center gap-3 min-w-0">
-          {mark ?? (Icon && <Icon size={32} strokeWidth={1.75} className="shrink-0" aria-hidden />)}
+          {mark}
           <h1 className="page-title min-w-0 [overflow-wrap:anywhere]">{title}</h1>
         </div>
         {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}

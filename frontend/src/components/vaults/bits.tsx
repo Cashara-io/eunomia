@@ -1,7 +1,8 @@
 "use client";
 
 // Small shared pieces of the Memory spaces page.
-import { ChevronDown } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, ChevronDown, X } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
 import type { Vault, VaultMember, VaultRole } from "@/lib/types";
 
@@ -19,12 +20,12 @@ export function ago(iso: string | null): string | null {
 
 export const sameEmail = (a: string | null, b: string | null) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
 
-/** Who is in a space, in one plain line: "Only you", "You and 2 others", "Private to you". */
+/** Who is in a space, in one plain line: "Not shared yet", "You and 2 others", "Private to you". */
 export function peopleLine(vault: Vault, members: VaultMember[] | null): string {
   if (vault.kind === "personal") return "Private to you";
   if (!members) return "Shared space";
   const others = members.length - 1;
-  if (others <= 0) return "Only you";
+  if (others <= 0) return "Not shared yet";
   return `You and ${others} ${others === 1 ? "other" : "others"}`;
 }
 
@@ -129,5 +130,29 @@ export function Disclosure({
         {open && children}
       </div>
     </section>
+  );
+}
+
+/** Who sent an invitation, in words: their email when known, else "Someone". */
+export const inviterWords = (invitedBy: string | null | undefined) => invitedBy || "Someone";
+
+/** After joining a space: says so, with the way in to what it holds. */
+export function JoinedNotice({ id, name, onDismiss }: { id: string; name: string; onDismiss?: () => void }) {
+  return (
+    <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2.5 text-[14px]" style={{ borderTop: "1px solid var(--border)" }}>
+      <DrawnCheck />
+      <span className="flex-1 min-w-[160px]">
+        You joined <span className="font-medium">{name}</span>.
+      </span>
+      <Link href={`/entities?vault=${encodeURIComponent(id)}`} className="btn btn-sm">
+        See its people &amp; topics
+        <ArrowRight {...ICON} aria-hidden />
+      </Link>
+      {onDismiss && (
+        <button type="button" className="btn btn-ghost btn-sm btn-icon" aria-label="Dismiss" onClick={onDismiss}>
+          <X {...ICON} aria-hidden />
+        </button>
+      )}
+    </div>
   );
 }

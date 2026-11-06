@@ -3,7 +3,7 @@
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Download, RefreshCw } from "lucide-react";
+import { Check, Download, RefreshCw } from "lucide-react";
 import { updateStatusQuery, useCheckForUpdate, useRequestUpdate } from "@/lib/queries/settings";
 import type { UpdateStatus } from "@/lib/types";
 import SyncMark from "@/components/bits/SyncMark";
@@ -142,7 +142,9 @@ export function UpdateSection() {
             ? `${status.latest_version} is available`
             : "You're on the latest release";
   const tone = busy || done ? "var(--accent)" : status.update_available ? "var(--warning)" : "var(--good)";
-  const progress = done ? 1 : phase === "restarting" ? 0.8 : phase === "applying" ? 0.5 : 0.15;
+  // The real step, from what the updater reports: it writes "Waiting for Eunomia to start" once the new images are up.
+  const restartingNow = phase === "restarting" || (phase === "applying" && /waiting for eunomia to start/i.test(status.progress ?? ""));
+  const step = done ? 3 : restartingNow ? 2 : phase === "applying" ? 1 : 0;
 
   return (
     <div className="flex flex-col gap-5">
@@ -162,8 +164,8 @@ export function UpdateSection() {
         <div className="p-5 flex flex-wrap items-center justify-between gap-4">
           <div className="min-w-0 flex flex-col gap-1">
             <span className="label">Running version</span>
-            <span className="text-[20px] font-mono font-medium tracking-[-0.01em]">{status.current_version}</span>
-            <span className="flex items-center gap-2 text-[12.5px]" style={{ color: "var(--ink-dim)" }}>
+            <span className="text-[20px] font-mono font-medium">{status.current_version}</span>
+            <span className="flex items-center gap-2 text-[13px]" style={{ color: "var(--ink-dim)" }}>
               <span className="dot" style={{ background: tone }} aria-hidden />
               <span role="status">{line}</span>
             </span>
@@ -186,28 +188,73 @@ export function UpdateSection() {
             </div>
           )}
         </div>
-        {(busy || done) && (
-          <div className="h-[3px]" style={{ background: "var(--surface-raised)" }} aria-hidden>
-            <div
-              className="h-full origin-left"
-              style={{
-                background: "var(--accent)",
-                transform: `scaleX(${progress})`,
-                transition: "transform 700ms var(--ease-out)",
-              }}
-            />
-          </div>
-        )}
+        {(busy || done) && <UpdateSteps current={step} detail={phase === "applying" ? (status.progress ?? null) : null} />}
       </div>
 
       {stale && !busy && (
-        <p className="text-[12.5px]" style={{ color: "var(--warning)" }}>
+        <p className="text-[13px]" style={{ color: "var(--warning)" }}>
           The updater hasn&apos;t reported for a while. Check that the <code className="font-mono">updater</code> container is
           running (<code className="font-mono">docker compose ps</code>).
         </p>
       )}
       {status.error && !busy && <ErrorLine>Last update attempt failed: {status.error}. Check the updater logs, then retry.</ErrorLine>}
       {error && <ErrorLine error={error} />}
+    </div>
+  );
+}
+
+const STEPS = ["Requested", "Downloading the new release", "Restarting Eunomia", "Reloading this page"] as const;
+
+/* Where the update is, step by step. Only the current step is "in progress"; earlier ones are done. */
+function UpdateSteps({ current, detail }: { current: number; detail: string | null }) {
+  return (
+    <ol className="px-5 pb-5 flex flex-col gap-2" aria-label="Update progress">
+      {STEPS.map((label, i) => {
+        const state = i < current ? "done" : i === current ? "now" : "later";
+        return (
+          <li key={label} className="flex items-start gap-2.5 text-[13px]" aria-current={state === "now" ? "step" : undefined}>
+            <span className="mt-[3px] shrink-0 w-3.5 h-3.5 flex items-center justify-center" aria-hidden>
+              {state === "done" ? (
+                <Check size={14} strokeWidth={2} style={{ color: "var(--good)" }} />
+              ) : (
+                <span className="dot" style={{ background: state === "now" ? "var(--accent)" : "var(--border-strong)" }} />
+              )}
+            </span>
+            <span className="flex flex-col gap-0.5 min-w-0">
+              <span style={{ color: state === "later" ? "var(--ink-faint)" : "var(--ink)", fontWeight: state === "now" ? 600 : 400 }}>
+                {label}
+                <span className="sr-only">{state === "done" ? " (done)" : state === "now" ? " (in progress)" : ""}</span>
+              </span>
+              {state === "now" && detail && (
+                <span className="text-[12px] break-words" style={{ color: "var(--ink-dim)" }}>
+                  {detail}
+                </span>
+              )}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+/* No API reports on the backup service yet, so this only explains what it does and where to read more. */
+export function BackupsNote() {
+  return (
+    <div className="flex flex-col gap-3 border-t pt-6" style={{ borderColor: "var(--border)" }}>
+      <PanelHead title="Backups">
+        Eunomia&apos;s backup service saves an encrypted copy of your data every night at 03:00, server time. Keep a copy of the
+        backup key somewhere off this machine: without it the backups can&apos;t be read.
+      </PanelHead>
+      <a
+        href="https://github.com/Cashara-io/eunomia/blob/main/INSTALLATION.md#backups"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-[13px] self-start"
+        style={{ color: "var(--accent-text)" }}
+      >
+        How backups and restores work
+      </a>
     </div>
   );
 }

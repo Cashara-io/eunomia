@@ -39,14 +39,14 @@
   --bauhaus-app-sidebar-line: rgba(250, 250, 247, 0.16);
   --bauhaus-app-sidebar-hover: #262624;
   /* type scale */
-  --bauhaus-app-title-size: 44px;
-  --bauhaus-app-title-tracking: -1.4px;
-  --bauhaus-app-heading-size: 34px;
-  --bauhaus-app-heading-tracking: -1px;
+  --bauhaus-app-title-size: 26px;
+  --bauhaus-app-title-tracking: -0.5px;
+  --bauhaus-app-heading-size: 24px;
+  --bauhaus-app-heading-tracking: -0.4px;
   /* layout */
   --bauhaus-app-sidebar-width: 232px;
-  --bauhaus-app-pad-y: 38px;
-  --bauhaus-app-pad-x: 48px;
+  --bauhaus-app-pad-y: 32px;
+  --bauhaus-app-pad-x: 40px;
   --bauhaus-app-radius: 4px;
   --bauhaus-app-focus: #3159b6;
 
@@ -172,12 +172,12 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* A page title: one per page. 44/600/1.1, -1.4px tracking (spec). Scales
-   down on narrow screens instead of overflowing. */
+/* A page title: one per page. 26/600, -0.5px: the content leads, not the
+   header. 22px on phones. */
 .page-title {
   font-family: var(--font-display), system-ui, sans-serif;
-  font-size: clamp(32px, 5vw + 12px, var(--bauhaus-app-title-size));
-  line-height: 1.1;
+  font-size: clamp(22px, 1vw + 18px, var(--bauhaus-app-title-size));
+  line-height: 1.2;
   font-weight: 600;
   letter-spacing: var(--bauhaus-app-title-tracking);
   color: var(--ink);
@@ -187,7 +187,7 @@ body {
 /* The heading of a connection guide or a framed task panel (34/600, -1px). */
 .connect-title {
   font-family: var(--font-display), system-ui, sans-serif;
-  font-size: clamp(24px, 3vw + 10px, var(--bauhaus-app-heading-size));
+  font-size: clamp(20px, 1vw + 16px, var(--bauhaus-app-heading-size));
   line-height: 1.15;
   font-weight: 600;
   letter-spacing: var(--bauhaus-app-heading-tracking);
@@ -196,7 +196,7 @@ body {
 
 /* The introduction sentence under a page title. */
 .page-intro {
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.5;
   color: var(--ink-dim);
   max-width: 72ch;
@@ -204,7 +204,7 @@ body {
 
 /* A section heading inside a page. */
 .section-title {
-  font-size: 17px;
+  font-size: 15px;
   line-height: 1.3;
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -215,7 +215,7 @@ body {
    a heading -- headings carry their own weight. */
 .eyebrow,
 .label {
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 1.35;
   color: var(--ink-dim);
 }
@@ -246,8 +246,8 @@ body {
 /* A framed task panel: the one thing to do on this screen (spec: ink edge). */
 .task-panel {
   background: var(--surface);
-  border: 1.5px solid var(--bauhaus-app-ink);
-  border-radius: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
 }
 
 /* Quiet information block on soft ground (details to copy, help asides). */
@@ -321,14 +321,14 @@ textarea::placeholder {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 40px;
-  padding: 0 16px;
+  min-height: 36px;
+  padding: 0 14px;
   border-radius: var(--radius-control);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.2;
   white-space: nowrap;
-  border: 1px solid var(--bauhaus-app-ink);
+  border: 1px solid var(--border-strong);
   background: var(--bauhaus-app-white);
   color: var(--bauhaus-app-ink);
   transition:
@@ -366,16 +366,16 @@ textarea::placeholder {
   color: #ffffff;
 }
 .btn-sm {
-  min-height: 32px;
-  padding: 0 12px;
+  min-height: 30px;
+  padding: 0 10px;
   font-size: 13px;
 }
 .btn-icon {
-  width: 40px;
+  width: 36px;
   padding: 0;
 }
 .btn-sm.btn-icon {
-  width: 32px;
+  width: 30px;
 }
 /* Practical touch targets on coarse pointers. */
 @media (pointer: coarse) {
@@ -415,7 +415,7 @@ textarea::placeholder {
   min-height: 32px;
   padding: 0 12px;
   border-radius: var(--radius-control);
-  border: 1px solid #8f8f87;
+  border: 1px solid var(--border);
   background: var(--surface);
   color: var(--ink);
   font-size: 13px;
@@ -436,13 +436,15 @@ button.pill:active {
 .pill[aria-pressed="false"] {
   color: var(--ink-dim);
 }
-/* Single choice (tabs, OS picker): blue fill, like the selected nav item. */
+/* Single choice (OS picker, segmented choices): ink edge on soft ground. Blue
+   stays for primary actions only; view switches use .tabs. */
 .pill[aria-selected="true"],
 .pill[aria-checked="true"],
 .pill[aria-current="page"] {
-  border-color: var(--bauhaus-app-blue);
-  background: var(--bauhaus-app-blue);
-  color: var(--bauhaus-app-cream);
+  border-color: var(--bauhaus-app-ink);
+  background: var(--bauhaus-app-soft);
+  color: var(--ink);
+  font-weight: 600;
 }
 
 .kbd {
@@ -487,10 +489,24 @@ button.pill:active {
 .nav-link .nav-icon {
   color: currentColor;
 }
+/* The current page: a lifted row with a 2px blue edge, not a filled block. */
 .nav-link[data-active] {
+  background: var(--bauhaus-app-sidebar-hover);
+  color: #ffffff;
+  font-weight: 500;
+  box-shadow: inset 2px 0 0 var(--bauhaus-app-blue);
+}
+.nav-badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
   background: var(--bauhaus-app-blue);
   color: #ffffff;
+  font-size: 11px;
   font-weight: 600;
+  line-height: 18px;
+  text-align: center;
 }
 .nav-link:focus-visible,
 .sidebar :focus-visible {
@@ -532,9 +548,46 @@ button.pill:active {
 .page-header {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding-bottom: 20px;
-  border-bottom: 2px solid var(--bauhaus-app-ink);
+  gap: 6px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Underline tabs for switching views (Connections / Memory map, Settings on
+   phones). Selected: ink text and a 2px ink underline; never a filled box. */
+.tabs {
+  display: flex;
+  gap: 20px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 1px;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-dim);
+  white-space: nowrap;
+  transition: color var(--dur-hover) ease, border-color var(--dur-hover) ease;
+}
+.tab:hover {
+  color: var(--ink);
+}
+.tab[aria-selected="true"],
+.tab[aria-current="page"] {
+  color: var(--ink);
+  border-bottom-color: var(--ink);
+}
+.tab:focus-visible {
+  outline: 2px solid var(--bauhaus-app-focus);
+  outline-offset: 2px;
 }
 
 /* Status in words with a small shape (StatusLabel). */

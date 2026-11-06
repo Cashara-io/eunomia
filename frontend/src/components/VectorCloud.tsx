@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import ErrorLine, { failure } from "./ErrorLine";
 import Scene3D from "./Scene3D";
 import MemoryRows, { MAX_COMPARE } from "./MemoryRows";
+import { pointKindLabel } from "@/lib/memoryKinds";
 import VectorInsights from "./VectorInsights";
 import { useEntityCloud } from "@/lib/queries/entities";
 import { useVaults } from "@/lib/queries/vaults";
@@ -16,7 +17,9 @@ const PANELS = [
   { id: "rows", label: "Memories" },
   { id: "insights", label: "Insights" },
 ] as const;
-const AXES: [string, string, string] = ["PC1", "PC2", "PC3"];
+// The axes and floor grid stay as a sense of space, unlabelled: "PC1" means nothing to most people.
+const AXES: [string, string, string] = ["", "", ""];
+export { pointKindLabel };
 
 export default function VectorCloud() {
   const vaultsQuery = useVaults();
@@ -135,7 +138,7 @@ export default function VectorCloud() {
             <div className="flex items-center gap-2 label">
               <span className="dot" style={{ background: selected.color }} aria-hidden />
               <span className="truncate">
-                {nameOf(selected.vault)} · {selected.kind}
+                {nameOf(selected.vault)} · {pointKindLabel(selected.kind)}
               </span>
               <button
                 type="button"
@@ -153,9 +156,9 @@ export default function VectorCloud() {
       {data && points.length > 0 && !error && (
         <aside className="ledger max-lg:shrink-0 lg:w-[340px] lg:shrink-0 lg:min-h-0 flex flex-col overflow-hidden" aria-label="Analysis">
           <div className="p-2 pb-0 shrink-0">
-            <div className="flex gap-2" role="tablist" aria-label="Analysis view">
+            <div className="tabs px-2" role="tablist" aria-label="Analysis view">
               {PANELS.map((t) => (
-                <button key={t.id} role="tab" aria-selected={tab === t.id} className="pill flex-1 justify-center" onClick={() => setTab(t.id)}>
+                <button key={t.id} role="tab" aria-selected={tab === t.id} className="tab" onClick={() => setTab(t.id)}>
                   {t.label}
                   {t.id === "rows" && selection.length > 0 && <span className="font-mono">{selection.length}</span>}
                 </button>

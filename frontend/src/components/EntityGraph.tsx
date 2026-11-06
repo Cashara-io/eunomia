@@ -2,25 +2,28 @@
 
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { Suspense, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
 import ConfirmButton from "@/components/ConfirmButton";
-import { ArrowLeft, ArrowRight, Eye, EyeOff, Pencil, Plus, Trash2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Pencil, Plus, Trash2, X } from "lucide-react";
 import GraphCanvas, { type CanvasInsets } from "./GraphCanvas";
 import AuthorTag from "./AuthorTag";
 import SyncMark from "./bits/SyncMark";
 import Tooltip, { TooltipGroup } from "./bits/Tooltip";
 import { cssVar, prefersReducedMotion } from "./bits/motion";
-import { Blobatar } from "@blobatar/react";
+import Monogram from "./graph/Monogram";
 import { useQueryClient } from "@tanstack/react-query";
 import type { BuiltInKind, EntityDetail, EntityGraph as EntityGraphData, EntityKind } from "@/lib/types";
 import { useMe } from "@/lib/queries/auth";
 import {
   entityDetailQuery,
+  findEntityVault,
   useAddMemory,
   useAddRelation,
   useCreateEntity as useCreateEntityMutation,
   useDeleteEntity,
   useDeleteMemory,
+  useEntityCounts,
   useEntityGraph,
   useUpdateEntity,
 } from "@/lib/queries/entities";
@@ -39,10 +42,17 @@ const KIND_LABEL: Record<BuiltInKind, string> = {
 };
 
 const ALL_KINDS: EntityKind[] = ["person", "organisation", "location", "repository", "file", "symbol"];
+// Code map's kinds: off by default on People & topics, behind one "Code" chip.
+const CODE_KINDS: EntityKind[] = ["repository", "file", "symbol"];
 
 // An agent's own kind ("db", "decision") has no token of its own: it gets a stable colour from its name
-// (or the one the person picked, see lib/kindColors.ts) and its name as written.
-const kindLabel = (kind: EntityKind) => KIND_LABEL[kind as BuiltInKind] ?? kind;
+// (or the one the person picked, see lib/kindColors.ts) and its name in sentence case ("project" -> "Project").
+const kindLabel = (kind: EntityKind) => {
+  const builtIn = KIND_LABEL[kind as BuiltInKind];
+  if (builtIn) return builtIn;
+  const words = kind.replace(/[_-]+/g, " ").trim();
+  return words.charAt(0).toUpperCase() + words.slice(1).toLowerCase();
+};
 
 // Compact age for a timestamp: "now", "4m", "3h", "2d", then a date.
 function age(iso?: string): string | null {
@@ -92,6 +102,30 @@ function readChromeHidden() {
   }
 }
 
+// The memory space last opened on People & topics ("" is Personal), so the page reopens where you were.
+const SPACE_KEY = "eunomia.graph.space";
+function readSpace(): string | null {
+  try {
+    return window.localStorage.getItem(SPACE_KEY);
+  } catch {
+    return null;
+  }
+}
+function storeSpace(id: string | undefined) {
+  try {
+    window.localStorage.setItem(SPACE_KEY, id ?? "");
+  } catch {}
+}
+
+/** `?id=<entity>` and `?vault=<space>` from the URL. Its own component so that only it waits on the URL (Suspense). */
+function UrlFocus({ onChange }: { onChange: (id: string | null, vault: string | null) => void }) {
+  const params = useSearchParams();
+  const id = params.get("id");
+  const vault = params.get("vault");
+  useEffect(() => onChange(id, vault), [id, vault]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
 export default function EntityGraph({
   kinds,
   header,
@@ -105,12 +139,37 @@ export default function EntityGraph({
   const colorOf = useKindColor();
   const shownKinds = kinds ?? ALL_KINDS;
   const queryClient = useQueryClient();
-  const [vaultId, setVaultId] = useState<string | undefined>(undefined);
-  const graphQuery = useEntityGraph({ kinds, vaultId });
-  const graph: EntityGraphData | null = graphQuery.data ?? null;
-  const error = graphQuery.error && !graph ? failure(graphQuery.error, "Could not load your people and topics.") : null;
   const myEmail = useMe().data?.email ?? null;
-  const myVaults = useVaults().data ?? [];
+  const vaultsQuery = useVaults();
+  const myVaults = vaultsQuery.data ?? [];
+  // The graph endpoint reads one space at a time (no "all my spaces"), so People & topics opens on
+  // the space last used here, else the newest shared space that has anything in it, else Personal.
+  // Code map (`kinds` given) opens on Personal as before.
+  const [vaultChoice, setVaultChoice] = useState<{ id: string | undefined } | null>(null);
+  const [storedSpace] = useState(() => (kinds || typeof window === "undefined" ? null : readSpace()));
+  const sharedVaults = [...myVaults.filter((v) => v.kind !== "personal")].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+  const pickDefault = !kinds && !vaultChoice;
+  const storedValid = storedSpace !== null && (storedSpace === "" || myVaults.some((v) => v.id === storedSpace));
+  const spaceCounts = useEntityCounts(
+    sharedVaults.map((v) => v.id),
+    pickDefault && vaultsQuery.isSuccess && !storedValid,
+  );
+  const vaultId: string | undefined = vaultChoice
+    ? vaultChoice.id
+    : !pickDefault
+      ? undefined
+      : storedValid
+        ? storedSpace || undefined
+        : sharedVaults.find((v) => (spaceCounts.counts.get(v.id) ?? 0) > 0)?.id;
+  const defaultReady = !pickDefault || storedValid || (vaultsQuery.isFetched && !spaceCounts.pending);
+  const graphQuery = useEntityGraph({ kinds, vaultId, enabled: defaultReady });
+  const graph: EntityGraphData | null = graphQuery.data ?? null;
+  const error =
+    graphQuery.error && !graph ? failure(graphQuery.error, "Could not load your people and topics.") : null;
+  function chooseVault(id: string | undefined) {
+    setVaultChoice({ id });
+    if (!kinds) storeSpace(id);
+  }
   const createEntityMutation = useCreateEntityMutation();
   const updateEntityMutation = useUpdateEntity();
   const deleteEntityMutation = useDeleteEntity();
@@ -119,9 +178,9 @@ export default function EntityGraph({
   const addRelationMutation = useAddRelation();
   const [selected, setSelected] = useState<EntityDetail | null>(null);
   // hidden rather than visible, so a custom kind that shows up later is on by default
-  const [hiddenKinds, setHiddenKinds] = useState<Set<EntityKind>>(new Set());
+  const [hiddenKinds, setHiddenKinds] = useState<Set<EntityKind>>(() => new Set(kinds ? [] : CODE_KINDS));
   const [showCreate, setShowCreate] = useState(false);
-  const [createForm, setCreateForm] = useState({ kind: shownKinds[0], name: "", aliases: "" });
+  const [createForm, setCreateForm] = useState<{ kind: EntityKind; name: string; aliases: string }>({ kind: shownKinds[0], name: "", aliases: "" });
   const [createError, setCreateError] = useState<Failure | null>(null);
   const [creating, setCreating] = useState(false);
 
@@ -154,20 +213,24 @@ export default function EntityGraph({
   const [insets, setInsets] = useState<CanvasInsets>({ top: 0, right: 0, bottom: 0, left: 0 });
   useEffect(() => {
     const el = chromeRef.current;
-    if (!el) return;
     const measure = () => {
       const md = window.matchMedia("(min-width: 768px)").matches;
-      setInsets({ top: el.offsetTop + el.offsetHeight, right: md ? 400 : 0, bottom: md ? 48 : 16, left: 0 });
+      // below md the controls sit above the canvas in the page flow, so they cover none of it
+      const top = md && el ? el.offsetTop + el.offsetHeight : 0;
+      setInsets((prev) => {
+        const next = { top, right: md ? 400 : 0, bottom: md ? 48 : 64, left: 0 };
+        return prev.top === next.top && prev.right === next.right && prev.bottom === next.bottom ? prev : next;
+      });
     };
     measure();
     const ro = new ResizeObserver(measure);
-    ro.observe(el);
+    if (el) ro.observe(el);
     window.addEventListener("resize", measure);
     return () => {
       ro.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, [graph]);
+  }, [graph, chromeHidden]);
 
   function toggleKind(kind: EntityKind) {
     setHiddenKinds((prev) => {
@@ -176,6 +239,23 @@ export default function EntityGraph({
       else next.add(kind);
       return next;
     });
+  }
+  // the one "Code" chip: all three code kinds on or off together
+  function toggleCode(show: boolean) {
+    setHiddenKinds((prev) => {
+      const next = new Set(prev);
+      CODE_KINDS.forEach((k) => (show ? next.delete(k) : next.add(k)));
+      return next;
+    });
+  }
+  function reveal(kind: EntityKind) {
+    if (!kinds && CODE_KINDS.includes(kind)) toggleCode(true);
+    else
+      setHiddenKinds((prev) => {
+        const next = new Set(prev);
+        next.delete(kind);
+        return next;
+      });
   }
 
   useEffect(() => {
@@ -202,6 +282,49 @@ export default function EntityGraph({
       setSelected(null);
     }
   }
+
+  // Deep links: `?id=<entity>` opens its inspector in its own space, `?vault=<space>` picks a space.
+  // The open entity is written back to the URL, so an inspector view can be shared or bookmarked.
+  const urlIdRef = useRef<string | null>(null); // the id the URL and the inspector last agreed on
+  const urlVaultRef = useRef<string | null>(null);
+  const focusSeq = useRef(0);
+  const [pendingFocus, setPendingFocus] = useState<{ id: string | null; vault: string | null } | null>(null);
+  const toGraphVault = (id: string | null | undefined): string | undefined => {
+    if (!id) return undefined;
+    return myVaults.find((v) => v.id === id)?.kind === "personal" ? undefined : id;
+  };
+  useEffect(() => {
+    if (!pendingFocus || !vaultsQuery.isFetched) return;
+    const { id, vault } = pendingFocus;
+    // No need to clear pendingFocus: the refs below make each URL value act once. UrlFocus remounts when the page swaps loading/empty/graph layouts: act on each URL value once
+    const seq = ++focusSeq.current; // a newer link wins over one still resolving
+    void (async () => {
+      await Promise.resolve(); // state changes happen after the effect, not inside it
+      if (seq !== focusSeq.current) return;
+      if (vault !== urlVaultRef.current) {
+        urlVaultRef.current = vault;
+        if (vault && myVaults.some((v) => v.id === vault)) chooseVault(toGraphVault(vault));
+      }
+      if (!id || id === urlIdRef.current) return;
+      urlIdRef.current = id;
+      const home = vault ?? (await findEntityVault(queryClient, id));
+      if (seq !== focusSeq.current) return;
+      if (home && myVaults.some((v) => v.id === home)) chooseVault(toGraphVault(home));
+      const detail = await selectNode(id);
+      if (detail && seq === focusSeq.current) reveal(detail.kind);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingFocus, vaultsQuery.isFetched]);
+  useEffect(() => {
+    const id = selected?.id ?? null;
+    if (id === urlIdRef.current) return;
+    urlIdRef.current = id;
+    const url = new URL(window.location.href);
+    if (id) url.searchParams.set("id", id);
+    else url.searchParams.delete("id");
+    url.searchParams.delete("vault");
+    window.history.replaceState(null, "", url.pathname + url.search);
+  }, [selected?.id]);
 
   async function createEntity(e: React.FormEvent) {
     e.preventDefault();
@@ -323,38 +446,34 @@ export default function EntityGraph({
     }
   }
 
-  // Everything floats over one full-bleed canvas: header and toolbar top left
-  // at the same page inset as every other route (main's px-4 py-6, sm px-8,
-  // lg px-12 py-38), inspector top right, zoom bottom right (inside GraphCanvas).
-  const frame = (toolbar: ReactNode, content: ReactNode, inspector?: ReactNode, aside?: ReactNode) => (
-    <div className="absolute inset-0 overflow-hidden">
-      <div className="absolute inset-0">{content}</div>
-      <div
-        ref={chromeRef}
-        // the inspector column is always kept clear, so opening it never reflows the toolbar or moves the camera
-        className="absolute left-0 top-0 right-0 md:right-auto px-4 pt-6 sm:px-8 lg:px-12 lg:pt-[38px] pb-3 flex flex-col gap-3 items-start pointer-events-none select-none w-full md:w-[calc(100%-25rem)] [&>*]:pointer-events-auto"
-        style={chromeHidden ? undefined : { background: "linear-gradient(var(--canvas) 85%, transparent)" }}
-      >
-        <button
-          type="button"
-          className={chromeHidden ? "btn btn-sm" : "btn btn-sm absolute right-4 sm:right-8 top-6 lg:top-[38px]"}
-          aria-pressed={chromeHidden}
-          onClick={toggleChrome}
-        >
-          {chromeHidden ? <Eye size={16} strokeWidth={1.75} aria-hidden /> : <EyeOff size={16} strokeWidth={1.75} aria-hidden />}
-          {chromeHidden ? "Show controls" : "Hide controls"}
-        </button>
-        {!chromeHidden && (
-          <>
+  // Desktop: everything floats over one full-bleed canvas. Header and toolbar top left at the same
+  // page inset as every other route (main's px-4 py-6, sm px-8, lg px-12 py-38), inspector top
+  // right, zoom and "Hide controls" bottom right (inside GraphCanvas). Below md the header and
+  // toolbar sit in the page flow above the canvas instead, so nothing covers the title or the graph.
+  // `alwaysShow`: states with no canvas (loading, error, empty) have nowhere to put "Show controls".
+  const frame = (toolbar: ReactNode, content: ReactNode, inspector?: ReactNode, aside?: ReactNode, alwaysShow = false) => {
+    const showChrome = alwaysShow || !chromeHidden;
+    return (
+      <div className="absolute inset-0 overflow-hidden flex flex-col md:block">
+        <Suspense fallback={null}>
+          <UrlFocus onChange={(id, vault) => setPendingFocus({ id, vault })} />
+        </Suspense>
+        {showChrome && (
+          <div
+            ref={chromeRef}
+            // the inspector column is always kept clear, so opening it never reflows the toolbar or moves the camera
+            className="relative shrink-0 md:absolute md:left-0 md:top-0 md:z-10 px-4 pt-6 sm:px-8 lg:px-12 lg:pt-[38px] pb-3 flex flex-col gap-3 items-start w-full md:w-[calc(100%-25rem)] md:pointer-events-none md:select-none md:[&>*]:pointer-events-auto md:[background:linear-gradient(var(--canvas)_85%,transparent)]"
+          >
             {header}
             {toolbar}
             {aside}
-          </>
+          </div>
         )}
+        <div className="relative flex-1 min-h-0 md:absolute md:inset-0">{content}</div>
+        {inspector}
       </div>
-      {inspector}
-    </div>
-  );
+    );
+  };
 
   if (error) {
     return frame(
@@ -366,7 +485,10 @@ export default function EntityGraph({
             Try again
           </button>
         </div>
-      </div>
+      </div>,
+      undefined,
+      undefined,
+      true
     );
   }
 
@@ -389,7 +511,10 @@ export default function EntityGraph({
             <span key={`${x}${y}`} className="skeleton absolute w-3 h-3 rounded-full" style={{ left: `${x}%`, top: `${y}%`, borderRadius: 999 }} />
           ))}
         </div>
-      </div>
+      </div>,
+      undefined,
+      undefined,
+      true
     );
   }
 
@@ -400,6 +525,12 @@ export default function EntityGraph({
   const visibleKinds = new Set(filterKinds.filter((k) => !hiddenKinds.has(k)));
   const counts = new Map<EntityKind, number>();
   graph.nodes.forEach((n) => counts.set(n.kind, (counts.get(n.kind) ?? 0) + 1));
+  // People & topics folds Code map's kinds into one "Code" chip, shown only when there is code to show
+  const groupCode = !kinds;
+  const codeCount = CODE_KINDS.reduce((sum, k) => sum + (counts.get(k) ?? 0), 0);
+  const codeShown = CODE_KINDS.some((k) => visibleKinds.has(k));
+  const chipKinds = groupCode ? filterKinds.filter((k) => !CODE_KINDS.includes(k)) : filterKinds;
+  const createKinds = groupCode ? filterKinds.filter((k) => !CODE_KINDS.includes(k)) : filterKinds;
   const nameOf = (id: string) => graph.nodes.find((n) => n.id === id)?.name ?? id;
 
   const createModal = showCreate && (
@@ -434,7 +565,7 @@ export default function EntityGraph({
             className="h-10 text-[14px] w-full"
             value={createForm.kind}
             onChange={(v) => setCreateForm((f) => ({ ...f, kind: v as EntityKind }))}
-            options={filterKinds.map((k) => ({ value: k, label: kindLabel(k) }))}
+            options={createKinds.map((k) => ({ value: k, label: kindLabel(k) }))}
           />
         </div>
         <label className="text-[14px] font-medium flex flex-col gap-1.5">
@@ -471,10 +602,10 @@ export default function EntityGraph({
 
   const vaultSwitcher = myVaults.length > 1 && (
     <Select
-      className="h-10 text-[14px] w-44"
+      className="h-10 text-[14px] w-36 sm:w-44 shrink-0"
       value={vaultId ?? ""}
       onChange={(v) => {
-        setVaultId(v || undefined);
+        chooseVault(v || undefined);
         setSelected(null);
       }}
       aria-label="Memory space"
@@ -482,66 +613,70 @@ export default function EntityGraph({
     />
   );
 
+  const chip = (key: string, label: string, color: string, count: number, active: boolean, onClick: () => void) => (
+    <button key={key} type="button" className="pill shrink-0" aria-pressed={active} onClick={onClick}>
+      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color, opacity: active ? 1 : 0.35 }} aria-hidden />
+      {label}
+      <span className="font-mono" style={{ color: "var(--ink-dim)" }}>
+        {count}
+      </span>
+      <span className="sr-only">{active ? "(shown)" : "(hidden)"}</span>
+    </button>
+  );
+
+  // Two rows at most: space, find and add; then the kind chips (one scrolling line on phones).
   const toolbar = (
-    <div className="flex flex-wrap items-center gap-2 max-w-full">
-      {vaultSwitcher}
-      <div className="flex flex-wrap gap-2 items-center" role="group" aria-label="Show kinds">
-        {filterKinds.map((kind) => {
-          const active = visibleKinds.has(kind);
-          return (
-            <button key={kind} type="button" className="pill shrink-0" aria-pressed={active} onClick={() => toggleKind(kind)}>
-              <span
-                className="w-2 h-2 rounded-full shrink-0"
-                style={{ background: colorOf(kind), opacity: active ? 1 : 0.35 }}
-                aria-hidden
-              />
-              {kindLabel(kind)}
-              <span className="font-mono" style={{ color: "var(--ink-dim)" }}>
-                {counts.get(kind) ?? 0}
-              </span>
-              <span className="sr-only">{active ? "(shown)" : "(hidden)"}</span>
-            </button>
-          );
-        })}
-      </div>
-      {graph.nodes.length > 0 && (
-        <form
-          className="shrink-0"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const input = e.currentTarget.elements.namedItem("find") as HTMLInputElement;
-            const q = input.value.trim().toLowerCase();
-            const hit = graph.nodes.find((n) => n.name.toLowerCase() === q) ?? graph.nodes.find((n) => n.name.toLowerCase().includes(q));
-            if (q && hit) {
-              setHiddenKinds((prev) => {
-                const next = new Set(prev);
-                next.delete(hit.kind);
-                return next;
-              });
-              selectNode(hit.id);
-              input.value = "";
-            }
-          }}
+    <div className="flex flex-col gap-2 w-full min-w-0">
+      <div className="flex items-center gap-2 w-full min-w-0">
+        {vaultSwitcher}
+        {graph.nodes.length > 0 && (
+          <form
+            className="flex-1 min-w-0 md:flex-none"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const input = e.currentTarget.elements.namedItem("find") as HTMLInputElement;
+              const q = input.value.trim().toLowerCase();
+              const hit = graph.nodes.find((n) => n.name.toLowerCase() === q) ?? graph.nodes.find((n) => n.name.toLowerCase().includes(q));
+              if (q && hit) {
+                reveal(hit.kind);
+                selectNode(hit.id);
+                input.value = "";
+              }
+            }}
+          >
+            <input
+              name="find"
+              list="entity-names"
+              className="field h-10 w-full md:w-56 px-3 text-[14px]"
+              placeholder="Find a person or topic…"
+              aria-label="Find a person or topic"
+              autoComplete="off"
+            />
+            <datalist id="entity-names">
+              {graph.nodes.map((n) => (
+                <option key={n.id} value={n.name} />
+              ))}
+            </datalist>
+          </form>
+        )}
+        <button
+          type="button"
+          className="btn btn-primary shrink-0 max-sm:ml-auto"
+          aria-label="Add person or topic"
+          onClick={() => setShowCreate(true)}
         >
-          <input
-            name="find"
-            list="entity-names"
-            className="field h-10 w-52 px-3 text-[14px]"
-            placeholder="Find a person or topic…"
-            aria-label="Find a person or topic"
-            autoComplete="off"
-          />
-          <datalist id="entity-names">
-            {graph.nodes.map((n) => (
-              <option key={n.id} value={n.name} />
-            ))}
-          </datalist>
-        </form>
-      )}
-      <button type="button" className="btn btn-primary shrink-0" onClick={() => setShowCreate(true)}>
-        <Plus size={18} strokeWidth={1.75} aria-hidden />
-        Add person or topic
-      </button>
+          <Plus size={18} strokeWidth={1.75} aria-hidden />
+          <span className="max-sm:sr-only">Add person or topic</span>
+        </button>
+      </div>
+      <div
+        className="flex gap-2 items-center w-full max-md:overflow-x-auto max-md:[scrollbar-width:none] md:flex-wrap"
+        role="group"
+        aria-label="Show kinds"
+      >
+        {chipKinds.map((kind) => chip(kind, kindLabel(kind), colorOf(kind), counts.get(kind) ?? 0, visibleKinds.has(kind), () => toggleKind(kind)))}
+        {groupCode && codeCount > 0 && chip("code", "Code", colorOf("repository"), codeCount, codeShown, () => toggleCode(!codeShown))}
+      </div>
     </div>
   );
 
@@ -557,18 +692,16 @@ export default function EntityGraph({
                 {guide}
               </div>
             ) : (
-              <div className="soft-panel flex flex-col items-center gap-3 text-center max-w-sm px-6 py-5">
-                <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
-                  No people or topics yet. They appear as your connected sources sync and your AI apps save memories, or you can add one
-                  yourself.
-                </p>
-                <button type="button" className="btn btn-primary" onClick={() => setShowCreate(true)}>
-                  <Plus size={18} strokeWidth={1.75} aria-hidden />
-                  Add person or topic
-                </button>
-              </div>
+              <p className="text-[14px] text-center max-w-sm" style={{ color: "var(--ink-dim)" }}>
+                {vaultId
+                  ? "Nothing in this memory space yet. People and topics appear here as your team's AI apps save memories, or you can add one yourself."
+                  : "No people or topics yet. They appear as your connected sources sync and your AI apps save memories, or you can add one yourself."}
+              </p>
             )}
-          </div>
+          </div>,
+          undefined,
+          undefined,
+          true
         )}
         {createModal}
       </>
@@ -587,7 +720,7 @@ export default function EntityGraph({
     >
       <div className="flex items-start justify-between gap-2 p-5 pb-3">
         <div className="flex items-center gap-3 min-w-0">
-          {selected.kind === "person" && <Blobatar name={selected.name || selected.id} animate="hover" size={36} background="circle" />}
+          {selected.kind === "person" && <Monogram name={selected.name || selected.id} size={36} color={colorOf("person")} />}
           <div className="min-w-0">
             <span className="caps block" style={{ color: "var(--accent-text)" }}>
               Selected {kindLabel(selected.kind).toLowerCase()}
@@ -842,6 +975,7 @@ export default function EntityGraph({
             onSelect={selectNode}
             myEmail={myEmail}
             ariaLabel="Entity relationship graph"
+            chrome={{ hidden: chromeHidden, toggle: toggleChrome }}
           />
         </>,
         inspector,

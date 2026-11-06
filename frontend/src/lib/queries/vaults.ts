@@ -7,8 +7,10 @@ import {
   deleteVault,
   inviteMember,
   leaveVault,
+  listEntities,
   listInvitations,
   listMembers,
+  listVaultPendingInvitations,
   listVaults,
   mergeVaults,
   removeMember,
@@ -26,7 +28,14 @@ export const vaultKeys = {
   list: () => [...vaultKeys.all, "list"] as const,
   members: (id: string) => [...vaultKeys.all, "members", id] as const,
   invitations: () => [...vaultKeys.all, "invitations"] as const,
+  pending: (id: string) => [...vaultKeys.all, "pending", id] as const,
+  counts: (id: string) => [...vaultKeys.all, "counts", id] as const,
 };
+
+/** An invitation to the caller. `invited_by` is the space's owner when it has exactly one, else absent. */
+export type MyInvitation = VaultInvitation & { invited_by?: string | null };
+/** An invitation into a space that the invitee hasn't answered yet, as its owners see it. */
+export type PendingInvite = { email: string; role: VaultRole; created_at: string | null };
 
 export const useVaults = () =>
   useQuery({
@@ -47,8 +56,33 @@ export const useVaultMembers = (id: string, enabled = true) =>
 export const useInvitations = () =>
   useQuery({
     queryKey: vaultKeys.invitations(),
-    queryFn: async () => (await call(listInvitations())).results as VaultInvitation[],
+    queryFn: async () => (await call(listInvitations())).results as MyInvitation[],
     refetchInterval: livePoll,
+  });
+
+/** How many invitations are waiting for the caller (0 while loading or on error), for a badge. */
+export const usePendingInvitationCount = () => useInvitations().data?.length ?? 0;
+
+/** Owners only: invitations into `id` nobody has answered yet. Withdraw one with `useRemoveMember`. */
+export const usePendingInvites = (id: string, enabled = true) =>
+  useQuery({
+    queryKey: vaultKeys.pending(id),
+    queryFn: async () => (await call(listVaultPendingInvitations({ path: { vault_id: id } }))).results as PendingInvite[],
+    enabled,
+  });
+
+/** People and topics in a space, from the entity list's totals (no rows fetched). */
+export const useVaultCounts = (id: string, enabled = true) =>
+  useQuery({
+    queryKey: vaultKeys.counts(id),
+    queryFn: async () => {
+      const [all, people] = await Promise.all([
+        call(listEntities({ query: { vault_id: id, limit: 0 } })),
+        call(listEntities({ query: { vault_id: id, kind: "person", limit: 0 } })),
+      ]);
+      return { people: people.total, topics: Math.max(0, all.total - people.total) };
+    },
+    enabled,
   });
 
 // Vault changes reshape what the entity graph and cloud can show (clone, merge, delete, accept), so those refresh too.

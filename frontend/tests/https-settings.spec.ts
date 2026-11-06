@@ -25,15 +25,18 @@ async function signInAsAdmin(page: Page) {
   await page.waitForURL((url) => url.pathname === "/");
 }
 
-test("a member who is not an admin is told only an admin can change it", async ({ page }) => {
+test("a member who is not an admin doesn't see the HTTPS settings at all", async ({ page }) => {
   fs.rmSync(requestFile(), { force: true });
   fs.rmSync(statusFile(), { force: true });
   await registerAndOnboard(page, uniqueEmail("https-member"));
   await page.goto("/settings?tab=https");
-  await page.getByLabel("Domain").fill("eunomia.example.com");
-  await page.getByLabel("Email for Let's Encrypt").fill("me@example.com");
-  await page.getByRole("button", { name: "Enable HTTPS" }).click();
-  await expect(page.getByText("Only an instance admin can change this server's HTTPS settings.")).toBeVisible();
+  // the Server group is hidden from members, so the link falls back to General
+  await expect(page.getByRole("tab", { name: "General" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tab", { name: "HTTPS" })).toHaveCount(0);
+  await expect(page.getByLabel("Domain")).toHaveCount(0);
+  // the server refuses it as well
+  const res = await page.request.post("/api/https", { data: { enabled: true, domain: "eunomia.example.com", email: "me@example.com" } });
+  expect(res.status()).toBe(403);
   expect(fs.existsSync(requestFile())).toBe(false);
 });
 

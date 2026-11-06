@@ -101,7 +101,13 @@ function Palette({ onClose }: { onClose: () => void }) {
     label: e.name,
     sub: KIND_WORD[e.kind] ?? e.kind,
     icon: ENTITY_ICON[e.kind] ?? User,
-    go: () => router.push(CODE_KINDS.has(e.kind) ? "/code" : "/entities"),
+    // opens the entity's inspector, in its own space (see EntityGraph's deep links)
+    go: () => {
+      const q = new URLSearchParams({ id: e.id });
+      const vault = (e as { vault?: string }).vault; // entities_search returns each hit's space
+      if (vault) q.set("vault", vault);
+      router.push(`${CODE_KINDS.has(e.kind) ? "/code" : "/entities"}?${q}`);
+    },
   }));
   const recordItems: Item[] = (searching ? recordHits : []).map((h) => ({
     key: `record:${h.id}`,
@@ -209,7 +215,7 @@ function Palette({ onClose }: { onClose: () => void }) {
                         <span className="flex-1 min-w-0 flex flex-col">
                           <span className="truncate">{item.label}</span>
                           {item.sub && (
-                            <span className="text-[12.5px] truncate" style={{ color: "var(--ink-dim)" }}>
+                            <span className="text-[12px] truncate" style={{ color: "var(--ink-dim)" }}>
                               {item.sub}
                             </span>
                           )}

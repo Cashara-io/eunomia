@@ -22,8 +22,7 @@ export async function registerAndOnboard(page: Page, email: string, password = "
   await page.getByRole("button", { name: "Create account" }).click();
 
   await page.waitForURL(/\/onboarding/);
-  await page.getByRole("button", { name: "Let's go" }).click();
-  await page.getByRole("button", { name: "Skip", exact: true }).click(); // Connect your AI
+  await page.getByRole("button", { name: "Skip", exact: true }).click(); // Connect your AI app
 
   // The OpenAI-key step only appears when no key is configured server-side.
   const skipFinish = page.getByRole("button", { name: "Skip & finish" });
@@ -32,4 +31,14 @@ export async function registerAndOnboard(page: Page, email: string, password = "
   }
 
   await page.waitForURL((url) => url.pathname === "/");
+}
+
+/** Shows the admin-only Settings groups (Workspace, Server) to this page's user by marking
+ * `/api/auth/me` as an admin. UI only: the server still checks every admin action itself. */
+export async function showAdminSettings(page: Page) {
+  await page.route("**/api/auth/me", async (route) => {
+    const res = await route.fetch();
+    if (!res.ok()) return route.fulfill({ response: res });
+    route.fulfill({ response: res, json: { ...(await res.json()), is_admin: true } });
+  });
 }

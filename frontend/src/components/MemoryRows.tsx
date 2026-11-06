@@ -1,5 +1,6 @@
 "use client";
 
+import { pointKindLabel } from "@/lib/memoryKinds";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import ErrorLine, { failure } from "./ErrorLine";
@@ -152,14 +153,14 @@ export default function MemoryRows({ points, vaultIds, nameOf, selection, focusI
                 {on ? num : ""}
               </span>
               <span className="min-w-0 flex-1 flex flex-col gap-0.5">
-                <span className="text-[13.5px] leading-snug line-clamp-2" style={{ color: "var(--ink)" }}>
+                <span className="text-[14px] leading-snug line-clamp-2" style={{ color: "var(--ink)" }}>
                   {p.label}
                 </span>
                 <span className="label flex items-center gap-1.5 min-w-0">
                   <span className="dot shrink-0" style={{ background: p.color }} aria-hidden />
                   <span className="truncate">
                     {vaultIds.length > 1 ? `${nameOf(p.vault)} · ` : ""}
-                    {p.kind}
+                    {pointKindLabel(p.kind)}
                   </span>
                 </span>
               </span>

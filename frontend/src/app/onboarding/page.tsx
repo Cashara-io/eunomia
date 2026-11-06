@@ -8,13 +8,13 @@ import { nextPath } from "@/lib/nextPath";
 import { useMe } from "@/lib/queries/auth";
 import { useCompleteOnboarding, useSettings, useUpdateSettings } from "@/lib/queries/settings";
 import EunomiaMark from "@/components/EunomiaMark";
-import BlurWords from "@/components/bits/BlurWords";
 import { spark } from "@/components/bits/Spark";
 import { InputModeTracker } from "@/components/bits/motion";
 import ConnectAgents from "@/components/ConnectAgents";
-import ResolveMark from "./ResolveMark";
+import AppChoices from "@/components/connect/AppChoices";
+import type { AppId } from "@/components/connect/apps";
 
-const STEP_LABELS = ["Welcome", "Connect your AI", "OpenAI key"];
+const STEP_LABELS = ["Connect your AI app", "OpenAI key"];
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -30,8 +30,6 @@ export default function OnboardingPage() {
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Failure | null>(null);
-  // The welcome moment plays once; coming Back shows it at rest.
-  const [welcomed, setWelcomed] = useState(false);
   // Skip turns into Continue once a token was minted on the Connect step.
   const [connected, setConnected] = useState(false);
 
@@ -44,7 +42,7 @@ export default function OnboardingPage() {
   // The OpenAI step is pointless if a key is already configured
   // server-wide (env var) or was already set earlier by this user.
   const skipOpenAiStep = Boolean(appSettings?.openai_api_key_set);
-  const steps = skipOpenAiStep ? STEP_LABELS.slice(0, 2) : STEP_LABELS;
+  const steps = skipOpenAiStep ? STEP_LABELS.slice(0, 1) : STEP_LABELS;
 
   /** `from` is the button a pointer click started this from; it sparks on success. Navigation is never delayed. */
   async function finish(from?: Element | null) {
@@ -68,6 +66,17 @@ export default function OnboardingPage() {
       setError(failure(err, "Could not save the key. Check the URL and key, or skip for now."));
       setBusy(false);
     }
+  }
+
+  /** Choosing an app finishes setup and opens that app's guide, the same one Home links to. */
+  async function pickApp(id: AppId) {
+    setBusy(true);
+    try {
+      await completeOnboarding.mutateAsync();
+    } catch {
+      // The guide is reachable either way; setup can be finished from there.
+    }
+    router.replace(`/connect/${id}`);
   }
 
   async function skip(from?: Element | null) {
@@ -117,6 +126,7 @@ export default function OnboardingPage() {
             </div>
           ) : (
             <>
+              {steps.length > 1 && (
               <ol className="flex gap-2 mb-7" aria-label="Setup progress">
                 {steps.map((label, i) => (
                   <li key={label} className="flex-1" aria-current={i === step ? "step" : undefined}>
@@ -126,53 +136,33 @@ export default function OnboardingPage() {
                     <span className="mt-2 flex items-center gap-1.5 whitespace-nowrap text-[13px]" style={{ color: i === step ? "var(--ink)" : "var(--ink-dim)", fontWeight: i === step ? 600 : 400 }}>
                       <span className="font-mono">{i + 1}</span>
                       {label}
-                      {i === 2 && <span className="hidden sm:inline" style={{ color: "var(--ink-dim)" }}>(optional)</span>}
+                      {i === 1 && <span className="hidden sm:inline" style={{ color: "var(--ink-dim)" }}>(optional)</span>}
                     </span>
                   </li>
                 ))}
               </ol>
-
-              {step === 0 && (
-                <div className="flex flex-col gap-4">
-                  <ResolveMark size={36} still={welcomed} />
-                  {welcomed ? <h1 className="connect-title">Welcome to Eunomia</h1> : <BlurWords text="Welcome to Eunomia" as="h1" className="connect-title" />}
-                  <p className="text-[16px] leading-[1.6]" style={{ color: "var(--ink)" }}>
-                    You&apos;re signed in as{" "}
-                    <span className="font-medium" style={{ color: "var(--ink)" }}>
-                      {me.email}
-                    </span>
-                    . Next, connect the AI app you already use{skipOpenAiStep ? "" : ", then, if you like, add an OpenAI key"}. It
-                    can all wait: Home keeps the step-by-step guides, and Connected sources adds your other information any time.
-                  </p>
-                  <button onClick={() => setStep(1)} className="btn btn-primary min-h-11 self-start mt-2 px-5">
-                    Let&apos;s go
-                  </button>
-                </div>
               )}
 
               {/* Hidden, not unmounted, so a minted token survives Back. */}
-              <div hidden={step !== 1} className="flex flex-col gap-4">
-                <h1 className="connect-title">Connect your AI</h1>
-                <p className="text-[16px] leading-[1.6]" style={{ color: "var(--ink-dim)" }}>
-                  Choose the AI app you use and follow its steps. Once it is connected, it can look up and save memories in
-                  Eunomia on its own. There is nothing else to install.
-                </p>
-                <ConnectAgents onToken={() => setConnected(true)} />
-                <div className="flex items-center gap-2 mt-2">
-                  <button
-                    onClick={() => {
-                      setWelcomed(true);
-                      setStep(0);
-                    }}
-                    disabled={busy}
-                    className="btn btn-ghost"
-                  >
-                    <ArrowLeft size={14} strokeWidth={1.75} aria-hidden />
-                    Back
-                  </button>
+              <div hidden={step !== 0} className="flex flex-col gap-5">
+                <div className="flex flex-col gap-2">
+                  <h1 className="connect-title">Connect your AI app</h1>
+                  <p className="text-[14px] leading-relaxed" style={{ color: "var(--ink-dim)" }}>
+                    You&apos;re signed in as <span className="font-medium" style={{ color: "var(--ink)" }}>{me.email}</span>. Choose the app you use and
+                    we&apos;ll show its steps. You can also do this later from Home.
+                  </p>
+                </div>
+                <AppChoices onPick={pickApp} disabled={busy} />
+                <details className="border-t pt-3">
+                  <summary className="cursor-pointer text-[14px] font-semibold min-h-11 flex items-center">Advanced: use an API token</summary>
+                  <div className="pt-3">
+                    <ConnectAgents onToken={() => setConnected(true)} />
+                  </div>
+                </details>
+                <div className="flex items-center gap-2">
                   <div className="flex-1" />
                   <button
-                    onClick={(e) => (skipOpenAiStep ? skip(e.detail > 0 ? e.currentTarget : null) : setStep(2))}
+                    onClick={(e) => (skipOpenAiStep ? skip(e.detail > 0 ? e.currentTarget : null) : setStep(1))}
                     disabled={busy}
                     aria-busy={busy}
                     className={`btn ${connected ? "btn-primary" : ""}`}
@@ -183,7 +173,7 @@ export default function OnboardingPage() {
                 </div>
               </div>
 
-              {step === 2 && !skipOpenAiStep && (
+              {step === 1 && !skipOpenAiStep && (
                 <div className="flex flex-col gap-4">
                   <h1 className="connect-title">Add an OpenAI key</h1>
                   <p className="text-[16px] leading-[1.6]" style={{ color: "var(--ink-dim)" }}>
@@ -224,9 +214,7 @@ export default function OnboardingPage() {
                   {error && <ErrorLine error={error} />}
 
                   <div className="flex items-center gap-2 mt-2">
-                    <button
-                      onClick={() => setStep(1)}
-                      disabled={busy} className="btn btn-ghost">
+                    <button onClick={() => setStep(0)} disabled={busy} className="btn btn-ghost">
                       <ArrowLeft size={14} strokeWidth={1.75} aria-hidden />
                       Back
                     </button>

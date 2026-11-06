@@ -24,6 +24,7 @@ import { openCommandPalette } from "./CommandPalette";
 import { useMe, useLogout } from "@/lib/queries/auth";
 import { useSources } from "@/lib/queries/sources";
 import { useUpdateStatus } from "@/lib/queries/settings";
+import { useInvitations } from "@/lib/queries/vaults";
 import { isLiveSource, sourceHealth, sourceLabel } from "@/lib/sourceState";
 
 // Visible labels follow the design spec; the routes stay as they were.
@@ -44,8 +45,8 @@ export const ADVANCED_NAV = [
 ];
 
 function isActive(pathname: string, href: string) {
-  // The connection guides (/connect/...) belong to Home.
-  return href === "/" ? pathname === "/" || pathname.startsWith("/connect") : pathname === href || pathname.startsWith(`${href}/`);
+  // The connection guides (/connect/...) belong to Home; /connectors is its own page.
+  return href === "/" ? pathname === "/" || pathname === "/connect" || pathname.startsWith("/connect/") : pathname === href || pathname.startsWith(`${href}/`);
 }
 
 function NavLink({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {
@@ -53,7 +54,7 @@ function NavLink({ href, active, children }: { href: string; active: boolean; ch
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
-      className="nav-link flex items-center gap-3 min-h-10 px-3 text-[14px]"
+      className="nav-link flex items-center gap-3 min-h-9 px-3 text-[14px]"
       data-active={active || undefined}
     >
       {children}
@@ -73,12 +74,12 @@ function Brand() {
         href="https://www.buildpaperless.com.au/eunomia"
         target="_blank"
         rel="noreferrer"
-        className="flex items-center gap-1.5 self-start rounded-[3px] text-[11px] opacity-60 hover:opacity-100 transition-opacity"
+        className="flex items-center gap-1.5 self-start rounded-[3px] text-[12px] sidebar-muted hover:opacity-100 transition-opacity"
         aria-label="Made by Paperless (opens in a new tab)"
       >
         <span aria-hidden>by</span>
         {/* eslint-disable-next-line @next/next/no-img-element -- a fixed 560x192 PNG, nothing to optimise */}
-        <img src="/paperless-logo-light.png" alt="" width={56} height={19} className="block h-[14px] w-auto" />
+        <img src="/paperless-logo-light.png" alt="" width={70} height={24} className="block h-[18px] w-auto opacity-90" />
       </a>
     </div>
   );
@@ -91,7 +92,8 @@ export default function Sidebar() {
   const rows = sourcesQuery.data ?? (sourcesQuery.isError ? [] : null);
   const me = useMe().data ?? null;
   const status = useUpdateStatus().data;
-  const newVersion = status?.configured && status.update_available ? status.latest_version : null;
+  // Only admins can act on an update (Settings > Updates is admin-only), so members don't see the prompt.
+  const newVersion = me?.is_admin && status?.configured && status.update_available ? status.latest_version : null;
   const logoutMutation = useLogout();
   // The drawer is open only for the page it was opened on, so navigating
   // closes it without an effect.
@@ -118,6 +120,7 @@ export default function Sidebar() {
     }
   }, [drawerOpen]);
 
+  const invites = useInvitations().data?.length ?? 0;
   const connected = rows?.filter(isLiveSource) ?? [];
   const failing = connected.filter((s) => sourceHealth(s).label === "Failing");
 
@@ -143,7 +146,7 @@ export default function Sidebar() {
   const navBody = (
     <>
       <div className="px-4">
-        <button onClick={openCommandPalette} className="sidebar-search w-full min-h-10 px-3 flex items-center gap-2 text-[14px] text-left">
+        <button onClick={openCommandPalette} className="sidebar-search w-full min-h-9 px-3 flex items-center gap-2 text-[13px] text-left">
           <Search size={18} strokeWidth={1.75} aria-hidden />
           <span className="flex-1">Search</span>
           <span className="kbd" aria-hidden>
@@ -156,8 +159,13 @@ export default function Sidebar() {
       <div className="px-4 flex flex-col gap-1">
         {MAIN_NAV.map(({ href, label, icon: Icon }) => (
           <NavLink key={href} href={href} active={isActive(pathname, href)}>
-            <Icon size={20} strokeWidth={1.75} className="nav-icon shrink-0" aria-hidden />
+            <Icon size={18} strokeWidth={1.75} className="nav-icon shrink-0" aria-hidden />
             <span className="flex-1">{label}</span>
+            {href === "/vaults" && invites > 0 && (
+              <span className="nav-badge" aria-label={`${invites} invitation${invites === 1 ? "" : "s"}`}>
+                {invites}
+              </span>
+            )}
           </NavLink>
         ))}
         <div className="caps sidebar-muted px-1 pt-4 pb-1.5" id="nav-advanced">
@@ -166,7 +174,7 @@ export default function Sidebar() {
         <div role="group" aria-labelledby="nav-advanced" className="flex flex-col gap-1">
           {ADVANCED_NAV.map(({ href, label, icon: Icon }) => (
             <NavLink key={href} href={href} active={isActive(pathname, href)}>
-              <Icon size={20} strokeWidth={1.75} className="nav-icon shrink-0" aria-hidden />
+              <Icon size={18} strokeWidth={1.75} className="nav-icon shrink-0" aria-hidden />
               <span className="flex-1">{label}</span>
             </NavLink>
           ))}
@@ -175,11 +183,15 @@ export default function Sidebar() {
 
       <div className="flex-1" />
 
-      <div className="px-4 flex flex-col gap-2 text-[12.5px] leading-snug">
+      <div className="px-4 flex flex-col gap-2 text-[12px] leading-snug">
         <Link href="/connectors" className="sidebar-muted hover:underline underline-offset-2 rounded-[3px]">
           {sourceStatus}
         </Link>
-        {newVersion ? (
+        {!status?.configured ? (
+          <Link href="/settings?tab=updates" className="sidebar-muted hover:underline underline-offset-2 rounded-[3px]">
+            v{version.replace(/^v/, "")} · Automatic updates off
+          </Link>
+        ) : newVersion ? (
           <span className="sidebar-muted">
             v{version.replace(/^v/, "")} ·{" "}
             <Link href="/settings?tab=updates" className="underline underline-offset-2 rounded-[3px]" style={{ color: "var(--bauhaus-app-yellow)" }}>
@@ -187,7 +199,9 @@ export default function Sidebar() {
             </Link>
           </span>
         ) : (
-          <span className="sidebar-muted">v{version.replace(/^v/, "")} · Up to date</span>
+          <span className="sidebar-muted" title={status.checked_at ? `Checked ${new Date(status.checked_at).toLocaleString()}` : undefined}>
+            v{version.replace(/^v/, "")} · Up to date
+          </span>
         )}
         <div className="flex items-center gap-2 pt-2" style={{ borderTop: "1px solid var(--bauhaus-app-sidebar-line)" }}>
           <span className="flex-1 min-w-0 truncate" title={me?.email ?? undefined}>
@@ -196,7 +210,7 @@ export default function Sidebar() {
           </span>
           <button
             onClick={logout}
-            className="nav-link inline-flex items-center gap-1.5 min-h-9 px-2 text-[12.5px] shrink-0"
+            className="nav-link inline-flex items-center gap-1.5 min-h-9 px-2 text-[12px] shrink-0"
             aria-label="Log out"
           >
             <LogOut size={16} strokeWidth={1.75} aria-hidden />

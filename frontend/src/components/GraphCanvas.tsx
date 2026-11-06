@@ -7,8 +7,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation, type Simulation, type SimulationNodeDatum } from "d3-force";
-import { Maximize2, Minus, Plus, RotateCcw } from "lucide-react";
-import { Blobatar } from "@blobatar/react";
+import { Eye, EyeOff, Maximize2, Minus, Plus, RotateCcw } from "lucide-react";
+import { SvgMonogram } from "./graph/Monogram";
 import Tooltip, { TooltipGroup } from "./bits/Tooltip";
 import type { EntityKind } from "@/lib/types";
 
@@ -20,10 +20,12 @@ type Sim = SimulationNodeDatum & GraphNode;
 type View = { zoom: number; x: number; y: number };
 
 const DRAG_THRESHOLD = 4; // px before a pointerdown counts as a drag, not a click
-const ZOOM_MIN = 0.5;
+// low enough that a large graph still fits a phone screen
+const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 2.5;
 const ZOOM_STEP = 0.2;
 const FIT_PADDING = 50;
+const PRE_TICKS = 120; // layout steps run before the first frame, so the first fit is close to the settled shape
 
 // Zoom/pan that centres `nodes` inside the part of the w x h canvas the
 // floating UI leaves free. Shared by auto-fit and the Fit button.
@@ -63,6 +65,7 @@ export default function GraphCanvas({
   insets,
   myEmail,
   ariaLabel,
+  chrome,
 }: {
   nodes: GraphNode[];
   edges: GraphEdge[];
@@ -73,6 +76,8 @@ export default function GraphCanvas({
   insets: CanvasInsets;
   myEmail: string | null;
   ariaLabel: string;
+  /** the page's "Hide controls" switch, drawn in the canvas corner beside the zoom buttons */
+  chrome?: { hidden: boolean; toggle: () => void };
 }) {
   const [nodes, setNodes] = useState<Sim[]>([]);
   const [view, setView] = useState<View>({ zoom: 1, x: 0, y: 0 });
@@ -87,18 +92,25 @@ export default function GraphCanvas({
   const panRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
   const insetsRef = useRef(insets);
   const dimsRef = useRef(dims);
+  const visibleRef = useRef(visibleKinds);
   useEffect(() => {
     insetsRef.current = insets;
     dimsRef.current = dims;
+    visibleRef.current = visibleKinds;
   });
+  // Only the nodes on screen count for a fit: a hidden kind must not pull the camera away.
+  const fitNow = (all: Sim[]) =>
+    setView(computeFit(all.filter((n) => visibleRef.current.has(n.kind)), dimsRef.current.w, dimsRef.current.h, insetsRef.current));
 
-  // True until the person pans, zooms or drags: then a change in the free area (the toolbar wrapping, a resize) re-fits.
+  // True until the person pans, zooms or drags. While true the camera keeps every visible node in
+  // the free area: as the layout settles, and when that area or the shown kinds change.
   const autoFit = useRef(true);
+  const visibleKey = [...visibleKinds].sort().join(",");
   useEffect(() => {
     if (!autoFit.current) return;
     const s = simRef.current;
-    if (s) setView(computeFit(s.nodes(), dims.w, dims.h, insets));
-  }, [dims.w, dims.h, insets]);
+    if (s) fitNow(s.nodes());
+  }, [dims.w, dims.h, insets, visibleKey]);
 
   const zoomBy = (f: number) => {
     autoFit.current = false;
@@ -132,9 +144,14 @@ export default function GraphCanvas({
       .force("charge", forceManyBody().strength(-160))
       .force("center", forceCenter(dimsRef.current.w / 2, dimsRef.current.h / 2))
       .force("collide", forceCollide(26))
-      .on("tick", () => setNodes([...s.nodes()]))
-      // fit once the layout settles, so a reload or vault switch never leaves nodes off screen
-      .on("end", () => autoFit.current && setView(computeFit(s.nodes(), dimsRef.current.w, dimsRef.current.h, insetsRef.current)));
+      .on("tick", () => {
+        setNodes([...s.nodes()]);
+        // follow the layout as it settles, so a reload or vault switch never leaves nodes off screen
+        if (autoFit.current) fitNow(s.nodes());
+      });
+    s.tick(PRE_TICKS);
+    setNodes([...s.nodes()]);
+    fitNow(s.nodes());
     simRef.current = s;
     return () => {
       s.stop();
@@ -160,7 +177,7 @@ export default function GraphCanvas({
 
   function fitToView() {
     autoFit.current = true;
-    setView(computeFit(nodes.filter((n) => visibleKinds.has(n.kind)), dims.w, dims.h, insets));
+    fitNow(nodes);
   }
 
   function resetView() {
@@ -288,12 +305,7 @@ export default function GraphCanvas({
               >
                 <title>{`${n.name}, added by ${!n.owner_email ? "unknown" : n.owner_email === myEmail ? "you" : n.owner_email}`}</title>
                 {n.kind === "person" ? (
-                  <>
-                    {(hot || picked) && <circle r={r + 1} fill="none" stroke={ring} strokeWidth={2} />}
-                    <foreignObject x={-r} y={-r} width={r * 2} height={r * 2} style={{ overflow: "visible" }}>
-                      <Blobatar name={n.name || n.id} animate="hover" size={r * 2} />
-                    </foreignObject>
-                  </>
+                  <SvgMonogram name={n.name || n.id} r={r} color={color} ring={ring} ringWidth={shape.strokeWidth} />
                 ) : n.kind === "organisation" ? (
                   <rect x={-r * 0.82} y={-r * 0.82} width={r * 1.64} height={r * 1.64} rx={4} {...shape} />
                 ) : n.kind === "location" ? (
@@ -332,6 +344,13 @@ export default function GraphCanvas({
           <ToolButton label="Zoom out" icon={<Minus size={16} strokeWidth={1.75} />} run={() => zoomBy(1 - ZOOM_STEP)} />
           <ToolButton label="Fit to view" icon={<Maximize2 size={16} strokeWidth={1.75} />} run={fitToView} />
           <ToolButton label="Reset view" icon={<RotateCcw size={16} strokeWidth={1.75} />} run={resetView} />
+          {chrome && (
+            <ToolButton
+              label={chrome.hidden ? "Show controls" : "Hide controls"}
+              icon={chrome.hidden ? <Eye size={16} strokeWidth={1.75} /> : <EyeOff size={16} strokeWidth={1.75} />}
+              run={chrome.toggle}
+            />
+          )}
         </div>
       </TooltipGroup>
       <p className="label absolute left-4 sm:left-8 lg:left-12 bottom-4 hidden md:block pointer-events-none">Drag to rearrange · Scroll to zoom · Click a name to open it</p>

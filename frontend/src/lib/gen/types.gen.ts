@@ -35,6 +35,10 @@ export type AuthOut = {
     has_password: boolean;
     id: string;
     /**
+     * True for an instance admin: the first user, or an email in `EUNOMIA_ADMIN_EMAILS`.
+     */
+    is_admin: boolean;
+    /**
      * The display name of the configured OpenID Connect provider when this account can sign in with it.
      */
     oidc_provider?: string | null;
@@ -706,6 +710,11 @@ export type InvitationList = {
 
 export type InvitationOut = {
     created_at?: string | null;
+    /**
+     * Email of the space's owner when it has exactly one: only owners invite, so that is who sent it.
+     * None when there are several owners (or it is unknown); show "Someone" then.
+     */
+    invited_by?: string | null;
     role: string;
     vault_id: string;
     vault_kind: string;
@@ -967,6 +976,19 @@ export type PendingCodeOut = {
     created_at?: string | null;
     expires_at?: string | null;
     id: string;
+    role: string;
+};
+
+export type PendingInviteList = {
+    results: Array<PendingInviteOut>;
+};
+
+/**
+ * An invitation into a vault that the invitee has not answered yet, as its owners see it.
+ */
+export type PendingInviteOut = {
+    created_at?: string | null;
+    email: string;
     role: string;
 };
 
@@ -4286,6 +4308,30 @@ export type RepairVaultIntegrityResponses = {
 };
 
 export type RepairVaultIntegrityResponse = RepairVaultIntegrityResponses[keyof RepairVaultIntegrityResponses];
+
+export type ListVaultPendingInvitationsData = {
+    body?: never;
+    path: {
+        vault_id: string;
+    };
+    query?: never;
+    url: '/api/vaults/{vault_id}/invitations';
+};
+
+export type ListVaultPendingInvitationsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListVaultPendingInvitationsError = ListVaultPendingInvitationsErrors[keyof ListVaultPendingInvitationsErrors];
+
+export type ListVaultPendingInvitationsResponses = {
+    200: PendingInviteList;
+};
+
+export type ListVaultPendingInvitationsResponse = ListVaultPendingInvitationsResponses[keyof ListVaultPendingInvitationsResponses];
 
 export type AcceptInvitationData = {
     body?: never;

@@ -10,6 +10,7 @@ import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import CopyButton from "@/components/bits/CopyButton";
 import { downloadDocumentFile, uploadDocumentFile } from "@/lib/api";
 import type { DocumentOut } from "@/lib/gen";
+import { useMe } from "@/lib/queries/auth";
 import { useDeleteDocument, useDocument, useDocuments, useRefreshDocuments, useReindexDocument } from "@/lib/queries/documents";
 
 const ICON = { size: 18, strokeWidth: 1.75 } as const;
@@ -414,6 +415,7 @@ function Documents() {
   const docs = list?.results ?? (listQuery.isError ? [] : null);
   const maxBytes = list?.max_bytes ?? null;
   const storageOff = list !== undefined && !list.storage;
+  const isAdmin = useMe().data?.is_admin ?? false;
   const select = (id: string | null) => router.replace(id ? `/documents?id=${encodeURIComponent(id)}` : "/documents", { scroll: false });
   const uploads = useUploads(maxBytes, (id) => select(id));
   const input = useRef<HTMLInputElement>(null);
@@ -449,9 +451,21 @@ function Documents() {
 
       {listQuery.isError && <ErrorLine error={failure(listQuery.error, "Could not load your documents.", " Reload the page to try again.")} />}
       {storageOff && (
-        <div className="ledger px-4 py-3 text-[13px]" style={{ color: "var(--ink-dim)" }}>
-          Document storage is turned off on this server, so files can&apos;t be uploaded yet. Ask the person who installed Eunomia to turn it on with <code className="font-mono text-[12px]">EUNOMIA_DOCUMENTS_BACKEND</code>{" "}
-          (see Documents in Help).
+        <div className="ledger px-4 py-3 text-[13px] flex flex-col gap-1.5" style={{ color: "var(--ink-dim)" }}>
+          {isAdmin ? (
+            <>
+              <span>Document storage is turned off on this server, so files can&apos;t be uploaded yet.</span>
+              <details>
+                <summary className="cursor-pointer">Details</summary>
+                <span className="block mt-1">
+                  Set <code className="font-mono text-[12px]">EUNOMIA_DOCUMENTS_BACKEND</code> in the server&apos;s environment and restart
+                  it. See Documents in Help.
+                </span>
+              </details>
+            </>
+          ) : (
+            <span>Uploading isn&apos;t turned on yet. Ask your admin to turn on document storage.</span>
+          )}
         </div>
       )}
 
@@ -498,7 +512,9 @@ function Documents() {
                   {docs?.length === 0 && (
                     <tr>
                       <td colSpan={6} style={{ color: "var(--ink-dim)", height: 56 }}>
-                        No documents yet. Drop a file above, or ask your AI app to save one for you.
+                        {storageOff
+                          ? "No documents yet."
+                          : "No documents yet. Drop a file above, or ask your AI app to save one for you."}
                       </td>
                     </tr>
                   )}

@@ -41,7 +41,6 @@ test.describe("Click-through fixes", () => {
     await page.getByLabel("Confirm password").fill(PASSWORD);
     await page.getByRole("button", { name: "Create account" }).click();
     await page.waitForURL(/\/onboarding\?next=%2Fvaults/);
-    await page.getByRole("button", { name: "Let's go" }).click();
     await page.getByRole("button", { name: "Skip", exact: true }).click();
     const skip = page.getByRole("button", { name: "Skip & finish" });
     if (await skip.isVisible({ timeout: 2000 }).catch(() => false)) await skip.click();
@@ -116,7 +115,8 @@ test.describe("Click-through fixes", () => {
     const settings = await (await page.request.get("/api/settings")).json();
     test.skip(settings.model_configured, "this stack has a model configured");
     await page.goto("/chat");
-    await expect(page.getByText("No model is configured")).toBeVisible();
+    // Admins are told what to set up; members are told to ask an admin.
+    await expect(page.getByText(/No model is configured|Chat isn't turned on yet/)).toBeVisible();
     await expect(page.getByLabel("Message")).toBeDisabled();
     expect(await page.locator("article").count()).toBe(0);
   });

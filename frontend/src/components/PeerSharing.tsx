@@ -151,7 +151,7 @@ export default function PeerSharing({ vault }: { vault: { id: string; name: stri
   const peers = useVaultPeers(vault.id);
   const create = useCreateShareCode(vault.id);
   const withdraw = useDeleteShareCode(vault.id);
-  const [role, setRole] = useState<PeerRole>("edit");
+  const [role, setRole] = useState<PeerRole>("read");
   const [made, setMade] = useState<ShareCode | null>(null);
   const [error, setError] = useState<string | null>(null);
   const roleId = useId();
@@ -191,8 +191,8 @@ export default function PeerSharing({ vault }: { vault: { id: string; name: stri
           </label>
           <div className="flex flex-wrap items-center gap-2">
             <select id={roleId} className="field h-10 px-3 text-[14px]" value={role} onChange={(e) => setRole(e.target.value as PeerRole)}>
-              <option value="edit">{ROLE_WORDS.edit}</option>
               <option value="read">{ROLE_WORDS.read}</option>
+              <option value="edit">{ROLE_WORDS.edit}</option>
             </select>
             <button
               type="button"
@@ -263,7 +263,8 @@ export default function PeerSharing({ vault }: { vault: { id: string; name: stri
   );
 }
 
-/** "Join a shared space": a button for the page header and a dialog to paste a share code into. */
+/** "Connect to another Eunomia…": a button for the page header and a dialog to paste a share code into.
+ * Not the same as a team invitation, which arrives under Pending invitations. */
 export function JoinSharedSpace({ onJoined }: { onJoined?: (vaultId: string) => void }) {
   const join = useJoinShared();
   const [open, setOpen] = useState(false);
@@ -298,7 +299,7 @@ export function JoinSharedSpace({ onJoined }: { onJoined?: (vaultId: string) => 
     <>
       <button type="button" className="btn" onClick={() => setOpen(true)}>
         <LogIn {...ICON} />
-        Join a shared space
+        Connect to another Eunomia…
       </button>
       <dialog
         ref={ref}
@@ -325,7 +326,7 @@ export function JoinSharedSpace({ onJoined }: { onJoined?: (vaultId: string) => 
           }}
         >
           <h2 id={titleId} className="text-[20px] font-semibold leading-tight tracking-[-0.01em]">
-            Join a shared space
+            Connect to another Eunomia
           </h2>
           {joined ? (
             <p className="text-[14px]" role="status">
@@ -334,7 +335,7 @@ export function JoinSharedSpace({ onJoined }: { onJoined?: (vaultId: string) => 
           ) : (
             <>
               <p className="text-[14px] leading-relaxed">
-                Paste the share code you were sent. This Eunomia makes a new space with a full copy and keeps it in step.
+                Paste the share code someone running another Eunomia sent you. This Eunomia makes a new space with a full copy and keeps it in step. Invitations from people on this Eunomia appear on the Memory spaces page instead.
               </p>
               <div className="flex flex-col gap-1.5">
                 <label htmlFor={codeId} className="text-[14px] font-medium">

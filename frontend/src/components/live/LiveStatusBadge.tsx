@@ -16,9 +16,12 @@ const WORDS = {
 /** A status word (never colour alone) saying whether this page updates by itself right now. */
 export default function LiveStatusBadge() {
   const status = useLiveStatus();
+  // Only worth a word when something is off: a working live link is the normal case, and a
+  // "Connecting…" that sits there for a second reads as broken (issue #146).
+  if (status !== "offline") return null;
   const { word, hint, color } = WORDS[status];
   return (
-    <span className="inline-flex items-center gap-1.5 text-[12.5px]" style={{ color: "var(--ink-dim)" }} title={hint} role="status" aria-live="polite">
+    <span className="inline-flex items-center gap-1.5 text-[12px]" style={{ color: "var(--ink-dim)" }} title={hint} role="status" aria-live="polite">
       <span aria-hidden className="inline-block w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
       {word}
     </span>

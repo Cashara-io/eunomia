@@ -95,6 +95,18 @@ pub struct InvitationOut {
     pub role: String,
     #[schema(value_type = Option<String>)]
     pub created_at: Option<Datetime>,
+    /// Email of the space's owner when it has exactly one: only owners invite, so that is who sent it.
+    /// None when there are several owners (or it is unknown); show "Someone" then.
+    pub invited_by: Option<String>,
+}
+
+/// An invitation into a vault that the invitee has not answered yet, as its owners see it.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub struct PendingInviteOut {
+    pub email: String,
+    pub role: String,
+    #[schema(value_type = Option<String>)]
+    pub created_at: Option<Datetime>,
 }
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
@@ -523,6 +535,68 @@ pub async fn list_my_invitations(db: &OrgDb, user_id: &RecordId) -> AppResult<Ve
             vault_kind: r.vault.kind,
             role: r.role,
             created_at: r.created_at,
+            invited_by: None,
+        })
+        .collect())
+}
+
+/// Fill `invited_by` on each invitation: the vault's owner, when it has exactly one.
+pub async fn add_inviters(db: &OrgDb, control: &ControlDb, invitations: &mut [InvitationOut]) -> AppResult<()> {
+    if invitations.is_empty() {
+        return Ok(());
+    }
+    #[derive(Deserialize, SurrealValue)]
+    struct Owner {
+        vault: RecordId,
+        user: RecordId,
+    }
+    #[derive(Deserialize, SurrealValue)]
+    struct Email {
+        id: RecordId,
+        email: String,
+    }
+    let vaults: Vec<RecordId> = invitations.iter().filter_map(|i| crate::rid::parse(&i.vault_id).ok()).collect();
+    let mut res = store::vaults::OWNERS_OF.on(db).bind(("vaults", vaults)).await?;
+    let owners: Vec<Owner> = res.take(0)?;
+    let mut res = store::entities::EMAILS_FOR
+        .on(control)
+        .bind(("ids", owners.iter().map(|o| o.user.clone()).collect::<Vec<_>>()))
+        .await?;
+    let emails: Vec<Email> = res.take(0)?;
+    for inv in invitations.iter_mut() {
+        let mine: Vec<&Owner> = owners.iter().filter(|o| o.vault.to_string() == inv.vault_id).collect();
+        if let [only] = mine.as_slice() {
+            inv.invited_by = emails.iter().find(|e| e.id == only.user).map(|e| e.email.clone());
+        }
+    }
+    Ok(())
+}
+
+/// Owner-only. Invitations into `vault_id` nobody has answered yet. Withdraw one with [`remove_member`].
+pub async fn list_pending_invites(db: &OrgDb, control: &ControlDb, user_id: &RecordId, vault_id: &RecordId) -> AppResult<Vec<PendingInviteOut>> {
+    authz::authorize(db, user_id, Action::ManageMembers, vault_id).await?;
+    #[derive(Deserialize, SurrealValue)]
+    struct Row {
+        user: RecordId,
+        role: String,
+        created_at: Option<Datetime>,
+    }
+    #[derive(Deserialize, SurrealValue)]
+    struct Email {
+        id: RecordId,
+        email: String,
+    }
+    let mut res = store::vaults::LIST_PENDING.on(db).bind(("vault", vault_id.clone())).await?;
+    let rows: Vec<Row> = res.take(0)?;
+    if rows.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut res = store::entities::EMAILS_FOR.on(control).bind(("ids", rows.iter().map(|r| r.user.clone()).collect::<Vec<_>>())).await?;
+    let emails: Vec<Email> = res.take(0)?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|r| {
+            emails.iter().find(|e| e.id == r.user).map(|e| PendingInviteOut { email: e.email.clone(), role: r.role, created_at: r.created_at })
         })
         .collect())
 }
@@ -583,7 +657,8 @@ pub async fn remove_member(db: &OrgDb, control: &ControlDb, user_id: &RecordId, 
     with_retry(|| async {
         store::vaults::REMOVE_MEMBER.on(db)
         .bind(("vault", vault_id.clone()))
-        .bind(("is_owner", target_membership.role == "owner"))
+        // only an active owner counts: withdrawing a pending owner invitation never strands the vault
+        .bind(("is_owner", target_membership.role == "owner" && target_membership.status == "active"))
         .bind(("id", target_membership.id.clone()))
         .await?
         .check()

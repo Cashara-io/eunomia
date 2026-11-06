@@ -1,4 +1,4 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import {
   addMemory,
   addRelation,
@@ -41,14 +41,46 @@ export const entityDetailQuery = (id: string) => ({
   staleTime: 0,
 });
 
-export const useEntityGraph = (opts: { kinds?: EntityKind[]; vaultId?: string }) =>
+export const useEntityGraph = (opts: { kinds?: EntityKind[]; vaultId?: string; enabled?: boolean }) =>
   useQuery({
+    enabled: opts.enabled ?? true,
     queryKey: entityKeys.graph(opts.kinds, opts.vaultId),
     queryFn: () => call(getEntityGraph({ query: { kinds: opts.kinds, vault_id: opts.vaultId } })) as Promise<EntityGraph>,
     // Switching vault keeps the old graph on screen until the new one lands.
     placeholderData: keepPreviousData,
     refetchInterval: livePoll,
   });
+
+/** How many people and topics each of `vaultIds` holds (one `limit=1` list per space, reading only `total`). */
+export const useEntityCounts = (vaultIds: string[], enabled = true) =>
+  useQueries({
+    queries: vaultIds.map((vaultId) => ({
+      queryKey: [...entityKeys.all, "count", vaultId] as const,
+      queryFn: async () => ((await call(listEntities({ query: { vault_id: vaultId, limit: 1 } }))) as EntityList).total,
+      enabled,
+      staleTime: 60_000,
+    })),
+    combine: (results) => ({
+      pending: results.some((r) => r.isPending && r.fetchStatus !== "idle"),
+      counts: new Map(vaultIds.map((id, i) => [id, results[i]?.data ?? 0])),
+    }),
+  });
+
+/**
+ * The memory space an entity lives in. The detail endpoint doesn't carry it, so: the detail's name,
+ * then a name search across every space the caller can read, matched back by id. `null` when the
+ * entity isn't readable or can't be found.
+ */
+export async function findEntityVault(qc: QueryClient, id: string): Promise<string | null> {
+  const detail = await qc.fetchQuery(entityDetailQuery(id)).catch(() => null);
+  if (!detail) return null;
+  const res = await invoke<{ results: (EntitySummary & { vault?: string })[] } | { error: string }>("entities_search", {
+    query: detail.name,
+    limit: 50,
+  }).catch(() => null);
+  const hit = res && "results" in res ? res.results.find((r) => r.id === id) : undefined;
+  return hit?.vault ?? (detail.memory[0] as { vault?: string } | undefined)?.vault ?? null;
+}
 
 export const useEntityCloud = (vaultIds: string[]) =>
   useQuery({

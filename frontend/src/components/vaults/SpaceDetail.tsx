@@ -20,12 +20,24 @@ import {
   useLeaveVault,
   useRemoveMember,
   useRenameVault,
+  usePendingInvites,
   useSetMemberRole,
+  useVaultCounts,
   useVaultMembers,
 } from "@/lib/queries/vaults";
 import { DetailSection, DrawnCheck, ICON, RoleChip, SpaceSwatch, ago, peopleLine, sameEmail } from "./bits";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** An invite that failed, in plain words with what to do next (the server's wording is for developers). */
+function inviteProblem(e: unknown): string {
+  const text = e instanceof Error ? e.message : "";
+  if (/no user with email/i.test(text)) return "No one with this email has an account here yet. Ask them to sign up first, then invite them again.";
+  if (/already a member or has a pending invite/i.test(text)) return "They're already in this space or have an invitation waiting.";
+  return "Could not send that invite. Check the address and try again.";
+}
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 const ROLE_OPTIONS = [
   { value: "member", label: "Member" },
   { value: "owner", label: "Owner" },
@@ -42,6 +54,11 @@ export default function SpaceDetail({
 }) {
   const membersQuery = useVaultMembers(vault.id);
   const members = membersQuery.data ?? (membersQuery.isError ? [] : null);
+  const isOwner = vault.role === "owner";
+  const isOrg = vault.kind !== "personal";
+  const pendingQuery = usePendingInvites(vault.id, isOwner && isOrg);
+  const pending = pendingQuery.data ?? [];
+  const counts = useVaultCounts(vault.id).data;
   const inviteMember = useInviteMember();
   const removeMember = useRemoveMember();
   const changeRole = useSetMemberRole();
@@ -56,6 +73,9 @@ export default function SpaceDetail({
   const [role, setRole] = useState<VaultRole>("member");
   const [touched, setTouched] = useState(false);
   const [error, setError] = useState<Failure | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [revokeError, setRevokeError] = useState<string | null>(null);
+  const [revoking, setRevoking] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<"leave" | "delete" | null>(null);
@@ -71,11 +91,10 @@ export default function SpaceDetail({
     return () => clearTimeout(t);
   }, [cloned]);
 
-  const isOwner = vault.role === "owner";
-  const isOrg = vault.kind !== "personal";
   const trimmed = email.trim();
   const invalid = touched && trimmed !== "" && !EMAIL_RE.test(trimmed);
   const already = members?.some((m) => sameEmail(m.email, trimmed));
+  const alreadyInvited = pending.some((p) => sameEmail(p.email, trimmed));
   const created = ago(vault.created_at);
   const others = (members ?? []).filter((m) => !sameEmail(m.email, me));
   // Last-owner rule: a shared space always needs an owner, so its only owner can't leave.
@@ -87,7 +106,7 @@ export default function SpaceDetail({
     setTouched(true);
     if (!trimmed || !EMAIL_RE.test(trimmed)) return;
     setBusy(true);
-    setError(null);
+    setInviteError(null);
     setSent(null);
     try {
       await inviteMember.mutateAsync({ id: vault.id, email: trimmed, role });
@@ -95,7 +114,7 @@ export default function SpaceDetail({
       setEmail("");
       setTouched(false);
     } catch (e) {
-      setError(failure(e, "Could not send that invite.", " Check the address and try again."));
+      setInviteError(inviteProblem(e));
     } finally {
       setBusy(false);
     }
@@ -139,10 +158,25 @@ export default function SpaceDetail({
     }
   }
 
-  const helpText = invalid
-    ? "That isn't an email address. Use name@company.com."
+  async function revoke(email: string) {
+    setRevoking(email);
+    setRevokeError(null);
+    try {
+      await removeMember.mutateAsync({ id: vault.id, email });
+    } catch {
+      setRevokeError(`Could not withdraw the invitation to ${email}. Reload and try again.`);
+    } finally {
+      setRevoking(null);
+    }
+  }
+
+  const problem = invalid ? "That isn't an email address. Use name@company.com." : inviteError;
+  const helpText = problem
+    ? problem
     : already
       ? "They're already in this space."
+      : alreadyInvited
+        ? "They already have an invitation waiting. Find it under Pending."
       : (sent ??
         (role === "owner"
           ? "Owners can invite and remove people, rename the space and delete it."
@@ -204,6 +238,11 @@ export default function SpaceDetail({
             : "Only you can see this space. To work with other people, create a shared space."}
           {created ? ` Created ${created}.` : ""}
         </p>
+        {counts && (
+          <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+            {plural(counts.people, "person", "people")} · {plural(counts.topics, "topic", "topics")}
+          </p>
+        )}
       </header>
 
       {/* People */}
@@ -213,7 +252,7 @@ export default function SpaceDetail({
           icon={<Users {...ICON} aria-hidden />}
           aside={members && <span className="label font-mono">{members.length}</span>}
         >
-          <ul className="hairline-rows">
+          <ul className="hairline-rows" aria-label="People in this space">
             {members === null &&
               [0, 1].map((i) => (
                 <li key={i} className="flex items-center gap-2 h-11">
@@ -267,6 +306,41 @@ export default function SpaceDetail({
             })}
           </ul>
 
+          {isOwner && pending.length > 0 && (
+            <div className="flex flex-col gap-1 pt-1">
+              <h4 className="text-[13px] font-medium" style={{ color: "var(--ink-dim)" }}>
+                Pending <span className="font-mono">{pending.length}</span>
+              </h4>
+              <ul className="hairline-rows" aria-label="Invitations not answered yet">
+                {pending.map((p) => (
+                  <li key={p.email} className="flex flex-wrap items-center gap-x-3 gap-y-1 min-h-11 py-1.5">
+                    <span className="flex-1 min-w-[140px] flex flex-col">
+                      <span className="truncate text-[14px]">{p.email}</span>
+                      <span className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+                        Invited as {p.role === "owner" ? "an owner" : "a member"}
+                        {ago(p.created_at) ? ` · ${ago(p.created_at)}` : ""}. Not joined yet.
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      disabled={revoking === p.email}
+                      aria-label={`Revoke invitation to ${p.email}`}
+                      onClick={() => revoke(p.email)}
+                    >
+                      {revoking === p.email ? "Revoking…" : "Revoke"}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {revokeError && (
+                <p role="alert" className="text-[13px]" style={{ color: "var(--critical)" }}>
+                  {revokeError}
+                </p>
+              )}
+            </div>
+          )}
+
           {isOwner && (
             <form
               className="flex flex-col gap-1.5 pt-2"
@@ -286,14 +360,15 @@ export default function SpaceDetail({
                   className="field h-10 px-3 text-[14px] flex-1 min-w-[200px]"
                   placeholder="person@example.com"
                   value={email}
-                  aria-invalid={invalid || undefined}
+                  aria-invalid={!!problem || undefined}
                   aria-describedby={`invite-help-${vault.id}`}
                   onChange={(e) => {
                     setEmail(e.target.value);
                     setSent(null);
+                    setInviteError(null);
                   }}
                   onBlur={() => setTouched(true)}
-                  style={invalid ? { borderColor: "var(--critical)" } : undefined}
+                  style={problem ? { borderColor: "var(--critical)" } : undefined}
                 />
                 <Select
                   className="h-10 text-[13px] w-[110px] shrink-0"
@@ -309,9 +384,9 @@ export default function SpaceDetail({
               </div>
               <p
                 id={`invite-help-${vault.id}`}
-                role={sent ? "status" : undefined}
+                role={inviteError ? "alert" : sent ? "status" : undefined}
                 className="text-[13px]"
-                style={{ color: invalid ? "var(--critical)" : "var(--ink-dim)" }}
+                style={{ color: problem ? "var(--critical)" : "var(--ink-dim)" }}
               >
                 {helpText}
               </p>
@@ -425,6 +500,7 @@ export default function SpaceDetail({
         title={confirm === "delete" ? `Delete ${vault.name}?` : `Leave ${vault.name}?`}
         confirmLabel={confirm === "delete" ? `Delete ${vault.name}` : `Leave ${vault.name}`}
         busy={leaveVault.isPending || deleteVault.isPending}
+        typeToConfirm={confirm === "delete" && isOrg ? vault.name : undefined}
         onCancel={() => setConfirm(null)}
         onConfirm={() =>
           confirm === "delete"

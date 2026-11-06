@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Loader2 } from "lucide-react";
@@ -10,12 +10,19 @@ import { keepNext, nextPath } from "@/lib/nextPath";
 import AuthShell, { LABEL, RevealToggle } from "./AuthShell";
 import { OrDivider, SsoButton, useOidcError, useSignIn } from "./Sso";
 
+const noSubscribe = () => () => {};
+/** `?email=` from "Sign in instead" on the register page. */
+const emailFromUrl = () => new URLSearchParams(window.location.search).get("email") ?? "";
+
 export default function LoginPage() {
   const router = useRouter();
   const login = useLogin();
   const { pending, mode, provider } = useSignIn();
   const oidcError = useOidcError(provider);
-  const [email, setEmail] = useState("");
+  // null until typed in: the field then shows the email the link carried, if any.
+  const [typedEmail, setEmail] = useState<string | null>(null);
+  const prefill = useSyncExternalStore(noSubscribe, emailFromUrl, () => "");
+  const email = typedEmail ?? prefill;
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
   const [error, setError] = useState<Failure | null>(null);
@@ -69,7 +76,7 @@ export default function LoginPage() {
                   id="email"
                   type="email"
                   required
-                  autoFocus={!provider}
+                  autoFocus={!provider && !prefill}
                   autoComplete="email"
                   spellCheck={false}
                   className="field h-11 px-3 text-[15px]"
@@ -89,6 +96,7 @@ export default function LoginPage() {
                     id="password"
                     type={show ? "text" : "password"}
                     required
+                    autoFocus={!provider && Boolean(prefill)}
                     autoComplete="current-password"
                     className="field h-11 w-full pl-3 pr-16 text-[15px]"
                     aria-invalid={error ? true : undefined}

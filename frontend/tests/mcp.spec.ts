@@ -28,7 +28,7 @@ test.describe("MCP server", () => {
     await page.goto("/connect/claude-code");
     await expect(page.getByLabel("Command").filter({ hasText: `claude mcp add --transport http --scope user eunomia ${url}` }).first()).toBeVisible();
 
-    await page.getByText("Advanced: connect with an API token instead").click();
+    await page.getByText("Advanced: use an API token").click();
     await page.getByRole("button", { name: "Generate a token" }).click();
     await expect(page.getByText(`claude mcp add --transport http --scope user eunomia ${url} --header`)).toBeVisible();
   });

@@ -189,7 +189,7 @@ function Chart({ report }: { report: ToolUsageReport | null }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="section-title">Calls over time</h3>
         <span className="flex items-center gap-3 text-[12px]" style={{ color: "var(--ink-dim)" }}>
-          <Swatch color="var(--series-2)" label="Succeeded" />
+          <Swatch color="var(--good)" label="Succeeded" />
           <Swatch color="var(--critical)" label="Errors" />
         </span>
       </div>
@@ -245,7 +245,7 @@ function Chart({ report }: { report: ToolUsageReport | null }) {
                   );
                 }}
               />
-              <Bar dataKey="ok" stackId="c" fill="var(--series-2)" radius={[0, 0, 0, 0]} isAnimationActive={false} />
+              <Bar dataKey="ok" stackId="c" fill="var(--good)" radius={[0, 0, 0, 0]} isAnimationActive={false} />
               <Bar dataKey="errors" stackId="c" fill="var(--critical)" radius={[2, 2, 0, 0]} isAnimationActive={false} />
             </BarChart>
           </ResponsiveContainer>
@@ -272,7 +272,7 @@ function Counts({ c, max }: { c: { calls: number; errors: number; avg_ms: number
         <span className="flex items-center gap-2">
           <span className="w-[52px] text-right">{fmt(c.calls)}</span>
           <span aria-hidden className="h-1 flex-1 rounded-full overflow-hidden" style={{ background: "var(--surface-raised)" }}>
-            <span className="block h-full rounded-full" style={{ width: `${max > 0 ? Math.max(3, (c.calls / max) * 100) : 0}%`, background: "var(--series-2)" }} />
+            <span className="block h-full rounded-full" style={{ width: `${max > 0 ? Math.max(3, (c.calls / max) * 100) : 0}%`, background: "var(--good)" }} />
           </span>
         </span>
       </td>

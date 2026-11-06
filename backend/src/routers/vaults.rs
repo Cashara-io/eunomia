@@ -28,6 +28,7 @@ pub fn router() -> Router<AppState> {
         .route("/vaults/{vault_id}/transfer", post(transfer_ownership))
         .route("/vaults/{vault_id}/leave", post(leave_vault))
         .route("/vaults/{vault_id}/integrity", get(check_integrity).post(repair_integrity))
+        .route("/vaults/{vault_id}/invitations", get(list_pending_invites))
         .route("/vaults/{vault_id}/invitations/accept", post(accept_invitation))
         .route("/vaults/{vault_id}/invitations/decline", post(decline_invitation))
 }
@@ -80,6 +81,11 @@ struct MemberList {
 #[derive(Serialize, utoipa::ToSchema)]
 struct InvitationList {
     results: Vec<service::InvitationOut>,
+}
+
+#[derive(Serialize, utoipa::ToSchema)]
+struct PendingInviteList {
+    results: Vec<service::PendingInviteOut>,
 }
 
 /// Vault kinds a client may create or clone into.
@@ -383,8 +389,31 @@ async fn leave_vault(
 )]
 async fn list_invitations(State(state): State<AppState>, user: User) -> AppResult<Json<InvitationList>> {
     let state = state.org(&user.org).await?;
-    let results = service::list_my_invitations(&state.db, &user.id).await?;
+    let mut results = service::list_my_invitations(&state.db, &user.id).await?;
+    service::add_inviters(&state.db, &state.control, &mut results).await?;
     Ok(Json(InvitationList { results }))
+}
+
+#[utoipa::path(
+    operation_id = "listVaultPendingInvitations",
+    get,
+    path = "/api/vaults/{vault_id}/invitations",
+    tag = "vaults",
+    summary = "Invitations into a vault not answered yet (owners only)",
+    description = "Withdraw one with `DELETE /api/vaults/{vault_id}/members/{email}`.",
+    params(("vault_id" = String, Path)),
+    responses((status = 200, body = PendingInviteList), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = []), ("bearer" = [])),
+)]
+async fn list_pending_invites(
+    State(state): State<AppState>,
+    user: User,
+    Path(vault_id): Path<String>,
+) -> AppResult<Json<PendingInviteList>> {
+    let state = state.org(&user.org).await?;
+    let rid = parse_vault_id(&vault_id)?;
+    let results = service::list_pending_invites(&state.db, &state.control, &user.id, &rid).await?;
+    Ok(Json(PendingInviteList { results }))
 }
 
 #[utoipa::path(
@@ -465,6 +494,7 @@ async fn repair_integrity(State(state): State<AppState>, user: User, Path(vault_
     list_vaults,
     create_vault,
     list_invitations,
+    list_pending_invites,
     merge_vaults,
     rename_vault,
     delete_vault,

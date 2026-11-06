@@ -2,7 +2,7 @@
 
 import { Fragment, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, ChevronDown, ChevronRight, Plug, Plus, Search, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Plug, Plus, Search, X } from "lucide-react";
 import type { Connector, SourceRow } from "@/lib/types";
 import { useConnectors } from "@/lib/queries/connectors";
 import { useSources } from "@/lib/queries/sources";
@@ -30,6 +30,36 @@ type ConnectedRow = {
   source: SourceRow | undefined;
   href: string;
 };
+
+// Work tools first, consumer sources last. Any kind missing here keeps its catalogue position at the end.
+const PAGE_ORDER: Connector["kind"][] = [
+  "gmail",
+  "google_calendar",
+  "slack",
+  "notion",
+  "linear",
+  "github",
+  "todoist",
+  "discord",
+  "ed",
+  "pocketai",
+  "stripe",
+  "up_bank",
+  "spotify",
+];
+const ORDERED_KINDS = [...PAGE_ORDER.filter((k) => CONNECTOR_ORDER.includes(k)), ...CONNECTOR_ORDER.filter((k) => !PAGE_ORDER.includes(k))];
+
+/* "up.transaction", "gcal.event" -> "transactions, events": what a source brings in, in words. */
+function typeWords(types: string[]): string {
+  const words = types.map((t) => {
+    const w = (t.split(".").pop() ?? t).replace(/_/g, " ").trim();
+    if (/s$/.test(w)) return w;
+    if (/[^aeiou]y$/.test(w)) return `${w.slice(0, -1)}ies`;
+    return `${w}s`;
+  });
+  const out = [...new Set(words)].join(", ");
+  return out ? out[0].toUpperCase() + out.slice(1) : out;
+}
 
 const CONNECTED_COLS = "grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1.4fr)_130px_76px_110px_minmax(0,1fr)_16px]";
 const ROW_LINK =
@@ -61,7 +91,7 @@ export default function ConnectorsPage() {
 
   const connected: ConnectedRow[] = [];
   const available: Connector["kind"][] = [];
-  for (const kind of CONNECTOR_ORDER) {
+  for (const kind of ORDERED_KINDS) {
     const meta = CONNECTOR_META[kind];
     // A kind can be connected more than once (two Gmail accounts): one row per live connection.
     // A disconnected connection that still has its key was paused on purpose: list it, so its data stays reachable.
@@ -205,8 +235,12 @@ export default function ConnectorsPage() {
                     <span className="hidden md:block text-[13px]" style={{ color: fails ? "var(--critical)" : "var(--ink-dim)" }}>
                       {fails ? `${fails} failed in a row` : s ? relativeTime(s.sync_status.last_ok) : "n/a"}
                     </span>
-                    <span className="hidden md:block font-mono text-[12px] truncate" style={{ color: "var(--ink-dim)" }}>
-                      {s?.record_types.join(", ") || "Tool calls only"}
+                    <span
+                      className="hidden md:block text-[13px] truncate"
+                      style={{ color: "var(--ink-dim)" }}
+                      title={s?.record_types.length ? typeWords(s.record_types) : undefined}
+                    >
+                      {s?.record_types.length ? typeWords(s.record_types) : "Tool calls only"}
                     </span>
                     <ChevronRight size={16} strokeWidth={1.75} color="var(--ink-dim)" className="hidden md:block" aria-hidden />
                   </Link>
@@ -233,7 +267,7 @@ export default function ConnectorsPage() {
           <h2 id="catalogue-heading" className="section-title">
             Add a source
           </h2>
-          {loading && <SkeletonCards count={6} />}
+          {loading && <SkeletonRows count={6} />}
           {!loading && shownAvailable.length === 0 && (
             <div className="text-[14px] flex flex-wrap items-center gap-3" style={{ color: "var(--ink-dim)" }}>
               {q ? (
@@ -248,37 +282,34 @@ export default function ConnectorsPage() {
               )}
             </div>
           )}
-          {/* Two columns with a 36px gap; one column on narrow screens. Each card is one link. */}
-          <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-9 gap-y-5">
-            {shownAvailable.map((kind) => {
-              const meta = CONNECTOR_META[kind];
-              const types = meta.sourceKey ? bySource[meta.sourceKey]?.record_types : undefined;
-              return (
-                <li key={kind} className="min-w-0">
-                  <Link
-                    href={`/connectors/setup/${kind}`}
-                    className="ledger h-full p-5 flex flex-col gap-3.5 transition-[border-color] duration-[120ms] hover:border-[var(--bauhaus-app-ink)]"
-                    style={{ borderColor: "#8f8f87" }}
-                  >
-                    <span className="flex items-center gap-3 min-w-0">
-                      <ConnectorTile kind={kind} size={32} />
-                      <span className="flex-1 min-w-0 text-[16px] font-semibold truncate">{meta.label}</span>
-                      <span className="btn btn-primary btn-sm shrink-0" aria-hidden>
-                        Connect <ArrowRight size={16} strokeWidth={1.75} />
+          {/* A compact list: one row per source, each row one link. */}
+          {shownAvailable.length > 0 && (
+            <ul className="hairline-rows border-y" style={{ borderColor: "var(--border)" }}>
+              {shownAvailable.map((kind) => {
+                const meta = CONNECTOR_META[kind];
+                return (
+                  <li key={kind} className="min-w-0">
+                    <Link
+                      href={`/connectors/setup/${kind}`}
+                      aria-label={`Connect ${meta.label}`}
+                      className="flex items-center gap-3 px-2 py-2.5 min-w-0 transition-colors hover:bg-[var(--surface-hover)]"
+                    >
+                      <ConnectorTile kind={kind} size={28} />
+                      <span className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-baseline sm:gap-3">
+                        <span className="text-[14px] font-semibold shrink-0">{meta.label}</span>
+                        <span className="text-[13px] truncate" style={{ color: "var(--ink-dim)" }}>
+                          {meta.description}
+                        </span>
                       </span>
-                    </span>
-                    <span className="text-[14px] leading-snug" style={{ color: "var(--ink)" }}>
-                      {meta.description}
-                    </span>
-                    <span className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[13px]" style={{ color: "var(--ink-dim)" }}>
-                      <StatusLabel tone="neutral">Not connected yet</StatusLabel>
-                      {types && types.length > 0 && <span className="font-mono text-[12px] truncate">{types.join(", ")}</span>}
-                    </span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
+                      <span className="btn btn-ghost btn-sm shrink-0" aria-hidden>
+                        Connect
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </section>
       )}
 
@@ -297,22 +328,6 @@ export default function ConnectorsPage() {
           )}
         </section>
       )}
-    </div>
-  );
-}
-
-function SkeletonCards({ count }: { count: number }) {
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-9 gap-y-5" aria-hidden>
-      {Array.from({ length: count }, (_, i) => (
-        <div key={i} className="ledger p-5 flex flex-col gap-3.5">
-          <span className="flex items-center gap-3">
-            <span className="skeleton w-8 h-8" />
-            <span className="skeleton h-3.5 w-28" />
-          </span>
-          <span className="skeleton h-3 w-3/4" />
-        </div>
-      ))}
     </div>
   );
 }

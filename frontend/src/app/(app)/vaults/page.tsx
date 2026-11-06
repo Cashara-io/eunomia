@@ -24,7 +24,7 @@ import LiveStatusBadge from "@/components/live/LiveStatusBadge";
 import { JoinSharedSpace } from "@/components/PeerSharing";
 import { cssVar, prefersReducedMotion } from "@/components/bits/motion";
 import SpaceDetail from "@/components/vaults/SpaceDetail";
-import { ICON, RoleChip, SpaceSwatch, ago, peopleLine, sameEmail } from "@/components/vaults/bits";
+import { ICON, JoinedNotice, RoleChip, SpaceSwatch, ago, inviterWords, peopleLine, sameEmail } from "@/components/vaults/bits";
 
 /* New rows (since the previous load, never the first) settle in. A stable function, so React calls it once per mount. */
 function arrive(el: HTMLElement | null) {
@@ -43,9 +43,11 @@ function InvitationsPanel() {
   const refreshVaults = useRefreshVaults();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [joined, setJoined] = useState<string | null>(null);
+  // the last space joined, kept after its invitation leaves the list, so the person sees where to go next
+  const [welcome, setWelcome] = useState<{ id: string; name: string } | null>(null);
   const [error, setError] = useState<Failure | null>(null);
 
-  async function accept(vaultId: string, button: HTMLElement, pointer: boolean) {
+  async function accept(vaultId: string, vaultName: string, button: HTMLElement, pointer: boolean) {
     setBusyId(vaultId);
     setError(null);
     try {
@@ -54,6 +56,7 @@ function InvitationsPanel() {
       // The dashed invite turns solid with a soft flash, then the vault row arrives in the list.
       setJoined(vaultId);
       if (!prefersReducedMotion()) await new Promise((r) => setTimeout(r, 180));
+      setWelcome({ id: vaultId, name: vaultName });
       await refreshVaults();
     } catch (e) {
       setError(
@@ -83,10 +86,12 @@ function InvitationsPanel() {
   }
 
   if (invitationsQuery.isError) return <ErrorLine error={failure(invitationsQuery.error, "Could not load your invitations.")} />;
-  if (!invitations || invitations.length === 0) return null;
+  if (!invitations || invitations.length === 0)
+    return welcome ? <JoinedNotice id={welcome.id} name={welcome.name} onDismiss={() => setWelcome(null)} /> : null;
 
   return (
     <section className="flex flex-col gap-2.5" aria-labelledby="invites-title">
+      {welcome && <JoinedNotice id={welcome.id} name={welcome.name} onDismiss={() => setWelcome(null)} />}
       <h2 id="invites-title" className="section-title flex items-center gap-2">
         <Mail {...ICON} aria-hidden />
         Pending invitations
@@ -107,7 +112,7 @@ function InvitationsPanel() {
               {inv.vault_name}
             </div>
             <div className="label mt-0.5">
-              Invited as {inv.role === "owner" ? "an owner" : "a member"}
+              {inviterWords(inv.invited_by)} invited you as {inv.role === "owner" ? "an owner" : "a member"}
               {inv.vault_kind === "org" ? " of a shared space" : ""}
               {ago(inv.created_at) ? ` · ${ago(inv.created_at)}` : ""}
             </div>
@@ -122,7 +127,7 @@ function InvitationsPanel() {
               Decline
             </button>
             <button
-              onClick={(e) => accept(inv.vault_id, e.currentTarget, e.detail > 0)}
+              onClick={(e) => accept(inv.vault_id, inv.vault_name, e.currentTarget, e.detail > 0)}
               disabled={busyId === inv.vault_id}
               className="btn btn-primary btn-sm"
             >

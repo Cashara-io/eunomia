@@ -37,8 +37,13 @@ export function TokensSection() {
   const vaultList: Vault[] = useVaults().data ?? [];
   const [name, setName] = useState("");
   const [scopes, setScopes] = useState<Scope[]>(SCOPES.map((s) => s.id));
-  const [vaultId, setVaultId] = useState("");
-  const [expiryDays, setExpiryDays] = useState("");
+  // Untouched (null) means the safer default: your personal space, not every space. "All my memory spaces" stays one click away.
+  const [vaultChoice, setVaultChoice] = useState<string | null>(null);
+  const personal = vaultList.find((v) => v.kind === "personal" && v.role === "owner");
+  const vaultId = vaultChoice ?? personal?.id ?? "";
+  const setVaultId = setVaultChoice;
+  // New tokens expire after 90 days unless you pick otherwise.
+  const [expiryDays, setExpiryDays] = useState("90");
   const [minted, setMinted] = useState<{ name: string; token: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Failure | null>(null);

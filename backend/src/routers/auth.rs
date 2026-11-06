@@ -46,6 +46,8 @@ struct AuthOut {
     has_password: bool,
     /// The display name of the configured OpenID Connect provider when this account can sign in with it.
     oidc_provider: Option<String>,
+    /// True for an instance admin: the first user, or an email in `EUNOMIA_ADMIN_EMAILS`.
+    is_admin: bool,
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -140,12 +142,14 @@ async fn auth_out(state: &AppState, user: User) -> AppResult<AuthOut> {
         }
         None => None,
     };
+    let is_admin = crate::authz::is_admin(&state.control, &user).await?;
     Ok(AuthOut {
         id: user.id.to_string(),
         email: user.email,
         onboarded: row.as_ref().is_some_and(|r| r.onboarded_at.is_some()),
         has_password: row.is_some_and(|r| r.password_hash.is_some()),
         oidc_provider,
+        is_admin,
     })
 }
 
@@ -246,7 +250,8 @@ async fn register(
         .await?;
     audit::record_as_caller(&state.control, &user.id, "auth.register", "", "ok").await;
 
-    let body = AuthOut { id: user.id.to_string(), email: user.email, onboarded: false, has_password: true, oidc_provider: None };
+    let is_admin = crate::authz::is_admin(&state.control, &user).await?;
+    let body = AuthOut { id: user.id.to_string(), email: user.email, onboarded: false, has_password: true, oidc_provider: None, is_admin };
     Ok((
         StatusCode::OK,
         [(header::SET_COOKIE, session_cookie_header(&token, &state.settings.public_url, https))],

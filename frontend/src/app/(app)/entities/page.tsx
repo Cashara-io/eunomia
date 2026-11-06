@@ -22,22 +22,33 @@ export default function EntitiesPage() {
 
   // Same header in both views, so switching tabs never moves it.
   const header = (
-    <div className="w-full flex flex-col gap-4">
-      <PageHeader icon={Users} title="People & topics" intro={current.blurb} />
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="flex gap-2" role="tablist" aria-label="View">
+    <div className="w-full">
+      <PageHeader
+        icon={Users}
+        title="People & topics"
+        intro={current.blurb}
+        actions={
+          <>
+            <LiveStatusBadge />
+            <button
+              className="btn btn-ghost btn-sm btn-icon"
+              aria-label="Refresh people and topics"
+              title="Refresh"
+              onClick={() => void qc.invalidateQueries({ queryKey: entityKeys.all })}
+            >
+              <RefreshCw size={16} strokeWidth={1.75} className={fetching ? "animate-spin" : undefined} aria-hidden />
+            </button>
+          </>
+        }
+      >
+        <div className="tabs mt-3" role="tablist" aria-label="View">
           {VIEWS.map((v) => (
-            <button key={v.id} role="tab" aria-selected={view === v.id} className="pill min-h-10" onClick={() => setView(v.id)}>
+            <button key={v.id} role="tab" aria-selected={view === v.id} className="tab" onClick={() => setView(v.id)}>
               {v.label}
             </button>
           ))}
         </div>
-        <button className="btn" aria-label="Refresh people and topics" title="Refresh" onClick={() => void qc.invalidateQueries({ queryKey: entityKeys.all })}>
-          <RefreshCw size={18} strokeWidth={1.75} className={fetching ? "animate-spin" : undefined} aria-hidden />
-          Refresh
-        </button>
-        <LiveStatusBadge />
-      </div>
+      </PageHeader>
     </div>
   );
 

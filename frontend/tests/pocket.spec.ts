@@ -1,7 +1,7 @@
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { test, expect } from "@playwright/test";
-import { registerAndOnboard, uniqueEmail, MOCK_BIND, mockBase } from "./helpers";
+import { registerAndOnboard, showAdminSettings, uniqueEmail, MOCK_BIND, mockBase } from "./helpers";
 
 // Pocket end to end against one stand-in server playing both Pocket's
 // public API and an OpenAI-compatible model server (reached through
@@ -159,8 +159,9 @@ test("a Pocket recording is stored whole, embedded, graphed, and deletable", asy
     // The connection itself is kept.
     expect((await (await page.request.get("/api/connectors/pocketai")).json()).credentials_set).toBe(true);
 
-    // The chat model can also be pinned in Settings (blank = automatic).
-    await page.goto("/settings");
+    // The chat model can also be pinned in Settings, Server, AI provider (blank = automatic).
+    await showAdminSettings(page);
+    await page.goto("/settings?tab=model");
     await expect(page.getByLabel("Base URL")).toHaveValue(mock.base);
     await page.waitForLoadState("networkidle"); // dev mode loads settings twice
     await page.getByLabel("Chat model").click(); // the endpoint lists its models, so it is a select

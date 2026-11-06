@@ -235,19 +235,16 @@ export function Approved({ connection, onShowSteps }: { connection: Connection; 
 }
 
 /** Frame for one app's guide: header with the app's mark, then the framed steps. */
-export function GuideFrame({ id, intro, children }: { id: AppId; intro: React.ReactNode; children: React.ReactNode }) {
+export function GuideFrame({ id, intro, children }: { id: AppId; intro?: React.ReactNode; children: React.ReactNode }) {
   const app = appById(id)!;
   const title = id === "other" ? "Other AI apps" : `Connect ${app.name}`;
   return (
     <div className="flex flex-col gap-8 max-w-[960px]">
       <PageHeader mark={<AppMark id={id} size={30} />} title={title} intro={<Trail here={id === "other" ? "More options" : app.name} />} />
-      <section className="task-panel p-6 sm:p-8 flex flex-col" aria-labelledby="guide-title">
-        <div className="flex flex-col gap-4 pb-6">
-          <h2 id="guide-title" className="connect-title">
-            {id === "other" ? "Connect another AI app" : `Connect ${app.name}`}
-          </h2>
-          <p className="text-[16px] leading-relaxed">{intro}</p>
-          <Link href="/" className="btn self-start">
+      <section className="task-panel p-6 sm:p-8 flex flex-col" aria-label={id === "other" ? "Steps for another AI app" : `Steps for ${app.name}`}>
+        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3 pb-6">
+          {intro && <p className="flex-1 min-w-[240px] text-[16px] leading-relaxed">{intro}</p>}
+          <Link href="/" className="btn btn-sm shrink-0">
             Choose a different app
           </Link>
         </div>

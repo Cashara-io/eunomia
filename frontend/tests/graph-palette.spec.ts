@@ -73,7 +73,6 @@ test.describe("Entity graph", () => {
     await page.getByRole("tab", { name: "Memory map" }).click();
     const cloud = page.getByRole("img", { name: "Memory map" });
     await expect(cloud.locator("canvas")).toBeVisible();
-    await expect(cloud.getByText("PC1")).toBeAttached();
 
     const layers = page.getByRole("group", { name: "Memory space layers" });
     await layers.getByRole("button", { name: /Team/ }).click();
@@ -82,7 +81,7 @@ test.describe("Entity graph", () => {
     await expect(layers.getByRole("button", { name: /^Team/ })).toContainText("1");
 
     await page.getByRole("button", { name: "Built the first compiler." }).first().press("Enter");
-    await expect(page.getByText(/· world$/).first()).toBeVisible();
+    await expect(page.getByText(/· Fact$/).first()).toBeVisible();
   });
 });
 

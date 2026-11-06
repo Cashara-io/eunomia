@@ -5485,6 +5485,56 @@
         ]
       }
     },
+    "/api/vaults/{vault_id}/invitations": {
+      "get": {
+        "tags": [
+          "vaults"
+        ],
+        "summary": "Invitations into a vault not answered yet (owners only)",
+        "description": "Withdraw one with `DELETE /api/vaults/{vault_id}/members/{email}`.",
+        "operationId": "listVaultPendingInvitations",
+        "parameters": [
+          {
+            "name": "vault_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingInviteList"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/vaults/{vault_id}/invitations/accept": {
       "post": {
         "tags": [
@@ -6248,7 +6298,8 @@
           "id",
           "email",
           "onboarded",
-          "has_password"
+          "has_password",
+          "is_admin"
         ],
         "properties": {
           "email": {
@@ -6260,6 +6311,10 @@
           },
           "id": {
             "type": "string"
+          },
+          "is_admin": {
+            "type": "boolean",
+            "description": "True for an instance admin: the first user, or an email in `EUNOMIA_ADMIN_EMAILS`."
           },
           "oidc_provider": {
             "type": [
@@ -7848,6 +7903,13 @@
               "null"
             ]
           },
+          "invited_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Email of the space's owner when it has exactly one: only owners invite, so that is who sent it.\nNone when there are several owners (or it is unknown); show \"Someone\" then."
+          },
           "role": {
             "type": "string"
           },
@@ -8492,6 +8554,42 @@
             ]
           },
           "id": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        }
+      },
+      "PendingInviteList": {
+        "type": "object",
+        "required": [
+          "results"
+        ],
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PendingInviteOut"
+            }
+          }
+        }
+      },
+      "PendingInviteOut": {
+        "type": "object",
+        "description": "An invitation into a vault that the invitee has not answered yet, as its owners see it.",
+        "required": [
+          "email",
+          "role"
+        ],
+        "properties": {
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
             "type": "string"
           },
           "role": {

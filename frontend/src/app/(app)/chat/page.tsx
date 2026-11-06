@@ -249,10 +249,12 @@ function ThreadList({
   return (
     <nav aria-label="Chat threads" className="ledger hidden md:flex flex-col w-60 shrink-0 h-full min-h-0">
       <div className="flex items-center justify-between min-h-14 pl-3.5 pr-2 shrink-0" style={{ borderBottom: "var(--hair) solid var(--border)" }}>
-        <h2 className="section-title">Conversations</h2>
-        <button onClick={onCreate} className="btn btn-sm">
-          <Plus size={16} strokeWidth={1.75} aria-hidden /> New chat
-        </button>
+        <h2 className="section-title min-w-0 truncate">Conversations</h2>
+        <Tooltip label="New chat">
+          <button onClick={onCreate} aria-label="New chat" className="btn btn-ghost btn-icon btn-sm shrink-0">
+            <Plus size={16} strokeWidth={1.75} />
+          </button>
+        </Tooltip>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto p-2 flex flex-col gap-0.5">
         {threads === null && ["80%", "65%", "50%"].map((w) => <div key={w} className="skeleton h-8" style={{ width: w }} />)}
@@ -279,7 +281,7 @@ function ThreadList({
           );
         })}
         {threads?.length === 0 && (
-          <div className="px-2.5 py-2 text-[12.5px]" style={{ color: "var(--ink-faint)" }}>
+          <div className="px-2.5 py-2 text-[12px]" style={{ color: "var(--ink-faint)" }}>
             No conversations yet.
           </div>
         )}
@@ -337,7 +339,10 @@ export default function ChatPage() {
   const [error, setError] = useState<Failure | null>(null);
   const [loadError, setLoadError] = useState<Failure | null>(null);
   const [needsKey, setNeedsKey] = useState(false);
-  const me = useMe().data?.email ?? null;
+  const meData = useMe().data;
+  const me = meData?.email ?? null;
+  // Only admins can turn chat on; members are told to ask one.
+  const isAdmin = meData?.is_admin ?? false;
   // unknown while loading counts as ready: the server still refuses a send it cannot answer
   const modelReady = useSettings().data?.model_configured ?? true;
   const [lastSent, setLastSent] = useState("");
@@ -536,10 +541,18 @@ export default function ChatPage() {
               {turns !== null && turns.length === 0 && !sending && !loadError && modelReady && <EmptyState onPick={(text) => send(text)} />}
               {!modelReady && (
                 <div role="status" className="soft-panel flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 text-[14px]">
-                  <p className="flex-1 min-w-[220px]" style={{ color: "var(--ink-dim)" }}>
-                    No model is configured, so the assistant can&apos;t answer yet. Chat needs an OpenAI key or a local model endpoint.
-                  </p>
-                  <Link href="/settings" className="btn btn-primary btn-sm">Set up a model</Link>
+                  {isAdmin ? (
+                    <>
+                      <p className="flex-1 min-w-[220px]" style={{ color: "var(--ink-dim)" }}>
+                        No model is configured, so the assistant can&apos;t answer yet. Chat needs an OpenAI key or a local model endpoint.
+                      </p>
+                      <Link href="/settings?tab=model" className="btn btn-primary btn-sm">Set up a model</Link>
+                    </>
+                  ) : (
+                    <p className="flex-1 min-w-[220px]" style={{ color: "var(--ink-dim)" }}>
+                      Chat isn&apos;t turned on yet. Ask your Eunomia admin.
+                    </p>
+                  )}
                 </div>
               )}
               {turns?.map((t, i) => <TurnView key={i} turn={t} me={me} />)}
@@ -577,10 +590,12 @@ export default function ChatPage() {
                   <div className="min-w-0 break-words">
                     <div className="font-medium">The assistant couldn&apos;t reply.</div>
                     <div className="mt-0.5" style={{ color: "var(--ink-dim)" }}>
-                      {needsKey ? (
+                      {needsKey && !isAdmin ? (
+                        "Chat isn't turned on yet. Ask your Eunomia admin."
+                      ) : needsKey ? (
                         <>
                           No OpenAI API key is set, so the assistant can&apos;t answer yet.{" "}
-                          <Link href="/settings" className="underline" style={{ color: "var(--accent-text)" }}>
+                          <Link href="/settings?tab=model" className="underline" style={{ color: "var(--accent-text)" }}>
                             Add one in Settings
                           </Link>
                           .
