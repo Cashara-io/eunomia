@@ -345,6 +345,17 @@ export function connectorStatus(c: Connector | undefined): "demo" | "connected" 
   return "disconnected";
 }
 
+/** A memory's `source` in plain words. A synced record id
+ * (`cache_record:⟨owner:ed:ed.thread:3699084⟩`, quoted with backticks or ⟨⟩) becomes
+ * "Ed Discussion thread"; anything else is returned as it is. */
+export function sourceRecordLabel(source: string): string {
+  const m = /^cache_record:[`⟨]?[^:]+:([^:]+):[^.:]*\.([^:]+):.+?[`⟩]?$/.exec(source.trim());
+  if (!m) return source;
+  const [, key, recordKind] = m;
+  const kind = kindForSource(key);
+  return `${kind ? CONNECTOR_META[kind].label : key} ${recordKind.replace(/_/g, " ")}`;
+}
+
 /** Connector kind whose data lives under a `sources.list()` key, if any. An added connection's key is `{source}~{instance}`. */
 export function kindForSource(sourceKey: string): Connector["kind"] | undefined {
   const base = sourceKey.split("~")[0];
