@@ -3,69 +3,11 @@
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
 import { useState } from "react";
-import Link from "next/link";
-import { Check, ChevronRight, Plug } from "lucide-react";
+import { Check } from "lucide-react";
 import type { SettingsUpdate } from "@/lib/gen";
 import { useOpenAiModels, useUpdateSettings } from "@/lib/queries/settings";
 import type { AppSettings } from "@/lib/types";
 import { ICON, PanelHead } from "./shared";
-
-export function GeneralSection({ settings }: { settings: AppSettings }) {
-  const updateSettings = useUpdateSettings();
-  const [syncError, setSyncError] = useState<Failure | null>(null);
-
-  /* Saves at once: it is a single switch, not part of the OpenAI form below. */
-  async function setCheckConnectivity(on: boolean) {
-    setSyncError(null);
-    try {
-      await updateSettings.mutateAsync({ sync_check_connectivity: on });
-    } catch (e) {
-      setSyncError(failure(e, "Could not save the setting. Try again."));
-    }
-  }
-
-  return (
-    <div className="flex flex-col gap-8">
-      <div className="flex flex-col gap-3">
-        <PanelHead title="Connected sources" />
-        <Link href="/connectors" className="ledger group px-4 py-3 flex items-center gap-3 transition-colors hover:bg-[var(--surface-raised)]">
-          <Plug {...ICON} style={{ color: "var(--ink-faint)" }} aria-hidden />
-          <div className="flex-1 min-w-0">
-            <div className="text-[14px] font-semibold">Connected sources</div>
-            <div className="label mt-0.5">Up Bank, PocketAI and more: sign-in details and connection status</div>
-          </div>
-          <span className="text-[13px] flex items-center gap-1" style={{ color: "var(--accent-text)" }}>
-            Manage
-            <ChevronRight {...ICON} aria-hidden />
-          </span>
-        </Link>
-      </div>
-
-      <div className="flex flex-col gap-3">
-        <PanelHead title="Syncing" />
-        <label htmlFor="check-connectivity" className="ledger px-5 py-4 flex items-start gap-3 cursor-pointer">
-          <input
-            id="check-connectivity"
-            type="checkbox"
-            className="mt-0.5"
-            style={{ accentColor: "var(--accent)" }}
-            checked={settings.sync_check_connectivity}
-            disabled={updateSettings.isPending}
-            onChange={(e) => setCheckConnectivity(e.target.checked)}
-          />
-          <span className="flex flex-col gap-0.5">
-            <span className="text-[13px] font-medium">Skip syncs while offline</span>
-            <span className="text-[12px]" style={{ color: "var(--ink-faint)" }}>
-              Checks for an internet connection before each scheduled sync. With no connection the sync is skipped quietly, with no
-              error shown, and picks up again by itself when you are back online. Sync now says so instead of failing.
-            </span>
-          </span>
-        </label>
-        {syncError && <ErrorLine error={syncError} />}
-      </div>
-    </div>
-  );
-}
 
 /* The AI provider: an admin concern (base URL and key), shown only in the Server group. */
 export function ModelSection({ settings }: { settings: AppSettings }) {

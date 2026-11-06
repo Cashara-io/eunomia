@@ -234,9 +234,21 @@ pub fn is_operator(user: &User) -> bool {
     operator_email_listed(&user.email)
 }
 
-/// Admin = the instance's first user, or an operator.
+/// Admin = the instance's first user, an operator, or an account an admin made one (Settings > People).
 pub async fn is_admin(db: &ControlDb, user: &User) -> AppResult<bool> {
-    Ok(is_operator(user) || crate::capsules::first_user(db).await?.as_ref() == Some(&user.id))
+    Ok(is_operator(user) || granted_admin(db, &user.id).await? || crate::capsules::first_user(db).await?.as_ref() == Some(&user.id))
+}
+
+/// True when an admin granted `user` admin rights in the app (the `admin` flag on the account).
+pub async fn granted_admin(db: &ControlDb, user: &RecordId) -> AppResult<bool> {
+    #[derive(Deserialize, SurrealValue)]
+    struct Flag {
+        #[serde(default)]
+        #[surreal(default)]
+        admin: Option<bool>,
+    }
+    let mut res = store::control::USER_ADMIN_FLAG.on(db).bind(("id", user.clone())).await?;
+    Ok(res.take::<Vec<Flag>>(0)?.into_iter().next().and_then(|f| f.admin).unwrap_or(false))
 }
 
 #[derive(Deserialize, SurrealValue)]

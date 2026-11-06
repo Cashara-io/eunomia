@@ -44,13 +44,15 @@ export const Note = ({ children }: { children: React.ReactNode }) => (
 
 export const Kbd = ({ children }: { children: React.ReactNode }) => <code className="font-mono text-[0.92em] px-1 rounded-[3px]" style={{ background: "var(--bauhaus-app-soft)" }}>{children}</code>;
 
-/** A command to paste into a terminal: ink block, then one primary copy button. */
+/** A command to paste into a terminal: ink block, then one primary copy button.
+ * Lines never wrap (a flag split across lines is easy to mistype); long ones scroll sideways. */
 export function CommandBlock({ value, label = "Command" }: { value: string; label?: string }) {
   return (
     <div className="flex flex-col gap-3 items-start">
       <pre
         aria-label={label}
-        className="w-full font-mono text-[13px] leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere] px-4 py-3.5 rounded-[2px]"
+        tabIndex={0}
+        className="w-full max-w-full font-mono text-[13px] leading-relaxed whitespace-pre overflow-x-auto px-4 py-3.5 rounded-[2px]"
         style={{ background: "var(--bauhaus-app-ink)", color: "var(--bauhaus-app-cream)" }}
       >
         {value}

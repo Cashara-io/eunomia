@@ -59,11 +59,12 @@ export function TokensSection() {
   const vaultName = (id: string) => vaultList.find((v) => v.id === id)?.name ?? id;
 
   async function create() {
+    if (!name.trim()) return;
     setBusy(true);
     setError(null);
     try {
       const res = await createToken.mutateAsync({
-        name: name.trim() || "API token",
+        name: name.trim(),
         scopes,
         vault_id: vaultId || null,
         expires_at: expiryDays ? new Date(Date.now() + Number(expiryDays) * 86_400_000).toISOString() : null,
@@ -137,8 +138,15 @@ export function TokensSection() {
             placeholder="For example: work laptop"
             maxLength={NAME_MAX}
             value={name}
+            required
+            aria-describedby={name.trim() ? undefined : "token-name-hint"}
             onChange={(e) => setName(e.target.value)}
           />
+          {!name.trim() && (
+            <p id="token-name-hint" className="text-[12px]" style={{ color: "var(--ink-faint)" }}>
+              Name it after where you&apos;ll use it, so you can tell your tokens apart later.
+            </p>
+          )}
         </div>
 
         <div className="flex flex-col gap-1.5">
@@ -202,7 +210,7 @@ export function TokensSection() {
               className="h-10 text-[14px] w-full"
             />
           </div>
-          <button type="submit" disabled={busy || scopes.length === 0} className="btn btn-primary">
+          <button type="submit" disabled={busy || scopes.length === 0 || !name.trim()} className="btn btn-primary">
             <KeyRound {...ICON} />
             {busy ? "Creating…" : "Create token"}
           </button>
@@ -311,11 +319,11 @@ export function TokensSection() {
                       </span>
                     </span>
                   </td>
-                  <td className="font-mono text-[12px]" style={{ color: "var(--ink-dim)" }}>
+                  <td className="tabular-nums text-[13px]" style={{ color: "var(--ink-dim)" }}>
                     {relativeTime(t.last_used_at)}
                   </td>
                   <td
-                    className="font-mono text-[12px]"
+                    className="tabular-nums text-[13px]"
                     style={{ color: exp.expired ? "var(--critical)" : "var(--ink-dim)" }}
                     title={t.expires_at ? new Date(t.expires_at).toLocaleString() : undefined}
                   >

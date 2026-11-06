@@ -24,7 +24,7 @@ import LiveStatusBadge from "@/components/live/LiveStatusBadge";
 import { JoinSharedSpace } from "@/components/PeerSharing";
 import { cssVar, prefersReducedMotion } from "@/components/bits/motion";
 import SpaceDetail from "@/components/vaults/SpaceDetail";
-import { ICON, JoinedNotice, RoleChip, SpaceSwatch, ago, inviterWords, peopleLine, sameEmail } from "@/components/vaults/bits";
+import { ICON, JoinedNotice, SpaceSwatch, ago, inviterWords, peopleLine, sameEmail } from "@/components/vaults/bits";
 
 /* New rows (since the previous load, never the first) settle in. A stable function, so React calls it once per mount. */
 function arrive(el: HTMLElement | null) {
@@ -183,9 +183,9 @@ function VaultRow({
     >
       <span className="flex-1 min-w-0">
         <span className="flex items-center gap-2.5 min-w-0">
-          <span className="text-[16px] font-medium truncate">{vault.name}</span>
+          {/* The one dot per space: its colour identity, repeated nowhere else. */}
           <SpaceSwatch vault={vault} />
-          {vault.role !== "owner" && <RoleChip role={vault.role} />}
+          <span className="text-[16px] font-medium truncate">{vault.name}</span>
         </span>
         <span className="label block mt-1 truncate">
           {peopleLine(vault, members)}
@@ -269,6 +269,9 @@ function CreateVaultForm({
   );
 }
 
+/** A quiet action that reads as a link (the page header keeps one primary button). */
+const TEXT_LINK = "inline-flex items-center gap-1 min-h-10 text-[14px] font-medium underline-offset-2 hover:underline";
+
 const vaultLabel = (v: Vault) => (v.kind === "personal" ? "Personal" : v.name);
 
 function MergeVaultsCard({
@@ -349,15 +352,15 @@ function MergeVaultsCard({
     <section className="flex flex-col gap-3 items-start" aria-labelledby="merge-title">
       <button
         type="button"
-        className="btn"
+        className={TEXT_LINK}
+        style={{ color: "var(--accent-text)" }}
         aria-expanded={open}
         aria-controls="merge-panel"
         onClick={() => setOpen((o) => !o)}
         id="merge-title"
       >
-        <Combine {...ICON} />
         Advanced: combine two spaces
-        <ChevronDown {...ICON} aria-hidden style={{ transform: open ? "rotate(180deg)" : undefined }} />
+        <ChevronDown size={16} strokeWidth={1.75} aria-hidden style={{ transform: open ? "rotate(180deg)" : undefined }} />
       </button>
       {open && (
       <div id="merge-panel" className="ledger p-5 flex flex-col gap-4 w-full">
@@ -522,7 +525,9 @@ export default function VaultsPage() {
   const vaultsQuery = useVaults();
   const refetchAll = useRefreshVaults();
   const vaults = vaultsQuery.data ?? (vaultsQuery.isError ? [] : null);
-  const me = useMe().data?.email ?? null;
+  const meQuery = useMe();
+  const me = meQuery.data?.email ?? null;
+  const isAdmin = meQuery.data?.is_admin ?? false;
   const [creating, setCreating] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // On narrow screens: has the person opened a space (detail view) or are they on the list?
@@ -543,6 +548,9 @@ export default function VaultsPage() {
   const org = vaults?.filter((v) => v.kind !== "personal") ?? [];
   // Open on the first shared space: that is where the people are.
   const selected = vaults?.find((v) => v.id === selectedId) ?? org[0] ?? personal[0] ?? null;
+
+  // Joining another Eunomia and combining spaces are for admins and people who run a shared space.
+  const canManage = isAdmin || org.some((v) => v.role === "owner");
 
   const wide = useWide();
   const showDetail = wide || opened;
@@ -569,7 +577,7 @@ export default function VaultsPage() {
       <PageHeader
         icon={Layers}
         title="Memory spaces"
-        intro="Keep each project's memories in its own space. Your personal space is private; other spaces can be shared with people you invite. AI apps can use a space by its name."
+        intro="Keep each project's memories in its own space. Share a space with the people you invite."
       />
 
       <div className="flex flex-wrap items-center justify-end gap-2">
@@ -577,7 +585,6 @@ export default function VaultsPage() {
         <button onClick={() => void refetchAll()} className="btn btn-icon" aria-label="Refresh spaces" title="Refresh">
           <RefreshCw {...ICON} />
         </button>
-        <JoinSharedSpace onJoined={(id) => open(id)} />
         {/* While the create form is open, its own Create button is the one primary action. */}
         <button onClick={() => setCreating(true)} disabled={creating} className={`btn ${creating ? "" : "btn-primary"}`}>
           <Plus {...ICON} />
@@ -658,7 +665,12 @@ export default function VaultsPage() {
         )}
       </div>
 
-      {vaults && vaults.length > 1 && showList && <MergeVaultsCard vaults={vaults} />}
+      {canManage && showList && (
+        <div className="flex flex-col gap-2 items-start pt-2" style={{ borderTop: "1px solid var(--border)" }}>
+          <JoinSharedSpace onJoined={(id) => open(id)} />
+          {vaults && vaults.length > 1 && <MergeVaultsCard vaults={vaults} />}
+        </div>
+      )}
     </div>
   );
 }

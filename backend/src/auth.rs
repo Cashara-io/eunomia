@@ -144,6 +144,11 @@ impl Credentials {
         self.map.write().unwrap_or_else(|e| e.into_inner()).retain(|_, c| c.tag != tag);
     }
 
+    /// Drops every credential of one user (an admin suspended the account).
+    pub fn forget_user(&self, user: &RecordId) {
+        self.map.write().unwrap_or_else(|e| e.into_inner()).retain(|_, c| &c.authn.user.id != user);
+    }
+
     /// Drops one presented credential (a token or a session cookie).
     pub fn forget_presented(&self, presented: &str) {
         self.map.write().unwrap_or_else(|e| e.into_inner()).remove(&models_user::hash_token(presented));

@@ -27,7 +27,7 @@ const MODES = [
   { id: "cosine", label: "Cosine", hint: "1 = same direction, 0 = unrelated" },
   { id: "distance", label: "Distance", hint: "euclidean distance between the full vectors; smaller is closer" },
   { id: "correlation", label: "Pearson", hint: "correlation of the vectors' components, -1 to 1" },
-  { id: "projected", label: "3D", hint: "euclidean distance in the 3D picture only" },
+  { id: "projected", label: "Map", hint: "distance between the points on the map only" },
 ] as const;
 type Mode = (typeof MODES)[number]["id"];
 
@@ -60,13 +60,13 @@ export default function MemoryRows({ points, vaultIds, nameOf, selection, focusI
     if (n < 2) return null;
     if (mode === "projected") {
       const ps = selection.map((id) => byId.get(id)).filter((p): p is Row => !!p);
-      return ps.map((a) => ps.map((b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)));
+      return ps.map((a) => ps.map((b) => Math.hypot(a.x - b.x, a.y - b.y)));
     }
     return ready && sim.data ? sim.data[mode] : null;
   }, [n, mode, selection, byId, ready, sim.data]);
   const projected = useMemo(() => {
     const ps = selection.map((id) => byId.get(id)).filter((p): p is Row => !!p);
-    return ps.map((a) => ps.map((b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)));
+    return ps.map((a) => ps.map((b) => Math.hypot(a.x - b.x, a.y - b.y)));
   }, [selection, byId]);
 
   const pairs = useMemo(() => {
@@ -190,7 +190,7 @@ export default function MemoryRows({ points, vaultIds, nameOf, selection, focusI
                 {[
                   [n === 2 ? "Cosine" : "Mean cosine", ready && n === 2 ? fmt(sim.data!.cosine[0][1]) : meanCos !== null ? fmt(meanCos) : "-"],
                   [n === 2 ? "Pearson" : "Mean Pearson", ready ? fmt(n === 2 ? sim.data!.correlation[0][1] : avgOff(sim.data!.correlation)) : "-"],
-                  [n === 2 ? "3D distance" : "Mean 3D gap", n === 2 ? fmt(projected[0]?.[1] ?? NaN) : fmt(avgOff(projected))],
+                  [n === 2 ? "Map distance" : "Mean map gap", n === 2 ? fmt(projected[0]?.[1] ?? NaN) : fmt(avgOff(projected))],
                 ].map(([l, v]) => (
                   <div key={l} className="flex flex-col">
                     <dd className="font-mono text-[17px] leading-tight order-1" style={{ color: "var(--ink)" }}>
@@ -206,7 +206,7 @@ export default function MemoryRows({ points, vaultIds, nameOf, selection, focusI
                     <div className="h-full rounded-full" style={{ width: `${Math.max(0, sim.data!.cosine[0][1]) * 100}%`, background: "var(--accent)" }} />
                   </div>
                   <p className="label">
-                    Embedding distance <span className="font-mono">{fmt(sim.data!.distance[0][1], 3)}</span>; the 3D distance only measures the picture.
+                    Embedding distance <span className="font-mono">{fmt(sim.data!.distance[0][1], 3)}</span>; the map distance only measures the picture.
                   </p>
                 </div>
               )}

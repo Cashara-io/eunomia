@@ -41,9 +41,9 @@ function LocalNote({ url }: { url: string }) {
       This address only works for apps on this {host === "localhost" || host.startsWith("127.") ? "computer" : "network"}.{" "}
       {isAdmin ? (
         <>
-          To connect an app on another computer, give Eunomia a public address under{" "}
+          To connect an app on another computer, turn on{" "}
           <Link href="/settings?tab=https" className="underline" style={{ color: "var(--accent-text)" }}>
-            Settings, HTTPS
+            HTTPS in settings
           </Link>
           .
         </>
@@ -61,7 +61,7 @@ function NotReachable({ url }: { url: string }) {
   const message =
     `Hi, I'd like to connect ChatGPT to our Eunomia server, but ChatGPT can't reach it yet. ` +
     `ChatGPT connects from OpenAI's servers, so Eunomia needs a public https:// address (it is ${address} right now). ` +
-    `An admin can set one up in Eunomia under Settings, HTTPS, or put the server behind a public https:// address another way. Thanks!`;
+    `An admin can turn on HTTPS in Eunomia's settings, or put the server behind a public https:// address another way. Thanks!`;
   return (
     <section className="flex flex-col gap-4 py-2" aria-labelledby="unreachable-title">
       <h2 id="unreachable-title" className="text-[20px] font-semibold leading-snug">
@@ -72,29 +72,21 @@ function NotReachable({ url }: { url: string }) {
         open this page from that address and the steps appear here.
       </p>
       <div className="flex flex-col gap-2">
-        <span className="text-[14px] font-semibold">Message for your IT team</span>
-        <p aria-label="Message for your IT team" className="soft-panel px-4 py-3 text-[14px] leading-relaxed whitespace-pre-wrap">
+        <span className="text-[14px] font-semibold">Message for your admin</span>
+        <p aria-label="Message for your admin" className="soft-panel px-4 py-3 text-[14px] leading-relaxed whitespace-pre-wrap">
           {message}
         </p>
         <CopyButton value={message} label="Copy message" size="sm" className="btn-primary self-start" />
       </div>
-      <Note>
-        {isAdmin ? (
-          <>
-            As an admin, you can set it up under{" "}
-            <Link href="/settings?tab=https" className="underline" style={{ color: "var(--accent-text)" }}>
-              Settings, HTTPS
-            </Link>
-            . Or{" "}
-          </>
-        ) : (
-          "While you wait, you can "
-        )}
-        <Link href="/" className="underline" style={{ color: "var(--accent-text)" }}>
-          choose a different AI app
-        </Link>
-        .
-      </Note>
+      {isAdmin && (
+        <Note>
+          As an admin, you can turn on{" "}
+          <Link href="/settings?tab=https" className="underline" style={{ color: "var(--accent-text)" }}>
+            HTTPS in settings
+          </Link>
+          .
+        </Note>
+      )}
     </section>
   );
 }

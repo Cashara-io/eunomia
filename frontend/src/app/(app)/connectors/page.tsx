@@ -1,12 +1,14 @@
 "use client";
 
+import SyncSettings from "@/components/SyncSettings";
 import { Fragment, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronRight, Plug, Plus, Search, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Database, Plug, Plus, Search, X } from "lucide-react";
 import type { Connector, SourceRow } from "@/lib/types";
 import { useConnectors } from "@/lib/queries/connectors";
 import { useSources } from "@/lib/queries/sources";
-import { CONNECTOR_META, CONNECTOR_ORDER, ConnectorTile, connectorStatus, kindForSource, relativeTime } from "@/lib/connectorMeta";
+import { CONNECTOR_META, CONNECTOR_ORDER, connectorStatus, kindForSource, relativeTime } from "@/lib/connectorMeta";
+import { useMe } from "@/lib/queries/auth";
 import { isLiveSource, sourceHealth } from "@/lib/sourceState";
 import ErrorLine, { failure } from "@/components/ErrorLine";
 import Tooltip from "@/components/bits/Tooltip";
@@ -65,6 +67,16 @@ const CONNECTED_COLS = "grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1.
 const ROW_LINK =
   "grid items-center gap-x-4 px-4 min-h-14 py-2 text-[14px] transition-[background-color] duration-[120ms] ease-[var(--ease-out)] hover:bg-[var(--bauhaus-app-bg)] focus-visible:outline-offset-[-2px]";
 
+/** A source's icon in plain ink, no tinted square: the name beside it identifies the source. */
+function SourceMark({ kind, size }: { kind: Connector["kind"] | null; size: number }) {
+  const icon = kind ? CONNECTOR_META[kind].icon : null;
+  return (
+    <span aria-hidden className="inline-flex items-center justify-center shrink-0" style={{ width: size, height: size, color: "var(--ink-dim)" }}>
+      {icon ?? <Database size={18} strokeWidth={1.75} />}
+    </span>
+  );
+}
+
 function matches(q: string, label: string, description = "") {
   return !q || label.toLowerCase().includes(q) || description.toLowerCase().includes(q);
 }
@@ -80,6 +92,7 @@ export default function ConnectorsPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   // Custom integrations are an advanced path: closed until asked for.
   const [showCustom, setShowCustom] = useState(false);
+  const isAdmin = useMe().data?.is_admin ?? false;
 
   const load = () => {
     connectorsQuery.refetch();
@@ -140,7 +153,7 @@ export default function ConnectorsPage() {
       <PageHeader
         icon={Plug}
         title="Connected sources"
-        intro="Bring meeting notes, emails and other information into Eunomia. Choose a source below to connect it. Your sign-in details are stored encrypted and only sent to the service they belong to."
+        intro="Bring emails, meeting notes and other information into Eunomia. Sign-ins are stored encrypted."
       />
 
       <div className="flex items-center gap-2 flex-wrap">
@@ -190,75 +203,78 @@ export default function ConnectorsPage() {
           <h2 id="connected-heading" className="section-title">
             Connected
           </h2>
-          <div className="ledger overflow-hidden">
-            <div
-              className={`hidden md:grid ${CONNECTED_COLS} gap-x-4 px-4 h-[34px] items-center caps`}
-              style={{ background: "var(--bauhaus-app-ink)", color: "var(--bauhaus-app-cream)" }}
-              aria-hidden
-            >
-              <span>Source</span>
-              <span>Status</span>
-              <span className="text-right">Items</span>
-              <span>Last updated</span>
-              <span>Brings in</span>
-              <span />
-            </div>
-            {loading && <SkeletonRows count={2} />}
-            {!loading && shownConnected.length === 0 && (
-              <p className="px-4 py-5 text-[14px]" style={{ color: "var(--ink-dim)" }}>
-                {q ? `No connected source matches "${query.trim()}".` : "Nothing connected yet. Choose a source under \u201cAdd a source\u201d to bring its information in."}
-              </p>
-            )}
-            <div className="hairline-rows">
-              {shownConnected.map((r) => {
-                const s = r.source;
-                const fails = s?.sync_status.consecutive_failures ?? 0;
-                const health = r.status === "paused" ? { tone: "var(--ink-dim)", label: "Disconnected" } : sourceHealth(s);
-                return (
-                  <Fragment key={r.id}>
-                  <Link href={r.href} className={`${ROW_LINK} ${CONNECTED_COLS}`}>
-                    <span className="flex items-center gap-3 min-w-0">
-                      <ConnectorTile kind={r.kind} size={32} />
-                      <span className="min-w-0 flex flex-col">
-                        <span className="font-medium truncate">{r.label}</span>
-                        {r.account && (
-                          <span className="text-[13px] truncate" style={{ color: "var(--ink-dim)" }}>
-                            {r.account}
-                          </span>
-                        )}
+          {loading && <SkeletonRows count={2} />}
+          {!loading && shownConnected.length === 0 && (
+            <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+              {q ? `No connected source matches "${query.trim()}".` : "Nothing connected yet. Choose a source under \u201cAdd a source\u201d to bring its information in."}
+            </p>
+          )}
+          {/* No table at all until there is a row to put in it. */}
+          {!loading && shownConnected.length > 0 && (
+            <div>
+              <div
+                className={`hidden md:grid ${CONNECTED_COLS} gap-x-4 px-4 pb-2 items-end text-[12px] font-medium border-b`}
+                style={{ color: "var(--ink-dim)" }}
+                aria-hidden
+              >
+                <span>Source</span>
+                <span>Status</span>
+                <span className="text-right">Items</span>
+                <span>Last updated</span>
+                <span>Brings in</span>
+                <span />
+              </div>
+              <div className="hairline-rows border-b">
+                {shownConnected.map((r) => {
+                  const s = r.source;
+                  const fails = s?.sync_status.consecutive_failures ?? 0;
+                  const health = r.status === "paused" ? { tone: "var(--ink-dim)", label: "Disconnected" } : sourceHealth(s);
+                  return (
+                    <Fragment key={r.id}>
+                    <Link href={r.href} className={`${ROW_LINK} ${CONNECTED_COLS}`}>
+                      <span className="flex items-center gap-3 min-w-0">
+                        <SourceMark kind={r.kind} size={24} />
+                        <span className="min-w-0 flex flex-col">
+                          <span className="font-medium truncate">{r.label}</span>
+                          {r.account && (
+                            <span className="text-[13px] truncate" style={{ color: "var(--ink-dim)" }}>
+                              {r.account}
+                            </span>
+                          )}
+                        </span>
                       </span>
-                    </span>
-                    <span title={s?.sync_status.last_error || undefined}>
-                      <StatusLabel tone={toneFromVar(health.tone)}>{health.label}</StatusLabel>
-                    </span>
-                    <span className="hidden md:block font-mono text-right">{s ? s.record_count.toLocaleString() : "n/a"}</span>
-                    <span className="hidden md:block text-[13px]" style={{ color: fails ? "var(--critical)" : "var(--ink-dim)" }}>
-                      {fails ? `${fails} failed in a row` : s ? relativeTime(s.sync_status.last_ok) : "n/a"}
-                    </span>
-                    <span
-                      className="hidden md:block text-[13px] truncate"
-                      style={{ color: "var(--ink-dim)" }}
-                      title={s?.record_types.length ? typeWords(s.record_types) : undefined}
-                    >
-                      {s?.record_types.length ? typeWords(s.record_types) : "Tool calls only"}
-                    </span>
-                    <ChevronRight size={16} strokeWidth={1.75} color="var(--ink-dim)" className="hidden md:block" aria-hidden />
-                  </Link>
-                  {r.addAfter && r.kind && (
-                    <Link
-                      href={`/connectors/setup/${r.kind}?new=1`}
-                      className="flex items-center gap-2 px-4 min-h-10 pl-[60px] text-[13px] font-medium underline-offset-2 hover:underline"
-                      style={{ color: "var(--accent-text)" }}
-                    >
-                      <Plus size={14} strokeWidth={1.75} aria-hidden />
-                      Add another {r.label} connection
+                      <span title={s?.sync_status.last_error || undefined}>
+                        <StatusLabel tone={toneFromVar(health.tone)}>{health.label}</StatusLabel>
+                      </span>
+                      <span className="hidden md:block font-mono text-right">{s ? s.record_count.toLocaleString() : "n/a"}</span>
+                      <span className="hidden md:block text-[13px]" style={{ color: fails ? "var(--critical)" : "var(--ink-dim)" }}>
+                        {fails ? `${fails} failed in a row` : s ? relativeTime(s.sync_status.last_ok) : "n/a"}
+                      </span>
+                      <span
+                        className="hidden md:block text-[13px] truncate"
+                        style={{ color: "var(--ink-dim)" }}
+                        title={s?.record_types.length ? typeWords(s.record_types) : undefined}
+                      >
+                        {s?.record_types.length ? typeWords(s.record_types) : "Tool calls only"}
+                      </span>
+                      <ChevronRight size={16} strokeWidth={1.75} color="var(--ink-dim)" className="hidden md:block" aria-hidden />
                     </Link>
-                  )}
-                  </Fragment>
-                );
-              })}
+                    {r.addAfter && r.kind && (
+                      <Link
+                        href={`/connectors/setup/${r.kind}?new=1`}
+                        className="flex items-center gap-2 px-4 min-h-10 pl-[52px] text-[13px] font-medium underline-offset-2 hover:underline"
+                        style={{ color: "var(--accent-text)" }}
+                      >
+                        <Plus size={14} strokeWidth={1.75} aria-hidden />
+                        Add another {r.label} connection
+                      </Link>
+                    )}
+                    </Fragment>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
         </section>
       )}
 
@@ -294,7 +310,7 @@ export default function ConnectorsPage() {
                       aria-label={`Connect ${meta.label}`}
                       className="flex items-center gap-3 px-2 py-2.5 min-w-0 transition-colors hover:bg-[var(--surface-hover)]"
                     >
-                      <ConnectorTile kind={kind} size={28} />
+                      <SourceMark kind={kind} size={24} />
                       <span className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-baseline sm:gap-3">
                         <span className="text-[14px] font-semibold shrink-0">{meta.label}</span>
                         <span className="text-[13px] truncate" style={{ color: "var(--ink-dim)" }}>
@@ -313,10 +329,10 @@ export default function ConnectorsPage() {
         </section>
       )}
 
-      {statusFilter !== "disconnected" && !q && (
+      {isAdmin && statusFilter !== "disconnected" && !q && (
         <section className="flex flex-col gap-4">
           <div>
-            <button type="button" className="btn" aria-expanded={showCustom} aria-controls="custom-integrations" onClick={() => setShowCustom((v) => !v)}>
+            <button type="button" className="btn btn-ghost" aria-expanded={showCustom} aria-controls="custom-integrations" onClick={() => setShowCustom((v) => !v)}>
               Advanced: custom integrations
               <ChevronDown size={16} strokeWidth={1.75} aria-hidden style={{ transform: showCustom ? "rotate(180deg)" : undefined }} />
             </button>
@@ -328,6 +344,8 @@ export default function ConnectorsPage() {
           )}
         </section>
       )}
+
+      <SyncSettings />
     </div>
   );
 }

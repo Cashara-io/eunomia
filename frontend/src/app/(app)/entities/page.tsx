@@ -16,17 +16,14 @@ const VIEWS = [
 ] as const;
 type ViewId = (typeof VIEWS)[number]["id"];
 
-// The view last picked here is remembered in this browser. Until then: List on phones, Connections on desktop.
+// The view last picked here is remembered in this browser. Until then: List, the first tab, everywhere.
 const VIEW_KEY = "eunomia.entities.view";
 const viewListeners = new Set<() => void>();
 let viewFallback: ViewId | null = null; // when storage is blocked, remembered for this visit only
 function subscribeView(l: () => void) {
   viewListeners.add(l);
-  const mq = window.matchMedia("(max-width: 767px)");
-  mq.addEventListener("change", l);
   return () => {
     viewListeners.delete(l);
-    mq.removeEventListener("change", l);
   };
 }
 function readView(): ViewId {
@@ -35,7 +32,7 @@ function readView(): ViewId {
     stored = window.localStorage.getItem(VIEW_KEY) ?? viewFallback;
   } catch {}
   if (VIEWS.some((v) => v.id === stored)) return stored as ViewId;
-  return window.matchMedia("(max-width: 767px)").matches ? "list" : "graph";
+  return "list";
 }
 function storeView(id: ViewId) {
   viewFallback = id;
@@ -46,7 +43,7 @@ function storeView(id: ViewId) {
 }
 
 export default function EntitiesPage() {
-  const view = useSyncExternalStore(subscribeView, readView, () => "graph" as ViewId);
+  const view = useSyncExternalStore(subscribeView, readView, () => "list" as ViewId);
   const setView = storeView;
   const qc = useQueryClient();
   const fetching = useIsFetching({ queryKey: entityKeys.all }) > 0;

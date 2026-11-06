@@ -1,7 +1,7 @@
 "use client";
 
 import ErrorLine, { failure } from "@/components/ErrorLine";
-import { Suspense, useRef } from "react";
+import { Suspense, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSettings } from "@/lib/queries/settings";
 import { useMe } from "@/lib/queries/auth";
@@ -10,9 +10,10 @@ import PageHeader from "@/components/ui/PageHeader";
 import { TokensSection } from "./TokensSection";
 import { ConnectedAppsSection } from "./ConnectedAppsSection";
 import { SessionsSection } from "./SessionsSection";
-import { BackupsNote, UpdateSection } from "./UpdateSection";
+import { UpdateSection } from "./UpdateSection";
+import { BackupsSection } from "./BackupsSection";
 import { HttpsSection } from "./HttpsSection";
-import { GeneralSection, ModelSection } from "./GeneralSection";
+import { ModelSection } from "./GeneralSection";
 import { DataSection } from "./DataSection";
 import { UsageSection } from "./UsageSection";
 import { AuditSection } from "./AuditSection";
@@ -24,7 +25,6 @@ const GROUPS = [
     label: "Account",
     admin: false,
     tabs: [
-      { id: "general", label: "General" },
       { id: "apps", label: "Connected apps" },
       { id: "tokens", label: "API tokens" },
       { id: "sessions", label: "Sessions" },
@@ -46,12 +46,14 @@ const GROUPS = [
     tabs: [
       { id: "https", label: "HTTPS" },
       { id: "updates", label: "Updates" },
+      { id: "backups", label: "Backups" },
       { id: "model", label: "AI provider" },
     ],
   },
 ] as const;
 
 type TabId = (typeof GROUPS)[number]["tabs"][number]["id"];
+const DEFAULT_TAB: TabId = "apps";
 
 // useSearchParams needs a Suspense boundary for the static build.
 export default function SettingsPage() {
@@ -71,8 +73,8 @@ function Settings() {
   const isAdmin = me.data?.is_admin ?? false;
   const groups = GROUPS.filter((g) => isAdmin || !g.admin);
   const tabs = groups.flatMap((g) => g.tabs as readonly { id: TabId; label: string }[]);
-  // an unknown tab, or an admin tab for a member, falls back to General
-  const tab: TabId = tabs.find((t) => t.id === requested)?.id ?? "general";
+  // an unknown tab, or an admin tab for a member, falls back to the first one
+  const tab: TabId = tabs.find((t) => t.id === requested)?.id ?? DEFAULT_TAB;
   const settingsQuery = useSettings();
   const settings = settingsQuery.data ?? null;
   const loadError = settingsQuery.isError
@@ -81,8 +83,13 @@ function Settings() {
   const tabRefs = useRef<Partial<Record<TabId, HTMLButtonElement | null>>>({});
 
   function choose(id: TabId) {
-    router.replace(id === "general" ? "/settings" : `/settings?tab=${id}`, { scroll: false });
+    router.replace(id === DEFAULT_TAB ? "/settings" : `/settings?tab=${id}`, { scroll: false });
   }
+
+  // General is gone (its sync switch lives on Connected sources): old links to it land on the default tab
+  useEffect(() => {
+    if (requested === "general") router.replace("/settings", { scroll: false });
+  }, [requested, router]);
 
   function onKey(e: React.KeyboardEvent, id: TabId) {
     const step = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
@@ -189,7 +196,6 @@ function Settings() {
           </nav>
 
           <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="min-w-0 flex-1 max-w-4xl">
-            {tab === "general" && <GeneralSection settings={settings} />}
             {tab === "apps" && <ConnectedAppsSection />}
             {tab === "tokens" && <TokensSection />}
             {tab === "sessions" && <SessionsSection />}
@@ -198,12 +204,8 @@ function Settings() {
             {tab === "audit" && <AuditSection />}
             {tab === "usage" && <UsageSection />}
             {tab === "https" && <HttpsSection />}
-            {tab === "updates" && (
-              <div className="flex flex-col gap-10">
-                <UpdateSection />
-                <BackupsNote />
-              </div>
-            )}
+            {tab === "updates" && <UpdateSection />}
+            {tab === "backups" && <BackupsSection />}
             {tab === "model" && <ModelSection settings={settings} />}
           </div>
         </div>

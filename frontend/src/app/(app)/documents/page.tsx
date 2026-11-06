@@ -425,9 +425,9 @@ function Documents() {
       <PageHeader
         icon={Files}
         title="Documents"
-        intro="Upload notes, specs and exports. Your AI apps can find each passage and trace it back to the file. Only you can read your documents."
+        intro="Notes, specs and exports your AI apps can search. Only you can read them."
         actions={
-          <button type="button" onClick={() => input.current?.click()} disabled={storageOff} className="btn btn-primary">
+          !storageOff && <button type="button" onClick={() => input.current?.click()} disabled={storageOff} className="btn btn-primary">
             <Upload {...ICON} aria-hidden />
             Upload
           </button>
@@ -450,28 +450,12 @@ function Documents() {
       </>
 
       {listQuery.isError && <ErrorLine error={failure(listQuery.error, "Could not load your documents.", " Reload the page to try again.")} />}
-      {storageOff && (
-        <div className="ledger px-4 py-3 text-[13px] flex flex-col gap-1.5" style={{ color: "var(--ink-dim)" }}>
-          {isAdmin ? (
-            <>
-              <span>Document storage is turned off on this server, so files can&apos;t be uploaded yet.</span>
-              <details>
-                <summary className="cursor-pointer">Details</summary>
-                <span className="block mt-1">
-                  Set <code className="font-mono text-[12px]">EUNOMIA_DOCUMENTS_BACKEND</code> in the server&apos;s environment and restart
-                  it. See Documents in Help.
-                </span>
-              </details>
-            </>
-          ) : (
-            <span>Uploading isn&apos;t turned on yet. Ask your admin to turn on document storage.</span>
-          )}
-        </div>
-      )}
-
+      {storageOff ? (
+        <StorageOff isAdmin={isAdmin} />
+      ) : (
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px] items-start">
         <div className="flex flex-col gap-6 min-w-0">
-          {!storageOff && <DropZone maxBytes={maxBytes} disabled={list === undefined} onFiles={uploads.add} />}
+          <DropZone maxBytes={maxBytes} disabled={list === undefined} onFiles={uploads.add} />
           <UploadRows rows={uploads.rows} onDismiss={uploads.dismiss} />
 
           <section className="flex flex-col gap-2.5" aria-labelledby="documents-title">
@@ -512,9 +496,7 @@ function Documents() {
                   {docs?.length === 0 && (
                     <tr>
                       <td colSpan={6} style={{ color: "var(--ink-dim)", height: 56 }}>
-                        {storageOff
-                          ? "No documents yet."
-                          : "No documents yet. Drop a file above, or ask your AI app to save one for you."}
+                        No documents yet. Drop a file above, or ask your AI app to save one for you.
                       </td>
                     </tr>
                   )}
@@ -568,6 +550,27 @@ function Documents() {
           )}
         </aside>
       </div>
+      )}
+    </div>
+  );
+}
+
+/* Storage is off: one calm empty state instead of a disabled upload, an empty table and an idle side panel. */
+function StorageOff({ isAdmin }: { isAdmin: boolean }) {
+  return (
+    <div className="flex flex-col items-center text-center gap-3 py-16 px-4" data-testid="documents-storage-off">
+      <Files size={28} strokeWidth={1.5} aria-hidden style={{ color: "var(--ink-faint)" }} />
+      <h2 className="text-[16px] font-semibold">Document storage isn&apos;t turned on</h2>
+      {isAdmin ? (
+        <p className="text-[14px] max-w-[52ch]" style={{ color: "var(--ink-dim)" }}>
+          To let people upload files, set <code className="font-mono text-[13px]">EUNOMIA_DOCUMENTS_BACKEND</code> in the server&apos;s
+          settings and restart Eunomia.
+        </p>
+      ) : (
+        <p className="text-[14px] max-w-[52ch]" style={{ color: "var(--ink-dim)" }}>
+          Ask your admin.
+        </p>
+      )}
     </div>
   );
 }

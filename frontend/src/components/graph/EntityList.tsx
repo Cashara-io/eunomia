@@ -20,9 +20,9 @@ function ago(iso: string | null): string {
   if (Number.isNaN(t)) return "";
   const s = Math.max(0, (Date.now() - t) / 1000);
   if (s < 60) return "Just now";
-  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
-  if (s < 86400 * 30) return `${Math.floor(s / 86400)} d ago`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  if (s < 86400 * 30) return `${Math.floor(s / 86400)}d ago`;
   return new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 

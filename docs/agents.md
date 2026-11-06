@@ -107,9 +107,9 @@ with read-only tools, which can `recall` but not save. Sources:
 
 ## The memory skill
 
-The **AI instructions** page (under Advanced in the sidebar) holds the instructions that tell agents
-when to recall and what to remember. You can view it, edit it, or reset it to the
-built-in default. It reaches agents three ways:
+Admins can add **AI instructions** (a page under Advanced in the sidebar, shown to admins only):
+the instructions that tell agents when to recall and what to remember. An admin can view them,
+edit them, or reset them to the built-in default. It reaches agents three ways:
 
 - **Every MCP client** gets it as the server's connection instructions, so an
   edit applies the next time the agent connects.

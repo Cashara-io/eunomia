@@ -71,7 +71,7 @@ export default function TransferOwnershipPanel({ vault, members, me }: { vault: 
               </button>
             </>
           ) : (
-            <button type="button" className="btn btn-primary" disabled={!target} onClick={() => setConfirming(true)}>
+            <button type="button" className="btn" disabled={!target} onClick={() => setConfirming(true)}>
               Hand over
             </button>
           )}

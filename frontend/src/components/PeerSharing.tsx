@@ -166,11 +166,15 @@ export default function PeerSharing({ vault }: { vault: { id: string; name: stri
 
   return (
     <Disclosure
-      key={inUse ? "in-use" : "unused"}
-      defaultOpen={inUse}
       title="Share with another Eunomia"
       icon={<Share2 {...ICON} />}
-      hint={inUse ? undefined : "Keep a copy of this space on someone else's Eunomia, kept in step."}
+      hint={
+        links.length > 0
+          ? `Shared with ${links.length === 1 ? "1 other Eunomia" : `${links.length} other Eunomias`}.`
+          : codes.length > 0
+            ? "A share code is waiting to be used."
+            : "Keep a copy of this space on someone else's Eunomia, kept in step."
+      }
     >
       <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
         {isOwner
@@ -275,7 +279,7 @@ export default function PeerSharing({ vault }: { vault: { id: string; name: stri
   );
 }
 
-/** "Connect to another Eunomia…": a button for the page header and a dialog to paste a share code into.
+/** "Connect to another Eunomia…": a quiet text action and a dialog to paste a share code into.
  * Not the same as a team invitation, which arrives under Pending invitations. */
 export function JoinSharedSpace({ onJoined }: { onJoined?: (vaultId: string) => void }) {
   const join = useJoinShared();
@@ -309,7 +313,12 @@ export function JoinSharedSpace({ onJoined }: { onJoined?: (vaultId: string) => 
 
   return (
     <>
-      <button type="button" className="btn" onClick={() => setOpen(true)}>
+      <button
+        type="button"
+        className="inline-flex items-center gap-1.5 min-h-10 text-[14px] font-medium underline-offset-2 hover:underline"
+        style={{ color: "var(--accent-text)" }}
+        onClick={() => setOpen(true)}
+      >
         <LogIn {...ICON} />
         Connect to another Eunomia…
       </button>

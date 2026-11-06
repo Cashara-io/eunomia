@@ -29,7 +29,8 @@ export default function PageHeader({
         </div>
         {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
       </div>
-      {intro && <p className="page-intro">{intro}</p>}
+      {/* a div, not a p: callers pass breadcrumbs (<nav>) and other blocks as the intro */}
+      {intro && <div className="page-intro">{intro}</div>}
       {children}
     </header>
   );

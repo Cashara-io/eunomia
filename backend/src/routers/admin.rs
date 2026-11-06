@@ -1,9 +1,10 @@
 //! Workspace administration (instance admin only): the security ledger (`audit_event`) as a
-//! readable activity log, and the people directory with the sign-up policy.
+//! readable activity log, and the people directory with the sign-up policy, where an admin can make
+//! another account an admin, take that back, and suspend or restore an account.
 
 use std::collections::HashMap;
 
-use axum::{extract::{Query, State}, routing::get, Json, Router};
+use axum::{extract::{Path, Query, State}, routing::{get, put}, Json, Router};
 use serde::{Deserialize, Serialize};
 use surrealdb::types::SurrealValue;
 use surrealdb::types::{Datetime, RecordId};
@@ -16,7 +17,11 @@ use crate::state::AppState;
 use crate::store;
 
 pub fn router() -> Router<AppState> {
-    Router::new().route("/admin/audit", get(get_workspace_audit)).route("/admin/people", get(get_people))
+    Router::new()
+        .route("/admin/audit", get(get_workspace_audit))
+        .route("/admin/people", get(get_people))
+        .route("/admin/people/{user_id}/admin", put(set_admin))
+        .route("/admin/people/{user_id}/suspended", put(set_suspended))
 }
 
 async fn require_admin(state: &AppState, user: &User) -> AppResult<()> {
@@ -35,28 +40,37 @@ async fn require_admin(state: &AppState, user: &User) -> AppResult<()> {
 pub enum AuditCategory {
     #[default]
     All,
+    /// Everything except sign-ins: spaces, tokens, apps, admin and the rest.
+    Changes,
     Spaces,
     Signins,
     Tokens,
     Apps,
+    /// Admin rights granted or taken back, accounts suspended or restored.
+    Admin,
 }
 
 const SIGNIN_ACTIONS: &[&str] = &["auth.login", "auth.register", "auth.oidc_login", "auth.oidc_link", "auth.failed"];
+const ADMIN_ACTIONS: &[&str] = &["admin.grant", "admin.revoke", "user.suspend", "user.restore"];
 
 impl AuditCategory {
-    /// `(prefix, exact actions)` for the ledger query; both empty means every event.
-    fn filter(self) -> (&'static str, &'static [&'static str]) {
+    /// `(prefix, exact actions, excluded actions)` for the ledger query; all empty means every event.
+    fn filter(self) -> (&'static str, &'static [&'static str], &'static [&'static str]) {
         match self {
-            AuditCategory::All => ("", &[]),
-            AuditCategory::Spaces => ("vault.", &[]),
-            AuditCategory::Signins => ("", SIGNIN_ACTIONS),
-            AuditCategory::Tokens => ("auth.token_", &[]),
-            AuditCategory::Apps => ("oauth.", &[]),
+            AuditCategory::All => ("", &[], &[]),
+            AuditCategory::Changes => ("", &[], SIGNIN_ACTIONS),
+            AuditCategory::Spaces => ("vault.", &[], &[]),
+            AuditCategory::Signins => ("", SIGNIN_ACTIONS, &[]),
+            AuditCategory::Tokens => ("auth.token_", &[], &[]),
+            AuditCategory::Apps => ("oauth.", &[], &[]),
+            AuditCategory::Admin => ("", ADMIN_ACTIONS, &[]),
         }
     }
 
     fn of(action: &str) -> Self {
-        if action.starts_with("vault.") {
+        if ADMIN_ACTIONS.contains(&action) {
+            AuditCategory::Admin
+        } else if action.starts_with("vault.") {
             AuditCategory::Spaces
         } else if action.starts_with("auth.token_") {
             AuditCategory::Tokens
@@ -177,6 +191,10 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
         },
         "vault.transfer" => format!("Handed {space} over to {email}"),
         "vault.delete" => format!("Deleted the space {space}"),
+        "admin.grant" => format!("Made {email} an admin"),
+        "admin.revoke" => format!("Took admin rights away from {email}"),
+        "user.suspend" => format!("Suspended {email}"),
+        "user.restore" => format!("Restored access for {email}"),
         "auth.login" if ok => return "Signed in".into(),
         "auth.login" => return "Sign-in failed (wrong email or password)".into(),
         "auth.oidc_login" if ok => return "Signed in with single sign-on".into(),
@@ -239,12 +257,13 @@ fn via_words(actor_kind: &str) -> &'static str {
 async fn get_workspace_audit(State(state): State<AppState>, user: User, Query(q): Query<WorkspaceAuditQuery>) -> AppResult<Json<WorkspaceAuditPage>> {
     require_admin(&state, &user).await?;
     let limit = q.limit.clamp(1, 200);
-    let (prefix, actions) = q.category.filter();
+    let (prefix, actions, exclude) = q.category.filter();
     let mut rows: Vec<LedgerRow> = store::control::ADMIN_AUDIT_PAGE
         .on(&state.control)
         .bind(("org", user.org.record()))
         .bind(("prefix", prefix.to_string()))
         .bind(("actions", actions.iter().map(|a| a.to_string()).collect::<Vec<_>>()))
+        .bind(("exclude", exclude.iter().map(|a| a.to_string()).collect::<Vec<_>>()))
         // one extra row says whether there is another page
         .bind(("limit", limit + 1))
         .bind(("offset", q.offset.max(0)))
@@ -307,6 +326,12 @@ struct PersonRow {
     #[surreal(default)]
     email: String,
     created_at: Option<Datetime>,
+    #[serde(default)]
+    #[surreal(default)]
+    admin: Option<bool>,
+    #[serde(default)]
+    #[surreal(default)]
+    suspended_at: Option<Datetime>,
 }
 
 #[derive(Debug, Deserialize, SurrealValue)]
@@ -335,8 +360,16 @@ struct Person {
     last_active: Option<String>,
     /// Shared spaces this person is an active member of (their personal space not counted).
     shared_spaces: i64,
-    /// `creator` (the first account), `operator` (listed in the server's admin emails), or empty.
+    /// Why this person is an admin: `creator` (the first account), `operator` (listed in the server's
+    /// admin emails), `granted` (made an admin in the app), or empty for a member.
     admin: String,
+    /// `admin` or `member`.
+    role: String,
+    /// When an admin suspended the account, RFC 3339; none while it is active.
+    #[schema(value_type = Option<String>)]
+    suspended_at: Option<Datetime>,
+    /// The admin looking at the list.
+    is_you: bool,
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -376,19 +409,32 @@ fn signup_policy(mode: &str, allowlist: &str, operators: &str) -> SignupPolicy {
     }
 }
 
-#[utoipa::path(
-    operation_id = "listPeople",
-    get,
-    path = "/api/admin/people",
-    tag = "admin",
-    summary = "Every account in the workspace and the sign-up policy (admin only)",
-    responses((status = 200, body = PeopleReport), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
-    security(("cookie" = []), ("bearer" = [])),
-)]
-async fn get_people(State(state): State<AppState>, user: User) -> AppResult<Json<PeopleReport>> {
-    require_admin(&state, &user).await?;
+/// Why `row` is an admin, as [`Person::admin`] spells it.
+fn admin_source(row: &PersonRow, creator: Option<&RecordId>) -> &'static str {
+    if creator == Some(&row.id) {
+        "creator"
+    } else if authz::operator_email_listed(&row.email) {
+        "operator"
+    } else if row.admin == Some(true) {
+        "granted"
+    } else {
+        ""
+    }
+}
+
+/// True when some account other than `target` is an admin and not suspended: the workspace keeps an
+/// admin after `target` loses admin rights or is suspended.
+fn another_admin_left(rows: &[PersonRow], creator: Option<&RecordId>, target: &RecordId) -> bool {
+    rows.iter().any(|r| &r.id != target && r.suspended_at.is_none() && !admin_source(r, creator).is_empty())
+}
+
+async fn people_rows(state: &AppState, user: &User) -> AppResult<Vec<PersonRow>> {
+    Ok(store::control::ADMIN_PEOPLE.on(&state.control).bind(("org", user.org.record())).await?.take(0)?)
+}
+
+async fn people_report(state: &AppState, user: &User) -> AppResult<PeopleReport> {
     let org = state.org(&user.org).await?;
-    let rows: Vec<PersonRow> = store::control::ADMIN_PEOPLE.on(&state.control).bind(("org", user.org.record())).await?.take(0)?;
+    let rows = people_rows(state, user).await?;
     let ids: Vec<RecordId> = rows.iter().map(|r| r.id.clone()).collect();
 
     let mut seen_res = store::control::ADMIN_LAST_SEEN.on(&state.control).bind(("ids", ids)).await?;
@@ -417,30 +463,159 @@ async fn get_people(State(state): State<AppState>, user: User) -> AppResult<Json
         .into_iter()
         .map(|r| {
             let key = r.id.to_string();
-            let admin = if creator.as_ref() == Some(&r.id) {
-                "creator"
-            } else if authz::operator_email_listed(&r.email) {
-                "operator"
-            } else {
-                ""
-            };
+            let admin = admin_source(&r, creator.as_ref());
             Person {
                 last_active: last.get(&key).map(|t| t.to_rfc3339()),
                 shared_spaces: spaces.get(&key).copied().unwrap_or(0),
                 admin: admin.into(),
+                role: if admin.is_empty() { "member" } else { "admin" }.into(),
+                is_you: r.id == user.id,
                 id: key,
                 email: r.email,
                 created_at: r.created_at,
+                suspended_at: r.suspended_at,
             }
         })
         .collect();
 
     let env = |k: &str| std::env::var(k).unwrap_or_default();
-    Ok(Json(PeopleReport { people, signup: signup_policy(&env("SIGNUP"), &env("SIGNUP_ALLOWLIST"), &env("EUNOMIA_ADMIN_EMAILS")) }))
+    Ok(PeopleReport { people, signup: signup_policy(&env("SIGNUP"), &env("SIGNUP_ALLOWLIST"), &env("EUNOMIA_ADMIN_EMAILS")) })
+}
+
+#[utoipa::path(
+    operation_id = "listPeople",
+    get,
+    path = "/api/admin/people",
+    tag = "admin",
+    summary = "Every account in the workspace and the sign-up policy (admin only)",
+    responses((status = 200, body = PeopleReport), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = []), ("bearer" = [])),
+)]
+async fn get_people(State(state): State<AppState>, user: User) -> AppResult<Json<PeopleReport>> {
+    require_admin(&state, &user).await?;
+    Ok(Json(people_report(&state, &user).await?))
+}
+
+#[derive(Deserialize, utoipa::ToSchema)]
+struct AdminChange {
+    /// `true` makes the person an admin, `false` takes admin rights away.
+    admin: bool,
+}
+
+#[derive(Deserialize, utoipa::ToSchema)]
+struct SuspendChange {
+    /// `true` suspends the account, `false` restores it.
+    suspended: bool,
+}
+
+/// The admin acting (browser session only) and the account they act on, which must be in their workspace.
+async fn target_of(state: &AppState, user: &User, user_id: &str) -> AppResult<(Vec<PersonRow>, Option<RecordId>, RecordId)> {
+    authz::require_session()?;
+    require_admin(state, user).await?;
+    let not_found = || AppError::coded(ErrorCode::AuthNotFound, "That account isn't in this workspace.");
+    let target: RecordId = crate::rid::parse(user_id).map_err(|_| not_found())?;
+    let rows = people_rows(state, user).await?;
+    if !rows.iter().any(|r| r.id == target) {
+        return Err(not_found());
+    }
+    let creator = crate::capsules::first_user(&state.control).await?;
+    Ok((rows, creator, target))
+}
+
+#[utoipa::path(
+    operation_id = "setPersonAdmin",
+    put,
+    path = "/api/admin/people/{user_id}/admin",
+    tag = "admin",
+    summary = "Make someone an admin, or take admin rights away (admin only, browser session)",
+    description = "The first account and the emails the server lists as admins are always admins and cannot be changed here. The last admin cannot be demoted.",
+    params(("user_id" = String, Path)),
+    request_body = AdminChange,
+    responses((status = 200, body = PeopleReport), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = [])),
+)]
+async fn set_admin(State(state): State<AppState>, user: User, Path(user_id): Path<String>, Json(body): Json<AdminChange>) -> AppResult<Json<PeopleReport>> {
+    let (rows, creator, target) = target_of(&state, &user, &user_id).await?;
+    let row = rows.iter().find(|r| r.id == target).expect("checked in target_of");
+    let source = admin_source(row, creator.as_ref());
+    let email = row.email.clone();
+    if !body.admin {
+        match source {
+            "creator" => return Err(AppError::bad_request("This is the account that set up the workspace. It is always an admin.")),
+            "operator" => return Err(AppError::bad_request("The server's settings list this account as an admin, so it can't be changed here.")),
+            "" => return Ok(Json(people_report(&state, &user).await?)),
+            _ => {}
+        }
+        if !another_admin_left(&rows, creator.as_ref(), &target) {
+            return Err(AppError::bad_request("The workspace needs at least one admin. Make someone else an admin first."));
+        }
+    } else if !source.is_empty() {
+        return Ok(Json(people_report(&state, &user).await?));
+    }
+    store::control::USER_SET_ADMIN
+        .on(&state.control)
+        .bind(("id", target.clone()))
+        .bind(("admin", body.admin.then_some(true)))
+        .await?
+        .check()?;
+    let action = if body.admin { "admin.grant" } else { "admin.revoke" };
+    crate::audit::record_as_caller_detail(&state.control, &user.id, action, &target.to_string(), "ok", &format!("email={email}")).await;
+    Ok(Json(people_report(&state, &user).await?))
+}
+
+#[utoipa::path(
+    operation_id = "setPersonSuspended",
+    put,
+    path = "/api/admin/people/{user_id}/suspended",
+    tag = "admin",
+    summary = "Suspend or restore an account (admin only, browser session)",
+    description = "A suspended account cannot sign in. Its sessions end at once, and its API tokens and app connections are refused until it is restored. You cannot suspend yourself or the first account.",
+    params(("user_id" = String, Path)),
+    request_body = SuspendChange,
+    responses((status = 200, body = PeopleReport), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = [])),
+)]
+async fn set_suspended(
+    State(state): State<AppState>,
+    user: User,
+    Path(user_id): Path<String>,
+    Json(body): Json<SuspendChange>,
+) -> AppResult<Json<PeopleReport>> {
+    let (rows, creator, target) = target_of(&state, &user, &user_id).await?;
+    let row = rows.iter().find(|r| r.id == target).expect("checked in target_of");
+    let email = row.email.clone();
+    if body.suspended == row.suspended_at.is_some() {
+        return Ok(Json(people_report(&state, &user).await?));
+    }
+    if body.suspended {
+        if target == user.id {
+            return Err(AppError::bad_request("You can't suspend your own account."));
+        }
+        if creator.as_ref() == Some(&target) {
+            return Err(AppError::bad_request("This is the account that set up the workspace. It can't be suspended."));
+        }
+        if !admin_source(row, creator.as_ref()).is_empty() && !another_admin_left(&rows, creator.as_ref(), &target) {
+            return Err(AppError::bad_request("The workspace needs at least one admin. Make someone else an admin first."));
+        }
+    }
+    store::control::USER_SET_SUSPENDED
+        .on(&state.control)
+        .bind(("id", target.clone()))
+        .bind(("suspended", body.suspended))
+        .await?
+        .check()?;
+    if body.suspended {
+        // every browser session ends now; tokens and app connections are refused while suspended (`load_user`)
+        store::control::AUTH_SESSION_REVOKE_OWNER.on(&state.control).bind(("owner", target.clone())).await?.check()?;
+        state.credentials.forget_user(&target);
+    }
+    let action = if body.suspended { "user.suspend" } else { "user.restore" };
+    crate::audit::record_as_caller_detail(&state.control, &user.id, action, &target.to_string(), "ok", &format!("email={email}")).await;
+    Ok(Json(people_report(&state, &user).await?))
 }
 
 #[derive(utoipa::OpenApi)]
-#[openapi(paths(get_workspace_audit, get_people))]
+#[openapi(paths(get_workspace_audit, get_people, set_admin, set_suspended))]
 pub struct Doc;
 
 #[cfg(test)]
@@ -473,6 +648,42 @@ mod tests {
         assert_eq!(AuditCategory::of("auth.login"), AuditCategory::Signins);
         assert_eq!(AuditCategory::of("oauth.grant_revoke"), AuditCategory::Apps);
         assert_eq!(result_words("vault.forbidden"), "Not allowed");
+    }
+
+    #[test]
+    fn admin_events_read_as_sentences() {
+        let n = HashMap::new();
+        assert_eq!(describe("admin.grant", "user:b", "email=bob@x.test", true, &n), "Made bob@x.test an admin");
+        assert_eq!(describe("admin.revoke", "user:b", "email=bob@x.test", true, &n), "Took admin rights away from bob@x.test");
+        assert_eq!(describe("user.suspend", "user:b", "email=bob@x.test", true, &n), "Suspended bob@x.test");
+        assert_eq!(describe("user.restore", "user:b", "email=bob@x.test", true, &n), "Restored access for bob@x.test");
+        assert_eq!(AuditCategory::of("user.suspend"), AuditCategory::Admin);
+        assert_eq!(AuditCategory::Changes.filter().2, SIGNIN_ACTIONS);
+    }
+
+    #[test]
+    fn the_last_admin_is_kept() {
+        let row = |id: &str, admin: bool, suspended: bool| PersonRow {
+            id: crate::rid::parse(id).unwrap(),
+            email: format!("{}@x.test", id.trim_start_matches("user:")),
+            created_at: None,
+            admin: admin.then_some(true),
+            suspended_at: suspended.then(Datetime::now),
+        };
+        let a: RecordId = crate::rid::parse("user:a").unwrap();
+        let b: RecordId = crate::rid::parse("user:b").unwrap();
+        // b is the only admin (the creator is in another workspace): b cannot be demoted or suspended
+        let rows = vec![row("user:a", false, false), row("user:b", true, false)];
+        assert!(!another_admin_left(&rows, None, &b));
+        assert!(another_admin_left(&rows, None, &a));
+        // a suspended admin does not count
+        let rows = vec![row("user:a", true, true), row("user:b", true, false)];
+        assert!(!another_admin_left(&rows, None, &b));
+        // the creator always counts
+        let rows = vec![row("user:a", false, false), row("user:b", true, false)];
+        assert!(another_admin_left(&rows, Some(&a), &b));
+        assert_eq!(admin_source(&rows[0], Some(&a)), "creator");
+        assert_eq!(admin_source(&rows[1], Some(&a)), "granted");
     }
 
     #[test]

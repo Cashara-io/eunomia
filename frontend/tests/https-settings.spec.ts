@@ -30,8 +30,8 @@ test("a member who is not an admin doesn't see the HTTPS settings at all", async
   fs.rmSync(statusFile(), { force: true });
   await registerAndOnboard(page, uniqueEmail("https-member"));
   await page.goto("/settings?tab=https");
-  // the Server group is hidden from members, so the link falls back to General
-  await expect(page.getByRole("tab", { name: "General" })).toHaveAttribute("aria-selected", "true");
+  // the Server group is hidden from members, so the link falls back to Connected apps
+  await expect(page.getByRole("tab", { name: "Connected apps" })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("tab", { name: "HTTPS" })).toHaveCount(0);
   await expect(page.getByLabel("Domain")).toHaveCount(0);
   // the server refuses it as well

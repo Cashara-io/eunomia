@@ -221,11 +221,12 @@ body {
 }
 
 /* Upper-case group label: the sidebar's ADVANCED, table heads. */
+/* Group label (the sidebar's "Advanced", small section heads): sentence case,
+   muted weight. Upper-case letter-spaced eyebrows read as template filler. */
 .caps {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
 }
 
 /* ---- the canvas ---- */
@@ -429,7 +430,7 @@ button.pill:active {
 /* Multi-select filters that are on: quiet, so a row of them never turns
    into a wall of accent. Single-choice selection (tabs) keeps the accent. */
 .pill[aria-pressed="true"] {
-  border-color: var(--bauhaus-app-ink);
+  border-color: var(--border-strong);
   background: var(--bauhaus-app-soft);
   color: var(--ink);
 }
@@ -846,4 +847,11 @@ a {
 .docs .md h2 { font-size: 1.2em; margin-top: 1.8em; }
 .docs .md p, .docs .md ul, .docs .md ol, .docs .md table, .docs .md pre { margin-bottom: 0.95em; }
 .docs .md td, .docs .md th { font-size: 0.92em; }
+}
+
+/* Commands to copy: never wrap mid-flag; scroll sideways on narrow screens. */
+pre,
+.cmd {
+  white-space: pre;
+  overflow-x: auto;
 }

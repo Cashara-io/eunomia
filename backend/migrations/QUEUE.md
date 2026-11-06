@@ -8,7 +8,7 @@ Owned by the lead. One line per reserved migration number (docs/architecture/nex
 - States: `reserved`, `locked`, `merged`. Applied files are immutable, so a number never changes once its file is on `main`.
 - `scripts/ci/check-migrations.sh` (the `scripts` CI job) checks that the numbers in `MIGRATIONS` and `CONTROL_MIGRATIONS` are contiguous and unique, that every file is registered under its own number and name, and that a file whose number is listed here is `locked` or `merged` under the same name.
 
-Control set: no reservations (control stays at 0006).
+Control set: 0007 is locked below (PR #138). Next free: 0008.
 
 | set | number | name | lane | PR | state |
 |---|---|---|---|---|---|
@@ -22,3 +22,4 @@ Control set: no reservations (control stays at 0006).
 | tenant | 0029 | pocket_audio | Sources (#117) | 2.0.8 | merged |
 | tenant | 0030 | perf_indexes | Performance | 2.0.8 | merged |
 | tenant | 0031 | credential_refs | L3 Broker | broker core | reserved |
+| control | 0007 | user_admin_suspend | Admin (#144) | #138 | locked |

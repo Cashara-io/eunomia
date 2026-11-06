@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowUpRight, Building2, MapPin, FileText, FolderGit2, KeyRound, Plug, Plus, Search, Settings, Upload, User, X } from "lucide-react";
+import { ArrowUpRight, Braces, Building2, CircleDot, FileCode, FileText, FolderGit2, FolderKanban, KeyRound, MapPin, Plug, Plus, Search, Settings, Upload, User, X } from "lucide-react";
+import Shortcuts from "./Shortcuts";
 import { ADVANCED_NAV, MAIN_NAV } from "./Sidebar";
 import { documentHref, type EntityKind } from "@/lib/types";
 import { useSources } from "@/lib/queries/sources";
@@ -21,8 +22,28 @@ export function openCommandPalette() {
   window.dispatchEvent(new Event(OPEN_EVENT));
 }
 
-// organisation and location read as a building and a pin, not a person
-const ENTITY_ICON: Record<string, IconType> = { person: User, organisation: Building2, location: MapPin, repository: FolderGit2, file: FileText };
+// One icon per kind: only a person gets the person icon. An agent's own kind ("project", "decision")
+// gets a neutral dot, or a folder for a project.
+const ENTITY_ICON: Record<string, IconType> = {
+  person: User,
+  organisation: Building2,
+  location: MapPin,
+  repository: FolderGit2,
+  file: FileCode,
+  symbol: Braces,
+  project: FolderKanban,
+};
+const entityIcon = (kind: string): IconType => ENTITY_ICON[kind.toLowerCase()] ?? CircleDot;
+// "project" -> "Project", "open_question" -> "Open question"
+const kindWord = (kind: string) => {
+  const builtIn = KIND_WORD[kind];
+  if (builtIn) return builtIn;
+  const words = kind.replace(/[_-]+/g, " ").trim().toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+};
+
+// Pages only admins use; hidden from everyone else (the sidebar hides them too).
+const ADMIN_HREFS = new Set(["/code", "/skill"]);
 
 // Pages, with the sidebar's own labels. Read when the palette renders (not at
 // module load), since Sidebar imports this module too.
@@ -53,10 +74,10 @@ const SETTINGS_TABS: { id: string; label: string; admin?: boolean }[] = [
 ];
 
 // Things to do, each found by its label or a few plain words people might type instead.
-const ACTIONS: { label: string; href: string; icon: IconType; words: string }[] = [
+const ACTIONS: { label: string; href: string; icon: IconType; words: string; admin?: boolean }[] = [
   { label: "Create a memory space", href: "/vaults", icon: Plus, words: "new space vault team share" },
   { label: "Upload a document", href: "/documents", icon: Upload, words: "add file pdf import" },
-  { label: "New API token", href: "/settings?tab=tokens", icon: KeyRound, words: "create key access token" },
+  { label: "New API token", href: "/settings?tab=tokens", icon: KeyRound, words: "create key access token", admin: true },
   { label: "Connect an AI app", href: "/", icon: Plug, words: "claude chatgpt cursor codex mcp setup" },
 ];
 
@@ -88,7 +109,12 @@ export default function CommandPalette() {
 
   // Mounted only while open, so every open starts from fresh state. No
   // open/close animation: this is opened from the keyboard many times a day.
-  return open ? <Palette onClose={() => setOpen(false)} /> : null;
+  return (
+    <>
+      <Shortcuts paletteOpen={open} openPalette={() => setOpen(true)} />
+      {open && <Palette onClose={() => setOpen(false)} />}
+    </>
+  );
 }
 
 function Palette({ onClose }: { onClose: () => void }) {
@@ -118,7 +144,9 @@ function Palette({ onClose }: { onClose: () => void }) {
   const connectorItems: Item[] = rows
     .filter((r) => r.connected)
     .map((r) => ({ key: `conn:${r.key}`, label: r.label, icon: Plug, go: () => router.push(`/connectors/${r.key}`) }));
-  const staticItems: Item[] = staticNav().map((s) => ({
+  const staticItems: Item[] = staticNav()
+    .filter((s) => isAdmin || !ADMIN_HREFS.has(s.href))
+    .map((s) => ({
     key: `nav:${s.href}`,
     label: s.label,
     icon: s.icon,
@@ -136,7 +164,7 @@ function Palette({ onClose }: { onClose: () => void }) {
         go: () => router.push(t.id === "general" ? "/settings" : `/settings?tab=${t.id}`),
       }))
     : [];
-  const actionItems: Item[] = ACTIONS.filter((a) => !needle || `${a.label} ${a.words}`.toLowerCase().includes(needle)).map((a) => ({
+  const actionItems: Item[] = ACTIONS.filter((a) => (!a.admin || isAdmin) && (!needle || `${a.label} ${a.words}`.toLowerCase().includes(needle))).map((a) => ({
     key: `action:${a.label}`,
     label: a.label,
     icon: a.icon,
@@ -147,8 +175,8 @@ function Palette({ onClose }: { onClose: () => void }) {
     key: `entity:${e.id}`,
     label: e.name,
     // the space tells apart two "Priya Nair"s from different spaces
-    sub: [KIND_WORD[e.kind] ?? e.kind, spaceName((e as { vault?: string }).vault)].filter(Boolean).join(" · "),
-    icon: ENTITY_ICON[e.kind] ?? User,
+    sub: [kindWord(e.kind), spaceName((e as { vault?: string }).vault)].filter(Boolean).join(" · "),
+    icon: entityIcon(e.kind),
     // opens the entity's inspector, in its own space (see EntityGraph's deep links)
     go: () => {
       const q = new URLSearchParams({ id: e.id });
@@ -194,53 +222,48 @@ function Palette({ onClose }: { onClose: () => void }) {
       <div
         role="dialog"
         aria-modal="true"
-        aria-labelledby="palette-title"
+        aria-label="Search"
         className="bauhaus-dialog w-full max-w-[560px] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between gap-2 px-5 pt-4">
-          <h2 id="palette-title" className="text-[20px] font-semibold tracking-[-0.01em]">
-            Search
-          </h2>
-          <button type="button" onClick={onClose} aria-label="Close search" className="btn btn-ghost btn-icon btn-sm">
+        {/* one input, no title or label repeating it: the dialog is named "Search" for screen readers */}
+        <div className="flex items-center gap-2.5 px-4 h-14" style={{ borderBottom: "1px solid var(--border)" }}>
+          <Search size={18} color="var(--ink-dim)" aria-hidden />
+          <input
+            autoFocus
+            aria-label="Search pages, people, topics and documents"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setIndex(0);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setIndex((i) => Math.min(i + 1, items.length - 1));
+              } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setIndex((i) => Math.max(i - 1, 0));
+              } else if (e.key === "Enter" && items[index]) {
+                choose(items[index]);
+              }
+            }}
+            placeholder="Jump to a page…"
+            className="flex-1 min-w-0 h-full bg-transparent text-[16px]"
+            // the dialog edge is the field; no focus ring or border inside it
+            style={{ color: "var(--ink)", outline: "none", boxShadow: "none", border: 0 }}
+          />
+          <span className="kbd shrink-0 max-sm:hidden" aria-hidden>
+            Esc
+          </span>
+          <button type="button" onClick={onClose} aria-label="Close search" className="btn btn-ghost btn-icon btn-sm sm:hidden">
             <X size={18} strokeWidth={1.75} aria-hidden />
           </button>
-        </div>
-        <div className="px-5 pt-2 pb-3 flex flex-col gap-1.5" style={{ borderBottom: "1px solid var(--border)" }}>
-          <label htmlFor="palette-input" className="text-[13px] font-medium">
-            Search pages, people, topics and documents
-          </label>
-          <div className="field flex items-center gap-2.5 px-3 h-11">
-            <Search size={18} color="var(--ink-dim)" aria-hidden />
-            <input
-              id="palette-input"
-              autoFocus
-              value={query}
-              onChange={(e) => {
-                setQuery(e.target.value);
-                setIndex(0);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "ArrowDown") {
-                  e.preventDefault();
-                  setIndex((i) => Math.min(i + 1, items.length - 1));
-                } else if (e.key === "ArrowUp") {
-                  e.preventDefault();
-                  setIndex((i) => Math.max(i - 1, 0));
-                } else if (e.key === "Enter" && items[index]) {
-                  choose(items[index]);
-                }
-              }}
-              placeholder="Jump to a page…"
-              className="flex-1 h-full bg-transparent text-[15px] outline-none"
-              style={{ color: "var(--ink)" }}
-            />
-          </div>
         </div>
         <div className="max-h-[min(420px,60vh)] overflow-y-auto py-2">
           {groups.map((g) => (
             <div key={g.title} className="py-1">
-              <div className="caps px-5 h-7 flex items-center" style={{ color: "var(--ink-dim)" }}>
+              <div className="px-5 h-7 flex items-center text-[12px] font-medium" style={{ color: "var(--ink-dim)" }}>
                 {g.title}
               </div>
               <ul>
@@ -298,6 +321,9 @@ function Palette({ onClose }: { onClose: () => void }) {
           <span className="flex items-center gap-1.5">
             <span className="kbd">{modKey()}</span>
             <span className="kbd">K</span> Search from anywhere
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="kbd">?</span> All shortcuts
           </span>
           <span className="ml-auto">Type 2 or more letters to search your memory</span>
         </div>

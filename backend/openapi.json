@@ -47,10 +47,12 @@
               "description": "Which kind of event a filter chip asks for.",
               "enum": [
                 "all",
+                "changes",
                 "spaces",
                 "signins",
                 "tokens",
-                "apps"
+                "apps",
+                "admin"
               ]
             }
           }
@@ -122,6 +124,120 @@
           },
           {
             "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/people/{user_id}/admin": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Make someone an admin, or take admin rights away (admin only, browser session)",
+        "description": "The first account and the emails the server lists as admins are always admins and cannot be changed here. The last admin cannot be demoted.",
+        "operationId": "setPersonAdmin",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeopleReport"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/people/{user_id}/suspended": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Suspend or restore an account (admin only, browser session)",
+        "description": "A suspended account cannot sign in. Its sessions end at once, and its API tokens and app connections are refused until it is restored. You cannot suspend yourself or the first account.",
+        "operationId": "setPersonSuspended",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuspendChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeopleReport"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
           }
         ]
       }
@@ -6349,15 +6465,29 @@
           }
         }
       },
+      "AdminChange": {
+        "type": "object",
+        "required": [
+          "admin"
+        ],
+        "properties": {
+          "admin": {
+            "type": "boolean",
+            "description": "`true` makes the person an admin, `false` takes admin rights away."
+          }
+        }
+      },
       "AuditCategory": {
         "type": "string",
         "description": "Which kind of event a filter chip asks for.",
         "enum": [
           "all",
+          "changes",
           "spaces",
           "signins",
           "tokens",
-          "apps"
+          "apps",
+          "admin"
         ]
       },
       "AuditEntry": {
@@ -8749,12 +8879,14 @@
           "id",
           "email",
           "shared_spaces",
-          "admin"
+          "admin",
+          "role",
+          "is_you"
         ],
         "properties": {
           "admin": {
             "type": "string",
-            "description": "`creator` (the first account), `operator` (listed in the server's admin emails), or empty."
+            "description": "Why this person is an admin: `creator` (the first account), `operator` (listed in the server's\nadmin emails), `granted` (made an admin in the app), or empty for a member."
           },
           "created_at": {
             "type": [
@@ -8768,6 +8900,10 @@
           "id": {
             "type": "string"
           },
+          "is_you": {
+            "type": "boolean",
+            "description": "The admin looking at the list."
+          },
           "last_active": {
             "type": [
               "string",
@@ -8775,10 +8911,21 @@
             ],
             "description": "Latest browser session activity or API token use, RFC 3339; none if never seen."
           },
+          "role": {
+            "type": "string",
+            "description": "`admin` or `member`."
+          },
           "shared_spaces": {
             "type": "integer",
             "format": "int64",
             "description": "Shared spaces this person is an active member of (their personal space not counted)."
+          },
+          "suspended_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When an admin suspended the account, RFC 3339; none while it is active."
           }
         }
       },
@@ -9529,6 +9676,18 @@
           },
           "day": {
             "type": "string"
+          }
+        }
+      },
+      "SuspendChange": {
+        "type": "object",
+        "required": [
+          "suspended"
+        ],
+        "properties": {
+          "suspended": {
+            "type": "boolean",
+            "description": "`true` suspends the account, `false` restores it."
           }
         }
       },

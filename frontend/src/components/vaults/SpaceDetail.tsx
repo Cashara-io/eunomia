@@ -1,9 +1,10 @@
 "use client";
 
 // Everything you can do with one memory space, in plain sections: who is in it, sharing it with
-// another Eunomia (folded away), and the rarer actions (copy, hand over, leave, delete) at the bottom.
+// another Eunomia (folded away), then a danger zone (hand over, leave, delete) at the very bottom.
+// "Make a copy" is a quiet action in the header.
 import { useEffect, useRef, useState } from "react";
-import { Copy, LogOut, Pencil, Settings2, Trash2, UserPlus, Users } from "lucide-react";
+import { Copy, LogOut, Pencil, Trash2, UserPlus, Users } from "lucide-react";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
@@ -24,7 +25,7 @@ import {
   useVaultCounts,
   useVaultMembers,
 } from "@/lib/queries/vaults";
-import { DetailSection, DrawnCheck, ICON, Initials, RoleChip, SpaceSwatch, ago, peopleLine, sameEmail } from "./bits";
+import { DetailSection, DrawnCheck, ICON, Initials, RoleChip, ago, peopleLine, sameEmail } from "./bits";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -211,9 +212,7 @@ export default function SpaceDetail({
           </form>
         ) : (
           <div className="flex items-center gap-2.5 min-w-0">
-            <SpaceSwatch vault={vault} size={10} />
-            <h2 className="text-[24px] font-semibold tracking-[-0.02em] truncate">{vault.name}</h2>
-            {!isOwner && <RoleChip role={vault.role} />}
+            <h2 className="text-[20px] font-semibold tracking-[-0.02em] truncate">{vault.name}</h2>
             {isOwner && (
               <Tooltip label="Rename space">
                 <button
@@ -229,6 +228,20 @@ export default function SpaceDetail({
                 </button>
               </Tooltip>
             )}
+            {!cloning && (
+              <button
+                type="button"
+                onClick={() => {
+                  setCloneName(`${vault.name} (copy)`);
+                  setError(null);
+                  setCloning(true);
+                }}
+                className="btn btn-ghost btn-sm shrink-0 ml-auto"
+              >
+                {cloned ? <DrawnCheck /> : <Copy {...ICON} />}
+                Make a copy
+              </button>
+            )}
           </div>
         )}
         <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
@@ -241,6 +254,38 @@ export default function SpaceDetail({
           <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
             {plural(counts.people + counts.topics, "person or topic", "people & topics")} saved
           </p>
+        )}
+        {cloning && (
+          <form
+            className="flex flex-col gap-1.5 pt-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              doClone();
+            }}
+          >
+            <label htmlFor={`clone-${vault.id}`} className="text-[13px] font-medium">
+              Name for the copy
+            </label>
+            <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+              The copy is a new space with the same memories, and only you in it. {vault.name} stays exactly as it is.
+            </p>
+            <input
+              id={`clone-${vault.id}`}
+              autoFocus
+              className="field h-10 px-3 text-[14px]"
+              value={cloneName}
+              onChange={(e) => setCloneName(e.target.value)}
+              onKeyDown={(e) => e.key === "Escape" && setCloning(false)}
+            />
+            <div className="flex justify-end gap-1.5">
+              <button type="button" onClick={() => setCloning(false)} className="btn">
+                Cancel
+              </button>
+              <button type="submit" disabled={cloneBusy} className="btn btn-primary">
+                {cloneBusy ? "Copying…" : "Create copy"}
+              </button>
+            </div>
+          </form>
         )}
       </header>
 
@@ -289,8 +334,8 @@ export default function SpaceDetail({
                         type="button"
                         onClick={() => setRemoving(m.email)}
                         aria-label={`Remove ${m.email}`}
-                        className="btn btn-ghost btn-sm"
-                        style={{ color: "var(--critical)" }}
+                        className="btn btn-ghost btn-sm hover:text-[var(--critical)] focus-visible:text-[var(--critical)]"
+                        style={{ color: "var(--ink-dim)" }}
                       >
                         Remove
                       </button>
@@ -395,95 +440,45 @@ export default function SpaceDetail({
 
       <PeerSharing vault={vault} />
 
-      {/* The rarer actions, quiet at the bottom. */}
-      <DetailSection title="More options" icon={<Settings2 {...ICON} aria-hidden />}>
-        {cloning ? (
-          <form
-            className="flex flex-col gap-1.5"
-            onSubmit={(e) => {
-              e.preventDefault();
-              doClone();
-            }}
-          >
-            <label htmlFor={`clone-${vault.id}`} className="text-[13px] font-medium">
-              Name for the copy
-            </label>
-            <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
-              The copy is a new space with the same memories, and only you in it. {vault.name} stays exactly as it is.
-            </p>
-            <input
-              id={`clone-${vault.id}`}
-              autoFocus
-              className="field h-10 px-3 text-[14px]"
-              value={cloneName}
-              onChange={(e) => setCloneName(e.target.value)}
-              onKeyDown={(e) => e.key === "Escape" && setCloning(false)}
-            />
-            <div className="flex justify-end gap-1.5">
-              <button type="button" onClick={() => setCloning(false)} className="btn">
-                Cancel
-              </button>
-              <button type="submit" disabled={cloneBusy} className="btn">
-                {cloneBusy ? "Copying…" : "Create copy"}
-              </button>
-            </div>
-          </form>
-        ) : (
-          <OptionRow
-            title="Make a copy"
-            body="A new space with the same memories. This one stays as it is."
-            action={
-              <button
-                onClick={() => {
-                  setCloneName(`${vault.name} (copy)`);
-                  setCloning(true);
-                }}
-                className="btn btn-sm"
-              >
-                {cloned ? <DrawnCheck /> : <Copy {...ICON} />}
-                Copy space
-              </button>
-            }
-          />
-        )}
-
-        {canHandOver && (
-          <div className="pt-3" style={{ borderTop: "1px solid var(--border)" }}>
+      {/* Hand over, leave, delete: last, under their own heading. */}
+      {(canHandOver || canLeave || (lastOwner && others.length > 0) || (isOrg && isOwner)) && (
+        <DetailSection title="Danger zone">
+          {canHandOver && (
             <TransferOwnershipPanel vault={vault} members={members} me={me} />
-          </div>
-        )}
+          )}
 
-        {canLeave && (
-          <OptionRow
-            title="Leave this space"
-            body="You stop seeing its memories. Everyone else keeps access."
-            action={
-              <button onClick={() => setConfirm("leave")} className="btn btn-sm">
-                <LogOut {...ICON} />
-                Leave space…
-              </button>
-            }
-          />
-        )}
-        {lastOwner && others.length > 0 && (
-          <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
-            To leave, first make someone else an owner. A shared space always needs one.
-          </p>
-        )}
+          {canLeave && (
+            <OptionRow
+              title="Leave this space"
+              body="You stop seeing its memories. Everyone else keeps access."
+              action={
+                <button onClick={() => setConfirm("leave")} className="btn btn-sm">
+                  <LogOut {...ICON} />
+                  Leave space…
+                </button>
+              }
+            />
+          )}
+          {lastOwner && others.length > 0 && (
+            <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+              To leave, first make someone else an owner. A shared space always needs one.
+            </p>
+          )}
 
-        {isOrg && isOwner && (
-          <OptionRow
-            title="Delete this space"
-            body="Removes it and everything in it, for everyone. This can't be undone."
-            action={
-              <button onClick={() => setConfirm("delete")} className="btn btn-danger btn-sm">
-                <Trash2 {...ICON} />
-                Delete space…
-              </button>
-            }
-          />
-        )}
-      </DetailSection>
+          {isOrg && isOwner && (
+            <OptionRow
+              title="Delete this space"
+              body="Removes it and everything in it, for everyone. This can't be undone."
+              action={
+                <button onClick={() => setConfirm("delete")} className="btn btn-danger btn-sm">
+                  <Trash2 {...ICON} />
+                  Delete space…
+                </button>
+              }
+            />
+          )}
+        </DetailSection>
+      )}
 
       {error && (
         <div className="px-5 sm:px-6 pb-5">

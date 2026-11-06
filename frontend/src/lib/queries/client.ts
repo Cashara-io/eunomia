@@ -26,9 +26,12 @@ export async function call<D>(request: Result<D>): Promise<D> {
 // Retry only what can succeed on a second try: network failures, 5xx and a DB write conflict. Never 4xx.
 const retryable = (e: unknown) => !(e instanceof ApiError) || e.status >= 500 || e.code === "db.conflict";
 
-/** True for a 401 that means "sign in again" (not, say, wrong credentials on the login form). */
+/** True for a 401 that means "sign in again" (not, say, wrong credentials on the login form), or a
+ * suspended account: its session no longer works either, and the login form says why. */
 export const isSessionEnded = (e: unknown) =>
-  e instanceof ApiError && e.status === 401 && ["auth.unauthorized", "auth.session_expired", "auth.token_expired"].includes(e.code);
+  e instanceof ApiError &&
+  ((e.status === 401 && ["auth.unauthorized", "auth.session_expired", "auth.token_expired"].includes(e.code)) ||
+    (e.status === 403 && e.code === "auth.suspended"));
 
 /** Sends any query or mutation that finds the session gone to /login, remembering where the user was. */
 async function onSessionEnded(e: unknown) {

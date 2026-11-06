@@ -7,7 +7,6 @@ import { useSearchParams } from "next/navigation";
 import ConfirmButton from "@/components/ConfirmButton";
 import { ArrowLeft, ArrowRight, Pencil, Plus, Trash2, X } from "lucide-react";
 import GraphCanvas, { type CanvasInsets } from "./GraphCanvas";
-import AuthorTag from "./AuthorTag";
 import SyncMark from "./bits/SyncMark";
 import Tooltip, { TooltipGroup } from "./bits/Tooltip";
 import { cssVar, prefersReducedMotion } from "./bits/motion";
@@ -32,6 +31,7 @@ import EditableMemoryText from "@/components/live/EditableMemoryText";
 import TidyUp from "./graph/TidyUp";
 import EntityList from "./graph/EntityList";
 import { chooseSpace, useSharedSpace } from "./graph/space";
+import SpaceSelect from "./graph/SpaceSelect";
 import { defaultKindHex, isCustomKind, kindColor, setKindColor, useKindColor } from "@/lib/kindColors";
 
 const KIND_LABEL: Record<BuiltInKind, string> = {
@@ -56,24 +56,35 @@ const kindLabel = (kind: EntityKind) => {
   return words.charAt(0).toUpperCase() + words.slice(1).toLowerCase();
 };
 
-// Compact age for a timestamp: "now", "4m", "3h", "2d", then a date.
-function age(iso?: string): string | null {
+// One time format for the whole inspector: "just now", "4m ago", "3h ago", "2d ago", then a date.
+function ago(iso?: string | null): string | null {
   if (!iso) return null;
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return null;
   const s = Math.max(0, (Date.now() - t) / 1000);
-  if (s < 60) return "now";
-  if (s < 3600) return `${Math.floor(s / 60)}m`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h`;
-  if (s < 86400 * 30) return `${Math.floor(s / 86400)}d`;
-  return new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  if (s < 86400 * 30) return `${Math.floor(s / 86400)}d ago`;
+  return new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
-// The real author of a row, if attribution was recorded. `null` means it
-// predates attribution tracking, so no tag is shown.
-function Author({ email, me }: { email: string | null; me: string | null }) {
-  if (!email) return null;
-  return <AuthorTag name={email} title={email === me ? `${email} (you)` : email} />;
+// "Added by ana@acme.test · 3h ago", as plain meta text. A row from before attribution was
+// recorded shows only its age (or nothing).
+function Byline({ email, at }: { email: string | null | undefined; at?: string | null }) {
+  const when = ago(at);
+  if (!email && !when) return null;
+  return (
+    <p className="text-[12px] min-w-0 truncate" style={{ color: "var(--ink-dim)" }} title={email ?? undefined}>
+      {email && <>Added by {email}</>}
+      {email && when && " · "}
+      {when && (
+        <time dateTime={at ?? undefined} title={at ?? undefined}>
+          {email ? when : when.charAt(0).toUpperCase() + when.slice(1)}
+        </time>
+      )}
+    </p>
+  );
 }
 
 const ICON = { size: 18, strokeWidth: 1.75 } as const;
@@ -189,6 +200,8 @@ export default function EntityGraph({
   const [editForm, setEditForm] = useState({ name: "", aliases: "", summary: "" });
   const [memoryText, setMemoryText] = useState("");
   const [relForm, setRelForm] = useState({ to: "", label: "" });
+  // the add forms stay folded behind a text button, so the inspector opens as something to read
+  const [adding, setAdding] = useState<"memory" | "relation" | null>(null);
   const [actionError, setActionError] = useState<Failure | null>(null);
   const [busy, setBusy] = useState(false);
   // "Add memory" progress: spinner while saving, a drawn check for 1.2s after
@@ -277,6 +290,7 @@ export default function EntityGraph({
     setEditing(false);
     setMemoryText("");
     setRelForm({ to: "", label: "" });
+    setAdding(null);
     setActionError(null);
     try {
       const detail = await queryClient.fetchQuery(entityDetailQuery(id));
@@ -408,7 +422,7 @@ export default function EntityGraph({
     try {
       await addMemoryMutation.mutateAsync({ id: selected.id, text: memoryText.trim() });
       setMemoryText("");
-      const detail = await selectNode(selected.id);
+      const detail = await selectNode(selected.id); // also folds the form again
       setFreshMemory(detail?.memory.find((m) => !before.has(m.id))?.id ?? null);
       setMemoryStatus("done");
       memoryTimer.current = setTimeout(() => setMemoryStatus("idle"), 1200);
@@ -631,16 +645,14 @@ export default function EntityGraph({
     </div>
   );
 
-  const vaultSwitcher = myVaults.length > 1 && (
-    <Select
-      className="h-10 text-[14px] w-36 sm:w-44 shrink-0"
-      value={vaultId ?? ""}
+  const vaultSwitcher = (
+    <SpaceSelect
+      className="h-10 text-[14px] flex-1 min-w-0 md:flex-none md:w-56"
+      value={vaultId}
       onChange={(v) => {
-        chooseVault(v || undefined);
+        chooseVault(v);
         setSelected(null);
       }}
-      aria-label="Memory space"
-      options={myVaults.map((v) => ({ value: v.kind === "personal" ? "" : v.id, label: v.kind === "personal" ? "Personal" : v.name }))}
     />
   );
 
@@ -648,21 +660,22 @@ export default function EntityGraph({
     <button key={key} type="button" className="pill shrink-0" aria-pressed={active} onClick={onClick}>
       <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color, opacity: active ? 1 : 0.35 }} aria-hidden />
       {label}
-      <span className="font-mono" style={{ color: "var(--ink-dim)" }}>
+      <span className="tabular-nums" style={{ color: "var(--ink-dim)" }}>
         {count}
       </span>
       <span className="sr-only">{active ? "(shown)" : "(hidden)"}</span>
     </button>
   );
 
-  // Two rows at most: space, find and add; then the kind chips (one scrolling line on phones).
+  // Desktop: space, find and add on one row, then the kind chips. Phones: space and add, then find on
+  // its own full-width row, then the chips in one row that scrolls sideways out to the screen edges.
   const toolbar = (
     <div className="flex flex-col gap-2 w-full min-w-0">
-      <div className="flex items-center gap-2 w-full min-w-0">
+      <div className="flex flex-wrap md:flex-nowrap items-center gap-2 w-full min-w-0">
         {vaultSwitcher}
         {graph.nodes.length > 0 && (
           <form
-            className="flex-1 min-w-0 md:flex-none"
+            className="order-last basis-full md:order-none md:basis-auto min-w-0"
             onSubmit={(e) => {
               e.preventDefault();
               const input = e.currentTarget.elements.namedItem("find") as HTMLInputElement;
@@ -677,6 +690,7 @@ export default function EntityGraph({
           >
             <input
               name="find"
+              data-page-search
               list="entity-names"
               className="field h-10 w-full md:w-56 px-3 text-[14px]"
               placeholder="Find a person or topic…"
@@ -690,18 +704,21 @@ export default function EntityGraph({
             </datalist>
           </form>
         )}
-        <button
-          type="button"
-          className="btn btn-primary shrink-0 max-sm:ml-auto"
-          aria-label="Add person or topic"
-          onClick={() => setShowCreate(true)}
-        >
-          <Plus size={18} strokeWidth={1.75} aria-hidden />
-          <span className="max-sm:sr-only">Add person or topic</span>
-        </button>
+        {!kinds && (
+          // Code map is filled by coding apps only: nothing to add by hand there
+          <button
+            type="button"
+            className="btn btn-primary shrink-0 ml-auto md:ml-0"
+            aria-label="Add person or topic"
+            onClick={() => setShowCreate(true)}
+          >
+            <Plus size={18} strokeWidth={1.75} aria-hidden />
+            <span className="max-sm:sr-only">Add person or topic</span>
+          </button>
+        )}
       </div>
       <div
-        className="flex gap-2 items-center w-full max-md:overflow-x-auto max-md:[scrollbar-width:none] md:flex-wrap"
+        className="flex gap-2 items-center max-md:flex-nowrap max-md:overflow-x-auto max-md:[scrollbar-width:none] max-md:py-1 max-sm:-mx-4 max-sm:px-4 sm:max-md:-mx-8 sm:max-md:px-8 md:flex-wrap"
         role="group"
         aria-label="Show kinds"
       >
@@ -770,9 +787,6 @@ export default function EntityGraph({
         <div className="flex items-center gap-3 min-w-0">
           {selected.kind === "person" && <Monogram name={selected.name || selected.id} size={36} color={colorOf("person")} />}
           <div className="min-w-0">
-            <span className="caps block" style={{ color: "var(--accent-text)" }}>
-              Selected {kindLabel(selected.kind).toLowerCase()}
-            </span>
             <h2 className="text-[20px] font-semibold tracking-[-0.015em] truncate">{selected.name}</h2>
             <span className="text-[13px] inline-flex items-center gap-1.5 mt-0.5" style={{ color: "var(--ink-dim)" }}>
               <span className="w-2 h-2 rounded-full" style={{ background: kindColor(selected.kind) }} aria-hidden />
@@ -793,11 +807,13 @@ export default function EntityGraph({
         </div>
         <TooltipGroup>
           <div className="flex items-center gap-0.5 shrink-0 -mr-1">
-            <Tooltip label="Edit">
-              <button className="btn btn-ghost btn-sm btn-icon" onClick={startEditing} aria-label="Edit">
-                <Pencil {...ICON} />
-              </button>
-            </Tooltip>
+            {canDelete(selected.owner_email) && !editing && (
+              <Tooltip label="Edit">
+                <button className="btn btn-ghost btn-sm btn-icon" onClick={startEditing} aria-label="Edit">
+                  <Pencil {...ICON} />
+                </button>
+              </Tooltip>
+            )}
             {canDelete(selected.owner_email) && (
               <Tooltip label="Delete. Also removes its memories and connections">
                 <ConfirmButton label="Delete" confirmLabel="Delete" onConfirm={deleteSelected} disabled={busy} className="btn btn-ghost btn-sm btn-icon">
@@ -817,24 +833,19 @@ export default function EntityGraph({
       </div>
 
       <div className="overflow-y-auto px-5 pb-5 flex flex-col gap-6">
-        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-[13px] items-center">
-          <dt className="label">Added by</dt>
-          <dd className="min-w-0">
-            {selected.owner_email ? <Author email={selected.owner_email} me={myEmail} /> : <span style={{ color: "var(--ink-faint)" }}>Not recorded</span>}
-          </dd>
-          <dt className="label">Last memory</dt>
-          <dd style={{ color: "var(--ink-dim)" }}>
-            {lastTouched ? `${age(lastTouched)} ago`.replace("now ago", "just now") : "None yet"}
-          </dd>
-          {selected.aliases.length > 0 && (
-            <>
-              <dt className="label">Other names</dt>
-              <dd className="truncate" style={{ color: "var(--ink-dim)" }}>
-                {selected.aliases.join(", ")}
-              </dd>
-            </>
+        <div className="flex flex-col gap-1">
+          {selected.owner_email && <Byline email={selected.owner_email} />}
+          {lastTouched && (
+            <p className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+              Last memory {ago(lastTouched)}
+            </p>
           )}
-        </dl>
+          {selected.aliases.length > 0 && (
+            <p className="text-[12px] truncate" style={{ color: "var(--ink-dim)" }} title={selected.aliases.join(", ")}>
+              Also called {selected.aliases.join(", ")}
+            </p>
+          )}
+        </div>
 
         {actionError && <ErrorLine error={actionError} />}
 
@@ -883,24 +894,20 @@ export default function EntityGraph({
           </h3>
           {selected.memory.length === 0 ? (
             <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
-              Nothing saved yet. Add the first memory below.
+              Nothing saved yet.
             </p>
           ) : (
             <ul className="hairline-rows">
               {selected.memory.map((m) => (
                 <li key={m.id} ref={m.id === freshMemory ? blurIn : undefined} className="group py-2.5 flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex flex-col gap-1.5">
-                    <EditableMemoryText memory={m} disabled={busy} onSaved={() => void selectNode(selected.id)} />
-                    {(m.owner_email || m.created_at) && (
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Author email={m.owner_email} me={myEmail} />
-                        {age(m.created_at) && (
-                          <time className="text-[12px]" style={{ color: "var(--ink-faint)" }} dateTime={m.created_at} title={m.created_at}>
-                            {age(m.created_at)}
-                          </time>
-                        )}
-                      </div>
+                  <div className="min-w-0 flex flex-col gap-1">
+                    {/* edit and delete follow one rule: whoever wrote it, and admins */}
+                    {canDelete(m.owner_email) ? (
+                      <EditableMemoryText memory={m} disabled={busy} onSaved={() => void selectNode(selected.id)} />
+                    ) : (
+                      <span className="text-[14px] leading-snug">{m.text}</span>
                     )}
+                    <Byline email={m.owner_email} at={m.created_at} />
                   </div>
                   {canDelete(m.owner_email) && (
                     <Tooltip label="Delete memory">
@@ -919,8 +926,10 @@ export default function EntityGraph({
               ))}
             </ul>
           )}
+          {adding === "memory" ? (
           <form onSubmit={submitMemory} className="flex flex-col gap-2">
             <textarea
+              autoFocus
               className="field px-3 py-2 text-[14px]"
               rows={2}
               aria-label={`New memory about ${selected.name}`}
@@ -932,6 +941,17 @@ export default function EntityGraph({
               <button type="submit" disabled={busy || !memoryText.trim()} className="btn btn-sm">
                 Add memory
               </button>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAdding(null)}>
+                Cancel
+              </button>
+            </div>
+          </form>
+          ) : (
+            <div className="flex items-center gap-3">
+              <button type="button" className="btn btn-ghost btn-sm self-start -ml-2" onClick={() => setAdding("memory")}>
+                <Plus size={16} strokeWidth={1.75} aria-hidden />
+                Add memory
+              </button>
               {memoryStatus !== "idle" && (
                 <span className="inline-flex items-center gap-1.5 text-[13px]" style={{ color: "var(--ink-dim)" }} role="status">
                   <SyncMark status={memoryStatus} />
@@ -939,8 +959,8 @@ export default function EntityGraph({
                 </span>
               )}
             </div>
-          </form>
-          {selected.memory.length > 1 && <TidyUp entityId={selected.id} disabled={busy} onDone={() => void selectNode(selected.id)} />}
+          )}
+          {selected.memory.length > 1 && selected.memory.every((m) => canDelete(m.owner_email)) && <TidyUp entityId={selected.id} disabled={busy} onDone={() => void selectNode(selected.id)} />}
         </section>
 
         <section className="flex flex-col gap-2">
@@ -959,7 +979,7 @@ export default function EntityGraph({
               {selected.relations.map((r) => {
                 const other = r.direction === "out" ? r.out : r.in;
                 return (
-                  <li key={r.id} className="py-2 flex items-center gap-2 min-w-0">
+                  <li key={r.id} className="py-2 flex items-center gap-2 min-w-0" title={r.owner_email ? `Added by ${r.owner_email}` : undefined}>
                     {r.direction === "out" ? (
                       <ArrowRight size={13} strokeWidth={1.75} className="shrink-0" style={{ color: "var(--ink-dim)" }} aria-label="outgoing" />
                     ) : (
@@ -976,14 +996,12 @@ export default function EntityGraph({
                     >
                       {nameOf(other)}
                     </button>
-                    <span className="ml-auto shrink-0">
-                      <Author email={r.owner_email} me={myEmail} />
-                    </span>
                   </li>
                 );
               })}
             </ul>
           )}
+          {adding === "relation" ? (
           <form onSubmit={submitRelation} className="flex flex-col gap-2">
             <Select
               aria-label="Relate to"
@@ -1002,10 +1020,23 @@ export default function EntityGraph({
               value={relForm.label}
               onChange={(e) => setRelForm((f) => ({ ...f, label: e.target.value }))}
             />
-            <button type="submit" disabled={busy || !relForm.to || !relForm.label.trim()} className="btn btn-sm self-start">
-              Add connection
-            </button>
+            <div className="flex gap-2">
+              <button type="submit" disabled={busy || !relForm.to || !relForm.label.trim()} className="btn btn-sm">
+                Add connection
+              </button>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAdding(null)}>
+                Cancel
+              </button>
+            </div>
           </form>
+          ) : (
+            graph.nodes.length > 1 && (
+              <button type="button" className="btn btn-ghost btn-sm self-start -ml-2" onClick={() => setAdding("relation")}>
+                <Plus size={16} strokeWidth={1.75} aria-hidden />
+                Add connection
+              </button>
+            )
+          )}
         </section>
       </div>
     </aside>

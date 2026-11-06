@@ -5,7 +5,7 @@ import ErrorLine, { failure } from "@/components/ErrorLine";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, Check, Plus, Upload, Users } from "lucide-react";
+import { AlertTriangle, ArrowRight, Check, Upload, Users } from "lucide-react";
 import type { EntityDetail, EntityKind, SourceRow, Vault } from "@/lib/types";
 import { entityKeys, type EntityList } from "@/lib/queries/entities";
 import { call } from "@/lib/queries/client";
@@ -80,11 +80,12 @@ function FailureBanner({ rows, dismissed, onDismiss }: { rows: SourceRow[]; dism
 
 // ponytail: no "recent activity" endpoint exists, so this lists each space and fans out
 // one entities.get per entity on its first page. Ceiling: memory counts and recency only
-// cover about ENTITY_CAP entities across all spaces (the count then reads "N+").
+// cover about ENTITY_CAP entities across all spaces (past that, the memory count is left out
+// rather than shown as an estimate).
 // Upgrade path: a backend summary endpoint with totals and recent entities.
 const ENTITY_CAP = 24;
 const RECENT_SHOWN = 6;
-// Code-map entities are not what a team member means by "people and projects".
+// Code-map entities are not what someone means by "people and projects".
 const CODE_KINDS = new Set<EntityKind>(["repository", "file", "symbol"]);
 
 type RecentEntity = { id: string; name: string; kind: EntityKind; memories: number; lastAt: string | null; vault: Vault };
@@ -142,7 +143,8 @@ function StatLine({ spaces, overview }: { spaces: number | null; overview: Overv
   const parts = [
     spaces !== null ? plural(spaces, "space", "spaces") : null,
     plural(overview.entities, "person or topic", "people & topics"),
-    `${overview.memories.toLocaleString()}${overview.memoriesCapped ? "+" : ""} ${overview.memories === 1 && !overview.memoriesCapped ? "memory" : "memories"}`,
+    // Only an exact count: a partial sum would read as a guess.
+    overview.memoriesCapped ? null : plural(overview.memories, "memory", "memories"),
     `last activity ${since(overview.lastActivity)}`,
   ].filter(Boolean);
   return (
@@ -151,6 +153,12 @@ function StatLine({ spaces, overview }: { spaces: number | null; overview: Overv
     </p>
   );
 }
+
+// A list row: dot, name, metadata. Below 640px the name takes the whole first line
+// (wrapping, never cut off) and the metadata moves, whole, to a second line.
+const ROW = "grid grid-cols-[auto_minmax(0,1fr)] sm:grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0.5 min-h-11 py-2 hover:bg-[var(--surface-raised)]";
+const ROW_NAME = "min-w-0 text-[14px] font-medium [overflow-wrap:anywhere] sm:truncate";
+const ROW_META = "col-start-2 sm:col-start-3 text-[12px] whitespace-nowrap";
 
 const entityHref = (e: RecentEntity) =>
   `/entities?id=${encodeURIComponent(e.id)}${e.vault.kind === "personal" ? "" : `&vault=${encodeURIComponent(e.vault.id)}`}`;
@@ -175,10 +183,10 @@ function RecentlyUpdated({ rows, showSpace }: { rows: RecentEntity[]; showSpace:
         <ul className="hairline-rows border-t">
           {rows.map((e) => (
             <li key={e.id}>
-              <Link href={entityHref(e)} className="flex items-center gap-3 min-h-11 py-2 hover:bg-[var(--surface-raised)]">
+              <Link href={entityHref(e)} className={ROW}>
                 <span className="dot shrink-0" style={{ background: kindColor(e.kind) }} aria-hidden />
-                <span className="flex-1 min-w-0 truncate text-[14px] font-medium">{e.name}</span>
-                <span className="shrink-0 text-[12px]" style={{ color: "var(--ink-dim)" }}>
+                <span className={ROW_NAME}>{e.name}</span>
+                <span className={ROW_META} style={{ color: "var(--ink-dim)" }}>
                   {showSpace && <>{spaceName(e.vault)} · </>}
                   {plural(e.memories, "memory", "memories")}
                   {e.lastAt && <> · {since(e.lastAt)}</>}
@@ -208,10 +216,10 @@ function SourcesHealth({ rows }: { rows: SourceRow[] }) {
           const health = sourceHealth(s);
           return (
             <li key={s.key}>
-              <Link href={`/connectors/${s.key}`} className="flex items-center gap-3 min-h-11 py-2 hover:bg-[var(--surface-raised)]">
+              <Link href={`/connectors/${s.key}`} className={ROW}>
                 <span className="dot shrink-0" style={{ background: health.tone }} aria-hidden />
-                <span className="flex-1 min-w-0 truncate text-[14px] font-medium">{sourceLabel(s)}</span>
-                <span className="shrink-0 text-[12px]" style={{ color: health.label === "Healthy" ? "var(--ink-dim)" : health.tone }}>
+                <span className={ROW_NAME}>{sourceLabel(s)}</span>
+                <span className={ROW_META} style={{ color: health.label === "Healthy" ? "var(--ink-dim)" : health.tone }}>
                   {health.label} · {plural(s.record_count, "record", "records")} · synced {since(s.sync_status.last_ok)}
                 </span>
               </Link>
@@ -226,12 +234,12 @@ function SourcesHealth({ rows }: { rows: SourceRow[] }) {
 // ---- choose your AI app ----
 
 /** Which AI app do you use? Neutral choices, nothing preselected; each opens that app's own steps. */
-function AppPicker({ again = false }: { again?: boolean }) {
+function AppPicker() {
   return (
     <section className="task-panel p-6 sm:p-8 flex flex-col gap-5" aria-labelledby="pick-title">
       <div className="flex flex-col gap-2">
         <h2 id="pick-title" className="text-[20px] font-semibold tracking-[-0.3px] leading-tight">
-          {again ? "Connect another AI app" : "Which AI app do you use?"}
+          Which AI app do you use?
         </h2>
         <p className="text-[14px] leading-relaxed" style={{ color: "var(--ink-dim)" }}>
           Choose the app you already use. We&apos;ll show only the steps for that app. You can connect more apps later.
@@ -246,6 +254,25 @@ function AppPicker({ again = false }: { again?: boolean }) {
           Connection help
         </Link>
       </div>
+    </section>
+  );
+}
+
+/** Once an app is connected, the picker shrinks to one line that opens the choices in place. */
+function ConnectAnother() {
+  const [open, setOpen] = useState(false);
+  return (
+    <section className="flex flex-col gap-4" aria-label="Connect another AI app">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="self-start inline-flex items-center gap-1 min-h-11 text-[14px] font-medium underline-offset-2 hover:underline"
+        style={{ color: "var(--accent-text)" }}
+      >
+        Connect another app <ArrowRight size={14} strokeWidth={1.75} aria-hidden className={open ? "rotate-90" : undefined} />
+      </button>
+      {open && <AppChoices />}
     </section>
   );
 }
@@ -280,7 +307,7 @@ const ago = (iso: string | null) => (iso ? since(iso) : "not used yet");
 const recentlyUsed = (iso: string | null) => Boolean(iso && Date.now() - new Date(iso).getTime() < 86_400_000);
 
 /** The connected-apps card. Only rendered from server-confirmed connections. */
-function ConnectedPanel({ connections, onConnectAnother }: { connections: Connection[]; onConnectAnother: () => void }) {
+function ConnectedPanel({ connections }: { connections: Connection[] }) {
   const latest = connections[0];
   const app = appForConnection(latest);
   const shown = connections.slice(0, 6);
@@ -304,16 +331,11 @@ function ConnectedPanel({ connections, onConnectAnother }: { connections: Connec
               : "Ask any of them to look for memories about you to try it."}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2 shrink-0">
-          {app.openUrl && connections.length === 1 && (
-            <a href={app.openUrl} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm">
-              Open {app.name}
-            </a>
-          )}
-          <button type="button" className="btn btn-sm" onClick={onConnectAnother}>
-            <Plus size={16} strokeWidth={1.75} aria-hidden /> Connect another app
-          </button>
-        </div>
+        {app.openUrl && connections.length === 1 && (
+          <a href={app.openUrl} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm shrink-0 self-start sm:self-auto">
+            Open {app.name}
+          </a>
+        )}
       </div>
       <ul className="grid sm:grid-cols-2" aria-label="Connected AI apps">
         {shown.map((c, i) => {
@@ -366,10 +388,9 @@ export default function HomePage() {
   const canUpload = documents !== undefined && Boolean(documents.storage);
   const [dismissedFailures, setDismissedFailures] = useState<Set<string>>(new Set());
   const { connections } = useConnections();
-  const [picking, setPicking] = useState(false);
 
   const liveSources = rows?.filter(isLiveSource) ?? [];
-  // Org spaces are what the team shares; every account also has its personal space.
+  // Shared spaces plus the personal space every account has.
   const spaceCount = vaults ? vaults.length : null;
   const hasData = Boolean(overview && (overview.entities > 0 || overview.memories > 0)) || liveSources.length > 0 || vaults?.some((v) => v.kind === "org");
   // Connected only on the server's word: an approved sign-in or a token an app has used.
@@ -377,7 +398,7 @@ export default function HomePage() {
 
   return (
     <div className="flex flex-col gap-8 max-w-[1240px]">
-      <PageHeader title="Home" intro="Your team's shared memory. ChatGPT, Claude and other AI apps can look things up here." />
+      <PageHeader title="Home" intro="Your shared memory. ChatGPT, Claude and other AI apps can look things up here." />
 
       <InvitationBanner />
 
@@ -385,7 +406,7 @@ export default function HomePage() {
         <FailureBanner rows={rows} dismissed={dismissedFailures} onDismiss={(key) => setDismissedFailures((prev) => new Set(prev).add(key))} />
       )}
 
-      {overviewQuery.isError && <ErrorLine error={failure(overviewQuery.error, "Could not load what your team has saved.")} />}
+      {overviewQuery.isError && <ErrorLine error={failure(overviewQuery.error, "Could not load what has been saved.")} />}
 
       {overview === null && !overviewQuery.isError ? (
         <div className="flex flex-col gap-3" aria-busy="true" aria-label="Loading your overview">
@@ -398,7 +419,7 @@ export default function HomePage() {
           <section className="flex flex-col gap-6" aria-labelledby="overview-title">
             <div className="flex flex-col gap-1">
               <h2 id="overview-title" className="section-title">
-                What your team knows
+                What&apos;s saved
               </h2>
               <StatLine spaces={spaceCount} overview={overview} />
             </div>
@@ -417,15 +438,11 @@ export default function HomePage() {
         </div>
       ) : !connectedApps ? (
         <AppPicker />
-      ) : picking ? (
-        <>
-          <AppPicker again />
-          <button type="button" className="btn self-start" onClick={() => setPicking(false)}>
-            Back to Home
-          </button>
-        </>
       ) : (
-        <ConnectedPanel connections={connections} onConnectAnother={() => setPicking(true)} />
+        <>
+          <ConnectedPanel connections={connections} />
+          <ConnectAnother />
+        </>
       )}
 
       {overview && !hasData && !connectedApps && <OwnInformation canUpload={canUpload} />}

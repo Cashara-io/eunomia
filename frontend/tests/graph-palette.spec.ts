@@ -27,6 +27,8 @@ test.describe("Entity graph", () => {
     await seedTwoRelatedPeople(page);
     await tool(page, "vault_create", { name: "Other vault" });
 
+    // List is the default tab; this test is about the Connections canvas
+    await page.addInitScript(() => window.localStorage.setItem("eunomia.entities.view", "graph"));
     await page.goto("/entities");
     const svg = page.getByRole("img", { name: "Entity relationship graph" });
     const link = svg.locator("line");
@@ -60,7 +62,7 @@ test.describe("Entity graph", () => {
     await expect(page.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0);
   });
 
-  test("vector cloud layers vaults in one 3D space, including a merge of them", async ({ page }) => {
+  test("memory map shows one space at a time, on the shared space picker, including a merge", async ({ page }) => {
     await registerAndOnboard(page, uniqueEmail("cloud"));
     await seedTwoRelatedPeople(page);
     const team = await tool(page, "vault_create", { name: "Team" });
@@ -73,16 +75,19 @@ test.describe("Entity graph", () => {
     await page.addInitScript(() => window.localStorage.setItem("eunomia.graph.space", ""));
     await page.goto("/entities");
     await page.getByRole("tab", { name: "Memory map" }).click();
-    const cloud = page.getByRole("img", { name: "Memory map" });
-    await expect(cloud.locator("canvas")).toBeVisible();
+    const map = page.getByRole("img", { name: "Memory map" });
+    await expect(map).toBeVisible();
+    await expect(page.getByText(/^2 memories/)).toBeVisible();
 
-    const layers = page.getByRole("group", { name: "Memory space layers" });
-    await layers.getByRole("button", { name: /Team/ }).click();
-    await layers.getByRole("button", { name: /Everything/ }).click();
-    await expect(layers.getByRole("button", { name: /Everything/ })).toContainText("3"); // one point per memory
-    await expect(layers.getByRole("button", { name: /^Team/ })).toContainText("1");
+    const space = page.getByRole("combobox", { name: "Memory space" });
+    await space.click();
+    await page.getByRole("option", { name: "Everything" }).click();
+    await expect(page.getByText(/^3 memories/)).toBeVisible(); // one point per memory
+    await space.click();
+    await page.getByRole("option", { name: "Team" }).click();
+    await expect(page.getByText(/^1 memory/)).toBeVisible();
 
-    await page.getByRole("button", { name: "Built the first compiler." }).first().press("Enter");
+    await map.getByRole("button", { name: "Built the first compiler." }).first().press("Enter");
     await expect(page.getByText(/· Fact$/).first()).toBeVisible();
   });
 });
@@ -115,5 +120,14 @@ test.describe("Command palette", () => {
     await expect(input).toHaveValue("");
     await page.keyboard.press("Escape");
     await expect(input).toHaveCount(0);
+
+    // Keyboard shortcuts: "g p" goes to People & topics, "?" lists them all.
+    await page.keyboard.press("g");
+    await page.keyboard.press("p");
+    await expect(page).toHaveURL(/\/entities/);
+    await page.keyboard.press("?");
+    await expect(page.getByRole("dialog", { name: "Keyboard shortcuts" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: "Keyboard shortcuts" })).toHaveCount(0);
   });
 });

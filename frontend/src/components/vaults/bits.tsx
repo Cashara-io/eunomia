@@ -59,20 +59,19 @@ export function RoleChip({ role }: { role: VaultRole }) {
    of a few calm colours for shared spaces (never the danger red). Decorative; the
    name and the words beside it carry the meaning. */
 const SWATCHES = ["var(--bauhaus-app-yellow)", "var(--bauhaus-app-blue)", "var(--good)"];
-export function SpaceSwatch({ vault, size = 8 }: { vault: Vault; size?: number }) {
-  const personal = vault.kind === "personal";
+/** A space's colour, shared by its dot here and its points on the Memory map. */
+export function spaceColor(vault: Pick<Vault, "id" | "kind"> | undefined): string {
+  if (!vault || vault.kind === "personal") return "var(--ink-faint)";
   let h = 0;
   for (const ch of vault.id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return SWATCHES[h % SWATCHES.length];
+}
+export function SpaceSwatch({ vault, size = 8 }: { vault: Vault; size?: number }) {
   return (
     <span
       aria-hidden
       className="inline-block shrink-0"
-      style={{
-        width: size,
-        height: size,
-        background: personal ? "var(--ink-faint)" : SWATCHES[h % SWATCHES.length],
-        borderRadius: 999,
-      }}
+      style={{ width: size, height: size, background: spaceColor(vault), borderRadius: 999 }}
     />
   );
 }

@@ -3,7 +3,7 @@
 // The entity graph's canvas: a flat SVG with a live d3-force layout. Drag a
 // node and the links follow; release and physics settles it back. Drag the
 // background to pan, scroll or use the buttons to zoom, click (or Enter or Space) a node
-// to select it. The vector cloud stays 3D (Scene3D).
+// to select it.
 
 import { useEffect, useRef, useState } from "react";
 import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation, type Simulation, type SimulationNodeDatum } from "d3-force";
@@ -24,7 +24,7 @@ const DRAG_THRESHOLD = 4; // px before a pointerdown counts as a drag, not a cli
 const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 2.5;
 const ZOOM_STEP = 0.2;
-const FIT_PADDING = 24; // screen px kept clear around the outermost label
+const FIT_PADDING = 48; // screen px kept clear around the outermost node or label
 const FIT_ZOOM_MAX = 1.4; // an auto-fit never blows a small graph up past this
 // Labels stay 12px on screen at any zoom (the font is divided by the zoom); they sit LABEL_Y layout
 // units under the node's centre.
@@ -33,34 +33,65 @@ const LABEL_Y = 26;
 const LABEL_MAX = 18; // characters before the label is cut with an ellipsis
 const NODE_R = 16;
 const labelText = (name: string) => (name.length > LABEL_MAX ? `${name.slice(0, LABEL_MAX - 1)}…` : name);
-// screen px from a node's centre to its label's edge: ~0.6em per character of a UI sans, generous so it never clips
-const labelHalfWidth = (name: string) => (labelText(name).length * LABEL_FONT * 0.6) / 2 + 2;
+// screen px from a node's centre to its label's edge: about 6.5px per character of 12px UI sans
+const labelHalfWidth = (name: string) => (labelText(name).length * 6.5) / 2;
 const PRE_TICKS = 120; // layout steps run before the first frame, so the first fit is close to the settled shape
 
-// Zoom/pan that centres `nodes` inside the part of the w x h canvas the
-// floating UI leaves free. Shared by auto-fit and the Fit button.
+type Box = { left: number; right: number; top: number; bottom: number };
+// The on-screen box (relative to an arbitrary origin) of every node and its label at `zoom`.
+// Shapes scale with the zoom, labels do not, so the box is measured per zoom.
+function screenBox(pts: { x: number; y: number; half: number }[], zoom: number): Box {
+  const box = { left: Infinity, right: -Infinity, top: Infinity, bottom: -Infinity };
+  for (const p of pts) {
+    const sx = p.x * zoom;
+    const sy = p.y * zoom;
+    const half = Math.max(p.half, NODE_R * zoom);
+    box.left = Math.min(box.left, sx - half);
+    box.right = Math.max(box.right, sx + half);
+    box.top = Math.min(box.top, sy - NODE_R * zoom);
+    box.bottom = Math.max(box.bottom, sy + LABEL_Y * zoom + 4); // baseline plus descenders
+  }
+  return box;
+}
+
+// Zoom/pan that centres `nodes` and their labels inside the part of the w x h canvas the floating
+// UI leaves free, with FIT_PADDING all round. Shared by auto-fit and the Fit button.
 function computeFit(nodes: { x?: number; y?: number; name: string }[], w: number, h: number, ins: CanvasInsets): View {
-  const pts = nodes.filter((n): n is { x: number; y: number; name: string } => typeof n.x === "number" && typeof n.y === "number");
+  const pts = nodes
+    .filter((n): n is { x: number; y: number; name: string } => typeof n.x === "number" && typeof n.y === "number")
+    .map((n) => ({ x: n.x, y: n.y, half: labelHalfWidth(n.name) }));
   if (pts.length === 0) return { zoom: 1, x: 0, y: 0 };
-  const xs = pts.map((p) => p.x);
-  const ys = pts.map((p) => p.y);
-  const [minX, maxX, minY, maxY] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
-  // Labels are a fixed screen size, so they are kept clear in screen px around the box of centres:
-  // the widest label at each side, the node above, the node and its label below (at the largest zoom).
-  const side = Math.max(NODE_R * FIT_ZOOM_MAX, ...pts.map((p) => labelHalfWidth(p.name))) + FIT_PADDING;
-  const above = NODE_R * FIT_ZOOM_MAX + FIT_PADDING;
-  const below = LABEL_Y * FIT_ZOOM_MAX + LABEL_FONT + FIT_PADDING;
   const freeW = Math.max(w - ins.left - ins.right, 100);
   const freeH = Math.max(h - ins.top - ins.bottom, 100);
-  const fit = Math.min(
-    Math.max(freeW - 2 * side, 40) / Math.max(maxX - minX, 1),
-    Math.max(freeH - above - below, 40) / Math.max(maxY - minY, 1),
-  );
-  const zoom = Math.min(FIT_ZOOM_MAX, Math.max(ZOOM_MIN, fit));
+  const roomW = Math.max(freeW - 2 * FIT_PADDING, 40);
+  const roomH = Math.max(freeH - 2 * FIT_PADDING, 40);
+  const fits = (z: number) => {
+    const b = screenBox(pts, z);
+    return b.right - b.left <= roomW && b.bottom - b.top <= roomH;
+  };
+  // the box grows with the zoom, so the largest zoom that fits is found by bisection
+  let zoom = ZOOM_MIN;
+  if (fits(FIT_ZOOM_MAX)) zoom = FIT_ZOOM_MAX;
+  else if (fits(ZOOM_MIN)) {
+    let lo = ZOOM_MIN;
+    let hi = FIT_ZOOM_MAX;
+    for (let i = 0; i < 24; i++) {
+      const mid = (lo + hi) / 2;
+      if (fits(mid)) lo = mid;
+      else hi = mid;
+    }
+    zoom = lo;
+  }
+  const b = screenBox(pts, zoom);
   const cx = ins.left + freeW / 2;
-  const cy = ins.top + above + (freeH - above - below) / 2;
-  // screen = w/2 + zoom * (p - w/2 + view.x), so solve for the view that puts the box centre on (cx, cy)
-  return { zoom, x: (cx - w / 2) / zoom + w / 2 - (minX + maxX) / 2, y: (cy - h / 2) / zoom + h / 2 - (minY + maxY) / 2 };
+  const cy = ins.top + freeH / 2;
+  // screen = w/2 + zoom * (p - w/2 + view.x) = zoom * p + w/2 + zoom * (view.x - w/2); solve for the
+  // view that puts the middle of the box on (cx, cy)
+  return {
+    zoom,
+    x: (cx - (b.left + b.right) / 2 - w / 2) / zoom + w / 2,
+    y: (cy - (b.top + b.bottom) / 2 - h / 2) / zoom + h / 2,
+  };
 }
 
 function ToolButton({ label, icon, run }: { label: string; icon: React.ReactNode; run: () => void }) {
@@ -348,18 +379,32 @@ export default function GraphCanvas({
                   // an agent's own kind
                   <circle r={r * 0.7} {...shape} />
                 )}
-                <text
-                  y={LABEL_Y}
-                  textAnchor="middle"
-                  fontSize={LABEL_FONT / view.zoom}
-                  fontFamily="var(--font-sans), ui-sans-serif, system-ui, sans-serif"
-                  fill={hot || picked ? "var(--ink)" : "var(--ink-dim)"}
-                >
-                  {labelText(n.name)}
-                </text>
               </g>
             );
           })}
+          {/* Labels last, over every edge and shape, with a canvas-coloured halo so no line runs through text. */}
+          <g pointerEvents="none" aria-hidden>
+            {visible.map((n) => {
+              const lit = hovered === n.id || draggingId === n.id || selectedId === n.id;
+              return (
+                <text
+                  key={n.id}
+                  x={n.x}
+                  y={(n.y ?? 0) + LABEL_Y}
+                  textAnchor="middle"
+                  fontSize={LABEL_FONT / view.zoom}
+                  fontFamily="var(--font-sans), ui-sans-serif, system-ui, sans-serif"
+                  fill={lit ? "var(--ink)" : "var(--ink-dim)"}
+                  stroke="var(--canvas)"
+                  strokeWidth={4 / view.zoom}
+                  strokeLinejoin="round"
+                  paintOrder="stroke"
+                >
+                  {labelText(n.name)}
+                </text>
+              );
+            })}
+          </g>
         </g>
       </svg>
 

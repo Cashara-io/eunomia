@@ -11,8 +11,8 @@ pub struct Doc {
 pub const DOCS: &[Doc] = &[
     Doc { slug: "quickstart", title: "Quickstart", body: include_str!("../../docs/quickstart.md") },
     Doc { slug: "installation", title: "Installation", body: include_str!("../../docs/installation.md") },
-    Doc { slug: "agents", title: "AI agents & MCP", body: include_str!("../../docs/agents.md") },
-    Doc { slug: "concepts", title: "Concepts", body: include_str!("../../docs/concepts.md") },
+    Doc { slug: "agents", title: "Connecting AI apps", body: include_str!("../../docs/agents.md") },
+    Doc { slug: "concepts", title: "How Eunomia works", body: include_str!("../../docs/concepts.md") },
     Doc { slug: "connectors", title: "Connectors", body: include_str!("../../docs/connectors.md") },
     Doc { slug: "documents", title: "Documents", body: include_str!("../../docs/documents.md") },
     Doc { slug: "deployment", title: "Deployment", body: include_str!("../../docs/deployment.md") },

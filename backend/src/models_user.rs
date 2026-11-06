@@ -104,19 +104,37 @@ pub fn validate_credentials(email: &str, password: &str) -> AppResult<()> {
 // ponytail: one org per request context, no org switcher: a credential is not pinned to an org, so a
 // user in two orgs always lands in the older one. Add an org claim to sessions and tokens to lift it.
 pub async fn org_of(control: &ControlDb, user: &RecordId) -> AppResult<OrgId> {
+    Ok(home_of(control, user).await?.0)
+}
+
+/// The user's home org, and whether an admin has suspended the account.
+async fn home_of(control: &ControlDb, user: &RecordId) -> AppResult<(OrgId, bool)> {
     #[derive(Deserialize, SurrealValue)]
     struct Row {
         org: RecordId,
+        #[serde(default)]
+        #[surreal(default)]
+        suspended_at: Option<Datetime>,
     }
     let mut res = store::control::ORG_OF_USER.on(control).bind(("user", user.clone())).await?;
     let row: Option<Row> = res.take::<Vec<Row>>(0)?.into_iter().next();
-    row.and_then(|r| crate::rid::key_string(&r.org.key).and_then(|k| OrgId::parse(&k)))
+    row.and_then(|r| crate::rid::key_string(&r.org.key).and_then(|k| OrgId::parse(&k)).map(|org| (org, r.suspended_at.is_some())))
         .ok_or_else(|| AppError::coded(ErrorCode::TenantNotFound, "This account does not belong to an organisation."))
 }
 
-/// Fills in a user's org for a credential that resolved to `id` and `email`.
+/// The refusal for a suspended account, wherever it tries to get in.
+pub fn suspended_error() -> AppError {
+    AppError::coded(ErrorCode::AuthSuspended, "This account is suspended. Ask your workspace admin to restore it.")
+}
+
+/// Fills in a user's org for a credential that resolved to `id` and `email`. Every way in (password,
+/// single sign-on, session cookie, API token, OAuth access token) comes through here, so a suspended
+/// account is refused here, once, for all of them.
 pub async fn load_user(control: &ControlDb, id: RecordId, email: String) -> AppResult<User> {
-    let org = org_of(control, &id).await?;
+    let (org, suspended) = home_of(control, &id).await?;
+    if suspended {
+        return Err(suspended_error());
+    }
     Ok(User { id, email, org })
 }
 

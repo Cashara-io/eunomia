@@ -31,7 +31,7 @@ test("every page and tab renders cleanly", async ({ page }) => {
     await page.goto(path);
     await expect(page.getByText(text).first(), path).toBeVisible();
   }
-  for (const tab of ["General", "Connected apps", "API tokens", "Sessions", "Your data", "People", "Audit log", "Usage", "HTTPS", "Updates", "AI provider"]) {
+  for (const tab of ["Connected apps", "API tokens", "Sessions", "Your data", "People", "Audit log", "Usage", "HTTPS", "Updates", "Backups", "AI provider"]) {
     await page.getByRole("tab", { name: tab }).click();
     await expect(page.getByRole("tab", { name: tab })).toHaveAttribute("aria-selected", "true");
   }
@@ -55,7 +55,7 @@ test("the sidebar's update badge opens Settings → Updates, from any page inclu
   await expect(page.getByRole("tab", { name: "Updates" })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByText("v9.9.9 is available")).toBeVisible();
 
-  await page.getByRole("tab", { name: "General" }).click();
+  await page.getByRole("tab", { name: "Connected apps" }).click();
   await expect(page).toHaveURL(/\/settings$/);
   await badge.click(); // already on Settings: must still switch tabs
   await expect(page.getByRole("tab", { name: "Updates" })).toHaveAttribute("aria-selected", "true");

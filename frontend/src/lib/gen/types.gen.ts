@@ -11,10 +11,17 @@ export type AckOut = {
     acked: number;
 };
 
+export type AdminChange = {
+    /**
+     * `true` makes the person an admin, `false` takes admin rights away.
+     */
+    admin: boolean;
+};
+
 /**
  * Which kind of event a filter chip asks for.
  */
-export type AuditCategory = 'all' | 'spaces' | 'signins' | 'tokens' | 'apps';
+export type AuditCategory = 'all' | 'changes' | 'spaces' | 'signins' | 'tokens' | 'apps' | 'admin';
 
 export type AuditEntry = {
     args_summary: string;
@@ -1004,20 +1011,33 @@ export type PeopleReport = {
 
 export type Person = {
     /**
-     * `creator` (the first account), `operator` (listed in the server's admin emails), or empty.
+     * Why this person is an admin: `creator` (the first account), `operator` (listed in the server's
+     * admin emails), `granted` (made an admin in the app), or empty for a member.
      */
     admin: string;
     created_at?: string | null;
     email: string;
     id: string;
     /**
+     * The admin looking at the list.
+     */
+    is_you: boolean;
+    /**
      * Latest browser session activity or API token use, RFC 3339; none if never seen.
      */
     last_active?: string | null;
     /**
+     * `admin` or `member`.
+     */
+    role: string;
+    /**
      * Shared spaces this person is an active member of (their personal space not counted).
      */
     shared_spaces: number;
+    /**
+     * When an admin suspended the account, RFC 3339; none while it is active.
+     */
+    suspended_at?: string | null;
 };
 
 export type PocketaiSummary = {
@@ -1341,6 +1361,13 @@ export type SpendByCategory = {
 export type SpendByDay = {
     amount: number;
     day: string;
+};
+
+export type SuspendChange = {
+    /**
+     * `true` suspends the account, `false` restores it.
+     */
+    suspended: boolean;
 };
 
 /**
@@ -1687,7 +1714,7 @@ export type ListWorkspaceAuditData = {
         /**
          * Which kind of event a filter chip asks for.
          */
-        category?: 'all' | 'spaces' | 'signins' | 'tokens' | 'apps';
+        category?: 'all' | 'changes' | 'spaces' | 'signins' | 'tokens' | 'apps' | 'admin';
     };
     url: '/api/admin/audit';
 };
@@ -1728,6 +1755,54 @@ export type ListPeopleResponses = {
 };
 
 export type ListPeopleResponse = ListPeopleResponses[keyof ListPeopleResponses];
+
+export type SetPersonAdminData = {
+    body: AdminChange;
+    path: {
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/admin/people/{user_id}/admin';
+};
+
+export type SetPersonAdminErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type SetPersonAdminError = SetPersonAdminErrors[keyof SetPersonAdminErrors];
+
+export type SetPersonAdminResponses = {
+    200: PeopleReport;
+};
+
+export type SetPersonAdminResponse = SetPersonAdminResponses[keyof SetPersonAdminResponses];
+
+export type SetPersonSuspendedData = {
+    body: SuspendChange;
+    path: {
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/admin/people/{user_id}/suspended';
+};
+
+export type SetPersonSuspendedErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type SetPersonSuspendedError = SetPersonSuspendedErrors[keyof SetPersonSuspendedErrors];
+
+export type SetPersonSuspendedResponses = {
+    200: PeopleReport;
+};
+
+export type SetPersonSuspendedResponse = SetPersonSuspendedResponses[keyof SetPersonSuspendedResponses];
 
 export type ListAuditData = {
     body?: never;
