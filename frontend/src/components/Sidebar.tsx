@@ -1,9 +1,9 @@
 "use client";
 
+import { ListIcon, MagnifyingGlassIcon, SignOutIcon, XIcon } from "@phosphor-icons/react/ssr";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { List, MagnifyingGlass, SignOut, X } from "@phosphor-icons/react/ssr";
 import EunomiaMark from "./EunomiaMark";
 import ThemeToggle from "./ThemeToggle";
 import { openCommandPalette } from "./CommandPalette";
@@ -45,7 +45,7 @@ export function NavGlyphShapes({ glyph }: { glyph: NavGlyph }) {
 
 function isActive(pathname: string, href: string) {
   // The connection guides (/connect/...) belong to Home.
-  return href === "/" ? pathname === "/" || pathname.startsWith("/connect") : pathname === href || pathname.startsWith(`${href}/`);
+  return href === "/" ? pathname === "/" || pathname.startsWith("/connect/") : pathname === href || pathname.startsWith(`${href}/`);
 }
 
 function NavChip({ href, label, glyph, active }: { href: string; label: string; glyph: NavGlyph; active: boolean }) {
@@ -127,7 +127,7 @@ export default function Sidebar() {
     <>
       <div className="px-4">
         <button onClick={openCommandPalette} className="sidebar-search w-full min-h-9 px-3 flex items-center gap-2 text-[13.5px] text-left">
-          <MagnifyingGlass size={16} weight="duotone" className="duo" style={{ ["--duo" as string]: "var(--vault-project)" }} aria-hidden />
+          <MagnifyingGlassIcon size={16} weight="duotone" className="duo" style={{ ["--duo" as string]: "var(--vault-project)" }} aria-hidden />
           <span className="flex-1">Search</span>
           <span className="kbd" aria-hidden>
             ⌘K
@@ -173,7 +173,7 @@ export default function Sidebar() {
           </span>
           <ThemeToggle />
           <button onClick={logout} className="side-button min-h-9 px-2.5 text-[12.5px] shrink-0" aria-label="Log out">
-            <SignOut size={16} weight="duotone" className="duo" style={{ ["--duo" as string]: "var(--vault-personal)" }} aria-hidden />
+            <SignOutIcon size={16} weight="duotone" className="duo" style={{ ["--duo" as string]: "var(--vault-personal)" }} aria-hidden />
             Log out
           </button>
         </div>
@@ -193,11 +193,11 @@ export default function Sidebar() {
           aria-controls="nav-drawer"
           className="side-button w-11 h-11"
         >
-          <List size={22} aria-hidden />
+          <ListIcon weight="duotone" size={22} aria-hidden />
         </button>
         <Brand />
         <button onClick={openCommandPalette} aria-label="Search" className="side-button w-11 h-11 ml-auto">
-          <MagnifyingGlass size={20} weight="duotone" className="duo" style={{ ["--duo" as string]: "var(--vault-project)" }} aria-hidden />
+          <MagnifyingGlassIcon size={20} weight="duotone" className="duo" style={{ ["--duo" as string]: "var(--vault-project)" }} aria-hidden />
         </button>
       </div>
 
@@ -222,7 +222,7 @@ export default function Sidebar() {
             <div className="pl-4 pr-2 flex items-center justify-between">
               <Brand />
               <button ref={closeButton} onClick={() => setDrawerPath(null)} aria-label="Close menu" className="side-button w-11 h-11">
-                <X size={20} aria-hidden />
+                <XIcon weight="duotone" size={20} aria-hidden />
               </button>
             </div>
             {navBody}

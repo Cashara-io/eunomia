@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowCounterClockwiseIcon, ArrowsOutIcon, MinusIcon, PlusIcon } from "@phosphor-icons/react/ssr";
 // The entity graph's canvas: a flat SVG with a live d3-force layout. Drag a
 // node and the links follow; release and physics settles it back. Drag the
 // background to pan, scroll or use the buttons to zoom, click (or Enter or Space) a node
@@ -7,7 +8,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation, type Simulation, type SimulationNodeDatum } from "d3-force";
-import { Maximize2, Minus, Plus, RotateCcw } from "lucide-react";
 import { Blobatar } from "@blobatar/react";
 import Tooltip, { TooltipGroup } from "./bits/Tooltip";
 import type { EntityKind } from "@/lib/types";
@@ -326,10 +326,10 @@ export default function GraphCanvas({
 
       <TooltipGroup>
         <div className="panel p-1 absolute right-4 md:right-[25.5rem] bottom-4 flex gap-1">
-          <ToolButton label="Zoom in" icon={<Plus size={16} strokeWidth={1.75} />} run={() => zoomBy(1 + ZOOM_STEP)} />
-          <ToolButton label="Zoom out" icon={<Minus size={16} strokeWidth={1.75} />} run={() => zoomBy(1 - ZOOM_STEP)} />
-          <ToolButton label="Fit to view" icon={<Maximize2 size={16} strokeWidth={1.75} />} run={fitToView} />
-          <ToolButton label="Reset view" icon={<RotateCcw size={16} strokeWidth={1.75} />} run={resetView} />
+          <ToolButton label="Zoom in" icon={<PlusIcon weight="duotone" size={16} />} run={() => zoomBy(1 + ZOOM_STEP)} />
+          <ToolButton label="Zoom out" icon={<MinusIcon weight="duotone" size={16} />} run={() => zoomBy(1 - ZOOM_STEP)} />
+          <ToolButton label="Fit to view" icon={<ArrowsOutIcon weight="duotone" size={16} />} run={fitToView} />
+          <ToolButton label="Reset view" icon={<ArrowCounterClockwiseIcon weight="duotone" size={16} />} run={resetView} />
         </div>
       </TooltipGroup>
       <p className="label absolute left-4 sm:left-8 lg:left-12 bottom-4 hidden md:block pointer-events-none">Drag to rearrange · Scroll to zoom · Click a name to open it</p>

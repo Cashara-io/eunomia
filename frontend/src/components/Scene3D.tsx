@@ -1,5 +1,6 @@
 "use client";
 
+import { CornersOutIcon, MinusIcon, PlusIcon } from "@phosphor-icons/react/ssr";
 // One small three.js scene shared by the entity graph and the vector cloud:
 // flat unlit discs (instanced, cheap for thousands of points) with a hairline
 // ring, optional link lines and labelled axes, orbit/zoom, hover tooltip,
@@ -8,7 +9,6 @@
 // world reads flat (Figma/tldraw) while orbit still works.
 
 import { useEffect, useRef, useState } from "react";
-import { Maximize, Minus, Plus } from "lucide-react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import Tooltip, { TooltipGroup } from "./bits/Tooltip";
@@ -707,7 +707,7 @@ export default function Scene3D({ points, links = [], axes, selectedId, highligh
           <div className="panel absolute right-3 bottom-3 hidden md:flex items-center gap-0.5 p-1" role="group" aria-label="Zoom">
             <Tooltip label="Zoom out">
               <button type="button" className="btn btn-ghost btn-sm btn-icon w-[26px]" aria-label="Zoom out" onClick={() => apiRef.current?.zoom(1.25)}>
-                <Minus size={14} strokeWidth={1.75} />
+                <MinusIcon weight="duotone" size={14} />
               </button>
             </Tooltip>
             {/* Figma-style scrub: drag left/right (Shift coarse, Alt fine); arrows step like the buttons */}
@@ -750,13 +750,13 @@ export default function Scene3D({ points, links = [], axes, selectedId, highligh
             </span>
             <Tooltip label="Zoom in">
               <button type="button" className="btn btn-ghost btn-sm btn-icon w-[26px]" aria-label="Zoom in" onClick={() => apiRef.current?.zoom(0.8)}>
-                <Plus size={14} strokeWidth={1.75} />
+                <PlusIcon weight="duotone" size={14} />
               </button>
             </Tooltip>
             <span className="w-px h-4 mx-0.5" style={{ background: "var(--border)" }} aria-hidden />
             <Tooltip label="Reset view">
               <button type="button" className="btn btn-ghost btn-sm btn-icon w-[26px]" aria-label="Reset view" onClick={() => apiRef.current?.reset()}>
-                <Maximize size={14} strokeWidth={1.75} />
+                <CornersOutIcon weight="duotone" size={14} />
               </button>
             </Tooltip>
           </div>

@@ -1,8 +1,8 @@
 "use client";
 
+import { CircleNotchIcon, ShieldWarningIcon } from "@phosphor-icons/react/ssr";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import { useEffect, useState } from "react";
-import { Loader2, ShieldAlert } from "lucide-react";
 import { getMe } from "@/lib/gen";
 import { call } from "@/lib/queries/client";
 import { useConsent, useDecideConsent } from "@/lib/queries/oauth";
@@ -141,7 +141,7 @@ export default function ConsentPage() {
                   className="flex items-start gap-2 rounded-[10px] px-3 py-2.5 text-[14px] leading-[1.45]"
                   style={{ background: "var(--critical-soft)", color: "var(--critical)" }}
                 >
-                  <ShieldAlert size={18} strokeWidth={1.75} className="mt-[2px] shrink-0" aria-hidden />
+                  <ShieldWarningIcon weight="duotone" size={18} className="mt-[2px] shrink-0" aria-hidden />
                   <span>This app is on your own computer. Only continue if you just started this connection from it.</span>
                 </div>
               )}
@@ -150,7 +150,7 @@ export default function ConsentPage() {
 
               <div className="flex flex-wrap gap-2">
                 <button onClick={() => decide(true)} disabled={busy !== null} aria-busy={busy === "allow"} className="btn btn-primary min-h-11 px-5">
-                  {busy === "allow" && <Loader2 size={14} strokeWidth={1.75} className="animate-spin" aria-hidden />}
+                  {busy === "allow" && <CircleNotchIcon weight="duotone" size={14} className="animate-spin" aria-hidden />}
                   Allow
                 </button>
                 <button onClick={() => decide(false)} disabled={busy !== null} aria-busy={busy === "deny"} className="btn min-h-11 px-5">

@@ -338,9 +338,18 @@ body {
    Phosphor draws the back layer as the line colour at 20%. We fill it with a
    solid vault colour and keep the line in the text colour. Set --duo per
    icon (components/ui/Duo.tsx does it for you). */
-.duo path[opacity] {
+.duo path[opacity],
+svg[viewBox="0 0 256 256"] > path[opacity="0.2"] {
   opacity: 1;
   fill: var(--duo, var(--vault-project));
+}
+/* Status and danger never borrow a vault colour: their icons keep the line
+   only, so red on a delete button can't be read as "personal". */
+.btn-danger,
+.btn-danger-solid,
+[role="alert"],
+.status-label {
+  --duo: transparent;
 }
 
 /* ---- the canvas: cream with a faint 20px ink dot grid ---- */
@@ -1004,6 +1013,12 @@ dialog.bauhaus-dialog::backdrop {
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--border-strong) transparent;
+}
+
+/* Native checks and radios follow the ink accent in both themes. */
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--accent);
 }
 
 /* Native datalist arrow: off, it clashes with the themed controls. */

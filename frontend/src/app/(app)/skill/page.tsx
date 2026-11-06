@@ -1,5 +1,6 @@
 "use client";
 
+import { BrainIcon } from "@phosphor-icons/react/ssr";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Link from "next/link";
 import { useState } from "react";
@@ -8,7 +9,6 @@ import Markdown from "@/components/Markdown";
 import CopyButton from "@/components/bits/CopyButton";
 import SyncMark from "@/components/bits/SyncMark";
 import PageHeader from "@/components/ui/PageHeader";
-import { BrainCircuit } from "lucide-react";
 import Tooltip from "@/components/bits/Tooltip";
 import { useSettings, useUpdateSettings } from "@/lib/queries/settings";
 
@@ -65,7 +65,7 @@ export default function SkillPage() {
   return (
     <div className="max-w-[1040px] flex flex-col gap-7">
       <PageHeader
-        icon={BrainCircuit}
+        icon={BrainIcon} tone="personal"
         title="AI instructions"
         intro="How your AI apps use memory: these instructions tell every connected AI app when to look things up in Eunomia and what to save. Edit them here; new sessions pick up your changes."
       />

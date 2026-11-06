@@ -1,7 +1,7 @@
 "use client";
 
+import { MoonIcon, SunIcon } from "@phosphor-icons/react/ssr";
 import { useSyncExternalStore } from "react";
-import { Moon, Sun } from "@phosphor-icons/react/ssr";
 
 type Theme = "light" | "dark";
 const KEY = "eunomia-theme";
@@ -45,7 +45,7 @@ export default function ThemeToggle({ className = "" }: { className?: string }) 
       aria-label="Dark theme"
       className={`btn btn-ghost btn-sm btn-icon ${className}`}
     >
-      {dark ? <Moon size={16} weight="duotone" className="duo" aria-hidden /> : <Sun size={16} weight="duotone" className="duo" aria-hidden />}
+      {dark ? <MoonIcon size={16} weight="duotone" className="duo" aria-hidden /> : <SunIcon size={16} weight="duotone" className="duo" aria-hidden />}
     </button>
   );
 }

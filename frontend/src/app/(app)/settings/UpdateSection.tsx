@@ -1,9 +1,9 @@
 "use client";
 
+import { ArrowsClockwiseIcon, DownloadSimpleIcon } from "@phosphor-icons/react/ssr";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Download, RefreshCw } from "lucide-react";
 import { updateStatusQuery, useCheckForUpdate, useRequestUpdate } from "@/lib/queries/settings";
 import type { UpdateStatus } from "@/lib/types";
 import SyncMark from "@/components/bits/SyncMark";
@@ -150,7 +150,7 @@ export function UpdateSection() {
         title="Updates"
         action={
           <button onClick={checkNow} disabled={checking || busy} className="btn btn-sm shrink-0" aria-label="Check for updates">
-            {checking || checkResult ? <SyncMark status={checking ? "running" : checkResult!} /> : <RefreshCw {...ICON} />}
+            {checking || checkResult ? <SyncMark status={checking ? "running" : checkResult!} /> : <ArrowsClockwiseIcon {...ICON} />}
             {checking ? "Checking…" : "Check now"}
           </button>
         }
@@ -180,7 +180,7 @@ export function UpdateSection() {
                 What&apos;s new
               </a>
               <button onClick={requestUpdate} className="btn btn-primary">
-                <Download {...ICON} />
+                <DownloadSimpleIcon {...ICON} />
                 Update now
               </button>
             </div>

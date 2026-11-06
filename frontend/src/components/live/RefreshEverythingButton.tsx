@@ -1,7 +1,7 @@
 "use client";
 
+import { ArrowsClockwiseIcon } from "@phosphor-icons/react/ssr";
 import { useState } from "react";
-import { RefreshCw } from "lucide-react";
 import { useRefreshEverything } from "@/lib/queries/live";
 import LiveStatusBadge from "./LiveStatusBadge";
 
@@ -24,7 +24,7 @@ export default function RefreshEverythingButton({ label = "Refresh" }: { label?:
           }
         }}
       >
-        <RefreshCw size={16} strokeWidth={1.75} className={busy ? "animate-spin" : undefined} aria-hidden />
+        <ArrowsClockwiseIcon weight="duotone" size={16} className={busy ? "animate-spin" : undefined} aria-hidden />
         {label}
       </button>
       <LiveStatusBadge />

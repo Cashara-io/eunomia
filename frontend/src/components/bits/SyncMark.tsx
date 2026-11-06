@@ -3,8 +3,9 @@
 // The check or cross draws only when status changes after mount, so history rows that mount "done" sit still.
 "use client";
 
+import { ArrowsClockwiseIcon } from "@phosphor-icons/react/ssr";
+
 import { useState } from "react";
-import { RefreshCw } from "lucide-react";
 import "./bits.css";
 
 export type SyncStatus = "idle" | "running" | "done" | "failed";
@@ -22,7 +23,7 @@ export default function SyncMark({ status, size = 14 }: { status: SyncStatus; si
   // On a primary (blue) button both marks take the button text colour (--bits-done), so they stay readable.
   // At rest it is a plain refresh icon, so it never reads as a frozen spinner
   // (and under reduced motion "running" still differs from idle).
-  if (status === "idle") return <RefreshCw size={size} strokeWidth={1.75} aria-hidden style={{ flexShrink: 0 }} />;
+  if (status === "idle") return <ArrowsClockwiseIcon weight="duotone" size={size} aria-hidden style={{ flexShrink: 0 }} />;
 
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ flexShrink: 0 }}>

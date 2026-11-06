@@ -3,8 +3,9 @@
 // Names flip to "Copied" for 1.5s after a successful write; size="icon" puts the name in aria-label, size="sm" shows it as text.
 "use client";
 
+import { CopyIcon } from "@phosphor-icons/react/ssr";
+
 import { useEffect, useRef, useState } from "react";
-import { Copy } from "lucide-react";
 import "./bits.css";
 
 type Props = {
@@ -40,7 +41,7 @@ export default function CopyButton({ value, label = "Copy", size = "icon", class
       <path d="M3.5 8.4 6.6 11.3 12.5 4.9" stroke="currentColor" pathLength={1} className="bits-draw" data-animate={drawn || undefined} />
     </svg>
   ) : (
-    <Copy size={14} strokeWidth={1.75} aria-hidden />
+    <CopyIcon weight="duotone" size={14} aria-hidden />
   );
 
   if (size === "icon")

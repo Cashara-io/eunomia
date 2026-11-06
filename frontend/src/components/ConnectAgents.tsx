@@ -1,5 +1,6 @@
 "use client";
 
+import { KeyIcon } from "@phosphor-icons/react/ssr";
 // Setup guides for the AI clients people connect most: one tab each, a token
 // minted for that client, and the exact command or config with this instance's
 // URL and the token filled in. Used by onboarding and, as the advanced
@@ -9,7 +10,6 @@
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import { useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { KeyRound } from "lucide-react";
 import { useCreateToken } from "@/lib/queries/auth";
 import CopyButton from "@/components/bits/CopyButton";
 import DecryptReveal from "@/components/bits/DecryptReveal";
@@ -144,7 +144,7 @@ export default function ConnectAgents({ onToken, initialClient = "claude" }: { o
         </div>
       ) : (
         <button onClick={mint} disabled={busy} aria-busy={busy} className="btn btn-primary self-start">
-          <KeyRound size={14} strokeWidth={1.75} aria-hidden />
+          <KeyIcon weight="duotone" size={14} aria-hidden />
           {busy ? "Creating…" : "Generate a token"}
         </button>
       )}

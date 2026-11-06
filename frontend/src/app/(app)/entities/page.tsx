@@ -1,8 +1,8 @@
 "use client";
 
+import { ArrowsClockwiseIcon, UsersIcon } from "@phosphor-icons/react/ssr";
 import { useState } from "react";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
-import { RefreshCw, Users } from "lucide-react";
 import { entityKeys } from "@/lib/queries/entities";
 import EntityGraph from "@/components/EntityGraph";
 import LiveStatusBadge from "@/components/live/LiveStatusBadge";
@@ -23,7 +23,7 @@ export default function EntitiesPage() {
   // Same header in both views, so switching tabs never moves it.
   const header = (
     <div className="w-full flex flex-col gap-4">
-      <PageHeader icon={Users} title="People & topics" intro={current.blurb} />
+      <PageHeader icon={UsersIcon} tone="personal" title="People & topics" intro={current.blurb} />
       <div className="flex items-center gap-2 flex-wrap">
         <div className="flex gap-2" role="tablist" aria-label="View">
           {VIEWS.map((v) => (
@@ -33,7 +33,7 @@ export default function EntitiesPage() {
           ))}
         </div>
         <button className="btn" aria-label="Refresh people and topics" title="Refresh" onClick={() => void qc.invalidateQueries({ queryKey: entityKeys.all })}>
-          <RefreshCw size={18} strokeWidth={1.75} className={fetching ? "animate-spin" : undefined} aria-hidden />
+          <ArrowsClockwiseIcon weight="duotone" size={18} className={fetching ? "animate-spin" : undefined} aria-hidden />
           Refresh
         </button>
         <LiveStatusBadge />

@@ -1,11 +1,11 @@
 "use client";
 
+import { ArrowRightIcon, HouseIcon, UploadSimpleIcon, UsersIcon, WarningIcon } from "@phosphor-icons/react/ssr";
 import { kindColor } from "@/lib/kindColors";
 import ErrorLine, { failure } from "@/components/ErrorLine";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, House, Upload, Users } from "lucide-react";
 import type { EntityDetail, EntityKind, EntityMemory, SourceRow } from "@/lib/types";
 import { entityKeys, type EntityList } from "@/lib/queries/entities";
 import { call } from "@/lib/queries/client";
@@ -58,7 +58,7 @@ function FailureBanner({ rows, dismissed, onDismiss }: { rows: SourceRow[]; dism
           className="flex flex-wrap items-center gap-3 rounded-[12px] px-4 py-3"
           style={{ background: "var(--critical-soft)", border: "1px solid var(--critical)" }}
         >
-          <AlertTriangle size={18} strokeWidth={1.75} color="var(--critical)" className="shrink-0" aria-hidden />
+          <WarningIcon weight="duotone" size={18} color="var(--critical)" className="shrink-0" aria-hidden />
           <div className="flex-1 min-w-[200px]">
             <div className="text-[14px] font-semibold">
               {sourceLabel(s)} could not update {s.sync_status.consecutive_failures} times in a row
@@ -202,7 +202,7 @@ function LiveMemory({
         <div className="px-3 py-8 text-[13px] flex flex-wrap items-center gap-x-3 gap-y-2" style={{ color: "var(--ink-dim)" }}>
           No memories yet. Ask your AI app to remember something, or add one yourself. New memories show here with who saved them.
           <Link href="/entities" className="btn btn-sm">
-            Browse people &amp; topics <ArrowRight size={14} strokeWidth={1.75} aria-hidden />
+            Browse people &amp; topics <ArrowRightIcon weight="duotone" size={14} aria-hidden />
           </Link>
         </div>
       ) : (
@@ -321,7 +321,7 @@ function Inspector({ row }: { row: LiveRow }) {
         </dl>
       </div>
       <Link href="/entities" className="btn btn-sm self-start">
-        Open people &amp; topics <ArrowRight size={14} strokeWidth={1.75} aria-hidden />
+        Open people &amp; topics <ArrowRightIcon weight="duotone" size={14} aria-hidden />
       </Link>
     </aside>
   );
@@ -416,10 +416,10 @@ function OwnInformation() {
       </p>
       <div className="flex flex-wrap gap-2">
         <Link href="/documents" className="btn">
-          <Upload size={18} strokeWidth={1.75} aria-hidden /> Upload a document
+          <UploadSimpleIcon weight="duotone" size={18} aria-hidden /> Upload a document
         </Link>
         <Link href="/entities" className="btn">
-          <Users size={18} strokeWidth={1.75} aria-hidden /> Browse people &amp; topics
+          <UsersIcon weight="duotone" size={18} aria-hidden /> Browse people &amp; topics
         </Link>
       </div>
     </section>
@@ -542,7 +542,7 @@ export default function HomePage() {
   return (
     <div className="flex flex-col gap-8 max-w-[1240px]">
       <PageHeader
-        icon={House}
+        icon={HouseIcon} tone="project"
         title="Home"
         intro={connected_apps ? "Your memory, connected across your AI apps." : "Connect an AI app, or start browsing your saved information."}
       />
@@ -697,7 +697,7 @@ export default function HomePage() {
                         </span>
                       </div>
                       <Link href={kind ? `/connectors/setup/${kind}` : "/connectors"} className="btn btn-sm shrink-0">
-                        Connect <ArrowRight size={12} strokeWidth={1.75} />
+                        Connect <ArrowRightIcon weight="duotone" size={12} />
                       </Link>
                     </li>
                   );
@@ -705,7 +705,7 @@ export default function HomePage() {
                 {disconnected.length > NOT_CONNECTED_SHOWN && (
                   <li className="flex items-center min-h-11 px-3">
                     <Link href="/connectors" className="text-[13px] inline-flex items-center gap-1.5 underline-offset-2 hover:underline" style={{ color: "var(--accent-text)" }}>
-                      See all {disconnected.length} in Connected sources <ArrowRight size={14} strokeWidth={1.75} aria-hidden />
+                      See all {disconnected.length} in Connected sources <ArrowRightIcon weight="duotone" size={14} aria-hidden />
                     </Link>
                   </li>
                 )}

@@ -1,10 +1,10 @@
 "use client";
 
+import { CaretRightIcon, CheckIcon, PlugIcon } from "@phosphor-icons/react/ssr";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
 import { useState } from "react";
 import Link from "next/link";
-import { Check, ChevronRight, Plug } from "lucide-react";
 import type { SettingsUpdate } from "@/lib/gen";
 import { useOpenAiModels, useUpdateSettings } from "@/lib/queries/settings";
 import type { AppSettings } from "@/lib/types";
@@ -82,14 +82,14 @@ export function GeneralSection({ settings }: { settings: AppSettings }) {
       <div className="flex flex-col gap-3">
         <PanelHead title="Connected sources" />
         <Link href="/connectors" className="ledger group px-4 py-3 flex items-center gap-3 transition-colors hover:bg-[var(--surface-raised)]">
-          <Plug {...ICON} style={{ color: "var(--ink-faint)" }} aria-hidden />
+          <PlugIcon {...ICON} style={{ color: "var(--ink-faint)" }} aria-hidden />
           <div className="flex-1 min-w-0">
             <div className="text-[15px] font-semibold">Connected sources</div>
             <div className="label mt-0.5">Up Bank, PocketAI and more: sign-in details and connection status</div>
           </div>
           <span className="text-[12.5px] flex items-center gap-1" style={{ color: "var(--accent-text)" }}>
             Manage
-            <ChevronRight {...ICON} aria-hidden />
+            <CaretRightIcon {...ICON} aria-hidden />
           </span>
         </Link>
       </div>
@@ -251,7 +251,7 @@ export function GeneralSection({ settings }: { settings: AppSettings }) {
               {saved ? "Saved." : dirty ? "Unsaved changes" : ""}
             </span>
             <button type="submit" disabled={saving || urlInvalid} className="btn btn-primary">
-              {saved && <Check {...ICON} />}
+              {saved && <CheckIcon {...ICON} />}
               {saving ? "Saving…" : saved ? "Saved" : "Save settings"}
             </button>
           </div>

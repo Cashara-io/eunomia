@@ -1,28 +1,10 @@
 "use client";
 
+import { ArrowsClockwiseIcon, ArrowsLeftRightIcon, ArrowsMergeIcon, CaretDownIcon, CaretRightIcon, CheckIcon, CopyIcon, CrownIcon, EnvelopeSimpleIcon, LockIcon, PencilSimpleIcon, PlusIcon, SignOutIcon, StackIcon, TrashIcon, UserPlusIcon, UsersIcon } from "@phosphor-icons/react/ssr";
 import VaultChip, { VaultShape, vaultTone } from "@/components/VaultChip";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
-import {
-  ArrowRightLeft,
-  Check,
-  ChevronRight,
-  Combine,
-  Copy,
-  ChevronDown,
-  Crown,
-  Layers,
-  Lock,
-  LogOut,
-  Mail,
-  Pencil,
-  Plus,
-  RefreshCw,
-  Trash2,
-  UserPlus,
-  Users,
-} from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import StatusLabel from "@/components/ui/StatusLabel";
@@ -56,7 +38,7 @@ import TransferOwnershipPanel from "@/components/live/TransferOwnershipPanel";
 import PeerSharing, { JoinSharedSpace } from "@/components/PeerSharing";
 import { cssVar, prefersReducedMotion } from "@/components/bits/motion";
 
-const ICON = { size: 18, strokeWidth: 1.75 } as const;
+const ICON = { size: 18, weight: "duotone" } as const;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function ago(iso: string | null): string | null {
@@ -295,7 +277,7 @@ function VaultInspector({
                   aria-label="Rename space"
                   className="btn btn-ghost btn-sm btn-icon shrink-0"
                 >
-                  <Pencil {...ICON} />
+                  <PencilSimpleIcon {...ICON} />
                 </button>
               </Tooltip>
             )}
@@ -360,7 +342,7 @@ function VaultInspector({
                           aria-label={m.role === "owner" ? "Make member" : "Make owner"}
                           className="btn btn-ghost btn-sm btn-icon shrink-0"
                         >
-                          <Crown {...ICON} />
+                          <CrownIcon {...ICON} />
                         </button>
                       </Tooltip>
                     )}
@@ -371,7 +353,7 @@ function VaultInspector({
                           aria-label="Hand over space"
                           className="btn btn-ghost btn-sm btn-icon shrink-0"
                         >
-                          <ArrowRightLeft {...ICON} />
+                          <ArrowsLeftRightIcon {...ICON} />
                         </button>
                       </Tooltip>
                     )}
@@ -383,7 +365,7 @@ function VaultInspector({
                           className="btn btn-ghost btn-sm btn-icon shrink-0"
                           style={{ color: "var(--critical)" }}
                         >
-                          <Trash2 {...ICON} />
+                          <TrashIcon {...ICON} />
                         </button>
                       </Tooltip>
                     )}
@@ -453,7 +435,7 @@ function VaultInspector({
                 disabled={busy || !trimmed}
                 className="btn btn-primary shrink-0"
               >
-                {busy || sent ? <SyncMark status={busy ? "running" : "done"} /> : <UserPlus {...ICON} />}
+                {busy || sent ? <SyncMark status={busy ? "running" : "done"} /> : <UserPlusIcon {...ICON} />}
                 {busy ? "Sending…" : "Send invite"}
               </button>
             </div>
@@ -512,7 +494,7 @@ function VaultInspector({
                 }}
                 className="btn btn-sm"
               >
-                {cloned ? <DrawnCheck /> : <Copy {...ICON} />}
+                {cloned ? <DrawnCheck /> : <CopyIcon {...ICON} />}
                 Copy space
               </button>
               {isOrg && (
@@ -522,13 +504,13 @@ function VaultInspector({
                   aria-describedby={lastOwner ? `last-owner-${vault.id}` : undefined}
                   className="btn btn-sm"
                 >
-                  <LogOut {...ICON} />
+                  <SignOutIcon {...ICON} />
                   Leave space…
                 </button>
               )}
               {isOrg && isOwner && (
                 <button onClick={() => setConfirm("delete")} className="btn btn-danger btn-sm">
-                  <Trash2 {...ICON} />
+                  <TrashIcon {...ICON} />
                   Delete space…
                 </button>
               )}
@@ -674,7 +656,7 @@ function InvitationsPanel() {
   return (
     <section className="flex flex-col gap-2.5" aria-labelledby="invites-title">
       <h2 id="invites-title" className="section-title flex items-center gap-2">
-        <Mail {...ICON} aria-hidden />
+        <EnvelopeSimpleIcon {...ICON} aria-hidden />
         Pending invitations
         <span className="label font-mono">{invitations.length}</span>
       </h2>
@@ -712,7 +694,7 @@ function InvitationsPanel() {
               disabled={busyId === inv.vault_id}
               className="btn btn-primary btn-sm"
             >
-              <Check {...ICON} />
+              <CheckIcon {...ICON} />
               Join
             </button>
           </div>
@@ -774,7 +756,7 @@ function VaultRow({
         </span>
       </span>
       <MemberStack members={members} />
-      <ChevronRight
+      <CaretRightIcon
         {...ICON}
         aria-hidden
         className="shrink-0"
@@ -942,9 +924,9 @@ function MergeVaultsCard({
         onClick={() => setOpen((o) => !o)}
         id="merge-title"
       >
-        <Combine {...ICON} />
+        <ArrowsMergeIcon {...ICON} />
         Advanced: combine two spaces
-        <ChevronDown {...ICON} aria-hidden style={{ transform: open ? "rotate(180deg)" : undefined }} />
+        <CaretDownIcon {...ICON} aria-hidden style={{ transform: open ? "rotate(180deg)" : undefined }} />
       </button>
       {open && (
       <div id="merge-panel" className="ledger p-5 flex flex-col gap-4 w-full">
@@ -955,7 +937,7 @@ function MergeVaultsCard({
         </p>
         <div className="flex items-end gap-2 flex-wrap">
           {select(a, setA, "First space")}
-          <Plus
+          <PlusIcon
             {...ICON}
             aria-hidden
             className="mb-3 hidden sm:block"
@@ -978,7 +960,7 @@ function MergeVaultsCard({
             disabled={busy || !a || a === b}
             className="btn btn-primary"
           >
-            <Combine {...ICON} />
+            <ArrowsMergeIcon {...ICON} />
             {busy ? "Combining…" : "Merge into a new space"}
           </button>
         </div>
@@ -1160,7 +1142,7 @@ export default function VaultsPage() {
   return (
     <div className="max-w-6xl flex flex-col gap-7">
       <PageHeader
-        icon={Layers}
+        icon={StackIcon} tone="project"
         title="Memory spaces"
         intro="Keep each project's memories in its own space. Your personal space is private; other spaces can be shared with people you invite. AI apps can use a space by its name."
       />
@@ -1174,7 +1156,7 @@ export default function VaultsPage() {
         <div className="flex items-center gap-2">
           <LiveStatusBadge />
           <button onClick={() => void refetchAll()} className="btn btn-icon" aria-label="Refresh spaces" title="Refresh">
-            <RefreshCw {...ICON} />
+            <ArrowsClockwiseIcon {...ICON} />
           </button>
           <JoinSharedSpace onJoined={(id) => setSelectedId(id)} />
           <button
@@ -1182,7 +1164,7 @@ export default function VaultsPage() {
             disabled={creating}
             className="btn btn-primary"
           >
-            <Plus {...ICON} />
+            <PlusIcon {...ICON} />
             Create space
           </button>
         </div>
@@ -1202,7 +1184,7 @@ export default function VaultsPage() {
               id="org-title"
               className="section-title flex items-center gap-2"
             >
-              <Users
+              <UsersIcon
                 {...ICON}
                 aria-hidden
               />
@@ -1231,7 +1213,7 @@ export default function VaultsPage() {
                     onClick={() => setCreating(true)}
                     className="btn"
                   >
-                    <Plus {...ICON} />
+                    <PlusIcon {...ICON} />
                     Create a space
                   </button>
                 </div>
@@ -1249,7 +1231,7 @@ export default function VaultsPage() {
               id="personal-title"
               className="section-title flex items-center gap-2"
             >
-              <Lock
+              <LockIcon
                 {...ICON}
                 aria-hidden
               />

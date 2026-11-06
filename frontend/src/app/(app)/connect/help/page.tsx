@@ -1,7 +1,7 @@
 "use client";
 
+import { LifebuoyIcon } from "@phosphor-icons/react/ssr";
 import Link from "next/link";
-import { LifeBuoy } from "lucide-react";
 import CopyButton from "@/components/bits/CopyButton";
 import PageHeader from "@/components/ui/PageHeader";
 import { EXAMPLE_QUESTION, Kbd, Note, useMcpAddress } from "@/components/connect/Guide";
@@ -22,7 +22,7 @@ export default function ConnectionHelpPage() {
   const url = useMcpAddress();
   return (
     <div className="flex flex-col gap-8 max-w-[960px]">
-      <PageHeader icon={LifeBuoy} title="Connection help" intro="Help with connecting your AI app." />
+      <PageHeader icon={LifebuoyIcon} tone="personal" title="Connection help" intro="Help with connecting your AI app." />
       <div className="task-panel p-6 sm:p-8 flex flex-col">
         <div className="flex flex-col gap-3 pb-6" style={{ borderBottom: "1px solid var(--border)" }}>
           <h2 className="connect-title">Let&apos;s get your app connected</h2>

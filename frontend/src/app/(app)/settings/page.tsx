@@ -1,10 +1,10 @@
 "use client";
 
+import { SlidersHorizontalIcon } from "@phosphor-icons/react/ssr";
 import ErrorLine, { failure } from "@/components/ErrorLine";
 import { Suspense, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSettings } from "@/lib/queries/settings";
-import { SlidersHorizontal } from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
 
 import { TokensSection } from "./TokensSection";
@@ -68,7 +68,7 @@ function Settings() {
 
   return (
     <div className="max-w-5xl flex flex-col gap-7">
-      <PageHeader icon={SlidersHorizontal} title="Settings" intro={`Settings / ${current.label}. Change how this Eunomia runs, who can reach it and what is stored.`} />
+      <PageHeader icon={SlidersHorizontalIcon} tone="company" title="Settings" intro={`Settings / ${current.label}. Change how this Eunomia runs, who can reach it and what is stored.`} />
 
       {!settings ? (
         loadError ? (

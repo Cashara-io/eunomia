@@ -1,12 +1,12 @@
 "use client";
 
+import { CaretDownIcon, CheckIcon } from "@phosphor-icons/react/ssr";
 // One select for the whole app, in the canvas style. ARIA "select-only combobox":
 // focus stays on the trigger, the list is announced through aria-activedescendant.
 // Usage: <Select aria-label="Role" value={role} onChange={setRole} options={[{ value: "member", label: "Member" }]} />
 
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown } from "lucide-react";
 
 export type SelectOption = { value: string; label: string; hint?: string };
 
@@ -170,7 +170,7 @@ export default function Select({ value, onChange, options, id, placeholder = "Se
         <span className={`flex-1 min-w-0 truncate ${mono ? "font-mono" : ""}`} style={{ color: selected ? "var(--ink)" : "var(--ink-faint)" }}>
           {selected ? selected.label : placeholder}
         </span>
-        <ChevronDown size={16} strokeWidth={1.75} aria-hidden className="select-chevron shrink-0" />
+        <CaretDownIcon weight="duotone" size={16} aria-hidden className="select-chevron shrink-0" />
       </button>
       {open &&
         place &&
@@ -206,7 +206,7 @@ export default function Select({ value, onChange, options, id, placeholder = "Se
                   className="select-option"
                 >
                   <span className="w-3.5 shrink-0" aria-hidden>
-                    {isSelected && <Check size={14} strokeWidth={2} />}
+                    {isSelected && <CheckIcon weight="duotone" size={14} />}
                   </span>
                   <span className={`flex-1 min-w-0 truncate ${mono ? "font-mono" : ""}`}>{o.label}</span>
                   {o.hint && <span className="shrink-0 text-[12px]" style={{ color: "var(--ink-dim)" }}>{o.hint}</span>}

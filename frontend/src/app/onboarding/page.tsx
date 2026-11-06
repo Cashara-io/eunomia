@@ -1,9 +1,9 @@
 "use client";
 
+import { ArrowLeftIcon, CircleNotchIcon, XIcon } from "@phosphor-icons/react/ssr";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, X } from "lucide-react";
 import { nextPath } from "@/lib/nextPath";
 import { useMe } from "@/lib/queries/auth";
 import { useCompleteOnboarding, useSettings, useUpdateSettings } from "@/lib/queries/settings";
@@ -98,7 +98,7 @@ export default function OnboardingPage() {
         <div className="flex items-center gap-1">
           {me && (
             <button onClick={() => skip()} disabled={busy} aria-label="Skip setup" className="btn btn-ghost btn-sm">
-              <X size={16} strokeWidth={1.75} aria-hidden />
+              <XIcon weight="duotone" size={16} aria-hidden />
               Set up later
             </button>
           )}
@@ -167,7 +167,7 @@ export default function OnboardingPage() {
                     disabled={busy}
                     className="btn btn-ghost"
                   >
-                    <ArrowLeft size={14} strokeWidth={1.75} aria-hidden />
+                    <ArrowLeftIcon weight="duotone" size={14} aria-hidden />
                     Back
                   </button>
                   <div className="flex-1" />
@@ -177,7 +177,7 @@ export default function OnboardingPage() {
                     aria-busy={busy}
                     className={`btn ${connected ? "btn-primary" : ""}`}
                   >
-                    {busy && <Loader2 size={14} strokeWidth={1.75} className="animate-spin" aria-hidden />}
+                    {busy && <CircleNotchIcon weight="duotone" size={14} className="animate-spin" aria-hidden />}
                     {connected ? (skipOpenAiStep ? "Finish" : "Continue") : "Skip"}
                   </button>
                 </div>
@@ -227,7 +227,7 @@ export default function OnboardingPage() {
                     <button
                       onClick={() => setStep(1)}
                       disabled={busy} className="btn btn-ghost">
-                      <ArrowLeft size={14} strokeWidth={1.75} aria-hidden />
+                      <ArrowLeftIcon weight="duotone" size={14} aria-hidden />
                       Back
                     </button>
                     <div className="flex-1" />
@@ -235,7 +235,7 @@ export default function OnboardingPage() {
                       Skip &amp; finish
                     </button>
                     <button onClick={saveApiKey} disabled={busy} aria-busy={busy} className="btn btn-primary">
-                      {busy && <Loader2 size={14} strokeWidth={1.75} className="animate-spin" aria-hidden />}
+                      {busy && <CircleNotchIcon weight="duotone" size={14} className="animate-spin" aria-hidden />}
                       {busy ? "Finishing…" : "Finish"}
                     </button>
                   </div>

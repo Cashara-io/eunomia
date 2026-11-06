@@ -1,27 +1,8 @@
 "use client";
 
+import { ArrowUpRightIcon, BookOpenIcon, BrainIcon, BuildingsIcon, ChatsCircleIcon, CodeIcon, FileTextIcon, FilesIcon, FolderSimpleIcon, HouseIcon, MagnifyingGlassIcon, MapPinIcon, PlugIcon, SlidersHorizontalIcon, StackIcon, UserIcon, UsersIcon, XIcon } from "@phosphor-icons/react/ssr";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  ArrowUpRight,
-  BookOpen,
-  Brain,
-  Buildings,
-  ChatsCircle,
-  Code,
-  FileText,
-  Files,
-  FolderSimple,
-  House,
-  MagnifyingGlass,
-  MapPin,
-  Plug,
-  SlidersHorizontal,
-  Stack,
-  User,
-  Users,
-  X,
-} from "@phosphor-icons/react/ssr";
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { ADVANCED_NAV, MAIN_NAV, type NavGlyph } from "./Sidebar";
 import Duo, { type DuoTone } from "./ui/Duo";
@@ -39,20 +20,20 @@ export function openCommandPalette() {
 }
 
 // organisation and location read as a building and a pin, not a person
-const ENTITY_ICON: Record<string, PhosphorIcon> = { person: User, organisation: Buildings, location: MapPin, repository: FolderSimple, file: FileText };
+const ENTITY_ICON: Record<string, PhosphorIcon> = { person: UserIcon, organisation: BuildingsIcon, location: MapPinIcon, repository: FolderSimpleIcon, file: FileTextIcon };
 
 // The palette is a dense list, so pages get icons, not the sidebar's shapes.
 const PAGE_ICON: Record<NavGlyph, PhosphorIcon> = {
-  home: House,
-  chat: ChatsCircle,
-  people: Users,
-  spaces: Stack,
-  docs: Files,
-  sources: Plug,
-  help: BookOpen,
-  settings: SlidersHorizontal,
-  instructions: Brain,
-  code: Code,
+  home: HouseIcon,
+  chat: ChatsCircleIcon,
+  people: UsersIcon,
+  spaces: StackIcon,
+  docs: FilesIcon,
+  sources: PlugIcon,
+  help: BookOpenIcon,
+  settings: SlidersHorizontalIcon,
+  instructions: BrainIcon,
+  code: CodeIcon,
 };
 const TONES: DuoTone[] = ["personal", "project", "company"];
 
@@ -120,7 +101,7 @@ function Palette({ onClose }: { onClose: () => void }) {
 
   const connectorItems: Item[] = rows
     .filter((r) => r.connected)
-    .map((r) => ({ key: `conn:${r.key}`, label: r.label, icon: Plug, tone: "project" as DuoTone, go: () => router.push(`/connectors/${r.key}`) }));
+    .map((r) => ({ key: `conn:${r.key}`, label: r.label, icon: PlugIcon, tone: "project" as DuoTone, go: () => router.push(`/connectors/${r.key}`) }));
   const staticItems: Item[] = staticNav().map((s) => ({
     key: `nav:${s.href}`,
     label: s.label,
@@ -136,7 +117,7 @@ function Palette({ onClose }: { onClose: () => void }) {
     key: `entity:${e.id}`,
     label: e.name,
     sub: KIND_WORD[e.kind] ?? e.kind,
-    icon: ENTITY_ICON[e.kind] ?? User,
+    icon: ENTITY_ICON[e.kind] ?? UserIcon,
     tone: "personal" as DuoTone,
     go: () => router.push(CODE_KINDS.has(e.kind) ? "/code" : "/entities"),
   }));
@@ -144,7 +125,7 @@ function Palette({ onClose }: { onClose: () => void }) {
     key: `record:${h.id}`,
     label: h.title || h.snippet,
     sub: h.document ? h.document.filename : h.source,
-    icon: FileText,
+    icon: FileTextIcon,
     tone: "company" as DuoTone,
     go: () => {
       // a passage of an uploaded document opens that document at the passage
@@ -185,7 +166,7 @@ function Palette({ onClose }: { onClose: () => void }) {
             Search
           </h2>
           <button type="button" onClick={onClose} aria-label="Close search" className="btn btn-ghost btn-icon btn-sm">
-            <X size={18} aria-hidden />
+            <XIcon weight="duotone" size={18} aria-hidden />
           </button>
         </div>
         <div className="px-5 pt-2 pb-3 flex flex-col gap-1.5" style={{ borderBottom: "1px solid var(--border)" }}>
@@ -193,7 +174,7 @@ function Palette({ onClose }: { onClose: () => void }) {
             Search pages, people, topics and documents
           </label>
           <div className="field flex items-center gap-2.5 px-3 h-11">
-            <Duo icon={MagnifyingGlass} size={18} tone="project" />
+            <Duo icon={MagnifyingGlassIcon} size={18} tone="project" />
             <input
               id="palette-input"
               autoFocus
@@ -250,7 +231,7 @@ function Palette({ onClose }: { onClose: () => void }) {
                             </span>
                           )}
                         </span>
-                        <ArrowUpRight size={16} aria-hidden style={{ color: active ? "var(--ink)" : "var(--ink-faint)" }} />
+                        <ArrowUpRightIcon weight="duotone" size={16} aria-hidden style={{ color: active ? "var(--ink)" : "var(--ink-faint)" }} />
                       </button>
                     </li>
                   );

@@ -1,8 +1,8 @@
 "use client";
 
+import { DownloadSimpleIcon } from "@phosphor-icons/react/ssr";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import { useState } from "react";
-import { Download } from "lucide-react";
 import { downloadExport } from "@/lib/api";
 import { ICON, PanelHead } from "./shared";
 
@@ -33,7 +33,7 @@ export function DataSection() {
           <div className="label mt-0.5 font-mono">eunomia-export.json</div>
         </div>
         <button onClick={doExport} disabled={exporting} className="btn">
-          <Download {...ICON} />
+          <DownloadSimpleIcon {...ICON} />
           {exporting ? "Preparing…" : "Download my data"}
         </button>
       </div>

@@ -1,7 +1,7 @@
 "use client";
 
+import { CodeIcon } from "@phosphor-icons/react/ssr";
 import Link from "next/link";
-import { Code } from "lucide-react";
 import EntityGraph from "@/components/EntityGraph";
 import PageHeader from "@/components/ui/PageHeader";
 import RefreshEverythingButton from "@/components/live/RefreshEverythingButton";
@@ -24,7 +24,7 @@ export default function CodePage() {
         }
         header={
           <div className="w-full flex flex-col gap-4">
-            <PageHeader icon={Code} title="Code map" intro="Repositories, files and functions your coding apps have mapped, and how they connect." />
+            <PageHeader icon={CodeIcon} tone="company" title="Code map" intro="Repositories, files and functions your coding apps have mapped, and how they connect." />
             <RefreshEverythingButton />
           </div>
         }

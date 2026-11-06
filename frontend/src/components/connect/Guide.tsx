@@ -1,8 +1,8 @@
 "use client";
 
+import { CheckCircleIcon } from "@phosphor-icons/react/ssr";
 import { useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { CircleCheck } from "lucide-react";
 import CopyButton from "@/components/bits/CopyButton";
 import PageHeader from "@/components/ui/PageHeader";
 import { AppMark, appById, appForConnection, connectionFor, type AiApp, type AppId, type Connection } from "./apps";
@@ -187,7 +187,7 @@ export function Approved({ connection, onShowSteps }: { connection: Connection; 
         : `Start a new ${app.name} session and paste the question.`;
   return (
     <div className="flex flex-col gap-8 max-w-[960px]">
-      <PageHeader icon={CircleCheck} title="Connection approved" intro={<Trail here="Ready to use" />} />
+      <PageHeader icon={CheckCircleIcon} tone="project" title="Connection approved" intro={<Trail here="Ready to use" />} />
       <section className="task-panel p-6 sm:p-8 flex flex-col gap-5" aria-labelledby="approved-title">
         <h2 id="approved-title" className="connect-title">
           Your AI app is connected
