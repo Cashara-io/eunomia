@@ -1,5 +1,6 @@
 "use client";
 
+import { EmptyArt } from "@/components/Shapes";
 import { ArrowBendDownLeftIcon, ArrowCounterClockwiseIcon, ArrowUpIcon, CaretRightIcon, ChatsCircleIcon, PlusIcon, SquareIcon, TrashIcon, WarningCircleIcon, WrenchIcon } from "@phosphor-icons/react/ssr";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
@@ -291,6 +292,7 @@ function ThreadList({
 function EmptyState({ onPick }: { onPick: (text: string) => void }) {
   return (
     <div className="flex-1 flex flex-col justify-center w-full max-w-[560px] mx-auto py-8">
+      <EmptyArt variant="chat" className="w-full h-[112px] mb-6" />
       <h2 className="text-[22px] font-medium tracking-[-0.03em]" style={{ color: "var(--ink)" }}>
         Ask your memory anything
       </h2>

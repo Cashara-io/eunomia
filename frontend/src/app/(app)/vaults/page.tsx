@@ -6,6 +6,7 @@ import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import PageHeader from "@/components/ui/PageHeader";
+import { EmptyState } from "@/components/Shapes";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import StatusLabel from "@/components/ui/StatusLabel";
 import AuthorTag from "@/components/AuthorTag";
@@ -1201,22 +1202,18 @@ export default function VaultsPage() {
               <SkeletonRows />
             ) : org.length === 0 ? (
               !creating && (
-                <div className="ledger px-5 py-5 flex flex-wrap items-center justify-between gap-3">
-                  <p
-                    className="text-[14px]"
-                    style={{ color: "var(--ink-dim)" }}
-                  >
-                    No shared spaces yet. Create one for anything you want kept
-                    apart, such as a project or a team, or join one you were invited to.
-                  </p>
-                  <button
-                    onClick={() => setCreating(true)}
-                    className="btn"
-                  >
-                    <PlusIcon {...ICON} />
-                    Create a space
-                  </button>
-                </div>
+                <EmptyState
+                  variant="spaces"
+                  title="No shared spaces yet"
+                  action={
+                    <button onClick={() => setCreating(true)} className="btn btn-sm">
+                      <PlusIcon {...ICON} />
+                      Create a space
+                    </button>
+                  }
+                >
+                  Create one for anything you want kept apart, such as a project or a team, or join one you were invited to.
+                </EmptyState>
               )
             ) : (
               list(org)

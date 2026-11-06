@@ -1,5 +1,6 @@
 "use client";
 
+import { EmptyArt } from "./Shapes";
 import { ArrowLeftIcon, ArrowRightIcon, PencilSimpleIcon, PlusIcon, TrashIcon, XIcon } from "@phosphor-icons/react/ssr";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
@@ -513,13 +514,15 @@ export default function EntityGraph({
           toolbar,
           <div className="h-full flex items-center justify-center p-6">
             {guide ? (
-              <div className="soft-panel flex flex-col items-center gap-3 text-center max-w-sm text-[14px] px-6 py-5" style={{ color: "var(--ink-dim)" }}>
-                <p className="font-medium" style={{ color: "var(--ink)" }}>Nothing mapped yet.</p>
+              <div className="panel flex flex-col items-center gap-3 text-center max-w-sm text-[14px] p-3 pb-5" style={{ color: "var(--ink-dim)" }}>
+                <EmptyArt variant="people" className="w-full h-[140px]" />
+                <p className="font-medium px-3" style={{ color: "var(--ink)" }}>Nothing mapped yet.</p>
                 {guide}
               </div>
             ) : (
-              <div className="soft-panel flex flex-col items-center gap-3 text-center max-w-sm px-6 py-5">
-                <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+              <div className="panel flex flex-col items-center gap-3 text-center max-w-sm p-3 pb-5">
+                <EmptyArt variant="people" className="w-full h-[140px]" />
+                <p className="text-[14px] px-3" style={{ color: "var(--ink-dim)" }}>
                   No people or topics yet. They appear as your connected sources sync and your AI apps save memories, or you can add one
                   yourself.
                 </p>

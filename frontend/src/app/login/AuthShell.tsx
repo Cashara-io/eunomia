@@ -1,47 +1,39 @@
 import Link from "next/link";
 import EunomiaMark from "@/components/EunomiaMark";
 import { InputModeTracker } from "@/components/bits/motion";
+import { AuthArt, AuthBand } from "@/components/Shapes";
 
-/** Split layout shared by /login and /register (spec App 01, 01.2): a soft
- * panel on the left with the product promise in plain words, the form on the
- * right. No decorative imagery beyond three flat Bauhaus shapes, which are
- * hidden from screen readers. Below `lg` the panel collapses to the wordmark. */
+/** Split layout shared by /login and /register: on the left a raised panel
+ * with the product promise in plain words above a large Bauhaus composition
+ * in the three vault colours (decorative, hidden from screen readers); the
+ * form sits on white on the right. Below `lg` the panel collapses to the
+ * wordmark over a thin band of the same shapes. */
 export default function AuthShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen w-full grid lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)]" style={{ background: "var(--bauhaus-app-bg)" }}>
-      <aside
-        className="flex flex-col px-6 py-6 sm:px-10 lg:px-12 lg:py-12"
-        style={{ background: "var(--bauhaus-app-soft)" }}
-        aria-label="About Eunomia"
-      >
-        <Link href="/login" className="inline-flex items-center gap-2 self-start text-[20px] font-semibold tracking-[-0.03em] rounded-[3px]">
-          <EunomiaMark size={24} />
-          eunomia
-        </Link>
-        <div className="hidden lg:flex flex-1 flex-col justify-center gap-10 py-12">
-          <p className="text-[clamp(40px,4vw,56px)] leading-[1.05] font-semibold tracking-[-0.04em]">
-            Your context.
-            <br />
-            Ready when you are.
-          </p>
-          <ol className="flex flex-col gap-2.5 text-[15px] leading-snug max-w-[40ch]" style={{ color: "var(--ink)" }}>
-            <li>1. Choose the AI app you already use.</li>
-            <li>2. Follow its steps.</li>
-            <li>3. Sign in and approve access.</li>
-            <li>4. Ask it to remember, and to recall.</li>
-          </ol>
-          <div className="flex items-center gap-3" aria-hidden>
-            <span className="w-14 h-14 rounded-full" style={{ background: "var(--bauhaus-app-red)" }} />
-            <span className="w-14 h-14" style={{ background: "var(--bauhaus-app-yellow)" }} />
-            <span className="w-28 h-14 rounded-full" style={{ background: "var(--bauhaus-app-blue)" }} />
+    <div className="min-h-screen w-full flex flex-col lg:grid lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)]" style={{ background: "var(--surface)" }}>
+      <aside className="relative flex flex-col overflow-hidden lg:min-h-screen" style={{ background: "var(--surface-raised)" }} aria-label="About Eunomia">
+        <div className="relative z-10 flex flex-col px-6 pt-6 sm:px-10 lg:px-12 lg:pt-12">
+          <Link href="/login" className="inline-flex items-center gap-2.5 self-start text-[20px] font-semibold tracking-[-0.03em] rounded-[4px]">
+            <EunomiaMark size={28} />
+            eunomia
+          </Link>
+          <div className="hidden lg:flex flex-col gap-8 pt-16">
+            <p className="text-[clamp(40px,3.6vw,56px)] leading-[1.04] font-medium tracking-[-0.04em] max-w-[13ch]">
+              Your context. Ready when you are.
+            </p>
+            <ol className="flex flex-col gap-2 text-[15px] leading-snug max-w-[40ch] list-decimal pl-5 marker:text-[var(--ink-faint)]" style={{ color: "var(--ink)" }}>
+              <li>Choose the AI app you already use.</li>
+              <li>Follow its steps.</li>
+              <li>Sign in and approve access.</li>
+              <li>Ask it to remember, and to recall.</li>
+            </ol>
           </div>
         </div>
-        <p className="hidden lg:block caps" style={{ color: "var(--ink-dim)" }}>
-          Shared memory for the AI apps you already use
-        </p>
+        <AuthArt className="hidden lg:block absolute bottom-0 right-0 w-full h-[46%]" />
+        <AuthBand className="lg:hidden block w-full h-[72px] mt-4" />
       </aside>
-      <div className="flex flex-col px-6 py-6 sm:px-10">
-        <main className="flex-1 flex items-start sm:items-center justify-center pt-10 pb-12 sm:py-12">
+      <div className="flex-1 flex flex-col px-6 py-6 sm:px-10">
+        <main className="flex-1 flex items-start sm:items-center justify-center pt-8 pb-12 sm:py-12">
           <div className="w-full max-w-[420px]">{children}</div>
         </main>
         <p className="label text-center lg:text-left">Self-hosted. Free for personal use.</p>
@@ -51,7 +43,7 @@ export default function AuthShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-export const LABEL = "text-[14px] font-semibold";
+export const LABEL = "text-[14px] font-medium";
 
 /** Show/hide for a password field. Named "Show"/"Hide" (not "...password")
  * so it never collides with the field's own accessible name. */

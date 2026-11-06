@@ -33,7 +33,7 @@ export default function PageHeader({
         </div>
         {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
       </div>
-      {intro && <p className="page-intro">{intro}</p>}
+      {intro && <div className="page-intro">{intro}</div>}
       {children}
     </header>
   );

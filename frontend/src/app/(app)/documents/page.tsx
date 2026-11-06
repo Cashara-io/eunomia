@@ -4,6 +4,7 @@ import { ArrowClockwiseIcon, DownloadSimpleIcon, FileCodeIcon, FileTextIcon, Fil
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import PageHeader from "@/components/ui/PageHeader";
+import { EmptyState } from "@/components/Shapes";
 import StatusLabel, { type StatusTone } from "@/components/ui/StatusLabel";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
@@ -471,6 +472,21 @@ function Documents() {
                 </span>
               )}
             </div>
+            {docs?.length === 0 ? (
+              <EmptyState
+                variant="documents"
+                title="No documents yet"
+                action={
+                  !storageOff && (
+                    <button type="button" onClick={() => input.current?.click()} className="btn btn-sm">
+                      Choose a file
+                    </button>
+                  )
+                }
+              >
+                Drop a file above, or ask your AI app to save one for you. Each passage becomes searchable and links back to the file.
+              </EmptyState>
+            ) : (
             <div className="ledger overflow-x-auto">
               <table className="data-table">
                 <thead>
@@ -495,13 +511,6 @@ function Documents() {
                         <td className="hidden sm:table-cell"><span className="skeleton block h-4 w-8 ml-auto" /></td>
                       </tr>
                     ))}
-                  {docs?.length === 0 && (
-                    <tr>
-                      <td colSpan={6} style={{ color: "var(--ink-dim)", height: 56 }}>
-                        No documents yet. Drop a file above, or ask your AI app to save one for you.
-                      </td>
-                    </tr>
-                  )}
                   {docs?.map((d) => {
                     const on = d.id === selected;
                     return (
@@ -539,6 +548,7 @@ function Documents() {
                 </tbody>
               </table>
             </div>
+            )}
           </section>
         </div>
 

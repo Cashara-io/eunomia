@@ -12,9 +12,11 @@ import BlurWords from "@/components/bits/BlurWords";
 import { spark } from "@/components/bits/Spark";
 import { InputModeTracker } from "@/components/bits/motion";
 import ConnectAgents from "@/components/ConnectAgents";
-import ResolveMark from "./ResolveMark";
+import { StepArt, StepDot, type StepShape } from "@/components/Shapes";
 
 const STEP_LABELS = ["Welcome", "Connect your AI", "OpenAI key"];
+// Each step has a shape of its own: the welcome circle, the connect triangle, the key square.
+const STEP_SHAPES: Exclude<StepShape, "trio">[] = ["circle", "triangle", "square"];
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -92,7 +94,7 @@ export default function OnboardingPage() {
       `}</style>
       <header className="flex items-center justify-between">
         <span className="inline-flex items-center gap-2 text-[20px] font-semibold tracking-[-0.03em]">
-          <EunomiaMark size={24} />
+          <EunomiaMark size={28} />
           eunomia
         </span>
         <div className="flex items-center gap-1">
@@ -120,11 +122,11 @@ export default function OnboardingPage() {
               <ol className="flex gap-2 mb-7" aria-label="Setup progress">
                 {steps.map((label, i) => (
                   <li key={label} className="flex-1" aria-current={i === step ? "step" : undefined}>
-                    <span className="block h-[4px] overflow-hidden" style={{ background: "var(--border)" }}>
+                    <span className="block h-[4px] overflow-hidden rounded-full" style={{ background: "var(--border)" }}>
                       <span className="onb-fill block h-full" style={{ background: "var(--accent)", transform: i <= step ? "none" : "scaleX(0)" }} />
                     </span>
-                    <span className="mt-2 flex items-center gap-1.5 whitespace-nowrap text-[13px]" style={{ color: i === step ? "var(--ink)" : "var(--ink-dim)", fontWeight: i === step ? 600 : 400 }}>
-                      <span className="font-mono">{i + 1}</span>
+                    <span className="mt-2 flex items-center gap-1.5 whitespace-nowrap text-[13px]" style={{ color: i === step ? "var(--ink)" : "var(--ink-dim)", fontWeight: i === step ? 500 : 400 }}>
+                      <StepDot shape={STEP_SHAPES[i]} dim={i > step} />
                       {label}
                       {i === 2 && <span className="hidden sm:inline" style={{ color: "var(--ink-dim)" }}>(optional)</span>}
                     </span>
@@ -134,7 +136,7 @@ export default function OnboardingPage() {
 
               {step === 0 && (
                 <div className="flex flex-col gap-4">
-                  <ResolveMark size={36} still={welcomed} />
+                  <StepArt shape="trio" still />
                   {welcomed ? <h1 className="connect-title">Welcome to Eunomia</h1> : <BlurWords text="Welcome to Eunomia" as="h1" className="connect-title" />}
                   <p className="text-[16px] leading-[1.6]" style={{ color: "var(--ink)" }}>
                     You&apos;re signed in as{" "}
@@ -152,6 +154,7 @@ export default function OnboardingPage() {
 
               {/* Hidden, not unmounted, so a minted token survives Back. */}
               <div hidden={step !== 1} className="flex flex-col gap-4">
+                {step === 1 && <StepArt shape="triangle" />}
                 <h1 className="connect-title">Connect your AI</h1>
                 <p className="text-[16px] leading-[1.6]" style={{ color: "var(--ink-dim)" }}>
                   Choose the AI app you use and follow its steps. Once it is connected, it can look up and save memories in
@@ -185,6 +188,7 @@ export default function OnboardingPage() {
 
               {step === 2 && !skipOpenAiStep && (
                 <div className="flex flex-col gap-4">
+                  <StepArt shape="square" />
                   <h1 className="connect-title">Add an OpenAI key</h1>
                   <p className="text-[16px] leading-[1.6]" style={{ color: "var(--ink-dim)" }}>
                     This is optional. Your connected AI app can already look up and save memories on its own. A key lets

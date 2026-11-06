@@ -17,6 +17,7 @@ import SyncMark, { type SyncStatus } from "@/components/bits/SyncMark";
 import { prefersReducedMotion } from "@/components/bits/motion";
 import { kindForSource } from "@/lib/connectorMeta";
 import PageHeader from "@/components/ui/PageHeader";
+import { EmptyState } from "@/components/Shapes";
 import StatusLabel from "@/components/ui/StatusLabel";
 import { AI_APPS, AppMark, appForConnection, type Connection } from "@/components/connect/apps";
 import { useConnections } from "@/components/connect/useConnections";
@@ -199,12 +200,18 @@ function LiveMemory({
           ))}
         </div>
       ) : rows.length === 0 ? (
-        <div className="px-3 py-8 text-[13px] flex flex-wrap items-center gap-x-3 gap-y-2" style={{ color: "var(--ink-dim)" }}>
-          No memories yet. Ask your AI app to remember something, or add one yourself. New memories show here with who saved them.
-          <Link href="/entities" className="btn btn-sm">
-            Browse people &amp; topics <ArrowRightIcon weight="duotone" size={14} aria-hidden />
-          </Link>
-        </div>
+        <EmptyState
+          bare
+          variant="memory"
+          title="No memories yet"
+          action={
+            <Link href="/entities" className="btn btn-sm">
+              Browse people &amp; topics <ArrowRightIcon weight="duotone" size={14} aria-hidden />
+            </Link>
+          }
+        >
+          Ask your AI app to remember something, or add one yourself. New memories show here with who saved them.
+        </EmptyState>
       ) : (
         <table className="data-table" style={{ tableLayout: "fixed" }}>
           <thead>
