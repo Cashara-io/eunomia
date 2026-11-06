@@ -872,3 +872,29 @@ pre,
     display: none;
   }
 }
+
+/* Every disclosure shows it opens: a chevron before the label that turns when open. Pages
+   that style <summary> as flex lose the browser's marker, so draw one for all of them. */
+summary {
+  cursor: pointer;
+  list-style: none;
+}
+summary::-webkit-details-marker {
+  display: none;
+}
+summary::before {
+  content: "";
+  display: inline-block;
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-right: 8px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(-45deg);
+  transition: transform var(--dur-hover) ease;
+  opacity: 0.7;
+}
+details[open] > summary::before {
+  transform: translateY(-3px) rotate(45deg);
+}

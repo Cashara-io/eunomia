@@ -25,8 +25,9 @@ const CATEGORIES: { id: AuditCategory; label: string }[] = [
 
 type View = "workspace" | "mine";
 
-/** One row of either log, ready to show: `failed` is the result in words, set only when it did not work. */
-type LogRow = { id: string; at: string | null; who: string; whoNote?: string; what: string; whatMono?: boolean; failed?: string };
+/** One row of either log, ready to show: `failed` is the result in words, set only when it did not work;
+ * `reason` says why, when the server knows. */
+type LogRow = { id: string; at: string | null; who: string; whoNote?: string; what: string; whatMono?: boolean; failed?: string; reason?: string };
 
 /** "6 Nov, 14:32", with the year when it isn't this one. */
 function absoluteTime(iso: string | null): string {
@@ -46,12 +47,14 @@ function Time({ at }: { at: string | null }) {
   );
 }
 
-function Failed({ words }: { words?: string }) {
-  if (!words) return null;
+/* Under a failed event: a red dot and why it failed (or just "Failed"), dim. */
+function Failed({ r }: { r: LogRow }) {
+  if (!r.failed) return null;
   return (
-    <span className="inline-flex items-center gap-1.5 ml-2 text-[12px] whitespace-nowrap" style={{ color: "var(--critical)" }}>
+    <span className="flex items-center gap-1.5 text-[12px] min-w-0" style={{ color: "var(--ink-dim)" }}>
       <span className="dot" style={{ background: "var(--critical)" }} aria-hidden />
-      {words}
+      <span className="sr-only">{r.failed}: </span>
+      <span className="min-w-0 break-words">{r.reason || r.failed}</span>
     </span>
   );
 }
@@ -67,11 +70,11 @@ function LogRows({ rows, loading, whoLabel, whatLabel }: { rows: LogRow[]; loadi
   return (
     <>
       <div className="hidden sm:block overflow-x-auto">
-        <table className="data-table w-full text-[13px]">
+        <table className="data-table w-full table-fixed text-[13px]">
           <thead>
             <tr>
-              <th className="text-left w-[130px]">Time</th>
-              <th className="text-left">{whoLabel}</th>
+              <th className="text-left w-[120px]">Time</th>
+              <th className="text-left w-[30%]">{whoLabel}</th>
               <th className="text-left">{whatLabel}</th>
             </tr>
           </thead>
@@ -84,8 +87,8 @@ function LogRows({ rows, loading, whoLabel, whatLabel }: { rows: LogRow[]; loadi
                   <td style={{ color: "var(--ink-dim)" }}>
                     <Time at={r.at} />
                   </td>
-                  <td className="max-w-[220px]">
-                    <span className="flex flex-col min-w-0">
+                  <td>
+                    <span className="flex flex-col min-w-0 py-1.5">
                       <span className="truncate" title={r.who}>
                         {r.who}
                       </span>
@@ -96,11 +99,16 @@ function LogRows({ rows, loading, whoLabel, whatLabel }: { rows: LogRow[]; loadi
                       )}
                     </span>
                   </td>
-                  <td className="min-w-[220px]">
-                    <span className={r.whatMono ? "font-mono text-[12px]" : undefined} style={r.whatMono ? { color: "var(--ink-dim)" } : undefined}>
-                      {r.what}
+                  <td>
+                    <span className="flex flex-col gap-0.5 min-w-0 py-1.5">
+                      <span
+                        className={`break-words ${r.whatMono ? "font-mono text-[12px]" : ""}`}
+                        style={r.whatMono ? { color: "var(--ink-dim)" } : undefined}
+                      >
+                        {r.what}
+                      </span>
+                      <Failed r={r} />
                     </span>
-                    <Failed words={r.failed} />
                   </td>
                 </tr>
               ))
@@ -119,10 +127,8 @@ function LogRows({ rows, loading, whoLabel, whatLabel }: { rows: LogRow[]; loadi
             ))
           : rows.map((r) => (
               <li key={r.id} className="py-3 flex flex-col gap-0.5 min-w-0">
-                <span className="text-[14px] break-words">
-                  {r.what}
-                  <Failed words={r.failed} />
-                </span>
+                <span className="text-[14px] break-words">{r.what}</span>
+                <Failed r={r} />
                 <span className="text-[12px] truncate" style={{ color: "var(--ink-dim)" }}>
                   {r.who}
                   {r.whoNote ? ` ${r.whoNote}` : ""} · <Time at={r.at} />
@@ -138,8 +144,8 @@ function LogRows({ rows, loading, whoLabel, whatLabel }: { rows: LogRow[]; loadi
 function downloadCsv(rows: LogRow[], name: string) {
   const cell = (v: string) => (/[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
   const lines = [
-    ["Time", "Who", "How", "What", "Result"],
-    ...rows.map((r) => [r.at ?? "", r.who, r.whoNote ?? "", r.what, r.failed ?? "Done"]),
+    ["Time", "Who", "How", "What", "Result", "Reason"],
+    ...rows.map((r) => [r.at ?? "", r.who, r.whoNote ?? "", r.what, r.failed ?? "Done", r.reason ?? ""]),
   ].map((l) => l.map(cell).join(","));
   const url = URL.createObjectURL(new Blob([lines.join("\r\n") + "\r\n"], { type: "text/csv;charset=utf-8" }));
   const a = document.createElement("a");
@@ -216,6 +222,7 @@ function WorkspaceLog() {
     whoNote: r.via && r.via !== "system" && r.via !== "another Eunomia" ? `with an ${r.via}` : undefined,
     what: r.summary,
     failed: r.ok ? undefined : r.result,
+    reason: r.ok ? undefined : r.reason || undefined,
   }));
 
   return (

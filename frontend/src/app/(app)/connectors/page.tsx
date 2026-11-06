@@ -91,7 +91,7 @@ export default function ConnectorsPage() {
   const sourceRows: SourceRow[] = sourcesQuery.data ?? [];
   const error = connectorsQuery.isError ? failure(connectorsQuery.error, "Could not load your sources.", " Check that Eunomia is running, then try again.") : null;
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [chosenFilter, setStatusFilter] = useState<StatusFilter>("all");
   // Custom integrations are an advanced path: closed until asked for.
   const [showCustom, setShowCustom] = useState(false);
   // Personal sources (bank, payments, music) are folded away until asked for, or while a search matches one.
@@ -148,6 +148,9 @@ export default function ConnectorsPage() {
   const personalAvailable = shownAvailable.filter((k) => PERSONAL_KINDS.has(k));
   const personalOpen = showPersonal || Boolean(q);
   const loading = connectors === null && !error;
+  // Nothing connected yet: no status chips and no empty "Connected" section, just the catalogue.
+  const nothingConnected = !loading && connected.length === 0;
+  const statusFilter: StatusFilter = nothingConnected ? "all" : chosenFilter;
 
   const filters: { value: StatusFilter; label: string; count: number }[] = [
     { value: "all", label: "All", count: connected.length + available.length },
@@ -156,7 +159,7 @@ export default function ConnectorsPage() {
   ];
 
   return (
-    <div className="max-w-5xl flex flex-col gap-8">
+    <div className="flex flex-col gap-8">
       <PageHeader
         icon={Plug}
         title="Connected sources"
@@ -182,16 +185,18 @@ export default function ConnectorsPage() {
             </Tooltip>
           )}
         </div>
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by status">
-          {filters.map((f) => (
-            <button key={f.value} type="button" className="pill" aria-pressed={statusFilter === f.value} onClick={() => setStatusFilter(f.value)}>
-              {f.label}
-              {!loading && (
-                <span className="tabular">{f.count}</span>
-              )}
-            </button>
-          ))}
-        </div>
+        {!nothingConnected && (
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by status">
+            {filters.map((f) => (
+              <button key={f.value} type="button" className="pill" aria-pressed={statusFilter === f.value} onClick={() => setStatusFilter(f.value)}>
+                {f.label}
+                {!loading && (
+                  <span className="tabular">{f.count}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {error && (
@@ -205,7 +210,7 @@ export default function ConnectorsPage() {
         </div>
       )}
 
-      {statusFilter !== "disconnected" && (
+      {statusFilter !== "disconnected" && !nothingConnected && (
         <section className="flex flex-col gap-3" aria-labelledby="connected-heading">
           <h2 id="connected-heading" className="section-title">
             Connected
@@ -337,23 +342,21 @@ export default function ConnectorsPage() {
         </section>
       )}
 
-      {isAdmin && statusFilter !== "disconnected" && !q && (
-        <section className="flex flex-col gap-4">
-          <div>
-            <button type="button" className="btn btn-ghost" aria-expanded={showCustom} aria-controls="custom-integrations" onClick={() => setShowCustom((v) => !v)}>
-              Advanced: custom integrations
-              <ChevronDown size={16} strokeWidth={1.75} aria-hidden style={{ transform: showCustom ? "rotate(180deg)" : undefined }} />
-            </button>
-          </div>
-          {showCustom && (
-            <div id="custom-integrations">
-              <ExtensionsSection />
-            </div>
-          )}
-        </section>
-      )}
+      <div className="flex flex-col gap-2">
+        {/* Advanced paths, closed until asked for, flush with the lists above. */}
+        {isAdmin && statusFilter !== "disconnected" && !q && (
+          <details className="border-t pt-2" onToggle={(e) => setShowCustom(e.currentTarget.open)}>
+            <summary className="inline-flex items-center min-h-10 section-title">Advanced: custom integrations</summary>
+            {showCustom && (
+              <div className="pt-3">
+                <ExtensionsSection />
+              </div>
+            )}
+          </details>
+        )}
 
-      <SyncSettings />
+        <SyncSettings />
+      </div>
     </div>
   );
 }

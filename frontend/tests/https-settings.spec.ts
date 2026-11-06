@@ -83,7 +83,7 @@ test.describe("as the instance admin", () => {
 
     // ...and the certificate answers
     writeStatus({ state: "active", domain: "eunomia.example.com", message: null, checked_at: new Date().toISOString() });
-    await expect(page.getByRole("status")).toContainText("Active", { timeout: 10_000 });
+    await expect(page.getByRole("status")).toHaveText("On", { timeout: 10_000 });
     await expect(page.getByRole("link", { name: "https://eunomia.example.com" })).toBeVisible();
 
     await page.getByRole("button", { name: "Disable" }).click();

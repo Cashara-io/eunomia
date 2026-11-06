@@ -113,7 +113,7 @@ function InvitationsPanel() {
             </div>
             <div className="label mt-0.5">
               {inviterWords(inv.invited_by)} invited you as {inv.role === "owner" ? "an owner" : "a member"}
-              {inv.vault_kind === "org" ? " of a shared space" : ""}
+              {inv.vault_kind === "org" ? " of a team space" : ""}
               {ago(inv.created_at) ? ` · ${ago(inv.created_at)}` : ""}
             </div>
           </div>
@@ -201,7 +201,7 @@ function CreateVaultForm({
   onCreated,
   onCancel,
 }: {
-  onCreated: () => void;
+  onCreated: (id: string) => void;
   onCancel: () => void;
 }) {
   const [name, setName] = useState("");
@@ -215,9 +215,9 @@ function CreateVaultForm({
     setBusy(true);
     setError(null);
     try {
-      await createVault.mutateAsync({ name: trimmed });
+      const made = await createVault.mutateAsync({ name: trimmed });
       setName("");
-      onCreated();
+      onCreated(made.id);
     } catch (e) {
       setError(
         failure(e, "Could not create that space. Try a different name."),
@@ -588,7 +588,13 @@ export default function VaultsPage() {
         </button>
       </div>
 
-      {creating && <CreateVaultForm onCancel={() => setCreating(false)} onCreated={() => setCreating(false)} />}
+      {creating && (
+        <CreateVaultForm onCancel={() => setCreating(false)} onCreated={(id) => {
+            setCreating(false);
+            open(id);
+          }}
+        />
+      )}
 
       {vaultsQuery.isError && <ErrorLine error={failure(vaultsQuery.error, "Could not load your memory spaces.", " Reload the page to try again.")} />}
 
@@ -599,13 +605,13 @@ export default function VaultsPage() {
           <div className="flex flex-col gap-7 min-w-0">
             <section className="flex flex-col gap-2.5" aria-labelledby="org-title">
               <h2 id="org-title" className="section-title flex items-center gap-2">
-                Shared spaces
+                Team spaces
                 {vaults && <span className="label font-mono">{org.length}</span>}
               </h2>
               {!vaults ? (
                 <SkeletonRows />
               ) : org.length === 0 ? (
-                !creating && <EmptyState>No shared spaces yet.</EmptyState>
+                !creating && <EmptyState>No team spaces yet.</EmptyState>
               ) : (
                 list(org)
               )}

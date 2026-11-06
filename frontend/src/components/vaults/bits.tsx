@@ -23,33 +23,15 @@ export const sameEmail = (a: string | null, b: string | null) => !!a && !!b && a
 /** Who is in a space, in one plain line: "Not shared yet", "3 members", "Private to you". */
 export function peopleLine(vault: Vault, members: VaultMember[] | null): string {
   if (vault.kind === "personal") return "Private to you";
-  if (!members) return "Shared space";
+  if (!members) return "Team space";
   if (members.length <= 1) return "Not shared yet";
   return `${members.length} members`;
 }
 
-/** A small neutral circle with someone's initials, for member rows. Decorative: the email beside it is the name. */
-export function Initials({ email }: { email: string }) {
-  const local = email.split("@")[0] ?? "";
-  const parts = local.split(/[._-]+/).filter(Boolean);
-  const letters = (parts.length > 1 ? parts[0][0] + parts[1][0] : local.slice(0, 2)).toUpperCase();
-  return (
-    <span
-      aria-hidden
-      className="inline-grid place-items-center shrink-0 w-7 h-7 rounded-full text-[12px] font-medium"
-      style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", color: "var(--ink-dim)" }}
-    >
-      {letters || "?"}
-    </span>
-  );
-}
-
+/** A member's role in plain dim text, for anyone who can't change it. */
 export function RoleChip({ role }: { role: VaultRole }) {
   return (
-    <span
-      className="inline-flex items-center h-6 px-2 rounded-[3px] text-[12px] font-medium shrink-0"
-      style={{ border: "1px solid var(--border-strong)", color: role === "owner" ? "var(--ink)" : "var(--ink-dim)" }}
-    >
+    <span className="text-[13px] shrink-0" style={{ color: "var(--ink-dim)" }}>
       {role === "owner" ? "Owner" : "Member"}
     </span>
   );
@@ -149,7 +131,7 @@ export const inviterWords = (invitedBy: string | null | undefined) => invitedBy 
 /** After joining a space: says so, with the way in to what it holds. */
 export function JoinedNotice({ id, name, onDismiss }: { id: string; name: string; onDismiss?: () => void }) {
   return (
-    <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2.5 text-[14px]" style={{ borderTop: "1px solid var(--border)" }}>
+    <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2.5 text-[14px]">
       <DrawnCheck />
       <span className="flex-1 min-w-[160px]">
         You joined <span className="font-medium">{name}</span>.

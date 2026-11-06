@@ -129,3 +129,56 @@ async fn a_suspended_account_loses_sessions_tokens_and_sign_in() {
 
     assert_eq!(audit_summaries(&app, &owner_cookie).await, ["Restored access for bob@example.com", "Suspended bob@example.com"]);
 }
+
+#[tokio::test]
+async fn an_admin_sees_and_revokes_someone_elses_api_tokens() {
+    let app = common::TestApp::new().await;
+    let bob = common::register(&app.state, "bob@example.com").await;
+    let carol = common::register(&app.state, "carol@example.com").await;
+    let owner_cookie = app.session_cookie().await;
+    let laptop = models_user::create_api_token(&app.state.control, &bob.id, "work laptop").await.unwrap();
+    models_user::create_api_token(&app.state.control, &bob.id, "ci").await.unwrap();
+    let bob_cookie = cookie_of(login(&app, &bob.email).await.1);
+    let tokens_path = format!("/api/admin/people/{}/tokens", bob.id.to_string());
+    let revoke_path = format!("{tokens_path}/{}", laptop.id.to_string());
+
+    // the people list counts them
+    let ((_, report), _) = common::http(&app.router, "GET", "/api/admin/people", None, None, Some(&owner_cookie)).await;
+    assert_eq!(person(&report, "bob@example.com")["tokens"], 2, "{report}");
+    assert_eq!(person(&report, "carol@example.com")["tokens"], 0);
+
+    // the admin sees names and dates, never a secret
+    let ((status, list), _) = common::http(&app.router, "GET", &tokens_path, None, None, Some(&owner_cookie)).await;
+    assert_eq!(status, StatusCode::OK, "{list}");
+    let names: Vec<&str> = list.as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap()).collect();
+    assert_eq!(names.len(), 2);
+    assert!(names.contains(&"work laptop") && names.contains(&"ci"), "{list}");
+    assert!(list[0].get("token").is_none() && list[0].get("token_hash").is_none(), "{list}");
+
+    // a member can neither list nor revoke
+    let ((status, _), _) = common::http(&app.router, "GET", &tokens_path, None, None, Some(&bob_cookie)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let ((status, _), _) = common::http(&app.router, "DELETE", &revoke_path, None, None, Some(&bob_cookie)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    // an admin's token cannot revoke: it takes the browser session
+    let (status, _) = app.http("DELETE", &revoke_path, None, true).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    // a token id under the wrong person is not found
+    let ((status, _), _) =
+        common::http(&app.router, "DELETE", &format!("/api/admin/people/{}/tokens/{}", carol.id.to_string(), laptop.id.to_string()), None, None, Some(&owner_cookie)).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    // the token works until revoked, then stops at once
+    let ((status, _), _) = common::http(&app.router, "GET", "/api/vaults", None, Some(&laptop.token), None).await;
+    assert_eq!(status, StatusCode::OK);
+    let ((status, left), _) = common::http(&app.router, "DELETE", &revoke_path, None, None, Some(&owner_cookie)).await;
+    assert_eq!(status, StatusCode::OK, "{left}");
+    assert_eq!(left.as_array().unwrap().len(), 1);
+    assert_eq!(left[0]["name"], "ci");
+    let ((status, _), _) = common::http(&app.router, "GET", "/api/vaults", None, Some(&laptop.token), None).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    let ((status, _), _) = common::http(&app.router, "DELETE", &revoke_path, None, None, Some(&owner_cookie)).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    assert_eq!(audit_summaries(&app, &owner_cookie).await, ["Revoked bob@example.com\u{2019}s API token \u{201c}work laptop\u{201d}"]);
+}

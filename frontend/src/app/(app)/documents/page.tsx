@@ -556,6 +556,9 @@ function Documents() {
   );
 }
 
+/* The setting docker-compose.yml defaults to: files kept in the database's own data volume. */
+const STORAGE_SETTING = "EUNOMIA_DOCUMENTS_BACKEND=file:/data/documents";
+
 /* Storage is off: one calm empty state instead of a disabled upload, an empty table and an idle side panel. */
 function StorageOff({ isAdmin }: { isAdmin: boolean }) {
   return (
@@ -564,16 +567,16 @@ function StorageOff({ isAdmin }: { isAdmin: boolean }) {
         title="Document storage isn’t turned on."
         action={
           isAdmin && (
-            <details className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
-              <summary className="cursor-pointer min-h-10 flex items-center">Details</summary>
-              <p>
-                The server setting is <code className="font-mono">EUNOMIA_DOCUMENTS_BACKEND</code>.
-              </p>
-            </details>
+            <span className="field inline-flex items-center gap-2 min-h-10 pl-3 pr-1 max-w-full">
+              <code className="font-mono text-[13px] truncate min-w-0" style={{ color: "var(--ink)" }}>
+                {STORAGE_SETTING}
+              </code>
+              <CopyButton value={STORAGE_SETTING} label="Copy setting" size="sm" className="btn-ghost shrink-0" />
+            </span>
           )
         }
       >
-        {isAdmin ? "To let people upload files, turn on document storage in the server’s settings and restart Eunomia." : "Ask your admin."}
+        {isAdmin ? "To let people upload files, add this line to the server’s .env file and restart Eunomia:" : "Ask your admin."}
       </EmptyState>
     </div>
   );

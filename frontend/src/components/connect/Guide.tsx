@@ -244,12 +244,8 @@ export function GuideFrame({ id, intro, children }: { id: AppId; intro?: React.R
     <div className="flex flex-col gap-8 max-w-[960px]">
       <PageHeader title={title} intro={<Trail here={id === "other" ? "More options" : app.name} />} />
       <section className="task-panel p-6 sm:p-8 flex flex-col" aria-label={id === "other" ? "Steps for another AI app" : `Steps for ${app.name}`}>
-        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3 pb-6">
-          {intro && <p className="flex-1 min-w-[240px] text-[15px] leading-relaxed">{intro}</p>}
-          <Link href="/" className="btn btn-sm shrink-0">
-            Choose a different app
-          </Link>
-        </div>
+        {/* The breadcrumb above is the way back to the other apps. */}
+        {intro && <p className="pb-6 text-[14px] leading-relaxed">{intro}</p>}
         {children}
       </section>
     </div>

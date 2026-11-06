@@ -3,7 +3,9 @@
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import { useState } from "react";
 import { useHttpsStatus, useRequestHttps } from "@/lib/queries/settings";
-import { PanelHead } from "./shared";
+import { PanelHead, StatusLine, type Tone } from "./shared";
+
+const INTRO = "Serve Eunomia at your own domain with a free certificate that renews itself.";
 
 export function HttpsSection() {
   const statusQuery = useHttpsStatus();
@@ -32,11 +34,7 @@ export function HttpsSection() {
   if (!status) {
     return (
       <div className="flex flex-col gap-5" aria-hidden>
-        <PanelHead title="HTTPS" />
-        <div className="ledger p-5 flex flex-col gap-3">
-          <span className="skeleton h-6 w-32" />
-          <span className="skeleton h-4 w-56" />
-        </div>
+        <PanelHead title="HTTPS" status={<span className="skeleton block h-4 w-24" />} />
       </div>
     );
   }
@@ -44,19 +42,20 @@ export function HttpsSection() {
   if (!status.configured) {
     return (
       <div className="flex flex-col gap-5">
-        <PanelHead title="HTTPS" />
-        <div className="ledger p-5 text-[13px] max-w-[62ch]" style={{ color: "var(--ink-dim)" }}>
-          HTTPS is set up by the <code className="font-mono">updater</code> service, which hasn&apos;t reported in yet. See
-          Settings, Updates.
-        </div>
+        <PanelHead title="HTTPS" status={<StatusLine tone="warning">Waiting for the updater</StatusLine>}>
+          {INTRO}
+        </PanelHead>
+        <p className="text-[13px] max-w-[62ch]" style={{ color: "var(--ink-dim)" }}>
+          HTTPS is set up by the updater service, which hasn&apos;t reported in yet. See Settings, Updates.
+        </p>
       </div>
     );
   }
 
-  const tone = status.state === "active" ? "var(--good)" : status.state === "error" ? "var(--critical)" : status.state === "pending" ? "var(--warning)" : "var(--ink-faint)";
+  const tone: Tone = status.state === "active" ? "good" : status.state === "error" ? "critical" : status.state === "pending" ? "warning" : "off";
   const line =
     status.state === "active"
-      ? "Active"
+      ? "On"
       : status.state === "pending"
         ? `Pending: getting a certificate for ${status.domain}…`
         : status.state === "error"
@@ -65,28 +64,28 @@ export function HttpsSection() {
 
   return (
     <div className="flex flex-col gap-5">
-      <PanelHead title="HTTPS">
-        Serve Eunomia at your own domain with a free Let&apos;s Encrypt certificate, renewed automatically. Needs a domain
-        whose DNS points at this machine and ports 80 and 443 reachable from the internet. Turning it on closes port 3000 to
-        the network: use the domain from other machines. Only an instance admin can change it.
+      <PanelHead
+        title="HTTPS"
+        status={
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <StatusLine tone={tone}>{line}</StatusLine>
+            {status.state === "active" && status.domain && (
+              <a href={`https://${status.domain}`} className="text-[13px] underline" style={{ color: "var(--accent-text)" }}>
+                https://{status.domain}
+              </a>
+            )}
+          </span>
+        }
+        action={
+          status.state !== "off" && (
+            <button onClick={() => submit(false)} disabled={request.isPending} className="btn btn-sm shrink-0">
+              Disable
+            </button>
+          )
+        }
+      >
+        {INTRO}
       </PanelHead>
-
-      <div className="ledger p-5 flex flex-wrap items-center justify-between gap-3">
-        <span className="flex items-center gap-2 text-[13px] min-w-0">
-          <span className="dot" style={{ background: tone }} aria-hidden />
-          <span role="status">{line}</span>
-          {status.state === "active" && status.domain && (
-            <a href={`https://${status.domain}`} className="text-[13px] underline" style={{ color: "var(--accent-text)" }}>
-              https://{status.domain}
-            </a>
-          )}
-        </span>
-        {status.state !== "off" && (
-          <button onClick={() => submit(false)} disabled={request.isPending} className="btn btn-sm shrink-0">
-            Disable
-          </button>
-        )}
-      </div>
       {status.message && (
         <p className="text-[13px]" style={{ color: status.state === "error" ? "var(--critical)" : "var(--ink-dim)" }}>
           {status.message}
@@ -94,6 +93,10 @@ export function HttpsSection() {
       )}
 
       <div className="flex flex-col gap-3 max-w-md">
+        <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+          The domain&apos;s DNS must point at this machine, with ports 80 and 443 open to the internet. Once it is on, use the domain
+          from other machines: port 3000 closes to the network.
+        </p>
         <label className="label flex flex-col gap-1.5">
           Domain
           <input className="field h-10 px-3 text-[14px] tabular-nums" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="eunomia.example.com" />

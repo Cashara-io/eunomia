@@ -5,7 +5,8 @@ import { useState } from "react";
 import Link from "next/link";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { useOauthGrants, useRevokeOauthGrant } from "@/lib/queries/oauth";
-import { relativeTime, PanelHead, TableSkeleton } from "./shared";
+import EmptyState from "@/components/ui/EmptyState";
+import { relativeTime, PanelHead, QUIET_DANGER, TableSkeleton } from "./shared";
 
 const SCOPE_WORDS: Record<string, string> = {
   "memory:read": "read memories",
@@ -38,11 +39,22 @@ export function ConnectedAppsSection() {
   return (
     <div className="flex flex-col gap-5">
       <PanelHead title="Connected apps">
-        AI apps you have allowed to use Eunomia by signing in and choosing Allow. Disconnecting an app stops its access
-        immediately; your saved memories stay in Eunomia. To use it again, connect it again from Home.
+        AI apps you allowed to use Eunomia. Disconnecting one stops it at once; your memories stay.
       </PanelHead>
       {grantsQuery.isError && <ErrorLine error={failure(grantsQuery.error, "Could not load your connected apps.", " Reload the page to try again.")} />}
       {error && <ErrorLine error={error} />}
+      {grants?.length === 0 ? (
+        <EmptyState
+          title="No AI apps are connected yet."
+          action={
+            <Link href="/" className="btn">
+              Connect an AI app
+            </Link>
+          }
+        >
+          Choose your AI app on Home and follow its steps.
+        </EmptyState>
+      ) : (
       <div className="ledger overflow-x-auto">
         <table className="data-table">
           <thead>
@@ -58,13 +70,6 @@ export function ConnectedAppsSection() {
           </thead>
           <tbody>
             {grants === null && <TableSkeleton cols={5} />}
-            {grants?.length === 0 && (
-              <tr>
-                <td colSpan={5} style={{ color: "var(--ink-dim)", height: 56 }}>
-                  No AI apps are connected yet. Choose your AI app on Home and follow its steps.
-                </td>
-              </tr>
-            )}
             {grants?.map((g) => (
               <tr key={g.id}>
                 <td className="font-medium">
@@ -80,7 +85,7 @@ export function ConnectedAppsSection() {
                   {relativeTime(g.last_used_at)}
                 </td>
                 <td className="text-right">
-                  <button type="button" className="btn btn-danger btn-sm" onClick={() => setPending({ id: g.id, name: g.client_name })} aria-label={`Disconnect ${g.client_name}`}>
+                  <button type="button" className={QUIET_DANGER} onClick={() => setPending({ id: g.id, name: g.client_name })} aria-label={`Disconnect ${g.client_name}`}>
                     Disconnect…
                   </button>
                 </td>
@@ -89,9 +94,12 @@ export function ConnectedAppsSection() {
           </tbody>
         </table>
       </div>
-      <Link href="/" className="btn self-start">
-        Connect another AI app
-      </Link>
+      )}
+      {grants && grants.length > 0 && (
+        <Link href="/" className="btn self-start">
+          Connect another AI app
+        </Link>
+      )}
       <ConfirmDialog
         open={pending !== null}
         title={`Disconnect ${pending?.name ?? "this app"}?`}

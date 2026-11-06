@@ -244,6 +244,117 @@
         ]
       }
     },
+    "/api/admin/people/{user_id}/tokens": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Someone's API tokens, newest first (admin only)",
+        "description": "Names and dates only; a token's secret is never stored or shown.",
+        "operationId": "listPersonTokens",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PersonToken"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/people/{user_id}/tokens/{token_id}": {
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Revoke someone's API token (admin only, browser session)",
+        "description": "The token stops working at once. Returns the person's remaining tokens.",
+        "operationId": "revokePersonToken",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "token_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PersonToken"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
     "/api/audit": {
       "get": {
         "tags": [
@@ -8885,7 +8996,8 @@
           "shared_spaces",
           "admin",
           "role",
-          "is_you"
+          "is_you",
+          "tokens"
         ],
         "properties": {
           "admin": {
@@ -8930,6 +9042,45 @@
               "null"
             ],
             "description": "When an admin suspended the account, RFC 3339; none while it is active."
+          },
+          "tokens": {
+            "type": "integer",
+            "format": "int64",
+            "description": "How many API tokens this person holds (see `/api/admin/people/{user_id}/tokens`)."
+          }
+        }
+      },
+      "PersonToken": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`null` for a token that never expires."
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_used_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
           }
         }
       },
@@ -10559,7 +10710,8 @@
           "summary",
           "outcome",
           "ok",
-          "result"
+          "result",
+          "reason"
         ],
         "properties": {
           "action": {
@@ -10588,6 +10740,10 @@
           "outcome": {
             "type": "string",
             "description": "`ok`, or the code that ended the action."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why a failed action failed, in words (\"Already a member or invited, or no account has that email\").\nEmpty when it worked, or when `summary` already says why."
           },
           "result": {
             "type": "string",

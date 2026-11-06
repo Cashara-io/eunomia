@@ -5,9 +5,9 @@ import { X } from "lucide-react";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Tooltip from "@/components/bits/Tooltip";
 import CopyButton from "@/components/bits/CopyButton";
-import { usePeople, useSetAdmin, useSetSuspended } from "@/lib/queries/admin";
+import { usePeople, usePersonTokens, useRevokePersonToken, useSetAdmin, useSetSuspended } from "@/lib/queries/admin";
 import type { Person } from "@/lib/gen";
-import { ICON, PanelHead, TableSkeleton, relativeTime } from "./shared";
+import { ICON, PanelHead, QUIET_DANGER, RevokeButton, TableSkeleton, expiryLabel, relativeTime } from "./shared";
 
 /* Why an admin can't be changed here, for the tooltip on the disabled button. */
 const LOCKED: Record<string, string> = {
@@ -114,11 +114,81 @@ function RowActions({ p, onError }: { p: Person; onError: (f: Failure | null) =>
           Restore
         </button>
       ) : (
-        <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => setConfirming("suspend")}>
+        <button type="button" className={QUIET_DANGER} disabled={busy} onClick={() => setConfirming("suspend")}>
           Suspend
         </button>
       )}
     </span>
+  );
+}
+
+/* "2 tokens" as a toggle that opens the list under the row; plain "None" when there are none. */
+function TokenCount({ p, open, onToggle }: { p: Person; open: boolean; onToggle: () => void }) {
+  if (!p.tokens) return <span style={{ color: "var(--ink-faint)" }}>None</span>;
+  return (
+    <button
+      type="button"
+      className="underline decoration-[var(--border-strong)] underline-offset-2 hover:decoration-current tabular-nums"
+      aria-expanded={open}
+      aria-label={`${open ? "Hide" : "Show"} ${p.email}'s API tokens`}
+      onClick={onToggle}
+    >
+      {p.tokens} {p.tokens === 1 ? "token" : "tokens"}
+    </button>
+  );
+}
+
+/* Someone's API tokens, opened from the count: name, created, last used, expires, and Revoke. */
+function PersonTokens({ p, onError }: { p: Person; onError: (f: Failure | null) => void }) {
+  const query = usePersonTokens(p.id);
+  const revoke = useRevokePersonToken();
+  const tokens = query.data;
+  if (query.isError) return <ErrorLine error={failure(query.error, `Could not load ${p.email}'s tokens. Reload to try again.`)} />;
+  if (!tokens)
+    return (
+      <p className="py-2 text-[13px]" style={{ color: "var(--ink-dim)" }}>
+        Loading tokens…
+      </p>
+    );
+  if (tokens.length === 0)
+    return (
+      <p className="py-2 text-[13px]" style={{ color: "var(--ink-dim)" }}>
+        No API tokens left.
+      </p>
+    );
+  return (
+    <ul className="hairline-rows text-[13px]" aria-label={`${p.email}'s API tokens`}>
+      {tokens.map((t) => {
+        const exp = expiryLabel(t.expires_at ?? null);
+        return (
+          <li key={t.id} className="py-2 flex flex-wrap items-center gap-x-3 gap-y-0.5 min-w-0">
+            <span className="flex flex-col min-w-0 flex-1">
+              <span className="truncate font-medium" title={t.name}>
+                {t.name}
+              </span>
+              <span className="text-[12px] tabular-nums" style={{ color: "var(--ink-dim)" }}>
+                {[
+                  `created ${date(t.created_at)}`,
+                  `last used ${relativeTime(t.last_used_at ?? null)}`,
+                  exp.expired ? "expired" : exp.text === "Never" ? "never expires" : `expires ${exp.text}`,
+                ].join(" · ")}
+              </span>
+            </span>
+            <RevokeButton
+              label={t.name}
+              onRevoke={async () => {
+                onError(null);
+                try {
+                  await revoke.mutateAsync({ user_id: p.id, token_id: t.id });
+                } catch (e) {
+                  onError(failure(e, `Could not revoke ${t.name}. Reload and try again.`));
+                }
+              }}
+            />
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -155,6 +225,9 @@ export function PeopleSection() {
   const people = data?.people ?? null;
   const signup = data?.signup;
   const [actionError, setActionError] = useState<Failure | null>(null);
+  // whose API tokens are open under their row
+  const [tokensOf, setTokensOf] = useState<string | null>(null);
+  const toggleTokens = (id: string) => setTokensOf((cur) => (cur === id ? null : id));
 
   return (
     <div className="flex flex-col gap-5">
@@ -169,37 +242,28 @@ export function PeopleSection() {
             <span>{signup.summary}</span>
           </div>
           {signup.mode === "open" && (
-            <div className="flex flex-col gap-1.5 text-[13px]" data-testid="signup-open-warning">
-              <p className="inline-flex items-center gap-1.5" style={{ color: "var(--warning)" }}>
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]" data-testid="signup-open-warning">
+              <span className="inline-flex items-center gap-1.5">
                 <span className="dot" style={{ background: "var(--warning)" }} aria-hidden />
                 Anyone who can reach this server can create an account.
-              </p>
-              <p style={{ color: "var(--ink-dim)" }}>
-                To allow only the people you invite, set this in the server&apos;s <code className="font-mono">.env</code> file and restart
-                Eunomia:
-              </p>
-              <span className="inline-flex items-center gap-2">
+              </span>
+              <span className="inline-flex items-center gap-1">
                 <code className="font-mono text-[13px]">SIGNUP=invite</code>
                 <CopyButton value="SIGNUP=invite" label="Copy setting" size="sm" className="btn-ghost" />
-                <a href={SIGNUP_DOCS} target="_blank" rel="noopener noreferrer" className="text-[13px] underline">
-                  Sign-up settings
-                </a>
               </span>
-            </div>
+              <a href={SIGNUP_DOCS} target="_blank" rel="noopener noreferrer" className="underline" style={{ color: "var(--ink-dim)" }}>
+                How to change this
+              </a>
+            </p>
           )}
-          {signup.mode === "invite" && (
+          {signup.mode !== "open" && (
             <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
-              {signup.allowlist.length ? `Allowed: ${signup.allowlist.join(", ")}` : "No emails are on the allowlist yet."}
+              {signup.mode === "invite" && (signup.allowlist.length ? `Allowed: ${signup.allowlist.join(", ")}. ` : "No emails are on the allowlist yet. ")}
+              <a href={SIGNUP_DOCS} target="_blank" rel="noopener noreferrer" className="underline">
+                How to change this
+              </a>
             </p>
           )}
-          <details className="text-[12px]" style={{ color: "var(--ink-faint)" }}>
-            <summary className="cursor-pointer select-none">How to change who can sign up</summary>
-            <p className="mt-1 max-w-[68ch]">
-              This comes from the server&apos;s settings: <code className="font-mono">SIGNUP</code> (open, invite or closed),{" "}
-              <code className="font-mono">SIGNUP_ALLOWLIST</code> and <code className="font-mono">EUNOMIA_ADMIN_EMAILS</code>. Change
-              them in your <code className="font-mono">.env</code> file and restart Eunomia.
-            </p>
-          </details>
         </div>
       )}
 
@@ -226,7 +290,18 @@ export function PeopleSection() {
                   `active ${relativeTime(p.last_active ?? null)}`,
                   `${p.shared_spaces} ${p.shared_spaces === 1 ? "space" : "spaces"}`,
                 ].join(" · ")}
+                {p.tokens > 0 && (
+                  <>
+                    {" · "}
+                    <TokenCount p={p} open={tokensOf === p.id} onToggle={() => toggleTokens(p.id)} />
+                  </>
+                )}
               </span>
+              {tokensOf === p.id && (
+                <div className="pl-3 border-l" style={{ borderColor: "var(--border)" }}>
+                  <PersonTokens p={p} onError={setActionError} />
+                </div>
+              )}
               <div className="pt-1">
                 <RowActions p={p} onError={setActionError} />
               </div>
@@ -236,36 +311,37 @@ export function PeopleSection() {
       </ul>
 
       <div className="hidden sm:block overflow-x-auto">
-        <table className="data-table w-full text-[13px]">
+        <table className="data-table w-full table-fixed text-[13px]">
           <thead>
             <tr>
               <th className="text-left">Email</th>
-              <th className="text-left w-[90px]">Role</th>
-              <th className="text-left w-[120px] hidden md:table-cell">Joined</th>
+              <th className="text-left w-[80px]">Role</th>
+              <th className="text-left w-[110px] hidden lg:table-cell">Joined</th>
               <th className="text-left w-[100px]">Last active</th>
-              <th className="text-right w-[70px] hidden md:table-cell">Spaces</th>
-              <th className="text-right">
+              <th className="text-right w-[70px] hidden lg:table-cell">Spaces</th>
+              <th className="text-left w-[90px]">API tokens</th>
+              <th className="text-right w-[210px]">
                 <span className="sr-only">Actions</span>
               </th>
             </tr>
           </thead>
           <tbody>
             {people === null ? (
-              <TableSkeleton cols={6} />
+              <TableSkeleton cols={7} />
             ) : people.length === 0 ? (
               <tr>
-                <td colSpan={6} className="py-6 text-center" style={{ color: "var(--ink-dim)" }}>
+                <td colSpan={7} className="py-6 text-center" style={{ color: "var(--ink-dim)" }}>
                   No accounts yet.
                 </td>
               </tr>
             ) : (
-              people.map((p) => (
+              people.flatMap((p) => [
                   <tr key={p.id} data-testid={`person-${p.email}`}>
-                    <td className="max-w-[300px]">
+                    <td>
                       <Email p={p} />
                     </td>
                     <td className="whitespace-nowrap">{p.role === "admin" ? "Admin" : "Member"}</td>
-                    <td className="whitespace-nowrap hidden md:table-cell tabular-nums" style={{ color: "var(--ink-dim)" }}>
+                    <td className="whitespace-nowrap hidden lg:table-cell tabular-nums" style={{ color: "var(--ink-dim)" }}>
                       {date(p.created_at)}
                     </td>
                     <td
@@ -275,12 +351,22 @@ export function PeopleSection() {
                     >
                       {relativeTime(p.last_active ?? null)}
                     </td>
-                    <td className="text-right tabular-nums hidden md:table-cell">{p.shared_spaces}</td>
+                    <td className="text-right tabular-nums hidden lg:table-cell">{p.shared_spaces}</td>
+                    <td className="whitespace-nowrap">
+                      <TokenCount p={p} open={tokensOf === p.id} onToggle={() => toggleTokens(p.id)} />
+                    </td>
                     <td className="text-right whitespace-nowrap">
                       <RowActions p={p} onError={setActionError} />
                     </td>
-                  </tr>
-              ))
+                  </tr>,
+                  tokensOf === p.id ? (
+                    <tr key={`${p.id}-tokens`} data-testid={`person-tokens-${p.email}`}>
+                      <td colSpan={7} className="h-auto! pl-8!">
+                        <PersonTokens p={p} onError={setActionError} />
+                      </td>
+                    </tr>
+                  ) : null,
+                ])
             )}
           </tbody>
         </table>

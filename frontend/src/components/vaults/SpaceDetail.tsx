@@ -1,8 +1,8 @@
 "use client";
 
 // Everything you can do with one memory space, in plain sections: who is in it, sharing it with
-// another Eunomia (folded away), then "Leave or delete" (hand over, leave, delete) at the very bottom.
-// "Make a copy" is a quiet action in the header.
+// another Eunomia (folded away), then "Hand over this space" and "Leave or delete" (copy, leave,
+// delete) at the very bottom.
 import { useEffect, useRef, useState } from "react";
 import { Copy, LogOut, Pencil, Trash2, UserPlus } from "lucide-react";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
@@ -25,7 +25,7 @@ import {
   useVaultCounts,
   useVaultMembers,
 } from "@/lib/queries/vaults";
-import { DetailSection, DrawnCheck, ICON, Initials, RoleChip, ago, peopleLine, sameEmail } from "./bits";
+import { DetailSection, DrawnCheck, ICON, RoleChip, ago, peopleLine, sameEmail } from "./bits";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -102,6 +102,9 @@ export default function SpaceDetail({
   const alreadyInvited = pending.some((p) => sameEmail(p.email, trimmed));
   const created = ago(vault.created_at);
   const others = (members ?? []).filter((m) => !sameEmail(m.email, me));
+  // Owners first (you first among them), then you, then everyone else A–Z.
+  const rank = (m: { email: string; role: VaultRole }) => (m.role === "owner" ? 0 : 2) + (sameEmail(m.email, me) ? 0 : 1);
+  const sortedMembers = members && [...members].sort((a, b) => rank(a) - rank(b) || a.email.localeCompare(b.email));
   // Last-owner rule: a shared space always needs an owner, so its only owner can't leave.
   const lastOwner = isOwner && isOrg && members !== null && members.filter((m) => m.role === "owner").length <= 1;
   const canLeave = isOrg && members !== null && !lastOwner;
@@ -216,8 +219,8 @@ export default function SpaceDetail({
             </button>
           </form>
         ) : (
-          <div className="flex items-center gap-2.5 min-w-0">
-            <h2 className="text-[20px] font-semibold tracking-[-0.02em] truncate">{vault.name}</h2>
+          <div className="flex items-start gap-2.5 min-w-0">
+            <h2 className="text-[20px] font-semibold tracking-[-0.02em] min-w-0 break-words">{vault.name}</h2>
             {isOwner && (
               <Tooltip label="Rename space">
                 <button
@@ -233,26 +236,12 @@ export default function SpaceDetail({
                 </button>
               </Tooltip>
             )}
-            {!cloning && (
-              <button
-                type="button"
-                onClick={() => {
-                  setCloneName(`${vault.name} (copy)`);
-                  setError(null);
-                  setCloning(true);
-                }}
-                className="btn btn-ghost btn-sm shrink-0 ml-auto"
-              >
-                {cloned ? <DrawnCheck /> : <Copy {...ICON} />}
-                Make a copy
-              </button>
-            )}
           </div>
         )}
         <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
           {isOrg
             ? `${peopleLine(vault, members)}. Only the people listed here can see what's in it.`
-            : "Only you can see this space. To work with other people, create a shared space."}
+            : "Only you can see this space. To work with other people, create a team space."}
           {created ? ` Created ${created}.` : ""}
         </p>
         {counts && (
@@ -260,45 +249,13 @@ export default function SpaceDetail({
             {plural(counts.people + counts.topics, "person or topic", "people & topics")} saved
           </p>
         )}
-        {cloning && (
-          <form
-            className="flex flex-col gap-1.5 pt-3"
-            onSubmit={(e) => {
-              e.preventDefault();
-              doClone();
-            }}
-          >
-            <label htmlFor={`clone-${vault.id}`} className="text-[13px] font-medium">
-              Name for the copy
-            </label>
-            <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
-              The copy is a new space with the same memories, and only you in it. {vault.name} stays exactly as it is.
-            </p>
-            <input
-              id={`clone-${vault.id}`}
-              autoFocus
-              className="field h-10 px-3 text-[14px]"
-              value={cloneName}
-              onChange={(e) => setCloneName(e.target.value)}
-              onKeyDown={(e) => e.key === "Escape" && setCloning(false)}
-            />
-            <div className="flex justify-end gap-1.5">
-              <button type="button" onClick={() => setCloning(false)} className="btn">
-                Cancel
-              </button>
-              <button type="submit" disabled={cloneBusy} className="btn btn-primary">
-                {cloneBusy ? "Copying…" : "Create copy"}
-              </button>
-            </div>
-          </form>
-        )}
       </header>
 
       {/* People */}
       {isOrg && (
         <DetailSection
           title="Members"
-          aside={members && <span className="label font-mono">{members.length}</span>}
+          aside={members && <span className="label">{members.length}</span>}
         >
           <ul className="hairline-rows" aria-label="People in this space">
             {members === null &&
@@ -308,11 +265,10 @@ export default function SpaceDetail({
                   <span className="skeleton h-4 flex-1" />
                 </li>
               ))}
-            {members?.map((m) => {
+            {sortedMembers?.map((m) => {
               const isMe = sameEmail(m.email, me);
               return (
                 <li key={m.email} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 min-h-12 py-2">
-                  <Initials email={m.email} />
                   <span className="flex-1 min-w-[140px] truncate text-[14px]" style={{ color: "var(--ink)" }}>
                     {m.email}
                     {isMe && <span style={{ color: "var(--ink-dim)" }}> (you)</span>}
@@ -354,7 +310,7 @@ export default function SpaceDetail({
           {isOwner && pending.length > 0 && (
             <div className="flex flex-col gap-1 pt-1">
               <h4 className="text-[13px] font-medium" style={{ color: "var(--ink-dim)" }}>
-                Pending <span className="font-mono">{pending.length}</span>
+                Pending {pending.length}
               </h4>
               <ul className="hairline-rows" aria-label="Invitations not answered yet">
                 {pending.map((p) => (
@@ -443,12 +399,67 @@ export default function SpaceDetail({
 
       <PeerSharing vault={vault} />
 
-      {/* Hand over, leave, delete: last, under their own heading. */}
-      {(canHandOver || canLeave || (lastOwner && others.length > 0) || (isOrg && isOwner)) && (
-        <DetailSection title="Leave or delete">
-          {canHandOver && (
-            <TransferOwnershipPanel vault={vault} members={members} me={me} />
-          )}
+      {/* Its own section, beside "Leave or delete" rather than inside it: one heading level. */}
+      {canHandOver && (
+        <section className="px-5 sm:px-6 py-5" style={{ borderTop: "1px solid var(--border)" }}>
+          <TransferOwnershipPanel vault={vault} members={members} me={me} />
+        </section>
+      )}
+
+      {(isOwner || canLeave || (lastOwner && others.length > 0)) && (
+        <DetailSection title={isOrg ? "Leave or delete" : "Copy this space"}>
+          {isOwner &&
+            (cloning ? (
+              <form
+                className="flex flex-col gap-1.5"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  doClone();
+                }}
+              >
+                <label htmlFor={`clone-${vault.id}`} className="text-[13px] font-medium">
+                  Name for the copy
+                </label>
+                <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+                  The copy is a new space with the same memories, and only you in it. {vault.name} stays exactly as it is.
+                </p>
+                <input
+                  id={`clone-${vault.id}`}
+                  autoFocus
+                  className="field h-10 px-3 text-[14px]"
+                  value={cloneName}
+                  onChange={(e) => setCloneName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Escape" && setCloning(false)}
+                />
+                <div className="flex justify-end gap-1.5">
+                  <button type="button" onClick={() => setCloning(false)} className="btn">
+                    Cancel
+                  </button>
+                  <button type="submit" disabled={cloneBusy} className="btn btn-primary">
+                    {cloneBusy ? "Copying…" : "Create copy"}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <OptionRow
+                title="Make a copy"
+                body="A new space with the same memories, and only you in it."
+                action={
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCloneName(`${vault.name} (copy)`);
+                      setError(null);
+                      setCloning(true);
+                    }}
+                    className="btn btn-ghost btn-sm"
+                  >
+                    {cloned ? <DrawnCheck /> : <Copy {...ICON} />}
+                    Copy space
+                  </button>
+                }
+              />
+            ))}
 
           {canLeave && (
             <OptionRow
@@ -464,7 +475,7 @@ export default function SpaceDetail({
           )}
           {lastOwner && others.length > 0 && (
             <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
-              To leave, first make someone else an owner. A shared space always needs one.
+              To leave, first make someone else an owner. A team space always needs one.
             </p>
           )}
 

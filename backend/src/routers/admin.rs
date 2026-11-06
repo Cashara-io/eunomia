@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use axum::{extract::{Path, Query, State}, routing::{get, put}, Json, Router};
+use axum::{extract::{Path, Query, State}, routing::{delete, get, put}, Json, Router};
 use serde::{Deserialize, Serialize};
 use surrealdb::types::SurrealValue;
 use surrealdb::types::{Datetime, RecordId};
@@ -22,6 +22,8 @@ pub fn router() -> Router<AppState> {
         .route("/admin/people", get(get_people))
         .route("/admin/people/{user_id}/admin", put(set_admin))
         .route("/admin/people/{user_id}/suspended", put(set_suspended))
+        .route("/admin/people/{user_id}/tokens", get(get_person_tokens))
+        .route("/admin/people/{user_id}/tokens/{token_id}", delete(revoke_person_token))
 }
 
 async fn require_admin(state: &AppState, user: &User) -> AppResult<()> {
@@ -46,7 +48,7 @@ pub enum AuditCategory {
     Signins,
     Tokens,
     Apps,
-    /// Admin rights granted or taken back, accounts suspended or restored.
+    /// Admin rights granted or taken back, accounts suspended or restored, other people's API tokens revoked.
     Admin,
     /// Spaces shared with another Eunomia: share codes, joins, links stopped. These copy data off the server.
     Sharing,
@@ -55,7 +57,7 @@ pub enum AuditCategory {
 }
 
 const SIGNIN_ACTIONS: &[&str] = &["auth.login", "auth.register", "auth.oidc_login", "auth.oidc_link", "auth.failed"];
-const ADMIN_ACTIONS: &[&str] = &["admin.grant", "admin.revoke", "user.suspend", "user.restore"];
+const ADMIN_ACTIONS: &[&str] = &["admin.grant", "admin.revoke", "user.suspend", "user.restore", "admin.token_revoke"];
 
 impl AuditCategory {
     /// `(prefix, exact actions, excluded actions)` for the ledger query; all empty means every event.
@@ -169,6 +171,9 @@ struct WorkspaceAuditEntry {
     ok: bool,
     /// The outcome in words: "Done", "Not allowed", "Declined", "Refused" or "Failed".
     result: String,
+    /// Why a failed action failed, in words ("Already a member or invited, or no account has that email").
+    /// Empty when it worked, or when `summary` already says why.
+    reason: String,
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -185,8 +190,59 @@ fn kv<'a>(detail: &'a str, key: &str) -> Option<&'a str> {
 /// The value of the last `from=` in `detail`, read to the end of the line: the names it carries
 /// (spaces, another Eunomia) may hold spaces.
 fn from_rest(detail: &str) -> Option<&str> {
-    let i = if detail.starts_with("from=") { 0 } else { detail.find(" from=")? + 1 };
-    Some(detail[i + 5..].trim()).filter(|v| !v.is_empty())
+    rest_of(detail, "from")
+}
+
+/// The value of `key=` in `detail`, read to the end of the line (it must come last).
+fn rest_of<'a>(detail: &'a str, key: &str) -> Option<&'a str> {
+    let tag = format!("{key}=");
+    let i = if detail.starts_with(&tag) { 0 } else { detail.find(&format!(" {tag}"))? + 1 };
+    Some(detail[i + tag.len()..].trim()).filter(|v| !v.is_empty())
+}
+
+/// The plain verb for the past-tense verb a sentence starts with, so a failed attempt reads
+/// "Couldn't invite ..." rather than "Invited ...".
+fn base_verb(past: &str) -> Option<&'static str> {
+    Some(match past {
+        "Invited" => "invite",
+        "Withdrew" => "withdraw",
+        "Removed" => "remove",
+        "Made" => "make",
+        "Handed" => "hand",
+        "Deleted" => "delete",
+        "Created" => "create",
+        "Renamed" => "rename",
+        "Joined" => "join",
+        "Declined" => "decline",
+        "Copied" => "copy",
+        "Merged" => "merge",
+        "Stopped" => "stop",
+        "Turned" => "turn",
+        "Started" => "start",
+        "Replaced" => "replace",
+        "Changed" => "change",
+        "Took" => "take",
+        "Suspended" => "suspend",
+        "Restored" => "restore",
+        "Linked" => "link",
+        "Revoked" => "revoke",
+        "Allowed" => "allow",
+        "Added" => "add",
+        "Disconnected" => "disconnect",
+        "Moved" => "move",
+        "Re-read" => "re-read",
+        _ => return None,
+    })
+}
+
+/// A sentence for something that was attempted and did not happen.
+fn couldnt(done: &str) -> String {
+    let (first, rest) = done.split_once(' ').unwrap_or((done, ""));
+    match base_verb(first) {
+        Some(v) if rest.is_empty() => format!("Couldn't {v}"),
+        Some(v) => format!("Couldn't {v} {rest}"),
+        None => format!("{done} (didn't go through)"),
+    }
 }
 
 /// One ledger row as a sentence an admin can read without knowing the action codes.
@@ -194,7 +250,6 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
     let email = kv(detail, "email").unwrap_or("someone");
     let space = if target.is_empty() { "a space" } else { target };
     let name = |fallback: &str| names.get(target).map(|n| format!("\u{201c}{n}\u{201d}")).unwrap_or_else(|| fallback.to_string());
-    let tried = if ok { "" } else { "Tried to: " };
     let s = match action {
         "vault.invite" => match kv(detail, "role") {
             Some("owner") => format!("Invited {email} to {space} as an owner"),
@@ -244,6 +299,10 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
         "admin.revoke" => format!("Took admin rights away from {email}"),
         "user.suspend" => format!("Suspended {email}"),
         "user.restore" => format!("Restored access for {email}"),
+        "admin.token_revoke" => match rest_of(detail, "token") {
+            Some(t) => format!("Revoked {email}\u{2019}s API token \u{201c}{t}\u{201d}"),
+            None => format!("Revoked an API token of {email}"),
+        },
         "auth.login" if ok => return "Signed in".into(),
         "auth.login" => return "Sign-in failed (wrong email or password)".into(),
         "auth.oidc_login" if ok => return "Signed in with single sign-on".into(),
@@ -270,7 +329,40 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
         "legacy.move" => "Moved data over from the previous version".into(),
         other => other.to_string(),
     };
-    format!("{tried}{s}")
+    if ok { s } else { couldnt(&s) }
+}
+
+/// Actions whose failed sentence already says why ([`describe`] returns early for them).
+const SELF_EXPLAINED: &[&str] = &["auth.login", "auth.oidc_login", "auth.failed", "oauth.consent", "authz.denied"];
+
+/// Why an action failed, from the error code it ended with, in words; empty when it worked.
+fn reason_words(action: &str, outcome: &str) -> String {
+    if outcome == "ok" || outcome.is_empty() || SELF_EXPLAINED.contains(&action) {
+        return String::new();
+    }
+    match (action, outcome) {
+        // `vaults::service::invite_member_inner` refuses both with a plain bad request
+        ("vault.invite", "validation.invalid") => "Already a member or invited, or no account has that email",
+        ("vault.join" | "vault.decline", "validation.invalid") => "There was no invitation waiting",
+        ("vault.transfer", "validation.invalid") => "They already own it, or aren't a member",
+        (_, "auth.not_found") => "No such account",
+        (_, "vault.not_found") => "The space doesn't exist any more",
+        (_, "vault.name_taken") => "That name is already taken",
+        (_, "auth.scope") => "The token doesn't have that permission",
+        (_, o) if o.ends_with(".forbidden") => "Not allowed",
+        (_, "rate.limited") => "Too many attempts (rate limited)",
+        (_, "auth.suspended") => "The account is suspended",
+        (_, "auth.token_expired") => "The token had expired",
+        (_, "auth.session_expired") => "The session had expired",
+        (_, "auth.unauthorized") => "Not signed in",
+        (_, "access_denied") => "Declined",
+        (_, "validation.invalid") => "The request wasn't valid",
+        (_, "db.conflict" | "db.duplicate") => "Clashed with another change",
+        (_, o) if o.ends_with(".not_found") => "It doesn't exist any more",
+        (_, "internal") => "Something went wrong on the server",
+        _ => "Something went wrong",
+    }
+    .into()
 }
 
 /// The other Eunomia a sharing event names, quoted; `start` puts it at the head of a sentence
@@ -368,6 +460,7 @@ async fn get_workspace_audit(State(state): State<AppState>, user: User, Query(q)
                 summary: describe(&r.action, &r.target, &r.detail, ok, &names),
                 category: AuditCategory::of(&r.action),
                 result: result_words(&r.outcome).into(),
+                reason: reason_words(&r.action, &r.outcome),
                 ok,
                 outcome: r.outcome,
                 action: r.action,
@@ -430,6 +523,16 @@ struct Person {
     suspended_at: Option<Datetime>,
     /// The admin looking at the list.
     is_you: bool,
+    /// How many API tokens this person holds (see `/api/admin/people/{user_id}/tokens`).
+    tokens: i64,
+}
+
+#[derive(Debug, Deserialize, SurrealValue)]
+struct CountRow {
+    owner: RecordId,
+    #[serde(default)]
+    #[surreal(default)]
+    n: i64,
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -497,6 +600,14 @@ async fn people_report(state: &AppState, user: &User) -> AppResult<PeopleReport>
     let rows = people_rows(state, user).await?;
     let ids: Vec<RecordId> = rows.iter().map(|r| r.id.clone()).collect();
 
+    let token_counts: HashMap<String, i64> = store::control::ADMIN_TOKEN_COUNTS
+        .on(&state.control)
+        .bind(("ids", ids.clone()))
+        .await?
+        .take::<Vec<CountRow>>(0)?
+        .into_iter()
+        .map(|r| (r.owner.to_string(), r.n))
+        .collect();
     let mut seen_res = store::control::ADMIN_LAST_SEEN.on(&state.control).bind(("ids", ids)).await?;
     let sessions: Vec<SeenRow> = seen_res.take(0)?;
     let tokens: Vec<SeenRow> = seen_res.take(1)?;
@@ -530,6 +641,7 @@ async fn people_report(state: &AppState, user: &User) -> AppResult<PeopleReport>
                 admin: admin.into(),
                 role: if admin.is_empty() { "member" } else { "admin" }.into(),
                 is_you: r.id == user.id,
+                tokens: token_counts.get(&key).copied().unwrap_or(0),
                 id: key,
                 email: r.email,
                 created_at: r.created_at,
@@ -571,6 +683,11 @@ struct SuspendChange {
 /// The admin acting (browser session only) and the account they act on, which must be in their workspace.
 async fn target_of(state: &AppState, user: &User, user_id: &str) -> AppResult<(Vec<PersonRow>, Option<RecordId>, RecordId)> {
     authz::require_session()?;
+    member_of(state, user, user_id).await
+}
+
+/// The account `user_id` names, which must be in the admin's workspace (any credential).
+async fn member_of(state: &AppState, user: &User, user_id: &str) -> AppResult<(Vec<PersonRow>, Option<RecordId>, RecordId)> {
     require_admin(state, user).await?;
     let not_found = || AppError::coded(ErrorCode::AuthNotFound, "That account isn't in this workspace.");
     let target: RecordId = crate::rid::parse(user_id).map_err(|_| not_found())?;
@@ -674,8 +791,76 @@ async fn set_suspended(
     Ok(Json(people_report(&state, &user).await?))
 }
 
+// ---------------------------------------------------------------- other people's API tokens
+
+#[derive(Serialize, utoipa::ToSchema)]
+struct PersonToken {
+    id: String,
+    name: String,
+    #[schema(value_type = Option<String>)]
+    created_at: Option<Datetime>,
+    #[schema(value_type = Option<String>)]
+    last_used_at: Option<Datetime>,
+    /// `null` for a token that never expires.
+    #[schema(value_type = Option<String>)]
+    expires_at: Option<Datetime>,
+}
+
+fn person_tokens(rows: Vec<crate::models_user::ApiTokenSummary>) -> Vec<PersonToken> {
+    rows.into_iter()
+        .map(|r| PersonToken { id: r.id.to_string(), name: r.name, created_at: Some(r.created_at), last_used_at: r.last_used_at, expires_at: r.expires_at })
+        .collect()
+}
+
+#[utoipa::path(
+    operation_id = "listPersonTokens",
+    get,
+    path = "/api/admin/people/{user_id}/tokens",
+    tag = "admin",
+    summary = "Someone's API tokens, newest first (admin only)",
+    description = "Names and dates only; a token's secret is never stored or shown.",
+    params(("user_id" = String, Path)),
+    responses((status = 200, body = Vec<PersonToken>), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = []), ("bearer" = [])),
+)]
+async fn get_person_tokens(State(state): State<AppState>, user: User, Path(user_id): Path<String>) -> AppResult<Json<Vec<PersonToken>>> {
+    let (_, _, target) = member_of(&state, &user, &user_id).await?;
+    Ok(Json(person_tokens(crate::models_user::list_api_tokens(&state.control, &target).await?)))
+}
+
+#[utoipa::path(
+    operation_id = "revokePersonToken",
+    delete,
+    path = "/api/admin/people/{user_id}/tokens/{token_id}",
+    tag = "admin",
+    summary = "Revoke someone's API token (admin only, browser session)",
+    description = "The token stops working at once. Returns the person's remaining tokens.",
+    params(("user_id" = String, Path), ("token_id" = String, Path)),
+    responses((status = 200, body = Vec<PersonToken>), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = [])),
+)]
+async fn revoke_person_token(
+    State(state): State<AppState>,
+    user: User,
+    Path((user_id, token_id)): Path<(String, String)>,
+) -> AppResult<Json<Vec<PersonToken>>> {
+    let (rows, _, target) = target_of(&state, &user, &user_id).await?;
+    let email = rows.iter().find(|r| r.id == target).map(|r| r.email.clone()).unwrap_or_default();
+    let not_found = || AppError::coded(ErrorCode::AuthNotFound, "That token doesn't exist any more.");
+    let rid: RecordId = crate::rid::parse(&token_id).map_err(|_| not_found())?;
+    let tokens = crate::models_user::list_api_tokens(&state.control, &target).await?;
+    let name = tokens.iter().find(|t| t.id == rid).map(|t| t.name.clone()).ok_or_else(not_found)?;
+    let gone = crate::models_user::revoke_api_token(&state.control, &target, &rid).await?;
+    state.credentials.forget(&rid.to_string());
+    if !gone {
+        return Err(not_found());
+    }
+    crate::audit::record_as_caller_detail(&state.control, &user.id, "admin.token_revoke", &rid.to_string(), "ok", &format!("email={email} token={name}")).await;
+    Ok(Json(person_tokens(crate::models_user::list_api_tokens(&state.control, &target).await?)))
+}
+
 #[derive(utoipa::OpenApi)]
-#[openapi(paths(get_workspace_audit, get_people, set_admin, set_suspended))]
+#[openapi(paths(get_workspace_audit, get_people, set_admin, set_suspended, get_person_tokens, revoke_person_token))]
 pub struct Doc;
 
 #[cfg(test)]
@@ -690,7 +875,14 @@ mod tests {
         assert_eq!(describe("vault.revoke", "x", "email=a@b.c", true, &n), "Withdrew the invitation for a@b.c to x");
         assert_eq!(describe("vault.role", "x", "email=a@b.c role=owner", true, &n), "Made a@b.c an owner of x");
         assert_eq!(describe("vault.delete", "x", "", true, &n), "Deleted the space x");
-        assert_eq!(describe("vault.member_remove", "x", "email=a@b.c", false, &n), "Tried to: Removed a@b.c from x");
+        assert_eq!(describe("vault.member_remove", "x", "email=a@b.c", false, &n), "Couldn't remove a@b.c from x");
+        assert_eq!(describe("vault.invite", "Team", "email=a@b.c role=member", false, &n), "Couldn't invite a@b.c to Team");
+        assert_eq!(describe("peer.left", "Team", "", false, &n), "Another Eunomia stopped syncing Team (it keeps its copy) (didn't go through)");
+        assert_eq!(reason_words("vault.invite", "validation.invalid"), "Already a member or invited, or no account has that email");
+        assert_eq!(reason_words("vault.role", "vault.forbidden"), "Not allowed");
+        assert_eq!(reason_words("vault.create", "rate.limited"), "Too many attempts (rate limited)");
+        assert_eq!(reason_words("vault.create", "ok"), "");
+        assert_eq!(reason_words("auth.login", "auth.unauthorized"), "");
     }
 
     #[test]
@@ -748,6 +940,8 @@ mod tests {
         assert_eq!(describe("admin.revoke", "user:b", "email=bob@x.test", true, &n), "Took admin rights away from bob@x.test");
         assert_eq!(describe("user.suspend", "user:b", "email=bob@x.test", true, &n), "Suspended bob@x.test");
         assert_eq!(describe("user.restore", "user:b", "email=bob@x.test", true, &n), "Restored access for bob@x.test");
+        assert_eq!(describe("admin.token_revoke", "api_token:t", "email=bob@x.test token=work laptop", true, &n), "Revoked bob@x.test\u{2019}s API token \u{201c}work laptop\u{201d}");
+        assert_eq!(AuditCategory::of("admin.token_revoke"), AuditCategory::Admin);
         assert_eq!(AuditCategory::of("user.suspend"), AuditCategory::Admin);
         assert_eq!(AuditCategory::Changes.filter().2, SIGNIN_ACTIONS);
     }

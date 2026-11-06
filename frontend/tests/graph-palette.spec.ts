@@ -107,6 +107,13 @@ test.describe("Command palette", () => {
     await input.fill("Ada");
     await expect(palette.getByText("Ada Lovelace")).toBeVisible();
 
+    // Memory text matches too, under the entity it is about; Enter opens that entity.
+    await input.fill("Analytical");
+    const memory = palette.getByRole("button", { name: /Designed the Analytical Engine/ });
+    await expect(memory).toBeVisible();
+    await expect(memory).toContainText("Charles Babbage");
+    await expect(palette.getByText(/Type 2 or more letters/)).toHaveCount(0);
+
     // Below the search threshold, data hits are hidden again.
     await input.fill("A");
     await expect(palette.getByText("Ada Lovelace")).toHaveCount(0);

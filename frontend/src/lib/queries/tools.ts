@@ -61,7 +61,26 @@ export const useRecord = (id: string, enabled: boolean) =>
     enabled,
   });
 
-/** Command palette: entity and record matches for a debounced query. Failures read as no matches. */
+/** A memory whose text matches a palette search, with the entity it is about and its space. */
+export type MemoryHit = { id: string; text: string; entity: string; entityName: string; entityKind: string; vault: string; vaultName?: string };
+type RecallHit = { id: string; kind: string; text: string; vault: string; vault_name: string };
+type EntityDetail = { id: string; kind: string; name: string; memory?: { id: string; text: string; vault: string }[] };
+
+/** Every word of `query` (2+ letters), lowercased: a memory matches when its text holds one of them. */
+export const queryWords = (query: string) =>
+  query.toLowerCase().split(/\s+/).filter((w) => w.length >= 2);
+const mentions = (text: string, words: string[]) => {
+  const t = text.toLowerCase();
+  return words.some((w) => t.includes(w));
+};
+
+/** Entities a memory search resolves memories against: the fact matches first (names that do not hold
+ * the query), then name matches, at most this many. */
+const RESOLVE_ENTITIES = 4;
+/** Memories shown in the palette. */
+const PALETTE_MEMORIES = 6;
+
+/** Command palette: entity, memory and record matches for a debounced query. Failures read as no matches. */
 export const usePaletteSearch = (query: string, limit: number, enabled: boolean) => {
   const entities = useQuery({
     queryKey: [...toolKeys.palette(query), "entities"],
@@ -78,7 +97,44 @@ export const usePaletteSearch = (query: string, limit: number, enabled: boolean)
     enabled,
     placeholderData: keepPreviousData,
   });
-  return { entities: entities.data ?? [], records: records.data ?? [] };
+  // Memory text. `recall` ranks the memories; it does not say which entity a memory is about, so the
+  // memories of the entities `entities_search` found (it matches fact text too) name each one. When
+  // recall fails (no embedding model, say) those entities' matching memories are the result.
+  const found = entities.isPlaceholderData ? undefined : entities.data;
+  const words = queryWords(query);
+  const resolveIds = (found ?? [])
+    .map((e) => ({ id: e.id, byName: mentions(e.name, words) }))
+    .sort((a, b) => Number(a.byName) - Number(b.byName))
+    .slice(0, RESOLVE_ENTITIES)
+    .map((e) => e.id);
+  const memories = useQuery({
+    queryKey: [...toolKeys.palette(query), "memories", resolveIds],
+    queryFn: async (): Promise<MemoryHit[]> => {
+      const [recall, ...details] = await Promise.all([
+        invoke<{ results: RecallHit[] } | { error: string }>("recall", { query, limit: PALETTE_MEMORIES }).catch(() => ({ error: "" })),
+        ...resolveIds.map((id) => invoke<EntityDetail | { error: string }>("entities_get", { id }).catch(() => ({ error: "" }))),
+      ]);
+      const about = new Map<string, MemoryHit>();
+      for (const d of details) {
+        if ("error" in d) continue;
+        for (const m of d.memory ?? []) {
+          if (mentions(m.text, words)) {
+            about.set(m.id, { id: m.id, text: m.text, entity: d.id, entityName: d.name, entityKind: d.kind, vault: m.vault });
+          }
+        }
+      }
+      if ("error" in recall) return [...about.values()].slice(0, PALETTE_MEMORIES);
+      const ranked = recall.results
+        .filter((r) => r.kind === "memory" && about.has(r.id))
+        .map((r) => ({ ...about.get(r.id)!, vaultName: r.vault_name || undefined }));
+      // a match recall ranked below its limit still shows, after the ranked ones
+      const seen = new Set(ranked.map((m) => m.id));
+      return [...ranked, ...[...about.values()].filter((m) => !seen.has(m.id))].slice(0, PALETTE_MEMORIES);
+    },
+    enabled: enabled && found !== undefined && words.length > 0,
+    placeholderData: keepPreviousData,
+  });
+  return { entities: entities.data ?? [], records: records.data ?? [], memories: memories.data ?? [] };
 };
 
 export const useDocs = () =>

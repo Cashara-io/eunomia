@@ -7,7 +7,7 @@ import { Check } from "lucide-react";
 import type { SettingsUpdate } from "@/lib/gen";
 import { useOpenAiModels, useUpdateSettings } from "@/lib/queries/settings";
 import type { AppSettings } from "@/lib/types";
-import { ICON, PanelHead } from "./shared";
+import { ICON, PanelHead, QUIET_DANGER } from "./shared";
 
 /* The AI provider: an admin concern (base URL and key), shown only in the Server group. */
 export function ModelSection({ settings }: { settings: AppSettings }) {
@@ -125,7 +125,7 @@ export function ModelSection({ settings }: { settings: AppSettings }) {
                 autoComplete="off"
               />
               {settings.openai_api_key_set && (
-                <button type="button" onClick={removeKey} disabled={saving} className="btn btn-sm shrink-0">
+                <button type="button" onClick={removeKey} disabled={saving} className={`${QUIET_DANGER} shrink-0`}>
                   Remove key
                 </button>
               )}

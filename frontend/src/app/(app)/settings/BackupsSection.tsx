@@ -1,14 +1,14 @@
 "use client";
 
-import { CopyField, PanelHead } from "./shared";
+import { CopyField, PanelHead, StatusLine } from "./shared";
 
 /* The backup service writes only to its own volume, which the backend never mounts, so this page has no
    evidence that a backup ran. It says so instead of claiming one did. */
 export function BackupsSection() {
   return (
     <div className="flex flex-col gap-5">
-      <PanelHead title="Backups">
-        Eunomia can&apos;t see the backup service from here, so it can&apos;t tell you when the last backup ran.
+      <PanelHead title="Backups" status={<StatusLine tone="off">Can&apos;t check from here</StatusLine>}>
+        Eunomia can&apos;t see the backup service, so it can&apos;t tell you when the last backup ran.
       </PanelHead>
       <div className="flex flex-col gap-2 max-w-[560px]">
         <span className="text-[14px] font-medium">To check the last backup, run this on the server</span>

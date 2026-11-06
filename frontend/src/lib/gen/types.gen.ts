@@ -1038,6 +1038,21 @@ export type Person = {
      * When an admin suspended the account, RFC 3339; none while it is active.
      */
     suspended_at?: string | null;
+    /**
+     * How many API tokens this person holds (see `/api/admin/people/{user_id}/tokens`).
+     */
+    tokens: number;
+};
+
+export type PersonToken = {
+    created_at?: string | null;
+    /**
+     * `null` for a token that never expires.
+     */
+    expires_at?: string | null;
+    id: string;
+    last_used_at?: string | null;
+    name: string;
 };
 
 export type PocketaiSummary = {
@@ -1684,6 +1699,11 @@ export type WorkspaceAuditEntry = {
      */
     outcome: string;
     /**
+     * Why a failed action failed, in words ("Already a member or invited, or no account has that email").
+     * Empty when it worked, or when `summary` already says why.
+     */
+    reason: string;
+    /**
      * The outcome in words: "Done", "Not allowed", "Declined", "Refused" or "Failed".
      */
     result: string;
@@ -1803,6 +1823,55 @@ export type SetPersonSuspendedResponses = {
 };
 
 export type SetPersonSuspendedResponse = SetPersonSuspendedResponses[keyof SetPersonSuspendedResponses];
+
+export type ListPersonTokensData = {
+    body?: never;
+    path: {
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/admin/people/{user_id}/tokens';
+};
+
+export type ListPersonTokensErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListPersonTokensError = ListPersonTokensErrors[keyof ListPersonTokensErrors];
+
+export type ListPersonTokensResponses = {
+    200: Array<PersonToken>;
+};
+
+export type ListPersonTokensResponse = ListPersonTokensResponses[keyof ListPersonTokensResponses];
+
+export type RevokePersonTokenData = {
+    body?: never;
+    path: {
+        user_id: string;
+        token_id: string;
+    };
+    query?: never;
+    url: '/api/admin/people/{user_id}/tokens/{token_id}';
+};
+
+export type RevokePersonTokenErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type RevokePersonTokenError = RevokePersonTokenErrors[keyof RevokePersonTokenErrors];
+
+export type RevokePersonTokenResponses = {
+    200: Array<PersonToken>;
+};
+
+export type RevokePersonTokenResponse = RevokePersonTokenResponses[keyof RevokePersonTokenResponses];
 
 export type ListAuditData = {
     body?: never;

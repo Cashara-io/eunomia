@@ -22,6 +22,10 @@ const ms = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)} s` : `${Math.ro
 const pct = (part: number, whole: number) => (whole > 0 ? `${((part / whole) * 100).toFixed(part / whole < 0.1 ? 1 : 0)}%` : "0%");
 const name = (email: string, id: string) => email || id;
 
+/* Phones (below 640px) keep the name and the call count: the other columns drop out, so no table scrolls sideways. */
+const PHONE_DROP = "max-sm:hidden";
+const DROPPED_ON_PHONES = new Set(["Type", "Channel", "Errors", "Avg time"]);
+
 export function UsageSection() {
   const [range, setRange] = useState<(typeof RANGES)[number]["id"]>("7d");
   const hours = RANGES.find((r) => r.id === range)!.hours;
@@ -81,14 +85,14 @@ export function UsageSection() {
         {report?.by_credential.map((c: UsageByCredential) => (
           <tr key={`${c.user_id}|${c.kind}|${c.credential_id}`}>
             {org && (
-              <td className="truncate max-w-[200px]" title={c.user_id}>
+              <td className={`truncate max-w-[200px] ${PHONE_DROP}`} title={c.user_id}>
                 {name(c.email, c.user_id)}
               </td>
             )}
             <td className="truncate max-w-[220px]" title={c.credential_id || undefined}>
               {c.label}
             </td>
-            <td style={{ color: "var(--ink-dim)" }}>{KIND[c.kind] ?? c.kind}</td>
+            <td className={PHONE_DROP} style={{ color: "var(--ink-dim)" }}>{KIND[c.kind] ?? c.kind}</td>
             <Counts c={c} max={report.by_credential[0]?.calls ?? 0} />
           </tr>
         ))}
@@ -113,14 +117,14 @@ export function UsageSection() {
         {report?.by_session.map((s) => (
           <tr key={`${s.user_id}|${s.channel}|${s.session}`}>
             {org && (
-              <td className="truncate max-w-[200px]" title={s.user_id}>
+              <td className={`truncate max-w-[200px] ${PHONE_DROP}`} title={s.user_id}>
                 {name(s.email, s.user_id)}
               </td>
             )}
             <td className="font-mono text-[12px] truncate max-w-[220px]" title={s.session}>
               {s.session}
             </td>
-            <td style={{ color: "var(--ink-dim)" }}>{CHANNEL[s.channel] ?? s.channel}</td>
+            <td className={PHONE_DROP} style={{ color: "var(--ink-dim)" }}>{CHANNEL[s.channel] ?? s.channel}</td>
             <Counts c={s} max={report.by_session[0]?.calls ?? 0} />
           </tr>
         ))}
@@ -130,8 +134,8 @@ export function UsageSection() {
         {report?.by_tool.map((t) => (
           <tr key={t.tool}>
             <td>
-              <span className="flex items-center gap-2">
-                <span className="font-mono text-[12px]">{t.tool}</span>
+              <span className="flex items-center gap-2 min-w-0">
+                <span className="font-mono text-[12px] truncate">{t.tool}</span>
                 {!t.read_only && <span className="pill">writes</span>}
               </span>
             </td>
@@ -252,18 +256,18 @@ function Swatch({ color, label }: { color: string; label: string }) {
 function Counts({ c, max }: { c: { calls: number; errors: number; avg_ms: number }; max: number }) {
   return (
     <>
-      <td className="tabular-nums text-[13px] w-[150px]">
+      <td className="tabular-nums text-[13px] w-[150px] max-sm:w-[96px]">
         <span className="flex items-center gap-2">
-          <span className="w-[52px] text-right">{fmt(c.calls)}</span>
-          <span aria-hidden className="h-1 flex-1 rounded-full overflow-hidden" style={{ background: "var(--surface-raised)" }}>
+          <span className="w-[52px] max-sm:w-auto text-right">{fmt(c.calls)}</span>
+          <span aria-hidden className="h-1 flex-1 min-w-[16px] rounded-full overflow-hidden" style={{ background: "var(--surface-raised)" }}>
             <span className="block h-full rounded-full" style={{ width: `${max > 0 ? Math.max(3, (c.calls / max) * 100) : 0}%`, background: "var(--good)" }} />
           </span>
         </span>
       </td>
-      <td className="tabular-nums text-[13px] w-[90px]" style={{ color: c.errors > 0 ? "var(--critical)" : "var(--ink-faint)" }}>
+      <td className={`tabular-nums text-[13px] w-[90px] ${PHONE_DROP}`} style={{ color: c.errors > 0 ? "var(--critical)" : "var(--ink-faint)" }}>
         {fmt(c.errors)}
       </td>
-      <td className="tabular-nums text-[13px] w-[90px]" style={{ color: "var(--ink-dim)" }}>
+      <td className={`tabular-nums text-[13px] w-[90px] ${PHONE_DROP}`} style={{ color: "var(--ink-dim)" }}>
         {ms(c.avg_ms)}
       </td>
     </>
@@ -297,11 +301,19 @@ function Table({
         )}
       </div>
       <div className="ledger overflow-x-auto">
-        <table className="data-table">
+        <table className="data-table max-sm:table-fixed">
           <thead>
             <tr>
-              {cols.map((c) => (
-                <th key={c}>{c}</th>
+              {cols.map((c, i) => (
+                // "Person" drops out too when it only labels another row's name (credential, session)
+                <th
+                  key={c}
+                  className={
+                    (i > 0 && DROPPED_ON_PHONES.has(c)) || (c === "Person" && cols[i + 1] !== "Calls") ? PHONE_DROP : c === "Calls" ? "max-sm:w-[96px]" : undefined
+                  }
+                >
+                  {c}
+                </th>
               ))}
             </tr>
           </thead>

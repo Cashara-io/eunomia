@@ -91,12 +91,11 @@ export default function VectorCloud() {
             >
               {data.space === "semantic" ? "placed by meaning" : "placed by shared words"}
             </span>
+            {/* the page's tab blurb already says what the map is; this line only adds how to use it */}
+            {points.length > 1 && " · click points to compare them"}
           </span>
         )}
       </div>
-      <p className="text-[13px] -mt-1" style={{ color: "var(--ink-dim)" }}>
-        Each point is a memory. Similar ones sit close together. Click points to read and compare them.
-      </p>
 
       <div className="flex flex-col lg:flex-row gap-3 flex-1 min-h-0">
       <div className="ledger relative flex-1 min-h-0 overflow-hidden min-w-0" style={{ minHeight: 420 }}>

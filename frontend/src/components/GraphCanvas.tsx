@@ -5,7 +5,7 @@
 // background to pan, scroll or use the buttons to zoom, click (or Enter or Space) a node
 // to select it.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation, type Simulation, type SimulationNodeDatum } from "d3-force";
 import { Eye, EyeOff, Maximize2, Minus, Plus, RotateCcw } from "lucide-react";
 import { SvgMonogram } from "./graph/Monogram";
@@ -142,9 +142,9 @@ export default function GraphCanvas({
   const insetsRef = useRef(insets);
   const dimsRef = useRef(dims);
   const visibleRef = useRef(visibleKinds);
+  // dimsRef is set where the size is measured (below), so the first layout already uses the real size.
   useEffect(() => {
     insetsRef.current = insets;
-    dimsRef.current = dims;
     visibleRef.current = visibleKinds;
   });
   // Only the nodes on screen count for a fit: a hidden kind must not pull the camera away.
@@ -173,13 +173,23 @@ export default function GraphCanvas({
     setView((v) => ({ ...v, zoom: Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, v.zoom * f)) }));
   };
 
-  // Track the canvas size so the viewBox and the centre force follow a resize.
-  useEffect(() => {
+  // Track the canvas size so the viewBox and the centre force follow a resize. Measured once before
+  // the first paint too: a first layout and fit at the 640x420 placeholder size, corrected only once
+  // the observer reported, left the nodes crowding one side of a wide canvas.
+  useLayoutEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
+    const apply = (width: number, height: number) => {
+      if (width < 10 || height < 10) return;
+      const next = { w: Math.round(width), h: Math.round(height) };
+      dimsRef.current = next;
+      setDims((prev) => (prev.w === next.w && prev.h === next.h ? prev : next));
+    };
+    const box = el.getBoundingClientRect();
+    apply(box.width, box.height);
     const ro = new ResizeObserver((entries) => {
-      const box = entries[0]?.contentRect;
-      if (box && box.width >= 10 && box.height >= 10) setDims({ w: Math.round(box.width), h: Math.round(box.height) });
+      const r = entries[0]?.contentRect;
+      if (r) apply(r.width, r.height);
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -203,6 +213,10 @@ export default function GraphCanvas({
       .on("tick", () => {
         setNodes([...s.nodes()]);
         // follow the layout as it settles, so a reload or vault switch never leaves nodes off screen
+        if (autoFit.current) fitNow(s.nodes());
+      })
+      // one last fit on the settled shape, with whatever insets and size hold by then
+      .on("end", () => {
         if (autoFit.current) fitNow(s.nodes());
       });
     s.tick(PRE_TICKS);

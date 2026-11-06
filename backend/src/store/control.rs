@@ -73,6 +73,7 @@ pub const ALL: &[&ControlStmt] = &[
     &ADMIN_PEOPLE,
     &ADMIN_LAST_SEEN,
     &ADMIN_TOKEN_NAMES,
+    &ADMIN_TOKEN_COUNTS,
     &USER_ADMIN_FLAG,
     &USER_SET_ADMIN,
     &USER_SET_SUSPENDED,
@@ -431,6 +432,10 @@ pub const ADMIN_LAST_SEEN: ControlStmt = ControlStmt::new(
 
 /// Names of API tokens by id, for the audit log's sentences (a revoked token's row is gone).
 pub const ADMIN_TOKEN_NAMES: ControlStmt = ControlStmt::new("control.admin_token_names", "SELECT id, name FROM api_token WHERE id IN $ids");
+
+/// How many API tokens each of `$ids` holds (People shows the count; an owner with none has no row).
+pub const ADMIN_TOKEN_COUNTS: ControlStmt =
+    ControlStmt::new("control.admin_token_counts", "SELECT owner, count() AS n FROM api_token WHERE owner IN $ids GROUP BY owner");
 
 /// Whether an admin granted this account admin rights in the app (`authz::is_admin`).
 pub const USER_ADMIN_FLAG: ControlStmt = ControlStmt::new("control.user_admin_flag", "SELECT admin FROM user WHERE id = $id LIMIT 1");

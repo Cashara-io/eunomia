@@ -2,19 +2,20 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowUpRight, Braces, Building2, CircleDot, FileCode, FileText, FolderGit2, FolderKanban, KeyRound, MapPin, Plug, Plus, Search, Settings, Upload, User, X } from "lucide-react";
+import { ArrowUpRight, Braces, Building2, CircleDot, FileCode, FileText, FolderGit2, FolderKanban, KeyRound, MapPin, MessageSquareText, Plug, Plus, Search, Settings, Upload, User, X } from "lucide-react";
 import Shortcuts from "./Shortcuts";
 import { ADVANCED_NAV, MAIN_NAV } from "./Sidebar";
 import { documentHref, type EntityKind } from "@/lib/types";
 import { useSources } from "@/lib/queries/sources";
-import { usePaletteSearch } from "@/lib/queries/tools";
+import { queryWords, usePaletteSearch } from "@/lib/queries/tools";
 import { useMe } from "@/lib/queries/auth";
 import { useVaults } from "@/lib/queries/vaults";
 import { modKey } from "@/lib/platform";
 import { SETTINGS_GROUPS } from "@/lib/settingsTabs";
 
 type IconType = React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
-type Item = { key: string; label: string; sub?: string; icon: IconType; go: () => void; score?: number };
+// `rich` replaces the one-line label: a memory's text, up to two lines, with the matched words bold.
+type Item = { key: string; label: string; rich?: React.ReactNode; sub?: string; icon: IconType; go: () => void; score?: number };
 type Group = { title: string; items: Item[] };
 
 const OPEN_EVENT = "eunomia:open-palette";
@@ -86,6 +87,26 @@ const ACTIONS: { label: string; href: string; icon: IconType; words: string; adm
   { label: "Connect an AI app", href: "/", icon: Plug, words: "claude chatgpt cursor codex mcp setup" },
 ];
 
+/** `text` with every occurrence of the query's words in bold. */
+function Highlight({ text, words }: { text: string; words: string[] }) {
+  if (words.length === 0) return <>{text}</>;
+  const escaped = words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const parts = text.split(new RegExp(`(${escaped.join("|")})`, "gi"));
+  return (
+    <>
+      {parts.map((part, i) =>
+        i % 2 === 1 ? (
+          <strong key={i} className="font-semibold">
+            {part}
+          </strong>
+        ) : (
+          part
+        )
+      )}
+    </>
+  );
+}
+
 const CODE_KINDS = new Set<EntityKind>(["repository", "file", "symbol"]);
 const SEARCH_DEBOUNCE_MS = 250;
 const SEARCH_MIN_LENGTH = 2;
@@ -144,7 +165,7 @@ function Palette({ onClose }: { onClose: () => void }) {
     const timer = setTimeout(() => setDebounced(q), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [q, searching]);
-  const { entities: entityHits, records: recordHits } = usePaletteSearch(debounced, SEARCH_LIMIT, debounced !== "");
+  const { entities: entityHits, records: recordHits, memories: memoryHits } = usePaletteSearch(debounced, SEARCH_LIMIT, debounced !== "");
 
   const connectorItems: Item[] = rows
     .filter((r) => r.connected)
@@ -199,6 +220,19 @@ function Palette({ onClose }: { onClose: () => void }) {
       router.push(`${CODE_KINDS.has(e.kind) ? "/code" : "/entities"}?${q}`);
     },
   }));
+  const words = queryWords(debounced);
+  const memoryItems: Item[] = (searching ? memoryHits : []).map((m) => ({
+    key: `memory:${m.id}`,
+    label: m.text,
+    rich: <Highlight text={m.text} words={words} />,
+    sub: [m.entityName, spaceName(m.vault) ?? m.vaultName].filter(Boolean).join(" · "),
+    icon: MessageSquareText,
+    // opens the inspector of the entity the memory is about, in the memory's space
+    go: () => {
+      const q = new URLSearchParams({ id: m.entity, vault: m.vault });
+      router.push(`${CODE_KINDS.has(m.entityKind as EntityKind) ? "/code" : "/entities"}?${q}`);
+    },
+  }));
   const recordItems: Item[] = (searching ? recordHits : []).map((h) => ({
     key: `record:${h.id}`,
     label: h.title || h.snippet,
@@ -229,6 +263,7 @@ function Palette({ onClose }: { onClose: () => void }) {
   const groups: Group[] = [
     ...navGroups,
     { title: "People & topics", items: entityItems },
+    { title: "Memories", items: memoryItems },
     { title: "Documents and saved items", items: recordItems },
   ].filter((g) => g.items.length > 0);
   const items = groups.flatMap((g) => g.items);
@@ -308,7 +343,11 @@ function Palette({ onClose }: { onClose: () => void }) {
                       >
                         <Icon size={18} color={active ? "var(--accent-text)" : "var(--ink-dim)"} />
                         <span className="flex-1 min-w-0 flex flex-col">
-                          <span className="truncate">{item.label}</span>
+                          {item.rich ? (
+                            <span className="line-clamp-2">{item.rich}</span>
+                          ) : (
+                            <span className="truncate">{item.label}</span>
+                          )}
                           {item.sub && (
                             <span className="text-[12px] truncate" style={{ color: "var(--ink-dim)" }}>
                               {item.sub}
@@ -350,7 +389,7 @@ function Palette({ onClose }: { onClose: () => void }) {
               <span className="kbd">?</span> All shortcuts
             </span>
           </span>
-          <span className="ml-auto pointer-coarse:ml-0">Type 2 or more letters to search your memory</span>
+          {!searching && <span className="ml-auto pointer-coarse:ml-0">Type 2 or more letters to search your memory</span>}
         </div>
       </div>
     </div>

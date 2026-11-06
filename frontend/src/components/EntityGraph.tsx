@@ -762,6 +762,12 @@ export default function EntityGraph({
   const lastTouched = selected
     ? selected.memory.reduce<string | undefined>((a, m) => (m.created_at && (!a || m.created_at > a) ? m.created_at : a), undefined)
     : undefined;
+  // One author for every memory: say so once at the top, not on each row.
+  const soleAuthor =
+    selected && selected.memory.length > 0 && selected.memory.every((m) => m.owner_email === selected.memory[0].owner_email)
+      ? selected.memory[0].owner_email
+      : undefined;
+  const topAuthor = soleAuthor ?? selected?.owner_email;
 
   const inspector = selected && (
     <aside
@@ -837,7 +843,7 @@ export default function EntityGraph({
 
       <div className="overflow-y-auto px-5 pb-5 flex flex-col gap-6">
         <div className="flex flex-col gap-1">
-          {selected.owner_email && <Byline email={selected.owner_email} />}
+          {topAuthor && <Byline email={topAuthor} />}
           {lastTouched && (
             <p className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
               Last memory {ago(lastTouched)}
@@ -910,7 +916,7 @@ export default function EntityGraph({
                     ) : (
                       <span className="text-[14px] leading-snug">{m.text}</span>
                     )}
-                    <Byline email={m.owner_email} at={m.created_at} />
+                    <Byline email={soleAuthor !== undefined ? null : m.owner_email} at={m.created_at} />
                   </div>
                   {canDelete(m.owner_email) && (
                     <Tooltip label="Delete memory">

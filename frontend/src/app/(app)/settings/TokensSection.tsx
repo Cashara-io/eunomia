@@ -22,6 +22,10 @@ const DEFAULT_SCOPES: Scope[] = ["memory:read", "memory:write"];
 // Same limit as the API (and as a vault name).
 const NAME_MAX = 80;
 
+/* Below 640px a row is a wrapping flex box and its cells lose the table's height, padding and rules. */
+const PHONE_ROW = "max-sm:flex max-sm:flex-wrap max-sm:items-center max-sm:gap-x-2 max-sm:gap-y-1 max-sm:px-3 max-sm:py-3 max-sm:border-b max-sm:border-[var(--border)] max-sm:last:border-b-0";
+const PHONE_CELL = "max-sm:block max-sm:h-auto! max-sm:p-0! max-sm:border-0!";
+
 const EXPIRY_OPTIONS = [
   { value: "", label: "Never expires" },
   { value: "7", label: "7 days" },
@@ -117,8 +121,7 @@ export function TokensSection() {
   return (
     <div className="flex flex-col gap-5">
       <PanelHead title="API tokens">
-        A token lets an AI app or script use Eunomia as you. Give each one only the access it needs, limit it to one memory
-        space, or let it expire. A token is a secret: it is shown once, when you create it, and never again.
+        A token lets an AI app or script use Eunomia as you. It is shown once, when you create it.
       </PanelHead>
 
       <form
@@ -242,9 +245,10 @@ export function TokensSection() {
       {tokensQuery.isError && <ErrorLine error={failure(tokensQuery.error, "Could not load your tokens.", " Reload the page to try again.")} />}
       {error && <ErrorLine error={error} />}
 
-      <div className="ledger overflow-x-auto">
-        <table className="data-table">
-          <thead>
+      {/* Phones: each token is a stacked entry (name and Revoke, then what it can do, then dates), never a sideways scroll. */}
+      <div className="ledger sm:overflow-x-auto">
+        <table className="data-table max-sm:block">
+          <thead className="max-sm:hidden">
             <tr>
               <th>Name</th>
               <th>Can</th>
@@ -255,11 +259,11 @@ export function TokensSection() {
               </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="max-sm:block">
             {tokens === null && <TableSkeleton cols={5} />}
             {tokens?.length === 0 && (
-              <tr>
-                <td colSpan={5} style={{ color: "var(--ink-dim)", height: 56 }}>
+              <tr className="max-sm:block">
+                <td colSpan={5} className={`${PHONE_CELL} max-sm:px-3! max-sm:py-4!`} style={{ color: "var(--ink-dim)", height: 56 }}>
                   No tokens yet. Create one above to connect an AI app with a token.
                 </td>
               </tr>
@@ -268,8 +272,8 @@ export function TokensSection() {
               const exp = expiryLabel(t.expires_at);
               const full = SCOPES.every((s) => t.scopes.includes(s.id));
               return (
-                <tr key={t.id}>
-                  <td className="font-medium">
+                <tr key={t.id} className={PHONE_ROW}>
+                  <td className={`font-medium ${PHONE_CELL} max-sm:min-w-0 max-sm:flex-1`}>
                     {renaming === t.id ? (
                       <input
                         aria-label="New token name"
@@ -307,8 +311,8 @@ export function TokensSection() {
                       </span>
                     )}
                   </td>
-                  <td>
-                    <span className="flex flex-col gap-0.5 py-1.5 min-w-0">
+                  <td className={`${PHONE_CELL} max-sm:order-last max-sm:basis-full`}>
+                    <span className="flex flex-col gap-0.5 py-1.5 max-sm:py-0 min-w-0">
                       {full ? (
                         <span>Full access</span>
                       ) : (
@@ -319,18 +323,20 @@ export function TokensSection() {
                       </span>
                     </span>
                   </td>
-                  <td className="tabular-nums text-[13px]" style={{ color: "var(--ink-dim)" }}>
+                  <td className={`tabular-nums text-[13px] ${PHONE_CELL} max-sm:order-last max-sm:text-[12px]`} style={{ color: "var(--ink-dim)" }}>
+                    <span className="sm:hidden">Last used </span>
                     {relativeTime(t.last_used_at)}
                   </td>
                   <td
-                    className="tabular-nums text-[13px] whitespace-nowrap"
+                    className={`tabular-nums text-[13px] whitespace-nowrap ${PHONE_CELL} max-sm:order-last max-sm:text-[12px]`}
                     style={{ color: exp.expired ? "var(--critical)" : "var(--ink-dim)" }}
                     title={t.expires_at ? new Date(t.expires_at).toLocaleString() : undefined}
                   >
                     {/* the column head says "Expires": the cell is just "in 90d", which never wraps */}
+                    <span className="sm:hidden">· Expires </span>
                     {exp.text}
                   </td>
-                  <td className="text-right">
+                  <td className={`text-right ${PHONE_CELL}`}>
                     <RevokeButton label={t.name} onRevoke={() => revoke(t.id)} />
                   </td>
                 </tr>
