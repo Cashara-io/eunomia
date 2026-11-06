@@ -1154,7 +1154,7 @@ export default function VaultsPage() {
             ? `${org.length} shared ${org.length === 1 ? "space" : "spaces"} · ${personal.length} personal`
             : "Loading your spaces…"}
         </p>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <LiveStatusBadge />
           <button onClick={() => void refetchAll()} className="btn btn-icon" aria-label="Refresh spaces" title="Refresh">
             <ArrowsClockwiseIcon {...ICON} />
