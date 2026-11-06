@@ -14,17 +14,24 @@
 #   3. install <from-tag> from it with the PUBLISHED ghcr images (`docker compose pull`), or with the
 #      images built from UPDATE_PATH_FROM_REF;
 #   4. seed real-shaped data through the API (two users in two orgs, vaults, entities of several
-#      kinds, facts, a superseded fact, a deleted fact, relations, skills, a document, a PAT);
+#      kinds, facts, a superseded fact, a deleted fact, relations, skills, a document, a PAT, and one
+#      fact holding a fake GitHub token, which the redaction backfill must rewrite);
 #   5. snapshot per-database, per-table row counts, the migration ledgers and a few reads;
 #   6. `backup now pre-update`;
 #   7. "Update now" as the admin, then the OLD checkout's scripts/auto-update.sh, for real except
 #      that a PATH shim turns `docker compose pull` into a no-op ($FAKE exists only locally);
 #   8. assert status.json, history.log, every service healthy, the new SurrealDB pin running,
 #      ledgers current, counts and reads unchanged, tenant 0022's rebuilt vector indexes present
-#      and answering kNN;
+#      and answering kNN, the seeded token redacted by the tenant 0024 backfill;
 #   9. run the updater again, restart the backend, `up -d` again: nothing changes;
 #  9b. the change log (tenant 0023) works on the upgraded stack: a write logs a row that REST and
 #      `changes_since` return, and the new tables hold exactly those rows;
+#  9c. password managers: with the `secrets` profile off (as the old updater leaves it) no helper
+#      container and Test connection answers helper_disabled at once; "Enable password managers" acted
+#      on by the new auto-update.sh turns the helper healthy and keeps it across `up -d`; Disable removes it;
+#  9d. secret requests (tenant 0032): the tables are new and empty, then an agent asks, the person fills
+#      it from the browser, the agent gets the eu:// handle and transforms it, with the helper off (as 9c
+#      leaves it: held secrets need no sidecar); the value is only enc:v1: and in no table or log;
 #  10. rollback: the old tag on a fresh volume, restore the pre-update backup, counts and reads again,
 #      and none of the tables the update added.
 # Own compose project ($P), ports 8251 (backend) and 3251 (frontend). Artifacts (logs, snapshots) in
@@ -53,12 +60,18 @@ LATEST_CONTROL="$(find "$ROOT/backend/migrations/control" -name '[0-9]*.surql' |
 # Rows that move by themselves (sessions, jobs, audit and usage rows, and the embedding cache that
 # recall in the reads below fills):
 # compared for presence only, not for an exact count.
-VOLATILE="${UPDATE_PATH_VOLATILE:-job job_leader audit_event audit_log tool_usage session failure_capsule _migration_lock rate_limit embed_cache redact_backfill}"
-# The change log's tables (tenant 0023). Where <from-tag> lacks them, the update adds them to every org
-# database, empty (nothing backfills the log); step 9b then exercises them. Other new tables are
-# checked by the generic "every new table empty" check below.
-NEW_TABLES="${UPDATE_PATH_NEW_TABLES:-change change_seq}"
-BUILT_FROM=0   # 1 once <from-tag>'s images were built here from UPDATE_PATH_FROM_REF
+VOLATILE="${UPDATE_PATH_VOLATILE:-job job_leader audit_event audit_log tool_usage session failure_capsule _migration_lock rate_limit embed_cache}"
+# Tables this checkout's tenant migrations add (0023_changes: the change log and its per-vault
+# counter; 0024_redact_backfill: the backfill's per-org marker; 0028_peers: peer vaults;
+# 0031_credential_refs: the credential broker's references and provider settings;
+# 0032_secret_requests: secret requests and the secrets Eunomia holds for agents). Where <from-tag> lacks one, the update must add it to
+# every org database, holding only what the backfill writes (new_rows below). Their counts are checked
+# on their own, so they are left out of the before/after diff.
+NEW_TABLES="${UPDATE_PATH_NEW_TABLES:-change change_seq redact_backfill peer_instance peer_share peer_link peer_item credential_ref secret_provider secret_request vault_secret}"
+BUILT_FROM=0
+# A fake GitHub token shape (built here, never a real one) in one fact: the backfill must redact it.
+FAKE_GH="ghp_$(printf 'Ab1Cd2Ef3G%.0s' 1 2 3 4)"
+PLAIN_SECRET=0   # 1 once the seed sees <from-tag> stored the fake token as is (the backfill has work)
 PASS=0; FAIL=0; T0=$SECONDS
 log() { printf '[update-path %4ss] %s\n' "$((SECONDS - T0))" "$*"; }
 check() { local d="$1"; shift; if "$@" >/dev/null 2>&1; then PASS=$((PASS + 1)); log "ok: $d"; else FAIL=$((FAIL + 1)); log "FAIL: $d"; fi; }
@@ -116,17 +129,40 @@ counts() { # counts: "<db>.<table> <rows>" for control and every org database, s
 }
 stable() { awk -v v=" $VOLATILE $NEW_TABLES " '{ split($1, a, "."); if (index(v, " " a[2] " ") == 0) print }' "$1"; }
 tables() { cut -d' ' -f1 "$1"; }
-expected_new() { # expected_new COUNTS-BEFORE : "<db>.<table> 0" for each NEW_TABLES table an org database lacked
+# new_rows DB TABLE : the rows a NEW_TABLES table holds right after the update. None (nothing backfills
+# the change log), bar what the redaction backfill (0024) writes: one marker row per org and, in the org
+# whose seeded fact held the fake token in plain text, the rewrite in the change log and its vault's counter.
+new_rows() {
+  case "$2" in
+    redact_backfill) echo 1 ;;
+    change|change_seq) if [ "$1" = "$ORG_A" ] && [ "$PLAIN_SECRET" = 1 ]; then echo 1; else echo 0; fi ;;
+    *) echo 0 ;;
+  esac
+}
+expected_new() { # expected_new COUNTS-BEFORE : "<db>.<table> <new_rows>" for each NEW_TABLES table an org database lacked
   local db t
   for db in $(tables "$1" | cut -d. -f1 | grep '^org_' | sort -u); do
-    for t in $NEW_TABLES; do grep -q "^$db\.$t " "$1" || echo "$db.$t 0"; done
+    for t in $NEW_TABLES; do grep -q "^$db\.$t " "$1" || echo "$db.$t $(new_rows "$db" "$t")"; done
   done | sort
 }
 added() { awk 'NR == FNR { seen[$1] = 1; next } !($1 in seen)' "$1" "$2" | sort; }   # added BEFORE AFTER : lines of AFTER whose table BEFORE lacks
-added_new() { added "$1" "$2" | awk -v n=" $NEW_TABLES " '{ split($1, a, "."); if (index(n, " " a[2] " ")) print }'; }   # added_new BEFORE AFTER : only the NEW_TABLES ones
-others_empty() { # others_empty COUNTS ORG : every NEW_TABLES table outside ORG holds no row
-  awk -v org="$2" -v n=" $NEW_TABLES " '{ split($1, a, "."); if (a[1] != org && index(n, " " a[2] " ") && $2 != 0) bad = 1 } END { exit bad }' "$1"
+others_empty() { # others_empty COUNTS ORG : the change log (change, change_seq) outside ORG holds no row
+  awk -v org="$2" -v n=" change change_seq " '{ split($1, a, "."); if (a[1] != org && index(n, " " a[2] " ") && $2 != 0) bad = 1 } END { exit bad }' "$1"
 }
+memtext() { echo "SELECT VALUE text FROM ONLY $SECRET_FACT;" | sql "$ORG_A" | jq -r '.[0].result // ""'; }
+wait_redacted() { # wait_redacted SECONDS : the seeded token's fact carries the marker (the backfill ran)
+  local until=$((SECONDS + $1))
+  while [ $SECONDS -lt $until ]; do memtext | grep -qF '[redacted: github token]' && return 0; sleep 3; done
+  log "the seeded token was not redacted after $1 s: $(memtext | sed "s/$FAKE_GH/<the fake token>/")"; return 1
+}
+# The detector version this build's backfill runs at: its marker is redact_backfill:v<version>.
+DETECTOR_VERSION="$(sed -n 's/^pub const DETECTOR_VERSION: i64 = \([0-9]*\);$/\1/p' "$ROOT/backend/src/redact.rs")"
+wait_backfilled() { # wait_backfilled SECONDS : one redact.backfill audit event per org database
+  local until=$((SECONDS + $1))
+  while [ $SECONDS -lt $until ]; do [ "$(backfill_events)" = "$(org_dbs | wc -l | tr -d ' ')" ] && return 0; sleep 3; done
+  log "the backfill had not finished in every org after $1 s: $(backfill_events) events"; return 1
+}
+backfill_events() { echo "SELECT count() FROM audit_event WHERE action = 'redact.backfill' GROUP ALL;" | sql control | jq -r '.[0].result[0].count // 0'; }
 ledgers() { # "<db> <rows> <max version>" for every _migration ledger
   local db
   for db in control $(org_dbs); do
@@ -267,11 +303,14 @@ expect_ledgers() { # expect_ledgers STABLE-COUNTS LEDGERS : the counts, each _mi
 }
 reads() { # reads FILE : a fixed set of reads, reduced to what must not change (ids, counts, bodies)
   {
-    echo "recall-a $(mcp "$TOKEN_A" recall '{"query":"algorithm"}' | jq -c '[.results[].id] | sort')"
+    # the fact with the fake token is left out of org A's recall lists: the backfill rewrites it, so the
+    # embed job gives it a new (stub, hash-based) vector and its rank moves; the default limit of 20 is
+    # above the seed's memory count, so no other hit can drop out because of it
+    echo "recall-a $(mcp "$TOKEN_A" recall '{"query":"algorithm"}' | jq -c --arg x "$SECRET_FACT" '[.results[].id | select(. != $x)] | sort')"
     echo "recall-a-team $(mcp "$TOKEN_A" recall "{\"query\":\"compiler\",\"vault_id\":\"$TEAM\"}" | jq -c '[.results[].id] | sort')"
     echo "recall-b $(mcp "$TOKEN_B" recall '{"query":"Postgres"}' | jq -c '[.results[].id] | sort')"
     echo "entity-ada $(mcp "$TOKEN_A" entities_get "{\"id\":\"$ADA\"}" | jq -c '{m: ([.memory[].id] | sort), r: (.relations | length)}')"
-    echo "recall-history $(mcp "$TOKEN_A" recall '{"query":"Ada Lovelace lives in London","include_history":true}' | jq -c '[.results[] | [.id, (.status // "")]] | sort')"
+    echo "recall-history $(mcp "$TOKEN_A" recall '{"query":"Ada Lovelace lives in London","include_history":true}' | jq -c --arg x "$SECRET_FACT" '[.results[] | select(.id != $x) | [.id, (.status // "")]] | sort')"
     echo "entity-ada-status $(mcp "$TOKEN_A" entities_get "{\"id\":\"$ADA\"}" | jq -c '[.memory[] | [.id, (.status // "")]] | sort')"
     echo "skill $(mcp "$TOKEN_A" skill_get "{\"id\":\"$SKILL\"}" | jq -c '{body, name}')"
     echo "skill-find $(mcp "$TOKEN_A" skill_find '{"query":"roll back a deploy"}' | jq -c '[.skills[].id] | sort')"
@@ -297,10 +336,10 @@ if [ "${UPDATE_PATH_SKIP_BUILD:-}" = 1 ] && docker image inspect "ghcr.io/cashar
   log "1. reusing the $FAKE images (UPDATE_PATH_SKIP_BUILD=1)"
 else
   log "1. building this checkout as $FAKE"
-  (cd "$ROOT" && EUNOMIA_IMAGE_TAG="$FAKE" docker compose --env-file /dev/null -p "$P-build" build backend frontend backup) > "$W/build.txt" 2>&1 \
+  (cd "$ROOT" && EUNOMIA_IMAGE_TAG="$FAKE" docker compose --env-file /dev/null -p "$P-build" build backend frontend backup secrets-helper) > "$W/build.txt" 2>&1 \
     || { tail -40 "$W/build.txt"; die "docker compose build failed"; }
 fi
-for s in backend frontend backup; do docker image inspect "ghcr.io/cashara-io/eunomia-$s:$FAKE" >/dev/null 2>&1 || die "no image eunomia-$s:$FAKE"; done
+for s in backend frontend backup secrets-helper; do docker image inspect "ghcr.io/cashara-io/eunomia-$s:$FAKE" >/dev/null 2>&1 || die "no image eunomia-$s:$FAKE"; done
 if [ -n "$FROM_REF" ]; then
   if [ "${UPDATE_PATH_SKIP_BUILD:-}" = 1 ] && docker image inspect "ghcr.io/cashara-io/eunomia-backend:$FROM" >/dev/null 2>&1; then
     log "1. reusing the local $FROM images (UPDATE_PATH_SKIP_BUILD=1)"
@@ -414,6 +453,8 @@ mcp "$TOKEN_A" memory_write "{\"subject_name\":\"Grace Hopper\",\"subject_kind\"
 SKILL="$(mcp "$TOKEN_A" skill_save '{"name":"deploy-rollback","description":"How to roll back a bad deploy","body":"# Roll back\n\n1. Revert."}' | jq -r .id)"
 mcp "$TOKEN_A" skill_save '{"name":"deploy-rollback","description":"How to roll back a bad deploy","body":"# Roll back v2"}' >/dev/null
 mcp "$TOKEN_A" skill_save '{"name":"release-notes","description":"How to write release notes","body":"Short, plain words."}' >/dev/null
+# a token pasted into a fact before redaction existed (the old release stores it as is)
+SECRET_FACT="$(mcp "$TOKEN_A" memory_write "{\"subject_name\":\"ci-bot\",\"subject_kind\":\"person\",\"text\":\"The CI bot pushes with $FAKE_GH as its token.\"}" | jq -r .memory.id)"
 mcp "$TOKEN_B" memory_write '{"subject_name":"orders_db","subject_kind":"db","text":"Runs Postgres 15 in the other org."}' >/dev/null
 mcp "$TOKEN_B" skill_save '{"name":"other-org","description":"A skill in the second org","body":"b"}' >/dev/null
 # Last: one more fact per user. Its inline embed also embeds that owner's backlog (the memory_update above
@@ -435,6 +476,7 @@ wait_embeddings 600; check "every seeded memory and record embedded before the s
 embed_backlog > "$W/embed-backlog-before.txt"
 n_orgs() { [ "$(org_dbs | wc -l | tr -d ' ')" -eq "$1" ]; }
 check "two users, two org databases" n_orgs 2
+if memtext | grep -qF "$FAKE_GH"; then PLAIN_SECRET=1; log "   $FROM stored the fake token in plain text (the backfill has work)"; else log "   INFO: $FROM already redacted the fake token on write"; fi
 
 # ---- 5. snapshot -------------------------------------------------------------------------------
 log "5. snapshot"
@@ -476,12 +518,31 @@ wait_healthy 600; check "every service healthy after the update" test $? -eq 0
 check "nothing left Created or exited (bar the one-shot)" bash -c "! (cd '$I' && docker compose ps -a --format '{{.Service}} {{.State}}') | grep -v '^surreal-upgrade ' | grep -v '^updater ' | grep -qE ' (created|exited)'"
 check "surrealdb runs surrealdb/surrealdb:$PIN" bash -c "[ \"\$(docker inspect -f '{{.Config.Image}}' \"\$(cd '$I' && docker compose ps -q surrealdb)\")\" = surrealdb/surrealdb:$PIN ]"
 check "surrealdb healthcheck is isready over ws" bash -c "docker inspect -f '{{json .Config.Healthcheck.Test}}' \"\$(cd '$I' && docker compose ps -q surrealdb)\" | grep -q 'ws://'"
+# the secrets-helper sidecar is new in this build, behind the `secrets` compose profile (decided by Avi on
+# 2026-11-01): the OLD updater's plain `up -d --remove-orphans` leaves an install without the profile
+# exactly as before, with no helper container (its image is not even in that updater's pull list).
+# Step 9c checks that the backend then answers helper_disabled, and switches it on and off.
+# by label: `docker compose ps` does not list a service whose profile is off, even if a container exists
+helper_containers() { docker ps -aq --filter "label=com.docker.compose.project=$P" --filter label=com.docker.compose.service=secrets-helper; }
+check "no secrets-helper container: its profile is off" test -z "$(helper_containers)"
+check ".env does not switch the secrets profile on" bash -c "! grep -q '^COMPOSE_PROFILES=.*secrets' '$I/.env'"
 for s in backend frontend backup; do
   check "$s runs eunomia-$s:$FAKE" bash -c "[ \"\$(docker inspect -f '{{.Config.Image}}' \"\$(cd '$I' && docker compose ps -q $s)\")\" = ghcr.io/cashara-io/eunomia-$s:$FAKE ]"
 done
 check "/readyz answers 200" curl -fsS -o /dev/null --max-time 10 "http://127.0.0.1:$BPORT/readyz"
 wait_tenants 300; check "every ledger at the latest migration (tenant $LATEST_TENANT, control $LATEST_CONTROL)" test $? -eq 0
 wait_jobs 180
+# the redaction backfill (tenant 0024) runs as a job after the migrations; wait for its rewrite (it
+# re-embeds what it rewrites, so before the embedding wait) and then the job queue, so the counts and
+# reads below see the backfilled install
+# 900 s: the backfill is queued on the leader's slow tick and runs behind the update's embedding jobs; on a
+# loaded CI runner it finished just after a 300 s bound (PR #122, 2026-11-01; the read then showed the marker)
+if [ "$PLAIN_SECRET" = 1 ]; then wait_redacted 900; check "the backfill rewrote the seeded token (bounded wait)" test $? -eq 0; fi
+# Every org runs this build's backfill once, even with nothing to rewrite: a <from-tag> that already
+# redacted on write (2.0.8) still has orgs marked done for an older detector version. Wait for all of
+# them, so the checks below do not race it.
+wait_backfilled 900; check "the backfill finished in every org (bounded wait)" test $? -eq 0
+wait_jobs 120
 wait_embeddings 600; check "no embedding backlog after the update" test $? -eq 0
 counts > "$W/counts-after.txt"; ledgers > "$W/ledgers-after.txt"
 reads "$W/reads-after.txt"; check "the reads answer after the update" test $? -eq 0
@@ -492,9 +553,30 @@ new_empty() { awk 'NR==FNR { seen[$1] = 1; next } !($1 in seen) && $2 == 0' "$1"
 { expect_ledgers "$W/stable-before.txt" "$W/ledgers-before.txt"; new_empty "$W/counts-before.txt" "$W/stable-after.txt"; } | sort > "$W/stable-expected.txt"
 check "per-table row counts unchanged (bar $VOLATILE; _migration grown by the new migrations)" diff "$W/stable-expected.txt" "$W/stable-after.txt"
 diff "$W/stable-expected.txt" "$W/stable-after.txt" | head -20
-check "no table gone, and every new table empty" diff <(cut -d' ' -f1 "$W/stable-before.txt") <(cut -d' ' -f1 "$W/stable-after.txt" | grep -vxFf <(new_empty "$W/stable-before.txt" "$W/stable-after.txt" | cut -d' ' -f1))
-expected_new "$W/counts-before.txt" > "$W/new-expected.txt"
-check "the change log tables are new and empty in every org where the update added them" diff "$W/new-expected.txt" <(added_new "$W/counts-before.txt" "$W/counts-after.txt")
+check "no table gone after the update" test -z "$(added "$W/counts-after.txt" "$W/counts-before.txt")"
+expected_new "$W/counts-before.txt" > "$W/new-expected.txt"; added "$W/counts-before.txt" "$W/counts-after.txt" > "$W/new-after.txt"
+check "the new tables are exactly the migrations' ($NEW_TABLES), in every org database, holding only the backfill's rows" diff "$W/new-expected.txt" "$W/new-after.txt"
+diff "$W/new-expected.txt" "$W/new-after.txt" | head -20
+# The redaction backfill (tenant 0024), waited for above: the seeded token is gone and the marker is in
+# its place, one finished marker row and one redact.backfill event per org, the rewrite in the change log
+# (0023) as an update by system. The counts above already hold its effect: it rewrites rows, it adds or
+# removes none outside its new tables.
+check "the seeded fake GitHub token is redacted after the update" bash -c 'case "$1" in *"[redacted: github token]"*) exit 0;; esac; exit 1' _ "$(memtext)"
+leaks() { echo "SELECT count() FROM memory WHERE string::contains(text, '$FAKE_GH') GROUP ALL;" | sql "$ORG_A" | jq -r '.[0].result[0].count // 0'; }
+check "no memory row holds the fake token" test "$(leaks)" = 0
+backfill_rows() { local d; for d in $(org_dbs); do echo "SELECT count() FROM redact_backfill:v$DETECTOR_VERSION WHERE done_at != NONE GROUP ALL;" | sql "$d" | jq -r '.[0].result[0].count // 0'; done | sort -u | tr '\n' ' '; }
+check "a finished redact_backfill:v$DETECTOR_VERSION marker in every org" test "$(backfill_rows)" = "1 "
+check "one redact.backfill audit event per org" test "$(backfill_events)" = "$(org_dbs | wc -l | tr -d ' ')"
+logged() { echo "SELECT count() FROM change WHERE op = 'updated' AND actor = 'system' AND item = '$SECRET_FACT' GROUP ALL;" | sql "$ORG_A" | jq -r '.[0].result[0].count // 0'; }
+check "the rewrite is in the change log as an update by system" test "$(logged)" = "$PLAIN_SECRET"
+# the credential broker (tenant 0031): its tables exist in every org and are empty after the update
+broker_rows() { grep -E '^org_[^ ]*\.(credential_ref|secret_provider) ' "$W/new-after.txt" | awk '{ s += $2; n++ } END { print n + 0, s + 0 }'; }
+check "the broker tables are new and empty in every org" test "$(broker_rows)" = "$(( $(org_dbs | wc -l | tr -d ' ') * 2 )) 0"
+# secret requests (tenant 0032): new and empty in every org, where the update added them
+request_rows() { grep -E '^org_[^ ]*\.(secret_request|vault_secret) ' "$W/new-after.txt" | awk '{ s += $2; n++ } END { print n + 0, s + 0 }'; }
+if grep -q '\.vault_secret ' "$W/new-expected.txt"; then
+  check "the secret request tables are new and empty in every org" test "$(request_rows)" = "$(( $(org_dbs | wc -l | tr -d ' ') * 2 )) 0"
+fi
 check "the fixed reads unchanged" diff "$W/reads-before.txt" "$W/reads-after.txt"
 diff "$W/reads-before.txt" "$W/reads-after.txt" | head -20
 # Tenant 0022 (rebuild_vector_indexes): in every org ledger, the three HNSW indexes defined, and the
@@ -529,7 +611,9 @@ check "no new ledger rows" diff "$W/ledgers-after.txt" "$W/ledgers-again.txt"
 counts > "$W/counts-again.txt"; stable "$W/counts-again.txt" > "$W/stable-again.txt"
 check "counts unchanged after the re-run" diff "$W/stable-expected.txt" "$W/stable-again.txt"
 diff "$W/stable-expected.txt" "$W/stable-again.txt" | head -20
-check "the new tables still empty after the re-run" diff "$W/new-expected.txt" <(added_new "$W/counts-before.txt" "$W/counts-again.txt")
+check "the new tables' counts unchanged after the re-run (the backfill does not run twice)" diff "$W/new-expected.txt" <(added "$W/counts-before.txt" "$W/counts-again.txt")
+check "still one redact.backfill event per org" test "$(backfill_events)" = "$(org_dbs | wc -l | tr -d ' ')"
+check "the fact is still redacted" bash -c 'case "$1" in *"[redacted: github token]"*) exit 0;; esac; exit 1' _ "$(memtext)"
 
 # ---- 9b. the change log on the upgraded stack --------------------------------------------------
 # Only where the update added it (a "from" release that already has it compares it like any table).
@@ -555,9 +639,105 @@ if grep -q '\.change ' "$W/new-expected.txt"; then
   check "the other org cannot read the Team vault's log (HTTP $code)" test "$code" != 200
   counts > "$W/counts-changes.txt"
   N_TEAM="$(jq '.changes | length' "$W/changes-team.json")"
-  check "change in $ORG_A holds exactly the Team vault's $N_TEAM rows" grep -qx "$ORG_A.change $N_TEAM" "$W/counts-changes.txt"
-  check "change_seq in $ORG_A holds one counter (the Team vault's)" grep -qx "$ORG_A.change_seq 1" "$W/counts-changes.txt"
+  # plus the backfill's rewrite of the seeded fact (not in the Team vault) and its vault's counter
+  BF_CHANGES="$(new_rows "$ORG_A" change)"
+  check "change in $ORG_A holds exactly the Team vault's $N_TEAM rows (and the backfill's $BF_CHANGES)" grep -qx "$ORG_A.change $((N_TEAM + BF_CHANGES))" "$W/counts-changes.txt"
+  check "change_seq in $ORG_A holds the Team vault's counter (and the backfill vault's $BF_CHANGES)" grep -qx "$ORG_A.change_seq $((1 + BF_CHANGES))" "$W/counts-changes.txt"
   check "the other org's change log is still empty" others_empty "$W/counts-changes.txt" "$ORG_A"
+fi
+
+# ---- 9c. password managers: off after the update, then on and off through the new updater ---------
+# Decided by Avi on 2026-11-01: the secrets-helper sidecar sits behind the `secrets` profile. (a) Off, as
+# the old updater leaves it: settings load, a provider saves, and "Test connection" answers
+# secret.unavailable / helper_disabled at once. (b) "Enable password managers" as the admin, acted on by
+# THIS release's auto-update.sh (the old one knows nothing of it): the profile goes into .env, the helper
+# turns healthy, Test connection reaches it, and a later plain `up -d` keeps it. (c) Disable: gone again.
+log "9c. password managers: off, then on and off through the new updater"
+if [ -f "$I/secrets-helper/Dockerfile" ]; then
+  helper() { api -f -b "$JAR_A" "$BASE/api/secrets/helper"; }
+  test_conn() { api -b "$JAR_A" -w '\n%{http_code}' -X POST "$BASE/api/secrets/providers/onepassword_connect/test"; }
+  helper > "$W/helper-off.json"
+  check "the helper's status: off, helper_disabled" jq -e '.state == "off" and .reason == "helper_disabled" and .enabled == false and .can_request == true' "$W/helper-off.json"
+  api -f -b "$JAR_A" -X PUT -H 'Content-Type: application/json' -d '{"host":"http://127.0.0.1:9","token":"update-path-connect-token-fixture"}' \
+    "$BASE/api/secrets/providers/onepassword_connect" > "$W/provider-put.json"
+  check "a provider saves with the helper off" jq -e '.ok == true' "$W/provider-put.json"
+  check "the references load with the helper off" bash -c "curl -fsS --max-time 60 -b '$JAR_A' '$BASE/api/secrets/refs' | jq -e 'type == \"array\"'"
+  t=$SECONDS; test_conn > "$W/test-off.txt"; took=$((SECONDS - t))
+  check "Test connection with the helper off: 503 secret.unavailable / helper_disabled" bash -c "[ \"\$(tail -1 '$W/test-off.txt')\" = 503 ] && head -1 '$W/test-off.txt' | jq -e '.code == \"secret.unavailable\" and .reason == \"helper_disabled\"'"
+  check "... at once (${took} s)" test "$took" -le 3
+  check "the other services are healthy with the helper off" wait_healthy 60
+
+  api -f -b "$JAR_A" -X POST -H 'Content-Type: application/json' -d '{"enabled":true}' "$BASE/api/secrets/helper" > "$W/helper-ack.json"
+  check "Enable password managers: the request is dropped for the updater" bash -c "jq -e '.configured and .requested' '$W/helper-ack.json' && [ -f '$I/update-status/secrets.json' ]"
+  EUNOMIA_DIR="$I" PATH="$W/shim:$PATH" bash "$I/scripts/auto-update.sh" > "$W/auto-update-3.txt" 2>&1; rc=$?
+  check "the new release's auto-update.sh acts on it (exit $rc)" test "$rc" -eq 0
+  check "secrets-status.json: running" jq -e '.state == "running"' "$I/update-status/secrets-status.json"
+  check ".env: secrets in COMPOSE_PROFILES" grep -Eq '^COMPOSE_PROFILES=(.*,)?secrets(,.*)?$' "$I/.env"
+  check ".env: the shared key is there" grep -Eq '^SECRETS_HELPER_KEY=.' "$I/.env"
+  sh_health() { docker inspect -f '{{.State.Health.Status}}' "$(dc ps -q secrets-helper)" 2>/dev/null; }
+  for _ in $(seq 40); do [ "$(sh_health)" = healthy ] && break; sleep 3; done
+  check "secrets-helper healthy" test "$(sh_health)" = healthy
+  check "secrets-helper runs eunomia-secrets-helper:$FAKE" bash -c "[ \"\$(docker inspect -f '{{.Config.Image}}' \"\$(cd '$I' && docker compose ps -q secrets-helper)\")\" = ghcr.io/cashara-io/eunomia-secrets-helper:$FAKE ]"
+  check "secrets-helper publishes no port" bash -c "[ -z \"\$(docker port \"\$(cd '$I' && docker compose ps -q secrets-helper)\")\" ]"
+  wait_healthy 300; check "healthy after the backend was recreated with the profile" test $? -eq 0
+  for _ in $(seq 20); do helper > "$W/helper-on.json" 2>/dev/null && jq -e '.state == "running"' "$W/helper-on.json" >/dev/null && break; sleep 3; done
+  check "the helper's status: running" jq -e '.state == "running" and .enabled == true and .reason == null' "$W/helper-on.json"
+  test_conn > "$W/test-on.txt"
+  check "Test connection now reaches the helper (the provider answers, not helper_disabled)" bash -c "[ \"\$(tail -1 '$W/test-on.txt')\" = 200 ] && head -1 '$W/test-on.txt' | jq -e '.ok == false and .error != null'"
+  id1="$(dc ps -q secrets-helper)"
+  dc up -d > "$W/up-secrets.txt" 2>&1; check "a later plain up -d keeps the helper" bash -c "[ -n '$id1' ] && [ \"\$(cd '$I' && docker compose ps -q secrets-helper)\" = '$id1' ]"
+  dc stop updater >/dev/null 2>&1
+
+  api -f -b "$JAR_A" -X POST -H 'Content-Type: application/json' -d '{"enabled":false}' "$BASE/api/secrets/helper" >/dev/null
+  EUNOMIA_DIR="$I" PATH="$W/shim:$PATH" bash "$I/scripts/auto-update.sh" > "$W/auto-update-4.txt" 2>&1
+  check "Disable: secrets-status.json off" jq -e '.state == "off"' "$I/update-status/secrets-status.json"
+  check "Disable: the profile is gone from .env" bash -c "! grep -q '^COMPOSE_PROFILES=.*secrets' '$I/.env'"
+  check "Disable: no secrets-helper container" test -z "$(helper_containers)"
+  wait_healthy 300; check "healthy after Disable" test $? -eq 0
+  for _ in $(seq 20); do helper > "$W/helper-off2.json" 2>/dev/null && jq -e '.state == "off"' "$W/helper-off2.json" >/dev/null && break; sleep 3; done
+  check "the helper's status: off again" jq -e '.state == "off" and .reason == "helper_disabled"' "$W/helper-off2.json"
+fi
+
+# ---- 9d. secret requests on the upgraded stack -------------------------------------------------
+# Only where the update added the tables. An agent asks, the person fills it from their browser session,
+# the agent gets the handle; the value is stored only as enc:v1: and is in no response, table or log.
+# The rollback below restores the pre-update backup, so these rows go with it.
+# shellcheck disable=SC2016 # "$secret" in the jq programs is the handle's key, not a shell variable
+if grep -q '\.vault_secret ' "$W/new-expected.txt"; then
+  log "9d. secret requests on the upgraded stack"
+  check "every org ledger has 0032_secret_requests" ledger_has 32 secret_requests
+  REQ="$(mcp "$TOKEN_A" secret_request '{"name":"update_path_key","label":"Update path key","description":"update-path","target":{"hosts":["api.example.com"]}}')"
+  RID="$(printf '%s' "$REQ" | jq -r .request_id)"
+  check "secret_request answers pending, with a fill URL and an eu:// handle" \
+    jq -e '.status == "pending" and (.fill_url | test("/secrets/requests/")) and (.handle["$secret"] | startswith("eu://"))' <<<"$REQ"
+  UP_SECRET="update-path-$(openssl rand -hex 12)"   # made here, never a real secret
+  code="$(curl -sS -o "$W/fill-token.json" -w '%{http_code}' --max-time 30 -H "Authorization: Bearer $TOKEN_A" -H 'Content-Type: application/json' \
+    -d "{\"value\":\"$UP_SECRET\"}" "$BASE/api/secrets/requests/$RID/fill")"
+  check "an agent's token cannot fill its own request (HTTP $code)" test "$code" = 403
+  code="$(curl -sS -o "$W/fill.json" -w '%{http_code}' --max-time 30 -b "$JAR_A" -H 'Content-Type: application/json' \
+    -d "{\"value\":\"$UP_SECRET\"}" "$BASE/api/secrets/requests/$RID/fill")"
+  check "the person fills it from their browser session (HTTP $code)" test "$code" = 200
+  check "the fill answer is the handle, not the value" bash -c "jq -e '.status == \"filled\"' '$W/fill.json' && ! grep -q '$UP_SECRET' '$W/fill.json'"
+  mcp "$TOKEN_A" secret_request_status "{\"request_id\":\"$RID\"}" > "$W/secret-status.json"
+  check "the agent sees it filled, with the same handle" jq -e --argjson req "$REQ" '.status == "filled" and .handle["$secret"] == $req.handle["$secret"]' "$W/secret-status.json"
+  # the helper is off here (9c switches it off again; an old updater never switched it on): an eu://
+  # handle is held by the backend, so a transform still works without the sidecar
+  helper_state="$(api -b "$JAR_A" "$BASE/api/secrets/helper" | jq -r '.state // empty')"
+  log "   the secrets helper is ${helper_state:-unknown} for the transform"
+  mcp "$TOKEN_A" secret_transform "$(jq -c '{op: "base64", inputs: {value: .handle["$secret"]}, name: "update_path_b64"}' <<<"$REQ")" > "$W/transform.json"
+  check "secret_transform on the upgraded stack (helper ${helper_state:-unknown}) makes a new eu:// handle" \
+    jq -e '(.handle["$secret"] // .handle | startswith("eu://")) and .op == "base64"' "$W/transform.json"
+  echo 'SELECT VALUE value_enc FROM vault_secret;' | sql "$ORG_A" > "$W/vault-secret.json"
+  check "the values are held only as enc:v1: ciphertext (the pasted one and the derived one)" jq -e '[.[0].result[] | startswith("enc:v1:")] | (length == 2 and all)' "$W/vault-secret.json"
+  held_leaks() {
+    local db t
+    for db in $(org_dbs); do for t in secret_request vault_secret audit_log memory; do echo "SELECT * FROM $t;" | sql "$db"; done; done | grep -c "$UP_SECRET"
+    for t in audit_event tool_usage failure_capsule; do echo "SELECT * FROM $t;" | sql control; done | grep -c "$UP_SECRET"
+    dc logs backend 2>&1 | grep -c "$UP_SECRET"
+  }
+  check "the value is in no table and no backend log line" test "$(held_leaks | awk '{ s += $1 } END { print s + 0 }')" = 0
+  api -H "Authorization: Bearer $TOKEN_B" "$BASE/api/secrets/requests" > "$W/requests-b.json"
+  check "the other org sees no request" jq -e '. == []' "$W/requests-b.json"
 fi
 
 # ---- 10. rollback ------------------------------------------------------------------------------

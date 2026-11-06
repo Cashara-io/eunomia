@@ -41,6 +41,8 @@ pub const MIGRATIONS: &[(u32, &str, &str)] = &[
     (28, "peers", include_str!("../migrations/tenant/0028_peers.surql")),
     (29, "pocket_audio", include_str!("../migrations/tenant/0029_pocket_audio.surql")),
     (30, "perf_indexes", include_str!("../migrations/tenant/0030_perf_indexes.surql")),
+    (31, "credential_refs", include_str!("../migrations/tenant/0031_credential_refs.surql")),
+    (32, "secret_requests", include_str!("../migrations/tenant/0032_secret_requests.surql")),
 ];
 
 /// The tenant schema version this code writes. An org database is current at this version.
@@ -58,6 +60,7 @@ pub const CONTROL_MIGRATIONS: &[(u32, &str, &str)] = &[
     (4, "email_lc_and_owner_slot", include_str!("../migrations/control/0004_email_lc_and_owner_slot.surql")),
     (5, "tool_usage", include_str!("../migrations/control/0005_tool_usage.surql")),
     (6, "oidc_identity", include_str!("../migrations/control/0006_oidc_identity.surql")),
+    (7, "secret_audit_index", include_str!("../migrations/control/0007_secret_audit_index.surql")),
 ];
 
 /// The last tenant migration the legacy single database may be brought to before its data moves out

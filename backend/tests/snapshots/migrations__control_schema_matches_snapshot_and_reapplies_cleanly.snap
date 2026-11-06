@@ -62,6 +62,16 @@ expression: first
       "indexes": [
         {
           "cols": [
+            "action",
+            "target",
+            "created_at"
+          ],
+          "index": "",
+          "name": "audit_event_secret_idx",
+          "table": "audit_event"
+        },
+        {
+          "cols": [
             "trace_id"
           ],
           "index": "",

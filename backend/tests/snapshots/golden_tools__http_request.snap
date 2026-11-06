@@ -1,0 +1,10 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "error": "A secret reference could not be used, so the tool did not run: eu://<id2>/golden_key (denied: no secret by that handle in a vault you belong to (a requested one is held only once the user fills it))",
+  "code": "secret.unavailable",
+  "trace_id": "<trace>",
+  "reason": "denied"
+}

@@ -12,6 +12,8 @@ pub mod audit;
 pub mod debug;
 pub mod export;
 pub mod extensions;
+pub mod secret_requests;
+pub mod secrets;
 pub mod sources;
 pub mod tools;
 pub mod update;

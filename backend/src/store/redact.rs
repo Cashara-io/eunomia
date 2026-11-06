@@ -28,15 +28,15 @@ pub const SAVE_MARKER: Stmt = Stmt::new(
 );
 
 // Each walk is a first-batch statement and an `id > $cursor` one, so the cursor is a plain id range.
-pub const MEMORY_FIRST: Stmt = Stmt::new("redact.memory_first", "SELECT id, owner, text FROM memory ORDER BY id LIMIT $limit");
-pub const MEMORY_AFTER: Stmt = Stmt::new("redact.memory_after", "SELECT id, owner, text FROM memory WHERE id > $cursor ORDER BY id LIMIT $limit");
+pub const MEMORY_FIRST: Stmt = Stmt::new("redact.memory_first", "SELECT id, owner, vault, text FROM memory ORDER BY id LIMIT $limit");
+pub const MEMORY_AFTER: Stmt = Stmt::new("redact.memory_after", "SELECT id, owner, vault, text FROM memory WHERE id > $cursor ORDER BY id LIMIT $limit");
 
 /// The `memory_text_changed` event drops the vector; the embed job makes a new one from the redacted text.
 pub const SET_MEMORY_TEXT: Stmt = Stmt::new("redact.set_memory_text", "UPDATE $id SET text = $text WHERE text = $old RETURN VALUE id");
 
-pub const SKILL_FIRST: Stmt = Stmt::new("redact.skill_first", "SELECT id, owner, name, description, body FROM skill ORDER BY id LIMIT $limit");
+pub const SKILL_FIRST: Stmt = Stmt::new("redact.skill_first", "SELECT id, owner, vault, name, description, body FROM skill ORDER BY id LIMIT $limit");
 pub const SKILL_AFTER: Stmt =
-    Stmt::new("redact.skill_after", "SELECT id, owner, name, description, body FROM skill WHERE id > $cursor ORDER BY id LIMIT $limit");
+    Stmt::new("redact.skill_after", "SELECT id, owner, vault, name, description, body FROM skill WHERE id > $cursor ORDER BY id LIMIT $limit");
 
 /// The `skill_text_changed` event drops the vector when the description changed; the embed job's skill
 /// backlog makes a new one.

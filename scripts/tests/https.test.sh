@@ -99,5 +99,12 @@ sed -i.bak '/^PUBLIC_URL=/d' "$TMP/repo/.env" && rm -f "$TMP/repo/.env.bak"
 rm -f "$S/https-status.json"; echo 'COMPOSE_PROFILES=https' >> "$TMP/repo/.env"; run
 check "installer-enabled: probed and active" test "$(field state)" = active
 
+# 7. the password managers' profile (`secrets`) is kept when HTTPS is switched on and off
+sed -i.bak '/^COMPOSE_PROFILES=/d' "$TMP/repo/.env" && rm -f "$TMP/repo/.env.bak"; echo 'COMPOSE_PROFILES=secrets' >> "$TMP/repo/.env"
+request true eunomia.example.com me@example.com; run
+check "enable with secrets on: both profiles" grep -qx 'COMPOSE_PROFILES=secrets,https' "$TMP/repo/.env"
+request false "" ""; run
+check "disable with secrets on: secrets kept" grep -qx 'COMPOSE_PROFILES=secrets' "$TMP/repo/.env"
+
 echo "https: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
