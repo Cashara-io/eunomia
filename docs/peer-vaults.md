@@ -52,9 +52,13 @@ several small ones; a change made anywhere reaches everyone.
 The share code holds a list of addresses for the sharing Eunomia, best first:
 
 1. **The local network.** `EUNOMIA_LAN_ADDRS` (the installer writes it with
-   `scripts/lan-addrs.sh --env .env`; port 3000, the web port), then, when the backend runs outside a
-   container, the private address its default route uses. Private means 10/8, 172.16/12, 192.168/16,
-   169.254/16, and 100.64/10 (Tailscale).
+   `scripts/lan-addrs.sh --env .env`; port 3000, the web port; "Update now" writes it too on Linux
+   hosts that lack it), then the private address you opened the app on in your browser (for example
+   `192.168.1.20:3000`, so sharing works with no setup when you browse by the machine's network
+   address rather than `localhost`), then, when the backend runs outside a container, the private
+   address its default route uses. Private means 10/8, 172.16/12, 192.168/16, 169.254/16, and
+   100.64/10 (Tailscale). Share codes made by an AI app through `vault_share_code` have no browser
+   address, so they rely on the others.
 2. **Its public name:** `https://<EUNOMIA_DOMAIN>` when HTTPS is on, then `PUBLIC_URL` unless it is
    `localhost`.
 3. **Anything else** in `EUNOMIA_PEER_ADDRS` (comma separated: a Cloudflare tunnel hostname, a port

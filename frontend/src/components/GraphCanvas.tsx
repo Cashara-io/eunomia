@@ -182,6 +182,7 @@ export default function GraphCanvas({
 
   function nodeDown(e: React.PointerEvent, n: Sim) {
     e.stopPropagation();
+    e.preventDefault(); // no text selection while dragging across the page's controls
     e.currentTarget.setPointerCapture(e.pointerId);
     dragRef.current = { id: n.id, moved: false };
     setDraggingId(n.id);
@@ -234,6 +235,7 @@ export default function GraphCanvas({
         style={{ touchAction: "none", userSelect: "none", WebkitUserSelect: "none", cursor: panning ? "grabbing" : "default" }}
         onPointerDown={(e) => {
           if (e.target !== e.currentTarget) return; // a node handled its own pointerdown
+          e.preventDefault(); // panning across the header must not select its text
           e.currentTarget.setPointerCapture(e.pointerId);
           autoFit.current = false;
           panRef.current = { startX: e.clientX, startY: e.clientY, originX: view.x, originY: view.y };

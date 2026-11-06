@@ -250,7 +250,7 @@ pub async fn create_share(state: &OrgState, user: &RecordId, vault: &RecordId, r
     }
     if addrs.is_empty() {
         return Err(AppError::bad_request(
-            "This Eunomia doesn't know an address another Eunomia can reach it on. Set EUNOMIA_LAN_ADDRS (the installer does) or EUNOMIA_PEER_ADDRS; see docs/peer-vaults.md.",
+            "Eunomia couldn't work out how another computer would reach this one. Open Eunomia using this computer's network address (for example http://192.168.1.20:3000) instead of localhost, then try again. Running Eunomia on a server? See docs/peer-vaults.md.",
         ));
     }
     let hours = hours.unwrap_or(DEFAULT_EXPIRY_HOURS).clamp(1, MAX_EXPIRY_HOURS);

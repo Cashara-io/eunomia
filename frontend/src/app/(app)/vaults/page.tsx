@@ -1,86 +1,32 @@
 "use client";
 
-import { ArrowsClockwiseIcon, ArrowsLeftRightIcon, ArrowsMergeIcon, CaretDownIcon, CaretRightIcon, CheckIcon, CopyIcon, CrownIcon, EnvelopeSimpleIcon, LockIcon, PencilSimpleIcon, PlusIcon, SignOutIcon, StackIcon, TrashIcon, UserPlusIcon, UsersIcon } from "@phosphor-icons/react/ssr";
-import VaultChip, { VaultShape, vaultTone } from "@/components/VaultChip";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { ArrowLeftIcon, ArrowsClockwiseIcon, ArrowsMergeIcon, CaretDownIcon, CaretRightIcon, CheckIcon, EnvelopeSimpleIcon, LockIcon, PlusIcon, StackIcon, UsersIcon } from "@phosphor-icons/react/ssr";
 import PageHeader from "@/components/ui/PageHeader";
+import VaultChip, { vaultTone } from "@/components/VaultChip";
 import { EmptyState } from "@/components/Shapes";
-import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import StatusLabel from "@/components/ui/StatusLabel";
-import AuthorTag from "@/components/AuthorTag";
-import type { Vault, VaultMember, VaultRole } from "@/lib/types";
+import type { Vault } from "@/lib/types";
 import { useMe } from "@/lib/queries/auth";
 import { useConnectors, useRepointConnectors } from "@/lib/queries/connectors";
 import {
   useAcceptInvitation,
-  useCloneVault,
   useCreateVault,
   useDeclineInvitation,
-  useDeleteVault,
   useInvitations,
-  useInviteMember,
-  useLeaveVault,
   useMergeVaults,
   useRefreshVaults,
-  useRemoveMember,
-  useRenameVault,
-  useSetMemberRole,
-  useTransferOwnership,
   useVaultMembers,
   useVaults,
 } from "@/lib/queries/vaults";
-import SyncMark from "@/components/bits/SyncMark";
 import { spark } from "@/components/bits/Spark";
-import Tooltip from "@/components/bits/Tooltip";
 import LiveStatusBadge from "@/components/live/LiveStatusBadge";
-import TransferOwnershipPanel from "@/components/live/TransferOwnershipPanel";
-import PeerSharing, { JoinSharedSpace } from "@/components/PeerSharing";
+import { JoinSharedSpace } from "@/components/PeerSharing";
 import { cssVar, prefersReducedMotion } from "@/components/bits/motion";
-
-const ICON = { size: 18, weight: "duotone" } as const;
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-function ago(iso: string | null): string | null {
-  if (!iso) return null;
-  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.round(hours / 24)}d ago`;
-}
-
-function RoleChip({ role }: { role: VaultRole }) {
-  return (
-    <span
-      className="inline-flex items-center h-6 px-2 rounded-[4px] text-[12px] font-medium shrink-0"
-      style={{
-        border: "1px solid var(--border-strong)",
-        color: role === "owner" ? "var(--ink)" : "var(--ink-dim)",
-      }}
-    >
-      {role === "owner" ? "Owner" : "Member"}
-    </span>
-  );
-}
-
-/* The space's identity: its vault shape in its vault colour (a red circle
-   for the personal space, a blue triangle for a shared space). Decorative;
-   the name and the "Private to you"/"Shared space" words carry the meaning. */
-function SpaceSwatch({ vault, size = 12 }: { vault: Vault; size?: number }) {
-  return <VaultShape tone={vaultTone(vault.kind)} size={size} />;
-}
-
-/* A check that draws itself once on mount (the shared .bits-draw grammar, loaded by the bits imports above; reduced motion is handled there). */
-function DrawnCheck() {
-  return (
-    <svg width={14} height={14} viewBox="0 0 16 16" fill="none" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ flexShrink: 0 }}>
-      <path d="M3.5 8.4 6.6 11.3 12.5 4.9" stroke="var(--good)" pathLength={1} className="bits-draw" data-animate="" />
-    </svg>
-  );
-}
+import SpaceDetail from "@/components/vaults/SpaceDetail";
+import { ICON, RoleChip, SpaceSwatch, ago, peopleLine, sameEmail } from "@/components/vaults/bits";
 
 /* New rows (since the previous load, never the first) settle in. A stable function, so React calls it once per mount. */
 function arrive(el: HTMLElement | null) {
@@ -89,519 +35,6 @@ function arrive(el: HTMLElement | null) {
     duration: 200,
     easing: cssVar("--ease-out") || "ease-out",
   });
-}
-
-/* Overlapping identity tags, Figma-cursor style. Real member emails only. */
-function MemberStack({ members }: { members: VaultMember[] | null }) {
-  if (!members)
-    return <span className="skeleton hidden sm:block h-5 w-20" aria-hidden />;
-  const shown = members.slice(0, 3);
-  const rest = members.length - shown.length;
-  return (
-    <span className="hidden sm:flex items-center gap-1 min-w-0" aria-hidden>
-      {shown.map((m) => (
-        <span key={m.email} className="max-w-[110px] min-w-0 flex">
-          <AuthorTag name={m.email} />
-        </span>
-      ))}
-      {rest > 0 && <span className="label font-mono">+{rest}</span>}
-    </span>
-  );
-}
-
-/* The inspector: everything you can do to one vault, Figma-style on the right. */
-function VaultInspector({
-  vault,
-  me,
-  inline = false,
-  onVaultsChanged,
-}: {
-  vault: Vault;
-  me: string | null;
-  inline?: boolean;
-  onVaultsChanged: () => void;
-}) {
-  const membersQuery = useVaultMembers(vault.id);
-  const members = membersQuery.data ?? (membersQuery.isError ? [] : null);
-  const inviteMember = useInviteMember();
-  const removeMember = useRemoveMember();
-  const changeRole = useSetMemberRole();
-  const transfer = useTransferOwnership();
-  const deleteVault = useDeleteVault();
-  const leaveVault = useLeaveVault();
-  const cloneVault = useCloneVault();
-  const renameVault = useRenameVault();
-  const [renaming, setRenaming] = useState(false);
-  const [renameValue, setRenameValue] = useState(vault.name);
-  const running = useRef(false);
-  const [email, setEmail] = useState("");
-  const [role, setRole] = useState<VaultRole>("member");
-  const [touched, setTouched] = useState(false);
-  const [error, setError] = useState<Failure | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [removing, setRemoving] = useState<string | null>(null);
-  const [handing, setHanding] = useState<string | null>(null);
-  const [confirm, setConfirm] = useState<"leave" | "delete" | null>(null);
-  const [cloning, setCloning] = useState(false);
-  const [cloneName, setCloneName] = useState(`${vault.name} (copy)`);
-  const [cloneBusy, setCloneBusy] = useState(false);
-  const [sent, setSent] = useState<string | null>(null);
-  const [cloned, setCloned] = useState(false);
-
-  useEffect(() => {
-    if (!cloned) return;
-    const t = setTimeout(() => setCloned(false), 1200);
-    return () => clearTimeout(t);
-  }, [cloned]);
-
-  const isOwner = vault.role === "owner";
-  const isOrg = vault.kind !== "personal";
-  const trimmed = email.trim();
-  const invalid = touched && trimmed !== "" && !EMAIL_RE.test(trimmed);
-  const already = members?.some(
-    (m) => m.email.toLowerCase() === trimmed.toLowerCase(),
-  );
-  const created = ago(vault.created_at);
-  // Last-owner rule: a shared space always needs an owner, so its only owner can't leave.
-  const lastOwner = isOwner && isOrg && members !== null && members.filter((m) => m.role === "owner").length <= 1;
-
-  async function invite() {
-    setTouched(true);
-    if (!trimmed || !EMAIL_RE.test(trimmed)) return;
-    setBusy(true);
-    setError(null);
-    setSent(null);
-    try {
-      await inviteMember.mutateAsync({ id: vault.id, email: trimmed, role });
-      setSent(
-        `Invite sent. It waits on their Memory spaces page until they join or decline. They can't see anything here until they join.`,
-      );
-      setEmail("");
-      setTouched(false);
-    } catch (e) {
-      setError(failure(e, "Could not send that invite.", " Check the address and try again."));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function run(
-    action: () => Promise<unknown>,
-    fallback: string,
-    after: () => void,
-  ) {
-    if (running.current) return; // a double click must not leave or delete twice
-    running.current = true;
-    setError(null);
-    try {
-      await action();
-      after();
-    } catch (e) {
-      setError(failure(e, fallback));
-    } finally {
-      running.current = false;
-    }
-  }
-
-  async function doRename() {
-    const name = renameValue.trim();
-    if (!name || name === vault.name) {
-      setRenaming(false);
-      return;
-    }
-    await run(() => renameVault.mutateAsync({ id: vault.id, name }), "Could not rename this space. Try a different name.", () => setRenaming(false));
-  }
-
-  async function doClone() {
-    setCloneBusy(true);
-    setError(null);
-    try {
-      await cloneVault.mutateAsync({ id: vault.id, name: cloneName.trim() || undefined });
-      setCloning(false);
-      setCloned(true);
-      onVaultsChanged();
-    } catch (e) {
-      setError(failure(e, "Could not copy this space. Try a different name."));
-    } finally {
-      setCloneBusy(false);
-    }
-  }
-
-  return (
-    <aside
-      className={inline ? "flex flex-col" : "panel flex flex-col"}
-      style={
-        inline ? { borderTop: "1px solid var(--border)", background: "var(--surface)" } : undefined
-      }
-      aria-label={`${vault.name} details`}
-    >
-      <div className="px-5 pt-4 pb-4 flex flex-col gap-1">
-        {renaming ? (
-          <form
-            className="flex items-center gap-1.5"
-            onSubmit={(e) => {
-              e.preventDefault();
-              doRename();
-            }}
-          >
-            <input
-              aria-label="Space name"
-              autoFocus
-              maxLength={80}
-              className="field h-10 px-3 text-[14px] flex-1 min-w-0"
-              value={renameValue}
-              onChange={(e) => setRenameValue(e.target.value)}
-              onKeyDown={(e) => e.key === "Escape" && setRenaming(false)}
-            />
-            <button type="submit" disabled={!renameValue.trim() || renameVault.isPending} className="btn btn-sm">
-              {renameVault.isPending ? "Saving…" : "Save"}
-            </button>
-            <button type="button" onClick={() => setRenaming(false)} className="btn btn-ghost btn-sm">
-              Cancel
-            </button>
-          </form>
-        ) : (
-          <div className="flex items-center gap-2.5 min-w-0">
-            <SpaceSwatch vault={vault} size={16} />
-            <h2 className="text-[22px] font-medium truncate tracking-[-0.03em]">
-              {vault.name}
-            </h2>
-            <RoleChip role={vault.role} />
-            {isOwner && (
-              <Tooltip label="Rename space">
-                <button
-                  onClick={() => {
-                    setRenameValue(vault.name);
-                    setError(null);
-                    setRenaming(true);
-                  }}
-                  aria-label="Rename space"
-                  className="btn btn-ghost btn-sm btn-icon shrink-0"
-                >
-                  <PencilSimpleIcon {...ICON} />
-                </button>
-              </Tooltip>
-            )}
-          </div>
-        )}
-        <span className="label">
-          {isOrg
-            ? "Shared space · only the members listed below can read it"
-            : "Personal space · private to you; nobody else can be added"}
-          {created ? ` · created ${created}` : ""}
-        </span>
-      </div>
-
-      <div
-        className="px-5 pb-4 flex flex-col gap-2"
-        style={{ borderTop: "1px solid var(--border)" }}
-      >
-        <h3 className="caps pt-4 flex items-center gap-1.5" style={{ color: "var(--ink-dim)" }}>
-          Members
-          {members && <span className="font-mono">{members.length}</span>}
-        </h3>
-        <ul className="hairline-rows">
-          {members === null &&
-            [0, 1].map((i) => (
-              <li key={i} className="flex items-center gap-2 h-11">
-                <span className="skeleton h-5 w-16" />
-                <span className="skeleton h-4 flex-1" />
-              </li>
-            ))}
-          {members?.map((m) => {
-            const isMe =
-              me !== null && m.email.toLowerCase() === me.toLowerCase();
-            return (
-              <li
-                key={m.email}
-                className="flex flex-wrap items-center gap-2 min-h-11 py-1.5"
-              >
-                <span className="flex max-w-[96px] min-w-0 shrink-0">
-                  <AuthorTag name={m.email} />
-                </span>
-                <span
-                  className="flex-1 min-w-0 truncate text-[13px]"
-                  style={{ color: "var(--ink)" }}
-                >
-                  {m.email}
-                  {isMe && (
-                    <span style={{ color: "var(--ink-dim)" }}> (you)</span>
-                  )}
-                </span>
-                <>
-                    <RoleChip role={m.role} />
-                    {isOwner && !isMe && (
-                      <Tooltip label={m.role === "owner" ? `Make ${m.email} a member` : `Make ${m.email} an owner`}>
-                        <button
-                          onClick={() =>
-                            run(
-                              () => changeRole.mutateAsync({ id: vault.id, email: m.email, role: m.role === "owner" ? "member" : "owner" }),
-                              "Could not change that role. Reload and try again.",
-                              () => {},
-                            )
-                          }
-                          aria-label={m.role === "owner" ? "Make member" : "Make owner"}
-                          className="btn btn-ghost btn-sm btn-icon shrink-0"
-                        >
-                          <CrownIcon {...ICON} />
-                        </button>
-                      </Tooltip>
-                    )}
-                    {isOwner && !isMe && (
-                      <Tooltip label={`Make ${m.email} the owner instead of you`}>
-                        <button
-                          onClick={() => setHanding(m.email)}
-                          aria-label="Hand over space"
-                          className="btn btn-ghost btn-sm btn-icon shrink-0"
-                        >
-                          <ArrowsLeftRightIcon {...ICON} />
-                        </button>
-                      </Tooltip>
-                    )}
-                    {isOwner && !isMe && (
-                      <Tooltip label={`Remove ${m.email}`}>
-                        <button
-                          onClick={() => setRemoving(m.email)}
-                          aria-label="Remove member"
-                          className="btn btn-ghost btn-sm btn-icon shrink-0"
-                          style={{ color: "var(--critical)" }}
-                        >
-                          <TrashIcon {...ICON} />
-                        </button>
-                      </Tooltip>
-                    )}
-                </>
-              </li>
-            );
-          })}
-        </ul>
-
-        {isOwner && isOrg && (
-          <form
-            className="flex flex-col gap-1.5 pt-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              invite();
-            }}
-            noValidate
-          >
-            <h3 className="section-title text-[15px]">Invite by email</h3>
-            <label htmlFor={`invite-${vault.id}`} className="text-[13px] font-medium">
-              Email address
-            </label>
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                id={`invite-${vault.id}`}
-                type="email"
-                className="field h-10 px-3 text-[14px] flex-1 min-w-[180px]"
-                placeholder="person@example.com"
-                value={email}
-                aria-invalid={invalid || undefined}
-                aria-describedby={`invite-help-${vault.id}`}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  setSent(null);
-                }}
-                onBlur={() => setTouched(true)}
-                style={invalid ? { borderColor: "var(--critical)" } : undefined}
-              />
-              <Select
-                className="h-10 text-[13px] w-32 shrink-0"
-                value={role}
-                aria-label="Role for invite"
-                onChange={(v) => setRole(v as VaultRole)}
-                options={[
-                  { value: "member", label: "Member" },
-                  { value: "owner", label: "Owner" },
-                ]}
-              />
-            </div>
-            <div className="flex items-start justify-between gap-2">
-              <span
-                id={`invite-help-${vault.id}`}
-                className="text-[13px] pt-1.5"
-                style={{
-                  color: invalid ? "var(--critical)" : "var(--ink-dim)",
-                }}
-              >
-                {invalid
-                  ? "That isn't an email address. Use name@company.com."
-                  : already
-                    ? "Already a member."
-                    : (sent ??
-                      "An invitation gives no access until they accept it. Owners can invite and remove members; members can read and add memories.")}
-              </span>
-              <button
-                type="submit"
-                disabled={busy || !trimmed}
-                className="btn btn-primary shrink-0"
-              >
-                {busy || sent ? <SyncMark status={busy ? "running" : "done"} /> : <UserPlusIcon {...ICON} />}
-                {busy ? "Sending…" : "Send invite"}
-              </button>
-            </div>
-          </form>
-        )}
-        {isOwner && <TransferOwnershipPanel vault={vault} members={members} me={me} />}
-      </div>
-
-      <div
-        className="px-5 py-4 flex flex-col gap-2"
-        style={{ borderTop: "1px solid var(--border)" }}
-      >
-        <PeerSharing vault={vault} />
-        {cloning ? (
-          <form
-            className="flex flex-col gap-1.5"
-            onSubmit={(e) => {
-              e.preventDefault();
-              doClone();
-            }}
-          >
-            <label htmlFor={`clone-${vault.id}`} className="text-[13px] font-medium">
-              Name for the copy
-            </label>
-            <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
-              Copying creates a new space with the same memories and you as its only member. {vault.name} stays exactly as it is.
-            </p>
-            <input
-              id={`clone-${vault.id}`}
-              autoFocus
-              className="field h-10 px-3 text-[14px]"
-              value={cloneName}
-              onChange={(e) => setCloneName(e.target.value)}
-              onKeyDown={(e) => e.key === "Escape" && setCloning(false)}
-            />
-            <div className="flex justify-end gap-1.5">
-              <button
-                type="button"
-                onClick={() => setCloning(false)}
-                className="btn"
-              >
-                Cancel
-              </button>
-              <button type="submit" disabled={cloneBusy} className="btn btn-primary">
-                {cloneBusy ? "Copying…" : "Create copy"}
-              </button>
-            </div>
-          </form>
-        ) : (
-          <>
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={() => {
-                  setCloneName(`${vault.name} (copy)`);
-                  setCloning(true);
-                }}
-                className="btn btn-sm"
-              >
-                {cloned ? <DrawnCheck /> : <CopyIcon {...ICON} />}
-                Copy space
-              </button>
-              {isOrg && (
-                <button
-                  onClick={() => setConfirm("leave")}
-                  disabled={lastOwner}
-                  aria-describedby={lastOwner ? `last-owner-${vault.id}` : undefined}
-                  className="btn btn-sm"
-                >
-                  <SignOutIcon {...ICON} />
-                  Leave space…
-                </button>
-              )}
-              {isOrg && isOwner && (
-                <button onClick={() => setConfirm("delete")} className="btn btn-danger btn-sm">
-                  <TrashIcon {...ICON} />
-                  Delete space…
-                </button>
-              )}
-            </div>
-            {lastOwner && (
-              <p id={`last-owner-${vault.id}`} className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
-                You are the only owner. Make another member an owner before leaving this space.
-              </p>
-            )}
-          </>
-        )}
-        <ConfirmDialog
-          open={confirm !== null}
-          danger
-          title={confirm === "delete" ? `Delete ${vault.name}?` : `Leave ${vault.name}?`}
-          confirmLabel={confirm === "delete" ? `Delete ${vault.name}` : `Leave ${vault.name}`}
-          busy={leaveVault.isPending || deleteVault.isPending}
-          onCancel={() => setConfirm(null)}
-          onConfirm={() =>
-            confirm === "delete"
-              ? run(
-                  () => deleteVault.mutateAsync(vault.id),
-                  "Could not delete this space. Reload and try again.",
-                  () => {
-                    setConfirm(null);
-                    onVaultsChanged();
-                  },
-                )
-              : run(
-                  () => leaveVault.mutateAsync(vault.id),
-                  "Could not leave this space. It needs an owner, so make someone else an owner first.",
-                  () => {
-                    setConfirm(null);
-                    onVaultsChanged();
-                  },
-                )
-          }
-        >
-          {confirm === "delete" ? (
-            <p>
-              Everyone in {vault.name} will lose access to this space and its saved memories, people and topics. This can&apos;t be
-              undone. Copy the space first if you want to keep anything.
-            </p>
-          ) : (
-            <p>
-              You will lose access to the memories in this space. Other members keep access. To return, an owner will need to
-              invite you again.
-            </p>
-          )}
-        </ConfirmDialog>
-        <ConfirmDialog
-          open={removing !== null}
-          danger
-          title={`Remove ${removing ?? ""} from ${vault.name}?`}
-          confirmLabel="Remove member"
-          busy={removeMember.isPending}
-          onCancel={() => setRemoving(null)}
-          onConfirm={() =>
-            removing &&
-            run(
-              () => removeMember.mutateAsync({ id: vault.id, email: removing }),
-              "Could not remove that member. Reload and try again.",
-              () => setRemoving(null),
-            )
-          }
-        >
-          <p>They lose access to this space and its memories straight away. What they added stays in the space. You can invite them again later.</p>
-        </ConfirmDialog>
-        <ConfirmDialog
-          open={handing !== null}
-          title={`Make ${handing ?? ""} the owner of ${vault.name}?`}
-          confirmLabel="Hand over"
-          busy={transfer.isPending}
-          onCancel={() => setHanding(null)}
-          onConfirm={() =>
-            handing &&
-            run(
-              () => transfer.mutateAsync({ id: vault.id, email: handing }),
-              "Could not hand over the space. Reload and try again.",
-              () => setHanding(null),
-            )
-          }
-        >
-          <p>They become an owner and you become a member. Only an owner can make you an owner again.</p>
-        </ConfirmDialog>
-        {membersQuery.isError && <ErrorLine error={failure(membersQuery.error, "Could not load the members of this space.")} />}
-        {error && <ErrorLine error={error} />}
-      </div>
-    </aside>
-  );
 }
 
 function InvitationsPanel() {
@@ -724,45 +157,39 @@ function JoinFlash() {
 
 function VaultRow({
   vault,
+  me,
   selected,
   onSelect,
 }: {
   vault: Vault;
+  me: string | null;
   selected: boolean;
   onSelect: () => void;
 }) {
   const membersQuery = useVaultMembers(vault.id);
   const members = membersQuery.data ?? (membersQuery.isError ? [] : null);
+  // Say who owns it only when it isn't you.
+  const owner = vault.role !== "owner" ? members?.find((m) => m.role === "owner" && !sameEmail(m.email, me))?.email : undefined;
 
   return (
     <button
       onClick={onSelect}
       aria-current={selected || undefined}
-      className="w-full flex items-center gap-3 px-4 py-4 min-h-[64px] text-left transition-[background-color] duration-[120ms] hover:bg-[var(--surface-raised)]"
+      className="w-full flex items-center gap-3 px-4 py-3.5 min-h-[60px] text-left transition-[background-color] duration-[120ms] hover:bg-[var(--surface-raised)]"
       style={selected ? { background: "var(--accent-soft)" } : undefined}
     >
       <span className="flex-1 min-w-0">
         <span className="flex items-center gap-2.5 min-w-0">
           <SpaceSwatch vault={vault} />
-          <span className="text-[17px] font-medium truncate">
-            {vault.name}
-          </span>
-          <RoleChip role={vault.role} />
+          <span className="text-[16px] font-medium truncate">{vault.name}</span>
+          {vault.role !== "owner" && <RoleChip role={vault.role} />}
         </span>
         <span className="label block mt-1 truncate">
-          {vault.kind === "personal" ? "Private to you" : "Shared space"}
-          {members
-            ? ` · ${members.length} ${members.length === 1 ? "member" : "members"}`
-            : ""}
+          {peopleLine(vault, members)}
+          {owner ? ` · owned by ${owner}` : ""}
         </span>
       </span>
-      <MemberStack members={members} />
-      <CaretRightIcon
-        {...ICON}
-        aria-hidden
-        className="shrink-0"
-        style={{ color: selected ? "var(--ink)" : "var(--ink-dim)" }}
-      />
+      <CaretRightIcon {...ICON} aria-hidden className="shrink-0" style={{ color: selected ? "var(--ink)" : "var(--ink-dim)" }} />
     </button>
   );
 }
@@ -894,7 +321,7 @@ function MergeVaultsCard({
       setError(
         failure(
           e,
-          "Could not combine those spaces. Check you are a member of both and try again.",
+          "Could not combine those spaces. CheckIcon you are a member of both and try again.",
         ),
       );
     } finally {
@@ -1074,7 +501,7 @@ function SkeletonRows() {
   );
 }
 
-// The inspector floats on the right on wide screens and opens under its row on narrow ones.
+// Wide screens show the list and the open space side by side; narrow ones show one at a time, with a way back.
 const WIDE = "(min-width: 1024px)";
 function useWide() {
   return useSyncExternalStore(
@@ -1095,6 +522,8 @@ export default function VaultsPage() {
   const me = useMe().data?.email ?? null;
   const [creating, setCreating] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // On narrow screens: has the person opened a space (detail view) or are they on the list?
+  const [opened, setOpened] = useState(false);
   // Ids from the previous load, so rows that appear later (join, create, clone, merge) can settle in.
   const known = useRef<Set<string> | null>(null);
   const [fresh, setFresh] = useState<Set<string>>(new Set());
@@ -1109,32 +538,24 @@ export default function VaultsPage() {
 
   const personal = vaults?.filter((v) => v.kind === "personal") ?? [];
   const org = vaults?.filter((v) => v.kind !== "personal") ?? [];
-  // Open on the first team vault: that is where the people are.
-  const selected =
-    vaults?.find((v) => v.id === selectedId) ?? org[0] ?? personal[0] ?? null;
+  // Open on the first shared space: that is where the people are.
+  const selected = vaults?.find((v) => v.id === selectedId) ?? org[0] ?? personal[0] ?? null;
 
   const wide = useWide();
-  const inspectorFor = (inline: boolean) =>
-    selected && (
-      <VaultInspector
-        key={selected.id}
-        inline={inline}
-        vault={selected}
-        me={me}
-        onVaultsChanged={() => setSelectedId(null)}
-      />
-    );
+  const showDetail = wide || opened;
+  const showList = wide || !opened;
+
+  const open = (id: string) => {
+    setSelectedId(id);
+    setOpened(true);
+    if (!wide) window.scrollTo({ top: 0 });
+  };
 
   const list = (items: Vault[]) => (
     <div className="ledger hairline-rows">
       {items.map((v) => (
         <div key={v.id} ref={fresh.has(v.id) ? arrive : undefined}>
-          <VaultRow
-            vault={v}
-            selected={selected?.id === v.id}
-            onSelect={() => setSelectedId(v.id)}
-          />
-          {!wide && selected?.id === v.id && inspectorFor(true)}
+          <VaultRow vault={v} me={me} selected={wide && selected?.id === v.id} onSelect={() => open(v.id)} />
         </div>
       ))}
     </div>
@@ -1148,103 +569,84 @@ export default function VaultsPage() {
         intro="Keep each project's memories in its own space. Your personal space is private; other spaces can be shared with people you invite. AI apps can use a space by its name."
       />
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
-          {vaults
-            ? `${org.length} shared ${org.length === 1 ? "space" : "spaces"} · ${personal.length} personal`
-            : "Loading your spaces…"}
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <LiveStatusBadge />
-          <button onClick={() => void refetchAll()} className="btn btn-icon" aria-label="Refresh spaces" title="Refresh">
-            <ArrowsClockwiseIcon {...ICON} />
-          </button>
-          <JoinSharedSpace onJoined={(id) => setSelectedId(id)} />
-          <button
-            onClick={() => setCreating(true)}
-            disabled={creating}
-            className="btn btn-primary"
-          >
-            <PlusIcon {...ICON} />
-            Create space
-          </button>
-        </div>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <LiveStatusBadge />
+        <button onClick={() => void refetchAll()} className="btn btn-icon" aria-label="Refresh spaces" title="Refresh">
+          <ArrowsClockwiseIcon {...ICON} />
+        </button>
+        <JoinSharedSpace onJoined={(id) => open(id)} />
+        <button onClick={() => setCreating(true)} disabled={creating} className="btn btn-primary">
+          <PlusIcon {...ICON} />
+          Create space
+        </button>
       </div>
+
+      {creating && <CreateVaultForm onCancel={() => setCreating(false)} onCreated={() => setCreating(false)} />}
 
       {vaultsQuery.isError && <ErrorLine error={failure(vaultsQuery.error, "Could not load your memory spaces.", " Reload the page to try again.")} />}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px] items-start">
-        <div className="flex flex-col gap-9 min-w-0">
-          <InvitationsPanel />
+      <InvitationsPanel />
 
-          <section
-            className="flex flex-col gap-2.5"
-            aria-labelledby="org-title"
-          >
-            <h2
-              id="org-title"
-              className="section-title flex items-center gap-2"
-            >
-              <UsersIcon
-                {...ICON}
-                aria-hidden
-              />
-              Shared spaces
-              {vaults && <span className="label font-mono">{org.length}</span>}
-            </h2>
-            {creating && (
-              <CreateVaultForm
-                onCancel={() => setCreating(false)}
-                onCreated={() => setCreating(false)}
-              />
+      <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)] items-start">
+        {showList && (
+          <div className="flex flex-col gap-7 min-w-0">
+            <section className="flex flex-col gap-2.5" aria-labelledby="org-title">
+              <h2 id="org-title" className="section-title flex items-center gap-2">
+                <UsersIcon {...ICON} aria-hidden />
+                Shared spaces
+                {vaults && <span className="label font-mono">{org.length}</span>}
+              </h2>
+              {!vaults ? (
+                <SkeletonRows />
+              ) : org.length === 0 ? (
+                !creating && (
+                  <EmptyState
+                    variant="spaces"
+                    title="No shared spaces yet"
+                    action={
+                      <button onClick={() => setCreating(true)} className="btn btn-sm">
+                        <PlusIcon {...ICON} />
+                        Create a space
+                      </button>
+                    }
+                  >
+                    Create one for a project or a team, or join one you were invited to.
+                  </EmptyState>
+                )
+              ) : (
+                list(org)
+              )}
+            </section>
+
+            <section className="flex flex-col gap-2.5" aria-labelledby="personal-title">
+              <h2 id="personal-title" className="section-title flex items-center gap-2">
+                <LockIcon {...ICON} aria-hidden />
+                Personal
+              </h2>
+              {!vaults ? <SkeletonRows /> : list(personal)}
+            </section>
+          </div>
+        )}
+
+        {showDetail && (
+          <div className="flex flex-col gap-3 min-w-0">
+            {!wide && (
+              <button type="button" className="btn btn-ghost btn-sm self-start" onClick={() => setOpened(false)}>
+                <ArrowLeftIcon {...ICON} />
+                All spaces
+              </button>
             )}
-            {!vaults ? (
-              <SkeletonRows />
-            ) : org.length === 0 ? (
-              !creating && (
-                <EmptyState
-                  variant="spaces"
-                  title="No shared spaces yet"
-                  action={
-                    <button onClick={() => setCreating(true)} className="btn btn-sm">
-                      <PlusIcon {...ICON} />
-                      Create a space
-                    </button>
-                  }
-                >
-                  Create one for anything you want kept apart, such as a project or a team, or join one you were invited to.
-                </EmptyState>
-              )
+            {selected ? (
+              <SpaceDetail
+                key={selected.id}
+                vault={selected}
+                me={me}
+                onVaultsChanged={() => {
+                  setSelectedId(null);
+                  setOpened(false);
+                }}
+              />
             ) : (
-              list(org)
-            )}
-          </section>
-
-          <section
-            className="flex flex-col gap-2.5"
-            aria-labelledby="personal-title"
-          >
-            <h2
-              id="personal-title"
-              className="section-title flex items-center gap-2"
-            >
-              <LockIcon
-                {...ICON}
-                aria-hidden
-              />
-              Personal
-            </h2>
-            {!vaults ? <SkeletonRows /> : list(personal)}
-          </section>
-
-          {vaults && vaults.length > 1 && (
-            <MergeVaultsCard vaults={vaults} />
-          )}
-        </div>
-
-        {wide && (
-          <div className="sticky top-8">
-            {inspectorFor(false) ?? (
               <div className="panel p-5 flex flex-col gap-3" aria-hidden>
                 <span className="skeleton h-4 w-24" />
                 <span className="skeleton h-5 w-40" />
@@ -1254,6 +656,8 @@ export default function VaultsPage() {
           </div>
         )}
       </div>
+
+      {vaults && vaults.length > 1 && showList && <MergeVaultsCard vaults={vaults} />}
     </div>
   );
 }

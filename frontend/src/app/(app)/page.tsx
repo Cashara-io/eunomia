@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRightIcon, HouseIcon, UploadSimpleIcon, UsersIcon, WarningIcon } from "@phosphor-icons/react/ssr";
+import { ArrowRightIcon, CheckIcon, HouseIcon, PlusIcon, UploadSimpleIcon, UsersIcon, WarningIcon } from "@phosphor-icons/react/ssr";
 import { kindColor } from "@/lib/kindColors";
 import ErrorLine, { failure } from "@/components/ErrorLine";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -18,7 +18,6 @@ import { prefersReducedMotion } from "@/components/bits/motion";
 import { kindForSource, sourceRecordLabel } from "@/lib/connectorMeta";
 import PageHeader from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/Shapes";
-import StatusLabel from "@/components/ui/StatusLabel";
 import { AI_APPS, AppMark, appForConnection, type Connection } from "@/components/connect/apps";
 import { useConnections } from "@/components/connect/useConnections";
 import { FAILURE_ALERT_THRESHOLD, isLiveSource, sourceHealth, sourceLabel } from "@/lib/sourceState";
@@ -443,46 +442,74 @@ function OwnInformation() {
 
 const ago = (iso: string | null) => (iso ? since(iso) : "not used yet");
 
+/** Used in the last day: shown as active. */
+const recentlyUsed = (iso: string | null) => Boolean(iso && Date.now() - new Date(iso).getTime() < 86_400_000);
+
 /** App 02.5: the connected Home. Only rendered from server-confirmed connections. */
 function ConnectedPanel({ connections, onConnectAnother }: { connections: Connection[]; onConnectAnother: () => void }) {
   const latest = connections[0];
   const app = appForConnection(latest);
+  const shown = connections.slice(0, 6);
   return (
-    <section className="ledger p-6 flex flex-col gap-4" aria-labelledby="connected-title">
-      <h2 id="connected-title" className="text-[20px] font-medium tracking-[-0.025em]">
-        {connections.length === 1 ? `${latest.name} is connected` : `${connections.length} AI apps are connected`}
-      </h2>
-      <p className="text-[15px]" style={{ color: "var(--ink-dim)" }}>
-        {app.id === "chatgpt"
-          ? "Your AI app can now use Eunomia. Choose Eunomia in your next ChatGPT conversation."
-          : "Your AI apps can now use Eunomia. Ask one to look for memories about you to try it."}
-      </p>
-      <ul className="flex flex-col gap-1.5">
-        {connections.slice(0, 6).map((c, i) => (
-          <li key={`${c.name}-${i}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[14px]">
-            <span className="font-medium">{c.name}</span>
-            <StatusLabel tone="good">{c.via === "sign-in" ? "Signed in" : "Using an API token"}</StatusLabel>
-            <span style={{ color: "var(--ink-dim)" }}>Last used {ago(c.at)}</span>
-          </li>
-        ))}
-        {connections.length > 6 && (
-          <li className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
-            and {connections.length - 6} more
-          </li>
-        )}
+    <section className="ledger flex flex-col overflow-hidden" aria-labelledby="connected-title">
+      <div className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-4 border-b">
+        <span
+          className="shrink-0 grid place-items-center w-10 h-10 rounded-full"
+          style={{ background: "var(--surface-raised)", color: "var(--good)" }}
+          aria-hidden
+        >
+          <CheckIcon weight="bold" size={20} />
+        </span>
+        <div className="flex-1 min-w-0 flex flex-col gap-1">
+          <h2 id="connected-title" className="text-[20px] font-medium tracking-[-0.025em]">
+            {connections.length === 1 ? `${latest.name} is connected` : `${connections.length} AI apps are connected`}
+          </h2>
+          <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+            {app.id === "chatgpt" && connections.length === 1
+              ? "Choose Eunomia in your next ChatGPT conversation."
+              : "Ask any of them to look for memories about you to try it."}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2 shrink-0">
+          {app.openUrl && connections.length === 1 && (
+            <a href={app.openUrl} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm">
+              Open {app.name}
+            </a>
+          )}
+          <button type="button" className="btn btn-sm" onClick={onConnectAnother}>
+            <PlusIcon weight="duotone" size={16} aria-hidden /> Connect another app
+          </button>
+        </div>
+      </div>
+      <ul className="grid sm:grid-cols-2" aria-label="Connected AI apps">
+        {shown.map((c, i) => {
+          const active = recentlyUsed(c.at);
+          return (
+            <li key={`${c.name}-${i}`} className="flex items-center gap-3 px-5 sm:px-6 py-3 min-w-0 border-b sm:[&:nth-child(odd)]:border-r">
+              <span className="shrink-0 grid place-items-center w-9 h-9 rounded-[10px]" style={{ background: "var(--surface-raised)", color: "var(--ink)" }} aria-hidden>
+                <AppMark id={appForConnection(c).id} size={18} />
+              </span>
+              <span className="flex-1 min-w-0 flex flex-col">
+                <span className="font-medium truncate">{c.name}</span>
+                <span className="text-[13px] truncate" style={{ color: "var(--ink-dim)" }}>
+                  {c.via === "sign-in" ? "Signed in" : "API token"} · {c.at ? `used ${ago(c.at)}` : "not used yet"}
+                </span>
+              </span>
+              <span
+                className="shrink-0 w-2 h-2 rounded-full"
+                style={active ? { background: "var(--good)" } : { border: "1px solid var(--ink-faint)" }}
+                title={active ? "Used in the last day" : "Not used in the last day"}
+                aria-label={active ? "Active" : "Idle"}
+              />
+            </li>
+          );
+        })}
       </ul>
-      <div className="flex flex-wrap gap-2">
-        {app.openUrl && connections.length === 1 && (
-          <a href={app.openUrl} target="_blank" rel="noreferrer" className="btn btn-primary">
-            Open {app.name}
-          </a>
-        )}
-        <Link href="/settings?tab=apps" className="btn">
-          Manage connected apps
+      <div className="px-5 sm:px-6 py-3 flex items-center justify-between gap-3 text-[14px]">
+        <span style={{ color: "var(--ink-dim)" }}>{connections.length > 6 ? `and ${connections.length - 6} more` : ""}</span>
+        <Link href="/settings?tab=apps" className="inline-flex items-center gap-1 font-medium underline underline-offset-[3px]" style={{ color: "var(--accent-text)" }}>
+          Manage connected apps <ArrowRightIcon weight="duotone" size={14} aria-hidden />
         </Link>
-        <button type="button" className="btn btn-ghost" onClick={onConnectAnother}>
-          Connect another app
-        </button>
       </div>
     </section>
   );

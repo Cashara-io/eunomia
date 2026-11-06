@@ -8,7 +8,7 @@
 
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::{delete, get, post},
     Json, Router,
@@ -70,6 +70,16 @@ fn my_name(user: &User, given: Option<&str>) -> String {
     given.or_else(|| Some(peers::instance_name()).filter(|n| !n.is_empty())).unwrap_or_else(|| user.email.clone())
 }
 
+/// This instance's addresses, plus the private address the browser opened the app on (the
+/// frontend forwards it as `X-Forwarded-Host`), so sharing works without `EUNOMIA_LAN_ADDRS`.
+fn my_addrs(state: &OrgState, headers: &HeaderMap) -> Vec<String> {
+    let browser = ["x-forwarded-host", "host"]
+        .iter()
+        .filter_map(|h| headers.get(*h).and_then(|v| v.to_str().ok()))
+        .find_map(peers::addrs::browser_lan_addr);
+    peers::addrs::advertised_with(&state.settings.public_url, browser)
+}
+
 #[utoipa::path(
     operation_id = "createVaultShareCode",
     post,
@@ -82,10 +92,10 @@ fn my_name(user: &User, given: Option<&str>) -> String {
     responses((status = 200, body = peers::ShareCodeOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
 )]
-async fn create_share_code(State(state): State<AppState>, user: User, Path(vault_id): Path<String>, Json(body): Json<ShareCodeRequest>) -> AppResult<Json<peers::ShareCodeOut>> {
+async fn create_share_code(State(state): State<AppState>, user: User, headers: HeaderMap, Path(vault_id): Path<String>, Json(body): Json<ShareCodeRequest>) -> AppResult<Json<peers::ShareCodeOut>> {
     let state = state.org(&user.org).await?;
     let vault = parse_vault_id(&vault_id)?;
-    let addrs = peers::addrs::advertised(&state.settings.public_url);
+    let addrs = my_addrs(&state, &headers);
     Ok(Json(peers::create_share(&state, &user.id, &vault, &body.role, body.expires_in_hours, addrs).await?))
 }
 
@@ -115,10 +125,10 @@ async fn delete_share_code(State(state): State<AppState>, user: User, Path((vaul
     responses((status = 200, body = peers::PeersOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
 )]
-async fn list_peers(State(state): State<AppState>, user: User, Path(vault_id): Path<String>) -> AppResult<Json<peers::PeersOut>> {
+async fn list_peers(State(state): State<AppState>, user: User, headers: HeaderMap, Path(vault_id): Path<String>) -> AppResult<Json<peers::PeersOut>> {
     let state = state.org(&user.org).await?;
     let vault = parse_vault_id(&vault_id)?;
-    let addrs = peers::addrs::advertised(&state.settings.public_url);
+    let addrs = my_addrs(&state, &headers);
     Ok(Json(peers::list(&state, &user.id, &vault, addrs).await?))
 }
 
@@ -133,9 +143,9 @@ async fn list_peers(State(state): State<AppState>, user: User, Path(vault_id): P
     responses((status = 200, body = peers::JoinOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
 )]
-async fn join_shared(State(state): State<AppState>, user: User, Json(body): Json<JoinRequestBody>) -> AppResult<Json<peers::JoinOut>> {
+async fn join_shared(State(state): State<AppState>, user: User, headers: HeaderMap, Json(body): Json<JoinRequestBody>) -> AppResult<Json<peers::JoinOut>> {
     let state = state.org(&user.org).await?;
-    let addrs = peers::addrs::advertised(&state.settings.public_url);
+    let addrs = my_addrs(&state, &headers);
     let name = my_name(&user, body.name.as_deref());
     Ok(Json(peers::join(&state, &user.id, &body.code, addrs, &name).await?))
 }
