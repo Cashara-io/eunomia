@@ -201,7 +201,8 @@ async fn free_name(db: &OrgDb, user_id: &RecordId, base: String) -> AppResult<St
 /// several, per the product ask); creator becomes its owner.
 pub async fn create_vault(db: &OrgDb, control: &ControlDb, user_id: &RecordId, name: &str, kind: &str) -> AppResult<VaultOut> {
     let res = create_vault_inner(db, user_id, name, kind).await;
-    let space = res.as_ref().map(|v| v.name.clone()).unwrap_or_else(|_| name.trim().to_string());
+    // the ledger names a space by id (the log reads its current name), never by what was typed
+    let space = res.as_ref().map(|v| v.id.to_string()).unwrap_or_default();
     audit_vault(control, user_id, "vault.create", &space, None, None, &res).await;
     res
 }
@@ -409,8 +410,7 @@ pub async fn get_vault(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId) -> A
 pub async fn rename_vault(db: &OrgDb, control: &ControlDb, user_id: &RecordId, vault_id: &RecordId, name: &str) -> AppResult<VaultOut> {
     let before = space_name(db, vault_id).await;
     let res = rename_vault_inner(db, user_id, vault_id, name).await;
-    let space = res.as_ref().map(|v| v.name.clone()).unwrap_or_else(|_| name.trim().to_string());
-    audit_vault_from(control, user_id, "vault.rename", &space, &before, &res).await;
+    audit_vault_from(control, user_id, "vault.rename", &vault_id.to_string(), &before, &res).await;
     res
 }
 
@@ -435,7 +435,8 @@ async fn rename_vault_inner(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId,
 pub async fn delete_vault(db: &OrgDb, control: &ControlDb, user_id: &RecordId, vault_id: &RecordId) -> AppResult<()> {
     let space = space_name(db, vault_id).await;
     let res = delete_vault_inner(db, user_id, vault_id).await;
-    audit_vault(control, user_id, "vault.delete", &space, None, None, &res).await;
+    // a deleted space can't be looked up later: its owner's row keeps the name it had
+    audit_vault_from(control, user_id, "vault.delete", &vault_id.to_string(), &space, &res).await;
     res
 }
 
@@ -468,6 +469,15 @@ async fn space_name(db: &OrgDb, vault_id: &RecordId) -> String {
 /// name; the detail carries the affected email and role as `email=... role=...` (see
 /// `routers::admin::describe`). A refused or failed attempt is recorded with its error code.
 async fn audit_vault<T>(control: &ControlDb, user_id: &RecordId, action: &str, space: &str, email: Option<&str>, role: Option<&str>, res: &AppResult<T>) {
+    if refused_access(res) {
+        // the caller can't see this space: record the attempt, never the space or who it named
+        crate::audit::record_as_caller_detail(control, user_id, action, HIDDEN_SPACE, outcome(res), "").await;
+        return;
+    }
+    // Any other failure keeps its reason but names no space: the id came from the caller, and the
+    // log resolves ids to names when read, so a failed attempt on someone else's space (no
+    // invitation waiting, say) must not turn into that space's name in the caller's own log.
+    let space = if res.is_err() { "" } else { space };
     let mut detail = String::new();
     if let Some(e) = email {
         detail.push_str(&format!("email={}", crate::models_user::normalize_email(e)));
@@ -510,7 +520,29 @@ fn outcome<T>(res: &AppResult<T>) -> &str {
 /// [`audit_vault`] for an event that names other spaces too (a rename's old name, the sources of a
 /// copy or merge): the detail is `from=<names>`, read to the end of the line, so names with spaces survive.
 async fn audit_vault_from<T>(control: &ControlDb, user_id: &RecordId, action: &str, space: &str, from: &str, res: &AppResult<T>) {
+    // Names (a rename's old name, the sources of a copy or merge) are kept only when the action went
+    // through: a failed attempt may name spaces the caller can't see (merging a space with itself
+    // fails validation before access is checked).
+    if res.is_err() {
+        crate::audit::record_as_caller_detail(control, user_id, action, HIDDEN_SPACE, outcome(res), "").await;
+        return;
+    }
     crate::audit::record_as_caller_detail(control, user_id, action, space, outcome(res), &format!("from={from}")).await;
+}
+
+/// The target an audit row names when the caller was refused access: a space they can't see must
+/// not leak into their own rows (its name, its id, or the people an attempt named).
+pub const HIDDEN_SPACE: &str = "a space you can't access";
+
+/// Whether an attempt failed because the caller may not touch the space (or it isn't theirs to see).
+pub fn refused_access<T>(res: &AppResult<T>) -> bool {
+    match res {
+        Ok(_) => false,
+        Err(e) => {
+            let c = e.code.as_str();
+            c.ends_with(".forbidden") || c.ends_with(".not_found") || c == "auth.scope" || c == "tenant.denied"
+        }
+    }
 }
 
 /// Add `email` to `vault_id`. Caller must already be an owner (so admin
@@ -537,7 +569,7 @@ pub async fn invite_member(
     role: &str,
 ) -> AppResult<InviteOut> {
     let res = invite_member_inner(db, control, user_id, vault_id, email, role).await;
-    audit_vault(control, user_id, "vault.invite", &space_name(db, vault_id).await, Some(email), Some(role), &res).await;
+    audit_vault(control, user_id, "vault.invite", &vault_id.to_string(), Some(email), Some(role), &res).await;
     res
 }
 
@@ -701,7 +733,7 @@ pub async fn list_pending_invites(db: &OrgDb, control: &ControlDb, user_id: &Rec
 /// their own invite.
 pub async fn accept_invitation(db: &OrgDb, control: &ControlDb, user_id: &RecordId, vault_id: &RecordId) -> AppResult<VaultWithRole> {
     let res = accept_invitation_inner(db, user_id, vault_id).await;
-    audit_vault(control, user_id, "vault.join", &space_name(db, vault_id).await, None, res.as_ref().ok().map(|v| v.role.as_str()), &res).await;
+    audit_vault(control, user_id, "vault.join", &vault_id.to_string(), None, res.as_ref().ok().map(|v| v.role.as_str()), &res).await;
     res
 }
 
@@ -731,9 +763,8 @@ async fn accept_invitation_inner(db: &OrgDb, user_id: &RecordId, vault_id: &Reco
 
 /// Decline (delete) a pending invitation into `vault_id`.
 pub async fn decline_invitation(db: &OrgDb, control: &ControlDb, user_id: &RecordId, vault_id: &RecordId) -> AppResult<()> {
-    let space = space_name(db, vault_id).await;
     let res = decline_invitation_inner(db, user_id, vault_id).await;
-    audit_vault(control, user_id, "vault.decline", &space, None, None, &res).await;
+    audit_vault(control, user_id, "vault.decline", &vault_id.to_string(), None, None, &res).await;
     res
 }
 
@@ -755,7 +786,7 @@ pub async fn remove_member(db: &OrgDb, control: &ControlDb, user_id: &RecordId, 
     let res = remove_member_inner(db, control, user_id, vault_id, email).await;
     // withdrawing a pending invitation reads differently from removing someone who had joined
     let action = if matches!(res, Ok(true)) { "vault.revoke" } else { "vault.member_remove" };
-    audit_vault(control, user_id, action, &space_name(db, vault_id).await, Some(email), None, &res).await;
+    audit_vault(control, user_id, action, &vault_id.to_string(), Some(email), None, &res).await;
     res.map(|_| ())
 }
 
@@ -793,7 +824,7 @@ async fn remove_member_inner(db: &OrgDb, control: &ControlDb, user_id: &RecordId
 /// can't be left admin-less.
 pub async fn set_member_role(db: &OrgDb, control: &ControlDb, user_id: &RecordId, vault_id: &RecordId, email: &str, role: &str) -> AppResult<MemberOut> {
     let res = set_member_role_inner(db, control, user_id, vault_id, email, role).await;
-    audit_vault(control, user_id, "vault.role", &space_name(db, vault_id).await, Some(email), Some(role), &res).await;
+    audit_vault(control, user_id, "vault.role", &vault_id.to_string(), Some(email), Some(role), &res).await;
     res
 }
 
@@ -829,7 +860,7 @@ async fn set_member_role_inner(db: &OrgDb, control: &ControlDb, user_id: &Record
 /// Owner-only. Make an active member an owner and demote the caller to member, in one transaction.
 pub async fn transfer_ownership(db: &OrgDb, control: &ControlDb, user_id: &RecordId, vault_id: &RecordId, email: &str) -> AppResult<MemberOut> {
     let res = transfer_ownership_inner(db, control, user_id, vault_id, email).await;
-    audit_vault(control, user_id, "vault.transfer", &space_name(db, vault_id).await, Some(email), None, &res).await;
+    audit_vault(control, user_id, "vault.transfer", &vault_id.to_string(), Some(email), None, &res).await;
     res
 }
 
@@ -1187,7 +1218,7 @@ pub async fn clone_vault(
 ) -> AppResult<CloneOut> {
     let source = space_name(db, vault_id).await;
     let res = clone_vault_inner(db, user_id, vault_id, name, kind).await;
-    let space = res.as_ref().map(|c| c.name.clone()).unwrap_or_else(|_| name.unwrap_or_default().trim().to_string());
+    let space = res.as_ref().map(|c| c.id.clone()).unwrap_or_default();
     audit_vault_from(control, user_id, "vault.clone", &space, &source, &res).await;
     res
 }
@@ -1248,7 +1279,7 @@ pub async fn merge_vaults(
 ) -> AppResult<MergeOut> {
     let sources = format!("{} and {}", space_name(db, a).await, space_name(db, b).await);
     let res = merge_vaults_inner(db, user_id, a, b, name, kind).await;
-    let space = res.as_ref().map(|m| m.name.clone()).unwrap_or_else(|_| name.unwrap_or_default().trim().to_string());
+    let space = res.as_ref().map(|m| m.id.clone()).unwrap_or_default();
     audit_vault_from(control, user_id, "vault.merge", &space, &sources, &res).await;
     res
 }

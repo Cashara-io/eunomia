@@ -533,7 +533,9 @@ export default function ChatPage() {
         intro="Ask a question about your saved memories and documents. Eunomia shows where each answer came from."
       />
 
-      {!modelReady ? (
+      {/* No model and no history: only the empty state. With history, the conversations stay readable
+          and only sending is off (the composer says why). */}
+      {!modelReady && (threads === null || threads.length === 0) ? (
         <NoModel isAdmin={isAdmin} />
       ) : (
       <div className="flex-1 min-h-0 flex gap-4">

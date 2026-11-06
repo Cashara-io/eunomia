@@ -90,7 +90,15 @@ const useVaultMutation = <V, R>(fn: (v: V) => Promise<R>) => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: fn,
-    onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: vaultKeys.all }), qc.invalidateQueries({ queryKey: entityKeys.all })]),
+    // A space's counts are marked stale but not refetched here: after leaving or deleting a space its
+    // detail can stay mounted for a moment, and an immediate refetch would hit a 403. They reload the
+    // next time a space detail mounts.
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: vaultKeys.all, predicate: (q) => !q.queryKey.includes("counts") }),
+        qc.invalidateQueries({ queryKey: vaultKeys.all, predicate: (q) => q.queryKey.includes("counts"), refetchType: "none" }),
+        qc.invalidateQueries({ queryKey: entityKeys.all }),
+      ]),
   });
 };
 

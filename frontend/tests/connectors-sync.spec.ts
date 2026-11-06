@@ -101,6 +101,8 @@ test("a connector syncs real API data that the search tool then finds", async ({
 test("every connector offered opens a setup page with instructions", async ({ page }) => {
   await registerAndOnboard(page, uniqueEmail("connector-pages"));
   await page.goto("/connectors");
+  // personal sources (Stripe, Up Bank, Spotify) sit in their own fold
+  await page.getByText(/^Personal sources/).click();
   const cards = page.locator('a[href^="/connectors/setup/"]');
   // 13 since Ed Discussion (#129)
   await expect(cards).toHaveCount(13);

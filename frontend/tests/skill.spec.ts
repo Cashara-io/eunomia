@@ -16,7 +16,8 @@ test("the memory skill is viewable, editable and resettable, and edits reach MCP
 
   expect(await instructions()).toContain("# Eunomia memory");
 
-  await page.getByRole("link", { name: "AI instructions" }).click();
+  // AI instructions is under Advanced, which the sidebar shows to admins; go there directly
+  await page.goto("/skill");
   await expect(page.getByRole("heading", { name: "Eunomia memory", level: 1 })).toBeVisible();
   await expect(page.getByLabel("Skill source")).toHaveText("Built-in default");
 

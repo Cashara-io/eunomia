@@ -40,17 +40,19 @@ async fn admin_sees_space_events_and_people() {
     assert_eq!(status, StatusCode::OK, "{page}");
     let rows = page["results"].as_array().unwrap();
     let summaries: Vec<&str> = rows.iter().map(|r| r["summary"].as_str().unwrap()).collect();
+    // Rows name spaces by id, so sentences use each space's current name (acme-engineering was
+    // renamed acme-eng); a deleted space keeps the name it had only on its delete row.
     for want in [
         "Deleted the space scratch",
-        "Created the space scratch",
+        "Created a space that has since been deleted",
         "Merged acme-eng and acme-copy into a new space, acme-all",
         "Copied acme-eng into a new space, acme-copy",
         "Renamed acme-engineering to acme-eng",
-        "Withdrew the invitation for carol@example.com to acme-engineering",
-        "Made bob@example.com an owner of acme-engineering",
-        "Joined acme-engineering",
-        "Invited bob@example.com to acme-engineering",
-        "Created the space acme-engineering",
+        "Withdrew the invitation for carol@example.com to acme-eng",
+        "Made bob@example.com an owner of acme-eng",
+        "Joined acme-eng",
+        "Invited bob@example.com to acme-eng",
+        "Created the space acme-eng",
     ] {
         assert!(summaries.contains(&want), "missing {want:?} in {summaries:?}");
     }

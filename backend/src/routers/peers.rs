@@ -103,8 +103,9 @@ async fn create_share_code(State(state): State<AppState>, user: User, headers: H
 }
 
 /// The space's name for the ledger (its id when it can't be read).
-async fn space_of(state: &OrgState, vault: &RecordId) -> String {
-    peers::vault_name(&state.db, vault).await.ok().flatten().unwrap_or_else(|| vault.to_string())
+async fn space_of(_state: &OrgState, vault: &RecordId) -> String {
+    // by id: the audit log reads the space's current name, and never stores what a caller typed
+    vault.to_string()
 }
 
 /// One ledger row per sharing change: these copy data to, or stop copying it to, another server.
@@ -112,6 +113,15 @@ async fn audit<T>(state: &OrgState, user: &User, action: &str, space: &str, deta
     let outcome = match res {
         Ok(_) => "ok",
         Err(e) => e.code.as_str(),
+    };
+    // refused access: never name the other side's space or what the attempt carried
+    // refused: name nothing; any other failure keeps its detail but not the space id the caller sent
+    let (space, detail) = if crate::vaults::service::refused_access(res) {
+        (crate::vaults::service::HIDDEN_SPACE, "")
+    } else if res.is_err() {
+        ("", detail)
+    } else {
+        (space, detail)
     };
     crate::audit::record_as_caller_detail(&state.control, &user.id, action, space, outcome, detail).await;
 }
@@ -170,8 +180,9 @@ async fn join_shared(State(state): State<AppState>, user: User, headers: HeaderM
     let name = my_name(&user, body.name.as_deref());
     let res = peers::join(&state, &user.id, &body.code, addrs, &name).await;
     let (space, detail) = match &res {
-        Ok(out) => (out.vault.name.clone(), format!("role={} from={}", out.link.role, out.link.peer_name)),
-        Err(_) => (peers::decode_code(&body.code).map(|c| c.vault).unwrap_or_default(), String::new()),
+        Ok(out) => (out.vault.id.to_string(), format!("role={} from={}", out.link.role, out.link.peer_name)),
+        // a failed join names nothing: the code came from the caller, and its space isn't theirs
+        Err(_) => (String::new(), String::new()),
     };
     audit(&state, &user, "peer.join", &space, &detail, &res).await;
     Ok(Json(res?))

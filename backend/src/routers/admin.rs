@@ -246,6 +246,9 @@ fn couldnt(done: &str) -> String {
 }
 
 /// One ledger row as a sentence an admin can read without knowing the action codes.
+/// How a space that no longer exists reads in the log (rows name spaces by id; see `vaults::service`).
+const DELETED_SPACE: &str = "a space that has since been deleted";
+
 fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<String, String>) -> String {
     let email = kv(detail, "email").unwrap_or("someone");
     let space = if target.is_empty() { "a space" } else { target };
@@ -262,7 +265,9 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
             _ => format!("Made {email} a member of {space}"),
         },
         "vault.transfer" => format!("Handed {space} over to {email}"),
-        "vault.delete" => format!("Deleted the space {space}"),
+        // the row keeps the name a deleted space had (it can't be looked up any more)
+        "vault.delete" => format!("Deleted the space {}", from_rest(detail).unwrap_or(space)),
+        "vault.create" if space == DELETED_SPACE => "Created a space that has since been deleted".to_string(),
         "vault.create" => format!("Created the space {space}"),
         "vault.rename" => format!("Renamed {} to {space}", from_rest(detail).unwrap_or("a space")),
         "vault.join" => match kv(detail, "role") {
@@ -453,6 +458,20 @@ async fn get_workspace_audit(State(state): State<AppState>, user: User, Query(q)
         let found: Vec<NamedRow> = store::control::TOOL_USAGE_CLIENTS.on(&state.control).bind(("ids", clients)).await?.take(0)?;
         names.extend(found.into_iter().map(|r| (r.client_id, r.name)));
     }
+    // spaces are stored by id: show their current name, or "a deleted space" once they are gone
+    let mut space_names: HashMap<String, String> = HashMap::new();
+    let vault_ids: std::collections::BTreeSet<String> =
+        rows.iter().filter(|r| r.target.starts_with("vault:")).map(|r| r.target.clone()).collect();
+    if !vault_ids.is_empty() {
+        let org = state.org(&user.org).await?;
+        for id in vault_ids {
+            let name = match crate::rid::parse(&id) {
+                Ok(rid) => crate::peers::vault_name(&org.db, &rid).await.ok().flatten(),
+                Err(_) => None,
+            };
+            space_names.insert(id, name.unwrap_or_else(|| DELETED_SPACE.to_string()));
+        }
+    }
 
     let results = rows
         .into_iter()
@@ -469,7 +488,7 @@ async fn get_workspace_audit(State(state): State<AppState>, user: User, Query(q)
                 created_at: r.created_at,
                 actor_email,
                 via: via_words(&r.actor_kind).into(),
-                summary: describe(&r.action, &r.target, &r.detail, ok, &names),
+                summary: describe(&r.action, space_names.get(&r.target).map(String::as_str).unwrap_or(&r.target), &r.detail, ok, &names),
                 category: AuditCategory::of(&r.action),
                 result: result_words(&r.outcome).into(),
                 reason: why_words(&r.detail).map(str::to_string).unwrap_or_else(|| reason_words(&r.action, &r.outcome)),

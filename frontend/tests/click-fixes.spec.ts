@@ -153,7 +153,7 @@ test.describe("Click-through fixes", () => {
   test("Space opens a focused graph node, and deleting an entity confirms inline", async ({ browser }) => {
     const { page } = await newUser(browser, "space");
     await tool(page, "memory_write", { subject_name: "Ada Lovelace", subject_kind: "person", text: "Wrote the first published algorithm." });
-    await page.goto("/entities");
+    await page.goto("/entities?view=connections"); // List is the default view now
     const node = page.getByRole("img", { name: "Entity relationship graph" }).getByRole("button", { name: "Ada Lovelace" });
     await node.focus();
     await page.keyboard.press("Space");

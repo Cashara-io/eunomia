@@ -37,7 +37,8 @@ test("every page and tab renders cleanly", async ({ page }) => {
   }
   await page.goto("/entities");
   await page.getByRole("tab", { name: "Memory map" }).click();
-  await expect(page.getByRole("group", { name: "Memory space layers" })).toBeVisible();
+  // the Memory map uses the one space picker shared with List and Connections
+  await expect(page.getByLabel("Memory space").first()).toBeVisible();
   expect(errors).toEqual([]);
 });
 

@@ -15,6 +15,8 @@ import Tooltip from "@/components/bits/Tooltip";
 import PageHeader from "@/components/ui/PageHeader";
 import StatusLabel, { toneFromVar } from "@/components/ui/StatusLabel";
 import ExtensionsSection from "./ExtensionsSection";
+import PasswordManagersSection from "./PasswordManagersSection";
+import SecretRequestsSection from "./SecretRequestsSection";
 
 type StatusFilter = "all" | "connected" | "disconnected";
 
@@ -289,6 +291,10 @@ export default function ConnectorsPage() {
           )}
         </section>
       )}
+
+      {/* from main (#122): secrets an agent asked for, and the password managers they come from */}
+      {statusFilter !== "disconnected" && !q && <SecretRequestsSection />}
+      {statusFilter !== "disconnected" && !q && <PasswordManagersSection />}
 
       {statusFilter !== "connected" && (
         <section className="flex flex-col gap-4" aria-labelledby="catalogue-heading">
