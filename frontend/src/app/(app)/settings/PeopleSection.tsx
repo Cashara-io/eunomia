@@ -307,7 +307,7 @@ export function PeopleSection() {
                 </div>
               )}
               {/* pulled left by the buttons' own padding, so the actions line up with the email above */}
-              <div className="pt-1 -ml-2.5">
+              <div className={`pt-1 ${p.is_you ? "" : "-ml-2.5"}`}>
                 <RowActions p={p} onError={setActionError} />
               </div>
             </li>

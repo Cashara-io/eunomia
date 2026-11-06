@@ -41,9 +41,10 @@ export default function ErrorLine({
           <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]" style={{ color: "var(--ink-dim)" }}>
             {showCode && <code className="font-mono">{error!.code}</code>}
             {error?.traceId && (
-              <span className="flex items-center gap-1">
+              // narrow dialogs: the 32-character id breaks onto a new line rather than pushing Copy off-screen
+              <span className="flex flex-wrap items-center gap-1 min-w-0">
                 <span>Trace</span>
-                <code className="font-mono">{error.traceId}</code>
+                <code className="font-mono break-all min-w-0">{error.traceId}</code>
                 <CopyButton value={error.traceId} label="Copy trace id" />
               </span>
             )}

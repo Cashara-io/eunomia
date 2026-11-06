@@ -304,13 +304,13 @@ function AppPicker() {
 }
 
 /** Once an app is connected, the picker shrinks to one line that opens the choices in place. */
-function ConnectAnother({ none = false }: { none?: boolean }) {
+function ConnectAnother({ none = false, fromSources = false }: { none?: boolean; fromSources?: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <section className="flex flex-col gap-4" aria-label={none ? "Connect an AI app" : "Connect another AI app"}>
       {none && (
         <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
-          No AI app has used Eunomia yet. What you see here was added in the browser or by a connected source.
+          No AI app has used Eunomia yet. What you see here was added by you or your teammates{fromSources ? " and your connected sources" : ""}.
         </p>
       )}
       <button
@@ -455,7 +455,7 @@ export default function HomePage() {
       </div>
     ) : !connectedApps && hasData ? (
       // Someone already working in Eunomia gets one honest line, not the first-run card.
-      <ConnectAnother none />
+      <ConnectAnother none fromSources={liveSources.length > 0} />
     ) : !connectedApps ? (
       <AppPicker />
     ) : (
