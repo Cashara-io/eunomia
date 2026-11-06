@@ -1,8 +1,6 @@
 # Eunomia re-theme brief: "Bauhaus Memory"
 
-Status: approved direction, November 2026. The landing page (`/eunomia` on the Build Paperless site) already ships it. The Eunomia app (`frontend/`, Next.js) still ships the old felt-green theme. This brief is the plan to move the app across.
-
-`DESIGN.md` at the repo root now describes this system, so the impeccable skill and any agent working on the UI uses it. Until the rollout below is done, the code and `DESIGN.md` disagree on colour. When they disagree, follow this brief.
+Status: shipped (branch `design/bauhaus-memory`, November 2026). This was the plan for moving the app off the felt-green theme and off the earlier blue-accent Bauhaus pass. Every step below is done, and `DESIGN.md` at the repo root is now the source of truth; where this brief and `DESIGN.md` differ (for example field edges and author tag text, tuned for contrast), `DESIGN.md` wins. Kept for history.
 
 ## 1. The idea in one line
 
