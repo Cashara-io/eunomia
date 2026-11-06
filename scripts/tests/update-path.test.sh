@@ -54,6 +54,11 @@ LATEST_CONTROL="$(find "$ROOT/backend/migrations/control" -name '[0-9]*.surql' |
 # recall in the reads below fills):
 # compared for presence only, not for an exact count.
 VOLATILE="${UPDATE_PATH_VOLATILE:-job job_leader audit_event audit_log tool_usage session failure_capsule _migration_lock rate_limit embed_cache redact_backfill}"
+# The change log's tables (tenant 0023). Where <from-tag> lacks them, the update adds them to every org
+# database, empty (nothing backfills the log); step 9b then exercises them. Other new tables are
+# checked by the generic "every new table empty" check below.
+NEW_TABLES="${UPDATE_PATH_NEW_TABLES:-change change_seq}"
+BUILT_FROM=0   # 1 once <from-tag>'s images were built here from UPDATE_PATH_FROM_REF
 PASS=0; FAIL=0; T0=$SECONDS
 log() { printf '[update-path %4ss] %s\n' "$((SECONDS - T0))" "$*"; }
 check() { local d="$1"; shift; if "$@" >/dev/null 2>&1; then PASS=$((PASS + 1)); log "ok: $d"; else FAIL=$((FAIL + 1)); log "FAIL: $d"; fi; }
@@ -118,6 +123,7 @@ expected_new() { # expected_new COUNTS-BEFORE : "<db>.<table> 0" for each NEW_TA
   done | sort
 }
 added() { awk 'NR == FNR { seen[$1] = 1; next } !($1 in seen)' "$1" "$2" | sort; }   # added BEFORE AFTER : lines of AFTER whose table BEFORE lacks
+added_new() { added "$1" "$2" | awk -v n=" $NEW_TABLES " '{ split($1, a, "."); if (index(n, " " a[2] " ")) print }'; }   # added_new BEFORE AFTER : only the NEW_TABLES ones
 others_empty() { # others_empty COUNTS ORG : every NEW_TABLES table outside ORG holds no row
   awk -v org="$2" -v n=" $NEW_TABLES " '{ split($1, a, "."); if (a[1] != org && index(n, " " a[2] " ") && $2 != 0) bad = 1 } END { exit bad }' "$1"
 }
@@ -481,6 +487,8 @@ new_empty() { awk 'NR==FNR { seen[$1] = 1; next } !($1 in seen) && $2 == 0' "$1"
 check "per-table row counts unchanged (bar $VOLATILE; _migration grown by the new migrations)" diff "$W/stable-expected.txt" "$W/stable-after.txt"
 diff "$W/stable-expected.txt" "$W/stable-after.txt" | head -20
 check "no table gone, and every new table empty" diff <(cut -d' ' -f1 "$W/stable-before.txt") <(cut -d' ' -f1 "$W/stable-after.txt" | grep -vxFf <(new_empty "$W/stable-before.txt" "$W/stable-after.txt" | cut -d' ' -f1))
+expected_new "$W/counts-before.txt" > "$W/new-expected.txt"
+check "the change log tables are new and empty in every org where the update added them" diff "$W/new-expected.txt" <(added_new "$W/counts-before.txt" "$W/counts-after.txt")
 check "the fixed reads unchanged" diff "$W/reads-before.txt" "$W/reads-after.txt"
 diff "$W/reads-before.txt" "$W/reads-after.txt" | head -20
 # Tenant 0022 (rebuild_vector_indexes): in every org ledger, the three HNSW indexes defined, and the
@@ -515,7 +523,7 @@ check "no new ledger rows" diff "$W/ledgers-after.txt" "$W/ledgers-again.txt"
 counts > "$W/counts-again.txt"; stable "$W/counts-again.txt" > "$W/stable-again.txt"
 check "counts unchanged after the re-run" diff "$W/stable-expected.txt" "$W/stable-again.txt"
 diff "$W/stable-expected.txt" "$W/stable-again.txt" | head -20
-check "the new tables still empty after the re-run" diff "$W/new-expected.txt" <(added "$W/counts-before.txt" "$W/counts-again.txt")
+check "the new tables still empty after the re-run" diff "$W/new-expected.txt" <(added_new "$W/counts-before.txt" "$W/counts-again.txt")
 
 # ---- 9b. the change log on the upgraded stack --------------------------------------------------
 # Only where the update added it (a "from" release that already has it compares it like any table).
