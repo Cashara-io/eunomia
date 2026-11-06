@@ -40,18 +40,22 @@ async fn every_write_appends_one_numbered_row_without_content() {
     assert_eq!(page["next"], 15);
     assert_eq!(page["changes"][0]["actor"], "system", "these tool calls ran as the system: {page}");
 
-    // update, merge, delete, skills
+    // update, merge, delete, skills: each call must succeed, or the log below is missing its row
+    let ok = |name: &'static str, r: Value| {
+        assert!(r.get("error").is_none() && r.get("code").is_none(), "{name}: {r}");
+        r
+    };
     let mem = written[0]["memory"]["id"].as_str().unwrap();
-    app.tool("memory_update", json!({"memory_id": mem, "text": "changed"})).await;
-    app.tool("memory_delete", json!({"memory_id": mem})).await;
+    ok("memory_update", app.tool("memory_update", json!({"memory_id": mem, "text": "changed"})).await);
+    ok("memory_delete", app.tool("memory_delete", json!({"memory_id": mem})).await);
     let (a, b) = (written[0]["entity"]["id"].as_str().unwrap(), written[1]["entity"]["id"].as_str().unwrap());
-    app.tool("entity_update", json!({"entity_id": a, "summary": "s"})).await;
-    app.tool("entity_merge", json!({"winner_id": a, "loser_id": b})).await;
-    let skill = app.tool("skill_save", json!({"name": "n", "description": "d", "body": "b"})).await;
-    app.tool("skill_save", json!({"name": "n", "description": "d", "body": "b2"})).await;
-    app.tool("skill_delete", json!({"id": skill["id"]})).await;
-    let doc = app.tool("document_upload", json!({"filename": "a.md", "text": "hello"})).await;
-    app.tool("document_delete", json!({"id": doc["id"]})).await;
+    ok("entity_update", app.tool("entity_update", json!({"entity_id": a, "summary": "s"})).await);
+    ok("entity_merge", app.tool("entity_merge", json!({"winner_id": a, "loser_id": b})).await);
+    let skill = ok("skill_save", app.tool("skill_save", json!({"name": "n", "description": "d", "body": "b"})).await);
+    ok("skill_save", app.tool("skill_save", json!({"name": "n", "description": "d", "body": "b2"})).await);
+    ok("skill_delete", app.tool("skill_delete", json!({"id": skill["id"]})).await);
+    let doc = ok("document_upload", app.tool("document_upload", json!({"filename": "a.md", "text": "hello"})).await);
+    ok("document_delete", app.tool("document_delete", json!({"id": doc["id"]})).await);
 
     let (_, page) = app.http("GET", &format!("/api/vaults/{vault}/changes?after=15"), None, true).await;
     assert_eq!(
