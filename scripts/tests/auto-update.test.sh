@@ -172,10 +172,12 @@ echo 2 > "$TMP/up_fails"; : > "$TMP/docker.log"; touch "$S/requested"; update
 check "failed up: retried until it succeeds" test "$(grep -c 'compose up -d --remove-orphans' "$TMP/docker.log")" = 3
 check "failed up then success: reported as updated" test "$(field current_version)" = v2.0.0 -a "$(field error)" = none -a "$(field applying)" = false
 check "failed up then success: history recorded" grep -q 'updated v1.9.0 -> v2.0.0' "$S/history.log"
-# it never comes up within the retry window: reported, once the tries run out
+# it never comes up within the retry window: reported, once the tries run out. The window is in
+# whole seconds of $SECONDS, so 1 s can tick over during the first try and allow no retry at all;
+# 3 s always allows one, and with no delay the tries still run out long before 1000.
 (cd "$TMP/src" && echo eleven > compose.yml && git_ commit -qam v2.1 && git tag v2.1.0)
 echo 1000 > "$TMP/up_fails"; : > "$TMP/docker.log"; touch "$S/requested"
-EUNOMIA_DIR="$TMP/repo" PATH="$TMP/bin:$PATH" UP_RETRY_DELAY=0 UP_RETRY_FOR=1 bash "$TMP/repo/scripts/auto-update.sh"
+EUNOMIA_DIR="$TMP/repo" PATH="$TMP/bin:$PATH" UP_RETRY_DELAY=0 UP_RETRY_FOR=3 bash "$TMP/repo/scripts/auto-update.sh"
 check "up never succeeds: retried, then given up" test "$(grep -c 'compose up -d --remove-orphans' "$TMP/docker.log")" -gt 1
 check "up never succeeds: the error says why" grep -q 'restart failed: dependency failed to start' "$S/status.json"
 check "up never succeeds: lock released" test ! -e "$S/.lock"
