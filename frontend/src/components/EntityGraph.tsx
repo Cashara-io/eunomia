@@ -512,7 +512,8 @@ export default function EntityGraph({
       <>
         {frame(
           toolbar,
-          <div className="h-full flex items-center justify-center p-6">
+          // Start below the floating header and toolbar, which would otherwise cover the card's top.
+          <div className="h-full overflow-y-auto flex items-center justify-center p-6" style={{ paddingTop: insets.top + 16 }}>
             {guide ? (
               <div className="panel flex flex-col items-center gap-3 text-center max-w-sm text-[14px] p-3 pb-5" style={{ color: "var(--ink-dim)" }}>
                 <EmptyArt variant="people" className="w-full h-[140px]" />

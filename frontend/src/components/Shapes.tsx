@@ -3,8 +3,11 @@
    panel's edge like the blog banners. They sit on --surface-raised, never
    behind text, never inside tables or forms. No outlines, shadows or
    gradients, and nothing loops: each composition settles in once (the
-   surface's one moment) and stays put under reduced motion. Decorative only,
-   so every one is aria-hidden. */
+   surface's one moment). The auth and empty-state compositions are playable
+   (ShapeField): drag and throw a shape and it springs back home. Under reduced
+   motion they are still pictures. Decorative only, so every one is aria-hidden. */
+
+import ShapeField, { type ShapeBody } from "@/components/ShapeField";
 
 const P = "var(--vault-personal)";
 const Y = "var(--vault-project)";
@@ -24,21 +27,18 @@ function i(n: number) {
 }
 
 /** The auth panel's composition: fills the space under the promise, shapes
- * running off the bottom and right edges. */
+ * running off the bottom and right edges. Playable: drag and throw them. */
+const AUTH_BODIES: ShapeBody[] = [
+  { x: 580, y: 250, r: 150, draw: <circle r="150" fill={Y} /> },
+  { x: 640, y: 480, r: 270, draw: <path d="M0 0H-270A270 270 0 0 1 0 -270Z" fill={B} /> },
+  { x: 170, y: 430, r: 96, draw: <circle r="96" fill={P} /> },
+  { x: 276, y: 195.33, r: 40, draw: <path d="M0 -45.33 38 22.67H-38Z" fill={INK} /> },
+  { x: 406, y: 338, r: 26, a: 14, draw: <rect x="-22" y="-22" width="44" height="44" fill={P} /> },
+  { x: 86, y: 262, r: 14, draw: <circle r="14" fill={B} /> },
+];
+
 export function AuthArt({ className = "" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 640 480" preserveAspectRatio="xMaxYMax slice" className={className} aria-hidden>
-      <style>{SETTLE}</style>
-      <g className="shape-art">
-        <circle cx="580" cy="250" r="150" fill={Y} style={i(0)} />
-        <path d="M640 480H370A270 270 0 0 1 640 210Z" fill={B} style={i(1)} />
-        <circle cx="170" cy="430" r="96" fill={P} style={i(2)} />
-        <path d="M276 150 314 218H238Z" fill={INK} style={i(3)} />
-        <g style={i(4)}><rect x="384" y="316" width="44" height="44" fill={P} transform="rotate(14 406 338)" /></g>
-        <circle cx="86" cy="262" r="14" fill={B} style={i(5)} />
-      </g>
-    </svg>
-  );
+  return <ShapeField viewBox="0 0 640 480" preserveAspectRatio="xMaxYMax slice" bodies={AUTH_BODIES} className={className} overflow />;
 }
 
 /** A thin band of the same composition for narrow screens, where the auth
@@ -111,67 +111,64 @@ export function StepDot({ shape, dim = false }: { shape: Exclude<StepShape, "tri
 
 export type EmptyVariant = "documents" | "people" | "chat" | "memory" | "sources" | "spaces";
 
+const EMPTY_BODIES: Record<EmptyVariant, ShapeBody[]> = {
+  documents: [
+    { x: 214, y: 72, r: 42, draw: <rect x="-36" y="-46" width="72" height="92" rx="4" fill={Y} /> },
+    { x: 266, y: 92, r: 30, draw: <path d="M-40 0a40 40 0 0 0 80 0Z" fill={P} /> },
+    { x: 150, y: 110.67, r: 17, draw: <path d="M0 -18.67 16 9.33H-16Z" fill={B} /> },
+    { x: 56, y: 44, r: 10, draw: <circle r="10" fill={P} /> },
+  ],
+  people: [
+    { x: 196, y: 52, r: 26, draw: <circle r="26" fill={P} /> },
+    { x: 196, y: 140, r: 30, draw: <path d="M-38 0a38 38 0 0 1 76 0Z" fill={Y} /> },
+    { x: 280, y: 106.67, r: 55, draw: <path d="M0 -66.67 54 33.33H-54Z" fill={B} /> },
+    { x: 58, y: 94, r: 10, draw: <rect x="-8" y="-8" width="16" height="16" fill={Y} /> },
+  ],
+  chat: [
+    { x: 300, y: 22, r: 64, draw: <circle r="64" fill={Y} /> },
+    {
+      x: 190,
+      y: 76,
+      r: 34,
+      draw: (
+        <>
+          <circle r="32" fill={B} />
+          <path d="M-22 24 6 28-18 50Z" fill={B} />
+        </>
+      ),
+    },
+    { x: 247, y: 103, r: 13, draw: <rect x="-11" y="-11" width="22" height="22" fill={P} /> },
+    { x: 64, y: 56, r: 14, draw: <path d="M0 -16 14 8H-14Z" fill={INK} /> },
+  ],
+  memory: [
+    { x: 170, y: 134, r: 52, draw: <circle r="52" fill={P} /> },
+    { x: 244, y: 62, r: 26, draw: <rect x="-22" y="-22" width="44" height="44" fill={Y} /> },
+    { x: 300, y: 62, r: 40, draw: <path d="M0 -48 40 24H-40Z" fill={B} /> },
+    { x: 58, y: 56, r: 9, draw: <circle r="9" fill={B} /> },
+  ],
+  spaces: [
+    { x: 195, y: 99, r: 30, draw: <rect x="-45" y="-19" width="90" height="38" rx="4" fill={B} /> },
+    { x: 211, y: 67, r: 30, draw: <rect x="-45" y="-19" width="90" height="38" rx="4" fill={Y} /> },
+    { x: 290, y: 34, r: 30, draw: <circle r="30" fill={P} /> },
+    { x: 58, y: 86, r: 14, draw: <path d="M0 -16 14 8H-14Z" fill={INK} /> },
+  ],
+  sources: [
+    { x: 261, y: 69, r: 38, draw: <rect x="-35" y="-35" width="70" height="70" fill={Y} /> },
+    { x: 171.33, y: 70, r: 30, draw: <path d="M-21.33 -24 42.67 0-21.33 24Z" fill={B} /> },
+    { x: 300, y: 134, r: 26, draw: <circle r="26" fill={P} /> },
+    { x: 60, y: 90, r: 9, draw: <circle r="9" fill={P} /> },
+  ],
+};
+
 /** Empty states: one composition of two or three shapes in a raised panel
  * beside (or above, on phones) the sentence and the one action. Drawn on a
  * wide 320 x 140 canvas anchored right: a 200 x 140 box shows the main group,
- * a wide phone box also shows the small accent on the left. */
+ * a wide phone box also shows the small accent on the left. Playable: drag and
+ * throw the shapes; they spring back. */
 export function EmptyArt({ variant, className = "" }: { variant: EmptyVariant; className?: string }) {
   return (
     <div className={`relative overflow-hidden rounded-[10px] shrink-0 ${className}`} style={{ background: "var(--surface-raised)" }} aria-hidden>
-      <svg viewBox="0 0 320 140" preserveAspectRatio="xMaxYMid slice" className="absolute inset-0 w-full h-full">
-        <style>{SETTLE}</style>
-        <g className="shape-art">
-          {variant === "documents" && (
-            <>
-              <rect x="178" y="26" width="72" height="92" rx="4" fill={Y} style={i(0)} />
-              <g style={i(1)}><path d="M226 92a40 40 0 0 0 80 0Z" fill={P} /></g>
-              <path d="M150 92 166 120H134Z" fill={B} style={i(2)} />
-              <circle cx="56" cy="44" r="10" fill={P} style={i(3)} />
-            </>
-          )}
-          {variant === "people" && (
-            <>
-              <circle cx="196" cy="52" r="26" fill={P} style={i(0)} />
-              <path d="M158 140a38 38 0 0 1 76 0Z" fill={Y} style={i(1)} />
-              <path d="M280 40 334 140H226Z" fill={B} style={i(2)} />
-              <rect x="50" y="86" width="16" height="16" fill={Y} style={i(3)} />
-            </>
-          )}
-          {variant === "chat" && (
-            <>
-              <circle cx="300" cy="22" r="64" fill={Y} style={i(0)} />
-              <circle cx="190" cy="76" r="32" fill={B} style={i(1)} />
-              <path d="M168 100 196 104 172 126Z" fill={B} style={i(1)} />
-              <rect x="236" y="92" width="22" height="22" fill={P} style={i(2)} />
-              <path d="M64 40 78 64H50Z" fill={INK} style={i(3)} />
-            </>
-          )}
-          {variant === "memory" && (
-            <>
-              <circle cx="170" cy="134" r="52" fill={P} style={i(0)} />
-              <rect x="222" y="40" width="44" height="44" fill={Y} style={i(1)} />
-              <path d="M300 14 340 86H260Z" fill={B} style={i(2)} />
-              <circle cx="58" cy="56" r="9" fill={B} style={i(3)} />
-            </>
-          )}
-          {variant === "spaces" && (
-            <>
-              <rect x="150" y="80" width="90" height="38" rx="4" fill={B} style={i(0)} />
-              <rect x="166" y="48" width="90" height="38" rx="4" fill={Y} style={i(1)} />
-              <circle cx="290" cy="34" r="30" fill={P} style={i(2)} />
-              <path d="M58 70 72 94H44Z" fill={INK} style={i(3)} />
-            </>
-          )}
-          {variant === "sources" && (
-            <>
-              <rect x="226" y="34" width="70" height="70" fill={Y} style={i(0)} />
-              <path d="M150 46 214 70 150 94Z" fill={B} style={i(1)} />
-              <circle cx="300" cy="134" r="26" fill={P} style={i(2)} />
-              <circle cx="60" cy="90" r="9" fill={P} style={i(3)} />
-            </>
-          )}
-        </g>
-      </svg>
+      <ShapeField viewBox="0 0 320 140" preserveAspectRatio="xMaxYMid slice" bodies={EMPTY_BODIES[variant]} className="absolute inset-0 w-full h-full" />
     </div>
   );
 }
