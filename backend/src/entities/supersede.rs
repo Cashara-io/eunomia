@@ -112,11 +112,21 @@ pub async fn check(db: &OrgDb, settings: &Settings, owner: &RecordId, subject: &
     if new.is_empty() || !enabled(db, settings, owner).await {
         return Vec::new();
     }
-    match run(db, settings, owner, subject, new).await {
-        Ok(marked) => marked,
-        Err(e) => {
-            tracing::warn!("supersede check failed for {}: {}", subject.to_string(), e.message);
-            Vec::new()
+    // The check runs right after the write, beside that write's own background work (its embed_soon),
+    // so a commit conflict is likely and says nothing about the facts: run it again. It is safe to
+    // repeat (embedding and marking are idempotent).
+    let mut attempt = 1;
+    loop {
+        match run(db, settings, owner, subject, new).await {
+            Ok(marked) => return marked,
+            Err(e) if e.code == crate::error::ErrorCode::DbConflict && attempt < CHECK_ATTEMPTS => {
+                attempt += 1;
+                tokio::time::sleep(Duration::from_millis(50 * attempt as u64)).await;
+            }
+            Err(e) => {
+                tracing::warn!("supersede check failed for {}: {}", subject.to_string(), e.message);
+                return Vec::new();
+            }
         }
     }
 }
@@ -125,6 +135,9 @@ pub async fn check(db: &OrgDb, settings: &Settings, owner: &RecordId, subject: &
 pub async fn enabled(db: &OrgDb, settings: &Settings, owner: &RecordId) -> bool {
     settings.embeddings_backend != "stub" && crate::embeddings::service::chat_available(db, settings, owner).await
 }
+
+/// Runs of one check when a commit conflict interrupts it.
+const CHECK_ATTEMPTS: u32 = 3;
 
 /// Most older facts embedded on the spot for one check.
 const EMBED_MISSING: i64 = 30;
@@ -149,14 +162,7 @@ async fn embed_missing(db: &OrgDb, settings: &Settings, owner: &RecordId, subjec
         if vector.len() != embeddings::dim() {
             continue;
         }
-        crate::store::cache::SET_MEMORY_EMBEDDING
-            .on(db)
-            .bind(("id", r.id.clone()))
-            .bind(("embedding", vector))
-            .bind(("spec", spec.to_string()))
-            .bind(("text", r.text.clone()))
-            .await?
-            .check()?;
+        embeddings::set_memory_embedding(db, &r.id, vector, spec, &r.text).await?;
     }
     Ok(())
 }
@@ -180,14 +186,7 @@ async fn run(db: &OrgDb, settings: &Settings, owner: &RecordId, subject: &Record
         if vector.len() != embeddings::dim() {
             return Err(AppError::internal(format!("embedding for {} has dimension {}", n.id.to_string(), vector.len())));
         }
-        crate::store::cache::SET_MEMORY_EMBEDDING
-            .on(db)
-            .bind(("id", n.id.clone()))
-            .bind(("embedding", vector.clone()))
-            .bind(("spec", spec.clone()))
-            .bind(("text", n.text.clone()))
-            .await?
-            .check()?;
+        embeddings::set_memory_embedding(db, &n.id, vector.clone(), &spec, &n.text).await?;
         let mut res = q::SIMILAR_LIVE_FACTS
             .on(db)
             .bind(("new", n.id.clone()))
@@ -222,12 +221,9 @@ async fn run(db: &OrgDb, settings: &Settings, owner: &RecordId, subject: &Record
     let ids: Vec<RecordId> = rows.iter().map(|(_, r, _)| r.id.clone()).collect();
     let marked = pick(&call_llm(db, settings, owner, build_prompt(&facts)).await?, &facts, &ids);
     if !marked.is_empty() {
-        q::MARK_SUPERSEDED
-            .on(db)
-            .bind(("ids", marked.clone()))
-            .bind(("subject", subject.clone()))
-            .await?
-            .check()?;
+        // the subject's other writers (consolidation, a new fact's embed) can touch these rows too
+        let mark = || async { q::MARK_SUPERSEDED.on(db).bind(("ids", marked.clone())).bind(("subject", subject.clone())).await?.check() };
+        crate::tx::with_retry(mark).await?;
     }
     Ok(marked)
 }

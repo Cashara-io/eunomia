@@ -115,6 +115,8 @@ services:
       - AUDIT_RETENTION_DAYS=${AUDIT_RETENTION_DAYS:-365}
       - TOOL_USAGE_RETENTION_DAYS=${TOOL_USAGE_RETENTION_DAYS:-90}
       - SESSION_RETENTION_DAYS=${SESSION_RETENTION_DAYS:-7}
+      - CHANGE_LOG_RETENTION_DAYS=${CHANGE_LOG_RETENTION_DAYS:-90}
+      - CHANGE_LOG_MAX_ROWS=${CHANGE_LOG_MAX_ROWS:-100000}
       - ENCRYPTION_KEY_LEGACY_EMPTY=${ENCRYPTION_KEY_LEGACY_EMPTY:-}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
@@ -133,10 +135,17 @@ services:
       - EUNOMIA_INSTANCE_NAME=${EUNOMIA_INSTANCE_NAME:-}
       # with HTTPS on, share codes also carry https://<domain>
       - EUNOMIA_DOMAIN=${EUNOMIA_DOMAIN:-}
+      # the credential broker's sidecar (below), on the secrets network only the two of them join
+      - SECRETS_HELPER_URL=http://secrets-helper:8080
+      - SECRETS_HELPER_KEY=${SECRETS_HELPER_KEY:-}
+      # the profiles in force: the sidecar runs only under `secrets`, and without it every secret
+      # resolution fails at once (secret.unavailable, helper_disabled) instead of waiting on a timeout
+      - EUNOMIA_COMPOSE_PROFILES=${COMPOSE_PROFILES:-}
     # Read/write access to ONE small status directory -- not the repo, not
     # the docker socket. The `updater` service below does the actual update.
     volumes:
       - ./update-status:/update-status
+    networks: [default, secrets]
     depends_on:
       surrealdb:
         condition: service_healthy
@@ -163,6 +172,32 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+
+  # The credential broker's sidecar (docs/architecture/specs/broker.md): resolves 1Password and Bitwarden
+  # Secrets Manager references for the backend. Off unless .env has `secrets` in COMPOSE_PROFILES, which
+  # Settings, Connectors, "Enable password managers" sets through the updater (or by hand:
+  # COMPOSE_PROFILES=secrets, then `docker compose up -d`; see docs/password-managers.md). Stateless: the
+  # provider token comes with each request from the backend (stored encrypted in the org's database) and
+  # is never written here; no volume, no port. It joins `secrets` (internal: only the backend can reach
+  # it) and `secrets-egress` (its own way out to the providers), never the default network the other
+  # services share. A missing SECRETS_HELPER_KEY leaves the network as the only gate.
+  secrets-helper:
+    image: ghcr.io/cashara-io/eunomia-secrets-helper:${EUNOMIA_IMAGE_TAG:-latest}
+    build: ./secrets-helper
+    profiles: [secrets]
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      - SECRETS_HELPER_KEY=${SECRETS_HELPER_KEY:-}
+    networks: [secrets, secrets-egress]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/healthz').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
 
   # Applies updates when you click "Update now" in Settings (see
   # scripts/updater.sh). Not web-facing: no ports, its only input is the
@@ -228,6 +263,14 @@ services:
     depends_on:
       surrealdb:
         condition: service_healthy
+
+networks:
+  default:
+  # backend <-> secrets-helper only, no way out
+  secrets:
+    internal: true
+  # secrets-helper -> the password managers
+  secrets-egress:
 
 volumes:
   eunomia-surreal-data:

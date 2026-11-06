@@ -1,9 +1,9 @@
 "use client";
 
+import { CircleNotchIcon } from "@phosphor-icons/react/ssr";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
 import { useRegister } from "@/lib/queries/auth";
 import { AlertCircle } from "lucide-react";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
@@ -201,7 +201,7 @@ export default function RegisterPage() {
               )}
 
               <button type="submit" disabled={busy} aria-busy={busy} className="btn btn-primary mt-1 min-h-11 w-full">
-                {busy && <Loader2 size={14} strokeWidth={1.75} className="animate-spin" aria-hidden />}
+                {busy && <CircleNotchIcon weight="duotone" size={14} className="animate-spin" aria-hidden />}
                 {busy ? "Creating account…" : "Create account"}
               </button>
 

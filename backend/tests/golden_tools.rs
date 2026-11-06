@@ -238,10 +238,19 @@ async fn goldens() {
     // -- agent skills (last, so they change no snapshot above; keyword-only: no embedding key) --
     let skill = Box::pin(g.snap("skill_save", "skill_save", json!({"name": "anvil-budget", "description": "How to read the anvil budget", "body": "# Anvil budget\n\n1. Open the sheet."}))).await;
     Box::pin(g.snap("skill_find", "skill_find", json!({"query": "anvil"}))).await;
+    Box::pin(g.snap("skill_list", "skill_list", json!({"limit": 10}))).await;
     Box::pin(g.snap("skill_get", "skill_get", json!({"id": s(&skill, "/id")}))).await;
     Box::pin(g.snap("skill_delete", "skill_delete", json!({"id": s(&skill, "/id")}))).await;
     // -- the change log: the first writes above, oldest first --
     Box::pin(g.snap("changes_since", "changes_since", json!({"after": 0, "limit": 3}))).await;
+
+    // -- secret requests (after the change log: they add no change rows). Only a person in a browser can
+    // fill a request, so the transform and the outbound call snapshot the unfilled handle's refusal --
+    let req = Box::pin(g.snap("secret_request", "secret_request", json!({"name": "golden_key", "label": "Golden key", "description": "to call the example API", "target": {"hosts": ["api.example.com"]}}))).await;
+    Box::pin(g.snap("secret_request_status", "secret_request_status", json!({"request_id": s(&req, "/request_id")}))).await;
+    let handle = s(&req, "/handle/$secret");
+    Box::pin(g.snap("secret_transform", "secret_transform", json!({"op": "template", "inputs": {"key": handle}, "params": {"template": "Bearer {{key}}"}}))).await;
+    Box::pin(g.snap("http_request", "http_request", json!({"url": "https://api.example.com/v1/ping", "headers": {"Authorization": {"$secret": handle}}}))).await;
 
     // -- invitations and roles (last, so they change no snapshot above) --
     role_goldens(&mut g, &bob).await;

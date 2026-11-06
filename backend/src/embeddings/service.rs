@@ -213,16 +213,27 @@ pub async fn embed_memory_backlog(db: &OrgDb, settings: &Settings, owner: &Recor
         if vector.len() != DIM {
             return Err(AppError::internal(format!("embedding for {} has dimension {}", row.id.to_string(), vector.len())));
         }
-        store::cache::SET_MEMORY_EMBEDDING
-            .on(db)
-            .bind(("id", row.id.clone()))
-            .bind(("embedding", vector))
-            .bind(("spec", spec.clone()))
-            .bind(("text", row.text.clone()))
-            .await?
-            .check()?;
+        set_memory_embedding(db, &row.id, vector, &spec, &row.text).await?;
     }
     Ok(rows.len())
+}
+
+/// Save `vector` as memory `id`'s embedding under `spec`, unless its text is no longer `text`. More
+/// than one writer sets vectors on the same memory (this backlog job, and a new fact's supersede
+/// check), so a commit conflict between them is retried, not returned.
+pub async fn set_memory_embedding(db: &OrgDb, id: &RecordId, vector: Vec<f32>, spec: &str, text: &str) -> AppResult<()> {
+    let set = || async {
+        store::cache::SET_MEMORY_EMBEDDING
+            .on(db)
+            .bind(("id", id.clone()))
+            .bind(("embedding", vector.clone()))
+            .bind(("spec", spec.to_string()))
+            .bind(("text", text.to_string()))
+            .await?
+            .check()
+    };
+    crate::tx::with_retry(set).await?;
+    Ok(())
 }
 
 /// Whether embeddings can run for `owner` right now. Without them the
@@ -292,12 +303,21 @@ pub async fn embed(db: &OrgDb, settings: &Settings, texts: &[String], owner: Opt
 
         for (i, v) in missing_idx.into_iter().zip(vecs) {
             let k = keys[i].clone();
-            store::cache::EMBED_CACHE_PUT
-                .on(db)
-                .bind(("id", RecordId::from_table_key("embed_cache", k.clone())))
-                .bind(("hmac", k.clone()))
-                .bind(("vector", v.clone()))
-                .await?;
+            // Two callers embedding the same text at once (a write's embed_soon and its supersede check)
+            // put the same cache row: retry the conflict. The cache is only a memo, so a put that still
+            // fails is logged and the vector is returned anyway.
+            let put = || async {
+                store::cache::EMBED_CACHE_PUT
+                    .on(db)
+                    .bind(("id", RecordId::from_table_key("embed_cache", k.clone())))
+                    .bind(("hmac", k.clone()))
+                    .bind(("vector", v.clone()))
+                    .await?
+                    .check()
+            };
+            if let Err(e) = crate::tx::with_retry(put).await {
+                tracing::warn!(error = %e, "embedding cache: not stored");
+            }
             cached.insert(k, v);
         }
     }

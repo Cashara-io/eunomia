@@ -37,7 +37,7 @@ test.describe("Documents", () => {
     await registerAndOnboard(page, uniqueEmail("docsui"));
     await page.getByRole("link", { name: "Documents" }).first().click();
     await expect(page.getByRole("heading", { name: "Documents", level: 1 })).toBeVisible();
-    await expect(page.getByText("No documents yet.")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "No documents yet" })).toBeVisible();
 
     const content = Buffer.from("# Field notes\n\nThe heron census found forty-two nests along the eastern marsh.\n");
     await page.getByTestId("document-file-input").setInputFiles({ name: "field-notes.md", mimeType: "text/markdown", buffer: content });
@@ -81,7 +81,7 @@ test.describe("Documents", () => {
     await dialog.getByLabel("Type field-notes.md to confirm").fill("field-notes.md");
     await confirm.click();
     await expect(page.getByTestId("document-row")).toHaveCount(0);
-    await expect(page.getByText("No documents yet.")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "No documents yet" })).toBeVisible();
 
     // gone from search too
     const search = await page.request.post("/api/tools/search", { data: { query: "heron census", mode: "keyword" } });

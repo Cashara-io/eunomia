@@ -3,8 +3,11 @@ name: CI
 on:
   push:
     branches: [main]
+  # Every pull request, whatever its base: a stacked PR (base release/2.0.x or another feature branch)
+  # gets the same jobs as one into main.
   pull_request:
-    branches: [main]
+  # A manual run on any branch; only offered once this file is on the default branch.
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -111,6 +114,9 @@ jobs:
         run: |
           echo "JWT_SECRET=$(openssl rand -hex 32)" >> .env
           echo "ENCRYPTION_KEY=$(openssl rand -hex 32)" >> .env
+          echo "SECRETS_HELPER_KEY=$(openssl rand -hex 32)" >> .env
+          # the password managers spec needs the secrets helper: its compose profile, as Enable sets it
+          echo "COMPOSE_PROFILES=secrets" >> .env
           # The connectors spec points connectors at its in-test mock provider.
           echo "EUNOMIA_ALLOW_CONNECTOR_BASE_URL=1" >> .env
           # the suite registers many users a minute from one address
@@ -118,7 +124,7 @@ jobs:
           # The backend writes https.json here and the HTTPS spec plays the updater.
           mkdir -p update-status && chmod 777 update-status
           echo "E2E_UPDATE_STATUS_DIR=$PWD/update-status" >> "$GITHUB_ENV"
-          docker compose -p eunomia-ci -f docker-compose.yml -f docker-compose.ci.yml up -d backend frontend
+          docker compose -p eunomia-ci -f docker-compose.yml -f docker-compose.ci.yml up -d backend frontend secrets-helper
 
       - name: Wait for backend and frontend
         run: |
@@ -202,7 +208,7 @@ jobs:
       # Every script test that needs no Docker, by glob so a new one cannot be forgotten.
       # SKIP lists the ones that need real containers (upgrade-surreal-v3 and update-path have their own jobs below).
       - run: |
-          SKIP="upgrade-surreal-v3.test.sh update-path.test.sh"
+          SKIP="upgrade-surreal-v3.test.sh update-path.test.sh secrets-helper-compose.test.sh"
           rc=0
           for t in scripts/tests/*.test.sh; do
             case " $SKIP " in *" $(basename "$t") "*) echo "skip $t"; continue ;; esac
@@ -217,6 +223,23 @@ jobs:
           node-version: 18
       - run: npm ci && npm test
         working-directory: cli/create-eunomia
+      # the credential broker's sidecar: its unit tests and the mock 1Password Connect and Bitwarden servers
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci && npm test
+        working-directory: secrets-helper
+
+  # The backend and the real secrets-helper container on the compose networks: Test connection through
+  # the sidecar to a mock 1Password Connect container, the sidecar reachable from the backend only, no
+  # published port, nothing written to its filesystem, no token in its environment.
+  secrets-helper-compose:
+    needs: [frontend]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/tests/secrets-helper-compose.test.sh
 
   # Real SurrealDB 2.7 -> 3.3 data move (scripts/upgrade-surreal-v3.sh), including a
   # forced mismatch that must roll back, and an upgrade from the released v1.2.2
@@ -235,19 +258,33 @@ jobs:
   # scripts/auto-update.sh (only `docker compose pull` is shimmed: the build is tagged v9.9.9-ci,
   # local only, never pushed), then counts, reads, ledgers, health, an idempotent re-run and a
   # rollback (old tag, pre-update backup restored). Compose project eu-update, ports 8251 and 3251.
+  # A row with `from_ref` starts from a release that is not tagged or published yet: its images are
+  # built here from that ref and tagged `from` in this runner's daemon only (never pushed), and the
+  # tag is put on the ref in the test's stand-in GitHub only.
   update-path:
     needs: [frontend]
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60   # a from_ref row builds two releases
     strategy:
       fail-fast: false
       matrix:
-        from: [v2.0.7]
+        include:
+          - from: v2.0.7                        # published releases, pulled from ghcr
+          - from: v2.0.8
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0   # the release tags: the stand-in GitHub serves them
-      - run: bash scripts/tests/update-path.test.sh "${{ matrix.from }}"
+      - name: Fetch the from_ref branch
+        if: matrix.from_ref
+        env:
+          FROM_REF: ${{ matrix.from_ref }}
+        run: git fetch --no-tags origin "+refs/heads/${FROM_REF#origin/}:refs/remotes/$FROM_REF"
+      - env:
+          UPDATE_PATH_FROM_REF: ${{ matrix.from_ref }}
+          UPDATE_PATH_FROM_TAG: ${{ matrix.from_ref && matrix.from || '' }}
+          FROM: ${{ matrix.from }}
+        run: bash scripts/tests/update-path.test.sh "$FROM"
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

@@ -3,7 +3,7 @@ source: tests/golden_tools.rs
 expression: stable
 ---
 {
-  "id": "vault:<id27>",
+  "id": "vault:<id28>",
   "name": "Peer Share",
   "kind": "org",
   "created_at": "<ts>"

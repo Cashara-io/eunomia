@@ -88,6 +88,8 @@ fn only_allow_listed_files_build_http_clients() {
         ("llm_net.rs", "the guarded client itself"),
         ("oauth/cimd.rs", "fetches a public client metadata URL with its own resolve-then-pin check and no redirects"),
         ("peers/net.rs", "reaches another Eunomia the user chose by pasting its share code, usually on the LAN, which the guarded client refuses by design: no redirects, short timeouts, capped bodies, and nothing is used unless the answer opens under the link key or matches the code's instance id"),
+        ("secrets/outbound.rs", "http_request: https only to host names a person approved for every handle in the call, a resolver that refuses loopback, private, link-local and metadata addresses at connect time, no redirects, no proxy, 5 s connect, 15 s total, capped bodies"),
+        ("secrets/client.rs", "calls only the operator's own secrets-helper sidecar (SECRETS_HELPER_URL, on the internal compose network), never a URL from a request: 2 s connect, 12 s total, no redirects; the sidecar makes the provider calls"),
         ("oidc.rs", "calls only the operator-configured OpenID Connect provider and the endpoints its discovery document names: https (loopback http for development), 10 s timeout, no redirects, capped bodies"),
     ];
     fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {

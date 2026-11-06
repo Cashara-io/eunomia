@@ -11,7 +11,10 @@ export default function PageHeader({
   actions,
   children,
 }: {
-  icon?: LucideIcon;
+  /** Accepted for callers that still pass one (Lucide or Phosphor); not drawn. */
+  icon?: LucideIcon | React.ElementType;
+  /** Accepted from main's design-system callers; this header has a single tone. */
+  tone?: string;
   /** A provider mark or other custom identity, used instead of `icon`. */
   mark?: React.ReactNode;
   title: React.ReactNode;

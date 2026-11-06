@@ -1,10 +1,10 @@
 "use client";
 
+import { ArrowRightIcon, CaretRightIcon, EyeIcon, EyeSlashIcon } from "@phosphor-icons/react/ssr";
 import Select from "@/components/Select";
 import { use, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowRight, ChevronRight, Eye, EyeOff } from "lucide-react";
 import { apiOrigin } from "@/lib/api";
 import type { ConnectorKind, ConnectorUpdate } from "@/lib/types";
 import { useMe } from "@/lib/queries/auth";
@@ -67,7 +67,7 @@ function Breadcrumb({ label }: { label: string }) {
       <Link href="/connectors" className="underline-offset-2 hover:underline" style={{ color: "var(--accent-text)" }}>
         Connected sources
       </Link>
-      <ChevronRight size={12} strokeWidth={1.75} aria-hidden />
+      <CaretRightIcon weight="duotone" size={12} aria-hidden />
       <span aria-current="page">{label}</span>
     </nav>
   );
@@ -99,7 +99,7 @@ function SecretToggle({ shown, onToggle, label }: { shown: boolean; onToggle: ()
   return (
     <Tooltip label={name}>
       <button type="button" onClick={onToggle} aria-label={name} aria-pressed={shown} className="btn btn-ghost btn-sm btn-icon -mr-2">
-        {shown ? <EyeOff size={18} strokeWidth={1.75} aria-hidden /> : <Eye size={18} strokeWidth={1.75} aria-hidden />}
+        {shown ? <EyeSlashIcon weight="duotone" size={18} aria-hidden /> : <EyeIcon weight="duotone" size={18} aria-hidden />}
       </button>
     </Tooltip>
   );
@@ -345,7 +345,7 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
           actions={
             (connected || isDemo) && sourceKey && connector ? (
               <Link href={`/connectors/${connector.source_key}`} className="btn">
-                View synced data <ArrowRight size={18} strokeWidth={1.75} aria-hidden />
+                View synced data <ArrowRightIcon weight="duotone" size={18} aria-hidden />
               </Link>
             ) : undefined
           }

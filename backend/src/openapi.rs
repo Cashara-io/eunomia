@@ -24,6 +24,9 @@ pub struct Problem {
     /// Stable dotted error code, see `docs/errors.md`.
     pub code: String,
     pub trace_id: Option<String>,
+    /// A stable machine-readable reason under `code`, when there is one (docs/errors.md).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -91,6 +94,8 @@ pub fn spec() -> utoipa::openapi::OpenApi {
         routers::entities::Doc::openapi(),
         routers::export::Doc::openapi(),
         routers::extensions::Doc::openapi(),
+        routers::secrets::Doc::openapi(),
+        routers::secret_requests::Doc::openapi(),
         routers::https::Doc::openapi(),
         routers::oauth::Doc::openapi(),
         routers::oidc::Doc::openapi(),

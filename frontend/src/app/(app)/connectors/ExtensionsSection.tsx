@@ -1,7 +1,8 @@
 "use client";
 
+import { ArrowClockwiseIcon, CaretDownIcon, PlusIcon, PowerIcon, TrashIcon, WebhooksLogoIcon, XIcon } from "@phosphor-icons/react/ssr";
+import VaultChip, { vaultTone } from "@/components/VaultChip";
 import { useState } from "react";
-import { ChevronDown, Plus, Power, RotateCw, Trash2, Webhook, X } from "lucide-react";
 import type { ExtensionOut } from "@/lib/gen";
 import { useCreateExtension, useDeleteExtension, useExtensions, useRotateExtensionSecret, useUpdateExtension } from "@/lib/queries/extensions";
 import { useVaults } from "@/lib/queries/vaults";
@@ -66,7 +67,7 @@ export default function ExtensionsSection() {
         </div>
         {!creating && (
           <button type="button" className="btn" onClick={() => { setCreating(true); setMinted(null); }}>
-            <Plus {...ICON} aria-hidden />
+            <PlusIcon {...ICON} aria-hidden />
             New extension
           </button>
         )}
@@ -81,9 +82,9 @@ export default function ExtensionsSection() {
           }}
         >
           <div className="flex items-start justify-between gap-3">
-            <h3 className="text-[17px] font-semibold">New extension</h3>
+            <h3 className="text-[17px] font-medium tracking-[-0.015em]">New extension</h3>
             <button type="button" onClick={() => setCreating(false)} aria-label="Cancel" className="btn btn-ghost btn-sm btn-icon -mt-1 -mr-1">
-              <X {...ICON} />
+              <XIcon {...ICON} />
             </button>
           </div>
           <div className="flex flex-col gap-1.5">
@@ -126,7 +127,7 @@ export default function ExtensionsSection() {
               />
             </div>
             <button type="submit" disabled={create.isPending || !name.trim()} className="btn btn-primary">
-              <Webhook {...ICON} aria-hidden />
+              <WebhooksLogoIcon {...ICON} aria-hidden />
               {create.isPending ? "Creating…" : "Create extension"}
             </button>
           </div>
@@ -144,7 +145,7 @@ export default function ExtensionsSection() {
       <div className="ledger overflow-hidden">
         <div
           className={`hidden md:grid ${COLS} gap-x-4 px-4 h-[34px] items-center caps`}
-          style={{ background: "var(--bauhaus-app-ink)", color: "var(--bauhaus-app-cream)" }}
+          style={{ background: "var(--surface-raised)", color: "var(--ink)", border: "1px solid var(--border)" }}
           aria-hidden
         >
           <span>Extension</span>
@@ -201,7 +202,7 @@ function MintedCard({ minted, onDismiss }: { minted: Minted; onDismiss: () => vo
           </p>
         </div>
         <button onClick={onDismiss} aria-label="Dismiss" className="btn btn-ghost btn-sm btn-icon">
-          <X {...ICON} />
+          <XIcon {...ICON} />
         </button>
       </div>
       <div className="flex flex-col gap-1.5">
@@ -257,7 +258,9 @@ function ExtensionRow({
   const rotate = useRotateExtensionSecret();
   const del = useDeleteExtension();
   const vaults = useVaults().data ?? [];
-  const vaultName = ext.vault_id ? (vaults.find((v) => v.id === ext.vault_id)?.name ?? ext.vault_id) : "Personal space";
+  const dest = ext.vault_id ? vaults.find((v) => v.id === ext.vault_id) : undefined;
+  const vaultName = ext.vault_id ? (dest?.name ?? ext.vault_id) : "Personal space";
+  const vaultChip = <VaultChip tone={ext.vault_id ? vaultTone(dest?.kind) : "personal"} name={vaultName} />;
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   async function toggleEnabled() {
@@ -305,10 +308,10 @@ function ExtensionRow({
               height: 28,
               borderRadius: 4,
               color: "var(--ink-dim)",
-              background: "var(--bauhaus-app-soft)",
+              background: "var(--surface-raised)",
             }}
           >
-            <Webhook size={15} strokeWidth={1.75} />
+            <WebhooksLogoIcon weight="duotone" size={15} />
           </span>
           <span className="min-w-0 flex flex-col">
             <span className="font-medium truncate">{ext.name}</span>
@@ -341,7 +344,7 @@ function ExtensionRow({
           {relativeTime(ext.last_delivery_at)}
         </span>
         <button type="button" onClick={onToggle} aria-hidden tabIndex={-1} className="justify-self-end" style={{ color: "var(--ink-faint)" }}>
-          <ChevronDown size={14} strokeWidth={1.75} style={{ transform: open ? "rotate(180deg)" : undefined, transition: "transform 140ms var(--ease-out)" }} />
+          <CaretDownIcon weight="duotone" size={14} style={{ transform: open ? "rotate(180deg)" : undefined, transition: "transform 140ms var(--ease-out)" }} />
         </button>
       </div>
 
@@ -353,23 +356,23 @@ function ExtensionRow({
           </div>
           <Curl url={ext.webhook_url} secret="$EXTENSION_SECRET" />
           <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
-            Secret ending <span className="font-mono">{ext.secret_hint}</span>, rotated {relativeTime(ext.secret_rotated_at)}. Saves to: {vaultName}. Collect batches with{" "}
+            Secret ending <span className="font-mono">{ext.secret_hint}</span>, rotated {relativeTime(ext.secret_rotated_at)}. Saves to: {vaultChip}. Collect batches with{" "}
             <span className="font-mono">POST /api/extensions/{ext.id}/events/claim</span> using an API token.
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" className="btn btn-sm" onClick={doRotate} disabled={rotate.isPending}>
-              <RotateCw {...ICON} aria-hidden />
+              <ArrowClockwiseIcon {...ICON} aria-hidden />
               {rotate.isPending ? "Rotating…" : "Rotate secret"}
             </button>
             <Tooltip label={ext.enabled ? "Deliveries are refused until you switch it back on" : "Accept deliveries again"}>
               <button type="button" className="btn btn-sm" onClick={toggleEnabled} disabled={update.isPending}>
-                <Power {...ICON} aria-hidden />
+                <PowerIcon {...ICON} aria-hidden />
                 {ext.enabled ? "Disable" : "Enable"}
               </button>
             </Tooltip>
             <span className="ml-auto">
               <button type="button" aria-label={`Delete ${ext.name}`} onClick={() => setConfirmDelete(true)} disabled={del.isPending} className="btn btn-sm btn-danger">
-                <Trash2 {...ICON} aria-hidden />
+                <TrashIcon {...ICON} aria-hidden />
                 Delete
               </button>
             </span>

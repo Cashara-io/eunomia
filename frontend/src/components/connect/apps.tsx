@@ -1,4 +1,6 @@
-import { Asterisk, LayoutGrid, MessageCircle, SquareTerminal } from "lucide-react";
+import { SquaresFourIcon } from "@phosphor-icons/react/ssr";
+import { ChatGptMark, ClaudeMark, CodexMark } from "@/components/marks/AssistantMarks";
+import Duo from "@/components/ui/Duo";
 import type { ApiToken, OAuthGrant } from "@/lib/types";
 
 export type AppId = "chatgpt" | "claude-code" | "codex" | "other";
@@ -23,32 +25,34 @@ export const AI_APPS: AiApp[] = [
 
 export const appById = (id: string): AiApp | undefined => AI_APPS.find((a) => a.id === id);
 
-/** A recognisable symbol for each app. These are category symbols drawn with
- * Lucide, not the vendors' official logos (none are bundled with the app);
- * the visible name always sits beside them. */
+/** Each app's own mark (components/marks/AssistantMarks.tsx: Simple Icons,
+ * CC0, and LobeHub, MIT). A factual "connects to" reference, never an
+ * endorsement; the visible name always sits beside it. "Other apps" gets a
+ * Phosphor symbol. */
 export function AppMark({ id, size = 24 }: { id: AppId; size?: number }) {
-  const s = { width: size, height: size };
+  const box = { width: size, height: size };
+  const cls = "w-full h-full";
   if (id === "claude-code")
     return (
-      <span className="inline-flex items-center justify-center shrink-0" style={{ ...s, color: "#c15f3c" }} aria-hidden>
-        <Asterisk size={size} strokeWidth={2.5} />
+      <span className="inline-flex shrink-0" style={box} aria-hidden>
+        <ClaudeMark className={cls} />
       </span>
     );
   if (id === "codex")
     return (
-      <span className="inline-flex items-center justify-center shrink-0 rounded-full" style={{ ...s, background: "var(--bauhaus-app-ink)", color: "#fff" }} aria-hidden>
-        <SquareTerminal size={Math.round(size * 0.62)} strokeWidth={2} />
+      <span className="inline-flex shrink-0" style={{ ...box, color: "var(--ink)" }} aria-hidden>
+        <CodexMark className={cls} />
       </span>
     );
   if (id === "chatgpt")
     return (
-      <span className="inline-flex items-center justify-center shrink-0" style={s} aria-hidden>
-        <MessageCircle size={size} strokeWidth={1.75} />
+      <span className="inline-flex shrink-0" style={{ ...box, color: "var(--ink)" }} aria-hidden>
+        <ChatGptMark className={cls} />
       </span>
     );
   return (
-    <span className="inline-flex items-center justify-center shrink-0" style={s} aria-hidden>
-      <LayoutGrid size={size} strokeWidth={1.75} />
+    <span className="inline-flex shrink-0" style={box} aria-hidden>
+      <Duo icon={SquaresFourIcon} size={size} tone="company" />
     </span>
   );
 }

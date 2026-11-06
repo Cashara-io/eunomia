@@ -1,5 +1,6 @@
 "use client";
 
+import { BrainIcon } from "@phosphor-icons/react/ssr";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Link from "next/link";
 import { useState } from "react";
@@ -8,7 +9,6 @@ import Markdown from "@/components/Markdown";
 import CopyButton from "@/components/bits/CopyButton";
 import SyncMark from "@/components/bits/SyncMark";
 import PageHeader from "@/components/ui/PageHeader";
-import { BrainCircuit } from "lucide-react";
 import Tooltip from "@/components/bits/Tooltip";
 import { useSettings, useUpdateSettings } from "@/lib/queries/settings";
 
@@ -65,7 +65,7 @@ export default function SkillPage() {
   return (
     <div className="max-w-[1040px] flex flex-col gap-7">
       <PageHeader
-        icon={BrainCircuit}
+        icon={BrainIcon} tone="personal"
         title="AI instructions"
         intro="How your AI apps use memory: these instructions tell every connected AI app when to look things up in Eunomia and what to save. Edit them here; new sessions pick up your changes."
       />
@@ -125,7 +125,7 @@ export default function SkillPage() {
           {error && <ErrorLine error={error} />}
         </div>
 
-        <div className="soft-panel min-w-0 overflow-hidden" style={editing ? { boxShadow: "inset 0 0 0 1.5px var(--bauhaus-app-blue)" } : undefined}>
+        <div className="soft-panel min-w-0 overflow-hidden" style={editing ? { boxShadow: "inset 0 0 0 1px var(--ink)" } : undefined}>
           {skill === null ? (
             !error && (
               <div className="flex flex-col gap-3 p-6 md:p-10" aria-busy="true" aria-label="Loading instructions">
@@ -220,7 +220,7 @@ export default function SkillPage() {
       </section>
 
       <section className="flex flex-col gap-2">
-        <h2 className="text-[14px] font-semibold">Refresh file copies</h2>
+        <h2 className="text-[14px] font-medium">Refresh file copies</h2>
         <p className="text-[14px] leading-relaxed" style={{ color: "var(--ink-dim)" }}>
           Only needed for the file copies. Run this from the Eunomia install folder with a token from{" "}
           <Link href="/settings?tab=tokens" style={{ color: "var(--accent-text)" }} className="underline">

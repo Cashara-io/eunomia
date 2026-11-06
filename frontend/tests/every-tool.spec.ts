@@ -123,6 +123,9 @@ test("every MCP tool works end to end", async ({ request, baseURL }) => {
   expect((await ok("skill_save", { name: "deploy-rollback", description: "How to roll back a bad deploy", body: "# Roll back v2" })).id).toBe(skill.id);
   expect((await ok("skill_find", { query: "roll back a deploy" })).skills.map((s: { id: string }) => s.id)).toContain(skill.id);
   expect((await ok("skill_get", { id: skill.id })).body).toBe("# Roll back v2");
+  const skillPage = await ok("skill_list", { limit: 1 });
+  expect(skillPage.skills.map((s: { name: string }) => s.name)).toEqual(["deploy-rollback"]);
+  expect(skillPage.next).toBeNull();
   expect((await call("skill_save", { name: "Bad Name", description: "d", body: "b" })).isError).toBe(true);
   expect((await ok("skill_delete", { id: skill.id })).deleted).toBe(skill.id);
 
@@ -149,6 +152,14 @@ test("every MCP tool works end to end", async ({ request, baseURL }) => {
   expect((await ok("vault_peers", { vault_id: shared.id })).links).toEqual([]);
   expect((await call("vault_join_shared", { share_code: "eunomia1:nope" })).isError).toBe(true);
   expect((await call("vault_peer_sync", { link_id: "0".repeat(32) })).isError).toBe(true);
+  // secret requests: the agent gets a request and a handle, never a value; nothing is filled here (only a
+  // person in a browser can, see secret-requests.spec.ts), so the transform and the call are refused
+  const asked = await ok("secret_request", { name: "every_tool_key", description: "coverage", target: { hosts: ["api.example.com"] } });
+  expect(asked.status).toBe("pending");
+  expect((await ok("secret_request_status", { request_id: asked.request_id })).status).toBe("pending");
+  const handle = asked.handle.$secret as string;
+  expect((await call("secret_transform", { op: "base64", inputs: { value: handle } })).data.code).toBe("secret.unavailable");
+  expect((await call("http_request", { url: "https://api.example.com/", headers: { Authorization: { $secret: handle } } })).data.code).toBe("secret.unavailable");
 
   // coverage: every tool the server lists was exercised above
   const list = await request.post("/mcp", {

@@ -443,6 +443,37 @@ fn split_decorated(name: &str) -> Option<(&str, Vec<String>)> {
     (!base.is_empty() && !extra.is_empty()).then_some((base, extra))
 }
 
+const HONORIFICS: &[&str] = &["dr", "doctor", "mr", "mrs", "ms", "miss", "mx", "prof", "professor"];
+
+/// A person's name without a leading honorific ("Dr. Aida Ghalebeigi" -> "Aida Ghalebeigi"), when
+/// what is left is still a full name of two or more words (so "Dr Who" stays as it is).
+fn strip_honorific(name: &str) -> Option<&str> {
+    let name = name.trim();
+    let (first, rest) = name.split_once(char::is_whitespace)?;
+    let rest = rest.trim();
+    (HONORIFICS.contains(&first.trim_end_matches('.').to_lowercase().as_str()) && rest.split_whitespace().count() >= 2).then_some(rest)
+}
+
+/// The other lowercase keys a person may already be stored under: the name with its honorific
+/// removed, and with each honorific (with and without the dot) put back. Empty for a single word, so
+/// "Smith" never resolves to "Dr Smith". Plain lookups only, nothing is stored under these keys.
+fn person_variants(name: &str) -> Vec<String> {
+    let bare = strip_honorific(name).unwrap_or(name.trim());
+    if bare.split_whitespace().count() < 2 {
+        return Vec::new();
+    }
+    let bare = bare.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
+    let mut out = vec![bare.clone()];
+    for h in HONORIFICS {
+        out.push(format!("{h} {bare}"));
+        out.push(format!("{h}. {bare}"));
+    }
+    // the name's own key was already looked up (and a concurrent writer of it must not get an alias)
+    let own = name.trim().to_lowercase();
+    out.retain(|v| *v != own);
+    out
+}
+
 /// [`upsert_entity`], plus whether the entity was created just now. A
 /// decorated name (see [`split_decorated`]) whose base name already exists
 /// resolves to that entity, the suffix parts becoming aliases.
@@ -469,6 +500,7 @@ pub async fn upsert_entity_created(
     // A decorated name ("Jane Doe (Acme/JD)") whose base name already exists resolves to it, the
     // suffix parts becoming aliases.
     let decorated = split_decorated(name);
+    let variants = if kind == "person" { person_variants(name) } else { Vec::new() };
     // Read-then-write: a concurrent upsert of the same name (in any case) loses on the
     // `(vault, name_key)` unique index, and the retry's re-read finds the winner. Both lookups are
     // index reads (`name_key`, `alias_keys`), however large the vault.
@@ -476,15 +508,30 @@ pub async fn upsert_entity_created(
         let mut found = None;
         let mut aliases = aliases.clone();
         let needles = std::iter::once((needle.clone(), None)).chain(decorated.as_ref().map(|(base, extra)| (base.to_lowercase(), Some(extra))));
-        for (key, extra) in needles {
-            let mut res =
-                q::find_by_key(db, table).bind(("vault", vault.clone())).bind(("kind", kind.to_string())).bind(("needle", key)).await?.check()?;
+        for (i, (key, extra)) in needles.enumerate() {
+            // A person under a different honorific ("Dr. X" for "Dr X", or plain "X"): the variant keys
+            // ride along with the name's own lookup, in the same round trip. The name's own key wins.
+            let with_variants = i == 0 && !variants.is_empty();
+            let lookup = if with_variants { q::find_by_key_or_variants(db, table).bind(("needles", variants.clone())) } else { q::find_by_key(db, table) };
+            let mut res = lookup.bind(("vault", vault.clone())).bind(("kind", kind.to_string())).bind(("needle", key)).await?.check()?;
             let by_name: Vec<EntityRow> = res.take(0)?;
             let by_alias: Vec<EntityRow> = res.take(1)?;
             if let Some(row) = by_name.into_iter().chain(by_alias).next() {
                 aliases.extend(extra.into_iter().flatten().cloned());
                 found = Some(row);
                 break;
+            }
+            if with_variants {
+                let by_name: Vec<EntityRow> = res.take(2)?;
+                let by_alias: Vec<EntityRow> = res.take(3)?;
+                if let Some(row) = by_name.into_iter().chain(by_alias).next() {
+                    let spelled = name.split_whitespace().collect::<Vec<_>>().join(" ");
+                    if spelled != row.name {
+                        aliases.push(spelled);
+                    }
+                    found = Some(row);
+                    break;
+                }
             }
         }
 
@@ -501,6 +548,16 @@ pub async fn upsert_entity_created(
                 .check()?;
             let rows: Vec<EntityRow> = updated.take(0)?;
             return Ok((rows.into_iter().next().unwrap_or(row), Some(changes::UPDATED)));
+        }
+
+        // the bare name of a new "Dr X Y" is an alias, so a later plain "X Y" finds it by alias too
+        if kind == "person"
+            && let Some(bare) = strip_honorific(name)
+        {
+            let bare = bare.split_whitespace().collect::<Vec<_>>().join(" ");
+            if !aliases.contains(&bare) {
+                aliases.push(bare);
+            }
         }
 
         let mut created = q::create_entity(db, table)
@@ -1316,6 +1373,26 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn honorifics_come_off_full_names_only() {
+        assert_eq!(strip_honorific("Dr. Aida Ghalebeigi"), Some("Aida Ghalebeigi"));
+        assert_eq!(strip_honorific("dr  Aida Ghalebeigi"), Some("Aida Ghalebeigi"));
+        assert_eq!(strip_honorific("Doctor Aida Ghalebeigi"), Some("Aida Ghalebeigi"));
+        assert_eq!(strip_honorific("Prof Jane Q Doe"), Some("Jane Q Doe"));
+        assert_eq!(strip_honorific("Dr Who"), None, "one word left");
+        assert_eq!(strip_honorific("Drake Bell"), None, "a name, not an honorific");
+    }
+
+    #[test]
+    fn person_variants_cover_the_honorific_spellings() {
+        let v = person_variants("Dr. Aida  Ghalebeigi");
+        assert!(v.contains(&"aida ghalebeigi".to_string()) && v.contains(&"dr aida ghalebeigi".to_string()) && v.contains(&"doctor aida ghalebeigi".to_string()));
+        assert!(person_variants("Aida Ghalebeigi").contains(&"dr. aida ghalebeigi".to_string()));
+        assert!(!person_variants("Concurrent Carl").contains(&"concurrent carl".to_string()), "never its own key");
+        assert!(person_variants("Smith").is_empty(), "a single word never resolves to a titled name");
+        assert!(!person_variants("Sam Leonard").contains(&"sam roberts".to_string()));
+    }
 
     #[test]
     fn decorated_names_split_into_base_and_aliases() {

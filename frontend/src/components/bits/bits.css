@@ -174,10 +174,11 @@
   gap: 6px;
   max-width: 240px;
   padding: 4px 8px;
-  border-radius: 4px;
-  background: var(--bauhaus-app-ink);
-  color: var(--bauhaus-app-cream);
-  font-size: 12.5px;
+  border-radius: 6px;
+  background: var(--surface-raised);
+  color: var(--ink);
+  box-shadow: var(--shadow-pop);
+  font-size: 12px;
   line-height: 1.3;
   white-space: nowrap;
   pointer-events: none;
@@ -192,9 +193,9 @@
   transition: none;
 }
 .bits-tip .kbd {
-  background: transparent;
-  color: var(--bauhaus-app-sidebar-muted);
-  border-color: var(--bauhaus-app-sidebar-line);
+  background: var(--surface);
+  color: var(--ink-faint);
+  border-color: var(--border-strong);
   height: 16px;
   min-width: 16px;
   font-size: 11.5px;

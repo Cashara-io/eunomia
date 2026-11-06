@@ -1,5 +1,5 @@
+import { WarningCircleIcon } from "@phosphor-icons/react/ssr";
 import { ApiError } from "@/lib/api";
-import { AlertCircle } from "lucide-react";
 import CopyButton from "@/components/bits/CopyButton";
 
 export type Failure = { message: string; code?: string; traceId?: string };
@@ -29,10 +29,10 @@ export default function ErrorLine({
   return (
     <div
       role="alert"
-      className="flex flex-wrap items-start gap-x-3 gap-y-2 px-3.5 py-2.5 rounded-[2px]"
-      style={{ background: "var(--critical-soft)", borderLeft: "3px solid var(--bauhaus-app-red)" }}
+      className="flex flex-wrap items-start gap-x-3 gap-y-2 px-3.5 py-2.5 rounded-[10px]"
+      style={{ background: "var(--critical-soft)" }}
     >
-      <AlertCircle size={18} strokeWidth={1.75} aria-hidden className="shrink-0 mt-px" style={{ color: "var(--critical)" }} />
+      <WarningCircleIcon weight="duotone" size={18} aria-hidden className="shrink-0 mt-px" style={{ color: "var(--critical)" }} />
       <div className="flex-1 min-w-[200px] flex flex-col gap-1">
         <p className="text-[14px] leading-snug" style={{ color: "var(--critical)" }}>
           {children ?? error?.message}

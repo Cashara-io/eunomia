@@ -1,6 +1,6 @@
 "use client";
 
-import { Download } from "lucide-react";
+import { DownloadSimpleIcon } from "@phosphor-icons/react/ssr";
 import { API_URL } from "@/lib/api";
 
 /** Plays (or downloads) the audio Eunomia kept for one Pocket recording (#117). Render it only when the recording has audio. */
@@ -12,7 +12,7 @@ export default function PocketAudioPlayer({ recordingId, title }: { recordingId:
       {/* the session cookie authorizes it, as for every other /api request */}
       <audio controls preload="none" src={src} className="max-w-full h-9" aria-label={title ? `Audio of ${title}` : "Recording audio"} />
       <a className="btn btn-sm" href={`${src}?download=true`} download>
-        <Download size={13} strokeWidth={1.75} aria-hidden />
+        <DownloadSimpleIcon weight="duotone" size={13} aria-hidden />
         Download
       </a>
     </div>

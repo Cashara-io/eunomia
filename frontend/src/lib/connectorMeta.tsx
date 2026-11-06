@@ -1,19 +1,4 @@
-import {
-  Calendar,
-  CheckSquare,
-  CreditCard,
-  Database,
-  GitBranch,
-  GraduationCap,
-  Landmark,
-  Mail,
-  MessageCircle,
-  MessagesSquare,
-  Mic,
-  Music,
-  Notebook,
-  Workflow,
-} from "lucide-react";
+import { BankIcon, CalendarBlankIcon, ChatCircleIcon, ChatsCircleIcon, CheckSquareIcon, CreditCardIcon, DatabaseIcon, EnvelopeSimpleIcon, FlowArrowIcon, GitBranchIcon, GraduationCapIcon, MicrophoneIcon, MusicNotesIcon, NotebookIcon } from "@phosphor-icons/react/ssr";
 import type { Connector } from "@/lib/types";
 
 export type FieldDef = { key: string; label: string; placeholder: string; secret: boolean };
@@ -83,7 +68,7 @@ export const CONNECTOR_META: Record<Connector["kind"], ConnectorMeta> = {
   up_bank: {
     label: "Up Bank",
     description: "Transactions, accounts and categories from your Up Bank account.",
-    icon: <Landmark size={18} strokeWidth={1.75} />,
+    icon: <BankIcon weight="duotone" size={18} />,
     tint: "var(--connector-up-bank)",
     help: (
       <>
@@ -102,7 +87,7 @@ export const CONNECTOR_META: Record<Connector["kind"], ConnectorMeta> = {
   pocketai: {
     label: "PocketAI",
     description: "Meeting recordings with transcripts and summaries from HeyPocket.",
-    icon: <Mic size={18} strokeWidth={1.75} />,
+    icon: <MicrophoneIcon weight="duotone" size={18} />,
     tint: "var(--connector-pocketai)",
     help: (
       <>
@@ -120,7 +105,7 @@ export const CONNECTOR_META: Record<Connector["kind"], ConnectorMeta> = {
   github: {
     label: "GitHub",
     description: "Issues and pull requests you created, are assigned to, or are mentioned in.",
-    icon: <GitBranch size={18} strokeWidth={1.75} />,
+    icon: <GitBranchIcon weight="duotone" size={18} />,
     tint: "var(--connector-github)",
     help: (
       <>
@@ -137,7 +122,7 @@ export const CONNECTOR_META: Record<Connector["kind"], ConnectorMeta> = {
   slack: {
     label: "Slack",
     description: "Messages in the channels your Slack app has joined.",
-    icon: <MessagesSquare size={18} strokeWidth={1.75} />,
+    icon: <ChatsCircleIcon weight="duotone" size={18} />,
     tint: "var(--connector-slack)",
     help: (
       <Steps>
@@ -161,7 +146,7 @@ export const CONNECTOR_META: Record<Connector["kind"], ConnectorMeta> = {
   notion: {
     label: "Notion",
     description: "Pages (with their text) and databases shared with your integration.",
-    icon: <Notebook size={18} strokeWidth={1.75} />,
+    icon: <NotebookIcon weight="duotone" size={18} />,
     tint: "var(--connector-notion)",
     help: (
       <>
@@ -177,7 +162,7 @@ export const CONNECTOR_META: Record<Connector["kind"], ConnectorMeta> = {
   linear: {
     label: "Linear",
     description: "Issues assigned to you.",
-    icon: <Workflow size={18} strokeWidth={1.75} />,
+    icon: <FlowArrowIcon weight="duotone" size={18} />,
     tint: "var(--connector-linear)",
     help: (
       <>
@@ -192,7 +177,7 @@ export const CONNECTOR_META: Record<Connector["kind"], ConnectorMeta> = {
   gmail: {
     label: "Gmail",
     description: "Your email from the last 30 days onwards, with subject, sender and text.",
-    icon: <Mail size={18} strokeWidth={1.75} />,
+    icon: <EnvelopeSimpleIcon weight="duotone" size={18} />,
     tint: "var(--connector-gmail)",
     help: googleHelp("Gmail API", "https://www.googleapis.com/auth/gmail.readonly"),
     fields: OAUTH_FIELDS,
@@ -202,7 +187,7 @@ export const CONNECTOR_META: Record<Connector["kind"], ConnectorMeta> = {
   google_calendar: {
     label: "Google Calendar",
     description: "Events on your primary calendar, 30 days back to 6 months ahead, kept up to date.",
-    icon: <Calendar size={18} strokeWidth={1.75} />,
+    icon: <CalendarBlankIcon weight="duotone" size={18} />,
     tint: "var(--connector-google-calendar)",
     help: googleHelp("Google Calendar API", "https://www.googleapis.com/auth/calendar.readonly"),
     fields: OAUTH_FIELDS,
@@ -212,7 +197,7 @@ export const CONNECTOR_META: Record<Connector["kind"], ConnectorMeta> = {
   discord: {
     label: "Discord",
     description: "Messages from the channels you choose, read by your own bot.",
-    icon: <MessageCircle size={18} strokeWidth={1.75} />,
+    icon: <ChatCircleIcon weight="duotone" size={18} />,
     tint: "var(--connector-discord)",
     help: (
       <Steps>
@@ -240,7 +225,7 @@ export const CONNECTOR_META: Record<Connector["kind"], ConnectorMeta> = {
   spotify: {
     label: "Spotify",
     description: "Tracks you play, building up a listening history over time.",
-    icon: <Music size={18} strokeWidth={1.75} />,
+    icon: <MusicNotesIcon weight="duotone" size={18} />,
     tint: "var(--connector-spotify)",
     help: (
       <Steps>
@@ -272,7 +257,7 @@ export const CONNECTOR_META: Record<Connector["kind"], ConnectorMeta> = {
   todoist: {
     label: "Todoist",
     description: "Your active tasks, with project, due date and labels.",
-    icon: <CheckSquare size={18} strokeWidth={1.75} />,
+    icon: <CheckSquareIcon weight="duotone" size={18} />,
     tint: "var(--connector-todoist)",
     help: (
       <>
@@ -287,7 +272,7 @@ export const CONNECTOR_META: Record<Connector["kind"], ConnectorMeta> = {
   stripe: {
     label: "Stripe",
     description: "Charges on your Stripe account.",
-    icon: <CreditCard size={18} strokeWidth={1.75} />,
+    icon: <CreditCardIcon weight="duotone" size={18} />,
     tint: "var(--connector-stripe)",
     help: (
       <>
@@ -302,7 +287,7 @@ export const CONNECTOR_META: Record<Connector["kind"], ConnectorMeta> = {
   ed: {
     label: "Ed Discussion",
     description: "Threads, answers and comments from your Ed Discussion courses.",
-    icon: <GraduationCap size={18} strokeWidth={1.75} />,
+    icon: <GraduationCapIcon weight="duotone" size={18} />,
     tint: "var(--connector-ed)",
     help: (
       <>
@@ -345,6 +330,17 @@ export function connectorStatus(c: Connector | undefined): "demo" | "connected" 
   return "disconnected";
 }
 
+/** A memory's `source` in plain words. A synced record id
+ * (`cache_record:⟨owner:ed:ed.thread:3699084⟩`, quoted with backticks or ⟨⟩) becomes
+ * "Ed Discussion thread"; anything else is returned as it is. */
+export function sourceRecordLabel(source: string): string {
+  const m = /^cache_record:[`⟨]?[^:]+:([^:]+):[^.:]*\.([^:]+):.+?[`⟩]?$/.exec(source.trim());
+  if (!m) return source;
+  const [, key, recordKind] = m;
+  const kind = kindForSource(key);
+  return `${kind ? CONNECTOR_META[kind].label : key} ${recordKind.replace(/_/g, " ")}`;
+}
+
 /** Connector kind whose data lives under a `sources.list()` key, if any. An added connection's key is `{source}~{instance}`. */
 export function kindForSource(sourceKey: string): Connector["kind"] | undefined {
   const base = sourceKey.split("~")[0];
@@ -381,7 +377,7 @@ export function ConnectorTile({ kind, size = 32 }: { kind: Connector["kind"] | n
       }}
     >
       <span className="inline-flex" style={{ transform: `scale(${Math.max(0.8, size / 28)})` }}>
-        {meta?.icon ?? <Database size={18} strokeWidth={1.75} />}
+        {meta?.icon ?? <DatabaseIcon weight="duotone" size={18} />}
       </span>
     </span>
   );

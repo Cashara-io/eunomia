@@ -1,8 +1,8 @@
 "use client";
 
+import { ArrowLeftIcon, ArrowRightIcon, ArrowSquareOutIcon, CaretRightIcon, GearSixIcon, MagnifyingGlassIcon, TrashIcon, XIcon } from "@phosphor-icons/react/ssr";
 import { Fragment, use, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, ChevronRight, ExternalLink, Search, Settings2, Trash2, X } from "lucide-react";
 import type { ConnectorKind, SourceRow, ToolHit } from "@/lib/types";
 import { useDeleteConnectorData } from "@/lib/queries/connectors";
 import { useSources, useSyncSource } from "@/lib/queries/sources";
@@ -109,9 +109,8 @@ function RecordRow({ hit }: { hit: ToolHit }) {
             aria-expanded={open}
             className="flex items-center gap-2 w-full min-w-0 text-left h-10 active:scale-[0.99] transition-transform duration-[120ms] ease-[var(--ease-out)]"
           >
-            <ChevronRight
+            <CaretRightIcon weight="duotone"
               size={14}
-              strokeWidth={1.75}
               color="var(--ink-faint)"
               className="shrink-0"
               style={{ transform: open ? "rotate(90deg)" : undefined }}
@@ -172,7 +171,7 @@ function RecordRow({ hit }: { hit: ToolHit }) {
                   )}
                   {hit.url && (
                     <a href={hit.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 self-start" style={{ color: "var(--accent-text)" }}>
-                      Open in source <ExternalLink size={12} strokeWidth={1.75} aria-hidden />
+                      Open in source <ArrowSquareOutIcon weight="duotone" size={12} aria-hidden />
                     </a>
                   )}
                 </>
@@ -199,7 +198,7 @@ function Breadcrumb({ label }: { label: string }) {
       <Link href="/connectors" className="underline-offset-2 hover:underline" style={{ color: "var(--accent-text)" }}>
         Connected sources
       </Link>
-      <ChevronRight size={12} strokeWidth={1.75} aria-hidden />
+      <CaretRightIcon weight="duotone" size={12} aria-hidden />
       <span aria-current="page">{label}</span>
     </nav>
   );
@@ -244,7 +243,7 @@ function DeleteData({ row, kind }: { row: SourceRow; kind: ConnectorKind }) {
         }}
         className="btn btn-danger self-start"
       >
-        <Trash2 size={18} strokeWidth={1.75} aria-hidden />
+        <TrashIcon weight="duotone" size={18} aria-hidden />
         Delete all {row.label} data
       </button>
       <ConfirmDialog
@@ -427,7 +426,7 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
             <>
               {settingsHref && (
                 <Link href={settingsHref} className="btn">
-                  <Settings2 size={18} strokeWidth={1.75} aria-hidden /> Setup
+                  <GearSixIcon weight="duotone" size={18} aria-hidden /> Setup
                 </Link>
               )}
               {!orphaned && (
@@ -503,7 +502,7 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
             </span>
           </h2>
           <form onSubmit={runSearch} className="field flex items-center gap-2 h-10 px-3 w-full sm:w-80" role="search">
-            <Search size={18} strokeWidth={1.75} color="var(--ink-dim)" aria-hidden />
+            <MagnifyingGlassIcon weight="duotone" size={18} color="var(--ink-dim)" aria-hidden />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -518,7 +517,7 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
               query && (
                 <Tooltip label="Clear search">
                   <button type="button" aria-label="Clear search" className="btn btn-ghost btn-sm -mr-1.5 w-6 px-0" onClick={clearSearch}>
-                    <X size={13} strokeWidth={1.75} aria-hidden />
+                    <XIcon weight="duotone" size={13} aria-hidden />
                   </button>
                 </Tooltip>
               )
@@ -575,10 +574,10 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
         {shown && (shown.offset > 0 || shown.has_more) && (
           <nav aria-label="Record pages" className="flex justify-end gap-1.5">
             <button type="button" className="btn btn-sm" disabled={paging || shown.offset === 0} onClick={() => setOffset(Math.max(0, shown.offset - RECORDS_PAGE))}>
-              <ArrowLeft size={14} strokeWidth={1.75} aria-hidden /> Previous
+              <ArrowLeftIcon weight="duotone" size={14} aria-hidden /> Previous
             </button>
             <button type="button" className="btn btn-sm" disabled={paging || !shown.has_more || (activeQuery !== "" && shown.offset + 2 * RECORDS_PAGE > SEARCH_WINDOW)} onClick={() => setOffset(shown.offset + RECORDS_PAGE)}>
-              Next <ArrowRight size={14} strokeWidth={1.75} aria-hidden />
+              Next <ArrowRightIcon weight="duotone" size={14} aria-hidden />
             </button>
           </nav>
         )}

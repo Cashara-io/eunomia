@@ -1,7 +1,8 @@
 "use client";
 
+import { ArrowDownIcon, ArrowUpIcon, PlusIcon, XIcon } from "@phosphor-icons/react/ssr";
+import VaultChip, { vaultTone } from "@/components/VaultChip";
 import { useState } from "react";
-import { ArrowDown, ArrowUp, Plus, X } from "lucide-react";
 import Select from "@/components/Select";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
@@ -11,7 +12,7 @@ import { useVaults } from "@/lib/queries/vaults";
 import { useMoveConnectorData, useUpdateConnector } from "@/lib/queries/connectors";
 import type { Connector, MoveReport, Routing, Vault } from "@/lib/types";
 
-const ICON = { size: 18, strokeWidth: 1.75 } as const;
+const ICON = { size: 18, weight: "duotone" } as const;
 
 /** How each routing field reads, and an example value. */
 const FIELDS: Record<string, { label: string; placeholder: string }> = {
@@ -133,9 +134,14 @@ export default function RoutingSection({ label, connector }: { label: string; co
           {(() => {
             const dest = vaults?.find((v) => v.id === (routing.default_vault ?? personal?.id));
             const shared = dest && !(dest.kind === "personal" && dest.role === "owner");
-            return dest
-              ? `New ${label} items are saved in ${vaultLabel(dest)}. ${shared ? "Its members can read them." : "Only you can read them."}`
-              : `New ${label} items are saved in one memory space, and only its members can read them.`;
+            return dest ? (
+              <>
+                New {label} items are saved in <VaultChip tone={vaultTone(dest.kind)} name={vaultLabel(dest)} />.{" "}
+                {shared ? "Its members can read them." : "Only you can read them."}
+              </>
+            ) : (
+              `New ${label} items are saved in one memory space, and only its members can read them.`
+            );
           })()}{" "}
           Changing this affects future updates only; moving items you already imported is a separate step below.
         </p>
@@ -211,7 +217,7 @@ export default function RoutingSection({ label, connector }: { label: string; co
                       <span className="flex items-center">
                         <Tooltip label="Move up">
                           <button type="button" className="btn btn-ghost btn-sm btn-icon" aria-label={`Move rule ${n} up`} disabled={i === 0} onClick={() => swap(i, i - 1)}>
-                            <ArrowUp {...ICON} aria-hidden />
+                            <ArrowUpIcon {...ICON} aria-hidden />
                           </button>
                         </Tooltip>
                         <Tooltip label="Move down">
@@ -222,12 +228,12 @@ export default function RoutingSection({ label, connector }: { label: string; co
                             disabled={i === routing.rules.length - 1}
                             onClick={() => swap(i, i + 1)}
                           >
-                            <ArrowDown {...ICON} aria-hidden />
+                            <ArrowDownIcon {...ICON} aria-hidden />
                           </button>
                         </Tooltip>
                         <Tooltip label="Remove">
                           <button type="button" className="btn btn-ghost btn-sm btn-icon" aria-label={`Remove rule ${n}`} onClick={() => removeRule(i)}>
-                            <X {...ICON} aria-hidden />
+                            <XIcon {...ICON} aria-hidden />
                           </button>
                         </Tooltip>
                       </span>
@@ -244,7 +250,7 @@ export default function RoutingSection({ label, connector }: { label: string; co
           )}
           <div>
             <button type="button" className="btn btn-sm" onClick={addRule} disabled={!vaults}>
-              <Plus {...ICON} aria-hidden />
+              <PlusIcon {...ICON} aria-hidden />
               Add rule
             </button>
           </div>
@@ -267,7 +273,7 @@ export default function RoutingSection({ label, connector }: { label: string; co
       </div>
 
       <div className="flex flex-col gap-2 pt-1" style={{ borderTop: "1px solid var(--border)" }}>
-        <h3 className="text-[15px] font-semibold pt-3">Move previously imported items</h3>
+        <h3 className="text-[15px] font-medium pt-3 tracking-[-0.015em]">Move previously imported items</h3>
         <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
           {draft !== null
             ? "Save the routing first."

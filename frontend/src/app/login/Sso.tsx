@@ -1,8 +1,8 @@
 "use client";
 
+import { KeyIcon } from "@phosphor-icons/react/ssr";
 import { useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { KeyRound } from "lucide-react";
 import { bootstrapQuery } from "@/lib/queries/auth";
 import { nextPath } from "@/lib/nextPath";
 import type { Failure } from "@/components/ErrorLine";
@@ -56,7 +56,7 @@ export function SsoButton({ provider, primary }: { provider: string; primary: bo
   const next = useSyncExternalStore(noSubscribe, nextPath, () => "/");
   return (
     <a href={`/api/auth/oidc/start?next=${encodeURIComponent(next)}`} className={`btn ${primary ? "btn-primary" : ""} min-h-11 w-full`}>
-      <KeyRound size={16} strokeWidth={1.75} aria-hidden />
+      <KeyIcon weight="duotone" size={16} aria-hidden />
       Continue with {provider}
     </a>
   );

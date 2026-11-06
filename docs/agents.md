@@ -199,10 +199,13 @@ No. The connected agent is the model.
 | `vault_set_role` / `vault_transfer_ownership` | Promote or demote a member; hand a vault to another member (owner only, last-owner guard) |
 | `document_upload` / `document_list` / `document_get` | Upload a document (text, Markdown, JSON, CSV, text PDF) and read its extracted text; its passages are found by `search`, `recall` and `get`, each hit naming the document ([documents](documents.md)) |
 | `document_download` / `document_export` / `document_delete` | The HTTP route for the original bytes, the passages-and-vectors manifest, deletion |
-| `skill_save` / `skill_find` / `skill_get` / `skill_delete` | Keep a skill an agent learned, find it later by meaning, read its body, delete it ([agent skills](#agent-skills)) |
+| `skill_save` / `skill_find` / `skill_list` / `skill_get` / `skill_delete` | Keep a skill an agent learned, find it later by meaning, list a vault's skills, read its body, delete it ([agent skills](#agent-skills)) |
 | `vault_share_code` / `vault_join_shared` / `vault_peers` / `vault_peer_sync` | Share a vault with another Eunomia install by a one-time code, join one, see each link's sync status, sync now ([peer vaults](peer-vaults.md)) |
 | `vault_check` / `vault_repair` | Check a vault for broken or leftover data (memories whose entity is gone, relations with a missing end, misfiled memories, a change-log counter behind); repair removes the dangling rows and fixes the counter (owner only). Also `GET`/`POST /api/vaults/{vault}/integrity` |
 | `changes_since` | A vault's numbered change log after a cursor: what was created, updated, merged or deleted, by whom, with no content ([change log](#change-log)) |
+| `secret_request` / `secret_request_status` | Ask the user for a password or API key through a masked pop-up in the Eunomia web app instead of the chat; you get a handle, never the value ([secret requests](#secret-requests)) |
+| `secret_transform` | Make a new held secret from others (base64, a Bearer or Basic header, an HMAC, a JWT) and get its handle |
+| `http_request` | Send one HTTPS request with handles in its headers, query or body, to a host the user approved |
 
 Destructive tools are flagged `destructiveHint` so clients can ask first.
 
@@ -218,10 +221,27 @@ so the embed job makes new ones. It runs once per org, resumes where it stopped 
 again when the detectors gain new shapes. When it finishes, the server logs `secret backfill finished`
 with how many rows of each kind changed, and the instance audit log gets a `redact.backfill` event with
 the same counts. It never logs the text. A rewrite leaves a memory's `version` and `updated_at` as they
-were, so a client cache or a change feed shows the old text until it fetches the row again. Uploaded
+were, but adds an `updated` row (actor `system`) to the vault's change log for each rewritten memory or
+skill, so a client following the vault (for example `create-eunomia watch`) fetches the redacted text.
+Change-log rows hold no content, so there is nothing in them to redact. Uploaded
 documents, synced connector records, chat messages, entity names, aliases and summaries, relation labels,
 sync error messages and extension webhook deliveries are not redacted on write, so the backfill leaves
 them alone too.
+
+### Secret requests
+
+Never ask the user to paste a password, API key or token into the chat. Ask Eunomia for it instead
+([secret requests](secret-requests.md)):
+
+1. `secret_request` with a stable `name` (`stripe_api_key`), a `label`, a `description` of why, and
+   `target.hosts` it will be sent to (`api.stripe.com`). You get a `request_id`, a `fill_url` and the
+   `handle` the secret will have, `{"$secret": "eu://<vault>/<name>"}`. Never a value.
+2. The user sees a pop-up in the Eunomia web app (or opens `fill_url`), pastes the value there and saves.
+   MCP clients that support URL elicitation (protocol 2025-11-25) are sent the page directly.
+3. `secret_request_status` tells you when it is filled.
+4. Use the handle in `http_request` (in a header by default), or derive another with `secret_transform`,
+   for example `{"op": "template", "inputs": {"key": "eu://.../stripe_api_key"}, "params": {"template": "Bearer {{key}}"}}`.
+   Responses come back with the value scrubbed. You never see it, and there is no tool that shows it.
 
 ### Agent skills
 
@@ -237,6 +257,11 @@ it, and a Markdown body) and any agent can find it later:
 - `skill_find` takes a `query` in plain words (and optionally `vault_id` and `limit`, at most 50). It
   searches every vault you can read, by meaning when embeddings are on, plus a keyword match on name and
   description. It returns each skill's `id`, `name`, `description`, `vault` and `updated_at`, not the body.
+- `skill_list` lists every skill of one vault (your personal vault, or `vault_id`; a token restricted to
+  one vault lists that vault), sorted by name, with the same fields as `skill_find`. It pages: `limit`
+  (default 100, at most 500) and `after`, the `next` of the previous call; `next` is `null` on the last
+  page. It is read-only and needs only `memory:read`. `create-eunomia sync` uses it for the skills that
+  are only on the server ([projects](projects.md#skills-sync)).
 - `skill_get` returns the full body, by `id` or by `name`. If several vaults you can read hold that name,
   it answers with an error naming the ids; pass `vault_id` or an id.
 - `skill_delete` removes one skill by id.
@@ -260,6 +285,9 @@ to that vault's change log. `changes_since`
 reads it: `after` (the `next` of your previous call, 0 to start), `limit` (at most 1000, default 100) and
 `vault_id` (your personal vault by default). Each row has `seq`, `op`, `kind`, the item's `id`, the `actor`
 (a user, token or OAuth client id, or `system`) and `at`. Rows never hold content: fetch the item to see it.
+The log keeps the last 90 days and at most 100,000 rows per vault by default. A cursor below what is kept,
+or past the newest change (after a restore), answers `changes.resync`: re-read what you need and start
+again from `after=0` ([retention](projects.md#retention)).
 The same log is `GET /api/vaults/{vault}/changes` over REST and a WebSocket for live updates
 ([projects](projects.md#watching-changes)).
 

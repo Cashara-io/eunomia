@@ -937,3 +937,57 @@ details[open] > summary::before {
   border: 0;
   border-radius: 999px;
 }
+
+/* ---- pieces main's design system brought in (merge of #138 with main) ----
+   Vault colours for the brand mark, VaultChip and Duo icons, on this PR's palette. Personal is a
+   neutral grey, never the danger red (council review: red only means "careful"). */
+:root {
+  --vault-personal: #8a8a83;
+  --vault-project: var(--bauhaus-app-yellow);
+  --vault-company: var(--bauhaus-app-blue);
+  --on-vault-personal: #ffffff;
+  --on-vault-project: var(--ink);
+  --on-vault-company: #ffffff;
+}
+
+/* Phosphor duotone icons: the back layer takes a vault colour, the line keeps the text colour. */
+.duo path[opacity],
+svg[viewBox="0 0 256 256"] > path[opacity="0.2"] {
+  opacity: 1;
+  fill: var(--duo, var(--vault-project));
+}
+.btn-danger,
+.btn-danger-solid,
+[role="alert"],
+.status-label {
+  --duo: transparent;
+}
+
+/* Vault chip (components/VaultChip.tsx): the vault's colour as a small flat pill. */
+.vault-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  max-width: 100%;
+  padding: 0 9px 0 8px;
+  border-radius: var(--radius-control);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.vault-chip[data-tone="personal"] { background: var(--vault-personal); color: #ffffff; }
+.vault-chip[data-tone="project"] { background: var(--vault-project); }
+.vault-chip[data-tone="company"] { background: var(--vault-company); color: #ffffff; }
+.vault-chip[data-tone="mixed"] { background: transparent; box-shadow: inset 0 0 0 1px var(--ink); }
+
+/* Shape compositions (ShapeField), where main still uses them. */
+@keyframes shape-settle { from { opacity: 0.001; transform: scale(0.92); } }
+.shape-in { transform-box: fill-box; transform-origin: center; animation: shape-settle 420ms var(--ease-out) both; animation-delay: calc(var(--i, 0) * 70ms); }
+.shape-field [data-body] { cursor: grab; touch-action: none; }
+@media (prefers-reduced-motion: reduce) {
+  .shape-in { animation: none; }
+  .shape-field [data-body] { cursor: default; touch-action: auto; }
+}

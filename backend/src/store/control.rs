@@ -4,6 +4,9 @@
 use super::ControlStmt;
 
 pub const ALL: &[&ControlStmt] = &[
+    &MEMBERSHIP_ROLE,
+    &SECRET_LOG,
+    &SECRET_SINCE,
     &READY_PING,
     &READY_VERSION,
     &AUTH_SESSION_CREATE,
@@ -448,4 +451,24 @@ pub const USER_SET_ADMIN: ControlStmt =
 pub const USER_SET_SUSPENDED: ControlStmt = ControlStmt::new(
     "control.user_set_suspended",
     "UPDATE user SET suspended_at = IF $suspended THEN (suspended_at ?? time::now()) ELSE NONE END WHERE id = $id RETURN id",
+);
+
+// the credential broker (routers/secrets.rs)
+
+/// The caller's role in one org.
+pub const MEMBERSHIP_ROLE: ControlStmt = ControlStmt::new("control.membership_role", "SELECT role FROM membership WHERE user = $user AND org = $org");
+
+/// One org's `secret.resolve` events, newest first, older than `$before` when it is set.
+/// Backed by audit_event_secret_idx (control 0007).
+pub const SECRET_LOG: ControlStmt = ControlStmt::new(
+    "control.secret_log",
+    "SELECT id, actor_kind, actor_id, outcome, trace_id, detail, created_at FROM audit_event \
+     WHERE action = 'secret.resolve' AND target = $org AND ($before = NONE OR created_at < $before) ORDER BY created_at DESC LIMIT $limit",
+);
+
+/// One org's `secret.resolve` events since `$since`, for the per-reference counts.
+pub const SECRET_SINCE: ControlStmt = ControlStmt::new(
+    "control.secret_since",
+    "SELECT id, actor_kind, actor_id, outcome, trace_id, detail, created_at FROM audit_event \
+     WHERE action = 'secret.resolve' AND target = $org AND created_at > $since",
 );
