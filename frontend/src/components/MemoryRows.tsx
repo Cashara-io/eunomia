@@ -136,7 +136,8 @@ export default function MemoryRows({ points, vaultIds, nameOf, selection, focusI
               style={{
                 background: on ? "var(--accent-soft)" : undefined,
                 opacity: blocked ? 0.5 : 1,
-                boxShadow: focusId === p.id ? "inset 2px 0 0 var(--accent)" : undefined,
+                outline: focusId === p.id ? "1px solid var(--accent)" : undefined,
+                outlineOffset: -1,
               }}
             >
               <span

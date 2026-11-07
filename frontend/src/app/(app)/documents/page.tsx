@@ -504,7 +504,7 @@ function Documents() {
                   {docs?.map((d) => {
                     const on = d.id === selected;
                     return (
-                      <tr key={d.id} style={on ? { background: "var(--accent-soft)", boxShadow: "inset 3px 0 0 var(--bauhaus-app-blue)" } : undefined} data-testid="document-row">
+                      <tr key={d.id} className={on ? "frame-selected" : undefined} style={on ? { background: "var(--accent-soft)" } : undefined} data-testid="document-row">
                         <td className="max-w-0 w-full">
                           <button
                             type="button"

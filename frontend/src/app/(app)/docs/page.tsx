@@ -213,7 +213,7 @@ export default function DocsPage() {
                         onClick={() => setTopic(t.topic)}
                         aria-current={current ? "page" : undefined}
                         className={`w-full text-left min-h-10 px-3 rounded-[10px] text-[14px] truncate transition-colors duration-150 ${current ? "font-semibold" : "hover:bg-[var(--surface-raised)]"}`}
-                        style={current ? { background: "var(--bauhaus-app-blue)", color: "#fff" } : { color: "var(--ink)" }}
+                        style={current ? { background: "var(--accent)", color: "var(--on-accent)" } : { color: "var(--ink)" }}
                       >
                         {t.title}
                       </button>
@@ -291,10 +291,10 @@ export default function DocsPage() {
               <li key={h.id}>
                 <a
                   href={`#${h.id}`}
-                  className="block py-1 pl-3 -ml-px transition-colors duration-150"
+                  className="block py-1 pl-3 transition-colors duration-150"
                   style={{
-                    borderLeft: `2px solid ${active === h.id ? "var(--bauhaus-app-blue)" : "transparent"}`,
                     color: active === h.id ? "var(--ink)" : "var(--ink-dim)",
+                    fontWeight: active === h.id ? 500 : undefined,
                   }}
                 >
                   {h.text}
