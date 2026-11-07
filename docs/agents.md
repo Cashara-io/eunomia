@@ -188,7 +188,7 @@ No. The connected agent is the model.
 | `memory_write_batch` | Remember up to 100 facts in one call, one result per fact; for imports |
 | `memory_update` / `memory_delete` | Edit or delete one memory |
 | `entities_search` / `entities_get` / `entities_graph` | Find and read people, orgs, places, code and custom kinds |
-| `entities_neighbourhood` | The entities within 1 to 3 relations of one entity, both directions, with their latest facts and the review of each link type between them; for working out what a change affects |
+| `entities_neighbourhood` | The entities within 1 to 3 relations of one entity, both directions, with their latest facts and the review of each link type between them; for working out what a change affects. At most 150 entities and 600 relations (`truncated` says when more were in reach) |
 | `show_view` | Show your answer as a view: `impact` (what a change affects, each entity with its path of relations and why) or `subgraph` (how entities connect). Every id is checked; returns the view with names filled in plus a plain-text version |
 | `entity_types` | The built-in entity kinds and the custom kinds agents created (any new lowercase `subject_kind` creates one), each with its review status |
 | `ontology_get` | One vault's kinds and link types, with counts, samples, descriptions and review status |
@@ -257,9 +257,10 @@ shipment` and `shipment fulfils order`, and the user says "Truck 7 is late, what
   ]}
 ```
 
-Every id is checked: each entity and relation must be in a vault you can read, and each `path` must be a
-connected chain of relations from `start_id` to its entity (either stored direction). A wrong id comes back
-as an error naming it; fix it and call again. `headline` and `why` are trimmed and capped, and secrets in
+Every id is checked: each entity and relation must be in a vault you can read, each relation's ends in the
+same vault, each affected entity listed once, and each `path` a chain of relations from `start_id` to its
+entity (either stored direction) that uses no relation twice and never comes back to an entity it passed.
+A wrong id comes back as an error naming it; fix it and call again. `headline` and `why` are trimmed and capped, and secrets in
 them are replaced as in a memory. The result is the view with names and kinds filled in, plus `text`:
 
 ```
@@ -269,8 +270,8 @@ Starting from Truck 7 (truck).
 2. Order 12 (order), via Truck 7 carries Shipment 88, then Shipment 88 fulfils Order 12. Its only shipment is late.
 ```
 
-Over MCP the tool's text content is that `text`, so Claude Code shows it as is; the resolved view is
-in `structuredContent` for clients that draw it. The in-app Chat follows the same steps with the same
+Over MCP the tool's `content` is only that `text`, so Claude Code shows readable prose rather than JSON.
+The resolved view, as JSON with every id, is in the result's `structuredContent`. The in-app Chat follows the same steps with the same
 tools and draws the view as cards above its reply. A `subgraph` view (`title`, `entity_ids`,
 `relation_ids`) shows how some entities connect instead.
 
