@@ -105,7 +105,7 @@ export function Disclosure({
           aria-expanded={open}
           aria-controls={id}
           onClick={() => setOpen((o) => !o)}
-          className="w-full flex items-center gap-2 min-h-10 text-left rounded-[4px]"
+          className="w-full flex items-center gap-2 min-h-10 text-left rounded-[10px]"
         >
           <span className="flex-1 min-w-0 flex flex-col">
             <span className="section-title">{title}</span>

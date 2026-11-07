@@ -231,7 +231,7 @@ function TurnView({ turn, me }: { turn: Turn; me: string | null }) {
       <article>
         {me ? <TurnHeader name={me} at={turn.at} /> : <div className="h-5 mb-2" />}
         <div
-          className="whitespace-pre-wrap break-words text-[15px] leading-relaxed px-4 py-3 rounded-[2px]"
+          className="whitespace-pre-wrap break-words text-[15px] leading-relaxed px-4 py-3 rounded-[12px]"
           style={{ background: "var(--surface-raised)", color: "var(--ink)" }}
         >
           {turn.content}
@@ -281,7 +281,7 @@ function ThreadList({
         {threads?.map((t) => {
           const active = t.id === activeId;
           return (
-            <div key={t.id} className="thread-row group flex items-center rounded-[3px]" data-active={active || undefined}>
+            <div key={t.id} className="thread-row group flex items-center rounded-[10px]" data-active={active || undefined}>
               <button
                 onClick={() => onSelect(t.id)}
                 aria-current={active ? "true" : undefined}
@@ -650,7 +650,7 @@ export default function ChatPage() {
               {error && (
                 <div
                   role="alert"
-                  className="flex items-start gap-2.5 px-4 py-3 rounded-[2px] text-[14px]"
+                  className="flex items-start gap-2.5 px-4 py-3 rounded-[10px] text-[14px]"
                   style={{ background: "var(--critical-soft)", color: "var(--critical)", borderLeft: "3px solid var(--vault-personal)" }}
                 >
                   <AlertCircle size={18} strokeWidth={1.75} className="shrink-0 mt-px" aria-hidden />

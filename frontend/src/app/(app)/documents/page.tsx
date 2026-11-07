@@ -100,7 +100,7 @@ function DropZone({ maxBytes, disabled, onFiles }: { maxBytes: number | null; di
   const [over, setOver] = useState(false);
   return (
     <div
-      className="flex flex-col items-center justify-center gap-3 px-4 py-8 text-center rounded-[2px]"
+      className="flex flex-col items-center justify-center gap-3 px-4 py-8 text-center rounded-[12px]"
       style={{
         border: "1.5px solid var(--bauhaus-app-blue)",
         background: over ? "var(--accent-soft)" : "var(--surface)",

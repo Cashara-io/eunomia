@@ -38,7 +38,7 @@ function RegisterError({ error, email }: { error: Failure; email: string }) {
   return (
     <div
       role="alert"
-      className="flex items-start gap-3 px-3.5 py-2.5 rounded-[2px]"
+      className="flex items-start gap-3 px-3.5 py-2.5 rounded-[10px]"
       style={{ background: "var(--critical-soft)", borderLeft: "3px solid var(--vault-personal)" }}
     >
       <AlertCircle size={18} strokeWidth={1.75} aria-hidden className="shrink-0 mt-px" style={{ color: "var(--critical)" }} />

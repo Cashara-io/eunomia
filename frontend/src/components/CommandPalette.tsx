@@ -344,7 +344,7 @@ function Palette({ onClose }: { onClose: () => void }) {
                       <button
                         onClick={() => choose(item)}
                         onMouseMove={() => setIndex(i)}
-                        className="w-full flex items-center gap-3 px-3 min-h-11 py-1.5 text-[14px] text-left rounded-[3px]"
+                        className="w-full flex items-center gap-3 px-3 min-h-11 py-1.5 text-[14px] text-left rounded-[10px]"
                         style={{
                           background: active ? "var(--accent-soft)" : "transparent",
                           boxShadow: active ? "inset 3px 0 0 var(--bauhaus-app-blue)" : undefined,

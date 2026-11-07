@@ -341,14 +341,15 @@ body {
 /* Quiet information block on soft ground (details to copy, help asides). */
 .soft-panel {
   background: var(--surface-raised);
-  border-radius: 2px;
+  border-radius: var(--radius-card);
 }
 
-/* A floating panel: the inspector, popovers, the palette. */
+/* A floating panel: the inspector, popovers, the palette. One soft shadow
+   that starts with a 1px ring. */
 .panel {
   background: var(--surface);
   border-radius: var(--radius-card);
-  border: 1px solid var(--border);
+  box-shadow: var(--shadow-panel);
 }
 
 .hairline-rows > * + * {
@@ -388,10 +389,17 @@ tr.frame-selected::after {
   font-family: var(--font-sans), system-ui, sans-serif;
   transition: border-color var(--dur-hover) ease, box-shadow var(--dur-hover) ease;
 }
+/* Focus: the edge turns ink and the blue ring sits outside it, 2px off. */
 .field:focus-within,
 .field:focus {
-  border-color: var(--bauhaus-app-blue);
-  box-shadow: 0 0 0 1px var(--bauhaus-app-blue);
+  border-color: var(--ink);
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+/* A field that wraps its own input (the chat composer, the search box) only
+   rings when a keyboard put focus there. */
+.field:focus-within:not(:has(:focus-visible)) {
   outline: none;
 }
 .field[aria-invalid="true"] {
@@ -404,21 +412,23 @@ textarea::placeholder {
   color: var(--ink-faint);
 }
 
+/* Buttons are pills. Primary is ink, one per view; secondary is an ink edge;
+   ghost has no edge. */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   min-height: 36px;
-  padding: 0 14px;
+  padding: 0 16px;
   border-radius: var(--radius-control);
   font-size: 14px;
   font-weight: 500;
   line-height: 1.2;
   white-space: nowrap;
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  color: var(--bauhaus-app-ink);
+  border: 1px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
   transition:
     transform var(--dur-press) var(--ease-out),
     background-color var(--dur-hover) ease,
@@ -432,9 +442,9 @@ textarea::placeholder {
   cursor: not-allowed;
 }
 .btn-primary {
-  background: var(--bauhaus-app-blue);
-  border-color: var(--bauhaus-app-blue);
-  color: var(--bauhaus-app-cream);
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
 }
 .btn-ghost {
   background: transparent;
@@ -444,7 +454,7 @@ textarea::placeholder {
 /* Danger is only for destructive actions: red edge and text on the trigger,
    a solid red fill on the final confirm (.btn-danger-solid). */
 .btn-danger {
-  background: var(--surface);
+  background: transparent;
   border-color: var(--critical);
   color: var(--critical);
 }
@@ -455,7 +465,7 @@ textarea::placeholder {
 }
 .btn-sm {
   min-height: 30px;
-  padding: 0 10px;
+  padding: 0 12px;
   font-size: 13px;
 }
 .btn-icon {
@@ -482,8 +492,8 @@ textarea::placeholder {
     background: var(--surface-raised);
   }
   .btn-primary:hover:not(:disabled) {
-    background: var(--bauhaus-app-blue);
-    border-color: var(--bauhaus-app-blue);
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
   }
   .btn-ghost:hover:not(:disabled) {
     background: var(--surface-raised);
@@ -500,50 +510,49 @@ textarea::placeholder {
 .pill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   min-height: 32px;
-  padding: 0 12px;
+  padding: 0 14px;
   border-radius: var(--radius-control);
-  border: 1px solid var(--border);
-  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  background: transparent;
   color: var(--ink);
   font-size: 13px;
   font-weight: 500;
   line-height: 1.2;
-  transition: transform var(--dur-press) var(--ease-out), border-color var(--dur-hover) ease, color var(--dur-hover) ease;
+  transition: transform var(--dur-press) var(--ease-out), background-color var(--dur-hover) ease, border-color var(--dur-hover) ease, color var(--dur-hover) ease;
 }
 button.pill:active {
   transform: scale(0.97);
 }
-/* Multi-select filters that are on: quiet, so a row of them never turns
-   into a wall of accent. Single-choice selection (tabs) keeps the accent. */
-/* Multi-select filters: "on" is an outlined chip with a check, "off" is plain
-   muted text, so the state reads at a glance without a wall of pressed boxes. */
+/* Multi-select filters (The Quiet Filter Rule): on is a raised fill with an
+   ink edge, off is a hairline with dim text. No check glyph: the fill says it. */
 .pill[aria-pressed="true"] {
-  border-color: var(--border-strong);
-  background: var(--surface);
+  border-color: var(--ink);
+  background: var(--surface-raised);
   color: var(--ink);
 }
-.pill[aria-pressed="true"]::before {
-  content: "✓";
-  font-size: 11px;
-  color: var(--ink-dim);
-}
 .pill[aria-pressed="false"] {
-  border-color: transparent;
+  border-color: var(--border-strong);
   background: transparent;
   color: var(--ink-dim);
 }
+@media (hover: hover) and (pointer: fine) {
+  button.pill:hover:not(:disabled) {
+    background: var(--surface-raised);
+  }
+  .pill[aria-pressed="false"]:hover {
+    color: var(--ink);
+  }
+}
 
-/* Single choice (OS picker, segmented choices): ink edge on soft ground. Blue
-   stays for primary actions only; view switches use .tabs. */
+/* Single choice (OS picker, segmented choices): an ink fill. */
 .pill[aria-selected="true"],
 .pill[aria-checked="true"],
 .pill[aria-current="page"] {
-  border-color: var(--bauhaus-app-ink);
-  background: var(--surface-raised);
-  color: var(--ink);
-  font-weight: 600;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 .kbd {
@@ -720,8 +729,9 @@ dialog.bauhaus-dialog,
 .bauhaus-dialog {
   background: var(--surface);
   color: var(--ink);
-  border: 1.5px solid var(--bauhaus-app-ink);
-  border-radius: 4px;
+  border: 0;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-pop);
   padding: 0;
   width: min(520px, calc(100vw - 32px));
   max-height: calc(100dvh - 32px);
@@ -804,7 +814,7 @@ dialog.bauhaus-dialog::backdrop {
   cursor: default;
 }
 .select-trigger[data-open] {
-  border-color: var(--bauhaus-app-blue);
+  border-color: var(--ink);
 }
 .select-chevron {
   color: var(--ink-faint);
@@ -822,8 +832,8 @@ dialog.bauhaus-dialog::backdrop {
   align-items: center;
   gap: 8px;
   min-height: 40px;
-  padding: 0 8px;
-  border-radius: 6px;
+  padding: 0 10px;
+  border-radius: 8px;
   font-size: 13px;
   color: var(--ink-dim);
   cursor: default;

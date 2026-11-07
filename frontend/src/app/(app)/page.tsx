@@ -54,7 +54,7 @@ function FailureBanner({ rows, dismissed, onDismiss }: { rows: SourceRow[]; dism
         <div
           key={s.key}
           role="alert"
-          className="flex flex-wrap items-center gap-3 rounded-[2px] px-4 py-3"
+          className="flex flex-wrap items-center gap-3 rounded-[12px] px-4 py-3"
           style={{ background: "var(--critical-soft)", border: "1px solid var(--critical)" }}
         >
           <AlertTriangle size={18} strokeWidth={1.75} color="var(--critical)" className="shrink-0" aria-hidden />
