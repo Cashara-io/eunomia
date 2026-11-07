@@ -297,6 +297,9 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                                     if !o.memory.redacted.is_empty() {
                                         v["redacted"] = json!(o.memory.redacted);
                                     }
+                                    if let Some(m) = &o.kind_mapped {
+                                        v["kind_mapped"] = json!(m);
+                                    }
                                     v
                                 }
                                 Err(e) => {

@@ -334,6 +334,9 @@ pub struct WriteMemoryOut {
     /// whose name shares a word with it -- candidates for `entity_merge`.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub possible_duplicates: Vec<EntityOut>,
+    /// `subject_kind` was rejected for the vault, so the fact was written under its merge target.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind_mapped: Option<crate::ontology::KindMapped>,
 }
 
 // ---------------------------------------------------------------------------
@@ -431,7 +434,34 @@ pub async fn upsert_entity(
     aliases: Option<Vec<String>>,
     vault_id: Option<&RecordId>,
 ) -> AppResult<EntityOut> {
-    Ok(upsert_entity_created(db, owner, kind, name, aliases, vault_id).await?.0)
+    Ok(upsert_grounded(db, owner, kind, name, aliases, vault_id).await?.entity)
+}
+
+/// The entity a write found or made, and where the vault's ontology sent it.
+pub struct Upserted {
+    pub entity: EntityOut,
+    pub created: bool,
+    /// The kind asked for was rejected for the vault and the write went to its merge target.
+    pub kind_mapped: Option<crate::ontology::KindMapped>,
+}
+
+/// [`upsert_entity_created`] for a write from an agent or a person: a kind the vault's owners rejected
+/// goes to its merge target, or is refused (`ontology::ground`). A built-in kind is never rejected, so
+/// only a custom kind pays the one lookup.
+pub async fn upsert_grounded(
+    db: &OrgDb,
+    owner: &RecordId,
+    kind: &str,
+    name: &str,
+    aliases: Option<Vec<String>>,
+    vault_id: Option<&RecordId>,
+) -> AppResult<Upserted> {
+    let table = kind_table(kind)?;
+    let vault = resolve_vault(db, owner, vault_id, Action::WriteMemories).await?;
+    let kind_mapped = if table == CUSTOM_TABLE { crate::ontology::ground(db, &vault, kind).await? } else { None };
+    let kind = kind_mapped.as_ref().map_or(kind, |m| m.to.as_str());
+    let (entity, created) = upsert_in_vault(db, owner, kind, name, aliases, &vault).await?;
+    Ok(Upserted { entity, created, kind_mapped })
 }
 
 /// `"Jane Doe (Acme/JD)"` -> `("Jane Doe", ["Acme", "JD"])`: a name with a
@@ -474,9 +504,10 @@ fn person_variants(name: &str) -> Vec<String> {
     out
 }
 
-/// [`upsert_entity`], plus whether the entity was created just now. A
-/// decorated name (see [`split_decorated`]) whose base name already exists
-/// resolves to that entity, the suffix parts becoming aliases.
+/// Find-or-create as [`upsert_entity`] does, under exactly `kind` (the vault's ontology is not
+/// consulted: peer sync copies what the other side holds), plus whether the entity was created just
+/// now. A decorated name (see [`split_decorated`]) whose base name already exists resolves to that
+/// entity, the suffix parts becoming aliases.
 pub async fn upsert_entity_created(
     db: &OrgDb,
     owner: &RecordId,
@@ -485,8 +516,21 @@ pub async fn upsert_entity_created(
     aliases: Option<Vec<String>>,
     vault_id: Option<&RecordId>,
 ) -> AppResult<(EntityOut, bool)> {
-    let table = kind_table(kind)?;
+    kind_table(kind)?;
     let vault = resolve_vault(db, owner, vault_id, Action::WriteMemories).await?;
+    upsert_in_vault(db, owner, kind, name, aliases, &vault).await
+}
+
+/// [`upsert_entity_created`] once the caller resolved `vault` and may write there.
+async fn upsert_in_vault(
+    db: &OrgDb,
+    owner: &RecordId,
+    kind: &str,
+    name: &str,
+    aliases: Option<Vec<String>>,
+    vault: &RecordId,
+) -> AppResult<(EntityOut, bool)> {
+    let table = kind_table(kind)?;
     let aliases = aliases.unwrap_or_default();
     let name = name.trim();
     if name.is_empty() {
@@ -494,7 +538,7 @@ pub async fn upsert_entity_created(
     }
     let needle = name.to_lowercase();
     if table == CUSTOM_TABLE {
-        check_custom_kind_room(db, &vault, kind).await?;
+        check_custom_kind_room(db, vault, kind).await?;
     }
 
     // A decorated name ("Jane Doe (Acme/JD)") whose base name already exists resolves to it, the
@@ -574,7 +618,7 @@ pub async fn upsert_entity_created(
     })
     .await?;
     if let Some(op) = changed {
-        changes::record(db, &vault, op, changes::ENTITY, &row.id).await;
+        changes::record(db, vault, op, changes::ENTITY, &row.id).await;
     }
     Ok((entity_out(&row), changed == Some(changes::CREATED)))
 }
@@ -611,6 +655,14 @@ pub struct CustomKind {
     pub kind: String,
     /// entities of this kind in the listed vaults
     pub entities: i64,
+    /// What the vault's owners decided about it (`observed`: never reviewed). Over several vaults, the
+    /// first listed vault that reviewed it decides.
+    pub status: crate::ontology::ViewStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// A rejected kind: writes under it go to this kind instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub merge_into: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -620,16 +672,35 @@ pub struct EntityTypesOut {
 }
 
 /// The built-in kinds, then every custom kind used in `vaults` (already resolved and checked by the
-/// caller) with its entity count.
+/// caller) or approved in one, with its entity count and review.
 pub async fn entity_types(db: &OrgDb, vaults: &[RecordId]) -> AppResult<EntityTypesOut> {
+    use crate::ontology::{Status, ViewStatus};
     let rows: Vec<CustomKindRow> = match q::CUSTOM_KINDS_IN.on(db).bind(("vaults", vaults.to_vec())).await {
         Err(e) if no_custom_table(&e) => Vec::new(),
         res => res?.take(0)?,
     };
-    Ok(EntityTypesOut {
-        built_in: KINDS.to_vec(),
-        custom: rows.into_iter().map(|r| CustomKind { kind: r.kind, entities: r.count }).collect(),
-    })
+    let mut reviewed = crate::ontology::reviewed_kinds(db, vaults).await?;
+    reviewed.sort_by_key(|r| vaults.iter().position(|v| *v == r.vault));
+    let mut kinds: std::collections::BTreeMap<String, i64> = rows.into_iter().map(|r| (r.kind, r.count)).collect();
+    for r in &reviewed {
+        if is_custom_kind(&r.kind) && r.status()? == Status::Approved {
+            kinds.entry(r.kind.clone()).or_insert(0);
+        }
+    }
+    let custom = kinds
+        .into_iter()
+        .map(|(kind, entities)| {
+            let review = reviewed.iter().find(|r| r.kind == kind);
+            Ok(CustomKind {
+                status: review.map(|r| r.status()).transpose()?.map_or(ViewStatus::Observed, ViewStatus::from),
+                description: review.and_then(|r| r.description.clone()),
+                merge_into: review.and_then(|r| r.merge_into.clone()),
+                kind,
+                entities,
+            })
+        })
+        .collect::<AppResult<Vec<_>>>()?;
+    Ok(EntityTypesOut { built_in: KINDS.to_vec(), custom })
 }
 
 /// Other `kind` entities in the entity's vault whose name or an alias shares a word (3+ letters) with
@@ -764,15 +835,15 @@ pub async fn write_memory(
     vault_id: Option<&RecordId>,
 ) -> AppResult<WriteMemoryOut> {
     authz::require_scope(Action::WriteMemories.scope())?;
-    // upsert_entity_created resolved and checked the vault for a write, and the entity lives in it:
+    // upsert_grounded resolved and checked the vault for a write, and the entity lives in it:
     // no need to read it back and check again (as `add_memory` does for a bare subject id)
-    let (entity, created) = upsert_entity_created(db, owner, subject_kind, subject_name, None, vault_id).await?;
+    let Upserted { entity, created, kind_mapped } = upsert_grounded(db, owner, subject_kind, subject_name, None, vault_id).await?;
     let entity_rid: RecordId =
         crate::rid::parse(&entity.id).map_err(|_| AppError::internal("entity id did not round-trip"))?;
     let vault: RecordId = crate::rid::parse(&entity.vault).map_err(|_| AppError::internal("vault id did not round-trip"))?;
     let memory = insert_memory(db, owner, &entity_rid, &vault, text, source_record_id, mem_type).await?;
     let possible_duplicates = if created { possible_duplicates(db, &entity).await? } else { Vec::new() };
-    Ok(WriteMemoryOut { entity, memory, possible_duplicates })
+    Ok(WriteMemoryOut { entity, memory, possible_duplicates, kind_mapped })
 }
 
 /// RELATE two entities, idempotent on the (in, out, label) unique index -- a
