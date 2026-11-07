@@ -17,6 +17,8 @@ use serde_json::json;
 use crate::documents::{self, DocumentDeleted, DocumentDetail, DocumentList, DocumentOut, Upload};
 use crate::error::{AppError, AppResult};
 use crate::models_user::User;
+use crate::ontology::tabular::{self, ImportArgs, ImportOut, TableProfile};
+use crate::ontology::Origin;
 use crate::state::{AppState, OrgState};
 
 pub fn router() -> Router<AppState> {
@@ -26,11 +28,13 @@ pub fn router() -> Router<AppState> {
         .route("/documents/{document_id}/download", get(download_document))
         .route("/documents/{document_id}/export", get(export_document))
         .route("/documents/{document_id}/reindex", post(reindex_document))
+        .route("/documents/{document_id}/profile", get(profile_document))
+        .route("/documents/{document_id}/import", post(import_document))
 }
 
 #[derive(utoipa::OpenApi)]
 #[openapi(
-    paths(list_documents, upload_document, get_document, delete_document, download_document, export_document, reindex_document),
+    paths(list_documents, upload_document, get_document, delete_document, download_document, export_document, reindex_document, profile_document, import_document),
     components(schemas(DocumentOut, DocumentList, DocumentDetail, DocumentDeleted, documents::ChunkRef))
 )]
 pub struct Doc;
@@ -156,6 +160,51 @@ async fn reindex_document(State(state): State<AppState>, user: User, Path(docume
     let state = state.org(&user.org).await?;
     let out = documents::reindex(&state, &user.id, &document_id).await;
     audit(&state, &user, "document_reindex", &document_id, &out).await;
+    Ok(Json(out?))
+}
+
+#[utoipa::path(
+    operation_id = "profileDocument",
+    get,
+    path = "/api/documents/{document_id}/profile",
+    tag = "documents",
+    summary = "An uploaded CSV's column profile, and what importing its rows would do now",
+    params(("document_id" = String, Path)),
+    responses((status = 200, body = TableProfile), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = []), ("bearer" = [])),
+)]
+async fn profile_document(State(state): State<AppState>, user: User, Path(document_id): Path<String>) -> AppResult<Json<TableProfile>> {
+    let state = state.org(&user.org).await?;
+    Ok(Json(tabular::document_profile(&state, &user.id, &document_id).await?))
+}
+
+/// How to import a CSV's rows: the approved kind, the naming column, and optionally which column feeds which property.
+#[derive(Deserialize, utoipa::ToSchema)]
+struct ImportBody {
+    kind: String,
+    name_column: String,
+    #[serde(default)]
+    column_map: Option<std::collections::BTreeMap<String, String>>,
+    #[serde(default)]
+    as_of: Option<String>,
+}
+
+#[utoipa::path(
+    operation_id = "importDocumentRows",
+    post,
+    path = "/api/documents/{document_id}/import",
+    tag = "documents",
+    summary = "Import an uploaded CSV's rows as entities of an approved kind, with values of its approved properties",
+    params(("document_id" = String, Path)),
+    request_body = ImportBody,
+    responses((status = 200, body = ImportOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = []), ("bearer" = [])),
+)]
+async fn import_document(State(state): State<AppState>, user: User, Path(document_id): Path<String>, Json(body): Json<ImportBody>) -> AppResult<Json<ImportOut>> {
+    let state = state.org(&user.org).await?;
+    let args = ImportArgs { document_id: document_id.clone(), kind: body.kind, name_column: body.name_column, column_map: body.column_map, as_of: body.as_of };
+    let out = tabular::import_rows(&state, &user.id, &args, Origin::Human).await;
+    record(&state, &user, "document_import_rows", &json!({ "id": document_id, "kind": args.kind, "via": "http" }), &out).await;
     Ok(Json(out?))
 }
 

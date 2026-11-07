@@ -11,6 +11,7 @@ use surrealdb::types::RecordId;
 
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::models_user::User;
+use crate::ontology::automap::{AutomapArgs, AutomapOut};
 use crate::ontology::{self, metric::MetricDecision, property::PropertyDecision, suggest::SuggestOut, KindDecision, LinkDecision, OntologyOut};
 use crate::state::AppState;
 
@@ -18,6 +19,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/vaults/{vault_id}/ontology", get(get_ontology))
         .route("/vaults/{vault_id}/ontology/suggest", post(suggest_ontology))
+        .route("/vaults/{vault_id}/ontology/automap", post(automap_ontology))
         .route("/vaults/{vault_id}/ontology/kinds/decide", post(decide_kind))
         .route("/vaults/{vault_id}/ontology/links/decide", post(decide_link))
         .route("/vaults/{vault_id}/ontology/properties/decide", post(decide_property))
@@ -86,6 +88,35 @@ async fn suggest_ontology(State(state): State<AppState>, user: User, Path(vault_
     let state = state.org(&user.org).await?;
     let vault = parse_vault_id(&vault_id)?;
     Ok(Json(ontology::suggest::suggest(&state.db, &state.settings, &user.id, Some(&vault)).await?))
+}
+
+/// What to auto-map: synced records (all, one source or one record type) or an uploaded CSV.
+#[derive(Deserialize, Default, utoipa::ToSchema)]
+struct AutomapBody {
+    #[serde(default)]
+    source: Option<String>,
+    #[serde(default)]
+    record_type: Option<String>,
+    #[serde(default)]
+    document_id: Option<String>,
+}
+
+#[utoipa::path(
+    operation_id = "automapVaultOntology",
+    post,
+    path = "/api/vaults/{vault_id}/ontology/automap",
+    tag = "vaults",
+    summary = "Profile record fields or a CSV and have the server's model propose kinds, properties and value-checked links (the profiles alone without a model)",
+    params(("vault_id" = String, Path)),
+    request_body = AutomapBody,
+    responses((status = 200, body = AutomapOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = []), ("bearer" = [])),
+)]
+async fn automap_ontology(State(state): State<AppState>, user: User, Path(vault_id): Path<String>, Json(body): Json<AutomapBody>) -> AppResult<Json<AutomapOut>> {
+    let state = state.org(&user.org).await?;
+    parse_vault_id(&vault_id)?;
+    let args = AutomapArgs { source: body.source, record_type: body.record_type, document_id: body.document_id, vault_id: Some(vault_id) };
+    Ok(Json(ontology::automap::automap(&state, &state.settings, &user.id, &args).await?))
 }
 
 #[utoipa::path(
@@ -157,5 +188,5 @@ async fn decide_metric(State(state): State<AppState>, user: User, Path(vault_id)
 }
 
 #[derive(utoipa::OpenApi)]
-#[openapi(paths(get_ontology, suggest_ontology, decide_kind, decide_link, decide_property, decide_metric))]
+#[openapi(paths(get_ontology, suggest_ontology, automap_ontology, decide_kind, decide_link, decide_property, decide_metric))]
 pub struct Doc;
