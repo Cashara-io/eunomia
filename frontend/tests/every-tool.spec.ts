@@ -67,12 +67,15 @@ test("every MCP tool works end to end", async ({ request, baseURL }) => {
   const hood = await ok("entities_neighbourhood", { entity_id: ada.entity.id });
   expect(hood.nodes.map((n: { name: string }) => n.name)).toContain("Charles Babbage");
   const shown = await call("show_view", {
-    view: { view: "impact", start_id: ada.entity.id, headline: "Ada changes plans.", affected: [{ entity_id: babbage.entity.id, path: [hood.edges[0].id], why: "They work together." }] },
+    view: "impact",
+    start_id: ada.entity.id,
+    headline: "Ada changes plans.",
+    affected: [{ entity_id: babbage.entity.id, path: [hood.edges[0].id], why: "They work together." }],
   });
   expect(shown.isError).toBe(false);
   expect(shown.data.affected[0].entity.name).toBe("Charles Babbage");
   expect(shown.text).toContain("Charles Babbage");
-  expect((await call("show_view", { view: { view: "impact", start_id: "person:invented", headline: "x", affected: [] } })).isError).toBe(true);
+  expect((await call("show_view", { view: "impact", start_id: "person:invented", headline: "x", affected: [] })).isError).toBe(true);
   await ok("memory_write", { subject_name: "orders_db", subject_kind: "db", text: "Runs Postgres 16." });
   expect((await ok("entity_types")).custom).toEqual([{ kind: "db", entities: 1, status: "observed" }]);
   await ok("ontology_propose", { kinds: [{ kind: "db", description: "A database" }] });

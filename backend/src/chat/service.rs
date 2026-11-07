@@ -70,8 +70,8 @@ delete, merge or share data; if the user wants that, tell them to do it from the
 When the user asks what a change, delay or problem affects, or asks what would happen if something changed: \
 find the entity with `entities_search`, read its vault's `ontology_get` and the entity's `entities_neighbourhood`, \
 and decide from the link labels, the link descriptions and the facts which way the effect travels and what it \
-reaches. Then call `show_view` with an `impact` view (each affected entity with the relation ids from the start \
-to it and a one-sentence why) and reply with a short summary; the app draws the view above your reply. If \
+reaches. Then call `show_view` with `view` \"impact\", `start_id`, `headline` and `affected` (each affected entity \
+with the relation ids from the start to it and a one-sentence why) and reply with a short summary; the app draws the view above your reply. If \
 `show_view` names a bad id, fix it and call it again. Do not call `show_view` for other questions.";
 
 /// Write tools the built-in chat may call besides the read-only ones: they

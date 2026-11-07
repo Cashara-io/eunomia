@@ -459,7 +459,7 @@ async fn edges_by_label(app: &TestApp, from: &str) -> std::collections::HashMap<
 }
 
 fn impact(start: &str, affected: Value) -> Value {
-    json!({"view": {"view": "impact", "start_id": start, "headline": "  Truck 7 is two hours late.  ", "affected": affected}})
+    json!({"view": "impact", "start_id": start, "headline": "  Truck 7 is two hours late.  ", "affected": affected})
 }
 
 fn refused(out: &Value, needle: &str) {
@@ -506,7 +506,7 @@ async fn an_impact_view_comes_back_resolved_with_names_and_text() {
     assert!(text.contains("Order 12 (order), via Truck 7 carries Shipment 88, then Shipment 88 fulfils Order 12."), "{text}");
 
     let sub = ok(app
-        .tool("show_view", json!({"view": {"view": "subgraph", "title": "How Ana reaches Acme", "entity_ids": [ids["Ana"]], "relation_ids": [rel["drives"], rel["for"]]}}))
+        .tool("show_view", json!({"view": "subgraph", "title": "How Ana reaches Acme", "entity_ids": [ids["Ana"]], "relation_ids": [rel["drives"], rel["for"]]}))
         .await);
     let names: Vec<&str> = sub["entities"].as_array().unwrap().iter().map(|e| e["name"].as_str().unwrap()).collect();
     assert_eq!(names, ["Ana", "Truck 7", "Order 12", "Acme"], "a relation's ends are shown too: {sub}");
@@ -537,8 +537,11 @@ async fn a_view_with_an_invented_id_or_a_broken_path_is_refused_naming_it() {
     refused(&out, "ends at");
     refused(&app.tool("show_view", shipment(json!([]))).await, "is empty");
     // an unknown view is a bad argument, not a new kind of answer
-    let out = app.tool("show_view", json!({"view": {"view": "pie_chart", "title": "x"}})).await;
+    let out = app.tool("show_view", json!({"view": "pie_chart", "title": "x"})).await;
     assert!(out["error"].as_str().unwrap().contains("unknown variant"), "{out}");
+    // the arguments are the view itself: a view nested under `view` is not one
+    let nested = app.tool("show_view", json!({"view": impact(truck, json!([]))})).await;
+    assert!(nested["error"].as_str().unwrap().contains("invalid arguments"), "{nested}");
 }
 
 #[tokio::test]
@@ -552,7 +555,7 @@ async fn a_view_cannot_name_an_entity_the_caller_cannot_read() {
     let hood = ok(as_user(&app, &bob, "entities_neighbourhood", json!({"entity_id": hidden})).await);
     assert_eq!(hood["nodes"][0]["name"], "Bob Private Depot");
 
-    for view in [impact(hidden, json!([])), json!({"view": {"view": "subgraph", "title": "x", "entity_ids": [ids["Ana"], hidden]}})] {
+    for view in [impact(hidden, json!([])), json!({"view": "subgraph", "title": "x", "entity_ids": [ids["Ana"], hidden]})] {
         let out = app.tool("show_view", view).await;
         refused(&out, hidden);
         assert!(!out.to_string().contains("Bob Private Depot"), "{out}");

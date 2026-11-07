@@ -250,11 +250,11 @@ shipment` and `shipment fulfils order`, and the user says "Truck 7 is late, what
 5. `show_view` draws it:
 
 ```json
-{"view": {"view": "impact", "start_id": "<truck id>", "headline": "Truck 7 is two hours late.",
+{"view": "impact", "start_id": "<truck id>", "headline": "Truck 7 is two hours late.",
   "affected": [
     {"entity_id": "<shipment id>", "path": ["<carries edge id>"], "why": "It is on the truck."},
     {"entity_id": "<order id>", "path": ["<carries edge id>", "<fulfils edge id>"], "why": "Its only shipment is late."}
-  ]}}
+  ]}
 ```
 
 Every id is checked: each entity and relation must be in a vault you can read, and each `path` must be a

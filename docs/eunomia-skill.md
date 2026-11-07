@@ -54,9 +54,9 @@ When the user asks what a change, delay or problem affects ("Truck 7 is
 late: what does that hit?"), find the entity with `entities_search`, read
 the vault's `ontology_get` and the entity's `entities_neighbourhood`, and
 decide from the link labels, the link descriptions and the facts which way
-the effect travels. Then call `show_view` with an `impact` view: each
-affected entity with `path` (the relation ids from the start to it) and
-`why` (one sentence). If it refuses an id, fix that id and call it again.
+the effect travels. Then call `show_view` with `"view": "impact"`,
+`start_id`, `headline` and `affected`: each affected entity with `path`
+(the relation ids from the start to it) and `why` (one sentence). If it refuses an id, fix that id and call it again.
 
 ## Code
 
