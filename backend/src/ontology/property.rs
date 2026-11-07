@@ -546,8 +546,8 @@ fn to_json(datatype: Datatype, v: &Stored) -> Option<Value> {
         Datatype::Integer => Value::from(v.num? as i64),
         d if d.numeric() => serde_json::Number::from_f64(v.num?).map(Value::Number)?,
         Datatype::Bool => Value::Bool(v.boolean?),
-        Datatype::Date => Value::String(v.date.clone()?.into_inner().format("%Y-%m-%d").to_string()),
-        Datatype::Datetime => Value::String(v.date.clone()?.into_inner().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
+        Datatype::Date => Value::String(v.date?.into_inner().format("%Y-%m-%d").to_string()),
+        Datatype::Datetime => Value::String(v.date?.into_inner().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
         _ => Value::String(v.text.clone()?),
     })
 }
@@ -573,7 +573,6 @@ pub struct PropertyValue {
     pub property: String,
     pub datatype: Datatype,
     /// A number, a bool or a string (a date is YYYY-MM-DD, a datetime RFC 3339).
-    #[schema(value_type = Object)]
     pub value: Value,
     /// The value's unit, else the property's.
     pub unit: Option<String>,
@@ -687,7 +686,7 @@ pub async fn set_property(db: &OrgDb, owner: &RecordId, input: SetProperty<'_>) 
         .bind(("value_num", stored.num))
         .bind(("value_text", stored.text.clone()))
         .bind(("value_bool", stored.boolean))
-        .bind(("value_date", stored.date.clone()))
+        .bind(("value_date", stored.date))
         .bind(("unit", unit))
         .bind(("as_of", Datetime::from(as_of)))
         .bind(("source", source))
@@ -747,13 +746,13 @@ struct ValueRow {
 
 impl ValueRow {
     fn out(&self, p: &ApprovedProperty) -> Option<PropertyValue> {
-        let stored = Stored { num: self.value_num, text: self.value_text.clone(), boolean: self.value_bool, date: self.value_date.clone() };
+        let stored = Stored { num: self.value_num, text: self.value_text.clone(), boolean: self.value_bool, date: self.value_date };
         Some(PropertyValue {
             property: p.name.clone(),
             datatype: p.datatype,
             value: to_json(p.datatype, &stored)?,
             unit: self.unit.clone().or_else(|| p.unit.clone()),
-            as_of: self.as_of.clone().into_inner().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+            as_of: self.as_of.into_inner().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
             source: self.source.as_ref().map(|s| s.to_string()),
         })
     }
