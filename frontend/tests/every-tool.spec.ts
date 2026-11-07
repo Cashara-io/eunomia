@@ -25,7 +25,9 @@ test("every MCP tool works end to end", async ({ request, baseURL }) => {
     expect(res.status(), name).toBe(200);
     const body = await res.json();
     expect(body.error, `${name}: protocol error ${JSON.stringify(body.error)}`).toBeUndefined();
-    return { isError: body.result.isError as boolean, data: JSON.parse(body.result.content[0].text) };
+    // show_view's text is plain prose for text-only clients; its structure comes as structuredContent
+    const data = body.result.structuredContent ?? JSON.parse(body.result.content[0].text);
+    return { isError: body.result.isError as boolean, data, text: body.result.content[0].text as string };
   };
   const ok = async (name: string, args: object = {}, token?: string) => {
     const r = await call(name, args, token);
@@ -62,6 +64,15 @@ test("every MCP tool works end to end", async ({ request, baseURL }) => {
   expect(detail.memory.length).toBe(2);
   expect(detail.relations.length).toBe(1);
   expect((await ok("entities_graph")).edges.length).toBeGreaterThanOrEqual(1);
+  const hood = await ok("entities_neighbourhood", { entity_id: ada.entity.id });
+  expect(hood.nodes.map((n: { name: string }) => n.name)).toContain("Charles Babbage");
+  const shown = await call("show_view", {
+    view: { view: "impact", start_id: ada.entity.id, headline: "Ada changes plans.", affected: [{ entity_id: babbage.entity.id, path: [hood.edges[0].id], why: "They work together." }] },
+  });
+  expect(shown.isError).toBe(false);
+  expect(shown.data.affected[0].entity.name).toBe("Charles Babbage");
+  expect(shown.text).toContain("Charles Babbage");
+  expect((await call("show_view", { view: { view: "impact", start_id: "person:invented", headline: "x", affected: [] } })).isError).toBe(true);
   await ok("memory_write", { subject_name: "orders_db", subject_kind: "db", text: "Runs Postgres 16." });
   expect((await ok("entity_types")).custom).toEqual([{ kind: "db", entities: 1, status: "observed" }]);
   await ok("ontology_propose", { kinds: [{ kind: "db", description: "A database" }] });
