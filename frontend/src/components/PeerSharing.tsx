@@ -63,7 +63,7 @@ function statusWords(link: PeerLink): [StatusTone, string] {
 function matchWords(link: PeerLink): string {
   if (link.status === "revoked") return "";
   if (link.digests_match === true) return "Copies match ✓";
-  if (link.digests_match === false) return "Copies differ — syncing";
+  if (link.digests_match === false) return "Copies differ, syncing";
   return "Checking…";
 }
 
