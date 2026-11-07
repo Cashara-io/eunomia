@@ -57,6 +57,8 @@ const TOOL_WORDS: Record<string, string> = {
   entity_delete: "Deleted a person or topic",
   entity_types: "Checked the kinds in use",
   ontology_get: "Checked this space's kinds",
+  metric_eval: "Worked out a number",
+  entity_set_property: "Saved a value",
   show_view: "Showed a view",
   document_list: "Listed documents",
   document_get: "Read a document",

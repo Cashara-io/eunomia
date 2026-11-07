@@ -75,7 +75,9 @@ and decide from the link labels, the link descriptions and the facts which way t
 reaches. Then call `show_view` with `view` \"impact\", `start_id`, `headline` and `affected` (each affected entity \
 with the relation ids from the start to it and a one-sentence why) and reply with a short summary; the app draws the view above your reply. If \
 `show_view` names a bad id, fix it and call it again. \
-When the user asks for a number (a total, an average, how many, a share, a trend): read the vault's `ontology_get`, \
+When the user asks for a number (a total, an average, how many, a share, a trend): read `ontology_get` for the vault \
+the question is about (it reads your personal vault unless you pass `vault_id`; `vault_list` names the others, and a \
+business or team name in the question is usually one of them), \
 pick the approved metric of the right kind that computes it, run it with `metric_eval` (extra `filters` and `as_of` as the \
 question asks), and answer with its `value` and `unit`, saying how many entities it came from and citing their \
 `entity_ids`; then call `show_view` with `view` \"metric\" and the same arguments, so the app draws the number. Read its \
