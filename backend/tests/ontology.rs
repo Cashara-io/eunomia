@@ -350,6 +350,20 @@ async fn reads_and_writes_still_work_on_an_org_database_before_the_properties_mi
     ok(app.tool("entity_delete", json!({"entity_id": latte})).await);
 }
 
+#[tokio::test]
+async fn a_kind_row_from_before_synonyms_still_takes_decisions_after_the_upgrade() {
+    let app = TestApp::new().await;
+    ok(app.tool("ontology_propose", json!({"kinds": [{"kind": "customer", "description": "A paying client"}]})).await);
+    let db = app.db().await;
+    // the row as 0033 left it: no synonyms field at all
+    db.test_raw().query("REMOVE FIELD synonyms ON ontology_kind; UPDATE ontology_kind UNSET synonyms;").await.unwrap().check().unwrap();
+    db.test_raw().query(include_str!("../migrations/tenant/0034_ontology_properties.surql")).await.unwrap().check().unwrap();
+    let vault = personal(&app).await;
+    let (status, o) = decide_kind(&app, &vault, "customer", json!({"action": "approve"})).await;
+    assert_eq!(status, 200, "{o}");
+    assert_eq!((kind(&o, "customer")["status"].as_str(), kind(&o, "customer")["synonyms"].clone()), (Some("approved"), json!([])));
+}
+
 // ------------------------------------------------------------ what a change affects: the neighbourhood
 
 /// A small logistics chain in the personal vault: Ana drives Truck 7, which carries Shipment 88, which

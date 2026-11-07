@@ -7495,6 +7495,62 @@
         ]
       }
     },
+    "/api/vaults/{vault_id}/ontology/properties/decide": {
+      "post": {
+        "tags": [
+          "vaults"
+        ],
+        "summary": "Approve, reject (optionally merging into another property of the kind) or describe a property (owner, browser session only)",
+        "operationId": "decideVaultOntologyProperty",
+        "parameters": [
+          {
+            "name": "vault_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PropertyDecideBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OntologyOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
     "/api/vaults/{vault_id}/ontology/suggest": {
       "post": {
         "tags": [
@@ -8788,6 +8844,21 @@
           }
         }
       },
+      "Datatype": {
+        "type": "string",
+        "description": "What a property's values are. A datatype, not a business field: the vault says which property has it.",
+        "enum": [
+          "text",
+          "number",
+          "integer",
+          "money",
+          "percent",
+          "bool",
+          "date",
+          "datetime",
+          "enum"
+        ]
+      },
       "DeclineOut": {
         "type": "object",
         "required": [
@@ -9065,7 +9136,8 @@
           "aliases",
           "summary",
           "memory",
-          "relations"
+          "relations",
+          "properties"
         ],
         "properties": {
           "aliases": {
@@ -9094,6 +9166,13 @@
               "string",
               "null"
             ]
+          },
+          "properties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PropertyValue"
+            },
+            "description": "The current value of each approved property of its kind that it has."
           },
           "relations": {
             "type": "array",
@@ -10171,8 +10250,10 @@
           "kind",
           "built_in",
           "status",
+          "synonyms",
           "entities",
-          "samples"
+          "samples",
+          "properties"
         ],
         "properties": {
           "built_in": {
@@ -10210,6 +10291,13 @@
               }
             ]
           },
+          "properties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PropertyItem"
+            },
+            "description": "Its typed properties, each with its review status. Only an approved one takes values."
+          },
           "reason": {
             "type": [
               "string",
@@ -10225,6 +10313,13 @@
           },
           "status": {
             "$ref": "#/components/schemas/ViewStatus"
+          },
+          "synonyms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Other names written in the vault's data for this kind."
           }
         }
       },
@@ -11308,11 +11403,207 @@
           }
         }
       },
+      "PropertyDecideBody": {
+        "type": "object",
+        "required": [
+          "kind",
+          "name",
+          "decision"
+        ],
+        "properties": {
+          "decision": {
+            "$ref": "#/components/schemas/PropertyDecision"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "PropertyDecision": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "approve"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Values for the property go to `merge_into` (a property of the same kind) from now on; without\nit they are refused.",
+            "required": [
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "reject"
+                ]
+              },
+              "merge_into": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Set or (blank) clear the description; the status stays as it is.",
+            "required": [
+              "description",
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "describe"
+                ]
+              },
+              "description": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "PropertyItem": {
+        "type": "object",
+        "description": "One property of a kind, as the ontology view shows it.",
+        "required": [
+          "name",
+          "datatype",
+          "synonyms",
+          "status",
+          "origin",
+          "values",
+          "samples"
+        ],
+        "properties": {
+          "datatype": {
+            "$ref": "#/components/schemas/Datatype"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "enum_values": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "merge_into": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Rejected: the property of the same kind its values go to. Proposed: the merge the proposer suggests."
+          },
+          "name": {
+            "type": "string"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/Origin"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "samples": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "A few of them, as text with their unit."
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          },
+          "synonyms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "values": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Values written for it in the vault, history included."
+          }
+        }
+      },
+      "PropertyValue": {
+        "type": "object",
+        "description": "One property's current value on an entity.",
+        "required": [
+          "property",
+          "datatype",
+          "value",
+          "as_of"
+        ],
+        "properties": {
+          "as_of": {
+            "type": "string",
+            "description": "When the value was true, RFC 3339."
+          },
+          "datatype": {
+            "$ref": "#/components/schemas/Datatype"
+          },
+          "property": {
+            "type": "string"
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The synced record it came from."
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The value's unit, else the property's."
+          },
+          "value": {
+            "description": "A number, a bool or a string (a date is YYYY-MM-DD, a datetime RFC 3339)."
+          }
+        }
+      },
       "ProposeOut": {
         "type": "object",
         "required": [
           "kinds",
-          "links"
+          "links",
+          "properties"
         ],
         "properties": {
           "kinds": {
@@ -11325,6 +11616,12 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ProposedLink"
+            }
+          },
+          "properties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProposedProperty"
             }
           }
         }
@@ -11371,6 +11668,36 @@
           },
           "to_kind": {
             "type": "string"
+          }
+        }
+      },
+      "ProposedProperty": {
+        "type": "object",
+        "description": "A proposed property after the call, with the row's status (a decided one keeps its decision).",
+        "required": [
+          "kind",
+          "name",
+          "datatype",
+          "status"
+        ],
+        "properties": {
+          "datatype": {
+            "$ref": "#/components/schemas/Datatype"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "merge_into": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
           }
         }
       },

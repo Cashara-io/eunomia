@@ -8,6 +8,7 @@ use eunomia_backend::pool::{ControlDb, OrgDb};
 use eunomia_backend::entities::service as entities;
 use eunomia_backend::error::AppResult;
 use eunomia_backend::models_user::User;
+use eunomia_backend::ontology::{self, property};
 use eunomia_backend::vaults::service as vaults;
 use eunomia_backend::rid;
 use surrealdb::types::RecordId;
@@ -55,6 +56,11 @@ impl World {
         }
         v
     }
+}
+
+/// A `price` (money) on `product`.
+fn price() -> ontology::Proposals {
+    serde_json::from_value(serde_json::json!({"properties": [{"kind": "product", "name": "price", "datatype": "money", "unit": "AUD"}]})).unwrap()
 }
 
 async fn world() -> World {
@@ -107,6 +113,8 @@ async fn vault_operations_matrix() {
         ("delete", [true, false, false, false]),
         ("clone", [true, true, false, false]),
         ("merge", [true, true, false, false]),
+        ("propose a property", [true, true, false, false]),
+        ("decide a property", [true, false, false, false]),
     ];
     for (op, want) in rows {
         for (i, who) in WHOS.into_iter().enumerate() {
@@ -121,6 +129,11 @@ async fn vault_operations_matrix() {
                 "remove member" => allowed(common::sys(vaults::remove_member(&w.db, &w.control, &u.id, &v, &w.pending.email)).await),
                 "delete" => allowed(common::sys(vaults::delete_vault(&w.db, &w.control, &u.id, &v)).await),
                 "clone" => allowed(common::sys(vaults::clone_vault(&w.db, &w.control, &u.id, &v, None, "org")).await),
+                "propose a property" => allowed(ontology::propose(&w.db, &u.id, Some(&v), &price()).await),
+                "decide a property" => {
+                    ontology::propose(&w.db, &w.owner.id, Some(&v), &price()).await.unwrap();
+                    allowed(property::decide_property(&w.db, &u.id, &v, "product", "price", property::PropertyDecision::Approve).await)
+                }
                 "merge" => {
                     let own = common::sys(vaults::default_vault_id(&w.db, &u.id)).await.unwrap();
                     allowed(common::sys(vaults::merge_vaults(&w.db, &w.control, &u.id, &v, &own, None, "org")).await)
@@ -156,6 +169,17 @@ async fn entity_row_operations_matrix() {
         check("update memory", who, got, member_like);
         let got = allowed(entities::add_memory(&w.db, &u.id, &eid, "new", None, "world").await);
         check("add memory", who, got, member_like);
+        ontology::propose(&w.db, &w.owner.id, Some(&v), &price()).await.unwrap();
+        w.db.test_raw().query("UPDATE ontology_property SET status = 'approved' WHERE vault = $v").bind(("v", v.clone())).await.unwrap().check().unwrap();
+        let product = entities::upsert_entity(&w.db, &w.owner.id, "product", "Latte", None, Some(&v)).await.unwrap();
+        let pid: RecordId = rid::parse(&product.id).unwrap();
+        let value = serde_json::json!(4.5);
+        let set = property::SetProperty { entity_id: &pid, property: "price", value: &value, unit: None, as_of: None, source_record_id: None };
+        let res = property::set_property(&w.db, &u.id, set).await;
+        if let Err(e) = &res {
+            assert_eq!(e.status, axum::http::StatusCode::NOT_FOUND, "a non-member sees no entity: {e:?}");
+        }
+        check("set property", who, res.is_ok(), member_like);
         let got = entities::delete_memory(&w.db, &u.id, &mid).await.unwrap();
         check("delete memory", who, got, member_like);
         let got = entities::delete_entity(&w.db, &u.id, &eid).await.unwrap();

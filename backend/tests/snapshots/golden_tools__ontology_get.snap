@@ -11,12 +11,14 @@ expression: stable
       "status": "observed",
       "description": null,
       "merge_into": null,
+      "synonyms": [],
       "origin": null,
       "reason": null,
       "entities": 1,
       "samples": [
         "Alice"
-      ]
+      ],
+      "properties": []
     },
     {
       "kind": "organisation",
@@ -24,10 +26,12 @@ expression: stable
       "status": "observed",
       "description": null,
       "merge_into": null,
+      "synonyms": [],
       "origin": null,
       "reason": null,
       "entities": 0,
-      "samples": []
+      "samples": [],
+      "properties": []
     },
     {
       "kind": "location",
@@ -35,10 +39,12 @@ expression: stable
       "status": "observed",
       "description": null,
       "merge_into": null,
+      "synonyms": [],
       "origin": null,
       "reason": null,
       "entities": 0,
-      "samples": []
+      "samples": [],
+      "properties": []
     },
     {
       "kind": "repository",
@@ -46,12 +52,14 @@ expression: stable
       "status": "observed",
       "description": null,
       "merge_into": null,
+      "synonyms": [],
       "origin": null,
       "reason": null,
       "entities": 1,
       "samples": [
         "eunomia"
-      ]
+      ],
+      "properties": []
     },
     {
       "kind": "file",
@@ -59,12 +67,14 @@ expression: stable
       "status": "observed",
       "description": null,
       "merge_into": null,
+      "synonyms": [],
       "origin": null,
       "reason": null,
       "entities": 1,
       "samples": [
         "main.rs"
-      ]
+      ],
+      "properties": []
     },
     {
       "kind": "symbol",
@@ -72,10 +82,12 @@ expression: stable
       "status": "observed",
       "description": null,
       "merge_into": null,
+      "synonyms": [],
       "origin": null,
       "reason": null,
       "entities": 0,
-      "samples": []
+      "samples": [],
+      "properties": []
     },
     {
       "kind": "db",
@@ -83,11 +95,30 @@ expression: stable
       "status": "proposed",
       "description": "A database a service reads or writes",
       "merge_into": null,
+      "synonyms": [
+        "database"
+      ],
       "origin": "agent",
       "reason": null,
       "entities": 1,
       "samples": [
         "orders_db"
+      ],
+      "properties": [
+        {
+          "name": "size_gb",
+          "datatype": "number",
+          "unit": "GB",
+          "enum_values": null,
+          "description": "How much it stores",
+          "synonyms": [],
+          "status": "proposed",
+          "merge_into": null,
+          "origin": "agent",
+          "reason": null,
+          "values": 0,
+          "samples": []
+        }
       ]
     }
   ],

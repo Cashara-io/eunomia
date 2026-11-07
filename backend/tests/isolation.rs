@@ -219,6 +219,22 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         ids.entities.push(id.to_string());
         call(state, &user, "entity_update", json!({"entity_id": id.to_string(), "summary": format!("{canary} summary"), "aliases": [format!("{canary} alias")]})).await;
     }
+    // a typed property of person (canary in its description), approved as an owner would, and a value of
+    // it on the person with the canary in it
+    Box::pin(call(state, &user, "ontology_propose", json!({
+        "vault_id": vault,
+        "properties": [{"kind": "person", "name": "ledger_code", "datatype": "text", "description": format!("{name} ledger {canary}"), "reason": canary}],
+    })))
+    .await;
+    db.test_raw()
+        .query("UPDATE ontology_property SET status = 'approved' WHERE vault = $v AND name = 'ledger_code'")
+        .bind(("v", eunomia_backend::rid::parse(&vault).unwrap()))
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    let set = Box::pin(call(state, &user, "entity_set_property", json!({"entity_id": ids.entities[0], "property": "ledger_code", "value": format!("code {canary}")}))).await;
+    assert!(set.get("error").is_none(), "{set}");
     let mem: Vec<surrealdb::types::RecordId> = db.test_raw().query("SELECT VALUE id FROM memory WHERE vault = $v").bind(("v", eunomia_backend::rid::parse(&vault).unwrap())).await.unwrap().take(0).unwrap();
     ids.memory = mem[0].to_string();
 
@@ -440,6 +456,8 @@ fn attack_value(tool: &str, prop: &str, schema: &Value, victim: &Org) -> Value {
         (t, "id" | "document_id") if t.starts_with("document_") => json!(victim.ids.document),
         (_, "source_record_id") => json!(victim.ids.cache_literal),
         ("entities_get", "id") => id(0),
+        // the victim's approved property on their person
+        ("entity_set_property", "property") => json!("ledger_code"),
         // the file: it has relations, one with the canary in its label
         ("entities_neighbourhood", "entity_id") => id(4),
         // a view over the victim's entities: their names must not come back

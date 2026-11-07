@@ -225,13 +225,23 @@ async fn goldens() {
     g.snap("document_delete", "document_delete", json!({"id": doc})).await;
 
     // -- an agent's own entity kind (last, so it changes no snapshot above) --
-    g.snap("memory_write__custom_kind", "memory_write",
+    let orders = g.snap("memory_write__custom_kind", "memory_write",
         json!({"subject_name":"orders_db","subject_kind":"db","text":"orders_db runs Postgres 16"})).await;
     g.snap("entity_types", "entity_types", json!({})).await;
     // -- the project ontology (after entity_types; proposals change no snapshot above) --
-    Box::pin(g.snap("ontology_propose", "ontology_propose", json!({"kinds": [{"kind": "db", "description": "A database a service reads or writes"}], "links": [{"from_kind": "person", "label": "owns", "to_kind": "db"}]}))).await;
+    Box::pin(g.snap("ontology_propose", "ontology_propose", json!({
+        "kinds": [{"kind": "db", "description": "A database a service reads or writes", "synonyms": ["database"]}],
+        "links": [{"from_kind": "person", "label": "owns", "to_kind": "db"}],
+        "properties": [{"kind": "db", "name": "size_gb", "datatype": "number", "unit": "GB", "description": "How much it stores"}],
+    }))).await;
     Box::pin(g.snap("ontology_get", "ontology_get", json!({}))).await;
     Box::pin(g.snap("ontology_suggest", "ontology_suggest", json!({}))).await;
+    // a value of a proposed property is refused; once an owner approved it (done here in the database), it is kept
+    let orders_id = s(&orders, "/entity/id");
+    let set = json!({"entity_id": orders_id, "property": "size_gb", "value": 120, "as_of": "2026-11-01"});
+    Box::pin(g.snap("entity_set_property__proposed", "entity_set_property", set.clone())).await;
+    g.app.db().await.test_raw().query("UPDATE ontology_property SET status = 'approved' WHERE name = 'size_gb'").await.unwrap().check().unwrap();
+    Box::pin(g.snap("entity_set_property", "entity_set_property", set)).await;
     // -- bulk writes (after entity_types, so they change no snapshot above): one result per item, a bad one fails alone --
     g.snap("memory_write_batch", "memory_write_batch", json!({"items": [
         {"subject_name": "Import page 1", "subject_kind": "file", "text": "page one says hello"},
