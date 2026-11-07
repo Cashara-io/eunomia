@@ -364,6 +364,30 @@ async fn a_kind_row_from_before_synonyms_still_takes_decisions_after_the_upgrade
     assert_eq!((kind(&o, "customer")["status"].as_str(), kind(&o, "customer")["synonyms"].clone()), (Some("approved"), json!([])));
 }
 
+#[tokio::test]
+async fn a_property_row_from_before_source_maps_still_takes_proposals_after_the_upgrade() {
+    let app = TestApp::new().await;
+    ok(app.tool("ontology_propose", json!({"properties": [price("money")]})).await);
+    let db = app.db().await;
+    // the row as 0034 left it: no source_map field at all
+    db.test_raw()
+        .query("REMOVE FIELD source_map[*].source ON ontology_property; REMOVE FIELD source_map[*].record_type ON ontology_property; REMOVE FIELD source_map[*].path ON ontology_property; REMOVE FIELD source_map ON ontology_property; UPDATE ontology_property UNSET source_map;")
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    db.test_raw().query(include_str!("../migrations/tenant/0036_ontology_automap.surql")).await.unwrap().check().unwrap();
+    // a decision updates the old row: it fails on a typed field left NONE
+    let vault = personal(&app).await;
+    let (status, body) = decide_property(&app, &vault, "product", "price", json!({"action": "describe", "description": "What one costs"})).await;
+    assert_eq!(status, 200, "{body}");
+    let mapped = json!({"source": "document", "record_type": "document:abc", "path": "price AUD"});
+    let again = ok(app.tool("ontology_propose", json!({"properties": [{"kind": "product", "name": "price", "datatype": "money", "source_map": [mapped.clone()]}]})).await);
+    assert_eq!(again["properties"][0]["status"], "proposed");
+    let o = ok(app.tool("ontology_get", json!({})).await);
+    assert_eq!(property(&o, "product", "price")["source_map"], json!([mapped]));
+}
+
 // ------------------------------------------------------------ what a change affects: the neighbourhood
 
 /// A small logistics chain in the personal vault: Ana drives Truck 7, which carries Shipment 88, which
@@ -1472,4 +1496,340 @@ async fn suggest_proposes_metrics_the_kinds_properties_can_compute() {
     assert_eq!((m["status"].as_str(), m["origin"].as_str(), m["expr_words"].as_str()), (Some("proposed"), Some("suggested"), Some("Average price")));
     let sent: Vec<_> = mock.requests().into_iter().filter(|r| r.path == "/chat/completions").collect();
     assert!(sent[0].body.contains("count_distinct"), "the prompt explains metrics: {}", sent[0].body);
+}
+
+// ------------------------------------------------------------ auto-mapping and CSV import
+
+/// A synced record of `source`/`type` with `payload`, as a connector would store it.
+async fn seed_record(app: &TestApp, source: &str, type_: &str, external_id: &str, payload: Value) {
+    let env: eunomia_backend::cache::search::Envelope = serde_json::from_value(json!({
+        "id": format!("{source}:{type_}:{external_id}"), "source": source, "type": type_, "external_id": external_id,
+        "title": external_id, "body_text": format!("{type_} {external_id}"), "payload": payload,
+    }))
+    .unwrap();
+    eunomia_backend::cache::search::upsert(&app.db().await, &app.user.id, &env).await.unwrap();
+}
+
+/// Six Stripe charges (two with no description, one refunded) and two customers they point at.
+async fn stripe_records(app: &TestApp) {
+    for c in ["cus_1", "cus_2"] {
+        seed_record(app, "stripe", "stripe.customer", c, json!({"email": format!("{c}@example.com")})).await;
+    }
+    for i in 0..6 {
+        let payload = json!({
+            "amount": 10.0 + i as f64 * 2.5, "currency": "AUD", "status": if i == 5 { "refunded" } else { "succeeded" },
+            "paid": i != 5, "customer": if i % 2 == 0 { "cus_1" } else { "cus_2" }, "created": format!("2026-11-0{}", i + 1),
+            "description": if i < 2 { Value::Null } else { json!(format!("Order {i}")) },
+            "billing": {"address": {"city": "Melbourne"}},
+        });
+        seed_record(app, "stripe", "stripe.charge", &format!("ch_{i}"), payload).await;
+    }
+}
+
+fn field<'a>(profiles: &'a Value, record_type: &str, path: &str) -> &'a Value {
+    let p = profiles.as_array().unwrap().iter().find(|p| p["record_type"] == record_type).unwrap_or_else(|| panic!("no {record_type} in {profiles}"));
+    p["fields"].as_array().unwrap().iter().find(|f| f["path"] == path).unwrap_or_else(|| panic!("no {path} in {p}"))
+}
+
+fn model_app_settings(mock: &eunomia_backend::sources::mock::Mock) -> Settings {
+    Settings { openai_base_url: mock.base.clone(), openai_api_key: Some("sk-test".into()), openai_chat_model: "test-model".into(), ..test_settings() }
+}
+
+#[tokio::test]
+async fn automap_without_a_model_profiles_the_records_fields_for_the_agent() {
+    let app = TestApp::new().await;
+    stripe_records(&app).await;
+    let out = ok(app.tool("ontology_automap", json!({"source": "stripe"})).await);
+    assert_eq!(out["mode"], "profile_only", "{out}");
+    assert!(out["hint"].as_str().unwrap().contains("ontology_propose"));
+    let profiles = &out["profiles"];
+    let amount = field(profiles, "stripe.charge", "amount");
+    assert_eq!((amount["inferred_type"].as_str(), amount["min"].as_f64(), amount["max"].as_f64()), (Some("number"), Some(10.0), Some(22.5)));
+    let status = field(profiles, "stripe.charge", "status");
+    assert_eq!((status["inferred_type"].as_str(), status["enum_values"].clone()), (Some("enum"), json!(["refunded", "succeeded"])));
+    assert_eq!(field(profiles, "stripe.charge", "description")["null_rate"], 0.333);
+    let created = field(profiles, "stripe.charge", "created");
+    assert_eq!((created["inferred_type"].as_str(), created["date_format"].as_str()), (Some("date"), Some("YYYY-MM-DD")));
+    assert_eq!(field(profiles, "stripe.charge", "paid")["inferred_type"], "bool");
+    assert_eq!(field(profiles, "stripe.charge", "billing.address.city")["distinct_count"], 1, "nested paths are walked");
+    let customer = field(profiles, "stripe.charge", "customer");
+    assert_eq!((customer["inferred_type"].as_str(), customer["is_unique"].as_bool(), customer["sample_size"].as_i64()), (Some("id"), Some(false), Some(6)));
+    assert_eq!(field(profiles, "stripe.customer", "email")["is_unique"], true);
+    // the customer key was checked against the customer records: every value matches
+    let keys = out["key_matches"].as_array().unwrap();
+    let key = keys.iter().find(|k| k["field"] == "customer").unwrap_or_else(|| panic!("{out}"));
+    assert_eq!((key["target_record_type"].as_str(), key["matched"].as_i64(), key["ratio"].as_f64()), (Some("stripe.customer"), Some(2), Some(1.0)));
+    // nothing was proposed, and a narrower call profiles only that record type
+    assert_eq!(ok(app.tool("ontology_get", json!({})).await)["kinds"].as_array().unwrap().iter().filter(|k| k["status"] == "proposed").count(), 0);
+    let one = ok(app.tool("ontology_automap", json!({"record_type": "stripe.customer"})).await);
+    assert_eq!(one["profiles"].as_array().unwrap().len(), 1);
+}
+
+const PRICE_LIST: &str = "product,supplier,price AUD,unit,lead_time_days,status,warehouse\n\
+Arabica beans 1kg,Bean Co,32.50,kg,5,Active,W1\n\
+Oat milk 1L,Dairy Free Ltd,3.80,L,2,Active,W2\n\
+Paper cups 8oz,Pack Pty,0.12,each,9,Active,W1\n\
+Chai syrup,Bean Co,14.00,bottle,7,Retired,W3\n";
+
+async fn upload_csv(app: &TestApp, name: &str, text: &str) -> String {
+    ok(app.tool("document_upload", json!({"filename": name, "text": text})).await)["id"].as_str().unwrap().to_string()
+}
+
+fn automap_answer(doc: &str) -> Value {
+    let field = |f: &str| json!([f]);
+    json!({"record_types": [{
+        "source": "document", "record_type": doc, "kind": "supply_item", "description": "Something a supplier sells us",
+        "name_field": "product",
+        "properties": [
+            {"name": "price", "datatype": "money", "unit": "AUD", "description": "What one unit costs", "fields": field("price AUD")},
+            {"name": "unit", "datatype": "text", "fields": field("unit")},
+            {"name": "lead_time_days", "datatype": "integer", "unit": "days", "fields": field("lead_time_days")},
+            {"name": "status", "datatype": "enum", "enum_values": ["Active", "Retired"], "fields": field("status")},
+            {"name": "status_again", "datatype": "text", "fields": field("status")},
+            {"name": "Bad Name", "datatype": "text", "fields": field("warehouse")},
+        ],
+        "links": [
+            {"field": "supplier", "label": "supplied_by", "to_kind": "organisation", "target": null, "description": "Who sells it"},
+            {"field": "warehouse", "label": "stored_in", "to_kind": "warehouse", "target": null},
+        ],
+    }, {"source": "nowhere", "record_type": "x", "kind": "x"}]})
+}
+
+#[tokio::test]
+async fn automap_with_a_model_proposes_and_keeps_only_links_whose_values_match() {
+    // the model's answer names the document, so it is set once the CSV is uploaded
+    let mock = serve(vec![route("POST", "/chat/completions", json!({}))]).await;
+    let app = TestApp::with_settings(model_app_settings(&mock)).await;
+    let doc = upload_csv(&app, "price-list.csv", PRICE_LIST).await;
+    mock.set_routes(vec![route("POST", "/chat/completions", json!({"choices": [{"message": {"content": automap_answer(&doc).to_string()}}]}))]);
+    write(&app, "Bean Co", "organisation").await;
+    write(&app, "Pack Pty", "organisation").await;
+
+    let out = ok(app.tool("ontology_automap", json!({"document_id": doc})).await);
+    assert_eq!(out["mode"], "model", "{out}");
+    // the unknown record type, the property whose only field was already taken and the bad name are left out
+    assert_eq!(out["skipped"], 3, "{out}");
+    let o = &out["ontology"];
+    let k = kind(o, "supply_item");
+    assert_eq!((k["status"].as_str(), k["origin"].as_str()), (Some("proposed"), Some("suggested")));
+    let p = property(o, "supply_item", "price");
+    assert_eq!((p["status"].as_str(), p["datatype"].as_str(), p["unit"].as_str()), (Some("proposed"), Some("money"), Some("AUD")));
+    assert_eq!(p["source_map"], json!([{"source": "document", "record_type": doc, "path": "price AUD"}]));
+    assert!(kind(o, "supply_item")["properties"].as_array().unwrap().iter().all(|p| p["name"] != "status_again"));
+    // two of the three suppliers are organisations in the vault: kept, with the share as its reason
+    let kept = link(o, "supply_item", "supplied_by", "organisation");
+    assert_eq!((kept["status"].as_str(), kept["reason"].as_str()), (Some("proposed"), Some("67% of values match (2 of 3)")));
+    // no warehouse matches anything: dropped
+    assert!(o["links"].as_array().unwrap().iter().all(|l| l["label"] != "stored_in"), "{o}");
+    let checks = out["links"].as_array().unwrap();
+    let dropped = checks.iter().find(|c| c["label"] == "stored_in").unwrap();
+    assert_eq!((dropped["kept"].as_bool(), dropped["matched"].as_i64(), dropped["reason"].as_str()), (Some(false), Some(0), Some("no value matches (0 of 3)")));
+    let mapped = &out["record_types"][0];
+    assert_eq!((mapped["kind"].as_str(), mapped["name_field"].as_str()), (Some("supply_item"), Some("product")));
+    assert_eq!(mapped["unmapped"], json!([]), "{mapped}");
+    // the model read the profile as data
+    let sent: Vec<_> = mock.requests().into_iter().filter(|r| r.path == "/chat/completions").collect();
+    assert!(sent[0].body.contains("<profiles>") && sent[0].body.contains("Arabica beans 1kg"), "{}", sent[0].body);
+}
+
+#[tokio::test]
+async fn automap_checks_a_record_key_against_the_target_records_ids() {
+    let mock = serve(vec![route("POST", "/chat/completions", json!({}))]).await;
+    let app = TestApp::with_settings(model_app_settings(&mock)).await;
+    stripe_records(&app).await;
+    seed_record(&app, "stripe", "stripe.refund", "re_1", json!({"charge": "ch_missing", "amount": 5})).await;
+    let answer = json!({"record_types": [
+        {"source": "stripe", "record_type": "stripe.charge", "kind": "charge", "name_field": null,
+         "properties": [{"name": "amount", "datatype": "money", "unit": "AUD", "fields": ["amount"]}],
+         "links": [{"field": "customer", "label": "paid_by", "to_kind": "customer", "target": {"source": "stripe", "record_type": "stripe.customer"}}]},
+        {"source": "stripe", "record_type": "stripe.refund", "kind": "refund", "name_field": null, "properties": [],
+         "links": [{"field": "charge", "label": "refunds", "to_kind": "charge", "target": {"source": "stripe", "record_type": "stripe.charge"}}]},
+    ]});
+    mock.set_routes(vec![route("POST", "/chat/completions", json!({"choices": [{"message": {"content": answer.to_string()}}]}))]);
+    let out = ok(app.tool("ontology_automap", json!({"source": "stripe"})).await);
+    let o = &out["ontology"];
+    assert_eq!(link(o, "charge", "paid_by", "customer")["reason"], "100% of values match (2 of 2)");
+    assert!(o["links"].as_array().unwrap().iter().all(|l| l["label"] != "refunds"), "a refund of a charge that is not there: {o}");
+    let mapped = out["record_types"].as_array().unwrap().iter().find(|t| t["kind"] == "charge").unwrap();
+    assert!(mapped["unmapped"].as_array().unwrap().contains(&json!("status")), "{mapped}");
+}
+
+/// The price list mapped and approved as an owner would: kind supply_item with price, lead_time_days and status.
+async fn approved_price_list(app: &TestApp, doc: &str) -> String {
+    let vault = personal(app).await;
+    let source = |path: &str| json!([{"source": "document", "record_type": doc, "path": path}]);
+    ok(app
+        .tool(
+            "ontology_propose",
+            json!({
+                "kinds": [{"kind": "supply_item"}],
+                "properties": [
+                    {"kind": "supply_item", "name": "price", "datatype": "money", "unit": "AUD", "source_map": source("price AUD")},
+                    {"kind": "supply_item", "name": "lead_time_days", "datatype": "integer", "source_map": source("lead_time_days")},
+                    {"kind": "supply_item", "name": "status", "datatype": "enum", "enum_values": ["Active", "Retired"], "source_map": source("status")},
+                    {"kind": "supply_item", "name": "unit", "datatype": "text", "source_map": source("unit")},
+                ],
+            }),
+        )
+        .await);
+    vault
+}
+
+async fn approve_price_list(app: &TestApp, vault: &str) {
+    assert_eq!(decide_kind(app, vault, "supply_item", json!({"action": "approve"})).await.0, 200);
+    for p in ["price", "lead_time_days", "status"] {
+        assert_eq!(decide_property(app, vault, "supply_item", p, json!({"action": "approve"})).await.0, 200);
+    }
+}
+
+async fn import(app: &TestApp, doc: &str) -> Value {
+    app.tool("document_import_rows", json!({"document_id": doc, "kind": "supply_item", "name_column": "product"})).await
+}
+
+/// The vault's supply_item entities, `id` and `name` each.
+async fn supply_items(app: &TestApp) -> Vec<Value> {
+    let rows: Vec<Value> =
+        app.db().await.test_raw().query("SELECT <string> id AS id, name FROM entity WHERE kind = 'supply_item'").await.unwrap().take(0).unwrap();
+    rows
+}
+
+#[tokio::test]
+async fn a_csv_profiles_and_imports_only_after_the_owner_approves() {
+    let app = TestApp::new().await;
+    let doc = upload_csv(&app, "price-list.csv", PRICE_LIST).await;
+    // the profile, as the document view shows it
+    let (status, prof) = app.http("GET", &format!("/api/documents/{doc}/profile"), None, true).await;
+    assert_eq!(status, 200, "{prof}");
+    assert_eq!((prof["rows"].as_i64(), prof["columns"].as_array().map(Vec::len)), (Some(4), Some(7)));
+    let price = prof["profile"]["fields"].as_array().unwrap().iter().find(|f| f["path"] == "price AUD").unwrap();
+    assert_eq!((price["inferred_type"].as_str(), price["min"].as_f64(), price["max"].as_f64()), (Some("number"), Some(0.12), Some(32.5)));
+    assert_eq!(prof["import"]["ready"], false);
+
+    // before anything is approved the import is refused, and writes nothing
+    let refused = import(&app, &doc).await;
+    assert!(err(&refused).contains("not approved"), "{refused}");
+    let vault = approved_price_list(&app, &doc).await;
+    let refused = import(&app, &doc).await;
+    assert!(err(&refused).contains("not approved"), "a proposed kind is not enough: {refused}");
+    assert_eq!(decide_kind(&app, &vault, "supply_item", json!({"action": "approve"})).await.0, 200);
+    let refused = import(&app, &doc).await;
+    assert!(err(&refused).contains("no approved property"), "{refused}");
+    assert!(supply_items(&app).await.is_empty());
+
+    approve_price_list(&app, &vault).await;
+    let (_, prof) = app.http("GET", &format!("/api/documents/{doc}/profile"), None, true).await;
+    assert_eq!((prof["import"]["ready"].as_bool(), prof["import"]["kind"].as_str(), prof["import"]["name_column"].as_str()), (Some(true), Some("supply_item"), Some("product")));
+
+    let out = ok(import(&app, &doc).await);
+    assert_eq!((out["rows"].as_i64(), out["created"].as_i64(), out["updated"].as_i64(), out["values"].as_i64()), (Some(4), Some(4), Some(0), Some(12)), "{out}");
+    let unit = out["columns"].as_array().unwrap().iter().find(|c| c["column"] == "unit").unwrap();
+    assert!(unit["skipped"].as_str().unwrap().contains("proposed, not approved"), "a proposed property is left out: {unit}");
+    let beans = supply_items(&app).await.into_iter().find(|e| e["name"] == "Arabica beans 1kg").expect("imported");
+    let got = ok(app.tool("entities_get", json!({"id": beans["id"]})).await);
+    let price = got["properties"].as_array().unwrap().iter().find(|p| p["property"] == "price").unwrap().clone();
+    assert_eq!((price["value"].as_f64(), price["unit"].as_str(), price["source"].as_str()), (Some(32.5), Some("AUD"), Some(doc.as_str())), "{got}");
+
+    // a metric over the imported values
+    ok(app.tool("ontology_propose", json!({"metrics": [{"kind": "supply_item", "name": "avg_price", "expr": {"agg": "avg", "property": "price"}}]})).await);
+    assert_eq!(decide_metric(&app, &vault, "supply_item", "avg_price", json!({"action": "approve"})).await.0, 200);
+    let avg = ok(app.tool("metric_eval", json!({"metric": "avg_price"})).await);
+    assert!((avg["value"].as_f64().unwrap() - 12.605).abs() < 1e-9 && avg["n_entities"] == 4, "{avg}");
+
+    // a new revision of the file: the re-run updates values in place and makes no entity or value row twice
+    let changed = PRICE_LIST.replace("32.50", "35.00");
+    ok(app.tool("document_upload", json!({"filename": "price-list.csv", "text": changed, "document_id": doc})).await);
+    let again = ok(import(&app, &doc).await);
+    assert_eq!((again["created"].as_i64(), again["updated"].as_i64(), again["values"].as_i64()), (Some(0), Some(4), Some(12)), "{again}");
+    assert_eq!(supply_items(&app).await.len(), 4);
+    let rows: Vec<Value> = app.db().await.test_raw().query("SELECT * FROM entity_property").await.unwrap().take(0).unwrap();
+    assert_eq!(rows.len(), 12);
+    let got = ok(app.tool("entities_get", json!({"id": beans["id"]})).await);
+    assert_eq!(got["properties"].as_array().unwrap().iter().find(|p| p["property"] == "price").unwrap()["value"], 35.0);
+
+    // deleting the document takes its imported values with it
+    ok(app.tool("document_delete", json!({"id": doc})).await);
+    let rows: Vec<Value> = app.db().await.test_raw().query("SELECT * FROM entity_property").await.unwrap().take(0).unwrap();
+    assert!(rows.is_empty());
+}
+
+#[tokio::test]
+async fn a_bad_cell_is_reported_on_its_line_and_the_rest_still_imports() {
+    let app = TestApp::new().await;
+    let csv = "product,supplier,price AUD,unit,lead_time_days,status,warehouse\n\
+Arabica beans 1kg,Bean Co,$32.50,kg,5,Active,W1\n\
+,Nobody,1.00,kg,1,Active,W1\n\
+Oat milk 1L,Dairy Free Ltd,3.80,L,two,Paused,W2\n\
+Paper cups 8oz,Pack Pty,0.12\n\
+Chai syrup,Bean Co,14.00,bottle,7,retired,W3\n";
+    let doc = upload_csv(&app, "messy.csv", csv).await;
+    let vault = approved_price_list(&app, &doc).await;
+    approve_price_list(&app, &vault).await;
+    let out = ok(import(&app, &doc).await);
+    assert_eq!((out["created"].as_i64(), out["bad_count"].as_i64()), (Some(3), Some(5)), "{out}");
+    let bad: Vec<(i64, Option<&str>)> = out["bad"].as_array().unwrap().iter().map(|b| (b["line"].as_i64().unwrap(), b["column"].as_str())).collect();
+    assert_eq!(bad, [(2, Some("price AUD")), (3, Some("product")), (4, Some("lead_time_days")), (4, Some("status")), (5, None)], "{out}");
+    assert!(out["bad"][0]["error"].as_str().unwrap().contains("a number"), "{out}");
+    // the good cells of a bad row still land; an enum value matches ignoring case
+    let items = supply_items(&app).await;
+    let chai = items.iter().find(|e| e["name"] == "Chai syrup").unwrap();
+    let got = ok(app.tool("entities_get", json!({"id": chai["id"]})).await);
+    assert_eq!(got["properties"].as_array().unwrap().iter().find(|p| p["property"] == "status").unwrap()["value"], "Retired");
+}
+
+#[tokio::test]
+async fn an_import_holds_the_row_and_column_caps() {
+    let app = TestApp::new().await;
+    let rows = format!("product,price AUD\n{}", (0..=eunomia_backend::ontology::tabular::MAX_ROWS).map(|i| format!("p{i},1\n")).collect::<String>());
+    let doc = upload_csv(&app, "long.csv", &rows).await;
+    let vault = approved_price_list(&app, &doc).await;
+    approve_price_list(&app, &vault).await;
+    assert!(err(&import(&app, &doc).await).contains("more than 5000 rows"));
+    assert!(supply_items(&app).await.is_empty(), "nothing is half imported");
+    let header = (0..=eunomia_backend::ontology::tabular::MAX_COLUMNS).map(|i| format!("c{i}")).collect::<Vec<_>>().join(",");
+    let wide = upload_csv(&app, "wide.csv", &format!("{header}\n")).await;
+    let refused = app.tool("ontology_automap", json!({"document_id": wide})).await;
+    assert!(err(&refused).contains("61 columns"), "{refused}");
+    // a file that is not a CSV is refused by name
+    let md = ok(app.tool("document_upload", json!({"filename": "notes.md", "text": "# notes"})).await)["id"].as_str().unwrap().to_string();
+    assert!(err(&app.tool("document_import_rows", json!({"document_id": md, "kind": "supply_item", "name_column": "x"})).await).contains("not a CSV"));
+}
+
+#[tokio::test]
+async fn extraction_writes_approved_custom_kinds_and_never_rejected_or_proposed_ones() {
+    let answer = json!({
+        "people": [],
+        "other": [
+            {"kind": "supply_item", "name": "Arabica beans 1kg", "facts": ["Arabica beans 1kg come from Bean Co."]},
+            {"kind": "junk", "name": "Spam thing", "facts": ["junk fact"]},
+            {"kind": "draft_kind", "name": "Draft thing", "facts": ["draft fact"]},
+        ],
+    });
+    let mock = serve(vec![route("POST", "/chat/completions", json!({"choices": [{"message": {"content": answer.to_string()}}]}))]).await;
+    let app = TestApp::with_settings(model_app_settings(&mock)).await;
+    let vault = personal(&app).await;
+    ok(app.tool("ontology_propose", json!({"kinds": [{"kind": "supply_item", "description": "Something a supplier sells us"}, {"kind": "draft_kind"}]})).await);
+    assert_eq!(decide_kind(&app, &vault, "supply_item", json!({"action": "approve"})).await.0, 200);
+    assert_eq!(decide_kind(&app, &vault, "junk", json!({"action": "reject"})).await.0, 200);
+
+    let db = app.db().await;
+    let record = eunomia_backend::entities::extract::ExtractRecord {
+        id: "notes:note:1".into(),
+        title: "Order notes".into(),
+        body_text: "We order Arabica beans 1kg from Bean Co every week, and the spam thing too.".into(),
+        occurred_at: None,
+        vault: None,
+        source: "notes".into(),
+        payload: Value::Null,
+        owner_name: None,
+    };
+    // as the extraction job runs it: with the system's credential
+    eunomia_backend::authz::as_system(eunomia_backend::entities::extract::extract_entities(&db, &app.state.settings, &app.user.id, &record)).await.unwrap();
+    let sent: Vec<_> = mock.requests().into_iter().filter(|r| r.path == "/chat/completions").collect();
+    let prompt = &sent[0].body;
+    assert!(prompt.contains("supply_item: Something a supplier sells us"), "{prompt}");
+    assert!(!prompt.contains("junk") && !prompt.contains("draft_kind"), "{prompt}");
+    let o = ok(app.tool("ontology_get", json!({})).await);
+    assert_eq!(kind(&o, "supply_item")["entities"], 1);
+    assert_eq!(kind(&o, "junk")["entities"], 0);
+    assert_eq!(kind(&o, "draft_kind")["entities"], 0);
 }

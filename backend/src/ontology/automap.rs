@@ -173,8 +173,8 @@ async fn names_matched(state: &OrgState, vault: &RecordId, kind: &Kind, lowered:
         .bind(("kind", if table == CUSTOM_TABLE { kind.as_str().to_string() } else { String::new() }))
         .bind(("values", lowered.to_vec()))
         .await?;
-    let names: Option<Vec<String>> = res.take(1)?;
-    Ok(names.unwrap_or_default().into_iter().collect())
+    let names: Vec<String> = res.take(1)?;
+    Ok(names.into_iter().collect())
 }
 
 fn values_of(sample: &Sample, field: &str) -> Vec<String> {

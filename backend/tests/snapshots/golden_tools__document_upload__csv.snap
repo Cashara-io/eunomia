@@ -1,0 +1,18 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "id": "document:<id21>",
+  "filename": "menu.csv",
+  "media_type": "text/csv",
+  "size_bytes": 36,
+  "sha256": "<hash>",
+  "revision": 1,
+  "status": "indexing",
+  "chunk_count": 0,
+  "created_at": "<ts>",
+  "updated_at": "<ts>",
+  "indexed_at": null,
+  "download_url": "/api/documents/document:<id21>/download"
+}

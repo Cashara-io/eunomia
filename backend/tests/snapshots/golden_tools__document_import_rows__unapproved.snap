@@ -1,0 +1,9 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "error": "the kind \"menu_item\" is not approved for this vault yet: a vault owner approves the kind and its properties in the Eunomia app (the vault's Kinds and links), then import again",
+  "code": "validation.invalid",
+  "trace_id": "<trace>"
+}

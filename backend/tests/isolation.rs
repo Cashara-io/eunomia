@@ -468,6 +468,8 @@ fn attack_value(tool: &str, prop: &str, schema: &Value, victim: &Org) -> Value {
         (_, p) if p.contains("vault") => json!(victim.ids.vault),
         ("get", "id") | ("links", "id") => json!(victim.ids.routed),
         (t, "id" | "document_id") if t.starts_with("document_") => json!(victim.ids.document),
+        // auto-mapping the victim's document, as a CSV would be
+        ("ontology_automap", "document_id") => json!(victim.ids.document),
         (_, "source_record_id") => json!(victim.ids.cache_literal),
         ("entities_get", "id") => id(0),
         // the victim's approved property on their person

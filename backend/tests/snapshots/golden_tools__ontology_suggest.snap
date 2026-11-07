@@ -125,7 +125,8 @@ expression: stable
             "origin": "agent",
             "reason": null,
             "values": 0,
-            "samples": []
+            "samples": [],
+            "source_map": []
           }
         ],
         "metrics": []

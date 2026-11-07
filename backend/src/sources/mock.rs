@@ -92,16 +92,22 @@ impl Req {
 #[derive(Clone)]
 struct MockState {
     base: String,
-    routes: Arc<Vec<Route>>,
+    routes: Arc<Mutex<Vec<Route>>>,
     requests: Arc<Mutex<Vec<Req>>>,
 }
 
 pub struct Mock {
     pub base: String,
+    routes: Arc<Mutex<Vec<Route>>>,
     requests: Arc<Mutex<Vec<Req>>>,
 }
 
 impl Mock {
+    /// Answers with `routes` from now on: for a reply that names something made after the mock started.
+    pub fn set_routes(&self, routes: Vec<Route>) {
+        *self.routes.lock().unwrap() = routes;
+    }
+
     pub fn requests(&self) -> Vec<Req> {
         self.requests.lock().unwrap().clone()
     }
@@ -123,8 +129,10 @@ async fn handle(State(st): State<MockState>, method: Method, uri: Uri, headers: 
         body: body.clone(),
     });
     let decoded = decode_query(&query);
-    let Some(r) = st
+    let found = st
         .routes
+        .lock()
+        .unwrap()
         .iter()
         .find(|r| {
             r.method == method
@@ -132,7 +140,8 @@ async fn handle(State(st): State<MockState>, method: Method, uri: Uri, headers: 
                 && r.query.iter().all(|q| decoded.contains(q))
                 && r.body_has.iter().all(|b| body.contains(b))
         })
-    else {
+        .cloned();
+    let Some(r) = found else {
         return (StatusCode::NOT_FOUND, format!("mock: no route for {method} {uri}")).into_response();
     };
     tokio::time::sleep(std::time::Duration::from_millis(r.delay_ms)).await;
@@ -156,12 +165,13 @@ pub async fn serve(routes: Vec<Route>) -> Mock {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     let requests = Arc::new(Mutex::new(Vec::new()));
-    let state = MockState { base: base.clone(), routes: Arc::new(routes), requests: requests.clone() };
+    let routes = Arc::new(Mutex::new(routes));
+    let state = MockState { base: base.clone(), routes: routes.clone(), requests: requests.clone() };
     let app = Router::new().fallback(handle).with_state(state);
     tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
     });
-    Mock { base, requests }
+    Mock { base, routes, requests }
 }
 
 /// Maps raw records exactly as the ingest pipeline does (`Source::map`, then

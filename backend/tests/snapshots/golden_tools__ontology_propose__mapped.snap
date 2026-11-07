@@ -1,0 +1,24 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "kinds": [
+    {
+      "kind": "menu_item",
+      "status": "proposed",
+      "merge_into": null
+    }
+  ],
+  "links": [],
+  "properties": [
+    {
+      "kind": "menu_item",
+      "name": "price",
+      "datatype": "money",
+      "status": "proposed",
+      "merge_into": null
+    }
+  ],
+  "metrics": []
+}

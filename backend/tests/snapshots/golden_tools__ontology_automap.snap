@@ -1,0 +1,68 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "mode": "profile_only",
+  "profiles": [
+    {
+      "source": "document",
+      "record_type": "document:<id21>",
+      "records": 2,
+      "fields": [
+        {
+          "source": "document",
+          "record_type": "document:<id21>",
+          "path": "product",
+          "inferred_type": "text",
+          "null_rate": 0.0,
+          "is_unique": true,
+          "distinct_count": 2,
+          "top_values": [
+            {
+              "value": "Latte",
+              "count": 1
+            },
+            {
+              "value": "Mocha",
+              "count": 1
+            }
+          ],
+          "enum_values": null,
+          "date_format": null,
+          "min": null,
+          "max": null,
+          "sample_size": 2
+        },
+        {
+          "source": "document",
+          "record_type": "document:<id21>",
+          "path": "price",
+          "inferred_type": "text",
+          "null_rate": 0.0,
+          "is_unique": true,
+          "distinct_count": 2,
+          "top_values": [
+            {
+              "value": "4.50",
+              "count": 1
+            },
+            {
+              "value": "oops",
+              "count": 1
+            }
+          ],
+          "enum_values": null,
+          "date_format": null,
+          "min": null,
+          "max": null,
+          "sample_size": 2
+        }
+      ],
+      "paths_truncated": false
+    }
+  ],
+  "key_matches": [],
+  "hint": "Eunomia has no model configured, so you map the records. Each profile is one record type and its fields (type, empty share, uniqueness, top values, enum values, date format, min and max). For each record type, call `ontology_propose` with one kind for what a record is, a typed property for every field that means something to the owner (with `source_map` [{source, record_type, path}] naming the field it comes from, so a CSV import knows which column feeds it), and a link only for a key field listed in `key_matches` (it names the share of values that match). A vault owner approves or rejects the proposals in the Eunomia app; then `document_import_rows` imports a CSV's rows.",
+  "note": null
+}

@@ -250,6 +250,18 @@ async fn goldens() {
     Box::pin(g.snap("metric_eval__proposed", "metric_eval", run.clone())).await;
     g.app.db().await.test_raw().query("UPDATE ontology_metric SET status = 'approved' WHERE name = 'total_size_gb'").await.unwrap().check().unwrap();
     Box::pin(g.snap("metric_eval", "metric_eval", run)).await;
+    // -- auto-mapping: a CSV profiled without a model, its rows refused until an owner approved the mapping, then imported --
+    let csv = g.snap("document_upload__csv", "document_upload", json!({"filename": "menu.csv", "text": "product,price\nLatte,4.50\nMocha,oops\n"})).await;
+    let csv_id = s(&csv, "/id");
+    Box::pin(g.snap("ontology_automap", "ontology_automap", json!({"document_id": csv_id}))).await;
+    let rows = json!({"document_id": csv_id, "kind": "menu_item", "name_column": "product"});
+    Box::pin(g.snap("document_import_rows__unapproved", "document_import_rows", rows.clone())).await;
+    Box::pin(g.snap("ontology_propose__mapped", "ontology_propose", json!({
+        "kinds": [{"kind": "menu_item"}],
+        "properties": [{"kind": "menu_item", "name": "price", "datatype": "money", "unit": "AUD", "source_map": [{"source": "document", "record_type": csv_id, "path": "price"}]}],
+    }))).await;
+    g.app.db().await.test_raw().query("UPDATE ontology_kind SET status = 'approved' WHERE kind = 'menu_item'; UPDATE ontology_property SET status = 'approved' WHERE kind = 'menu_item'").await.unwrap().check().unwrap();
+    Box::pin(g.snap("document_import_rows", "document_import_rows", rows)).await;
     // -- bulk writes (after entity_types, so they change no snapshot above): one result per item, a bad one fails alone --
     g.snap("memory_write_batch", "memory_write_batch", json!({"items": [
         {"subject_name": "Import page 1", "subject_kind": "file", "text": "page one says hello"},

@@ -2513,6 +2513,114 @@
         ]
       }
     },
+    "/api/documents/{document_id}/import": {
+      "post": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "Import an uploaded CSV's rows as entities of an approved kind, with values of its approved properties",
+        "operationId": "importDocumentRows",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/documents/{document_id}/profile": {
+      "get": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "An uploaded CSV's column profile, and what importing its rows would do now",
+        "operationId": "profileDocument",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TableProfile"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/documents/{document_id}/reindex": {
       "post": {
         "tags": [
@@ -7383,6 +7491,65 @@
         ]
       }
     },
+    "/api/vaults/{vault_id}/ontology/automap": {
+      "post": {
+        "tags": [
+          "vaults"
+        ],
+        "summary": "Profile record fields or a CSV and have the server's model propose kinds, properties and value-checked links (the profiles alone without a model)",
+        "operationId": "automapVaultOntology",
+        "parameters": [
+          {
+            "name": "vault_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutomapBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomapOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/vaults/{vault_id}/ontology/kinds/decide": {
       "post": {
         "tags": [
@@ -8290,6 +8457,142 @@
           }
         }
       },
+      "AutomapBody": {
+        "type": "object",
+        "description": "What to auto-map: synced records (all, one source or one record type) or an uploaded CSV.",
+        "properties": {
+          "document_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "record_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "AutomapOut": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "The server's model proposed; `ontology` is the vault's ontology after the proposals.",
+            "required": [
+              "proposed",
+              "record_types",
+              "links",
+              "skipped",
+              "ontology",
+              "mode"
+            ],
+            "properties": {
+              "links": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/LinkCheck"
+                }
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "model"
+                ]
+              },
+              "ontology": {
+                "$ref": "#/components/schemas/OntologyOut"
+              },
+              "proposed": {
+                "$ref": "#/components/schemas/ProposeOut"
+              },
+              "record_types": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/MappedType"
+                }
+              },
+              "skipped": {
+                "type": "integer",
+                "description": "Model items left out for an unknown record type, an invalid name or field.",
+                "minimum": 0
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "No server model (or it failed): read `profiles` and `key_matches` and call `ontology_propose`.",
+            "required": [
+              "profiles",
+              "key_matches",
+              "hint",
+              "mode"
+            ],
+            "properties": {
+              "hint": {
+                "type": "string"
+              },
+              "key_matches": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/KeyMatch"
+                }
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "profile_only"
+                ]
+              },
+              "note": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "profiles": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/RecordTypeProfile"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "BadCell": {
+        "type": "object",
+        "description": "A row or cell that was not imported.",
+        "required": [
+          "line",
+          "error"
+        ],
+        "properties": {
+          "column": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The column, or none when the whole row was left out."
+          },
+          "error": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The file's line (the header is line 1).",
+            "minimum": 0
+          }
+        }
+      },
       "BootstrapOut": {
         "type": "object",
         "required": [
@@ -8666,6 +8969,59 @@
               "type": "string"
             },
             "description": "the vaults the points were listed from (same as `vault_ids` of the cloud); default: your personal vault"
+          }
+        }
+      },
+      "ColumnPlan": {
+        "type": "object",
+        "description": "How one column would be imported.",
+        "required": [
+          "column"
+        ],
+        "properties": {
+          "column": {
+            "type": "string"
+          },
+          "property": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The property it feeds, from its `source_map`."
+          },
+          "status": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Status"
+              }
+            ]
+          }
+        }
+      },
+      "ColumnUse": {
+        "type": "object",
+        "description": "One column of an import: the property it wrote, or why it was left out.",
+        "required": [
+          "column"
+        ],
+        "properties": {
+          "column": {
+            "type": "string"
+          },
+          "property": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "skipped": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -9492,6 +9848,92 @@
           }
         }
       },
+      "FieldProfile": {
+        "type": "object",
+        "description": "One field of one record type, from a sample.",
+        "required": [
+          "source",
+          "record_type",
+          "path",
+          "inferred_type",
+          "null_rate",
+          "is_unique",
+          "distinct_count",
+          "top_values",
+          "sample_size"
+        ],
+        "properties": {
+          "date_format": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "For dates: the notation the values are written in, such as `YYYY-MM-DD` or `DD/MM/YYYY`."
+          },
+          "distinct_count": {
+            "type": "integer",
+            "description": "Distinct values in the sample, counted up to 26 (26 means 26 or more).",
+            "minimum": 0
+          },
+          "enum_values": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Every distinct value, for an enum candidate (25 or fewer)."
+          },
+          "inferred_type": {
+            "$ref": "#/components/schemas/InferredType"
+          },
+          "is_unique": {
+            "type": "boolean",
+            "description": "Every sampled value differs (and there is at least one)."
+          },
+          "max": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "min": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "null_rate": {
+            "type": "number",
+            "format": "double",
+            "description": "The share of sampled records with no value here (missing, null or blank), 0 to 1."
+          },
+          "path": {
+            "type": "string",
+            "description": "The payload key path (`billing.country`) or the CSV column."
+          },
+          "record_type": {
+            "type": "string"
+          },
+          "sample_size": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "source": {
+            "type": "string"
+          },
+          "top_values": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TopValue"
+            },
+            "description": "The commonest values, most frequent first, at most five."
+          }
+        }
+      },
       "FillBody": {
         "type": "object",
         "description": "What the pop-up sends. `value` is zeroised when this is dropped; Debug never prints it.",
@@ -10051,6 +10493,159 @@
           }
         }
       },
+      "ImportBody": {
+        "type": "object",
+        "description": "How to import a CSV's rows: the approved kind, the naming column, and optionally which column feeds which property.",
+        "required": [
+          "kind",
+          "name_column"
+        ],
+        "properties": {
+          "as_of": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "column_map": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name_column": {
+            "type": "string"
+          }
+        }
+      },
+      "ImportOut": {
+        "type": "object",
+        "required": [
+          "document_id",
+          "kind",
+          "rows",
+          "created",
+          "updated",
+          "values",
+          "columns",
+          "bad",
+          "bad_count"
+        ],
+        "properties": {
+          "bad": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BadCell"
+            },
+            "description": "Rows and cells left out, at most 100 listed."
+          },
+          "bad_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ColumnUse"
+            }
+          },
+          "created": {
+            "type": "integer",
+            "description": "Entities made by this run, and ones it found and updated.",
+            "minimum": 0
+          },
+          "document_id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "rows": {
+            "type": "integer",
+            "description": "Data rows in the file.",
+            "minimum": 0
+          },
+          "updated": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "values": {
+            "type": "integer",
+            "description": "Values written (each new or updated in place).",
+            "minimum": 0
+          }
+        }
+      },
+      "ImportPlan": {
+        "type": "object",
+        "description": "What an import of the CSV would do now.",
+        "required": [
+          "columns",
+          "ready"
+        ],
+        "properties": {
+          "columns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ColumnPlan"
+            }
+          },
+          "kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The kind its mapped properties belong to, once auto-mapping proposed them."
+          },
+          "kind_status": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Status",
+                "description": "That kind's review status; none when it was never reviewed."
+              }
+            ]
+          },
+          "name_column": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The column that names each row's entity: the first one no property is mapped from."
+          },
+          "ready": {
+            "type": "boolean",
+            "description": "The kind is approved and at least one mapped property is: `document_import_rows` will run."
+          }
+        }
+      },
+      "InferredType": {
+        "type": "string",
+        "description": "What a field's values look like. The datatypes of a property, plus `id` for a key that names a\nrecord (a link candidate).",
+        "enum": [
+          "text",
+          "number",
+          "integer",
+          "money",
+          "percent",
+          "bool",
+          "date",
+          "datetime",
+          "enum",
+          "id"
+        ]
+      },
       "IntegrityReport": {
         "type": "object",
         "required": [
@@ -10233,6 +10828,51 @@
               "null"
             ],
             "description": "How the other Eunomia will name this one (default: `EUNOMIA_INSTANCE_NAME`, else your email)."
+          }
+        }
+      },
+      "KeyMatch": {
+        "type": "object",
+        "description": "One key field whose values are another record type's ids.",
+        "required": [
+          "source",
+          "record_type",
+          "field",
+          "target_source",
+          "target_record_type",
+          "values",
+          "matched",
+          "ratio"
+        ],
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "matched": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "ratio": {
+            "type": "number",
+            "format": "double",
+            "description": "matched / values, 0 to 1."
+          },
+          "record_type": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "target_record_type": {
+            "type": "string"
+          },
+          "target_source": {
+            "type": "string"
+          },
+          "values": {
+            "type": "integer",
+            "description": "Distinct values checked, and how many match.",
+            "minimum": 0
           }
         }
       },
@@ -10439,6 +11079,63 @@
         "properties": {
           "left": {
             "type": "boolean"
+          }
+        }
+      },
+      "LinkCheck": {
+        "type": "object",
+        "description": "A link the model proposed, after the value check.",
+        "required": [
+          "from_kind",
+          "label",
+          "to_kind",
+          "source",
+          "record_type",
+          "field",
+          "values",
+          "matched",
+          "ratio",
+          "kept",
+          "reason"
+        ],
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "from_kind": {
+            "type": "string"
+          },
+          "kept": {
+            "type": "boolean",
+            "description": "Proposed (some values match) or dropped (none do)."
+          },
+          "label": {
+            "type": "string"
+          },
+          "matched": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "ratio": {
+            "type": "number",
+            "format": "double"
+          },
+          "reason": {
+            "type": "string",
+            "description": "The match share in words, as the link's proposal reason says it."
+          },
+          "record_type": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "to_kind": {
+            "type": "string"
+          },
+          "values": {
+            "type": "integer",
+            "minimum": 0
           }
         }
       },
@@ -10699,6 +11396,40 @@
               "null"
             ],
             "description": "Pass as `before` for the next (older) page; absent on the last page."
+          }
+        }
+      },
+      "MappedType": {
+        "type": "object",
+        "description": "What became of one record type.",
+        "required": [
+          "source",
+          "record_type",
+          "kind",
+          "unmapped"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "name_field": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "record_type": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "unmapped": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Fields no property took (left out by the model, or claimed by an earlier property)."
           }
         }
       },
@@ -11814,7 +12545,8 @@
           "status",
           "origin",
           "values",
-          "samples"
+          "samples",
+          "source_map"
         ],
         "properties": {
           "datatype": {
@@ -11860,6 +12592,13 @@
               "type": "string"
             },
             "description": "A few of them, as text with their unit."
+          },
+          "source_map": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SourceField"
+            },
+            "description": "The record fields or CSV columns it was mapped from."
           },
           "status": {
             "$ref": "#/components/schemas/Status"
@@ -12151,6 +12890,40 @@
             }
           },
           "title": {
+            "type": "string"
+          }
+        }
+      },
+      "RecordTypeProfile": {
+        "type": "object",
+        "description": "One record type's fields.",
+        "required": [
+          "source",
+          "record_type",
+          "records",
+          "fields",
+          "paths_truncated"
+        ],
+        "properties": {
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FieldProfile"
+            }
+          },
+          "paths_truncated": {
+            "type": "boolean",
+            "description": "More fields than [`MAX_PATHS`]: the later ones were left out."
+          },
+          "record_type": {
+            "type": "string"
+          },
+          "records": {
+            "type": "integer",
+            "description": "Records sampled.",
+            "minimum": 0
+          },
+          "source": {
             "type": "string"
           }
         }
@@ -13004,6 +13777,26 @@
           }
         }
       },
+      "SourceField": {
+        "type": "object",
+        "description": "A record field or CSV column a property's values come from: `source` and `record_type` name the\nrecords (`stripe`, `stripe.charge`), or `document` and the document id for an uploaded CSV, and\n`path` the payload key path or the column.",
+        "required": [
+          "source",
+          "record_type",
+          "path"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "record_type": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          }
+        }
+      },
       "SourceOut": {
         "type": "object",
         "description": "One connection of a source. A kind's first connection keeps the source key as its `key`; each one\nadded after it is `{source}~{instance}`.",
@@ -13291,6 +14084,41 @@
           }
         }
       },
+      "TableProfile": {
+        "type": "object",
+        "required": [
+          "document_id",
+          "filename",
+          "rows",
+          "columns",
+          "profile",
+          "import"
+        ],
+        "properties": {
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "document_id": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "import": {
+            "$ref": "#/components/schemas/ImportPlan"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/RecordTypeProfile"
+          },
+          "rows": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
       "TagCount": {
         "type": "object",
         "required": [
@@ -13561,6 +14389,22 @@
           },
           "totals": {
             "$ref": "#/components/schemas/UsageCounts"
+          }
+        }
+      },
+      "TopValue": {
+        "type": "object",
+        "required": [
+          "value",
+          "count"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "value": {
+            "type": "string"
           }
         }
       },

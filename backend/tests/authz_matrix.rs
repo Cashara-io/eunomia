@@ -26,6 +26,7 @@ const WHOS: [Who; 4] = [Owner, Member, Pending, Outsider];
 
 struct World {
     db: OrgDb,
+    org: eunomia_backend::state::OrgState,
     control: ControlDb,
     owner: User,
     member: User,
@@ -79,9 +80,11 @@ async fn world() -> World {
         users.push(common::register(&state, &format!("{name}@example.com")).await);
     }
     let db = common::org_db(&state, &users[0]).await;
+    let org = state.org(&users[0].org).await.unwrap();
     let mut it = users.into_iter();
     World {
         db,
+        org,
         control: state.control.clone(),
         owner: it.next().unwrap(),
         member: it.next().unwrap(),
@@ -126,6 +129,7 @@ async fn vault_operations_matrix() {
         ("decide a property", [true, false, false, false]),
         ("decide a metric", [true, false, false, false]),
         ("run a metric", [true, true, false, false]),
+        ("auto-map records", [true, true, false, false]),
     ];
     for (op, want) in rows {
         for (i, who) in WHOS.into_iter().enumerate() {
@@ -154,6 +158,10 @@ async fn vault_operations_matrix() {
                     ontology::propose(&w.db, &w.owner.id, Some(&v), &avg_price()).await.unwrap();
                     let args = metric::EvalArgs { metric: "avg_price".into(), vault_id: Some(rid::RecordIdExt::to_string(&v)), allow_unapproved: true, ..Default::default() };
                     allowed(metric::eval(&w.db, &u.id, &args).await)
+                }
+                "auto-map records" => {
+                    let args = ontology::automap::AutomapArgs { vault_id: Some(rid::RecordIdExt::to_string(&v)), ..Default::default() };
+                    allowed(ontology::automap::automap(&w.org, &w.org.settings, &u.id, &args).await)
                 }
                 "merge" => {
                     let own = common::sys(vaults::default_vault_id(&w.db, &u.id)).await.unwrap();

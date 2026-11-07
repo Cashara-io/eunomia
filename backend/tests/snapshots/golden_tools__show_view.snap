@@ -21,7 +21,7 @@ expression: stable
       },
       "path": [
         {
-          "id": "relates_to:<id29>",
+          "id": "relates_to:<id30>",
           "from": {
             "id": "file:<id10>",
             "name": "main.rs",
