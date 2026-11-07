@@ -1,4 +1,4 @@
-//! Statements for the project ontology (`ontology`, migrations 0033, 0034 and 0035). See the module docs in store/mod.rs.
+//! Statements for the project ontology (`ontology`, migrations 0033 to 0036). See the module docs in store/mod.rs.
 
 use super::Stmt;
 
@@ -201,13 +201,14 @@ pub const PROPOSE_PROPERTY: Stmt = Stmt::at(
         LET $row = IF array::len($cur) = 0 {
             (CREATE $id SET vault = $vault, kind = $kind, name = $name, datatype = $datatype, unit = $unit,
                 enum_values = $enum_values, description = $description, synonyms = $synonyms, merge_into = $merge_into,
-                origin = $origin, reason = $reason RETURN AFTER)
+                origin = $origin, reason = $reason, source_map = $source_map RETURN AFTER)
         } ELSE IF $cur[0] = "proposed" {
             (UPDATE $id SET datatype = $datatype, unit = $unit ?? unit, enum_values = $enum_values ?? enum_values,
                 description = $description ?? description, synonyms = array::union(synonyms ?? [], $synonyms),
-                merge_into = $merge_into ?? merge_into, reason = $reason ?? reason, updated_at = time::now() RETURN AFTER)
+                merge_into = $merge_into ?? merge_into, reason = $reason ?? reason,
+                source_map = array::union(source_map ?? [], $source_map), updated_at = time::now() RETURN AFTER)
         } ELSE {
-            (SELECT * FROM $id)
+            (UPDATE $id SET source_map = array::union(source_map ?? [], $source_map) RETURN AFTER)
         };
         RETURN $row;
         COMMIT TRANSACTION;"#,
@@ -329,6 +330,71 @@ pub const METRIC_INPUTS: Stmt = Stmt::new(
         WHERE property IN $props AND vault = $vault AND as_of <= $as_of ORDER BY as_of DESC, created_at DESC;"#,
 );
 
+/// Every record type of `$vault` with its record count (personal vault: also the owner's records filed
+/// in none), uploaded document chunks left out. Auto-mapping profiles each.
+pub const RECORD_TYPES: Stmt = Stmt::new(
+    "ontology.record_types",
+    r#"SELECT source, type, count() AS count FROM cache_record
+        WHERE (vault IN $vaults OR ($own AND vault = NONE AND owner = $owner)) AND deleted = false AND source != "documents"
+        GROUP BY source, type ORDER BY source, type LIMIT 100"#,
+);
+
+/// The newest `$limit` payloads of one record type in `$vault` (as for [`RECORD_TYPES`]).
+pub const RECORD_SAMPLE: Stmt = Stmt::new(
+    "ontology.record_sample",
+    r#"SELECT external_id, payload, updated_at FROM cache_record
+        WHERE (vault IN $vaults OR ($own AND vault = NONE AND owner = $owner)) AND deleted = false AND source = $source AND type = $type
+        ORDER BY updated_at DESC LIMIT $limit"#,
+);
+
+/// The records in `$vault` (as for [`RECORD_TYPES`]) whose external id is one of `$values`, with their
+/// type: a link's value check, against every record type at once.
+// ponytail: no index on external_id, so this scans the vault's records once per checked field; fine
+// for an owner's one-off auto-map run.
+pub const MATCH_EXTERNAL_IDS: Stmt = Stmt::new(
+    "ontology.match_external_ids",
+    r#"SELECT source, type, external_id FROM cache_record
+        WHERE (vault IN $vaults OR ($own AND vault = NONE AND owner = $owner)) AND deleted = false AND source != "documents"
+        AND external_id IN $values"#,
+);
+
+/// Which of `$values` (lowercased) are the name or an alias of an entity of one kind in `$vault`
+/// (`$table` picks the kind's table, `$kind` the custom kind): a link's value check.
+pub const MATCH_NAMES: Stmt = Stmt::new(
+    "ontology.match_names",
+    r#"LET $rows = IF $table = "person" { (SELECT name, aliases FROM person WHERE vault = $vault) }
+        ELSE IF $table = "organisation" { (SELECT name, aliases FROM organisation WHERE vault = $vault) }
+        ELSE IF $table = "location" { (SELECT name, aliases FROM location WHERE vault = $vault) }
+        ELSE IF $table = "repository" { (SELECT name, aliases FROM repository WHERE vault = $vault) }
+        ELSE IF $table = "file" { (SELECT name, aliases FROM file WHERE vault = $vault) }
+        ELSE IF $table = "symbol" { (SELECT name, aliases FROM symbol WHERE vault = $vault) }
+        ELSE { (SELECT name, aliases FROM entity WHERE vault = $vault AND kind = $kind) };
+     RETURN array::distinct(array::flatten($rows.map(|$r| array::concat([$r.name], $r.aliases ?? []))).map(|$n| string::lowercase($n)))
+        .filter(|$n| $n IN $values);"#,
+);
+
+/// The approved custom kinds of `$vault`, newest decision first, at most `$limit`: what extraction
+/// may write besides people, organisations and locations.
+pub const EXTRACTION_KINDS: Stmt = Stmt::new(
+    "ontology.extraction_kinds",
+    r#"SELECT kind, description FROM ontology_kind WHERE vault = $vault AND status = "approved" AND kind NOT IN $built_in
+        ORDER BY updated_at DESC LIMIT $limit"#,
+);
+
+/// One kind's row by its derived id: an import checks the kind is approved.
+pub const KIND: Stmt = Stmt::new("ontology.kind", "SELECT kind, status FROM $id");
+
+/// One imported value, keyed by (entity, property, document): a re-run of the import updates it in
+/// place instead of adding history.
+pub const UPSERT_IMPORTED_VALUE: Stmt = Stmt::new(
+    "ontology.upsert_imported_value",
+    "UPSERT $id SET vault = $vault, entity = $entity, property = $property, value_num = $value_num, value_text = $value_text, \
+     value_bool = $value_bool, value_date = $value_date, unit = NONE, as_of = $as_of, source = $source, origin = $origin RETURN NONE",
+);
+
+/// The values a deleted document's import wrote go with it.
+pub const DELETE_IMPORTED_VALUES: Stmt = Stmt::new("ontology.delete_imported_values", "DELETE entity_property WHERE source = $document");
+
 pub const ALL: &[&Stmt] = &[
     &PROFILE,
     &REGISTRY,
@@ -364,4 +430,12 @@ pub const ALL: &[&Stmt] = &[
     &DECIDE_METRIC,
     &DESCRIBE_METRIC,
     &METRIC_INPUTS,
+    &RECORD_TYPES,
+    &RECORD_SAMPLE,
+    &MATCH_EXTERNAL_IDS,
+    &MATCH_NAMES,
+    &EXTRACTION_KINDS,
+    &KIND,
+    &UPSERT_IMPORTED_VALUE,
+    &DELETE_IMPORTED_VALUES,
 ];
