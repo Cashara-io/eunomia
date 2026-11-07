@@ -26,5 +26,6 @@ expression: stable
       "status": "proposed",
       "merge_into": null
     }
-  ]
+  ],
+  "metrics": []
 }

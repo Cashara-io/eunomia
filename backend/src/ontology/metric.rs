@@ -1001,11 +1001,11 @@ fn compute(side: &Side, filters: &[Cond], entities: &[&String], values: &Values,
         };
         let Some(h) = get(p) else { continue };
         if side.agg.numeric_only() {
-            if let (Some(u), Some(want)) = (&h.unit, &unit) {
-                if u != want {
-                    *other_units.entry(u.clone()).or_default() += 1;
-                    continue;
-                }
+            if let (Some(u), Some(want)) = (&h.unit, &unit)
+                && u != want
+            {
+                *other_units.entry(u.clone()).or_default() += 1;
+                continue;
             }
             let Some(n) = h.stored.num else { continue };
             nums.push(n);

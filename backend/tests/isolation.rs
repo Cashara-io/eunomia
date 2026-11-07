@@ -235,6 +235,20 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         .unwrap();
     let set = Box::pin(call(state, &user, "entity_set_property", json!({"entity_id": ids.entities[0], "property": "ledger_code", "value": format!("code {canary}")}))).await;
     assert!(set.get("error").is_none(), "{set}");
+    // a metric over it (canary in its description), approved as an owner would
+    let proposed = Box::pin(call(state, &user, "ontology_propose", json!({
+        "vault_id": vault,
+        "metrics": [{"kind": "person", "name": "ledger_codes", "expr": {"agg": "count_distinct", "property": "ledger_code"}, "description": format!("{name} codes {canary}")}],
+    })))
+    .await;
+    assert!(proposed.get("error").is_none(), "{proposed}");
+    db.test_raw()
+        .query("UPDATE ontology_metric SET status = 'approved' WHERE vault = $v")
+        .bind(("v", eunomia_backend::rid::parse(&vault).unwrap()))
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
     let mem: Vec<surrealdb::types::RecordId> = db.test_raw().query("SELECT VALUE id FROM memory WHERE vault = $v").bind(("v", eunomia_backend::rid::parse(&vault).unwrap())).await.unwrap().take(0).unwrap();
     ids.memory = mem[0].to_string();
 
@@ -458,6 +472,9 @@ fn attack_value(tool: &str, prop: &str, schema: &Value, victim: &Org) -> Value {
         ("entities_get", "id") => id(0),
         // the victim's approved property on their person
         ("entity_set_property", "property") => json!("ledger_code"),
+        // the victim's approved metric
+        ("metric_eval", "metric") => json!("ledger_codes"),
+        ("metric_eval", "kind") => json!("person"),
         // the file: it has relations, one with the canary in its label
         ("entities_neighbourhood", "entity_id") => id(4),
         // a view over the victim's entities: their names must not come back

@@ -1,0 +1,9 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "error": "the metric \"total_size_gb\" on \"db\" is proposed, not approved: a vault owner approves it in the Eunomia app (the vault's Kinds and links). To try it before that, pass allow_unapproved: true; the result then says it is unapproved",
+  "code": "validation.invalid",
+  "trace_id": "<trace>"
+}

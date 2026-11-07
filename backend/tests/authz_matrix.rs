@@ -8,7 +8,7 @@ use eunomia_backend::pool::{ControlDb, OrgDb};
 use eunomia_backend::entities::service as entities;
 use eunomia_backend::error::AppResult;
 use eunomia_backend::models_user::User;
-use eunomia_backend::ontology::{self, property};
+use eunomia_backend::ontology::{self, metric, property};
 use eunomia_backend::vaults::service as vaults;
 use eunomia_backend::rid;
 use surrealdb::types::RecordId;
@@ -63,6 +63,15 @@ fn price() -> ontology::Proposals {
     serde_json::from_value(serde_json::json!({"properties": [{"kind": "product", "name": "price", "datatype": "money", "unit": "AUD"}]})).unwrap()
 }
 
+/// `price` with an `avg_price` metric over it.
+fn avg_price() -> ontology::Proposals {
+    serde_json::from_value(serde_json::json!({
+        "properties": [{"kind": "product", "name": "price", "datatype": "money", "unit": "AUD"}],
+        "metrics": [{"kind": "product", "name": "avg_price", "expr": {"agg": "avg", "property": "price"}}],
+    }))
+    .unwrap()
+}
+
 async fn world() -> World {
     let state = common::bare_state().await;
     let mut users = Vec::new();
@@ -115,6 +124,8 @@ async fn vault_operations_matrix() {
         ("merge", [true, true, false, false]),
         ("propose a property", [true, true, false, false]),
         ("decide a property", [true, false, false, false]),
+        ("decide a metric", [true, false, false, false]),
+        ("run a metric", [true, true, false, false]),
     ];
     for (op, want) in rows {
         for (i, who) in WHOS.into_iter().enumerate() {
@@ -133,6 +144,16 @@ async fn vault_operations_matrix() {
                 "decide a property" => {
                     ontology::propose(&w.db, &w.owner.id, Some(&v), &price()).await.unwrap();
                     allowed(property::decide_property(&w.db, &u.id, &v, "product", "price", property::PropertyDecision::Approve).await)
+                }
+                "decide a metric" => {
+                    ontology::propose(&w.db, &w.owner.id, Some(&v), &avg_price()).await.unwrap();
+                    property::decide_property(&w.db, &w.owner.id, &v, "product", "price", property::PropertyDecision::Approve).await.unwrap();
+                    allowed(metric::decide_metric(&w.db, &u.id, &v, "product", "avg_price", metric::MetricDecision::Approve).await)
+                }
+                "run a metric" => {
+                    ontology::propose(&w.db, &w.owner.id, Some(&v), &avg_price()).await.unwrap();
+                    let args = metric::EvalArgs { metric: "avg_price".into(), vault_id: Some(rid::RecordIdExt::to_string(&v)), allow_unapproved: true, ..Default::default() };
+                    allowed(metric::eval(&w.db, &u.id, &args).await)
                 }
                 "merge" => {
                     let own = common::sys(vaults::default_vault_id(&w.db, &u.id)).await.unwrap();

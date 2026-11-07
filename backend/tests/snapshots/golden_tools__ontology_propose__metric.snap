@@ -1,0 +1,17 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "kinds": [],
+  "links": [],
+  "properties": [],
+  "metrics": [
+    {
+      "kind": "db",
+      "name": "total_size_gb",
+      "status": "proposed",
+      "merge_into": null
+    }
+  ]
+}

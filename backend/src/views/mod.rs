@@ -373,7 +373,8 @@ fn metric_text(m: &MetricEvalOut, entities: &[EntityRef]) -> String {
     }
     out.push_str(&format!("\n{}.", m.expr_words));
     if let Some(d) = &m.description {
-        out.push_str(&format!(" {d}"));
+        let stop = if d.ends_with(['.', '!', '?']) { "" } else { "." };
+        out.push_str(&format!(" {d}{stop}"));
     }
     let date = m.as_of.get(..10).unwrap_or(&m.as_of);
     let noun = if m.n_entities == 1 { words(&m.kind) } else { format!("{}s", words(&m.kind)) };
