@@ -232,7 +232,7 @@ function TurnView({ turn, me }: { turn: Turn; me: string | null }) {
         {me ? <TurnHeader name={me} at={turn.at} /> : <div className="h-5 mb-2" />}
         <div
           className="whitespace-pre-wrap break-words text-[15px] leading-relaxed px-4 py-3 rounded-[2px]"
-          style={{ background: "var(--bauhaus-app-soft)", color: "var(--ink)" }}
+          style={{ background: "var(--surface-raised)", color: "var(--ink)" }}
         >
           {turn.content}
         </div>
@@ -651,7 +651,7 @@ export default function ChatPage() {
                 <div
                   role="alert"
                   className="flex items-start gap-2.5 px-4 py-3 rounded-[2px] text-[14px]"
-                  style={{ background: "var(--critical-soft)", color: "var(--critical)", borderLeft: "3px solid var(--bauhaus-app-red)" }}
+                  style={{ background: "var(--critical-soft)", color: "var(--critical)", borderLeft: "3px solid var(--vault-personal)" }}
                 >
                   <AlertCircle size={18} strokeWidth={1.75} className="shrink-0 mt-px" aria-hidden />
                   <div className="min-w-0 break-words">

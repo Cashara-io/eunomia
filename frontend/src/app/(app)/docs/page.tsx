@@ -212,7 +212,7 @@ export default function DocsPage() {
                       <button
                         onClick={() => setTopic(t.topic)}
                         aria-current={current ? "page" : undefined}
-                        className={`w-full text-left min-h-10 px-3 rounded-[4px] text-[14px] truncate transition-colors duration-150 ${current ? "font-semibold" : "hover:bg-[var(--bauhaus-app-soft)]"}`}
+                        className={`w-full text-left min-h-10 px-3 rounded-[4px] text-[14px] truncate transition-colors duration-150 ${current ? "font-semibold" : "hover:bg-[var(--surface-raised)]"}`}
                         style={current ? { background: "var(--bauhaus-app-blue)", color: "#fff" } : { color: "var(--ink)" }}
                       >
                         {t.title}

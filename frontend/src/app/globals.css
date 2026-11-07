@@ -1,93 +1,78 @@
 @import "tailwindcss";
 
-/* ---- Eunomia: Bauhaus app ----
-   Source of truth: DESIGN.md (Eunomia Bauhaus app design spec, v1.0).
-   Warm paper ground, ink text, a dark ink sidebar, blue for actions and the
-   selected place, red only for destructive or failing things, yellow only as
-   a fill (never as small text). Status is always written in words; colour
-   only supports it. One light theme: the spec defines no dark variant.
-
-   The spec tokens are the --bauhaus-app-* set below. The older semantic
-   tokens (--canvas, --ink, --accent, ...) every component already uses are
-   mapped onto them, so the whole app follows one palette. The older eu-*
-   landing-page tokens, if any page defines them, are left untouched. */
+/* ---- Eunomia: Bauhaus Memory ----
+   Source of truth: DESIGN.md. A calm cream page, black ink, and three flat
+   colours that each mean one kind of memory: red is personal, yellow is
+   project, blue is company. Ink is the accent ("press me", "selected"); blue
+   is focus ("you are here"). Light is the default; data-theme="dark" on
+   <html> flips every token to warm "ink paper". Never hard-code a colour in a
+   component: add a token here with a light and a dark value. */
 
 :root {
   color-scheme: light;
 
-  /* ---- spec tokens (exact canvas values) ---- */
-  --bauhaus-app-bg: #fafaf7;
-  --bauhaus-app-ink: #171717;
-  --bauhaus-app-muted: #61615d;
-  --bauhaus-app-line: #dadad2;
-  --bauhaus-app-soft: #edede6;
-  --bauhaus-app-red: #cf412f;
-  --bauhaus-app-blue: #3159b6;
-  --bauhaus-app-yellow: #e8be39;
-  --bauhaus-app-white: #ffffff;
-  --bauhaus-app-cream: #fafaf7;
-  /* text-safe variants (WCAG AA on white and on --bauhaus-app-bg) */
-  --bauhaus-app-red-text: #b2382a;
-  --bauhaus-app-blue-hover: #284a98;
-  --bauhaus-app-blue-soft: rgba(49, 89, 182, 0.09);
-  --bauhaus-app-red-soft: rgba(207, 65, 47, 0.09);
-  --bauhaus-app-yellow-soft: rgba(232, 190, 57, 0.22);
-  /* the sidebar is ink; its text is cream */
-  --bauhaus-app-sidebar: #171717;
-  --bauhaus-app-sidebar-text: #f2f2ec;
-  --bauhaus-app-sidebar-muted: #b9b9b1;
-  --bauhaus-app-sidebar-line: rgba(250, 250, 247, 0.16);
-  --bauhaus-app-sidebar-hover: #262624;
-  /* type scale */
-  --bauhaus-app-title-size: 26px;
-  --bauhaus-app-title-tracking: -0.5px;
-  --bauhaus-app-heading-size: 24px;
-  --bauhaus-app-heading-tracking: -0.4px;
-  /* layout */
-  --bauhaus-app-sidebar-width: 232px;
-  --bauhaus-app-pad-y: 32px;
-  --bauhaus-app-pad-x: 40px;
-  --bauhaus-app-radius: 4px;
-  --bauhaus-app-focus: #3159b6;
+  /* ---- neutrals ---- */
+  --canvas: #fafaf7;
+  --surface: #ffffff;
+  --surface-raised: #f0f0eb;
+  --surface-hover: #e8e8e1;
+  --ink: #171717;
+  --ink-dim: #61615d;
+  --ink-faint: #67675f;
+  --border: #e2e2dc;
+  --border-strong: #cbcbc4;
+  /* Field and control edges: --border-strong is too faint to find an input
+     by (1.6:1); this one clears 3:1 on white and on the canvas. */
+  --border-field: #8c8c84;
+  --grid-dot: rgba(23, 23, 23, 0.08);
+  --scrim: rgba(23, 23, 23, 0.32);
 
-  /* ---- semantic tokens used across components ---- */
-  --canvas: var(--bauhaus-app-bg);
-  --surface: var(--bauhaus-app-white);
-  --surface-raised: var(--bauhaus-app-soft);
-  --surface-hover: #e4e4dc;
-  --ink: var(--bauhaus-app-ink);
-  --ink-dim: var(--bauhaus-app-muted);
-  --ink-faint: #66665f;
-  --border: var(--bauhaus-app-line);
-  --border-strong: #a6a69d;
-  --grid-dot: transparent;
+  /* ---- accent: ink. Primary button fill, selected tab, selection frame,
+     active nav chip. Links are ink and always underlined. ---- */
+  --accent: #171717;
+  --accent-hover: #000000;
+  --accent-text: #171717;
+  --accent-soft: rgba(23, 23, 23, 0.06);
+  --on-accent: #ffffff;
+  /* The 2px focus ring. Blue, so focused never looks like selected (ink). */
+  --focus: #3159b6;
 
-  /* the action colour: fills, links, the selected place */
-  --accent: var(--bauhaus-app-blue);
-  --accent-text: var(--bauhaus-app-blue);
-  --accent-soft: var(--bauhaus-app-blue-soft);
-  --on-accent: var(--bauhaus-app-cream);
-  --felt: var(--accent);
+  /* ---- the three vault colours: always flat, always with their shape ---- */
+  --vault-personal: #cf412f; /* circle */
+  --vault-project: #e8be39; /* square */
+  --vault-company: #3159b6; /* triangle */
+  --on-vault-personal: #ffffff;
+  --on-vault-project: #171717;
+  --on-vault-company: #ffffff;
 
-  --good: #2b7a4b;
-  --warning: #8a6510;
-  --critical: var(--bauhaus-app-red-text);
-  --critical-soft: var(--bauhaus-app-red-soft);
+  /* ---- status: always with a word or icon, deeper than the vault fills ---- */
+  --good: #2f7a4e;
+  --warning: #946610;
+  --critical: #b83a28;
+  --critical-hover: #9c3020;
+  --critical-soft: rgba(207, 65, 47, 0.1);
+  --on-critical: #ffffff;
 
-  /* author tags: who wrote a memory. Never actions or status. */
-  --author-1: #c4522f;
-  --author-2: #3159b6;
-  --author-3: #7a4fae;
-  --author-4: #8a6510;
-  --author-5: #b0436f;
-  --author-6: #237c78;
-  --on-author: #ffffff;
+  /* ---- authors: who wrote a memory. Never the exact vault hues. ---- */
+  --author-1: #d9694a;
+  --author-2: #4f7fcf;
+  --author-3: #8d63b8;
+  --author-4: #c9a030;
+  --author-5: #c95a82;
+  --author-6: #2f8f8a;
+  /* Text on each author tag. Ink wherever it reads better than white
+     (4.5:1 or more); plum is dark enough for white. */
+  --on-author-1: #171717;
+  --on-author-2: #171717;
+  --on-author-3: #ffffff;
+  --on-author-4: #171717;
+  --on-author-5: #171717;
+  --on-author-6: #171717;
 
-  --shadow-panel: 0 0 0 1px var(--border);
-  --shadow-pop: 0 0 0 1px var(--bauhaus-app-ink), 0 12px 32px -12px rgba(23, 23, 23, 0.28);
-  --scrim: rgba(23, 23, 23, 0.42);
+  --shadow-panel: 0 0 0 1px var(--border), 0 12px 32px -12px rgba(23, 23, 23, 0.18);
+  --shadow-pop: 0 0 0 1px var(--border-strong), 0 12px 32px -12px rgba(23, 23, 23, 0.18);
 
-  /* entity kinds: muted, distinct from the action blue */
+  /* entity kinds: muted, never the vault hues */
   --kind-person: #4f7fb0;
   --kind-organisation: #8061b0;
   --kind-location: #b06a35;
@@ -118,19 +103,121 @@
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 
-  --radius-card: var(--bauhaus-app-radius);
-  --radius-field: var(--bauhaus-app-radius);
-  --radius-control: var(--bauhaus-app-radius);
+  /* ---- shape: round where you press, square where you read ---- */
+  --radius-card: 12px;
+  --radius-field: 10px;
+  --radius-control: 999px;
+  --radius-tag: 4px;
+  --radius-vault: 4px;
 
   --hair: 1px;
 
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  /* Shapes moving on hover (nav chips), from the landing page. */
+  --ease-shape: cubic-bezier(0.2, 0.7, 0.2, 1);
   --dur-press: 140ms;
   --dur-hover: 120ms;
   --dur-pop: 180ms;
   --dur-drawer: 260ms;
+  --dur-shape: 320ms;
+}
+
+/* Dark: "ink paper", warm near-black, never blue-black. Opt-in, saved per
+   browser (localStorage "eunomia-theme"); layout.tsx applies it before paint. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --canvas: #121211;
+  --surface: #1a1a18;
+  --surface-raised: #23231f;
+  --surface-hover: #2c2c27;
+  --ink: #f0f0eb;
+  --ink-dim: #a9a9a2;
+  --ink-faint: #94948c;
+  --border: rgba(240, 240, 235, 0.09);
+  --border-strong: rgba(240, 240, 235, 0.16);
+  --border-field: rgba(240, 240, 235, 0.36);
+  --grid-dot: rgba(240, 240, 235, 0.06);
+  --scrim: rgba(0, 0, 0, 0.56);
+
+  --accent: #f0f0eb;
+  --accent-hover: #ffffff;
+  --accent-text: #f0f0eb;
+  --accent-soft: rgba(240, 240, 235, 0.08);
+  --on-accent: #171717;
+  --focus: #7c9be6;
+
+  --vault-personal: #dd5743;
+  --vault-project: #ecc64c;
+  --vault-company: #5a80d8;
+  --on-vault-personal: #171717;
+  --on-vault-project: #171717;
+  --on-vault-company: #171717;
+
+  --good: #5bb07f;
+  --warning: #d8a640;
+  --critical: #ec7a68;
+  --critical-hover: #f29484;
+  --critical-soft: rgba(221, 87, 67, 0.16);
+  --on-critical: #171717;
+
+  --author-1: #e07a5c;
+  --author-2: #6b93d8;
+  --author-3: #a07cc8;
+  --author-4: #d2ac40;
+  --author-5: #d26f94;
+  --author-6: #3fa39d;
+  --on-author-1: #171717;
+  --on-author-2: #171717;
+  --on-author-3: #171717;
+  --on-author-4: #171717;
+  --on-author-5: #171717;
+  --on-author-6: #171717;
+
+  --shadow-panel: 0 0 0 1px var(--border), 0 1px 1px rgba(0, 0, 0, 0.25), 0 12px 32px -12px rgba(0, 0, 0, 0.6);
+  --shadow-pop: 0 0 0 1px var(--border-strong), 0 4px 12px -2px rgba(0, 0, 0, 0.4), 0 24px 64px -16px rgba(0, 0, 0, 0.7);
+
+  --kind-person: #6f9bc9;
+  --kind-organisation: #a692c9;
+  --kind-location: #c98a5a;
+  --kind-repository: #5a9e8f;
+  --kind-file: #9e9150;
+  --kind-symbol: #b06a8c;
+
+  --series-1: #5a80d8;
+  --series-2: #dd5743;
+  --series-3: #ecc64c;
+  --series-4: #f0f0eb;
+
+  --connector-up-bank: #6a95cc;
+  --connector-pocketai: #a874c4;
+  --connector-github: #9aa0a8;
+  --connector-slack: #c873a3;
+  --connector-notion: #a8a49f;
+  --connector-linear: #7c8ad0;
+  --connector-gmail: #d06e60;
+  --connector-google-calendar: #64a2cc;
+  --connector-discord: #7d8fd0;
+  --connector-spotify: #4fa886;
+  --connector-todoist: #d0875a;
+  --connector-stripe: #8f78d0;
+  --connector-ed: #4fa89c;
+}
+
+/* The sidebar is ink in both themes, so its palette does not flip. */
+:root {
+  --bauhaus-app-ink: #171717;
+  --bauhaus-app-cream: #fafaf7;
+  --bauhaus-app-yellow: #e8be39;
+  --bauhaus-app-blue: #3159b6;
+  --bauhaus-app-sidebar: #171717;
+  --bauhaus-app-sidebar-text: #f2f2ec;
+  --bauhaus-app-sidebar-muted: #b9b9b1;
+  --bauhaus-app-sidebar-line: rgba(250, 250, 247, 0.16);
+  --bauhaus-app-sidebar-hover: #262624;
+  --bauhaus-app-sidebar-width: 232px;
 }
 
 @layer base {
@@ -176,10 +263,10 @@ body {
    header. 22px on phones. */
 .page-title {
   font-family: var(--font-display), system-ui, sans-serif;
-  font-size: clamp(22px, 1vw + 18px, var(--bauhaus-app-title-size));
+  font-size: 22px;
   line-height: 1.2;
-  font-weight: 600;
-  letter-spacing: var(--bauhaus-app-title-tracking);
+  font-weight: 500;
+  letter-spacing: -0.03em;
   color: var(--ink);
   text-wrap: balance;
 }
@@ -187,10 +274,10 @@ body {
 /* The heading of a connection guide or a framed task panel (34/600, -1px). */
 .connect-title {
   font-family: var(--font-display), system-ui, sans-serif;
-  font-size: clamp(20px, 1vw + 16px, var(--bauhaus-app-heading-size));
+  font-size: 20px;
   line-height: 1.15;
-  font-weight: 600;
-  letter-spacing: var(--bauhaus-app-heading-tracking);
+  font-weight: 500;
+  letter-spacing: -0.03em;
   color: var(--ink);
 }
 
@@ -253,7 +340,7 @@ body {
 
 /* Quiet information block on soft ground (details to copy, help asides). */
 .soft-panel {
-  background: var(--bauhaus-app-soft);
+  background: var(--surface-raised);
   border-radius: 2px;
 }
 
@@ -295,7 +382,7 @@ tr.frame-selected::after {
 
 .field {
   background: var(--surface);
-  border: 1px solid #8f8f87;
+  border: 1px solid var(--border-field);
   border-radius: var(--radius-field);
   color: var(--ink);
   font-family: var(--font-sans), system-ui, sans-serif;
@@ -330,7 +417,7 @@ textarea::placeholder {
   line-height: 1.2;
   white-space: nowrap;
   border: 1px solid var(--border-strong);
-  background: var(--bauhaus-app-white);
+  background: var(--surface);
   color: var(--bauhaus-app-ink);
   transition:
     transform var(--dur-press) var(--ease-out),
@@ -357,14 +444,14 @@ textarea::placeholder {
 /* Danger is only for destructive actions: red edge and text on the trigger,
    a solid red fill on the final confirm (.btn-danger-solid). */
 .btn-danger {
-  background: var(--bauhaus-app-white);
+  background: var(--surface);
   border-color: var(--critical);
   color: var(--critical);
 }
 .btn-danger-solid {
-  background: var(--bauhaus-app-red-text);
-  border-color: var(--bauhaus-app-red-text);
-  color: #ffffff;
+  background: var(--critical);
+  border-color: var(--critical);
+  color: var(--on-critical);
 }
 .btn-sm {
   min-height: 30px;
@@ -392,20 +479,21 @@ textarea::placeholder {
 
 @media (hover: hover) and (pointer: fine) {
   .btn:hover:not(:disabled) {
-    background: var(--bauhaus-app-soft);
+    background: var(--surface-raised);
   }
   .btn-primary:hover:not(:disabled) {
-    background: var(--bauhaus-app-blue-hover);
-    border-color: var(--bauhaus-app-blue-hover);
+    background: var(--bauhaus-app-blue);
+    border-color: var(--bauhaus-app-blue);
   }
   .btn-ghost:hover:not(:disabled) {
-    background: var(--bauhaus-app-soft);
+    background: var(--surface-raised);
   }
   .btn-danger:hover:not(:disabled) {
     background: var(--critical-soft);
   }
   .btn-danger-solid:hover:not(:disabled) {
-    background: #96301f;
+    background: var(--critical-hover);
+    border-color: var(--critical-hover);
   }
 }
 
@@ -453,7 +541,7 @@ button.pill:active {
 .pill[aria-checked="true"],
 .pill[aria-current="page"] {
   border-color: var(--bauhaus-app-ink);
-  background: var(--bauhaus-app-soft);
+  background: var(--surface-raised);
   color: var(--ink);
   font-weight: 600;
 }
@@ -483,7 +571,7 @@ button.pill:active {
   padding: 0 6px;
   border-radius: 4px 4px 4px 1px;
   background: var(--author, var(--ink-faint));
-  color: var(--on-author);
+  color: var(--author-on, var(--ink));
   font-size: 11.5px;
   font-weight: 500;
   line-height: 1;
@@ -601,7 +689,7 @@ button.pill:active {
   border-bottom-color: var(--ink);
 }
 .tab:focus-visible {
-  outline: 2px solid var(--bauhaus-app-focus);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
@@ -616,9 +704,9 @@ button.pill:active {
   color: var(--ink);
 }
 .status-label[data-tone="good"] .status-shape { background: var(--good); }
-.status-label[data-tone="warning"] .status-shape { background: var(--bauhaus-app-yellow); box-shadow: inset 0 0 0 1px #8a6510; }
-.status-label[data-tone="critical"] .status-shape { background: var(--bauhaus-app-red); }
-.status-label[data-tone="info"] .status-shape { background: var(--bauhaus-app-blue); }
+.status-label[data-tone="warning"] .status-shape { background: var(--warning); }
+.status-label[data-tone="critical"] .status-shape { background: var(--critical); }
+.status-label[data-tone="info"] .status-shape { background: var(--ink); }
 .status-label[data-tone="neutral"] .status-shape { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-dim); }
 .status-shape {
   width: 8px;
@@ -684,7 +772,7 @@ dialog.bauhaus-dialog::backdrop {
 }
 @media (hover: hover) and (pointer: fine) {
   .data-table tbody tr:hover td {
-    background: var(--bauhaus-app-bg);
+    background: var(--surface-raised);
   }
 }
 
@@ -748,7 +836,7 @@ dialog.bauhaus-dialog::backdrop {
   color: var(--accent-text);
 }
 .select-option[data-active] {
-  background: var(--bauhaus-app-soft);
+  background: var(--surface-raised);
   color: var(--ink);
 }
 
@@ -790,9 +878,8 @@ dialog.bauhaus-dialog::backdrop {
 }
 
 :focus-visible {
-  outline: 2px solid var(--bauhaus-app-focus);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
-  box-shadow: 0 0 0 4px var(--bauhaus-app-yellow-soft);
 }
 
 * {
@@ -936,18 +1023,6 @@ details[open] > summary::before {
   border-radius: 999px;
 }
 
-/* ---- pieces main's design system brought in (merge of #138 with main) ----
-   Vault colours for the brand mark, VaultChip and Duo icons, on this PR's palette. Personal is a
-   neutral grey, never the danger red (council review: red only means "careful"). */
-:root {
-  --vault-personal: #8a8a83;
-  --vault-project: var(--bauhaus-app-yellow);
-  --vault-company: var(--bauhaus-app-blue);
-  --on-vault-personal: #ffffff;
-  --on-vault-project: var(--ink);
-  --on-vault-company: #ffffff;
-}
-
 /* Phosphor duotone icons: the back layer takes a vault colour, the line keeps the text colour. */
 .duo path[opacity],
 svg[viewBox="0 0 256 256"] > path[opacity="0.2"] {
@@ -976,9 +1051,9 @@ svg[viewBox="0 0 256 256"] > path[opacity="0.2"] {
   white-space: nowrap;
   vertical-align: middle;
 }
-.vault-chip[data-tone="personal"] { background: var(--vault-personal); color: #ffffff; }
-.vault-chip[data-tone="project"] { background: var(--vault-project); }
-.vault-chip[data-tone="company"] { background: var(--vault-company); color: #ffffff; }
+.vault-chip[data-tone="personal"] { background: var(--vault-personal); color: var(--on-vault-personal); }
+.vault-chip[data-tone="project"] { background: var(--vault-project); color: var(--on-vault-project); }
+.vault-chip[data-tone="company"] { background: var(--vault-company); color: var(--on-vault-company); }
 .vault-chip[data-tone="mixed"] { background: transparent; box-shadow: inset 0 0 0 1px var(--ink); }
 
 /* Shape compositions (ShapeField), where main still uses them. */
@@ -988,4 +1063,14 @@ svg[viewBox="0 0 256 256"] > path[opacity="0.2"] {
 @media (prefers-reduced-motion: reduce) {
   .shape-in { animation: none; }
   .shape-field [data-body] { cursor: default; touch-action: auto; }
+}
+
+/* Ghost buttons on the ink sidebar (the theme toggle) keep the sidebar's cream text. */
+.sidebar .btn-ghost {
+  color: var(--bauhaus-app-sidebar-text);
+}
+@media (hover: hover) and (pointer: fine) {
+  .sidebar .btn-ghost:hover:not(:disabled) {
+    background: var(--bauhaus-app-sidebar-hover);
+  }
 }

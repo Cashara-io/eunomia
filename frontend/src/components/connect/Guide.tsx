@@ -42,7 +42,7 @@ export const Note = ({ children }: { children: React.ReactNode }) => (
   </p>
 );
 
-export const Kbd = ({ children }: { children: React.ReactNode }) => <code className="font-mono text-[0.92em] px-1 rounded-[3px]" style={{ background: "var(--bauhaus-app-soft)" }}>{children}</code>;
+export const Kbd = ({ children }: { children: React.ReactNode }) => <code className="font-mono text-[0.92em] px-1 rounded-[3px]" style={{ background: "var(--surface-raised)" }}>{children}</code>;
 
 /** A command to paste into a terminal: ink block, then one primary copy button.
  * Lines never wrap (a flag split across lines is easy to mistype); long ones scroll sideways. */

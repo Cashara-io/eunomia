@@ -69,7 +69,7 @@ function typeWords(types: string[]): string {
 
 const CONNECTED_COLS = "grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1.4fr)_130px_76px_110px_minmax(0,1fr)_16px]";
 const ROW_LINK =
-  "grid items-center gap-x-4 px-4 min-h-14 py-2 text-[14px] transition-[background-color] duration-[120ms] ease-[var(--ease-out)] hover:bg-[var(--bauhaus-app-bg)] focus-visible:outline-offset-[-2px]";
+  "grid items-center gap-x-4 px-4 min-h-14 py-2 text-[14px] transition-[background-color] duration-[120ms] ease-[var(--ease-out)] hover:bg-[var(--surface-raised)] focus-visible:outline-offset-[-2px]";
 
 /** A source's icon in plain ink, no tinted square: the name beside it identifies the source. */
 function SourceMark({ kind, size }: { kind: Connector["kind"] | null; size: number }) {

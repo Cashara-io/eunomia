@@ -103,7 +103,7 @@ function DropZone({ maxBytes, disabled, onFiles }: { maxBytes: number | null; di
       className="flex flex-col items-center justify-center gap-3 px-4 py-8 text-center rounded-[2px]"
       style={{
         border: "1.5px solid var(--bauhaus-app-blue)",
-        background: over ? "var(--bauhaus-app-blue-soft)" : "var(--surface)",
+        background: over ? "var(--accent-soft)" : "var(--surface)",
         transition: "background-color var(--dur-hover) ease, border-color var(--dur-hover) ease",
       }}
       onDragOver={(e) => {

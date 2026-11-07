@@ -8,9 +8,9 @@ export default function EunomiaMark({ size = 20, className }: { size?: number; c
   const w = Math.round((h * 44) / 12);
   return (
     <svg width={w} height={h} viewBox="0 0 44 12" fill="none" aria-hidden className={className} style={{ flexShrink: 0 }}>
-      <circle cx="6" cy="6" r="6" fill="var(--bauhaus-app-red)" />
-      <rect x="16" y="0" width="12" height="12" fill="var(--bauhaus-app-yellow)" />
-      <path d="M38 0 44 12H32Z" fill="var(--bauhaus-app-blue)" />
+      <circle cx="6" cy="6" r="6" fill="var(--vault-personal)" />
+      <rect x="16" y="0" width="12" height="12" fill="var(--vault-project)" />
+      <path d="M38 0 44 12H32Z" fill="var(--vault-company)" />
     </svg>
   );
 }

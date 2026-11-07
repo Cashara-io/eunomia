@@ -178,8 +178,8 @@ function VaultRow({
     <button
       onClick={onSelect}
       aria-current={selected || undefined}
-      className="w-full flex items-center gap-3 px-4 py-3.5 min-h-[60px] text-left transition-[background-color] duration-[120ms] hover:bg-[var(--bauhaus-app-soft)]"
-      style={selected ? { background: "var(--bauhaus-app-soft)", boxShadow: "inset 3px 0 0 var(--bauhaus-app-ink)" } : undefined}
+      className="w-full flex items-center gap-3 px-4 py-3.5 min-h-[60px] text-left transition-[background-color] duration-[120ms] hover:bg-[var(--surface-raised)]"
+      style={selected ? { background: "var(--surface-raised)", boxShadow: "inset 3px 0 0 var(--bauhaus-app-ink)" } : undefined}
     >
       <span className="flex-1 min-w-0">
         <span className="flex items-center gap-2.5 min-w-0">

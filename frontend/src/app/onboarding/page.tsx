@@ -99,7 +99,7 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="min-h-screen w-full flex flex-col px-6 py-6 sm:px-10" style={{ background: "var(--bauhaus-app-bg)" }}>
+    <div className="min-h-screen w-full flex flex-col px-6 py-6 sm:px-10" style={{ background: "var(--canvas)" }}>
       <InputModeTracker />
       {/* Progress fills slide in when a pointer moved the step; keyboard steps swap instantly. */}
       <style>{`
@@ -138,7 +138,7 @@ export default function OnboardingPage() {
               <ol className="flex gap-2 mb-7" aria-label="Setup progress">
                 {steps.map((label, i) => (
                   <li key={label} className="flex-1" aria-current={i === step ? "step" : undefined}>
-                    <span className="block h-[4px] overflow-hidden" style={{ background: "var(--bauhaus-app-line)" }}>
+                    <span className="block h-[4px] overflow-hidden" style={{ background: "var(--border)" }}>
                       <span className="onb-fill block h-full" style={{ background: "var(--accent)", transform: i <= step ? "none" : "scaleX(0)" }} />
                     </span>
                     <span className="mt-2 flex items-center gap-1.5 whitespace-nowrap text-[13px]" style={{ color: i === step ? "var(--ink)" : "var(--ink-dim)", fontWeight: i === step ? 600 : 400 }}>

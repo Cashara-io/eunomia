@@ -1,5 +1,6 @@
 "use client";
 
+import ThemeToggle from "@/components/ThemeToggle";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -239,6 +240,7 @@ export default function Sidebar() {
             <span className="sr-only">Signed in as </span>
             {me?.email ?? ""}
           </span>
+          <ThemeToggle />
           <button
             onClick={logout}
             className="nav-link inline-flex items-center gap-1.5 min-h-9 px-2 text-[12px] shrink-0"
