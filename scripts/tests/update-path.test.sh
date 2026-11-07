@@ -64,10 +64,11 @@ VOLATILE="${UPDATE_PATH_VOLATILE:-job job_leader audit_event audit_log tool_usag
 # Tables this checkout's tenant migrations add (0023_changes: the change log and its per-vault
 # counter; 0024_redact_backfill: the backfill's per-org marker; 0028_peers: peer vaults;
 # 0031_credential_refs: the credential broker's references and provider settings;
-# 0032_secret_requests: secret requests and the secrets Eunomia holds for agents). Where <from-tag> lacks one, the update must add it to
+# 0032_secret_requests: secret requests and the secrets Eunomia holds for agents; 0033_ontology: the kinds
+# and link types a vault's owners reviewed). Where <from-tag> lacks one, the update must add it to
 # every org database, holding only what the backfill writes (new_rows below). Their counts are checked
 # on their own, so they are left out of the before/after diff.
-NEW_TABLES="${UPDATE_PATH_NEW_TABLES:-change change_seq redact_backfill peer_instance peer_share peer_link peer_item credential_ref secret_provider secret_request vault_secret}"
+NEW_TABLES="${UPDATE_PATH_NEW_TABLES:-change change_seq redact_backfill peer_instance peer_share peer_link peer_item credential_ref secret_provider secret_request vault_secret ontology_kind ontology_link}"
 BUILT_FROM=0
 # A fake GitHub token shape (built here, never a real one) in one fact: the backfill must redact it.
 FAKE_GH="ghp_$(printf 'Ab1Cd2Ef3G%.0s' 1 2 3 4)"
@@ -576,6 +577,11 @@ check "the broker tables are new and empty in every org" test "$(broker_rows)" =
 request_rows() { grep -E '^org_[^ ]*\.(secret_request|vault_secret) ' "$W/new-after.txt" | awk '{ s += $2; n++ } END { print n + 0, s + 0 }'; }
 if grep -q '\.vault_secret ' "$W/new-expected.txt"; then
   check "the secret request tables are new and empty in every org" test "$(request_rows)" = "$(( $(org_dbs | wc -l | tr -d ' ') * 2 )) 0"
+fi
+# the project ontology (tenant 0033): new and empty in every org, where the update added it (nobody reviewed anything yet)
+ontology_rows() { grep -E '^org_[^ ]*\.(ontology_kind|ontology_link) ' "$W/new-after.txt" | awk '{ s += $2; n++ } END { print n + 0, s + 0 }'; }
+if grep -q '\.ontology_link ' "$W/new-expected.txt"; then
+  check "the ontology tables are new and empty in every org" test "$(ontology_rows)" = "$(( $(org_dbs | wc -l | tr -d ' ') * 2 )) 0"
 fi
 check "the fixed reads unchanged" diff "$W/reads-before.txt" "$W/reads-after.txt"
 diff "$W/reads-before.txt" "$W/reads-after.txt" | head -20
