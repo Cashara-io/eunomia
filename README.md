@@ -36,26 +36,25 @@ things up there. You don't need to know what MCP is to set it up.
 
 **Watch the launch film** (with sound) in [1080p](docs/media/eunomia-launch-film.mp4) (27 MB) or [720p](docs/media/eunomia-launch-film-720p.mp4) (4 MB): your agents forget, Eunomia remembers, and every agent recalls what the team decided.
 
-## What's new in 2.0.8: a calmer, clearer app
+## What's new in 2.0.9: admin tools, password managers, and a calmer app
 
-Release 2.0.8 brings the **Eunomia Bauhaus app design**: one obvious next step
-on every screen, written for people who are not technical.
+- **For admins.** Settings has a People directory (make or remove admins, suspend
+  and restore accounts) and a workspace audit log. The log records space changes,
+  sign-ins and settings in plain sentences, and you can export it as CSV. Owners
+  can see and withdraw pending invitations to their spaces.
+- **Password managers.** Agents can use secrets from 1Password or Bitwarden Secrets
+  Manager (preview) through references, without ever seeing the value. When an
+  agent needs a key you haven't stored, it asks you in a pop-up. Turn it on under
+  Connected sources ([docs/password-managers.md](docs/password-managers.md)).
+- **Members first.** Home shows what your team knows before the setup steps. Memory
+  spaces has a simple list and a detail panel. People & topics opens on a sortable
+  list, with the graph a tab away. Search shows which space each result is in.
+- **Connections you control.** Disconnect stops importing and keeps what was already
+  imported. Removing a connection and its data is a separate, confirmed step.
+- **Sharing with another Eunomia needs no setup** on most home networks: share codes
+  include the address your browser opened the app on.
 
-- **Home asks one question first: "Which AI app do you use?"** Pick ChatGPT,
-  Claude Code, Codex or Other apps (nothing is chosen for you) and you see only
-  that app's steps. Browser setup and terminal setup are kept separate.
-- **Plain names everywhere.** The sidebar reads Home, Chat, People & topics,
-  Memory spaces, Documents, Connected sources, Help and Settings, with AI
-  instructions and Code map under *Advanced*.
-- **Honest status.** "Connected" only appears after Eunomia itself has seen your
-  app sign in. Every status is written in words, not just a coloured dot, and
-  anything you can't undo asks first, naming exactly what will change.
-- **Works for everyone.** Keyboard and screen-reader friendly, large touch
-  targets, readable contrast, a menu drawer on small screens, and less motion
-  when your device asks for it.
-
-The design system (colours, type, layout and component rules) is documented in
-[DESIGN.md](DESIGN.md).
+The design system is documented in [DESIGN.md](DESIGN.md).
 
 ## Connect your AI app in four steps
 

@@ -8,7 +8,7 @@ Owned by the lead. One line per reserved migration number (docs/architecture/nex
 - States: `reserved`, `locked`, `merged`. Applied files are immutable, so a number never changes once its file is on `main`.
 - `scripts/ci/check-migrations.sh` (the `scripts` CI job) checks that the numbers in `MIGRATIONS` and `CONTROL_MIGRATIONS` are contiguous and unique, that every file is registered under its own number and name, and that a file whose number is listed here is `locked` or `merged` under the same name.
 
-Control set: 0007 indexes secret audit queries; 0008 adds admin and suspension to user records (PR #138). Next free: 0009.
+Control set: 0007 indexes secret audit queries; 0008 adds admin and suspension to user records (PR #162). Next free: 0009.
 
 | set | number | name | lane | PR | state |
 |---|---|---|---|---|---|
@@ -21,7 +21,7 @@ Control set: 0007 indexes secret audit queries; 0008 adds admin and suspension t
 | tenant | 0028 | peers | Peer vaults | 2.0.8 | merged |
 | tenant | 0029 | pocket_audio | Sources (#117) | 2.0.8 | merged |
 | tenant | 0030 | perf_indexes | Performance | 2.0.8 | merged |
-| tenant | 0031 | credential_refs | L3 Broker | broker core (#122) | locked |
-| tenant | 0032 | secret_requests | L3 Broker | B4 (#122) | locked |
-| control | 0007 | secret_audit_index | L3 Broker | #123 (#122) | locked |
-| control | 0008 | user_admin_suspend | Admin (#144) | #138 | locked |
+| tenant | 0031 | credential_refs | L3 Broker | broker core (#122), 2.0.9 | merged |
+| tenant | 0032 | secret_requests | L3 Broker | B4 (#122), 2.0.9 | merged |
+| control | 0007 | secret_audit_index | L3 Broker | #123 (#122), 2.0.9 | merged |
+| control | 0008 | user_admin_suspend | Admin (#144) | #162, 2.0.9 | merged |
