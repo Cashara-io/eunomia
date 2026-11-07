@@ -746,6 +746,12 @@ async fn the_chat_streams_the_resolved_view_with_the_show_view_result_only() {
     let (thread_id, events) = chat(&app, "Truck 7 is late. What does that affect?").await;
     let results: Vec<&Value> = events.iter().filter(|e| e["type"] == "tool_result").collect();
     assert_eq!(results.len(), 2, "{events:?}");
+    // each call and its result carry the model's id for the call, so the app pairs them by it
+    let pairs = |kind: &str| -> Vec<(String, String)> {
+        events.iter().filter(|e| e["type"] == kind).map(|e| (e["id"].as_str().unwrap_or_else(|| panic!("no id: {e}")).to_string(), e["name"].as_str().unwrap().to_string())).collect()
+    };
+    let want = vec![("c1".to_string(), "entities_search".to_string()), ("c2".to_string(), "show_view".to_string())];
+    assert_eq!((pairs("tool_call"), pairs("tool_result")), (want.clone(), want));
     let search = results.iter().find(|e| e["name"] == "entities_search").unwrap();
     assert!(search.get("view").is_none(), "only show_view carries a view: {search}");
     let shown = &results.iter().find(|e| e["name"] == "show_view").unwrap()["view"];

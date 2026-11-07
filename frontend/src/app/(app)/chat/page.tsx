@@ -29,7 +29,8 @@ const EXAMPLES = [
   "Search my synced records for anything from last week.",
 ];
 
-type ToolStep = { name: string; args: string; result?: string; running?: boolean };
+// `callId`: the model's id for a live call, which pairs it with its result
+type ToolStep = { name: string; args: string; result?: string; running?: boolean; callId?: string };
 
 // A rendered turn: one person's message, or everything the assistant did
 // between two of them (tool calls, their results, and the reply text).
@@ -519,10 +520,12 @@ export default function ChatPage() {
           reply += event.delta;
           setStreamingText(reply);
         } else if (event.type === "tool_call") {
-          steps.push({ name: event.name, args: "", running: true });
+          steps.push({ name: event.name, args: "", running: true, callId: event.id });
           setLiveSteps([...steps]);
         } else if (event.type === "tool_result") {
-          const step = steps.find((s) => s.running && s.name === event.name);
+          // by id, so two calls of one tool finishing out of order keep their own results; a server that
+          // sends no ids gets the first running call of that name
+          const step = steps.find((s) => s.running && (event.id ? s.callId === event.id : s.name === event.name));
           if (step) {
             step.running = false;
             if (event.view) step.result = JSON.stringify(event.view);

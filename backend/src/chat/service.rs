@@ -122,11 +122,18 @@ impl std::error::Error for ChatNotConfigured {}
 pub enum ChatEvent {
     #[serde(rename = "text")]
     Text { delta: String },
+    /// `id`: the model's id for the call, which its `tool_result` repeats.
     #[serde(rename = "tool_call")]
-    ToolCall { name: String },
+    ToolCall {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        id: Option<String>,
+        name: String,
+    },
     /// `view`: the resolved view, for a `show_view` call that drew one (`crate::views`).
     #[serde(rename = "tool_result")]
     ToolResult {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        id: Option<String>,
         name: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         view: Option<Value>,
@@ -615,7 +622,7 @@ async fn run_send(
 
         for tc in ordered {
             let name = tc.name.clone().unwrap_or_default();
-            let _ = tx.send(ChatEvent::ToolCall { name: name.clone() }).await;
+            let _ = tx.send(ChatEvent::ToolCall { id: tc.id.clone(), name: name.clone() }).await;
 
             let args: Value = serde_json::from_str(&tc.arguments).unwrap_or_else(|_| json!({}));
             let result = if !chat_may_call(&name) {
@@ -634,7 +641,7 @@ async fn run_send(
                 .map_err(|e| (e.code, e.message))?;
             messages.push(json!({ "role": "tool", "tool_call_id": tc.id, "content": as_untrusted_data(&result_text) }));
             let view = (name == crate::views::TOOL && result.get("error").is_none()).then_some(result);
-            let _ = tx.send(ChatEvent::ToolResult { name, view }).await;
+            let _ = tx.send(ChatEvent::ToolResult { id: tc.id, name, view }).await;
         }
     }
 
@@ -843,14 +850,14 @@ mod tests {
         let e = ChatEvent::Text { delta: "hi".to_string() };
         assert_eq!(serde_json::to_value(&e).unwrap(), json!({ "type": "text", "delta": "hi" }));
 
-        let e = ChatEvent::ToolCall { name: "search".to_string() };
-        assert_eq!(serde_json::to_value(&e).unwrap(), json!({ "type": "tool_call", "name": "search" }));
+        let e = ChatEvent::ToolCall { id: Some("call_1".to_string()), name: "search".to_string() };
+        assert_eq!(serde_json::to_value(&e).unwrap(), json!({ "type": "tool_call", "id": "call_1", "name": "search" }));
 
-        let e = ChatEvent::ToolResult { name: "search".to_string(), view: None };
+        let e = ChatEvent::ToolResult { id: None, name: "search".to_string(), view: None };
         assert_eq!(serde_json::to_value(&e).unwrap(), json!({ "type": "tool_result", "name": "search" }));
 
-        let e = ChatEvent::ToolResult { name: "show_view".to_string(), view: Some(json!({ "view": "impact" })) };
-        assert_eq!(serde_json::to_value(&e).unwrap(), json!({ "type": "tool_result", "name": "show_view", "view": { "view": "impact" } }));
+        let e = ChatEvent::ToolResult { id: Some("call_2".to_string()), name: "show_view".to_string(), view: Some(json!({ "view": "impact" })) };
+        assert_eq!(serde_json::to_value(&e).unwrap(), json!({ "type": "tool_result", "id": "call_2", "name": "show_view", "view": { "view": "impact" } }));
 
         let e = ChatEvent::Done { reply: "hi".to_string(), tool_calls_made: vec!["search".to_string()] };
         assert_eq!(
