@@ -56,6 +56,7 @@ pub enum ErrorCode {
     SecretOutboundBlocked,
     SecretOutboundFailed,
     ValidationInvalid,
+    OntologyRejected,
     DbConflict,
     DbDuplicate,
     JobNoHandler,
@@ -105,6 +106,7 @@ impl ErrorCode {
         ErrorCode::SecretOutboundBlocked,
         ErrorCode::SecretOutboundFailed,
         ErrorCode::ValidationInvalid,
+        ErrorCode::OntologyRejected,
         ErrorCode::DbConflict,
         ErrorCode::DbDuplicate,
         ErrorCode::JobNoHandler,
@@ -154,6 +156,7 @@ impl ErrorCode {
             ErrorCode::SecretOutboundBlocked => "secret.outbound_blocked",
             ErrorCode::SecretOutboundFailed => "secret.outbound_failed",
             ErrorCode::ValidationInvalid => "validation.invalid",
+            ErrorCode::OntologyRejected => "ontology.rejected",
             ErrorCode::DbConflict => "db.conflict",
             ErrorCode::DbDuplicate => "db.duplicate",
             ErrorCode::JobNoHandler => "job.no_handler",
@@ -190,7 +193,7 @@ impl ErrorCode {
             | ErrorCode::TenantNotFound
             | ErrorCode::ResourceNotFound
             | ErrorCode::DocumentNotFound => StatusCode::NOT_FOUND,
-            ErrorCode::ConnectorNotConnected | ErrorCode::ValidationInvalid => StatusCode::BAD_REQUEST,
+            ErrorCode::ConnectorNotConnected | ErrorCode::ValidationInvalid | ErrorCode::OntologyRejected => StatusCode::BAD_REQUEST,
             ErrorCode::JobNoHandler | ErrorCode::JobLeaseExpired | ErrorCode::JobPanicked | ErrorCode::Internal => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
@@ -371,7 +374,7 @@ mod tests {
                 | ErrorCode::ConnectorNotConnected | ErrorCode::SourceNotFound | ErrorCode::ExtensionNotFound | ErrorCode::ExtensionDisabled | ErrorCode::ExtensionBufferFull | ErrorCode::ToolNotFound
                 | ErrorCode::ResourceNotFound | ErrorCode::DocumentNotFound | ErrorCode::DocumentTooLarge
                 | ErrorCode::DocumentUnsupportedType | ErrorCode::DocumentStorageUnavailable | ErrorCode::SecretUnavailable | ErrorCode::SecretRequestClosed | ErrorCode::SecretHostDenied
-                | ErrorCode::SecretOutboundBlocked | ErrorCode::SecretOutboundFailed | ErrorCode::ChangesResync | ErrorCode::ValidationInvalid | ErrorCode::DbConflict
+                | ErrorCode::SecretOutboundBlocked | ErrorCode::SecretOutboundFailed | ErrorCode::ChangesResync | ErrorCode::ValidationInvalid | ErrorCode::OntologyRejected | ErrorCode::DbConflict
                 | ErrorCode::DbDuplicate | ErrorCode::JobNoHandler | ErrorCode::JobLeaseExpired | ErrorCode::JobPanicked
                 | ErrorCode::Internal => {}
             }

@@ -567,7 +567,7 @@ async fn record_failure(state: &OrgState, owner: &RecordId, name: &str, args: Va
         Err(e) => (e.code, e.source.clone().unwrap_or_else(|| e.message.clone())),
         Ok(_) => return,
     };
-    if code == ErrorCode::ValidationInvalid {
+    if matches!(code, ErrorCode::ValidationInvalid | ErrorCode::OntologyRejected) {
         return;
     }
     let status = code.default_status().as_u16();

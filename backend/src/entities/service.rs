@@ -1423,7 +1423,13 @@ pub async fn upsert_code_entity(
 
     if let Some(parent_id) = parent_id {
         let label = parent_label(kind, parent_id.table());
-        add_relation(db, owner, &entity_rid, parent_id, label, None).await?;
+        match add_relation(db, owner, &entity_rid, parent_id, label, None).await {
+            // the entity is already written; a parent link type the owners rejected is left out, not an error
+            Err(e) if e.code == crate::error::ErrorCode::OntologyRejected => tracing::info!(label, "parent link left out: its link type was rejected"),
+            res => {
+                res?;
+            }
+        }
     }
 
     Ok(entity)

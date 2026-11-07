@@ -20,7 +20,7 @@ use surrealdb::types::{RecordId, SurrealValue};
 
 use crate::authz::{self, Action};
 use crate::entities::service::{kind_table, KINDS};
-use crate::error::{AppError, AppResult};
+use crate::error::{AppError, AppResult, ErrorCode};
 use crate::pool::OrgDb;
 use crate::rid::RecordIdExt;
 use crate::store::ontology as q;
@@ -801,7 +801,7 @@ pub async fn ground_link(db: &OrgDb, vault: &RecordId, from_kind: &str, label: &
     } else {
         format!("use an approved one: {}", approved.iter().map(|l| format!("{from} {l} {to}")).collect::<Vec<_>>().join(", "))
     };
-    Err(AppError::bad_request(format!("the link type {from} {} {to} was rejected for this vault; {alternatives}", key.label.0)))
+    Err(AppError::coded(ErrorCode::OntologyRejected, format!("the link type {from} {} {to} was rejected for this vault; {alternatives}", key.label.0)))
 }
 
 /// A reviewed kind in one of the vaults `entity_types` reads.

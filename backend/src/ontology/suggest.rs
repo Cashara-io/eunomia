@@ -102,7 +102,16 @@ async fn facts_by_kind(db: &OrgDb, vault: &RecordId) -> AppResult<HashMap<String
 /// Keeps the synonyms written somewhere in `evidence` (ignoring case), so a synonym the model made up,
 /// or one from another kind's data, never lands.
 fn written_in(synonyms: Vec<String>, evidence: &str) -> Vec<String> {
-    synonyms.into_iter().filter(|s| !s.trim().is_empty() && evidence.contains(&s.trim().to_lowercase())).collect()
+    synonyms.into_iter().filter(|s| s.trim().chars().count() >= 2 && has_word(evidence, &s.trim().to_lowercase())).collect()
+}
+
+/// Whether `needle` occurs in `haystack` as whole words, so "a" never matches inside "cafe".
+fn has_word(haystack: &str, needle: &str) -> bool {
+    haystack.match_indices(needle).any(|(i, m)| {
+        let before = haystack[..i].chars().next_back().is_none_or(|c| !c.is_alphanumeric());
+        let after = haystack[i + m.len()..].chars().next().is_none_or(|c| !c.is_alphanumeric());
+        before && after
+    })
 }
 
 pub async fn suggest(db: &OrgDb, settings: &Settings, owner: &RecordId, vault_id: Option<&RecordId>) -> AppResult<SuggestOut> {
@@ -227,6 +236,13 @@ async fn ask(p: &Provider, profile: &OntologyOut, facts: &HashMap<String, Vec<St
 mod tests {
     use super::*;
     use crate::ontology::{KindItem, ViewStatus};
+
+    #[test]
+    fn a_synonym_counts_only_as_whole_words_of_two_or_more_letters() {
+        let evidence = "bluebird cafe buys a flat white; fw is the house name.";
+        let kept = written_in(vec!["a".into(), "FW".into(), "white".into(), "hit".into(), "Flat White".into()], evidence);
+        assert_eq!(kept, ["FW", "white", "Flat White"]);
+    }
 
     #[test]
     fn a_name_in_the_profile_cannot_close_the_block() {

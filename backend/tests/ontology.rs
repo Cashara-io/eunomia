@@ -957,6 +957,11 @@ async fn the_newest_value_wins_on_read_and_the_older_ones_stay() {
     let node = hood["nodes"].as_array().unwrap().iter().find(|n| n["id"] == latte.as_str()).unwrap();
     assert_eq!(node["properties"][0]["value"].as_f64(), Some(5.0), "{hood}");
 
+    // a future as_of would pin a value no later write could replace, so it is refused and stores nothing
+    let next_year = (chrono::Utc::now() + chrono::Duration::days(365)).format("%Y-%m-%d").to_string();
+    let refused = set(0.0, &next_year).await;
+    assert!(err(&refused).contains("as_of is in the future"), "{refused}");
+
     let mut res = app.db().await.test_raw().query("SELECT VALUE value_num FROM entity_property ORDER BY as_of").await.unwrap();
     let history: Vec<f64> = res.take(0).unwrap();
     assert_eq!(history, [4.0, 4.5, 5.0]);
@@ -1014,6 +1019,7 @@ async fn a_rejected_link_type_refuses_the_relation_and_names_the_approved_ones()
 
     let refused = app.tool("code_relate", json!({"from_id": ada, "to_id": orders, "label": "owns"})).await;
     assert!(err(&refused).contains("person owns db was rejected") && err(&refused).contains("person maintains db"), "{refused}");
+    assert_eq!(refused["code"], "ontology.rejected", "{refused}");
     let (status, body) = app.http("POST", &format!("/api/entities/{ada}/relations"), Some(json!({"to_id": orders, "label": "owns"})), true).await;
     assert_eq!(status, 400, "{body}");
 
@@ -1028,8 +1034,10 @@ async fn a_rejected_link_type_refuses_the_relation_and_names_the_approved_ones()
     let repo = ok(app.tool("code_entity_upsert", json!({"kind": "repository", "name": "eunomia"})).await)["id"].as_str().unwrap().to_string();
     let body = json!({"from_kind": "file", "label": "part_of", "to_kind": "repository", "decision": {"action": "reject"}});
     assert_eq!(app.http_session("POST", &format!("/api/vaults/{vault}/ontology/links/decide"), Some(body)).await.0, 200);
-    let refused = app.tool("code_entity_upsert", json!({"kind": "file", "name": "src/main.rs", "parent_id": repo})).await;
-    assert!(err(&refused).contains("file part_of repository was rejected"), "{refused}");
+    // the file is still written; only its rejected parent link is left out
+    let file = ok(app.tool("code_entity_upsert", json!({"kind": "file", "name": "src/main.rs", "parent_id": repo})).await);
+    let got = ok(app.tool("entities_get", json!({"id": file["id"]})).await);
+    assert_eq!(got["relations"].as_array().map(Vec::len), Some(0), "{got}");
 }
 
 #[tokio::test]
@@ -1050,7 +1058,7 @@ async fn suggest_proposes_properties_and_only_synonyms_written_in_each_kinds_dat
     let mock = serve(vec![route("POST", "/chat/completions", completion)]).await;
     let settings = Settings { openai_base_url: mock.base.clone(), openai_api_key: Some("sk-test".into()), openai_chat_model: "test-model".into(), ..test_settings() };
     let app = TestApp::with_settings(settings).await;
-    ok(app.tool("memory_write", json!({"subject_name": "Flat White", "subject_kind": "product", "text": "Flat White, also called FW, costs 4.50 AUD"})).await);
+    ok(app.tool("memory_write", json!({"subject_name": "Flat White", "subject_kind": "product", "text": "Flat White, also called FW, has a cost of 4.50 AUD"})).await);
     write(&app, "Bean Bar", "cafe").await;
 
     let out = ok(app.tool("ontology_suggest", json!({})).await);

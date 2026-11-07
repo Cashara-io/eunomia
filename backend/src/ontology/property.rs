@@ -82,6 +82,8 @@ const MAX_UNIT: usize = 32;
 const MAX_ENUM_VALUES: usize = 100;
 const MAX_SYNONYMS: usize = 20;
 const MAX_VALUE_TEXT: usize = 2000;
+/// How far past now an `as_of` may be, for clock skew between the agent and the server.
+const AS_OF_LEEWAY_MINUTES: i64 = 5;
 
 /// A property name (`price`, `unit_price`): a lowercase letter, then lowercase letters, digits or `_`,
 /// at most 64. One spelling per property, so an agent's write finds the row an owner approved.
@@ -677,6 +679,11 @@ pub async fn set_property(db: &OrgDb, owner: &RecordId, input: SetProperty<'_>) 
         Some(s) => crate::cache::search::parse_datetime("as_of", s)?,
         None => chrono::Utc::now(),
     };
+    // the newest as_of is the current value and single values cannot be deleted, so a future date
+    // would pin a value that no later write could replace
+    if as_of > chrono::Utc::now() + chrono::Duration::minutes(AS_OF_LEEWAY_MINUTES) {
+        return Err(AppError::bad_request("as_of is in the future: give when the value became true, today or earlier"));
+    }
     let source = input.source_record_id.map(|r| cache_record_rid(owner, r));
     let written: Vec<ValueRow> = q::SET_VALUE
         .on(db)
