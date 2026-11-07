@@ -425,6 +425,12 @@ async fn call_tool(state: &AppState, user: &User, id: Value, params: &Value) -> 
     if name == "secret_request" && !is_error && value.get("status").and_then(Value::as_str) == Some("pending") && session_has_url_elicitation() {
         return url_elicitation_required(id, &value);
     }
+    // a view reads as its plain text in a client that shows only text (Claude Code); a host that draws
+    // structured results gets the resolved view
+    if name == crate::views::TOOL && !is_error {
+        let text = value["text"].as_str().unwrap_or_default().to_string();
+        return result_response(id, json!({ "content": [{ "type": "text", "text": text }], "structuredContent": value, "isError": false }));
+    }
     // compact, not pretty: the text goes into the model's context, and indentation was a quarter to
     // a third of every result's tokens (and bytes on the wire) with nothing for the model to read
     let text = value.to_string();

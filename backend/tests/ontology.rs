@@ -558,3 +558,32 @@ async fn a_view_cannot_name_an_entity_the_caller_cannot_read() {
         assert!(!out.to_string().contains("Bob Private Depot"), "{out}");
     }
 }
+
+#[tokio::test]
+async fn over_mcp_a_view_is_its_text_plus_the_structured_view() {
+    let app = TestApp::new().await;
+    let ids = logistics(&app).await;
+    let rel = edges_by_label(&app, &ids["Truck 7"]).await;
+    let mcp = |name: &str, args: Value| json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": name, "arguments": args}});
+
+    let args = impact(&ids["Truck 7"], json!([{"entity_id": ids["Shipment 88"], "path": [rel["carries"]], "why": "It is on the truck."}]));
+    let (status, rpc) = app.http("POST", "/mcp", Some(mcp("show_view", args)), true).await;
+    assert_eq!(status, 200, "{rpc}");
+    let result = &rpc["result"];
+    assert_eq!(result["isError"], false, "{rpc}");
+    let text = result["content"][0]["text"].as_str().unwrap();
+    assert_eq!(text, "Truck 7 is two hours late.\nStarting from Truck 7 (truck).\n1. Shipment 88 (shipment), via Truck 7 carries Shipment 88. It is on the truck.");
+    let view = &result["structuredContent"];
+    assert_eq!((view["view"].as_str(), view["affected"][0]["entity"]["name"].as_str()), (Some("impact"), Some("Shipment 88")), "{view}");
+    assert_eq!(view["text"], text);
+
+    // a refused view is an ordinary tool error; other tools keep their JSON text and no structure
+    let (_, rpc) = app.http("POST", "/mcp", Some(mcp("show_view", impact("entity:invented", json!([])))), true).await;
+    assert_eq!(rpc["result"]["isError"], true, "{rpc}");
+    assert!(rpc["result"]["content"][0]["text"].as_str().unwrap().contains("entity:invented"), "{rpc}");
+    assert!(rpc["result"].get("structuredContent").is_none(), "{rpc}");
+    let (_, rpc) = app.http("POST", "/mcp", Some(mcp("entities_neighbourhood", json!({"entity_id": ids["Truck 7"]}))), true).await;
+    let hood: Value = serde_json::from_str(rpc["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(hood["nodes"][0]["name"], "Truck 7");
+    assert!(rpc["result"].get("structuredContent").is_none(), "{rpc}");
+}
