@@ -1786,7 +1786,9 @@ async fn australian_money_percents_and_day_first_dates_import_and_a_repeated_nam
     let csv = "product,price AUD,discount,listed\n\
 Arabica beans 1kg,\"$1,200.50\",10%,25/12/2026\n\
 Paper cups 8oz,A$0.12,2.5 %,01/02/2026\n\
-Arabica beans 1kg,$9.99,0%,02/02/2026\n";
+Arabica beans 1kg,$9.99,0%,02/02/2026\n\
+Teapot,US$5.00,abc%,03/02/2026\n\
+Kettle,\"1.234,56\",5%,04/02/2026\n";
     let doc = upload_csv(&app, "au-prices.csv", csv).await;
     let vault = personal(&app).await;
     let source = |path: &str| json!([{"source": "document", "record_type": doc, "path": path}]);
@@ -1809,9 +1811,14 @@ Arabica beans 1kg,$9.99,0%,02/02/2026\n";
     }
     let out = ok(import(&app, &doc).await);
     // the third row repeats the first's name, so it is reported and left out, never merged silently
-    assert_eq!((out["created"].as_i64(), out["bad_count"].as_i64(), out["values"].as_i64()), (Some(2), Some(1), Some(6)), "{out}");
-    assert_eq!((out["bad"][0]["line"].as_i64(), out["bad"][0]["column"].as_str()), (Some(4), Some("product")), "{out}");
+    // a US dollar amount into an AUD price, a decimal comma, and a non-number percent are refused as
+    // written, never stored as another number
+    let bad: Vec<(i64, Option<&str>)> = out["bad"].as_array().unwrap().iter().map(|b| (b["line"].as_i64().unwrap(), b["column"].as_str())).collect();
+    assert_eq!(bad, [(4, Some("product")), (5, Some("price AUD")), (5, Some("discount")), (6, Some("price AUD"))], "{out}");
     assert!(out["bad"][0]["error"].as_str().unwrap().contains("repeats the name"), "{out}");
+    assert!(out["bad"][1]["error"].as_str().unwrap().contains("US$5.00"), "the cell as written: {out}");
+    assert!(out["bad"][2]["error"].as_str().unwrap().contains("abc%"), "the cell as written: {out}");
+    assert_eq!((out["created"].as_i64(), out["values"].as_i64()), (Some(4), Some(9)), "{out}");
 
     let value = |got: &Value, p: &str| got["properties"].as_array().unwrap().iter().find(|v| v["property"] == p).unwrap()["value"].clone();
     let items = supply_items(&app).await;
@@ -1830,9 +1837,12 @@ async fn a_column_two_properties_claim_is_skipped_until_the_owner_picks() {
     let doc = upload_csv(&app, "price-list.csv", PRICE_LIST).await;
     let vault = approved_price_list(&app, &doc).await;
     approve_price_list(&app, &vault).await;
-    // an agent maps the price column onto a second approved property too
+    // an agent maps the price column onto a second property too: while it is only proposed, the
+    // approved mapping still holds
     let source = json!([{"source": "document", "record_type": doc, "path": "price AUD"}]);
     ok(app.tool("ontology_propose", json!({"properties": [{"kind": "supply_item", "name": "list_price", "datatype": "money", "unit": "AUD", "source_map": source}]})).await);
+    let out = ok(import(&app, &doc).await);
+    assert!(out["columns"].as_array().unwrap().iter().any(|c| c["column"] == "price AUD" && c["property"] == "price" && c["skipped"].is_null()), "{out}");
     assert_eq!(decide_property(&app, &vault, "supply_item", "list_price", json!({"action": "approve"})).await.0, 200);
     let out = ok(import(&app, &doc).await);
     let price = out["columns"].as_array().unwrap().iter().find(|c| c["column"] == "price AUD").unwrap();

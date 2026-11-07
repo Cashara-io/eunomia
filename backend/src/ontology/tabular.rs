@@ -175,10 +175,12 @@ async fn plan(db: &OrgDb, vault: &RecordId, document_id: &str, columns: &[String
     let plans: Vec<ColumnPlan> = columns
         .iter()
         .map(|c| {
-            let mut fed = props.iter().filter(|p| fed_by(p, c));
-            // a column two properties claim has no default: the import asks for a column_map
-            let p = match (fed.next(), fed.next()) {
-                (Some(p), None) => Some(p),
+            let fed: Vec<_> = props.iter().filter(|p| fed_by(p, c)).collect();
+            let approved: Vec<_> = fed.iter().filter(|p| p.status == Status::Approved).collect();
+            // a column two approved properties claim has no default: the import asks for a column_map
+            let p = match (approved.as_slice(), fed.as_slice()) {
+                ([one], _) => Some(**one),
+                ([], [one]) => Some(*one),
                 _ => None,
             };
             ColumnPlan { column: c.clone(), property: p.map(|p| p.name.clone()), status: p.map(|p| p.status) }
@@ -294,8 +296,12 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
         let wanted = match &args.column_map {
             Some(map) => map.get(col).cloned(),
             None => {
-                let claimed: Vec<&str> =
-                    rows.iter().filter(|r| r.source_map().iter().any(|f| f.source == SOURCE && f.record_type == doc_id && &f.path == col)).map(|r| r.name.as_str()).collect();
+                let claimed: Vec<&str> = rows
+                    .iter()
+                    .filter(|r| r.status == Status::Approved.as_str())
+                    .filter(|r| r.source_map().iter().any(|f| f.source == SOURCE && f.record_type == doc_id && &f.path == col))
+                    .map(|r| r.name.as_str())
+                    .collect();
                 // two properties claiming one column (an agent can add a mapping to an approved one) is
                 // the owner's call, never a silent pick
                 if claimed.len() > 1 {
@@ -368,7 +374,7 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
             if cell.is_empty() {
                 continue;
             }
-            let cell = local_cell(*datatype, cell, notations.get(i).copied());
+            let cell = local_cell(*datatype, cell, row.unit.as_deref(), notations.get(i).copied());
             let stored = match property::parse_value(*datatype, &row.name, row.enum_values.as_deref(), &json!(cell)) {
                 Ok(s) => s,
                 Err(e) => {
@@ -404,19 +410,78 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
 
 /// A cell as a spreadsheet writes it, in the form `parse_value` takes: `$1,200.50` or `A$4` for money,
 /// `10%` for a percent, and a date in the column's own notation (`25/12/2026`) as an ISO date. Anything
-/// that does not fit is passed on unchanged, so its error names the cell as written.
-fn local_cell(datatype: Datatype, cell: &str, notation: Option<&str>) -> String {
+/// that does not fit, or would change meaning, is passed on unchanged, so its error names the cell as
+/// written.
+fn local_cell(datatype: Datatype, cell: &str, unit: Option<&str>, notation: Option<&str>) -> String {
     match datatype {
-        Datatype::Money => {
-            let plain = cell.replace(',', "");
-            super::profile::money(&plain).or_else(|| super::profile::plain_number(plain.trim())).map_or_else(|| cell.to_string(), |n| n.to_string())
-        }
-        Datatype::Percent => cell.strip_suffix('%').map_or_else(|| cell.to_string(), |n| n.trim().to_string()),
+        Datatype::Money => local_money(cell, unit).unwrap_or_else(|| cell.to_string()),
+        Datatype::Percent => cell
+            .strip_suffix('%')
+            .map(str::trim)
+            .filter(|n| super::profile::plain_number(n).is_some())
+            .map_or_else(|| cell.to_string(), str::to_string),
         Datatype::Date => notation
             .and_then(|f| chrono::NaiveDate::parse_from_str(cell, f).ok())
             .map_or_else(|| cell.to_string(), |d| d.format("%Y-%m-%d").to_string()),
         _ => cell.to_string(),
     }
+}
+
+/// The amount in a money cell, when reading it keeps its meaning: a currency mark or code must match
+/// the property's unit (a bare `$` is taken as that unit), and a comma must be a thousands separator.
+fn local_money(cell: &str, unit: Option<&str>) -> Option<String> {
+    let t = cell.trim();
+    let code = |c: &str| c.len() == 3 && c.chars().all(|ch| ch.is_ascii_uppercase());
+    let (amount, currency) = if let Some(r) = t.strip_prefix("A$") {
+        (r, Some("AUD"))
+    } else if let Some(r) = t.strip_prefix("US$") {
+        (r, Some("USD"))
+    } else if let Some(r) = t.strip_prefix('$') {
+        (r, None)
+    } else if let Some(r) = t.strip_prefix('€') {
+        (r, Some("EUR"))
+    } else if let Some(r) = t.strip_prefix('£') {
+        (r, Some("GBP"))
+    } else if let Some((a, b)) = t.split_once(' ').filter(|(a, b)| code(a) || code(b)) {
+        if code(a) { (b, Some(a)) } else { (a, Some(b)) }
+    } else {
+        (t, None)
+    };
+    if let (Some(c), Some(u)) = (currency, unit)
+        && !c.eq_ignore_ascii_case(u.trim())
+    {
+        return None;
+    }
+    let plain = without_thousands(amount.trim())?;
+    super::profile::plain_number(&plain).map(|n| n.to_string())
+}
+
+/// `1,200.50` as `1200.50`. A comma counts only between groups of exactly three digits, so `1,5` or
+/// `1.234,56` (a decimal comma) is refused rather than read as another number.
+fn without_thousands(s: &str) -> Option<String> {
+    if !s.contains(',') {
+        return Some(s.to_string());
+    }
+    let (int, frac) = match s.split_once('.') {
+        Some((i, f)) => (i, Some(f)),
+        None => (s, None),
+    };
+    let mut groups = int.split(',');
+    let first = groups.next()?;
+    let digits = |g: &str| g.chars().all(|c| c.is_ascii_digit());
+    if first.is_empty() || first.len() > 3 || !digits(first.trim_start_matches('-')) {
+        return None;
+    }
+    let rest: Vec<&str> = groups.collect();
+    if rest.iter().any(|g| g.len() != 3 || !digits(g)) || frac.is_some_and(|f| f.contains(',')) {
+        return None;
+    }
+    let mut out = int.replace(',', "");
+    if let Some(f) = frac {
+        out.push('.');
+        out.push_str(f);
+    }
+    Some(out)
 }
 
 fn bad(out: &mut ImportOut, line: u64, column: Option<&str>, error: String) {
