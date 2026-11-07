@@ -44,10 +44,12 @@ pub enum Action {
     Merge,
     Leave,
     SetRole,
+    /// Approve or reject the vault's ontology proposals (`ontology::decide_kind`).
+    DecideOntology,
 }
 
 impl Action {
-    pub const ALL: [Action; 11] = [
+    pub const ALL: [Action; 12] = [
         Action::ReadMemories,
         Action::WriteMemories,
         Action::ListMembers,
@@ -59,6 +61,7 @@ impl Action {
         Action::Merge,
         Action::Leave,
         Action::SetRole,
+        Action::DecideOntology,
     ];
 
     /// The token scope this action needs.
@@ -73,7 +76,8 @@ impl Action {
             | Action::Clone
             | Action::Merge
             | Action::Leave
-            | Action::SetRole => scopes::VAULTS_ADMIN,
+            | Action::SetRole
+            | Action::DecideOntology => scopes::VAULTS_ADMIN,
         }
     }
 }
@@ -88,7 +92,7 @@ pub fn permits(role: Role, action: Action) -> bool {
         | Action::Clone
         | Action::Merge
         | Action::Leave => true,
-        Action::ManageMembers | Action::Invite | Action::Rename | Action::Delete | Action::SetRole => role == Role::Owner,
+        Action::ManageMembers | Action::Invite | Action::Rename | Action::Delete | Action::SetRole | Action::DecideOntology => role == Role::Owner,
     }
 }
 
@@ -311,6 +315,7 @@ mod tests {
             (Merge, true, true),
             (Leave, true, true),
             (SetRole, true, false),
+            (DecideOntology, true, false),
         ];
         assert_eq!(table.len(), Action::ALL.len(), "every action is in the table");
         for (action, owner, member) in table {

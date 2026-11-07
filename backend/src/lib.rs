@@ -24,6 +24,7 @@ pub mod migrate;
 pub mod models_user;
 pub mod oauth;
 pub mod oidc;
+pub mod ontology;
 pub mod openapi;
 pub mod peers;
 pub mod pool;
@@ -84,6 +85,7 @@ pub fn app_with(state: AppState, limits: ratelimit::RateConfig) -> axum::Router 
         .merge(routers::update::router())
         .merge(routers::https::router())
         .merge(routers::vaults::router())
+        .merge(routers::ontology::router())
         .merge(routers::peers::router())
         .merge(routers::changes::router())
         .merge(routers::connectors::router())

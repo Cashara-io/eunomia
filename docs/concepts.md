@@ -102,6 +102,17 @@ kind), vault clone and merge, export. Kinds belong to their vault: another
 vault, and anyone who is not a member, never sees them. The Entities page
 shows a filter for each custom kind in the vault on screen.
 
+### The project ontology
+
+A vault's owners can review its kinds and link types on the Memory spaces
+page (Kinds and links). Each one is `observed` (used, never reviewed),
+`proposed`, `approved` or `rejected`. Agents read it with `ontology_get`,
+propose with `ontology_propose`, and `ontology_suggest` has the server's
+model propose (or hands the agent the profile when there is no model). Only
+an owner in the app decides. A write under a rejected kind goes to the kind
+it was merged into (the result's `kind_mapped` says so), or is refused when
+it has none.
+
 ## Synced records
 
 Connectors (Up Bank, GitHub, Gmail, …) sync raw records into a cache. With

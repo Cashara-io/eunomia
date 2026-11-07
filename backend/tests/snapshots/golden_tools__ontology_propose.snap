@@ -1,0 +1,21 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "kinds": [
+    {
+      "kind": "db",
+      "status": "proposed",
+      "merge_into": null
+    }
+  ],
+  "links": [
+    {
+      "from_kind": "person",
+      "label": "owns",
+      "to_kind": "db",
+      "status": "proposed"
+    }
+  ]
+}

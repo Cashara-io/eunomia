@@ -204,6 +204,25 @@ Any restore winds a vault's log back to what the backup held, so a client's curs
 restored log's last seq. The server answers such a cursor with `changes.resync` (see
 [retention](#retention)), and `create-eunomia watch` starts again from the restored log by itself.
 
-## Coming next
+## Project ontology
 
-- A project ontology: the entity kinds the vault uses.
+Each vault has an ontology: the entity kinds it uses and the link types between them (from kind,
+relation label, to kind). It follows NVIDIA Auto-Ontology's four steps.
+
+- Discover. `ontology_get` (and `GET /api/vaults/{vault_id}/ontology`) shows every kind and link type
+  the vault's entities and relations use, with counts and sample names, merged with the reviewed
+  ones. `ontology_suggest` asks the server's model for descriptions, kinds to merge and link types
+  worth keeping. Without a model it returns the profile (`mode: "profile_only"`) and the agent
+  proposes with `ontology_propose`, like `reflect` without a model.
+- Review. Proposals wait as `proposed` until a vault owner approves or rejects them on the Memory
+  spaces page (Kinds and links). Deciding is REST only and needs a browser session, so an agent
+  cannot approve its own proposal. A built-in kind can be described and approved, never rejected.
+- Ground. A write under a kind rejected with a merge target lands under the target, and the result
+  says so in `kind_mapped`. A kind rejected without one is refused, and the error names the kinds to
+  use. A proposal never changes an approved or rejected row, so running suggest again is safe.
+- Expose. Agents read the ontology over MCP, and `entity_types` carries each custom kind's status,
+  description and merge target.
+
+The registry lives in two tables per org database, `ontology_kind` and `ontology_link` (tenant
+migration 0033). A kind or link with no row is shown as `observed`. Vault copies, merges and peer
+sync do not carry the registry yet.

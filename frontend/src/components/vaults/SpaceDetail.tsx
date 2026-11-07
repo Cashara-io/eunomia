@@ -1,7 +1,7 @@
 "use client";
 
-// Everything you can do with one memory space, in plain sections: who is in it, sharing it with
-// another Eunomia (folded away), then "Hand over this space" and "Leave or delete" (copy, leave,
+// Everything you can do with one memory space, in plain sections: who is in it, its kinds and links
+// and sharing it with another Eunomia (both folded away), then "Hand over this space" and "Leave or delete" (copy, leave,
 // delete) at the very bottom.
 import { useEffect, useRef, useState } from "react";
 import { Copy, LogOut, Pencil, Trash2, UserPlus } from "lucide-react";
@@ -12,6 +12,7 @@ import SyncMark from "@/components/bits/SyncMark";
 import Tooltip from "@/components/bits/Tooltip";
 import TransferOwnershipPanel from "@/components/live/TransferOwnershipPanel";
 import PeerSharing from "@/components/PeerSharing";
+import OntologySection from "./OntologySection";
 import type { Vault, VaultRole } from "@/lib/types";
 import {
   useCloneVault,
@@ -397,6 +398,8 @@ export default function SpaceDetail({
           {membersQuery.isError && <ErrorLine error={failure(membersQuery.error, "Could not load the people in this space.")} />}
         </DetailSection>
       )}
+
+      <OntologySection vault={vault} />
 
       <PeerSharing vault={vault} />
 
