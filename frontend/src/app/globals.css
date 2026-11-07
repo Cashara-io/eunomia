@@ -408,7 +408,7 @@ tr.frame-selected::after {
 }
 /* A field that wraps its own input (the chat composer, the search box) only
    rings when a keyboard put focus there. */
-.field:focus-within:not(:has(:focus-visible)) {
+.field:focus-within:not(:focus-visible):not(:has(:focus-visible)) {
   outline: none;
 }
 .field[aria-invalid="true"] {
