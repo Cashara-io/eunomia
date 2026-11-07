@@ -583,6 +583,33 @@ async fn a_view_cannot_name_an_entity_the_caller_cannot_read() {
 }
 
 #[tokio::test]
+async fn a_view_cannot_show_a_relation_across_vaults_even_when_both_ends_are_readable() {
+    let app = TestApp::new().await;
+    let ids = logistics(&app).await;
+    ok(app.tool("vault_create", json!({"name": "Team", "kind": "org"})).await);
+    let depot = ok(app.tool("memory_write", json!({"subject_name": "Depot", "subject_kind": "location", "text": "Depot is shared", "vault_id": "Team"})).await);
+    let depot_id = depot["entity"]["id"].as_str().unwrap().to_string();
+    // an edge from before relations were confined to one vault
+    let mut res = app
+        .db()
+        .await
+        .test_raw()
+        .query("LET $r = RELATE $a->relates_to->$b SET label = 'parks_at'; RETURN <string> $r[0].id;")
+        .bind(("a", rid::parse(&ids["Truck 7"]).unwrap()))
+        .bind(("b", rid::parse(&depot_id).unwrap()))
+        .await
+        .unwrap();
+    let parks_at: String = res.take::<Option<String>>(1).unwrap().unwrap();
+    let both = ok(app.tool("show_view", json!({"view": "subgraph", "title": "x", "entity_ids": [ids["Truck 7"], depot_id]})).await);
+    assert_eq!(both["entities"].as_array().unwrap().len(), 2, "both ends are readable: {both}");
+
+    let sub = app.tool("show_view", json!({"view": "subgraph", "title": "x", "entity_ids": [ids["Truck 7"]], "relation_ids": [parks_at]})).await;
+    refused(&sub, &format!("unknown relation {parks_at}"));
+    let out = app.tool("show_view", impact(&ids["Truck 7"], json!([{"entity_id": depot_id, "path": [parks_at], "why": "x"}]))).await;
+    refused(&out, &format!("unknown relation {parks_at}"));
+}
+
+#[tokio::test]
 async fn over_mcp_a_view_is_its_text_plus_the_structured_view() {
     let app = TestApp::new().await;
     let ids = logistics(&app).await;

@@ -190,7 +190,8 @@ struct Resolved {
 
 impl Resolved {
     /// Loads every id in two round trips plus one access check per vault. A relation is readable when
-    /// both its ends are. Ids that do not parse fail here; ids that are missing or unreadable fail when
+    /// both its ends are and share a vault: one from before relations were confined to a vault stays
+    /// hidden, as in `entities_get` and the neighbourhood. Ids that do not parse fail here; ids that are missing or unreadable fail when
     /// the view looks them up, so the error names the first bad one in the view's order.
     async fn load<'a>(
         db: &OrgDb,
@@ -227,7 +228,7 @@ impl Resolved {
             .filter_map(|(id, e)| {
                 let from = entities.get(&e.from.to_string())?.clone();
                 let to = entities.get(&e.to.to_string())?.clone();
-                Some((id, (e, from, to)))
+                (from.vault == to.vault).then_some((id, (e, from, to)))
             })
             .collect();
         Ok(Resolved { entities, relations })
