@@ -4,16 +4,18 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   decideVaultOntologyKind,
   decideVaultOntologyLink,
+  decideVaultOntologyProperty,
   getVaultOntology,
   suggestVaultOntology,
   type KindDecision,
   type LinkDecision,
   type OntologyOut,
+  type PropertyDecision,
 } from "@/lib/gen";
 import { call } from "./client";
 import { entityKeys } from "./entities";
 
-export type { KindItem, LinkItem, OntologyOut, SuggestOut, ViewStatus } from "@/lib/gen";
+export type { KindItem, LinkItem, OntologyOut, PropertyItem, SuggestOut, ViewStatus } from "@/lib/gen";
 
 export const ontologyKeys = {
   all: ["ontology"] as const,
@@ -48,6 +50,11 @@ export const useDecideKind = (vaultId: string) =>
 export const useDecideLink = (vaultId: string) =>
   useDecision(vaultId, (v: { from_kind: string; label: string; to_kind: string; decision: LinkDecision }) =>
     call(decideVaultOntologyLink({ path: { vault_id: vaultId }, body: v })),
+  );
+
+export const useDecideProperty = (vaultId: string) =>
+  useDecision(vaultId, (v: { kind: string; name: string; decision: PropertyDecision }) =>
+    call(decideVaultOntologyProperty({ path: { vault_id: vaultId }, body: v })),
   );
 
 export const useSuggestOntology = (vaultId: string) => {

@@ -2,7 +2,7 @@
 
 // A space's kinds and links: what its memories are about (person, customer, decision, ...) and how
 // they connect (works at, owns, ...). AI apps and the server's model only suggest; an owner decides.
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ArrowsMergeIcon, CheckIcon, PencilSimpleIcon, SparkleIcon, XIcon } from "@phosphor-icons/react/ssr";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
@@ -11,12 +11,15 @@ import StatusLabel, { type StatusTone } from "@/components/ui/StatusLabel";
 import {
   useDecideKind,
   useDecideLink,
+  useDecideProperty,
   useOntology,
   useSuggestOntology,
   type KindItem,
   type LinkItem,
+  type PropertyItem,
   type ViewStatus,
 } from "@/lib/queries/ontology";
+import type { PropertyDecision } from "@/lib/gen";
 import type { Vault } from "@/lib/types";
 import { Disclosure } from "./bits";
 
@@ -35,6 +38,7 @@ export default function OntologySection({ vault }: { vault: Vault }) {
   const suggest = useSuggestOntology(vault.id);
   const decideKind = useDecideKind(vault.id);
   const decideLink = useDecideLink(vault.id);
+  const decideProperty = useDecideProperty(vault.id);
   const [error, setError] = useState<Failure | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const data = query.data;
@@ -56,7 +60,7 @@ export default function OntologySection({ vault }: { vault: Vault }) {
     await run(async () => {
       const out = await suggest.mutateAsync();
       if (out.mode === "model") {
-        const n = out.proposed.kinds.filter((k) => k.status === "proposed").length + out.proposed.links.filter((l) => l.status === "proposed").length;
+        const n = [...out.proposed.kinds, ...out.proposed.links, ...out.proposed.properties].filter((x) => x.status === "proposed").length;
         setNote(n === 0 ? "Nothing new to suggest." : `${n} ${n === 1 ? "suggestion" : "suggestions"} to review below.`);
       } else {
         setNote(
@@ -74,7 +78,9 @@ export default function OntologySection({ vault }: { vault: Vault }) {
       .filter((k) => k.kind !== self && k.status !== "rejected" && (k.built_in || k.status === "approved" || k.entities > 0))
       .map((k) => ({ value: k.kind, label: words(k.kind) }));
 
-  const proposed = (data?.kinds ?? []).filter((k) => k.status === "proposed").length + (data?.links ?? []).filter((l) => l.status === "proposed").length;
+  const proposed = [...(data?.kinds ?? []), ...(data?.links ?? []), ...(data?.kinds ?? []).flatMap((k) => k.properties)].filter(
+    (x) => x.status === "proposed",
+  ).length;
 
   return (
     <Disclosure
@@ -105,7 +111,7 @@ export default function OntologySection({ vault }: { vault: Vault }) {
       </h4>
       <ul className="hairline-rows" aria-label="Kinds in this space">
         {!data && !query.isError && [0, 1, 2].map((i) => <SkeletonRow key={i} />)}
-        {data?.kinds.filter((k) => !(k.built_in && k.entities === 0 && k.status === "observed")).map((k) => (
+        {data?.kinds.filter((k) => !(k.built_in && k.entities === 0 && k.status === "observed" && k.properties.length === 0)).map((k) => (
           <KindRow
             key={k.kind}
             item={k}
@@ -113,7 +119,22 @@ export default function OntologySection({ vault }: { vault: Vault }) {
             busy={decideKind.isPending}
             targets={targets(k.kind)}
             onDecide={(decision, fallback) => run(() => decideKind.mutateAsync({ kind: k.kind, decision }), fallback)}
-          />
+          >
+            {k.properties.length > 0 && (
+              <ul className="flex flex-col gap-1 pl-3 border-l" style={{ borderColor: "var(--border)" }} aria-label={`Properties of ${words(k.kind)}`}>
+                {k.properties.map((p) => (
+                  <PropertyRow
+                    key={p.name}
+                    item={p}
+                    isOwner={isOwner}
+                    busy={decideProperty.isPending}
+                    targets={k.properties.filter((o) => o.name !== p.name && o.status !== "rejected").map((o) => ({ value: o.name, label: words(o.name) }))}
+                    onDecide={(decision, fallback) => run(() => decideProperty.mutateAsync({ kind: k.kind, name: p.name, decision }), fallback)}
+                  />
+                ))}
+              </ul>
+            )}
+          </KindRow>
         ))}
       </ul>
 
@@ -160,12 +181,14 @@ function KindRow({
   busy,
   targets,
   onDecide,
+  children,
 }: {
   item: KindItem;
   isOwner: boolean;
   busy: boolean;
   targets: { value: string; label: string }[];
   onDecide: Decide<{ action: "approve" } | { action: "reject"; merge_into?: string | null } | { action: "describe"; description: string }>;
+  children?: ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
   const count = `${item.entities} ${item.entities === 1 ? "entry" : "entries"}`;
@@ -233,6 +256,113 @@ function KindRow({
                 disabled={busy}
                 options={targets}
                 onChange={(to) => onDecide({ action: "reject", merge_into: to }, "Could not merge that kind.")}
+              />
+            </span>
+          )}
+          <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => setEditing(true)}>
+            <Duo icon={PencilSimpleIcon} tone="none" />
+            {item.description ? "Edit description" : "Add description"}
+          </button>
+        </div>
+      )}
+      {children}
+    </li>
+  );
+}
+
+const DATATYPE: Record<PropertyItem["datatype"], string> = {
+  text: "text",
+  number: "number",
+  integer: "whole number",
+  money: "money",
+  percent: "percent",
+  bool: "yes or no",
+  date: "date",
+  datetime: "date and time",
+  enum: "one of a list",
+};
+
+/** One typed property of a kind. Only an approved one takes values. */
+function PropertyRow({
+  item,
+  isOwner,
+  busy,
+  targets,
+  onDecide,
+}: {
+  item: PropertyItem;
+  isOwner: boolean;
+  busy: boolean;
+  targets: { value: string; label: string }[];
+  onDecide: Decide<PropertyDecision>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const type = [DATATYPE[item.datatype], item.unit].filter(Boolean).join(" · ");
+  const values = `${item.values} ${item.values === 1 ? "value" : "values"}`;
+  const suggestedMerge = item.status === "proposed" && item.merge_into ? item.merge_into : null;
+  const detail =
+    item.status === "rejected"
+      ? item.merge_into
+        ? `New values go to ${words(item.merge_into)}.`
+        : "New values are refused."
+      : suggestedMerge
+        ? `Suggested: merge into ${words(suggestedMerge)}.`
+        : null;
+  return (
+    <li className="flex flex-col gap-1 py-1.5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className="flex-1 min-w-[160px] flex flex-wrap items-baseline gap-x-2">
+          <span className="text-[13px] font-medium">{words(item.name)}</span>
+          <span className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+            {type} · {values}
+          </span>
+        </span>
+        <StatusLabel tone={STATUS[item.status].tone}>{STATUS[item.status].label}</StatusLabel>
+      </div>
+      <Description
+        text={item.description}
+        samples={item.samples}
+        editing={editing}
+        busy={busy}
+        onSave={(description) => onDecide({ action: "describe", description }, "Could not save that description.").then((ok) => ok && setEditing(false))}
+        onCancel={() => setEditing(false)}
+      />
+      {detail && (
+        <p className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+          {detail}
+          {item.reason ? ` ${item.reason}` : ""}
+        </p>
+      )}
+      {isOwner && !editing && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {item.status !== "approved" && (
+            <button type="button" className="btn btn-sm" disabled={busy} onClick={() => onDecide({ action: "approve" }, "Could not approve that property.")}>
+              <Duo icon={CheckIcon} tone="none" />
+              Approve
+            </button>
+          )}
+          {item.status !== "rejected" && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              disabled={busy}
+              onClick={() => onDecide({ action: "reject", merge_into: suggestedMerge }, "Could not reject that property.")}
+            >
+              <Duo icon={XIcon} tone="none" />
+              {suggestedMerge ? `Reject and merge into ${words(suggestedMerge)}` : "Reject"}
+            </button>
+          )}
+          {targets.length > 0 && (
+            <span className="flex items-center gap-1.5">
+              <Duo icon={ArrowsMergeIcon} tone="none" />
+              <Select
+                className="h-8 text-[13px] w-[160px]"
+                aria-label={`Merge ${words(item.name)} into`}
+                placeholder="Merge into…"
+                value={item.status === "rejected" ? (item.merge_into ?? "") : ""}
+                disabled={busy}
+                options={targets}
+                onChange={(to) => onDecide({ action: "reject", merge_into: to }, "Could not merge that property.")}
               />
             </span>
           )}
