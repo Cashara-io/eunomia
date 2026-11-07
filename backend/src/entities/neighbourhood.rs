@@ -139,6 +139,94 @@ fn not_found(id: &RecordId) -> AppError {
     AppError::coded(ErrorCode::EntityNotFound, format!("entity {} not found", id.to_string()))
 }
 
+/// The relations of `id` inside `vault`, both ways, at most [`MAX_EDGES_PER_ENTITY`] each way, and
+/// whether more were cut.
+pub(crate) async fn relations_of(db: &OrgDb, vault: &RecordId, id: &RecordId) -> AppResult<(Vec<EdgeRow>, bool)> {
+    let mut res = q::EDGES_TOUCHING.on(db).bind(("ids", vec![id.clone()])).bind(("limit", MAX_EDGES_PER_ENTITY + 1)).await?;
+    let lists: Vec<Vec<EdgeRow>> = res.take(q::EDGES_TOUCHING.slot)?;
+    let mut cut = false;
+    let mut out = Vec::new();
+    for mut list in lists {
+        cut |= list.len() > MAX_EDGES_PER_ENTITY;
+        list.truncate(MAX_EDGES_PER_ENTITY);
+        out.extend(list.into_iter().filter(|e| e.from_vault.as_ref() == Some(vault) && e.to_vault.as_ref() == Some(vault)));
+    }
+    Ok((out, cut))
+}
+
+/// What [`walk`] reached.
+pub(crate) struct Walk {
+    /// The starts, then each entity in the order it was reached.
+    pub order: Vec<RecordId>,
+    /// Hops from the nearest start, by id; 0 for a start.
+    pub hops: HashMap<String, u8>,
+    /// The relation that first reached each entity that is not a start, by id.
+    pub via: HashMap<String, EdgeRow>,
+    pub edges: Vec<EdgeRow>,
+    pub truncated: bool,
+}
+
+/// Breadth-first from `starts` over their relations in both directions, `depth` hops, never leaving
+/// `vault`. At most [`MAX_NODES`] entities, [`MAX_EDGES`] relations and [`MAX_EDGES_PER_ENTITY`]
+/// relations each way from any one entity.
+pub(crate) async fn walk(db: &OrgDb, vault: &RecordId, starts: &[RecordId], depth: u8) -> AppResult<Walk> {
+    let mut order: Vec<RecordId> = Vec::new();
+    let mut seen: HashMap<String, u8> = HashMap::new();
+    for s in starts {
+        if seen.insert(s.to_string(), 0).is_none() {
+            order.push(s.clone());
+        }
+    }
+    let mut via: HashMap<String, EdgeRow> = HashMap::new();
+    let mut edges: Vec<EdgeRow> = Vec::new();
+    let mut edge_ids: HashSet<String> = HashSet::new();
+    let mut truncated = false;
+    let mut frontier = order.clone();
+    for hop in 1..=depth {
+        if frontier.is_empty() || edges.len() >= MAX_EDGES {
+            break;
+        }
+        // one more than the cap, to tell a full list from a cut one
+        let mut res = q::EDGES_TOUCHING.on(db).bind(("ids", frontier)).bind(("limit", MAX_EDGES_PER_ENTITY + 1)).await?;
+        let lists: Vec<Vec<EdgeRow>> = res.take(q::EDGES_TOUCHING.slot)?;
+        let mut touching = Vec::new();
+        for mut list in lists {
+            if list.len() > MAX_EDGES_PER_ENTITY {
+                truncated = true;
+                list.truncate(MAX_EDGES_PER_ENTITY);
+            }
+            touching.extend(list);
+        }
+        let mut next = Vec::new();
+        // an edge from before relations were confined to one vault stays hidden
+        for e in touching.into_iter().filter(|e| e.from_vault.as_ref() == Some(vault) && e.to_vault.as_ref() == Some(vault)) {
+            if edge_ids.contains(&e.id.to_string()) {
+                continue;
+            }
+            if edges.len() >= MAX_EDGES {
+                truncated = true;
+                break;
+            }
+            // one end is on the frontier, so at most the other is new
+            let new_end = [&e.from, &e.to].into_iter().find(|end| !seen.contains_key(&end.to_string()));
+            if let Some(end) = new_end {
+                if seen.len() >= MAX_NODES {
+                    truncated = true;
+                    continue;
+                }
+                seen.insert(end.to_string(), hop);
+                via.insert(end.to_string(), e.clone());
+                order.push(end.clone());
+                next.push(end.clone());
+            }
+            edge_ids.insert(e.id.to_string());
+            edges.push(e);
+        }
+        frontier = next;
+    }
+    Ok(Walk { order, hops: seen, via, edges, truncated })
+}
+
 /// Breadth-first from `entity_id` over its relations in both directions, `depth` hops (default
 /// [`DEFAULT_DEPTH`], clamped to 1..=[`MAX_DEPTH`]), never leaving the entity's vault. Read access as
 /// for `entities_get`: an entity the caller cannot read is not found. With `vault_id`, the entity must be
@@ -157,55 +245,7 @@ pub async fn neighbourhood(
     }
     let vault = start.vault.clone();
     let depth = depth.unwrap_or(DEFAULT_DEPTH as i64).clamp(1, MAX_DEPTH as i64) as u8;
-
-    let mut order: Vec<RecordId> = vec![start.id.clone()];
-    // hops from the start, by id
-    let mut seen: HashMap<String, u8> = HashMap::from([(start.id.to_string(), 0)]);
-    let mut edges: Vec<EdgeRow> = Vec::new();
-    let mut edge_ids: HashSet<String> = HashSet::new();
-    let mut truncated = false;
-    let mut frontier = vec![start.id.clone()];
-    for hop in 1..=depth {
-        if frontier.is_empty() || edges.len() >= MAX_EDGES {
-            break;
-        }
-        // one more than the cap, to tell a full list from a cut one
-        let mut res = q::EDGES_TOUCHING.on(db).bind(("ids", frontier)).bind(("limit", MAX_EDGES_PER_ENTITY + 1)).await?;
-        let lists: Vec<Vec<EdgeRow>> = res.take(q::EDGES_TOUCHING.slot)?;
-        let mut touching = Vec::new();
-        for mut list in lists {
-            if list.len() > MAX_EDGES_PER_ENTITY {
-                truncated = true;
-                list.truncate(MAX_EDGES_PER_ENTITY);
-            }
-            touching.extend(list);
-        }
-        let mut next = Vec::new();
-        // an edge from before relations were confined to one vault stays hidden
-        for e in touching.into_iter().filter(|e| e.from_vault.as_ref() == Some(&vault) && e.to_vault.as_ref() == Some(&vault)) {
-            if edge_ids.contains(&e.id.to_string()) {
-                continue;
-            }
-            if edges.len() >= MAX_EDGES {
-                truncated = true;
-                break;
-            }
-            // one end is on the frontier, so at most the other is new
-            let new_end = [&e.from, &e.to].into_iter().find(|end| !seen.contains_key(&end.to_string()));
-            if let Some(end) = new_end {
-                if seen.len() >= MAX_NODES {
-                    truncated = true;
-                    continue;
-                }
-                seen.insert(end.to_string(), hop);
-                order.push(end.clone());
-                next.push(end.clone());
-            }
-            edge_ids.insert(e.id.to_string());
-            edges.push(e);
-        }
-        frontier = next;
-    }
+    let Walk { order, hops: seen, mut edges, truncated, .. } = walk(db, &vault, std::slice::from_ref(&start.id), depth).await?;
 
     let mut rows = load_nodes(db, order.clone()).await?;
     rows.retain(|_, r| r.vault == vault);

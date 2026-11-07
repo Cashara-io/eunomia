@@ -917,12 +917,21 @@ struct InputRow {
 
 /// One entity's value of one property as of the run.
 #[derive(Debug, Clone)]
-struct Held {
-    stored: Stored,
-    unit: Option<String>,
+pub(super) struct Held {
+    pub(super) stored: Stored,
+    pub(super) unit: Option<String>,
 }
 
-type Values = HashMap<String, HashMap<String, Held>>;
+/// Entity id to property name to its value.
+pub(super) type Values = HashMap<String, HashMap<String, Held>>;
+
+/// Values a what-if puts in place of the real ones, and entities it takes out, for [`Prepared::run`].
+/// Entity ids are unique across kinds, so one overlay serves every metric of a scenario.
+#[derive(Debug, Default, Clone)]
+pub(super) struct Overlay {
+    pub(super) values: Values,
+    pub(super) removed: HashSet<String>,
+}
 
 fn not_found(name: &str, approved: &[String]) -> AppError {
     let named = if approved.is_empty() { " It has no approved metrics yet.".to_string() } else { format!(" Approved metrics: {}.", approved.join(", ")) };
@@ -946,8 +955,41 @@ fn unapproved(name: &str, kind: &str) -> AppError {
     ))
 }
 
+/// Filters on one kind's properties, checked as a metric's own are, that pick the entities a what-if
+/// changes.
+pub(super) struct Selector {
+    conds: Vec<Cond>,
+}
+
+impl Selector {
+    /// Checked against `kind`'s properties in `vault`. A value listed nowhere is refused, naming the
+    /// nearest listed ones, rather than quietly picking nothing.
+    pub(super) async fn new(db: &OrgDb, vault: &RecordId, kind: &Kind, filters: &[Filter]) -> AppResult<Self> {
+        if filters.len() > MAX_FILTERS {
+            return Err(AppError::bad_request(format!("at most {MAX_FILTERS} filters")));
+        }
+        let props = props_of(db, vault, kind).await?;
+        let conds = filters.iter().map(|f| check_filter(&props, kind, f).map_err(hard)).collect::<AppResult<Vec<_>>>()?;
+        Ok(Selector { conds })
+    }
+
+    pub(super) fn properties(&self) -> impl Iterator<Item = &String> {
+        self.conds.iter().map(|c| &c.filter.property)
+    }
+
+    /// Whether an entity whose values `held` returns passes every filter.
+    pub(super) fn picks<'a>(&self, held: impl Fn(&str) -> Option<&'a Held>) -> bool {
+        self.conds.iter().all(|c| matches(c, held(&c.filter.property)))
+    }
+
+    /// "status is Active and price is over 10", or None without filters.
+    pub(super) fn words(&self) -> Option<String> {
+        (!self.conds.is_empty()).then(|| self.conds.iter().map(|c| filter_words(&c.filter)).collect::<Vec<_>>().join(" and "))
+    }
+}
+
 /// The end of a bare date's day, so "as of 2026-06-01" includes values dated that day.
-fn parse_as_of(s: Option<&str>) -> AppResult<chrono::DateTime<chrono::Utc>> {
+pub(super) fn parse_as_of(s: Option<&str>) -> AppResult<chrono::DateTime<chrono::Utc>> {
     let Some(s) = s.map(str::trim).filter(|s| !s.is_empty()) else { return Ok(chrono::Utc::now()) };
     let at = crate::cache::search::parse_datetime("as_of", s)?;
     Ok(if s.contains('T') { at } else { at + chrono::Duration::days(1) - chrono::Duration::milliseconds(1) })
@@ -1085,6 +1127,60 @@ fn anchor_warnings(conds: &[&Cond], entities: &[&String], values: &Values) -> Ve
 pub async fn eval(db: &OrgDb, owner: &RecordId, args: &EvalArgs) -> AppResult<MetricEvalOut> {
     let vault_id = args.vault_id.as_deref().map(str::trim).filter(|v| !v.is_empty()).map(|v| crate::rid::parse(v).map_err(|_| AppError::coded(ErrorCode::VaultNotFound, "Vault not found."))).transpose()?;
     let vault = resolve(db, owner, vault_id.as_ref(), Action::ReadMemories).await?;
+    prepare(db, &vault, args).await?.run(None)
+}
+
+/// Each entity of `kind` in `vault`, sorted, and its latest value of each of `names` as of `as_of`.
+pub(super) async fn load_values(db: &OrgDb, vault: &RecordId, kind: &Kind, names: &BTreeSet<String>, as_of: chrono::DateTime<chrono::Utc>) -> AppResult<(Vec<String>, Values)> {
+    let by_id: HashMap<String, String> = names.iter().map(|n| (property_rid(vault, kind, &PropertyName::parse(n).expect("checked")).to_string(), n.clone())).collect();
+    let prop_ids: Vec<RecordId> = names.iter().map(|n| property_rid(vault, kind, &PropertyName::parse(n).expect("checked"))).collect();
+    let mut res = q::METRIC_INPUTS
+        .on(db)
+        .bind(("vault", vault.clone()))
+        .bind(("table", kind_table(kind.as_str())?.to_string()))
+        .bind(("kind", kind.as_str().to_string()))
+        .bind(("props", prop_ids))
+        .bind(("as_of", Datetime::from(as_of)))
+        .await?;
+    let ids: Vec<RecordId> = res.take(1)?;
+    let rows: Vec<InputRow> = match res.take(2) {
+        Err(e) if no_ontology_table(&e) => Vec::new(),
+        r => r?,
+    };
+    let mut entities: Vec<String> = ids.iter().map(|i| i.to_string()).collect();
+    entities.sort();
+    let known: HashSet<&String> = entities.iter().collect();
+    let mut values: Values = HashMap::new();
+    // newest first: the first row of each (entity, property) is its value as of the run
+    for r in rows {
+        let entity = r.entity.to_string();
+        let Some(name) = by_id.get(&r.property.to_string()) else { continue };
+        if !known.contains(&entity) {
+            continue;
+        }
+        let stored = Stored { num: r.value_num, text: r.value_text, boolean: r.value_bool, date: r.value_date };
+        values.entry(entity).or_default().entry(name.clone()).or_insert(Held { stored, unit: r.unit });
+    }
+    Ok((entities, values))
+}
+
+/// A metric found, gated, checked and loaded for one run: everything but the arithmetic, which
+/// [`Prepared::run`] does on the real values or on a what-if's.
+pub(super) struct Prepared {
+    out: MetricEvalOut,
+    plan: Plan,
+    props: Props,
+    kind: Kind,
+    entities: Vec<String>,
+    values: Values,
+    series: bool,
+    /// A filter value listed nowhere: `out` already says nothing was computed.
+    nothing: bool,
+}
+
+/// Finds and loads the metric `args` names in `vault` (the caller checked access).
+pub(super) async fn prepare(db: &OrgDb, vault: &RecordId, args: &EvalArgs) -> AppResult<Prepared> {
+    let vault = vault.clone();
     let asked = metric_name(&args.metric)?;
     let row = match args.kind.as_deref().map(str::trim).filter(|k| !k.is_empty()) {
         Some(k) => {
@@ -1191,92 +1287,94 @@ pub async fn eval(db: &OrgDb, owner: &RecordId, args: &EvalArgs) -> AppResult<Me
         let glue = if out.expr_words.contains(" where ") { " and " } else { " where " };
         out.expr_words.push_str(&format!("{glue}{joined}"));
     }
-    if !unlisted.is_empty() {
-        // a filter value listed nowhere matches nothing: say so instead of returning 0
-        out.warnings.extend(unlisted.iter().map(|u| format!("{}. Nothing was computed: this is not a 0", u.sentence())));
-        if args.group_by_grain {
-            out.series = Some(Vec::new());
-        }
-        return Ok(out);
-    }
-
     let names: BTreeSet<String> = plan.properties().into_iter().chain(extra.iter().map(|c| c.filter.property.clone())).collect();
-    let by_id: HashMap<String, String> = names.iter().map(|n| (property_rid(&vault, &kind, &PropertyName::parse(n).expect("checked")).to_string(), n.clone())).collect();
-    let prop_ids: Vec<RecordId> = names.iter().map(|n| property_rid(&vault, &kind, &PropertyName::parse(n).expect("checked"))).collect();
-    let mut res = q::METRIC_INPUTS
-        .on(db)
-        .bind(("vault", vault.clone()))
-        .bind(("table", kind_table(kind.as_str())?.to_string()))
-        .bind(("kind", kind.as_str().to_string()))
-        .bind(("props", prop_ids))
-        .bind(("as_of", Datetime::from(as_of)))
-        .await?;
-    let ids: Vec<RecordId> = res.take(1)?;
-    let rows: Vec<InputRow> = match res.take(2) {
-        Err(e) if no_ontology_table(&e) => Vec::new(),
-        r => r?,
-    };
-    let mut entities: Vec<String> = ids.iter().map(|i| i.to_string()).collect();
-    entities.sort();
-    let known: HashSet<&String> = entities.iter().collect();
-    let mut values: Values = HashMap::new();
-    // newest first: the first row of each (entity, property) is its value as of the run
-    for r in rows {
-        let entity = r.entity.to_string();
-        let Some(name) = by_id.get(&r.property.to_string()) else { continue };
-        if !known.contains(&entity) {
-            continue;
-        }
-        let stored = Stored { num: r.value_num, text: r.value_text, boolean: r.value_bool, date: r.value_date };
-        values.entry(entity).or_default().entry(name.clone()).or_insert(Held { stored, unit: r.unit });
-    }
-
     let mut all_filters = plan.filters.clone();
     all_filters.extend(extra);
     let plan = Plan { filters: all_filters, ..plan };
-    let refs: Vec<&String> = entities.iter().collect();
-    let conds: Vec<&Cond> = plan.filters.iter().chain(plan.sides.iter().flat_map(|s| &s.filters)).collect();
-    out.warnings.extend(anchor_warnings(&conds, &refs, &values));
+    let mut prepared = Prepared { out, plan, props, kind, entities: Vec::new(), values: HashMap::new(), series: args.group_by_grain, nothing: false };
+    if !unlisted.is_empty() {
+        // a filter value listed nowhere matches nothing: say so instead of returning 0
+        prepared.out.warnings.extend(unlisted.iter().map(|u| format!("{}. Nothing was computed: this is not a 0", u.sentence())));
+        if args.group_by_grain {
+            prepared.out.series = Some(Vec::new());
+        }
+        prepared.nothing = true;
+        return Ok(prepared);
+    }
+    (prepared.entities, prepared.values) = load_values(db, &vault, &prepared.kind, &names, as_of).await?;
+    Ok(prepared)
+}
 
-    let used = if let (true, Some((t, grain))) = (args.group_by_grain, &plan.time) {
-        let mut periods: BTreeMap<String, Vec<&String>> = BTreeMap::new();
-        let mut undated = 0;
-        for e in &refs {
-            match values.get(*e).and_then(|h| h.get(t)).and_then(|h| h.stored.date) {
-                Some(d) => periods.entry(grain.period(d.into_inner())).or_default().push(e),
-                None => undated += 1,
+impl Prepared {
+    /// The metric over the loaded values, or over them with `overlay`'s values in place and its removed
+    /// entities left out: the same arithmetic either way.
+    pub(super) fn run(&self, overlay: Option<&Overlay>) -> AppResult<MetricEvalOut> {
+        let mut out = self.out.clone();
+        if self.nothing {
+            return Ok(out);
+        }
+        let plan = &self.plan;
+        let kind = &self.kind;
+        let props = &self.props;
+        let mut values = std::borrow::Cow::Borrowed(&self.values);
+        let mut refs: Vec<&String> = self.entities.iter().collect();
+        if let Some(o) = overlay {
+            refs.retain(|e| !o.removed.contains(*e));
+            let reads = plan.properties();
+            let known: HashSet<&String> = self.entities.iter().collect();
+            for (e, held) in &o.values {
+                if !known.contains(e) {
+                    continue;
+                }
+                for (p, h) in held.iter().filter(|(p, _)| reads.contains(*p)) {
+                    values.to_mut().entry(e.clone()).or_default().insert(p.clone(), h.clone());
+                }
             }
         }
-        if periods.len() > MAX_PERIODS {
-            return Err(AppError::bad_request(format!("the series has more than {MAX_PERIODS} periods: use a longer grain")));
+        let values = values.as_ref();
+        let conds: Vec<&Cond> = plan.filters.iter().chain(plan.sides.iter().flat_map(|s| &s.filters)).collect();
+        out.warnings.extend(anchor_warnings(&conds, &refs, values));
+
+        let used = if let (true, Some((t, grain))) = (self.series, &plan.time) {
+            let mut periods: BTreeMap<String, Vec<&String>> = BTreeMap::new();
+            let mut undated = 0;
+            for e in &refs {
+                match values.get(*e).and_then(|h| h.get(t)).and_then(|h| h.stored.date) {
+                    Some(d) => periods.entry(grain.period(d.into_inner())).or_default().push(e),
+                    None => undated += 1,
+                }
+            }
+            if periods.len() > MAX_PERIODS {
+                return Err(AppError::bad_request(format!("the series has more than {MAX_PERIODS} periods: use a longer grain")));
+            }
+            let mut series = Vec::new();
+            let mut used = BTreeSet::new();
+            for (period, members) in periods {
+                let (value, u) = value_of(plan, &members, values, props, &mut out.warnings);
+                series.push(Period { period, value, n: u.len() });
+                used.extend(u);
+            }
+            if undated > 0 && !used.is_empty() {
+                out.warnings.push(format!("{undated} {} with no {t:?} are left out of the series", words(kind.as_str())));
+            }
+            out.series = Some(series);
+            used
+        } else {
+            let (value, used) = value_of(plan, &refs, values, props, &mut out.warnings);
+            out.value = value;
+            if plan.ratio && value.is_none() && !used.is_empty() {
+                out.warnings.push("the denominator is 0, so the ratio has no value".into());
+            }
+            used
+        };
+        if used.is_empty() {
+            out.warnings.push(format!("no {} matched as of {}: nothing was computed from any entity", words(kind.as_str()), out.as_of));
         }
-        let mut series = Vec::new();
-        let mut used = BTreeSet::new();
-        for (period, members) in periods {
-            let (value, u) = value_of(&plan, &members, &values, &props, &mut out.warnings);
-            series.push(Period { period, value, n: u.len() });
-            used.extend(u);
-        }
-        if undated > 0 && !used.is_empty() {
-            out.warnings.push(format!("{undated} {} with no {t:?} are left out of the series", words(kind.as_str())));
-        }
-        out.series = Some(series);
-        used
-    } else {
-        let (value, used) = value_of(&plan, &refs, &values, &props, &mut out.warnings);
-        out.value = value;
-        if plan.ratio && value.is_none() && !used.is_empty() {
-            out.warnings.push("the denominator is 0, so the ratio has no value".into());
-        }
-        used
-    };
-    if used.is_empty() {
-        out.warnings.push(format!("no {} matched as of {}: nothing was computed from any entity", words(kind.as_str()), out.as_of));
+        out.n_entities = used.len();
+        out.truncated = used.len() > MAX_ENTITY_IDS;
+        out.entity_ids = used.into_iter().take(MAX_ENTITY_IDS).collect();
+        Ok(out)
     }
-    out.n_entities = used.len();
-    out.truncated = used.len() > MAX_ENTITY_IDS;
-    out.entity_ids = used.into_iter().take(MAX_ENTITY_IDS).collect();
-    Ok(out)
 }
 
 #[cfg(test)]
