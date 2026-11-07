@@ -59,6 +59,17 @@ propose it with `ontology_propose` (`properties`: kind, name, datatype,
 unit) and keep the fact as a memory meanwhile. A relation of a link type
 the owners rejected is refused too; the error names the approved ones.
 
+## Numbers
+
+For a number about the vault's entities (an average price, how many
+orders are late), read `ontology_get` and run the kind's approved metric
+with `metric_eval` (for example `{"metric": "avg_price"}`). Answer with its
+`value` and `unit`, say how many entities it came from, and cite its
+`entity_ids`. Read its `warnings`: a filter value it could not find is a
+spelling to fix, not a 0. Never add up or average values yourself. If no
+metric fits, propose one with `ontology_propose` (`metrics`: kind, name,
+expr such as `{"agg": "avg", "property": "price"}`).
+
 ## What a change affects
 
 When the user asks what a change, delay or problem affects ("Truck 7 is

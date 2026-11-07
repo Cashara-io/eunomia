@@ -127,8 +127,27 @@ stay as history. Kinds and properties also keep `synonyms`, other names
 written in the vault's own data; `ontology_suggest` keeps only the ones it
 finds there, kind by kind.
 
-Typed properties, certified metrics and record auto-mapping follow ideas
-from NVIDIA Auto Ontology (Apache 2.0). See `THIRD_PARTY_NOTICES.md`.
+A kind can also have certified metrics: a named number the server computes
+from the typed values, such as `avg_price` on `product` (the average of
+its `price`). A metric is per-vault data with a typed expression: an
+aggregate (sum, count, average, min, max, count of different values, or a
+ratio of two), filters on the kind's properties, and an optional date
+property and grain for a series. The server checks the expression against
+the kind's properties and runs it itself, so no query text ever comes from
+an agent or a model. Metrics are reviewed like properties, and the review
+gates them: only an approved metric runs by name with `metric_eval`, a
+proposed one runs only when the caller asks to try it (and the result says
+it is unapproved), and a rejected one runs the metric it was merged into.
+Each run reads every entity's latest value as of a date (default now) and
+returns the number with its unit and the ids of the entities it came from.
+A filter value that matches no listed value comes back as a warning naming
+the nearest ones, never as a silent 0. The in-app Chat answers number
+questions this way and draws the result as a `metric` view; it never adds
+up values itself.
+
+Typed properties, certified metrics, the literal check on metric filters
+and record auto-mapping follow ideas from NVIDIA Auto Ontology (Apache 2.0).
+See `THIRD_PARTY_NOTICES.md`.
 
 The ontology is also how agents and the in-app Chat reason about knock-on
 effects. Nothing about what affects what is hardcoded: asked "Truck 7 is
