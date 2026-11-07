@@ -95,8 +95,9 @@ test.describe("Entity graph", () => {
     // drop Personal: Team alone, and the other views follow to Team
     await personalChip.click();
     await expect(page.getByText(/^1 memory/)).toBeVisible();
-    // the last space can't be turned off
-    await teamChip.click();
+    // the last space can't be turned off: its chip says so (aria-disabled, which Playwright won't click)
+    await expect(teamChip).toHaveAttribute("aria-disabled", "true");
+    await teamChip.click({ force: true });
     await expect(teamChip).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByText(/^1 memory/)).toBeVisible();
     await page.getByRole("tab", { name: "Connections" }).click();
