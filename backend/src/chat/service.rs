@@ -72,7 +72,9 @@ find the entity with `entities_search`, read its vault's `ontology_get` and the 
 and decide from the link labels, the link descriptions and the facts which way the effect travels and what it \
 reaches. Then call `show_view` with `view` \"impact\", `start_id`, `headline` and `affected` (each affected entity \
 with the relation ids from the start to it and a one-sentence why) and reply with a short summary; the app draws the view above your reply. If \
-`show_view` names a bad id, fix it and call it again. Do not call `show_view` for other questions.";
+`show_view` names a bad id, fix it and call it again. Do not call `show_view` for other questions. \
+Never save what you worked out (an impact, a summary, that the user asked something) with `memory_write`: \
+save only a new fact the user tells you, such as the delay itself when it is not already remembered.";
 
 /// Write tools the built-in chat may call besides the read-only ones: they
 /// add or edit one memory but can't remove data, merge or rename entities,
