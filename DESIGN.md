@@ -147,7 +147,11 @@ in brackets ("memory spaces (vaults)").
 - **Accent** (`--accent`): ink. The primary button, the selected tab, the
   selection frame and its handles, the current nav chip. Dark theme: cream with
   ink text.
-- **Accent text** (`--accent-text`): ink, always underlined. Links.
+- **Accent text** (`--accent-text`): ink, always underlined. Links, through
+  `.link`: a 1px underline at a 3px offset that thickens to 2px on hover. A
+  `<button>` that reads as a link inside a sentence or list (a connection's
+  name in the inspector) takes `.link` too; a button that runs something
+  ("Summarise memories") is a ghost button, never a link.
 - **Accent wash** (`--accent-soft`): ink at 6%, behind a selected row.
 - **Focus** (`--focus`): blue, the 2px ring at 2px offset. Never selection.
 
@@ -169,6 +173,13 @@ Anything else is an ink outline square, never a fourth colour.
 Deeper than the vault fills, and always with a word or icon so it is never
 read as a vault: `--good` `#2F7A4E` (the only green left), `--warning`,
 `--critical` with `--critical-soft` and `--on-critical`.
+
+### Memory map spaces
+When the memory map shows several spaces at once, each space's points take a
+muted series hue (`--space-1`…`--space-3`, teal, plum and ochre, with dark
+values), and the personal space takes `ink-faint`. Never the vault hues: those
+say what kind of space it is, not which one. Lists name a space with its
+`VaultShape` instead.
 
 ### Authors (presence)
 `--author-1`…`--author-6` (coral, sky, plum, ochre, rose, teal) mark who wrote
@@ -214,7 +225,9 @@ stylistic sets and turns on tabular numerals).
   `clamp(38px, 4.8vw, 68px)`. Small uppercase labels are a marketing-only
   device; the app is sentence case everywhere (`.caps` is sentence case too).
 - **The No Kicker Rule.** Never a small label above a heading.
-- **The Honest Mono Rule.** Mono for data that must align or be copied exactly.
+- **The Honest Mono Rule.** Mono for data that must align or be copied exactly:
+  counts in a column or beside a heading, ids, clock times. Relative ages
+  ("2h ago") are words and stay in Geist.
 
 ## Shape and the motif
 
@@ -306,6 +319,12 @@ A 1px ink outline plus four 6px ink handles. A selected table row gets the
 outline and the `accent-soft` wash. Handles snap in when a pointer picked the
 frame; keyboard selection shows them at once.
 
+Selected rows in a list (chat conversations, memory spaces, documents, the
+memory map's compare rows) take the outline and the wash, never a coloured
+edge on one side (**The No Side Edge Rule**). A row inside a rounded list
+rounds with it. A table whose first column has no side padding keeps the wash
+only, so the frame never touches the text.
+
 ### Data tables (`.data-table`)
 13px, tabular numerals, 32px sentence-case headers in 12px `ink-faint`, 40px
 rows, hairline rules, row hover `surface-raised`. Secondary columns hide on
@@ -324,6 +343,24 @@ small screens rather than wrap.
 - **Confirmation** (`components/ui/ConfirmDialog.tsx`): native `<dialog>` that
   names the target in the title, states the consequence, focuses Cancel first,
   can lock behind typing the name, and returns focus to the opener.
+
+### Upload drop zone
+A 1px dashed `--border-field` edge on white, 12px radius, an ink icon and one
+sentence. Dragging over it fills the `accent-soft` wash. The upload bar is
+ink on `surface-raised`.
+
+### Chat
+- **Turns:** each starts with the author tag and a mono clock time. The
+  person's message sits on `surface-raised` at 12px; the answer is plain text
+  on the ledger, no bubble.
+- **Tool steps** sit in one ledger above the answer, one row each. A row says
+  what happened in plain words ("Searched people and topics", "Saved a
+  memory"), then the words it searched for or saved in `ink-dim`, then
+  "Running" or "Done" with the sync mark. Never the raw tool name or JSON
+  keys in the row: opening it shows the tool name in mono and the full
+  arguments and result in raised 10px blocks. One chevron, from `summary`.
+- **Composer:** a `.field` holding the textarea, the keyboard hints and the
+  one ink Send pill.
 
 ### Code to copy
 `CommandBlock` in `components/connect/Guide.tsx`: a raised mono block with a
@@ -349,8 +386,11 @@ both work, always with `weight="duotone"`.
   use `components/ui/Duo.tsx` with `tone="personal" | "project" | "company"`.
   Vary the tones across a row so neighbours differ; pick for meaning when there
   is one. On a vault-coloured tile the back layer is white (`tone="white"`).
-- **Status and danger keep the line only:** icons inside `.btn-danger`,
-  `[role="alert"]` and `.status-label` get a transparent back layer.
+- **Controls, status and danger keep the line only:** icons inside `.btn`
+  (every kind), `.pill`, `.field`, `.tab`, `[role="alert"]` and
+  `.status-label` get a transparent back layer. A yellow block on a button
+  would read as a vault (**The Vault Colour Rule**). The back layer shows in
+  tiles, headers, list rows and empty states.
 - **Sizes:** 16px in dense UI, 20 to 26px in tiles and headers, 28px and up in
   empty states.
 - **Agent brand marks** (Claude, ChatGPT, Codex, Cursor, Gemini and more) come
