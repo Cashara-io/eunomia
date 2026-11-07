@@ -111,7 +111,24 @@ propose with `ontology_propose`, and `ontology_suggest` has the server's
 model propose (or hands the agent the profile when there is no model). Only
 an owner in the app decides. A write under a rejected kind goes to the kind
 it was merged into (the result's `kind_mapped` says so), or is refused when
-it has none.
+it has none. A relation of a rejected link type is refused too, and the
+error names the approved ones; a link type nobody reviewed still works and
+shows as `observed`.
+
+Each kind can have typed properties: a name, a datatype (text, number,
+integer, money, percent, bool, date, datetime or enum) and a unit, such as
+a `price` in AUD on `product`. They are per-vault data, reviewed the same
+way, and the review gates writes. `entity_set_property` takes a value only
+for an approved property, only when it parses as the datatype, and sends a
+value for a rejected property to the one it was merged into. Values are
+rows with a date (`as_of`) and a source, so the newest is the current value
+(`entities_get` and `entities_neighbourhood` show it) and the older ones
+stay as history. Kinds and properties also keep `synonyms`, other names
+written in the vault's own data; `ontology_suggest` keeps only the ones it
+finds there, kind by kind.
+
+Typed properties, certified metrics and record auto-mapping follow ideas
+from NVIDIA Auto Ontology (Apache 2.0). See `THIRD_PARTY_NOTICES.md`.
 
 The ontology is also how agents and the in-app Chat reason about knock-on
 effects. Nothing about what affects what is hardcoded: asked "Truck 7 is
