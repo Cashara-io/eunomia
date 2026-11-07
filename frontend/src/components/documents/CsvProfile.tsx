@@ -97,7 +97,13 @@ export default function CsvProfile({ documentId }: { documentId: string }) {
         </span>
       </h3>
       <div className="overflow-x-auto">
-        <table className="data-table w-full">
+        <table className="data-table w-full table-fixed">
+          <colgroup>
+            <col className="w-[30%]" />
+            <col className="w-[24%]" />
+            <col />
+            <col className="w-[64px]" />
+          </colgroup>
           <thead>
             <tr>
               <th scope="col">Column</th>
@@ -113,7 +119,7 @@ export default function CsvProfile({ documentId }: { documentId: string }) {
               const mapped = plan.columns.find((c) => c.column === f.path)?.property;
               return (
                 <tr key={f.path}>
-                  <td>
+                  <td className="truncate" title={f.path}>
                     <span className="font-medium">{f.path}</span>
                     {mapped && (
                       <span className="label block">
@@ -122,7 +128,7 @@ export default function CsvProfile({ documentId }: { documentId: string }) {
                     )}
                   </td>
                   <td>{TYPE[f.inferred_type] ?? f.inferred_type}</td>
-                  <td className="max-w-[260px] truncate" style={{ color: "var(--ink-dim)" }} title={f.top_values.map((v) => v.value).join(", ")}>
+                  <td className="truncate" style={{ color: "var(--ink-dim)" }} title={f.top_values.map((v) => v.value).join(", ")}>
                     {f.top_values.slice(0, 3).map((v) => v.value).join(", ")}
                   </td>
                   <td className="text-right font-mono">{percent(f.null_rate)}</td>
