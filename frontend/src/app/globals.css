@@ -490,22 +490,20 @@ button.pill:active {
   white-space: nowrap;
 }
 
-/* Sidebar nav row on the ink sidebar. Selected = blue fill + aria-current.
-   Focus is a cream outline, so it never looks like the selected fill. */
+/* Sidebar nav chips on the ink sidebar (DESIGN.md, Nav chips): pills, and the current page is the
+   inverse chip, cream with ink text. Focus is a yellow outline, so it never looks like the current chip. */
 .nav-link {
   color: var(--bauhaus-app-sidebar-text);
-  border-radius: 3px;
+  border-radius: 999px;
   transition: background-color var(--dur-hover) ease, color var(--dur-hover) ease;
 }
 .nav-link .nav-icon {
   color: currentColor;
 }
-/* The current page: a lifted row with a 2px blue edge, not a filled block. */
 .nav-link[data-active] {
-  background: var(--bauhaus-app-sidebar-hover);
-  color: #ffffff;
+  background: var(--bauhaus-app-cream);
+  color: var(--bauhaus-app-ink);
   font-weight: 500;
-  box-shadow: inset 2px 0 0 var(--bauhaus-app-blue);
 }
 .nav-badge {
   min-width: 18px;
