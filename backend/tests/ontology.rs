@@ -1324,7 +1324,8 @@ async fn metric_eval_reads_each_value_as_of_a_date_and_applies_filters() {
     assert_eq!((riverside["value"].as_f64(), riverside["n_entities"].as_u64()), (Some(5.5), Some(2)), "{riverside}");
     let large = ok(run("total_price", json!({"filters": [{"property": "size", "op": "in", "value": ["Large"]}]})).await);
     assert_eq!(large["value"].as_f64(), Some(11.0), "{large}");
-    assert!(large["expr_words"].as_str().unwrap().ends_with("and where size is one of Large"), "{large}");
+    let words = large["expr_words"].as_str().unwrap();
+    assert!(words.ends_with(" where size is one of Large") && !words.contains(", and where"), "{large}");
     let cheap = ok(run("total_price", json!({"filters": [{"property": "price", "op": "lt", "value": 5}]})).await);
     assert_eq!(cheap["value"].as_f64(), Some(3.0));
 
@@ -1768,15 +1769,82 @@ Chai syrup,Bean Co,14.00,bottle,7,retired,W3\n";
     let vault = approved_price_list(&app, &doc).await;
     approve_price_list(&app, &vault).await;
     let out = ok(import(&app, &doc).await);
-    assert_eq!((out["created"].as_i64(), out["bad_count"].as_i64()), (Some(3), Some(5)), "{out}");
+    assert_eq!((out["created"].as_i64(), out["bad_count"].as_i64()), (Some(3), Some(4)), "{out}");
     let bad: Vec<(i64, Option<&str>)> = out["bad"].as_array().unwrap().iter().map(|b| (b["line"].as_i64().unwrap(), b["column"].as_str())).collect();
-    assert_eq!(bad, [(2, Some("price AUD")), (3, Some("product")), (4, Some("lead_time_days")), (4, Some("status")), (5, None)], "{out}");
-    assert!(out["bad"][0]["error"].as_str().unwrap().contains("a number"), "{out}");
+    assert_eq!(bad, [(3, Some("product")), (4, Some("lead_time_days")), (4, Some("status")), (5, None)], "{out}");
+    assert!(out["bad"][1]["error"].as_str().unwrap().contains("number"), "{out}");
     // the good cells of a bad row still land; an enum value matches ignoring case
     let items = supply_items(&app).await;
     let chai = items.iter().find(|e| e["name"] == "Chai syrup").unwrap();
     let got = ok(app.tool("entities_get", json!({"id": chai["id"]})).await);
     assert_eq!(got["properties"].as_array().unwrap().iter().find(|p| p["property"] == "status").unwrap()["value"], "Retired");
+}
+
+#[tokio::test]
+async fn australian_money_percents_and_day_first_dates_import_and_a_repeated_name_is_reported() {
+    let app = TestApp::new().await;
+    let csv = "product,price AUD,discount,listed\n\
+Arabica beans 1kg,\"$1,200.50\",10%,25/12/2026\n\
+Paper cups 8oz,A$0.12,2.5 %,01/02/2026\n\
+Arabica beans 1kg,$9.99,0%,02/02/2026\n";
+    let doc = upload_csv(&app, "au-prices.csv", csv).await;
+    let vault = personal(&app).await;
+    let source = |path: &str| json!([{"source": "document", "record_type": doc, "path": path}]);
+    ok(app
+        .tool(
+            "ontology_propose",
+            json!({
+                "kinds": [{"kind": "supply_item"}],
+                "properties": [
+                    {"kind": "supply_item", "name": "price", "datatype": "money", "unit": "AUD", "source_map": source("price AUD")},
+                    {"kind": "supply_item", "name": "discount", "datatype": "percent", "source_map": source("discount")},
+                    {"kind": "supply_item", "name": "listed", "datatype": "date", "source_map": source("listed")},
+                ],
+            }),
+        )
+        .await);
+    assert_eq!(decide_kind(&app, &vault, "supply_item", json!({"action": "approve"})).await.0, 200);
+    for p in ["price", "discount", "listed"] {
+        assert_eq!(decide_property(&app, &vault, "supply_item", p, json!({"action": "approve"})).await.0, 200);
+    }
+    let out = ok(import(&app, &doc).await);
+    // the third row repeats the first's name, so it is reported and left out, never merged silently
+    assert_eq!((out["created"].as_i64(), out["bad_count"].as_i64(), out["values"].as_i64()), (Some(2), Some(1), Some(6)), "{out}");
+    assert_eq!((out["bad"][0]["line"].as_i64(), out["bad"][0]["column"].as_str()), (Some(4), Some("product")), "{out}");
+    assert!(out["bad"][0]["error"].as_str().unwrap().contains("repeats the name"), "{out}");
+
+    let value = |got: &Value, p: &str| got["properties"].as_array().unwrap().iter().find(|v| v["property"] == p).unwrap()["value"].clone();
+    let items = supply_items(&app).await;
+    let beans = ok(app.tool("entities_get", json!({"id": items.iter().find(|e| e["name"] == "Arabica beans 1kg").unwrap()["id"]})).await);
+    assert_eq!((value(&beans, "price").as_f64(), value(&beans, "discount").as_f64()), (Some(1200.5), Some(10.0)), "{beans}");
+    assert!(value(&beans, "listed").as_str().unwrap().starts_with("2026-12-25"), "{beans}");
+    let cups = ok(app.tool("entities_get", json!({"id": items.iter().find(|e| e["name"] == "Paper cups 8oz").unwrap()["id"]})).await);
+    assert_eq!((value(&cups, "price").as_f64(), value(&cups, "discount").as_f64()), (Some(0.12), Some(2.5)), "{cups}");
+    // day first, as the column's other dates show: 1 February, not 2 January
+    assert!(value(&cups, "listed").as_str().unwrap().starts_with("2026-02-01"), "{cups}");
+}
+
+#[tokio::test]
+async fn a_column_two_properties_claim_is_skipped_until_the_owner_picks() {
+    let app = TestApp::new().await;
+    let doc = upload_csv(&app, "price-list.csv", PRICE_LIST).await;
+    let vault = approved_price_list(&app, &doc).await;
+    approve_price_list(&app, &vault).await;
+    // an agent maps the price column onto a second approved property too
+    let source = json!([{"source": "document", "record_type": doc, "path": "price AUD"}]);
+    ok(app.tool("ontology_propose", json!({"properties": [{"kind": "supply_item", "name": "list_price", "datatype": "money", "unit": "AUD", "source_map": source}]})).await);
+    assert_eq!(decide_property(&app, &vault, "supply_item", "list_price", json!({"action": "approve"})).await.0, 200);
+    let out = ok(import(&app, &doc).await);
+    let price = out["columns"].as_array().unwrap().iter().find(|c| c["column"] == "price AUD").unwrap();
+    assert!(price["skipped"].as_str().unwrap().contains("choose one with column_map"), "{out}");
+    let (_, prof) = app.http("GET", &format!("/api/documents/{doc}/profile"), None, true).await;
+    let planned = prof["import"]["columns"].as_array().unwrap().iter().find(|c| c["column"] == "price AUD").unwrap().clone();
+    assert!(planned["property"].is_null(), "no default for a column two properties claim: {planned}");
+    // the owner picks one, and the column imports
+    let picked = ok(app
+        .tool("document_import_rows", json!({"document_id": doc, "kind": "supply_item", "name_column": "product", "column_map": {"price AUD": "price"}}))
+        .await);
+    assert!(picked["columns"].as_array().unwrap().iter().any(|c| c["column"] == "price AUD" && c["property"] == "price" && c["skipped"].is_null()), "{picked}");
 }
 
 #[tokio::test]

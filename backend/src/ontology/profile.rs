@@ -186,13 +186,13 @@ pub fn values_at(sample: &Sample, path: &str) -> Vec<String> {
 }
 
 /// A number written as text: plain digits, an optional sign and decimal point.
-fn plain_number(s: &str) -> Option<f64> {
+pub(crate) fn plain_number(s: &str) -> Option<f64> {
     let ok = !s.is_empty() && s.chars().all(|c| c.is_ascii_digit() || matches!(c, '.' | '-' | '+')) && s.chars().any(|c| c.is_ascii_digit());
     if ok { s.parse::<f64>().ok().filter(|n| n.is_finite()) } else { None }
 }
 
 /// An amount with a currency mark: `$4.50`, `A$4.50`, `AUD 4.50`, `4.50 AUD`.
-fn money(s: &str) -> Option<f64> {
+pub(crate) fn money(s: &str) -> Option<f64> {
     let t = s.trim();
     let stripped = t
         .strip_prefix("A$")
@@ -211,6 +211,12 @@ fn money(s: &str) -> Option<f64> {
 
 const DATE_FORMATS: &[(&str, &str)] = &[("%Y-%m-%d", "YYYY-MM-DD"), ("%d/%m/%Y", "DD/MM/YYYY"), ("%m/%d/%Y", "MM/DD/YYYY"), ("%Y/%m/%d", "YYYY/MM/DD"), ("%d-%m-%Y", "DD-MM-YYYY"), ("%d %b %Y", "D MMM YYYY")];
 const DATETIME_FORMATS: &[(&str, &str)] = &[("%Y-%m-%d %H:%M:%S", "YYYY-MM-DD hh:mm:ss"), ("%Y-%m-%dT%H:%M:%S", "YYYY-MM-DDThh:mm:ss")];
+
+/// The chrono notation every date in `values` parses in (day first wins, as in `date_format`), so an
+/// import can turn them into ISO dates.
+pub(crate) fn date_notation(values: &[&str]) -> Option<&'static str> {
+    DATE_FORMATS.iter().find(|(fmt, _)| values.iter().all(|s| chrono::NaiveDate::parse_from_str(s, fmt).is_ok())).map(|(fmt, _)| *fmt)
+}
 
 /// The one notation every value parses in, and whether it is a datetime. Day first wins over month
 /// first when both fit (Australian dates).

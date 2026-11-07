@@ -175,7 +175,12 @@ async fn plan(db: &OrgDb, vault: &RecordId, document_id: &str, columns: &[String
     let plans: Vec<ColumnPlan> = columns
         .iter()
         .map(|c| {
-            let p = props.iter().find(|p| fed_by(p, c));
+            let mut fed = props.iter().filter(|p| fed_by(p, c));
+            // a column two properties claim has no default: the import asks for a column_map
+            let p = match (fed.next(), fed.next()) {
+                (Some(p), None) => Some(p),
+                _ => None,
+            };
             ColumnPlan { column: c.clone(), property: p.map(|p| p.name.clone()), status: p.map(|p| p.status) }
         })
         .collect();
@@ -288,11 +293,18 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
     for (i, col) in table.columns.iter().enumerate().filter(|(i, _)| *i != name_at) {
         let wanted = match &args.column_map {
             Some(map) => map.get(col).cloned(),
-            None => rows
-                .iter()
-                .find(|r| r.source_map().iter().any(|f| f.source == SOURCE && f.record_type == doc_id && &f.path == col))
-                .map(|r| r.name.clone())
-                .or_else(|| Some(property_name_for(col)).filter(|n| rows.iter().any(|r| &r.name == n))),
+            None => {
+                let claimed: Vec<&str> =
+                    rows.iter().filter(|r| r.source_map().iter().any(|f| f.source == SOURCE && f.record_type == doc_id && &f.path == col)).map(|r| r.name.as_str()).collect();
+                // two properties claiming one column (an agent can add a mapping to an approved one) is
+                // the owner's call, never a silent pick
+                if claimed.len() > 1 {
+                    let skipped = format!("is mapped to {}: choose one with column_map", claimed.join(" and "));
+                    columns.push(ColumnUse { column: col.clone(), property: None, skipped: Some(skipped) });
+                    continue;
+                }
+                claimed.first().map(|n| n.to_string()).or_else(|| Some(property_name_for(col)).filter(|n| rows.iter().any(|r| &r.name == n)))
+            }
         };
         let Some(wanted) = wanted else {
             columns.push(ColumnUse { column: col.clone(), property: None, skipped: Some("no property is mapped from it".into()) });
@@ -315,8 +327,18 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
         return Err(not_ready(&kind, "has no approved property that a column of this CSV feeds"));
     }
 
+    // the notation each date column is written in, as profiling reads it (day first for Australian dates)
+    let notations: HashMap<usize, &'static str> = targets
+        .iter()
+        .filter(|(_, _, d)| *d == Datatype::Date)
+        .filter_map(|(i, _, _)| {
+            let values: Vec<&str> = table.rows.iter().filter_map(|(_, c)| c.get(*i)).map(|v| v.trim()).filter(|v| !v.is_empty()).collect();
+            super::profile::date_notation(&values).map(|f| (*i, f))
+        })
+        .collect();
     let mut out = ImportOut { document_id: doc_id.clone(), kind: kind.as_str().to_string(), rows: table.rows.len(), created: 0, updated: 0, values: 0, columns, bad: Vec::new(), bad_count: 0 };
     let mut seen: HashMap<String, ()> = HashMap::new();
+    let mut names: HashMap<String, u64> = HashMap::new();
     for (line, cells) in &table.rows {
         if cells.len() != table.columns.len() {
             bad(&mut out, *line, None, format!("has {} cells; the header has {}", cells.len(), table.columns.len()));
@@ -327,6 +349,12 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
             bad(&mut out, *line, Some(&table.columns[name_at]), "no name: the row was left out".into());
             continue;
         }
+        // two rows with one name would land on one entity, the later silently overwriting the earlier
+        if let Some(first) = names.get(&name.to_lowercase()) {
+            bad(&mut out, *line, Some(&table.columns[name_at]), format!("repeats the name {name:?} from line {first}: the row was left out"));
+            continue;
+        }
+        names.insert(name.to_lowercase(), *line);
         let up = crate::entities::service::upsert_grounded(db, user, kind.as_str(), name, None, Some(&doc.vault)).await?;
         let first_time = seen.insert(up.entity.id.clone(), ()).is_none();
         match (up.created, first_time) {
@@ -340,6 +368,7 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
             if cell.is_empty() {
                 continue;
             }
+            let cell = local_cell(*datatype, cell, notations.get(i).copied());
             let stored = match property::parse_value(*datatype, &row.name, row.enum_values.as_deref(), &json!(cell)) {
                 Ok(s) => s,
                 Err(e) => {
@@ -371,6 +400,23 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
         }
     }
     Ok(out)
+}
+
+/// A cell as a spreadsheet writes it, in the form `parse_value` takes: `$1,200.50` or `A$4` for money,
+/// `10%` for a percent, and a date in the column's own notation (`25/12/2026`) as an ISO date. Anything
+/// that does not fit is passed on unchanged, so its error names the cell as written.
+fn local_cell(datatype: Datatype, cell: &str, notation: Option<&str>) -> String {
+    match datatype {
+        Datatype::Money => {
+            let plain = cell.replace(',', "");
+            super::profile::money(&plain).or_else(|| super::profile::plain_number(plain.trim())).map_or_else(|| cell.to_string(), |n| n.to_string())
+        }
+        Datatype::Percent => cell.strip_suffix('%').map_or_else(|| cell.to_string(), |n| n.trim().to_string()),
+        Datatype::Date => notation
+            .and_then(|f| chrono::NaiveDate::parse_from_str(cell, f).ok())
+            .map_or_else(|| cell.to_string(), |d| d.format("%Y-%m-%d").to_string()),
+        _ => cell.to_string(),
+    }
 }
 
 fn bad(out: &mut ImportOut, line: u64, column: Option<&str>, error: String) {
