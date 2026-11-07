@@ -70,6 +70,16 @@ spelling to fix, not a 0. Never add up or average values yourself. If no
 metric fits, propose one with `ontology_propose` (`metrics`: kind, name,
 expr such as `{"agg": "avg", "property": "price"}`).
 
+## Mapping records and CSVs
+
+To map a source's records or an uploaded CSV onto the ontology, run
+`ontology_automap` (`{"source": "stripe"}` or `{"document_id": "<id>"}`).
+With a server model it proposes the kinds, properties and checked links
+for an owner to approve. Without one it returns the field profiles: propose
+a kind per record type and a property per field with `ontology_propose`,
+each property with its `source_map`. Once an owner approved a CSV's kind
+and properties, `document_import_rows` imports its rows.
+
 ## What a change affects
 
 When the user asks what a change, delay or problem affects ("Truck 7 is

@@ -36,6 +36,8 @@ Upload from the **Documents** page (sidebar) or with the `document_upload` MCP t
 | `document_export` | The export manifest: every passage with its text, location and embedding state, plus the embedding model and dimension. Vectors are left out unless `include_vectors` is true. `vectors_url` serves the full manifest over HTTP. |
 | `document_delete` | Delete the document, its passages and the facts extracted from them. Flagged `destructiveHint`. |
 
+| `document_import_rows` | A CSV's rows as entities of an approved kind, with values of its approved properties ([CSV import](#csv-import)). |
+
 An agent that has an HTTP tool can download with the same `Authorization: Bearer <token>` header it uses for MCP. Paths are relative to the address the agent reaches Eunomia at, the same one as `/mcp`.
 
 ## HTTP
@@ -57,6 +59,18 @@ curl -X DELETE -H "Authorization: Bearer $TOKEN" http://localhost:8001/api/docum
 ```
 
 The export manifest has `format: "eunomia.document-export"` and `version: 1`. It includes the document (with its SHA-256) and an `embedding` block with `dimension` (1536), `provider`, `model`, `chunks_embedded` and `chunks_missing`. It also has one entry per passage with `chunk_id`, `part`, `char_start`, `char_end`, `text`, `embedding_state` (`present` or `missing`) and `embedding` (the vector, or `null`). The model is the one your settings name now: vectors do not yet record which model made them.
+
+## CSV import
+
+A CSV is indexed as text like any document, so `recall` finds its rows. It can also become entities with typed values:
+
+1. **Profile.** The document page of a CSV shows each column's type, top values and empty share (`GET /api/documents/<id>/profile`). It reads the stored file, so it works before indexing finishes.
+2. **Auto-map.** On the Memory spaces page (Kinds and links), **Auto-map** with the CSV picked runs `ontology_automap`: one kind for the file, a typed property for each column, and links for columns whose values name entities the vault already has (each with the share that matches). An owner approves them there.
+3. **Import.** Once the kind and at least one property are approved, **Import rows** on the document page (or `document_import_rows`, or `POST /api/documents/<id>/import` with `{"kind", "name_column", "column_map"?, "as_of"?}`) writes each row as an entity of the kind, found or created by its name column, with a value for each column that feeds an approved property. Each value is checked as `entity_set_property` checks it (its datatype, approved properties only, no `as_of` in the future) and names the document as its source.
+
+Importing again (say after uploading a new version of the file) updates each value in place: no entity is made twice and no extra history is kept for that document. A bad cell (`$32.50` in a money column, a status not in the enum, a row with no name or the wrong number of cells) is listed with its line and column, and the rest of the file is still imported. Deleting the document removes the values it imported; the entities stay, like entities extracted from it.
+
+Limits: a CSV is read as a table up to 2 MiB, 60 columns and 5,000 rows; a larger file is refused with a message, never half imported. The first row is the header. Blank header cells become `column_N` and a repeated header gets `_2`. The in-app Chat does not import rows: it is a bulk write from a file, so it stays a button and an agent tool.
 
 ## Setup
 

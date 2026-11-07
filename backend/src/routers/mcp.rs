@@ -47,7 +47,9 @@ Writes go to the user's personal vault unless a `vault_id` is given; `recall`, `
 cover the personal vault and every org vault the user belongs to unless one is. To work out what a change, \
 delay or problem affects, read `ontology_get` and `entities_neighbourhood`, decide which way the effect travels, \
 and show the answer with `show_view`. For a number about the vault's entities, run an approved metric from `ontology_get` \
-with `metric_eval` and cite the `entity_ids` it returns; never add up values yourself.";
+with `metric_eval` and cite the `entity_ids` it returns; never add up values yourself. To map a source's records or an \
+uploaded CSV onto the ontology, run `ontology_automap`; once an owner approved a CSV's kind and properties, \
+`document_import_rows` imports its rows.";
 
 /// The memory skill is also served as a prompt and a resource: `instructions` reach only the
 /// clients that read them, and Claude Code offers MCP prompts as slash commands.

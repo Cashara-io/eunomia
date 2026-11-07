@@ -145,6 +145,34 @@ the nearest ones, never as a silent 0. The in-app Chat answers number
 questions this way and draws the result as a `metric` view; it never adds
 up values itself.
 
+The map can also build itself. `ontology_automap` (or Auto-map in Kinds
+and links) profiles the fields of the records a vault already holds, or the
+columns of an uploaded CSV: each field's type, how often it is empty,
+whether every value differs, its commonest values, the full list when there
+are 25 or fewer, its date format, and min and max for numbers. It reads a
+sample of the newest 1000 records of each record type and stores nothing.
+With a server model it then proposes, for each record type, one kind, a
+typed property for each field (each property remembers the field it comes
+from) and links for fields that hold another record's key or an entity's
+name. Every link is checked against the values first: a share of the
+field's values must be the id of a record of the target type or the name of
+an entity of the target kind. A link that matches nothing is dropped, and a
+kept one says how much matched ("82% of values match"). Everything lands as
+`proposed`, for an owner to decide. Without a model, the agent gets the
+profiles and the key fields that match, and proposes itself.
+
+Once an owner approved a CSV's kind and its properties, its rows can be
+imported (`document_import_rows`, or Import rows on the document): each
+row becomes an entity of that kind, found or created by a name column, with
+a value for each column that feeds an approved property. Values are checked
+as `entity_set_property` checks them and name the document as their source.
+A re-run updates the values and never makes an entity twice, and a bad
+cell is reported with its line and never stops the rest. Approved custom
+kinds also feed entity extraction: besides people, organisations and
+locations, extraction from a synced record or document may write entities
+of the vault's approved kinds (at most eight per prompt, never a proposed
+or rejected one).
+
 Typed properties, certified metrics, the literal check on metric filters
 and record auto-mapping follow ideas from NVIDIA Auto Ontology (Apache 2.0).
 See `THIRD_PARTY_NOTICES.md`.
