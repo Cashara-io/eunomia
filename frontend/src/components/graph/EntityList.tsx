@@ -113,14 +113,14 @@ export default function EntityList({
                     onSelect(r.id);
                   }
                 }}
-                className="cursor-pointer align-top hover:bg-[var(--surface-hover)] focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
-                style={{ borderBottom: "1px solid var(--border)", background: picked ? "var(--accent-soft)" : undefined }}
+                className="cursor-pointer align-top hover:bg-[var(--surface-raised)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--focus)]"
+                style={{ borderBottom: "1px solid var(--border)" }}
               >
                 <td className="py-2.5 pr-3 min-w-0">
                   <div className="font-medium text-[14px] truncate" style={{ color: "var(--ink)" }}>
                     {r.name}
                   </div>
-                  <div className="text-[12px] inline-flex items-center gap-1.5" style={{ color: "var(--ink-dim)" }}>
+                  <div className="text-[13px] inline-flex items-center gap-1.5" style={{ color: "var(--ink-dim)" }}>
                     <span className="w-2 h-2 rounded-full shrink-0" style={{ background: kindColor(r.kind) }} aria-hidden />
                     {r.kindWord}
                   </div>
@@ -133,10 +133,10 @@ export default function EntityList({
                 <td className="py-2.5 px-3 max-md:hidden" style={{ color: r.latest ? "var(--ink-dim)" : "var(--ink-faint)" }}>
                   <span className="line-clamp-2">{r.latest ?? (r.count === 0 ? "No memories yet" : "")}</span>
                 </td>
-                <td className="py-2.5 px-3 max-md:hidden text-right tabular-nums" style={{ color: "var(--ink-dim)" }}>
+                <td className="py-2.5 px-3 max-md:hidden text-right font-mono text-[12px]" style={{ color: "var(--ink-dim)" }}>
                   {r.count ?? ""}
                 </td>
-                <td className="py-2.5 pl-3 text-right whitespace-nowrap text-[12px]" style={{ color: "var(--ink-dim)" }}>
+                <td className="py-2.5 pl-3 text-right whitespace-nowrap text-[13px]" style={{ color: "var(--ink-dim)" }}>
                   {r.updated ? (
                     <time dateTime={r.updated} title={new Date(r.updated).toLocaleString()}>
                       {ago(r.updated)}

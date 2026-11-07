@@ -800,6 +800,21 @@ dialog.bauhaus-dialog::backdrop {
   }
 }
 
+/* A selected table row: the accent wash, plus the selection frame (1px ink
+   outline) where cells have side padding to keep it off the text. Keyboard
+   focus still wins with the blue ring. */
+tr[aria-selected="true"] {
+  background: var(--accent-soft);
+}
+.data-table tr[aria-selected="true"] {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+tr[aria-selected="true"]:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
 /* Skeleton block for loading states. */
 .skeleton {
   border-radius: 5px;

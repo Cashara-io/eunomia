@@ -77,7 +77,7 @@ function Byline({ email, at }: { email: string | null | undefined; at?: string |
   const when = ago(at);
   if (!email && !when) return null;
   return (
-    <p className="text-[12px] min-w-0 truncate" style={{ color: "var(--ink-dim)" }} title={email ?? undefined}>
+    <p className="text-[13px] min-w-0 truncate" style={{ color: "var(--ink-dim)" }} title={email ?? undefined}>
       {email && <>Added by {email}</>}
       {email && when && " · "}
       {when && (
@@ -810,7 +810,7 @@ export default function EntityGraph({
         <div className="flex items-center gap-3 min-w-0">
           {selected.kind === "person" && <Monogram name={selected.name || selected.id} size={36} color={colorOf("person")} />}
           <div className="min-w-0">
-            <h2 className="text-[20px] font-semibold tracking-[-0.015em] truncate">{selected.name}</h2>
+            <h2 className="text-[20px] font-medium leading-tight tracking-[-0.015em] truncate">{selected.name}</h2>
             <span className="text-[13px] inline-flex items-center gap-1.5 mt-0.5" style={{ color: "var(--ink-dim)" }}>
               <span className="w-2 h-2 rounded-full" style={{ background: kindColor(selected.kind) }} aria-hidden />
               {kindLabel(selected.kind)}
@@ -868,12 +868,12 @@ export default function EntityGraph({
         <div className="flex flex-col gap-1">
           {topAuthor && <Byline email={topAuthor} />}
           {lastTouched && (
-            <p className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+            <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
               Last memory {ago(lastTouched)}
             </p>
           )}
           {selected.aliases.length > 0 && (
-            <p className="text-[12px] truncate" style={{ color: "var(--ink-dim)" }} title={selected.aliases.join(", ")}>
+            <p className="text-[13px] truncate" style={{ color: "var(--ink-dim)" }} title={selected.aliases.join(", ")}>
               Also called {selected.aliases.join(", ")}
             </p>
           )}
@@ -920,7 +920,7 @@ export default function EntityGraph({
         <section className="flex flex-col gap-2">
           <h3 className="section-title flex items-baseline gap-2">
             Memory
-            <span className="text-[12px] font-normal tabular-nums" style={{ color: "var(--ink-faint)" }}>
+            <span className="font-mono text-[12px] font-normal" style={{ color: "var(--ink-faint)" }}>
               {selected.memory.length}
             </span>
           </h3>
@@ -934,7 +934,7 @@ export default function EntityGraph({
                 <li
                   key={m.id}
                   ref={m.id === freshMemory ? blurIn : m.id === pointedMemory ? scrollToMemory : undefined}
-                  className="group py-2.5 flex items-start justify-between gap-2"
+                  className="group py-3 flex items-start justify-between gap-2"
                   style={m.id === pointedMemory ? { background: "var(--accent-soft)", boxShadow: "-8px 0 0 var(--accent-soft), 8px 0 0 var(--accent-soft)" } : undefined}
                   aria-current={m.id === pointedMemory ? "true" : undefined}
                 >
@@ -943,7 +943,7 @@ export default function EntityGraph({
                     {canDelete(m.owner_email) ? (
                       <EditableMemoryText memory={m} disabled={busy} onSaved={() => void selectNode(selected.id)} />
                     ) : (
-                      <span className="text-[14px] leading-snug">{m.text}</span>
+                      <span className="text-[14px] leading-normal">{m.text}</span>
                     )}
                     <Byline email={soleAuthor !== undefined ? null : m.owner_email} at={m.created_at} />
                   </div>
@@ -986,7 +986,7 @@ export default function EntityGraph({
           </form>
           ) : (
             <div className="flex items-center gap-3">
-              <button type="button" className="btn btn-ghost btn-sm self-start -ml-2" onClick={() => setAdding("memory")}>
+              <button type="button" className="btn btn-ghost btn-sm self-start -ml-3" onClick={() => setAdding("memory")}>
                 <Plus size={16} strokeWidth={1.75} aria-hidden />
                 Add memory
               </button>
@@ -1004,7 +1004,7 @@ export default function EntityGraph({
         <section className="flex flex-col gap-2">
           <h3 className="section-title flex items-baseline gap-2">
             Connections
-            <span className="text-[12px] font-normal tabular-nums" style={{ color: "var(--ink-faint)" }}>
+            <span className="font-mono text-[12px] font-normal" style={{ color: "var(--ink-faint)" }}>
               {selected.relations.length}
             </span>
           </h3>
@@ -1019,7 +1019,7 @@ export default function EntityGraph({
                 return (
                   // each connection reads as a sentence: "works on Billing Rewrite" (outgoing) or
                   // "Tom Becker works on this" (incoming), never a bare arrow
-                  <li key={r.id} className="py-2 flex items-baseline gap-1.5 min-w-0 text-[13px]" title={r.owner_email ? `Added by ${r.owner_email}` : undefined}>
+                  <li key={r.id} className="py-2.5 flex items-baseline gap-1.5 min-w-0 text-[14px]" title={r.owner_email ? `Added by ${r.owner_email}` : undefined}>
                     {r.direction === "out" ? (
                       <>
                         <span className="shrink-0" style={{ color: "var(--ink-dim)" }}>
@@ -1074,7 +1074,7 @@ export default function EntityGraph({
           </form>
           ) : (
             graph.nodes.length > 1 && (
-              <button type="button" className="btn btn-ghost btn-sm self-start -ml-2" onClick={() => setAdding("relation")}>
+              <button type="button" className="btn btn-ghost btn-sm self-start -ml-3" onClick={() => setAdding("relation")}>
                 <Plus size={16} strokeWidth={1.75} aria-hidden />
                 Add connection
               </button>

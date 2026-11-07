@@ -15,7 +15,7 @@ export default function EditableMemoryText({ memory, onSaved, disabled }: { memo
 
   if (!editing) {
     return (
-      <span className="text-[14px] leading-snug">
+      <span className="text-[14px] leading-normal">
         {memory.text}{" "}
         <button
           type="button"
@@ -52,7 +52,7 @@ export default function EditableMemoryText({ memory, onSaved, disabled }: { memo
   return (
     <form onSubmit={save} className="flex flex-col gap-2 w-full">
       <textarea
-        className="field px-2.5 py-1.5 text-[13px]"
+        className="field px-3 py-2 text-[14px]"
         rows={3}
         aria-label="Memory text"
         autoFocus
