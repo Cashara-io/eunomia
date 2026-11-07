@@ -645,7 +645,7 @@ export default function VaultsPage() {
                 }}
               />
             ) : (
-              <div className="panel p-5 flex flex-col gap-3" aria-hidden>
+              <div className="ledger p-5 flex flex-col gap-3" aria-hidden>
                 <span className="skeleton h-4 w-24" />
                 <span className="skeleton h-5 w-40" />
                 <span className="skeleton h-24 w-full" />

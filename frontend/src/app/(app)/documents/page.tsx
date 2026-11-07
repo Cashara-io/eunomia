@@ -285,7 +285,7 @@ function DocumentPanel({ id, chunk, onClose }: { id: string; chunk: string | nul
   }
   if (!detail) {
     return (
-      <div className="panel p-4 flex flex-col gap-3" aria-busy="true" aria-label="Loading document">
+      <div className="ledger p-4 flex flex-col gap-3" aria-busy="true" aria-label="Loading document">
         <span className="skeleton h-5 w-40" />
         <span className="skeleton h-3 w-56" />
         <span className="skeleton h-24 w-full" />

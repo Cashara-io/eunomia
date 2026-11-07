@@ -361,7 +361,7 @@ function ConnectedPanel({ connections }: { connections: Connection[] }) {
   const app = appForConnection(latest);
   const shown = connections.slice(0, 6);
   return (
-    <section className="panel flex flex-col overflow-hidden" aria-labelledby="connected-title">
+    <section className="ledger flex flex-col overflow-hidden" aria-labelledby="connected-title">
       <div className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-4 border-b">
         <span
           className="shrink-0 grid place-items-center w-10 h-10 rounded-full"

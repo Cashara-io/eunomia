@@ -193,7 +193,7 @@ export default function SpaceDetail({
           : "Members can read and add memories. Nothing is shared until they accept."));
 
   return (
-    <article className="panel flex flex-col min-w-0" aria-label={`${vault.name} details`}>
+    <article className="ledger flex flex-col min-w-0" aria-label={`${vault.name} details`}>
       {/* Header: what this space is, at a glance. */}
       <header className="px-5 sm:px-6 pt-5 pb-5 flex flex-col gap-1.5">
         {renaming ? (
