@@ -25,7 +25,7 @@ fn schema() -> serde_json::Value {
             "headline": {"type": "string", "description": "impact: one sentence, what happened (at most 200 characters)"},
             "affected": {
                 "type": "array",
-                "description": "impact: the affected entities",
+                "description": "impact: each affected entity once",
                 "maxItems": views::MAX_AFFECTED,
                 "items": {
                     "type": "object",
@@ -35,7 +35,7 @@ fn schema() -> serde_json::Value {
                             "type": "array",
                             "items": {"type": "string"},
                             "maxItems": views::MAX_PATH,
-                            "description": "the relation (edge) ids from the start to this entity, in order; each may run either way",
+                            "description": "the relation (edge) ids from the start to this entity, in order; each may run either way; no relation twice, and never back to an entity already passed",
                         },
                         "why": {"type": "string", "description": "one sentence: why this entity is affected (at most 300 characters)"},
                     },

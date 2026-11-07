@@ -10,7 +10,7 @@
 //! names and kinds from the database, plus [`Shown::text`], a plain rendering for a terminal.
 
 use std::collections::hash_map::Entry;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 use surrealdb::types::RecordId;
@@ -114,12 +114,16 @@ pub async fn show(db: &OrgDb, owner: &RecordId, spec: ViewSpec) -> AppResult<Sho
             let graph = Resolved::load(db, owner, entity_ids, relation_ids).await?;
             let start = graph.entity(&start_id)?;
             let headline = clean("headline", &headline, MAX_HEADLINE)?;
+            let mut listed = HashSet::new();
             let affected = affected
                 .iter()
                 .map(|a| {
                     let entity = graph.entity(&a.entity_id)?;
                     if entity.id == start.id {
                         return Err(AppError::bad_request(format!("{} is the start entity; list only what it affects", a.entity_id)));
+                    }
+                    if !listed.insert(entity.id.clone()) {
+                        return Err(AppError::bad_request(format!("{} is listed twice in affected: list each entity once", a.entity_id)));
                     }
                     let path = graph.path(&start, &entity, &a.path)?;
                     Ok(Affected { entity, path, why: clean("why", &a.why, MAX_WHY)? })
@@ -134,7 +138,14 @@ pub async fn show(db: &OrgDb, owner: &RecordId, spec: ViewSpec) -> AppResult<Sho
                 )));
             }
             let graph = Resolved::load(db, owner, entity_ids.iter().map(String::as_str), relation_ids.iter().map(String::as_str)).await?;
-            let relations = relation_ids.iter().map(|r| graph.step(r)).collect::<AppResult<Vec<_>>>()?;
+            // a repeat carries nothing new, so it is dropped rather than refused
+            let mut relations: Vec<Step> = Vec::new();
+            for r in &relation_ids {
+                let step = graph.step(r)?;
+                if !relations.iter().any(|x| x.id == step.id) {
+                    relations.push(step);
+                }
+            }
             // a relation's ends belong in the picture even when the model did not list them
             let mut entities: Vec<EntityRef> = Vec::new();
             let listed = entity_ids.iter().map(|e| graph.entity(e)).collect::<AppResult<Vec<_>>>()?;
@@ -160,7 +171,7 @@ fn clean(field: &str, s: &str, max: usize) -> AppResult<String> {
     if s.chars().count() <= max {
         return Ok(s);
     }
-    Ok(s.chars().take(max - 1).collect::<String>().trim_end().to_string() + "\u{2026}")
+    Ok(s.chars().take(max.saturating_sub(1)).collect::<String>().trim_end().to_string() + "\u{2026}")
 }
 
 fn unknown_entity(id: &str) -> AppError {
@@ -234,15 +245,19 @@ impl Resolved {
     }
 
     /// `ids` as a chain of relations that starts at `start` and ends at `end`, each relation walked in
-    /// either direction.
+    /// either direction, never twice, and never back to an entity it already passed.
     fn path(&self, start: &EntityRef, end: &EntityRef, ids: &[String]) -> AppResult<Vec<Step>> {
         if ids.is_empty() {
             return Err(AppError::bad_request(format!("the path to {} is empty: list the relation ids from the start to it", end.id)));
         }
         let mut at = start.id.clone();
-        let mut steps = Vec::new();
+        let mut passed = HashSet::from([start.id.clone()]);
+        let mut steps: Vec<Step> = Vec::new();
         for id in ids {
             let step = self.step(id)?;
+            if steps.iter().any(|s| s.id == step.id) {
+                return Err(AppError::bad_request(format!("the path to {} uses relation {id} twice", end.id)));
+            }
             at = if step.from.id == at {
                 step.to.id.clone()
             } else if step.to.id == at {
@@ -252,6 +267,9 @@ impl Resolved {
             } else {
                 return Err(AppError::bad_request(format!("the path to {} is broken at relation {id}: it does not touch {at}", end.id)));
             };
+            if !passed.insert(at.clone()) {
+                return Err(AppError::bad_request(format!("the path to {} comes back to {at} at relation {id}: list the shortest chain", end.id)));
+            }
             steps.push(step);
         }
         if at != end.id {

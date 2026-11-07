@@ -506,10 +506,11 @@ async fn an_impact_view_comes_back_resolved_with_names_and_text() {
     assert!(text.contains("Order 12 (order), via Truck 7 carries Shipment 88, then Shipment 88 fulfils Order 12."), "{text}");
 
     let sub = ok(app
-        .tool("show_view", json!({"view": "subgraph", "title": "How Ana reaches Acme", "entity_ids": [ids["Ana"]], "relation_ids": [rel["drives"], rel["for"]]}))
+        .tool("show_view", json!({"view": "subgraph", "title": "How Ana reaches Acme", "entity_ids": [ids["Ana"], ids["Ana"]], "relation_ids": [rel["drives"], rel["for"], rel["drives"]]}))
         .await);
     let names: Vec<&str> = sub["entities"].as_array().unwrap().iter().map(|e| e["name"].as_str().unwrap()).collect();
-    assert_eq!(names, ["Ana", "Truck 7", "Order 12", "Acme"], "a relation's ends are shown too: {sub}");
+    assert_eq!(names, ["Ana", "Truck 7", "Order 12", "Acme"], "a relation's ends are shown too, a repeated id once: {sub}");
+    assert_eq!(sub["relations"].as_array().unwrap().len(), 2, "a repeated relation is shown once: {sub}");
     assert!(sub["text"].as_str().unwrap().contains("- Order 12 for Acme"), "{sub}");
 }
 
@@ -536,6 +537,25 @@ async fn a_view_with_an_invented_id_or_a_broken_path_is_refused_naming_it() {
     let out = app.tool("show_view", impact(truck, json!([{"entity_id": ids["Order 12"], "path": [rel["carries"]], "why": "x"}]))).await;
     refused(&out, "ends at");
     refused(&app.tool("show_view", shipment(json!([]))).await, "is empty");
+    // a chain that goes round in circles is not a path: no relation twice, no entity twice
+    let out = app.tool("show_view", shipment(json!([rel["carries"], rel["carries"], rel["carries"]]))).await;
+    refused(&out, &format!("uses relation {} twice", rel["carries"]));
+    let rides = ok(app.tool("code_relate", json!({"from_id": ids["Shipment 88"], "to_id": truck, "label": "rides_on"})).await);
+    let rides = rides["id"].as_str().unwrap().to_string();
+    let out = app.tool("show_view", impact(truck, json!([{"entity_id": ids["Order 12"], "path": [rel["carries"], rides, rel["carries"], rel["fulfils"]], "why": "x"}]))).await;
+    refused(&out, &format!("comes back to {truck} at relation {rides}"));
+    // each affected entity once
+    let twice = json!([
+        {"entity_id": ids["Shipment 88"], "path": [rel["carries"]], "why": "x"},
+        {"entity_id": ids["Shipment 88"], "path": [rel["carries"]], "why": "y"},
+    ]);
+    refused(&app.tool("show_view", impact(truck, twice)).await, &format!("{} is listed twice", ids["Shipment 88"]));
+    // the caps, before any id is looked up
+    let many: Vec<Value> = (0..=eunomia_backend::views::MAX_AFFECTED).map(|i| json!({"entity_id": format!("entity:many{i}"), "path": ["relates_to:x"], "why": "x"})).collect();
+    refused(&app.tool("show_view", impact(truck, json!(many))).await, &format!("at most {} affected", eunomia_backend::views::MAX_AFFECTED));
+    let long = vec![rel["carries"].clone(); eunomia_backend::views::MAX_PATH + 1];
+    let out = app.tool("show_view", impact(truck, json!([{"entity_id": ids["Order 12"], "path": long, "why": "x"}]))).await;
+    refused(&out, &format!("the path to {} has more than {} relations", ids["Order 12"], eunomia_backend::views::MAX_PATH));
     // an unknown view is a bad argument, not a new kind of answer
     let out = app.tool("show_view", json!({"view": "pie_chart", "title": "x"})).await;
     assert!(out["error"].as_str().unwrap().contains("unknown variant"), "{out}");
