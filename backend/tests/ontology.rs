@@ -1083,3 +1083,393 @@ async fn suggest_proposes_properties_and_only_synonyms_written_in_each_kinds_dat
     let sent: Vec<_> = mock.requests().into_iter().filter(|r| r.path == "/chat/completions").collect();
     assert!(sent[0].body.contains("also called FW"), "{}", sent[0].body);
 }
+
+// ------------------------------------------------------------ certified metrics
+
+/// A metric decision as the owner's browser session sends it.
+async fn decide_metric(app: &TestApp, vault: &str, kind: &str, name: &str, decision: Value) -> (u16, Value) {
+    let body = json!({"kind": kind, "name": name, "decision": decision});
+    let (status, body) = app.http_session("POST", &format!("/api/vaults/{vault}/ontology/metrics/decide"), Some(body)).await;
+    (status.as_u16(), body)
+}
+
+fn metric<'a>(ontology: &'a Value, kind_name: &str, name: &str) -> &'a Value {
+    kind(ontology, kind_name)["metrics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["name"] == name)
+        .unwrap_or_else(|| panic!("no metric {name} on {kind_name} in {ontology}"))
+}
+
+fn eval_args(metric: &str, extra: Value) -> Value {
+    let mut args = json!({"metric": metric});
+    args.as_object_mut().unwrap().extend(extra.as_object().cloned().unwrap_or_default());
+    args
+}
+
+/// A small cafe range in the personal vault. Products with approved `price` (money, AUD), `size` (enum),
+/// `launched_on` (date) and `supplier` (text). Current prices: Latte 5 (4 until June), Mocha 6, Tea 3;
+/// the Scone has no price. Returns the vault and the product ids by name.
+async fn cafe_range(app: &TestApp) -> (String, std::collections::HashMap<&'static str, String>) {
+    let mut ids = std::collections::HashMap::new();
+    for name in ["Latte", "Mocha", "Tea", "Scone"] {
+        ids.insert(name, write(app, name, "product").await["entity"]["id"].as_str().unwrap().to_string());
+    }
+    let vault = personal(app).await;
+    ok(app.tool("ontology_propose", json!({"properties": [
+        price("money"),
+        {"kind": "product", "name": "size", "datatype": "enum", "enum_values": ["Small", "Large"]},
+        {"kind": "product", "name": "launched_on", "datatype": "date"},
+        {"kind": "product", "name": "supplier", "datatype": "text"},
+    ]})).await);
+    for name in ["price", "size", "launched_on", "supplier"] {
+        assert_eq!(decide_property(app, &vault, "product", name, json!({"action": "approve"})).await.0, 200);
+    }
+    let set = |who: &str, property: &str, value: Value, as_of: &str| {
+        app.tool("entity_set_property", json!({"entity_id": ids[who], "property": property, "value": value, "as_of": as_of}))
+    };
+    for (who, property, value, as_of) in [
+        ("Latte", "price", json!(4.0), "2026-01-01"),
+        ("Latte", "price", json!(5.0), "2026-06-01"),
+        ("Mocha", "price", json!(6.0), "2026-02-01"),
+        ("Tea", "price", json!(3.0), "2026-02-01"),
+        ("Latte", "size", json!("Large"), "2026-01-01"),
+        ("Mocha", "size", json!("Large"), "2026-01-01"),
+        ("Tea", "size", json!("Small"), "2026-01-01"),
+        ("Scone", "size", json!("Small"), "2026-01-01"),
+        ("Latte", "launched_on", json!("2026-01-15"), "2026-01-15"),
+        ("Mocha", "launched_on", json!("2026-01-20"), "2026-01-20"),
+        ("Tea", "launched_on", json!("2026-03-05"), "2026-03-05"),
+        ("Latte", "supplier", json!("Riverside Roasters"), "2026-01-01"),
+        ("Mocha", "supplier", json!("Riverside Roasters"), "2026-01-01"),
+        ("Tea", "supplier", json!("Leaf Co"), "2026-01-01"),
+    ] {
+        ok(set(who, property, value, as_of).await);
+    }
+    (vault, ids)
+}
+
+/// Proposes `metrics` (each {name, expr, ...} on product) and approves them in the browser.
+async fn approved_metrics(app: &TestApp, vault: &str, metrics: Value) {
+    let metrics: Vec<Value> = metrics.as_array().unwrap().iter().map(|m| { let mut m = m.clone(); m["kind"] = json!("product"); m }).collect();
+    ok(app.tool("ontology_propose", json!({"metrics": metrics.clone()})).await);
+    for m in &metrics {
+        let (status, body) = decide_metric(app, vault, "product", m["name"].as_str().unwrap(), json!({"action": "approve"})).await;
+        assert_eq!(status, 200, "{body}");
+    }
+}
+
+fn ids_of(names: &[&str], ids: &std::collections::HashMap<&'static str, String>) -> Vec<String> {
+    let mut out: Vec<String> = names.iter().map(|n| ids[n].clone()).collect();
+    out.sort();
+    out
+}
+
+#[tokio::test]
+async fn a_metric_is_refused_unless_its_expression_fits_the_kinds_properties() {
+    let app = TestApp::new().await;
+    cafe_range(&app).await;
+    let propose = |name: &str, expr: Value| app.tool("ontology_propose", json!({"metrics": [{"kind": "product", "name": name, "expr": expr}]}));
+    let gt = |i: usize| json!({"property": "price", "op": "gt", "value": i});
+    for (name, expr, says) in [
+        ("avg_weight", json!({"agg": "avg", "property": "weight"}), "not a property of \"product\""),
+        ("supplier_sum", json!({"agg": "sum", "property": "supplier"}), "needs a number, integer, money or percent property"),
+        ("cheap", json!({"agg": "count", "filters": [{"property": "price", "op": "lt", "value": "cheap"}]}), "must be a number"),
+        ("mixed", json!({"agg": "count", "filters": [{"property": "size", "op": "gt", "value": "Small"}]}), "takes eq, ne or in"),
+        ("many", json!({"agg": "count", "filters": (0..11).map(gt).collect::<Vec<_>>()}), "at most 10 filters"),
+        ("medium", json!({"agg": "count", "filters": [{"property": "size", "op": "eq", "value": "Medum"}]}), "nearest: "),
+        // anything that reads as query text: in a property name, a filter value, or an extra field
+        ("drop", json!({"agg": "sum", "property": "price; DELETE entity_property"}), "invalid property name"),
+        ("inject", json!({"agg": "count", "filters": [{"property": "supplier", "op": "eq", "value": "x'; DELETE entity_property; --"}]}), "looks like query text"),
+        ("raw", json!({"agg": "count", "sql": "SELECT * FROM entity_property"}), "unknown field"),
+        ("Avg Price", json!({"agg": "avg", "property": "price"}), "invalid metric name"),
+    ] {
+        let refused = propose(name, expr).await;
+        assert!(err(&refused).contains(says), "{name}: {refused}");
+    }
+    let mut res = app.db().await.test_raw().query("SELECT VALUE id FROM ontology_metric").await.unwrap();
+    let written: Vec<Value> = res.take(0).unwrap();
+    assert!(written.is_empty(), "a refused metric writes nothing: {written:?}");
+
+    // a metric over a property proposed in the same call is checked against that property
+    let out = ok(app.tool("ontology_propose", json!({
+        "properties": [{"kind": "product", "name": "weight_g", "datatype": "integer"}],
+        "metrics": [{"kind": "product", "name": "avg_weight", "expr": {"agg": "avg", "property": "weight_g"}, "description": "Average weight"}],
+    })).await);
+    assert_eq!(out["metrics"], json!([{"kind": "product", "name": "avg_weight", "status": "proposed", "merge_into": null}]));
+}
+
+#[tokio::test]
+async fn only_a_vault_owner_in_the_browser_decides_a_metric() {
+    let app = TestApp::new().await;
+    let (vault, _) = cafe_range(&app).await;
+    ok(app.tool("ontology_propose", json!({
+        "properties": [{"kind": "product", "name": "weight_g", "datatype": "integer"}],
+        "metrics": [
+            {"kind": "product", "name": "avg_price", "expr": {"agg": "avg", "property": "price"}, "description": "What a product costs on average"},
+            {"kind": "product", "name": "avg_weight", "expr": {"agg": "avg", "property": "weight_g"}},
+        ],
+    })).await);
+    let o = ok(app.tool("ontology_get", json!({})).await);
+    let m = metric(&o, "product", "avg_price");
+    assert_eq!((m["status"].as_str(), m["origin"].as_str(), m["expr_words"].as_str(), m["unit"].as_str()), (Some("proposed"), Some("agent"), Some("Average price"), None));
+    assert_eq!(m["expr"], json!({"agg": "avg", "property": "price"}));
+
+    let path = format!("/api/vaults/{vault}/ontology/metrics/decide");
+    let body = json!({"kind": "product", "name": "avg_price", "decision": {"action": "approve"}});
+    let (status, refused) = app.http("POST", &path, Some(body.clone()), true).await;
+    assert_eq!(status, 403, "a token (an agent may hold one) cannot decide: {refused}");
+    assert_eq!(metric(&ok(app.tool("ontology_get", json!({})).await), "product", "avg_price")["status"], "proposed");
+    let (status, o) = app.http_session("POST", &path, Some(body)).await;
+    assert_eq!(status, 200, "{o}");
+    assert_eq!(metric(&o, "product", "avg_price")["status"], "approved");
+
+    // a metric over a property nobody approved cannot be approved: it would read nothing
+    let (status, refused) = decide_metric(&app, &vault, "product", "avg_weight", json!({"action": "approve"})).await;
+    assert_eq!(status, 400, "{refused}");
+    assert!(refused.to_string().contains("approve the property \\\"weight_g\\\""), "{refused}");
+    let (status, o) = decide_metric(&app, &vault, "product", "avg_weight", json!({"action": "describe", "description": "Grams, on average"})).await;
+    assert_eq!(status, 200, "{o}");
+    assert_eq!((metric(&o, "product", "avg_weight")["description"].as_str(), metric(&o, "product", "avg_weight")["status"].as_str()), (Some("Grams, on average"), Some("proposed")));
+    // a merge target must be a metric of the kind that is kept
+    assert_eq!(decide_metric(&app, &vault, "product", "avg_weight", json!({"action": "reject", "merge_into": "nothing_here"})).await.0, 400);
+    assert_eq!(decide_metric(&app, &vault, "product", "nothing_here", json!({"action": "approve"})).await.0, 404);
+}
+
+#[tokio::test]
+async fn metric_eval_computes_each_aggregate_from_the_latest_values() {
+    let app = TestApp::new().await;
+    let (vault, ids) = cafe_range(&app).await;
+    approved_metrics(&app, &vault, json!([
+        {"name": "total_price", "expr": {"agg": "sum", "property": "price"}},
+        {"name": "avg_price", "expr": {"agg": "avg", "property": "price"}},
+        {"name": "lowest_price", "expr": {"agg": "min", "property": "price"}},
+        {"name": "highest_price", "expr": {"agg": "max", "property": "price"}},
+        {"name": "products", "expr": {"agg": "count"}},
+        {"name": "priced_products", "expr": {"agg": "count", "property": "price"}},
+        {"name": "sizes", "expr": {"agg": "count_distinct", "property": "size"}},
+        {"name": "large_share", "expr": {"agg": "ratio", "numerator": {"agg": "count", "filters": [{"property": "size", "op": "eq", "value": "large"}]}, "denominator": {"agg": "count"}}},
+    ])).await;
+    let run = |name: &str| app.tool("metric_eval", json!({"metric": name}));
+    for (name, value, unit, from) in [
+        ("total_price", 14.0, Some("AUD"), vec!["Latte", "Mocha", "Tea"]),
+        ("avg_price", 4.666667, Some("AUD"), vec!["Latte", "Mocha", "Tea"]),
+        ("lowest_price", 3.0, Some("AUD"), vec!["Latte", "Mocha", "Tea"]),
+        ("highest_price", 6.0, Some("AUD"), vec!["Latte", "Mocha", "Tea"]),
+        ("products", 4.0, None, vec!["Latte", "Mocha", "Tea", "Scone"]),
+        ("priced_products", 3.0, None, vec!["Latte", "Mocha", "Tea"]),
+        ("sizes", 2.0, None, vec!["Latte", "Mocha", "Tea", "Scone"]),
+        ("large_share", 0.5, None, vec!["Latte", "Mocha", "Tea", "Scone"]),
+    ] {
+        let out = ok(run(name).await);
+        assert_eq!(out["value"].as_f64(), Some(value), "{name}: {out}");
+        assert_eq!(out["unit"].as_str(), unit, "{name}: {out}");
+        assert_eq!((out["status"].as_str(), out["kind"].as_str(), out["n_entities"].as_u64()), (Some("approved"), Some("product"), Some(from.len() as u64)), "{name}: {out}");
+        let got: Vec<String> = serde_json::from_value(out["entity_ids"].clone()).unwrap();
+        assert_eq!(got, ids_of(&from, &ids), "{name}: the entities it was computed from");
+        assert_eq!(out["truncated"], false);
+    }
+    let shown = ok(run("large_share").await);
+    assert_eq!(shown["expr_words"], "Number of product where size is Large, divided by number of product");
+}
+
+#[tokio::test]
+async fn metric_eval_reads_each_value_as_of_a_date_and_applies_filters() {
+    let app = TestApp::new().await;
+    let (vault, ids) = cafe_range(&app).await;
+    approved_metrics(&app, &vault, json!([
+        {"name": "total_price", "expr": {"agg": "sum", "property": "price"}},
+        {"name": "riverside_avg_price", "expr": {"agg": "avg", "property": "price", "filters": [{"property": "supplier", "op": "eq", "value": "Riverside Roasters"}]}},
+        {"name": "launched_total", "expr": {"agg": "sum", "property": "price", "time_property": "launched_on", "grain": "month"}},
+    ])).await;
+    let run = |name: &str, extra: Value| app.tool("metric_eval", eval_args(name, extra));
+
+    // history from typed properties: the Latte was 4 until June
+    assert_eq!(ok(run("total_price", json!({})).await)["value"].as_f64(), Some(14.0));
+    let march = ok(run("total_price", json!({"as_of": "2026-03-01"})).await);
+    assert_eq!((march["value"].as_f64(), march["as_of"].as_str()), (Some(13.0), Some("2026-03-01T23:59:59Z")), "{march}");
+    // a bare date includes the values dated that day
+    assert_eq!(ok(run("total_price", json!({"as_of": "2026-06-01"})).await)["value"].as_f64(), Some(14.0));
+    let early = ok(run("total_price", json!({"as_of": "2026-01-10"})).await);
+    assert_eq!((early["value"].as_f64(), early["n_entities"].as_u64()), (Some(4.0), Some(1)));
+    assert_eq!(early["entity_ids"], json!([ids["Latte"]]));
+
+    // the metric's filter, then an extra one ANDed with it
+    let riverside = ok(run("riverside_avg_price", json!({})).await);
+    assert_eq!((riverside["value"].as_f64(), riverside["n_entities"].as_u64()), (Some(5.5), Some(2)), "{riverside}");
+    let large = ok(run("total_price", json!({"filters": [{"property": "size", "op": "in", "value": ["Large"]}]})).await);
+    assert_eq!(large["value"].as_f64(), Some(11.0), "{large}");
+    assert!(large["expr_words"].as_str().unwrap().ends_with("and where size is one of Large"), "{large}");
+    let cheap = ok(run("total_price", json!({"filters": [{"property": "price", "op": "lt", "value": 5}]})).await);
+    assert_eq!(cheap["value"].as_f64(), Some(3.0));
+
+    // a series by the month each product launched, oldest first
+    let series = ok(run("launched_total", json!({"group_by_grain": true})).await);
+    assert_eq!(series["series"], json!([{"period": "2026-01", "value": 11.0, "n": 2}, {"period": "2026-03", "value": 3.0, "n": 1}]), "{series}");
+    assert!(series["value"].is_null());
+    let refused = run("total_price", json!({"group_by_grain": true})).await;
+    assert!(err(&refused).contains("has no time_property"), "{refused}");
+}
+
+#[tokio::test]
+async fn a_misspelt_filter_value_warns_with_the_nearest_values_instead_of_a_zero() {
+    let app = TestApp::new().await;
+    let (vault, _) = cafe_range(&app).await;
+    approved_metrics(&app, &vault, json!([{"name": "total_price", "expr": {"agg": "sum", "property": "price"}}])).await;
+
+    let out = ok(app.tool("metric_eval", json!({"metric": "total_price", "filters": [{"property": "size", "op": "eq", "value": "Lage"}]})).await);
+    assert!(out["value"].is_null(), "an enum value listed nowhere is no answer, not 0: {out}");
+    let warnings = out["warnings"].to_string();
+    assert!(warnings.contains("nearest: Large"), "{out}");
+    assert_eq!(out["n_entities"], 0);
+
+    // a text value no entity holds names the stored values nearest it
+    let out = ok(app.tool("metric_eval", json!({"metric": "total_price", "filters": [{"property": "supplier", "op": "eq", "value": "Riverside Roaster"}]})).await);
+    assert_eq!(out["value"].as_f64(), Some(0.0));
+    assert!(out["warnings"].to_string().contains("nearest stored values: Riverside Roasters"), "{out}");
+}
+
+#[tokio::test]
+async fn only_an_approved_metric_runs_by_name() {
+    let app = TestApp::new().await;
+    let (vault, _) = cafe_range(&app).await;
+    approved_metrics(&app, &vault, json!([{"name": "avg_price", "expr": {"agg": "avg", "property": "price"}}])).await;
+    ok(app.tool("ontology_propose", json!({"metrics": [
+        {"kind": "product", "name": "max_price", "expr": {"agg": "max", "property": "price"}},
+        {"kind": "product", "name": "mean_price", "expr": {"agg": "avg", "property": "price"}},
+        {"kind": "product", "name": "junk", "expr": {"agg": "count"}},
+    ]})).await);
+
+    // proposed: refused, unless the caller asks to try it, and then marked unapproved
+    let refused = app.tool("metric_eval", json!({"metric": "max_price"})).await;
+    assert!(err(&refused).contains("proposed, not approved") && err(&refused).contains("allow_unapproved"), "{refused}");
+    let tried = ok(app.tool("metric_eval", json!({"metric": "max_price", "allow_unapproved": true})).await);
+    assert_eq!((tried["value"].as_f64(), tried["status"].as_str()), (Some(6.0), Some("proposed")), "{tried}");
+    assert!(tried["warnings"].to_string().contains("not approved"), "{tried}");
+
+    // rejected into another metric: that one runs, and the result says so
+    assert_eq!(decide_metric(&app, &vault, "product", "mean_price", json!({"action": "reject", "merge_into": "avg_price"})).await.0, 200);
+    let mapped = ok(app.tool("metric_eval", json!({"metric": "mean_price"})).await);
+    assert_eq!(mapped["metric_mapped"], json!({"from": "mean_price", "to": "avg_price"}));
+    assert_eq!((mapped["metric"].as_str(), mapped["value"].as_f64(), mapped["status"].as_str()), (Some("avg_price"), Some(4.666667), Some("approved")));
+
+    // rejected with no target, or unknown: refused, naming the approved metrics
+    assert_eq!(decide_metric(&app, &vault, "product", "junk", json!({"action": "reject"})).await.0, 200);
+    let refused = app.tool("metric_eval", json!({"metric": "junk", "allow_unapproved": true})).await;
+    assert!(err(&refused).contains("was rejected") && err(&refused).contains("avg_price (product)"), "{refused}");
+    assert_eq!(refused["code"], "ontology.rejected", "{refused}");
+    let unknown = app.tool("metric_eval", json!({"metric": "median_price"})).await;
+    assert!(err(&unknown).contains("no metric \"median_price\"") && err(&unknown).contains("avg_price (product)"), "{unknown}");
+
+    // the metric is the personal vault's: another vault has none
+    ok(app.tool("vault_create", json!({"name": "Team", "kind": "org"})).await);
+    let elsewhere = app.tool("metric_eval", json!({"metric": "avg_price", "vault_id": "Team"})).await;
+    assert!(err(&elsewhere).contains("no metric"), "{elsewhere}");
+}
+
+#[tokio::test]
+async fn a_metric_lists_at_most_fifty_entity_ids_and_says_when_there_were_more() {
+    let app = TestApp::new().await;
+    let items: Vec<Value> = (0..55).map(|i| json!({"subject_name": format!("Widget {i}"), "subject_kind": "widget", "text": format!("Widget {i} is a widget")})).collect();
+    ok(app.tool("memory_write_batch", json!({"items": items})).await);
+    let vault = personal(&app).await;
+    ok(app.tool("ontology_propose", json!({"metrics": [{"kind": "widget", "name": "widgets", "expr": {"agg": "count"}}]})).await);
+    assert_eq!(decide_metric(&app, &vault, "widget", "widgets", json!({"action": "approve"})).await.0, 200);
+    let out = ok(app.tool("metric_eval", json!({"metric": "widgets"})).await);
+    assert_eq!((out["value"].as_f64(), out["n_entities"].as_u64(), out["truncated"].as_bool()), (Some(55.0), Some(55), Some(true)), "{out}");
+    assert_eq!(out["entity_ids"].as_array().unwrap().len(), 50);
+}
+
+#[tokio::test]
+async fn a_metric_view_runs_the_metric_again_and_never_takes_a_number() {
+    let app = TestApp::new().await;
+    let (vault, _) = cafe_range(&app).await;
+    approved_metrics(&app, &vault, json!([{"name": "avg_price", "expr": {"agg": "avg", "property": "price"}, "description": "What a product costs on average"}])).await;
+
+    // a number the model sends is not part of the view: the server's own run is
+    let shown = ok(app.tool("show_view", json!({"view": "metric", "metric": "avg_price", "value": 999})).await);
+    assert_eq!((shown["view"].as_str(), shown["metric"]["value"].as_f64(), shown["metric"]["unit"].as_str()), (Some("metric"), Some(4.666667), Some("AUD")), "{shown}");
+    let mut names: Vec<&str> = shown["entities"].as_array().unwrap().iter().map(|e| e["name"].as_str().unwrap()).collect();
+    names.sort();
+    assert_eq!(names, ["Latte", "Mocha", "Tea"]);
+    let text = shown["text"].as_str().unwrap();
+    assert!(text.starts_with("avg_price: 4.67 AUD\nAverage price. What a product costs on average.\nAs of "), "{text}");
+    assert!(text.contains("from 3 products") && text.contains("From: "), "{text}");
+
+    let refused = app.tool("show_view", json!({"view": "metric", "metric": "made_up_metric"})).await;
+    assert!(err(&refused).contains("no metric \"made_up_metric\""), "{refused}");
+
+    // over MCP, the view reads as its text
+    let rpc = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "show_view", "arguments": {"view": "metric", "metric": "avg_price"}}});
+    let (_, rpc) = app.http("POST", "/mcp", Some(rpc), true).await;
+    assert_eq!(rpc["result"]["content"][0]["text"], rpc["result"]["structuredContent"]["text"], "{rpc}");
+    assert!(rpc["result"]["content"][0]["text"].as_str().unwrap().starts_with("avg_price: 4.67 AUD"), "{rpc}");
+}
+
+#[tokio::test]
+async fn the_chat_answers_a_number_with_metric_eval_and_streams_the_metric_view() {
+    let app = TestApp::new().await;
+    let (vault, _) = cafe_range(&app).await;
+    approved_metrics(&app, &vault, json!([{"name": "avg_price", "expr": {"agg": "avg", "property": "price"}}])).await;
+
+    let call = |i: usize, id: &str, name: &str, args: Value| json!({"index": i, "id": id, "function": {"name": name, "arguments": args.to_string()}});
+    let tools = json!({"choices": [{"delta": {"tool_calls": [
+        call(0, "c1", "metric_eval", json!({"metric": "avg_price"})),
+        call(1, "c2", "show_view", json!({"view": "metric", "metric": "avg_price"})),
+    ]}}]});
+    let reply = json!({"choices": [{"delta": {"content": "The average price is 4.67 AUD, from 3 products."}}]});
+    let sse = |chunk: Value| format!("data: {chunk}\n\ndata: [DONE]\n\n");
+    let mock = serve(vec![
+        route("POST", "/chat/completions", json!(null)).body("\"role\":\"tool\"").raw(&sse(reply)).header("content-type", "text/event-stream"),
+        route("POST", "/chat/completions", json!(null)).raw(&sse(tools)).header("content-type", "text/event-stream"),
+    ])
+    .await;
+    let (status, _) = app.http("PATCH", "/api/settings", Some(json!({"openai_base_url": mock.base})), true).await;
+    assert_eq!(status, 200);
+
+    let (_, events) = chat(&app, "What is the average price of our products?").await;
+    let names: Vec<&str> = events.iter().filter(|e| e["type"] == "tool_result").map(|e| e["name"].as_str().unwrap()).collect();
+    assert_eq!(names, ["metric_eval", "show_view"], "{events:?}");
+    let shown = &events.iter().find(|e| e["type"] == "tool_result" && e["name"] == "show_view").unwrap()["view"];
+    assert_eq!((shown["view"].as_str(), shown["metric"]["value"].as_f64()), (Some("metric"), Some(4.666667)), "{shown}");
+    assert_eq!(events.iter().find(|e| e["type"] == "done").unwrap()["reply"], "The average price is 4.67 AUD, from 3 products.");
+    // the model read the server's number and its entity ids in the metric_eval result
+    let sent: Vec<_> = mock.requests().into_iter().filter(|r| r.path == "/chat/completions" && r.body.contains("\"role\":\"tool\"")).collect();
+    assert!(sent.iter().any(|r| r.body.contains("4.666667") && r.body.contains("entity_ids")), "{:?}", sent.iter().map(|r| &r.body).collect::<Vec<_>>());
+}
+
+#[tokio::test]
+async fn reads_still_work_on_an_org_database_before_the_metrics_migration() {
+    let app = TestApp::new().await;
+    write(&app, "Latte", "product").await;
+    app.db().await.test_raw().query("REMOVE TABLE ontology_metric").await.unwrap().check().unwrap();
+    assert_eq!(kind(&ok(app.tool("ontology_get", json!({})).await), "product")["metrics"], json!([]));
+    let refused = app.tool("metric_eval", json!({"metric": "avg_price"})).await;
+    assert!(err(&refused).contains("no metric"), "{refused}");
+}
+
+#[tokio::test]
+async fn suggest_proposes_metrics_the_kinds_properties_can_compute() {
+    let answer = json!({
+        "properties": [{"kind": "product", "name": "price", "datatype": "money", "unit": "AUD"}],
+        "metrics": [
+            {"kind": "product", "name": "avg_price", "description": "What a product costs on average", "expr": {"agg": "avg", "property": "price"}, "reason": "prices are in the facts"},
+            {"kind": "product", "name": "avg_weight", "expr": {"agg": "avg", "property": "weight"}},
+            {"kind": "product", "name": "raw", "expr": {"agg": "count", "sql": "SELECT 1"}},
+        ],
+    });
+    let completion = json!({"choices": [{"message": {"content": answer.to_string()}}]});
+    let mock = serve(vec![route("POST", "/chat/completions", completion)]).await;
+    let settings = Settings { openai_base_url: mock.base.clone(), openai_api_key: Some("sk-test".into()), openai_chat_model: "test-model".into(), ..test_settings() };
+    let app = TestApp::with_settings(settings).await;
+    write(&app, "Latte", "product").await;
+
+    let out = ok(app.tool("ontology_suggest", json!({})).await);
+    // a metric over a property that does not exist, or with a field that is not part of an expression, is dropped
+    assert_eq!((out["mode"].as_str(), out["skipped"].as_i64()), (Some("model"), Some(2)), "{out}");
+    let m = metric(&out["ontology"], "product", "avg_price");
+    assert_eq!((m["status"].as_str(), m["origin"].as_str(), m["expr_words"].as_str()), (Some("proposed"), Some("suggested"), Some("Average price")));
+    let sent: Vec<_> = mock.requests().into_iter().filter(|r| r.path == "/chat/completions").collect();
+    assert!(sent[0].body.contains("count_distinct"), "the prompt explains metrics: {}", sent[0].body);
+}

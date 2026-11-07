@@ -11,7 +11,7 @@ use surrealdb::types::RecordId;
 
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::models_user::User;
-use crate::ontology::{self, property::PropertyDecision, suggest::SuggestOut, KindDecision, LinkDecision, OntologyOut};
+use crate::ontology::{self, metric::MetricDecision, property::PropertyDecision, suggest::SuggestOut, KindDecision, LinkDecision, OntologyOut};
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -21,6 +21,7 @@ pub fn router() -> Router<AppState> {
         .route("/vaults/{vault_id}/ontology/kinds/decide", post(decide_kind))
         .route("/vaults/{vault_id}/ontology/links/decide", post(decide_link))
         .route("/vaults/{vault_id}/ontology/properties/decide", post(decide_property))
+        .route("/vaults/{vault_id}/ontology/metrics/decide", post(decide_metric))
 }
 
 fn parse_vault_id(vault_id: &str) -> AppResult<RecordId> {
@@ -46,6 +47,13 @@ struct PropertyDecideBody {
     kind: String,
     name: String,
     decision: PropertyDecision,
+}
+
+#[derive(Deserialize, utoipa::ToSchema)]
+struct MetricDecideBody {
+    kind: String,
+    name: String,
+    decision: MetricDecision,
 }
 
 #[utoipa::path(
@@ -131,6 +139,23 @@ async fn decide_property(State(state): State<AppState>, user: User, Path(vault_i
     Ok(Json(ontology::property::decide_property(&state.db, &user.id, &vault, &body.kind, &body.name, body.decision).await?))
 }
 
+#[utoipa::path(
+    operation_id = "decideVaultOntologyMetric",
+    post,
+    path = "/api/vaults/{vault_id}/ontology/metrics/decide",
+    tag = "vaults",
+    summary = "Approve, reject (optionally merging into another metric of the kind) or describe a metric (owner, browser session only)",
+    params(("vault_id" = String, Path)),
+    request_body = MetricDecideBody,
+    responses((status = 200, body = OntologyOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = [])),
+)]
+async fn decide_metric(State(state): State<AppState>, user: User, Path(vault_id): Path<String>, Json(body): Json<MetricDecideBody>) -> AppResult<Json<OntologyOut>> {
+    let state = state.org(&user.org).await?;
+    let vault = parse_vault_id(&vault_id)?;
+    Ok(Json(ontology::metric::decide_metric(&state.db, &user.id, &vault, &body.kind, &body.name, body.decision).await?))
+}
+
 #[derive(utoipa::OpenApi)]
-#[openapi(paths(get_ontology, suggest_ontology, decide_kind, decide_link, decide_property))]
+#[openapi(paths(get_ontology, suggest_ontology, decide_kind, decide_link, decide_property, decide_metric))]
 pub struct Doc;

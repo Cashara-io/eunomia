@@ -8,8 +8,11 @@
 //! * Ground: [`ground`] sends a write under a rejected kind to its merge target, or refuses it;
 //!   [`ground_link`] refuses a relation of a rejected link type; [`property::set_property`] takes a
 //!   value only for an approved property (migration 0034).
-//! * Expose: the `ontology_*` tools and `entity_set_property` (`tools/registry/ontology.rs`).
+//! * Compute: [`metric::eval`] runs an approved metric over the typed values and returns the entities
+//!   it used (migration 0035); [`metric::decide_metric`] is decided like a property.
+//! * Expose: the `ontology_*` tools, `entity_set_property` and `metric_eval` (`tools/registry/ontology.rs`).
 
+pub mod metric;
 pub mod property;
 pub mod suggest;
 
@@ -174,10 +177,10 @@ fn link_rid(vault: &RecordId, key: &LinkKey) -> RecordId {
 }
 
 /// Whether `e` is a read of an ontology table on an org database one schema behind (before migration
-/// 0033 or 0034), which is served until its migration job runs.
+/// 0033, 0034 or 0035), which is served until its migration job runs.
 fn no_ontology_table(e: &surrealdb::Error) -> bool {
     let s = e.to_string();
-    ["ontology_kind", "ontology_link", "ontology_property", "entity_property"]
+    ["ontology_kind", "ontology_link", "ontology_property", "entity_property", "ontology_metric"]
         .iter()
         .any(|t| s.contains(&format!("The table '{t}' does not exist")))
 }
@@ -274,6 +277,8 @@ pub struct KindItem {
     pub samples: Vec<String>,
     /// Its typed properties, each with its review status. Only an approved one takes values.
     pub properties: Vec<property::PropertyItem>,
+    /// Its metrics, each with its review status and expression. Only an approved one runs by name.
+    pub metrics: Vec<metric::MetricItem>,
 }
 
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
@@ -329,10 +334,16 @@ pub(crate) async fn view(db: &OrgDb, vault: &RecordId) -> AppResult<OntologyOut>
     let kind_rows: Vec<KindRow> = registry.take(0)?;
     let link_rows: Vec<LinkRow> = registry.take(1)?;
     let properties = property::properties_by_kind(db, vault).await?;
-    Ok(OntologyOut { vault: vault.to_string(), kinds: merge_kinds(counts, kind_rows, properties)?, links: merge_links(link_counts, link_rows)? })
+    let metrics = metric::metrics_by_kind(db, vault).await?;
+    Ok(OntologyOut { vault: vault.to_string(), kinds: merge_kinds(counts, kind_rows, properties, metrics)?, links: merge_links(link_counts, link_rows)? })
 }
 
-fn merge_kinds(counts: Vec<KindCount>, rows: Vec<KindRow>, properties: BTreeMap<String, Vec<property::PropertyItem>>) -> AppResult<Vec<KindItem>> {
+fn merge_kinds(
+    counts: Vec<KindCount>,
+    rows: Vec<KindRow>,
+    properties: BTreeMap<String, Vec<property::PropertyItem>>,
+    metrics: BTreeMap<String, Vec<metric::MetricItem>>,
+) -> AppResult<Vec<KindItem>> {
     let mut by_kind: BTreeMap<String, KindItem> = BTreeMap::new();
     let blank = |kind: &str| KindItem {
         kind: kind.to_string(),
@@ -346,6 +357,7 @@ fn merge_kinds(counts: Vec<KindCount>, rows: Vec<KindRow>, properties: BTreeMap<
         entities: 0,
         samples: Vec::new(),
         properties: Vec::new(),
+        metrics: Vec::new(),
     };
     for c in counts {
         by_kind.insert(c.kind.clone(), KindItem { entities: c.count, samples: c.samples, ..blank(&c.kind) });
@@ -361,6 +373,9 @@ fn merge_kinds(counts: Vec<KindCount>, rows: Vec<KindRow>, properties: BTreeMap<
     }
     for (kind, props) in properties {
         by_kind.entry(kind.clone()).or_insert_with(|| blank(&kind)).properties = props;
+    }
+    for (kind, ms) in metrics {
+        by_kind.entry(kind.clone()).or_insert_with(|| blank(&kind)).metrics = ms;
     }
     let mut kinds: Vec<KindItem> = by_kind.into_values().collect();
     kinds.sort_by_key(|k| (KINDS.iter().position(|b| *b == k.kind).unwrap_or(KINDS.len()), k.kind.clone()));
@@ -483,6 +498,7 @@ impl LinkProposal {
 pub const MAX_PROPOSED_KINDS: usize = 50;
 pub const MAX_PROPOSED_LINKS: usize = 100;
 pub const MAX_PROPOSED_PROPERTIES: usize = 200;
+pub const MAX_PROPOSED_METRICS: usize = 50;
 
 /// A proposed kind after the call: `status` is the row's, so a kind a person already decided shows
 /// that decision (the proposal did not change it).
@@ -506,6 +522,7 @@ pub struct ProposeOut {
     pub kinds: Vec<ProposedKind>,
     pub links: Vec<ProposedLink>,
     pub properties: Vec<property::ProposedProperty>,
+    pub metrics: Vec<metric::ProposedMetric>,
 }
 
 /// What one proposal call carries.
@@ -517,34 +534,43 @@ pub struct Proposals {
     pub links: Vec<LinkProposal>,
     #[serde(default)]
     pub properties: Vec<property::PropertyProposal>,
+    #[serde(default)]
+    pub metrics: Vec<metric::MetricProposal>,
 }
 
 /// An agent's proposals for `vault_id` (the caller's personal vault when omitted). Every item is
 /// checked before any is written: one bad name fails the call.
 pub async fn propose(db: &OrgDb, owner: &RecordId, vault_id: Option<&RecordId>, p: &Proposals) -> AppResult<ProposeOut> {
-    if p.kinds.is_empty() && p.links.is_empty() && p.properties.is_empty() {
-        return Err(AppError::bad_request("propose at least one kind, link or property"));
+    if p.kinds.is_empty() && p.links.is_empty() && p.properties.is_empty() && p.metrics.is_empty() {
+        return Err(AppError::bad_request("propose at least one kind, link, property or metric"));
     }
-    if p.kinds.len() > MAX_PROPOSED_KINDS || p.links.len() > MAX_PROPOSED_LINKS || p.properties.len() > MAX_PROPOSED_PROPERTIES {
+    if p.kinds.len() > MAX_PROPOSED_KINDS
+        || p.links.len() > MAX_PROPOSED_LINKS
+        || p.properties.len() > MAX_PROPOSED_PROPERTIES
+        || p.metrics.len() > MAX_PROPOSED_METRICS
+    {
         return Err(AppError::bad_request(format!(
-            "at most {MAX_PROPOSED_KINDS} kinds, {MAX_PROPOSED_LINKS} links and {MAX_PROPOSED_PROPERTIES} properties per call"
+            "at most {MAX_PROPOSED_KINDS} kinds, {MAX_PROPOSED_LINKS} links, {MAX_PROPOSED_PROPERTIES} properties and {MAX_PROPOSED_METRICS} metrics per call"
         )));
     }
     let vault = resolve(db, owner, vault_id, Action::WriteMemories).await?;
     let kinds = p.kinds.iter().map(KindProposal::validate).collect::<AppResult<Vec<_>>>()?;
     let links = p.links.iter().map(LinkProposal::validate).collect::<AppResult<Vec<_>>>()?;
     let properties = p.properties.iter().map(property::PropertyProposal::validate).collect::<AppResult<Vec<_>>>()?;
-    apply(db, &vault, kinds, links, properties, Origin::Agent).await
+    let metrics = metric::validate_all(db, &vault, &p.metrics, &properties).await?;
+    apply(db, &vault, Valid { kinds, links, properties, metrics }, Origin::Agent).await
 }
 
-async fn apply(
-    db: &OrgDb,
-    vault: &RecordId,
+/// Proposals that passed their checks, ready to write.
+struct Valid {
     kinds: Vec<ValidKind>,
     links: Vec<ValidLink>,
     properties: Vec<property::ValidProperty>,
-    origin: Origin,
-) -> AppResult<ProposeOut> {
+    metrics: Vec<metric::ValidMetric>,
+}
+
+async fn apply(db: &OrgDb, vault: &RecordId, valid: Valid, origin: Origin) -> AppResult<ProposeOut> {
+    let Valid { kinds, links, properties, metrics } = valid;
     let mut out = ProposeOut::default();
     for k in kinds {
         let id = kind_rid(vault, &k.kind);
@@ -587,6 +613,7 @@ async fn apply(
         out.links.push(ProposedLink { from_kind: row.from_kind, label: row.label, to_kind: row.to_kind, status: Status::parse(&row.status)? });
     }
     out.properties = property::apply_properties(db, vault, properties, origin).await?;
+    out.metrics = metric::apply_metrics(db, vault, metrics, origin).await?;
     Ok(out)
 }
 
@@ -846,7 +873,7 @@ mod tests {
 
     #[test]
     fn built_in_kinds_come_first_then_the_rest_by_name() {
-        let kinds = merge_kinds(vec![count("zebra", 2), count("person", 1), count("db", 3), count("file", 0)], vec![row("alpha", "proposed")], BTreeMap::new()).unwrap();
+        let kinds = merge_kinds(vec![count("zebra", 2), count("person", 1), count("db", 3), count("file", 0)], vec![row("alpha", "proposed")], BTreeMap::new(), BTreeMap::new()).unwrap();
         let names: Vec<&str> = kinds.iter().map(|k| k.kind.as_str()).collect();
         assert_eq!(names, ["person", "file", "alpha", "db", "zebra"]);
         assert_eq!(kinds[2].status, ViewStatus::Proposed);
@@ -857,7 +884,7 @@ mod tests {
 
     #[test]
     fn a_registry_row_sets_the_status_of_an_observed_kind() {
-        let kinds = merge_kinds(vec![count("db", 3)], vec![row("db", "rejected")], BTreeMap::new()).unwrap();
+        let kinds = merge_kinds(vec![count("db", 3)], vec![row("db", "rejected")], BTreeMap::new(), BTreeMap::new()).unwrap();
         assert_eq!((kinds[0].status, kinds[0].entities, kinds[0].origin), (ViewStatus::Rejected, 3, Some(Origin::Agent)));
     }
 

@@ -791,6 +791,32 @@ expression: info(&db).await
       "kind": {
         "kind": "NORMAL"
       },
+      "name": "ontology_metric",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "vault",
+            "kind",
+            "name"
+          ],
+          "index": "UNIQUE",
+          "name": "ontology_metric_vault_key_unique",
+          "table": "ontology_metric"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
       "name": "ontology_property",
       "permissions": {
         "create": false,

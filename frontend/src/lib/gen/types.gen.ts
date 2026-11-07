@@ -76,6 +76,11 @@ export type AdminChange = {
 };
 
 /**
+ * How a metric combines its entities' values.
+ */
+export type Agg = 'sum' | 'count' | 'avg' | 'min' | 'max' | 'count_distinct' | 'ratio';
+
+/**
  * Which kind of event a filter chip asks for.
  */
 export type AuditCategory = 'all' | 'changes' | 'spaces' | 'signins' | 'tokens' | 'apps' | 'admin' | 'sharing' | 'server';
@@ -690,6 +695,18 @@ export type FillOut = {
     status: string;
 };
 
+/**
+ * Keeps entities whose value of `property` compares to `value` by `op` (`in` takes a list).
+ */
+export type Filter = {
+    op: Op;
+    property: string;
+    /**
+     * In the property's datatype; a list for `in`.
+     */
+    value: unknown;
+};
+
 export type FinanceAccount = {
     balance: string;
     name: string;
@@ -708,6 +725,8 @@ export type FinanceTransaction = {
     created_at: string;
     description: string;
 };
+
+export type Grain = 'day' | 'week' | 'month' | 'quarter' | 'year';
 
 export type Grant = {
     client_id: string;
@@ -1010,6 +1029,10 @@ export type KindItem = {
      * Rejected: where writes under this kind go instead. Proposed: the merge the proposer suggests.
      */
     merge_into?: string | null;
+    /**
+     * Its metrics, each with its review status and expression. Only an approved one runs by name.
+     */
+    metrics: Array<MetricItem>;
     origin?: null | Origin;
     /**
      * Its typed properties, each with its review status. Only an approved one takes values.
@@ -1186,6 +1209,68 @@ export type MessageOut = {
     }> | null;
 };
 
+export type MetricDecideBody = {
+    decision: MetricDecision;
+    kind: string;
+    name: string;
+};
+
+export type MetricDecision = {
+    action: 'approve';
+} | {
+    action: 'reject';
+    merge_into?: string | null;
+} | {
+    action: 'describe';
+    description: string;
+};
+
+/**
+ * What a metric computes, over the latest value of each property per entity. Never query text: an
+ * unknown field is refused.
+ */
+export type MetricExpr = {
+    agg: Agg;
+    denominator?: null | SubExpr;
+    /**
+     * ANDed, and on a ratio applied to both sides.
+     */
+    filters?: Array<Filter>;
+    grain?: null | Grain;
+    numerator?: null | SubExpr;
+    /**
+     * The measured property: needed by sum, avg, min, max and count_distinct; count counts the
+     * entities that have it, or every entity without it.
+     */
+    property?: string | null;
+    /**
+     * A date or datetime property a series groups the entities by.
+     */
+    time_property?: string | null;
+};
+
+/**
+ * One metric of a kind, as the ontology view shows it. Its value is never here: `metric_eval` runs it.
+ */
+export type MetricItem = {
+    description?: string | null;
+    expr: MetricExpr;
+    /**
+     * The expression in plain words, e.g. "Sum of price where status is late".
+     */
+    expr_words: string;
+    /**
+     * Rejected: the metric of the same kind that runs instead. Proposed: the merge the proposer suggests.
+     */
+    merge_into?: string | null;
+    name: string;
+    origin: Origin;
+    reason?: string | null;
+    status: Status;
+    synonyms: Array<string>;
+    unit?: string | null;
+};
+
 export type Metrics = {
     /**
      * Org database handles currently open in this process (the pool is capped).
@@ -1264,6 +1349,8 @@ export type OntologyOut = {
     links: Array<LinkItem>;
     vault: string;
 };
+
+export type Op = 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte' | 'in';
 
 /**
  * Who proposed a row: the server's model, an agent over MCP, or a person in the app.
@@ -1521,6 +1608,7 @@ export type PropertyValue = {
 export type ProposeOut = {
     kinds: Array<ProposedKind>;
     links: Array<ProposedLink>;
+    metrics: Array<ProposedMetric>;
     properties: Array<ProposedProperty>;
 };
 
@@ -1539,6 +1627,16 @@ export type ProposedLink = {
     label: string;
     status: Status;
     to_kind: string;
+};
+
+/**
+ * A proposed metric after the call, with the row's status (a decided one keeps its decision).
+ */
+export type ProposedMetric = {
+    kind: string;
+    merge_into?: string | null;
+    name: string;
+    status: Status;
 };
 
 /**
@@ -2016,6 +2114,15 @@ export type Stability = 'stable' | 'preview';
  * What a person decided about a kind or link, as stored.
  */
 export type Status = 'proposed' | 'approved' | 'rejected';
+
+/**
+ * One side of a ratio.
+ */
+export type SubExpr = {
+    agg: Agg;
+    filters?: Array<Filter>;
+    property?: string | null;
+};
 
 export type SuggestOut = {
     mode: 'model';
@@ -6057,6 +6164,30 @@ export type DecideVaultOntologyLinkResponses = {
 };
 
 export type DecideVaultOntologyLinkResponse = DecideVaultOntologyLinkResponses[keyof DecideVaultOntologyLinkResponses];
+
+export type DecideVaultOntologyMetricData = {
+    body: MetricDecideBody;
+    path: {
+        vault_id: string;
+    };
+    query?: never;
+    url: '/api/vaults/{vault_id}/ontology/metrics/decide';
+};
+
+export type DecideVaultOntologyMetricErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type DecideVaultOntologyMetricError = DecideVaultOntologyMetricErrors[keyof DecideVaultOntologyMetricErrors];
+
+export type DecideVaultOntologyMetricResponses = {
+    200: OntologyOut;
+};
+
+export type DecideVaultOntologyMetricResponse = DecideVaultOntologyMetricResponses[keyof DecideVaultOntologyMetricResponses];
 
 export type DecideVaultOntologyPropertyData = {
     body: PropertyDecideBody;

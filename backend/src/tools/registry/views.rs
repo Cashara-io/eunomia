@@ -20,7 +20,7 @@ fn schema() -> serde_json::Value {
     json!({
         "type": "object",
         "properties": {
-            "view": {"type": "string", "enum": ["impact", "subgraph"], "description": "`impact`: what a change, delay or problem with one entity affects. `subgraph`: how some entities connect"},
+            "view": {"type": "string", "enum": ["impact", "subgraph", "metric"], "description": "`impact`: what a change, delay or problem with one entity affects. `subgraph`: how some entities connect. `metric`: an approved metric's number, run again by the server"},
             "start_id": {"type": "string", "description": "impact: the entity that changed"},
             "headline": {"type": "string", "description": "impact: one sentence, what happened (at most 200 characters)"},
             "affected": {
@@ -45,6 +45,13 @@ fn schema() -> serde_json::Value {
             "title": {"type": "string", "description": "subgraph: what the picture shows"},
             "entity_ids": id_list("subgraph: the entities to show"),
             "relation_ids": id_list("subgraph: the relations (edge ids) between them to show; their ends are shown too"),
+            "metric": {"type": "string", "description": "metric: the metric's name; the other metric fields are as for metric_eval"},
+            "kind": {"type": "string", "description": "metric: its kind, when several kinds have one of that name"},
+            "vault_id": {"type": "string", "description": "metric: the vault, as for metric_eval"},
+            "filters": {"type": "array", "items": {"type": "object"}, "description": "metric: the extra filters you gave metric_eval"},
+            "as_of": {"type": "string", "description": "metric: as for metric_eval"},
+            "group_by_grain": {"type": "boolean", "description": "metric: draw the series"},
+            "allow_unapproved": {"type": "boolean", "description": "metric: only to show a proposed metric the user asked to try; it is drawn as not approved"},
         },
         "required": ["view"],
     })

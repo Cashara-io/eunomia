@@ -1,0 +1,21 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "metric": "total_size_gb",
+  "kind": "db",
+  "vault": "vault:<id2>",
+  "description": "How much the databases store",
+  "expr_words": "Sum of size gb",
+  "value": 120.0,
+  "unit": "GB",
+  "as_of": "<ts>",
+  "n_entities": 1,
+  "entity_ids": [
+    "entity:<id19>"
+  ],
+  "truncated": false,
+  "status": "approved",
+  "warnings": []
+}

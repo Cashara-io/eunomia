@@ -2,16 +2,18 @@
 // falls back to the plain text the server sends with every view.
 import type { ComponentType } from "react";
 import ImpactView from "./ImpactView";
+import MetricView from "./MetricView";
 import SubgraphView from "./SubgraphView";
-import type { ImpactView as Impact, ShownView, SubgraphView as Subgraph } from "./types";
+import type { ImpactView as Impact, MetricView as Metric, ShownView, SubgraphView as Subgraph } from "./types";
 
 export const SHOW_VIEW = "show_view";
 
-type Known = Impact | Subgraph;
+type Known = Impact | Subgraph | Metric;
 
 const VIEWS: { [K in Known["view"]]: ComponentType<{ view: Extract<Known, { view: K }> }> } = {
   impact: ImpactView,
   subgraph: SubgraphView,
+  metric: MetricView,
 };
 
 /** A `show_view` result as stored or streamed, or null when it is not a view (an error, bad JSON). */

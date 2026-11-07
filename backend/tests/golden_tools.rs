@@ -242,6 +242,14 @@ async fn goldens() {
     Box::pin(g.snap("entity_set_property__proposed", "entity_set_property", set.clone())).await;
     g.app.db().await.test_raw().query("UPDATE ontology_property SET status = 'approved' WHERE name = 'size_gb'").await.unwrap().check().unwrap();
     Box::pin(g.snap("entity_set_property", "entity_set_property", set)).await;
+    // a metric over it: a proposed one runs only on request, an approved one by name
+    Box::pin(g.snap("ontology_propose__metric", "ontology_propose", json!({
+        "metrics": [{"kind": "db", "name": "total_size_gb", "expr": {"agg": "sum", "property": "size_gb"}, "description": "How much the databases store"}],
+    }))).await;
+    let run = json!({"metric": "total_size_gb", "as_of": "2026-11-02"});
+    Box::pin(g.snap("metric_eval__proposed", "metric_eval", run.clone())).await;
+    g.app.db().await.test_raw().query("UPDATE ontology_metric SET status = 'approved' WHERE name = 'total_size_gb'").await.unwrap().check().unwrap();
+    Box::pin(g.snap("metric_eval", "metric_eval", run)).await;
     // -- bulk writes (after entity_types, so they change no snapshot above): one result per item, a bad one fails alone --
     g.snap("memory_write_batch", "memory_write_batch", json!({"items": [
         {"subject_name": "Import page 1", "subject_kind": "file", "text": "page one says hello"},

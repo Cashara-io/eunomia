@@ -1,4 +1,4 @@
-//! Statements for the project ontology (`ontology`, migrations 0033 and 0034). See the module docs in store/mod.rs.
+//! Statements for the project ontology (`ontology`, migrations 0033, 0034 and 0035). See the module docs in store/mod.rs.
 
 use super::Stmt;
 
@@ -253,6 +253,82 @@ pub const DELETE_VALUES_OF: Stmt = Stmt::new("ontology.delete_values_of", "DELET
 /// A merged-away entity's values move to the entity it was merged into.
 pub const MOVE_VALUES: Stmt = Stmt::new("ontology.move_values", "UPDATE entity_property SET entity = $winner WHERE entity = $loser");
 
+/// The metric rows of `$vault`, by kind and name.
+pub const METRICS: Stmt = Stmt::new("ontology.metrics", "SELECT * FROM ontology_metric WHERE vault = $vault ORDER BY kind, name");
+
+/// One metric, by its derived id.
+pub const METRIC: Stmt = Stmt::new("ontology.metric", "SELECT * FROM $id");
+
+/// The metrics named `$name` in `$vault`, on any kind, for `metric_eval` without a kind.
+pub const METRICS_NAMED: Stmt =
+    Stmt::new("ontology.metrics_named", "SELECT * FROM ontology_metric WHERE vault = $vault AND name = $name ORDER BY kind");
+
+/// The approved metric names of `$kind` in `$vault`, to name in a refusal.
+pub const APPROVED_METRICS: Stmt = Stmt::new(
+    "ontology.approved_metrics",
+    r#"SELECT VALUE name FROM ontology_metric WHERE vault = $vault AND kind = $kind AND status = "approved" ORDER BY name"#,
+);
+
+/// The property rows of `$kind` in `$vault`, to check a metric's expression against.
+pub const PROPERTIES_OF_KIND: Stmt =
+    Stmt::new("ontology.properties_of_kind", "SELECT * FROM ontology_property WHERE vault = $vault AND kind = $kind ORDER BY name");
+
+/// A metric proposal, as for a property: a decided row is returned as it is.
+pub const PROPOSE_METRIC: Stmt = Stmt::at(
+    "ontology.propose_metric",
+    r#"BEGIN TRANSACTION;
+        LET $cur = (SELECT VALUE status FROM $id);
+        LET $row = IF array::len($cur) = 0 {
+            (CREATE $id SET vault = $vault, kind = $kind, name = $name, description = $description, synonyms = $synonyms,
+                expr = $expr, unit = $unit, merge_into = $merge_into, origin = $origin, reason = $reason RETURN AFTER)
+        } ELSE IF $cur[0] = "proposed" {
+            (UPDATE $id SET expr = $expr, unit = $unit ?? unit, description = $description ?? description,
+                synonyms = array::union(synonyms ?? [], $synonyms), merge_into = $merge_into ?? merge_into,
+                reason = $reason ?? reason, updated_at = time::now() RETURN AFTER)
+        } ELSE {
+            (SELECT * FROM $id)
+        };
+        RETURN $row;
+        COMMIT TRANSACTION;"#,
+    3,
+);
+
+/// A person's approval or rejection of a metric. Metrics rejected into this one follow it to its new
+/// target, as properties do.
+pub const DECIDE_METRIC: Stmt = Stmt::new(
+    "ontology.decide_metric",
+    r#"BEGIN TRANSACTION;
+        UPDATE $id SET status = $status, merge_into = $merge_into, decided_by = $user, updated_at = time::now();
+        IF $status = "rejected" {
+            UPDATE ontology_metric SET merge_into = $merge_into, updated_at = time::now()
+                WHERE vault = $vault AND kind = $kind AND status = "rejected" AND merge_into = $name
+        };
+        COMMIT TRANSACTION;"#,
+);
+
+pub const DESCRIBE_METRIC: Stmt =
+    Stmt::new("ontology.describe_metric", "UPDATE $id SET description = $description, updated_at = time::now()");
+
+/// What one metric evaluation reads, whatever the metric: the entities of the kind in `$vault` (slot
+/// 1; `$table` picks the kind's table, `$kind` the custom kind) and every value of the properties in
+/// `$props` there that was true by `$as_of`, newest first (slot 2), so the first row of each (entity,
+/// property) is its value as of then. Fixed text: every input is a parameter.
+// ponytail: reads every value of the metric's properties in the vault and filters in Rust; fine
+// until a vault holds hundreds of thousands of values of one property.
+pub const METRIC_INPUTS: Stmt = Stmt::new(
+    "ontology.metric_inputs",
+    r#"LET $ids = IF $table = "person" { (SELECT VALUE id FROM person WHERE vault = $vault) }
+        ELSE IF $table = "organisation" { (SELECT VALUE id FROM organisation WHERE vault = $vault) }
+        ELSE IF $table = "location" { (SELECT VALUE id FROM location WHERE vault = $vault) }
+        ELSE IF $table = "repository" { (SELECT VALUE id FROM repository WHERE vault = $vault) }
+        ELSE IF $table = "file" { (SELECT VALUE id FROM file WHERE vault = $vault) }
+        ELSE IF $table = "symbol" { (SELECT VALUE id FROM symbol WHERE vault = $vault) }
+        ELSE { (SELECT VALUE id FROM entity WHERE vault = $vault AND kind = $kind) };
+     RETURN $ids;
+     SELECT entity, property, value_num, value_text, value_bool, value_date, as_of, created_at FROM entity_property
+        WHERE property IN $props AND vault = $vault AND as_of <= $as_of ORDER BY as_of DESC, created_at DESC;"#,
+);
+
 pub const ALL: &[&Stmt] = &[
     &PROFILE,
     &REGISTRY,
@@ -279,4 +355,13 @@ pub const ALL: &[&Stmt] = &[
     &VALUES_OF,
     &DELETE_VALUES_OF,
     &MOVE_VALUES,
+    &METRICS,
+    &METRIC,
+    &METRICS_NAMED,
+    &APPROVED_METRICS,
+    &PROPERTIES_OF_KIND,
+    &PROPOSE_METRIC,
+    &DECIDE_METRIC,
+    &DESCRIBE_METRIC,
+    &METRIC_INPUTS,
 ];

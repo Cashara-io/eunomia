@@ -19,6 +19,7 @@ use crate::authz::Action;
 use crate::entities::neighbourhood::{load_edges, load_nodes, EdgeRow, NodeRow};
 use crate::entities::service::{accessible, require_entity_id};
 use crate::error::{AppError, AppResult};
+use crate::ontology::metric::{self, EvalArgs, Filter, MetricEvalOut};
 use crate::pool::OrgDb;
 use crate::rid::RecordIdExt;
 
@@ -48,6 +49,22 @@ pub enum ViewSpec {
         entity_ids: Vec<String>,
         #[serde(default)]
         relation_ids: Vec<String>,
+    },
+    /// The same arguments as `metric_eval`; there is no field for a value.
+    Metric {
+        metric: String,
+        #[serde(default)]
+        kind: Option<String>,
+        #[serde(default)]
+        vault_id: Option<String>,
+        #[serde(default)]
+        filters: Vec<Filter>,
+        #[serde(default)]
+        as_of: Option<String>,
+        #[serde(default)]
+        group_by_grain: bool,
+        #[serde(default)]
+        allow_unapproved: bool,
     },
 }
 
@@ -89,6 +106,8 @@ pub struct Affected {
 pub enum View {
     Impact { start: EntityRef, headline: String, affected: Vec<Affected> },
     Subgraph { title: String, entities: Vec<EntityRef>, relations: Vec<Step> },
+    /// `metric` is the server's own run; `entities` are its `entity_ids` with names, the receipts.
+    Metric { metric: MetricEvalOut, entities: Vec<EntityRef> },
 }
 
 /// `show_view`'s result: the view's fields, plus `text`.
@@ -155,6 +174,14 @@ pub async fn show(db: &OrgDb, owner: &RecordId, spec: ViewSpec) -> AppResult<Sho
                 }
             }
             View::Subgraph { title: clean("title", &title, MAX_HEADLINE)?, entities, relations }
+        }
+        ViewSpec::Metric { metric, kind, vault_id, filters, as_of, group_by_grain, allow_unapproved } => {
+            let args = EvalArgs { metric, kind, vault_id, filters, as_of, group_by_grain, allow_unapproved };
+            let out = metric::eval(db, owner, &args).await?;
+            let ids = out.entity_ids.iter().map(String::as_str);
+            let graph = Resolved::load(db, owner, ids, std::iter::empty()).await?;
+            let entities = out.entity_ids.iter().filter_map(|id| graph.entity(id).ok()).collect();
+            View::Metric { metric: out, entities }
         }
     };
     let text = view.text();
@@ -312,8 +339,58 @@ impl View {
                 }
                 out
             }
+            View::Metric { metric: m, entities } => metric_text(m, entities),
         }
     }
+}
+
+/// A metric's number as people write it: money to the cent, whole numbers bare, others to two places.
+pub fn number(value: f64, unit: Option<&str>) -> String {
+    let money = unit.is_some_and(|u| u.len() == 3 && u.chars().all(|c| c.is_ascii_uppercase()));
+    let n = if money {
+        format!("{value:.2}")
+    } else if value.fract() == 0.0 && value.abs() < 1e15 {
+        format!("{}", value as i64)
+    } else {
+        let s = format!("{value:.2}");
+        s.trim_end_matches('0').trim_end_matches('.').to_string()
+    };
+    match unit {
+        Some(u) => format!("{n} {u}"),
+        None => n,
+    }
+}
+
+fn metric_text(m: &MetricEvalOut, entities: &[EntityRef]) -> String {
+    let value = match (&m.series, m.value) {
+        (Some(_), _) => "a series".to_string(),
+        (None, Some(v)) => number(v, m.unit.as_deref()),
+        (None, None) => "no value".to_string(),
+    };
+    let mut out = format!("{}: {value}", m.metric);
+    if m.status != crate::ontology::Status::Approved {
+        out.push_str(" (not approved yet)");
+    }
+    out.push_str(&format!("\n{}.", m.expr_words));
+    if let Some(d) = &m.description {
+        let stop = if d.ends_with(['.', '!', '?']) { "" } else { "." };
+        out.push_str(&format!(" {d}{stop}"));
+    }
+    let date = m.as_of.get(..10).unwrap_or(&m.as_of);
+    let noun = if m.n_entities == 1 { words(&m.kind) } else { format!("{}s", words(&m.kind)) };
+    out.push_str(&format!("\nAs of {date}, from {} {noun}.", m.n_entities));
+    for p in m.series.iter().flatten() {
+        let v = p.value.map(|v| number(v, m.unit.as_deref())).unwrap_or_else(|| "no value".into());
+        out.push_str(&format!("\n- {}: {v} ({})", p.period, p.n));
+    }
+    if !entities.is_empty() {
+        let more = if m.truncated { format!(" and {} more", m.n_entities - entities.len()) } else { String::new() };
+        out.push_str(&format!("\nFrom: {}{more}.", entities.iter().map(|e| e.name.as_str()).collect::<Vec<_>>().join(", ")));
+    }
+    for w in &m.warnings {
+        out.push_str(&format!("\nNote: {w}"));
+    }
+    out
 }
 
 #[cfg(test)]

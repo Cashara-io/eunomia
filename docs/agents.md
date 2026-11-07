@@ -189,10 +189,11 @@ No. The connected agent is the model.
 | `memory_update` / `memory_delete` | Edit or delete one memory |
 | `entities_search` / `entities_get` / `entities_graph` | Find and read people, orgs, places, code and custom kinds |
 | `entities_neighbourhood` | The entities within 1 to 3 relations of one entity, both directions, with their latest facts and the review of each link type between them; for working out what a change affects. At most 150 entities and 600 relations (`truncated` says when more were in reach) |
-| `show_view` | Show your answer as a view: `impact` (what a change affects, each entity with its path of relations and why) or `subgraph` (how entities connect). Every id is checked; returns the view with names filled in plus a plain-text version |
+| `show_view` | Show your answer as a view: `impact` (what a change affects, each entity with its path of relations and why), `subgraph` (how entities connect) or `metric` (an approved metric's number, which the server runs again). Every id is checked; returns the view with names filled in plus a plain-text version |
 | `entity_types` | The built-in entity kinds and the custom kinds agents created (any new lowercase `subject_kind` creates one), each with its review status |
-| `ontology_get` | One vault's kinds and link types, with counts, samples, descriptions, synonyms and review status, and each kind's typed properties |
-| `ontology_suggest` / `ontology_propose` | Propose kinds, merges, link types, typed properties and synonyms for a vault owner to approve in the app; without a server model `ontology_suggest` returns the profile for you to review |
+| `ontology_get` | One vault's kinds and link types, with counts, samples, descriptions, synonyms and review status, and each kind's typed properties and metrics |
+| `ontology_suggest` / `ontology_propose` | Propose kinds, merges, link types, typed properties, metrics and synonyms for a vault owner to approve in the app; without a server model `ontology_suggest` returns the profile for you to review |
+| `metric_eval` | Run an approved metric by name (`avg_price`): the number, its unit, as of when, and the entity ids it came from; optional extra filters, `as_of` and a series by period ([certified metrics](#certified-metrics)) |
 | `entity_set_property` | Set one approved typed property of an entity (a `price` on a `product`), checked against its datatype and kept with its date and source ([typed properties](#typed-properties)) |
 | `entity_update` / `entity_merge` / `entity_delete` | Edit, de-duplicate, delete entities |
 | `code_entity_upsert` / `code_relate` | Map repositories, files, symbols and their relations |
@@ -255,6 +256,47 @@ in its list, a date that is not `YYYY-MM-DD`), and a property rejected with no m
 rejected into another (say `cost` into `price`) writes to that one, and the result's `property_mapped`
 says so. Relations are grounded the same way: a `code_relate` whose link type the owners rejected is
 refused, and the error names the approved link types between the two kinds.
+
+### Certified metrics
+
+A metric is a number the server computes from a kind's typed properties. Only an approved one runs by
+name, and every result carries the entities it came from, so you never add up values yourself. Say the
+cafe vault has the approved `price` (money, AUD) on `product` from above, and the user asks "what do our
+products cost on average?":
+
+1. `ontology_get` shows `product` with a metric `avg_price` (`expr` `{"agg": "avg", "property": "price"}`,
+   `expr_words` "Average price", status `approved`). If there is none, propose it:
+   `ontology_propose` `{"metrics": [{"kind": "product", "name": "avg_price", "description": "What a product
+   costs on average", "expr": {"agg": "avg", "property": "price"}}]}`. A vault owner approves it on the
+   Memory spaces page (Kinds and links), after approving `price`.
+2. `metric_eval` `{"metric": "avg_price"}` runs it:
+
+```json
+{"metric": "avg_price", "kind": "product", "value": 4.666667, "unit": "AUD", "as_of": "2026-11-08T09:30:00Z",
+ "n_entities": 3, "entity_ids": ["entity:latte", "entity:mocha", "entity:tea"], "truncated": false,
+ "status": "approved", "warnings": [], "expr_words": "Average price"}
+```
+
+3. Answer with the value and unit, say it came from 3 products and cite their ids. To draw it, call
+   `show_view` `{"view": "metric", "metric": "avg_price"}`: the server runs the metric again and shows its
+   own number, never one you send.
+
+An expression is `agg` (`sum`, `avg`, `min` and `max` over a number, integer, money or percent property;
+`count` of entities, or of those with a `property`; `count_distinct` of a property's values; `ratio` of a
+`numerator` over a `denominator`, each with its own agg, property and filters), `filters`
+(`[{"property": "supplier", "op": "eq", "value": "Riverside Roasters"}]`, ops `eq`, `ne`, `gt`, `gte`, `lt`,
+`lte` and `in`, at most 10), and for a series `time_property` (a date property) and `grain` (`day`, `week`,
+`month`, `quarter` or `year`). Every property must be on the kind and every value must fit its datatype;
+anything else, including query text, is refused when proposed.
+
+`metric_eval` also takes extra `filters` (ANDed with the metric's own), `as_of` (each entity's latest value
+by then; a bare date includes its day), `group_by_grain` (a `series` of `{period, value, n}` instead of one
+value) and `kind` (when two kinds have a metric of that name). A proposed metric is refused unless you pass
+`allow_unapproved: true`; it then runs with `status: "proposed"` and a warning, so never present that
+number as checked. A rejected metric with a merge target runs the target (`metric_mapped` says so). Read
+`warnings`: an enum filter value listed nowhere ("Lage") returns no value and names the nearest listed
+ones ("Large"), and a text value no entity holds names the nearest stored ones, so fix the spelling
+instead of reporting 0.
 
 ### What a change affects
 

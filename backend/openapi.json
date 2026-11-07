@@ -7495,6 +7495,62 @@
         ]
       }
     },
+    "/api/vaults/{vault_id}/ontology/metrics/decide": {
+      "post": {
+        "tags": [
+          "vaults"
+        ],
+        "summary": "Approve, reject (optionally merging into another metric of the kind) or describe a metric (owner, browser session only)",
+        "operationId": "decideVaultOntologyMetric",
+        "parameters": [
+          {
+            "name": "vault_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MetricDecideBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OntologyOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
     "/api/vaults/{vault_id}/ontology/properties/decide": {
       "post": {
         "tags": [
@@ -8063,6 +8119,19 @@
             "description": "`true` makes the person an admin, `false` takes admin rights away."
           }
         }
+      },
+      "Agg": {
+        "type": "string",
+        "description": "How a metric combines its entities' values.",
+        "enum": [
+          "sum",
+          "count",
+          "avg",
+          "min",
+          "max",
+          "count_distinct",
+          "ratio"
+        ]
       },
       "AuditCategory": {
         "type": "string",
@@ -9480,6 +9549,27 @@
           }
         }
       },
+      "Filter": {
+        "type": "object",
+        "description": "Keeps entities whose value of `property` compares to `value` by `op` (`in` takes a list).",
+        "required": [
+          "property",
+          "op",
+          "value"
+        ],
+        "properties": {
+          "op": {
+            "$ref": "#/components/schemas/Op"
+          },
+          "property": {
+            "type": "string"
+          },
+          "value": {
+            "description": "In the property's datatype; a list for `in`."
+          }
+        },
+        "additionalProperties": false
+      },
       "FinanceAccount": {
         "type": "object",
         "required": [
@@ -9553,6 +9643,16 @@
             "type": "string"
           }
         }
+      },
+      "Grain": {
+        "type": "string",
+        "enum": [
+          "day",
+          "week",
+          "month",
+          "quarter",
+          "year"
+        ]
       },
       "Grant": {
         "type": "object",
@@ -10253,7 +10353,8 @@
           "synonyms",
           "entities",
           "samples",
-          "properties"
+          "properties",
+          "metrics"
         ],
         "properties": {
           "built_in": {
@@ -10279,6 +10380,13 @@
               "null"
             ],
             "description": "Rejected: where writes under this kind go instead. Proposed: the merge the proposer suggests."
+          },
+          "metrics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MetricItem"
+            },
+            "description": "Its metrics, each with its review status and expression. Only an approved one runs by name."
           },
           "origin": {
             "oneOf": [
@@ -10822,6 +10930,210 @@
           }
         }
       },
+      "MetricDecideBody": {
+        "type": "object",
+        "required": [
+          "kind",
+          "name",
+          "decision"
+        ],
+        "properties": {
+          "decision": {
+            "$ref": "#/components/schemas/MetricDecision"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "MetricDecision": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "The metric runs by name from now on. Its properties must be approved first.",
+            "required": [
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "approve"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Runs of the metric go to `merge_into` (a metric of the same kind) from now on; without it they\nare refused.",
+            "required": [
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "reject"
+                ]
+              },
+              "merge_into": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Set or (blank) clear the description; the status stays as it is.",
+            "required": [
+              "description",
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "describe"
+                ]
+              },
+              "description": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "MetricExpr": {
+        "type": "object",
+        "description": "What a metric computes, over the latest value of each property per entity. Never query text: an\nunknown field is refused.",
+        "required": [
+          "agg"
+        ],
+        "properties": {
+          "agg": {
+            "$ref": "#/components/schemas/Agg"
+          },
+          "denominator": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SubExpr"
+              }
+            ]
+          },
+          "filters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Filter"
+            },
+            "description": "ANDed, and on a ratio applied to both sides."
+          },
+          "grain": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Grain"
+              }
+            ]
+          },
+          "numerator": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SubExpr",
+                "description": "Ratio only."
+              }
+            ]
+          },
+          "property": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The measured property: needed by sum, avg, min, max and count_distinct; count counts the\nentities that have it, or every entity without it."
+          },
+          "time_property": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A date or datetime property a series groups the entities by."
+          }
+        },
+        "additionalProperties": false
+      },
+      "MetricItem": {
+        "type": "object",
+        "description": "One metric of a kind, as the ontology view shows it. Its value is never here: `metric_eval` runs it.",
+        "required": [
+          "name",
+          "synonyms",
+          "expr",
+          "expr_words",
+          "status",
+          "origin"
+        ],
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expr": {
+            "$ref": "#/components/schemas/MetricExpr"
+          },
+          "expr_words": {
+            "type": "string",
+            "description": "The expression in plain words, e.g. \"Sum of price where status is late\"."
+          },
+          "merge_into": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Rejected: the metric of the same kind that runs instead. Proposed: the merge the proposer suggests."
+          },
+          "name": {
+            "type": "string"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/Origin"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          },
+          "synonyms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "Metrics": {
         "type": "object",
         "required": [
@@ -10982,6 +11294,18 @@
             "type": "string"
           }
         }
+      },
+      "Op": {
+        "type": "string",
+        "enum": [
+          "eq",
+          "ne",
+          "gt",
+          "gte",
+          "lt",
+          "lte",
+          "in"
+        ]
       },
       "Origin": {
         "type": "string",
@@ -11603,7 +11927,8 @@
         "required": [
           "kinds",
           "links",
-          "properties"
+          "properties",
+          "metrics"
         ],
         "properties": {
           "kinds": {
@@ -11616,6 +11941,12 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ProposedLink"
+            }
+          },
+          "metrics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProposedMetric"
             }
           },
           "properties": {
@@ -11668,6 +11999,32 @@
           },
           "to_kind": {
             "type": "string"
+          }
+        }
+      },
+      "ProposedMetric": {
+        "type": "object",
+        "description": "A proposed metric after the call, with the row's status (a decided one keeps its decision).",
+        "required": [
+          "kind",
+          "name",
+          "status"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "merge_into": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
           }
         }
       },
@@ -12747,6 +13104,31 @@
           "approved",
           "rejected"
         ]
+      },
+      "SubExpr": {
+        "type": "object",
+        "description": "One side of a ratio.",
+        "required": [
+          "agg"
+        ],
+        "properties": {
+          "agg": {
+            "$ref": "#/components/schemas/Agg"
+          },
+          "filters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Filter"
+            }
+          },
+          "property": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
       },
       "SuggestOut": {
         "oneOf": [

@@ -31,3 +31,12 @@ export function PathSentence({ path }: { path: Step[] }) {
     </span>
   );
 }
+
+/** A metric's number as people write it: money (a three-letter currency) to the cent, whole numbers
+ * bare, others to two places. Matches the server's text (backend/src/views/mod.rs, `number`). */
+export function formatNumber(value: number, unit: string | null | undefined): string {
+  const money = !!unit && /^[A-Z]{3}$/.test(unit);
+  if (money) return value.toFixed(2);
+  if (Number.isInteger(value)) return String(value);
+  return String(Number(value.toFixed(2)));
+}
