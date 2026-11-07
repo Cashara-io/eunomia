@@ -86,6 +86,7 @@ pub const READ_ONLY_TOOLS: &[&str] = &[
     "entities_search",
     "entities_get",
     "entities_graph",
+    "entities_neighbourhood",
     "entity_types",
     "ontology_get",
     "vault_list",
@@ -159,6 +160,7 @@ pub fn description(name: &str) -> &'static str {
         "ontology_propose" => "Propose kinds and link types for one vault's ontology (your personal vault unless `vault_id` is given): a `description` for a kind or link, a kind to fold into another (`merge_into`, the kind to keep), a `reason` for the reviewer. Proposals wait for a vault owner to approve or reject them in the Eunomia app; you cannot approve them. An item a person already decided keeps that decision (the result shows each item's status). Kind names follow `memory_write`'s rules.",
         "entities_get" => "Get one entity with its memories (facts and consolidated observations) and its relations to other entities.",
         "entities_graph" => "Get the entity relationship graph (nodes and edges), optionally restricted to some entity kinds or a vault.",
+        "entities_neighbourhood" => "The entities within `depth` relations of one entity (default 2, at most 3), following relations in both directions inside the entity's vault: each node with its kind, summary and up to three most recent facts, each edge in its stored direction (`from` `label` `to`), and the vault's review of each link type present (status and description). At most 150 nodes (`truncated` says when more were in reach). Use it to work out what a change, delay or problem with the entity affects: decide from the labels, the link descriptions and the facts which way an effect travels.",
         "code_entity_upsert" => "Find-or-create a code entity -- a repository, file or symbol -- matched case-insensitively by name, with a short summary. `parent_id` links a file to its repository or a symbol to its file. Returns the entity id.",
         "code_relate" => "Record a labelled relation between two entities, e.g. symbol `calls` symbol, file `imports` file.",
         "memory_write" => "Remember a fact about a person, organisation, location, code entity or anything else (created if new; \"Jane Doe (Acme/JD)\" resolves to an existing \"Jane Doe\", adding the parts as aliases). `subject_kind` is a built-in kind or your own lowercase kind name (`db`, `table`, `field`, `defect`, `decision`, `task`, ...): a new name creates that kind in the vault (at most 50 custom kinds per vault; `entity_types` lists them, reuse one when it fits). A kind the vault's owners rejected is written under its merge target instead (the result says so in `kind_mapped`), or refused when it has none. Type `world` for objective facts, `experience` for things that happened, `observation` for stable patterns. Writes to the personal vault unless `vault_id` is given. Earlier facts about the subject this one makes no longer true are marked superseded in the background (left out of recall from then on). When a new entity was created, the result lists `possible_duplicates`: similar existing entities to `entity_merge`. Save durable facts, decisions, preferences and corrections as they come up, and before finishing a task a short summary of what was learned (`experience`).",
@@ -641,6 +643,7 @@ mod tests {
             "entities_search",
             "entities_get",
             "entities_graph",
+            "entities_neighbourhood",
             "entity_types",
             "ontology_get",
             "vault_list",
@@ -750,7 +753,7 @@ mod tests {
             "skill_save", "skill_find", "skill_list", "skill_get", "skill_delete", "changes_since",
             "vault_share_code", "vault_join_shared", "vault_peers", "vault_peer_sync",
             "secret_request", "secret_request_status", "secret_transform", "http_request",
-            "ontology_get", "ontology_suggest", "ontology_propose",
+            "ontology_get", "ontology_suggest", "ontology_propose", "entities_neighbourhood",
         ];
         let tools = all_tools();
         for name in expected {

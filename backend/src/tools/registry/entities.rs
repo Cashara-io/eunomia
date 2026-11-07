@@ -1,4 +1,4 @@
-//! Entities: search, get, graph (read-only), update, delete and merge.
+//! Entities: search, get, graph, neighbourhood (read-only), update, delete and merge.
 //! Part of the tool registry (see `registry/mod.rs`); one `register` call per tool.
 
 use std::collections::HashMap;
@@ -8,6 +8,7 @@ use serde_json::json;
 
 use super::{register, IdArgs, bad_args, parse_rid, parse_opt_rid, parse_vault_ids, to_tool_value, vault_ids_schema, ToolSpec};
 use super::kind_schema;
+use crate::entities::neighbourhood;
 use crate::entities::tools as entities_tools;
 
 pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
@@ -161,6 +162,46 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                 };
                 let result = entities_tools::entities_graph(&state.db, &state.control, owner, a.kinds.as_deref(), vault_id.as_ref()).await;
                 Ok(to_tool_value(result))
+            })
+        }),
+    );
+
+    #[derive(serde::Deserialize)]
+    struct NeighbourhoodArgs {
+        entity_id: String,
+        #[serde(default)]
+        depth: Option<i64>,
+        #[serde(default)]
+        vault_id: Option<String>,
+    }
+
+    register(
+        registry,
+        "entities_neighbourhood",
+        json!({
+            "type": "object",
+            "properties": {
+                "entity_id": {"type": "string", "description": "the entity to start from (an id from `entities_search`)"},
+                "depth": {"type": "integer", "minimum": 1, "maximum": neighbourhood::MAX_DEPTH, "description": format!("how many relations out to follow, in both directions (default {}, at most {})", neighbourhood::DEFAULT_DEPTH, neighbourhood::MAX_DEPTH)},
+                "vault_id": {"type": "string", "description": "the vault the entity must be in (a vault id or its name); omit to use the entity's own vault"},
+            },
+            "required": ["entity_id"],
+        }),
+        Arc::new(|state, owner, args| {
+            Box::pin(async move {
+                let a: NeighbourhoodArgs = match serde_json::from_value(args) {
+                    Ok(a) => a,
+                    Err(e) => return Ok(bad_args(e)),
+                };
+                let rid = match parse_rid("entity_id", &a.entity_id) {
+                    Ok(v) => v,
+                    Err(e) => return Ok(e),
+                };
+                let vault_id = match parse_opt_rid("vault_id", &a.vault_id) {
+                    Ok(v) => v,
+                    Err(e) => return Ok(e),
+                };
+                Ok(to_tool_value(neighbourhood::neighbourhood(&state.db, owner, &rid, a.depth, vault_id.as_ref()).await))
             })
         }),
     );

@@ -310,7 +310,7 @@ pub async fn get(db: &OrgDb, owner: &RecordId, vault_id: Option<&RecordId>) -> A
 }
 
 /// What `vault` uses merged with its registry rows. The caller checked access.
-async fn view(db: &OrgDb, vault: &RecordId) -> AppResult<OntologyOut> {
+pub(crate) async fn view(db: &OrgDb, vault: &RecordId) -> AppResult<OntologyOut> {
     let mut profile = q::PROFILE.on(db).bind(("vault", vault.clone())).await?;
     let mut registry = q::REGISTRY.on(db).bind(("vault", vault.clone())).await?;
     let counts: Vec<KindCount> = profile.take(q::PROFILE_KINDS_SLOT)?;

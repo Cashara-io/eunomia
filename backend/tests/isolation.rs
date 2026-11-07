@@ -440,6 +440,8 @@ fn attack_value(tool: &str, prop: &str, schema: &Value, victim: &Org) -> Value {
         (t, "id" | "document_id") if t.starts_with("document_") => json!(victim.ids.document),
         (_, "source_record_id") => json!(victim.ids.cache_literal),
         ("entities_get", "id") => id(0),
+        // the file: it has relations, one with the canary in its label
+        ("entities_neighbourhood", "entity_id") => id(4),
         (_, "parent_id") => id(3),
         (_, "from_id") | (_, "winner_id") | (_, "subject_id") | (_, "entity_id") => id(0),
         (_, "to_id") | (_, "loser_id") => id(1),

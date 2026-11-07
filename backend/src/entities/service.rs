@@ -354,7 +354,7 @@ async fn resolve_vault(db: &OrgDb, owner: &RecordId, vault_id: Option<&RecordId>
 
 /// Whether `owner` may read/write a row in `vault` -- member of its vault.
 /// Not-a-member is treated the same as not-found everywhere in this module.
-async fn accessible(db: &OrgDb, owner: &RecordId, vault: &RecordId, action: Action) -> AppResult<bool> {
+pub(crate) async fn accessible(db: &OrgDb, owner: &RecordId, vault: &RecordId, action: Action) -> AppResult<bool> {
     match authz::authorize(db, owner, action, vault).await {
         Ok(_) => Ok(true),
         Err(e) if e.code == ErrorCode::VaultForbidden => Ok(false),

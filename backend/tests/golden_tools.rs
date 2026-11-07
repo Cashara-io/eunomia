@@ -260,6 +260,9 @@ async fn goldens() {
     role_goldens(&mut g, &bob).await;
     // -- peer vaults (last; no second instance: what works without one) --
     peer_goldens(&mut g).await;
+    // -- what a change affects (last, so the ids it shows first change no snapshot above): the code graph
+    // above has a file that `imports` and is `part_of` its repository --
+    Box::pin(g.snap("entities_neighbourhood", "entities_neighbourhood", json!({"entity_id": repo_id}))).await;
 
     let registered: BTreeSet<String> = registry::all_tools().keys().map(|k| k.to_string()).collect();
     let missing: Vec<_> = registered.difference(&g.covered).collect();

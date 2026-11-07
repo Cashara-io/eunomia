@@ -1,0 +1,54 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "vault": "vault:<id2>",
+  "depth": 2,
+  "nodes": [
+    {
+      "id": "repository:<id9>",
+      "name": "eunomia",
+      "kind": "repository",
+      "summary": "memory layer",
+      "facts": []
+    },
+    {
+      "id": "file:<id10>",
+      "name": "main.rs",
+      "kind": "file",
+      "facts": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "relates_to:<id11>",
+      "from": "file:<id10>",
+      "label": "imports",
+      "to": "repository:<id9>"
+    },
+    {
+      "id": "relates_to:<id29>",
+      "from": "file:<id10>",
+      "label": "part_of",
+      "to": "repository:<id9>"
+    }
+  ],
+  "link_types": [
+    {
+      "from_kind": "file",
+      "label": "imports",
+      "to_kind": "repository",
+      "status": "observed",
+      "description": null
+    },
+    {
+      "from_kind": "file",
+      "label": "part_of",
+      "to_kind": "repository",
+      "status": "observed",
+      "description": null
+    }
+  ],
+  "truncated": false
+}

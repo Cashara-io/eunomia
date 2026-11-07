@@ -334,3 +334,117 @@ async fn writes_still_work_on_an_org_database_before_the_migration() {
     assert_eq!(types["custom"], json!([{"kind": "db", "entities": 1, "status": "observed"}]));
 }
 
+
+// ------------------------------------------------------------ what a change affects: the neighbourhood
+
+/// A small logistics chain in the personal vault: Ana drives Truck 7, which carries Shipment 88, which
+/// fulfils Order 12, which is for Acme. Returns the entity ids by name.
+async fn logistics(app: &TestApp) -> std::collections::HashMap<&'static str, String> {
+    let mut ids = std::collections::HashMap::new();
+    for (name, kind) in [("Ana", "person"), ("Truck 7", "truck"), ("Shipment 88", "shipment"), ("Order 12", "order"), ("Acme", "organisation")] {
+        ids.insert(name, write(app, name, kind).await["entity"]["id"].as_str().unwrap().to_string());
+    }
+    for (from, label, to) in [("Ana", "drives", "Truck 7"), ("Truck 7", "carries", "Shipment 88"), ("Shipment 88", "fulfils", "Order 12"), ("Order 12", "for", "Acme")] {
+        ok(app.tool("code_relate", json!({"from_id": ids[from], "to_id": ids[to], "label": label})).await);
+    }
+    ids
+}
+
+fn names(n: &Value) -> Vec<String> {
+    let mut v: Vec<String> = n["nodes"].as_array().unwrap().iter().map(|n| n["name"].as_str().unwrap().to_string()).collect();
+    v.sort();
+    v
+}
+
+async fn as_user(app: &TestApp, user: &eunomia_backend::models_user::User, tool: &str, args: Value) -> Value {
+    eunomia_backend::authz::as_system(eunomia_backend::tools::registry::call(&app.state, user, tool, args)).await.unwrap()
+}
+
+#[tokio::test]
+async fn the_neighbourhood_follows_relations_both_ways_up_to_the_depth() {
+    let app = TestApp::new().await;
+    let ids = logistics(&app).await;
+    for i in 1..=4 {
+        ok(app.tool("memory_write", json!({"subject_name": "Truck 7", "subject_kind": "truck", "text": format!("Truck 7 report {i}")})).await);
+    }
+
+    // default depth 2 from the truck: one hop back to its driver, forward to the shipment, then the order
+    let n = ok(app.tool("entities_neighbourhood", json!({"entity_id": ids["Truck 7"]})).await);
+    assert_eq!(n["depth"], 2);
+    assert_eq!(names(&n), ["Ana", "Order 12", "Shipment 88", "Truck 7"], "{n}");
+    assert_eq!(n["nodes"][0]["name"], "Truck 7", "the start comes first");
+    assert_eq!(n["truncated"], false);
+    let edges: Vec<(String, String, String)> = n["edges"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| {
+            let name = |id: &Value| ids.iter().find(|(_, v)| *v == id).unwrap().0.to_string();
+            (name(&e["from"]), e["label"].as_str().unwrap().to_string(), name(&e["to"]))
+        })
+        .collect();
+    for want in [("Ana", "drives", "Truck 7"), ("Truck 7", "carries", "Shipment 88"), ("Shipment 88", "fulfils", "Order 12")] {
+        assert!(edges.contains(&(want.0.into(), want.1.into(), want.2.into())), "stored direction kept: {edges:?}");
+    }
+    assert_eq!(edges.len(), 3, "{edges:?}");
+    let truck = &n["nodes"][0];
+    assert_eq!(truck["kind"], "truck");
+    let facts: Vec<&str> = truck["facts"].as_array().unwrap().iter().map(|f| f.as_str().unwrap()).collect();
+    assert_eq!(facts.len(), 3, "the three most recent facts: {facts:?}");
+    assert!(facts.contains(&"Truck 7 report 4") && !facts.contains(&"Truck 7 report 1"), "{facts:?}");
+
+    // the depth clamps to 1..=3
+    let deep = ok(app.tool("entities_neighbourhood", json!({"entity_id": ids["Truck 7"], "depth": 9})).await);
+    assert_eq!((deep["depth"].as_i64(), names(&deep).len()), (Some(3), 5), "{deep}");
+    let shallow = ok(app.tool("entities_neighbourhood", json!({"entity_id": ids["Truck 7"], "depth": 0})).await);
+    assert_eq!(names(&shallow), ["Ana", "Shipment 88", "Truck 7"], "{shallow}");
+
+    // the link types present, with the vault's review of each
+    ok(app.tool("ontology_propose", json!({"links": [{"from_kind": "truck", "label": "carries", "to_kind": "shipment", "description": "A late truck delays what it carries"}]})).await);
+    let n = ok(app.tool("entities_neighbourhood", json!({"entity_id": ids["Truck 7"], "depth": 1})).await);
+    let types = n["link_types"].as_array().unwrap();
+    assert_eq!(types.len(), 2, "only the types among these edges: {n}");
+    let carries = types.iter().find(|l| l["label"] == "carries").unwrap();
+    assert_eq!(
+        (carries["from_kind"].as_str(), carries["to_kind"].as_str(), carries["status"].as_str(), carries["description"].as_str()),
+        (Some("truck"), Some("shipment"), Some("proposed"), Some("A late truck delays what it carries"))
+    );
+    assert_eq!(types.iter().find(|l| l["label"] == "drives").unwrap()["status"], "observed");
+}
+
+#[tokio::test]
+async fn the_neighbourhood_never_leaves_the_vault_or_opens_one_the_caller_cannot_read() {
+    let app = TestApp::new().await;
+    let ids = logistics(&app).await;
+    let team = ok(app.tool("vault_create", json!({"name": "Team", "kind": "org"})).await);
+    let depot = ok(app.tool("memory_write", json!({"subject_name": "Depot", "subject_kind": "location", "text": "Depot is shared", "vault_id": "Team"})).await);
+    let depot_id = depot["entity"]["id"].as_str().unwrap().to_string();
+    // an edge from before relations were confined to one vault, into the Team vault
+    app.db()
+        .await
+        .test_raw()
+        .query("RELATE $a->relates_to->$b SET label = 'parks_at'")
+        .bind(("a", rid::parse(&ids["Truck 7"]).unwrap()))
+        .bind(("b", rid::parse(&depot_id).unwrap()))
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    let n = ok(app.tool("entities_neighbourhood", json!({"entity_id": ids["Truck 7"], "depth": 3})).await);
+    assert!(!names(&n).contains(&"Depot".to_string()), "{n}");
+    assert!(n["edges"].as_array().unwrap().iter().all(|e| e["label"] != "parks_at"), "{n}");
+    assert!(!n.to_string().contains(&depot_id), "{n}");
+    let from_depot = ok(app.tool("entities_neighbourhood", json!({"entity_id": depot_id})).await);
+    assert_eq!(names(&from_depot), ["Depot"], "{from_depot}");
+
+    // the entity must be in the vault named
+    let wrong = app.tool("entities_neighbourhood", json!({"entity_id": ids["Truck 7"], "vault_id": "Team"})).await;
+    assert_eq!(wrong["code"], "entity.not_found", "{wrong}");
+    assert_eq!(ok(app.tool("entities_neighbourhood", json!({"entity_id": depot_id, "vault_id": team["id"]})).await)["nodes"][0]["name"], "Depot");
+
+    // someone outside the personal vault gets not found, not the truck
+    let bob = common::register(&app.state, "bob@example.com").await;
+    let out = as_user(&app, &bob, "entities_neighbourhood", json!({"entity_id": ids["Truck 7"]})).await;
+    assert_eq!(out["code"], "entity.not_found", "{out}");
+    assert!(!out.to_string().contains("Truck 7"), "{out}");
+}
