@@ -971,8 +971,86 @@ export type Kind = {
     stability: Stability;
 };
 
+export type KindDecideBody = {
+    decision: KindDecision;
+    kind: string;
+};
+
+export type KindDecision = {
+    action: 'approve';
+} | {
+    action: 'reject';
+    merge_into?: string | null;
+} | {
+    action: 'describe';
+    description: string;
+};
+
+/**
+ * One entity kind of the vault.
+ */
+export type KindItem = {
+    built_in: boolean;
+    description?: string | null;
+    /**
+     * Entities of this kind in the vault.
+     */
+    entities: number;
+    kind: string;
+    /**
+     * Rejected: where writes under this kind go instead. Proposed: the merge the proposer suggests.
+     */
+    merge_into?: string | null;
+    origin?: null | Origin;
+    reason?: string | null;
+    /**
+     * A few of their names.
+     */
+    samples: Array<string>;
+    status: ViewStatus;
+};
+
 export type LeftBody = {
     left: boolean;
+};
+
+export type LinkDecideBody = {
+    decision: LinkDecision;
+    from_kind: string;
+    label: string;
+    to_kind: string;
+};
+
+export type LinkDecision = {
+    action: 'approve';
+} | {
+    action: 'reject';
+} | {
+    action: 'describe';
+    description: string;
+};
+
+/**
+ * One link type of the vault: relations labelled `label` from a `from_kind` entity to a `to_kind` one.
+ */
+export type LinkItem = {
+    /**
+     * Relations of this type in the vault.
+     */
+    count: number;
+    description?: string | null;
+    from_kind: string;
+    label: string;
+    origin?: null | Origin;
+    reason?: string | null;
+    samples: Array<LinkSample>;
+    status: ViewStatus;
+    to_kind: string;
+};
+
+export type LinkSample = {
+    from: string;
+    to: string;
 };
 
 export type ListEntitiesOut = {
@@ -1161,6 +1239,20 @@ export type OkBody = {
     warning?: string | null;
 };
 
+export type OntologyOut = {
+    /**
+     * The built-in kinds first, then the others by name.
+     */
+    kinds: Array<KindItem>;
+    links: Array<LinkItem>;
+    vault: string;
+};
+
+/**
+ * Who proposed a row: the server's model, an agent over MCP, or a person in the app.
+ */
+export type Origin = 'suggested' | 'agent' | 'human';
+
 export type PatchBody = {
     description?: string | null;
     /**
@@ -1340,6 +1432,28 @@ export type Problem = {
      * Always `about:blank`.
      */
     type: string;
+};
+
+export type ProposeOut = {
+    kinds: Array<ProposedKind>;
+    links: Array<ProposedLink>;
+};
+
+/**
+ * A proposed kind after the call: `status` is the row's, so a kind a person already decided shows
+ * that decision (the proposal did not change it).
+ */
+export type ProposedKind = {
+    kind: string;
+    merge_into?: string | null;
+    status: Status;
+};
+
+export type ProposedLink = {
+    from_kind: string;
+    label: string;
+    status: Status;
+    to_kind: string;
 };
 
 export type ProviderBody = {
@@ -1802,6 +1916,26 @@ export type SpendByDay = {
  */
 export type Stability = 'stable' | 'preview';
 
+/**
+ * What a person decided about a kind or link, as stored.
+ */
+export type Status = 'proposed' | 'approved' | 'rejected';
+
+export type SuggestOut = {
+    mode: 'model';
+    ontology: OntologyOut;
+    proposed: ProposeOut;
+    /**
+     * Model proposals left out for an invalid name or field.
+     */
+    skipped: number;
+} | {
+    hint: string;
+    mode: 'profile_only';
+    note?: string | null;
+    profile: OntologyOut;
+};
+
 export type SuspendChange = {
     /**
      * `true` suspends the account, `false` restores it.
@@ -2094,6 +2228,11 @@ export type VerifyOut = {
      */
     remote_digest?: string | null;
 };
+
+/**
+ * A kind or link as the ontology view shows it. `Observed`: used in the vault, never reviewed.
+ */
+export type ViewStatus = 'observed' | 'proposed' | 'approved' | 'rejected';
 
 /**
  * Body of the webhook route: `{"status": "ignored"}` or an ingest report with
@@ -5750,6 +5889,102 @@ export type SetMemberRoleResponses = {
 };
 
 export type SetMemberRoleResponse = SetMemberRoleResponses[keyof SetMemberRoleResponses];
+
+export type GetVaultOntologyData = {
+    body?: never;
+    path: {
+        vault_id: string;
+    };
+    query?: never;
+    url: '/api/vaults/{vault_id}/ontology';
+};
+
+export type GetVaultOntologyErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetVaultOntologyError = GetVaultOntologyErrors[keyof GetVaultOntologyErrors];
+
+export type GetVaultOntologyResponses = {
+    200: OntologyOut;
+};
+
+export type GetVaultOntologyResponse = GetVaultOntologyResponses[keyof GetVaultOntologyResponses];
+
+export type DecideVaultOntologyKindData = {
+    body: KindDecideBody;
+    path: {
+        vault_id: string;
+    };
+    query?: never;
+    url: '/api/vaults/{vault_id}/ontology/kinds/decide';
+};
+
+export type DecideVaultOntologyKindErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type DecideVaultOntologyKindError = DecideVaultOntologyKindErrors[keyof DecideVaultOntologyKindErrors];
+
+export type DecideVaultOntologyKindResponses = {
+    200: OntologyOut;
+};
+
+export type DecideVaultOntologyKindResponse = DecideVaultOntologyKindResponses[keyof DecideVaultOntologyKindResponses];
+
+export type DecideVaultOntologyLinkData = {
+    body: LinkDecideBody;
+    path: {
+        vault_id: string;
+    };
+    query?: never;
+    url: '/api/vaults/{vault_id}/ontology/links/decide';
+};
+
+export type DecideVaultOntologyLinkErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type DecideVaultOntologyLinkError = DecideVaultOntologyLinkErrors[keyof DecideVaultOntologyLinkErrors];
+
+export type DecideVaultOntologyLinkResponses = {
+    200: OntologyOut;
+};
+
+export type DecideVaultOntologyLinkResponse = DecideVaultOntologyLinkResponses[keyof DecideVaultOntologyLinkResponses];
+
+export type SuggestVaultOntologyData = {
+    body?: never;
+    path: {
+        vault_id: string;
+    };
+    query?: never;
+    url: '/api/vaults/{vault_id}/ontology/suggest';
+};
+
+export type SuggestVaultOntologyErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type SuggestVaultOntologyError = SuggestVaultOntologyErrors[keyof SuggestVaultOntologyErrors];
+
+export type SuggestVaultOntologyResponses = {
+    200: SuggestOut;
+};
+
+export type SuggestVaultOntologyResponse = SuggestVaultOntologyResponses[keyof SuggestVaultOntologyResponses];
 
 export type ListVaultPeersData = {
     body?: never;
