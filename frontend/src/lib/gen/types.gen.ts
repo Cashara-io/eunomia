@@ -130,6 +130,48 @@ export type AuthzParams = {
     state?: string | null;
 };
 
+/**
+ * What to auto-map: synced records (all, one source or one record type) or an uploaded CSV.
+ */
+export type AutomapBody = {
+    document_id?: string | null;
+    record_type?: string | null;
+    source?: string | null;
+};
+
+export type AutomapOut = {
+    links: Array<LinkCheck>;
+    mode: 'model';
+    ontology: OntologyOut;
+    proposed: ProposeOut;
+    record_types: Array<MappedType>;
+    /**
+     * Model items left out for an unknown record type, an invalid name or field.
+     */
+    skipped: number;
+} | {
+    hint: string;
+    key_matches: Array<KeyMatch>;
+    mode: 'profile_only';
+    note?: string | null;
+    profiles: Array<RecordTypeProfile>;
+};
+
+/**
+ * A row or cell that was not imported.
+ */
+export type BadCell = {
+    /**
+     * The column, or none when the whole row was left out.
+     */
+    column?: string | null;
+    error: string;
+    /**
+     * The file's line (the header is line 1).
+     */
+    line: number;
+};
+
 export type BootstrapOut = {
     /**
      * Which sign-in methods the login and register pages offer.
@@ -309,6 +351,27 @@ export type CloudSimilarityBody = {
      * the vaults the points were listed from (same as `vault_ids` of the cloud); default: your personal vault
      */
     vault_ids?: Array<string>;
+};
+
+/**
+ * How one column would be imported.
+ */
+export type ColumnPlan = {
+    column: string;
+    /**
+     * The property it feeds, from its `source_map`.
+     */
+    property?: string | null;
+    status?: null | Status;
+};
+
+/**
+ * One column of an import: the property it wrote, or why it was left out.
+ */
+export type ColumnUse = {
+    column: string;
+    property?: string | null;
+    skipped?: string | null;
 };
 
 export type ConnectorCreateBody = {
@@ -665,6 +728,46 @@ export type ExtensionWithSecret = {
 };
 
 /**
+ * One field of one record type, from a sample.
+ */
+export type FieldProfile = {
+    /**
+     * For dates: the notation the values are written in, such as `YYYY-MM-DD` or `DD/MM/YYYY`.
+     */
+    date_format?: string | null;
+    /**
+     * Distinct values in the sample, counted up to 26 (26 means 26 or more).
+     */
+    distinct_count: number;
+    /**
+     * Every distinct value, for an enum candidate (25 or fewer).
+     */
+    enum_values?: Array<string> | null;
+    inferred_type: InferredType;
+    /**
+     * Every sampled value differs (and there is at least one).
+     */
+    is_unique: boolean;
+    max?: number | null;
+    min?: number | null;
+    /**
+     * The share of sampled records with no value here (missing, null or blank), 0 to 1.
+     */
+    null_rate: number;
+    /**
+     * The payload key path (`billing.country`) or the CSV column.
+     */
+    path: string;
+    record_type: string;
+    sample_size: number;
+    source: string;
+    /**
+     * The commonest values, most frequent first, at most five.
+     */
+    top_values: Array<TopValue>;
+};
+
+/**
  * What the pop-up sends. `value` is zeroised when this is dropped; Debug never prints it.
  */
 export type FillBody = {
@@ -898,6 +1001,68 @@ export type IdsBody = {
     ids: Array<string>;
 };
 
+/**
+ * How to import a CSV's rows: the approved kind, the naming column, and optionally which column feeds which property.
+ */
+export type ImportBody = {
+    as_of?: string | null;
+    column_map?: {
+        [key: string]: string;
+    } | null;
+    kind: string;
+    name_column: string;
+};
+
+export type ImportOut = {
+    /**
+     * Rows and cells left out, at most 100 listed.
+     */
+    bad: Array<BadCell>;
+    bad_count: number;
+    columns: Array<ColumnUse>;
+    /**
+     * Entities made by this run, and ones it found and updated.
+     */
+    created: number;
+    document_id: string;
+    kind: string;
+    /**
+     * Data rows in the file.
+     */
+    rows: number;
+    updated: number;
+    /**
+     * Values written (each new or updated in place).
+     */
+    values: number;
+};
+
+/**
+ * What an import of the CSV would do now.
+ */
+export type ImportPlan = {
+    columns: Array<ColumnPlan>;
+    /**
+     * The kind its mapped properties belong to, once auto-mapping proposed them.
+     */
+    kind?: string | null;
+    kind_status?: null | Status;
+    /**
+     * The column that names each row's entity: the first one no property is mapped from.
+     */
+    name_column?: string | null;
+    /**
+     * The kind is approved and at least one mapped property is: `document_import_rows` will run.
+     */
+    ready: boolean;
+};
+
+/**
+ * What a field's values look like. The datatypes of a property, plus `id` for a key that names a
+ * record (a link candidate).
+ */
+export type InferredType = 'text' | 'number' | 'integer' | 'money' | 'percent' | 'bool' | 'date' | 'datetime' | 'enum' | 'id';
+
 export type IntegrityReport = {
     /**
      * True when the counter is behind the log (the next write's append would collide).
@@ -973,6 +1138,26 @@ export type JoinRequestBody = {
      * How the other Eunomia will name this one (default: `EUNOMIA_INSTANCE_NAME`, else your email).
      */
     name?: string | null;
+};
+
+/**
+ * One key field whose values are another record type's ids.
+ */
+export type KeyMatch = {
+    field: string;
+    matched: number;
+    /**
+     * matched / values, 0 to 1.
+     */
+    ratio: number;
+    record_type: string;
+    source: string;
+    target_record_type: string;
+    target_source: string;
+    /**
+     * Distinct values checked, and how many match.
+     */
+    values: number;
 };
 
 /**
@@ -1052,6 +1237,29 @@ export type KindItem = {
 
 export type LeftBody = {
     left: boolean;
+};
+
+/**
+ * A link the model proposed, after the value check.
+ */
+export type LinkCheck = {
+    field: string;
+    from_kind: string;
+    /**
+     * Proposed (some values match) or dropped (none do).
+     */
+    kept: boolean;
+    label: string;
+    matched: number;
+    ratio: number;
+    /**
+     * The match share in words, as the link's proposal reason says it.
+     */
+    reason: string;
+    record_type: string;
+    source: string;
+    to_kind: string;
+    values: number;
 };
 
 export type LinkDecideBody = {
@@ -1140,6 +1348,20 @@ export type LogPage = {
      * Pass as `before` for the next (older) page; absent on the last page.
      */
     next_before?: string | null;
+};
+
+/**
+ * What became of one record type.
+ */
+export type MappedType = {
+    kind: string;
+    name_field?: string | null;
+    record_type: string;
+    source: string;
+    /**
+     * Fields no property took (left out by the model, or claimed by an earlier property).
+     */
+    unmapped: Array<string>;
 };
 
 export type MemberList = {
@@ -1572,6 +1794,10 @@ export type PropertyItem = {
      * A few of them, as text with their unit.
      */
     samples: Array<string>;
+    /**
+     * The record fields or CSV columns it was mapped from.
+     */
+    source_map: Array<SourceField>;
     status: Status;
     synonyms: Array<string>;
     unit?: string | null;
@@ -1702,6 +1928,23 @@ export type RecentRecording = {
     recorded_at?: string | null;
     tags: Array<string>;
     title: string;
+};
+
+/**
+ * One record type's fields.
+ */
+export type RecordTypeProfile = {
+    fields: Array<FieldProfile>;
+    /**
+     * More fields than [`MAX_PATHS`]: the later ones were left out.
+     */
+    paths_truncated: boolean;
+    record_type: string;
+    /**
+     * Records sampled.
+     */
+    records: number;
+    source: string;
 };
 
 /**
@@ -2073,6 +2316,17 @@ export type SnapshotOut = {
 };
 
 /**
+ * A record field or CSV column a property's values come from: `source` and `record_type` name the
+ * records (`stripe`, `stripe.charge`), or `document` and the document id for an uploaded CSV, and
+ * `path` the payload key path or the column.
+ */
+export type SourceField = {
+    path: string;
+    record_type: string;
+    source: string;
+};
+
+/**
  * One connection of a source. A kind's first connection keeps the source key as its `key`; each one
  * added after it is `{source}~{instance}`.
  */
@@ -2173,6 +2427,15 @@ export type SyncStatusOut = {
     last_run?: string | null;
 };
 
+export type TableProfile = {
+    columns: Array<string>;
+    document_id: string;
+    filename: string;
+    import: ImportPlan;
+    profile: RecordTypeProfile;
+    rows: number;
+};
+
 export type TagCount = {
     count: number;
     tag: string;
@@ -2264,6 +2527,11 @@ export type ToolUsageReport = {
     series_step: string;
     since: string;
     totals: UsageCounts;
+};
+
+export type TopValue = {
+    count: number;
+    value: string;
 };
 
 export type TransferRequest = {
@@ -3754,6 +4022,54 @@ export type ExportDocumentResponses = {
 };
 
 export type ExportDocumentResponse = ExportDocumentResponses[keyof ExportDocumentResponses];
+
+export type ImportDocumentRowsData = {
+    body: ImportBody;
+    path: {
+        document_id: string;
+    };
+    query?: never;
+    url: '/api/documents/{document_id}/import';
+};
+
+export type ImportDocumentRowsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ImportDocumentRowsError = ImportDocumentRowsErrors[keyof ImportDocumentRowsErrors];
+
+export type ImportDocumentRowsResponses = {
+    200: ImportOut;
+};
+
+export type ImportDocumentRowsResponse = ImportDocumentRowsResponses[keyof ImportDocumentRowsResponses];
+
+export type ProfileDocumentData = {
+    body?: never;
+    path: {
+        document_id: string;
+    };
+    query?: never;
+    url: '/api/documents/{document_id}/profile';
+};
+
+export type ProfileDocumentErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ProfileDocumentError = ProfileDocumentErrors[keyof ProfileDocumentErrors];
+
+export type ProfileDocumentResponses = {
+    200: TableProfile;
+};
+
+export type ProfileDocumentResponse = ProfileDocumentResponses[keyof ProfileDocumentResponses];
 
 export type ReindexDocumentData = {
     body?: never;
@@ -6116,6 +6432,30 @@ export type GetVaultOntologyResponses = {
 };
 
 export type GetVaultOntologyResponse = GetVaultOntologyResponses[keyof GetVaultOntologyResponses];
+
+export type AutomapVaultOntologyData = {
+    body: AutomapBody;
+    path: {
+        vault_id: string;
+    };
+    query?: never;
+    url: '/api/vaults/{vault_id}/ontology/automap';
+};
+
+export type AutomapVaultOntologyErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type AutomapVaultOntologyError = AutomapVaultOntologyErrors[keyof AutomapVaultOntologyErrors];
+
+export type AutomapVaultOntologyResponses = {
+    200: AutomapOut;
+};
+
+export type AutomapVaultOntologyResponse = AutomapVaultOntologyResponses[keyof AutomapVaultOntologyResponses];
 
 export type DecideVaultOntologyKindData = {
     body: KindDecideBody;
