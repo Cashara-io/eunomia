@@ -47,7 +47,7 @@ function RegisterError({ error, email }: { error: Failure; email: string }) {
           {taken ? "There's already an account for this email." : plainMessage(error)}
         </p>
         {taken && (
-          <Link href={signIn} className="text-[14px] font-medium underline self-start" style={{ color: "var(--accent-text)" }}>
+          <Link href={signIn} className="link text-[14px] font-medium self-start">
             Sign in instead
           </Link>
         )}
@@ -207,7 +207,7 @@ export default function RegisterPage() {
 
               <p className="mt-2 text-[14px]" style={{ color: "var(--ink-dim)" }}>
                 Already have an account?{" "}
-                <Link href="/login" onClick={(e) => { e.preventDefault(); router.push(keepNext("/login")); }} className="font-medium underline" style={{ color: "var(--accent-text)" }}>
+                <Link href="/login" onClick={(e) => { e.preventDefault(); router.push(keepNext("/login")); }} className="link font-medium">
                   Sign in
                 </Link>
               </p>

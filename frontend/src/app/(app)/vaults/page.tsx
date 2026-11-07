@@ -270,7 +270,7 @@ function CreateVaultForm({
 }
 
 /** A quiet action that reads as a link (the page header keeps one primary button). */
-const TEXT_LINK = "inline-flex items-center gap-1 min-h-10 text-[14px] font-medium underline-offset-2 hover:underline";
+const TEXT_LINK = "link inline-flex items-center gap-1 min-h-10 text-[14px] font-medium";
 
 const vaultLabel = (v: Vault) => (v.kind === "personal" ? "Personal" : v.name);
 
@@ -353,7 +353,6 @@ function MergeVaultsCard({
       <button
         type="button"
         className={TEXT_LINK}
-        style={{ color: "var(--accent-text)" }}
         aria-expanded={open}
         aria-controls="merge-panel"
         onClick={() => setOpen((o) => !o)}

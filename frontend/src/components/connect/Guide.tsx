@@ -14,7 +14,7 @@ export const EXAMPLE_QUESTION = "Use Eunomia to look for memories about me.";
 export function Trail({ here }: { here: string }) {
   return (
     <nav aria-label="Breadcrumb" className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
-      <Link href="/" className="underline underline-offset-2" style={{ color: "var(--accent-text)" }}>
+      <Link href="/" className="link">
         Connect your AI app
       </Link>{" "}
       / <span aria-current="page">{here}</span>
@@ -198,7 +198,7 @@ export function Approved({ connection, onShowSteps }: { connection: Connection; 
           Eunomia has confirmed {connection.via === "sign-in" ? "your sign-in" : "that this app is using its key"}. Your app can now use the memories you approved.
         </p>
         <div className="soft-panel px-5 py-4 flex flex-col gap-1.5">
-          <p className="text-[16px] font-semibold" style={{ color: "var(--accent-text)" }}>
+          <p className="link text-[16px] font-semibold">
             {connection.name} · {connection.via === "sign-in" ? "Access approved" : "Connected with an API token"}
           </p>
           <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>

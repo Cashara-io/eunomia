@@ -510,8 +510,7 @@ function Documents() {
                             type="button"
                             onClick={() => select(on ? null : d.id)}
                             aria-current={on || undefined}
-                            className="flex items-center gap-2 min-h-11 min-w-0 max-w-full text-left font-medium hover:underline underline-offset-2"
-                            style={{ color: "var(--accent-text)" }}
+                            className="link flex items-center gap-2 min-h-11 min-w-0 max-w-full text-left font-medium"
                           >
                             <FileText {...ICON} aria-hidden className="shrink-0" />
                             <span className="truncate">{d.filename}</span>

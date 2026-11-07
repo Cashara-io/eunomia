@@ -181,7 +181,7 @@ export function UpdateSection() {
               <Download {...ICON} />
               Update now
             </button>
-            <a href={notes} target="_blank" rel="noopener noreferrer" className="btn btn-ghost btn-sm" style={{ color: "var(--accent-text)" }}>
+            <a href={notes} target="_blank" rel="noopener noreferrer" className="btn btn-ghost btn-sm">
               What&apos;s new
             </a>
           </div>

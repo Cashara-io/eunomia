@@ -314,8 +314,7 @@ export function JoinSharedSpace({ onJoined }: { onJoined?: (vaultId: string) => 
     <>
       <button
         type="button"
-        className="inline-flex items-center gap-1.5 min-h-10 text-[14px] font-medium underline-offset-2 hover:underline"
-        style={{ color: "var(--accent-text)" }}
+        className="link inline-flex items-center gap-1.5 min-h-10 text-[14px] font-medium"
         onClick={() => setOpen(true)}
       >
         <LogIn {...ICON} />

@@ -276,8 +276,7 @@ export default function ConnectorsPage() {
                     {r.addAfter && r.kind && (
                       <Link
                         href={`/connectors/setup/${r.kind}?new=1`}
-                        className="flex items-center gap-2 px-4 min-h-10 pl-[52px] text-[13px] font-medium underline-offset-2 hover:underline"
-                        style={{ color: "var(--accent-text)" }}
+                        className="link flex items-center gap-2 px-4 min-h-10 pl-[52px] text-[13px] font-medium"
                       >
                         <Plus size={14} strokeWidth={1.75} aria-hidden />
                         Add another {r.label} connection

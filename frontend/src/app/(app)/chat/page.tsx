@@ -662,7 +662,7 @@ export default function ChatPage() {
                       ) : needsKey ? (
                         <>
                           No OpenAI API key is set, so the assistant can&apos;t answer yet.{" "}
-                          <Link href="/settings?tab=model" className="underline" style={{ color: "var(--accent-text)" }}>
+                          <Link href="/settings?tab=model" className="link">
                             Add one in Settings
                           </Link>
                           .

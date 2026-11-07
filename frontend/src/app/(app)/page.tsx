@@ -175,7 +175,7 @@ function RecentlyUpdated({ rows, showSpace }: { rows: RecentEntity[]; showSpace:
         <h2 id="recent-title" className="section-title">
           Recently updated
         </h2>
-        <Link href="/entities" className="text-[13px] inline-flex items-center gap-1 underline-offset-2 hover:underline" style={{ color: "var(--accent-text)" }}>
+        <Link href="/entities" className="link text-[13px] inline-flex items-center gap-1">
           All people &amp; topics <ArrowRight size={14} strokeWidth={1.75} aria-hidden />
         </Link>
       </div>
@@ -214,7 +214,7 @@ function SourcesHealth({ rows }: { rows: SourceRow[] }) {
         <h2 id="sources-title" className="section-title">
           Connected sources
         </h2>
-        <Link href="/connectors" className="text-[13px] inline-flex items-center gap-1 underline-offset-2 hover:underline" style={{ color: "var(--accent-text)" }}>
+        <Link href="/connectors" className="link text-[13px] inline-flex items-center gap-1">
           Manage <ArrowRight size={14} strokeWidth={1.75} aria-hidden />
         </Link>
       </div>
@@ -267,7 +267,7 @@ function AdminSignals({ vaults }: { vaults: Vault[] | undefined }) {
       {signals.map((s, i) => (
         <span key={s.href + s.text}>
           {i > 0 && " · "}
-          <Link href={s.href} className="underline-offset-2 hover:underline" style={{ color: "var(--accent-text)" }}>
+          <Link href={s.href} className="link">
             {s.text}
           </Link>
         </span>
@@ -317,8 +317,7 @@ function ConnectAnother({ none = false, fromSources = false }: { none?: boolean;
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="self-start inline-flex items-center gap-1 min-h-11 text-[14px] font-medium underline-offset-2 hover:underline"
-        style={{ color: "var(--accent-text)" }}
+        className="link self-start inline-flex items-center gap-1 min-h-11 text-[14px] font-medium"
       >
         {none ? "Connect an AI app" : "Connect another app"} <ArrowRight size={14} strokeWidth={1.75} aria-hidden className={open ? "rotate-90" : undefined} />
       </button>
@@ -413,7 +412,7 @@ function ConnectedPanel({ connections }: { connections: Connection[] }) {
       </ul>
       <div className="px-5 sm:px-6 py-3 flex items-center justify-between gap-3 text-[14px]">
         <span style={{ color: "var(--ink-dim)" }}>{connections.length > 6 ? `and ${connections.length - 6} more` : ""}</span>
-        <Link href="/settings?tab=apps" className="inline-flex items-center gap-1 font-medium underline-offset-2 hover:underline" style={{ color: "var(--accent-text)" }}>
+        <Link href="/settings?tab=apps" className="link inline-flex items-center gap-1 font-medium">
           Manage connected apps <ArrowRight size={14} strokeWidth={1.75} aria-hidden />
         </Link>
       </div>

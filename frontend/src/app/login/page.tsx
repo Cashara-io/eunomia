@@ -120,7 +120,7 @@ export default function LoginPage() {
 
               <p className="mt-2 text-[14px]" style={{ color: "var(--ink-dim)" }}>
                 No account yet?{" "}
-                <Link href="/register" onClick={(e) => { e.preventDefault(); router.push(keepNext("/register")); }} className="font-medium underline" style={{ color: "var(--accent-text)" }}>
+                <Link href="/register" onClick={(e) => { e.preventDefault(); router.push(keepNext("/register")); }} className="link font-medium">
                   Create one
                 </Link>
               </p>

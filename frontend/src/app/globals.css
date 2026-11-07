@@ -702,6 +702,20 @@ button.pill:active {
   outline-offset: 2px;
 }
 
+/* Links are ink and always underlined; the line thickens on hover. Use on any
+   <a>, or a <button> that reads as a link inside a sentence or list. */
+.link {
+  color: var(--accent-text);
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .link:hover:not(:disabled) {
+    text-decoration-thickness: 2px;
+  }
+}
+
 /* Status in words with a small shape (StatusLabel). */
 .status-label {
   display: inline-flex;

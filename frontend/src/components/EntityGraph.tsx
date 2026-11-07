@@ -1025,13 +1025,13 @@ export default function EntityGraph({
                         <span className="shrink-0" style={{ color: "var(--ink-dim)" }}>
                           {r.label.replace(/_/g, " ")}
                         </span>
-                        <button type="button" className="truncate text-left min-w-0 hover:underline" style={{ color: "var(--accent-text)" }} onClick={() => selectNode(other)}>
+                        <button type="button" className="link truncate text-left min-w-0" onClick={() => selectNode(other)}>
                           {nameOf(other)}
                         </button>
                       </>
                     ) : (
                       <>
-                        <button type="button" className="truncate text-left min-w-0 hover:underline" style={{ color: "var(--accent-text)" }} onClick={() => selectNode(other)}>
+                        <button type="button" className="link truncate text-left min-w-0" onClick={() => selectNode(other)}>
                           {nameOf(other)}
                         </button>
                         <span className="shrink-0" style={{ color: "var(--ink-dim)" }}>

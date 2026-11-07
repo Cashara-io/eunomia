@@ -129,7 +129,7 @@ export default function ConnectAgents({ onToken, initialClient }: { onToken?: ()
       )}
       <Hint>
         Named &ldquo;{current.token}&rdquo; under{" "}
-        <Link href="/settings?tab=tokens" className="underline" style={{ color: "var(--accent-text)" }}>
+        <Link href="/settings?tab=tokens" className="link">
           Settings, API tokens
         </Link>
         , so you can revoke it on its own.
@@ -213,7 +213,7 @@ export default function ConnectAgents({ onToken, initialClient }: { onToken?: ()
           <Hint>
             <Mono>{host}</Mono> only works for agents on this {host === "localhost" || host.startsWith("127.") ? "computer" : "network"}.
             For agents elsewhere, give Eunomia a public address under{" "}
-            <Link href="/settings?tab=https" className="underline" style={{ color: "var(--accent-text)" }}>
+            <Link href="/settings?tab=https" className="link">
               Settings, HTTPS
             </Link>
             .
@@ -228,7 +228,7 @@ export default function ConnectAgents({ onToken, initialClient }: { onToken?: ()
         <Hint>
           Or connect every agent on this machine at once (Claude Code, Codex, Cursor, Gemini CLI, …) from the install
           folder.{" "}
-          <Link href="/docs" className="underline" style={{ color: "var(--accent-text)" }}>
+          <Link href="/docs" className="link">
             Read Help
           </Link>
         </Hint>

@@ -22,8 +22,7 @@ export function BackupsSection() {
         href="https://github.com/Cashara-io/eunomia/blob/main/INSTALLATION.md#backups"
         target="_blank"
         rel="noopener noreferrer"
-        className="text-[13px] self-start"
-        style={{ color: "var(--accent-text)" }}
+        className="link text-[13px] self-start"
       >
         How backups and restores work
       </a>

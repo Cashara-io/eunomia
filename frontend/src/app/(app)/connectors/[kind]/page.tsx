@@ -59,7 +59,7 @@ function formatPrimitive(key: string, value: unknown): string {
 function PayloadValue({ k, v }: { k: string; v: unknown }) {
   if (typeof v === "string" && /^https?:\/\//i.test(v)) {
     return (
-      <a href={v} target="_blank" rel="noreferrer" className="underline break-all" style={{ color: "var(--accent-text)" }}>
+      <a href={v} target="_blank" rel="noreferrer" className="link break-all">
         {v}
       </a>
     );
@@ -170,7 +170,7 @@ function RecordRow({ hit }: { hit: ToolHit }) {
                     </details>
                   )}
                   {hit.url && (
-                    <a href={hit.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 self-start" style={{ color: "var(--accent-text)" }}>
+                    <a href={hit.url} target="_blank" rel="noreferrer" className="link inline-flex items-center gap-1 self-start">
                       Open in source <ArrowSquareOutIcon weight="duotone" size={12} aria-hidden />
                     </a>
                   )}
@@ -195,7 +195,7 @@ function rangeLabel(offset: number, count: number, total: number | null, hasMore
 function Breadcrumb({ label }: { label: string }) {
   return (
     <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-[13px]" style={{ color: "var(--ink-dim)" }}>
-      <Link href="/connectors" className="underline-offset-2 hover:underline" style={{ color: "var(--accent-text)" }}>
+      <Link href="/connectors" className="link">
         Connected sources
       </Link>
       <CaretRightIcon weight="duotone" size={12} aria-hidden />
@@ -478,7 +478,7 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
             {settingsHref ? (
               <>
                 If it mentions sign-in or permission (for example HTTP 401 or 403), check the details in{" "}
-                <Link href={settingsHref} className="underline" style={{ color: "var(--accent-text)" }}>
+                <Link href={settingsHref} className="link">
                   {row.label} setup
                 </Link>
                 . Otherwise choose Sync now to try again; items already imported are kept.
