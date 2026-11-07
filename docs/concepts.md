@@ -113,6 +113,15 @@ an owner in the app decides. A write under a rejected kind goes to the kind
 it was merged into (the result's `kind_mapped` says so), or is refused when
 it has none.
 
+The ontology is also how agents and the in-app Chat reason about knock-on
+effects. Nothing about what affects what is hardcoded: asked "Truck 7 is
+late, what does that affect?", the model reads the link types and their
+descriptions (`ontology_get`), the entities around the truck with their
+facts (`entities_neighbourhood`), decides which way the delay travels, and
+shows its answer with `show_view`, which checks every id and path before
+the app draws it. A clear description on a link type ("a late truck delays
+what it carries") is what lets the model get the direction right.
+
 ## Synced records
 
 Connectors (Up Bank, GitHub, Gmail, …) sync raw records into a cache. With

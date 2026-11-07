@@ -44,7 +44,9 @@ Use `recall` before answering questions about the user's world, `search`/`get` f
 and `memory_write` to remember new facts. You are the model: if the server has no OpenAI key, `reflect` \
 returns the recalled memories for you to answer from (cite them by index) instead of a synthesized answer. \
 Writes go to the user's personal vault unless a `vault_id` is given; `recall`, `reflect` and `entities_search` \
-cover the personal vault and every org vault the user belongs to unless one is.";
+cover the personal vault and every org vault the user belongs to unless one is. To work out what a change, \
+delay or problem affects, read `ontology_get` and `entities_neighbourhood`, decide which way the effect travels, \
+and show the answer with `show_view`.";
 
 /// The memory skill is also served as a prompt and a resource: `instructions` reach only the
 /// clients that read them, and Claude Code offers MCP prompts as slash commands.

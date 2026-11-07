@@ -232,6 +232,48 @@ documents, synced connector records, chat messages, entity names, aliases and su
 sync error messages and extension webhook deliveries are not redacted on write, so the backfill leaves
 them alone too.
 
+### What a change affects
+
+Nothing in Eunomia hardcodes what affects what. Your agent works it out from the vault's ontology
+(its kinds and link types, with their descriptions and review status), the relations and the facts,
+then shows the answer as a view. Say a logistics vault has `driver drives truck`, `truck carries
+shipment` and `shipment fulfils order`, and the user says "Truck 7 is late, what does that affect?":
+
+1. `entities_search` `{"query": "Truck 7"}` finds the truck's id.
+2. `ontology_get` gives the link types. A description such as "a late truck delays what it carries"
+   tells you which way a delay travels.
+3. `entities_neighbourhood` `{"entity_id": "<truck id>"}` returns the entities within two relations,
+   both directions: the driver, Shipment 88, Order 12. Each node has its latest facts, each edge its id,
+   label and stored direction (`from` `label` `to`), and `link_types` the review of each type present.
+4. You decide: the shipment is late because the truck carries it, the order because the shipment
+   fulfils it; the driver is not delayed by the truck.
+5. `show_view` draws it:
+
+```json
+{"view": {"view": "impact", "start_id": "<truck id>", "headline": "Truck 7 is two hours late.",
+  "affected": [
+    {"entity_id": "<shipment id>", "path": ["<carries edge id>"], "why": "It is on the truck."},
+    {"entity_id": "<order id>", "path": ["<carries edge id>", "<fulfils edge id>"], "why": "Its only shipment is late."}
+  ]}}
+```
+
+Every id is checked: each entity and relation must be in a vault you can read, and each `path` must be a
+connected chain of relations from `start_id` to its entity (either stored direction). A wrong id comes back
+as an error naming it; fix it and call again. `headline` and `why` are trimmed and capped, and secrets in
+them are replaced as in a memory. The result is the view with names and kinds filled in, plus `text`:
+
+```
+Truck 7 is two hours late.
+Starting from Truck 7 (truck).
+1. Shipment 88 (shipment), via Truck 7 carries Shipment 88. It is on the truck.
+2. Order 12 (order), via Truck 7 carries Shipment 88, then Shipment 88 fulfils Order 12. Its only shipment is late.
+```
+
+Over MCP the tool's text content is that `text`, so Claude Code shows it as is; the resolved view is
+in `structuredContent` for clients that draw it. The in-app Chat follows the same steps with the same
+tools and draws the view as cards above its reply. A `subgraph` view (`title`, `entity_ids`,
+`relation_ids`) shows how some entities connect instead.
+
 ### Secret requests
 
 Never ask the user to paste a password, API key or token into the chat. Ask Eunomia for it instead
