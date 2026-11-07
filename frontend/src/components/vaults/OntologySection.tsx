@@ -3,7 +3,9 @@
 // A space's kinds and links: what its memories are about (person, customer, decision, ...) and how
 // they connect (works at, owns, ...). AI apps and the server's model only suggest; an owner decides.
 import { useState, type ReactNode } from "react";
-import { ArrowsMergeIcon, CheckIcon, PencilSimpleIcon, SparkleIcon, XIcon } from "@phosphor-icons/react/ssr";
+import { ArrowsMergeIcon, CheckIcon, PencilSimpleIcon, PlayIcon, SparkleIcon, XIcon } from "@phosphor-icons/react/ssr";
+import { asOfDate, MetricNumber, MetricWarnings } from "@/components/chat/views/MetricView";
+import type { MetricRun } from "@/components/chat/views/types";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
 import Duo from "@/components/ui/Duo";
@@ -11,15 +13,18 @@ import StatusLabel, { type StatusTone } from "@/components/ui/StatusLabel";
 import {
   useDecideKind,
   useDecideLink,
+  useDecideMetric,
   useDecideProperty,
   useOntology,
   useSuggestOntology,
+  useTryMetric,
   type KindItem,
   type LinkItem,
+  type MetricItem,
   type PropertyItem,
   type ViewStatus,
 } from "@/lib/queries/ontology";
-import type { PropertyDecision } from "@/lib/gen";
+import type { MetricDecision, PropertyDecision } from "@/lib/gen";
 import type { Vault } from "@/lib/types";
 import { Disclosure } from "./bits";
 
@@ -39,6 +44,8 @@ export default function OntologySection({ vault }: { vault: Vault }) {
   const decideKind = useDecideKind(vault.id);
   const decideLink = useDecideLink(vault.id);
   const decideProperty = useDecideProperty(vault.id);
+  const decideMetric = useDecideMetric(vault.id);
+  const tryMetric = useTryMetric(vault.id);
   const [error, setError] = useState<Failure | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const data = query.data;
@@ -60,7 +67,7 @@ export default function OntologySection({ vault }: { vault: Vault }) {
     await run(async () => {
       const out = await suggest.mutateAsync();
       if (out.mode === "model") {
-        const n = [...out.proposed.kinds, ...out.proposed.links, ...out.proposed.properties].filter((x) => x.status === "proposed").length;
+        const n = [...out.proposed.kinds, ...out.proposed.links, ...out.proposed.properties, ...out.proposed.metrics].filter((x) => x.status === "proposed").length;
         setNote(n === 0 ? "Nothing new to suggest." : `${n} ${n === 1 ? "suggestion" : "suggestions"} to review below.`);
       } else {
         setNote(
@@ -78,9 +85,12 @@ export default function OntologySection({ vault }: { vault: Vault }) {
       .filter((k) => k.kind !== self && k.status !== "rejected" && (k.built_in || k.status === "approved" || k.entities > 0))
       .map((k) => ({ value: k.kind, label: words(k.kind) }));
 
-  const proposed = [...(data?.kinds ?? []), ...(data?.links ?? []), ...(data?.kinds ?? []).flatMap((k) => k.properties)].filter(
-    (x) => x.status === "proposed",
-  ).length;
+  const proposed = [
+    ...(data?.kinds ?? []),
+    ...(data?.links ?? []),
+    ...(data?.kinds ?? []).flatMap((k) => k.properties),
+    ...(data?.kinds ?? []).flatMap((k) => k.metrics),
+  ].filter((x) => x.status === "proposed").length;
 
   return (
     <Disclosure
@@ -111,7 +121,7 @@ export default function OntologySection({ vault }: { vault: Vault }) {
       </h4>
       <ul className="hairline-rows" aria-label="Kinds in this space">
         {!data && !query.isError && [0, 1, 2].map((i) => <SkeletonRow key={i} />)}
-        {data?.kinds.filter((k) => !(k.built_in && k.entities === 0 && k.status === "observed" && k.properties.length === 0)).map((k) => (
+        {data?.kinds.filter((k) => !(k.built_in && k.entities === 0 && k.status === "observed" && k.properties.length === 0 && k.metrics.length === 0)).map((k) => (
           <KindRow
             key={k.kind}
             item={k}
@@ -130,6 +140,21 @@ export default function OntologySection({ vault }: { vault: Vault }) {
                     busy={decideProperty.isPending}
                     targets={k.properties.filter((o) => o.name !== p.name && o.status !== "rejected").map((o) => ({ value: o.name, label: words(o.name) }))}
                     onDecide={(decision, fallback) => run(() => decideProperty.mutateAsync({ kind: k.kind, name: p.name, decision }), fallback)}
+                  />
+                ))}
+              </ul>
+            )}
+            {k.metrics.length > 0 && (
+              <ul className="flex flex-col gap-1 pl-3 border-l" style={{ borderColor: "var(--border)" }} aria-label={`Metrics of ${words(k.kind)}`}>
+                {k.metrics.map((m) => (
+                  <MetricRow
+                    key={m.name}
+                    item={m}
+                    isOwner={isOwner}
+                    busy={decideMetric.isPending}
+                    targets={k.metrics.filter((o) => o.name !== m.name && o.status !== "rejected").map((o) => ({ value: o.name, label: words(o.name) }))}
+                    onDecide={(decision, fallback) => run(() => decideMetric.mutateAsync({ kind: k.kind, name: m.name, decision }), fallback)}
+                    onTry={() => tryMetric.mutateAsync({ kind: k.kind, name: m.name })}
                   />
                 ))}
               </ul>
@@ -370,6 +395,135 @@ function PropertyRow({
             <Duo icon={PencilSimpleIcon} tone="none" />
             {item.description ? "Edit description" : "Add description"}
           </button>
+        </div>
+      )}
+    </li>
+  );
+}
+
+/** One metric of a kind: what it computes in plain words, and a run of it on demand. Only an approved
+ * one runs by name for AI apps; "Try it" runs it here whatever its status. */
+function MetricRow({
+  item,
+  isOwner,
+  busy,
+  targets,
+  onDecide,
+  onTry,
+}: {
+  item: MetricItem;
+  isOwner: boolean;
+  busy: boolean;
+  targets: { value: string; label: string }[];
+  onDecide: Decide<MetricDecision>;
+  onTry: () => Promise<MetricRun | { error: string }>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [tried, setTried] = useState<MetricRun | { error: string } | null>(null);
+  const [trying, setTrying] = useState(false);
+  const suggestedMerge = item.status === "proposed" && item.merge_into ? item.merge_into : null;
+  const detail =
+    item.status === "rejected"
+      ? item.merge_into
+        ? `Runs ${words(item.merge_into)} instead.`
+        : "AI apps cannot run it."
+      : suggestedMerge
+        ? `Suggested: merge into ${words(suggestedMerge)}.`
+        : null;
+  async function doTry() {
+    setTrying(true);
+    try {
+      setTried(await onTry());
+    } catch {
+      setTried({ error: "Could not run it. Try again." });
+    } finally {
+      setTrying(false);
+    }
+  }
+  return (
+    <li className="flex flex-col gap-1 py-1.5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className="flex-1 min-w-[160px] flex flex-wrap items-baseline gap-x-2">
+          <span className="text-[13px] font-medium">{words(item.name)}</span>
+          <span className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+            {item.expr_words}
+            {item.unit ? ` · ${item.unit}` : ""}
+          </span>
+        </span>
+        <StatusLabel tone={STATUS[item.status].tone}>{STATUS[item.status].label}</StatusLabel>
+      </div>
+      <Description
+        text={item.description}
+        samples={[]}
+        editing={editing}
+        busy={busy}
+        onSave={(description) => onDecide({ action: "describe", description }, "Could not save that description.").then((ok) => ok && setEditing(false))}
+        onCancel={() => setEditing(false)}
+      />
+      {detail && (
+        <p className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+          {detail}
+          {item.reason ? ` ${item.reason}` : ""}
+        </p>
+      )}
+      {!editing && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {isOwner && item.status !== "approved" && (
+            <button type="button" className="btn btn-sm" disabled={busy} onClick={() => onDecide({ action: "approve" }, "Could not approve that metric.")}>
+              <Duo icon={CheckIcon} tone="none" />
+              Approve
+            </button>
+          )}
+          {isOwner && item.status !== "rejected" && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              disabled={busy}
+              onClick={() => onDecide({ action: "reject", merge_into: suggestedMerge }, "Could not reject that metric.")}
+            >
+              <Duo icon={XIcon} tone="none" />
+              {suggestedMerge ? `Reject and merge into ${words(suggestedMerge)}` : "Reject"}
+            </button>
+          )}
+          {isOwner && targets.length > 0 && (
+            <span className="flex items-center gap-1.5">
+              <Duo icon={ArrowsMergeIcon} tone="none" />
+              <Select
+                className="h-8 text-[13px] w-[160px]"
+                aria-label={`Merge ${words(item.name)} into`}
+                placeholder="Merge into…"
+                value={item.status === "rejected" ? (item.merge_into ?? "") : ""}
+                disabled={busy}
+                options={targets}
+                onChange={(to) => onDecide({ action: "reject", merge_into: to }, "Could not merge that metric.")}
+              />
+            </span>
+          )}
+          {isOwner && (
+            <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => setEditing(true)}>
+              <Duo icon={PencilSimpleIcon} tone="none" />
+              {item.description ? "Edit description" : "Add description"}
+            </button>
+          )}
+          <button type="button" className="btn btn-ghost btn-sm" disabled={trying} onClick={doTry}>
+            <Duo icon={PlayIcon} tone="none" />
+            {trying ? "Running…" : "Try it"}
+          </button>
+        </div>
+      )}
+      {tried && "error" in tried && (
+        <p role="status" className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+          {tried.error}
+        </p>
+      )}
+      {tried && !("error" in tried) && (
+        <div role="status" className="soft-panel px-3 py-2.5 flex flex-col gap-1.5 max-w-md">
+          <MetricNumber run={tried} size={22} />
+          <p className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+            As of {asOfDate(tried.as_of)}, from <span className="font-mono">{tried.n_entities}</span> {tried.n_entities === 1 ? "entry" : "entries"}
+            {tried.status !== "approved" ? ". Not approved yet, so AI apps cannot use this number." : "."}
+          </p>
+          <MetricWarnings warnings={tried.warnings.filter((w) => !w.includes("is proposed, not approved"))} />
         </div>
       )}
     </li>

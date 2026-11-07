@@ -93,6 +93,15 @@ test("every MCP tool works end to end", async ({ request, baseURL }) => {
   expect(decided.ok()).toBeTruthy();
   expect((await ok("entity_set_property", { entity_id: orders, property: "size_gb", value: 120 })).value.value).toBe(120);
   expect((await ok("entities_get", { id: orders })).properties[0].property).toBe("size_gb");
+  // a metric over it runs by name once an owner approved it, with the entities it came from
+  await ok("ontology_propose", { metrics: [{ kind: "db", name: "total_size_gb", expr: { agg: "sum", property: "size_gb" } }] });
+  expect((await call("metric_eval", { metric: "total_size_gb" })).isError).toBe(true);
+  const approvedMetric = await request.post(`/api/vaults/${vaultOf}/ontology/metrics/decide`, {
+    data: { kind: "db", name: "total_size_gb", decision: { action: "approve" } },
+  });
+  expect(approvedMetric.ok()).toBeTruthy();
+  const total = await ok("metric_eval", { metric: "total_size_gb" });
+  expect([total.value, total.unit, total.entity_ids]).toEqual([120, "GB", [orders]]);
   const repo = await ok("code_entity_upsert", { kind: "repository", name: "eunomia", summary: "memory system" });
   const file = await ok("code_entity_upsert", { kind: "file", name: "auth.rs", parent_id: repo.id });
   expect(file.id).toBeTruthy();

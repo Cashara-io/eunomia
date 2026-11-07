@@ -4,18 +4,22 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   decideVaultOntologyKind,
   decideVaultOntologyLink,
+  decideVaultOntologyMetric,
   decideVaultOntologyProperty,
   getVaultOntology,
   suggestVaultOntology,
   type KindDecision,
   type LinkDecision,
+  type MetricDecision,
   type OntologyOut,
   type PropertyDecision,
 } from "@/lib/gen";
+import type { MetricRun } from "@/components/chat/views/types";
 import { call } from "./client";
 import { entityKeys } from "./entities";
+import { invoke } from "./tools";
 
-export type { KindItem, LinkItem, OntologyOut, PropertyItem, SuggestOut, ViewStatus } from "@/lib/gen";
+export type { KindItem, LinkItem, MetricItem, OntologyOut, PropertyItem, SuggestOut, ViewStatus } from "@/lib/gen";
 
 export const ontologyKeys = {
   all: ["ontology"] as const,
@@ -56,6 +60,18 @@ export const useDecideProperty = (vaultId: string) =>
   useDecision(vaultId, (v: { kind: string; name: string; decision: PropertyDecision }) =>
     call(decideVaultOntologyProperty({ path: { vault_id: vaultId }, body: v })),
   );
+
+export const useDecideMetric = (vaultId: string) =>
+  useDecision(vaultId, (v: { kind: string; name: string; decision: MetricDecision }) =>
+    call(decideVaultOntologyMetric({ path: { vault_id: vaultId }, body: v })),
+  );
+
+/** Runs a metric once, approved or not, to see its number before deciding. A refusal is a value. */
+export const useTryMetric = (vaultId: string) =>
+  useMutation({
+    mutationFn: ({ kind, name }: { kind: string; name: string }) =>
+      invoke<MetricRun | { error: string }>("metric_eval", { metric: name, kind, vault_id: vaultId, allow_unapproved: true }),
+  });
 
 export const useSuggestOntology = (vaultId: string) => {
   const qc = useQueryClient();
