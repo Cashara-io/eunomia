@@ -327,8 +327,11 @@ async fn apply_extraction(
         }
         let (from_id, _) = ensure(db, owner, vault, &mut entity_ids, from_name, from_kind, None).await?;
         let (to_id, _) = ensure(db, owner, vault, &mut entity_ids, to_name, to_kind, None).await?;
-        service::add_relation(db, owner, &from_id, &to_id, rel.label.as_deref().unwrap_or(""), Some(source_record_id))
-            .await?;
+        match service::add_relation(db, owner, &from_id, &to_id, rel.label.as_deref().unwrap_or(""), Some(source_record_id)).await {
+            // a link type the vault's owners rejected: the relation is left out, the rest of the record kept
+            Err(e) if e.code == crate::error::ErrorCode::ValidationInvalid => continue,
+            res => res?,
+        };
     }
 
     Ok(touched)
