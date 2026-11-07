@@ -79,7 +79,6 @@ test.describe("Entity graph", () => {
     await expect(page.getByText(/^2 memories/)).toBeVisible();
 
     const layers = page.getByRole("group", { name: "Spaces on the map" });
-    // not anchored: an on chip's ✓ (CSS ::before) leads its accessible name
     const personalChip = layers.getByRole("button", { name: /Personal/ });
     const teamChip = layers.getByRole("button", { name: /Team/ });
     await expect(personalChip).toHaveAttribute("aria-pressed", "true");
