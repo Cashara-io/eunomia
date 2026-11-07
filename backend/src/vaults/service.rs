@@ -95,6 +95,18 @@ pub struct InvitationOut {
     pub role: String,
     #[schema(value_type = Option<String>)]
     pub created_at: Option<Datetime>,
+    /// Email of the space's owner when it has exactly one: only owners invite, so that is who sent it.
+    /// None when there are several owners (or it is unknown); show "Someone" then.
+    pub invited_by: Option<String>,
+}
+
+/// An invitation into a vault that the invitee has not answered yet, as its owners see it.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub struct PendingInviteOut {
+    pub email: String,
+    pub role: String,
+    #[schema(value_type = Option<String>)]
+    pub created_at: Option<Datetime>,
 }
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
@@ -187,7 +199,15 @@ async fn free_name(db: &OrgDb, user_id: &RecordId, base: String) -> AppResult<St
 
 /// Create a new vault (org, or an extra personal-style one -- a user can have
 /// several, per the product ask); creator becomes its owner.
-pub async fn create_vault(db: &OrgDb, user_id: &RecordId, name: &str, kind: &str) -> AppResult<VaultOut> {
+pub async fn create_vault(db: &OrgDb, control: &ControlDb, user_id: &RecordId, name: &str, kind: &str) -> AppResult<VaultOut> {
+    let res = create_vault_inner(db, user_id, name, kind).await;
+    // the ledger names a space by id (the log reads its current name), never by what was typed
+    let space = res.as_ref().map(|v| v.id.to_string()).unwrap_or_default();
+    audit_vault(control, user_id, "vault.create", &space, None, None, &res).await;
+    res
+}
+
+async fn create_vault_inner(db: &OrgDb, user_id: &RecordId, name: &str, kind: &str) -> AppResult<VaultOut> {
     authz::require_unrestricted()?;
     let name = &check_name(db, user_id, name, None).await?;
     let vault = with_retry(|| async {
@@ -387,7 +407,14 @@ pub async fn get_vault(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId) -> A
     Ok(VaultDetail { id: v.id, name: v.name, kind: v.kind, created_at: v.created_at, role: v.role, member_count: rows.len() })
 }
 
-pub async fn rename_vault(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId, name: &str) -> AppResult<VaultOut> {
+pub async fn rename_vault(db: &OrgDb, control: &ControlDb, user_id: &RecordId, vault_id: &RecordId, name: &str) -> AppResult<VaultOut> {
+    let before = space_name(db, vault_id).await;
+    let res = rename_vault_inner(db, user_id, vault_id, name).await;
+    audit_vault_from(control, user_id, "vault.rename", &vault_id.to_string(), &before, &res).await;
+    res
+}
+
+async fn rename_vault_inner(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId, name: &str) -> AppResult<VaultOut> {
     authz::authorize(db, user_id, Action::Rename, vault_id).await?;
     let name = &check_name(db, user_id, name, Some(vault_id)).await?;
     let mut res = store::vaults::RENAME.on(db)
@@ -405,7 +432,15 @@ pub async fn rename_vault(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId, n
 /// rows already in the vault in place (orphaned-but-inaccessible, same
 /// accepted tradeoff as the rest of this codebase's delete paths -- add a
 /// cascade if dangling vault data ever becomes a real problem).
-pub async fn delete_vault(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId) -> AppResult<()> {
+pub async fn delete_vault(db: &OrgDb, control: &ControlDb, user_id: &RecordId, vault_id: &RecordId) -> AppResult<()> {
+    let space = space_name(db, vault_id).await;
+    let res = delete_vault_inner(db, user_id, vault_id).await;
+    // a deleted space can't be looked up later: its owner's row keeps the name it had
+    audit_vault_from(control, user_id, "vault.delete", &vault_id.to_string(), &space, &res).await;
+    res
+}
+
+async fn delete_vault_inner(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId) -> AppResult<()> {
     authz::authorize(db, user_id, Action::Delete, vault_id).await?;
     // read before the memberships go, so everyone who had it hears it is gone
     let audience = crate::changes::audience(db, vault_id).await;
@@ -420,6 +455,94 @@ pub async fn delete_vault(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId) -
     .await?;
     crate::changes::announce(db, vault_id, crate::changes::VAULT_DELETED, &audience).await;
     Ok(())
+}
+
+/// The space's name for the audit ledger (its id when the row is gone or unreadable).
+async fn space_name(db: &OrgDb, vault_id: &RecordId) -> String {
+    match store::get::<VaultFullRow>(db, vault_id).await {
+        Ok(Some(v)) if !v.name.is_empty() => v.name,
+        _ => vault_id.to_string(),
+    }
+}
+
+/// One `audit_event` row per membership or lifecycle change of a space: the target is the space's
+/// name; the detail carries the affected email and role as `email=... role=...` (see
+/// `routers::admin::describe`). A refused or failed attempt is recorded with its error code.
+async fn audit_vault<T>(control: &ControlDb, user_id: &RecordId, action: &str, space: &str, email: Option<&str>, role: Option<&str>, res: &AppResult<T>) {
+    if refused_access(res) {
+        // the caller can't see this space: record the attempt, never the space or who it named
+        crate::audit::record_as_caller_detail(control, user_id, action, HIDDEN_SPACE, outcome(res), "").await;
+        return;
+    }
+    // Any other failure keeps its reason but names no space: the id came from the caller, and the
+    // log resolves ids to names when read, so a failed attempt on someone else's space (no
+    // invitation waiting, say) must not turn into that space's name in the caller's own log.
+    let space = if res.is_err() { "" } else { space };
+    let mut detail = String::new();
+    if let Some(e) = email {
+        detail.push_str(&format!("email={}", crate::models_user::normalize_email(e)));
+    }
+    if let Some(r) = role {
+        if !detail.is_empty() {
+            detail.push(' ');
+        }
+        detail.push_str(&format!("role={r}"));
+    }
+    // A refused invite shares one error code for two different causes: say which, so the audit log can.
+    if let Err(e) = res {
+        let why = if e.message.starts_with("no user with email") {
+            Some("no_account")
+        } else if e.message.contains("is already a member") {
+            Some("member")
+        } else if e.message.contains("already has a pending invite") {
+            Some("pending")
+        } else {
+            None
+        };
+        if let Some(w) = why {
+            if !detail.is_empty() {
+                detail.push(' ');
+            }
+            detail.push_str(&format!("why={w}"));
+        }
+    }
+    crate::audit::record_as_caller_detail(control, user_id, action, space, outcome(res), &detail).await;
+}
+
+/// `ok` or the error code that ended the attempt.
+fn outcome<T>(res: &AppResult<T>) -> &str {
+    match res {
+        Ok(_) => "ok",
+        Err(e) => e.code.as_str(),
+    }
+}
+
+/// [`audit_vault`] for an event that names other spaces too (a rename's old name, the sources of a
+/// copy or merge): the detail is `from=<names>`, read to the end of the line, so names with spaces survive.
+async fn audit_vault_from<T>(control: &ControlDb, user_id: &RecordId, action: &str, space: &str, from: &str, res: &AppResult<T>) {
+    // Names (a rename's old name, the sources of a copy or merge) are kept only when the action went
+    // through: a failed attempt may name spaces the caller can't see (merging a space with itself
+    // fails validation before access is checked).
+    if res.is_err() {
+        crate::audit::record_as_caller_detail(control, user_id, action, HIDDEN_SPACE, outcome(res), "").await;
+        return;
+    }
+    crate::audit::record_as_caller_detail(control, user_id, action, space, outcome(res), &format!("from={from}")).await;
+}
+
+/// The target an audit row names when the caller was refused access: a space they can't see must
+/// not leak into their own rows (its name, its id, or the people an attempt named).
+pub const HIDDEN_SPACE: &str = "a space you can't access";
+
+/// Whether an attempt failed because the caller may not touch the space (or it isn't theirs to see).
+pub fn refused_access<T>(res: &AppResult<T>) -> bool {
+    match res {
+        Ok(_) => false,
+        Err(e) => {
+            let c = e.code.as_str();
+            c.ends_with(".forbidden") || c.ends_with(".not_found") || c == "auth.scope" || c == "tenant.denied"
+        }
+    }
 }
 
 /// Add `email` to `vault_id`. Caller must already be an owner (so admin
@@ -445,14 +568,31 @@ pub async fn invite_member(
     email: &str,
     role: &str,
 ) -> AppResult<InviteOut> {
+    let res = invite_member_inner(db, control, user_id, vault_id, email, role).await;
+    audit_vault(control, user_id, "vault.invite", &vault_id.to_string(), Some(email), Some(role), &res).await;
+    res
+}
+
+async fn invite_member_inner(
+    db: &OrgDb,
+    control: &ControlDb,
+    user_id: &RecordId,
+    vault_id: &RecordId,
+    email: &str,
+    role: &str,
+) -> AppResult<InviteOut> {
     authz::authorize(db, user_id, Action::Invite, vault_id).await?;
 
     let invitee = user_in_org(db, control, email)
         .await?
         .ok_or_else(|| AppError::bad_request(format!("no user with email '{email}'")))?;
 
-    if membership_any_status(db, vault_id, &invitee).await?.is_some() {
-        return Err(AppError::bad_request(format!("{email} is already a member or has a pending invite")));
+    if let Some(m) = membership_any_status(db, vault_id, &invitee).await? {
+        return Err(AppError::bad_request(if m.status == "active" {
+            format!("{email} is already a member of this space")
+        } else {
+            format!("{email} already has a pending invite to this space")
+        }));
     }
 
     let mut res = store::vaults::INVITE.on(db)
@@ -464,7 +604,7 @@ pub async fn invite_member(
         .map_err(|e| {
             // lost the race against a concurrent invite of the same user
             if e.to_string().contains("already contains") {
-                AppError::bad_request(format!("{email} is already a member or has a pending invite"))
+                AppError::bad_request(format!("{email} already has a pending invite to this space"))
             } else {
                 e.into()
             }
@@ -523,13 +663,81 @@ pub async fn list_my_invitations(db: &OrgDb, user_id: &RecordId) -> AppResult<Ve
             vault_kind: r.vault.kind,
             role: r.role,
             created_at: r.created_at,
+            invited_by: None,
+        })
+        .collect())
+}
+
+/// Fill `invited_by` on each invitation: the vault's owner, when it has exactly one.
+pub async fn add_inviters(db: &OrgDb, control: &ControlDb, invitations: &mut [InvitationOut]) -> AppResult<()> {
+    if invitations.is_empty() {
+        return Ok(());
+    }
+    #[derive(Deserialize, SurrealValue)]
+    struct Owner {
+        vault: RecordId,
+        user: RecordId,
+    }
+    #[derive(Deserialize, SurrealValue)]
+    struct Email {
+        id: RecordId,
+        email: String,
+    }
+    let vaults: Vec<RecordId> = invitations.iter().filter_map(|i| crate::rid::parse(&i.vault_id).ok()).collect();
+    let mut res = store::vaults::OWNERS_OF.on(db).bind(("vaults", vaults)).await?;
+    let owners: Vec<Owner> = res.take(0)?;
+    let mut res = store::entities::EMAILS_FOR
+        .on(control)
+        .bind(("ids", owners.iter().map(|o| o.user.clone()).collect::<Vec<_>>()))
+        .await?;
+    let emails: Vec<Email> = res.take(0)?;
+    for inv in invitations.iter_mut() {
+        let mine: Vec<&Owner> = owners.iter().filter(|o| o.vault.to_string() == inv.vault_id).collect();
+        if let [only] = mine.as_slice() {
+            inv.invited_by = emails.iter().find(|e| e.id == only.user).map(|e| e.email.clone());
+        }
+    }
+    Ok(())
+}
+
+/// Owner-only. Invitations into `vault_id` nobody has answered yet. Withdraw one with [`remove_member`].
+pub async fn list_pending_invites(db: &OrgDb, control: &ControlDb, user_id: &RecordId, vault_id: &RecordId) -> AppResult<Vec<PendingInviteOut>> {
+    authz::authorize(db, user_id, Action::ManageMembers, vault_id).await?;
+    #[derive(Deserialize, SurrealValue)]
+    struct Row {
+        user: RecordId,
+        role: String,
+        created_at: Option<Datetime>,
+    }
+    #[derive(Deserialize, SurrealValue)]
+    struct Email {
+        id: RecordId,
+        email: String,
+    }
+    let mut res = store::vaults::LIST_PENDING.on(db).bind(("vault", vault_id.clone())).await?;
+    let rows: Vec<Row> = res.take(0)?;
+    if rows.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut res = store::entities::EMAILS_FOR.on(control).bind(("ids", rows.iter().map(|r| r.user.clone()).collect::<Vec<_>>())).await?;
+    let emails: Vec<Email> = res.take(0)?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|r| {
+            emails.iter().find(|e| e.id == r.user).map(|e| PendingInviteOut { email: e.email.clone(), role: r.role, created_at: r.created_at })
         })
         .collect())
 }
 
 /// Accept a pending invitation into `vault_id`. Only the invitee can accept
 /// their own invite.
-pub async fn accept_invitation(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId) -> AppResult<VaultWithRole> {
+pub async fn accept_invitation(db: &OrgDb, control: &ControlDb, user_id: &RecordId, vault_id: &RecordId) -> AppResult<VaultWithRole> {
+    let res = accept_invitation_inner(db, user_id, vault_id).await;
+    audit_vault(control, user_id, "vault.join", &vault_id.to_string(), None, res.as_ref().ok().map(|v| v.role.as_str()), &res).await;
+    res
+}
+
+async fn accept_invitation_inner(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId) -> AppResult<VaultWithRole> {
     authz::check_vault(vault_id)?;
     let m = membership_any_status(db, vault_id, user_id)
         .await?
@@ -554,7 +762,13 @@ pub async fn accept_invitation(db: &OrgDb, user_id: &RecordId, vault_id: &Record
 }
 
 /// Decline (delete) a pending invitation into `vault_id`.
-pub async fn decline_invitation(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId) -> AppResult<()> {
+pub async fn decline_invitation(db: &OrgDb, control: &ControlDb, user_id: &RecordId, vault_id: &RecordId) -> AppResult<()> {
+    let res = decline_invitation_inner(db, user_id, vault_id).await;
+    audit_vault(control, user_id, "vault.decline", &vault_id.to_string(), None, None, &res).await;
+    res
+}
+
+async fn decline_invitation_inner(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId) -> AppResult<()> {
     authz::check_vault(vault_id)?;
     let m = membership_any_status(db, vault_id, user_id)
         .await?
@@ -569,6 +783,15 @@ pub async fn decline_invitation(db: &OrgDb, user_id: &RecordId, vault_id: &Recor
 /// Owner-only. Refuses to remove the last owner, so a vault can't be left
 /// admin-less.
 pub async fn remove_member(db: &OrgDb, control: &ControlDb, user_id: &RecordId, vault_id: &RecordId, email: &str) -> AppResult<()> {
+    let res = remove_member_inner(db, control, user_id, vault_id, email).await;
+    // withdrawing a pending invitation reads differently from removing someone who had joined
+    let action = if matches!(res, Ok(true)) { "vault.revoke" } else { "vault.member_remove" };
+    audit_vault(control, user_id, action, &vault_id.to_string(), Some(email), None, &res).await;
+    res.map(|_| ())
+}
+
+/// Returns true when the removed membership was a pending invitation.
+async fn remove_member_inner(db: &OrgDb, control: &ControlDb, user_id: &RecordId, vault_id: &RecordId, email: &str) -> AppResult<bool> {
     authz::authorize(db, user_id, Action::ManageMembers, vault_id).await?;
 
     let target_id = user_in_org(db, control, email).await?.ok_or_else(|| AppError::bad_request(format!("no user with email '{email}'")))?;
@@ -583,7 +806,8 @@ pub async fn remove_member(db: &OrgDb, control: &ControlDb, user_id: &RecordId, 
     with_retry(|| async {
         store::vaults::REMOVE_MEMBER.on(db)
         .bind(("vault", vault_id.clone()))
-        .bind(("is_owner", target_membership.role == "owner"))
+        // only an active owner counts: withdrawing a pending owner invitation never strands the vault
+        .bind(("is_owner", target_membership.role == "owner" && target_membership.status == "active"))
         .bind(("id", target_membership.id.clone()))
         .await?
         .check()
@@ -593,12 +817,18 @@ pub async fn remove_member(db: &OrgDb, control: &ControlDb, user_id: &RecordId, 
         if e.to_string().contains("last_owner") { AppError::bad_request("cannot remove the last owner") } else { e.into() }
     })?;
     crate::changes::announce(db, vault_id, crate::changes::VAULT_MEMBER_REMOVED, &[target_id]).await;
-    Ok(())
+    Ok(target_membership.status != "active")
 }
 
 /// Owner-only. Promote or demote an active member. Demoting the last owner is refused, so a vault
 /// can't be left admin-less.
 pub async fn set_member_role(db: &OrgDb, control: &ControlDb, user_id: &RecordId, vault_id: &RecordId, email: &str, role: &str) -> AppResult<MemberOut> {
+    let res = set_member_role_inner(db, control, user_id, vault_id, email, role).await;
+    audit_vault(control, user_id, "vault.role", &vault_id.to_string(), Some(email), Some(role), &res).await;
+    res
+}
+
+async fn set_member_role_inner(db: &OrgDb, control: &ControlDb, user_id: &RecordId, vault_id: &RecordId, email: &str, role: &str) -> AppResult<MemberOut> {
     authz::authorize(db, user_id, Action::SetRole, vault_id).await?;
     if role != "owner" && role != "member" {
         return Err(AppError::bad_request("role must be 'owner' or 'member'"));
@@ -629,6 +859,12 @@ pub async fn set_member_role(db: &OrgDb, control: &ControlDb, user_id: &RecordId
 
 /// Owner-only. Make an active member an owner and demote the caller to member, in one transaction.
 pub async fn transfer_ownership(db: &OrgDb, control: &ControlDb, user_id: &RecordId, vault_id: &RecordId, email: &str) -> AppResult<MemberOut> {
+    let res = transfer_ownership_inner(db, control, user_id, vault_id, email).await;
+    audit_vault(control, user_id, "vault.transfer", &vault_id.to_string(), Some(email), None, &res).await;
+    res
+}
+
+async fn transfer_ownership_inner(db: &OrgDb, control: &ControlDb, user_id: &RecordId, vault_id: &RecordId, email: &str) -> AppResult<MemberOut> {
     authz::authorize(db, user_id, Action::SetRole, vault_id).await?;
     let target_id = user_in_org(db, control, email).await?.ok_or_else(|| AppError::bad_request(format!("no user with email '{email}'")))?;
     if &target_id == user_id {
@@ -974,11 +1210,20 @@ async fn copy_into(db: &OrgDb, user_id: &RecordId, src: &RecordId, dest: &Record
 /// something `user_id` can't read) is skipped rather than left dangling.
 pub async fn clone_vault(
     db: &OrgDb,
+    control: &ControlDb,
     user_id: &RecordId,
     vault_id: &RecordId,
     name: Option<&str>,
     kind: &str,
 ) -> AppResult<CloneOut> {
+    let source = space_name(db, vault_id).await;
+    let res = clone_vault_inner(db, user_id, vault_id, name, kind).await;
+    let space = res.as_ref().map(|c| c.id.clone()).unwrap_or_default();
+    audit_vault_from(control, user_id, "vault.clone", &space, &source, &res).await;
+    res
+}
+
+async fn clone_vault_inner(db: &OrgDb, user_id: &RecordId, vault_id: &RecordId, name: Option<&str>, kind: &str) -> AppResult<CloneOut> {
     authz::authorize(db, user_id, Action::Clone, vault_id).await?;
     authz::require_unrestricted()?;
 
@@ -1025,12 +1270,21 @@ pub struct MergeOut {
 /// deduplicated, a second observation appended to the first).
 pub async fn merge_vaults(
     db: &OrgDb,
+    control: &ControlDb,
     user_id: &RecordId,
     a: &RecordId,
     b: &RecordId,
     name: Option<&str>,
     kind: &str,
 ) -> AppResult<MergeOut> {
+    let sources = format!("{} and {}", space_name(db, a).await, space_name(db, b).await);
+    let res = merge_vaults_inner(db, user_id, a, b, name, kind).await;
+    let space = res.as_ref().map(|m| m.id.clone()).unwrap_or_default();
+    audit_vault_from(control, user_id, "vault.merge", &space, &sources, &res).await;
+    res
+}
+
+async fn merge_vaults_inner(db: &OrgDb, user_id: &RecordId, a: &RecordId, b: &RecordId, name: Option<&str>, kind: &str) -> AppResult<MergeOut> {
     if a == b {
         return Err(AppError::bad_request("pick two different vaults to merge"));
     }

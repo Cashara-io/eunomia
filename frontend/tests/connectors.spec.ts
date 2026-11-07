@@ -6,8 +6,11 @@ test.describe("Connectors", () => {
     await registerAndOnboard(page, uniqueEmail("connectors"));
     await page.goto("/connectors");
 
-    const upBankCard = page.getByRole("link", { name: /Up Bank/ });
-    await expect(upBankCard.getByText("Not connected")).toBeVisible();
+    // Not connected yet: listed under "Add a source", folded under the personal sources, as a "Connect Up Bank" row.
+    await expect(page.getByRole("link", { name: "Connect Up Bank" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Personal sources (3)" }).click();
+    const upBankCard = page.getByRole("link", { name: "Connect Up Bank" });
+    await expect(upBankCard).toBeVisible();
     await upBankCard.click();
 
     await page.getByPlaceholder("up:yeah:…").fill("up:yeah:e2e-fake-token");

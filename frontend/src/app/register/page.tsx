@@ -5,12 +5,71 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRegister } from "@/lib/queries/auth";
+import { AlertCircle } from "lucide-react";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
-import { keepNext } from "@/lib/nextPath";
+import CopyButton from "@/components/bits/CopyButton";
+import { keepNext, nextPath } from "@/lib/nextPath";
 import AuthShell, { LABEL, RevealToggle } from "../login/AuthShell";
 import { OrDivider, SsoButton, useOidcError, useSignIn } from "../login/Sso";
 
 const MISMATCH = "Passwords don't match.";
+const EMAIL_TAKEN = "auth.email_taken";
+
+/** Known register failures in plain words. Validation messages (password length, email shape) are already plain. */
+const PLAIN: Record<string, string> = {
+  "auth.password_disabled": "This server signs people in with a company account, not a password. Use the sign-in button above.",
+  "tenant.provisioning_disabled": "New accounts can't be created on this server. Ask your Eunomia admin to invite you.",
+  "rate.limited": "Too many attempts. Wait a minute, then try again.",
+  internal: "Something went wrong on the server. Try again in a moment.",
+};
+
+function plainMessage(f: Failure): string {
+  if (f.code && PLAIN[f.code]) return PLAIN[f.code];
+  if (f.code === "validation.invalid") return f.message;
+  return f.code || f.traceId ? "Could not create the account. Try again." : f.message;
+}
+
+/** The register error: a plain sentence, a way forward when the email is taken, and the code and trace id behind Details. */
+function RegisterError({ error, email }: { error: Failure; email: string }) {
+  const taken = error.code === EMAIL_TAKEN;
+  const next = nextPath();
+  const signIn = `/login?email=${encodeURIComponent(email.trim())}${next === "/" ? "" : `&next=${encodeURIComponent(next)}`}`;
+  const details = error.code || error.traceId;
+  return (
+    <div
+      role="alert"
+      className="flex items-start gap-3 px-3.5 py-2.5 rounded-[2px]"
+      style={{ background: "var(--critical-soft)", borderLeft: "3px solid var(--bauhaus-app-red)" }}
+    >
+      <AlertCircle size={18} strokeWidth={1.75} aria-hidden className="shrink-0 mt-px" style={{ color: "var(--critical)" }} />
+      <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+        <p className="text-[14px] leading-snug" style={{ color: "var(--critical)" }}>
+          {taken ? "There's already an account for this email." : plainMessage(error)}
+        </p>
+        {taken && (
+          <Link href={signIn} className="text-[14px] font-medium underline self-start" style={{ color: "var(--accent-text)" }}>
+            Sign in instead
+          </Link>
+        )}
+        {details && (
+          <details className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+            <summary className="cursor-pointer select-none">Details</summary>
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+              {error.code && <code className="font-mono">{error.code}</code>}
+              {error.traceId && (
+                <span className="flex items-center gap-1">
+                  <span>Trace</span>
+                  <code className="font-mono">{error.traceId}</code>
+                  <CopyButton value={error.traceId} label="Copy trace id" />
+                </span>
+              )}
+            </div>
+          </details>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -137,7 +196,7 @@ export default function RegisterPage() {
 
               {error && (
                 <div id="register-error">
-                  <ErrorLine error={error} />
+                  <RegisterError error={error} email={email} />
                 </div>
               )}
 

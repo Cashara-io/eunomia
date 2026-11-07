@@ -584,7 +584,7 @@ async fn vault_owners_manage_their_own_vaults_references() {
     let db = w.app.db().await;
     let team_id = eunomia_backend::rid::parse(&team).unwrap();
     common::sys(eunomia_backend::vaults::service::invite_member(&db, &st.control, &w.app.user.id, &team_id, "bob@example.com", "member")).await.unwrap();
-    common::sys(eunomia_backend::vaults::service::accept_invitation(&db, &bob.id, &team_id)).await.unwrap();
+    common::sys(eunomia_backend::vaults::service::accept_invitation(&db, &st.control, &bob.id, &team_id)).await.unwrap();
     let own = Box::pin(common::sys(registry::call(st, &bob, "vault_create", json!({"name": "Bob"})))).await.unwrap()["id"].as_str().unwrap().to_string();
     let bob_c = login(&w, "bob@example.com").await;
 

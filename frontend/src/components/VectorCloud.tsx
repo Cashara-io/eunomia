@@ -1,59 +1,52 @@
 "use client";
 
-import { XIcon } from "@phosphor-icons/react/ssr";
-import { VaultShape, vaultTone } from "./VaultChip";
 import { useMemo, useState } from "react";
+import { X } from "lucide-react";
 import ErrorLine, { failure } from "./ErrorLine";
-import Scene3D from "./Scene3D";
+import MemoryScatter from "./graph/MemoryScatter";
 import MemoryRows, { MAX_COMPARE } from "./MemoryRows";
+import { pointKindLabel } from "@/lib/memoryKinds";
 import VectorInsights from "./VectorInsights";
 import { useEntityCloud } from "@/lib/queries/entities";
 import { useVaults } from "@/lib/queries/vaults";
+import { chooseSpace, useSharedSpace } from "./graph/space";
+import SpaceSelect, { spaceColor, spaceName } from "./graph/SpaceSelect";
 
-// One colour per layered vault, in pick order.
-// Series colours, never the accent: the accent marks only what is pressable or selected.
-// Point colours per memory space. The vault colours mean vault identity and
-// nothing else: the personal space is red, the first shared space is the
-// company blue, and any further shared spaces take the muted series hues.
-const EXTRA_LAYER_COLORS = ["var(--kind-repository)", "var(--kind-location)", "var(--kind-organisation)", "var(--kind-symbol)", "var(--kind-file)"];
 const PANELS = [
   { id: "rows", label: "Memories" },
   { id: "insights", label: "Insights" },
 ] as const;
-const AXES: [string, string, string] = ["PC1", "PC2", "PC3"];
+export { pointKindLabel };
 
 export default function VectorCloud() {
   const vaultsQuery = useVaults();
   const vaults = vaultsQuery.data ?? [];
-  // Until the user toggles a layer, the personal vault (or the first one) is picked.
-  const [userPicked, setPicked] = useState<string[] | null>(null);
-  const defaultVault = vaults.find((v) => v.kind === "personal") ?? vaults[0];
-  const picked = userPicked ?? (defaultVault ? [defaultVault.id] : []);
+  // The map shows the one space the List and Connections views show (shared, see graph/space.ts;
+  // `undefined` there is Personal), picked with the same select.
+  const shared = useSharedSpace();
+  const personal = vaults.find((v) => v.kind === "personal");
+  const space = shared.vaultId ? vaults.find((v) => v.id === shared.vaultId) : personal;
+  const picked = useMemo(() => (shared.ready && space ? [space.id] : []), [shared.ready, space]);
   const cloudQuery = useEntityCloud(picked);
   const data = cloudQuery.data ?? null;
   const error = vaultsQuery.isError
     ? failure(vaultsQuery.error, "Could not load your memory spaces.", " Reload the page to try again.")
     : cloudQuery.isError
-      ? failure(cloudQuery.error, "Could not load the vector cloud.", " Reload the page to try again.")
+      ? failure(cloudQuery.error, "Could not load the memory map.", " Reload the page to try again.")
       : null;
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const shared = vaults.filter((v) => v.kind !== "personal");
-  const colorOf = (vaultId: string) => {
-    const v = vaults.find((x) => x.id === vaultId);
-    if (!v || v.kind === "personal") return "var(--vault-personal)";
-    const i = shared.indexOf(v);
-    return i === 0 ? "var(--vault-company)" : EXTRA_LAYER_COLORS[(i - 1) % EXTRA_LAYER_COLORS.length];
-  };
+  // each point wears its space's colour, the same one Memory spaces shows beside the space's name
+  const colorOf = (vaultId: string) => spaceColor(vaults.find((v) => v.id === vaultId));
   const points = useMemo(
-    () => (picked.length ? data?.points ?? [] : []).map((p) => ({ ...p, color: colorOf(p.vault) })),
+    () => (picked.length ? (data?.points ?? []).filter((p) => picked.includes(p.vault)) : []).map((p) => ({ ...p, color: colorOf(p.vault) })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [data]
+    [data, picked, vaults]
   );
   const selected = points.find((p) => p.id === selectedId);
   const nameOf = (id: string) => {
     const v = vaults.find((x) => x.id === id);
-    return v ? (v.kind === "personal" ? "Personal" : v.name) : id;
+    return v ? spaceName(v) : id;
   };
 
   // Rows ticked for comparison, in tick order (these are the numbers drawn on the points).
@@ -75,46 +68,34 @@ export default function VectorCloud() {
     } else toggleRow(id);
   }
 
-  function toggle(id: string) {
+  function pickSpace(id: string | undefined) {
     setSelectedId(null);
     setSelection([]);
-    setPicked(picked.includes(id) ? picked.filter((x) => x !== id) : [...picked, id]);
+    chooseSpace(id);
   }
 
   return (
     <div className="flex flex-col gap-3 flex-1 min-h-0">
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex gap-2 flex-wrap items-center" role="group" aria-label="Memory space layers">
-          {vaults.map((v) => {
-            const on = picked.includes(v.id);
-            const count = on ? points.filter((p) => p.vault === v.id).length : null;
-            return (
-              <button key={v.id} type="button" className="pill min-h-10" aria-pressed={on} onClick={() => toggle(v.id)}>
-                <VaultShape tone={vaultTone(v.kind)} size={10} fill={on ? colorOf(v.id) : "var(--border-strong)"} />
-                {nameOf(v.id)}
-                {count !== null && <span className="font-mono" style={{ color: "var(--ink-dim)" }}>{count}</span>}
-                <span className="sr-only">{on ? "(shown)" : "(hidden)"}</span>
-              </button>
-            );
-          })}
-        </div>
+      <div className="flex items-center gap-x-4 gap-y-2 flex-wrap">
+        <SpaceSelect className="h-10 text-[14px] w-full sm:w-56" value={shared.vaultId} onChange={pickSpace} />
         {data && picked.length > 0 && (
-          <span
-            className="label"
-            title={
-              data.space === "semantic"
-                ? "Model embeddings: nearby points mean similar meaning."
-                : "No model key: points are placed by shared words. Add a key in Settings for a semantic space."
-            }
-          >
-            {data.space === "semantic" ? "Placed by meaning" : "Placed by shared words"}
+          <span className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+            {points.length === 1 ? "1 memory" : `${points.length} memories`}
+            {" · "}
+            <span
+              title={
+                data.space === "semantic"
+                  ? "Placed by an AI model: nearby points mean similar meaning."
+                  : "No AI model set up, so points are placed by shared words. Add one in Settings to place them by meaning."
+              }
+            >
+              {data.space === "semantic" ? "placed by meaning" : "placed by shared words"}
+            </span>
+            {/* the page's tab blurb already says what the map is; this line only adds how to use it */}
+            {points.length > 1 && " · click points to compare them"}
           </span>
         )}
       </div>
-      <p className="text-[14px] -mt-1" style={{ color: "var(--ink-dim)" }}>
-        Each point is a memory or an item from a connected source. Turn memory spaces on or off above, drag to turn the map, and click a point
-        to read it and add it to the comparison.
-      </p>
 
       <div className="flex flex-col lg:flex-row gap-3 flex-1 min-h-0">
       <div className="ledger relative flex-1 min-h-0 overflow-hidden min-w-0" style={{ minHeight: 420 }}>
@@ -122,18 +103,14 @@ export default function VectorCloud() {
           <div className="m-4">
             <ErrorLine error={error} />
           </div>
-        ) : picked.length === 0 ? (
-          <div className="p-10 text-center text-[13px]" style={{ color: "var(--ink-dim)" }}>
-            Turn on at least one memory space above to see its memories.
-          </div>
         ) : !data ? (
           <div className="absolute inset-4 skeleton" aria-busy="true" aria-label="Loading the memory map" />
         ) : points.length === 0 ? (
           <div className="p-10 text-center text-[13px]" style={{ color: "var(--ink-dim)" }}>
-            Nothing saved in these memory spaces yet.
+            Nothing saved in this memory space yet.
           </div>
         ) : (
-          <Scene3D points={points} axes={AXES} selectedId={selectedId} highlightIds={selection} onSelect={pickPoint} ariaLabel="Memory map" />
+          <MemoryScatter points={points} selectedId={selectedId} highlightIds={selection} onSelect={pickPoint} ariaLabel="Memory map" />
         )}
         {selected && (
           <aside
@@ -143,9 +120,9 @@ export default function VectorCloud() {
             style={{ transformOrigin: "top right" }}
           >
             <div className="flex items-center gap-2 label">
-              <VaultShape tone={vaultTone(vaults.find((v) => v.id === selected.vault)?.kind)} size={10} fill={selected.color} />
+              <span className="dot" style={{ background: selected.color }} aria-hidden />
               <span className="truncate">
-                {nameOf(selected.vault)} · {selected.kind}
+                {nameOf(selected.vault)} · {pointKindLabel(selected.kind)}
               </span>
               <button
                 type="button"
@@ -153,7 +130,7 @@ export default function VectorCloud() {
                 aria-label="Close"
                 onClick={() => setSelectedId(null)}
               >
-                <XIcon weight="duotone" size={16} />
+                <X size={16} strokeWidth={1.75} />
               </button>
             </div>
             <p className="text-[14px] leading-snug" style={{ color: "var(--ink)" }}>{selected.label}</p>
@@ -163,11 +140,11 @@ export default function VectorCloud() {
       {data && points.length > 0 && !error && (
         <aside className="ledger max-lg:shrink-0 lg:w-[340px] lg:shrink-0 lg:min-h-0 flex flex-col overflow-hidden" aria-label="Analysis">
           <div className="p-2 pb-0 shrink-0">
-            <div className="flex gap-2" role="tablist" aria-label="Analysis view">
+            <div className="tabs px-2" role="tablist" aria-label="Analysis view">
               {PANELS.map((t) => (
-                <button key={t.id} role="tab" aria-selected={tab === t.id} className="pill flex-1 justify-center" onClick={() => setTab(t.id)}>
+                <button key={t.id} role="tab" aria-selected={tab === t.id} className="tab" onClick={() => setTab(t.id)}>
                   {t.label}
-                  {t.id === "rows" && selection.length > 0 && <span className="font-mono">{selection.length}</span>}
+                  {t.id === "rows" && selection.length > 0 && <span className="tabular-nums">{selection.length}</span>}
                 </button>
               ))}
             </div>
@@ -177,7 +154,6 @@ export default function VectorCloud() {
               points={points}
               vaultIds={picked}
               nameOf={nameOf}
-              toneOf={(id) => vaultTone(vaults.find((v) => v.id === id)?.kind)}
               selection={selection}
               focusId={selectedId}
               onToggle={toggleRow}

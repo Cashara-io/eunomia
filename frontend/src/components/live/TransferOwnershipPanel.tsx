@@ -1,6 +1,5 @@
 "use client";
 
-import { ArrowsLeftRightIcon } from "@phosphor-icons/react/ssr";
 import { useState } from "react";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
@@ -35,7 +34,6 @@ export default function TransferOwnershipPanel({ vault, members, me }: { vault: 
   return (
     <section className="flex flex-col gap-2" aria-labelledby={`handover-${vault.id}`}>
       <h3 id={`handover-${vault.id}`} className="section-title flex items-center gap-2">
-        <ArrowsLeftRightIcon weight="duotone" size={16} aria-hidden />
         Hand over this space
       </h3>
       <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
@@ -71,7 +69,7 @@ export default function TransferOwnershipPanel({ vault, members, me }: { vault: 
               </button>
             </>
           ) : (
-            <button type="button" className="btn btn-primary" disabled={!target} onClick={() => setConfirming(true)}>
+            <button type="button" className="btn" disabled={!target} onClick={() => setConfirming(true)}>
               Hand over
             </button>
           )}

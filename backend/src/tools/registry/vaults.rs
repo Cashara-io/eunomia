@@ -43,7 +43,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     Ok(a) => a,
                     Err(e) => return Ok(bad_args(e)),
                 };
-                Ok(vaults_tools::vault_create(&state.db, owner, &a.name, &a.kind).await)
+                Ok(vaults_tools::vault_create(&state.db, &state.control, owner, &a.name, &a.kind).await)
             })
         }),
     );
@@ -86,7 +86,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     Ok(v) => v,
                     Err(e) => return Ok(e),
                 };
-                Ok(vaults_tools::vault_clone(&state.db, owner, &vault_id, a.name.as_deref(), &a.kind).await)
+                Ok(vaults_tools::vault_clone(&state.db, &state.control, owner, &vault_id, a.name.as_deref(), &a.kind).await)
             })
         }),
     );
@@ -128,7 +128,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     Ok(v) => v,
                     Err(e) => return Ok(e),
                 };
-                Ok(vaults_tools::vault_merge(&state.db, owner, &va, &vb, a.name.as_deref(), &a.kind).await)
+                Ok(vaults_tools::vault_merge(&state.db, &state.control, owner, &va, &vb, a.name.as_deref(), &a.kind).await)
             })
         }),
     );
@@ -380,7 +380,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     Ok(v) => v,
                     Err(e) => return Ok(e),
                 };
-                Ok(vaults_tools::vault_accept_invitation(&state.db, owner, &vault_id).await)
+                Ok(vaults_tools::vault_accept_invitation(&state.db, &state.control, owner, &vault_id).await)
             })
         }),
     );
@@ -399,7 +399,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     Ok(v) => v,
                     Err(e) => return Ok(e),
                 };
-                Ok(vaults_tools::vault_decline_invitation(&state.db, owner, &vault_id).await)
+                Ok(vaults_tools::vault_decline_invitation(&state.db, &state.control, owner, &vault_id).await)
             })
         }),
     );
@@ -428,7 +428,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     Ok(v) => v,
                     Err(e) => return Ok(e),
                 };
-                Ok(vaults_tools::vault_rename(&state.db, owner, &vault_id, &a.name).await)
+                Ok(vaults_tools::vault_rename(&state.db, &state.control, owner, &vault_id, &a.name).await)
             })
         }),
     );
@@ -447,7 +447,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     Ok(v) => v,
                     Err(e) => return Ok(e),
                 };
-                Ok(vaults_tools::vault_delete(&state.db, owner, &vault_id).await)
+                Ok(vaults_tools::vault_delete(&state.db, &state.control, owner, &vault_id).await)
             })
         }),
     );

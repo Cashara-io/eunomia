@@ -191,9 +191,3 @@ export function useLiveUpdates() {
 
 /** The live stream's state, for a status word next to Refresh. */
 export const useLiveStatus = (): LiveStatus => useSyncExternalStore(subscribeLiveStatus, getLiveStatus, () => "connecting");
-
-/** Manual refresh of everything an agent can change: memory spaces, invitations, people & topics, documents. */
-export function useRefreshEverything() {
-  const qc = useQueryClient();
-  return () => flush(qc, { ...fresh(), all: true });
-}

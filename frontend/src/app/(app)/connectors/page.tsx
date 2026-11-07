@@ -1,12 +1,14 @@
 "use client";
 
-import { ArrowRightIcon, CaretDownIcon, CaretRightIcon, MagnifyingGlassIcon, PlugIcon, PlusIcon, XIcon } from "@phosphor-icons/react/ssr";
+import SyncSettings from "@/components/SyncSettings";
 import { Fragment, useState } from "react";
 import Link from "next/link";
+import { ChevronDown, ChevronRight, Database, Plug, Plus, Search, X } from "lucide-react";
 import type { Connector, SourceRow } from "@/lib/types";
 import { useConnectors } from "@/lib/queries/connectors";
 import { useSources } from "@/lib/queries/sources";
-import { CONNECTOR_META, CONNECTOR_ORDER, ConnectorTile, connectorStatus, kindForSource, relativeTime } from "@/lib/connectorMeta";
+import { CONNECTOR_META, CONNECTOR_ORDER, connectorStatus, kindForSource, relativeTime } from "@/lib/connectorMeta";
+import { useMe } from "@/lib/queries/auth";
 import { isLiveSource, sourceHealth } from "@/lib/sourceState";
 import ErrorLine, { failure } from "@/components/ErrorLine";
 import Tooltip from "@/components/bits/Tooltip";
@@ -33,9 +35,51 @@ type ConnectedRow = {
   href: string;
 };
 
+// Work tools first, consumer sources last. Any kind missing here keeps its catalogue position at the end.
+const PAGE_ORDER: Connector["kind"][] = [
+  "gmail",
+  "google_calendar",
+  "slack",
+  "notion",
+  "linear",
+  "github",
+  "todoist",
+  "discord",
+  "ed",
+  "pocketai",
+  "stripe",
+  "up_bank",
+  "spotify",
+];
+/** Consumer sources: listed under "Add a source" behind their own fold, after the work tools. */
+const PERSONAL_KINDS = new Set<Connector["kind"]>(["stripe", "up_bank", "spotify"]);
+const ORDERED_KINDS = [...PAGE_ORDER.filter((k) => CONNECTOR_ORDER.includes(k)), ...CONNECTOR_ORDER.filter((k) => !PAGE_ORDER.includes(k))];
+
+/* "up.transaction", "gcal.event" -> "transactions, events": what a source brings in, in words. */
+function typeWords(types: string[]): string {
+  const words = types.map((t) => {
+    const w = (t.split(".").pop() ?? t).replace(/_/g, " ").trim();
+    if (/s$/.test(w)) return w;
+    if (/[^aeiou]y$/.test(w)) return `${w.slice(0, -1)}ies`;
+    return `${w}s`;
+  });
+  const out = [...new Set(words)].join(", ");
+  return out ? out[0].toUpperCase() + out.slice(1) : out;
+}
+
 const CONNECTED_COLS = "grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1.4fr)_130px_76px_110px_minmax(0,1fr)_16px]";
 const ROW_LINK =
-  "grid items-center gap-x-4 px-4 min-h-14 py-2 text-[14px] transition-[background-color] duration-[120ms] ease-[var(--ease-out)] hover:bg-[var(--surface-raised)] focus-visible:outline-offset-[-2px]";
+  "grid items-center gap-x-4 px-4 min-h-14 py-2 text-[14px] transition-[background-color] duration-[120ms] ease-[var(--ease-out)] hover:bg-[var(--bauhaus-app-bg)] focus-visible:outline-offset-[-2px]";
+
+/** A source's icon in plain ink, no tinted square: the name beside it identifies the source. */
+function SourceMark({ kind, size }: { kind: Connector["kind"] | null; size: number }) {
+  const icon = kind ? CONNECTOR_META[kind].icon : null;
+  return (
+    <span aria-hidden className="inline-flex items-center justify-center shrink-0" style={{ width: size, height: size, color: "var(--ink-dim)" }}>
+      {icon ?? <Database size={18} strokeWidth={1.75} />}
+    </span>
+  );
+}
 
 function matches(q: string, label: string, description = "") {
   return !q || label.toLowerCase().includes(q) || description.toLowerCase().includes(q);
@@ -49,9 +93,12 @@ export default function ConnectorsPage() {
   const sourceRows: SourceRow[] = sourcesQuery.data ?? [];
   const error = connectorsQuery.isError ? failure(connectorsQuery.error, "Could not load your sources.", " Check that Eunomia is running, then try again.") : null;
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [chosenFilter, setStatusFilter] = useState<StatusFilter>("all");
   // Custom integrations are an advanced path: closed until asked for.
   const [showCustom, setShowCustom] = useState(false);
+  // Personal sources (bank, payments, music) are folded away until asked for, or while a search matches one.
+  const [showPersonal, setShowPersonal] = useState(false);
+  const isAdmin = useMe().data?.is_admin ?? false;
 
   const load = () => {
     connectorsQuery.refetch();
@@ -63,7 +110,7 @@ export default function ConnectorsPage() {
 
   const connected: ConnectedRow[] = [];
   const available: Connector["kind"][] = [];
-  for (const kind of CONNECTOR_ORDER) {
+  for (const kind of ORDERED_KINDS) {
     const meta = CONNECTOR_META[kind];
     // A kind can be connected more than once (two Gmail accounts): one row per live connection.
     // A disconnected connection that still has its key was paused on purpose: list it, so its data stays reachable.
@@ -99,7 +146,13 @@ export default function ConnectorsPage() {
 
   const shownConnected = connected.filter((r) => matches(q, `${r.label} ${r.account}`, r.kind ? CONNECTOR_META[r.kind].description : ""));
   const shownAvailable = available.filter((k) => matches(q, CONNECTOR_META[k].label, CONNECTOR_META[k].description));
+  const workAvailable = shownAvailable.filter((k) => !PERSONAL_KINDS.has(k));
+  const personalAvailable = shownAvailable.filter((k) => PERSONAL_KINDS.has(k));
+  const personalOpen = showPersonal || Boolean(q);
   const loading = connectors === null && !error;
+  // Nothing connected yet: no status chips and no empty "Connected" section, just the catalogue.
+  const nothingConnected = !loading && connected.length === 0;
+  const statusFilter: StatusFilter = nothingConnected ? "all" : chosenFilter;
 
   const filters: { value: StatusFilter; label: string; count: number }[] = [
     { value: "all", label: "All", count: connected.length + available.length },
@@ -108,16 +161,16 @@ export default function ConnectorsPage() {
   ];
 
   return (
-    <div className="max-w-5xl flex flex-col gap-8">
+    <div className="flex flex-col gap-8">
       <PageHeader
-        icon={PlugIcon} tone="personal"
+        icon={Plug}
         title="Connected sources"
-        intro="Bring meeting notes, emails and other information into Eunomia. Choose a source below to connect it. Your sign-in details are stored encrypted and only sent to the service they belong to."
+        intro="Bring emails, meeting notes and other information into Eunomia. Sign-ins are stored encrypted."
       />
 
       <div className="flex items-center gap-2 flex-wrap">
         <div className="field flex items-center gap-2 h-10 px-3 w-full sm:w-72">
-          <MagnifyingGlassIcon weight="duotone" size={18} color="var(--ink-dim)" aria-hidden />
+          <Search size={18} strokeWidth={1.75} color="var(--ink-dim)" aria-hidden />
           <input
             type="text"
             aria-label="Search sources"
@@ -129,21 +182,23 @@ export default function ConnectorsPage() {
           {query && (
             <Tooltip label="Clear search">
               <button type="button" aria-label="Clear search" className="btn btn-ghost btn-sm -mr-1.5 w-6 px-0" onClick={() => setQuery("")}>
-                <XIcon weight="duotone" size={13} aria-hidden />
+                <X size={13} strokeWidth={1.75} aria-hidden />
               </button>
             </Tooltip>
           )}
         </div>
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by status">
-          {filters.map((f) => (
-            <button key={f.value} type="button" className="pill" aria-pressed={statusFilter === f.value} onClick={() => setStatusFilter(f.value)}>
-              {f.label}
-              {!loading && (
-                <span className="tabular">{f.count}</span>
-              )}
-            </button>
-          ))}
-        </div>
+        {!nothingConnected && (
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by status">
+            {filters.map((f) => (
+              <button key={f.value} type="button" className="pill" aria-pressed={statusFilter === f.value} onClick={() => setStatusFilter(f.value)}>
+                {f.label}
+                {!loading && (
+                  <span className="tabular">{f.count}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {error && (
@@ -157,79 +212,87 @@ export default function ConnectorsPage() {
         </div>
       )}
 
-      {statusFilter !== "disconnected" && (
+      {statusFilter !== "disconnected" && !nothingConnected && (
         <section className="flex flex-col gap-3" aria-labelledby="connected-heading">
           <h2 id="connected-heading" className="section-title">
             Connected
           </h2>
-          <div className="ledger overflow-hidden">
-            <div
-              className={`hidden md:grid ${CONNECTED_COLS} gap-x-4 px-4 h-[34px] items-center caps`}
-              style={{ background: "var(--surface-raised)", color: "var(--ink)", border: "1px solid var(--border)" }}
-              aria-hidden
-            >
-              <span>Source</span>
-              <span>Status</span>
-              <span className="text-right">Items</span>
-              <span>Last updated</span>
-              <span>Brings in</span>
-              <span />
-            </div>
-            {loading && <SkeletonRows count={2} />}
-            {!loading && shownConnected.length === 0 && (
-              <p className="px-4 py-5 text-[14px]" style={{ color: "var(--ink-dim)" }}>
-                {q ? `No connected source matches "${query.trim()}".` : "Nothing connected yet. Choose a source under \u201cAdd a source\u201d to bring its information in."}
-              </p>
-            )}
-            <div className="hairline-rows">
-              {shownConnected.map((r) => {
-                const s = r.source;
-                const fails = s?.sync_status.consecutive_failures ?? 0;
-                const health = r.status === "paused" ? { tone: "var(--ink-dim)", label: "Disconnected" } : sourceHealth(s);
-                return (
-                  <Fragment key={r.id}>
-                  <Link href={r.href} className={`${ROW_LINK} ${CONNECTED_COLS}`}>
-                    <span className="flex items-center gap-3 min-w-0">
-                      <ConnectorTile kind={r.kind} size={32} />
-                      <span className="min-w-0 flex flex-col">
-                        <span className="font-medium truncate">{r.label}</span>
-                        {r.account && (
-                          <span className="text-[13px] truncate" style={{ color: "var(--ink-dim)" }}>
-                            {r.account}
-                          </span>
-                        )}
+          {loading && <SkeletonRows count={2} />}
+          {!loading && shownConnected.length === 0 && (
+            <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+              {q ? `No connected source matches "${query.trim()}".` : "Nothing connected yet. Choose a source under \u201cAdd a source\u201d to bring its information in."}
+            </p>
+          )}
+          {/* No table at all until there is a row to put in it. */}
+          {!loading && shownConnected.length > 0 && (
+            <div>
+              <div
+                className={`hidden md:grid ${CONNECTED_COLS} gap-x-4 px-4 pb-2 items-end text-[12px] font-medium border-b`}
+                style={{ color: "var(--ink-dim)" }}
+                aria-hidden
+              >
+                <span>Source</span>
+                <span>Status</span>
+                <span className="text-right">Items</span>
+                <span>Last updated</span>
+                <span>Brings in</span>
+                <span />
+              </div>
+              <div className="hairline-rows border-b">
+                {shownConnected.map((r) => {
+                  const s = r.source;
+                  const fails = s?.sync_status.consecutive_failures ?? 0;
+                  const health = r.status === "paused" ? { tone: "var(--ink-dim)", label: "Disconnected" } : sourceHealth(s);
+                  return (
+                    <Fragment key={r.id}>
+                    <Link href={r.href} className={`${ROW_LINK} ${CONNECTED_COLS}`}>
+                      <span className="flex items-center gap-3 min-w-0">
+                        <SourceMark kind={r.kind} size={24} />
+                        <span className="min-w-0 flex flex-col">
+                          <span className="font-medium truncate">{r.label}</span>
+                          {r.account && (
+                            <span className="text-[13px] truncate" style={{ color: "var(--ink-dim)" }}>
+                              {r.account}
+                            </span>
+                          )}
+                        </span>
                       </span>
-                    </span>
-                    <span title={s?.sync_status.last_error || undefined}>
-                      <StatusLabel tone={toneFromVar(health.tone)}>{health.label}</StatusLabel>
-                    </span>
-                    <span className="hidden md:block font-mono text-right">{s ? s.record_count.toLocaleString() : "n/a"}</span>
-                    <span className="hidden md:block text-[13px]" style={{ color: fails ? "var(--critical)" : "var(--ink-dim)" }}>
-                      {fails ? `${fails} failed in a row` : s ? relativeTime(s.sync_status.last_ok) : "n/a"}
-                    </span>
-                    <span className="hidden md:block font-mono text-[12px] truncate" style={{ color: "var(--ink-dim)" }}>
-                      {s?.record_types.join(", ") || "Tool calls only"}
-                    </span>
-                    <CaretRightIcon weight="duotone" size={16} color="var(--ink-dim)" className="hidden md:block" aria-hidden />
-                  </Link>
-                  {r.addAfter && r.kind && (
-                    <Link
-                      href={`/connectors/setup/${r.kind}?new=1`}
-                      className="flex items-center gap-2 px-4 min-h-10 pl-[60px] text-[13px] font-medium underline-offset-2 hover:underline"
-                      style={{ color: "var(--accent-text)" }}
-                    >
-                      <PlusIcon weight="duotone" size={14} aria-hidden />
-                      Add another {r.label} connection
+                      <span title={s?.sync_status.last_error || undefined}>
+                        <StatusLabel tone={toneFromVar(health.tone)}>{health.label}</StatusLabel>
+                      </span>
+                      <span className="hidden md:block font-mono text-right">{s ? s.record_count.toLocaleString() : "n/a"}</span>
+                      <span className="hidden md:block text-[13px]" style={{ color: fails ? "var(--critical)" : "var(--ink-dim)" }}>
+                        {fails ? `${fails} failed in a row` : s ? relativeTime(s.sync_status.last_ok) : "n/a"}
+                      </span>
+                      <span
+                        className="hidden md:block text-[13px] truncate"
+                        style={{ color: "var(--ink-dim)" }}
+                        title={s?.record_types.length ? typeWords(s.record_types) : undefined}
+                      >
+                        {s?.record_types.length ? typeWords(s.record_types) : "Tool calls only"}
+                      </span>
+                      <ChevronRight size={16} strokeWidth={1.75} color="var(--ink-dim)" className="hidden md:block" aria-hidden />
                     </Link>
-                  )}
-                  </Fragment>
-                );
-              })}
+                    {r.addAfter && r.kind && (
+                      <Link
+                        href={`/connectors/setup/${r.kind}?new=1`}
+                        className="flex items-center gap-2 px-4 min-h-10 pl-[52px] text-[13px] font-medium underline-offset-2 hover:underline"
+                        style={{ color: "var(--accent-text)" }}
+                      >
+                        <Plus size={14} strokeWidth={1.75} aria-hidden />
+                        Add another {r.label} connection
+                      </Link>
+                    )}
+                    </Fragment>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
         </section>
       )}
 
+      {/* from main (#122): secrets an agent asked for, and the password managers they come from */}
       {statusFilter !== "disconnected" && !q && <SecretRequestsSection />}
       {statusFilter !== "disconnected" && !q && <PasswordManagersSection />}
 
@@ -238,7 +301,7 @@ export default function ConnectorsPage() {
           <h2 id="catalogue-heading" className="section-title">
             Add a source
           </h2>
-          {loading && <SkeletonCards count={6} />}
+          {loading && <SkeletonRows count={6} />}
           {!loading && shownAvailable.length === 0 && (
             <div className="text-[14px] flex flex-wrap items-center gap-3" style={{ color: "var(--ink-dim)" }}>
               {q ? (
@@ -253,72 +316,84 @@ export default function ConnectorsPage() {
               )}
             </div>
           )}
-          {/* Two columns with a 36px gap; one column on narrow screens. Each card is one link. */}
-          <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-9 gap-y-5">
-            {shownAvailable.map((kind) => {
-              const meta = CONNECTOR_META[kind];
-              const types = meta.sourceKey ? bySource[meta.sourceKey]?.record_types : undefined;
-              return (
-                <li key={kind} className="min-w-0">
-                  <Link
-                    href={`/connectors/setup/${kind}`}
-                    className="ledger h-full p-5 flex flex-col gap-3.5 transition-[border-color] duration-[120ms] hover:border-[var(--ink)]"
-                    style={{ borderColor: "var(--border-strong)" }}
-                  >
-                    <span className="flex items-center gap-3 min-w-0">
-                      <ConnectorTile kind={kind} size={32} />
-                      <span className="flex-1 min-w-0 text-[16px] font-semibold truncate">{meta.label}</span>
-                      <span className="btn btn-primary btn-sm shrink-0" aria-hidden>
-                        Connect <ArrowRightIcon weight="duotone" size={16} />
-                      </span>
-                    </span>
-                    <span className="text-[14px] leading-snug" style={{ color: "var(--ink)" }}>
-                      {meta.description}
-                    </span>
-                    <span className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[13px]" style={{ color: "var(--ink-dim)" }}>
-                      <StatusLabel tone="neutral">Not connected yet</StatusLabel>
-                      {types && types.length > 0 && <span className="font-mono text-[12px] truncate">{types.join(", ")}</span>}
-                    </span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      )}
-
-      {statusFilter !== "disconnected" && !q && (
-        <section className="flex flex-col gap-4">
-          <div>
-            <button type="button" className="btn" aria-expanded={showCustom} aria-controls="custom-integrations" onClick={() => setShowCustom((v) => !v)}>
-              Advanced: custom integrations
-              <CaretDownIcon weight="duotone" size={16} aria-hidden style={{ transform: showCustom ? "rotate(180deg)" : undefined }} />
-            </button>
-          </div>
-          {showCustom && (
-            <div id="custom-integrations">
-              <ExtensionsSection />
+          {/* Compact lists: one row per source, each row one link. Work first; personal sources folded below. */}
+          {workAvailable.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <h3 className="text-[13px] font-medium" style={{ color: "var(--ink-dim)" }}>
+                Work
+              </h3>
+              <CatalogueList kinds={workAvailable} />
+            </div>
+          )}
+          {personalAvailable.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                className="self-start inline-flex items-center gap-1 min-h-10 text-[13px] font-medium"
+                style={{ color: "var(--ink-dim)" }}
+                aria-expanded={personalOpen}
+                aria-controls="personal-sources"
+                onClick={() => setShowPersonal((v) => !v)}
+              >
+                {personalOpen ? <ChevronDown size={16} strokeWidth={1.75} aria-hidden /> : <ChevronRight size={16} strokeWidth={1.75} aria-hidden />}
+                Personal sources ({personalAvailable.length})
+              </button>
+              {personalOpen && (
+                <div id="personal-sources">
+                  <CatalogueList kinds={personalAvailable} />
+                </div>
+              )}
             </div>
           )}
         </section>
       )}
+
+      <div className="flex flex-col gap-2">
+        {/* Advanced paths, closed until asked for, flush with the lists above. */}
+        {isAdmin && statusFilter !== "disconnected" && !q && (
+          <details className="border-t pt-2" onToggle={(e) => setShowCustom(e.currentTarget.open)}>
+            <summary className="inline-flex items-center min-h-10 section-title">Advanced: custom integrations</summary>
+            {showCustom && (
+              <div className="pt-3">
+                <ExtensionsSection />
+              </div>
+            )}
+          </details>
+        )}
+
+        <SyncSettings />
+      </div>
     </div>
   );
 }
 
-function SkeletonCards({ count }: { count: number }) {
+function CatalogueList({ kinds }: { kinds: Connector["kind"][] }) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-9 gap-y-5" aria-hidden>
-      {Array.from({ length: count }, (_, i) => (
-        <div key={i} className="ledger p-5 flex flex-col gap-3.5">
-          <span className="flex items-center gap-3">
-            <span className="skeleton w-8 h-8" />
-            <span className="skeleton h-3.5 w-28" />
-          </span>
-          <span className="skeleton h-3 w-3/4" />
-        </div>
-      ))}
-    </div>
+    <ul className="hairline-rows border-y" style={{ borderColor: "var(--border)" }}>
+      {kinds.map((kind) => {
+        const meta = CONNECTOR_META[kind];
+        return (
+          <li key={kind} className="min-w-0">
+            <Link
+              href={`/connectors/setup/${kind}`}
+              aria-label={`Connect ${meta.label}`}
+              className="flex items-center gap-3 px-2 py-2.5 min-w-0 transition-colors hover:bg-[var(--surface-hover)]"
+            >
+              <SourceMark kind={kind} size={24} />
+              <span className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-baseline sm:gap-3">
+                <span className="text-[14px] font-semibold shrink-0">{meta.label}</span>
+                <span className="text-[13px] truncate" style={{ color: "var(--ink-dim)" }}>
+                  {meta.description}
+                </span>
+              </span>
+              <span className="btn btn-ghost btn-sm shrink-0" aria-hidden>
+                Connect
+              </span>
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

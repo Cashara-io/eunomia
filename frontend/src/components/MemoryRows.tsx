@@ -1,8 +1,8 @@
 "use client";
 
-import { MagnifyingGlassIcon, XIcon } from "@phosphor-icons/react/ssr";
-import { VaultShape, type VaultTone } from "./VaultChip";
+import { pointKindLabel } from "@/lib/memoryKinds";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Search, X } from "lucide-react";
 import ErrorLine, { failure } from "./ErrorLine";
 import { useCloudSimilarity } from "@/lib/queries/entities";
 import type { InsightPoint } from "@/lib/vectorInsights";
@@ -15,8 +15,6 @@ type Props = {
   points: Row[];
   vaultIds: string[];
   nameOf: (vaultId: string) => string;
-  /** The vault identity of a memory space, for the shape before each row's kind. */
-  toneOf: (vaultId: string) => VaultTone;
   /** ids of the compared rows, in selection order (the numbers in the graph) */
   selection: string[];
   focusId: string | null;
@@ -29,11 +27,11 @@ const MODES = [
   { id: "cosine", label: "Cosine", hint: "1 = same direction, 0 = unrelated" },
   { id: "distance", label: "Distance", hint: "euclidean distance between the full vectors; smaller is closer" },
   { id: "correlation", label: "Pearson", hint: "correlation of the vectors' components, -1 to 1" },
-  { id: "projected", label: "3D", hint: "euclidean distance in the 3D picture only" },
+  { id: "projected", label: "Map", hint: "distance between the points on the map only" },
 ] as const;
 type Mode = (typeof MODES)[number]["id"];
 
-export default function MemoryRows({ points, vaultIds, nameOf, toneOf, selection, focusId, onToggle, onClear }: Props) {
+export default function MemoryRows({ points, vaultIds, nameOf, selection, focusId, onToggle, onClear }: Props) {
   const [filter, setFilter] = useState("");
   const [mode, setMode] = useState<Mode>("cosine");
   const rowRefs = useRef(new Map<string, HTMLElement>());
@@ -62,13 +60,13 @@ export default function MemoryRows({ points, vaultIds, nameOf, toneOf, selection
     if (n < 2) return null;
     if (mode === "projected") {
       const ps = selection.map((id) => byId.get(id)).filter((p): p is Row => !!p);
-      return ps.map((a) => ps.map((b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)));
+      return ps.map((a) => ps.map((b) => Math.hypot(a.x - b.x, a.y - b.y)));
     }
     return ready && sim.data ? sim.data[mode] : null;
   }, [n, mode, selection, byId, ready, sim.data]);
   const projected = useMemo(() => {
     const ps = selection.map((id) => byId.get(id)).filter((p): p is Row => !!p);
-    return ps.map((a) => ps.map((b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)));
+    return ps.map((a) => ps.map((b) => Math.hypot(a.x - b.x, a.y - b.y)));
   }, [selection, byId]);
 
   const pairs = useMemo(() => {
@@ -90,7 +88,7 @@ export default function MemoryRows({ points, vaultIds, nameOf, toneOf, selection
     <div className="flex flex-col min-h-0 flex-1">
       <div className="p-3 pb-2 flex flex-col gap-2">
         <div className="field flex items-center gap-2 h-10 px-3">
-          <MagnifyingGlassIcon weight="duotone" size={13} style={{ color: "var(--ink-faint)" }} aria-hidden />
+          <Search size={13} strokeWidth={1.75} style={{ color: "var(--ink-faint)" }} aria-hidden />
           <input
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
@@ -155,14 +153,14 @@ export default function MemoryRows({ points, vaultIds, nameOf, toneOf, selection
                 {on ? num : ""}
               </span>
               <span className="min-w-0 flex-1 flex flex-col gap-0.5">
-                <span className="text-[13.5px] leading-snug line-clamp-2" style={{ color: "var(--ink)" }}>
+                <span className="text-[14px] leading-snug line-clamp-2" style={{ color: "var(--ink)" }}>
                   {p.label}
                 </span>
                 <span className="label flex items-center gap-1.5 min-w-0">
-                  <VaultShape tone={toneOf(p.vault)} size={9} fill={p.color} />
+                  <span className="dot shrink-0" style={{ background: p.color }} aria-hidden />
                   <span className="truncate">
                     {vaultIds.length > 1 ? `${nameOf(p.vault)} · ` : ""}
-                    {p.kind}
+                    {pointKindLabel(p.kind)}
                   </span>
                 </span>
               </span>
@@ -178,7 +176,7 @@ export default function MemoryRows({ points, vaultIds, nameOf, toneOf, selection
           aria-label="Comparison"
         >
           <div className="flex items-baseline justify-between gap-2">
-            <h3 className="text-[15px] font-medium tracking-[-0.015em]" style={{ color: "var(--ink)" }}>
+            <h3 className="text-[15px] font-semibold" style={{ color: "var(--ink)" }}>
               Comparing {n}
             </h3>
             {sim.data && <span className="label">{sim.data.space === "semantic" ? "Full embedding vectors" : "Word-hash vectors"}</span>}
@@ -192,7 +190,7 @@ export default function MemoryRows({ points, vaultIds, nameOf, toneOf, selection
                 {[
                   [n === 2 ? "Cosine" : "Mean cosine", ready && n === 2 ? fmt(sim.data!.cosine[0][1]) : meanCos !== null ? fmt(meanCos) : "-"],
                   [n === 2 ? "Pearson" : "Mean Pearson", ready ? fmt(n === 2 ? sim.data!.correlation[0][1] : avgOff(sim.data!.correlation)) : "-"],
-                  [n === 2 ? "3D distance" : "Mean 3D gap", n === 2 ? fmt(projected[0]?.[1] ?? NaN) : fmt(avgOff(projected))],
+                  [n === 2 ? "Map distance" : "Mean map gap", n === 2 ? fmt(projected[0]?.[1] ?? NaN) : fmt(avgOff(projected))],
                 ].map(([l, v]) => (
                   <div key={l} className="flex flex-col">
                     <dd className="font-mono text-[17px] leading-tight order-1" style={{ color: "var(--ink)" }}>
@@ -208,7 +206,7 @@ export default function MemoryRows({ points, vaultIds, nameOf, toneOf, selection
                     <div className="h-full rounded-full" style={{ width: `${Math.max(0, sim.data!.cosine[0][1]) * 100}%`, background: "var(--accent)" }} />
                   </div>
                   <p className="label">
-                    Embedding distance <span className="font-mono">{fmt(sim.data!.distance[0][1], 3)}</span>; the 3D distance only measures the picture.
+                    Embedding distance <span className="font-mono">{fmt(sim.data!.distance[0][1], 3)}</span>; the map distance only measures the picture.
                   </p>
                 </div>
               )}
@@ -260,7 +258,7 @@ export default function MemoryRows({ points, vaultIds, nameOf, toneOf, selection
                       {label(id)}
                     </span>
                     <button type="button" className="shrink-0 mt-0.5" aria-label={`Remove ${label(id)} from the comparison`} onClick={() => onToggle(id)} style={{ color: "var(--ink-faint)" }}>
-                      <XIcon weight="duotone" size={12} />
+                      <X size={12} strokeWidth={1.75} />
                     </button>
                   </li>
                 ))}

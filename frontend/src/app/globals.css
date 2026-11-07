@@ -1,78 +1,93 @@
 @import "tailwindcss";
 
-/* ---- Eunomia: Bauhaus Memory ----
-   Source of truth: DESIGN.md. A calm cream page, black ink, and three flat
-   colours that each mean one kind of memory: red is personal, yellow is
-   project, blue is company. Ink is the accent ("press me", "selected"); blue
-   is focus ("you are here"). Light is the default; data-theme="dark" on
-   <html> flips every token to warm "ink paper". Never hard-code a colour in a
-   component: add a token here with a light and a dark value. */
+/* ---- Eunomia: Bauhaus app ----
+   Source of truth: DESIGN.md (Eunomia Bauhaus app design spec, v1.0).
+   Warm paper ground, ink text, a dark ink sidebar, blue for actions and the
+   selected place, red only for destructive or failing things, yellow only as
+   a fill (never as small text). Status is always written in words; colour
+   only supports it. One light theme: the spec defines no dark variant.
+
+   The spec tokens are the --bauhaus-app-* set below. The older semantic
+   tokens (--canvas, --ink, --accent, ...) every component already uses are
+   mapped onto them, so the whole app follows one palette. The older eu-*
+   landing-page tokens, if any page defines them, are left untouched. */
 
 :root {
   color-scheme: light;
 
-  /* ---- neutrals ---- */
-  --canvas: #fafaf7;
-  --surface: #ffffff;
-  --surface-raised: #f0f0eb;
-  --surface-hover: #e8e8e1;
-  --ink: #171717;
-  --ink-dim: #61615d;
-  --ink-faint: #67675f;
-  --border: #e2e2dc;
-  --border-strong: #cbcbc4;
-  /* Field and control edges: --border-strong is too faint to find an input
-     by (1.6:1); this one clears 3:1 on white and on the canvas. */
-  --border-field: #8c8c84;
-  --grid-dot: rgba(23, 23, 23, 0.08);
-  --scrim: rgba(23, 23, 23, 0.32);
+  /* ---- spec tokens (exact canvas values) ---- */
+  --bauhaus-app-bg: #fafaf7;
+  --bauhaus-app-ink: #171717;
+  --bauhaus-app-muted: #61615d;
+  --bauhaus-app-line: #dadad2;
+  --bauhaus-app-soft: #edede6;
+  --bauhaus-app-red: #cf412f;
+  --bauhaus-app-blue: #3159b6;
+  --bauhaus-app-yellow: #e8be39;
+  --bauhaus-app-white: #ffffff;
+  --bauhaus-app-cream: #fafaf7;
+  /* text-safe variants (WCAG AA on white and on --bauhaus-app-bg) */
+  --bauhaus-app-red-text: #b2382a;
+  --bauhaus-app-blue-hover: #284a98;
+  --bauhaus-app-blue-soft: rgba(49, 89, 182, 0.09);
+  --bauhaus-app-red-soft: rgba(207, 65, 47, 0.09);
+  --bauhaus-app-yellow-soft: rgba(232, 190, 57, 0.22);
+  /* the sidebar is ink; its text is cream */
+  --bauhaus-app-sidebar: #171717;
+  --bauhaus-app-sidebar-text: #f2f2ec;
+  --bauhaus-app-sidebar-muted: #b9b9b1;
+  --bauhaus-app-sidebar-line: rgba(250, 250, 247, 0.16);
+  --bauhaus-app-sidebar-hover: #262624;
+  /* type scale */
+  --bauhaus-app-title-size: 26px;
+  --bauhaus-app-title-tracking: -0.5px;
+  --bauhaus-app-heading-size: 24px;
+  --bauhaus-app-heading-tracking: -0.4px;
+  /* layout */
+  --bauhaus-app-sidebar-width: 232px;
+  --bauhaus-app-pad-y: 32px;
+  --bauhaus-app-pad-x: 40px;
+  --bauhaus-app-radius: 4px;
+  --bauhaus-app-focus: #3159b6;
 
-  /* ---- accent: ink. Primary button fill, selected tab, selection frame,
-     active nav chip. Links are ink and always underlined. ---- */
-  --accent: #171717;
-  --accent-hover: #000000;
-  --accent-text: #171717;
-  --accent-soft: rgba(23, 23, 23, 0.06);
-  --on-accent: #ffffff;
-  /* The 2px focus ring. Blue, so focused never looks like selected (ink). */
-  --focus: #3159b6;
+  /* ---- semantic tokens used across components ---- */
+  --canvas: var(--bauhaus-app-bg);
+  --surface: var(--bauhaus-app-white);
+  --surface-raised: var(--bauhaus-app-soft);
+  --surface-hover: #e4e4dc;
+  --ink: var(--bauhaus-app-ink);
+  --ink-dim: var(--bauhaus-app-muted);
+  --ink-faint: #66665f;
+  --border: var(--bauhaus-app-line);
+  --border-strong: #a6a69d;
+  --grid-dot: transparent;
 
-  /* ---- the three vault colours: always flat, always with their shape ---- */
-  --vault-personal: #cf412f; /* circle */
-  --vault-project: #e8be39; /* square */
-  --vault-company: #3159b6; /* triangle */
-  --on-vault-personal: #ffffff;
-  --on-vault-project: #171717;
-  --on-vault-company: #ffffff;
+  /* the action colour: fills, links, the selected place */
+  --accent: var(--bauhaus-app-blue);
+  --accent-text: var(--bauhaus-app-blue);
+  --accent-soft: var(--bauhaus-app-blue-soft);
+  --on-accent: var(--bauhaus-app-cream);
+  --felt: var(--accent);
 
-  /* ---- status: always with a word or icon, deeper than the vault fills ---- */
-  --good: #2f7a4e;
-  --warning: #946610;
-  --critical: #b83a28;
-  --critical-hover: #9c3020;
-  --critical-soft: rgba(207, 65, 47, 0.1);
-  --on-critical: #ffffff;
+  --good: #2b7a4b;
+  --warning: #8a6510;
+  --critical: var(--bauhaus-app-red-text);
+  --critical-soft: var(--bauhaus-app-red-soft);
 
-  /* ---- authors: who wrote a memory. Never the exact vault hues. ---- */
-  --author-1: #d9694a;
-  --author-2: #4f7fcf;
-  --author-3: #8d63b8;
-  --author-4: #c9a030;
-  --author-5: #c95a82;
-  --author-6: #2f8f8a;
-  /* Text on each author tag. Ink wherever it reads better than white
-     (4.5:1 or more); plum is dark enough for white. */
-  --on-author-1: #171717;
-  --on-author-2: #171717;
-  --on-author-3: #ffffff;
-  --on-author-4: #171717;
-  --on-author-5: #171717;
-  --on-author-6: #171717;
+  /* author tags: who wrote a memory. Never actions or status. */
+  --author-1: #c4522f;
+  --author-2: #3159b6;
+  --author-3: #7a4fae;
+  --author-4: #8a6510;
+  --author-5: #b0436f;
+  --author-6: #237c78;
+  --on-author: #ffffff;
 
-  --shadow-panel: 0 0 0 1px var(--border), 0 12px 32px -12px rgba(23, 23, 23, 0.18);
-  --shadow-pop: 0 0 0 1px var(--border-strong), 0 12px 32px -12px rgba(23, 23, 23, 0.18);
+  --shadow-panel: 0 0 0 1px var(--border);
+  --shadow-pop: 0 0 0 1px var(--bauhaus-app-ink), 0 12px 32px -12px rgba(23, 23, 23, 0.28);
+  --scrim: rgba(23, 23, 23, 0.42);
 
-  /* entity kinds: muted, never the vault hues */
+  /* entity kinds: muted, distinct from the action blue */
   --kind-person: #4f7fb0;
   --kind-organisation: #8061b0;
   --kind-location: #b06a35;
@@ -99,111 +114,23 @@
   --connector-stripe: #6a4fb0;
   --connector-ed: #237c72;
 
-  --font-display: var(--font-geist);
-  --font-sans: var(--font-geist);
+  --font-display: var(--font-geist-sans);
+  --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 
-  /* ---- shape: round where you press, square where you read ---- */
-  --radius-card: 12px;
-  --radius-field: 10px;
-  --radius-control: 999px;
-  --radius-tag: 4px;
-  --radius-vault: 4px;
+  --radius-card: var(--bauhaus-app-radius);
+  --radius-field: var(--bauhaus-app-radius);
+  --radius-control: var(--bauhaus-app-radius);
 
   --hair: 1px;
 
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
-  /* Shapes moving on hover (nav chips), from the landing page. */
-  --ease-shape: cubic-bezier(0.2, 0.7, 0.2, 1);
   --dur-press: 140ms;
   --dur-hover: 120ms;
   --dur-pop: 180ms;
   --dur-drawer: 260ms;
-  --dur-shape: 320ms;
-}
-
-/* Dark: "ink paper", warm near-black, never blue-black. Opt-in, saved per
-   browser (localStorage "eunomia-theme"); layout.tsx applies it before paint. */
-:root[data-theme="dark"] {
-  color-scheme: dark;
-
-  --canvas: #121211;
-  --surface: #1a1a18;
-  --surface-raised: #23231f;
-  --surface-hover: #2c2c27;
-  --ink: #f0f0eb;
-  --ink-dim: #a9a9a2;
-  --ink-faint: #94948c;
-  --border: rgba(240, 240, 235, 0.09);
-  --border-strong: rgba(240, 240, 235, 0.16);
-  --border-field: rgba(240, 240, 235, 0.36);
-  --grid-dot: rgba(240, 240, 235, 0.06);
-  --scrim: rgba(0, 0, 0, 0.56);
-
-  --accent: #f0f0eb;
-  --accent-hover: #ffffff;
-  --accent-text: #f0f0eb;
-  --accent-soft: rgba(240, 240, 235, 0.08);
-  --on-accent: #171717;
-  --focus: #7c9be6;
-
-  --vault-personal: #dd5743;
-  --vault-project: #ecc64c;
-  --vault-company: #5a80d8;
-  --on-vault-personal: #171717;
-  --on-vault-project: #171717;
-  --on-vault-company: #171717;
-
-  --good: #5bb07f;
-  --warning: #d8a640;
-  --critical: #ec7a68;
-  --critical-hover: #f29484;
-  --critical-soft: rgba(221, 87, 67, 0.16);
-  --on-critical: #171717;
-
-  --author-1: #e07a5c;
-  --author-2: #6b93d8;
-  --author-3: #a07cc8;
-  --author-4: #d2ac40;
-  --author-5: #d26f94;
-  --author-6: #3fa39d;
-  --on-author-1: #171717;
-  --on-author-2: #171717;
-  --on-author-3: #171717;
-  --on-author-4: #171717;
-  --on-author-5: #171717;
-  --on-author-6: #171717;
-
-  --shadow-panel: 0 0 0 1px var(--border), 0 1px 1px rgba(0, 0, 0, 0.25), 0 12px 32px -12px rgba(0, 0, 0, 0.6);
-  --shadow-pop: 0 0 0 1px var(--border-strong), 0 4px 12px -2px rgba(0, 0, 0, 0.4), 0 24px 64px -16px rgba(0, 0, 0, 0.7);
-
-  --kind-person: #6f9bc9;
-  --kind-organisation: #a692c9;
-  --kind-location: #c98a5a;
-  --kind-repository: #5a9e8f;
-  --kind-file: #9e9150;
-  --kind-symbol: #b06a8c;
-
-  --series-1: #5a80d8;
-  --series-2: #dd5743;
-  --series-3: #ecc64c;
-  --series-4: #f0f0eb;
-
-  --connector-up-bank: #6a95cc;
-  --connector-pocketai: #a874c4;
-  --connector-github: #9aa0a8;
-  --connector-slack: #c873a3;
-  --connector-notion: #a8a49f;
-  --connector-linear: #7c8ad0;
-  --connector-gmail: #d06e60;
-  --connector-google-calendar: #64a2cc;
-  --connector-discord: #7d8fd0;
-  --connector-spotify: #4fa886;
-  --connector-todoist: #d0875a;
-  --connector-stripe: #8f78d0;
-  --connector-ed: #4fa89c;
 }
 
 @layer base {
@@ -227,14 +154,12 @@ body {
 }
 
 @layer components {
-/* ---- type ----
-   Headings are big and calm: weight 500 with tight tracking. App sizes stay
-   dense (13px body, 14px root, 22px page title). */
+/* ---- type ---- */
 
 .font-display {
   font-family: var(--font-display), system-ui, sans-serif;
-  font-weight: 500;
-  letter-spacing: -0.03em;
+  font-weight: 600;
+  letter-spacing: -0.025em;
 }
 
 .font-mono {
@@ -247,26 +172,26 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* A page title: one per page. */
+/* A page title: one per page. 26/600, -0.5px: the content leads, not the
+   header. 22px on phones. */
 .page-title {
   font-family: var(--font-display), system-ui, sans-serif;
-  font-size: 22px;
+  font-size: clamp(22px, 1vw + 18px, var(--bauhaus-app-title-size));
   line-height: 1.2;
-  font-weight: 500;
-  letter-spacing: -0.03em;
+  font-weight: 600;
+  letter-spacing: var(--bauhaus-app-title-tracking);
   color: var(--ink);
   text-wrap: balance;
 }
 
-/* The heading of a connection guide or a framed task panel. */
+/* The heading of a connection guide or a framed task panel (34/600, -1px). */
 .connect-title {
   font-family: var(--font-display), system-ui, sans-serif;
-  font-size: 20px;
-  line-height: 1.25;
-  font-weight: 500;
-  letter-spacing: -0.03em;
+  font-size: clamp(20px, 1vw + 16px, var(--bauhaus-app-heading-size));
+  line-height: 1.15;
+  font-weight: 600;
+  letter-spacing: var(--bauhaus-app-heading-tracking);
   color: var(--ink);
-  text-wrap: balance;
 }
 
 /* The introduction sentence under a page title. */
@@ -274,62 +199,43 @@ body {
   font-size: 14px;
   line-height: 1.5;
   color: var(--ink-dim);
-  max-width: 62ch;
+  max-width: 72ch;
 }
 
 /* A section heading inside a page. */
 .section-title {
   font-size: 15px;
   line-height: 1.3;
-  font-weight: 500;
-  letter-spacing: -0.015em;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   color: var(--ink);
 }
 
 /* Small quiet label for a field, table column or stat. Never a kicker above
-   a heading: headings carry their own weight. */
+   a heading -- headings carry their own weight. */
 .eyebrow,
 .label {
   font-size: 12px;
-  line-height: 1.3;
-  color: var(--ink-faint);
+  line-height: 1.35;
+  color: var(--ink-dim);
 }
 
-/* Group label (the sidebar's Advanced group). Sentence case: uppercase
-   labels are a marketing-only device. */
+/* Upper-case group label: the sidebar's ADVANCED, table heads. */
+/* Group label (the sidebar's "Advanced", small section heads): sentence case,
+   muted weight. Upper-case letter-spaced eyebrows read as template filler. */
 .caps {
   font-size: 12px;
   font-weight: 500;
-  color: var(--ink-faint);
+  letter-spacing: 0;
 }
 
-/* ---- icons: Phosphor Duotone, the Eunomia twist ----
-   Phosphor draws the back layer as the line colour at 20%. We fill it with a
-   solid vault colour and keep the line in the text colour. Set --duo per
-   icon (components/ui/Duo.tsx does it for you). */
-.duo path[opacity],
-svg[viewBox="0 0 256 256"] > path[opacity="0.2"] {
-  opacity: 1;
-  fill: var(--duo, var(--vault-project));
-}
-/* Status and danger never borrow a vault colour: their icons keep the line
-   only, so red on a delete button can't be read as "personal". */
-.btn-danger,
-.btn-danger-solid,
-[role="alert"],
-.status-label {
-  --duo: transparent;
-}
-
-/* ---- the canvas: cream with a faint 20px ink dot grid ---- */
+/* ---- the canvas ---- */
 
 .canvas-grid {
   background-color: var(--canvas);
-  background-image: radial-gradient(circle at 1px 1px, var(--grid-dot) 1px, transparent 0);
-  background-size: 20px 20px;
 }
 
-/* ---- containers: in-flow is a hairline and no shadow ---- */
+/* ---- containers ---- */
 
 .surface,
 .ledger {
@@ -338,33 +244,32 @@ svg[viewBox="0 0 256 256"] > path[opacity="0.2"] {
   border-radius: var(--radius-card);
 }
 
-/* A framed task panel: the one thing to do on this screen. */
+/* A framed task panel: the one thing to do on this screen (spec: ink edge). */
 .task-panel {
   background: var(--surface);
-  border: 1px solid var(--ink);
+  border: 1px solid var(--border);
   border-radius: var(--radius-card);
 }
 
-/* Quiet information block on raised ground (details to copy, help asides). */
+/* Quiet information block on soft ground (details to copy, help asides). */
 .soft-panel {
-  background: var(--surface-raised);
-  border-radius: var(--radius-card);
+  background: var(--bauhaus-app-soft);
+  border-radius: 2px;
 }
 
-/* A floating panel: the inspector, popovers, the palette. One soft shadow. */
+/* A floating panel: the inspector, popovers, the palette. */
 .panel {
   background: var(--surface);
   border-radius: var(--radius-card);
-  box-shadow: var(--shadow-panel);
+  border: 1px solid var(--border);
 }
 
 .hairline-rows > * + * {
   border-top: var(--hair) solid var(--border);
 }
 
-/* Selection: a 1px ink outline with four 6px ink handles. Table rows get the
-   outline and the ink wash (a pseudo-element would become an extra cell).
-   Focus stays blue, so selected and focused never look the same. */
+/* Figma-style selection: accent outline with four square handles. Table rows
+   get the outline only (a pseudo-element would become an extra cell). */
 .frame-selected {
   position: relative;
   outline: 1px solid var(--accent);
@@ -372,9 +277,6 @@ svg[viewBox="0 0 256 256"] > path[opacity="0.2"] {
 }
 tr.frame-selected::after {
   content: none;
-}
-tr.frame-selected > td {
-  background: var(--accent-soft);
 }
 .frame-selected:not(tr)::after {
   content: "";
@@ -391,24 +293,18 @@ tr.frame-selected > td {
 
 /* ---- controls ---- */
 
-/* Fields: white, a visible edge, 10px corners. On focus the edge turns ink
-   and the blue focus ring sits outside it. */
 .field {
   background: var(--surface);
-  border: 1px solid var(--border-field);
+  border: 1px solid #8f8f87;
   border-radius: var(--radius-field);
   color: var(--ink);
   font-family: var(--font-sans), system-ui, sans-serif;
   transition: border-color var(--dur-hover) ease, box-shadow var(--dur-hover) ease;
 }
-input.field,
-button.field {
-  min-height: 36px;
-}
 .field:focus-within,
 .field:focus {
-  border-color: var(--ink);
-  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--focus);
+  border-color: var(--bauhaus-app-blue);
+  box-shadow: 0 0 0 1px var(--bauhaus-app-blue);
   outline: none;
 }
 .field[aria-invalid="true"] {
@@ -421,28 +317,25 @@ textarea::placeholder {
   color: var(--ink-faint);
 }
 
-/* Buttons are pills. Secondary (the default) is an ink outline; primary is
-   an ink fill, one per view. Colour is saved for meaning, never "press me". */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   min-height: 36px;
-  padding: 0 16px;
+  padding: 0 14px;
   border-radius: var(--radius-control);
   font-size: 14px;
   font-weight: 500;
   line-height: 1.2;
   white-space: nowrap;
-  border: 1px solid var(--ink);
-  background: transparent;
-  color: var(--ink);
+  border: 1px solid var(--border-strong);
+  background: var(--bauhaus-app-white);
+  color: var(--bauhaus-app-ink);
   transition:
     transform var(--dur-press) var(--ease-out),
     background-color var(--dur-hover) ease,
-    border-color var(--dur-hover) ease,
-    color var(--dur-hover) ease;
+    border-color var(--dur-hover) ease;
 }
 .btn:active:not(:disabled) {
   transform: scale(0.97);
@@ -452,10 +345,9 @@ textarea::placeholder {
   cursor: not-allowed;
 }
 .btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--on-accent);
-  --bits-done: currentColor;
+  background: var(--bauhaus-app-blue);
+  border-color: var(--bauhaus-app-blue);
+  color: var(--bauhaus-app-cream);
 }
 .btn-ghost {
   background: transparent;
@@ -465,20 +357,19 @@ textarea::placeholder {
 /* Danger is only for destructive actions: red edge and text on the trigger,
    a solid red fill on the final confirm (.btn-danger-solid). */
 .btn-danger {
-  background: transparent;
+  background: var(--bauhaus-app-white);
   border-color: var(--critical);
   color: var(--critical);
 }
 .btn-danger-solid {
-  background: var(--critical);
-  border-color: var(--critical);
-  color: var(--on-critical);
+  background: var(--bauhaus-app-red-text);
+  border-color: var(--bauhaus-app-red-text);
+  color: #ffffff;
 }
 .btn-sm {
   min-height: 30px;
-  padding: 0 12px;
+  padding: 0 10px;
   font-size: 13px;
-  gap: 6px;
 }
 .btn-icon {
   width: 36px;
@@ -501,25 +392,23 @@ textarea::placeholder {
 
 @media (hover: hover) and (pointer: fine) {
   .btn:hover:not(:disabled) {
-    background: var(--surface-raised);
+    background: var(--bauhaus-app-soft);
   }
   .btn-primary:hover:not(:disabled) {
-    background: var(--accent-hover);
-    border-color: var(--accent-hover);
+    background: var(--bauhaus-app-blue-hover);
+    border-color: var(--bauhaus-app-blue-hover);
   }
   .btn-ghost:hover:not(:disabled) {
-    background: var(--surface-raised);
+    background: var(--bauhaus-app-soft);
   }
   .btn-danger:hover:not(:disabled) {
     background: var(--critical-soft);
   }
   .btn-danger-solid:hover:not(:disabled) {
-    background: var(--critical-hover);
-    border-color: var(--critical-hover);
+    background: #96301f;
   }
 }
 
-/* Pills: filters, tabs and static chips. Fully round. */
 .pill {
   display: inline-flex;
   align-items: center;
@@ -527,38 +416,46 @@ textarea::placeholder {
   min-height: 32px;
   padding: 0 12px;
   border-radius: var(--radius-control);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border);
   background: var(--surface);
   color: var(--ink);
   font-size: 13px;
   font-weight: 500;
   line-height: 1.2;
-  transition: transform var(--dur-press) var(--ease-out), border-color var(--dur-hover) ease, background-color var(--dur-hover) ease, color var(--dur-hover) ease;
+  transition: transform var(--dur-press) var(--ease-out), border-color var(--dur-hover) ease, color var(--dur-hover) ease;
 }
 button.pill:active {
   transform: scale(0.97);
 }
-@media (hover: hover) and (pointer: fine) {
-  button.pill:hover {
-    background: var(--surface-raised);
-  }
-}
-/* Multi-select filters that are on go neutral, so a row of them never turns
-   into a wall of ink. Only single choice (tabs) takes the accent. */
+/* Multi-select filters that are on: quiet, so a row of them never turns
+   into a wall of accent. Single-choice selection (tabs) keeps the accent. */
+/* Multi-select filters: "on" is an outlined chip with a check, "off" is plain
+   muted text, so the state reads at a glance without a wall of pressed boxes. */
 .pill[aria-pressed="true"] {
-  border-color: var(--ink);
-  background: var(--surface-hover);
+  border-color: var(--border-strong);
+  background: var(--surface);
   color: var(--ink);
 }
-.pill[aria-pressed="false"] {
+.pill[aria-pressed="true"]::before {
+  content: "✓";
+  font-size: 11px;
   color: var(--ink-dim);
 }
+.pill[aria-pressed="false"] {
+  border-color: transparent;
+  background: transparent;
+  color: var(--ink-dim);
+}
+
+/* Single choice (OS picker, segmented choices): ink edge on soft ground. Blue
+   stays for primary actions only; view switches use .tabs. */
 .pill[aria-selected="true"],
 .pill[aria-checked="true"],
 .pill[aria-current="page"] {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--on-accent);
+  border-color: var(--bauhaus-app-ink);
+  background: var(--bauhaus-app-soft);
+  color: var(--ink);
+  font-weight: 600;
 }
 
 .kbd {
@@ -568,7 +465,7 @@ button.pill:active {
   min-width: 18px;
   height: 18px;
   padding: 0 4px;
-  border-radius: var(--radius-tag);
+  border-radius: 4px;
   border: var(--hair) solid var(--border-strong);
   background: var(--surface);
   color: var(--ink-faint);
@@ -586,212 +483,131 @@ button.pill:active {
   padding: 0 6px;
   border-radius: 4px 4px 4px 1px;
   background: var(--author, var(--ink-faint));
-  color: var(--author-on, var(--on-author-1));
+  color: var(--on-author);
   font-size: 11.5px;
   font-weight: 500;
   line-height: 1;
   white-space: nowrap;
 }
 
-/* Vault chip (components/VaultChip.tsx): the vault's solid colour as a pill,
-   its shape before the name. Flat: no tint, gradient or glow. */
-.vault-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 22px;
-  max-width: 100%;
-  padding: 0 9px 0 8px;
-  border-radius: var(--radius-control);
-  font-size: 12px;
+/* Sidebar nav row on the ink sidebar. Selected = blue fill + aria-current.
+   Focus is a cream outline, so it never looks like the selected fill. */
+.nav-link {
+  color: var(--bauhaus-app-sidebar-text);
+  border-radius: 3px;
+  transition: background-color var(--dur-hover) ease, color var(--dur-hover) ease;
+}
+.nav-link .nav-icon {
+  color: currentColor;
+}
+/* The current page: a lifted row with a 2px blue edge, not a filled block. */
+.nav-link[data-active] {
+  background: var(--bauhaus-app-sidebar-hover);
+  color: #ffffff;
   font-weight: 500;
-  line-height: 1;
-  white-space: nowrap;
-  vertical-align: middle;
+  box-shadow: inset 2px 0 0 var(--bauhaus-app-blue);
 }
-.vault-chip[data-tone="personal"] { background: var(--vault-personal); }
-.vault-chip[data-tone="project"] { background: var(--vault-project); }
-.vault-chip[data-tone="company"] { background: var(--vault-company); }
-.vault-chip[data-tone="mixed"] { background: transparent; box-shadow: inset 0 0 0 1px var(--ink); }
+.nav-badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--bauhaus-app-blue);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+}
+.nav-link:focus-visible,
+.sidebar :focus-visible {
+  outline: 2px solid var(--bauhaus-app-yellow);
+  outline-offset: 2px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .nav-link:not([data-active]):hover {
+    background: var(--bauhaus-app-sidebar-hover);
+  }
+}
 
-/* ---- the sidebar and its nav chips ----
-   A white sidebar with a right hairline. Each nav link is a pill chip with a
-   small glyph built from the three shapes; the glyph moves on hover with a
-   fine pointer only. The current page is an ink chip. */
+/* The ink sidebar and its drawer. */
 .sidebar {
-  background: var(--surface);
-  color: var(--ink);
-}
-.sidebar-rail {
-  border-right: 1px solid var(--border);
+  background: var(--bauhaus-app-sidebar);
+  color: var(--bauhaus-app-sidebar-text);
 }
 .sidebar .sidebar-muted {
-  color: var(--ink-dim);
+  color: var(--bauhaus-app-sidebar-muted);
 }
 .sidebar .sidebar-search {
-  border: 1px solid var(--border-field);
-  border-radius: var(--radius-control);
-  color: var(--ink-dim);
-  background: var(--surface);
-  transition: border-color var(--dur-hover) ease, background-color var(--dur-hover) ease;
+  border: 1px solid var(--bauhaus-app-sidebar-line);
+  border-radius: var(--radius-field);
+  color: var(--bauhaus-app-sidebar-text);
+  background: transparent;
 }
 @media (hover: hover) and (pointer: fine) {
   .sidebar .sidebar-search:hover {
-    border-color: var(--ink);
-    color: var(--ink);
+    border-color: var(--bauhaus-app-sidebar-muted);
   }
 }
-
-.nav-chip {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 32px;
-  padding: 0 12px 0 10px;
-  border-radius: var(--radius-control);
-  border: 1px solid transparent;
-  color: var(--ink);
-  font-size: 13.5px;
-  line-height: 1.2;
-  transition:
-    background-color var(--dur-hover) ease,
-    border-color var(--dur-hover) ease,
-    color var(--dur-hover) ease,
-    transform var(--dur-press) var(--ease-out);
-}
-.nav-chip:active {
-  transform: scale(0.97);
-}
-.nav-chip[aria-current="page"] {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--on-accent);
-  font-weight: 500;
-}
-@media (hover: hover) and (pointer: fine) {
-  .nav-chip:not([aria-current="page"]):hover {
-    background: var(--surface-raised);
-    border-color: var(--ink);
-  }
-}
-@media (pointer: coarse) {
-  .nav-chip {
-    min-height: 44px;
-  }
+.sidebar .kbd {
+  background: transparent;
+  color: var(--bauhaus-app-sidebar-muted);
+  border-color: var(--bauhaus-app-sidebar-line);
 }
 
-/* A plain sidebar control (menu, close, log out). */
-.side-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border-radius: var(--radius-control);
-  color: var(--ink);
-  transition: background-color var(--dur-hover) ease;
-}
-@media (hover: hover) and (pointer: fine) {
-  .side-button:hover {
-    background: var(--surface-raised);
-  }
-}
-
-/* The glyph: three absolutely placed shapes in a 20 x 14 box. Shape classes
-   give the fill and silhouette; each data-glyph places them and says how they
-   move. Flat fills, no outline, nothing loops. */
-.nav-glyph {
-  position: relative;
-  width: 20px;
-  height: 14px;
-  flex: none;
-}
-.nav-glyph > span {
-  position: absolute;
-  display: block;
-  transition: transform var(--dur-shape) var(--ease-shape), border-radius var(--dur-shape) var(--ease-shape);
-}
-.g-c { background: var(--vault-personal); border-radius: 999px; }
-.g-s { background: var(--vault-project); }
-.g-t { background: var(--vault-company); clip-path: polygon(50% 0, 100% 100%, 0 100%); }
-
-/* Home: a yellow house with a blue roof and a red sun. */
-[data-glyph="home"] .g-s { left: 4px; top: 7px; width: 9px; height: 7px; }
-[data-glyph="home"] .g-t { left: 2px; top: 1px; width: 13px; height: 6px; }
-[data-glyph="home"] .g-c { left: 15px; top: 1px; width: 5px; height: 5px; }
-/* Chat: two speech bubbles and a small square. */
-[data-glyph="chat"] .g-c { left: 0; top: 1px; width: 10px; height: 10px; }
-[data-glyph="chat"] .g-t { left: 2px; top: 9px; width: 5px; height: 5px; transform: rotate(180deg); }
-[data-glyph="chat"] .g-s { left: 12px; top: 5px; width: 8px; height: 8px; border-radius: 3px; }
-/* People and topics: a head, a body and a second person. */
-[data-glyph="people"] .g-c { left: 2px; top: 0; width: 7px; height: 7px; }
-[data-glyph="people"] .g-s { left: 1px; top: 8px; width: 9px; height: 6px; border-radius: 4px 4px 0 0; }
-[data-glyph="people"] .g-t { left: 11px; top: 4px; width: 9px; height: 10px; }
-/* Memory spaces: the trio itself, in a row. */
-[data-glyph="spaces"] > span { top: 4px; width: 6px; height: 6px; }
-[data-glyph="spaces"] .g-c { left: 0; }
-[data-glyph="spaces"] .g-s { left: 7px; }
-[data-glyph="spaces"] .g-t { left: 14px; }
-/* Documents: a yellow page with a red half moon (the landing page's Blog). */
-[data-glyph="docs"] .g-s { left: 3px; top: 0; width: 11px; height: 13px; border-radius: 2px 6px 2px 2px; }
-[data-glyph="docs"] .g-c { left: 10px; top: 5px; width: 9px; height: 9px; border-radius: 0 0 9px 9px; }
-[data-glyph="docs"] .g-t { left: 0; top: 8px; width: 6px; height: 6px; }
-/* Connected sources: a triangle plugging into a square, a red cable end. */
-[data-glyph="sources"] .g-s { left: 9px; top: 2px; width: 10px; height: 10px; }
-[data-glyph="sources"] .g-t { left: 1px; top: 3px; width: 8px; height: 8px; transform: rotate(90deg); }
-[data-glyph="sources"] .g-c { left: 0; top: 10px; width: 4px; height: 4px; }
-/* Help: a red ring-like half circle over a small blue dot. */
-[data-glyph="help"] .g-c { left: 4px; top: 0; width: 12px; height: 7px; border-radius: 12px 12px 0 0; }
-[data-glyph="help"] .g-s { left: 8px; top: 7px; width: 4px; height: 4px; }
-[data-glyph="help"] .g-t { left: 7px; top: 11px; width: 6px; height: 3px; }
-/* Settings: a yellow square dial with a blue pointer and a red knob. */
-[data-glyph="settings"] .g-s { left: 4px; top: 1px; width: 12px; height: 12px; border-radius: 3px; }
-[data-glyph="settings"] .g-c { left: 7px; top: 4px; width: 6px; height: 6px; }
-[data-glyph="settings"] .g-t { left: 0; top: 4px; width: 5px; height: 6px; transform: rotate(90deg); }
-/* AI instructions: a play triangle reading a stacked note. */
-[data-glyph="instructions"] .g-t { left: 0; top: 2px; width: 9px; height: 10px; transform: rotate(90deg); }
-[data-glyph="instructions"] .g-s { left: 11px; top: 1px; width: 9px; height: 5px; }
-[data-glyph="instructions"] .g-c { left: 11px; top: 8px; width: 5px; height: 5px; }
-/* Code map: two brackets facing each other around a square. */
-[data-glyph="code"] .g-t { left: 0; top: 3px; width: 7px; height: 8px; transform: rotate(-90deg); }
-[data-glyph="code"] .g-s { left: 8px; top: 4px; width: 5px; height: 5px; }
-[data-glyph="code"] .g-c { left: 14px; top: 3px; width: 6px; height: 8px; border-radius: 0 8px 8px 0; }
-
-@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
-  .nav-chip:hover [data-glyph="home"] .g-t { transform: translateY(-2px); }
-  .nav-chip:hover [data-glyph="home"] .g-c { transform: translate(-1px, 2px); }
-  .nav-chip:hover [data-glyph="chat"] .g-c { transform: translateY(-2px); }
-  .nav-chip:hover [data-glyph="chat"] .g-s { transform: translateY(-3px); border-radius: 999px; }
-  .nav-chip:hover [data-glyph="people"] .g-t { transform: translateX(-2px); }
-  .nav-chip:hover [data-glyph="people"] .g-c { transform: translateY(-1px); }
-  .nav-chip:hover [data-glyph="spaces"] .g-c { transform: translateY(4px); }
-  .nav-chip:hover [data-glyph="spaces"] .g-t { transform: translateY(-4px); }
-  .nav-chip:hover [data-glyph="docs"] .g-s { transform: rotate(-12deg); }
-  .nav-chip:hover [data-glyph="docs"] .g-c { transform: rotate(180deg); }
-  .nav-chip:hover [data-glyph="docs"] .g-t { transform: translate(2px, -2px); }
-  .nav-chip:hover [data-glyph="sources"] .g-t { transform: translateX(2px) rotate(90deg); }
-  .nav-chip:hover [data-glyph="sources"] .g-c { transform: translateX(2px); }
-  .nav-chip:hover [data-glyph="help"] .g-c { transform: rotate(-14deg); }
-  .nav-chip:hover [data-glyph="help"] .g-s { transform: translateY(-1px); border-radius: 999px; }
-  .nav-chip:hover [data-glyph="settings"] .g-s { transform: rotate(45deg); }
-  .nav-chip:hover [data-glyph="settings"] .g-t { transform: translateX(2px) rotate(90deg); }
-  .nav-chip:hover [data-glyph="instructions"] .g-t { transform: translateX(2px) rotate(90deg); }
-  .nav-chip:hover [data-glyph="instructions"] .g-c { transform: translateX(4px); }
-  .nav-chip:hover [data-glyph="code"] .g-t { transform: translateX(-2px) rotate(-90deg); }
-  .nav-chip:hover [data-glyph="code"] .g-c { transform: translateX(2px); }
-  .nav-chip:hover [data-glyph="code"] .g-s { transform: rotate(45deg); }
-}
-
-/* Page header: icon + title, a hairline, then the introduction. */
+/* Page header: icon + title, a 2px ink rule, then the introduction. */
 .page-header {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   padding-bottom: 16px;
   border-bottom: 1px solid var(--border);
 }
 
-/* Status in words with a small dot (StatusLabel). Status colours are
-   deeper than the vault fills and always come with a word. */
+/* A header that ends in tabs lets the tab rule be its rule: one line, not two. */
+.page-header:has(.tabs) {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+/* Underline tabs for switching views (Connections / Memory map, Settings on
+   phones). Selected: ink text and a 2px ink underline; never a filled box. */
+.tabs {
+  display: flex;
+  gap: 20px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 1px;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-dim);
+  white-space: nowrap;
+  transition: color var(--dur-hover) ease, border-color var(--dur-hover) ease;
+}
+.tab:hover {
+  color: var(--ink);
+}
+.tab[aria-selected="true"],
+.tab[aria-current="page"] {
+  color: var(--ink);
+  border-bottom-color: var(--ink);
+}
+.tab:focus-visible {
+  outline: 2px solid var(--bauhaus-app-focus);
+  outline-offset: 2px;
+}
+
+/* Status in words with a small shape (StatusLabel). */
 .status-label {
   display: inline-flex;
   align-items: center;
@@ -802,9 +618,9 @@ button.pill:active {
   color: var(--ink);
 }
 .status-label[data-tone="good"] .status-shape { background: var(--good); }
-.status-label[data-tone="warning"] .status-shape { background: var(--warning); }
-.status-label[data-tone="critical"] .status-shape { background: var(--critical); }
-.status-label[data-tone="info"] .status-shape { background: var(--ink); }
+.status-label[data-tone="warning"] .status-shape { background: var(--bauhaus-app-yellow); box-shadow: inset 0 0 0 1px #8a6510; }
+.status-label[data-tone="critical"] .status-shape { background: var(--bauhaus-app-red); }
+.status-label[data-tone="info"] .status-shape { background: var(--bauhaus-app-blue); }
 .status-label[data-tone="neutral"] .status-shape { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-dim); }
 .status-shape {
   width: 8px;
@@ -818,9 +634,8 @@ dialog.bauhaus-dialog,
 .bauhaus-dialog {
   background: var(--surface);
   color: var(--ink);
-  border: 0;
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-pop);
+  border: 1.5px solid var(--bauhaus-app-ink);
+  border-radius: 4px;
   padding: 0;
   width: min(520px, calc(100vw - 32px));
   max-height: calc(100dvh - 32px);
@@ -843,19 +658,21 @@ dialog.bauhaus-dialog::backdrop {
   flex-shrink: 0;
 }
 
-/* Data tables: tabular numerals, hairline rows, quiet sentence-case headers. */
+/* Data tables: tabular numerals, hairline rows, quiet headers. */
 .data-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
 }
+/* Quiet column heads: muted 12px on a hairline, so the data leads, not the header. */
 .data-table th {
   height: 32px;
   padding: 0 12px;
   text-align: left;
   font-weight: 500;
   font-size: 12px;
-  color: var(--ink-faint);
+  color: var(--ink-dim);
+  background: transparent;
   border-bottom: 1px solid var(--border);
 }
 .data-table td {
@@ -869,7 +686,7 @@ dialog.bauhaus-dialog::backdrop {
 }
 @media (hover: hover) and (pointer: fine) {
   .data-table tbody tr:hover td {
-    background: var(--surface-raised);
+    background: var(--bauhaus-app-bg);
   }
 }
 
@@ -901,7 +718,7 @@ dialog.bauhaus-dialog::backdrop {
   cursor: default;
 }
 .select-trigger[data-open] {
-  border-color: var(--ink);
+  border-color: var(--bauhaus-app-blue);
 }
 .select-chevron {
   color: var(--ink-faint);
@@ -933,7 +750,7 @@ dialog.bauhaus-dialog::backdrop {
   color: var(--accent-text);
 }
 .select-option[data-active] {
-  background: var(--surface-raised);
+  background: var(--bauhaus-app-soft);
   color: var(--ink);
 }
 
@@ -975,19 +792,14 @@ dialog.bauhaus-dialog::backdrop {
 }
 
 :focus-visible {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--bauhaus-app-focus);
   outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--bauhaus-app-yellow-soft);
 }
 
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--border-strong) transparent;
-}
-
-/* Native checks and radios follow the ink accent in both themes. */
-input[type="checkbox"],
-input[type="radio"] {
-  accent-color: var(--accent);
 }
 
 /* Native datalist arrow: off, it clashes with the themed controls. */
@@ -1017,6 +829,7 @@ a {
 .md li + li { margin-top: 0.2em; }
 .md li::marker { color: var(--ink-faint); }
 .md a { color: var(--accent-text); text-decoration: underline; }
+.md pre { background: var(--bauhaus-app-ink) !important; color: var(--bauhaus-app-cream); border-color: var(--bauhaus-app-ink) !important; }
 .md strong { font-weight: 600; }
 .md hr { border: 0; border-top: var(--hair) solid var(--border); margin: 1em 0; }
 .md blockquote { border-left: 1px solid var(--border-strong); padding-left: 0.9em; color: var(--ink-dim); }
@@ -1046,8 +859,131 @@ a {
 .docs .md td, .docs .md th { font-size: 0.92em; }
 }
 
-/* Playable shape compositions (ShapeField): each shape settles in once, then
-   follows the hand. Touch on a shape drags it instead of scrolling the page. */
+/* Commands to copy: never wrap mid-flag; scroll sideways on narrow screens. */
+pre,
+.cmd {
+  white-space: pre;
+  overflow-x: auto;
+}
+
+/* Keyboard hints are noise on touch screens. */
+@media (pointer: coarse) {
+  .kbd-hint {
+    display: none;
+  }
+}
+
+/* Every disclosure shows it opens: a chevron before the label that turns when open. Pages
+   that style <summary> as flex lose the browser's marker, so draw one for all of them. */
+summary {
+  cursor: pointer;
+  list-style: none;
+}
+summary::-webkit-details-marker {
+  display: none;
+}
+summary::before {
+  content: "";
+  display: inline-block;
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-right: 8px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(-45deg);
+  transition: transform var(--dur-hover) ease;
+  opacity: 0.7;
+}
+details[open] > summary::before {
+  transform: translateY(-3px) rotate(45deg);
+}
+
+/* Which space a row belongs to: a quiet label beside a name, one style everywhere. */
+.space-chip {
+  display: inline-block;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 400;
+  color: var(--ink-dim);
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+
+/* The colour picker for an agent's own kind, drawn as a plain round swatch rather than the
+   browser's raw control. */
+.kind-swatch {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+}
+.kind-swatch::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.kind-swatch::-webkit-color-swatch {
+  border: 0;
+  border-radius: 999px;
+}
+.kind-swatch::-moz-color-swatch {
+  border: 0;
+  border-radius: 999px;
+}
+
+/* ---- pieces main's design system brought in (merge of #138 with main) ----
+   Vault colours for the brand mark, VaultChip and Duo icons, on this PR's palette. Personal is a
+   neutral grey, never the danger red (council review: red only means "careful"). */
+:root {
+  --vault-personal: #8a8a83;
+  --vault-project: var(--bauhaus-app-yellow);
+  --vault-company: var(--bauhaus-app-blue);
+  --on-vault-personal: #ffffff;
+  --on-vault-project: var(--ink);
+  --on-vault-company: #ffffff;
+}
+
+/* Phosphor duotone icons: the back layer takes a vault colour, the line keeps the text colour. */
+.duo path[opacity],
+svg[viewBox="0 0 256 256"] > path[opacity="0.2"] {
+  opacity: 1;
+  fill: var(--duo, var(--vault-project));
+}
+.btn-danger,
+.btn-danger-solid,
+[role="alert"],
+.status-label {
+  --duo: transparent;
+}
+
+/* Vault chip (components/VaultChip.tsx): the vault's colour as a small flat pill. */
+.vault-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  max-width: 100%;
+  padding: 0 9px 0 8px;
+  border-radius: var(--radius-control);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.vault-chip[data-tone="personal"] { background: var(--vault-personal); color: #ffffff; }
+.vault-chip[data-tone="project"] { background: var(--vault-project); }
+.vault-chip[data-tone="company"] { background: var(--vault-company); color: #ffffff; }
+.vault-chip[data-tone="mixed"] { background: transparent; box-shadow: inset 0 0 0 1px var(--ink); }
+
+/* Shape compositions (ShapeField), where main still uses them. */
 @keyframes shape-settle { from { opacity: 0.001; transform: scale(0.92); } }
 .shape-in { transform-box: fill-box; transform-origin: center; animation: shape-settle 420ms var(--ease-out) both; animation-delay: calc(var(--i, 0) * 70ms); }
 .shape-field [data-body] { cursor: grab; touch-action: none; }

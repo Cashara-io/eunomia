@@ -1,11 +1,12 @@
 "use client";
 
-import { ArrowsClockwiseIcon, LinkBreakIcon, ShareNetworkIcon, SignInIcon, XIcon } from "@phosphor-icons/react/ssr";
 // Sharing a memory space with another Eunomia (docs/peer-vaults.md), in plain words: a one-time code
 // to send, the other Eunomias this space is shared with and how syncing is going, and a dialog to
 // join a space someone else shared.
 import { useEffect, useId, useRef, useState } from "react";
+import { LogIn, RefreshCw, Unlink, X } from "lucide-react";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import Select from "@/components/Select";
 import StatusLabel, { type StatusTone } from "@/components/ui/StatusLabel";
 import CopyButton from "@/components/bits/CopyButton";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
@@ -22,7 +23,7 @@ import {
   type ShareCode,
 } from "@/lib/queries/peers";
 
-const ICON = { size: 16, weight: "duotone", "aria-hidden": true } as const;
+const ICON = { size: 16, strokeWidth: 1.75, "aria-hidden": true } as const;
 
 const ROLE_WORDS: Record<PeerRole, string> = { edit: "Can add and change", read: "Can only read" };
 
@@ -115,13 +116,13 @@ function PeerRow({ link, isOwner, vaultId, vaultName }: { link: PeerLink; isOwne
               sync.mutate(link.id, { onError: (e) => setError(failure(e, "Couldn't sync just now.", " It will try again by itself.")) });
             }}
           >
-            <ArrowsClockwiseIcon {...ICON} />
+            <RefreshCw {...ICON} />
             {sync.isPending ? "Syncing…" : "Sync now"}
           </button>
         )}
         {isOwner && (
           <button type="button" className="btn btn-sm" onClick={() => setConfirm(true)}>
-            <LinkBreakIcon {...ICON} />
+            <Unlink {...ICON} />
             {link.status === "revoked" ? "Remove" : "Stop sharing…"}
           </button>
         )}
@@ -151,9 +152,9 @@ export default function PeerSharing({ vault }: { vault: { id: string; name: stri
   const peers = useVaultPeers(vault.id);
   const create = useCreateShareCode(vault.id);
   const withdraw = useDeleteShareCode(vault.id);
-  const [role, setRole] = useState<PeerRole>("edit");
+  const [role, setRole] = useState<PeerRole>("read");
   const [made, setMade] = useState<ShareCode | null>(null);
-  const [error, setError] = useState<Failure | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const roleId = useId();
   const codeId = useId();
   const links = peers.data?.links ?? [];
@@ -165,14 +166,22 @@ export default function PeerSharing({ vault }: { vault: { id: string; name: stri
 
   return (
     <Disclosure
-      key={inUse ? "in-use" : "unused"}
-      defaultOpen={inUse}
       title="Share with another Eunomia"
-      icon={<ShareNetworkIcon {...ICON} />}
-      hint={inUse ? undefined : "Keep a copy of this space on someone else's Eunomia, kept in step."}
+      hint={
+        links.length > 0
+          ? `Shared with ${links.length === 1 ? "1 other Eunomia" : `${links.length} other Eunomias`}.`
+          : codes.length > 0
+            ? "A share code is waiting to be used."
+            : "Keep a copy of this space on someone else's Eunomia, kept in step."
+      }
     >
       <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
-        The other Eunomia gets a full copy of this space, and changes travel both ways. Documents aren&apos;t shared yet.
+        {isOwner
+          ? role === "read"
+            ? "The other Eunomia gets a full copy of this space that stays in step with changes made here. It can read but not change anything."
+            : "The other Eunomia gets a full copy of this space, and changes made on either side travel both ways."
+          : "The other Eunomia keeps a full copy of this space in step with this one."}{" "}
+        Documents aren&apos;t shared yet.
       </p>
 
       {links.length > 0 && (
@@ -190,27 +199,37 @@ export default function PeerSharing({ vault }: { vault: { id: string; name: stri
             What the other Eunomia can do
           </label>
           <div className="flex flex-wrap items-center gap-2">
-            <select id={roleId} className="field h-10 px-3 text-[14px]" value={role} onChange={(e) => setRole(e.target.value as PeerRole)}>
-              <option value="edit">{ROLE_WORDS.edit}</option>
-              <option value="read">{ROLE_WORDS.read}</option>
-            </select>
+            <Select
+              id={roleId}
+              className="h-10 text-[14px] w-[200px]"
+              value={role}
+              onChange={(v) => setRole(v as PeerRole)}
+              options={[
+                { value: "read", label: ROLE_WORDS.read },
+                { value: "edit", label: ROLE_WORDS.edit },
+              ]}
+            />
             <button
               type="button"
-              className="btn btn-primary"
+              className="btn"
               disabled={create.isPending}
               aria-busy={create.isPending}
               onClick={() => {
                 setError(null);
                 create.mutate(role, {
                   onSuccess: (c) => setMade(c),
-                  onError: (e) => setError({ message: failure(e, "Couldn't create a share code. Try again in a moment.").message }),
+                  onError: (e) => setError(failure(e, "Couldn't create a share code. Try again in a moment.").message),
                 });
               }}
             >
               {create.isPending ? "Creating…" : "Create share code"}
             </button>
           </div>
-          {error && <ErrorLine error={error} />}
+          {error && (
+            <p role="alert" className="text-[13px]" style={{ color: "var(--critical)" }}>
+              {error}
+            </p>
+          )}
           {made && (
             <div className="flex flex-col gap-1.5">
               <label htmlFor={codeId} className="text-[13px] font-medium">
@@ -245,7 +264,7 @@ export default function PeerSharing({ vault }: { vault: { id: string; name: stri
                       {ROLE_WORDS[c.role]} · expires {day(c.expires_at)}
                     </span>
                     <button type="button" className="btn btn-sm" disabled={withdraw.isPending} onClick={() => withdraw.mutate(c.id)}>
-                      <XIcon {...ICON} />
+                      <X {...ICON} />
                       Cancel code
                     </button>
                   </li>
@@ -259,7 +278,8 @@ export default function PeerSharing({ vault }: { vault: { id: string; name: stri
   );
 }
 
-/** "Join a shared space": a button for the page header and a dialog to paste a share code into. */
+/** "Connect to another Eunomia…": a quiet text action and a dialog to paste a share code into.
+ * Not the same as a team invitation, which arrives under Pending invitations. */
 export function JoinSharedSpace({ onJoined }: { onJoined?: (vaultId: string) => void }) {
   const join = useJoinShared();
   const [open, setOpen] = useState(false);
@@ -292,9 +312,14 @@ export function JoinSharedSpace({ onJoined }: { onJoined?: (vaultId: string) => 
 
   return (
     <>
-      <button type="button" className="btn" onClick={() => setOpen(true)}>
-        <SignInIcon {...ICON} />
-        Join a shared space
+      <button
+        type="button"
+        className="inline-flex items-center gap-1.5 min-h-10 text-[14px] font-medium underline-offset-2 hover:underline"
+        style={{ color: "var(--accent-text)" }}
+        onClick={() => setOpen(true)}
+      >
+        <LogIn {...ICON} />
+        Connect to another Eunomia…
       </button>
       <dialog
         ref={ref}
@@ -320,8 +345,8 @@ export function JoinSharedSpace({ onJoined }: { onJoined?: (vaultId: string) => 
             });
           }}
         >
-          <h2 id={titleId} className="text-[20px] font-medium leading-tight tracking-[-0.025em]">
-            Join a shared space
+          <h2 id={titleId} className="text-[20px] font-semibold leading-tight tracking-[-0.01em]">
+            Connect to another Eunomia
           </h2>
           {joined ? (
             <p className="text-[14px]" role="status">
@@ -330,7 +355,7 @@ export function JoinSharedSpace({ onJoined }: { onJoined?: (vaultId: string) => 
           ) : (
             <>
               <p className="text-[14px] leading-relaxed">
-                Paste the share code you were sent. This Eunomia makes a new space with a full copy and keeps it in step.
+                Paste the share code someone running another Eunomia sent you. This Eunomia makes a new space with a full copy and keeps it in step. Invitations from people on this Eunomia appear on the Memory spaces page instead.
               </p>
               <div className="flex flex-col gap-1.5">
                 <label htmlFor={codeId} className="text-[14px] font-medium">

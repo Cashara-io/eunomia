@@ -1,12 +1,12 @@
 "use client";
 
-import { EmptyArt } from "@/components/Shapes";
-import { ArrowBendDownLeftIcon, ArrowCounterClockwiseIcon, ArrowUpIcon, CaretRightIcon, ChatsCircleIcon, PlusIcon, SquareIcon, TrashIcon, WarningCircleIcon, WrenchIcon } from "@phosphor-icons/react/ssr";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { AlertCircle, ArrowUp, Square, ChevronRight, CornerDownLeft, MessagesSquare, RotateCcw, Plus, Trash2, Wrench } from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
+import EmptyNote from "@/components/ui/EmptyState";
 import Markdown from "@/components/Markdown";
 import AuthorTag from "@/components/AuthorTag";
 import SyncMark from "@/components/bits/SyncMark";
@@ -153,9 +153,9 @@ function ToolRow({ step, live }: { step: ToolStep; live?: boolean }) {
   const row = (
     <>
       {inspectable ? (
-        <CaretRightIcon weight="duotone" size={13} className="chev shrink-0" style={{ color: "var(--ink-faint)" }} />
+        <ChevronRight size={13} strokeWidth={1.75} className="chev shrink-0" style={{ color: "var(--ink-faint)" }} />
       ) : (
-        <WrenchIcon weight="duotone" size={13} className="shrink-0" style={{ color: "var(--ink-faint)" }} />
+        <Wrench size={13} strokeWidth={1.75} className="shrink-0" style={{ color: "var(--ink-faint)" }} />
       )}
       <span className="font-mono text-[12px] shrink-0" style={{ color: "var(--accent-text)" }}>
         {step.name}
@@ -213,8 +213,8 @@ function TurnView({ turn, me }: { turn: Turn; me: string | null }) {
       <article>
         {me ? <TurnHeader name={me} at={turn.at} /> : <div className="h-5 mb-2" />}
         <div
-          className="whitespace-pre-wrap break-words text-[15px] leading-relaxed px-4 py-3 rounded-[12px]"
-          style={{ background: "var(--surface-raised)", color: "var(--ink)" }}
+          className="whitespace-pre-wrap break-words text-[15px] leading-relaxed px-4 py-3 rounded-[2px]"
+          style={{ background: "var(--bauhaus-app-soft)", color: "var(--ink)" }}
         >
           {turn.content}
         </div>
@@ -250,17 +250,19 @@ function ThreadList({
   return (
     <nav aria-label="Chat threads" className="ledger hidden md:flex flex-col w-60 shrink-0 h-full min-h-0">
       <div className="flex items-center justify-between min-h-14 pl-3.5 pr-2 shrink-0" style={{ borderBottom: "var(--hair) solid var(--border)" }}>
-        <h2 className="section-title">Conversations</h2>
-        <button onClick={onCreate} className="btn btn-sm">
-          <PlusIcon weight="duotone" size={16} aria-hidden /> New chat
-        </button>
+        <h2 className="section-title min-w-0 truncate">Conversations</h2>
+        <Tooltip label="New chat">
+          <button onClick={onCreate} aria-label="New chat" className="btn btn-ghost btn-icon btn-sm shrink-0">
+            <Plus size={16} strokeWidth={1.75} />
+          </button>
+        </Tooltip>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto p-2 flex flex-col gap-0.5">
         {threads === null && ["80%", "65%", "50%"].map((w) => <div key={w} className="skeleton h-8" style={{ width: w }} />)}
         {threads?.map((t) => {
           const active = t.id === activeId;
           return (
-            <div key={t.id} className="thread-row group flex items-center rounded-full" data-active={active || undefined}>
+            <div key={t.id} className="thread-row group flex items-center rounded-[3px]" data-active={active || undefined}>
               <button
                 onClick={() => onSelect(t.id)}
                 aria-current={active ? "true" : undefined}
@@ -273,14 +275,14 @@ function ThreadList({
               </button>
               <Tooltip label="Delete thread">
                 <button onClick={() => onDelete(t.id)} aria-label="Delete thread" className="thread-delete btn btn-ghost btn-icon btn-sm mr-0.5 shrink-0">
-                  <TrashIcon weight="duotone" size={16} />
+                  <Trash2 size={16} strokeWidth={1.75} />
                 </button>
               </Tooltip>
             </div>
           );
         })}
         {threads?.length === 0 && (
-          <div className="px-2.5 py-2 text-[12.5px]" style={{ color: "var(--ink-faint)" }}>
+          <div className="px-2.5 py-2 text-[12px]" style={{ color: "var(--ink-faint)" }}>
             No conversations yet.
           </div>
         )}
@@ -292,8 +294,7 @@ function ThreadList({
 function EmptyState({ onPick }: { onPick: (text: string) => void }) {
   return (
     <div className="flex-1 flex flex-col justify-center w-full max-w-[560px] mx-auto py-8">
-      <EmptyArt variant="chat" className="w-full h-[112px] mb-6" />
-      <h2 className="text-[22px] font-medium tracking-[-0.03em]" style={{ color: "var(--ink)" }}>
+      <h2 className="text-[22px] font-semibold tracking-[-0.015em]" style={{ color: "var(--ink)" }}>
         Ask your memory anything
       </h2>
       <p className="text-[15px] mt-2 mb-5 leading-relaxed" style={{ color: "var(--ink-dim)" }}>
@@ -304,10 +305,32 @@ function EmptyState({ onPick }: { onPick: (text: string) => void }) {
         {EXAMPLES.map((ex) => (
           <button key={ex} onClick={() => onPick(ex)} className="example-row press w-full flex items-center gap-2.5 min-h-11 py-2 px-4 text-left text-[14px]">
             <span className="flex-1">{ex}</span>
-            <ArrowBendDownLeftIcon weight="duotone" size={16} className="shrink-0" style={{ color: "var(--ink-faint)" }} />
+            <CornerDownLeft size={16} strokeWidth={1.75} className="shrink-0" style={{ color: "var(--ink-faint)" }} />
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+/** Chat without a model: just what to do next, with no conversations or composer to type into. */
+function NoModel({ isAdmin }: { isAdmin: boolean }) {
+  return (
+    <div role="status">
+      <EmptyNote
+        title={isAdmin ? "Set up a model to use Chat." : "Chat isn\u2019t turned on yet."}
+        action={
+          isAdmin && (
+            <Link href="/settings?tab=model" className="btn btn-primary">
+              Set up a model
+            </Link>
+          )
+        }
+      >
+        {isAdmin
+          ? "Chat answers questions from your saved memories and documents. It needs an OpenAI key or a local model endpoint."
+          : "Ask your Eunomia admin to turn on Chat. Your connected AI apps can still look things up in the meantime."}
+      </EmptyNote>
     </div>
   );
 }
@@ -339,7 +362,10 @@ export default function ChatPage() {
   const [error, setError] = useState<Failure | null>(null);
   const [loadError, setLoadError] = useState<Failure | null>(null);
   const [needsKey, setNeedsKey] = useState(false);
-  const me = useMe().data?.email ?? null;
+  const meData = useMe().data;
+  const me = meData?.email ?? null;
+  // Only admins can turn chat on; members are told to ask one.
+  const isAdmin = meData?.is_admin ?? false;
   // unknown while loading counts as ready: the server still refuses a send it cannot answer
   const modelReady = useSettings().data?.model_configured ?? true;
   const [lastSent, setLastSent] = useState("");
@@ -366,8 +392,12 @@ export default function ChatPage() {
   useEffect(() => {
     queryClient
       .fetchQuery({ ...threadsQuery(), staleTime: 0 })
-      .then(async (list: ChatThread[]) => {
-        if (list.length === 0) list = [await createThreadMutation.mutateAsync(undefined)];
+      .then((list: ChatThread[]) => {
+        // No conversations yet: start on an unsaved draft; the thread is created with the first message.
+        if (list.length === 0) {
+          setMessages([]);
+          return;
+        }
         setActiveId(list[0].id);
         loadHistory(list[0].id);
       })
@@ -375,8 +405,7 @@ export default function ChatPage() {
         setMessages([]);
         setLoadError(failure(e, "Could not load your conversations."));
       });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadHistory]);
+  }, [loadHistory, queryClient]);
 
   // Follow new content only while the reader is at the bottom; scrolling up
   // to reread something holds the view still.
@@ -395,9 +424,9 @@ export default function ChatPage() {
     loadHistory(id);
   }
 
-  async function createThread() {
-    const created = await createThreadMutation.mutateAsync(undefined);
-    setActiveId(created.id);
+  /** "New chat" opens an unsaved draft; nothing is stored until its first message is sent. */
+  function createThread() {
+    setActiveId(null);
     setMessages([]);
     setError(null);
     setNeedsKey(false);
@@ -412,9 +441,7 @@ export default function ChatPage() {
       setActiveId(remaining[0].id);
       loadHistory(remaining[0].id);
     } else {
-      const created = await createThreadMutation.mutateAsync(undefined);
-      setActiveId(created.id);
-      setMessages([]);
+      createThread();
     }
   }
 
@@ -423,8 +450,7 @@ export default function ChatPage() {
 
   async function send(raw: string = input, retry = false) {
     const text = raw.trim();
-    if (!text || sending || !activeId || !modelReady) return;
-    const threadId = activeId;
+    if (!text || sending || !modelReady) return;
     if (!retry) setInput("");
     setError(null);
     setNeedsKey(false);
@@ -432,6 +458,17 @@ export default function ChatPage() {
     stickRef.current = true;
     if (!retry) setMessages((prev) => [...(prev ?? []), { role: "user", content: text, created_at: new Date().toISOString() }]);
     setSending(true);
+    let threadId = activeId;
+    if (!threadId) {
+      try {
+        threadId = (await createThreadMutation.mutateAsync(undefined)).id;
+        setActiveId(threadId);
+      } catch (e) {
+        setError(failure(e, "Could not start a new conversation."));
+        setSending(false);
+        return;
+      }
+    }
     setStreamingText("");
     setLiveSteps([]);
     const start = performance.now();
@@ -485,17 +522,22 @@ export default function ChatPage() {
 
   const turns = messages ? toTurns(messages) : null;
   const activeTool = liveSteps.find((s) => s.running)?.name;
-  const canSend = !!input.trim() && !sending && !!activeId && modelReady;
+  const canSend = !!input.trim() && !sending && messages !== null && modelReady;
 
   return (
     <TooltipGroup>
     <div className="flex flex-col gap-6 h-[calc(100dvh-6.5rem)] md:h-[calc(100dvh-3rem)] lg:h-[calc(100dvh-76px)] min-h-[560px]">
       <PageHeader
-        icon={ChatsCircleIcon} tone="company"
+        icon={MessagesSquare}
         title="Chat"
         intro="Ask a question about your saved memories and documents. Eunomia shows where each answer came from."
       />
 
+      {/* No model and no history: only the empty state. With history, the conversations stay readable
+          and only sending is off (the composer says why). */}
+      {!modelReady && (threads === null || threads.length === 0) ? (
+        <NoModel isAdmin={isAdmin} />
+      ) : (
       <div className="flex-1 min-h-0 flex gap-4">
         <ThreadList threads={threads} activeId={activeId} onSelect={selectThread} onCreate={createThread} onDelete={deleteThread} />
 
@@ -506,18 +548,18 @@ export default function ChatPage() {
               aria-label="Conversation"
               className="h-10 text-[14px] flex-1 min-w-0"
               value={activeId ?? ""}
-              onChange={selectThread}
-              options={(threads ?? []).map((t) => ({ value: t.id, label: t.title }))}
+              onChange={(id) => id && selectThread(id)}
+              options={[...(activeId ? [] : [{ value: "", label: "New chat" }]), ...(threads ?? []).map((t) => ({ value: t.id, label: t.title }))]}
             />
             <Tooltip label="New chat">
               <button onClick={createThread} aria-label="New chat" className="btn btn-icon">
-                <PlusIcon weight="duotone" size={18} />
+                <Plus size={18} strokeWidth={1.75} />
               </button>
             </Tooltip>
             {activeId && (
               <Tooltip label="Delete thread">
                 <button onClick={() => deleteThread(activeId)} aria-label="Delete thread" className="btn btn-ghost btn-icon">
-                  <TrashIcon weight="duotone" size={18} />
+                  <Trash2 size={18} strokeWidth={1.75} />
                 </button>
               </Tooltip>
             )}
@@ -536,14 +578,6 @@ export default function ChatPage() {
               {loadError && <ErrorLine error={loadError} />}
               {turns === null && <LoadingTurns />}
               {turns !== null && turns.length === 0 && !sending && !loadError && modelReady && <EmptyState onPick={(text) => send(text)} />}
-              {!modelReady && (
-                <div role="status" className="soft-panel flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 text-[14px]">
-                  <p className="flex-1 min-w-[220px]" style={{ color: "var(--ink-dim)" }}>
-                    No model is configured, so the assistant can&apos;t answer yet. Chat needs an OpenAI key or a local model endpoint.
-                  </p>
-                  <Link href="/settings" className="btn btn-primary btn-sm">Set up a model</Link>
-                </div>
-              )}
               {turns?.map((t, i) => <TurnView key={i} turn={t} me={me} />)}
               {sending && (
                 <article className="fade-in">
@@ -572,17 +606,19 @@ export default function ChatPage() {
               {error && (
                 <div
                   role="alert"
-                  className="flex items-start gap-2.5 px-4 py-3 rounded-[10px] text-[14px]"
-                  style={{ background: "var(--critical-soft)", color: "var(--critical)" }}
+                  className="flex items-start gap-2.5 px-4 py-3 rounded-[2px] text-[14px]"
+                  style={{ background: "var(--critical-soft)", color: "var(--critical)", borderLeft: "3px solid var(--bauhaus-app-red)" }}
                 >
-                  <WarningCircleIcon weight="duotone" size={18} className="shrink-0 mt-px" aria-hidden />
+                  <AlertCircle size={18} strokeWidth={1.75} className="shrink-0 mt-px" aria-hidden />
                   <div className="min-w-0 break-words">
                     <div className="font-medium">The assistant couldn&apos;t reply.</div>
                     <div className="mt-0.5" style={{ color: "var(--ink-dim)" }}>
-                      {needsKey ? (
+                      {needsKey && !isAdmin ? (
+                        "Chat isn't turned on yet. Ask your Eunomia admin."
+                      ) : needsKey ? (
                         <>
                           No OpenAI API key is set, so the assistant can&apos;t answer yet.{" "}
-                          <Link href="/settings" className="underline" style={{ color: "var(--accent-text)" }}>
+                          <Link href="/settings?tab=model" className="underline" style={{ color: "var(--accent-text)" }}>
                             Add one in Settings
                           </Link>
                           .
@@ -599,7 +635,7 @@ export default function ChatPage() {
                     ) : null}
                     {!needsKey && lastSent && (
                       <button type="button" onClick={() => send(lastSent, true)} className="btn btn-sm mt-2.5">
-                        <ArrowCounterClockwiseIcon weight="duotone" size={13} /> Retry
+                        <RotateCcw size={13} strokeWidth={1.75} /> Retry
                       </button>
                     )}
                   </div>
@@ -640,13 +676,13 @@ export default function ChatPage() {
                   {sending ? (
                     <Tooltip label="Stop">
                       <button type="button" onClick={() => abortRef.current?.abort()} aria-label="Stop" className="btn">
-                        <SquareIcon weight="duotone" size={12} fill="currentColor" aria-hidden /> Stop
+                        <Square size={12} strokeWidth={2.5} fill="currentColor" aria-hidden /> Stop
                       </button>
                     </Tooltip>
                   ) : (
                     <Tooltip label="Send" shortcut="Enter">
                       <button type="submit" disabled={!canSend} aria-label="Send" className="btn btn-primary">
-                        Send <ArrowUpIcon weight="duotone" size={16} aria-hidden />
+                        Send <ArrowUp size={16} strokeWidth={2} aria-hidden />
                       </button>
                     </Tooltip>
                   )}
@@ -656,11 +692,12 @@ export default function ChatPage() {
           </form>
         </section>
       </div>
+      )}
 
       <style>{`
         .composer { field-sizing: content; min-height: 24px; max-height: 200px; }
         .thread-row { color: var(--ink); transition: background-color var(--dur-hover) ease, color var(--dur-hover) ease; }
-        .thread-row[data-active] { background: var(--surface-raised); font-weight: 500; }
+        .thread-row[data-active] { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--bauhaus-app-blue); font-weight: 600; }
         .thread-delete { display: none; color: var(--ink-dim); }
         .thread-row:focus-within .thread-delete { display: inline-flex; }
         .thread-row:focus-within .thread-time { display: none; }

@@ -1,13 +1,36 @@
 "use client";
 
-import { TrashIcon, XIcon } from "@phosphor-icons/react/ssr";
 import { useState } from "react";
+import { X } from "lucide-react";
 import CopyButton from "@/components/bits/CopyButton";
 import DecryptReveal from "@/components/bits/DecryptReveal";
-import Tooltip from "@/components/bits/Tooltip";
-import HoldButton from "@/components/bits/HoldButton";
 
-export const ICON = { size: 14, weight: "duotone" } as const;
+export const ICON = { size: 14, strokeWidth: 1.75 } as const;
+
+/** A destructive row action that stays quiet at rest and turns red on hover or focus (the Spaces
+ * pattern); its confirm step says the rest. `!` because the .btn styles sit outside Tailwind's layers. */
+export const QUIET_DANGER = "btn btn-ghost btn-sm text-[var(--ink-dim)]! hover:text-[var(--critical)]! focus-visible:text-[var(--critical)]!";
+
+export type Tone = "good" | "warning" | "critical" | "accent" | "off";
+const TONE: Record<Tone, string> = {
+  good: "var(--good)",
+  warning: "var(--warning)",
+  critical: "var(--critical)",
+  accent: "var(--accent)",
+  off: "var(--ink-faint)",
+};
+
+/** A section's one-line status: a 6px dot and a few words ("Off", "On · expires 3 Feb"). */
+export function StatusLine({ tone, children }: { tone: Tone; children: React.ReactNode }) {
+  return (
+    <p className="flex items-center gap-2 text-[13px] min-w-0" style={{ color: "var(--ink)" }}>
+      <span className="dot" style={{ background: TONE[tone] }} aria-hidden />
+      <span role="status" className="min-w-0">
+        {children}
+      </span>
+    </p>
+  );
+}
 
 /* reveal: a freshly minted secret decrypts in once (the token, never a command). */
 export function CopyField({ value, reveal = false }: { value: string; reveal?: boolean }) {
@@ -42,12 +65,27 @@ export function expiryLabel(iso: string | null): { text: string; expired: boolea
   return { text: days >= 2 ? `in ${days}d` : "in <1d", expired: false };
 }
 
-/* Section header inside a tab panel: title, one line of purpose, optional action. */
-export function PanelHead({ title, children, action }: { title: string; children?: React.ReactNode; action?: React.ReactNode }) {
+/* Section header inside a tab panel: title, an optional one-line status, one line of purpose, optional action. */
+export function PanelHead({
+  title,
+  children,
+  action,
+  status,
+}: {
+  title: string;
+  children?: React.ReactNode;
+  action?: React.ReactNode;
+  status?: React.ReactNode;
+}) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div className="min-w-0 flex-1">
-        <h2 className="section-title">{title}</h2>
+    // phones: the action (tabs, a button) goes under the heading instead of squeezing it
+    <div className="flex flex-col items-start gap-3 sm:flex-row sm:flex-wrap sm:justify-between">
+      <div className="min-w-0 flex-1 self-stretch sm:self-auto">
+        {/* the status sits on the heading line ("HTTPS · Off"), never floating on its own row */}
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h2 className="section-title">{title}</h2>
+          {status}
+        </div>
         {children && (
           <p className="text-[15px] leading-relaxed mt-1.5 max-w-[68ch]" style={{ color: "var(--ink-dim)" }}>
             {children}
@@ -59,7 +97,7 @@ export function PanelHead({ title, children, action }: { title: string; children
   );
 }
 
-/* Inline revoke: one click arms it, the second confirms. Holding the icon for 650ms is the accelerator. */
+/* Inline revoke: quiet text that turns red on hover; one click arms it, the second confirms. */
 export function RevokeButton({ label, onRevoke, warn }: { label: string; onRevoke: () => Promise<void>; warn?: string }) {
   const [armed, setArmed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -74,32 +112,18 @@ export function RevokeButton({ label, onRevoke, warn }: { label: string; onRevok
   }
   if (!armed)
     return (
-      <Tooltip label={`Revoke ${label}. Hold to revoke now`}>
-      <HoldButton
-        holdMs={650}
-        onClick={() => setArmed(true)}
-        onConfirm={confirm}
-        disabled={busy}
-        aria-label="Revoke"
-        className="btn-sm"
-      >
-        <TrashIcon {...ICON} aria-hidden />
+      <button type="button" onClick={() => setArmed(true)} disabled={busy} aria-label="Revoke" title={`Revoke ${label}`} className={QUIET_DANGER}>
         Revoke
-      </HoldButton>
-      </Tooltip>
+      </button>
     );
   return (
     <span className="inline-flex items-center gap-1">
       {warn && <span className="text-[13px] mr-1" style={{ color: "var(--critical)" }}>{warn}</span>}
-      <button
-        onClick={confirm}
-        disabled={busy}
-        className="btn btn-danger-solid btn-sm"
-      >
+      <button type="button" onClick={confirm} disabled={busy} className="btn btn-danger-solid btn-sm">
         {busy ? "Revoking…" : "Revoke"}
       </button>
-      <button onClick={() => setArmed(false)} aria-label="Keep" className="btn btn-ghost btn-sm btn-icon">
-        <XIcon {...ICON} />
+      <button type="button" onClick={() => setArmed(false)} aria-label="Keep" className="btn btn-ghost btn-sm btn-icon">
+        <X {...ICON} />
       </button>
     </span>
   );

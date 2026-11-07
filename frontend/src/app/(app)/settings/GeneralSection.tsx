@@ -1,16 +1,16 @@
 "use client";
 
-import { CaretRightIcon, CheckIcon, PlugIcon } from "@phosphor-icons/react/ssr";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
 import { useState } from "react";
-import Link from "next/link";
+import { Check } from "lucide-react";
 import type { SettingsUpdate } from "@/lib/gen";
 import { useOpenAiModels, useUpdateSettings } from "@/lib/queries/settings";
 import type { AppSettings } from "@/lib/types";
-import { ICON, PanelHead } from "./shared";
+import { ICON, PanelHead, QUIET_DANGER } from "./shared";
 
-export function GeneralSection({ settings }: { settings: AppSettings }) {
+/* The AI provider: an admin concern (base URL and key), shown only in the Server group. */
+export function ModelSection({ settings }: { settings: AppSettings }) {
   const updateSettings = useUpdateSettings();
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [baseUrlInput, setBaseUrlInput] = useState(settings.openai_base_url);
@@ -24,7 +24,6 @@ export function GeneralSection({ settings }: { settings: AppSettings }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<Failure | null>(null);
-  const [syncError, setSyncError] = useState<Failure | null>(null);
 
   const urlInvalid = baseUrlInput.trim() !== "" && !/^https?:\/\/\S+$/.test(baseUrlInput.trim());
   const dirty =
@@ -65,58 +64,10 @@ export function GeneralSection({ settings }: { settings: AppSettings }) {
     }
   }
 
-  /* Saves at once: it is a single switch, not part of the OpenAI form below. */
-  async function setCheckConnectivity(on: boolean) {
-    setSyncError(null);
-    try {
-      await updateSettings.mutateAsync({ sync_check_connectivity: on });
-    } catch (e) {
-      setSyncError(failure(e, "Could not save the setting. Try again."));
-    }
-  }
-
   const row = "grid gap-1.5 md:grid-cols-[180px_minmax(0,1fr)] md:gap-6 px-5 py-4 items-start";
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="flex flex-col gap-3">
-        <PanelHead title="Connected sources" />
-        <Link href="/connectors" className="ledger group px-4 py-3 flex items-center gap-3 transition-colors hover:bg-[var(--surface-raised)]">
-          <PlugIcon {...ICON} style={{ color: "var(--ink-faint)" }} aria-hidden />
-          <div className="flex-1 min-w-0">
-            <div className="text-[15px] font-semibold">Connected sources</div>
-            <div className="label mt-0.5">Up Bank, PocketAI and more: sign-in details and connection status</div>
-          </div>
-          <span className="text-[12.5px] flex items-center gap-1" style={{ color: "var(--accent-text)" }}>
-            Manage
-            <CaretRightIcon {...ICON} aria-hidden />
-          </span>
-        </Link>
-      </div>
-
-      <div className="flex flex-col gap-3">
-        <PanelHead title="Syncing" />
-        <label htmlFor="check-connectivity" className="ledger px-5 py-4 flex items-start gap-3 cursor-pointer">
-          <input
-            id="check-connectivity"
-            type="checkbox"
-            className="mt-0.5"
-            style={{ accentColor: "var(--accent)" }}
-            checked={settings.sync_check_connectivity}
-            disabled={updateSettings.isPending}
-            onChange={(e) => setCheckConnectivity(e.target.checked)}
-          />
-          <span className="flex flex-col gap-0.5">
-            <span className="text-[13px] font-medium">Skip syncs while offline</span>
-            <span className="text-[12px]" style={{ color: "var(--ink-faint)" }}>
-              Checks for an internet connection before each scheduled sync. With no connection the sync is skipped quietly, with no
-              error shown, and picks up again by itself when you are back online. Sync now says so instead of failing.
-            </span>
-          </span>
-        </label>
-        {syncError && <ErrorLine error={syncError} />}
-      </div>
-
       <form
         className="flex flex-col gap-3"
         onSubmit={(e) => {
@@ -124,7 +75,7 @@ export function GeneralSection({ settings }: { settings: AppSettings }) {
           saveSettings();
         }}
       >
-        <PanelHead title="OpenAI (optional)">
+        <PanelHead title="AI provider (optional)">
           Not required: an agent connected over MCP (Claude, Codex and others) can recall and write memory using its own
           model. Adding one saves agent tokens, since Eunomia then does embeddings and answer synthesis itself and powers the
           in-app chat. Any OpenAI-compatible endpoint works, a local model server or proxy included.
@@ -174,7 +125,7 @@ export function GeneralSection({ settings }: { settings: AppSettings }) {
                 autoComplete="off"
               />
               {settings.openai_api_key_set && (
-                <button type="button" onClick={removeKey} disabled={saving} className="btn btn-sm shrink-0">
+                <button type="button" onClick={removeKey} disabled={saving} className={`${QUIET_DANGER} shrink-0`}>
                   Remove key
                 </button>
               )}
@@ -251,7 +202,7 @@ export function GeneralSection({ settings }: { settings: AppSettings }) {
               {saved ? "Saved." : dirty ? "Unsaved changes" : ""}
             </span>
             <button type="submit" disabled={saving || urlInvalid} className="btn btn-primary">
-              {saved && <CheckIcon {...ICON} />}
+              {saved && <Check {...ICON} />}
               {saving ? "Saving…" : saved ? "Saved" : "Save settings"}
             </button>
           </div>

@@ -45,12 +45,12 @@ impl World {
 
     /// A fresh org vault owned by `owner`, with `member` active and `pending` invited.
     async fn vault(&self) -> RecordId {
-        let v = common::sys(vaults::create_vault(&self.db, &self.owner.id, &format!("Team {}", uuid::Uuid::new_v4().simple()), "org")).await.unwrap();
+        let v = common::sys(vaults::create_vault(&self.db, &self.control, &self.owner.id, &format!("Team {}", uuid::Uuid::new_v4().simple()), "org")).await.unwrap();
         let v: RecordId = rid::parse(&v.id).unwrap();
         for (u, accept) in [(&self.member, true), (&self.pending, false)] {
             common::sys(vaults::invite_member(&self.db, &self.control, &self.owner.id, &v, &u.email, "member")).await.unwrap();
             if accept {
-                common::sys(vaults::accept_invitation(&self.db, &u.id, &v)).await.unwrap();
+                common::sys(vaults::accept_invitation(&self.db, &self.control, &u.id, &v)).await.unwrap();
             }
         }
         v
@@ -116,14 +116,14 @@ async fn vault_operations_matrix() {
                 "read memories" => allowed(entities::list_entities(&w.db, &u.id, None, Some(&v), None, 0).await),
                 "write memories" => allowed(entities::upsert_entity(&w.db, &u.id, "person", "Bob", None, Some(&v)).await),
                 "list members" => allowed(common::sys(vaults::list_members(&w.db, &w.control, &u.id, &v)).await),
-                "rename" => allowed(common::sys(vaults::rename_vault(&w.db, &u.id, &v, "Renamed")).await),
+                "rename" => allowed(common::sys(vaults::rename_vault(&w.db, &w.control, &u.id, &v, "Renamed")).await),
                 "invite" => allowed(common::sys(vaults::invite_member(&w.db, &w.control, &u.id, &v, &w.spare.email, "member")).await),
                 "remove member" => allowed(common::sys(vaults::remove_member(&w.db, &w.control, &u.id, &v, &w.pending.email)).await),
-                "delete" => allowed(common::sys(vaults::delete_vault(&w.db, &u.id, &v)).await),
-                "clone" => allowed(common::sys(vaults::clone_vault(&w.db, &u.id, &v, None, "org")).await),
+                "delete" => allowed(common::sys(vaults::delete_vault(&w.db, &w.control, &u.id, &v)).await),
+                "clone" => allowed(common::sys(vaults::clone_vault(&w.db, &w.control, &u.id, &v, None, "org")).await),
                 "merge" => {
                     let own = common::sys(vaults::default_vault_id(&w.db, &u.id)).await.unwrap();
-                    allowed(common::sys(vaults::merge_vaults(&w.db, &u.id, &v, &own, None, "org")).await)
+                    allowed(common::sys(vaults::merge_vaults(&w.db, &w.control, &u.id, &v, &own, None, "org")).await)
                 }
                 _ => unreachable!(),
             };
@@ -176,8 +176,8 @@ async fn leave_and_invitation_rules() {
     assert!(!allowed(common::sys(vaults::list_members(&w.db, &w.control, &w.member.id, &v)).await));
     // only the invitee can accept
     let v2 = w.vault().await;
-    assert!(common::sys(vaults::accept_invitation(&w.db, &w.outsider.id, &v2)).await.is_err());
-    assert!(common::sys(vaults::accept_invitation(&w.db, &w.pending.id, &v2)).await.is_ok());
+    assert!(common::sys(vaults::accept_invitation(&w.db, &w.control, &w.outsider.id, &v2)).await.is_err());
+    assert!(common::sys(vaults::accept_invitation(&w.db, &w.control, &w.pending.id, &v2)).await.is_ok());
     }))
     .await;
 }

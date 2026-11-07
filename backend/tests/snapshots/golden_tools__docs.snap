@@ -14,11 +14,11 @@ expression: stable
     },
     {
       "topic": "agents",
-      "title": "AI agents & MCP"
+      "title": "Connecting AI apps"
     },
     {
       "topic": "concepts",
-      "title": "Concepts"
+      "title": "How Eunomia works"
     },
     {
       "topic": "connectors",

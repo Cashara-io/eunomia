@@ -1,19 +1,20 @@
 "use client";
 
-import { ArrowClockwiseIcon, DownloadSimpleIcon, FileCodeIcon, FileTextIcon, FilesIcon, TrashIcon, UploadSimpleIcon, XIcon } from "@phosphor-icons/react/ssr";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Download, FileJson, Files, FileText, RotateCw, Trash2, Upload, X } from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
-import { EmptyState } from "@/components/Shapes";
+import EmptyState from "@/components/ui/EmptyState";
 import StatusLabel, { type StatusTone } from "@/components/ui/StatusLabel";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import CopyButton from "@/components/bits/CopyButton";
 import { downloadDocumentFile, uploadDocumentFile } from "@/lib/api";
 import type { DocumentOut } from "@/lib/gen";
+import { useMe } from "@/lib/queries/auth";
 import { useDeleteDocument, useDocument, useDocuments, useRefreshDocuments, useReindexDocument } from "@/lib/queries/documents";
 
-const ICON = { size: 18, weight: "duotone" } as const;
+const ICON = { size: 18, strokeWidth: 1.75 } as const;
 const ACCEPT = ".txt,.text,.md,.markdown,.json,.csv,.pdf,text/plain,text/markdown,application/json,text/csv,application/pdf";
 const EXTENSIONS = ["txt", "text", "log", "md", "markdown", "json", "csv", "pdf"];
 const TYPE_LABEL: Record<string, string> = {
@@ -99,10 +100,10 @@ function DropZone({ maxBytes, disabled, onFiles }: { maxBytes: number | null; di
   const [over, setOver] = useState(false);
   return (
     <div
-      className="flex flex-col items-center justify-center gap-3 px-4 py-8 text-center rounded-[12px]"
+      className="flex flex-col items-center justify-center gap-3 px-4 py-8 text-center rounded-[2px]"
       style={{
-        border: over ? "1px solid var(--ink)" : "1px dashed var(--border-field)",
-        background: over ? "var(--surface-raised)" : "var(--surface)",
+        border: "1.5px solid var(--bauhaus-app-blue)",
+        background: over ? "var(--bauhaus-app-blue-soft)" : "var(--surface)",
         transition: "background-color var(--dur-hover) ease, border-color var(--dur-hover) ease",
       }}
       onDragOver={(e) => {
@@ -117,7 +118,7 @@ function DropZone({ maxBytes, disabled, onFiles }: { maxBytes: number | null; di
         if (!disabled && e.dataTransfer.files.length) onFiles(e.dataTransfer.files);
       }}
     >
-      <UploadSimpleIcon weight="duotone" size={24} aria-hidden style={{ color: "var(--ink)" }} />
+      <Upload size={24} strokeWidth={1.75} aria-hidden style={{ color: "var(--bauhaus-app-blue)" }} />
       <p className="text-[16px]" style={{ color: "var(--ink)" }}>
         Drop files here, or choose files
       </p>
@@ -152,11 +153,11 @@ function UploadRows({ rows, onDismiss }: { rows: UploadRow[]; onDismiss: (key: s
       {rows.map((r) => (
         <div key={r.key} className="flex flex-col gap-2 px-4 py-3">
           <div className="flex items-center gap-3">
-            <FileTextIcon {...ICON} aria-hidden style={{ color: "var(--ink-faint)" }} />
+            <FileText {...ICON} aria-hidden style={{ color: "var(--ink-faint)" }} />
             <span className="flex-1 min-w-0 truncate text-[13px]">{r.name}</span>
             {r.error ? (
               <button type="button" onClick={() => onDismiss(r.key)} aria-label={`Dismiss ${r.name}`} className="btn btn-ghost btn-icon btn-sm">
-                <XIcon {...ICON} />
+                <X {...ICON} />
               </button>
             ) : (
               <span className="font-mono text-[12px]" style={{ color: "var(--ink-dim)" }}>
@@ -176,7 +177,7 @@ function UploadRows({ rows, onDismiss }: { rows: UploadRow[]; onDismiss: (key: s
               className="h-1.5 rounded-full overflow-hidden"
               style={{ background: "var(--surface-raised)" }}
             >
-              <div className="h-full" style={{ width: `${Math.round(r.progress * 100)}%`, background: "var(--ink)", transition: "width 120ms linear" }} />
+              <div className="h-full" style={{ width: `${Math.round(r.progress * 100)}%`, background: "var(--bauhaus-app-blue)", transition: "width 120ms linear" }} />
             </div>
           )}
         </div>
@@ -214,7 +215,7 @@ function DeleteDocument({ doc, onDeleted }: { doc: DocumentOut; onDeleted: () =>
         }}
         className="btn btn-danger btn-sm"
       >
-        <TrashIcon {...ICON} aria-hidden />
+        <Trash2 {...ICON} aria-hidden />
         Delete
       </button>
       <ConfirmDialog
@@ -297,7 +298,7 @@ function DocumentPanel({ id, chunk, onClose }: { id: string; chunk: string | nul
     <section className="task-panel p-5 flex flex-col gap-4 min-w-0" aria-labelledby="document-title" data-testid="document-panel">
       <div className="flex items-start gap-2">
         <div className="flex-1 min-w-0">
-          <h2 id="document-title" className="text-[20px] font-medium break-words tracking-[-0.025em]">
+          <h2 id="document-title" className="text-[20px] font-semibold tracking-[-0.015em] break-words">
             {doc.filename}
           </h2>
           <p className="label mt-1">
@@ -305,7 +306,7 @@ function DocumentPanel({ id, chunk, onClose }: { id: string; chunk: string | nul
           </p>
         </div>
         <button type="button" onClick={onClose} aria-label="Close document" className="btn btn-ghost btn-icon btn-sm">
-          <XIcon {...ICON} />
+          <X {...ICON} />
         </button>
       </div>
 
@@ -334,15 +335,15 @@ function DocumentPanel({ id, chunk, onClose }: { id: string; chunk: string | nul
 
       <div className="flex flex-wrap gap-2">
         <button type="button" onClick={() => save("download")} disabled={busy !== null} aria-busy={busy === "download"} className="btn btn-sm">
-          <DownloadSimpleIcon {...ICON} aria-hidden />
+          <Download {...ICON} aria-hidden />
           {busy === "download" ? "Downloading…" : "Download"}
         </button>
         <button type="button" onClick={() => save("export")} disabled={busy !== null || doc.status !== "ready"} aria-busy={busy === "export"} className="btn btn-sm">
-          <FileCodeIcon {...ICON} aria-hidden />
+          <FileJson {...ICON} aria-hidden />
           {busy === "export" ? "Preparing…" : "Export"}
         </button>
         <button type="button" onClick={runReindex} disabled={reindex.isPending || doc.status === "indexing"} className="btn btn-sm">
-          <ArrowClockwiseIcon {...ICON} aria-hidden />
+          <RotateCw {...ICON} aria-hidden />
           Re-index
         </button>
         <span className="flex-1" />
@@ -415,6 +416,7 @@ function Documents() {
   const docs = list?.results ?? (listQuery.isError ? [] : null);
   const maxBytes = list?.max_bytes ?? null;
   const storageOff = list !== undefined && !list.storage;
+  const isAdmin = useMe().data?.is_admin ?? false;
   const select = (id: string | null) => router.replace(id ? `/documents?id=${encodeURIComponent(id)}` : "/documents", { scroll: false });
   const uploads = useUploads(maxBytes, (id) => select(id));
   const input = useRef<HTMLInputElement>(null);
@@ -422,12 +424,12 @@ function Documents() {
   return (
     <div className="max-w-6xl flex flex-col gap-8">
       <PageHeader
-        icon={FilesIcon} tone="company"
+        icon={Files}
         title="Documents"
-        intro="Upload notes, specs and exports. Your AI apps can find each passage and trace it back to the file. Only you can read your documents."
+        intro="Notes, specs and exports your AI apps can search. Only you can read them."
         actions={
-          <button type="button" onClick={() => input.current?.click()} disabled={storageOff} className="btn btn-primary">
-            <UploadSimpleIcon {...ICON} aria-hidden />
+          !storageOff && <button type="button" onClick={() => input.current?.click()} disabled={storageOff} className="btn btn-primary">
+            <Upload {...ICON} aria-hidden />
             Upload
           </button>
         }
@@ -449,16 +451,12 @@ function Documents() {
       </>
 
       {listQuery.isError && <ErrorLine error={failure(listQuery.error, "Could not load your documents.", " Reload the page to try again.")} />}
-      {storageOff && (
-        <div className="ledger px-4 py-3 text-[13px]" style={{ color: "var(--ink-dim)" }}>
-          Document storage is turned off on this server, so files can&apos;t be uploaded yet. Ask the person who installed Eunomia to turn it on with <code className="font-mono text-[12px]">EUNOMIA_DOCUMENTS_BACKEND</code>{" "}
-          (see Documents in Help).
-        </div>
-      )}
-
+      {storageOff ? (
+        <StorageOff isAdmin={isAdmin} />
+      ) : (
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px] items-start">
         <div className="flex flex-col gap-6 min-w-0">
-          {!storageOff && <DropZone maxBytes={maxBytes} disabled={list === undefined} onFiles={uploads.add} />}
+          <DropZone maxBytes={maxBytes} disabled={list === undefined} onFiles={uploads.add} />
           <UploadRows rows={uploads.rows} onDismiss={uploads.dismiss} />
 
           <section className="flex flex-col gap-2.5" aria-labelledby="documents-title">
@@ -472,21 +470,6 @@ function Documents() {
                 </span>
               )}
             </div>
-            {docs?.length === 0 ? (
-              <EmptyState
-                variant="documents"
-                title="No documents yet"
-                action={
-                  !storageOff && (
-                    <button type="button" onClick={() => input.current?.click()} className="btn btn-sm">
-                      Choose a file
-                    </button>
-                  )
-                }
-              >
-                Drop a file above, or ask your AI app to save one for you. Each passage becomes searchable and links back to the file.
-              </EmptyState>
-            ) : (
             <div className="ledger overflow-x-auto">
               <table className="data-table">
                 <thead>
@@ -511,10 +494,17 @@ function Documents() {
                         <td className="hidden sm:table-cell"><span className="skeleton block h-4 w-8 ml-auto" /></td>
                       </tr>
                     ))}
+                  {docs?.length === 0 && (
+                    <tr>
+                      <td colSpan={6} style={{ color: "var(--ink-dim)", height: 56 }}>
+                        No documents yet. Drop a file above, or ask your AI app to save one for you.
+                      </td>
+                    </tr>
+                  )}
                   {docs?.map((d) => {
                     const on = d.id === selected;
                     return (
-                      <tr key={d.id} style={on ? { background: "var(--accent-soft)" } : undefined} data-testid="document-row">
+                      <tr key={d.id} style={on ? { background: "var(--accent-soft)", boxShadow: "inset 3px 0 0 var(--bauhaus-app-blue)" } : undefined} data-testid="document-row">
                         <td className="max-w-0 w-full">
                           <button
                             type="button"
@@ -523,7 +513,7 @@ function Documents() {
                             className="flex items-center gap-2 min-h-11 min-w-0 max-w-full text-left font-medium hover:underline underline-offset-2"
                             style={{ color: "var(--accent-text)" }}
                           >
-                            <FileTextIcon {...ICON} aria-hidden className="shrink-0" />
+                            <FileText {...ICON} aria-hidden className="shrink-0" />
                             <span className="truncate">{d.filename}</span>
                           </button>
                         </td>
@@ -548,7 +538,6 @@ function Documents() {
                 </tbody>
               </table>
             </div>
-            )}
           </section>
         </div>
 
@@ -562,6 +551,33 @@ function Documents() {
           )}
         </aside>
       </div>
+      )}
+    </div>
+  );
+}
+
+/* The setting docker-compose.yml defaults to: files kept in the database's own data volume. */
+const STORAGE_SETTING = "EUNOMIA_DOCUMENTS_BACKEND=file:/data/documents";
+
+/* Storage is off: one calm empty state instead of a disabled upload, an empty table and an idle side panel. */
+function StorageOff({ isAdmin }: { isAdmin: boolean }) {
+  return (
+    <div data-testid="documents-storage-off">
+      <EmptyState
+        title="Document storage isn’t turned on."
+        action={
+          isAdmin && (
+            <span className="field inline-flex items-center gap-2 min-h-10 pl-3 pr-1 max-w-full">
+              <code className="font-mono text-[13px] truncate min-w-0" style={{ color: "var(--ink)" }}>
+                {STORAGE_SETTING}
+              </code>
+              <CopyButton value={STORAGE_SETTING} label="Copy setting" size="sm" className="btn-ghost shrink-0" />
+            </span>
+          )
+        }
+      >
+        {isAdmin ? "To let people upload files, add this line to the server’s .env file and restart Eunomia:" : "Ask your admin."}
+      </EmptyState>
     </div>
   );
 }

@@ -1,11 +1,11 @@
 "use client";
 
-import { CheckCircleIcon } from "@phosphor-icons/react/ssr";
 import { useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
+import { CircleCheck } from "lucide-react";
 import CopyButton from "@/components/bits/CopyButton";
 import PageHeader from "@/components/ui/PageHeader";
-import { AppMark, appById, appForConnection, connectionFor, type AiApp, type AppId, type Connection } from "./apps";
+import { appById, appForConnection, connectionFor, type AiApp, type AppId, type Connection } from "./apps";
 import { useConnections } from "./useConnections";
 
 export const EXAMPLE_QUESTION = "Use Eunomia to look for memories about me.";
@@ -25,7 +25,7 @@ export function Trail({ here }: { here: string }) {
 export function GuideStep({ n, title, children }: { n?: number; title: React.ReactNode; children: React.ReactNode }) {
   return (
     <li className="guide-step flex flex-col gap-3 py-6">
-      <h3 className="text-[17px] font-medium leading-snug tracking-[-0.015em]">
+      <h3 className="text-[17px] font-semibold leading-snug">
         {n !== undefined && <span>{n}. </span>}
         {title}
       </h3>
@@ -42,16 +42,18 @@ export const Note = ({ children }: { children: React.ReactNode }) => (
   </p>
 );
 
-export const Kbd = ({ children }: { children: React.ReactNode }) => <code className="font-mono text-[0.92em] px-1 rounded-[4px]" style={{ background: "var(--surface-raised)" }}>{children}</code>;
+export const Kbd = ({ children }: { children: React.ReactNode }) => <code className="font-mono text-[0.92em] px-1 rounded-[3px]" style={{ background: "var(--bauhaus-app-soft)" }}>{children}</code>;
 
-/** A command to paste into a terminal: a raised code block, then one primary copy button. */
+/** A command to paste into a terminal: ink block, then one primary copy button.
+ * Lines never wrap (a flag split across lines is easy to mistype); long ones scroll sideways. */
 export function CommandBlock({ value, label = "Command" }: { value: string; label?: string }) {
   return (
     <div className="flex flex-col gap-3 items-start">
       <pre
         aria-label={label}
-        className="w-full font-mono text-[13px] leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere] px-4 py-3.5 rounded-[10px]"
-        style={{ background: "var(--surface-raised)", color: "var(--ink)", border: "1px solid var(--border)" }}
+        tabIndex={0}
+        className="w-full max-w-full font-mono text-[13px] leading-relaxed whitespace-pre overflow-x-auto px-4 py-3.5 rounded-[2px]"
+        style={{ background: "var(--bauhaus-app-ink)", color: "var(--bauhaus-app-cream)" }}
       >
         {value}
       </pre>
@@ -187,7 +189,7 @@ export function Approved({ connection, onShowSteps }: { connection: Connection; 
         : `Start a new ${app.name} session and paste the question.`;
   return (
     <div className="flex flex-col gap-8 max-w-[960px]">
-      <PageHeader icon={CheckCircleIcon} tone="project" title="Connection approved" intro={<Trail here="Ready to use" />} />
+      <PageHeader icon={CircleCheck} title="Connection approved" intro={<Trail here="Ready to use" />} />
       <section className="task-panel p-6 sm:p-8 flex flex-col gap-5" aria-labelledby="approved-title">
         <h2 id="approved-title" className="connect-title">
           Your AI app is connected
@@ -203,7 +205,7 @@ export function Approved({ connection, onShowSteps }: { connection: Connection; 
             Your connection is ready. If no memories have been saved yet, a search can return no results. That is normal.
           </p>
         </div>
-        <div className="flex flex-col gap-3 items-start px-5 py-4" style={{ border: "1px solid var(--border-strong)", borderRadius: 12 }}>
+        <div className="flex flex-col gap-3 items-start px-5 py-4" style={{ border: "1px solid var(--bauhaus-app-blue)", borderRadius: 2 }}>
           <p className="text-[16px]">{EXAMPLE_QUESTION}</p>
           <CopyButton value={EXAMPLE_QUESTION} label="Copy example question" size="sm" className="btn-primary" />
         </div>
@@ -234,23 +236,16 @@ export function Approved({ connection, onShowSteps }: { connection: Connection; 
   );
 }
 
-/** Frame for one app's guide: header with the app's mark, then the framed steps. */
-export function GuideFrame({ id, intro, children }: { id: AppId; intro: React.ReactNode; children: React.ReactNode }) {
+/** Frame for one app's guide: the page header, then the framed steps. */
+export function GuideFrame({ id, intro, children }: { id: AppId; intro?: React.ReactNode; children: React.ReactNode }) {
   const app = appById(id)!;
   const title = id === "other" ? "Other AI apps" : `Connect ${app.name}`;
   return (
     <div className="flex flex-col gap-8 max-w-[960px]">
-      <PageHeader mark={<AppMark id={id} size={30} />} title={title} intro={<Trail here={id === "other" ? "More options" : app.name} />} />
-      <section className="task-panel p-6 sm:p-8 flex flex-col" aria-labelledby="guide-title">
-        <div className="flex flex-col gap-4 pb-6">
-          <h2 id="guide-title" className="connect-title">
-            {id === "other" ? "Connect another AI app" : `Connect ${app.name}`}
-          </h2>
-          <p className="text-[16px] leading-relaxed">{intro}</p>
-          <Link href="/" className="btn self-start">
-            Choose a different app
-          </Link>
-        </div>
+      <PageHeader title={title} intro={<Trail here={id === "other" ? "More options" : app.name} />} />
+      <section className="task-panel p-6 sm:p-8 flex flex-col" aria-label={id === "other" ? "Steps for another AI app" : `Steps for ${app.name}`}>
+        {/* The breadcrumb above is the way back to the other apps. */}
+        {intro && <p className="pb-6 text-[14px] leading-relaxed">{intro}</p>}
         {children}
       </section>
     </div>

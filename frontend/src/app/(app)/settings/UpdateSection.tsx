@@ -1,13 +1,32 @@
 "use client";
 
-import { ArrowsClockwiseIcon, DownloadSimpleIcon } from "@phosphor-icons/react/ssr";
+import { APP_VERSION, UPDATER_OFF, versionLabel } from "@/lib/version";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { Check, Download, RefreshCw } from "lucide-react";
 import { updateStatusQuery, useCheckForUpdate, useRequestUpdate } from "@/lib/queries/settings";
 import type { UpdateStatus } from "@/lib/types";
 import SyncMark from "@/components/bits/SyncMark";
-import { ICON, CopyField, relativeTime, PanelHead } from "./shared";
+import { ICON, CopyField, relativeTime, PanelHead, StatusLine, type Tone } from "./shared";
+
+// The version this frontend was built as; the updater's report, when there is one, wins.
+const BUILT_VERSION = versionLabel(APP_VERSION);
+
+/* "Running 2.0.9 · latest 2.1.0": always the running version, and the latest when known. */
+function Versions({ running, latest }: { running: string | null; latest?: string | null }) {
+  return (
+    <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+      Running <span className="font-mono" style={{ color: "var(--ink)" }}>{running ? versionLabel(running) : BUILT_VERSION}</span>
+      {latest && latest !== running && (
+        <>
+          {" · latest "}
+          <span className="font-mono" style={{ color: "var(--ink)" }}>{latest}</span>
+        </>
+      )}
+    </p>
+  );
+}
 
 const INSTALL_CMD = "curl -fsSL https://www.buildpaperless.com.au/eunomia/install.sh | bash";
 
@@ -100,11 +119,8 @@ export function UpdateSection() {
   if (!status) {
     return (
       <div className="flex flex-col gap-5" aria-hidden>
-        <PanelHead title="Updates" />
-        <div className="ledger p-5 flex flex-col gap-3">
-          <span className="skeleton h-6 w-32" />
-          <span className="skeleton h-4 w-56" />
-        </div>
+        <PanelHead title="Updates" status={<span className="skeleton block h-4 w-24" />} />
+        <Versions running={BUILT_VERSION} />
       </div>
     );
   }
@@ -112,16 +128,12 @@ export function UpdateSection() {
   if (!status.configured) {
     return (
       <div className="flex flex-col gap-5">
-        <PanelHead title="Updates" />
-        <div className="ledger p-5 flex flex-col gap-3">
-          <div className="flex items-center gap-2 text-[13px] font-medium">
-            <span className="dot" style={{ background: "var(--warning)" }} aria-hidden />
-            Waiting for the updater
-          </div>
-          <p className="text-[13px] max-w-[62ch]" style={{ color: "var(--ink-dim)" }}>
-            It ships with Eunomia as the <code className="font-mono">updater</code> service and reports in within a minute of
-            starting. If this message stays, this install predates it: run the installer once more from the folder that
-            contains your install. It updates in place and keeps your data and settings.
+        <PanelHead title="Updates" status={<StatusLine tone="warning">{UPDATER_OFF}</StatusLine>} />
+        <Versions running={BUILT_VERSION} />
+        <div className="flex flex-col gap-3 max-w-[62ch]">
+          <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+            The updater ships with Eunomia and reports in within a minute of starting. If this stays, your install predates it: run
+            the installer once more from your install folder. It updates in place and keeps your data and settings.
           </p>
           <CopyField value={INSTALL_CMD} />
         </div>
@@ -140,17 +152,20 @@ export function UpdateSection() {
           ? "Restarting Eunomia…"
           : status.update_available
             ? `${status.latest_version} is available`
-            : "You're on the latest release";
-  const tone = busy || done ? "var(--accent)" : status.update_available ? "var(--warning)" : "var(--good)";
-  const progress = done ? 1 : phase === "restarting" ? 0.8 : phase === "applying" ? 0.5 : 0.15;
+            : "Up to date";
+  const tone: Tone = busy || done ? "accent" : status.update_available ? "warning" : "good";
+  // The real step, from what the updater reports: it writes "Waiting for Eunomia to start" once the new images are up.
+  const restartingNow = phase === "restarting" || (phase === "applying" && /waiting for eunomia to start/i.test(status.progress ?? ""));
+  const step = done ? 3 : restartingNow ? 2 : phase === "applying" ? 1 : 0;
 
   return (
     <div className="flex flex-col gap-5">
       <PanelHead
         title="Updates"
+        status={<StatusLine tone={tone}>{line}</StatusLine>}
         action={
           <button onClick={checkNow} disabled={checking || busy} className="btn btn-sm shrink-0" aria-label="Check for updates">
-            {checking || checkResult ? <SyncMark status={checking ? "running" : checkResult!} /> : <ArrowsClockwiseIcon {...ICON} />}
+            {checking || checkResult ? <SyncMark status={checking ? "running" : checkResult!} /> : <RefreshCw {...ICON} />}
             {checking ? "Checking…" : "Check now"}
           </button>
         }
@@ -158,50 +173,24 @@ export function UpdateSection() {
         Checked {relativeTime(status.checked_at)}. Updating takes about a minute and your data stays put.
       </PanelHead>
 
-      <div className="ledger overflow-hidden">
-        <div className="p-5 flex flex-wrap items-center justify-between gap-4">
-          <div className="min-w-0 flex flex-col gap-1">
-            <span className="label">Running version</span>
-            <span className="text-[20px] font-mono font-medium tracking-[-0.01em]">{status.current_version}</span>
-            <span className="flex items-center gap-2 text-[12.5px]" style={{ color: "var(--ink-dim)" }}>
-              <span className="dot" style={{ background: tone }} aria-hidden />
-              <span role="status">{line}</span>
-            </span>
-          </div>
-          {status.update_available && !busy && !done && (
-            <div className="flex items-center gap-2 shrink-0">
-              <a
-                href={notes}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-ghost btn-sm"
-                style={{ color: "var(--accent-text)" }}
-              >
-                What&apos;s new
-              </a>
-              <button onClick={requestUpdate} className="btn btn-primary">
-                <DownloadSimpleIcon {...ICON} />
-                Update now
-              </button>
-            </div>
-          )}
-        </div>
-        {(busy || done) && (
-          <div className="h-[3px]" style={{ background: "var(--surface-raised)" }} aria-hidden>
-            <div
-              className="h-full origin-left"
-              style={{
-                background: "var(--accent)",
-                transform: `scaleX(${progress})`,
-                transition: "transform 700ms var(--ease-out)",
-              }}
-            />
+      <div className="flex flex-col gap-3">
+        <Versions running={status.current_version || BUILT_VERSION} latest={status.latest_version} />
+        {status.update_available && !busy && !done && (
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={requestUpdate} className="btn btn-primary">
+              <Download {...ICON} />
+              Update now
+            </button>
+            <a href={notes} target="_blank" rel="noopener noreferrer" className="btn btn-ghost btn-sm" style={{ color: "var(--accent-text)" }}>
+              What&apos;s new
+            </a>
           </div>
         )}
+        {(busy || done) && <UpdateSteps current={step} detail={phase === "applying" ? (status.progress ?? null) : null} />}
       </div>
 
       {stale && !busy && (
-        <p className="text-[12.5px]" style={{ color: "var(--warning)" }}>
+        <p className="text-[13px]" style={{ color: "var(--warning)" }}>
           The updater hasn&apos;t reported for a while. Check that the <code className="font-mono">updater</code> container is
           running (<code className="font-mono">docker compose ps</code>).
         </p>
@@ -209,5 +198,40 @@ export function UpdateSection() {
       {status.error && !busy && <ErrorLine>Last update attempt failed: {status.error}. Check the updater logs, then retry.</ErrorLine>}
       {error && <ErrorLine error={error} />}
     </div>
+  );
+}
+
+const STEPS = ["Requested", "Downloading the new release", "Restarting Eunomia", "Reloading this page"] as const;
+
+/* Where the update is, step by step. Only the current step is "in progress"; earlier ones are done. */
+function UpdateSteps({ current, detail }: { current: number; detail: string | null }) {
+  return (
+    <ol className="flex flex-col gap-2" aria-label="Update progress">
+      {STEPS.map((label, i) => {
+        const state = i < current ? "done" : i === current ? "now" : "later";
+        return (
+          <li key={label} className="flex items-start gap-2.5 text-[13px]" aria-current={state === "now" ? "step" : undefined}>
+            <span className="mt-[3px] shrink-0 w-3.5 h-3.5 flex items-center justify-center" aria-hidden>
+              {state === "done" ? (
+                <Check size={14} strokeWidth={2} style={{ color: "var(--good)" }} />
+              ) : (
+                <span className="dot" style={{ background: state === "now" ? "var(--accent)" : "var(--border-strong)" }} />
+              )}
+            </span>
+            <span className="flex flex-col gap-0.5 min-w-0">
+              <span style={{ color: state === "later" ? "var(--ink-faint)" : "var(--ink)", fontWeight: state === "now" ? 600 : 400 }}>
+                {label}
+                <span className="sr-only">{state === "done" ? " (done)" : state === "now" ? " (in progress)" : ""}</span>
+              </span>
+              {state === "now" && detail && (
+                <span className="text-[12px] break-words" style={{ color: "var(--ink-dim)" }}>
+                  {detail}
+                </span>
+              )}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }

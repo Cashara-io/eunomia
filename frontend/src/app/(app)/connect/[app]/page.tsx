@@ -3,6 +3,7 @@
 import { use, useState } from "react";
 import Link from "next/link";
 import CopyButton from "@/components/bits/CopyButton";
+import { useMe } from "@/lib/queries/auth";
 import ConnectAgents from "@/components/ConnectAgents";
 import { appById, connectionFor, type AiApp, type Connection } from "@/components/connect/apps";
 import { useConnections } from "@/components/connect/useConnections";
@@ -24,33 +25,70 @@ import {
 const claudeCommand = (url: string) => `claude mcp add --transport http --scope user eunomia ${url}`;
 const codexCommand = (url: string) => `codex mcp add eunomia --url ${url}\ncodex mcp login eunomia`;
 
-function LocalNote({ url, cloud }: { url: string; cloud: boolean }) {
+/** ChatGPT connects from OpenAI's servers, so it needs a public https:// address. */
+function reachableFromInternet(url: string): boolean {
+  if (!url) return true; // not known yet (first render): don't flash the warning
+  return url.startsWith("https://") && !isPrivateHost(new URL(url).hostname);
+}
+
+function LocalNote({ url }: { url: string }) {
+  const isAdmin = useMe().data?.is_admin ?? false;
   if (!url) return null;
   const host = new URL(url).hostname;
-  const https = url.startsWith("https://");
-  if (cloud && (!https || isPrivateHost(host)))
-    return (
-      <div role="note" className="soft-panel px-5 py-4 text-[14px] leading-relaxed mb-2">
-        <strong>ChatGPT cannot reach this address yet.</strong> ChatGPT connects from OpenAI&apos;s servers, so Eunomia needs a public{" "}
-        <Kbd>https://</Kbd> address, not <Kbd>{url.replace(/\/mcp$/, "")}</Kbd>. Set one up under{" "}
-        <Link href="/settings?tab=https" className="underline" style={{ color: "var(--accent-text)" }}>
-          Settings, HTTPS
-        </Link>{" "}
-        (or ask the person who installed Eunomia), then open this page from that address.
+  if (!isPrivateHost(host)) return null;
+  return (
+    <Note>
+      This address only works for apps on this {host === "localhost" || host.startsWith("127.") ? "computer" : "network"}.{" "}
+      {isAdmin ? (
+        <>
+          To connect an app on another computer, turn on{" "}
+          <Link href="/settings?tab=https" className="underline" style={{ color: "var(--accent-text)" }}>
+            HTTPS in settings
+          </Link>
+          .
+        </>
+      ) : (
+        "To connect an app on another computer, ask your Eunomia admin for a public address."
+      )}
+    </Note>
+  );
+}
+
+/** ChatGPT cannot reach this server: say only that, with a message to pass on. */
+function NotReachable({ url }: { url: string }) {
+  const isAdmin = useMe().data?.is_admin ?? false;
+  const address = url.replace(/\/mcp$/, "");
+  const message =
+    `Hi, I'd like to connect ChatGPT to our Eunomia server, but ChatGPT can't reach it yet. ` +
+    `ChatGPT connects from OpenAI's servers, so Eunomia needs a public https:// address (it is ${address} right now). ` +
+    `An admin can turn on HTTPS in Eunomia's settings, or put the server behind a public https:// address another way. Thanks!`;
+  return (
+    <section className="flex flex-col gap-4 py-2" aria-labelledby="unreachable-title">
+      <h2 id="unreachable-title" className="text-[20px] font-semibold leading-snug">
+        Your Eunomia admin needs to make this server reachable from the internet first
+      </h2>
+      <p className="text-[15px] leading-relaxed">
+        ChatGPT connects from OpenAI&apos;s servers, so it can&apos;t reach <Kbd>{address}</Kbd>. Once the server has a public <Kbd>https://</Kbd> address,
+        open this page from that address and the steps appear here.
+      </p>
+      <div className="flex flex-col gap-2">
+        <span className="text-[14px] font-semibold">Message for your admin</span>
+        <p aria-label="Message for your admin" className="soft-panel px-4 py-3 text-[14px] leading-relaxed whitespace-pre-wrap">
+          {message}
+        </p>
+        <CopyButton value={message} label="Copy message" size="sm" className="btn-primary self-start" />
       </div>
-    );
-  if (!cloud && isPrivateHost(host))
-    return (
-      <Note>
-        This address only works for apps on this {host === "localhost" || host.startsWith("127.") ? "computer" : "network"}. To connect an app on another
-        computer, give Eunomia a public address under{" "}
-        <Link href="/settings?tab=https" className="underline" style={{ color: "var(--accent-text)" }}>
-          Settings, HTTPS
-        </Link>
-        .
-      </Note>
-    );
-  return null;
+      {isAdmin && (
+        <Note>
+          As an admin, you can turn on{" "}
+          <Link href="/settings?tab=https" className="underline" style={{ color: "var(--accent-text)" }}>
+            HTTPS in settings
+          </Link>
+          .
+        </Note>
+      )}
+    </section>
+  );
 }
 
 /** For people who prefer a pasted key over signing in, or whose app can't sign in. */
@@ -58,7 +96,7 @@ function TokenFallback({ initial }: { initial: "claude" | "codex" | "other" }) {
   return (
     <li className="guide-step py-6">
     <details>
-      <summary className="cursor-pointer text-[15px] font-semibold min-h-11 flex items-center">Advanced: connect with an API token instead</summary>
+      <summary className="cursor-pointer text-[15px] font-semibold min-h-11 flex items-center">Advanced: use an API token</summary>
       <div className="pt-3 flex flex-col gap-3">
         <Note>Use this only if your app cannot open the Eunomia sign-in page. The token is shown once; you can revoke it any time under Settings, API tokens.</Note>
         <ConnectAgents initialClient={initial} />
@@ -70,11 +108,16 @@ function TokenFallback({ initial }: { initial: "claude" | "codex" | "other" }) {
 
 function ChatGptGuide({ app, url, onConfirmed }: { app: AiApp; url: string; onConfirmed: (c: Connection) => void }) {
   return (
-    <GuideFrame id="chatgpt" intro="Use ChatGPT on the web for setup. Keep this page open beside it. Your Eunomia address is ready to copy below.">
-      <LocalNote url={url} cloud />
+    <GuideFrame
+      id="chatgpt"
+      intro={reachableFromInternet(url) ? "Use ChatGPT on the web for setup. Keep this page open beside it. Your Eunomia address is ready to copy below." : null}
+    >
+      {!reachableFromInternet(url) ? (
+        <NotReachable url={url} />
+      ) : (
       <ol className="flex flex-col" style={{ borderTop: "1px solid var(--border)" }}>
         <GuideStep n={1} title="Open Plugins in ChatGPT">
-          <p>Open the link below and sign in to ChatGPT. Choose the plus (+) button, then Add custom MCP server.</p>
+          <p>Open the link below and sign in to ChatGPT. Choose the plus (+) button, then the option to add your own server (ChatGPT calls it Add custom MCP server).</p>
           <a href="https://chatgpt.com/plugins" target="_blank" rel="noreferrer" className="btn btn-primary self-start">
             Open ChatGPT Plugins
           </a>
@@ -86,7 +129,7 @@ function ChatGptGuide({ app, url, onConfirmed }: { app: AiApp; url: string; onCo
             <dt style={{ color: "var(--ink-dim)" }}>Server URL</dt>
             <dd className="font-mono [overflow-wrap:anywhere]">{url}</dd>
             <dt style={{ color: "var(--ink-dim)" }}>Authentication</dt>
-            <dd>OAuth (sign in with Eunomia)</dd>
+            <dd>Sign in with Eunomia (ChatGPT may call this OAuth)</dd>
           </dl>
           <CopyButton value={url} label="Copy server URL" size="sm" className="self-start" />
           <Note>Review the warning, select I understand and want to continue, then choose Create as a plugin. There is nothing else to paste.</Note>
@@ -104,7 +147,7 @@ function ChatGptGuide({ app, url, onConfirmed }: { app: AiApp; url: string; onCo
           <CheckConnection app={app} onConfirmed={onConfirmed} />
           <aside className="soft-panel px-5 py-4 flex flex-col gap-2 mt-2" aria-labelledby="no-custom">
             <h4 id="no-custom" className="text-[15px] font-semibold">
-              Can&apos;t see &ldquo;Add custom MCP server&rdquo;?
+              Can&apos;t see the option to add your own server?
             </h4>
             <Note>
               Your workspace may not allow custom connections. Business, Enterprise and Edu plans can use them fully; Pro can read memories but not save new
@@ -116,6 +159,7 @@ function ChatGptGuide({ app, url, onConfirmed }: { app: AiApp; url: string; onCo
           </aside>
         </GuideStep>
       </ol>
+      )}
     </GuideFrame>
   );
 }
@@ -134,7 +178,7 @@ function TerminalGuide({ app, url, onConfirmed }: { app: AiApp; url: string; onC
             {claude ? " It adds Eunomia to Claude Code for all your projects." : " The second line starts sign-in."}
           </Note>
           <CommandBlock value={claude ? claudeCommand(url) : codexCommand(url)} />
-          <LocalNote url={url} cloud={false} />
+          <LocalNote url={url} />
         </GuideStep>
         <GuideStep n={3} title="Sign in and approve access">
           {claude ? (
@@ -178,13 +222,13 @@ function OtherGuide({ app, url, onConfirmed }: { app: AiApp; url: string; onConf
     >
       <ol className="flex flex-col" style={{ borderTop: "1px solid var(--border)" }}>
         <GuideStep n={1} title="Find the connection option in your app">
-          <p>Look for Add connector, Add MCP server, or custom connection in the app&apos;s settings. The wording depends on the app.</p>
+          <p>Look for an option to add a connector, server or custom connection in the app&apos;s settings (often called Add MCP server). The wording depends on the app.</p>
         </GuideStep>
         <GuideStep n={2} title="Enter Eunomia’s address and sign in">
           <p>
-            Use <Kbd>{url}</Kbd>. If asked for Authentication, choose OAuth. Use your Eunomia email and password when the sign-in page opens.
+            Use <Kbd>{url}</Kbd>. If asked how to sign in, choose OAuth (sign in through the browser). Use your Eunomia email and password when the sign-in page opens.
           </p>
-          <LocalNote url={url} cloud={false} />
+          <LocalNote url={url} />
         </GuideStep>
         <GuideStep n={3} title="Approve and start a new conversation">
           <p>Review the requested access and choose Allow. Follow your app&apos;s instructions to turn on Eunomia in a new conversation.</p>

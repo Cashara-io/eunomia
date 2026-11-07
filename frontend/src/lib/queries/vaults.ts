@@ -7,8 +7,10 @@ import {
   deleteVault,
   inviteMember,
   leaveVault,
+  listEntities,
   listInvitations,
   listMembers,
+  listVaultPendingInvitations,
   listVaults,
   mergeVaults,
   removeMember,
@@ -26,7 +28,14 @@ export const vaultKeys = {
   list: () => [...vaultKeys.all, "list"] as const,
   members: (id: string) => [...vaultKeys.all, "members", id] as const,
   invitations: () => [...vaultKeys.all, "invitations"] as const,
+  pending: (id: string) => [...vaultKeys.all, "pending", id] as const,
+  counts: (id: string) => [...vaultKeys.all, "counts", id] as const,
 };
+
+/** An invitation to the caller. `invited_by` is the space's owner when it has exactly one, else absent. */
+export type MyInvitation = VaultInvitation & { invited_by?: string | null };
+/** An invitation into a space that the invitee hasn't answered yet, as its owners see it. */
+export type PendingInvite = { email: string; role: VaultRole; created_at: string | null };
 
 export const useVaults = () =>
   useQuery({
@@ -47,8 +56,33 @@ export const useVaultMembers = (id: string, enabled = true) =>
 export const useInvitations = () =>
   useQuery({
     queryKey: vaultKeys.invitations(),
-    queryFn: async () => (await call(listInvitations())).results as VaultInvitation[],
+    queryFn: async () => (await call(listInvitations())).results as MyInvitation[],
     refetchInterval: livePoll,
+  });
+
+/** How many invitations are waiting for the caller (0 while loading or on error), for a badge. */
+export const usePendingInvitationCount = () => useInvitations().data?.length ?? 0;
+
+/** Owners only: invitations into `id` nobody has answered yet. Withdraw one with `useRemoveMember`. */
+export const usePendingInvites = (id: string, enabled = true) =>
+  useQuery({
+    queryKey: vaultKeys.pending(id),
+    queryFn: async () => (await call(listVaultPendingInvitations({ path: { vault_id: id } }))).results as PendingInvite[],
+    enabled,
+  });
+
+/** People and topics in a space, from the entity list's totals (no rows fetched). */
+export const useVaultCounts = (id: string, enabled = true) =>
+  useQuery({
+    queryKey: vaultKeys.counts(id),
+    queryFn: async () => {
+      const [all, people] = await Promise.all([
+        call(listEntities({ query: { vault_id: id, limit: 0 } })),
+        call(listEntities({ query: { vault_id: id, kind: "person", limit: 0 } })),
+      ]);
+      return { people: people.total, topics: Math.max(0, all.total - people.total) };
+    },
+    enabled,
   });
 
 // Vault changes reshape what the entity graph and cloud can show (clone, merge, delete, accept), so those refresh too.
@@ -56,7 +90,15 @@ const useVaultMutation = <V, R>(fn: (v: V) => Promise<R>) => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: fn,
-    onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: vaultKeys.all }), qc.invalidateQueries({ queryKey: entityKeys.all })]),
+    // A space's counts are marked stale but not refetched here: after leaving or deleting a space its
+    // detail can stay mounted for a moment, and an immediate refetch would hit a 403. They reload the
+    // next time a space detail mounts.
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: vaultKeys.all, predicate: (q) => !q.queryKey.includes("counts") }),
+        qc.invalidateQueries({ queryKey: vaultKeys.all, predicate: (q) => q.queryKey.includes("counts"), refetchType: "none" }),
+        qc.invalidateQueries({ queryKey: entityKeys.all }),
+      ]),
   });
 };
 
@@ -72,11 +114,14 @@ const useEndAccessMutation = (fn: (id: string) => Promise<unknown>) => {
     onSuccess: async (_d, id) => {
       // A list poll already in flight would land after this and put the vault back on screen, remounting
       // its inspector and asking for members the caller can no longer see.
-      await qc.cancelQueries({ queryKey: vaultKeys.members(id) });
+      // Every per-space query for the space just lost (members, counts, pending invitations) goes:
+      // a refetch would answer 403.
+      const ofThisSpace = (q: { queryKey: readonly unknown[] }) => q.queryKey[0] === vaultKeys.all[0] && q.queryKey[2] === id;
+      await qc.cancelQueries({ predicate: ofThisSpace });
       await qc.cancelQueries({ queryKey: vaultKeys.list() });
-      qc.removeQueries({ queryKey: vaultKeys.members(id) });
+      qc.removeQueries({ predicate: ofThisSpace });
       await Promise.all([
-        qc.invalidateQueries({ queryKey: vaultKeys.all, predicate: (q) => q.queryKey[1] !== "members" || q.queryKey[2] !== id }),
+        qc.invalidateQueries({ queryKey: vaultKeys.all, predicate: (q) => !ofThisSpace(q) }),
         qc.invalidateQueries({ queryKey: entityKeys.all }),
       ]);
     },

@@ -9,6 +9,352 @@
     "version": "1"
   },
   "paths": {
+    "/api/admin/audit": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Workspace activity log: sign-ins, tokens, app connections and space changes (admin only)",
+        "description": "Reads the security ledger for the admin's workspace, newest first. Per-tool-call rows are left out (see `/api/audit/tool-usage`).",
+        "operationId": "listWorkspaceAudit",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Rows per page (1 to 200, default 50).",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "description": "Only this kind of event (default `all`).",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Which kind of event a filter chip asks for.",
+              "enum": [
+                "all",
+                "changes",
+                "spaces",
+                "signins",
+                "tokens",
+                "apps",
+                "admin",
+                "sharing",
+                "server"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceAuditPage"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/people": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Every account in the workspace and the sign-up policy (admin only)",
+        "operationId": "listPeople",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeopleReport"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/people/{user_id}/admin": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Make someone an admin, or take admin rights away (admin only, browser session)",
+        "description": "The first account and the emails the server lists as admins are always admins and cannot be changed here. The last admin cannot be demoted.",
+        "operationId": "setPersonAdmin",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeopleReport"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/people/{user_id}/suspended": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Suspend or restore an account (admin only, browser session)",
+        "description": "A suspended account cannot sign in. Its sessions end at once, and its API tokens and app connections are refused until it is restored. You cannot suspend yourself or the first account.",
+        "operationId": "setPersonSuspended",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuspendChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeopleReport"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/people/{user_id}/tokens": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Someone's API tokens, newest first (admin only)",
+        "description": "Names and dates only; a token's secret is never stored or shown.",
+        "operationId": "listPersonTokens",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PersonToken"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/admin/people/{user_id}/tokens/{token_id}": {
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Revoke someone's API token (admin only, browser session)",
+        "description": "The token stops working at once. Returns the person's remaining tokens.",
+        "operationId": "revokePersonToken",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "token_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PersonToken"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
     "/api/audit": {
       "get": {
         "tags": [
@@ -6561,6 +6907,56 @@
         ]
       }
     },
+    "/api/vaults/{vault_id}/invitations": {
+      "get": {
+        "tags": [
+          "vaults"
+        ],
+        "summary": "Invitations into a vault not answered yet (owners only)",
+        "description": "Withdraw one with `DELETE /api/vaults/{vault_id}/members/{email}`.",
+        "operationId": "listVaultPendingInvitations",
+        "parameters": [
+          {
+            "name": "vault_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingInviteList"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/vaults/{vault_id}/invitations/accept": {
       "post": {
         "tags": [
@@ -7390,6 +7786,33 @@
           }
         }
       },
+      "AdminChange": {
+        "type": "object",
+        "required": [
+          "admin"
+        ],
+        "properties": {
+          "admin": {
+            "type": "boolean",
+            "description": "`true` makes the person an admin, `false` takes admin rights away."
+          }
+        }
+      },
+      "AuditCategory": {
+        "type": "string",
+        "description": "Which kind of event a filter chip asks for.",
+        "enum": [
+          "all",
+          "changes",
+          "spaces",
+          "signins",
+          "tokens",
+          "apps",
+          "admin",
+          "sharing",
+          "server"
+        ]
+      },
       "AuditEntry": {
         "type": "object",
         "required": [
@@ -7456,7 +7879,8 @@
           "id",
           "email",
           "onboarded",
-          "has_password"
+          "has_password",
+          "is_admin"
         ],
         "properties": {
           "email": {
@@ -7468,6 +7892,10 @@
           },
           "id": {
             "type": "string"
+          },
+          "is_admin": {
+            "type": "boolean",
+            "description": "True for an instance admin: the first user, or an email in `EUNOMIA_ADMIN_EMAILS`."
           },
           "oidc_provider": {
             "type": [
@@ -9330,6 +9758,13 @@
               "null"
             ]
           },
+          "invited_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Email of the space's owner when it has exactly one: only owners invite, so that is who sent it.\nNone when there are several owners (or it is unknown); show \"Someone\" then."
+          },
           "role": {
             "type": "string"
           },
@@ -10101,6 +10536,156 @@
             "type": "string"
           },
           "role": {
+            "type": "string"
+          }
+        }
+      },
+      "PendingInviteList": {
+        "type": "object",
+        "required": [
+          "results"
+        ],
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PendingInviteOut"
+            }
+          }
+        }
+      },
+      "PendingInviteOut": {
+        "type": "object",
+        "description": "An invitation into a vault that the invitee has not answered yet, as its owners see it.",
+        "required": [
+          "email",
+          "role"
+        ],
+        "properties": {
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        }
+      },
+      "PeopleReport": {
+        "type": "object",
+        "required": [
+          "people",
+          "signup"
+        ],
+        "properties": {
+          "people": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Person"
+            }
+          },
+          "signup": {
+            "$ref": "#/components/schemas/SignupPolicy"
+          }
+        }
+      },
+      "Person": {
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "shared_spaces",
+          "admin",
+          "role",
+          "is_you",
+          "tokens"
+        ],
+        "properties": {
+          "admin": {
+            "type": "string",
+            "description": "Why this person is an admin: `creator` (the first account), `operator` (listed in the server's\nadmin emails), `granted` (made an admin in the app), or empty for a member."
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "is_you": {
+            "type": "boolean",
+            "description": "The admin looking at the list."
+          },
+          "last_active": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Latest browser session activity or API token use, RFC 3339; none if never seen."
+          },
+          "role": {
+            "type": "string",
+            "description": "`admin` or `member`."
+          },
+          "shared_spaces": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Shared spaces this person is an active member of (their personal space not counted)."
+          },
+          "suspended_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When an admin suspended the account, RFC 3339; none while it is active."
+          },
+          "tokens": {
+            "type": "integer",
+            "format": "int64",
+            "description": "How many API tokens this person holds (see `/api/admin/people/{user_id}/tokens`)."
+          }
+        }
+      },
+      "PersonToken": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`null` for a token that never expires."
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_used_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
             "type": "string"
           }
         }
@@ -11025,6 +11610,39 @@
           }
         }
       },
+      "SignupPolicy": {
+        "type": "object",
+        "required": [
+          "mode",
+          "summary",
+          "allowlist",
+          "operators"
+        ],
+        "properties": {
+          "allowlist": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The emails that may sign up when `mode` is `invite`."
+          },
+          "mode": {
+            "type": "string",
+            "description": "`open`, `invite` or `closed`."
+          },
+          "operators": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Emails the server lists as admins (`EUNOMIA_ADMIN_EMAILS`)."
+          },
+          "summary": {
+            "type": "string",
+            "description": "The policy in words."
+          }
+        }
+      },
       "Similarity": {
         "type": "object",
         "description": "Pairwise relationships between points of the cloud, measured on the real vectors (not the 3D\nprojection). Row `i` / column `j` of every matrix refers to `ids[i]` / `ids[j]`.",
@@ -11198,6 +11816,18 @@
           "stable",
           "preview"
         ]
+      },
+      "SuspendChange": {
+        "type": "object",
+        "required": [
+          "suspended"
+        ],
+        "properties": {
+          "suspended": {
+            "type": "boolean",
+            "description": "`true` suspends the account, `false` restores it."
+          }
+        }
       },
       "SyncReport": {
         "type": "object",
@@ -12065,6 +12695,84 @@
           "transaction_count": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "WorkspaceAuditEntry": {
+        "type": "object",
+        "required": [
+          "id",
+          "actor_email",
+          "via",
+          "action",
+          "category",
+          "summary",
+          "outcome",
+          "ok",
+          "result",
+          "reason"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "The raw action code, such as `vault.invite`."
+          },
+          "actor_email": {
+            "type": "string",
+            "description": "The person who acted; for a failed sign-in, the email that was tried. Empty for the system."
+          },
+          "category": {
+            "$ref": "#/components/schemas/AuditCategory"
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "outcome": {
+            "type": "string",
+            "description": "`ok`, or the code that ended the action."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why a failed action failed, in words (\"Already a member or invited, or no account has that email\").\nEmpty when it worked, or when `summary` already says why."
+          },
+          "result": {
+            "type": "string",
+            "description": "The outcome in words: \"Done\", \"Not allowed\", \"Declined\", \"Refused\" or \"Failed\"."
+          },
+          "summary": {
+            "type": "string",
+            "description": "What happened, in plain words (\"Invited user@acme.test to acme-engineering\")."
+          },
+          "via": {
+            "type": "string",
+            "description": "How they acted: empty for the browser, `API token`, `app` (an OAuth client) or `system`."
+          }
+        }
+      },
+      "WorkspaceAuditPage": {
+        "type": "object",
+        "required": [
+          "results",
+          "has_more"
+        ],
+        "properties": {
+          "has_more": {
+            "type": "boolean"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceAuditEntry"
+            }
           }
         }
       }

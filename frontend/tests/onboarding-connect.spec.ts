@@ -1,17 +1,18 @@
 import { test, expect, type Page } from "@playwright/test";
-import { uniqueEmail } from "./helpers";
+import { showAdminSettings, uniqueEmail } from "./helpers";
 
 const PASSWORD = "correct-horse-battery-staple";
 
-async function registerToConnectStep(page: Page) {
+/** `admin` shows the admin-only token method (members connect through an app's guide). */
+async function registerToConnectStep(page: Page, { admin = false } = {}) {
+  if (admin) await showAdminSettings(page);
   await page.goto("/register");
   await page.getByLabel("Email").fill(uniqueEmail("connect"));
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByLabel("Confirm password").fill(PASSWORD);
   await page.getByRole("button", { name: "Create account" }).click();
   await page.waitForURL(/\/onboarding/);
-  await page.getByRole("button", { name: "Let's go" }).click();
-  await expect(page.getByRole("heading", { name: "Connect your AI" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Connect your AI app" })).toBeVisible();
 }
 
 const tokenNames = async (page: Page) =>
@@ -20,9 +21,25 @@ const tokenNames = async (page: Page) =>
 test.describe("Onboarding: Connect your AI", () => {
   test.use({ permissions: ["clipboard-read", "clipboard-write"] });
 
+  test("lands on the app picker with nothing preselected, and an app opens its own guide", async ({ page }) => {
+    await registerToConnectStep(page, { admin: true });
+    for (const app of ["ChatGPT", "Claude Code", "Codex", "Other apps"]) await expect(page.getByRole("link", { name: new RegExp(`^${app}`) })).toBeVisible();
+    // The token method waits behind the Advanced disclosure, with no app chosen.
+    await expect(page.getByRole("button", { name: "Generate a token" })).toBeHidden();
+    await page.getByText("Advanced: use an API token").click();
+    await expect(page.getByRole("tab", { selected: true })).toHaveCount(0);
+    await page.getByText("Advanced: use an API token").click();
+
+    await page.getByRole("link", { name: /^Claude Code/ }).click();
+    await expect(page.getByRole("heading", { name: "Connect Claude Code", level: 1 })).toBeVisible();
+    // Choosing an app finished setup: the guide stays put rather than bouncing back to onboarding.
+    expect((await (await page.request.get("/api/auth/me")).json()).onboarded).toBe(true);
+  });
+
   test("each client gets its own token and a ready-to-paste setup with this URL", async ({ page }) => {
-    await registerToConnectStep(page);
+    await registerToConnectStep(page, { admin: true });
     const mcpUrl = `${new URL(page.url()).origin}/mcp`;
+    await page.getByText("Advanced: use an API token").click();
     const panel = page.getByRole("tabpanel");
 
     const cases = [
@@ -58,29 +75,24 @@ test.describe("Onboarding: Connect your AI", () => {
     }
     expect(await tokenNames(page)).toEqual(expect.arrayContaining(["Claude Code", "Codex", "MCP"]));
 
-    // ChatGPT signs in with OAuth: no token, the URL to paste, and on localhost an honest warning.
-    await page.getByRole("tab", { name: "ChatGPT" }).click();
-    await expect(panel.getByRole("button", { name: "Generate a token" })).toHaveCount(0);
-    await expect(panel.getByText(mcpUrl, { exact: true })).toBeVisible();
-    await panel.getByRole("button", { name: "Copy URL" }).click();
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(mcpUrl);
-    if (!mcpUrl.startsWith("https://")) await expect(panel.getByText(/needs a public https:\/\/ address/)).toBeVisible();
-
     // Tabs are a real tablist: arrows move the selection.
-    await page.getByRole("tab", { name: "ChatGPT" }).press("ArrowLeft");
+    // ChatGPT can only sign in, so it has no token tab.
+    await expect(page.getByRole("tab", { name: "ChatGPT" })).toHaveCount(0);
+    await page.getByRole("tab", { name: "Other" }).press("ArrowLeft");
     await expect(page.getByRole("tab", { name: "Codex" })).toHaveAttribute("aria-selected", "true");
     // A token minted here survives the trip there and back.
     await expect(panel.getByLabel("Config", { exact: true })).toContainText("Bearer ");
 
-    // Once something is connected, Skip becomes Continue.
+    // Once something is connected, a Continue (or Finish) appears beside the one "Set up later" exit.
     await page.getByRole("button", { name: /^(Continue|Finish)$/ }).click();
-    await expect(page.getByRole("heading", { name: "Connect your AI" })).toBeHidden();
+    await expect(page.getByRole("heading", { name: "Connect your AI app" })).toBeHidden();
   });
 
-  test("skip leaves without minting a token", async ({ page }) => {
+  test("set up later leaves without minting a token, and members see no token method", async ({ page }) => {
     await registerToConnectStep(page);
-    await page.getByRole("button", { name: "Skip", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "Connect your AI" })).toBeHidden();
+    await expect(page.getByText("Advanced: use an API token")).toHaveCount(0);
+    await page.getByRole("button", { name: "Set up later" }).click();
+    await expect(page.getByRole("heading", { name: "Connect your AI app" })).toBeHidden();
     const skipFinish = page.getByRole("button", { name: "Skip & finish" });
     if (await skipFinish.isVisible({ timeout: 2000 }).catch(() => false)) await skipFinish.click();
     await page.waitForURL((url) => url.pathname === "/");
@@ -88,7 +100,7 @@ test.describe("Onboarding: Connect your AI", () => {
 
     // The same token guides live on Home's connection steps afterwards, as the advanced option.
     await page.getByRole("link", { name: /^Codex/ }).click();
-    await page.getByText("Advanced: connect with an API token instead").click();
+    await page.getByText("Advanced: use an API token").click();
     const card = page.getByRole("tabpanel");
     await expect(page.getByRole("tab", { name: "Codex" })).toHaveAttribute("aria-selected", "true");
     await card.getByRole("button", { name: "Generate a token" }).click();

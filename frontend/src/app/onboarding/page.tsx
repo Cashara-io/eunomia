@@ -1,22 +1,21 @@
 "use client";
 
-import { ArrowLeftIcon, CircleNotchIcon, XIcon } from "@phosphor-icons/react/ssr";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ArrowLeft, Loader2, X } from "lucide-react";
 import { nextPath } from "@/lib/nextPath";
 import { useMe } from "@/lib/queries/auth";
 import { useCompleteOnboarding, useSettings, useUpdateSettings } from "@/lib/queries/settings";
 import EunomiaMark from "@/components/EunomiaMark";
-import BlurWords from "@/components/bits/BlurWords";
 import { spark } from "@/components/bits/Spark";
 import { InputModeTracker } from "@/components/bits/motion";
 import ConnectAgents from "@/components/ConnectAgents";
-import { StepArt, StepDot, type StepShape } from "@/components/Shapes";
+import AppChoices from "@/components/connect/AppChoices";
+import InvitationBanner from "@/components/vaults/InvitationBanner";
+import type { AppId } from "@/components/connect/apps";
 
-const STEP_LABELS = ["Welcome", "Connect your AI", "OpenAI key"];
-// Each step has a shape of its own: the welcome circle, the connect triangle, the key square.
-const STEP_SHAPES: Exclude<StepShape, "trio">[] = ["circle", "triangle", "square"];
+const STEP_LABELS = ["Connect your AI app", "OpenAI key"];
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -32,21 +31,24 @@ export default function OnboardingPage() {
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Failure | null>(null);
-  // The welcome moment plays once; coming Back shows it at rest.
-  const [welcomed, setWelcomed] = useState(false);
-  // Skip turns into Continue once a token was minted on the Connect step.
+  // A Continue appears once a token was minted on the Connect step (admins only); otherwise "Set up later" is the one exit.
   const [connected, setConnected] = useState(false);
 
+  // Set while this page navigates on its own (to an app's guide), so the "already onboarded" redirect
+  // below doesn't race it to Home once finishing setup refreshes `me`.
+  const navigating = useRef(false);
   const { isError, data } = meQuery;
   useEffect(() => {
+    if (navigating.current) return;
     if (isError) router.replace("/login");
     else if (data?.onboarded) router.replace(nextPath());
   }, [isError, data, router]);
 
-  // The OpenAI step is pointless if a key is already configured
-  // server-wide (env var) or was already set earlier by this user.
-  const skipOpenAiStep = Boolean(appSettings?.openai_api_key_set);
-  const steps = skipOpenAiStep ? STEP_LABELS.slice(0, 2) : STEP_LABELS;
+  // The OpenAI step is pointless if a key is already configured server-wide or was set earlier,
+  // and members can't set it at all (it is a server setting for admins).
+  const isAdmin = Boolean(data?.is_admin);
+  const skipOpenAiStep = !isAdmin || Boolean(appSettings?.openai_api_key_set);
+  const steps = skipOpenAiStep ? STEP_LABELS.slice(0, 1) : STEP_LABELS;
 
   /** `from` is the button a pointer click started this from; it sparks on success. Navigation is never delayed. */
   async function finish(from?: Element | null) {
@@ -72,6 +74,18 @@ export default function OnboardingPage() {
     }
   }
 
+  /** Choosing an app finishes setup and opens that app's guide, the same one Home links to. */
+  async function pickApp(id: AppId) {
+    navigating.current = true;
+    setBusy(true);
+    try {
+      await completeOnboarding.mutateAsync();
+    } catch {
+      // The guide is reachable either way; setup can be finished from there.
+    }
+    router.replace(`/connect/${id}`);
+  }
+
   async function skip(from?: Element | null) {
     setBusy(true);
     try {
@@ -85,7 +99,7 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="min-h-screen w-full flex flex-col px-6 py-6 sm:px-10" style={{ background: "var(--canvas)" }}>
+    <div className="min-h-screen w-full flex flex-col px-6 py-6 sm:px-10" style={{ background: "var(--bauhaus-app-bg)" }}>
       <InputModeTracker />
       {/* Progress fills slide in when a pointer moved the step; keyboard steps swap instantly. */}
       <style>{`
@@ -94,13 +108,13 @@ export default function OnboardingPage() {
       `}</style>
       <header className="flex items-center justify-between">
         <span className="inline-flex items-center gap-2 text-[20px] font-semibold tracking-[-0.03em]">
-          <EunomiaMark size={28} />
+          <EunomiaMark size={24} />
           eunomia
         </span>
         <div className="flex items-center gap-1">
           {me && (
-            <button onClick={() => skip()} disabled={busy} aria-label="Skip setup" className="btn btn-ghost btn-sm">
-              <XIcon weight="duotone" size={16} aria-hidden />
+            <button onClick={() => skip()} disabled={busy} className="btn btn-ghost btn-sm">
+              <X size={16} strokeWidth={1.75} aria-hidden />
               Set up later
             </button>
           )}
@@ -119,76 +133,62 @@ export default function OnboardingPage() {
             </div>
           ) : (
             <>
+              {!isAdmin && <InvitationBanner className="mb-6" />}
+              {steps.length > 1 && (
               <ol className="flex gap-2 mb-7" aria-label="Setup progress">
                 {steps.map((label, i) => (
                   <li key={label} className="flex-1" aria-current={i === step ? "step" : undefined}>
-                    <span className="block h-[4px] overflow-hidden rounded-full" style={{ background: "var(--border)" }}>
+                    <span className="block h-[4px] overflow-hidden" style={{ background: "var(--bauhaus-app-line)" }}>
                       <span className="onb-fill block h-full" style={{ background: "var(--accent)", transform: i <= step ? "none" : "scaleX(0)" }} />
                     </span>
-                    <span className="mt-2 flex items-center gap-1.5 whitespace-nowrap text-[13px]" style={{ color: i === step ? "var(--ink)" : "var(--ink-dim)", fontWeight: i === step ? 500 : 400 }}>
-                      <StepDot shape={STEP_SHAPES[i]} dim={i > step} />
+                    <span className="mt-2 flex items-center gap-1.5 whitespace-nowrap text-[13px]" style={{ color: i === step ? "var(--ink)" : "var(--ink-dim)", fontWeight: i === step ? 600 : 400 }}>
+                      <span className="font-mono">{i + 1}</span>
                       {label}
-                      {i === 2 && <span className="hidden sm:inline" style={{ color: "var(--ink-dim)" }}>(optional)</span>}
+                      {i === 1 && <span className="hidden sm:inline" style={{ color: "var(--ink-dim)" }}>(optional)</span>}
                     </span>
                   </li>
                 ))}
               </ol>
-
-              {step === 0 && (
-                <div className="flex flex-col gap-4">
-                  <StepArt shape="trio" still />
-                  {welcomed ? <h1 className="connect-title">Welcome to Eunomia</h1> : <BlurWords text="Welcome to Eunomia" as="h1" className="connect-title" />}
-                  <p className="text-[16px] leading-[1.6]" style={{ color: "var(--ink)" }}>
-                    You&apos;re signed in as{" "}
-                    <span className="font-medium" style={{ color: "var(--ink)" }}>
-                      {me.email}
-                    </span>
-                    . Next, connect the AI app you already use{skipOpenAiStep ? "" : ", then, if you like, add an OpenAI key"}. It
-                    can all wait: Home keeps the step-by-step guides, and Connected sources adds your other information any time.
-                  </p>
-                  <button onClick={() => setStep(1)} className="btn btn-primary min-h-11 self-start mt-2 px-5">
-                    Let&apos;s go
-                  </button>
-                </div>
               )}
 
               {/* Hidden, not unmounted, so a minted token survives Back. */}
-              <div hidden={step !== 1} className="flex flex-col gap-4">
-                {step === 1 && <StepArt shape="triangle" />}
-                <h1 className="connect-title">Connect your AI</h1>
-                <p className="text-[16px] leading-[1.6]" style={{ color: "var(--ink-dim)" }}>
-                  Choose the AI app you use and follow its steps. Once it is connected, it can look up and save memories in
-                  Eunomia on its own. There is nothing else to install.
-                </p>
-                <ConnectAgents onToken={() => setConnected(true)} />
-                <div className="flex items-center gap-2 mt-2">
-                  <button
-                    onClick={() => {
-                      setWelcomed(true);
-                      setStep(0);
-                    }}
-                    disabled={busy}
-                    className="btn btn-ghost"
-                  >
-                    <ArrowLeftIcon weight="duotone" size={14} aria-hidden />
-                    Back
-                  </button>
-                  <div className="flex-1" />
-                  <button
-                    onClick={(e) => (skipOpenAiStep ? skip(e.detail > 0 ? e.currentTarget : null) : setStep(2))}
-                    disabled={busy}
-                    aria-busy={busy}
-                    className={`btn ${connected ? "btn-primary" : ""}`}
-                  >
-                    {busy && <CircleNotchIcon weight="duotone" size={14} className="animate-spin" aria-hidden />}
-                    {connected ? (skipOpenAiStep ? "Finish" : "Continue") : "Skip"}
-                  </button>
+              <div hidden={step !== 0} className="flex flex-col gap-5">
+                <div className="flex flex-col gap-2">
+                  <h1 className="connect-title">Connect your AI app</h1>
+                  <p className="text-[14px] leading-relaxed" style={{ color: "var(--ink-dim)" }}>
+                    Eunomia is your shared memory: ChatGPT, Claude and other AI apps can look things up in it.
+                  </p>
+                  <p className="text-[14px] leading-relaxed" style={{ color: "var(--ink-dim)" }}>
+                    You&apos;re signed in as <span className="font-medium" style={{ color: "var(--ink)" }}>{me.email}</span>. Choose the app you use and
+                    we&apos;ll show its steps. You can also do this later from Home.
+                  </p>
                 </div>
+                <AppChoices onPick={pickApp} disabled={busy} />
+                {isAdmin && (
+                  <details className="border-t pt-3">
+                    <summary className="cursor-pointer text-[14px] font-semibold min-h-11 flex items-center">Advanced: use an API token</summary>
+                    <div className="pt-3">
+                      <ConnectAgents onToken={() => setConnected(true)} />
+                    </div>
+                  </details>
+                )}
+                {connected && (
+                  <div className="flex items-center justify-end">
+                    <button
+                      onClick={(e) => (skipOpenAiStep ? skip(e.detail > 0 ? e.currentTarget : null) : setStep(1))}
+                      disabled={busy}
+                      aria-busy={busy}
+                      className="btn btn-primary"
+                    >
+                      {busy && <Loader2 size={14} strokeWidth={1.75} className="animate-spin" aria-hidden />}
+                      {skipOpenAiStep ? "Finish" : "Continue"}
+                    </button>
+                  </div>
+                )}
               </div>
 
-              {step === 2 && !skipOpenAiStep && (
+              {step === 1 && !skipOpenAiStep && (
                 <div className="flex flex-col gap-4">
-                  <StepArt shape="square" />
                   <h1 className="connect-title">Add an OpenAI key</h1>
                   <p className="text-[16px] leading-[1.6]" style={{ color: "var(--ink-dim)" }}>
                     This is optional. Your connected AI app can already look up and save memories on its own. A key lets
@@ -228,10 +228,8 @@ export default function OnboardingPage() {
                   {error && <ErrorLine error={error} />}
 
                   <div className="flex items-center gap-2 mt-2">
-                    <button
-                      onClick={() => setStep(1)}
-                      disabled={busy} className="btn btn-ghost">
-                      <ArrowLeftIcon weight="duotone" size={14} aria-hidden />
+                    <button onClick={() => setStep(0)} disabled={busy} className="btn btn-ghost">
+                      <ArrowLeft size={14} strokeWidth={1.75} aria-hidden />
                       Back
                     </button>
                     <div className="flex-1" />
@@ -239,7 +237,7 @@ export default function OnboardingPage() {
                       Skip &amp; finish
                     </button>
                     <button onClick={saveApiKey} disabled={busy} aria-busy={busy} className="btn btn-primary">
-                      {busy && <CircleNotchIcon weight="duotone" size={14} className="animate-spin" aria-hidden />}
+                      {busy && <Loader2 size={14} strokeWidth={1.75} className="animate-spin" aria-hidden />}
                       {busy ? "Finishing…" : "Finish"}
                     </button>
                   </div>

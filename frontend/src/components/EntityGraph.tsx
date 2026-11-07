@@ -1,22 +1,23 @@
 "use client";
 
-import { EmptyArt } from "./Shapes";
-import { ArrowLeftIcon, ArrowRightIcon, EyeIcon, EyeSlashIcon, PencilSimpleIcon, PlusIcon, TrashIcon, XIcon } from "@phosphor-icons/react/ssr";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { Suspense, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
 import ConfirmButton from "@/components/ConfirmButton";
+import { ArrowLeft, Pencil, Plus, Trash2, X } from "lucide-react";
 import GraphCanvas, { type CanvasInsets } from "./GraphCanvas";
-import AuthorTag from "./AuthorTag";
 import SyncMark from "./bits/SyncMark";
 import Tooltip, { TooltipGroup } from "./bits/Tooltip";
 import { cssVar, prefersReducedMotion } from "./bits/motion";
-import { Blobatar } from "@blobatar/react";
-import { useQueryClient } from "@tanstack/react-query";
+import Monogram from "./graph/Monogram";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { BuiltInKind, EntityDetail, EntityGraph as EntityGraphData, EntityKind } from "@/lib/types";
 import { useMe } from "@/lib/queries/auth";
 import {
   entityDetailQuery,
+  entityListQuery,
+  findEntityVault,
   useAddMemory,
   useAddRelation,
   useCreateEntity as useCreateEntityMutation,
@@ -27,8 +28,12 @@ import {
 } from "@/lib/queries/entities";
 import { useVaults } from "@/lib/queries/vaults";
 import EditableMemoryText from "@/components/live/EditableMemoryText";
-import TidyObservationsButton from "@/components/live/TidyObservationsButton";
-import { defaultKindHex, isCustomKind, kindColor, setKindColor, shuffleKindColor, useKindColor } from "@/lib/kindColors";
+import TidyUp from "./graph/TidyUp";
+import EmptyState from "./ui/EmptyState";
+import EntityList from "./graph/EntityList";
+import { chooseSpace, useSharedSpace } from "./graph/space";
+import SpaceSelect from "./graph/SpaceSelect";
+import { defaultKindHex, isCustomKind, kindColor, setKindColor, useKindColor } from "@/lib/kindColors";
 
 const KIND_LABEL: Record<BuiltInKind, string> = {
   person: "Person",
@@ -40,33 +45,52 @@ const KIND_LABEL: Record<BuiltInKind, string> = {
 };
 
 const ALL_KINDS: EntityKind[] = ["person", "organisation", "location", "repository", "file", "symbol"];
+// Code map's kinds: off by default on People & topics, behind one "Code" chip.
+const CODE_KINDS: EntityKind[] = ["repository", "file", "symbol"];
 
 // An agent's own kind ("db", "decision") has no token of its own: it gets a stable colour from its name
-// (or the one the person picked, see lib/kindColors.ts) and its name as written.
-const kindLabel = (kind: EntityKind) => KIND_LABEL[kind as BuiltInKind] ?? kind;
+// (or the one the person picked, see lib/kindColors.ts) and its name in sentence case ("project" -> "Project").
+const kindLabel = (kind: EntityKind) => {
+  const builtIn = KIND_LABEL[kind as BuiltInKind];
+  if (builtIn) return builtIn;
+  const words = kind.replace(/[_-]+/g, " ").trim();
+  return words.charAt(0).toUpperCase() + words.slice(1).toLowerCase();
+};
 
-// Compact age for a timestamp: "now", "4m", "3h", "2d", then a date.
-function age(iso?: string): string | null {
+// One time format for the whole inspector: "just now", "4m ago", "3h ago", "2d ago", then a date.
+function ago(iso?: string | null): string | null {
   if (!iso) return null;
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return null;
   const s = Math.max(0, (Date.now() - t) / 1000);
-  if (s < 60) return "now";
-  if (s < 3600) return `${Math.floor(s / 60)}m`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h`;
-  if (s < 86400 * 30) return `${Math.floor(s / 86400)}d`;
-  return new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  if (s < 86400 * 30) return `${Math.floor(s / 86400)}d ago`;
+  return new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
-// The real author of a row, if attribution was recorded. `null` means it
-// predates attribution tracking, so no tag is shown.
-function Author({ email, me }: { email: string | null; me: string | null }) {
-  if (!email) return null;
-  return <AuthorTag name={email} title={email === me ? `${email} (you)` : email} />;
+// "Added by ana@acme.test · 3h ago", as plain meta text. A row from before attribution was
+// recorded shows only its age (or nothing).
+function Byline({ email, at }: { email: string | null | undefined; at?: string | null }) {
+  const when = ago(at);
+  if (!email && !when) return null;
+  return (
+    <p className="text-[12px] min-w-0 truncate" style={{ color: "var(--ink-dim)" }} title={email ?? undefined}>
+      {email && <>Added by {email}</>}
+      {email && when && " · "}
+      {when && (
+        <time dateTime={at ?? undefined} title={at ?? undefined}>
+          {email ? when : when.charAt(0).toUpperCase() + when.slice(1)}
+        </time>
+      )}
+    </p>
+  );
 }
 
-const ICON = { size: 18, weight: "duotone" } as const;
+const ICON = { size: 18, strokeWidth: 1.75 } as const;
 
+const LIST_LIMIT = 500; // rows the List view reads in one go
 const SPARSE = 3; // fewer nodes than this shows the `guide`
 
 // A memory row that just arrived from "Add memory" settles in from a slight blur, once.
@@ -93,25 +117,76 @@ function readChromeHidden() {
   }
 }
 
+// px of the canvas the desktop inspector covers (22rem wide, 1.5rem from the edge, plus a gap)
+const INSPECTOR_RESERVE = 400;
+
+// Phones (below md) get the inspector as a full-screen sheet.
+function subscribeWidth(l: () => void) {
+  const mq = window.matchMedia("(max-width: 767px)");
+  mq.addEventListener("change", l);
+  return () => mq.removeEventListener("change", l);
+}
+const readPhone = () => window.matchMedia("(max-width: 767px)").matches;
+
+/** `?id=<entity>`, `?vault=<space>` and `?memory=<memory>` from the URL. Its own component so that only it waits on the URL (Suspense). */
+function UrlFocus({ onChange }: { onChange: (id: string | null, vault: string | null, memory: string | null) => void }) {
+  const params = useSearchParams();
+  const id = params.get("id");
+  const vault = params.get("vault");
+  const memory = params.get("memory");
+  useEffect(() => onChange(id, vault, memory), [id, vault, memory]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
+/** Scrolls a memory a search result pointed at into view, once, as it mounts. */
+const scrollToMemory = (el: HTMLElement | null) => el?.scrollIntoView({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+
 export default function EntityGraph({
   kinds,
   header,
   guide,
+  mode = "graph",
 }: {
   kinds?: EntityKind[];
+  /** "list": the same toolbar and inspector over a plain table instead of the canvas */
+  mode?: "graph" | "list";
   header?: ReactNode;
-  /** one sentence plus one action, shown while the graph is empty or sparse */
-  guide?: ReactNode;
+  /** one sentence plus at most one action, shown while the graph is empty */
+  guide?: { text: ReactNode; action?: ReactNode };
 } = {}) {
   const colorOf = useKindColor();
   const shownKinds = kinds ?? ALL_KINDS;
   const queryClient = useQueryClient();
-  const [vaultId, setVaultId] = useState<string | undefined>(undefined);
-  const graphQuery = useEntityGraph({ kinds, vaultId });
-  const graph: EntityGraphData | null = graphQuery.data ?? null;
-  const error = graphQuery.error && !graph ? failure(graphQuery.error, "Could not load your people and topics.") : null;
-  const myEmail = useMe().data?.email ?? null;
-  const myVaults = useVaults().data ?? [];
+  const me = useMe().data;
+  const myEmail = me?.email ?? null;
+  const isAdmin = me?.is_admin ?? false;
+  // Deleting is offered to whoever wrote the thing, and to admins; the server checks again.
+  const canDelete = (author: string | null | undefined) => isAdmin || (!!author && author === myEmail);
+  const vaultsQuery = useVaults();
+  const myVaults = vaultsQuery.data ?? [];
+  const isPhone = useSyncExternalStore(subscribeWidth, readPhone, () => false);
+  // The graph endpoint reads one space at a time (no "all my spaces"). People & topics shares its
+  // space with the List and Memory map views (see graph/space.ts); Code map (`kinds` given) opens on Personal.
+  const shared = useSharedSpace(!kinds);
+  const [codeVault, setCodeVault] = useState<string | undefined>(undefined);
+  const vaultId: string | undefined = kinds ? codeVault : shared.vaultId;
+  const defaultReady = kinds ? true : shared.ready;
+  const graphQuery = useEntityGraph({ kinds, vaultId, enabled: defaultReady && mode === "graph" });
+  const listQuery = useQuery({ ...entityListQuery(undefined, vaultId, LIST_LIMIT), enabled: defaultReady && mode === "list", placeholderData: keepPreviousData });
+  // The list has no relations, so it stands in for the graph's nodes (find, "Relate to", names).
+  const graph: EntityGraphData | null =
+    mode === "graph"
+      ? (graphQuery.data ?? null)
+      : listQuery.data
+        ? { nodes: listQuery.data.results.map((e) => ({ id: e.id, kind: e.kind, name: e.name, owner_email: null })), edges: [] }
+        : null;
+  const activeQuery = mode === "graph" ? graphQuery : listQuery;
+  const error =
+    activeQuery.error && !graph ? failure(activeQuery.error, "Could not load your people and topics.") : null;
+  function chooseVault(id: string | undefined) {
+    if (kinds) setCodeVault(id);
+    else chooseSpace(id);
+  }
   const createEntityMutation = useCreateEntityMutation();
   const updateEntityMutation = useUpdateEntity();
   const deleteEntityMutation = useDeleteEntity();
@@ -120,9 +195,9 @@ export default function EntityGraph({
   const addRelationMutation = useAddRelation();
   const [selected, setSelected] = useState<EntityDetail | null>(null);
   // hidden rather than visible, so a custom kind that shows up later is on by default
-  const [hiddenKinds, setHiddenKinds] = useState<Set<EntityKind>>(new Set());
+  const [hiddenKinds, setHiddenKinds] = useState<Set<EntityKind>>(() => new Set(kinds ? [] : CODE_KINDS));
   const [showCreate, setShowCreate] = useState(false);
-  const [createForm, setCreateForm] = useState({ kind: shownKinds[0], name: "", aliases: "" });
+  const [createForm, setCreateForm] = useState<{ kind: EntityKind; name: string; aliases: string }>({ kind: shownKinds[0], name: "", aliases: "" });
   const [createError, setCreateError] = useState<Failure | null>(null);
   const [creating, setCreating] = useState(false);
 
@@ -130,11 +205,15 @@ export default function EntityGraph({
   const [editForm, setEditForm] = useState({ name: "", aliases: "", summary: "" });
   const [memoryText, setMemoryText] = useState("");
   const [relForm, setRelForm] = useState({ to: "", label: "" });
+  // the add forms stay folded behind a text button, so the inspector opens as something to read
+  const [adding, setAdding] = useState<"memory" | "relation" | null>(null);
   const [actionError, setActionError] = useState<Failure | null>(null);
   const [busy, setBusy] = useState(false);
   // "Add memory" progress: spinner while saving, a drawn check for 1.2s after
   const [memoryStatus, setMemoryStatus] = useState<"idle" | "running" | "done">("idle");
   const [freshMemory, setFreshMemory] = useState<string | null>(null);
+  // the memory a search result pointed at (`?memory=`): tinted until the inspector moves on
+  const [pointedMemory, setPointedMemory] = useState<string | null>(null);
   const memoryTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(memoryTimer.current), []);
 
@@ -153,22 +232,29 @@ export default function EntityGraph({
   }
 
   const [insets, setInsets] = useState<CanvasInsets>({ top: 0, right: 0, bottom: 0, left: 0 });
+  const inspectorOpen = !!selected;
+  const hasGraph = !!graph && graph.nodes.length > 0;
   useEffect(() => {
     const el = chromeRef.current;
-    if (!el) return;
     const measure = () => {
       const md = window.matchMedia("(min-width: 768px)").matches;
-      setInsets({ top: el.offsetTop + el.offsetHeight, right: md ? 400 : 0, bottom: md ? 48 : 16, left: 0 });
+      // below md the controls sit above the canvas in the page flow, so they cover none of it,
+      // and the inspector is a full-screen sheet; on desktop it covers the right column only while open
+      const top = md && el ? el.offsetTop + el.offsetHeight : 0;
+      setInsets((prev) => {
+        const next = { top, right: md && inspectorOpen ? INSPECTOR_RESERVE : 0, bottom: md ? 48 : 64, left: 0 };
+        return prev.top === next.top && prev.right === next.right && prev.bottom === next.bottom ? prev : next;
+      });
     };
     measure();
     const ro = new ResizeObserver(measure);
-    ro.observe(el);
+    if (el) ro.observe(el);
     window.addEventListener("resize", measure);
     return () => {
       ro.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, [graph]);
+  }, [hasGraph, chromeHidden, inspectorOpen, mode]);
 
   function toggleKind(kind: EntityKind) {
     setHiddenKinds((prev) => {
@@ -177,6 +263,23 @@ export default function EntityGraph({
       else next.add(kind);
       return next;
     });
+  }
+  // the one "Code" chip: all three code kinds on or off together
+  function toggleCode(show: boolean) {
+    setHiddenKinds((prev) => {
+      const next = new Set(prev);
+      CODE_KINDS.forEach((k) => (show ? next.delete(k) : next.add(k)));
+      return next;
+    });
+  }
+  function reveal(kind: EntityKind) {
+    if (!kinds && CODE_KINDS.includes(kind)) toggleCode(true);
+    else
+      setHiddenKinds((prev) => {
+        const next = new Set(prev);
+        next.delete(kind);
+        return next;
+      });
   }
 
   useEffect(() => {
@@ -194,6 +297,7 @@ export default function EntityGraph({
     setEditing(false);
     setMemoryText("");
     setRelForm({ to: "", label: "" });
+    setAdding(null);
     setActionError(null);
     try {
       const detail = await queryClient.fetchQuery(entityDetailQuery(id));
@@ -203,6 +307,50 @@ export default function EntityGraph({
       setSelected(null);
     }
   }
+
+  // Deep links: `?id=<entity>` opens its inspector in its own space, `?vault=<space>` picks a space.
+  // The open entity is written back to the URL, so an inspector view can be shared or bookmarked.
+  const urlIdRef = useRef<string | null>(null); // the id the URL and the inspector last agreed on
+  const urlVaultRef = useRef<string | null>(null);
+  const focusSeq = useRef(0);
+  const [pendingFocus, setPendingFocus] = useState<{ id: string | null; vault: string | null } | null>(null);
+  const toGraphVault = (id: string | null | undefined): string | undefined => {
+    if (!id) return undefined;
+    return myVaults.find((v) => v.id === id)?.kind === "personal" ? undefined : id;
+  };
+  useEffect(() => {
+    if (!pendingFocus || !vaultsQuery.isFetched) return;
+    const { id, vault } = pendingFocus;
+    // No need to clear pendingFocus: the refs below make each URL value act once. UrlFocus remounts when the page swaps loading/empty/graph layouts: act on each URL value once
+    const seq = ++focusSeq.current; // a newer link wins over one still resolving
+    void (async () => {
+      await Promise.resolve(); // state changes happen after the effect, not inside it
+      if (seq !== focusSeq.current) return;
+      if (vault !== urlVaultRef.current) {
+        urlVaultRef.current = vault;
+        if (vault && myVaults.some((v) => v.id === vault)) chooseVault(toGraphVault(vault));
+      }
+      if (!id || id === urlIdRef.current) return;
+      urlIdRef.current = id;
+      const home = vault ?? (await findEntityVault(queryClient, id));
+      if (seq !== focusSeq.current) return;
+      if (home && myVaults.some((v) => v.id === home)) chooseVault(toGraphVault(home));
+      const detail = await selectNode(id);
+      if (detail && seq === focusSeq.current) reveal(detail.kind);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingFocus, vaultsQuery.isFetched]);
+  useEffect(() => {
+    const id = selected?.id ?? null;
+    if (id === urlIdRef.current) return;
+    urlIdRef.current = id;
+    const url = new URL(window.location.href);
+    if (id) url.searchParams.set("id", id);
+    else url.searchParams.delete("id");
+    url.searchParams.delete("vault");
+    url.searchParams.delete("memory");
+    window.history.replaceState(null, "", url.pathname + url.search);
+  }, [selected?.id]);
 
   async function createEntity(e: React.FormEvent) {
     e.preventDefault();
@@ -282,7 +430,7 @@ export default function EntityGraph({
     try {
       await addMemoryMutation.mutateAsync({ id: selected.id, text: memoryText.trim() });
       setMemoryText("");
-      const detail = await selectNode(selected.id);
+      const detail = await selectNode(selected.id); // also folds the form again
       setFreshMemory(detail?.memory.find((m) => !before.has(m.id))?.id ?? null);
       setMemoryStatus("done");
       memoryTimer.current = setTimeout(() => setMemoryStatus("idle"), 1200);
@@ -324,38 +472,58 @@ export default function EntityGraph({
     }
   }
 
-  // Everything floats over one full-bleed canvas: header and toolbar top left
-  // at the same page inset as every other route (main's px-4 py-6, sm px-8,
-  // lg px-12 py-38), inspector top right, zoom bottom right (inside GraphCanvas).
-  const frame = (toolbar: ReactNode, content: ReactNode, inspector?: ReactNode, aside?: ReactNode) => (
-    <div className="absolute inset-0 overflow-hidden">
-      <div className="absolute inset-0">{content}</div>
-      <div
-        ref={chromeRef}
-        // the inspector column is always kept clear, so opening it never reflows the toolbar or moves the camera
-        className="absolute left-0 top-0 right-0 md:right-auto px-4 pt-6 sm:px-8 lg:px-12 lg:pt-[38px] pb-3 flex flex-col gap-3 items-start pointer-events-none select-none w-full md:w-[calc(100%-25rem)] [&>*]:pointer-events-auto"
-        style={chromeHidden ? undefined : { background: "linear-gradient(var(--canvas) 85%, transparent)" }}
-      >
-        <button
-          type="button"
-          className={chromeHidden ? "btn btn-sm" : "btn btn-sm absolute right-4 sm:right-8 top-6 lg:top-[38px]"}
-          aria-pressed={chromeHidden}
-          onClick={toggleChrome}
-        >
-          {chromeHidden ? <EyeIcon weight="duotone" size={16} aria-hidden /> : <EyeSlashIcon weight="duotone" size={16} aria-hidden />}
-          {chromeHidden ? "Show controls" : "Hide controls"}
-        </button>
-        {!chromeHidden && (
+  // Graph, desktop: everything floats over one full-bleed canvas. Header and toolbar run the full
+  // content width at the same page inset as every other route (main's px-4 py-6, sm px-8, lg px-12
+  // py-38) and give up the right column only while the inspector is open; zoom and "Hide controls"
+  // sit bottom right (inside GraphCanvas). Below md the header and toolbar sit in the page flow above
+  // the canvas instead, so nothing covers the title or the graph.
+  // List: header and toolbar on top, the table scrolling below, the inspector in the same place.
+  // `alwaysShow`: states with no canvas (loading, error, empty) have nowhere to put "Show controls".
+  const frame = (toolbar: ReactNode, content: ReactNode, inspector?: ReactNode, aside?: ReactNode, alwaysShow = false) => {
+    const list = mode === "list";
+    const showChrome = list || alwaysShow || !chromeHidden;
+    // inline, so it wins over the responsive page padding
+    const reserve = inspector && !isPhone ? { paddingRight: "25rem" } : undefined;
+    return (
+      <div className="absolute inset-0 overflow-hidden flex flex-col md:block">
+        <Suspense fallback={null}>
+          <UrlFocus
+            onChange={(id, vault, memory) => {
+              setPendingFocus({ id, vault });
+              setPointedMemory(memory);
+            }}
+          />
+        </Suspense>
+        {list ? (
+          <div className="absolute inset-0 flex flex-col">
+            <div ref={chromeRef} className="shrink-0 px-4 pt-6 sm:px-8 lg:px-12 lg:pt-[38px] pb-3 flex flex-col gap-3 items-start w-full" style={reserve}>
+              {header}
+              {toolbar}
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-8 lg:px-12 pb-8" style={reserve}>
+              {content}
+            </div>
+          </div>
+        ) : (
           <>
-            {header}
-            {toolbar}
-            {aside}
+            {showChrome && (
+              <div
+                ref={chromeRef}
+                className={"relative shrink-0 md:absolute md:left-0 md:top-0 md:z-10 px-4 pt-6 sm:px-8 lg:px-12 lg:pt-[38px] pb-3 flex flex-col gap-3 items-start w-full md:pointer-events-none md:select-none md:[&>*]:pointer-events-auto md:[background:linear-gradient(var(--canvas)_85%,transparent)]"}
+                style={reserve}
+              >
+                {header}
+                {toolbar}
+                {aside}
+              </div>
+            )}
+            <div className="relative flex-1 min-h-0 md:absolute md:inset-0">{content}</div>
           </>
         )}
+        {inspector}
       </div>
-      {inspector}
-    </div>
-  );
+    );
+  };
 
   if (error) {
     return frame(
@@ -367,7 +535,10 @@ export default function EntityGraph({
             Try again
           </button>
         </div>
-      </div>
+      </div>,
+      undefined,
+      undefined,
+      true
     );
   }
 
@@ -378,6 +549,13 @@ export default function EntityGraph({
           <span key={w} className="skeleton h-6" style={{ width: w }} />
         ))}
       </div>,
+      mode === "list" ? (
+        <div className="flex flex-col gap-3 pt-2" aria-hidden>
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <span key={i} className="skeleton h-10 w-full" />
+          ))}
+        </div>
+      ) : (
       <div className="h-full flex items-center justify-center" aria-hidden>
         <div className="relative w-48 h-48">
           {[
@@ -391,6 +569,10 @@ export default function EntityGraph({
           ))}
         </div>
       </div>
+      ),
+      undefined,
+      undefined,
+      true
     );
   }
 
@@ -401,6 +583,12 @@ export default function EntityGraph({
   const visibleKinds = new Set(filterKinds.filter((k) => !hiddenKinds.has(k)));
   const counts = new Map<EntityKind, number>();
   graph.nodes.forEach((n) => counts.set(n.kind, (counts.get(n.kind) ?? 0) + 1));
+  // People & topics folds Code map's kinds into one "Code" chip, shown only when there is code to show
+  const groupCode = !kinds;
+  const codeCount = CODE_KINDS.reduce((sum, k) => sum + (counts.get(k) ?? 0), 0);
+  const codeShown = CODE_KINDS.some((k) => visibleKinds.has(k));
+  const chipKinds = groupCode ? filterKinds.filter((k) => !CODE_KINDS.includes(k)) : filterKinds;
+  const createKinds = groupCode ? filterKinds.filter((k) => !CODE_KINDS.includes(k)) : filterKinds;
   const nameOf = (id: string) => graph.nodes.find((n) => n.id === id)?.name ?? id;
 
   const createModal = showCreate && (
@@ -418,11 +606,11 @@ export default function EntityGraph({
         aria-labelledby="new-entity-title"
       >
         <div className="flex items-center justify-between">
-          <h2 id="new-entity-title" className="text-[20px] font-medium tracking-[-0.025em]">
+          <h2 id="new-entity-title" className="text-[20px] font-semibold tracking-[-0.01em]">
             Add a person or topic
           </h2>
           <button type="button" className="btn btn-ghost btn-icon" onClick={() => setShowCreate(false)} aria-label="Close">
-            <XIcon {...ICON} />
+            <X {...ICON} />
           </button>
         </div>
         <p className="text-[14px] -mt-1" style={{ color: "var(--ink-dim)" }}>
@@ -435,7 +623,7 @@ export default function EntityGraph({
             className="h-10 text-[14px] w-full"
             value={createForm.kind}
             onChange={(v) => setCreateForm((f) => ({ ...f, kind: v as EntityKind }))}
-            options={filterKinds.map((k) => ({ value: k, label: kindLabel(k) }))}
+            options={createKinds.map((k) => ({ value: k, label: kindLabel(k) }))}
           />
         </div>
         <label className="text-[14px] font-medium flex flex-col gap-1.5">
@@ -470,110 +658,115 @@ export default function EntityGraph({
     </div>
   );
 
-  const vaultSwitcher = myVaults.length > 1 && (
-    <Select
-      className="h-10 text-[14px] w-44"
-      value={vaultId ?? ""}
+  const vaultSwitcher = (
+    <SpaceSelect
+      className="h-10 text-[14px] flex-1 min-w-0 md:flex-none md:w-56"
+      value={vaultId}
       onChange={(v) => {
-        setVaultId(v || undefined);
+        chooseVault(v);
         setSelected(null);
       }}
-      aria-label="Memory space"
-      options={myVaults.map((v) => ({ value: v.kind === "personal" ? "" : v.id, label: v.kind === "personal" ? "Personal" : v.name }))}
     />
   );
 
+  const chip = (key: string, label: string, color: string, count: number, active: boolean, onClick: () => void) => (
+    <button key={key} type="button" className="pill shrink-0" aria-pressed={active} onClick={onClick}>
+      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color, opacity: active ? 1 : 0.35 }} aria-hidden />
+      {label}
+      <span className="tabular-nums" style={{ color: "var(--ink-dim)" }}>
+        {count}
+      </span>
+      <span className="sr-only">{active ? "(shown)" : "(hidden)"}</span>
+    </button>
+  );
+
+  // Desktop: space, find and add on one row, then the kind chips. Phones: space and add, then find on
+  // its own full-width row, then the chips in one row that scrolls sideways out to the screen edges.
   const toolbar = (
-    <div className="flex flex-wrap items-center gap-2 max-w-full">
-      {vaultSwitcher}
-      <div className="flex flex-wrap gap-2 items-center" role="group" aria-label="Show kinds">
-        {filterKinds.map((kind) => {
-          const active = visibleKinds.has(kind);
-          return (
-            <button key={kind} type="button" className="pill shrink-0" aria-pressed={active} onClick={() => toggleKind(kind)}>
-              <span
-                className="w-2 h-2 rounded-full shrink-0"
-                style={{ background: colorOf(kind), opacity: active ? 1 : 0.35 }}
-                aria-hidden
-              />
-              {kindLabel(kind)}
-              <span className="font-mono" style={{ color: "var(--ink-dim)" }}>
-                {counts.get(kind) ?? 0}
-              </span>
-              <span className="sr-only">{active ? "(shown)" : "(hidden)"}</span>
-            </button>
-          );
-        })}
+    <div className="flex flex-col gap-2 w-full min-w-0">
+      <div className="flex flex-wrap md:flex-nowrap items-center gap-2 w-full min-w-0">
+        {vaultSwitcher}
+        {graph.nodes.length > 0 && (
+          <form
+            className="order-last basis-full md:order-none md:basis-auto min-w-0"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const input = e.currentTarget.elements.namedItem("find") as HTMLInputElement;
+              const q = input.value.trim().toLowerCase();
+              const hit = graph.nodes.find((n) => n.name.toLowerCase() === q) ?? graph.nodes.find((n) => n.name.toLowerCase().includes(q));
+              if (q && hit) {
+                reveal(hit.kind);
+                selectNode(hit.id);
+                input.value = "";
+              }
+            }}
+          >
+            <input
+              name="find"
+              data-page-search
+              list="entity-names"
+              className="field h-10 w-full md:w-56 px-3 text-[14px]"
+              placeholder="Find a person or topic…"
+              aria-label="Find a person or topic"
+              autoComplete="off"
+            />
+            <datalist id="entity-names">
+              {graph.nodes.map((n) => (
+                <option key={n.id} value={n.name} />
+              ))}
+            </datalist>
+          </form>
+        )}
+        {!kinds && (
+          // Code map is filled by coding apps only: nothing to add by hand there
+          // Most people come here to read: adding is a secondary action for members, primary for admins.
+          <button
+            type="button"
+            className={`btn ${isAdmin ? "btn-primary" : ""} shrink-0 ml-auto md:ml-0`}
+            aria-label="Add person or topic"
+            onClick={() => setShowCreate(true)}
+          >
+            <Plus size={18} strokeWidth={1.75} aria-hidden />
+            {/* phones keep a short label rather than a bare + */}
+            <span className="sm:hidden" aria-hidden>
+              Add
+            </span>
+            <span className="max-sm:hidden">Add person or topic</span>
+          </button>
+        )}
       </div>
+      {/* a chip only for a kind that has something in it; no row at all while everything is empty */}
       {graph.nodes.length > 0 && (
-        <form
-          className="shrink-0"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const input = e.currentTarget.elements.namedItem("find") as HTMLInputElement;
-            const q = input.value.trim().toLowerCase();
-            const hit = graph.nodes.find((n) => n.name.toLowerCase() === q) ?? graph.nodes.find((n) => n.name.toLowerCase().includes(q));
-            if (q && hit) {
-              setHiddenKinds((prev) => {
-                const next = new Set(prev);
-                next.delete(hit.kind);
-                return next;
-              });
-              selectNode(hit.id);
-              input.value = "";
-            }
-          }}
+        <div
+          className="flex gap-2 items-center max-md:flex-nowrap max-md:overflow-x-auto max-md:[scrollbar-width:none] max-md:py-1 max-sm:-mx-4 max-sm:px-4 sm:max-md:-mx-8 sm:max-md:px-8 md:flex-wrap"
+          role="group"
+          aria-label="Show kinds"
         >
-          <input
-            name="find"
-            list="entity-names"
-            className="field h-10 w-52 px-3 text-[14px]"
-            placeholder="Find a person or topic…"
-            aria-label="Find a person or topic"
-            autoComplete="off"
-          />
-          <datalist id="entity-names">
-            {graph.nodes.map((n) => (
-              <option key={n.id} value={n.name} />
-            ))}
-          </datalist>
-        </form>
+          {chipKinds
+            .filter((kind) => (counts.get(kind) ?? 0) > 0)
+            .map((kind) => chip(kind, kindLabel(kind), colorOf(kind), counts.get(kind) ?? 0, visibleKinds.has(kind), () => toggleKind(kind)))}
+          {groupCode && codeCount > 0 && chip("code", "Code", colorOf("repository"), codeCount, codeShown, () => toggleCode(!codeShown))}
+        </div>
       )}
-      <button type="button" className="btn btn-primary shrink-0" onClick={() => setShowCreate(true)}>
-        <PlusIcon weight="duotone" size={18} aria-hidden />
-        Add person or topic
-      </button>
     </div>
   );
 
   if (graph.nodes.length === 0) {
+    // the empty message sits right under the toolbar, where the first row would be, not mid-canvas
+    const empty = guide ? (
+      <EmptyState title="Nothing mapped yet." action={guide.action}>
+        {guide.text}
+      </EmptyState>
+    ) : (
+      <EmptyState title="No people or topics yet.">
+        {vaultId
+          ? "People and topics appear here as your team's AI apps save memories in this space, or you can add one yourself."
+          : "They appear as your connected sources sync and your AI apps save memories, or you can add one yourself."}
+      </EmptyState>
+    );
     return (
       <>
-        {frame(
-          toolbar,
-          // Start below the floating header and toolbar, which would otherwise cover the card's top.
-          <div className="h-full overflow-y-auto flex items-center justify-center p-6" style={{ paddingTop: insets.top + 16 }}>
-            {guide ? (
-              <div className="panel flex flex-col items-center gap-3 text-center max-w-sm text-[14px] p-3 pb-5" style={{ color: "var(--ink-dim)" }}>
-                <EmptyArt variant="people" className="w-full h-[140px]" />
-                <p className="font-medium px-3" style={{ color: "var(--ink)" }}>Nothing mapped yet.</p>
-                {guide}
-              </div>
-            ) : (
-              <div className="panel flex flex-col items-center gap-3 text-center max-w-sm p-3 pb-5">
-                <EmptyArt variant="people" className="w-full h-[140px]" />
-                <p className="text-[14px] px-3" style={{ color: "var(--ink-dim)" }}>
-                  No people or topics yet. They appear as your connected sources sync and your AI apps save memories, or you can add one
-                  yourself.
-                </p>
-                <button type="button" className="btn btn-primary" onClick={() => setShowCreate(true)}>
-                  <PlusIcon weight="duotone" size={18} aria-hidden />
-                  Add person or topic
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+        {mode === "list" ? frame(toolbar, empty, undefined, undefined, true) : frame(toolbar, null, undefined, empty, true)}
         {createModal}
       </>
     );
@@ -582,81 +775,99 @@ export default function EntityGraph({
   const lastTouched = selected
     ? selected.memory.reduce<string | undefined>((a, m) => (m.created_at && (!a || m.created_at > a) ? m.created_at : a), undefined)
     : undefined;
+  // One author for every memory: say so once at the top, not on each row.
+  const soleAuthor =
+    selected && selected.memory.length > 0 && selected.memory.every((m) => m.owner_email === selected.memory[0].owner_email)
+      ? selected.memory[0].owner_email
+      : undefined;
+  const topAuthor = soleAuthor ?? selected?.owner_email;
 
   const inspector = selected && (
     <aside
       aria-label={`${selected.name} details`}
-      className="panel pop-in absolute z-20 flex flex-col inset-x-2 bottom-2 max-h-[62%] md:inset-x-auto md:bottom-auto md:right-6 md:top-6 md:w-[22rem] md:max-h-[calc(100%-5rem)]"
-      style={{ transformOrigin: "top right" }}
+      // phones: a full-screen sheet with Back; desktop: a card in the right column
+      className={
+        isPhone
+          ? "panel fixed inset-0 z-50 flex flex-col"
+          : "panel pop-in absolute z-20 flex flex-col right-6 top-6 w-[22rem] max-h-[calc(100%-5rem)]"
+      }
+      style={
+        isPhone
+          ? { borderRadius: 0, border: 0 }
+          : { transformOrigin: "top right" }
+      }
     >
+      {isPhone && (
+        <div className="shrink-0 px-2 pt-2" style={{ borderBottom: "1px solid var(--border)" }}>
+          <button type="button" className="btn btn-ghost btn-sm mb-2" onClick={() => setSelected(null)}>
+            <ArrowLeft size={16} strokeWidth={1.75} aria-hidden />
+            Back
+          </button>
+        </div>
+      )}
       <div className="flex items-start justify-between gap-2 p-5 pb-3">
         <div className="flex items-center gap-3 min-w-0">
-          {selected.kind === "person" && <Blobatar name={selected.name || selected.id} animate="hover" size={36} background="circle" />}
+          {selected.kind === "person" && <Monogram name={selected.name || selected.id} size={36} color={colorOf("person")} />}
           <div className="min-w-0">
-            <span className="caps block" style={{ color: "var(--accent-text)" }}>
-              Selected {kindLabel(selected.kind).toLowerCase()}
-            </span>
-            <h2 className="text-[20px] font-medium truncate tracking-[-0.025em]">{selected.name}</h2>
+            <h2 className="text-[20px] font-semibold tracking-[-0.015em] truncate">{selected.name}</h2>
             <span className="text-[13px] inline-flex items-center gap-1.5 mt-0.5" style={{ color: "var(--ink-dim)" }}>
               <span className="w-2 h-2 rounded-full" style={{ background: kindColor(selected.kind) }} aria-hidden />
               {kindLabel(selected.kind)}
-              {isCustomKind(selected.kind) && (
-                <span className="inline-flex items-center gap-1 ml-1">
-                  <input
-                    type="color"
-                    aria-label={`Colour for ${selected.kind}`}
-                    className="w-4 h-4 p-0 border-0 bg-transparent cursor-pointer"
-                    value={/^#[0-9a-f]{6}$/i.test(kindColor(selected.kind)) ? kindColor(selected.kind) : defaultKindHex(selected.kind)}
-                    onChange={(e) => setKindColor(selected.kind, e.target.value)}
-                  />
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => shuffleKindColor(selected.kind)}>
-                    Shuffle
-                  </button>
-                </span>
+              {isCustomKind(selected.kind) && canDelete(selected.owner_email) && (
+                // the dot doubles as the colour picker for an agent's own kind (for whoever can edit it)
+                <input
+                  type="color"
+                  aria-label={`Colour for ${kindLabel(selected.kind)}`}
+                  title="Change this kind's colour"
+                  className="kind-swatch"
+                  value={/^#[0-9a-f]{6}$/i.test(kindColor(selected.kind)) ? kindColor(selected.kind) : defaultKindHex(selected.kind)}
+                  onChange={(e) => setKindColor(selected.kind, e.target.value)}
+                />
               )}
             </span>
           </div>
         </div>
         <TooltipGroup>
           <div className="flex items-center gap-0.5 shrink-0 -mr-1">
-            <Tooltip label="Edit">
-              <button className="btn btn-ghost btn-sm btn-icon" onClick={startEditing} aria-label="Edit">
-                <PencilSimpleIcon {...ICON} />
-              </button>
-            </Tooltip>
-            <Tooltip label="Delete. Also removes its memories and connections">
-              <ConfirmButton label="Delete" confirmLabel="Delete" onConfirm={deleteSelected} disabled={busy} className="btn btn-ghost btn-sm btn-icon">
-                <TrashIcon {...ICON} />
-              </ConfirmButton>
-            </Tooltip>
-            <Tooltip label="Close" shortcut="Esc">
-              <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setSelected(null)} aria-label="Close">
-                <XIcon {...ICON} />
-              </button>
-            </Tooltip>
+            {canDelete(selected.owner_email) && !editing && (
+              <Tooltip label="Edit">
+                <button className="btn btn-ghost btn-sm btn-icon" onClick={startEditing} aria-label="Edit">
+                  <Pencil {...ICON} />
+                </button>
+              </Tooltip>
+            )}
+            {canDelete(selected.owner_email) && (
+              <Tooltip label="Delete. Also removes its memories and connections">
+                <ConfirmButton label="Delete" confirmLabel="Delete" onConfirm={deleteSelected} disabled={busy} className="btn btn-ghost btn-sm btn-icon">
+                  <Trash2 {...ICON} />
+                </ConfirmButton>
+              </Tooltip>
+            )}
+            {!isPhone && (
+              <Tooltip label="Close" shortcut="Esc">
+                <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setSelected(null)} aria-label="Close">
+                  <X {...ICON} />
+                </button>
+              </Tooltip>
+            )}
           </div>
         </TooltipGroup>
       </div>
 
       <div className="overflow-y-auto px-5 pb-5 flex flex-col gap-6">
-        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-[13px] items-center">
-          <dt className="label">Added by</dt>
-          <dd className="min-w-0">
-            {selected.owner_email ? <Author email={selected.owner_email} me={myEmail} /> : <span style={{ color: "var(--ink-faint)" }}>Not recorded</span>}
-          </dd>
-          <dt className="label">Last memory</dt>
-          <dd className="font-mono text-[12px]" style={{ color: "var(--ink-dim)" }}>
-            {lastTouched ? `${age(lastTouched)} ago`.replace("now ago", "just now") : "None yet"}
-          </dd>
-          {selected.aliases.length > 0 && (
-            <>
-              <dt className="label">Other names</dt>
-              <dd className="truncate" style={{ color: "var(--ink-dim)" }}>
-                {selected.aliases.join(", ")}
-              </dd>
-            </>
+        <div className="flex flex-col gap-1">
+          {topAuthor && <Byline email={topAuthor} />}
+          {lastTouched && (
+            <p className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+              Last memory {ago(lastTouched)}
+            </p>
           )}
-        </dl>
+          {selected.aliases.length > 0 && (
+            <p className="text-[12px] truncate" style={{ color: "var(--ink-dim)" }} title={selected.aliases.join(", ")}>
+              Also called {selected.aliases.join(", ")}
+            </p>
+          )}
+        </div>
 
         {actionError && <ErrorLine error={actionError} />}
 
@@ -699,48 +910,54 @@ export default function EntityGraph({
         <section className="flex flex-col gap-2">
           <h3 className="section-title flex items-baseline gap-2">
             Memory
-            <span className="font-mono text-[12px] font-normal" style={{ color: "var(--ink-faint)" }}>
+            <span className="text-[12px] font-normal tabular-nums" style={{ color: "var(--ink-faint)" }}>
               {selected.memory.length}
             </span>
           </h3>
           {selected.memory.length === 0 ? (
             <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
-              Nothing saved yet. Add the first memory below.
+              Nothing saved yet.
             </p>
           ) : (
             <ul className="hairline-rows">
               {selected.memory.map((m) => (
-                <li key={m.id} ref={m.id === freshMemory ? blurIn : undefined} className="group py-2.5 flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex flex-col gap-1.5">
-                    <EditableMemoryText memory={m} disabled={busy} onSaved={() => void selectNode(selected.id)} />
-                    {(m.owner_email || m.created_at) && (
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Author email={m.owner_email} me={myEmail} />
-                        {age(m.created_at) && (
-                          <time className="font-mono text-[11.5px]" style={{ color: "var(--ink-faint)" }} dateTime={m.created_at} title={m.created_at}>
-                            {age(m.created_at)}
-                          </time>
-                        )}
-                      </div>
+                <li
+                  key={m.id}
+                  ref={m.id === freshMemory ? blurIn : m.id === pointedMemory ? scrollToMemory : undefined}
+                  className="group py-2.5 flex items-start justify-between gap-2"
+                  style={m.id === pointedMemory ? { background: "var(--accent-soft)", boxShadow: "-8px 0 0 var(--accent-soft), 8px 0 0 var(--accent-soft)" } : undefined}
+                  aria-current={m.id === pointedMemory ? "true" : undefined}
+                >
+                  <div className="min-w-0 flex flex-col gap-1">
+                    {/* edit and delete follow one rule: whoever wrote it, and admins */}
+                    {canDelete(m.owner_email) ? (
+                      <EditableMemoryText memory={m} disabled={busy} onSaved={() => void selectNode(selected.id)} />
+                    ) : (
+                      <span className="text-[14px] leading-snug">{m.text}</span>
                     )}
+                    <Byline email={soleAuthor !== undefined ? null : m.owner_email} at={m.created_at} />
                   </div>
-                  <Tooltip label="Delete memory">
-                    <ConfirmButton
-                      label="Delete memory"
-                      confirmLabel="Delete"
-                      onConfirm={() => deleteMemory(m.id)}
-                      disabled={busy}
-                      className="btn btn-ghost btn-sm btn-icon shrink-0 -mr-1"
-                    >
-                      <XIcon weight="duotone" size={16} />
-                    </ConfirmButton>
-                  </Tooltip>
+                  {canDelete(m.owner_email) && (
+                    <Tooltip label="Delete memory">
+                      <ConfirmButton
+                        label="Delete memory"
+                        confirmLabel="Delete"
+                        onConfirm={() => deleteMemory(m.id)}
+                        disabled={busy}
+                        className="btn btn-ghost btn-sm btn-icon shrink-0 -mr-1"
+                      >
+                        <X size={16} strokeWidth={1.75} />
+                      </ConfirmButton>
+                    </Tooltip>
+                  )}
                 </li>
               ))}
             </ul>
           )}
+          {adding === "memory" ? (
           <form onSubmit={submitMemory} className="flex flex-col gap-2">
             <textarea
+              autoFocus
               className="field px-3 py-2 text-[14px]"
               rows={2}
               aria-label={`New memory about ${selected.name}`}
@@ -752,6 +969,17 @@ export default function EntityGraph({
               <button type="submit" disabled={busy || !memoryText.trim()} className="btn btn-sm">
                 Add memory
               </button>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAdding(null)}>
+                Cancel
+              </button>
+            </div>
+          </form>
+          ) : (
+            <div className="flex items-center gap-3">
+              <button type="button" className="btn btn-ghost btn-sm self-start -ml-2" onClick={() => setAdding("memory")}>
+                <Plus size={16} strokeWidth={1.75} aria-hidden />
+                Add memory
+              </button>
               {memoryStatus !== "idle" && (
                 <span className="inline-flex items-center gap-1.5 text-[13px]" style={{ color: "var(--ink-dim)" }} role="status">
                   <SyncMark status={memoryStatus} />
@@ -759,14 +987,14 @@ export default function EntityGraph({
                 </span>
               )}
             </div>
-          </form>
-          {selected.memory.length > 1 && <TidyObservationsButton entityId={selected.id} disabled={busy} onDone={() => void selectNode(selected.id)} />}
+          )}
+          {selected.memory.length > 1 && selected.memory.every((m) => canDelete(m.owner_email)) && <TidyUp entityId={selected.id} disabled={busy} onDone={() => void selectNode(selected.id)} />}
         </section>
 
         <section className="flex flex-col gap-2">
           <h3 className="section-title flex items-baseline gap-2">
             Connections
-            <span className="font-mono text-[12px] font-normal" style={{ color: "var(--ink-faint)" }}>
+            <span className="text-[12px] font-normal tabular-nums" style={{ color: "var(--ink-faint)" }}>
               {selected.relations.length}
             </span>
           </h3>
@@ -779,31 +1007,34 @@ export default function EntityGraph({
               {selected.relations.map((r) => {
                 const other = r.direction === "out" ? r.out : r.in;
                 return (
-                  <li key={r.id} className="py-2 flex items-center gap-2 min-w-0">
+                  // each connection reads as a sentence: "works on Billing Rewrite" (outgoing) or
+                  // "Tom Becker works on this" (incoming), never a bare arrow
+                  <li key={r.id} className="py-2 flex items-baseline gap-1.5 min-w-0 text-[13px]" title={r.owner_email ? `Added by ${r.owner_email}` : undefined}>
                     {r.direction === "out" ? (
-                      <ArrowRightIcon weight="duotone" size={13} className="shrink-0" style={{ color: "var(--ink-dim)" }} aria-label="outgoing" />
+                      <>
+                        <span className="shrink-0" style={{ color: "var(--ink-dim)" }}>
+                          {r.label.replace(/_/g, " ")}
+                        </span>
+                        <button type="button" className="truncate text-left min-w-0 hover:underline" style={{ color: "var(--accent-text)" }} onClick={() => selectNode(other)}>
+                          {nameOf(other)}
+                        </button>
+                      </>
                     ) : (
-                      <ArrowLeftIcon weight="duotone" size={13} className="shrink-0" style={{ color: "var(--ink-dim)" }} aria-label="incoming" />
+                      <>
+                        <button type="button" className="truncate text-left min-w-0 hover:underline" style={{ color: "var(--accent-text)" }} onClick={() => selectNode(other)}>
+                          {nameOf(other)}
+                        </button>
+                        <span className="shrink-0" style={{ color: "var(--ink-dim)" }}>
+                          {r.label.replace(/_/g, " ")} this
+                        </span>
+                      </>
                     )}
-                    <span className="font-mono text-[11.5px] shrink-0" style={{ color: "var(--ink-faint)" }}>
-                      {r.label}
-                    </span>
-                    <button
-                      type="button"
-                      className="text-[13px] truncate text-left min-w-0 hover:underline"
-                      style={{ color: "var(--accent-text)" }}
-                      onClick={() => selectNode(other)}
-                    >
-                      {nameOf(other)}
-                    </button>
-                    <span className="ml-auto shrink-0">
-                      <Author email={r.owner_email} me={myEmail} />
-                    </span>
                   </li>
                 );
               })}
             </ul>
           )}
+          {adding === "relation" ? (
           <form onSubmit={submitRelation} className="flex flex-col gap-2">
             <Select
               aria-label="Relate to"
@@ -817,15 +1048,28 @@ export default function EntityGraph({
             />
             <input
               className="field h-10 px-3 text-[14px]"
-              placeholder="How they connect, e.g. works_at"
+              placeholder="How they connect, e.g. works at"
               aria-label="Relation label"
               value={relForm.label}
               onChange={(e) => setRelForm((f) => ({ ...f, label: e.target.value }))}
             />
-            <button type="submit" disabled={busy || !relForm.to || !relForm.label.trim()} className="btn btn-sm self-start">
-              Add connection
-            </button>
+            <div className="flex gap-2">
+              <button type="submit" disabled={busy || !relForm.to || !relForm.label.trim()} className="btn btn-sm">
+                Add connection
+              </button>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAdding(null)}>
+                Cancel
+              </button>
+            </div>
           </form>
+          ) : (
+            graph.nodes.length > 1 && (
+              <button type="button" className="btn btn-ghost btn-sm self-start -ml-2" onClick={() => setAdding("relation")}>
+                <Plus size={16} strokeWidth={1.75} aria-hidden />
+                Add connection
+              </button>
+            )
+          )}
         </section>
       </div>
     </aside>
@@ -835,7 +1079,16 @@ export default function EntityGraph({
     <>
       {frame(
         toolbar,
-        <>
+        mode === "list" ? (
+          <EntityList
+            entities={(listQuery.data?.results ?? []).filter((e) => visibleKinds.has(e.kind))}
+            total={listQuery.data?.has_more ? listQuery.data.total : undefined}
+            kindLabel={kindLabel}
+            kindColor={colorOf}
+            selectedId={selected?.id}
+            onSelect={selectNode}
+          />
+        ) : (
           <GraphCanvas
             nodes={graph.nodes}
             edges={graph.edges}
@@ -846,12 +1099,14 @@ export default function EntityGraph({
             onSelect={selectNode}
             myEmail={myEmail}
             ariaLabel="Entity relationship graph"
+            chrome={{ hidden: chromeHidden, toggle: toggleChrome }}
           />
-        </>,
+        ),
         inspector,
-        guide && graph.nodes.length < SPARSE && (
-          <div className="soft-panel px-4 py-3 max-w-sm text-[14px] flex flex-col gap-2 items-start" style={{ color: "var(--ink-dim)" }}>
-            {guide}
+        mode === "graph" && guide && graph.nodes.length < SPARSE && (
+          <div className="max-w-sm text-[13px] flex flex-col gap-2 items-start" style={{ color: "var(--ink-dim)" }}>
+            <p>{guide.text}</p>
+            {guide.action}
           </div>
         )
       )}

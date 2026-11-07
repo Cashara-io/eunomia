@@ -128,7 +128,11 @@ pub(super) async fn require_admin(state: &AppState, user: &User, what: &str) -> 
 )]
 async fn request_update(State(state): State<AppState>, user: User) -> AppResult<Json<Value>> {
     require_admin(&state, &user, "update this server").await?;
-    drop_marker(&state, "requested")
+    let out = drop_marker(&state, "requested")?;
+    if out.0["configured"] == true {
+        crate::audit::record_as_caller(&state.control, &user.id, "server.update", "", "ok").await;
+    }
+    Ok(out)
 }
 
 /// "Check now": ask GitHub for the newest release without waiting for the

@@ -42,7 +42,11 @@ test.describe("Sign up", () => {
     await page.goto("about:blank");
     await context.clearCookies();
     await fillRegister(page, email.toUpperCase(), PASSWORD);
-    await expect(page.getByText("A user with that email already exists.")).toBeVisible();
+    await expect(page.getByText("There's already an account for this email.")).toBeVisible();
+    await expect(page.getByText("auth.email_taken")).toBeHidden(); // behind Details
+    await page.getByRole("link", { name: "Sign in instead" }).click();
+    await expect(page).toHaveURL(/\/login\?email=/);
+    await expect(page.getByLabel("Email")).toHaveValue(email.toUpperCase());
   });
 
   test("email is case- and whitespace-insensitive at login", async ({ page, context }) => {

@@ -51,7 +51,7 @@ async fn token(app: &TestApp, granted: &[&str], vault: Option<&RecordId>) -> Str
 }
 
 async fn org_vault(app: &TestApp) -> RecordId {
-    rid::parse(&common::sys(vaults::create_vault(&app.db().await, &app.user.id, "Team", "org")).await.unwrap().id).unwrap()
+    rid::parse(&common::sys(vaults::create_vault(&app.db().await, &app.state.control, &app.user.id, "Team", "org")).await.unwrap().id).unwrap()
 }
 
 /// A JSON-RPC `tools/call` over `/mcp`; returns (isError, tool value).
@@ -352,9 +352,9 @@ async fn vault_restricted_token_is_confined_to_its_vault() {
 async fn restricted_token_loses_access_when_removed_from_its_vault() {
     let app = TestApp::new().await;
     let other = common::register(&app.state, "o@example.com").await;
-    let theirs: RecordId = rid::parse(&common::sys(vaults::create_vault(&app.db().await, &other.id, "Theirs", "org")).await.unwrap().id).unwrap();
+    let theirs: RecordId = rid::parse(&common::sys(vaults::create_vault(&app.db().await, &app.state.control, &other.id, "Theirs", "org")).await.unwrap().id).unwrap();
     common::sys(vaults::invite_member(&app.db().await, app.control(), &other.id, &theirs, &app.user.email, "member")).await.unwrap();
-    common::sys(vaults::accept_invitation(&app.db().await, &app.user.id, &theirs)).await.unwrap();
+    common::sys(vaults::accept_invitation(&app.db().await, &app.state.control, &app.user.id, &theirs)).await.unwrap();
     let t = token(&app, scopes::ALL, Some(&theirs)).await;
 
     let (status, _, _) = send(&app.router, "GET", "/api/entities", None, &bearer(&t)).await;

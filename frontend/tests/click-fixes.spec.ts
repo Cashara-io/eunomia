@@ -41,8 +41,7 @@ test.describe("Click-through fixes", () => {
     await page.getByLabel("Confirm password").fill(PASSWORD);
     await page.getByRole("button", { name: "Create account" }).click();
     await page.waitForURL(/\/onboarding\?next=%2Fvaults/);
-    await page.getByRole("button", { name: "Let's go" }).click();
-    await page.getByRole("button", { name: "Skip", exact: true }).click();
+    await page.getByRole("button", { name: "Set up later" }).click();
     const skip = page.getByRole("button", { name: "Skip & finish" });
     if (await skip.isVisible({ timeout: 2000 }).catch(() => false)) await skip.click();
     await page.waitForURL((url) => url.pathname === "/vaults");
@@ -116,8 +115,10 @@ test.describe("Click-through fixes", () => {
     const settings = await (await page.request.get("/api/settings")).json();
     test.skip(settings.model_configured, "this stack has a model configured");
     await page.goto("/chat");
-    await expect(page.getByText("No model is configured")).toBeVisible();
-    await expect(page.getByLabel("Message")).toBeDisabled();
+    // Admins are told what to set up; members are told to ask an admin.
+    await expect(page.getByText(/Set up a model to use Chat|Chat isn.t turned on yet/)).toBeVisible();
+    // Only the empty state: no composer and no conversation list to type into.
+    await expect(page.getByLabel("Message")).toHaveCount(0);
     expect(await page.locator("article").count()).toBe(0);
   });
 
@@ -152,7 +153,7 @@ test.describe("Click-through fixes", () => {
   test("Space opens a focused graph node, and deleting an entity confirms inline", async ({ browser }) => {
     const { page } = await newUser(browser, "space");
     await tool(page, "memory_write", { subject_name: "Ada Lovelace", subject_kind: "person", text: "Wrote the first published algorithm." });
-    await page.goto("/entities");
+    await page.goto("/entities?view=connections"); // List is the default view now
     const node = page.getByRole("img", { name: "Entity relationship graph" }).getByRole("button", { name: "Ada Lovelace" });
     await node.focus();
     await page.keyboard.press("Space");

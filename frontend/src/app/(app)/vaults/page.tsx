@@ -3,10 +3,9 @@
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ArrowLeftIcon, ArrowsClockwiseIcon, ArrowsMergeIcon, CaretDownIcon, CaretRightIcon, CheckIcon, EnvelopeSimpleIcon, LockIcon, PlusIcon, StackIcon, UsersIcon } from "@phosphor-icons/react/ssr";
+import { ArrowLeft, Check, ChevronRight, Combine, ChevronDown, Layers, Plus } from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
-import VaultChip, { vaultTone } from "@/components/VaultChip";
-import { EmptyState } from "@/components/Shapes";
+import EmptyState from "@/components/ui/EmptyState";
 import StatusLabel from "@/components/ui/StatusLabel";
 import type { Vault } from "@/lib/types";
 import { useMe } from "@/lib/queries/auth";
@@ -26,7 +25,7 @@ import LiveStatusBadge from "@/components/live/LiveStatusBadge";
 import { JoinSharedSpace } from "@/components/PeerSharing";
 import { cssVar, prefersReducedMotion } from "@/components/bits/motion";
 import SpaceDetail from "@/components/vaults/SpaceDetail";
-import { ICON, RoleChip, SpaceSwatch, ago, peopleLine, sameEmail } from "@/components/vaults/bits";
+import { ICON, JoinedNotice, SpaceSwatch, ago, inviterWords, peopleLine, sameEmail } from "@/components/vaults/bits";
 
 /* New rows (since the previous load, never the first) settle in. A stable function, so React calls it once per mount. */
 function arrive(el: HTMLElement | null) {
@@ -45,9 +44,11 @@ function InvitationsPanel() {
   const refreshVaults = useRefreshVaults();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [joined, setJoined] = useState<string | null>(null);
+  // the last space joined, kept after its invitation leaves the list, so the person sees where to go next
+  const [welcome, setWelcome] = useState<{ id: string; name: string } | null>(null);
   const [error, setError] = useState<Failure | null>(null);
 
-  async function accept(vaultId: string, button: HTMLElement, pointer: boolean) {
+  async function accept(vaultId: string, vaultName: string, button: HTMLElement, pointer: boolean) {
     setBusyId(vaultId);
     setError(null);
     try {
@@ -56,6 +57,7 @@ function InvitationsPanel() {
       // The dashed invite turns solid with a soft flash, then the vault row arrives in the list.
       setJoined(vaultId);
       if (!prefersReducedMotion()) await new Promise((r) => setTimeout(r, 180));
+      setWelcome({ id: vaultId, name: vaultName });
       await refreshVaults();
     } catch (e) {
       setError(
@@ -85,12 +87,13 @@ function InvitationsPanel() {
   }
 
   if (invitationsQuery.isError) return <ErrorLine error={failure(invitationsQuery.error, "Could not load your invitations.")} />;
-  if (!invitations || invitations.length === 0) return null;
+  if (!invitations || invitations.length === 0)
+    return welcome ? <JoinedNotice id={welcome.id} name={welcome.name} onDismiss={() => setWelcome(null)} /> : null;
 
   return (
     <section className="flex flex-col gap-2.5" aria-labelledby="invites-title">
+      {welcome && <JoinedNotice id={welcome.id} name={welcome.name} onDismiss={() => setWelcome(null)} />}
       <h2 id="invites-title" className="section-title flex items-center gap-2">
-        <EnvelopeSimpleIcon {...ICON} aria-hidden />
         Pending invitations
         <span className="label font-mono">{invitations.length}</span>
       </h2>
@@ -105,12 +108,12 @@ function InvitationsPanel() {
         >
           {joined === inv.vault_id && <JoinFlash />}
           <div className="flex-1 min-w-[160px]">
-            <div className="text-[15px] font-medium min-w-0">
-              <VaultChip tone={vaultTone(inv.vault_kind)} name={inv.vault_name} />
+            <div className="text-[15px] font-semibold truncate">
+              {inv.vault_name}
             </div>
             <div className="label mt-0.5">
-              Invited as {inv.role === "owner" ? "an owner" : "a member"}
-              {inv.vault_kind === "org" ? " of a shared space" : ""}
+              {inviterWords(inv.invited_by)} invited you as {inv.role === "owner" ? "an owner" : "a member"}
+              {inv.vault_kind === "org" ? " of a team space" : ""}
               {ago(inv.created_at) ? ` · ${ago(inv.created_at)}` : ""}
             </div>
           </div>
@@ -124,11 +127,11 @@ function InvitationsPanel() {
               Decline
             </button>
             <button
-              onClick={(e) => accept(inv.vault_id, e.currentTarget, e.detail > 0)}
+              onClick={(e) => accept(inv.vault_id, inv.vault_name, e.currentTarget, e.detail > 0)}
               disabled={busyId === inv.vault_id}
-              className="btn btn-primary btn-sm"
+              className="btn btn-sm"
             >
-              <CheckIcon {...ICON} />
+              <Check {...ICON} />
               Join
             </button>
           </div>
@@ -175,21 +178,21 @@ function VaultRow({
     <button
       onClick={onSelect}
       aria-current={selected || undefined}
-      className="w-full flex items-center gap-3 px-4 py-3.5 min-h-[60px] text-left transition-[background-color] duration-[120ms] hover:bg-[var(--surface-raised)]"
-      style={selected ? { background: "var(--accent-soft)" } : undefined}
+      className="w-full flex items-center gap-3 px-4 py-3.5 min-h-[60px] text-left transition-[background-color] duration-[120ms] hover:bg-[var(--bauhaus-app-soft)]"
+      style={selected ? { background: "var(--bauhaus-app-soft)", boxShadow: "inset 3px 0 0 var(--bauhaus-app-ink)" } : undefined}
     >
       <span className="flex-1 min-w-0">
         <span className="flex items-center gap-2.5 min-w-0">
+          {/* The one dot per space: its colour identity, repeated nowhere else. */}
           <SpaceSwatch vault={vault} />
           <span className="text-[16px] font-medium truncate">{vault.name}</span>
-          {vault.role !== "owner" && <RoleChip role={vault.role} />}
         </span>
         <span className="label block mt-1 truncate">
           {peopleLine(vault, members)}
           {owner ? ` · owned by ${owner}` : ""}
         </span>
       </span>
-      <CaretRightIcon {...ICON} aria-hidden className="shrink-0" style={{ color: selected ? "var(--ink)" : "var(--ink-dim)" }} />
+      <ChevronRight {...ICON} aria-hidden className="shrink-0" style={{ color: selected ? "var(--ink)" : "var(--ink-dim)" }} />
     </button>
   );
 }
@@ -198,7 +201,7 @@ function CreateVaultForm({
   onCreated,
   onCancel,
 }: {
-  onCreated: () => void;
+  onCreated: (id: string) => void;
   onCancel: () => void;
 }) {
   const [name, setName] = useState("");
@@ -212,9 +215,9 @@ function CreateVaultForm({
     setBusy(true);
     setError(null);
     try {
-      await createVault.mutateAsync({ name: trimmed });
+      const made = await createVault.mutateAsync({ name: trimmed });
       setName("");
-      onCreated();
+      onCreated(made.id);
     } catch (e) {
       setError(
         failure(e, "Could not create that space. Try a different name."),
@@ -265,6 +268,9 @@ function CreateVaultForm({
     </form>
   );
 }
+
+/** A quiet action that reads as a link (the page header keeps one primary button). */
+const TEXT_LINK = "inline-flex items-center gap-1 min-h-10 text-[14px] font-medium underline-offset-2 hover:underline";
 
 const vaultLabel = (v: Vault) => (v.kind === "personal" ? "Personal" : v.name);
 
@@ -321,7 +327,7 @@ function MergeVaultsCard({
       setError(
         failure(
           e,
-          "Could not combine those spaces. CheckIcon you are a member of both and try again.",
+          "Could not combine those spaces. Check you are a member of both and try again.",
         ),
       );
     } finally {
@@ -346,15 +352,15 @@ function MergeVaultsCard({
     <section className="flex flex-col gap-3 items-start" aria-labelledby="merge-title">
       <button
         type="button"
-        className="btn"
+        className={TEXT_LINK}
+        style={{ color: "var(--accent-text)" }}
         aria-expanded={open}
         aria-controls="merge-panel"
         onClick={() => setOpen((o) => !o)}
         id="merge-title"
       >
-        <ArrowsMergeIcon {...ICON} />
         Advanced: combine two spaces
-        <CaretDownIcon {...ICON} aria-hidden style={{ transform: open ? "rotate(180deg)" : undefined }} />
+        <ChevronDown size={16} strokeWidth={1.75} aria-hidden style={{ transform: open ? "rotate(180deg)" : undefined }} />
       </button>
       {open && (
       <div id="merge-panel" className="ledger p-5 flex flex-col gap-4 w-full">
@@ -365,7 +371,7 @@ function MergeVaultsCard({
         </p>
         <div className="flex items-end gap-2 flex-wrap">
           {select(a, setA, "First space")}
-          <PlusIcon
+          <Plus
             {...ICON}
             aria-hidden
             className="mb-3 hidden sm:block"
@@ -386,9 +392,9 @@ function MergeVaultsCard({
           <button
             onClick={merge}
             disabled={busy || !a || a === b}
-            className="btn btn-primary"
+            className="btn"
           >
-            <ArrowsMergeIcon {...ICON} />
+            <Combine {...ICON} />
             {busy ? "Combining…" : "Merge into a new space"}
           </button>
         </div>
@@ -517,9 +523,10 @@ function useWide() {
 
 export default function VaultsPage() {
   const vaultsQuery = useVaults();
-  const refetchAll = useRefreshVaults();
   const vaults = vaultsQuery.data ?? (vaultsQuery.isError ? [] : null);
-  const me = useMe().data?.email ?? null;
+  const meQuery = useMe();
+  const me = meQuery.data?.email ?? null;
+  const isAdmin = meQuery.data?.is_admin ?? false;
   const [creating, setCreating] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // On narrow screens: has the person opened a space (detail view) or are they on the list?
@@ -540,6 +547,9 @@ export default function VaultsPage() {
   const org = vaults?.filter((v) => v.kind !== "personal") ?? [];
   // Open on the first shared space: that is where the people are.
   const selected = vaults?.find((v) => v.id === selectedId) ?? org[0] ?? personal[0] ?? null;
+
+  // Joining another Eunomia and combining spaces are for admins and people who run a shared space.
+  const canManage = isAdmin || org.some((v) => v.role === "owner");
 
   const wide = useWide();
   const showDetail = wide || opened;
@@ -564,24 +574,28 @@ export default function VaultsPage() {
   return (
     <div className="max-w-6xl flex flex-col gap-7">
       <PageHeader
-        icon={StackIcon} tone="project"
+        icon={Layers}
         title="Memory spaces"
-        intro="Keep each project's memories in its own space. Your personal space is private; other spaces can be shared with people you invite. AI apps can use a space by its name."
+        intro="Keep each project's memories in its own space. Share a space with the people you invite."
+        actions={
+          <>
+            <LiveStatusBadge />
+            {/* While the create form is open, its own Create button is the one primary action. */}
+            <button onClick={() => setCreating(true)} disabled={creating} className={`btn ${creating ? "" : "btn-primary"}`}>
+              <Plus {...ICON} />
+              Create space
+            </button>
+          </>
+        }
       />
 
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <LiveStatusBadge />
-        <button onClick={() => void refetchAll()} className="btn btn-icon" aria-label="Refresh spaces" title="Refresh">
-          <ArrowsClockwiseIcon {...ICON} />
-        </button>
-        <JoinSharedSpace onJoined={(id) => open(id)} />
-        <button onClick={() => setCreating(true)} disabled={creating} className="btn btn-primary">
-          <PlusIcon {...ICON} />
-          Create space
-        </button>
-      </div>
-
-      {creating && <CreateVaultForm onCancel={() => setCreating(false)} onCreated={() => setCreating(false)} />}
+      {creating && (
+        <CreateVaultForm onCancel={() => setCreating(false)} onCreated={(id) => {
+            setCreating(false);
+            open(id);
+          }}
+        />
+      )}
 
       {vaultsQuery.isError && <ErrorLine error={failure(vaultsQuery.error, "Could not load your memory spaces.", " Reload the page to try again.")} />}
 
@@ -592,27 +606,13 @@ export default function VaultsPage() {
           <div className="flex flex-col gap-7 min-w-0">
             <section className="flex flex-col gap-2.5" aria-labelledby="org-title">
               <h2 id="org-title" className="section-title flex items-center gap-2">
-                <UsersIcon {...ICON} aria-hidden />
-                Shared spaces
-                {vaults && <span className="label font-mono">{org.length}</span>}
+                Spaces
+                {vaults && org.length > 0 && <span className="label tabular">{org.length}</span>}
               </h2>
               {!vaults ? (
                 <SkeletonRows />
               ) : org.length === 0 ? (
-                !creating && (
-                  <EmptyState
-                    variant="spaces"
-                    title="No shared spaces yet"
-                    action={
-                      <button onClick={() => setCreating(true)} className="btn btn-sm">
-                        <PlusIcon {...ICON} />
-                        Create a space
-                      </button>
-                    }
-                  >
-                    Create one for a project or a team, or join one you were invited to.
-                  </EmptyState>
-                )
+                !creating && <EmptyState>No shared spaces yet.</EmptyState>
               ) : (
                 list(org)
               )}
@@ -620,7 +620,6 @@ export default function VaultsPage() {
 
             <section className="flex flex-col gap-2.5" aria-labelledby="personal-title">
               <h2 id="personal-title" className="section-title flex items-center gap-2">
-                <LockIcon {...ICON} aria-hidden />
                 Personal
               </h2>
               {!vaults ? <SkeletonRows /> : list(personal)}
@@ -632,7 +631,7 @@ export default function VaultsPage() {
           <div className="flex flex-col gap-3 min-w-0">
             {!wide && (
               <button type="button" className="btn btn-ghost btn-sm self-start" onClick={() => setOpened(false)}>
-                <ArrowLeftIcon {...ICON} />
+                <ArrowLeft {...ICON} />
                 All spaces
               </button>
             )}
@@ -657,7 +656,14 @@ export default function VaultsPage() {
         )}
       </div>
 
-      {vaults && vaults.length > 1 && showList && <MergeVaultsCard vaults={vaults} />}
+      {showList && (
+        // Anyone who can create a space can accept one shared from another Eunomia; combining
+        // spaces stays with admins and owners.
+        <div className="flex flex-col gap-2 items-start pt-2" style={{ borderTop: "1px solid var(--border)" }}>
+          <JoinSharedSpace onJoined={(id) => open(id)} />
+          {canManage && vaults && vaults.length > 1 && <MergeVaultsCard vaults={vaults} />}
+        </div>
+      )}
     </div>
   );
 }

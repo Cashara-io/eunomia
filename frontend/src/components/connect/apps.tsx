@@ -18,9 +18,9 @@ export type AiApp = {
 
 export const AI_APPS: AiApp[] = [
   { id: "chatgpt", name: "ChatGPT", hint: "Web or desktop app", match: /chatgpt|openai/i, openUrl: "https://chatgpt.com" },
-  { id: "claude-code", name: "Claude Code", hint: "Coding terminal, not Claude chat", match: /claude/i },
+  { id: "claude-code", name: "Claude Code", hint: "Coding terminal", match: /claude/i },
   { id: "codex", name: "Codex", hint: "Coding app or terminal", match: /codex/i },
-  { id: "other", name: "Other apps", hint: "Claude chat, Cursor and more", match: /./ },
+  { id: "other", name: "Other apps", hint: "Claude chat, Cursor, more", match: /./ },
 ];
 
 export const appById = (id: string): AiApp | undefined => AI_APPS.find((a) => a.id === id);

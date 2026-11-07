@@ -46,6 +46,8 @@ struct AuthOut {
     has_password: bool,
     /// The display name of the configured OpenID Connect provider when this account can sign in with it.
     oidc_provider: Option<String>,
+    /// True for an instance admin: the first user, or an email in `EUNOMIA_ADMIN_EMAILS`.
+    is_admin: bool,
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -140,12 +142,14 @@ async fn auth_out(state: &AppState, user: User) -> AppResult<AuthOut> {
         }
         None => None,
     };
+    let is_admin = crate::authz::is_admin(&state.control, &user).await?;
     Ok(AuthOut {
         id: user.id.to_string(),
         email: user.email,
         onboarded: row.as_ref().is_some_and(|r| r.onboarded_at.is_some()),
         has_password: row.is_some_and(|r| r.password_hash.is_some()),
         oidc_provider,
+        is_admin,
     })
 }
 
@@ -195,14 +199,19 @@ pub(crate) fn signup_allowed(mode: &str, has_users: bool, email: &str, allowlist
     }
 }
 
-/// Why signup was refused, in words the person and their admin can act on (issue #76: a bare
-/// "403 forbidden" left a second user guessing). A reserved operator address reads like an
-/// invite-only refusal, so it says nothing about which addresses are operators.
-fn signup_refusal(mode: &str, reserved: bool) -> &'static str {
+/// What a refused signup reads, in words the person can act on (issue #76: a bare "403 forbidden"
+/// left a second user guessing). One text for every policy, so it names no setting and says
+/// nothing about which addresses are operators; the setting goes to the server log
+/// ([`signup_refusal_reason`]) for the admin.
+const SIGNUP_REFUSED: &str = "Signing up here is by invitation. Ask your Eunomia admin to invite you.";
+
+/// Which setting refused a signup, for the server log.
+fn signup_refusal_reason(mode: &str, reserved: bool) -> &'static str {
     match mode.trim().to_ascii_lowercase().as_str() {
-        _ if reserved => "Signup on this server is by invitation only. Ask the admin to add your email to SIGNUP_ALLOWLIST.",
-        "invite" => "Signup on this server is by invitation only. Ask the admin to add your email to SIGNUP_ALLOWLIST.",
-        _ => "Signup is closed on this server (SIGNUP). Ask the admin to create your account or to open signup.",
+        _ if reserved => "the address is in EUNOMIA_ADMIN_EMAILS and needs an account made first",
+        "invite" => "SIGNUP=invite and the address is not in SIGNUP_ALLOWLIST",
+        "closed" => "SIGNUP=closed",
+        _ => "SIGNUP has an unknown value, which closes signup",
     }
 }
 
@@ -229,8 +238,8 @@ async fn register(
     let reserved = has_users && authz::operator_email_listed(&body.email);
     let mode = std::env::var("SIGNUP").unwrap_or_default();
     if reserved || !signup_allowed(&mode, has_users, &body.email, &std::env::var("SIGNUP_ALLOWLIST").unwrap_or_default()) {
-        tracing::info!(signup = %mode, reserved, "signup refused by the SIGNUP policy");
-        return Err(AppError::coded(ErrorCode::AuthForbidden, signup_refusal(&mode, reserved)));
+        tracing::info!(signup = %mode, reserved, reason = signup_refusal_reason(&mode, reserved), "signup refused by the SIGNUP policy");
+        return Err(AppError::coded(ErrorCode::AuthForbidden, SIGNUP_REFUSED));
     }
     let user = models_user::register_user(&state, &body.email, &body.password)
         .await
@@ -246,7 +255,8 @@ async fn register(
         .await?;
     audit::record_as_caller(&state.control, &user.id, "auth.register", "", "ok").await;
 
-    let body = AuthOut { id: user.id.to_string(), email: user.email, onboarded: false, has_password: true, oidc_provider: None };
+    let is_admin = crate::authz::is_admin(&state.control, &user).await?;
+    let body = AuthOut { id: user.id.to_string(), email: user.email, onboarded: false, has_password: true, oidc_provider: None, is_admin };
     Ok((
         StatusCode::OK,
         [(header::SET_COOKIE, session_cookie_header(&token, &state.settings.public_url, https))],
@@ -674,11 +684,11 @@ mod tests {
     }
 
     #[test]
-    fn a_refusal_says_which_policy_refused() {
-        assert!(signup_refusal("invite", false).contains("SIGNUP_ALLOWLIST"));
-        assert!(signup_refusal("closed", false).contains("closed"));
-        assert!(signup_refusal("junk", false).contains("closed"), "a typo closes, and says so");
-        assert_eq!(signup_refusal("", true), signup_refusal("invite", false), "a reserved address reveals nothing more");
+    fn a_refusal_names_the_policy_in_the_log_only() {
+        assert!(signup_refusal_reason("invite", false).contains("SIGNUP_ALLOWLIST"));
+        assert!(signup_refusal_reason("closed", false).contains("closed"));
+        assert!(signup_refusal_reason("junk", false).contains("closes"), "a typo closes, and the log says so");
+        assert!(!SIGNUP_REFUSED.contains("SIGNUP"), "the person sees no setting names");
     }
 
     #[test]

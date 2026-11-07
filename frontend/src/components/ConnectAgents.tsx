@@ -1,48 +1,27 @@
 "use client";
 
-import { KeyIcon } from "@phosphor-icons/react/ssr";
-// Setup guides for the AI clients people connect most: one tab each, a token
-// minted for that client, and the exact command or config with this instance's
-// URL and the token filled in. Used by onboarding and, as the advanced
-// "connect with an API token" option, by the Home connection guides (which
-// lead with sign-in instead).
+// The API-token way to connect an AI app: one tab per app, a token minted for
+// that app, and the exact command or config with this instance's URL and the
+// token filled in. Shown as the advanced option under onboarding and the
+// /connect guides, which lead with sign-in instead. ChatGPT has no tab: it can
+// only sign in, never use a pasted token.
 
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
-import { useRef, useState, useSyncExternalStore } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
+import { KeyRound } from "lucide-react";
 import { useCreateToken } from "@/lib/queries/auth";
 import CopyButton from "@/components/bits/CopyButton";
 import DecryptReveal from "@/components/bits/DecryptReveal";
+import { isPrivateHost, useMcpAddress } from "@/components/connect/Guide";
 
 const CLIENTS = [
   { id: "claude", label: "Claude Code", token: "Claude Code" },
   { id: "codex", label: "Codex", token: "Codex" },
-  { id: "chatgpt", label: "ChatGPT", token: null },
   { id: "other", label: "Other", token: "MCP" },
 ] as const;
 
 type ClientId = (typeof CLIENTS)[number]["id"];
-
-// Same origin as the app: the frontend proxies /mcp to the backend.
-const noSubscribe = () => () => {};
-export function useMcpUrl(): string {
-  return useSyncExternalStore(noSubscribe, () => `${window.location.origin}/mcp`, () => "");
-}
-
-/** Only reachable from this computer or this network, so no cloud service (ChatGPT) can call it. */
-function isPrivateHost(host: string): boolean {
-  return (
-    host === "localhost" ||
-    host.endsWith(".localhost") ||
-    host.endsWith(".local") ||
-    host === "[::1]" ||
-    /^127\./.test(host) ||
-    /^10\./.test(host) ||
-    /^192\.168\./.test(host) ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
-    /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host) // CGNAT, e.g. Tailscale
-  );
-}
 
 const claudeCodeCommand = (url: string, token: string) =>
   `claude mcp add --transport http --scope user eunomia ${url} --header "Authorization: Bearer ${token}"`;
@@ -58,8 +37,8 @@ function Code({ value, label }: { value: string; label: string }) {
     <div className="flex flex-col gap-2 items-start">
       <pre
         aria-label={label}
-        className="w-full text-[13px] font-mono whitespace-pre-wrap [overflow-wrap:anywhere] px-4 py-3 rounded-[10px]"
-        style={{ background: "var(--surface-raised)", color: "var(--ink)", border: "1px solid var(--border)" }}
+        className="w-full text-[13px] font-mono whitespace-pre-wrap [overflow-wrap:anywhere] px-4 py-3 rounded-[2px]"
+        style={{ background: "var(--bauhaus-app-ink)", color: "var(--bauhaus-app-cream)" }}
       >
         {value}
       </pre>
@@ -87,10 +66,11 @@ const Hint = ({ children }: { children: React.ReactNode }) => (
   </p>
 );
 
-/** `onToken` fires after a token is minted, so a wizard can turn Skip into Continue. */
-export default function ConnectAgents({ onToken, initialClient = "claude" }: { onToken?: () => void; initialClient?: ClientId }) {
-  const mcpUrl = useMcpUrl();
-  const [client, setClient] = useState<ClientId>(initialClient);
+/** `onToken` fires after a token is minted, so a wizard can turn Skip into Continue.
+ * Without `initialClient` no app is preselected until one is chosen. */
+export default function ConnectAgents({ onToken, initialClient }: { onToken?: () => void; initialClient?: ClientId }) {
+  const mcpUrl = useMcpAddress();
+  const [client, setClient] = useState<ClientId | null>(initialClient ?? null);
   // One token per client, shown once; kept while the guide stays mounted.
   const [tokens, setTokens] = useState<Partial<Record<ClientId, string>>>({});
   const [busy, setBusy] = useState(false);
@@ -98,14 +78,13 @@ export default function ConnectAgents({ onToken, initialClient = "claude" }: { o
   const createToken = useCreateToken();
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
-  const current = CLIENTS.find((c) => c.id === client)!;
-  const token = tokens[client];
+  const current = CLIENTS.find((c) => c.id === client) ?? null;
+  const token = client ? tokens[client] : undefined;
   const host = mcpUrl ? new URL(mcpUrl).hostname : "";
   const local = isPrivateHost(host);
-  const https = mcpUrl.startsWith("https://");
 
   async function mint() {
-    if (!current.token) return;
+    if (!current || !client) return;
     setBusy(true);
     setError(null);
     try {
@@ -133,7 +112,7 @@ export default function ConnectAgents({ onToken, initialClient = "claude" }: { o
     tabRefs.current[j]?.focus();
   }
 
-  const mintStep = (
+  const mintStep = current && (
     <Step n={1} title={token ? "Your token, shown once" : "Generate a token for " + current.label}>
       {token ? (
         <div className="field flex items-center gap-2 min-h-10 pl-3 pr-1">
@@ -144,7 +123,7 @@ export default function ConnectAgents({ onToken, initialClient = "claude" }: { o
         </div>
       ) : (
         <button onClick={mint} disabled={busy} aria-busy={busy} className="btn btn-primary self-start">
-          <KeyIcon weight="duotone" size={14} aria-hidden />
+          <KeyRound size={14} strokeWidth={1.75} aria-hidden />
           {busy ? "Creating…" : "Generate a token"}
         </button>
       )}
@@ -160,7 +139,7 @@ export default function ConnectAgents({ onToken, initialClient = "claude" }: { o
 
   return (
     <div className="flex flex-col gap-5">
-      <div role="tablist" aria-label="AI client" className="flex flex-wrap gap-2">
+      <div role="tablist" aria-label="AI app" className="tabs">
         {CLIENTS.map((c, i) => (
           <button
             key={c.id}
@@ -171,20 +150,20 @@ export default function ConnectAgents({ onToken, initialClient = "claude" }: { o
             id={`connect-tab-${c.id}`}
             aria-selected={client === c.id}
             aria-controls="connect-panel"
-            tabIndex={client === c.id ? 0 : -1}
+            tabIndex={client === c.id || (client === null && i === 0) ? 0 : -1}
             onClick={() => choose(c.id)}
             onKeyDown={(e) => onKey(e, i)}
-            className="pill min-h-10 px-4"
+            className="tab"
           >
             {c.label}
           </button>
         ))}
       </div>
 
+      {client === null ? (
+        <Hint>Choose your app above to see its token steps.</Hint>
+      ) : (
       <div role="tabpanel" id="connect-panel" aria-labelledby={`connect-tab-${client}`} className="flex flex-col gap-4 min-w-0">
-        {client === "chatgpt" ? (
-          <ChatGptGuide mcpUrl={mcpUrl} reachable={https && !local} />
-        ) : (
           <ol className="flex flex-col gap-4">
             {mintStep}
             {client === "claude" && (
@@ -219,19 +198,18 @@ export default function ConnectAgents({ onToken, initialClient = "claude" }: { o
             )}
             {client === "other" && (
               <>
-                <Step n={2} title="Add it to your client's MCP config">
+                <Step n={2} title="Add it to your app's settings">
                   {token ? <Code label="Config" value={otherConfig(mcpUrl, token)} /> : <Pending />}
                   <Hint>
-                    Any client that speaks Streamable HTTP: URL <Mono>{mcpUrl}</Mono>, header{" "}
-                    <Mono>Authorization: Bearer &lt;token&gt;</Mono>. The field names differ a little per client.
+                    Most apps that can add a server by web address work: URL <Mono>{mcpUrl}</Mono>, header{" "}
+                    <Mono>Authorization: Bearer &lt;token&gt;</Mono>. The field names differ a little per app.
                   </Hint>
                 </Step>
               </>
             )}
           </ol>
-        )}
 
-        {client !== "chatgpt" && local && (
+        {local && (
           <Hint>
             <Mono>{host}</Mono> only works for agents on this {host === "localhost" || host.startsWith("127.") ? "computer" : "network"}.
             For agents elsewhere, give Eunomia a public address under{" "}
@@ -244,6 +222,7 @@ export default function ConnectAgents({ onToken, initialClient = "claude" }: { o
 
         {error && <ErrorLine error={error}>{error.message} Try again, or create one under Settings, API tokens.</ErrorLine>}
       </div>
+      )}
 
       <div className="flex flex-col gap-1.5 pt-3.5" style={{ borderTop: "var(--hair) solid var(--border)" }}>
         <Hint>
@@ -264,49 +243,5 @@ function Pending() {
     <div className="soft-panel px-4 py-3 text-[14px]" style={{ color: "var(--ink-dim)" }}>
       Generate the token first and the command appears here, filled in.
     </div>
-  );
-}
-
-function ChatGptGuide({ mcpUrl, reachable }: { mcpUrl: string; reachable: boolean }) {
-  return (
-    <>
-      {!reachable && (
-        <div className="soft-panel px-4 py-3 text-[14px] leading-relaxed">
-          ChatGPT calls Eunomia from OpenAI&apos;s servers, so it needs a public <Mono>https://</Mono> address, not{" "}
-          <Mono>{mcpUrl.replace(/\/mcp$/, "")}</Mono>. Set one up under{" "}
-          <Link href="/settings?tab=https" className="underline" style={{ color: "var(--accent-text)" }}>
-            Settings, HTTPS
-          </Link>{" "}
-          (or a tunnel), then open this page from that address.
-        </div>
-      )}
-      <ol className="flex flex-col gap-4">
-        <Step n={1} title="Copy the server URL">
-          <div className="field flex items-center gap-2 min-h-10 pl-3 pr-1">
-            <code className="flex-1 min-w-0 truncate text-[13px] font-mono" style={{ color: "var(--ink)" }}>
-              {mcpUrl}
-            </code>
-            <CopyButton value={mcpUrl} label="Copy URL" className="shrink-0" />
-          </div>
-        </Step>
-        <Step n={2} title="Add it as a custom MCP server">
-          <Hint>
-            In ChatGPT on the web, open <Mono>chatgpt.com/plugins</Mono>, choose +, then Add custom MCP server. Name it
-            Eunomia, paste the URL, set authentication to OAuth, continue past the warning and choose Create as a
-            plugin. ChatGPT sends you to Eunomia to approve access, so there is no token to paste.
-          </Hint>
-          <Hint>
-            Custom MCP servers depend on your plan and workspace: Business, Enterprise and Edu get full access, Pro
-            read-only tools (it can recall but not save).
-          </Hint>
-        </Step>
-        <Step n={3} title="Check it">
-          <Hint>
-            Install the plugin from your personal plugins. In a chat, type <Mono>@</Mono>, pick Eunomia and ask
-            &ldquo;What do you remember about me?&rdquo;
-          </Hint>
-        </Step>
-      </ol>
-    </>
   );
 }

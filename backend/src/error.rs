@@ -25,6 +25,7 @@ pub enum ErrorCode {
     AuthTokenExpired,
     AuthSessionExpired,
     AuthPasswordDisabled,
+    AuthSuspended,
     RateLimited,
     TenantDenied,
     TenantNotFound,
@@ -73,6 +74,7 @@ impl ErrorCode {
         ErrorCode::AuthTokenExpired,
         ErrorCode::AuthSessionExpired,
         ErrorCode::AuthPasswordDisabled,
+        ErrorCode::AuthSuspended,
         ErrorCode::RateLimited,
         ErrorCode::TenantDenied,
         ErrorCode::TenantNotFound,
@@ -121,6 +123,7 @@ impl ErrorCode {
             ErrorCode::AuthTokenExpired => "auth.token_expired",
             ErrorCode::AuthSessionExpired => "auth.session_expired",
             ErrorCode::AuthPasswordDisabled => "auth.password_disabled",
+            ErrorCode::AuthSuspended => "auth.suspended",
             ErrorCode::RateLimited => "rate.limited",
             ErrorCode::TenantDenied => "tenant.denied",
             ErrorCode::TenantNotFound => "tenant.not_found",
@@ -163,7 +166,7 @@ impl ErrorCode {
     pub fn default_status(self) -> StatusCode {
         match self {
             ErrorCode::AuthUnauthorized | ErrorCode::AuthTokenExpired | ErrorCode::AuthSessionExpired => StatusCode::UNAUTHORIZED,
-            ErrorCode::AuthForbidden | ErrorCode::AuthPasswordDisabled | ErrorCode::AuthScope | ErrorCode::TenantDenied | ErrorCode::VaultForbidden | ErrorCode::ExtensionDisabled
+            ErrorCode::AuthForbidden | ErrorCode::AuthPasswordDisabled | ErrorCode::AuthSuspended | ErrorCode::AuthScope | ErrorCode::TenantDenied | ErrorCode::VaultForbidden | ErrorCode::ExtensionDisabled
             | ErrorCode::SecretHostDenied
             | ErrorCode::SecretOutboundBlocked => StatusCode::FORBIDDEN,
             ErrorCode::SecretOutboundFailed => StatusCode::BAD_GATEWAY,
@@ -361,7 +364,7 @@ mod tests {
         for c in ErrorCode::ALL {
             match c {
                 ErrorCode::AuthUnauthorized | ErrorCode::AuthForbidden | ErrorCode::AuthEmailTaken | ErrorCode::AuthNotFound
-                | ErrorCode::AuthScope | ErrorCode::AuthTokenExpired | ErrorCode::AuthSessionExpired | ErrorCode::AuthPasswordDisabled | ErrorCode::RateLimited
+                | ErrorCode::AuthScope | ErrorCode::AuthTokenExpired | ErrorCode::AuthSessionExpired | ErrorCode::AuthPasswordDisabled | ErrorCode::AuthSuspended | ErrorCode::RateLimited
                 | ErrorCode::TenantDenied | ErrorCode::TenantNotFound | ErrorCode::TenantSchemaBehind
                 | ErrorCode::TenantProvisioningDisabled | ErrorCode::VaultNotFound | ErrorCode::VaultForbidden | ErrorCode::VaultNameTaken | ErrorCode::EntityNotFound
                 | ErrorCode::MemoryNotFound | ErrorCode::ChatThreadNotFound | ErrorCode::ConnectorNotFound

@@ -1,16 +1,21 @@
 "use client";
 
-import { ArrowUpRightIcon, BookOpenIcon, BrainIcon, BuildingsIcon, ChatsCircleIcon, CodeIcon, FileTextIcon, FilesIcon, FolderSimpleIcon, HouseIcon, MagnifyingGlassIcon, MapPinIcon, PlugIcon, SlidersHorizontalIcon, StackIcon, UserIcon, UsersIcon, XIcon } from "@phosphor-icons/react/ssr";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
-import { ADVANCED_NAV, MAIN_NAV, type NavGlyph } from "./Sidebar";
-import Duo, { type DuoTone } from "./ui/Duo";
+import { ArrowUpRight, Braces, Building2, CircleDot, FileCode, FileText, FolderGit2, FolderKanban, KeyRound, MapPin, MessageSquareText, Plug, Plus, Search, Settings, Upload, User, X } from "lucide-react";
+import Shortcuts from "./Shortcuts";
+import { ADVANCED_NAV, MAIN_NAV } from "./Sidebar";
 import { documentHref, type EntityKind } from "@/lib/types";
 import { useSources } from "@/lib/queries/sources";
-import { usePaletteSearch } from "@/lib/queries/tools";
+import { queryWords, usePaletteSearch } from "@/lib/queries/tools";
+import { useMe } from "@/lib/queries/auth";
+import { useVaults } from "@/lib/queries/vaults";
+import { modKey } from "@/lib/platform";
+import { SETTINGS_GROUPS } from "@/lib/settingsTabs";
 
-type Item = { key: string; label: string; sub?: string; icon: PhosphorIcon; tone: DuoTone; go: () => void };
+type IconType = React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
+// `rich` replaces the one-line label: a memory's text, up to two lines, with the matched words bold.
+type Item = { key: string; label: string; rich?: React.ReactNode; sub?: string; icon: IconType; go: () => void; score?: number };
 type Group = { title: string; items: Item[] };
 
 const OPEN_EVENT = "eunomia:open-palette";
@@ -19,27 +24,32 @@ export function openCommandPalette() {
   window.dispatchEvent(new Event(OPEN_EVENT));
 }
 
-// organisation and location read as a building and a pin, not a person
-const ENTITY_ICON: Record<string, PhosphorIcon> = { person: UserIcon, organisation: BuildingsIcon, location: MapPinIcon, repository: FolderSimpleIcon, file: FileTextIcon };
-
-// The palette is a dense list, so pages get icons, not the sidebar's shapes.
-const PAGE_ICON: Record<NavGlyph, PhosphorIcon> = {
-  home: HouseIcon,
-  chat: ChatsCircleIcon,
-  people: UsersIcon,
-  spaces: StackIcon,
-  docs: FilesIcon,
-  sources: PlugIcon,
-  help: BookOpenIcon,
-  settings: SlidersHorizontalIcon,
-  instructions: BrainIcon,
-  code: CodeIcon,
+// One icon per kind: only a person gets the person icon. An agent's own kind ("project", "decision")
+// gets a neutral dot, or a folder for a project.
+const ENTITY_ICON: Record<string, IconType> = {
+  person: User,
+  organisation: Building2,
+  location: MapPin,
+  repository: FolderGit2,
+  file: FileCode,
+  symbol: Braces,
+  project: FolderKanban,
 };
-const TONES: DuoTone[] = ["personal", "project", "company"];
+const entityIcon = (kind: string): IconType => ENTITY_ICON[kind.toLowerCase()] ?? CircleDot;
+// "project" -> "Project", "open_question" -> "Open question"
+const kindWord = (kind: string) => {
+  const builtIn = KIND_WORD[kind];
+  if (builtIn) return builtIn;
+  const words = kind.replace(/[_-]+/g, " ").trim().toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+};
+
+// Pages only admins use; hidden from everyone else (the sidebar hides them too).
+const ADMIN_HREFS = new Set(["/code", "/skill"]);
 
 // Pages, with the sidebar's own labels. Read when the palette renders (not at
 // module load), since Sidebar imports this module too.
-const staticNav = () => [...MAIN_NAV, ...ADVANCED_NAV].map((n, i) => ({ label: n.label, href: n.href, icon: PAGE_ICON[n.glyph], tone: TONES[i % 3] }));
+const staticNav = (): { label: string; href: string; icon: IconType }[] => [...MAIN_NAV, ...ADVANCED_NAV];
 
 const KIND_WORD: Record<string, string> = {
   person: "Person",
@@ -49,6 +59,53 @@ const KIND_WORD: Record<string, string> = {
   file: "File",
   symbol: "Function",
 };
+
+// Settings tabs come from the one list the Settings page also reads; admin groups are for admins only.
+type SettingsEntry = { id: string; label: string; group: string; admin: boolean; words: string };
+const SETTINGS_ENTRIES: SettingsEntry[] = SETTINGS_GROUPS.flatMap((g) =>
+  g.tabs.map((t) => ({ id: t.id, label: t.label, group: g.label, admin: g.admin, words: t.keywords }))
+);
+
+/** How well `label` (plus extra `words`) matches `needle`: 0 is best, null is no match. Exact and
+ * prefix matches on the label beat a keyword hit, which beats a match in the middle of a word. */
+function matchScore(needle: string, label: string, words = ""): number | null {
+  const l = label.toLowerCase();
+  if (!needle) return 3;
+  if (l === needle) return 0;
+  if (l.startsWith(needle)) return 1;
+  if (l.split(/[^a-z0-9]+/).some((w) => w.startsWith(needle))) return 2;
+  if (words.toLowerCase().split(/\s+/).some((w) => w.startsWith(needle))) return 2;
+  if (`${l} ${words.toLowerCase()}`.includes(needle)) return 3;
+  return null;
+}
+
+// Things to do, each found by its label or a few plain words people might type instead.
+const ACTIONS: { label: string; href: string; icon: IconType; words: string; admin?: boolean }[] = [
+  { label: "Create a memory space", href: "/vaults", icon: Plus, words: "new space vault team share" },
+  { label: "Upload a document", href: "/documents", icon: Upload, words: "add file pdf import" },
+  { label: "New API token", href: "/settings?tab=tokens", icon: KeyRound, words: "create key access token" },
+  { label: "Connect an AI app", href: "/", icon: Plug, words: "claude chatgpt cursor codex mcp setup" },
+];
+
+/** `text` with every occurrence of the query's words in bold. */
+function Highlight({ text, words }: { text: string; words: string[] }) {
+  if (words.length === 0) return <>{text}</>;
+  const escaped = words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const parts = text.split(new RegExp(`(${escaped.join("|")})`, "gi"));
+  return (
+    <>
+      {parts.map((part, i) =>
+        i % 2 === 1 ? (
+          <strong key={i} className="font-semibold">
+            {part}
+          </strong>
+        ) : (
+          part
+        )
+      )}
+    </>
+  );
+}
 
 const CODE_KINDS = new Set<EntityKind>(["repository", "file", "symbol"]);
 const SEARCH_DEBOUNCE_MS = 250;
@@ -78,7 +135,12 @@ export default function CommandPalette() {
 
   // Mounted only while open, so every open starts from fresh state. No
   // open/close animation: this is opened from the keyboard many times a day.
-  return open ? <Palette onClose={() => setOpen(false)} /> : null;
+  return (
+    <>
+      <Shortcuts paletteOpen={open} openPalette={() => setOpen(true)} />
+      {open && <Palette onClose={() => setOpen(false)} />}
+    </>
+  );
 }
 
 function Palette({ onClose }: { onClose: () => void }) {
@@ -87,6 +149,12 @@ function Palette({ onClose }: { onClose: () => void }) {
   const rows = useSources().data ?? [];
   const [debounced, setDebounced] = useState("");
   const router = useRouter();
+  const isAdmin = useMe().data?.is_admin ?? false;
+  const vaults = useVaults().data ?? [];
+  const spaceName = (id?: string) => {
+    const v = id ? vaults.find((x) => x.id === id) : undefined;
+    return v ? (v.kind === "personal" ? "Personal" : v.name) : null;
+  };
 
   // Data search, debounced -- only fires once the nav/connector match is
   // worth supplementing, i.e. the query is long enough to be meaningful.
@@ -97,36 +165,89 @@ function Palette({ onClose }: { onClose: () => void }) {
     const timer = setTimeout(() => setDebounced(q), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [q, searching]);
-  const { entities: entityHits, records: recordHits } = usePaletteSearch(debounced, SEARCH_LIMIT, debounced !== "");
+  const { entities: entityHits, records: recordHits, memories: memoryHits } = usePaletteSearch(debounced, SEARCH_LIMIT, debounced !== "");
 
   const connectorItems: Item[] = rows
     .filter((r) => r.connected)
-    .map((r) => ({ key: `conn:${r.key}`, label: r.label, icon: PlugIcon, tone: "project" as DuoTone, go: () => router.push(`/connectors/${r.key}`) }));
-  const staticItems: Item[] = staticNav().map((s) => ({
+    .map((r) => ({ key: `conn:${r.key}`, label: r.label, icon: Plug, go: () => router.push(`/connectors/${r.key}`) }));
+  const staticItems: Item[] = staticNav()
+    .filter((s) => isAdmin || !ADMIN_HREFS.has(s.href))
+    .map((s) => ({
     key: `nav:${s.href}`,
     label: s.label,
     icon: s.icon,
-    tone: s.tone,
     go: () => router.push(s.href),
   }));
-  const navItems = [...staticItems, ...connectorItems].filter((item) =>
-    item.label.toLowerCase().includes(query.toLowerCase())
+  const needle = query.trim().toLowerCase();
+  // best match first within each group; a stable sort keeps the sidebar's order among equals
+  const ranked = (list: Item[]) => list.filter((i) => i.score !== undefined).sort((a, b) => a.score! - b.score!);
+  const scored = (item: Item, words?: string): Item => ({ ...item, score: matchScore(needle, item.label, words) ?? undefined });
+  const navItems = ranked([...staticItems, ...connectorItems].map((item) => scored(item)));
+  // Settings tabs only once something is typed, so the empty palette stays short.
+  const settingsItems: Item[] = needle
+    ? ranked(
+        SETTINGS_ENTRIES.filter((t) => !t.admin || isAdmin).map((t) =>
+          scored(
+            {
+              key: `settings:${t.id}`,
+              label: t.label,
+              sub: `Settings › ${t.group}`,
+              icon: Settings,
+              go: () => router.push(`/settings?tab=${t.id}`),
+            },
+            `${t.words} settings`
+          )
+        )
+      )
+    : [];
+  const actionItems: Item[] = ranked(
+    ACTIONS.map((a) =>
+      scored({ key: `action:${a.label}`, label: a.label, icon: a.icon, go: () => router.push(a.href) }, a.words)
+    )
   );
 
   const entityItems: Item[] = (searching ? entityHits : []).map((e) => ({
     key: `entity:${e.id}`,
     label: e.name,
-    sub: KIND_WORD[e.kind] ?? e.kind,
-    icon: ENTITY_ICON[e.kind] ?? UserIcon,
-    tone: "personal" as DuoTone,
-    go: () => router.push(CODE_KINDS.has(e.kind) ? "/code" : "/entities"),
+    // the space, right by the name, tells apart two "Acme Corp"s from different spaces
+    rich: (() => {
+      const space = spaceName((e as { vault?: string }).vault);
+      return (
+        <>
+          {e.name}
+          {space && <span className="space-chip ml-2">{space}</span>}
+        </>
+      );
+    })(),
+    sub: kindWord(e.kind),
+    icon: entityIcon(e.kind),
+    // opens the entity's inspector, in its own space (see EntityGraph's deep links)
+    go: () => {
+      const q = new URLSearchParams({ id: e.id });
+      const vault = (e as { vault?: string }).vault; // entities_search returns each hit's space
+      if (vault) q.set("vault", vault);
+      router.push(`${CODE_KINDS.has(e.kind) ? "/code" : "/entities"}?${q}`);
+    },
+  }));
+  const words = queryWords(debounced);
+  const memoryItems: Item[] = (searching ? memoryHits : []).map((m) => ({
+    key: `memory:${m.id}`,
+    label: m.text,
+    rich: <Highlight text={m.text} words={words} />,
+    sub: [m.entityName, spaceName(m.vault) ?? m.vaultName].filter(Boolean).join(" · "),
+    icon: MessageSquareText,
+    // opens the inspector of the entity the memory is about, in the memory's space
+    go: () => {
+      // `memory` points the inspector at the memory that matched, which it highlights
+      const q = new URLSearchParams({ id: m.entity, vault: m.vault, memory: m.id });
+      router.push(`${CODE_KINDS.has(m.entityKind as EntityKind) ? "/code" : "/entities"}?${q}`);
+    },
   }));
   const recordItems: Item[] = (searching ? recordHits : []).map((h) => ({
     key: `record:${h.id}`,
     label: h.title || h.snippet,
     sub: h.document ? h.document.filename : h.source,
-    icon: FileTextIcon,
-    tone: "company" as DuoTone,
+    icon: FileText,
     go: () => {
       // a passage of an uploaded document opens that document at the passage
       if (h.document) {
@@ -139,9 +260,20 @@ function Palette({ onClose }: { onClose: () => void }) {
     },
   }));
 
-  const groups: Group[] = [
+  // Pages, Settings and Actions are ordered by their best match, so "backup" leads with
+  // Settings › Backups; people, topics and documents always come after them.
+  const best = (g: Group) => Math.min(...g.items.map((i) => i.score ?? 3));
+  const navGroups: Group[] = [
     { title: "Pages", items: navItems },
+    { title: "Actions", items: actionItems },
+    { title: "Settings", items: settingsItems },
+  ]
+    .filter((g) => g.items.length > 0)
+    .sort((a, b) => best(a) - best(b));
+  const groups: Group[] = [
+    ...navGroups,
     { title: "People & topics", items: entityItems },
+    { title: "Memories", items: memoryItems },
     { title: "Documents and saved items", items: recordItems },
   ].filter((g) => g.items.length > 0);
   const items = groups.flatMap((g) => g.items);
@@ -157,81 +289,82 @@ function Palette({ onClose }: { onClose: () => void }) {
       <div
         role="dialog"
         aria-modal="true"
-        aria-labelledby="palette-title"
+        aria-label="Search"
         className="bauhaus-dialog w-full max-w-[560px] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between gap-2 px-5 pt-4">
-          <h2 id="palette-title" className="text-[20px] font-medium tracking-[-0.025em]">
-            Search
-          </h2>
-          <button type="button" onClick={onClose} aria-label="Close search" className="btn btn-ghost btn-icon btn-sm">
-            <XIcon weight="duotone" size={18} aria-hidden />
+        {/* one input, no title or label repeating it: the dialog is named "Search" for screen readers */}
+        <div className="flex items-center gap-2.5 px-4 h-14" style={{ borderBottom: "1px solid var(--border)" }}>
+          <Search size={18} color="var(--ink-dim)" aria-hidden />
+          <input
+            autoFocus
+            aria-label="Search pages, people, topics and documents"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setIndex(0);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setIndex((i) => Math.min(i + 1, items.length - 1));
+              } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setIndex((i) => Math.max(i - 1, 0));
+              } else if (e.key === "Enter" && items[index]) {
+                choose(items[index]);
+              }
+            }}
+            placeholder="Jump to a page…"
+            className="flex-1 min-w-0 h-full bg-transparent text-[16px]"
+            // the dialog edge is the field; no focus ring or border inside it
+            style={{ color: "var(--ink)", outline: "none", boxShadow: "none", border: 0 }}
+          />
+          <span className="kbd shrink-0 max-sm:hidden pointer-coarse:hidden" aria-hidden>
+            Esc
+          </span>
+          <button type="button" onClick={onClose} aria-label="Close search" className="btn btn-ghost btn-icon btn-sm sm:hidden">
+            <X size={18} strokeWidth={1.75} aria-hidden />
           </button>
-        </div>
-        <div className="px-5 pt-2 pb-3 flex flex-col gap-1.5" style={{ borderBottom: "1px solid var(--border)" }}>
-          <label htmlFor="palette-input" className="text-[13px] font-medium">
-            Search pages, people, topics and documents
-          </label>
-          <div className="field flex items-center gap-2.5 px-3 h-11">
-            <Duo icon={MagnifyingGlassIcon} size={18} tone="project" />
-            <input
-              id="palette-input"
-              autoFocus
-              value={query}
-              onChange={(e) => {
-                setQuery(e.target.value);
-                setIndex(0);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "ArrowDown") {
-                  e.preventDefault();
-                  setIndex((i) => Math.min(i + 1, items.length - 1));
-                } else if (e.key === "ArrowUp") {
-                  e.preventDefault();
-                  setIndex((i) => Math.max(i - 1, 0));
-                } else if (e.key === "Enter" && items[index]) {
-                  choose(items[index]);
-                }
-              }}
-              placeholder="Jump to a page…"
-              className="flex-1 h-full bg-transparent text-[15px] outline-none"
-              style={{ color: "var(--ink)" }}
-            />
-          </div>
         </div>
         <div className="max-h-[min(420px,60vh)] overflow-y-auto py-2">
           {groups.map((g) => (
             <div key={g.title} className="py-1">
-              <div className="label px-5 h-7 flex items-center">
+              <div className="px-5 h-7 flex items-center text-[12px] font-medium" style={{ color: "var(--ink-dim)" }}>
                 {g.title}
               </div>
               <ul>
                 {g.items.map((item) => {
                   flat += 1;
                   const i = flat;
+                  const Icon = item.icon;
                   const active = i === index;
                   return (
                     <li key={item.key} className="px-2">
                       <button
                         onClick={() => choose(item)}
                         onMouseMove={() => setIndex(i)}
-                        className="w-full flex items-center gap-3 px-3 min-h-11 py-1.5 text-[14px] text-left rounded-[8px]"
+                        className="w-full flex items-center gap-3 px-3 min-h-11 py-1.5 text-[14px] text-left rounded-[3px]"
                         style={{
-                          background: active ? "var(--surface-raised)" : "transparent",
+                          background: active ? "var(--accent-soft)" : "transparent",
+                          boxShadow: active ? "inset 3px 0 0 var(--bauhaus-app-blue)" : undefined,
                           color: "var(--ink)",
                         }}
                       >
-                        <Duo icon={item.icon} size={18} tone={item.tone} />
+                        <Icon size={18} color={active ? "var(--accent-text)" : "var(--ink-dim)"} />
                         <span className="flex-1 min-w-0 flex flex-col">
-                          <span className="truncate">{item.label}</span>
+                          {item.rich ? (
+                            <span className="line-clamp-2">{item.rich}</span>
+                          ) : (
+                            <span className="truncate">{item.label}</span>
+                          )}
                           {item.sub && (
-                            <span className="text-[12.5px] truncate" style={{ color: "var(--ink-dim)" }}>
+                            <span className="text-[12px] truncate" style={{ color: "var(--ink-dim)" }}>
                               {item.sub}
                             </span>
                           )}
                         </span>
-                        <ArrowUpRightIcon weight="duotone" size={16} aria-hidden style={{ color: active ? "var(--ink)" : "var(--ink-faint)" }} />
+                        <ArrowUpRight size={16} color="var(--accent-text)" aria-hidden />
                       </button>
                     </li>
                   );
@@ -245,18 +378,32 @@ function Palette({ onClose }: { onClose: () => void }) {
             </div>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-2.5 text-[12px]" style={{ borderTop: "1px solid var(--border)", color: "var(--ink-dim)" }}>
-          <span className="flex items-center gap-1.5">
-            <span className="kbd">↑</span>
-            <span className="kbd">↓</span> Move
+        {/* On a touch screen the footer would only hold the "type 2 letters" hint: show it only then, and no empty band after. */}
+        <div
+          className={`flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-2.5 text-[12px] ${searching ? "pointer-coarse:hidden" : ""}`}
+          style={{ borderTop: "1px solid var(--border)", color: "var(--ink-dim)" }}
+        >
+          {/* keyboard hints mean nothing on a touch screen: hidden on coarse pointers */}
+          <span className="contents pointer-coarse:hidden">
+            <span className="flex items-center gap-1.5">
+              <span className="kbd">↑</span>
+              <span className="kbd">↓</span> Move
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="kbd">↵</span> Open
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="kbd">Esc</span> Close
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="kbd">{modKey()}</span>
+              <span className="kbd">K</span> Search from anywhere
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="kbd">?</span> All shortcuts
+            </span>
           </span>
-          <span className="flex items-center gap-1.5">
-            <span className="kbd">↵</span> Open
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="kbd">Esc</span> Close
-          </span>
-          <span className="ml-auto">Type 2 or more letters to search your memory</span>
+          {!searching && <span className="ml-auto pointer-coarse:ml-0">Type 2 or more letters to search your memory</span>}
         </div>
       </div>
     </div>

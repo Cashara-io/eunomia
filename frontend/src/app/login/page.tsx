@@ -1,25 +1,35 @@
 "use client";
 
-import { ArrowRightIcon, CircleNotchIcon } from "@phosphor-icons/react/ssr";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ArrowRight, Info, Loader2 } from "lucide-react";
 import { useLogin } from "@/lib/queries/auth";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import { keepNext, nextPath } from "@/lib/nextPath";
 import AuthShell, { LABEL, RevealToggle } from "./AuthShell";
 import { OrDivider, SsoButton, useOidcError, useSignIn } from "./Sso";
 
+const noSubscribe = () => () => {};
+/** `?email=` from "Sign in instead" on the register page. */
+const emailFromUrl = () => new URLSearchParams(window.location.search).get("email") ?? "";
+
 export default function LoginPage() {
   const router = useRouter();
   const login = useLogin();
   const { pending, mode, provider } = useSignIn();
   const oidcError = useOidcError(provider);
-  const [email, setEmail] = useState("");
+  // null until typed in: the field then shows the email the link carried, if any.
+  const [typedEmail, setEmail] = useState<string | null>(null);
+  const prefill = useSyncExternalStore(noSubscribe, emailFromUrl, () => "");
+  const email = typedEmail ?? prefill;
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
   const [error, setError] = useState<Failure | null>(null);
   const [busy, setBusy] = useState(false);
+  // a suspended account is not a mistake the person made: it reads as a calm notice, and the fields stay valid
+  const suspended = error?.code === "auth.suspended";
+  const invalid = error && !suspended ? true : undefined;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -69,12 +79,12 @@ export default function LoginPage() {
                   id="email"
                   type="email"
                   required
-                  autoFocus={!provider}
+                  autoFocus={!provider && !prefill}
                   autoComplete="email"
                   spellCheck={false}
                   className="field h-11 px-3 text-[15px]"
                   placeholder="you@example.com"
-                  aria-invalid={error ? true : undefined}
+                  aria-invalid={invalid}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
@@ -89,9 +99,10 @@ export default function LoginPage() {
                     id="password"
                     type={show ? "text" : "password"}
                     required
+                    autoFocus={!provider && Boolean(prefill)}
                     autoComplete="current-password"
                     className="field h-11 w-full pl-3 pr-16 text-[15px]"
-                    aria-invalid={error ? true : undefined}
+                    aria-invalid={invalid}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                   />
@@ -99,12 +110,12 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              {error && <ErrorLine error={error} />}
+              {error && (suspended ? <SuspendedNotice message={error.message} /> : <ErrorLine error={error} />)}
 
               <button type="submit" disabled={busy} aria-busy={busy} className="btn btn-primary mt-1 min-h-11 w-full">
-                {busy && <CircleNotchIcon weight="duotone" size={14} className="animate-spin" aria-hidden />}
+                {busy && <Loader2 size={14} strokeWidth={1.75} className="animate-spin" aria-hidden />}
                 {busy ? "Signing in…" : "Sign in"}
-                {!busy && <ArrowRightIcon weight="duotone" size={16} aria-hidden />}
+                {!busy && <ArrowRight size={16} strokeWidth={1.75} aria-hidden />}
               </button>
 
               <p className="mt-2 text-[14px]" style={{ color: "var(--ink-dim)" }}>
@@ -118,5 +129,17 @@ export default function LoginPage() {
         )}
       </div>
     </AuthShell>
+  );
+}
+
+/** The sign-in answer for a suspended account: the server's words, no code or trace, no alarm. */
+function SuspendedNotice({ message }: { message: string }) {
+  return (
+    <div role="status" className="flex items-start gap-2.5 px-3.5 py-2.5 rounded-[2px]" style={{ background: "var(--surface-raised)" }}>
+      <Info size={18} strokeWidth={1.75} aria-hidden className="shrink-0 mt-px" style={{ color: "var(--ink-dim)" }} />
+      <p className="text-[14px] leading-snug" style={{ color: "var(--ink)" }}>
+        {message}
+      </p>
+    </div>
   );
 }

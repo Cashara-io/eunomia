@@ -28,8 +28,9 @@ test.describe("Vault invitations", () => {
     const vaultName = `Team ${Date.now()}`;
 
     await createVaultAndInvite(owner.page, vaultName, invitee.email);
-    // Pending invitees aren't listed as members yet.
-    await expect(owner.page.getByText(invitee.email)).toHaveCount(0);
+    // Pending invitees aren't listed as members yet, only under Pending.
+    await expect(owner.page.getByRole("list", { name: "People in this space" }).getByText(invitee.email)).toHaveCount(0);
+    await expect(owner.page.getByRole("list", { name: "Invitations not answered yet" }).getByText(invitee.email)).toBeVisible();
 
     await invitee.page.goto("/vaults");
     const invite = invitee.page.locator(".ledger", { hasText: vaultName });

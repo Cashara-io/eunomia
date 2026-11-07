@@ -1,13 +1,13 @@
 "use client";
 
 // Everything you can do with one memory space, in plain sections: who is in it, sharing it with
-// another Eunomia (folded away), and the rarer actions (copy, hand over, leave, delete) at the bottom.
+// another Eunomia (folded away), then "Hand over this space" and "Leave or delete" (copy, leave,
+// delete) at the very bottom.
 import { useEffect, useRef, useState } from "react";
-import { CopyIcon, PencilSimpleIcon, SignOutIcon, SlidersHorizontalIcon, TrashIcon, UserPlusIcon, UsersIcon } from "@phosphor-icons/react/ssr";
+import { Copy, LogOut, Pencil, Trash2, UserPlus } from "lucide-react";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import AuthorTag from "@/components/AuthorTag";
 import SyncMark from "@/components/bits/SyncMark";
 import Tooltip from "@/components/bits/Tooltip";
 import TransferOwnershipPanel from "@/components/live/TransferOwnershipPanel";
@@ -20,12 +20,30 @@ import {
   useLeaveVault,
   useRemoveMember,
   useRenameVault,
+  usePendingInvites,
   useSetMemberRole,
+  useVaultCounts,
   useVaultMembers,
 } from "@/lib/queries/vaults";
-import { DetailSection, DrawnCheck, ICON, RoleChip, SpaceSwatch, ago, peopleLine, sameEmail } from "./bits";
+import { DetailSection, DrawnCheck, ICON, RoleChip, ago, peopleLine, sameEmail } from "./bits";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** An invite that failed, in plain words with what to do next (the server's wording is for developers). */
+function inviteProblem(e: unknown): string {
+  const text = e instanceof Error ? e.message : "";
+  if (/no user with email/i.test(text)) return "No one with this email has an account here yet. Ask them to sign up first, then invite them again.";
+  if (/is already a member/i.test(text)) return "They're already in this space.";
+  if (/already has a pending invite|already a member or has a pending invite/i.test(text)) return "They already have an invitation waiting.";
+  return "Could not send that invite. Check the address and try again.";
+}
+
+/** A destructive action that stays quiet at rest and turns red on hover or focus; its confirm says the rest. */
+// `!` because the .btn styles sit outside Tailwind's layers.
+const RED_ON_HOVER = "hover:text-[var(--critical)]! focus-visible:text-[var(--critical)]!";
+const QUIET_DANGER = `btn btn-ghost btn-sm text-[var(--ink-dim)]! ${RED_ON_HOVER}`;
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 const ROLE_OPTIONS = [
   { value: "member", label: "Member" },
   { value: "owner", label: "Owner" },
@@ -42,6 +60,11 @@ export default function SpaceDetail({
 }) {
   const membersQuery = useVaultMembers(vault.id);
   const members = membersQuery.data ?? (membersQuery.isError ? [] : null);
+  const isOwner = vault.role === "owner";
+  const isOrg = vault.kind !== "personal";
+  const pendingQuery = usePendingInvites(vault.id, isOwner && isOrg);
+  const pending = pendingQuery.data ?? [];
+  const counts = useVaultCounts(vault.id).data;
   const inviteMember = useInviteMember();
   const removeMember = useRemoveMember();
   const changeRole = useSetMemberRole();
@@ -56,6 +79,9 @@ export default function SpaceDetail({
   const [role, setRole] = useState<VaultRole>("member");
   const [touched, setTouched] = useState(false);
   const [error, setError] = useState<Failure | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [revokeError, setRevokeError] = useState<string | null>(null);
+  const [revoking, setRevoking] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<"leave" | "delete" | null>(null);
@@ -71,13 +97,15 @@ export default function SpaceDetail({
     return () => clearTimeout(t);
   }, [cloned]);
 
-  const isOwner = vault.role === "owner";
-  const isOrg = vault.kind !== "personal";
   const trimmed = email.trim();
   const invalid = touched && trimmed !== "" && !EMAIL_RE.test(trimmed);
   const already = members?.some((m) => sameEmail(m.email, trimmed));
+  const alreadyInvited = pending.some((p) => sameEmail(p.email, trimmed));
   const created = ago(vault.created_at);
   const others = (members ?? []).filter((m) => !sameEmail(m.email, me));
+  // Owners first (you first among them), then you, then everyone else A–Z.
+  const rank = (m: { email: string; role: VaultRole }) => (m.role === "owner" ? 0 : 2) + (sameEmail(m.email, me) ? 0 : 1);
+  const sortedMembers = members && [...members].sort((a, b) => rank(a) - rank(b) || a.email.localeCompare(b.email));
   // Last-owner rule: a shared space always needs an owner, so its only owner can't leave.
   const lastOwner = isOwner && isOrg && members !== null && members.filter((m) => m.role === "owner").length <= 1;
   const canLeave = isOrg && members !== null && !lastOwner;
@@ -87,7 +115,7 @@ export default function SpaceDetail({
     setTouched(true);
     if (!trimmed || !EMAIL_RE.test(trimmed)) return;
     setBusy(true);
-    setError(null);
+    setInviteError(null);
     setSent(null);
     try {
       await inviteMember.mutateAsync({ id: vault.id, email: trimmed, role });
@@ -95,7 +123,7 @@ export default function SpaceDetail({
       setEmail("");
       setTouched(false);
     } catch (e) {
-      setError(failure(e, "Could not send that invite.", " Check the address and try again."));
+      setInviteError(inviteProblem(e));
     } finally {
       setBusy(false);
     }
@@ -139,10 +167,25 @@ export default function SpaceDetail({
     }
   }
 
-  const helpText = invalid
-    ? "That isn't an email address. Use name@company.com."
+  async function revoke(email: string) {
+    setRevoking(email);
+    setRevokeError(null);
+    try {
+      await removeMember.mutateAsync({ id: vault.id, email });
+    } catch {
+      setRevokeError(`Could not withdraw the invitation to ${email}. Reload and try again.`);
+    } finally {
+      setRevoking(null);
+    }
+  }
+
+  const problem = invalid ? "That isn't an email address. Use name@company.com." : inviteError;
+  const helpText = problem
+    ? problem
     : already
       ? "They're already in this space."
+      : alreadyInvited
+        ? "They already have an invitation waiting. Find it under Pending."
       : (sent ??
         (role === "owner"
           ? "Owners can invite and remove people, rename the space and delete it."
@@ -177,10 +220,8 @@ export default function SpaceDetail({
             </button>
           </form>
         ) : (
-          <div className="flex items-center gap-2.5 min-w-0">
-            <SpaceSwatch vault={vault} size={16} />
-            <h2 className="text-[22px] font-medium tracking-[-0.03em] truncate">{vault.name}</h2>
-            {!isOwner && <RoleChip role={vault.role} />}
+          <div className="flex items-start gap-2.5 min-w-0">
+            <h2 className="text-[20px] font-semibold tracking-[-0.02em] min-w-0 break-words">{vault.name}</h2>
             {isOwner && (
               <Tooltip label="Rename space">
                 <button
@@ -192,7 +233,7 @@ export default function SpaceDetail({
                   aria-label="Rename space"
                   className="btn btn-ghost btn-sm btn-icon shrink-0"
                 >
-                  <PencilSimpleIcon {...ICON} />
+                  <Pencil {...ICON} />
                 </button>
               </Tooltip>
             )}
@@ -201,19 +242,23 @@ export default function SpaceDetail({
         <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
           {isOrg
             ? `${peopleLine(vault, members)}. Only the people listed here can see what's in it.`
-            : "Only you can see this space. To work with other people, create a shared space."}
+            : "Only you can see this space. To work with other people, create a team space."}
           {created ? ` Created ${created}.` : ""}
         </p>
+        {counts && (
+          <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+            {plural(counts.people + counts.topics, "person or topic", "people & topics")} saved
+          </p>
+        )}
       </header>
 
       {/* People */}
       {isOrg && (
         <DetailSection
-          title="People"
-          icon={<UsersIcon {...ICON} aria-hidden />}
-          aside={members && <span className="label font-mono">{members.length}</span>}
+          title="Members"
+          aside={members && <span className="label">{members.length}</span>}
         >
-          <ul className="hairline-rows">
+          <ul className="hairline-rows" aria-label="People in this space">
             {members === null &&
               [0, 1].map((i) => (
                 <li key={i} className="flex items-center gap-2 h-11">
@@ -221,13 +266,10 @@ export default function SpaceDetail({
                   <span className="skeleton h-4 flex-1" />
                 </li>
               ))}
-            {members?.map((m) => {
+            {sortedMembers?.map((m) => {
               const isMe = sameEmail(m.email, me);
               return (
                 <li key={m.email} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 min-h-12 py-2">
-                  <span className="flex max-w-[96px] min-w-0 shrink-0" aria-hidden>
-                    <AuthorTag name={m.email} />
-                  </span>
                   <span className="flex-1 min-w-[140px] truncate text-[14px]" style={{ color: "var(--ink)" }}>
                     {m.email}
                     {isMe && <span style={{ color: "var(--ink-dim)" }}> (you)</span>}
@@ -253,8 +295,7 @@ export default function SpaceDetail({
                         type="button"
                         onClick={() => setRemoving(m.email)}
                         aria-label={`Remove ${m.email}`}
-                        className="btn btn-ghost btn-sm"
-                        style={{ color: "var(--critical)" }}
+                        className={QUIET_DANGER}
                       >
                         Remove
                       </button>
@@ -266,6 +307,41 @@ export default function SpaceDetail({
               );
             })}
           </ul>
+
+          {isOwner && pending.length > 0 && (
+            <div className="flex flex-col gap-1 pt-1">
+              <h4 className="text-[13px] font-medium" style={{ color: "var(--ink-dim)" }}>
+                Pending {pending.length}
+              </h4>
+              <ul className="hairline-rows" aria-label="Invitations not answered yet">
+                {pending.map((p) => (
+                  <li key={p.email} className="flex flex-wrap items-center gap-x-3 gap-y-1 min-h-11 py-1.5">
+                    <span className="flex-1 min-w-[140px] flex flex-col">
+                      <span className="truncate text-[14px]">{p.email}</span>
+                      <span className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+                        Invited as {p.role === "owner" ? "an owner" : "a member"}
+                        {ago(p.created_at) ? ` · ${ago(p.created_at)}` : ""}. Not joined yet.
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      className={QUIET_DANGER}
+                      disabled={revoking === p.email}
+                      aria-label={`Revoke invitation to ${p.email}`}
+                      onClick={() => revoke(p.email)}
+                    >
+                      {revoking === p.email ? "Revoking…" : "Revoke"}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {revokeError && (
+                <p role="alert" className="text-[13px]" style={{ color: "var(--critical)" }}>
+                  {revokeError}
+                </p>
+              )}
+            </div>
+          )}
 
           {isOwner && (
             <form
@@ -286,14 +362,15 @@ export default function SpaceDetail({
                   className="field h-10 px-3 text-[14px] flex-1 min-w-[200px]"
                   placeholder="person@example.com"
                   value={email}
-                  aria-invalid={invalid || undefined}
+                  aria-invalid={!!problem || undefined}
                   aria-describedby={`invite-help-${vault.id}`}
                   onChange={(e) => {
                     setEmail(e.target.value);
                     setSent(null);
+                    setInviteError(null);
                   }}
                   onBlur={() => setTouched(true)}
-                  style={invalid ? { borderColor: "var(--critical)" } : undefined}
+                  style={problem ? { borderColor: "var(--critical)" } : undefined}
                 />
                 <Select
                   className="h-10 text-[13px] w-[110px] shrink-0"
@@ -302,16 +379,16 @@ export default function SpaceDetail({
                   onChange={(v) => setRole(v as VaultRole)}
                   options={ROLE_OPTIONS}
                 />
-                <button type="submit" disabled={busy || !trimmed} className="btn btn-primary shrink-0">
-                  {busy || sent ? <SyncMark status={busy ? "running" : "done"} /> : <UserPlusIcon {...ICON} />}
+                <button type="submit" disabled={busy || !trimmed} className="btn shrink-0">
+                  {busy || sent ? <SyncMark status={busy ? "running" : "done"} /> : <UserPlus {...ICON} />}
                   {busy ? "Sending…" : "Send invite"}
                 </button>
               </div>
               <p
                 id={`invite-help-${vault.id}`}
-                role={sent ? "status" : undefined}
+                role={inviteError ? "alert" : sent ? "status" : undefined}
                 className="text-[13px]"
-                style={{ color: invalid ? "var(--critical)" : "var(--ink-dim)" }}
+                style={{ color: problem ? "var(--critical)" : "var(--ink-dim)" }}
               >
                 {helpText}
               </p>
@@ -323,95 +400,100 @@ export default function SpaceDetail({
 
       <PeerSharing vault={vault} />
 
-      {/* The rarer actions, quiet at the bottom. */}
-      <DetailSection title="More options" icon={<SlidersHorizontalIcon {...ICON} aria-hidden />}>
-        {cloning ? (
-          <form
-            className="flex flex-col gap-1.5"
-            onSubmit={(e) => {
-              e.preventDefault();
-              doClone();
-            }}
-          >
-            <label htmlFor={`clone-${vault.id}`} className="text-[13px] font-medium">
-              Name for the copy
-            </label>
-            <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
-              The copy is a new space with the same memories, and only you in it. {vault.name} stays exactly as it is.
-            </p>
-            <input
-              id={`clone-${vault.id}`}
-              autoFocus
-              className="field h-10 px-3 text-[14px]"
-              value={cloneName}
-              onChange={(e) => setCloneName(e.target.value)}
-              onKeyDown={(e) => e.key === "Escape" && setCloning(false)}
-            />
-            <div className="flex justify-end gap-1.5">
-              <button type="button" onClick={() => setCloning(false)} className="btn">
-                Cancel
-              </button>
-              <button type="submit" disabled={cloneBusy} className="btn btn-primary">
-                {cloneBusy ? "Copying…" : "Create copy"}
-              </button>
-            </div>
-          </form>
-        ) : (
-          <OptionRow
-            title="Make a copy"
-            body="A new space with the same memories. This one stays as it is."
-            action={
-              <button
-                onClick={() => {
-                  setCloneName(`${vault.name} (copy)`);
-                  setCloning(true);
+      {/* Its own section, beside "Leave or delete" rather than inside it: one heading level. */}
+      {canHandOver && (
+        <section className="px-5 sm:px-6 py-5" style={{ borderTop: "1px solid var(--border)" }}>
+          <TransferOwnershipPanel vault={vault} members={members} me={me} />
+        </section>
+      )}
+
+      {(isOwner || canLeave || (lastOwner && others.length > 0)) && (
+        <DetailSection title={isOrg ? "Leave or delete" : "More"}>
+          {isOwner &&
+            (cloning ? (
+              <form
+                className="flex flex-col gap-1.5"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  doClone();
                 }}
-                className="btn btn-sm"
               >
-                {cloned ? <DrawnCheck /> : <CopyIcon {...ICON} />}
-                CopyIcon space
-              </button>
-            }
-          />
-        )}
+                <label htmlFor={`clone-${vault.id}`} className="text-[13px] font-medium">
+                  Name for the copy
+                </label>
+                <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+                  The copy is a new space with the same memories, and only you in it. {vault.name} stays exactly as it is.
+                </p>
+                <input
+                  id={`clone-${vault.id}`}
+                  autoFocus
+                  className="field h-10 px-3 text-[14px]"
+                  value={cloneName}
+                  onChange={(e) => setCloneName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Escape" && setCloning(false)}
+                />
+                <div className="flex justify-end gap-1.5">
+                  <button type="button" onClick={() => setCloning(false)} className="btn">
+                    Cancel
+                  </button>
+                  <button type="submit" disabled={cloneBusy} className="btn btn-primary">
+                    {cloneBusy ? "Copying…" : "Create copy"}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <OptionRow
+                title="Make a copy"
+                body="A new space with the same memories, and only you in it."
+                action={
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCloneName(`${vault.name} (copy)`);
+                      setError(null);
+                      setCloning(true);
+                    }}
+                    className="btn btn-ghost btn-sm"
+                  >
+                    {cloned ? <DrawnCheck /> : <Copy {...ICON} />}
+                    Copy
+                  </button>
+                }
+              />
+            ))}
 
-        {canHandOver && (
-          <div className="pt-3" style={{ borderTop: "1px solid var(--border)" }}>
-            <TransferOwnershipPanel vault={vault} members={members} me={me} />
-          </div>
-        )}
+          {canLeave && (
+            <OptionRow
+              title="Leave this space"
+              body="You stop seeing its memories. Everyone else keeps access."
+              action={
+                <button onClick={() => setConfirm("leave")} className="btn btn-sm">
+                  <LogOut {...ICON} />
+                  Leave space…
+                </button>
+              }
+            />
+          )}
+          {lastOwner && others.length > 0 && (
+            <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+              To leave, first make someone else an owner. A team space always needs one.
+            </p>
+          )}
 
-        {canLeave && (
-          <OptionRow
-            title="Leave this space"
-            body="You stop seeing its memories. Everyone else keeps access."
-            action={
-              <button onClick={() => setConfirm("leave")} className="btn btn-sm">
-                <SignOutIcon {...ICON} />
-                Leave space…
-              </button>
-            }
-          />
-        )}
-        {lastOwner && others.length > 0 && (
-          <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
-            To leave, first make someone else an owner. A shared space always needs one.
-          </p>
-        )}
-
-        {isOrg && isOwner && (
-          <OptionRow
-            title="Delete this space"
-            body="Removes it and everything in it, for everyone. This can't be undone."
-            action={
-              <button onClick={() => setConfirm("delete")} className="btn btn-danger btn-sm">
-                <TrashIcon {...ICON} />
-                Delete space…
-              </button>
-            }
-          />
-        )}
-      </DetailSection>
+          {isOrg && isOwner && (
+            <OptionRow
+              title="Delete this space"
+              body="Removes it and everything in it, for everyone. This can't be undone."
+              action={
+                <button onClick={() => setConfirm("delete")} className={`btn btn-sm ${RED_ON_HOVER}`}>
+                  <Trash2 {...ICON} />
+                  Delete space…
+                </button>
+              }
+            />
+          )}
+        </DetailSection>
+      )}
 
       {error && (
         <div className="px-5 sm:px-6 pb-5">
@@ -425,6 +507,7 @@ export default function SpaceDetail({
         title={confirm === "delete" ? `Delete ${vault.name}?` : `Leave ${vault.name}?`}
         confirmLabel={confirm === "delete" ? `Delete ${vault.name}` : `Leave ${vault.name}`}
         busy={leaveVault.isPending || deleteVault.isPending}
+        typeToConfirm={confirm === "delete" && isOrg ? vault.name : undefined}
         onCancel={() => setConfirm(null)}
         onConfirm={() =>
           confirm === "delete"
@@ -449,7 +532,7 @@ export default function SpaceDetail({
         {confirm === "delete" ? (
           <p>
             Everyone in {vault.name} will lose access to this space and its saved memories, people and topics. This can&apos;t be
-            undone. CopyIcon the space first if you want to keep anything.
+            undone. Copy the space first if you want to keep anything.
           </p>
         ) : (
           <p>

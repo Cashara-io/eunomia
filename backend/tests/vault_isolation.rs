@@ -92,7 +92,7 @@ async fn personal_of(w: &World, p: &P) -> String {
 
 async fn accept(w: &World, p: &P, vault: &str) {
     let db = w.app.db().await;
-    common::sys(vaults::accept_invitation(&db, &p.user.id, &rid::parse(vault).unwrap())).await.unwrap();
+    common::sys(vaults::accept_invitation(&db, &w.app.state.control, &p.user.id, &rid::parse(vault).unwrap())).await.unwrap();
 }
 
 async fn world() -> World {

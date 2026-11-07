@@ -1,12 +1,12 @@
 "use client";
 
 // Small shared pieces of the Memory spaces page.
-import { CaretDownIcon } from "@phosphor-icons/react/ssr";
+import Link from "next/link";
+import { ArrowRight, ChevronDown, X } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
-import { VaultShape, vaultTone } from "@/components/VaultChip";
 import type { Vault, VaultMember, VaultRole } from "@/lib/types";
 
-export const ICON = { size: 18, weight: "duotone" } as const;
+export const ICON = { size: 18, strokeWidth: 1.75 } as const;
 
 export function ago(iso: string | null): string | null {
   if (!iso) return null;
@@ -20,30 +20,42 @@ export function ago(iso: string | null): string | null {
 
 export const sameEmail = (a: string | null, b: string | null) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
 
-/** Who is in a space, in one plain line: "Only you", "You and 2 others", "Private to you". */
+/** Who is in a space, in one plain line: "Not shared yet", "3 members", "Private to you". */
 export function peopleLine(vault: Vault, members: VaultMember[] | null): string {
   if (vault.kind === "personal") return "Private to you";
-  if (!members) return "Shared space";
-  const others = members.length - 1;
-  if (others <= 0) return "Only you";
-  return `You and ${others} ${others === 1 ? "other" : "others"}`;
+  if (!members) return "Team space";
+  if (members.length <= 1) return "Not shared yet";
+  return `${members.length} members`;
 }
 
+/** A member's role in plain dim text, for anyone who can't change it. */
 export function RoleChip({ role }: { role: VaultRole }) {
   return (
-    <span
-      className="inline-flex items-center h-6 px-2 rounded-[4px] text-[12px] font-medium shrink-0"
-      style={{ border: "1px solid var(--border-strong)", color: role === "owner" ? "var(--ink)" : "var(--ink-dim)" }}
-    >
+    <span className="text-[13px] shrink-0" style={{ color: "var(--ink-dim)" }}>
       {role === "owner" ? "Owner" : "Member"}
     </span>
   );
 }
 
-/* The space's identity: its vault shape in its vault colour (a red circle for the personal space, a
-   blue triangle for a shared space). Decorative; the name and the words beside it carry the meaning. */
-export function SpaceSwatch({ vault, size = 12 }: { vault: Vault; size?: number }) {
-  return <VaultShape tone={vaultTone(vault.kind)} size={size} />;
+/* The space's identity: a small dot, neutral grey for the personal space and one
+   of a few calm colours for shared spaces (never the danger red). Decorative; the
+   name and the words beside it carry the meaning. */
+const SWATCHES = ["var(--bauhaus-app-yellow)", "var(--bauhaus-app-blue)", "var(--good)"];
+/** A space's colour, shared by its dot here and its points on the Memory map. */
+export function spaceColor(vault: Pick<Vault, "id" | "kind"> | undefined): string {
+  if (!vault || vault.kind === "personal") return "var(--ink-faint)";
+  let h = 0;
+  for (const ch of vault.id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return SWATCHES[h % SWATCHES.length];
+}
+export function SpaceSwatch({ vault, size = 8 }: { vault: Vault; size?: number }) {
+  return (
+    <span
+      aria-hidden
+      className="inline-block shrink-0"
+      style={{ width: size, height: size, background: spaceColor(vault), borderRadius: 999 }}
+    />
+  );
 }
 
 /* A check that draws itself once on mount (the shared .bits-draw grammar; reduced motion is handled there). */
@@ -56,13 +68,12 @@ export function DrawnCheck() {
 }
 
 /** One section of the space detail: a heading and its content, separated by a hairline. */
-export function DetailSection({ title, icon, aside, children }: { title: ReactNode; icon?: ReactNode; aside?: ReactNode; children: ReactNode }) {
+export function DetailSection({ title, aside, children }: { title: ReactNode; aside?: ReactNode; children: ReactNode }) {
   const id = useId();
   return (
     <section className="px-5 sm:px-6 py-5 flex flex-col gap-3" style={{ borderTop: "1px solid var(--border)" }} aria-labelledby={id}>
       <div className="flex items-center justify-between gap-2">
         <h3 id={id} className="section-title flex items-center gap-2">
-          {icon}
           {title}
         </h3>
         {aside}
@@ -75,13 +86,11 @@ export function DetailSection({ title, icon, aside, children }: { title: ReactNo
 /** A section that stays folded behind its heading until someone opens it. */
 export function Disclosure({
   title,
-  icon,
   hint,
   defaultOpen = false,
   children,
 }: {
   title: string;
-  icon?: ReactNode;
   hint?: string;
   defaultOpen?: boolean;
   children: ReactNode;
@@ -98,7 +107,6 @@ export function Disclosure({
           onClick={() => setOpen((o) => !o)}
           className="w-full flex items-center gap-2 min-h-10 text-left rounded-[4px]"
         >
-          {icon}
           <span className="flex-1 min-w-0 flex flex-col">
             <span className="section-title">{title}</span>
             {hint && !open && (
@@ -107,12 +115,36 @@ export function Disclosure({
               </span>
             )}
           </span>
-          <CaretDownIcon {...ICON} aria-hidden className="shrink-0" style={{ color: "var(--ink-dim)", transform: open ? "rotate(180deg)" : undefined }} />
+          <ChevronDown {...ICON} aria-hidden className="shrink-0" style={{ color: "var(--ink-dim)", transform: open ? "rotate(180deg)" : undefined }} />
         </button>
       </h3>
       <div id={id} hidden={!open} className="flex flex-col gap-3">
         {open && children}
       </div>
     </section>
+  );
+}
+
+/** Who sent an invitation, in words: their email when known, else "Someone". */
+export const inviterWords = (invitedBy: string | null | undefined) => invitedBy || "Someone";
+
+/** After joining a space: says so, with the way in to what it holds. */
+export function JoinedNotice({ id, name, onDismiss }: { id: string; name: string; onDismiss?: () => void }) {
+  return (
+    <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2.5 text-[14px]">
+      <DrawnCheck />
+      <span className="flex-1 min-w-[160px]">
+        You joined <span className="font-medium">{name}</span>.
+      </span>
+      <Link href={`/entities?vault=${encodeURIComponent(id)}`} className="btn btn-sm">
+        See its people &amp; topics
+        <ArrowRight {...ICON} aria-hidden />
+      </Link>
+      {onDismiss && (
+        <button type="button" className="btn btn-ghost btn-sm btn-icon" aria-label="Dismiss" onClick={onDismiss}>
+          <X {...ICON} aria-hidden />
+        </button>
+      )}
+    </div>
   );
 }

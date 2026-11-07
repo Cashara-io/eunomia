@@ -72,6 +72,14 @@ pub const ALL: &[&ControlStmt] = &[
     &IDENTITY_LIST_FOR_USER,
     &IDENTITY_DELETE_USER,
     &AUTH_SESSION_REVOKE_OWNER,
+    &ADMIN_AUDIT_PAGE,
+    &ADMIN_PEOPLE,
+    &ADMIN_LAST_SEEN,
+    &ADMIN_TOKEN_NAMES,
+    &ADMIN_TOKEN_COUNTS,
+    &USER_ADMIN_FLAG,
+    &USER_SET_ADMIN,
+    &USER_SET_SUSPENDED,
 ];
 
 pub const AUTH_SESSION_CREATE: ControlStmt =
@@ -316,7 +324,10 @@ pub const SESSION_PRUNE: ControlStmt = ControlStmt::new(
 
 /// A user's home org: their oldest membership. Every credential resolves to it.
 pub const ORG_OF_USER: ControlStmt =
-    ControlStmt::new("control.org_of_user", "SELECT org, role FROM membership WHERE user = $user ORDER BY created_at, id LIMIT 1");
+    ControlStmt::new(
+        "control.org_of_user",
+        "SELECT org, role, user.suspended_at AS suspended_at FROM membership WHERE user = $user ORDER BY created_at, id LIMIT 1",
+    );
 
 pub const ORG_FIRST_OWNER: ControlStmt = ControlStmt::new(
     "control.org_first_owner",
@@ -392,6 +403,55 @@ pub const IDENTITY_DELETE_USER: ControlStmt = ControlStmt::new("control.identity
 /// Ends every browser session of a user (linking a provider to an existing account signs its other sessions out).
 pub const AUTH_SESSION_REVOKE_OWNER: ControlStmt =
     ControlStmt::new("control.auth_session_revoke_owner", "UPDATE session SET revoked = true WHERE owner = $owner AND revoked = false");
+
+// workspace admin (routers/admin.rs)
+
+/// A page of the security ledger for one org, newest first: rows of its members plus the
+/// anonymous rows (failed sign-ins), never the per-tool-call `tool.*` rows (Usage covers those).
+/// `$prefix` and `$actions` narrow it to one kind of event, `$exclude` leaves some out; empty means all.
+pub const ADMIN_AUDIT_PAGE: ControlStmt = ControlStmt::new(
+    "control.admin_audit_page",
+    "SELECT id, user, user.email AS email, actor_kind, action, target, outcome, detail, created_at FROM audit_event \
+     WHERE (user IS NONE OR user IN (SELECT VALUE user FROM membership WHERE org = $org)) \
+     AND !string::starts_with(action, 'tool.') \
+     AND ($prefix = '' OR string::starts_with(action, $prefix)) \
+     AND (array::len($actions) = 0 OR action IN $actions) \
+     AND (array::len($exclude) = 0 OR action NOTINSIDE $exclude) \
+     ORDER BY created_at DESC LIMIT $limit START $offset",
+);
+
+/// Every account in an org, oldest first.
+pub const ADMIN_PEOPLE: ControlStmt = ControlStmt::new(
+    "control.admin_people",
+    "SELECT id, email, created_at, admin, suspended_at FROM user WHERE id IN (SELECT VALUE user FROM membership WHERE org = $org) ORDER BY created_at, id",
+);
+
+/// When each of `$ids` was last seen: browser sessions, then API tokens (the caller takes the latest).
+pub const ADMIN_LAST_SEEN: ControlStmt = ControlStmt::new(
+    "control.admin_last_seen",
+    "SELECT owner, last_seen_at AS at FROM session WHERE owner IN $ids; \
+     SELECT owner, last_used_at AS at FROM api_token WHERE owner IN $ids AND last_used_at IS NOT NONE",
+);
+
+/// Names of API tokens by id, for the audit log's sentences (a revoked token's row is gone).
+pub const ADMIN_TOKEN_NAMES: ControlStmt = ControlStmt::new("control.admin_token_names", "SELECT id, name FROM api_token WHERE id IN $ids");
+
+/// How many API tokens each of `$ids` holds (People shows the count; an owner with none has no row).
+pub const ADMIN_TOKEN_COUNTS: ControlStmt =
+    ControlStmt::new("control.admin_token_counts", "SELECT owner, count() AS n FROM api_token WHERE owner IN $ids GROUP BY owner");
+
+/// Whether an admin granted this account admin rights in the app (`authz::is_admin`).
+pub const USER_ADMIN_FLAG: ControlStmt = ControlStmt::new("control.user_admin_flag", "SELECT admin FROM user WHERE id = $id LIMIT 1");
+
+/// Grants (`true`) or takes back (`NONE`) admin rights granted in the app.
+pub const USER_SET_ADMIN: ControlStmt =
+    ControlStmt::new("control.user_set_admin", "UPDATE user SET admin = $admin WHERE id = $id RETURN id");
+
+/// Suspends (now) or restores an account. Suspending again keeps the first time.
+pub const USER_SET_SUSPENDED: ControlStmt = ControlStmt::new(
+    "control.user_set_suspended",
+    "UPDATE user SET suspended_at = IF $suspended THEN (suspended_at ?? time::now()) ELSE NONE END WHERE id = $id RETURN id",
+);
 
 // the credential broker (routers/secrets.rs)
 

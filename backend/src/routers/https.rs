@@ -163,6 +163,8 @@ async fn request_https(State(state): State<AppState>, user: User, Json(req): Jso
         return Ok(Json(json!({ "configured": false })));
     }
     std::fs::write(dir.join("https.json"), body).map_err(|e| AppError::internal(e.to_string()))?;
+    let detail = if req.enabled { format!("domain={}", req.domain.trim().to_ascii_lowercase()) } else { "off".to_string() };
+    crate::audit::record_as_caller_detail(&state.control, &user.id, "server.https", "", "ok", &detail).await;
     Ok(Json(json!({ "configured": true, "requested": true })))
 }
 

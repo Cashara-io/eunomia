@@ -1,10 +1,9 @@
 "use client";
 
-import { KeyIcon, PencilSimpleIcon, XIcon } from "@phosphor-icons/react/ssr";
-import VaultChip, { vaultTone } from "@/components/VaultChip";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
 import { useRef, useState } from "react";
+import { KeyRound, Pencil, X } from "lucide-react";
 import { useCreateToken, useRenameToken, useRevokeToken, useTokens } from "@/lib/queries/auth";
 import { useVaults } from "@/lib/queries/vaults";
 import type { ApiToken, Scope, Vault } from "@/lib/types";
@@ -18,8 +17,14 @@ const SCOPES: { id: Scope; label: string; hint: string }[] = [
   { id: "connectors", label: "Connected sources", hint: "View and sync connected sources" },
 ];
 
+const DEFAULT_SCOPES: Scope[] = ["memory:read", "memory:write"];
+
 // Same limit as the API (and as a vault name).
 const NAME_MAX = 80;
+
+/* Below 640px a row is a wrapping flex box and its cells lose the table's height, padding and rules. */
+const PHONE_ROW = "max-sm:flex max-sm:flex-wrap max-sm:items-center max-sm:gap-x-2 max-sm:gap-y-1 max-sm:px-3 max-sm:py-3 max-sm:border-b max-sm:border-[var(--border)] max-sm:last:border-b-0";
+const PHONE_CELL = "max-sm:block max-sm:h-auto! max-sm:p-0! max-sm:border-0!";
 
 const EXPIRY_OPTIONS = [
   { value: "", label: "Never expires" },
@@ -37,9 +42,15 @@ export function TokensSection() {
   const renameToken = useRenameToken();
   const vaultList: Vault[] = useVaults().data ?? [];
   const [name, setName] = useState("");
-  const [scopes, setScopes] = useState<Scope[]>(SCOPES.map((s) => s.id));
-  const [vaultId, setVaultId] = useState("");
-  const [expiryDays, setExpiryDays] = useState("");
+  // Least privilege: a new token reads and saves memories only. Managing spaces and sources is opt-in.
+  const [scopes, setScopes] = useState<Scope[]>(DEFAULT_SCOPES);
+  // Untouched (null) means the safer default: your personal space, not every space. "All my memory spaces" stays one click away.
+  const [vaultChoice, setVaultChoice] = useState<string | null>(null);
+  const personal = vaultList.find((v) => v.kind === "personal" && v.role === "owner");
+  const vaultId = vaultChoice ?? personal?.id ?? "";
+  const setVaultId = setVaultChoice;
+  // New tokens expire after 90 days unless you pick otherwise.
+  const [expiryDays, setExpiryDays] = useState("90");
   const [minted, setMinted] = useState<{ name: string; token: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Failure | null>(null);
@@ -49,14 +60,15 @@ export function TokensSection() {
   const [draft, setDraft] = useState("");
   const renamingRef = useRef<string | null>(null);
 
-  const vaultOf = (id: string) => vaultList.find((v) => v.id === id);
+  const vaultName = (id: string) => vaultList.find((v) => v.id === id)?.name ?? id;
 
   async function create() {
+    if (!name.trim()) return;
     setBusy(true);
     setError(null);
     try {
       const res = await createToken.mutateAsync({
-        name: name.trim() || "API token",
+        name: name.trim(),
         scopes,
         vault_id: vaultId || null,
         expires_at: expiryDays ? new Date(Date.now() + Number(expiryDays) * 86_400_000).toISOString() : null,
@@ -109,8 +121,7 @@ export function TokensSection() {
   return (
     <div className="flex flex-col gap-5">
       <PanelHead title="API tokens">
-        A token lets an AI app or script use Eunomia as you. Give each one only the access it needs, limit it to one memory
-        space, or let it expire. A token is a secret: it is shown once, when you create it, and never again.
+        A token lets an AI app or script use Eunomia as you. It is shown once, when you create it.
       </PanelHead>
 
       <form
@@ -126,32 +137,44 @@ export function TokensSection() {
           </label>
           <input
             id="token-name"
-            className="field h-10 px-3 text-[14px] w-full"
+            className="field h-10 px-3 text-[14px] w-full max-w-[360px]"
             placeholder="For example: work laptop"
             maxLength={NAME_MAX}
             value={name}
+            required
+            aria-describedby={name.trim() ? undefined : "token-name-hint"}
             onChange={(e) => setName(e.target.value)}
           />
+          {!name.trim() && (
+            <p id="token-name-hint" className="text-[12px]" style={{ color: "var(--ink-faint)" }}>
+              Name it after where you&apos;ll use it, so you can tell your tokens apart later.
+            </p>
+          )}
         </div>
 
         <div className="flex flex-col gap-1.5">
           <span id="token-scopes" className="label">
             What it can do
           </span>
-          <div className="flex flex-wrap gap-2" role="group" aria-labelledby="token-scopes">
+          <div className="flex flex-col gap-2" role="group" aria-labelledby="token-scopes">
             {SCOPES.map((s) => {
               const on = scopes.includes(s.id);
               return (
-                <Tooltip key={s.id} label={s.hint}>
-                  <button
-                    type="button"
-                    className="pill"
-                    aria-pressed={on}
-                    onClick={() => setScopes((cur) => (on ? cur.filter((x) => x !== s.id) : [...cur, s.id]))}
-                  >
-                    {s.label}
-                  </button>
-                </Tooltip>
+                <label key={s.id} className="flex items-start gap-2.5 cursor-pointer text-[14px]">
+                  <input
+                    type="checkbox"
+                    className="mt-[3px] h-4 w-4 shrink-0 cursor-pointer"
+                    style={{ accentColor: "var(--accent)" }}
+                    checked={on}
+                    onChange={() => setScopes((cur) => (on ? cur.filter((x) => x !== s.id) : [...cur, s.id]))}
+                  />
+                  <span className="flex flex-col">
+                    <span style={{ color: "var(--ink)" }}>{s.label}</span>
+                    <span className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+                      {s.hint}
+                    </span>
+                  </span>
+                </label>
               );
             })}
           </div>
@@ -190,8 +213,8 @@ export function TokensSection() {
               className="h-10 text-[14px] w-full"
             />
           </div>
-          <button type="submit" disabled={busy || scopes.length === 0} className="btn btn-primary">
-            <KeyIcon {...ICON} />
+          <button type="submit" disabled={busy || scopes.length === 0 || !name.trim()} className="btn btn-primary">
+            <KeyRound {...ICON} />
             {busy ? "Creating…" : "Create token"}
           </button>
         </div>
@@ -212,7 +235,7 @@ export function TokensSection() {
               </p>
             </div>
             <button onClick={() => setMinted(null)} aria-label="Dismiss" className="btn btn-ghost btn-sm btn-icon">
-              <XIcon {...ICON} />
+              <X {...ICON} />
             </button>
           </div>
           <CopyField value={minted.token} reveal />
@@ -222,9 +245,10 @@ export function TokensSection() {
       {tokensQuery.isError && <ErrorLine error={failure(tokensQuery.error, "Could not load your tokens.", " Reload the page to try again.")} />}
       {error && <ErrorLine error={error} />}
 
-      <div className="ledger overflow-x-auto">
-        <table className="data-table">
-          <thead>
+      {/* Phones: each token is a stacked entry (name and Revoke, then what it can do, then dates), never a sideways scroll. */}
+      <div className="ledger sm:overflow-x-auto">
+        <table className="data-table max-sm:block">
+          <thead className="max-sm:hidden">
             <tr>
               <th>Name</th>
               <th>Can</th>
@@ -235,11 +259,11 @@ export function TokensSection() {
               </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="max-sm:block">
             {tokens === null && <TableSkeleton cols={5} />}
             {tokens?.length === 0 && (
-              <tr>
-                <td colSpan={5} style={{ color: "var(--ink-dim)", height: 56 }}>
+              <tr className="max-sm:block">
+                <td colSpan={5} className={`${PHONE_CELL} max-sm:px-3! max-sm:py-4!`} style={{ color: "var(--ink-dim)", height: 56 }}>
                   No tokens yet. Create one above to connect an AI app with a token.
                 </td>
               </tr>
@@ -248,8 +272,8 @@ export function TokensSection() {
               const exp = expiryLabel(t.expires_at);
               const full = SCOPES.every((s) => t.scopes.includes(s.id));
               return (
-                <tr key={t.id}>
-                  <td className="font-medium">
+                <tr key={t.id} className={PHONE_ROW}>
+                  <td className={`font-medium ${PHONE_CELL} max-sm:min-w-0 max-sm:flex-1`}>
                     {renaming === t.id ? (
                       <input
                         aria-label="New token name"
@@ -281,42 +305,38 @@ export function TokensSection() {
                             aria-label={`Rename ${t.name}`}
                             className="btn btn-ghost btn-sm btn-icon shrink-0"
                           >
-                            <PencilSimpleIcon {...ICON} />
+                            <Pencil {...ICON} />
                           </button>
                         </Tooltip>
                       </span>
                     )}
                   </td>
-                  <td>
-                    <span className="flex flex-col gap-0.5 py-1.5 min-w-0">
+                  <td className={`${PHONE_CELL} max-sm:order-last max-sm:basis-full`}>
+                    <span className="flex flex-col gap-0.5 py-1.5 max-sm:py-0 min-w-0">
                       {full ? (
                         <span>Full access</span>
                       ) : (
                         <span>{t.scopes.map((sc) => SCOPES.find((x) => x.id === sc)?.label ?? sc).join(", ")}</span>
                       )}
-                      {t.vault_id ? (
-                        <span className="flex items-center gap-1.5 text-[12px] min-w-0" style={{ color: "var(--ink-dim)" }}>
-                          Memory space:
-                          <VaultChip tone={vaultTone(vaultOf(t.vault_id)?.kind)} name={vaultOf(t.vault_id)?.name ?? t.vault_id} />
-                        </span>
-                      ) : (
-                        <span className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
-                          All memory spaces
-                        </span>
-                      )}
+                      <span className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+                        {t.vault_id ? `Memory space: ${vaultName(t.vault_id)}` : "All memory spaces"}
+                      </span>
                     </span>
                   </td>
-                  <td className="font-mono text-[12px]" style={{ color: "var(--ink-dim)" }}>
+                  <td className={`tabular-nums text-[13px] ${PHONE_CELL} max-sm:order-last max-sm:text-[12px]`} style={{ color: "var(--ink-dim)" }}>
+                    <span className="sm:hidden">Last used </span>
                     {relativeTime(t.last_used_at)}
                   </td>
                   <td
-                    className="font-mono text-[12px]"
+                    className={`tabular-nums text-[13px] whitespace-nowrap ${PHONE_CELL} max-sm:order-last max-sm:text-[12px]`}
                     style={{ color: exp.expired ? "var(--critical)" : "var(--ink-dim)" }}
                     title={t.expires_at ? new Date(t.expires_at).toLocaleString() : undefined}
                   >
-                    {exp.expired ? "Expired" : exp.text === "Never" ? "Never" : `Expires ${exp.text}`}
+                    {/* the column head says "Expires": the cell is just "in 90d", which never wraps */}
+                    <span className="sm:hidden">· Expires </span>
+                    {exp.text}
                   </td>
-                  <td className="text-right">
+                  <td className={`text-right ${PHONE_CELL}`}>
                     <RevokeButton label={t.name} onRevoke={() => revoke(t.id)} />
                   </td>
                 </tr>

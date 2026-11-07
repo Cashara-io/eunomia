@@ -4,6 +4,7 @@ import { LifebuoyIcon } from "@phosphor-icons/react/ssr";
 import Link from "next/link";
 import CopyButton from "@/components/bits/CopyButton";
 import PageHeader from "@/components/ui/PageHeader";
+import { useMe } from "@/lib/queries/auth";
 import { EXAMPLE_QUESTION, Kbd, Note, useMcpAddress } from "@/components/connect/Guide";
 
 function Problem({ id, title, children }: { id?: string; title: string; children: React.ReactNode }) {
@@ -20,6 +21,7 @@ function Problem({ id, title, children }: { id?: string; title: string; children
 /** App 02.6: help for the common ways connecting goes wrong. Plain words, one next step each. */
 export default function ConnectionHelpPage() {
   const url = useMcpAddress();
+  const isAdmin = useMe().data?.is_admin ?? false;
   return (
     <div className="flex flex-col gap-8 max-w-[960px]">
       <PageHeader icon={LifebuoyIcon} tone="personal" title="Connection help" intro="Help with connecting your AI app." />
@@ -44,25 +46,31 @@ export default function ConnectionHelpPage() {
             Your workspace may not allow it. Custom connections work on ChatGPT Business, Enterprise and Edu; on Pro, ChatGPT can read memories but not
             save new ones. Ask your workspace administrator to enable custom connections, or use another AI app.
           </Note>
-          <Note>ChatGPT also needs Eunomia to have a public https:// address. If yours starts with http://localhost or a home network address, set one up under Settings, HTTPS.</Note>
+          <Note>
+            ChatGPT also needs Eunomia to have a public https:// address. If yours starts with http://localhost or a home network address, an admin can
+            turn on HTTPS in Eunomia&apos;s settings.
+          </Note>
           <div className="flex flex-wrap gap-2">
             <Link href="/connect/chatgpt" className="btn">
               View ChatGPT steps
             </Link>
-            <Link href="/settings?tab=https" className="btn">
-              Open HTTPS settings
-            </Link>
+            {isAdmin && (
+              <Link href="/settings?tab=https" className="btn">
+                Open HTTPS settings
+              </Link>
+            )}
           </div>
         </Problem>
 
         <Problem id="not-found" title="My command says “not found”">
           <Note>
             The coding app is not installed, or your command window cannot find it. Install the app first, then open a new command window and run the
-            command again. You can also choose another app instead of changing computer settings.
+            command again. You can also{" "}
+            <Link href="/" className="underline" style={{ color: "var(--accent-text)" }}>
+              choose another app
+            </Link>{" "}
+            instead of changing computer settings.
           </Note>
-          <Link href="/" className="btn self-start">
-            Choose a different app
-          </Link>
         </Problem>
 
         <Problem id="no-sign-in" title="No sign-in page opened">

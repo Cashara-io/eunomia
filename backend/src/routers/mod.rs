@@ -8,6 +8,7 @@ pub mod entities;
 pub mod vaults;
 pub mod peers;
 pub mod settings;
+pub mod admin;
 pub mod audit;
 pub mod debug;
 pub mod export;

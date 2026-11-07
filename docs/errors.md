@@ -22,6 +22,7 @@ The `ErrorCode` enum is in `backend/src/error.rs`. A unit test fails if a code i
 | `auth.token_expired` | 401 | The API token's `expires_at` has passed. Create a new token. | `gate.rs`, `auth.rs` |
 | `auth.session_expired` | 401 | The session cookie is past its (sliding) expiry or its JWT `exp`. Log in again. | `gate.rs`, `auth.rs` |
 | `auth.password_disabled` | 403 | `AUTH_MODE=oidc`: email and password sign-in and signup are turned off; users sign in through the OpenID Connect provider (`/api/auth/oidc/start`). | `routers/auth.rs` |
+| `auth.suspended` | 403 | The account is suspended by a workspace admin (Settings > People): it cannot sign in, and its sessions, API tokens and app connections are refused until an admin restores it. | `models_user.rs` |
 | `rate.limited` | 429 | Too many requests for this user, token or (for login and signup) client address. Also 10 failed logins for one email, or 30 failed token requests for one OAuth client, in 15 minutes, whatever the address (counted per process). Honour the `Retry-After` header. | `gate.rs`, `routers/auth.rs`, `oauth/server.rs` |
 | `tenant.denied` | 403 | The database refused a query on permissions grounds, or a statement named a table of the other database (control vs org) and was refused before it was sent. Logged at error level; treat as a high-severity alert. | `error.rs` (DB error mapping), `store/mod.rs` (`CROSSING_MARK`) |
 | `tenant.not_found` | 404 | The org has no ready database: its routing row is missing or the database is still being created or moved. | `pool.rs` |

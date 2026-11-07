@@ -1,24 +1,26 @@
 "use client";
 
-import { ArrowRightIcon, CheckIcon, HouseIcon, PlusIcon, UploadSimpleIcon, UsersIcon, WarningIcon } from "@phosphor-icons/react/ssr";
 import { kindColor } from "@/lib/kindColors";
 import ErrorLine, { failure } from "@/components/ErrorLine";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import type { EntityDetail, EntityKind, EntityMemory, SourceRow } from "@/lib/types";
+import { AlertTriangle, ArrowRight, Check, Upload, Users } from "lucide-react";
+import type { EntityDetail, EntityKind, SourceRow, Vault } from "@/lib/types";
 import { entityKeys, type EntityList } from "@/lib/queries/entities";
 import { call } from "@/lib/queries/client";
-import { useSources, useSyncSource } from "@/lib/queries/sources";
-import { getEntity, listEntities } from "@/lib/gen";
-import AuthorTag, { authorColor, CursorGlyph } from "@/components/AuthorTag";
-import DigitRoll from "@/components/bits/DigitRoll";
-import SyncMark, { type SyncStatus } from "@/components/bits/SyncMark";
-import { prefersReducedMotion } from "@/components/bits/motion";
-import { kindForSource, sourceRecordLabel } from "@/lib/connectorMeta";
+import { useSources } from "@/lib/queries/sources";
+import { useDocuments } from "@/lib/queries/documents";
+import { vaultKeys, useVaults, type PendingInvite } from "@/lib/queries/vaults";
+import { useMe } from "@/lib/queries/auth";
+import { adminKeys } from "@/lib/queries/admin";
+import { settingsKeys } from "@/lib/queries/settings";
+import { getEntity, getHttpsStatus, listEntities, listPeople, listVaultPendingInvitations } from "@/lib/gen";
+import type { HttpsStatus } from "@/lib/types";
 import PageHeader from "@/components/ui/PageHeader";
-import { EmptyState } from "@/components/Shapes";
-import { AI_APPS, AppMark, appForConnection, type Connection } from "@/components/connect/apps";
+import InvitationBanner from "@/components/vaults/InvitationBanner";
+import AppChoices from "@/components/connect/AppChoices";
+import { AppMark, appForConnection, type Connection } from "@/components/connect/apps";
 import { useConnections } from "@/components/connect/useConnections";
 import { FAILURE_ALERT_THRESHOLD, isLiveSource, sourceHealth, sourceLabel } from "@/lib/sourceState";
 
@@ -33,16 +35,13 @@ function age(iso: string | null | undefined): string {
   return `${Math.round(hours / 24)}d`;
 }
 
-function since(iso: string | null): string {
+function since(iso: string | null | undefined): string {
   if (!iso) return "never";
   const a = age(iso);
   return a === "now" ? "just now" : `${a} ago`;
 }
 
-function stamp(iso: string | null | undefined): string {
-  if (!iso) return "–";
-  return new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
-}
+const plural = (n: number, one: string, many: string) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
 
 // ---- failure banner ----
 
@@ -55,16 +54,16 @@ function FailureBanner({ rows, dismissed, onDismiss }: { rows: SourceRow[]; dism
         <div
           key={s.key}
           role="alert"
-          className="flex flex-wrap items-center gap-3 rounded-[12px] px-4 py-3"
+          className="flex flex-wrap items-center gap-3 rounded-[2px] px-4 py-3"
           style={{ background: "var(--critical-soft)", border: "1px solid var(--critical)" }}
         >
-          <WarningIcon weight="duotone" size={18} color="var(--critical)" className="shrink-0" aria-hidden />
+          <AlertTriangle size={18} strokeWidth={1.75} color="var(--critical)" className="shrink-0" aria-hidden />
           <div className="flex-1 min-w-[200px]">
             <div className="text-[14px] font-semibold">
               {sourceLabel(s)} could not update {s.sync_status.consecutive_failures} times in a row
             </div>
             {s.sync_status.last_error && (
-              <div className="text-[12.5px] font-mono truncate" style={{ color: "var(--ink-dim)" }}>
+              <div className="text-[12px] font-mono truncate" style={{ color: "var(--ink-dim)" }}>
                 {s.sync_status.last_error}
               </div>
             )}
@@ -81,332 +80,218 @@ function FailureBanner({ rows, dismissed, onDismiss }: { rows: SourceRow[]; dism
   );
 }
 
-// ---- live memory ----
-// The entity lives in the inspector, not a table column: graph-palette.spec
-// asserts entity names are absent from the page behind the palette.
+// ---- overview data ----
 
-// The API returns more on each memory than lib/api.ts declares; read what is there.
-type Memory = EntityMemory & { type?: string; updated_at?: string };
-type LiveRow = Memory & { entityName: string; entityKind: EntityKind };
-
-// ponytail: no "recent memories" endpoint exists, so this fans out one
-// entities.get per entity on the first page. Ceiling: only memories on the
-// first ENTITY_CAP entities show. Upgrade path: a backend
-// `GET /api/memories?sort=-created_at&limit=n` endpoint.
+// ponytail: no "recent activity" endpoint exists, so this lists each space and fans out
+// one entities.get per entity on its first page. Ceiling: memory counts and recency only
+// cover about ENTITY_CAP entities across all spaces (past that, the memory count is left out
+// rather than shown as an estimate).
+// Upgrade path: a backend summary endpoint with totals and recent entities.
 const ENTITY_CAP = 24;
-const ROW_LIMIT = 12;
+const RECENT_SHOWN = 6;
+// Code-map entities are not what someone means by "people and projects".
+const CODE_KINDS = new Set<EntityKind>(["repository", "file", "symbol"]);
 
-async function loadLiveMemory(): Promise<{ rows: LiveRow[]; total: number }> {
-  const list = (await call(listEntities())) as EntityList;
+type RecentEntity = { id: string; name: string; kind: EntityKind; memories: number; lastAt: string | null; vault: Vault };
+type Overview = { entities: number; memories: number; memoriesCapped: boolean; lastActivity: string | null; recent: RecentEntity[] };
+
+/** Totals and recent entities summed over every space the caller belongs to (one list call per space). */
+async function loadOverview(vaults: Vault[]): Promise<Overview> {
+  // No space list (it failed to load): fall back to the personal space, which is the default.
+  const spaces: Vault[] = vaults.length > 0 ? vaults : [{ id: "", name: "Personal", kind: "personal", created_at: null, role: "owner" }];
+  const lists = await Promise.all(
+    spaces.map(async (v) => ({
+      vault: v,
+      list: (await call(listEntities(v.id ? { query: { vault_id: v.id } } : undefined))) as EntityList,
+    })),
+  );
+  const perSpace = Math.max(4, Math.ceil(ENTITY_CAP / Math.max(1, lists.length)));
+  const firstPages = lists.map(({ vault, list }) => ({ vault, rows: list.results.slice(0, perSpace) }));
   const details = await Promise.all(
-    list.results.slice(0, ENTITY_CAP).map((e) => call(getEntity({ path: { entity_id: e.id } })).catch(() => null) as Promise<EntityDetail | null>),
+    firstPages.flatMap(({ vault, rows }) =>
+      rows.map((e) =>
+        (call(getEntity({ path: { entity_id: e.id } })) as Promise<EntityDetail>).then(
+          (d) => ({ d, vault }),
+          () => null,
+        ),
+      ),
+    ),
   );
-  const rows = details
-    .flatMap((d) => (d ? (d.memory as Memory[]).map((m) => ({ ...m, entityName: d.name, entityKind: d.kind })) : []))
-    .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))
-    .slice(0, ROW_LIMIT);
-  return { rows, total: list.total };
+  const loaded = details.filter((x): x is { d: EntityDetail; vault: Vault } => x !== null);
+  const withTimes = loaded.map(({ d, vault }) => ({
+    id: d.id,
+    name: d.name,
+    kind: d.kind,
+    vault,
+    memories: d.memory.length,
+    lastAt: d.memory.reduce<string | null>((max, m) => (m.created_at && (!max || m.created_at > max) ? m.created_at : max), null),
+  }));
+  const lastActivity = withTimes.reduce<string | null>((max, e) => (e.lastAt && (!max || e.lastAt > max) ? e.lastAt : max), null);
+  const recent = withTimes
+    .filter((e) => !CODE_KINDS.has(e.kind))
+    .sort((a, b) => (b.lastAt ?? "").localeCompare(a.lastAt ?? ""))
+    .slice(0, RECENT_SHOWN);
+  const total = lists.reduce((sum, { list }) => sum + list.total, 0);
+  return {
+    entities: total,
+    memories: withTimes.reduce((sum, e) => sum + e.memories, 0),
+    memoriesCapped: lists.some(({ list }) => list.total > perSpace),
+    lastActivity,
+    recent,
+  };
 }
 
-const authorOf = (m: Memory) => m.owner_email || m.source || null;
+// ---- overview ----
 
-// Arrival: rows new since the previous poll fade in under an author-colour wash,
-// and (at most CURSOR_CAP of them) show the author's cursor for a moment.
-const ARRIVAL_MS = 2400;
-const WASH_MS = 1400;
-const CURSOR_CAP = 3;
-
-/** Author tag that can carry the author's cursor glyph at its corner, Figma style, without moving the tag. */
-function RowAuthor({ name, id, cursor }: { name: string; id: string; cursor: boolean }) {
+function StatLine({ spaces, overview }: { spaces: number | null; overview: Overview }) {
+  const parts = [
+    spaces !== null ? plural(spaces, "space", "spaces") : null,
+    plural(overview.entities, "person or topic", "people & topics"),
+    // Only an exact count: a partial sum would read as a guess.
+    overview.memoriesCapped ? null : plural(overview.memories, "memory", "memories"),
+    `last activity ${since(overview.lastActivity)}`,
+  ].filter(Boolean);
   return (
-    <span className="relative inline-flex max-w-full">
-      {cursor && (
-        <span data-arrival-cursor={id} className="absolute -left-1.5 -top-2.5 pointer-events-none">
-          <CursorGlyph color={authorColor(name)} size={14} />
-        </span>
-      )}
-      <AuthorTag name={name} />
-    </span>
+    <p className="text-[14px] tabular" style={{ color: "var(--ink-dim)" }} aria-label="Summary">
+      {parts.join(" · ")}
+    </p>
   );
 }
 
-function LiveMemory({
-  rows,
-  arrived,
-  selectedId,
-  onSelect,
-}: {
-  rows: LiveRow[] | null;
-  arrived: string[];
-  selectedId: string | null;
-  onSelect: (id: string) => void;
-}) {
-  const body = useRef<HTMLTableSectionElement>(null);
-  // Layout effect: the new rows must start transparent on their first painted frame.
-  useLayoutEffect(() => {
-    const tbody = body.current;
-    if (!tbody || arrived.length === 0) return;
-    const reduced = prefersReducedMotion();
-    const anims: Animation[] = [];
-    for (const id of arrived) {
-      const tr = tbody.querySelector(`[data-memory-id="${id}"]`)?.closest("tr");
-      if (!tr) continue;
-      const author = rows?.find((r) => r.id === id);
-      const name = author ? authorOf(author) : null;
-      // Movement-free, so it stays under reduced motion; only the fade is dropped.
-      if (name)
-        anims.push(
-          tr.animate(
-            [
-              { backgroundColor: `color-mix(in oklab, ${authorColor(name)} 16%, transparent)` },
-              { backgroundColor: `color-mix(in oklab, ${authorColor(name)} 16%, transparent)`, offset: 0.3 },
-              { backgroundColor: "transparent" },
-            ],
-            { duration: WASH_MS, easing: "ease" },
-          ),
-        );
-      if (!reduced) anims.push(tr.animate([{ opacity: 0.001 }, { opacity: 1 }], { duration: 200, easing: "cubic-bezier(0.23, 1, 0.32, 1)" }));
-    }
-    for (const glyph of tbody.querySelectorAll<HTMLElement>("[data-arrival-cursor]"))
-      anims.push(
-        glyph.animate(reduced ? [{ opacity: 1 }, { opacity: 1, offset: 0.92 }, { opacity: 0 }] : [{ opacity: 0 }, { opacity: 1, offset: 0.08 }, { opacity: 1, offset: 0.9 }, { opacity: 0 }], {
-          duration: ARRIVAL_MS,
-          fill: "forwards",
-        }),
-      );
-    return () => anims.forEach((a) => a.cancel());
-    // rows is read for authors only; a new poll always brings a new `arrived`.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [arrived]);
+// A list row: dot, name, metadata. Below 640px the name takes the whole first line
+// (wrapping, never cut off) and the metadata moves, whole, to a second line.
+const ROW = "grid grid-cols-[auto_minmax(0,1fr)] sm:grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0.5 min-h-11 py-2 hover:bg-[var(--surface-raised)]";
+const ROW_NAME = "min-w-0 text-[14px] font-medium [overflow-wrap:anywhere] sm:truncate";
+const ROW_META = "col-start-2 sm:col-start-3 text-[12px] whitespace-nowrap";
 
-  const cursors = new Set(arrived.slice(0, CURSOR_CAP));
+const entityHref = (e: RecentEntity) =>
+  `/entities?id=${encodeURIComponent(e.id)}${e.vault.kind === "personal" ? "" : `&vault=${encodeURIComponent(e.vault.id)}`}`;
+const spaceName = (v: Vault) => (v.kind === "personal" ? "Personal" : v.name);
+
+function RecentlyUpdated({ rows, showSpace }: { rows: RecentEntity[]; showSpace: boolean }) {
   return (
-    <section className="ledger" aria-labelledby="live-memory-title">
-      <div className="flex items-center justify-between gap-3 min-h-12 px-4">
-        <h2 id="live-memory-title" className="section-title">
-          Live memory
+    <section className="flex flex-col gap-2 min-w-0" aria-labelledby="recent-title">
+      <div className="flex items-center justify-between gap-3">
+        <h2 id="recent-title" className="section-title">
+          Recently updated
         </h2>
-        {rows && rows.length > 0 && <span className="label">Latest {rows.length}</span>}
+        <Link href="/entities" className="text-[13px] inline-flex items-center gap-1 underline-offset-2 hover:underline" style={{ color: "var(--accent-text)" }}>
+          All people &amp; topics <ArrowRight size={14} strokeWidth={1.75} aria-hidden />
+        </Link>
       </div>
-      {rows === null ? (
-        <div aria-busy="true" aria-label="Loading memories">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="flex items-center gap-4 h-10 px-3" style={{ borderTop: i ? "var(--hair) solid var(--border)" : undefined }}>
-              <div className="skeleton h-5 w-16" />
-              <div className="skeleton h-3.5 flex-1 max-w-[340px]" />
-              <div className="skeleton h-3.5 w-8 ml-auto" />
-            </div>
-          ))}
-        </div>
-      ) : rows.length === 0 ? (
-        <EmptyState
-          bare
-          variant="memory"
-          title="No memories yet"
-          action={
-            <Link href="/entities" className="btn btn-sm">
-              Browse people &amp; topics <ArrowRightIcon weight="duotone" size={14} aria-hidden />
-            </Link>
-          }
-        >
-          Ask your AI app to remember something, or add one yourself. New memories show here with who saved them.
-        </EmptyState>
+      {rows.length === 0 ? (
+        <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+          No people or projects yet.
+        </p>
       ) : (
-        <table className="data-table" style={{ tableLayout: "fixed" }}>
-          <thead>
-            <tr>
-              <th className="hidden sm:table-cell" style={{ width: 112 }}>
-                Author
-              </th>
-              <th>Memory</th>
-              <th className="hidden md:table-cell" style={{ width: 160 }}>About</th>
-              <th className="hidden sm:table-cell text-right" style={{ width: 56 }}>
-                Age
-              </th>
-            </tr>
-          </thead>
-          <tbody
-            ref={body}
-            onKeyDown={(e) => {
-              // Arrow keys walk the selection; no animation on keyboard moves.
-              if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-              const i = rows.findIndex((r) => r.id === selectedId);
-              const next = rows[Math.min(rows.length - 1, Math.max(0, i + (e.key === "ArrowDown" ? 1 : -1)))];
-              if (!next) return;
-              e.preventDefault();
-              onSelect(next.id);
-              (e.currentTarget.querySelector(`[data-memory-id="${next.id}"]`) as HTMLElement | null)?.focus();
-            }}
-          >
-            {rows.map((m) => {
-              const selected = m.id === selectedId;
-              const author = authorOf(m);
-              return (
-                <tr
-                  key={m.id}
-                  onClick={() => onSelect(m.id)}
-                  // A row outline, not .frame-selected: its ::after would become an extra table cell.
-                  style={selected ? { background: "var(--accent-soft)", outline: "1px solid var(--accent)", outlineOffset: -1 } : undefined}
-                >
-                  <td className="hidden sm:table-cell overflow-hidden">{author && <RowAuthor name={author} id={m.id} cursor={cursors.has(m.id)} />}</td>
-                  <td className="overflow-hidden">
-                    <div className="py-2 sm:py-0 flex flex-col gap-1 min-w-0">
-                      <button
-                        type="button"
-                        aria-pressed={selected}
-                        data-memory-id={m.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSelect(m.id);
-                        }}
-                        className="block w-full truncate text-left"
-                        style={{ color: "var(--ink)" }}
-                        title={m.text}
-                      >
-                        {m.text}
-                      </button>
-                      {/* Below sm the author and age ride under the text so the memory keeps the full width. */}
-                      <span className="sm:hidden flex items-center gap-2 min-w-0">
-                        {author && <RowAuthor name={author} id={m.id} cursor={cursors.has(m.id)} />}
-                        <time dateTime={m.created_at} className="font-mono text-[11.5px]" style={{ color: "var(--ink-faint)" }}>
-                          {age(m.created_at)}
-                        </time>
-                      </span>
-                    </div>
-                  </td>
-                  <td className="hidden md:table-cell overflow-hidden">
-                    <span className="flex items-center gap-1.5 min-w-0 text-[12.5px]" style={{ color: "var(--ink-dim)" }}>
-                      <span className="dot" style={{ background: kindColor(m.entityKind) }} aria-hidden />
-                      <span className="truncate">{m.entityName}</span>
-                    </span>
-                  </td>
-                  <td className="hidden sm:table-cell text-right font-mono text-[12px]" style={{ color: "var(--ink-faint)" }}>
-                    <time dateTime={m.created_at}>{age(m.created_at)}</time>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <ul className="hairline-rows border-t">
+          {rows.map((e) => (
+            <li key={e.id}>
+              <Link href={entityHref(e)} className={ROW}>
+                <span className="dot shrink-0" style={{ background: kindColor(e.kind) }} aria-hidden />
+                <span className={ROW_NAME}>
+                  {e.name}
+                  {/* the space right by the name, so the same name in two spaces reads as two things */}
+                  {showSpace && <span className="space-chip ml-2">{spaceName(e.vault)}</span>}
+                </span>
+                <span className={ROW_META} style={{ color: "var(--ink-dim)" }}>
+                  {plural(e.memories, "memory", "memories")}
+                  {e.lastAt && <> · {since(e.lastAt)}</>}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
       )}
     </section>
   );
 }
 
-function Inspector({ row }: { row: LiveRow }) {
-  const author = authorOf(row);
-  const mono = (v: string) => <span className="font-mono text-[12px]">{v}</span>;
-  const updated = row.updated_at && row.updated_at.slice(0, 16) !== row.created_at?.slice(0, 16) ? row.updated_at : null;
-  const fields: { label: string; value: React.ReactNode; show?: boolean }[] = [
-    { label: "Author", value: author ? <AuthorTag name={author} /> : <span style={{ color: "var(--ink-faint)" }}>Not recorded</span> },
-    { label: "About", value: <span className="truncate">{row.entityName}</span> },
-    { label: "Kind", value: <span className="capitalize">{row.entityKind}</span> },
-    { label: "Type", value: <span className="capitalize">{row.type}</span>, show: Boolean(row.type) },
-    { label: "Written", value: mono(stamp(row.created_at)) },
-    { label: "Updated", value: mono(stamp(updated)), show: Boolean(updated) },
-    {
-      label: "Source",
-      value: (
-        <span className="truncate" title={row.source ?? undefined}>
-          {sourceRecordLabel(row.source ?? "")}
-        </span>
-      ),
-      show: Boolean(row.source && row.source !== author),
-    },
-  ];
+function SourcesHealth({ rows }: { rows: SourceRow[] }) {
+  return (
+    <section className="flex flex-col gap-2 min-w-0" aria-labelledby="sources-title">
+      <div className="flex items-center justify-between gap-3">
+        <h2 id="sources-title" className="section-title">
+          Connected sources
+        </h2>
+        <Link href="/connectors" className="text-[13px] inline-flex items-center gap-1 underline-offset-2 hover:underline" style={{ color: "var(--accent-text)" }}>
+          Manage <ArrowRight size={14} strokeWidth={1.75} aria-hidden />
+        </Link>
+      </div>
+      <ul className="hairline-rows border-t">
+        {rows.map((s) => {
+          const health = sourceHealth(s);
+          return (
+            <li key={s.key}>
+              <Link href={`/connectors/${s.key}`} className={ROW}>
+                <span className="dot shrink-0" style={{ background: health.tone }} aria-hidden />
+                <span className={ROW_NAME}>{sourceLabel(s)}</span>
+                <span className={ROW_META} style={{ color: health.label === "Healthy" ? "var(--ink-dim)" : health.tone }}>
+                  {health.label} · {plural(s.record_count, "record", "records")} · synced {since(s.sync_status.last_ok)}
+                </span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+// ---- admin signals ----
+
+/** Admins only: one quiet line of things worth a look (unanswered space invitations, open sign-up,
+ * HTTPS off), each a link to where it is changed. Renders nothing when none apply. */
+function AdminSignals({ vaults }: { vaults: Vault[] | undefined }) {
+  const owned = (vaults ?? []).filter((v) => v.kind === "org" && v.role === "owner");
+  // Same keys and endpoints as the Settings and Memory spaces pages, so the caches are shared.
+  const people = useQuery({ queryKey: adminKeys.people(), queryFn: () => call(listPeople()) });
+  const https = useQuery({ queryKey: settingsKeys.httpsStatus(), queryFn: () => call(getHttpsStatus()) as Promise<HttpsStatus> });
+  const pending = useQueries({
+    queries: owned.map((v) => ({
+      queryKey: vaultKeys.pending(v.id),
+      queryFn: async () => (await call(listVaultPendingInvitations({ path: { vault_id: v.id } }))).results as PendingInvite[],
+    })),
+  });
+  const pendingCount = pending.reduce((n, q) => n + (q.data?.length ?? 0), 0);
+
+  const signals: { href: string; text: string }[] = [];
+  if (pendingCount > 0) signals.push({ href: "/vaults", text: plural(pendingCount, "pending invitation", "pending invitations") });
+  if (people.data?.signup.mode === "open") signals.push({ href: "/settings?tab=people", text: "Sign-up is open" });
+  if (https.data && (!https.data.configured || https.data.state === "off")) signals.push({ href: "/settings?tab=https", text: "HTTPS is off" });
+  else if (https.data?.state === "error") signals.push({ href: "/settings?tab=https", text: "HTTPS has a problem" });
+  if (signals.length === 0) return null;
 
   return (
-    <aside aria-label="Selected memory" className="panel p-5 flex flex-col gap-4" >
-      <span className="caps" style={{ color: "var(--accent-text)" }}>
-        Selected memory
-      </span>
-      {/* Re-keyed per row so the content settles in with a short fade, the panel itself stays put. */}
-      <div key={row.id} className="fade-in flex flex-col gap-4">
-        <h2 className="text-[15px] font-medium leading-snug" style={{ color: "var(--ink)" }}>
-          {row.text}
-        </h2>
-        <dl className="grid gap-y-2.5 gap-x-3 text-[13px]" style={{ gridTemplateColumns: "72px minmax(0, 1fr)" }}>
-          {fields.filter((f) => f.show !== false).map(({ label, value }) => (
-            <div key={label} className="contents">
-              <dt className="label self-center">{label}</dt>
-              <dd className="min-w-0 flex items-center">{value}</dd>
-            </div>
-          ))}
-        </dl>
-      </div>
-      <Link href="/entities" className="btn btn-sm self-start">
-        Open people &amp; topics <ArrowRightIcon weight="duotone" size={14} aria-hidden />
-      </Link>
-    </aside>
+    <p className="text-[13px] -mt-4" aria-label="Workspace notes" style={{ color: "var(--ink-dim)" }}>
+      {signals.map((s, i) => (
+        <span key={s.href + s.text}>
+          {i > 0 && " · "}
+          <Link href={s.href} className="underline-offset-2 hover:underline" style={{ color: "var(--accent-text)" }}>
+            {s.text}
+          </Link>
+        </span>
+      ))}
+    </p>
   );
 }
-
-// ---- stats + sources ----
-
-/** value is a DigitRoll when it is a number, or plain text ("–", "None", "4m ago"). */
-function Stat({ label, value, href, children }: { label: string; value: React.ReactNode; href?: string; children?: React.ReactNode }) {
-  const numeric = typeof value !== "string" || /\d/.test(value);
-  const body = (
-    <>
-      <span className="label">{label}</span>
-      <span
-        className="flex items-center gap-2 text-[28px] leading-none tracking-[-0.02em] font-medium tabular"
-        style={{ color: numeric ? "var(--ink)" : "var(--ink-dim)" }}
-      >
-        {children}
-        {value}
-      </span>
-    </>
-  );
-  const cls = "flex flex-col gap-3 px-4 py-4 min-w-0 bg-[var(--surface)]";
-  return href ? (
-    <Link href={href} className={`${cls} transition-[background-color,transform] duration-150 ease-[var(--ease-out)] hover:bg-[var(--surface-raised)] active:scale-[0.98]`}>
-      {body}
-    </Link>
-  ) : (
-    <div className={cls}>{body}</div>
-  );
-}
-
-// The full catalogue lives on /connectors; the dashboard shows a short list.
-const NOT_CONNECTED_SHOWN = 6;
-const SYNC_HOLD_MS = 1200;
 
 // ---- choose your AI app ----
 
-/** App 02: which AI app do you use? Neutral choices, nothing preselected;
- * each opens that app's own steps. */
-function AppPicker({ again = false }: { again?: boolean }) {
+/** Which AI app do you use? Neutral choices, nothing preselected; each opens that app's own steps. */
+function AppPicker() {
   return (
     <section className="task-panel p-6 sm:p-8 flex flex-col gap-5" aria-labelledby="pick-title">
-      <div className="flex flex-col gap-3">
-        <h2 id="pick-title" className="text-[26px] sm:text-[28px] font-medium leading-tight tracking-[-0.03em]">
-          {again ? "Connect another AI app" : "Which AI app do you use?"}
+      <div className="flex flex-col gap-2">
+        <h2 id="pick-title" className="text-[20px] font-semibold tracking-[-0.3px] leading-tight">
+          Which AI app do you use?
         </h2>
-        <p className="text-[16px] leading-relaxed">
+        <p className="text-[14px] leading-relaxed" style={{ color: "var(--ink-dim)" }}>
           Choose the app you already use. We&apos;ll show only the steps for that app. You can connect more apps later.
         </p>
       </div>
-      <ul className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
-        {AI_APPS.map((a) => (
-          <li key={a.id}>
-            <Link
-              href={`/connect/${a.id}`}
-              className="flex flex-col gap-1.5 h-full min-h-[76px] px-4 py-3.5 rounded-[12px] transition-colors hover:bg-[var(--surface-raised)] hover:border-[var(--ink)]"
-              style={{ background: "var(--surface)", border: "1px solid var(--border-strong)" }}
-            >
-              <span className="flex items-center gap-2.5 text-[16px] font-semibold">
-                <AppMark id={a.id} size={22} />
-                {a.name}
-              </span>
-              <span className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
-                {a.hint}
-              </span>
-            </Link>
-          </li>
-        ))}
-      </ul>
-      <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+      <AppChoices />
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
           Not sure which one? Get help choosing. You can also do this later.
         </p>
@@ -418,22 +303,48 @@ function AppPicker({ again = false }: { again?: boolean }) {
   );
 }
 
-/** Or start with your own information: useful before any app is connected. */
-function OwnInformation() {
+/** Once an app is connected, the picker shrinks to one line that opens the choices in place. */
+function ConnectAnother({ none = false, fromSources = false }: { none?: boolean; fromSources?: boolean }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section className="flex flex-col gap-4" aria-label={none ? "Connect an AI app" : "Connect another AI app"}>
+      {none && (
+        <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+          No AI app has used Eunomia yet. What you see here was added by you or your teammates{fromSources ? " and your connected sources" : ""}.
+        </p>
+      )}
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="self-start inline-flex items-center gap-1 min-h-11 text-[14px] font-medium underline-offset-2 hover:underline"
+        style={{ color: "var(--accent-text)" }}
+      >
+        {none ? "Connect an AI app" : "Connect another app"} <ArrowRight size={14} strokeWidth={1.75} aria-hidden className={open ? "rotate-90" : undefined} />
+      </button>
+      {open && <AppChoices />}
+    </section>
+  );
+}
+
+/** Or start with your own information: shown while there is nothing saved yet. */
+function OwnInformation({ canUpload }: { canUpload: boolean }) {
   return (
     <section className="flex flex-col gap-3" aria-labelledby="own-info-title">
       <h2 id="own-info-title" className="section-title">
         Or start with your own information
       </h2>
-      <p className="text-[15px]" style={{ color: "var(--ink-dim)" }}>
+      <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
         You can read and organise your memories and documents before connecting an AI app.
       </p>
       <div className="flex flex-wrap gap-2">
-        <Link href="/documents" className="btn">
-          <UploadSimpleIcon weight="duotone" size={18} aria-hidden /> Upload a document
-        </Link>
+        {canUpload && (
+          <Link href="/documents" className="btn">
+            <Upload size={18} strokeWidth={1.75} aria-hidden /> Upload a document
+          </Link>
+        )}
         <Link href="/entities" className="btn">
-          <UsersIcon weight="duotone" size={18} aria-hidden /> Browse people &amp; topics
+          <Users size={18} strokeWidth={1.75} aria-hidden /> Browse people &amp; topics
         </Link>
       </div>
     </section>
@@ -445,23 +356,23 @@ const ago = (iso: string | null) => (iso ? since(iso) : "not used yet");
 /** Used in the last day: shown as active. */
 const recentlyUsed = (iso: string | null) => Boolean(iso && Date.now() - new Date(iso).getTime() < 86_400_000);
 
-/** App 02.5: the connected Home. Only rendered from server-confirmed connections. */
-function ConnectedPanel({ connections, onConnectAnother }: { connections: Connection[]; onConnectAnother: () => void }) {
+/** The connected-apps card. Only rendered from server-confirmed connections. */
+function ConnectedPanel({ connections }: { connections: Connection[] }) {
   const latest = connections[0];
   const app = appForConnection(latest);
   const shown = connections.slice(0, 6);
   return (
-    <section className="ledger flex flex-col overflow-hidden" aria-labelledby="connected-title">
+    <section className="panel flex flex-col overflow-hidden" aria-labelledby="connected-title">
       <div className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-4 border-b">
         <span
           className="shrink-0 grid place-items-center w-10 h-10 rounded-full"
-          style={{ background: "var(--surface-raised)", color: "var(--good)" }}
+          style={{ background: "color-mix(in srgb, var(--good) 14%, transparent)", color: "var(--good)" }}
           aria-hidden
         >
-          <CheckIcon weight="bold" size={20} />
+          <Check size={20} strokeWidth={2.25} />
         </span>
         <div className="flex-1 min-w-0 flex flex-col gap-1">
-          <h2 id="connected-title" className="text-[20px] font-medium tracking-[-0.025em]">
+          <h2 id="connected-title" className="text-[20px] font-semibold tracking-[-0.3px]">
             {connections.length === 1 ? `${latest.name} is connected` : `${connections.length} AI apps are connected`}
           </h2>
           <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
@@ -470,23 +381,18 @@ function ConnectedPanel({ connections, onConnectAnother }: { connections: Connec
               : "Ask any of them to look for memories about you to try it."}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2 shrink-0">
-          {app.openUrl && connections.length === 1 && (
-            <a href={app.openUrl} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm">
-              Open {app.name}
-            </a>
-          )}
-          <button type="button" className="btn btn-sm" onClick={onConnectAnother}>
-            <PlusIcon weight="duotone" size={16} aria-hidden /> Connect another app
-          </button>
-        </div>
+        {app.openUrl && connections.length === 1 && (
+          <a href={app.openUrl} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm shrink-0 self-start sm:self-auto">
+            Open {app.name}
+          </a>
+        )}
       </div>
       <ul className="grid sm:grid-cols-2" aria-label="Connected AI apps">
         {shown.map((c, i) => {
           const active = recentlyUsed(c.at);
           return (
             <li key={`${c.name}-${i}`} className="flex items-center gap-3 px-5 sm:px-6 py-3 min-w-0 border-b sm:[&:nth-child(odd)]:border-r">
-              <span className="shrink-0 grid place-items-center w-9 h-9 rounded-[10px]" style={{ background: "var(--surface-raised)", color: "var(--ink)" }} aria-hidden>
+              <span className="shrink-0 grid place-items-center w-9 h-9 rounded-[6px]" style={{ background: "var(--canvas)", color: "var(--ink)" }} aria-hidden>
                 <AppMark id={appForConnection(c).id} size={18} />
               </span>
               <span className="flex-1 min-w-0 flex flex-col">
@@ -497,7 +403,7 @@ function ConnectedPanel({ connections, onConnectAnother }: { connections: Connec
               </span>
               <span
                 className="shrink-0 w-2 h-2 rounded-full"
-                style={active ? { background: "var(--good)" } : { border: "1px solid var(--ink-faint)" }}
+                style={{ background: active ? "var(--good)" : "var(--ink-faint)" }}
                 title={active ? "Used in the last day" : "Not used in the last day"}
                 aria-label={active ? "Active" : "Idle"}
               />
@@ -507,8 +413,8 @@ function ConnectedPanel({ connections, onConnectAnother }: { connections: Connec
       </ul>
       <div className="px-5 sm:px-6 py-3 flex items-center justify-between gap-3 text-[14px]">
         <span style={{ color: "var(--ink-dim)" }}>{connections.length > 6 ? `and ${connections.length - 6} more` : ""}</span>
-        <Link href="/settings?tab=apps" className="inline-flex items-center gap-1 font-medium underline underline-offset-[3px]" style={{ color: "var(--accent-text)" }}>
-          Manage connected apps <ArrowRightIcon weight="duotone" size={14} aria-hidden />
+        <Link href="/settings?tab=apps" className="inline-flex items-center gap-1 font-medium underline-offset-2 hover:underline" style={{ color: "var(--accent-text)" }}>
+          Manage connected apps <ArrowRight size={14} strokeWidth={1.75} aria-hidden />
         </Link>
       </div>
     </section>
@@ -516,248 +422,93 @@ function ConnectedPanel({ connections, onConnectAnother }: { connections: Connec
 }
 
 export default function HomePage() {
-  // Live: rows and counts refresh in place on fixed layouts, nothing jumps.
   const sourcesQuery = useSources({ refetchInterval: 60_000 });
   const rows = sourcesQuery.data ?? (sourcesQuery.isError ? [] : null);
-  const liveQuery = useQuery({ queryKey: entityKeys.live(), queryFn: loadLiveMemory, refetchInterval: 60_000 });
-  const live = liveQuery.data?.rows ?? (liveQuery.isError ? [] : null);
-  const entityCount = liveQuery.data?.total ?? (liveQuery.isError ? 0 : null);
-  const syncSource = useSyncSource();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  // One sync mark at a time: running, then done or failed held for SYNC_HOLD_MS.
-  const [syncMark, setSyncMark] = useState<{ key: string; status: SyncStatus } | null>(null);
-  const syncHold = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const [arrived, setArrived] = useState<string[]>([]);
-  const knownIds = useRef<Set<string> | null>(null);
+  const vaultsQuery = useVaults();
+  const vaults = vaultsQuery.data;
+  const overviewQuery = useQuery({
+    queryKey: [...entityKeys.live(), "overview", (vaults ?? []).map((v) => v.id).join(",")],
+    queryFn: () => loadOverview(vaults ?? []),
+    enabled: vaults !== undefined || vaultsQuery.isError,
+    refetchInterval: 60_000,
+  });
+  const overview = overviewQuery.data ?? null;
+  const documents = useDocuments().data;
+  // Hide the upload shortcut while document storage is off (or unknown).
+  const canUpload = documents !== undefined && Boolean(documents.storage);
   const [dismissedFailures, setDismissedFailures] = useState<Set<string>>(new Set());
   const { connections } = useConnections();
-  const [picking, setPicking] = useState(false);
+  const isAdmin = Boolean(useMe().data?.is_admin);
 
-  const arrivalTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const liveRows = liveQuery.data?.rows;
-  useEffect(() => {
-    if (!liveRows) return;
-    // Never on first load: only rows unseen by an earlier poll count as arrivals.
-    const known = knownIds.current;
-    if (known) {
-      const fresh = liveRows.filter((m) => !known.has(m.id)).map((m) => m.id);
-      if (fresh.length) {
-        setArrived(fresh);
-        clearTimeout(arrivalTimer.current);
-        arrivalTimer.current = setTimeout(() => setArrived([]), ARRIVAL_MS);
-      }
-    }
-    knownIds.current = new Set([...(known ?? []), ...liveRows.map((m) => m.id)]);
-  }, [liveRows]);
-  useEffect(
-    () => () => {
-      clearTimeout(arrivalTimer.current);
-      clearTimeout(syncHold.current);
-    },
-    [],
-  );
-
-  async function sync(key: string) {
-    clearTimeout(syncHold.current);
-    setSyncMark({ key, status: "running" });
-    let status: SyncStatus = "done";
-    try {
-      // offline: nothing was attempted, so it must not read as a successful sync
-      if ((await syncSource.mutateAsync(key)).status === "offline") status = "failed";
-    } catch {
-      status = "failed";
-    }
-    setSyncMark({ key, status });
-    syncHold.current = setTimeout(() => setSyncMark(null), SYNC_HOLD_MS);
-  }
-
-  const connected = rows?.filter(isLiveSource) ?? [];
-  const disconnected = rows?.filter((r) => !isLiveSource(r)) ?? [];
-  const healthy = connected.filter((r) => sourceHealth(r).label === "Healthy").length;
-  const totalRecords = rows?.reduce((sum, r) => sum + r.record_count, 0) ?? 0;
-  const lastSyncs = connected.map((r) => r.sync_status.last_ok).filter((d): d is string => Boolean(d));
-  const lastSync = lastSyncs.length ? lastSyncs.sort().at(-1)! : null;
-  const selected = live?.find((m) => m.id === selectedId) ?? live?.[0] ?? null;
+  const liveSources = rows?.filter(isLiveSource) ?? [];
+  // Shared spaces plus the personal space every account has.
+  const spaceCount = vaults ? vaults.length : null;
+  const hasData = Boolean(overview && (overview.entities > 0 || overview.memories > 0)) || liveSources.length > 0 || vaults?.some((v) => v.kind === "org");
   // Connected only on the server's word: an approved sign-in or a token an app has used.
-  const connected_apps = connections !== null && connections.length > 0;
+  const connectedApps = connections !== null && connections.length > 0;
+
+  const appBlock =
+    connections === null ? (
+      <div className="task-panel p-8 flex flex-col gap-4" aria-busy="true" aria-label="Checking your connected apps">
+        <div className="skeleton h-7 w-72" />
+        <div className="skeleton h-4 w-full max-w-[520px]" />
+      </div>
+    ) : !connectedApps && hasData ? (
+      // Someone already working in Eunomia gets one honest line, not the first-run card.
+      <ConnectAnother none fromSources={liveSources.length > 0} />
+    ) : !connectedApps ? (
+      <AppPicker />
+    ) : (
+      <>
+        <ConnectedPanel connections={connections} />
+        <ConnectAnother />
+      </>
+    );
 
   return (
     <div className="flex flex-col gap-8 max-w-[1240px]">
-      <PageHeader
-        icon={HouseIcon} tone="project"
-        title="Home"
-        intro={connected_apps ? "Your memory, connected across your AI apps." : "Connect an AI app, or start browsing your saved information."}
-      />
+      <PageHeader title="Home" intro="Your shared memory. ChatGPT, Claude and other AI apps can look things up here." />
 
-      {connections === null ? (
-        <div className="task-panel p-8 flex flex-col gap-4" aria-busy="true" aria-label="Checking your connected apps">
-          <div className="skeleton h-7 w-72" />
-          <div className="skeleton h-4 w-full max-w-[520px]" />
-        </div>
-      ) : !connected_apps ? (
-        <>
-          <AppPicker />
-          <OwnInformation />
-        </>
-      ) : picking ? (
-        <>
-          <AppPicker again />
-          <button type="button" className="btn self-start" onClick={() => setPicking(false)}>
-            Back to Home
-          </button>
-        </>
-      ) : (
-        <ConnectedPanel connections={connections} onConnectAnother={() => setPicking(true)} />
-      )}
+      {isAdmin && <AdminSignals vaults={vaults} />}
+
+      <InvitationBanner />
 
       {rows && (
-        <FailureBanner
-          rows={rows}
-          dismissed={dismissedFailures}
-          onDismiss={(key) => setDismissedFailures((prev) => new Set(prev).add(key))}
-        />
+        <FailureBanner rows={rows} dismissed={dismissedFailures} onDismiss={(key) => setDismissedFailures((prev) => new Set(prev).add(key))} />
       )}
 
-      {connected_apps && !picking && (
-      <>
-      {sourcesQuery.isError && <ErrorLine error={failure(sourcesQuery.error, "Could not load your sources.")} />}
-      {liveQuery.isError && <ErrorLine error={failure(liveQuery.error, "Could not load recent memory.")} />}
+      {/* Until an app is connected, connecting one comes first: the full picker on a fresh account,
+          one line for someone who already has things saved. */}
+      {!connectedApps && appBlock}
 
-      <section
-        aria-label="Summary"
-        className="grid grid-cols-2 lg:grid-cols-4 overflow-hidden rounded-[12px]"
-        style={{ gap: "var(--hair)", background: "var(--border)", border: "var(--hair) solid var(--border)" }}
-      >
-        <Stat label="People & topics" value={entityCount !== null ? <DigitRoll value={entityCount} /> : "–"} href="/entities" />
-        <Stat label="Records" value={rows ? <DigitRoll value={totalRecords} /> : "–"} />
-        <Stat
-          label="Sources healthy"
-          value={!rows ? "–" : connected.length ? <DigitRoll value={healthy} format={(v) => `${v}/${connected.length}`} /> : "None"}
-        >
-          {rows && connected.length > 0 && (
-            <span className="dot" aria-hidden style={{ background: healthy === connected.length ? "var(--good)" : "var(--warning)" }} />
-          )}
-        </Stat>
-        <Stat label="Last sync" value={lastSync ? since(lastSync) : "Never"} />
-      </section>
+      {overviewQuery.isError && <ErrorLine error={failure(overviewQuery.error, "Could not load what has been saved.")} />}
 
-      {/* Mobile order: live memory, sources, then inspector and connect. From lg the right column is the sticky inspector. */}
-      <div className="grid gap-x-6 gap-y-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:grid-rows-[auto_1fr] items-start">
-        <div className="min-w-0 lg:col-start-1 lg:row-start-1">
-          <LiveMemory rows={live} arrived={arrived} selectedId={selected?.id ?? null} onSelect={setSelectedId} />
+      {overview === null && !overviewQuery.isError ? (
+        <div className="flex flex-col gap-3" aria-busy="true" aria-label="Loading your overview">
+          <div className="skeleton h-4 w-full max-w-[440px]" />
+          <div className="skeleton h-4 w-2/3 max-w-[320px]" />
         </div>
-
-        <div className="order-3 lg:order-none flex flex-col gap-8 min-w-0 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:sticky lg:top-8">
-          {selected && <Inspector row={selected} />}
-        </div>
-
-        <div className="order-2 lg:order-none flex flex-col gap-8 min-w-0 lg:col-start-1 lg:row-start-2">
-          <section className="flex flex-col gap-3" aria-labelledby="connected-sources">
-            <h2 id="connected-sources" className="section-title">
-              Connected sources
-            </h2>
-            {rows === null ? (
-              <div className="ledger p-3 flex flex-col gap-3" aria-busy="true">
-                <div className="skeleton h-4 w-1/2" />
-                <div className="skeleton h-4 w-1/3" />
-              </div>
-            ) : connected.length === 0 ? (
-              <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
-                No sources connected yet. Pick one under &ldquo;Add a source&rdquo; below.
-              </p>
-            ) : (
-              <div className="ledger overflow-x-auto relative">
-                {/* relative: keeps the sr-only labels inside the scroll box, or they widen the page on mobile. */}
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Source</th>
-                      <th className="text-right">Records</th>
-                      <th className="hidden sm:table-cell">Last sync</th>
-                      <th style={{ width: 1 }}>
-                        <span className="sr-only">Actions</span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {connected.map((s) => {
-                      const st = s.sync_status;
-                      const mark = syncMark?.key === s.key ? syncMark.status : "idle";
-                      const busy = mark === "running";
-                      const health = sourceHealth(s);
-                      return (
-                        <tr key={s.key}>
-                          <td>
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="dot" title={health.label} style={{ background: health.tone }} />
-                              <span className="sr-only">{health.label}:</span>
-                              <span className="font-medium truncate">{sourceLabel(s)}</span>
-                              <span className="hidden sm:inline-flex">
-                                <AuthorTag name={s.key} />
-                              </span>
-                            </div>
-                          </td>
-                          <td className="text-right font-mono text-[12.5px]">
-                            <DigitRoll value={s.record_count} />
-                          </td>
-                          <td className="hidden sm:table-cell text-[12.5px] whitespace-nowrap">
-                            <span className="font-mono" style={{ color: "var(--ink-dim)" }}>
-                              {since(st.last_ok)}
-                            </span>
-                            {st.consecutive_failures > 0 && <span style={{ color: "var(--critical)" }}> · {st.consecutive_failures} failed</span>}
-                          </td>
-                          <td className="text-right">
-                            <button onClick={() => sync(s.key)} disabled={busy} className="btn btn-sm">
-                              <SyncMark status={mark} size={12} />
-                              {busy ? "Syncing…" : "Sync now"}
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-
-          {disconnected.length > 0 && (
-            <section className="flex flex-col gap-3" aria-labelledby="add-source">
-              <h2 id="add-source" className="section-title">
-                Add a source
+      ) : (
+        hasData &&
+        overview && (
+          <section className="flex flex-col gap-6" aria-labelledby="overview-title">
+            <div className="flex flex-col gap-1">
+              <h2 id="overview-title" className="section-title">
+                What&apos;s saved
               </h2>
-              <ul className="ledger hairline-rows">
-                {disconnected.slice(0, NOT_CONNECTED_SHOWN).map((s) => {
-                  const kind = kindForSource(s.key);
-                  return (
-                    <li key={s.key} className="flex items-center gap-3 min-h-11 px-3 py-2">
-                      <span className="dot" aria-hidden style={{ background: "var(--border-strong)" }} />
-                      <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-x-3 gap-y-0.5">
-                        <span className="text-[13px] font-medium truncate">{sourceLabel(s)}</span>
-                        <span className="text-[12px] font-mono truncate" style={{ color: "var(--ink-faint)" }}>
-                          {s.record_types.join(", ")}
-                        </span>
-                      </div>
-                      <Link href={kind ? `/connectors/setup/${kind}` : "/connectors"} className="btn btn-sm shrink-0">
-                        Connect <ArrowRightIcon weight="duotone" size={12} />
-                      </Link>
-                    </li>
-                  );
-                })}
-                {disconnected.length > NOT_CONNECTED_SHOWN && (
-                  <li className="flex items-center min-h-11 px-3">
-                    <Link href="/connectors" className="text-[13px] inline-flex items-center gap-1.5 underline-offset-2 hover:underline" style={{ color: "var(--accent-text)" }}>
-                      See all {disconnected.length} in Connected sources <ArrowRightIcon weight="duotone" size={14} aria-hidden />
-                    </Link>
-                  </li>
-                )}
-              </ul>
-            </section>
-          )}
-        </div>
-      </div>
-      </>
+              <StatLine spaces={spaceCount} overview={overview} />
+            </div>
+            <div className={`grid gap-x-10 gap-y-8 ${liveSources.length > 0 ? "lg:grid-cols-2" : ""}`}>
+              <RecentlyUpdated rows={overview.recent} showSpace={(vaults?.length ?? 0) > 1} />
+              {liveSources.length > 0 && <SourcesHealth rows={liveSources} />}
+            </div>
+          </section>
+        )
       )}
+
+      {connectedApps && appBlock}
+
+      {overview && !hasData && !connectedApps && <OwnInformation canUpload={canUpload} />}
     </div>
   );
 }

@@ -68,6 +68,18 @@ export type ActivityPage = {
     next_before?: string | null;
 };
 
+export type AdminChange = {
+    /**
+     * `true` makes the person an admin, `false` takes admin rights away.
+     */
+    admin: boolean;
+};
+
+/**
+ * Which kind of event a filter chip asks for.
+ */
+export type AuditCategory = 'all' | 'changes' | 'spaces' | 'signins' | 'tokens' | 'apps' | 'admin' | 'sharing' | 'server';
+
 export type AuditEntry = {
     args_summary: string;
     created_at?: string | null;
@@ -91,6 +103,10 @@ export type AuthOut = {
      */
     has_password: boolean;
     id: string;
+    /**
+     * True for an instance admin: the first user, or an email in `EUNOMIA_ADMIN_EMAILS`.
+     */
+    is_admin: boolean;
     /**
      * The display name of the configured OpenID Connect provider when this account can sign in with it.
      */
@@ -890,6 +906,11 @@ export type InvitationList = {
 
 export type InvitationOut = {
     created_at?: string | null;
+    /**
+     * Email of the space's owner when it has exactly one: only owners invite, so that is who sent it.
+     * None when there are several owners (or it is unknown); show "Someone" then.
+     */
+    invited_by?: string | null;
     role: string;
     vault_id: string;
     vault_kind: string;
@@ -1219,6 +1240,70 @@ export type PendingCodeOut = {
     expires_at?: string | null;
     id: string;
     role: string;
+};
+
+export type PendingInviteList = {
+    results: Array<PendingInviteOut>;
+};
+
+/**
+ * An invitation into a vault that the invitee has not answered yet, as its owners see it.
+ */
+export type PendingInviteOut = {
+    created_at?: string | null;
+    email: string;
+    role: string;
+};
+
+export type PeopleReport = {
+    people: Array<Person>;
+    signup: SignupPolicy;
+};
+
+export type Person = {
+    /**
+     * Why this person is an admin: `creator` (the first account), `operator` (listed in the server's
+     * admin emails), `granted` (made an admin in the app), or empty for a member.
+     */
+    admin: string;
+    created_at?: string | null;
+    email: string;
+    id: string;
+    /**
+     * The admin looking at the list.
+     */
+    is_you: boolean;
+    /**
+     * Latest browser session activity or API token use, RFC 3339; none if never seen.
+     */
+    last_active?: string | null;
+    /**
+     * `admin` or `member`.
+     */
+    role: string;
+    /**
+     * Shared spaces this person is an active member of (their personal space not counted).
+     */
+    shared_spaces: number;
+    /**
+     * When an admin suspended the account, RFC 3339; none while it is active.
+     */
+    suspended_at?: string | null;
+    /**
+     * How many API tokens this person holds (see `/api/admin/people/{user_id}/tokens`).
+     */
+    tokens: number;
+};
+
+export type PersonToken = {
+    created_at?: string | null;
+    /**
+     * `null` for a token that never expires.
+     */
+    expires_at?: string | null;
+    id: string;
+    last_used_at?: string | null;
+    name: string;
 };
 
 export type PocketaiSummary = {
@@ -1628,6 +1713,25 @@ export type ShareCodeRequest = {
     role?: string;
 };
 
+export type SignupPolicy = {
+    /**
+     * The emails that may sign up when `mode` is `invite`.
+     */
+    allowlist: Array<string>;
+    /**
+     * `open`, `invite` or `closed`.
+     */
+    mode: string;
+    /**
+     * Emails the server lists as admins (`EUNOMIA_ADMIN_EMAILS`).
+     */
+    operators: Array<string>;
+    /**
+     * The policy in words.
+     */
+    summary: string;
+};
+
 /**
  * Pairwise relationships between points of the cloud, measured on the real vectors (not the 3D
  * projection). Row `i` / column `j` of every matrix refers to `ids[i]` / `ids[j]`.
@@ -1697,6 +1801,13 @@ export type SpendByDay = {
  * checked against the provider's own service; shown with a "Preview" badge in Settings.
  */
 export type Stability = 'stable' | 'preview';
+
+export type SuspendChange = {
+    /**
+     * `true` suspends the account, `false` restores it.
+     */
+    suspended: boolean;
+};
 
 /**
  * Outcome of a sync or webhook ingest: an ingest report, `source` + `error` when the sync failed, or
@@ -2001,6 +2112,198 @@ export type WeekSummary = {
     spent: number;
     transaction_count: number;
 };
+
+export type WorkspaceAuditEntry = {
+    /**
+     * The raw action code, such as `vault.invite`.
+     */
+    action: string;
+    /**
+     * The person who acted; for a failed sign-in, the email that was tried. Empty for the system.
+     */
+    actor_email: string;
+    category: AuditCategory;
+    created_at?: string | null;
+    id: string;
+    ok: boolean;
+    /**
+     * `ok`, or the code that ended the action.
+     */
+    outcome: string;
+    /**
+     * Why a failed action failed, in words ("Already a member or invited, or no account has that email").
+     * Empty when it worked, or when `summary` already says why.
+     */
+    reason: string;
+    /**
+     * The outcome in words: "Done", "Not allowed", "Declined", "Refused" or "Failed".
+     */
+    result: string;
+    /**
+     * What happened, in plain words ("Invited user@acme.test to acme-engineering").
+     */
+    summary: string;
+    /**
+     * How they acted: empty for the browser, `API token`, `app` (an OAuth client) or `system`.
+     */
+    via: string;
+};
+
+export type WorkspaceAuditPage = {
+    has_more: boolean;
+    results: Array<WorkspaceAuditEntry>;
+};
+
+export type ListWorkspaceAuditData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Rows per page (1 to 200, default 50).
+         */
+        limit?: number;
+        offset?: number;
+        /**
+         * Which kind of event a filter chip asks for.
+         */
+        category?: 'all' | 'changes' | 'spaces' | 'signins' | 'tokens' | 'apps' | 'admin' | 'sharing' | 'server';
+    };
+    url: '/api/admin/audit';
+};
+
+export type ListWorkspaceAuditErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListWorkspaceAuditError = ListWorkspaceAuditErrors[keyof ListWorkspaceAuditErrors];
+
+export type ListWorkspaceAuditResponses = {
+    200: WorkspaceAuditPage;
+};
+
+export type ListWorkspaceAuditResponse = ListWorkspaceAuditResponses[keyof ListWorkspaceAuditResponses];
+
+export type ListPeopleData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/admin/people';
+};
+
+export type ListPeopleErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListPeopleError = ListPeopleErrors[keyof ListPeopleErrors];
+
+export type ListPeopleResponses = {
+    200: PeopleReport;
+};
+
+export type ListPeopleResponse = ListPeopleResponses[keyof ListPeopleResponses];
+
+export type SetPersonAdminData = {
+    body: AdminChange;
+    path: {
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/admin/people/{user_id}/admin';
+};
+
+export type SetPersonAdminErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type SetPersonAdminError = SetPersonAdminErrors[keyof SetPersonAdminErrors];
+
+export type SetPersonAdminResponses = {
+    200: PeopleReport;
+};
+
+export type SetPersonAdminResponse = SetPersonAdminResponses[keyof SetPersonAdminResponses];
+
+export type SetPersonSuspendedData = {
+    body: SuspendChange;
+    path: {
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/admin/people/{user_id}/suspended';
+};
+
+export type SetPersonSuspendedErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type SetPersonSuspendedError = SetPersonSuspendedErrors[keyof SetPersonSuspendedErrors];
+
+export type SetPersonSuspendedResponses = {
+    200: PeopleReport;
+};
+
+export type SetPersonSuspendedResponse = SetPersonSuspendedResponses[keyof SetPersonSuspendedResponses];
+
+export type ListPersonTokensData = {
+    body?: never;
+    path: {
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/admin/people/{user_id}/tokens';
+};
+
+export type ListPersonTokensErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListPersonTokensError = ListPersonTokensErrors[keyof ListPersonTokensErrors];
+
+export type ListPersonTokensResponses = {
+    200: Array<PersonToken>;
+};
+
+export type ListPersonTokensResponse = ListPersonTokensResponses[keyof ListPersonTokensResponses];
+
+export type RevokePersonTokenData = {
+    body?: never;
+    path: {
+        user_id: string;
+        token_id: string;
+    };
+    query?: never;
+    url: '/api/admin/people/{user_id}/tokens/{token_id}';
+};
+
+export type RevokePersonTokenErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type RevokePersonTokenError = RevokePersonTokenErrors[keyof RevokePersonTokenErrors];
+
+export type RevokePersonTokenResponses = {
+    200: Array<PersonToken>;
+};
+
+export type RevokePersonTokenResponse = RevokePersonTokenResponses[keyof RevokePersonTokenResponses];
 
 export type ListAuditData = {
     body?: never;
@@ -5253,6 +5556,30 @@ export type RepairVaultIntegrityResponses = {
 };
 
 export type RepairVaultIntegrityResponse = RepairVaultIntegrityResponses[keyof RepairVaultIntegrityResponses];
+
+export type ListVaultPendingInvitationsData = {
+    body?: never;
+    path: {
+        vault_id: string;
+    };
+    query?: never;
+    url: '/api/vaults/{vault_id}/invitations';
+};
+
+export type ListVaultPendingInvitationsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListVaultPendingInvitationsError = ListVaultPendingInvitationsErrors[keyof ListVaultPendingInvitationsErrors];
+
+export type ListVaultPendingInvitationsResponses = {
+    200: PendingInviteList;
+};
+
+export type ListVaultPendingInvitationsResponse = ListVaultPendingInvitationsResponses[keyof ListVaultPendingInvitationsResponses];
 
 export type AcceptInvitationData = {
     body?: never;

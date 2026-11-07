@@ -113,6 +113,18 @@ pub const LIST_INVITATIONS: Stmt = Stmt::new(
     r#"SELECT vault.* AS vault, role, created_at FROM vault_member WHERE user = $user AND status = "pending""#,
 );
 
+/// Outgoing invitations into one vault that nobody has answered yet, oldest first.
+pub const LIST_PENDING: Stmt = Stmt::new(
+    "vaults.list_pending",
+    r#"SELECT user, role, created_at FROM vault_member WHERE vault = $vault AND status = "pending" ORDER BY created_at"#,
+);
+
+/// Active owners of each vault in `$vaults` (only an owner can invite, so these name who sent an invitation).
+pub const OWNERS_OF: Stmt = Stmt::new(
+    "vaults.owners_of",
+    r#"SELECT vault, user FROM vault_member WHERE vault IN $vaults AND role = "owner" AND status = "active""#,
+);
+
 pub const ACCEPT_INVITATION: Stmt = Stmt::at(
     "vaults.accept_invitation",
     r#"BEGIN TRANSACTION;
@@ -198,7 +210,14 @@ pub const SAME_RELATION: Stmt = Stmt::new(
 pub const COPY_RELATION: Stmt =
     Stmt::new("vaults.copy_relation", "RELATE $in->relates_to->$out SET label = $label, owner = $owner");
 
+/// Workspace admin (People tab): how many shared spaces each person is an active member of.
+pub const SHARED_COUNTS: Stmt = Stmt::new(
+    "vaults.shared_counts",
+    r#"SELECT user, count() AS spaces FROM vault_member WHERE status = "active" AND vault.kind = "org" GROUP BY user"#,
+);
+
 pub const ALL: &[&Stmt] = &[
+    &SHARED_COUNTS,
     &CREATE_PERSONAL,
     &CREATE_VAULT,
     &STAGE_COPY,
@@ -217,6 +236,8 @@ pub const ALL: &[&Stmt] = &[
     &INVITE,
     &LIST_MEMBERS,
     &LIST_INVITATIONS,
+    &LIST_PENDING,
+    &OWNERS_OF,
     &ACCEPT_INVITATION,
     &DELETE_RECORD,
     &REMOVE_MEMBER,

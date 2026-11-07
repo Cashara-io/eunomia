@@ -34,10 +34,9 @@ Restart your agent so it loads the new server (in Claude Code: exit, then `claud
 The agent calls Eunomia's `memory_write` and `recall` tools. No OpenAI key is
 needed: your agent is the model.
 
-Agent not connected yet (or installed it later)? The **Connect your AI** step
-when you first sign in, and the **Connect an MCP client** card on the
-dashboard, give the exact setup for Claude Code, Codex and ChatGPT with your
-URL and a fresh token filled in. See [AI agents & MCP](agents.md#connecting-one-agent-by-hand).
+Agent not connected yet (or installed it later)? The **Connect your AI app**
+step when you first sign in, and the app picker on **Home**, give the exact
+setup for Claude Code, Codex and ChatGPT with your address filled in. See [Connecting AI apps](agents.md#connecting-one-agent-by-hand).
 
 ## 4. Optional: add a model key
 
@@ -48,10 +47,10 @@ synthesis (`reflect`) itself, and the in-app Chat works.
 
 ## 5. Tune what agents remember
 
-**Memory skill** in the sidebar shows the instructions agents follow. You
-can edit them, for example "always remember my project deadlines".
+Admins can add **AI instructions** (under Advanced in the sidebar; members don't see it).
+They are the instructions agents follow, for example "always remember my project deadlines".
 
 ## Next
 
-- [AI agents & MCP](agents.md): connect more agents and see every tool.
-- [Concepts](concepts.md): vaults, memories, the graph and the vector cloud.
+- [Connecting AI apps](agents.md): connect more agents and see every tool.
+- [How Eunomia works](concepts.md): vaults, memories, the graph and the vector cloud.

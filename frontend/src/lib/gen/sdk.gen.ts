@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, ServerSentEventsResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AcceptInvitationData, AcceptInvitationErrors, AcceptInvitationResponses, AckExtensionEventsData, AckExtensionEventsErrors, AckExtensionEventsResponses, AddMemoryData, AddMemoryErrors, AddMemoryResponses, AddRelationData, AddRelationErrors, AddRelationResponses, CheckForUpdateData, CheckForUpdateErrors, CheckForUpdateResponses, CheckVaultIntegrityData, CheckVaultIntegrityErrors, CheckVaultIntegrityResponses, ClaimExtensionEventsData, ClaimExtensionEventsErrors, ClaimExtensionEventsResponses, CloneVaultData, CloneVaultErrors, CloneVaultResponses, CompleteOnboardingData, CompleteOnboardingErrors, CompleteOnboardingResponses, CreateConnectorData, CreateConnectorErrors, CreateConnectorResponses, CreateEntityData, CreateEntityErrors, CreateEntityResponses, CreateExtensionData, CreateExtensionErrors, CreateExtensionResponses, CreateSecretRefData, CreateSecretRefErrors, CreateSecretRefResponses, CreateThreadData, CreateThreadErrors, CreateThreadResponses, CreateTokenData, CreateTokenErrors, CreateTokenResponses, CreateVaultData, CreateVaultErrors, CreateVaultResponses, CreateVaultShareCodeData, CreateVaultShareCodeErrors, CreateVaultShareCodeResponses, DecideOauthConsentData, DecideOauthConsentErrors, DecideOauthConsentResponses, DeclineInvitationData, DeclineInvitationErrors, DeclineInvitationResponses, DeclineSecretRequestData, DeclineSecretRequestErrors, DeclineSecretRequestResponses, DeleteConnectorData, DeleteConnectorDataData, DeleteConnectorDataErrors, DeleteConnectorDataResponses, DeleteConnectorErrors, DeleteConnectorResponses, DeleteDocumentData, DeleteDocumentErrors, DeleteDocumentResponses, DeleteEntityData, DeleteEntityErrors, DeleteEntityResponses, DeleteExtensionData, DeleteExtensionErrors, DeleteExtensionResponses, DeleteHeldSecretData, DeleteHeldSecretErrors, DeleteHeldSecretResponses, DeleteMemoryData, DeleteMemoryErrors, DeleteMemoryResponses, DeleteSecretProviderData, DeleteSecretProviderErrors, DeleteSecretProviderResponses, DeleteSecretRefData, DeleteSecretRefErrors, DeleteSecretRefResponses, DeleteThreadData, DeleteThreadErrors, DeleteThreadResponses, DeleteTokenData, DeleteTokenErrors, DeleteTokenResponses, DeleteVaultData, DeleteVaultErrors, DeleteVaultResponses, DeleteVaultShareCodeData, DeleteVaultShareCodeErrors, DeleteVaultShareCodeResponses, DownloadDocumentData, DownloadDocumentErrors, DownloadDocumentResponses, ExportDataData, ExportDataErrors, ExportDataResponses, ExportDocumentData, ExportDocumentErrors, ExportDocumentResponses, FillSecretRequestData, FillSecretRequestErrors, FillSecretRequestResponses, FollowEventsData, FollowEventsErrors, FollowEventsResponses, FollowVaultChangesData, FollowVaultChangesErrors, FollowVaultChangesResponses, GetBootstrapData, GetBootstrapErrors, GetBootstrapResponses, GetCloudSimilarityData, GetCloudSimilarityErrors, GetCloudSimilarityResponses, GetConnectorData, GetConnectorErrors, GetConnectorResponses, GetDocumentData, GetDocumentErrors, GetDocumentResponses, GetEntityData, GetEntityErrors, GetEntityGraphData, GetEntityGraphErrors, GetEntityGraphResponses, GetEntityResponses, GetExtensionData, GetExtensionErrors, GetExtensionResponses, GetFailureCapsuleData, GetFailureCapsuleErrors, GetFailureCapsuleResponses, GetHttpsStatusData, GetHttpsStatusErrors, GetHttpsStatusResponses, GetMeData, GetMeErrors, GetMeResponses, GetMetricsData, GetMetricsErrors, GetMetricsResponses, GetOauthConsentData, GetOauthConsentErrors, GetOauthConsentResponses, GetOpenapiData, GetOpenapiResponses, GetPocketaiAllData, GetPocketaiAllErrors, GetPocketaiAllResponses, GetPocketaiAudioData, GetPocketaiAudioErrors, GetPocketaiAudioResponses, GetPocketaiDetailData, GetPocketaiDetailErrors, GetPocketaiDetailResponses, GetPocketaiSummaryData, GetPocketaiSummaryErrors, GetPocketaiSummaryResponses, GetReadyzData, GetReadyzErrors, GetReadyzResponses, GetSecretAccessData, GetSecretAccessErrors, GetSecretAccessResponses, GetSecretCountsData, GetSecretCountsErrors, GetSecretCountsResponses, GetSecretRequestData, GetSecretRequestErrors, GetSecretRequestResponses, GetSecretsHelperData, GetSecretsHelperErrors, GetSecretsHelperResponses, GetSettingsData, GetSettingsErrors, GetSettingsResponses, GetSnapshotData, GetSnapshotErrors, GetSnapshotResponses, GetSourcesStatusData, GetSourcesStatusErrors, GetSourcesStatusResponses, GetThreadHistoryData, GetThreadHistoryErrors, GetThreadHistoryResponses, GetToolUsageData, GetToolUsageErrors, GetToolUsageResponses, GetUpBankFinanceSummaryData, GetUpBankFinanceSummaryErrors, GetUpBankFinanceSummaryResponses, GetUpdateStatusData, GetUpdateStatusErrors, GetUpdateStatusResponses, GetVectorCloudData, GetVectorCloudErrors, GetVectorCloudResponses, InviteMemberData, InviteMemberErrors, InviteMemberResponses, InvokeToolData, InvokeToolErrors, InvokeToolResponses, JoinSharedVaultData, JoinSharedVaultErrors, JoinSharedVaultResponses, LeaveVaultData, LeaveVaultErrors, LeaveVaultResponses, ListAuditData, ListAuditErrors, ListAuditResponses, ListConnectorsData, ListConnectorsErrors, ListConnectorsResponses, ListDocumentsData, ListDocumentsErrors, ListDocumentsResponses, ListEntitiesData, ListEntitiesErrors, ListEntitiesResponses, ListExtensionEventsData, ListExtensionEventsErrors, ListExtensionEventsResponses, ListExtensionsData, ListExtensionsErrors, ListExtensionsResponses, ListHeldSecretsData, ListHeldSecretsErrors, ListHeldSecretsResponses, ListInvitationsData, ListInvitationsErrors, ListInvitationsResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListOauthGrantsData, ListOauthGrantsErrors, ListOauthGrantsResponses, ListOpenaiModelsData, ListOpenaiModelsErrors, ListOpenaiModelsResponses, ListSecretActivityData, ListSecretActivityErrors, ListSecretActivityResponses, ListSecretKindsData, ListSecretKindsErrors, ListSecretKindsResponses, ListSecretProvidersData, ListSecretProvidersErrors, ListSecretProvidersResponses, ListSecretRefsData, ListSecretRefsErrors, ListSecretRefsResponses, ListSecretRequestsData, ListSecretRequestsErrors, ListSecretRequestsResponses, ListSecretResolutionsData, ListSecretResolutionsErrors, ListSecretResolutionsResponses, ListSessionsData, ListSessionsErrors, ListSessionsResponses, ListSourcesData, ListSourcesErrors, ListSourcesResponses, ListThreadsData, ListThreadsErrors, ListThreadsResponses, ListTokensData, ListTokensErrors, ListTokensResponses, ListToolsData, ListToolsErrors, ListToolsResponses, ListVaultChangesData, ListVaultChangesErrors, ListVaultChangesResponses, ListVaultPeersData, ListVaultPeersErrors, ListVaultPeersResponses, ListVaultsData, ListVaultsErrors, ListVaultsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, MergeEntitiesData, MergeEntitiesErrors, MergeEntitiesResponses, MergeVaultsData, MergeVaultsErrors, MergeVaultsResponses, MoveConnectorDataData, MoveConnectorDataErrors, MoveConnectorDataResponses, NackExtensionEventsData, NackExtensionEventsErrors, NackExtensionEventsResponses, OidcCallbackData, OidcCallbackErrors, OidcCallbackResponses, OidcStartData, OidcStartErrors, OidcStartResponses, PeerExchangeData, PeerExchangeErrors, PeerExchangeResponses, PeerHelloData, PeerHelloErrors, PeerHelloResponses, PeerJoinData, PeerJoinErrors, PeerJoinResponses, PutSecretProviderData, PutSecretProviderErrors, PutSecretProviderResponses, ReceiveExtensionWebhookData, ReceiveExtensionWebhookErrors, ReceiveExtensionWebhookResponses, ReceiveSourceWebhookData, ReceiveSourceWebhookErrors, ReceiveSourceWebhookResponses, ReextractSourceData, ReextractSourceErrors, ReextractSourceResponses, RegisterData, RegisterErrors, RegisterResponses, ReindexDocumentData, ReindexDocumentErrors, ReindexDocumentResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, RenameTokenData, RenameTokenErrors, RenameTokenResponses, RenameVaultData, RenameVaultErrors, RenameVaultResponses, RepairVaultIntegrityData, RepairVaultIntegrityErrors, RepairVaultIntegrityResponses, ReplaceHeldSecretData, ReplaceHeldSecretErrors, ReplaceHeldSecretResponses, RepointConnectorsData, RepointConnectorsErrors, RepointConnectorsResponses, RequestHttpsData, RequestHttpsErrors, RequestHttpsResponses, RequestSecretsHelperData, RequestSecretsHelperErrors, RequestSecretsHelperResponses, RequestUpdateData, RequestUpdateErrors, RequestUpdateResponses, RevokeOauthGrantData, RevokeOauthGrantErrors, RevokeOauthGrantResponses, RevokeSessionData, RevokeSessionErrors, RevokeSessionResponses, RotateExtensionSecretData, RotateExtensionSecretErrors, RotateExtensionSecretResponses, SearchPocketaiData, SearchPocketaiErrors, SearchPocketaiResponses, SendMessageData, SendMessageErrors, SendMessageResponse, SendMessageResponses, SetMemberRoleData, SetMemberRoleErrors, SetMemberRoleResponses, StopVaultPeerData, StopVaultPeerErrors, StopVaultPeerResponses, SyncSourceData, SyncSourceErrors, SyncSourceResponses, SyncVaultPeerData, SyncVaultPeerErrors, SyncVaultPeerResponses, TestConnectorData, TestConnectorErrors, TestConnectorResponses, TestSecretProviderData, TestSecretProviderErrors, TestSecretProviderResponses, TransferOwnershipData, TransferOwnershipErrors, TransferOwnershipResponses, UpdateConnectorData, UpdateConnectorErrors, UpdateConnectorResponses, UpdateEntityData, UpdateEntityErrors, UpdateEntityResponses, UpdateExtensionData, UpdateExtensionErrors, UpdateExtensionResponses, UpdateMemoryData, UpdateMemoryErrors, UpdateMemoryResponses, UpdateSecretRefData, UpdateSecretRefErrors, UpdateSecretRefResponses, UpdateSettingsData, UpdateSettingsErrors, UpdateSettingsResponses, UploadDocumentData, UploadDocumentErrors, UploadDocumentResponses, VerifyVaultPeerData, VerifyVaultPeerErrors, VerifyVaultPeerResponses } from './types.gen';
+import type { AcceptInvitationData, AcceptInvitationErrors, AcceptInvitationResponses, AckExtensionEventsData, AckExtensionEventsErrors, AckExtensionEventsResponses, AddMemoryData, AddMemoryErrors, AddMemoryResponses, AddRelationData, AddRelationErrors, AddRelationResponses, CheckForUpdateData, CheckForUpdateErrors, CheckForUpdateResponses, CheckVaultIntegrityData, CheckVaultIntegrityErrors, CheckVaultIntegrityResponses, ClaimExtensionEventsData, ClaimExtensionEventsErrors, ClaimExtensionEventsResponses, CloneVaultData, CloneVaultErrors, CloneVaultResponses, CompleteOnboardingData, CompleteOnboardingErrors, CompleteOnboardingResponses, CreateConnectorData, CreateConnectorErrors, CreateConnectorResponses, CreateEntityData, CreateEntityErrors, CreateEntityResponses, CreateExtensionData, CreateExtensionErrors, CreateExtensionResponses, CreateSecretRefData, CreateSecretRefErrors, CreateSecretRefResponses, CreateThreadData, CreateThreadErrors, CreateThreadResponses, CreateTokenData, CreateTokenErrors, CreateTokenResponses, CreateVaultData, CreateVaultErrors, CreateVaultResponses, CreateVaultShareCodeData, CreateVaultShareCodeErrors, CreateVaultShareCodeResponses, DecideOauthConsentData, DecideOauthConsentErrors, DecideOauthConsentResponses, DeclineInvitationData, DeclineInvitationErrors, DeclineInvitationResponses, DeclineSecretRequestData, DeclineSecretRequestErrors, DeclineSecretRequestResponses, DeleteConnectorData, DeleteConnectorDataData, DeleteConnectorDataErrors, DeleteConnectorDataResponses, DeleteConnectorErrors, DeleteConnectorResponses, DeleteDocumentData, DeleteDocumentErrors, DeleteDocumentResponses, DeleteEntityData, DeleteEntityErrors, DeleteEntityResponses, DeleteExtensionData, DeleteExtensionErrors, DeleteExtensionResponses, DeleteHeldSecretData, DeleteHeldSecretErrors, DeleteHeldSecretResponses, DeleteMemoryData, DeleteMemoryErrors, DeleteMemoryResponses, DeleteSecretProviderData, DeleteSecretProviderErrors, DeleteSecretProviderResponses, DeleteSecretRefData, DeleteSecretRefErrors, DeleteSecretRefResponses, DeleteThreadData, DeleteThreadErrors, DeleteThreadResponses, DeleteTokenData, DeleteTokenErrors, DeleteTokenResponses, DeleteVaultData, DeleteVaultErrors, DeleteVaultResponses, DeleteVaultShareCodeData, DeleteVaultShareCodeErrors, DeleteVaultShareCodeResponses, DownloadDocumentData, DownloadDocumentErrors, DownloadDocumentResponses, ExportDataData, ExportDataErrors, ExportDataResponses, ExportDocumentData, ExportDocumentErrors, ExportDocumentResponses, FillSecretRequestData, FillSecretRequestErrors, FillSecretRequestResponses, FollowEventsData, FollowEventsErrors, FollowEventsResponses, FollowVaultChangesData, FollowVaultChangesErrors, FollowVaultChangesResponses, GetBootstrapData, GetBootstrapErrors, GetBootstrapResponses, GetCloudSimilarityData, GetCloudSimilarityErrors, GetCloudSimilarityResponses, GetConnectorData, GetConnectorErrors, GetConnectorResponses, GetDocumentData, GetDocumentErrors, GetDocumentResponses, GetEntityData, GetEntityErrors, GetEntityGraphData, GetEntityGraphErrors, GetEntityGraphResponses, GetEntityResponses, GetExtensionData, GetExtensionErrors, GetExtensionResponses, GetFailureCapsuleData, GetFailureCapsuleErrors, GetFailureCapsuleResponses, GetHttpsStatusData, GetHttpsStatusErrors, GetHttpsStatusResponses, GetMeData, GetMeErrors, GetMeResponses, GetMetricsData, GetMetricsErrors, GetMetricsResponses, GetOauthConsentData, GetOauthConsentErrors, GetOauthConsentResponses, GetOpenapiData, GetOpenapiResponses, GetPocketaiAllData, GetPocketaiAllErrors, GetPocketaiAllResponses, GetPocketaiAudioData, GetPocketaiAudioErrors, GetPocketaiAudioResponses, GetPocketaiDetailData, GetPocketaiDetailErrors, GetPocketaiDetailResponses, GetPocketaiSummaryData, GetPocketaiSummaryErrors, GetPocketaiSummaryResponses, GetReadyzData, GetReadyzErrors, GetReadyzResponses, GetSecretAccessData, GetSecretAccessErrors, GetSecretAccessResponses, GetSecretCountsData, GetSecretCountsErrors, GetSecretCountsResponses, GetSecretRequestData, GetSecretRequestErrors, GetSecretRequestResponses, GetSecretsHelperData, GetSecretsHelperErrors, GetSecretsHelperResponses, GetSettingsData, GetSettingsErrors, GetSettingsResponses, GetSnapshotData, GetSnapshotErrors, GetSnapshotResponses, GetSourcesStatusData, GetSourcesStatusErrors, GetSourcesStatusResponses, GetThreadHistoryData, GetThreadHistoryErrors, GetThreadHistoryResponses, GetToolUsageData, GetToolUsageErrors, GetToolUsageResponses, GetUpBankFinanceSummaryData, GetUpBankFinanceSummaryErrors, GetUpBankFinanceSummaryResponses, GetUpdateStatusData, GetUpdateStatusErrors, GetUpdateStatusResponses, GetVectorCloudData, GetVectorCloudErrors, GetVectorCloudResponses, InviteMemberData, InviteMemberErrors, InviteMemberResponses, InvokeToolData, InvokeToolErrors, InvokeToolResponses, JoinSharedVaultData, JoinSharedVaultErrors, JoinSharedVaultResponses, LeaveVaultData, LeaveVaultErrors, LeaveVaultResponses, ListAuditData, ListAuditErrors, ListAuditResponses, ListConnectorsData, ListConnectorsErrors, ListConnectorsResponses, ListDocumentsData, ListDocumentsErrors, ListDocumentsResponses, ListEntitiesData, ListEntitiesErrors, ListEntitiesResponses, ListExtensionEventsData, ListExtensionEventsErrors, ListExtensionEventsResponses, ListExtensionsData, ListExtensionsErrors, ListExtensionsResponses, ListHeldSecretsData, ListHeldSecretsErrors, ListHeldSecretsResponses, ListInvitationsData, ListInvitationsErrors, ListInvitationsResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListOauthGrantsData, ListOauthGrantsErrors, ListOauthGrantsResponses, ListOpenaiModelsData, ListOpenaiModelsErrors, ListOpenaiModelsResponses, ListPeopleData, ListPeopleErrors, ListPeopleResponses, ListPersonTokensData, ListPersonTokensErrors, ListPersonTokensResponses, ListSecretActivityData, ListSecretActivityErrors, ListSecretActivityResponses, ListSecretKindsData, ListSecretKindsErrors, ListSecretKindsResponses, ListSecretProvidersData, ListSecretProvidersErrors, ListSecretProvidersResponses, ListSecretRefsData, ListSecretRefsErrors, ListSecretRefsResponses, ListSecretRequestsData, ListSecretRequestsErrors, ListSecretRequestsResponses, ListSecretResolutionsData, ListSecretResolutionsErrors, ListSecretResolutionsResponses, ListSessionsData, ListSessionsErrors, ListSessionsResponses, ListSourcesData, ListSourcesErrors, ListSourcesResponses, ListThreadsData, ListThreadsErrors, ListThreadsResponses, ListTokensData, ListTokensErrors, ListTokensResponses, ListToolsData, ListToolsErrors, ListToolsResponses, ListVaultChangesData, ListVaultChangesErrors, ListVaultChangesResponses, ListVaultPeersData, ListVaultPeersErrors, ListVaultPeersResponses, ListVaultPendingInvitationsData, ListVaultPendingInvitationsErrors, ListVaultPendingInvitationsResponses, ListVaultsData, ListVaultsErrors, ListVaultsResponses, ListWorkspaceAuditData, ListWorkspaceAuditErrors, ListWorkspaceAuditResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, MergeEntitiesData, MergeEntitiesErrors, MergeEntitiesResponses, MergeVaultsData, MergeVaultsErrors, MergeVaultsResponses, MoveConnectorDataData, MoveConnectorDataErrors, MoveConnectorDataResponses, NackExtensionEventsData, NackExtensionEventsErrors, NackExtensionEventsResponses, OidcCallbackData, OidcCallbackErrors, OidcCallbackResponses, OidcStartData, OidcStartErrors, OidcStartResponses, PeerExchangeData, PeerExchangeErrors, PeerExchangeResponses, PeerHelloData, PeerHelloErrors, PeerHelloResponses, PeerJoinData, PeerJoinErrors, PeerJoinResponses, PutSecretProviderData, PutSecretProviderErrors, PutSecretProviderResponses, ReceiveExtensionWebhookData, ReceiveExtensionWebhookErrors, ReceiveExtensionWebhookResponses, ReceiveSourceWebhookData, ReceiveSourceWebhookErrors, ReceiveSourceWebhookResponses, ReextractSourceData, ReextractSourceErrors, ReextractSourceResponses, RegisterData, RegisterErrors, RegisterResponses, ReindexDocumentData, ReindexDocumentErrors, ReindexDocumentResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, RenameTokenData, RenameTokenErrors, RenameTokenResponses, RenameVaultData, RenameVaultErrors, RenameVaultResponses, RepairVaultIntegrityData, RepairVaultIntegrityErrors, RepairVaultIntegrityResponses, ReplaceHeldSecretData, ReplaceHeldSecretErrors, ReplaceHeldSecretResponses, RepointConnectorsData, RepointConnectorsErrors, RepointConnectorsResponses, RequestHttpsData, RequestHttpsErrors, RequestHttpsResponses, RequestSecretsHelperData, RequestSecretsHelperErrors, RequestSecretsHelperResponses, RequestUpdateData, RequestUpdateErrors, RequestUpdateResponses, RevokeOauthGrantData, RevokeOauthGrantErrors, RevokeOauthGrantResponses, RevokePersonTokenData, RevokePersonTokenErrors, RevokePersonTokenResponses, RevokeSessionData, RevokeSessionErrors, RevokeSessionResponses, RotateExtensionSecretData, RotateExtensionSecretErrors, RotateExtensionSecretResponses, SearchPocketaiData, SearchPocketaiErrors, SearchPocketaiResponses, SendMessageData, SendMessageErrors, SendMessageResponse, SendMessageResponses, SetMemberRoleData, SetMemberRoleErrors, SetMemberRoleResponses, SetPersonAdminData, SetPersonAdminErrors, SetPersonAdminResponses, SetPersonSuspendedData, SetPersonSuspendedErrors, SetPersonSuspendedResponses, StopVaultPeerData, StopVaultPeerErrors, StopVaultPeerResponses, SyncSourceData, SyncSourceErrors, SyncSourceResponses, SyncVaultPeerData, SyncVaultPeerErrors, SyncVaultPeerResponses, TestConnectorData, TestConnectorErrors, TestConnectorResponses, TestSecretProviderData, TestSecretProviderErrors, TestSecretProviderResponses, TransferOwnershipData, TransferOwnershipErrors, TransferOwnershipResponses, UpdateConnectorData, UpdateConnectorErrors, UpdateConnectorResponses, UpdateEntityData, UpdateEntityErrors, UpdateEntityResponses, UpdateExtensionData, UpdateExtensionErrors, UpdateExtensionResponses, UpdateMemoryData, UpdateMemoryErrors, UpdateMemoryResponses, UpdateSecretRefData, UpdateSecretRefErrors, UpdateSecretRefResponses, UpdateSettingsData, UpdateSettingsErrors, UpdateSettingsResponses, UploadDocumentData, UploadDocumentErrors, UploadDocumentResponses, VerifyVaultPeerData, VerifyVaultPeerErrors, VerifyVaultPeerResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -17,6 +17,102 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
      */
     meta?: keyof ClientMeta extends never ? Record<string, unknown> : ClientMeta;
 };
+
+/**
+ * Workspace activity log: sign-ins, tokens, app connections and space changes (admin only)
+ *
+ * Reads the security ledger for the admin's workspace, newest first. Per-tool-call rows are left out (see `/api/audit/tool-usage`).
+ */
+export const listWorkspaceAudit = <ThrowOnError extends boolean = false>(options?: Options<ListWorkspaceAuditData, ThrowOnError>): RequestResult<ListWorkspaceAuditResponses, ListWorkspaceAuditErrors, ThrowOnError> => (options?.client ?? client).get<ListWorkspaceAuditResponses, ListWorkspaceAuditErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/admin/audit',
+    ...options
+});
+
+/**
+ * Every account in the workspace and the sign-up policy (admin only)
+ */
+export const listPeople = <ThrowOnError extends boolean = false>(options?: Options<ListPeopleData, ThrowOnError>): RequestResult<ListPeopleResponses, ListPeopleErrors, ThrowOnError> => (options?.client ?? client).get<ListPeopleResponses, ListPeopleErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/admin/people',
+    ...options
+});
+
+/**
+ * Make someone an admin, or take admin rights away (admin only, browser session)
+ *
+ * The first account and the emails the server lists as admins are always admins and cannot be changed here. The last admin cannot be demoted.
+ */
+export const setPersonAdmin = <ThrowOnError extends boolean = false>(options: Options<SetPersonAdminData, ThrowOnError>): RequestResult<SetPersonAdminResponses, SetPersonAdminErrors, ThrowOnError> => (options.client ?? client).put<SetPersonAdminResponses, SetPersonAdminErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }],
+    url: '/api/admin/people/{user_id}/admin',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Suspend or restore an account (admin only, browser session)
+ *
+ * A suspended account cannot sign in. Its sessions end at once, and its API tokens and app connections are refused until it is restored. You cannot suspend yourself or the first account.
+ */
+export const setPersonSuspended = <ThrowOnError extends boolean = false>(options: Options<SetPersonSuspendedData, ThrowOnError>): RequestResult<SetPersonSuspendedResponses, SetPersonSuspendedErrors, ThrowOnError> => (options.client ?? client).put<SetPersonSuspendedResponses, SetPersonSuspendedErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }],
+    url: '/api/admin/people/{user_id}/suspended',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Someone's API tokens, newest first (admin only)
+ *
+ * Names and dates only; a token's secret is never stored or shown.
+ */
+export const listPersonTokens = <ThrowOnError extends boolean = false>(options: Options<ListPersonTokensData, ThrowOnError>): RequestResult<ListPersonTokensResponses, ListPersonTokensErrors, ThrowOnError> => (options.client ?? client).get<ListPersonTokensResponses, ListPersonTokensErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/admin/people/{user_id}/tokens',
+    ...options
+});
+
+/**
+ * Revoke someone's API token (admin only, browser session)
+ *
+ * The token stops working at once. Returns the person's remaining tokens.
+ */
+export const revokePersonToken = <ThrowOnError extends boolean = false>(options: Options<RevokePersonTokenData, ThrowOnError>): RequestResult<RevokePersonTokenResponses, RevokePersonTokenErrors, ThrowOnError> => (options.client ?? client).delete<RevokePersonTokenResponses, RevokePersonTokenErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }],
+    url: '/api/admin/people/{user_id}/tokens/{token_id}',
+    ...options
+});
 
 /**
  * Page of the caller's tool-call audit log
@@ -1847,6 +1943,21 @@ export const repairVaultIntegrity = <ThrowOnError extends boolean = false>(optio
             type: 'apiKey'
         }, { scheme: 'bearer', type: 'http' }],
     url: '/api/vaults/{vault_id}/integrity',
+    ...options
+});
+
+/**
+ * Invitations into a vault not answered yet (owners only)
+ *
+ * Withdraw one with `DELETE /api/vaults/{vault_id}/members/{email}`.
+ */
+export const listVaultPendingInvitations = <ThrowOnError extends boolean = false>(options: Options<ListVaultPendingInvitationsData, ThrowOnError>): RequestResult<ListVaultPendingInvitationsResponses, ListVaultPendingInvitationsErrors, ThrowOnError> => (options.client ?? client).get<ListVaultPendingInvitationsResponses, ListVaultPendingInvitationsErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'eunomia_session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/api/vaults/{vault_id}/invitations',
     ...options
 });
 

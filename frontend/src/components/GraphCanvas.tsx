@@ -1,14 +1,14 @@
 "use client";
 
-import { ArrowCounterClockwiseIcon, ArrowsOutIcon, MinusIcon, PlusIcon } from "@phosphor-icons/react/ssr";
 // The entity graph's canvas: a flat SVG with a live d3-force layout. Drag a
 // node and the links follow; release and physics settles it back. Drag the
 // background to pan, scroll or use the buttons to zoom, click (or Enter or Space) a node
-// to select it. The vector cloud stays 3D (Scene3D).
+// to select it.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation, type Simulation, type SimulationNodeDatum } from "d3-force";
-import { Blobatar } from "@blobatar/react";
+import { Eye, EyeOff, Maximize2, Minus, Plus, RotateCcw } from "lucide-react";
+import { SvgMonogram } from "./graph/Monogram";
 import Tooltip, { TooltipGroup } from "./bits/Tooltip";
 import type { EntityKind } from "@/lib/types";
 
@@ -20,27 +20,78 @@ type Sim = SimulationNodeDatum & GraphNode;
 type View = { zoom: number; x: number; y: number };
 
 const DRAG_THRESHOLD = 4; // px before a pointerdown counts as a drag, not a click
-const ZOOM_MIN = 0.5;
+// low enough that a large graph still fits a phone screen
+const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 2.5;
 const ZOOM_STEP = 0.2;
-const FIT_PADDING = 50;
+const FIT_PADDING = 48; // screen px kept clear around the outermost node or label
+const FIT_ZOOM_MAX = 1.4; // an auto-fit never blows a small graph up past this
+// Labels stay 12px on screen at any zoom (the font is divided by the zoom); they sit LABEL_Y layout
+// units under the node's centre.
+const LABEL_FONT = 12;
+const LABEL_Y = 26;
+const LABEL_MAX = 18; // characters before the label is cut with an ellipsis
+const NODE_R = 16;
+const labelText = (name: string) => (name.length > LABEL_MAX ? `${name.slice(0, LABEL_MAX - 1)}…` : name);
+// screen px from a node's centre to its label's edge: about 6.5px per character of 12px UI sans
+const labelHalfWidth = (name: string) => (labelText(name).length * 6.5) / 2;
+const PRE_TICKS = 120; // layout steps run before the first frame, so the first fit is close to the settled shape
 
-// Zoom/pan that centres `nodes` inside the part of the w x h canvas the
-// floating UI leaves free. Shared by auto-fit and the Fit button.
-function computeFit(nodes: { x?: number; y?: number }[], w: number, h: number, ins: CanvasInsets): View {
-  const pts = nodes.filter((n): n is { x: number; y: number } => typeof n.x === "number" && typeof n.y === "number");
+type Box = { left: number; right: number; top: number; bottom: number };
+// The on-screen box (relative to an arbitrary origin) of every node and its label at `zoom`.
+// Shapes scale with the zoom, labels do not, so the box is measured per zoom.
+function screenBox(pts: { x: number; y: number; half: number }[], zoom: number): Box {
+  const box = { left: Infinity, right: -Infinity, top: Infinity, bottom: -Infinity };
+  for (const p of pts) {
+    const sx = p.x * zoom;
+    const sy = p.y * zoom;
+    const half = Math.max(p.half, NODE_R * zoom);
+    box.left = Math.min(box.left, sx - half);
+    box.right = Math.max(box.right, sx + half);
+    box.top = Math.min(box.top, sy - NODE_R * zoom);
+    box.bottom = Math.max(box.bottom, sy + LABEL_Y * zoom + 4); // baseline plus descenders
+  }
+  return box;
+}
+
+// Zoom/pan that centres `nodes` and their labels inside the part of the w x h canvas the floating
+// UI leaves free, with FIT_PADDING all round. Shared by auto-fit and the Fit button.
+function computeFit(nodes: { x?: number; y?: number; name: string }[], w: number, h: number, ins: CanvasInsets): View {
+  const pts = nodes
+    .filter((n): n is { x: number; y: number; name: string } => typeof n.x === "number" && typeof n.y === "number")
+    .map((n) => ({ x: n.x, y: n.y, half: labelHalfWidth(n.name) }));
   if (pts.length === 0) return { zoom: 1, x: 0, y: 0 };
-  const xs = pts.map((p) => p.x);
-  const ys = pts.map((p) => p.y);
-  const [minX, maxX, minY, maxY] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
   const freeW = Math.max(w - ins.left - ins.right, 100);
   const freeH = Math.max(h - ins.top - ins.bottom, 100);
-  const fit = Math.min((freeW - 2 * FIT_PADDING) / Math.max(maxX - minX, 1), (freeH - 2 * FIT_PADDING) / Math.max(maxY - minY, 1));
-  const zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, fit));
+  const roomW = Math.max(freeW - 2 * FIT_PADDING, 40);
+  const roomH = Math.max(freeH - 2 * FIT_PADDING, 40);
+  const fits = (z: number) => {
+    const b = screenBox(pts, z);
+    return b.right - b.left <= roomW && b.bottom - b.top <= roomH;
+  };
+  // the box grows with the zoom, so the largest zoom that fits is found by bisection
+  let zoom = ZOOM_MIN;
+  if (fits(FIT_ZOOM_MAX)) zoom = FIT_ZOOM_MAX;
+  else if (fits(ZOOM_MIN)) {
+    let lo = ZOOM_MIN;
+    let hi = FIT_ZOOM_MAX;
+    for (let i = 0; i < 24; i++) {
+      const mid = (lo + hi) / 2;
+      if (fits(mid)) lo = mid;
+      else hi = mid;
+    }
+    zoom = lo;
+  }
+  const b = screenBox(pts, zoom);
   const cx = ins.left + freeW / 2;
   const cy = ins.top + freeH / 2;
-  // screen = w/2 + zoom * (p - w/2 + view.x), so solve for the view that puts the box centre on (cx, cy)
-  return { zoom, x: (cx - w / 2) / zoom + w / 2 - (minX + maxX) / 2, y: (cy - h / 2) / zoom + h / 2 - (minY + maxY) / 2 };
+  // screen = w/2 + zoom * (p - w/2 + view.x) = zoom * p + w/2 + zoom * (view.x - w/2); solve for the
+  // view that puts the middle of the box on (cx, cy)
+  return {
+    zoom,
+    x: (cx - (b.left + b.right) / 2 - w / 2) / zoom + w / 2,
+    y: (cy - (b.top + b.bottom) / 2 - h / 2) / zoom + h / 2,
+  };
 }
 
 function ToolButton({ label, icon, run }: { label: string; icon: React.ReactNode; run: () => void }) {
@@ -63,6 +114,7 @@ export default function GraphCanvas({
   insets,
   myEmail,
   ariaLabel,
+  chrome,
 }: {
   nodes: GraphNode[];
   edges: GraphEdge[];
@@ -73,6 +125,8 @@ export default function GraphCanvas({
   insets: CanvasInsets;
   myEmail: string | null;
   ariaLabel: string;
+  /** the page's "Hide controls" switch, drawn in the canvas corner beside the zoom buttons */
+  chrome?: { hidden: boolean; toggle: () => void };
 }) {
   const [nodes, setNodes] = useState<Sim[]>([]);
   const [view, setView] = useState<View>({ zoom: 1, x: 0, y: 0 });
@@ -87,31 +141,55 @@ export default function GraphCanvas({
   const panRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
   const insetsRef = useRef(insets);
   const dimsRef = useRef(dims);
+  const visibleRef = useRef(visibleKinds);
+  // dimsRef is set where the size is measured (below), so the first layout already uses the real size.
   useEffect(() => {
     insetsRef.current = insets;
-    dimsRef.current = dims;
+    visibleRef.current = visibleKinds;
   });
+  // Only the nodes on screen count for a fit: a hidden kind must not pull the camera away.
+  const fitNow = (all: Sim[]) =>
+    setView(computeFit(all.filter((n) => visibleRef.current.has(n.kind)), dimsRef.current.w, dimsRef.current.h, insetsRef.current));
 
-  // True until the person pans, zooms or drags: then a change in the free area (the toolbar wrapping, a resize) re-fits.
+  // True until the person pans, zooms or drags. While true the camera keeps every visible node in
+  // the free area: as the layout settles, and when that area or the shown kinds change.
   const autoFit = useRef(true);
+  const visibleKey = [...visibleKinds].sort().join(",");
+  // Opening or closing the inspector changes the free area: fit again even after a pan or zoom.
+  const lastRight = useRef(insets.right);
+  useEffect(() => {
+    if (lastRight.current === insets.right) return;
+    lastRight.current = insets.right;
+    autoFit.current = true;
+  }, [insets.right]);
   useEffect(() => {
     if (!autoFit.current) return;
     const s = simRef.current;
-    if (s) setView(computeFit(s.nodes(), dims.w, dims.h, insets));
-  }, [dims.w, dims.h, insets]);
+    if (s) fitNow(s.nodes());
+  }, [dims.w, dims.h, insets, visibleKey]);
 
   const zoomBy = (f: number) => {
     autoFit.current = false;
     setView((v) => ({ ...v, zoom: Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, v.zoom * f)) }));
   };
 
-  // Track the canvas size so the viewBox and the centre force follow a resize.
-  useEffect(() => {
+  // Track the canvas size so the viewBox and the centre force follow a resize. Measured once before
+  // the first paint too: a first layout and fit at the 640x420 placeholder size, corrected only once
+  // the observer reported, left the nodes crowding one side of a wide canvas.
+  useLayoutEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
+    const apply = (width: number, height: number) => {
+      if (width < 10 || height < 10) return;
+      const next = { w: Math.round(width), h: Math.round(height) };
+      dimsRef.current = next;
+      setDims((prev) => (prev.w === next.w && prev.h === next.h ? prev : next));
+    };
+    const box = el.getBoundingClientRect();
+    apply(box.width, box.height);
     const ro = new ResizeObserver((entries) => {
-      const box = entries[0]?.contentRect;
-      if (box && box.width >= 10 && box.height >= 10) setDims({ w: Math.round(box.width), h: Math.round(box.height) });
+      const r = entries[0]?.contentRect;
+      if (r) apply(r.width, r.height);
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -132,9 +210,18 @@ export default function GraphCanvas({
       .force("charge", forceManyBody().strength(-160))
       .force("center", forceCenter(dimsRef.current.w / 2, dimsRef.current.h / 2))
       .force("collide", forceCollide(26))
-      .on("tick", () => setNodes([...s.nodes()]))
-      // fit once the layout settles, so a reload or vault switch never leaves nodes off screen
-      .on("end", () => autoFit.current && setView(computeFit(s.nodes(), dimsRef.current.w, dimsRef.current.h, insetsRef.current)));
+      .on("tick", () => {
+        setNodes([...s.nodes()]);
+        // follow the layout as it settles, so a reload or vault switch never leaves nodes off screen
+        if (autoFit.current) fitNow(s.nodes());
+      })
+      // one last fit on the settled shape, with whatever insets and size hold by then
+      .on("end", () => {
+        if (autoFit.current) fitNow(s.nodes());
+      });
+    s.tick(PRE_TICKS);
+    setNodes([...s.nodes()]);
+    fitNow(s.nodes());
     simRef.current = s;
     return () => {
       s.stop();
@@ -160,7 +247,7 @@ export default function GraphCanvas({
 
   function fitToView() {
     autoFit.current = true;
-    setView(computeFit(nodes.filter((n) => visibleKinds.has(n.kind)), dims.w, dims.h, insets));
+    fitNow(nodes);
   }
 
   function resetView() {
@@ -263,7 +350,7 @@ export default function GraphCanvas({
             const picked = selectedId === n.id;
             const r = hot || picked ? 16 : 14;
             const color = kindColor(n.kind);
-            const ring = picked ? "var(--accent)" : hot ? "var(--ink-dim)" : "none";
+            const ring = picked ? "var(--accent)" : hot ? "var(--felt)" : "none";
             const shape = { fill: color, stroke: ring, strokeWidth: picked || hot ? 2 : 0, opacity: picked || hot ? 1 : 0.85 };
             return (
               <g
@@ -288,12 +375,7 @@ export default function GraphCanvas({
               >
                 <title>{`${n.name}, added by ${!n.owner_email ? "unknown" : n.owner_email === myEmail ? "you" : n.owner_email}`}</title>
                 {n.kind === "person" ? (
-                  <>
-                    {(hot || picked) && <circle r={r + 1} fill="none" stroke={ring} strokeWidth={2} />}
-                    <foreignObject x={-r} y={-r} width={r * 2} height={r * 2} style={{ overflow: "visible" }}>
-                      <Blobatar name={n.name || n.id} animate="hover" size={r * 2} />
-                    </foreignObject>
-                  </>
+                  <SvgMonogram name={n.name || n.id} r={r} color={color} ring={ring} ringWidth={shape.strokeWidth} />
                 ) : n.kind === "organisation" ? (
                   <rect x={-r * 0.82} y={-r * 0.82} width={r * 1.64} height={r * 1.64} rx={4} {...shape} />
                 ) : n.kind === "location" ? (
@@ -311,27 +393,48 @@ export default function GraphCanvas({
                   // an agent's own kind
                   <circle r={r * 0.7} {...shape} />
                 )}
-                <text
-                  y={24}
-                  textAnchor="middle"
-                  fontSize={10.5}
-                  fontFamily="var(--font-mono), ui-monospace, monospace"
-                  fill={hot || picked ? "var(--ink)" : "var(--ink-dim)"}
-                >
-                  {n.name.length > 16 ? `${n.name.slice(0, 15)}…` : n.name}
-                </text>
               </g>
             );
           })}
+          {/* Labels last, over every edge and shape, with a canvas-coloured halo so no line runs through text. */}
+          <g pointerEvents="none" aria-hidden>
+            {visible.map((n) => {
+              const lit = hovered === n.id || draggingId === n.id || selectedId === n.id;
+              return (
+                <text
+                  key={n.id}
+                  x={n.x}
+                  y={(n.y ?? 0) + LABEL_Y}
+                  textAnchor="middle"
+                  fontSize={LABEL_FONT / view.zoom}
+                  fontFamily="var(--font-sans), ui-sans-serif, system-ui, sans-serif"
+                  fill={lit ? "var(--ink)" : "var(--ink-dim)"}
+                  stroke="var(--canvas)"
+                  strokeWidth={4 / view.zoom}
+                  strokeLinejoin="round"
+                  paintOrder="stroke"
+                >
+                  {labelText(n.name)}
+                </text>
+              );
+            })}
+          </g>
         </g>
       </svg>
 
       <TooltipGroup>
-        <div className="panel p-1 absolute right-4 md:right-[25.5rem] bottom-4 flex gap-1">
-          <ToolButton label="Zoom in" icon={<PlusIcon weight="duotone" size={16} />} run={() => zoomBy(1 + ZOOM_STEP)} />
-          <ToolButton label="Zoom out" icon={<MinusIcon weight="duotone" size={16} />} run={() => zoomBy(1 - ZOOM_STEP)} />
-          <ToolButton label="Fit to view" icon={<ArrowsOutIcon weight="duotone" size={16} />} run={fitToView} />
-          <ToolButton label="Reset view" icon={<ArrowCounterClockwiseIcon weight="duotone" size={16} />} run={resetView} />
+        <div className="panel p-1 absolute bottom-4 flex gap-1" style={{ right: insets.right ? insets.right + 8 : 16 }}>
+          <ToolButton label="Zoom in" icon={<Plus size={16} strokeWidth={1.75} />} run={() => zoomBy(1 + ZOOM_STEP)} />
+          <ToolButton label="Zoom out" icon={<Minus size={16} strokeWidth={1.75} />} run={() => zoomBy(1 - ZOOM_STEP)} />
+          <ToolButton label="Fit to view" icon={<Maximize2 size={16} strokeWidth={1.75} />} run={fitToView} />
+          <ToolButton label="Reset view" icon={<RotateCcw size={16} strokeWidth={1.75} />} run={resetView} />
+          {chrome && (
+            <ToolButton
+              label={chrome.hidden ? "Show controls" : "Hide controls"}
+              icon={chrome.hidden ? <Eye size={16} strokeWidth={1.75} /> : <EyeOff size={16} strokeWidth={1.75} />}
+              run={chrome.toggle}
+            />
+          )}
         </div>
       </TooltipGroup>
       <p className="label absolute left-4 sm:left-8 lg:left-12 bottom-4 hidden md:block pointer-events-none">Drag to rearrange · Scroll to zoom · Click a name to open it</p>
