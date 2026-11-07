@@ -25,7 +25,8 @@ import LiveStatusBadge from "@/components/live/LiveStatusBadge";
 import { JoinSharedSpace } from "@/components/PeerSharing";
 import { cssVar, prefersReducedMotion } from "@/components/bits/motion";
 import SpaceDetail from "@/components/vaults/SpaceDetail";
-import { ICON, JoinedNotice, SpaceSwatch, ago, inviterWords, peopleLine, sameEmail } from "@/components/vaults/bits";
+import { VaultShape, vaultTone } from "@/components/VaultChip";
+import { ICON, JoinedNotice, ago, inviterWords, peopleLine, sameEmail } from "@/components/vaults/bits";
 
 /* New rows (since the previous load, never the first) settle in. A stable function, so React calls it once per mount. */
 function arrive(el: HTMLElement | null) {
@@ -183,8 +184,7 @@ function VaultRow({
     >
       <span className="flex-1 min-w-0">
         <span className="flex items-center gap-2.5 min-w-0">
-          {/* The one dot per space: its colour identity, repeated nowhere else. */}
-          <SpaceSwatch vault={vault} />
+          <VaultShape tone={vaultTone(vault.kind)} />
           <span className="text-[16px] font-medium truncate">{vault.name}</span>
         </span>
         <span className="label block mt-1 truncate">

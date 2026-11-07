@@ -198,14 +198,14 @@ export function Approved({ connection, onShowSteps }: { connection: Connection; 
           Eunomia has confirmed {connection.via === "sign-in" ? "your sign-in" : "that this app is using its key"}. Your app can now use the memories you approved.
         </p>
         <div className="soft-panel px-5 py-4 flex flex-col gap-1.5">
-          <p className="link text-[16px] font-semibold">
+          <p className="text-[16px] font-medium">
             {connection.name} · {connection.via === "sign-in" ? "Access approved" : "Connected with an API token"}
           </p>
           <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
             Your connection is ready. If no memories have been saved yet, a search can return no results. That is normal.
           </p>
         </div>
-        <div className="flex flex-col gap-3 items-start px-5 py-4" style={{ border: "1px solid var(--bauhaus-app-blue)", borderRadius: 12 }}>
+        <div className="task-panel flex flex-col gap-3 items-start px-5 py-4">
           <p className="text-[16px]">{EXAMPLE_QUESTION}</p>
           <CopyButton value={EXAMPLE_QUESTION} label="Copy example question" size="sm" className="btn-primary" />
         </div>

@@ -223,7 +223,7 @@ export default function SkillPage() {
         <h2 className="text-[14px] font-medium">Refresh file copies</h2>
         <p className="text-[14px] leading-relaxed" style={{ color: "var(--ink-dim)" }}>
           Only needed for the file copies. Run this from the Eunomia install folder with a token from{" "}
-          <Link href="/settings?tab=tokens" className="link" className="underline">
+          <Link href="/settings?tab=tokens" className="link">
             Settings, API tokens
           </Link>
           .

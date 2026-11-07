@@ -102,7 +102,7 @@ function DropZone({ maxBytes, disabled, onFiles }: { maxBytes: number | null; di
     <div
       className="flex flex-col items-center justify-center gap-3 px-4 py-8 text-center rounded-[12px]"
       style={{
-        border: "1.5px solid var(--bauhaus-app-blue)",
+        border: "1px dashed var(--border-field)",
         background: over ? "var(--accent-soft)" : "var(--surface)",
         transition: "background-color var(--dur-hover) ease, border-color var(--dur-hover) ease",
       }}
@@ -118,7 +118,7 @@ function DropZone({ maxBytes, disabled, onFiles }: { maxBytes: number | null; di
         if (!disabled && e.dataTransfer.files.length) onFiles(e.dataTransfer.files);
       }}
     >
-      <Upload size={24} strokeWidth={1.75} aria-hidden style={{ color: "var(--bauhaus-app-blue)" }} />
+      <Upload size={24} strokeWidth={1.75} aria-hidden style={{ color: "var(--ink)" }} />
       <p className="text-[16px]" style={{ color: "var(--ink)" }}>
         Drop files here, or choose files
       </p>
@@ -177,7 +177,7 @@ function UploadRows({ rows, onDismiss }: { rows: UploadRow[]; onDismiss: (key: s
               className="h-1.5 rounded-full overflow-hidden"
               style={{ background: "var(--surface-raised)" }}
             >
-              <div className="h-full" style={{ width: `${Math.round(r.progress * 100)}%`, background: "var(--bauhaus-app-blue)", transition: "width 120ms linear" }} />
+              <div className="h-full" style={{ width: `${Math.round(r.progress * 100)}%`, background: "var(--ink)", transition: "width 120ms linear" }} />
             </div>
           )}
         </div>

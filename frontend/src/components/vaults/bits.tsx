@@ -37,27 +37,16 @@ export function RoleChip({ role }: { role: VaultRole }) {
   );
 }
 
-/* The space's identity: a small dot, neutral grey for the personal space and one
-   of a few calm colours for shared spaces (never the danger red). Decorative; the
-   name and the words beside it carry the meaning. */
-const SWATCHES = ["var(--bauhaus-app-yellow)", "var(--bauhaus-app-blue)", "var(--good)"];
-/** A space's colour, shared by its dot here and its points on the Memory map. */
+/* A space's series colour on the Memory map, where several spaces can show at once.
+   Muted hues, never the vault colours: those name the kind of space, not which one. */
+const SWATCHES = ["var(--space-1)", "var(--space-2)", "var(--space-3)"];
+/** A space's colour on the Memory map. */
 export function spaceColor(vault: Pick<Vault, "id" | "kind"> | undefined): string {
   if (!vault || vault.kind === "personal") return "var(--ink-faint)";
   let h = 0;
   for (const ch of vault.id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   return SWATCHES[h % SWATCHES.length];
 }
-export function SpaceSwatch({ vault, size = 8 }: { vault: Vault; size?: number }) {
-  return (
-    <span
-      aria-hidden
-      className="inline-block shrink-0"
-      style={{ width: size, height: size, background: spaceColor(vault), borderRadius: 999 }}
-    />
-  );
-}
-
 /* A check that draws itself once on mount (the shared .bits-draw grammar; reduced motion is handled there). */
 export function DrawnCheck() {
   return (

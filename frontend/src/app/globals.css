@@ -85,6 +85,11 @@
   --series-3: #e8be39;
   --series-4: #171717;
 
+  /* which space a point belongs to on the Memory map: muted, never the vault hues */
+  --space-1: #2f7f70;
+  --space-2: #8061b0;
+  --space-3: #b06a35;
+
   --connector-up-bank: #3d6fb0;
   --connector-pocketai: #8a45ad;
   --connector-github: #4a4f57;
@@ -190,6 +195,10 @@
   --series-2: #dd5743;
   --series-3: #ecc64c;
   --series-4: #f0f0eb;
+
+  --space-1: #5a9e8f;
+  --space-2: #a692c9;
+  --space-3: #c98a5a;
 
   --connector-up-bank: #6a95cc;
   --connector-pocketai: #a874c4;

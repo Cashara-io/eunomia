@@ -17,6 +17,7 @@ import { adminKeys } from "@/lib/queries/admin";
 import { settingsKeys } from "@/lib/queries/settings";
 import { getEntity, getHttpsStatus, listEntities, listPeople, listVaultPendingInvitations } from "@/lib/gen";
 import type { HttpsStatus } from "@/lib/types";
+import StatusLabel from "@/components/ui/StatusLabel";
 import PageHeader from "@/components/ui/PageHeader";
 import InvitationBanner from "@/components/vaults/InvitationBanner";
 import AppChoices from "@/components/connect/AppChoices";
@@ -400,12 +401,9 @@ function ConnectedPanel({ connections }: { connections: Connection[] }) {
                   {c.via === "sign-in" ? "Signed in" : "API token"} · {c.at ? `used ${ago(c.at)}` : "not used yet"}
                 </span>
               </span>
-              <span
-                className="shrink-0 w-2 h-2 rounded-full"
-                style={{ background: active ? "var(--good)" : "var(--ink-faint)" }}
-                title={active ? "Used in the last day" : "Not used in the last day"}
-                aria-label={active ? "Active" : "Idle"}
-              />
+              <span className="shrink-0" title={active ? "Used in the last day" : "Not used in the last day"}>
+                <StatusLabel tone={active ? "good" : "neutral"}>{active ? "Active" : "Idle"}</StatusLabel>
+              </span>
             </li>
           );
         })}
