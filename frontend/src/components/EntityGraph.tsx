@@ -5,7 +5,8 @@ import Select from "@/components/Select";
 import { Suspense, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import ConfirmButton from "@/components/ConfirmButton";
-import { ArrowLeft, Pencil, Plus, Trash2, X } from "lucide-react";
+import { ArrowLeft, Pencil, Plus, Trash2, X, Zap } from "lucide-react";
+import Link from "next/link";
 import GraphCanvas, { type CanvasInsets } from "./GraphCanvas";
 import SyncMark from "./bits/SyncMark";
 import Tooltip, { TooltipGroup } from "./bits/Tooltip";
@@ -829,6 +830,15 @@ export default function EntityGraph({
         </div>
         <TooltipGroup>
           <div className="flex items-center gap-0.5 shrink-0 -mr-1">
+            <Tooltip label="Ask what this affects">
+              <Link
+                href={`/chat?ask=${encodeURIComponent(`If something changes with ${selected.name}, what does it affect?`)}`}
+                className="btn btn-ghost btn-sm btn-icon"
+                aria-label="Ask what this affects"
+              >
+                <Zap {...ICON} />
+              </Link>
+            </Tooltip>
             {canDelete(selected.owner_email) && !editing && (
               <Tooltip label="Edit">
                 <button className="btn btn-ghost btn-sm btn-icon" onClick={startEditing} aria-label="Edit">

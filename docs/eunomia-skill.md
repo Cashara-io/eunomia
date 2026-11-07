@@ -48,6 +48,16 @@ and reuse a kind that fits, so one thing keeps one kind name. Prefer kinds
 the vault's owners approved, never write under a rejected one, and suggest
 new kinds with `ontology_propose`.
 
+## What a change affects
+
+When the user asks what a change, delay or problem affects ("Truck 7 is
+late: what does that hit?"), find the entity with `entities_search`, read
+the vault's `ontology_get` and the entity's `entities_neighbourhood`, and
+decide from the link labels, the link descriptions and the facts which way
+the effect travels. Then call `show_view` with `"view": "impact"`,
+`start_id`, `headline` and `affected`: each affected entity with `path`
+(the relation ids from the start to it) and `why` (one sentence). If it refuses an id, fix that id and call it again.
+
 ## Code
 
 When you learn how a codebase fits together, map it with

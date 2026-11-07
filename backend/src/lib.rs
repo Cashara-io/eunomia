@@ -44,6 +44,7 @@ pub mod tools;
 pub mod tx;
 pub mod usage;
 pub mod vaults;
+pub mod views;
 
 use axum::http::{header, HeaderName, HeaderValue, Method};
 use tower_http::cors::{AllowOrigin, CorsLayer};

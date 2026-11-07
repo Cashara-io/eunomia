@@ -177,6 +177,30 @@ pub const EDGES_AMONG: Stmt = Stmt::new(
     "SELECT * FROM relates_to WHERE $ids CONTAINS in AND $ids CONTAINS out",
 );
 
+// entities/neighbourhood.rs and views/ (`entities_neighbourhood`, `show_view`)
+/// Up to `$limit` relations from each of `$ids`, and up to `$limit` into each, with both ends' vaults:
+/// one list per id and direction. Each id's relations come through the `in` and `out` indexes, all in one
+/// round trip.
+// The caller filters on the vaults: `out = $id AND in.vault = $vault` inside the closure matched nothing
+// on SurrealDB 3.3 (outside one it works).
+pub const EDGES_TOUCHING: Stmt = Stmt::at(
+    "entities.edges_touching",
+    r#"LET $outs = $ids.map(|$id| (SELECT id, in, out, label, in.vault AS from_vault, out.vault AS to_vault FROM relates_to WHERE in = $id LIMIT $limit));
+       LET $ins = $ids.map(|$id| (SELECT id, in, out, label, in.vault AS from_vault, out.vault AS to_vault FROM relates_to WHERE out = $id LIMIT $limit));
+       RETURN array::concat($outs, $ins);"#,
+    2, // two LETs, then the RETURN
+);
+/// Entities by id, in any vault: the caller checks each one's vault.
+pub const NODES_BY_ID: Stmt = Stmt::new("entities.nodes_by_id", "SELECT id, vault, kind, name, summary FROM $ids");
+/// Relations by id, in any vault: the caller checks both ends.
+pub const RELATIONS_BY_ID: Stmt = Stmt::new("entities.relations_by_id", "SELECT id, in, out, label FROM $ids");
+/// The texts of up to three most recent live raw facts of each of `$ids` in `$vault`, in `$ids` order.
+pub const RECENT_FACTS: Stmt = Stmt::new(
+    "entities.recent_facts",
+    r#"RETURN $ids.map(|$id| (SELECT text, created_at FROM memory WHERE subject = $id AND vault = $vault
+       AND type IN ["world","experience"] AND status != "superseded" ORDER BY created_at DESC LIMIT 3).text)"#,
+);
+
 pub const SET_SUMMARY: Stmt = Stmt::new(
     "entities.set_summary",
     "UPDATE $id SET summary = $summary, updated_at = time::now() RETURN AFTER",
@@ -275,6 +299,10 @@ pub const ALL: &[&Stmt] = &[
     &EDGES_IN_IN_VAULT,
     &MEMORIES_OF,
     &EDGES_AMONG,
+    &EDGES_TOUCHING,
+    &NODES_BY_ID,
+    &RELATIONS_BY_ID,
+    &RECENT_FACTS,
     &SET_SUMMARY,
     &RAW_MEMORIES,
     &FACTS_BY_ID,

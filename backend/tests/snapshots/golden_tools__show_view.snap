@@ -1,0 +1,44 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "view": "impact",
+  "start": {
+    "id": "repository:<id9>",
+    "name": "eunomia",
+    "kind": "repository",
+    "vault": "vault:<id2>"
+  },
+  "headline": "The repository moves to a new host.",
+  "affected": [
+    {
+      "entity": {
+        "id": "file:<id10>",
+        "name": "main.rs",
+        "kind": "file",
+        "vault": "vault:<id2>"
+      },
+      "path": [
+        {
+          "id": "relates_to:<id29>",
+          "from": {
+            "id": "file:<id10>",
+            "name": "main.rs",
+            "kind": "file",
+            "vault": "vault:<id2>"
+          },
+          "label": "part_of",
+          "to": {
+            "id": "repository:<id9>",
+            "name": "eunomia",
+            "kind": "repository",
+            "vault": "vault:<id2>"
+          }
+        }
+      ],
+      "why": "It is part of the repository."
+    }
+  ],
+  "text": "The repository moves to a new host.\nStarting from eunomia (repository).\n1. main.rs (file), via main.rs part of eunomia. It is part of the repository."
+}
