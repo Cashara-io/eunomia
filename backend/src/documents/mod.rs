@@ -435,6 +435,25 @@ pub async fn get(state: &OrgState, user: &RecordId, id: &str, max_chars: Option<
     Ok(DocumentDetail { document: DocumentOut::from(&doc), text, text_truncated: truncated, chunks })
 }
 
+/// An uploaded CSV the caller may `action` on: its id, vault, filename and original bytes. Any other
+/// type is refused (after the access check, so a guessed id reveals nothing).
+pub struct CsvDocument {
+    pub id: RecordId,
+    pub vault: RecordId,
+    pub filename: String,
+    pub bytes: Vec<u8>,
+}
+
+pub async fn load_csv(state: &OrgState, user: &RecordId, id: &str, action: Action) -> AppResult<CsvDocument> {
+    let doc = load(&state.db, user, &parse_id(id)?, false, action).await?;
+    if doc.media_type != "text/csv" {
+        return Err(AppError::bad_request(format!("{} is not a CSV ({}): only a CSV has rows to profile and import", doc.filename, doc.media_type)));
+    }
+    require_storage(state)?;
+    let bytes = stored_bytes(&state.db, &doc).await?;
+    Ok(CsvDocument { id: doc.id, vault: doc.vault, filename: doc.filename, bytes })
+}
+
 /// The original bytes (checked against the stored SHA-256) and the row they belong to. The caller
 /// records the disclosure in the audit log.
 pub async fn download(state: &OrgState, user: &RecordId, id: &str) -> AppResult<(DocumentOut, Vec<u8>)> {
@@ -680,6 +699,7 @@ pub async fn delete(state: &OrgState, user: &RecordId, id: &str) -> AppResult<Do
 async fn purge(db: &OrgDb, doc: &DocRow, objects: bool) -> AppResult<Value> {
     q::MARK_DELETED.on(db).bind(("id", doc.id.clone())).bind(("owner", doc.owner.clone())).await?.check()?;
     let removed = remove_chunks(db, &doc.owner, &doc.id, -1, -1, -1).await?;
+    crate::ontology::tabular::delete_imported_values(db, &doc.id).await?;
     if objects {
         delete_object(db, &doc.object_path).await?;
     }
