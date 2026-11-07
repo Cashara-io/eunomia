@@ -3,11 +3,14 @@
 //!
 //! * Discover: [`get`] profiles the vault; [`suggest::suggest`] asks the server's model for proposals,
 //!   [`propose`] takes an agent's. Proposals never overwrite a decision, so rerunning converges.
-//! * Review: [`decide_kind`] and [`decide_link`], for a vault owner in a browser session only, so an
-//!   agent cannot approve its own proposal (there is no MCP tool for them).
-//! * Ground: [`ground`] sends a write under a rejected kind to its merge target, or refuses it.
-//! * Expose: the `ontology_*` tools (`tools/registry/ontology.rs`).
+//! * Review: [`decide_kind`], [`decide_link`] and [`property::decide_property`], for a vault owner in a
+//!   browser session only, so an agent cannot approve its own proposal (there is no MCP tool for them).
+//! * Ground: [`ground`] sends a write under a rejected kind to its merge target, or refuses it;
+//!   [`ground_link`] refuses a relation of a rejected link type; [`property::set_property`] takes a
+//!   value only for an approved property (migration 0034).
+//! * Expose: the `ontology_*` tools and `entity_set_property` (`tools/registry/ontology.rs`).
 
+pub mod property;
 pub mod suggest;
 
 use std::collections::BTreeMap;
@@ -170,12 +173,13 @@ fn link_rid(vault: &RecordId, key: &LinkKey) -> RecordId {
     RecordId::from_table_key("ontology_link", crate::tx::stable_key('l', &parts))
 }
 
-/// Whether `e` is a read of an ontology table on an org database still at schema 32 (before
-/// migration 0033), which is served until its migration job runs.
-// ponytail: drop with the next tenant migration, once 0033 is the oldest schema served.
+/// Whether `e` is a read of an ontology table on an org database one schema behind (before migration
+/// 0033 or 0034), which is served until its migration job runs.
 fn no_ontology_table(e: &surrealdb::Error) -> bool {
     let s = e.to_string();
-    s.contains("The table 'ontology_kind' does not exist") || s.contains("The table 'ontology_link' does not exist")
+    ["ontology_kind", "ontology_link", "ontology_property", "entity_property"]
+        .iter()
+        .any(|t| s.contains(&format!("The table '{t}' does not exist")))
 }
 
 // ---------------------------------------------------------------------------
@@ -192,6 +196,9 @@ struct KindRow {
     #[serde(default)]
     #[surreal(default)]
     merge_into: Option<String>,
+    #[serde(default)]
+    #[surreal(default)]
+    synonyms: Vec<String>,
     origin: String,
     #[serde(default)]
     #[surreal(default)]
@@ -256,6 +263,8 @@ pub struct KindItem {
     pub description: Option<String>,
     /// Rejected: where writes under this kind go instead. Proposed: the merge the proposer suggests.
     pub merge_into: Option<String>,
+    /// Other names written in the vault's data for this kind.
+    pub synonyms: Vec<String>,
     /// Who proposed it; none for a kind that was never reviewed.
     pub origin: Option<Origin>,
     pub reason: Option<String>,
@@ -263,6 +272,8 @@ pub struct KindItem {
     pub entities: i64,
     /// A few of their names.
     pub samples: Vec<String>,
+    /// Its typed properties, each with its review status. Only an approved one takes values.
+    pub properties: Vec<property::PropertyItem>,
 }
 
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
@@ -317,10 +328,11 @@ pub(crate) async fn view(db: &OrgDb, vault: &RecordId) -> AppResult<OntologyOut>
     let link_counts: Vec<LinkCount> = profile.take(q::PROFILE_LINKS_SLOT)?;
     let kind_rows: Vec<KindRow> = registry.take(0)?;
     let link_rows: Vec<LinkRow> = registry.take(1)?;
-    Ok(OntologyOut { vault: vault.to_string(), kinds: merge_kinds(counts, kind_rows)?, links: merge_links(link_counts, link_rows)? })
+    let properties = property::properties_by_kind(db, vault).await?;
+    Ok(OntologyOut { vault: vault.to_string(), kinds: merge_kinds(counts, kind_rows, properties)?, links: merge_links(link_counts, link_rows)? })
 }
 
-fn merge_kinds(counts: Vec<KindCount>, rows: Vec<KindRow>) -> AppResult<Vec<KindItem>> {
+fn merge_kinds(counts: Vec<KindCount>, rows: Vec<KindRow>, properties: BTreeMap<String, Vec<property::PropertyItem>>) -> AppResult<Vec<KindItem>> {
     let mut by_kind: BTreeMap<String, KindItem> = BTreeMap::new();
     let blank = |kind: &str| KindItem {
         kind: kind.to_string(),
@@ -328,10 +340,12 @@ fn merge_kinds(counts: Vec<KindCount>, rows: Vec<KindRow>) -> AppResult<Vec<Kind
         status: ViewStatus::Observed,
         description: None,
         merge_into: None,
+        synonyms: Vec::new(),
         origin: None,
         reason: None,
         entities: 0,
         samples: Vec::new(),
+        properties: Vec::new(),
     };
     for c in counts {
         by_kind.insert(c.kind.clone(), KindItem { entities: c.count, samples: c.samples, ..blank(&c.kind) });
@@ -341,8 +355,12 @@ fn merge_kinds(counts: Vec<KindCount>, rows: Vec<KindRow>) -> AppResult<Vec<Kind
         item.status = Status::parse(&r.status)?.into();
         item.description = r.description;
         item.merge_into = r.merge_into;
+        item.synonyms = r.synonyms;
         item.origin = Some(Origin::parse(&r.origin)?);
         item.reason = r.reason;
+    }
+    for (kind, props) in properties {
+        by_kind.entry(kind.clone()).or_insert_with(|| blank(&kind)).properties = props;
     }
     let mut kinds: Vec<KindItem> = by_kind.into_values().collect();
     kinds.sort_by_key(|k| (KINDS.iter().position(|b| *b == k.kind).unwrap_or(KINDS.len()), k.kind.clone()));
@@ -396,6 +414,9 @@ pub struct KindProposal {
     /// Proposes folding this kind into another one (rejecting it with that merge target).
     #[serde(default)]
     pub merge_into: Option<String>,
+    /// Other names for it, as written in the vault's data.
+    #[serde(default)]
+    pub synonyms: Vec<String>,
     #[serde(default)]
     pub reason: Option<String>,
 }
@@ -416,6 +437,7 @@ struct ValidKind {
     kind: Kind,
     description: Option<String>,
     merge_into: Option<Kind>,
+    synonyms: Vec<String>,
     reason: Option<String>,
 }
 
@@ -438,6 +460,7 @@ impl KindProposal {
             }
         }
         Ok(ValidKind {
+            synonyms: property::clean_synonyms(&kind.0, &self.synonyms)?,
             kind,
             description: clean_text("description", self.description.as_deref())?,
             merge_into,
@@ -456,9 +479,10 @@ impl LinkProposal {
     }
 }
 
-/// Most kinds and links one proposal call takes.
+/// Most kinds, links and properties one proposal call takes.
 pub const MAX_PROPOSED_KINDS: usize = 50;
 pub const MAX_PROPOSED_LINKS: usize = 100;
+pub const MAX_PROPOSED_PROPERTIES: usize = 200;
 
 /// A proposed kind after the call: `status` is the row's, so a kind a person already decided shows
 /// that decision (the proposal did not change it).
@@ -481,30 +505,46 @@ pub struct ProposedLink {
 pub struct ProposeOut {
     pub kinds: Vec<ProposedKind>,
     pub links: Vec<ProposedLink>,
+    pub properties: Vec<property::ProposedProperty>,
+}
+
+/// What one proposal call carries.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct Proposals {
+    #[serde(default)]
+    pub kinds: Vec<KindProposal>,
+    #[serde(default)]
+    pub links: Vec<LinkProposal>,
+    #[serde(default)]
+    pub properties: Vec<property::PropertyProposal>,
 }
 
 /// An agent's proposals for `vault_id` (the caller's personal vault when omitted). Every item is
 /// checked before any is written: one bad name fails the call.
-pub async fn propose(
-    db: &OrgDb,
-    owner: &RecordId,
-    vault_id: Option<&RecordId>,
-    kinds: &[KindProposal],
-    links: &[LinkProposal],
-) -> AppResult<ProposeOut> {
-    if kinds.is_empty() && links.is_empty() {
-        return Err(AppError::bad_request("propose at least one kind or link"));
+pub async fn propose(db: &OrgDb, owner: &RecordId, vault_id: Option<&RecordId>, p: &Proposals) -> AppResult<ProposeOut> {
+    if p.kinds.is_empty() && p.links.is_empty() && p.properties.is_empty() {
+        return Err(AppError::bad_request("propose at least one kind, link or property"));
     }
-    if kinds.len() > MAX_PROPOSED_KINDS || links.len() > MAX_PROPOSED_LINKS {
-        return Err(AppError::bad_request(format!("at most {MAX_PROPOSED_KINDS} kinds and {MAX_PROPOSED_LINKS} links per call")));
+    if p.kinds.len() > MAX_PROPOSED_KINDS || p.links.len() > MAX_PROPOSED_LINKS || p.properties.len() > MAX_PROPOSED_PROPERTIES {
+        return Err(AppError::bad_request(format!(
+            "at most {MAX_PROPOSED_KINDS} kinds, {MAX_PROPOSED_LINKS} links and {MAX_PROPOSED_PROPERTIES} properties per call"
+        )));
     }
     let vault = resolve(db, owner, vault_id, Action::WriteMemories).await?;
-    let kinds = kinds.iter().map(KindProposal::validate).collect::<AppResult<Vec<_>>>()?;
-    let links = links.iter().map(LinkProposal::validate).collect::<AppResult<Vec<_>>>()?;
-    apply(db, &vault, kinds, links, Origin::Agent).await
+    let kinds = p.kinds.iter().map(KindProposal::validate).collect::<AppResult<Vec<_>>>()?;
+    let links = p.links.iter().map(LinkProposal::validate).collect::<AppResult<Vec<_>>>()?;
+    let properties = p.properties.iter().map(property::PropertyProposal::validate).collect::<AppResult<Vec<_>>>()?;
+    apply(db, &vault, kinds, links, properties, Origin::Agent).await
 }
 
-async fn apply(db: &OrgDb, vault: &RecordId, kinds: Vec<ValidKind>, links: Vec<ValidLink>, origin: Origin) -> AppResult<ProposeOut> {
+async fn apply(
+    db: &OrgDb,
+    vault: &RecordId,
+    kinds: Vec<ValidKind>,
+    links: Vec<ValidLink>,
+    properties: Vec<property::ValidProperty>,
+    origin: Origin,
+) -> AppResult<ProposeOut> {
     let mut out = ProposeOut::default();
     for k in kinds {
         let id = kind_rid(vault, &k.kind);
@@ -516,6 +556,7 @@ async fn apply(db: &OrgDb, vault: &RecordId, kinds: Vec<ValidKind>, links: Vec<V
                 .bind(("kind", k.kind.0.clone()))
                 .bind(("description", k.description.clone()))
                 .bind(("merge_into", k.merge_into.as_ref().map(|m| m.0.clone())))
+                .bind(("synonyms", k.synonyms.clone()))
                 .bind(("origin", origin.as_str().to_string()))
                 .bind(("reason", k.reason.clone()))
                 .await?;
@@ -545,6 +586,7 @@ async fn apply(db: &OrgDb, vault: &RecordId, kinds: Vec<ValidKind>, links: Vec<V
         .await?;
         out.links.push(ProposedLink { from_kind: row.from_kind, label: row.label, to_kind: row.to_kind, status: Status::parse(&row.status)? });
     }
+    out.properties = property::apply_properties(db, vault, properties, origin).await?;
     Ok(out)
 }
 
@@ -733,6 +775,35 @@ pub async fn ground(db: &OrgDb, vault: &RecordId, kind: &str) -> AppResult<Optio
     }
 }
 
+/// Whether a relation `from_kind -label-> to_kind` may be written in `vault`: refused when owners
+/// rejected that link type, naming the approved labels between the two kinds; anything else (approved,
+/// proposed, never reviewed) passes and shows as observed until someone reviews it. One point read.
+pub async fn ground_link(db: &OrgDb, vault: &RecordId, from_kind: &str, label: &str, to_kind: &str) -> AppResult<()> {
+    // a label or kind that is not a valid ontology key cannot have been rejected
+    let Ok(key) = LinkKey::parse(from_kind, label, to_kind) else { return Ok(()) };
+    let status: Vec<String> = match q::GROUND_LINK.on(db).bind(("id", link_rid(vault, &key))).await {
+        Err(e) if no_ontology_table(&e) => return Ok(()),
+        res => res?.take(0)?,
+    };
+    if status.first().map(String::as_str) != Some(Status::Rejected.as_str()) {
+        return Ok(());
+    }
+    let approved: Vec<String> = q::APPROVED_LINKS
+        .on(db)
+        .bind(("vault", vault.clone()))
+        .bind(("from_kind", key.from_kind.0.clone()))
+        .bind(("to_kind", key.to_kind.0.clone()))
+        .await?
+        .take(0)?;
+    let (from, to) = (&key.from_kind.0, &key.to_kind.0);
+    let alternatives = if approved.is_empty() {
+        format!("no link type from {from} to {to} is approved yet: propose one with ontology_propose")
+    } else {
+        format!("use an approved one: {}", approved.iter().map(|l| format!("{from} {l} {to}")).collect::<Vec<_>>().join(", "))
+    };
+    Err(AppError::bad_request(format!("the link type {from} {} {to} was rejected for this vault; {alternatives}", key.label.0)))
+}
+
 /// A reviewed kind in one of the vaults `entity_types` reads.
 #[derive(Debug, Deserialize, SurrealValue)]
 pub struct ReviewedKind {
@@ -770,12 +841,12 @@ mod tests {
     }
 
     fn row(kind: &str, status: &str) -> KindRow {
-        KindRow { kind: kind.into(), description: None, status: status.into(), merge_into: None, origin: "agent".into(), reason: None }
+        KindRow { kind: kind.into(), description: None, status: status.into(), merge_into: None, synonyms: vec![], origin: "agent".into(), reason: None }
     }
 
     #[test]
     fn built_in_kinds_come_first_then_the_rest_by_name() {
-        let kinds = merge_kinds(vec![count("zebra", 2), count("person", 1), count("db", 3), count("file", 0)], vec![row("alpha", "proposed")]).unwrap();
+        let kinds = merge_kinds(vec![count("zebra", 2), count("person", 1), count("db", 3), count("file", 0)], vec![row("alpha", "proposed")], BTreeMap::new()).unwrap();
         let names: Vec<&str> = kinds.iter().map(|k| k.kind.as_str()).collect();
         assert_eq!(names, ["person", "file", "alpha", "db", "zebra"]);
         assert_eq!(kinds[2].status, ViewStatus::Proposed);
@@ -786,13 +857,13 @@ mod tests {
 
     #[test]
     fn a_registry_row_sets_the_status_of_an_observed_kind() {
-        let kinds = merge_kinds(vec![count("db", 3)], vec![row("db", "rejected")]).unwrap();
+        let kinds = merge_kinds(vec![count("db", 3)], vec![row("db", "rejected")], BTreeMap::new()).unwrap();
         assert_eq!((kinds[0].status, kinds[0].entities, kinds[0].origin), (ViewStatus::Rejected, 3, Some(Origin::Agent)));
     }
 
     #[test]
     fn a_proposal_cannot_merge_a_kind_into_itself_or_a_built_in_away() {
-        let p = |kind: &str, into: &str| KindProposal { kind: kind.into(), description: None, merge_into: Some(into.into()), reason: None };
+        let p = |kind: &str, into: &str| KindProposal { kind: kind.into(), description: None, merge_into: Some(into.into()), synonyms: vec![], reason: None };
         assert!(p("client", "client").validate().is_err());
         assert!(p("person", "customer").validate().is_err());
         assert!(p("Bad Kind", "customer").validate().is_err());
