@@ -961,6 +961,10 @@ async fn the_newest_value_wins_on_read_and_the_older_ones_stay() {
     let next_year = (chrono::Utc::now() + chrono::Duration::days(365)).format("%Y-%m-%d").to_string();
     let refused = set(0.0, &next_year).await;
     assert!(err(&refused).contains("as_of is in the future"), "{refused}");
+    let in_two_days = (chrono::Utc::now() + chrono::Duration::days(2)).format("%Y-%m-%d").to_string();
+    assert!(err(&set(0.0, &in_two_days).await).contains("as_of is in the future"));
+    let in_an_hour = (chrono::Utc::now() + chrono::Duration::hours(1)).to_rfc3339();
+    assert!(err(&set(0.0, &in_an_hour).await).contains("as_of is in the future"));
 
     let mut res = app.db().await.test_raw().query("SELECT VALUE value_num FROM entity_property ORDER BY as_of").await.unwrap();
     let history: Vec<f64> = res.take(0).unwrap();
@@ -973,6 +977,11 @@ async fn the_newest_value_wins_on_read_and_the_older_ones_stay() {
     ok(app.tool("entity_set_property", json!({"entity_id": dup, "property": "price", "value": 6, "as_of": "2026-09-01"})).await);
     ok(app.tool("entity_merge", json!({"winner_id": latte, "loser_id": dup})).await);
     assert_eq!(ok(app.tool("entities_get", json!({"id": latte})).await)["properties"][0]["value"].as_f64(), Some(6.0));
+
+    // today's date where the day starts before UTC's (Melbourne in the morning) is tomorrow in UTC: accepted
+    let tomorrow_utc = (chrono::Utc::now() + chrono::Duration::days(1)).format("%Y-%m-%d").to_string();
+    ok(set(5.5, &tomorrow_utc).await);
+    assert_eq!(ok(app.tool("entities_get", json!({"id": latte})).await)["properties"][0]["value"].as_f64(), Some(5.5));
     ok(app.tool("entity_delete", json!({"entity_id": latte})).await);
     let mut res = app.db().await.test_raw().query("SELECT VALUE id FROM entity_property").await.unwrap();
     let left: Vec<Value> = res.take(0).unwrap();
