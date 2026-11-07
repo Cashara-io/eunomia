@@ -91,7 +91,7 @@ fn owner_key_string(owner: &RecordId) -> String {
 
 /// The internal `cache_record` RecordId for a record's caller-facing id --
 /// (the owner-id prefix is internal).
-fn cache_record_rid(owner: &RecordId, record_id: &str) -> RecordId {
+pub(crate) fn cache_record_rid(owner: &RecordId, record_id: &str) -> RecordId {
     RecordId::from_table_key("cache_record", format!("{}:{}", owner_key_string(owner), record_id))
 }
 
@@ -295,6 +295,8 @@ pub struct EntityDetail {
     pub owner_email: Option<String>,
     pub memory: Vec<MemoryOut>,
     pub relations: Vec<RelationOut>,
+    /// The current value of each approved property of its kind that it has.
+    pub properties: Vec<crate::ontology::property::PropertyValue>,
 }
 
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
@@ -874,6 +876,7 @@ pub async fn add_relation(
         return Err(AppError::coded(crate::error::ErrorCode::VaultForbidden, "not a member of both entities' vaults"));
     }
     same_vault(&in_row, &out_row)?;
+    crate::ontology::ground_link(db, &in_row.vault, &in_row.kind(), label, &out_row.kind()).await?;
 
     if let Some(existing) = find_relation(db, from_id, to_id, label).await? {
         return Ok(relation_out(&existing, None, None));
@@ -1088,6 +1091,7 @@ pub async fn delete_entity(db: &OrgDb, owner: &RecordId, entity_id: &RecordId) -
         .check()
     })
     .await?;
+    crate::ontology::property::delete_values_of(db, entity_id).await?;
     // its memories and edges go with it: one row for the entity, not one per memory
     changes::record(db, &row.vault, changes::DELETED, changes::ENTITY, entity_id).await;
     Ok(true)
@@ -1163,7 +1167,7 @@ async fn merge_rows(db: &OrgDb, winner: &RecordId, loser: &RecordId, add_aliases
             .check()
     })
     .await?;
-    Ok(())
+    crate::ontology::property::move_values(db, winner, loser).await
 }
 
 /// An entity's row plus its `memory` entries and `relates_to` edges in both
@@ -1195,6 +1199,7 @@ pub async fn get_entity(db: &OrgDb, control: &ControlDb, owner: &RecordId, entit
     owner_ids.extend(outgoing.iter().map(|r| r.owner.clone()));
     owner_ids.extend(incoming.iter().map(|r| r.owner.clone()));
     let emails = emails_for(control, owner_ids).await?;
+    let properties = crate::ontology::property::latest_values(db, &row.vault, std::slice::from_ref(entity_id)).await?.remove(&entity_id.to_string()).unwrap_or_default();
 
     let memory_out_rows: Vec<MemoryOut> = memories
         .iter()
@@ -1219,6 +1224,7 @@ pub async fn get_entity(db: &OrgDb, control: &ControlDb, owner: &RecordId, entit
         owner_email: row.owner.as_ref().and_then(|o| emails.get(&o.to_string()).cloned()),
         memory: memory_out_rows,
         relations,
+        properties,
     }))
 }
 
@@ -1417,7 +1423,13 @@ pub async fn upsert_code_entity(
 
     if let Some(parent_id) = parent_id {
         let label = parent_label(kind, parent_id.table());
-        add_relation(db, owner, &entity_rid, parent_id, label, None).await?;
+        match add_relation(db, owner, &entity_rid, parent_id, label, None).await {
+            // the entity is already written; a parent link type the owners rejected is left out, not an error
+            Err(e) if e.code == crate::error::ErrorCode::OntologyRejected => tracing::info!(label, "parent link left out: its link type was rejected"),
+            res => {
+                res?;
+            }
+        }
     }
 
     Ok(entity)

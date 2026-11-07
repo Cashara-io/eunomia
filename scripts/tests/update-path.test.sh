@@ -65,10 +65,10 @@ VOLATILE="${UPDATE_PATH_VOLATILE:-job job_leader audit_event audit_log tool_usag
 # counter; 0024_redact_backfill: the backfill's per-org marker; 0028_peers: peer vaults;
 # 0031_credential_refs: the credential broker's references and provider settings;
 # 0032_secret_requests: secret requests and the secrets Eunomia holds for agents; 0033_ontology: the kinds
-# and link types a vault's owners reviewed). Where <from-tag> lacks one, the update must add it to
+# and link types a vault's owners reviewed; 0034_ontology_properties: typed properties and their values). Where <from-tag> lacks one, the update must add it to
 # every org database, holding only what the backfill writes (new_rows below). Their counts are checked
 # on their own, so they are left out of the before/after diff.
-NEW_TABLES="${UPDATE_PATH_NEW_TABLES:-change change_seq redact_backfill peer_instance peer_share peer_link peer_item credential_ref secret_provider secret_request vault_secret ontology_kind ontology_link}"
+NEW_TABLES="${UPDATE_PATH_NEW_TABLES:-change change_seq redact_backfill peer_instance peer_share peer_link peer_item credential_ref secret_provider secret_request vault_secret ontology_kind ontology_link ontology_property entity_property}"
 BUILT_FROM=0
 # A fake GitHub token shape (built here, never a real one) in one fact: the backfill must redact it.
 FAKE_GH="ghp_$(printf 'Ab1Cd2Ef3G%.0s' 1 2 3 4)"
@@ -582,6 +582,11 @@ fi
 ontology_rows() { grep -E '^org_[^ ]*\.(ontology_kind|ontology_link) ' "$W/new-after.txt" | awk '{ s += $2; n++ } END { print n + 0, s + 0 }'; }
 if grep -q '\.ontology_link ' "$W/new-expected.txt"; then
   check "the ontology tables are new and empty in every org" test "$(ontology_rows)" = "$(( $(org_dbs | wc -l | tr -d ' ') * 2 )) 0"
+fi
+# typed properties and their values (tenant 0034): new and empty in every org, where the update added them
+property_rows() { grep -E '^org_[^ ]*\.(ontology_property|entity_property) ' "$W/new-after.txt" | awk '{ s += $2; n++ } END { print n + 0, s + 0 }'; }
+if grep -q '\.entity_property ' "$W/new-expected.txt"; then
+  check "the property tables are new and empty in every org" test "$(property_rows)" = "$(( $(org_dbs | wc -l | tr -d ' ') * 2 )) 0"
 fi
 check "the fixed reads unchanged" diff "$W/reads-before.txt" "$W/reads-after.txt"
 diff "$W/reads-before.txt" "$W/reads-after.txt" | head -20

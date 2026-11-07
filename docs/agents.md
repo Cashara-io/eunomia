@@ -191,8 +191,9 @@ No. The connected agent is the model.
 | `entities_neighbourhood` | The entities within 1 to 3 relations of one entity, both directions, with their latest facts and the review of each link type between them; for working out what a change affects. At most 150 entities and 600 relations (`truncated` says when more were in reach) |
 | `show_view` | Show your answer as a view: `impact` (what a change affects, each entity with its path of relations and why) or `subgraph` (how entities connect). Every id is checked; returns the view with names filled in plus a plain-text version |
 | `entity_types` | The built-in entity kinds and the custom kinds agents created (any new lowercase `subject_kind` creates one), each with its review status |
-| `ontology_get` | One vault's kinds and link types, with counts, samples, descriptions and review status |
-| `ontology_suggest` / `ontology_propose` | Propose kinds, merges and link types for a vault owner to approve in the app; without a server model `ontology_suggest` returns the profile for you to review |
+| `ontology_get` | One vault's kinds and link types, with counts, samples, descriptions, synonyms and review status, and each kind's typed properties |
+| `ontology_suggest` / `ontology_propose` | Propose kinds, merges, link types, typed properties and synonyms for a vault owner to approve in the app; without a server model `ontology_suggest` returns the profile for you to review |
+| `entity_set_property` | Set one approved typed property of an entity (a `price` on a `product`), checked against its datatype and kept with its date and source ([typed properties](#typed-properties)) |
 | `entity_update` / `entity_merge` / `entity_delete` | Edit, de-duplicate, delete entities |
 | `code_entity_upsert` / `code_relate` | Map repositories, files, symbols and their relations |
 | `consolidate_observations` | Fold new facts into each entity's belief |
@@ -231,6 +232,29 @@ Change-log rows hold no content, so there is nothing in them to redact. Uploaded
 documents, synced connector records, chat messages, entity names, aliases and summaries, relation labels,
 sync error messages and extension webhook deliveries are not redacted on write, so the backfill leaves
 them alone too.
+
+### Typed properties
+
+A vault's ontology can give a kind typed properties, and only an approved one takes values. Say a cafe
+vault keeps its menu as `product` entities and the user says "a latte is $4.50 now":
+
+1. `ontology_get` shows `product` with a property `price` (`money`, unit `AUD`, status `approved`).
+   If there is none, propose it and keep the fact as a memory meanwhile:
+   `ontology_propose` `{"properties": [{"kind": "product", "name": "price", "datatype": "money", "unit": "AUD"}]}`.
+   A vault owner approves it on the Memory spaces page (Kinds and links).
+2. `entity_set_property` `{"entity_id": "<latte id>", "property": "price", "value": 4.5}` stores it. The
+   value is a number, not `"$4.50"`; pass `as_of` (an ISO date) when the price held from another day, and
+   `source_record_id` when it came from a synced record.
+3. `entities_get` on the latte now returns `properties: [{"property": "price", "datatype": "money",
+   "value": 4.5, "unit": "AUD", "as_of": "...", "source": null}]`. An older price stays as history; the
+   newest `as_of` is the current value.
+
+What is refused, with an error that says why: a property that does not exist or is only proposed (propose
+it and wait), a value that does not fit the datatype (a money value with a currency sign, an enum value not
+in its list, a date that is not `YYYY-MM-DD`), and a property rejected with no merge target. A property
+rejected into another (say `cost` into `price`) writes to that one, and the result's `property_mapped`
+says so. Relations are grounded the same way: a `code_relate` whose link type the owners rejected is
+refused, and the error names the approved link types between the two kinds.
 
 ### What a change affects
 

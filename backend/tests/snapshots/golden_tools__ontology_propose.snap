@@ -17,5 +17,14 @@ expression: stable
       "to_kind": "db",
       "status": "proposed"
     }
+  ],
+  "properties": [
+    {
+      "kind": "db",
+      "name": "size_gb",
+      "datatype": "number",
+      "status": "proposed",
+      "merge_into": null
+    }
   ]
 }

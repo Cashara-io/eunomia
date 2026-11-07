@@ -416,6 +416,11 @@ export type Credentials = {
     password: string;
 };
 
+/**
+ * What a property's values are. A datatype, not a business field: the vault says which property has it.
+ */
+export type Datatype = 'text' | 'number' | 'integer' | 'money' | 'percent' | 'bool' | 'date' | 'datetime' | 'enum';
+
 export type DeclineOut = {
     status: string;
 };
@@ -535,6 +540,10 @@ export type EntityDetail = {
     memory: Array<MemoryOut>;
     name: string;
     owner_email?: string | null;
+    /**
+     * The current value of each approved property of its kind that it has.
+     */
+    properties: Array<PropertyValue>;
     relations: Array<RelationOut>;
     summary: string;
 };
@@ -1002,12 +1011,20 @@ export type KindItem = {
      */
     merge_into?: string | null;
     origin?: null | Origin;
+    /**
+     * Its typed properties, each with its review status. Only an approved one takes values.
+     */
+    properties: Array<PropertyItem>;
     reason?: string | null;
     /**
      * A few of their names.
      */
     samples: Array<string>;
     status: ViewStatus;
+    /**
+     * Other names written in the vault's data for this kind.
+     */
+    synonyms: Array<string>;
 };
 
 export type LeftBody = {
@@ -1434,9 +1451,77 @@ export type Problem = {
     type: string;
 };
 
+export type PropertyDecideBody = {
+    decision: PropertyDecision;
+    kind: string;
+    name: string;
+};
+
+export type PropertyDecision = {
+    action: 'approve';
+} | {
+    action: 'reject';
+    merge_into?: string | null;
+} | {
+    action: 'describe';
+    description: string;
+};
+
+/**
+ * One property of a kind, as the ontology view shows it.
+ */
+export type PropertyItem = {
+    datatype: Datatype;
+    description?: string | null;
+    enum_values?: Array<string> | null;
+    /**
+     * Rejected: the property of the same kind its values go to. Proposed: the merge the proposer suggests.
+     */
+    merge_into?: string | null;
+    name: string;
+    origin: Origin;
+    reason?: string | null;
+    /**
+     * A few of them, as text with their unit.
+     */
+    samples: Array<string>;
+    status: Status;
+    synonyms: Array<string>;
+    unit?: string | null;
+    /**
+     * Values written for it in the vault, history included.
+     */
+    values: number;
+};
+
+/**
+ * One property's current value on an entity.
+ */
+export type PropertyValue = {
+    /**
+     * When the value was true, RFC 3339.
+     */
+    as_of: string;
+    datatype: Datatype;
+    property: string;
+    /**
+     * The synced record it came from.
+     */
+    source?: string | null;
+    /**
+     * The value's unit, else the property's.
+     */
+    unit?: string | null;
+    /**
+     * A number, a bool or a string (a date is YYYY-MM-DD, a datetime RFC 3339).
+     */
+    value: unknown;
+};
+
 export type ProposeOut = {
     kinds: Array<ProposedKind>;
     links: Array<ProposedLink>;
+    properties: Array<ProposedProperty>;
 };
 
 /**
@@ -1454,6 +1539,17 @@ export type ProposedLink = {
     label: string;
     status: Status;
     to_kind: string;
+};
+
+/**
+ * A proposed property after the call, with the row's status (a decided one keeps its decision).
+ */
+export type ProposedProperty = {
+    datatype: Datatype;
+    kind: string;
+    merge_into?: string | null;
+    name: string;
+    status: Status;
 };
 
 export type ProviderBody = {
@@ -5961,6 +6057,30 @@ export type DecideVaultOntologyLinkResponses = {
 };
 
 export type DecideVaultOntologyLinkResponse = DecideVaultOntologyLinkResponses[keyof DecideVaultOntologyLinkResponses];
+
+export type DecideVaultOntologyPropertyData = {
+    body: PropertyDecideBody;
+    path: {
+        vault_id: string;
+    };
+    query?: never;
+    url: '/api/vaults/{vault_id}/ontology/properties/decide';
+};
+
+export type DecideVaultOntologyPropertyErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type DecideVaultOntologyPropertyError = DecideVaultOntologyPropertyErrors[keyof DecideVaultOntologyPropertyErrors];
+
+export type DecideVaultOntologyPropertyResponses = {
+    200: OntologyOut;
+};
+
+export type DecideVaultOntologyPropertyResponse = DecideVaultOntologyPropertyResponses[keyof DecideVaultOntologyPropertyResponses];
 
 export type SuggestVaultOntologyData = {
     body?: never;

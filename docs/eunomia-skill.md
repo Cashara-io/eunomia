@@ -48,6 +48,17 @@ and reuse a kind that fits, so one thing keeps one kind name. Prefer kinds
 the vault's owners approved, never write under a rejected one, and suggest
 new kinds with `ontology_propose`.
 
+## Typed properties
+
+A kind can have typed properties, for example a `price` (money, AUD) on
+`product`. `ontology_get` lists each kind's properties and their status.
+When a value fits one that is approved, store it with `entity_set_property`
+(`"value": 4.5`, not `"$4.50"`), and pass `as_of` when it was true at
+another time. A property that is missing or only proposed is refused:
+propose it with `ontology_propose` (`properties`: kind, name, datatype,
+unit) and keep the fact as a memory meanwhile. A relation of a link type
+the owners rejected is refused too; the error names the approved ones.
+
 ## What a change affects
 
 When the user asks what a change, delay or problem affects ("Truck 7 is

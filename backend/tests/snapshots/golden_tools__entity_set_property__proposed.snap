@@ -1,0 +1,9 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "error": "the property \"size_gb\" on \"db\" is proposed, not approved: a vault owner approves it in the Eunomia app (the vault's Kinds and links), then write the value again",
+  "code": "validation.invalid",
+  "trace_id": "<trace>"
+}

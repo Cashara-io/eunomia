@@ -59,5 +59,6 @@ expression: stable
       "owner_email": "tester@example.com"
     }
   ],
-  "relations": []
+  "relations": [],
+  "properties": []
 }

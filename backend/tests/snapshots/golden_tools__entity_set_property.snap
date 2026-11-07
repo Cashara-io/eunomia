@@ -1,0 +1,16 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "entity_id": "entity:<id19>",
+  "kind": "db",
+  "value": {
+    "property": "size_gb",
+    "datatype": "number",
+    "value": 120.0,
+    "unit": "GB",
+    "as_of": "<ts>",
+    "source": null
+  }
+}

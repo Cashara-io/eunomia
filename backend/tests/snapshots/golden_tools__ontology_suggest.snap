@@ -13,12 +13,14 @@ expression: stable
         "status": "observed",
         "description": null,
         "merge_into": null,
+        "synonyms": [],
         "origin": null,
         "reason": null,
         "entities": 1,
         "samples": [
           "Alice"
-        ]
+        ],
+        "properties": []
       },
       {
         "kind": "organisation",
@@ -26,10 +28,12 @@ expression: stable
         "status": "observed",
         "description": null,
         "merge_into": null,
+        "synonyms": [],
         "origin": null,
         "reason": null,
         "entities": 0,
-        "samples": []
+        "samples": [],
+        "properties": []
       },
       {
         "kind": "location",
@@ -37,10 +41,12 @@ expression: stable
         "status": "observed",
         "description": null,
         "merge_into": null,
+        "synonyms": [],
         "origin": null,
         "reason": null,
         "entities": 0,
-        "samples": []
+        "samples": [],
+        "properties": []
       },
       {
         "kind": "repository",
@@ -48,12 +54,14 @@ expression: stable
         "status": "observed",
         "description": null,
         "merge_into": null,
+        "synonyms": [],
         "origin": null,
         "reason": null,
         "entities": 1,
         "samples": [
           "eunomia"
-        ]
+        ],
+        "properties": []
       },
       {
         "kind": "file",
@@ -61,12 +69,14 @@ expression: stable
         "status": "observed",
         "description": null,
         "merge_into": null,
+        "synonyms": [],
         "origin": null,
         "reason": null,
         "entities": 1,
         "samples": [
           "main.rs"
-        ]
+        ],
+        "properties": []
       },
       {
         "kind": "symbol",
@@ -74,10 +84,12 @@ expression: stable
         "status": "observed",
         "description": null,
         "merge_into": null,
+        "synonyms": [],
         "origin": null,
         "reason": null,
         "entities": 0,
-        "samples": []
+        "samples": [],
+        "properties": []
       },
       {
         "kind": "db",
@@ -85,11 +97,30 @@ expression: stable
         "status": "proposed",
         "description": "A database a service reads or writes",
         "merge_into": null,
+        "synonyms": [
+          "database"
+        ],
         "origin": "agent",
         "reason": null,
         "entities": 1,
         "samples": [
           "orders_db"
+        ],
+        "properties": [
+          {
+            "name": "size_gb",
+            "datatype": "number",
+            "unit": "GB",
+            "enum_values": null,
+            "description": "How much it stores",
+            "synonyms": [],
+            "status": "proposed",
+            "merge_into": null,
+            "origin": "agent",
+            "reason": null,
+            "values": 0,
+            "samples": []
+          }
         ]
       }
     ],
@@ -139,6 +170,6 @@ expression: stable
       }
     ]
   },
-  "hint": "Eunomia has no model configured, so you review the ontology. Read the profile: each kind and link type with its counts and sample names. Then call `ontology_propose` with a one-sentence description for each kind and link type that has none, the kinds that name the same thing as another (`merge_into` the one to keep), and the link types worth keeping. A vault owner approves or rejects proposals in the Eunomia app.",
+  "hint": "Eunomia has no model configured, so you review the ontology. Read the profile: each kind and link type with its counts and sample names, and each kind's properties. Then call `ontology_propose` with a one-sentence description for each kind and link type that has none, the kinds that name the same thing as another (`merge_into` the one to keep), the link types worth keeping, and the typed properties the kinds' facts show (`properties`: kind, name, datatype, unit). Give a kind or property `synonyms` only when the vault's own names or facts spell them out. A vault owner approves or rejects proposals in the Eunomia app.",
   "note": null
 }

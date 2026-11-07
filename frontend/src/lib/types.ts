@@ -1,5 +1,6 @@
 // Domain types the pages use. They narrow the generated client's looser
 // shapes (string kinds become unions); the query hooks cast to them.
+import type { PropertyValue } from "@/lib/gen";
 
 export type Me = { id: string; email: string; onboarded: boolean; has_password: boolean; oidc_provider?: string | null; is_admin: boolean };
 
@@ -218,6 +219,8 @@ export type EntityDetail = EntitySummary & {
   owner_email: string | null;
   memory: EntityMemory[];
   relations: EntityRelation[];
+  /** The current value of each approved property it has. */
+  properties?: PropertyValue[];
 };
 
 export type EntityGraphNode = { id: string; kind: EntityKind; name: string; owner_email: string | null };

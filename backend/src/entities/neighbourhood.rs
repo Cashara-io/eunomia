@@ -99,6 +99,9 @@ pub struct Node {
     pub summary: Option<String>,
     /// Up to three of its most recent live facts.
     pub facts: Vec<String>,
+    /// The current value of each approved property it has.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub properties: Vec<crate::ontology::property::PropertyValue>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -211,6 +214,7 @@ pub async fn neighbourhood(
     let ids: Vec<RecordId> = order.iter().map(|n| n.id.clone()).collect();
     let mut res = q::RECENT_FACTS.on(db).bind(("ids", ids)).bind(("vault", vault.clone())).await?;
     let facts: Vec<Vec<String>> = res.take(0)?;
+    let mut values = crate::ontology::property::latest_values(db, &vault, &order.iter().map(|n| n.id.clone()).collect::<Vec<_>>()).await?;
 
     let kinds: HashMap<String, String> = order.iter().map(|n| (n.id.to_string(), n.kind())).collect();
     // an edge to an entity left out (the cap, a deleted one) would point at nothing
@@ -232,6 +236,7 @@ pub async fn neighbourhood(
         .into_iter()
         .zip(facts.into_iter().chain(std::iter::repeat_with(Vec::new)))
         .map(|(n, facts)| Node {
+            properties: values.remove(&n.id.to_string()).unwrap_or_default(),
             id: n.id.to_string(),
             kind: n.kind(),
             summary: Some(n.summary.clone()).filter(|s| !s.trim().is_empty()),

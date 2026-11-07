@@ -30,6 +30,7 @@ import {
 import { useVaults } from "@/lib/queries/vaults";
 import EditableMemoryText from "@/components/live/EditableMemoryText";
 import TidyUp from "./graph/TidyUp";
+import PropertyValues from "./graph/PropertyValues";
 import EmptyState from "./ui/EmptyState";
 import EntityList from "./graph/EntityList";
 import { chooseSpace, useSharedSpace } from "./graph/space";
@@ -916,6 +917,8 @@ export default function EntityGraph({
             </p>
           )
         )}
+
+        <PropertyValues properties={selected.properties} />
 
         <section className="flex flex-col gap-2">
           <h3 className="section-title flex items-baseline gap-2">

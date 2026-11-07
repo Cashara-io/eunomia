@@ -248,7 +248,8 @@ pub const TENANT_TABLES: &[&str] = &[
     "app_settings", "vault", "vault_member", "connector", "sync_status", "cache_record", "linked_to", "person", "organisation", "location", "repository", "entity",
     "file", "symbol", "memory", "relates_to", "chat_thread", "chat_message", "audit_log", "embed_cache", "pocket_recording",
     "document", "extension", "extension_event", "skill", "change", "change_seq", "redact_backfill", "peer_instance", "peer_share", "peer_link", "peer_item",
-    "credential_ref", "secret_provider", "secret_request", "vault_secret", "ontology_kind", "ontology_link",
+    "credential_ref", "secret_provider", "secret_request", "vault_secret", "ontology_kind", "ontology_link", "ontology_property",
+    "entity_property",
 ];
 
 /// The first table `sql` names that lives in the other database. A table is recognised where

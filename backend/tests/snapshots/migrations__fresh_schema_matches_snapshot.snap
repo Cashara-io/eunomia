@@ -411,6 +411,40 @@ expression: info(&db).await
       "kind": {
         "kind": "NORMAL"
       },
+      "name": "entity_property",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "entity",
+            "property",
+            "as_of"
+          ],
+          "index": "",
+          "name": "entity_property_entity_idx",
+          "table": "entity_property"
+        },
+        {
+          "cols": [
+            "property"
+          ],
+          "index": "",
+          "name": "entity_property_property_idx",
+          "table": "entity_property"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
       "name": "extension",
       "permissions": {
         "create": false,
@@ -748,6 +782,32 @@ expression: info(&db).await
           "index": "UNIQUE",
           "name": "ontology_link_vault_key_unique",
           "table": "ontology_link"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
+      "name": "ontology_property",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "vault",
+            "kind",
+            "name"
+          ],
+          "index": "UNIQUE",
+          "name": "ontology_property_vault_key_unique",
+          "table": "ontology_property"
         }
       ]
     },

@@ -335,6 +335,35 @@ async fn writes_still_work_on_an_org_database_before_the_migration() {
 }
 
 
+#[tokio::test]
+async fn reads_and_writes_still_work_on_an_org_database_before_the_properties_migration() {
+    let app = TestApp::new().await;
+    let latte = write(&app, "Latte", "product").await["entity"]["id"].as_str().unwrap().to_string();
+    let cafe = write(&app, "Bean Bar", "cafe").await["entity"]["id"].as_str().unwrap().to_string();
+    app.db().await.test_raw().query("REMOVE TABLE entity_property; REMOVE TABLE ontology_property").await.unwrap().check().unwrap();
+    ok(app.tool("code_relate", json!({"from_id": cafe, "to_id": latte, "label": "sells"})).await);
+    assert_eq!(ok(app.tool("entities_get", json!({"id": latte})).await)["properties"], json!([]));
+    ok(app.tool("entities_neighbourhood", json!({"entity_id": cafe})).await);
+    assert_eq!(kind(&ok(app.tool("ontology_get", json!({})).await), "product")["properties"], json!([]));
+    let refused = app.tool("entity_set_property", json!({"entity_id": latte, "property": "price", "value": 4.5})).await;
+    assert!(refused["error"].as_str().unwrap_or_default().contains("does not exist"), "{refused}");
+    ok(app.tool("entity_delete", json!({"entity_id": latte})).await);
+}
+
+#[tokio::test]
+async fn a_kind_row_from_before_synonyms_still_takes_decisions_after_the_upgrade() {
+    let app = TestApp::new().await;
+    ok(app.tool("ontology_propose", json!({"kinds": [{"kind": "customer", "description": "A paying client"}]})).await);
+    let db = app.db().await;
+    // the row as 0033 left it: no synonyms field at all
+    db.test_raw().query("REMOVE FIELD synonyms ON ontology_kind; UPDATE ontology_kind UNSET synonyms;").await.unwrap().check().unwrap();
+    db.test_raw().query(include_str!("../migrations/tenant/0034_ontology_properties.surql")).await.unwrap().check().unwrap();
+    let vault = personal(&app).await;
+    let (status, o) = decide_kind(&app, &vault, "customer", json!({"action": "approve"})).await;
+    assert_eq!(status, 200, "{o}");
+    assert_eq!((kind(&o, "customer")["status"].as_str(), kind(&o, "customer")["synonyms"].clone()), (Some("approved"), json!([])));
+}
+
 // ------------------------------------------------------------ what a change affects: the neighbourhood
 
 /// A small logistics chain in the personal vault: Ana drives Truck 7, which carries Shipment 88, which
@@ -764,4 +793,293 @@ async fn the_chat_streams_the_resolved_view_with_the_show_view_result_only() {
     let (_, history) = app.http("GET", &format!("/api/chat/threads/{thread_id}/history"), None, true).await;
     let stored: Vec<Value> = history.as_array().unwrap().iter().filter(|m| m["role"] == "tool").map(|m| serde_json::from_str(m["content"].as_str().unwrap()).unwrap()).collect();
     assert!(stored.iter().any(|r| r == shown), "{history}");
+}
+
+// ------------------------------------------------------------ typed properties and grounded links
+
+/// A property decision as the owner's browser session sends it.
+async fn decide_property(app: &TestApp, vault: &str, kind: &str, name: &str, decision: Value) -> (u16, Value) {
+    let body = json!({"kind": kind, "name": name, "decision": decision});
+    let (status, body) = app.http_session("POST", &format!("/api/vaults/{vault}/ontology/properties/decide"), Some(body)).await;
+    (status.as_u16(), body)
+}
+
+fn property<'a>(ontology: &'a Value, kind_name: &str, name: &str) -> &'a Value {
+    kind(ontology, kind_name)["properties"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["name"] == name)
+        .unwrap_or_else(|| panic!("no property {name} on {kind_name} in {ontology}"))
+}
+
+fn price(datatype: &str) -> Value {
+    json!({"kind": "product", "name": "price", "datatype": datatype, "unit": "AUD", "description": "What one costs", "synonyms": ["cost"]})
+}
+
+/// A latte (a `product`) and an approved `price` (money, AUD) on product. Returns the vault and the latte's id.
+async fn latte_with_price(app: &TestApp) -> (String, String) {
+    let latte = write(app, "Latte", "product").await["entity"]["id"].as_str().unwrap().to_string();
+    let vault = personal(app).await;
+    ok(app.tool("ontology_propose", json!({"properties": [price("money")]})).await);
+    assert_eq!(decide_property(app, &vault, "product", "price", json!({"action": "approve"})).await.0, 200);
+    (vault, latte)
+}
+
+fn err(v: &Value) -> &str {
+    v["error"].as_str().unwrap_or_else(|| panic!("expected an error, got {v}"))
+}
+
+#[tokio::test]
+async fn a_proposed_property_waits_for_the_owner_in_the_browser() {
+    let app = TestApp::new().await;
+    write(&app, "Latte", "product").await;
+    let vault = personal(&app).await;
+
+    let out = ok(app.tool("ontology_propose", json!({"properties": [price("money")]})).await);
+    assert_eq!(out["properties"], json!([{"kind": "product", "name": "price", "datatype": "money", "status": "proposed", "merge_into": null}]));
+    let p = property(&ok(app.tool("ontology_get", json!({})).await), "product", "price").clone();
+    assert_eq!((p["status"].as_str(), p["origin"].as_str(), p["unit"].as_str(), p["values"].as_i64()), (Some("proposed"), Some("agent"), Some("AUD"), Some(0)));
+    assert_eq!(p["synonyms"], json!(["cost"]));
+
+    // a bad datatype or name fails the whole call
+    let bad = app.tool("ontology_propose", json!({"properties": [{"kind": "product", "name": "size", "datatype": "colour"}]})).await;
+    assert!(err(&bad).contains("datatype"), "{bad}");
+    let bad = app.tool("ontology_propose", json!({"properties": [{"kind": "product", "name": "Unit Price", "datatype": "money"}]})).await;
+    assert!(err(&bad).contains("invalid property name"), "{bad}");
+
+    // the owner with a token (an agent may hold one) cannot decide
+    let path = format!("/api/vaults/{vault}/ontology/properties/decide");
+    let body = json!({"kind": "product", "name": "price", "decision": {"action": "approve"}});
+    let (status, refused) = app.http("POST", &path, Some(body.clone()), true).await;
+    assert_eq!(status, 403, "{refused}");
+    assert_eq!(property(&ok(app.tool("ontology_get", json!({})).await), "product", "price")["status"], "proposed");
+
+    // the owner in the browser approves; a later proposal does not change the decision
+    let (status, o) = app.http_session("POST", &path, Some(body)).await;
+    assert_eq!(status, 200, "{o}");
+    assert_eq!(property(&o, "product", "price")["status"], "approved");
+    let again = ok(app.tool("ontology_propose", json!({"properties": [price("text")]})).await);
+    assert_eq!((again["properties"][0]["status"].as_str(), again["properties"][0]["datatype"].as_str()), (Some("approved"), Some("money")));
+
+    // describing keeps the status; deciding a property nobody proposed is not found
+    let (status, o) = decide_property(&app, &vault, "product", "price", json!({"action": "describe", "description": "Shelf price"})).await;
+    assert_eq!(status, 200, "{o}");
+    assert_eq!((property(&o, "product", "price")["description"].as_str(), property(&o, "product", "price")["status"].as_str()), (Some("Shelf price"), Some("approved")));
+    assert_eq!(decide_property(&app, &vault, "product", "weight", json!({"action": "approve"})).await.0, 404);
+}
+
+#[tokio::test]
+async fn a_value_needs_an_approved_property_and_must_fit_its_datatype() {
+    let app = TestApp::new().await;
+    let latte = write(&app, "Latte", "product").await["entity"]["id"].as_str().unwrap().to_string();
+    let vault = personal(&app).await;
+    let set = |property: &str, value: Value| app.tool("entity_set_property", json!({"entity_id": latte, "property": property, "value": value}));
+
+    let unknown = set("price", json!(4.5)).await;
+    assert!(err(&unknown).contains("propose it with ontology_propose"), "{unknown}");
+    ok(app.tool("ontology_propose", json!({"properties": [
+        price("money"),
+        {"kind": "product", "name": "size", "datatype": "enum", "enum_values": ["Small", "Large"]},
+        {"kind": "product", "name": "launched_on", "datatype": "date"},
+    ]})).await);
+    let proposed = set("price", json!(4.5)).await;
+    assert!(err(&proposed).contains("proposed, not approved"), "{proposed}");
+
+    for name in ["price", "size", "launched_on"] {
+        assert_eq!(decide_property(&app, &vault, "product", name, json!({"action": "approve"})).await.0, 200);
+    }
+    for (name, value, says) in [
+        ("price", json!("$4.50"), "must be a number"),
+        ("price", json!(true), "must be a number"),
+        ("size", json!("Medium"), "takes one of Small, Large"),
+        ("launched_on", json!("7/11/2026"), "YYYY-MM-DD"),
+        ("launched_on", json!("2026-02-30"), "YYYY-MM-DD"),
+    ] {
+        let refused = set(name, value).await;
+        assert!(err(&refused).contains(says), "{name}: {refused}");
+    }
+    let mut res = app.db().await.test_raw().query("SELECT VALUE id FROM entity_property").await.unwrap();
+    let written: Vec<Value> = res.take(0).unwrap();
+    assert!(written.is_empty(), "a refused value writes nothing: {written:?}");
+
+    let out = ok(set("price", json!("4.50")).await);
+    assert_eq!((out["value"]["property"].as_str(), out["value"]["value"].as_f64(), out["value"]["unit"].as_str()), (Some("price"), Some(4.5), Some("AUD")));
+    assert!(out.get("property_mapped").is_none(), "{out}");
+    assert_eq!(ok(set("size", json!("large")).await)["value"]["value"], "Large", "an enum value is stored as listed");
+    assert_eq!(ok(set("launched_on", json!("2026-11-07")).await)["value"]["value"], "2026-11-07");
+}
+
+#[tokio::test]
+async fn a_rejected_property_sends_its_values_to_the_merge_target() {
+    let app = TestApp::new().await;
+    let (vault, latte) = latte_with_price(&app).await;
+    ok(app.tool("ontology_propose", json!({"properties": [
+        {"kind": "product", "name": "cost", "datatype": "number"},
+        {"kind": "product", "name": "junk", "datatype": "text"},
+    ]})).await);
+
+    // a merge target must be a property of the kind that is kept
+    assert_eq!(decide_property(&app, &vault, "product", "cost", json!({"action": "reject", "merge_into": "weight"})).await.0, 400);
+    let (status, o) = decide_property(&app, &vault, "product", "cost", json!({"action": "reject", "merge_into": "price"})).await;
+    assert_eq!(status, 200, "{o}");
+    assert_eq!((property(&o, "product", "cost")["status"].as_str(), property(&o, "product", "cost")["merge_into"].as_str()), (Some("rejected"), Some("price")));
+
+    let out = ok(app.tool("entity_set_property", json!({"entity_id": latte, "property": "cost", "value": 5, "unit": "USD"})).await);
+    assert_eq!(out["property_mapped"], json!({"from": "cost", "to": "price"}));
+    assert_eq!((out["value"]["property"].as_str(), out["value"]["value"].as_f64(), out["value"]["unit"].as_str()), (Some("price"), Some(5.0), Some("USD")));
+
+    // rejected with no target: refused, naming the approved properties
+    assert_eq!(decide_property(&app, &vault, "product", "junk", json!({"action": "reject"})).await.0, 200);
+    let refused = app.tool("entity_set_property", json!({"entity_id": latte, "property": "junk", "value": "x"})).await;
+    assert!(err(&refused).contains("was rejected") && err(&refused).contains("Approved properties of \"product\": price"), "{refused}");
+}
+
+#[tokio::test]
+async fn the_newest_value_wins_on_read_and_the_older_ones_stay() {
+    let app = TestApp::new().await;
+    let (_, latte) = latte_with_price(&app).await;
+    let cafe = write(&app, "Bean Bar", "cafe").await["entity"]["id"].as_str().unwrap().to_string();
+    ok(app.tool("code_relate", json!({"from_id": cafe, "to_id": latte, "label": "sells"})).await);
+    let set = |value: f64, as_of: &str| app.tool("entity_set_property", json!({"entity_id": latte, "property": "price", "value": value, "as_of": as_of}));
+    ok(set(4.5, "2026-01-01").await);
+    ok(set(5.0, "2026-06-01").await);
+    // written last but true earlier: it is history, not the current value
+    ok(set(4.0, "2025-12-01").await);
+
+    let got = ok(app.tool("entities_get", json!({"id": latte})).await);
+    assert_eq!(got["properties"].as_array().unwrap().len(), 1, "{got}");
+    let current = &got["properties"][0];
+    assert_eq!((current["property"].as_str(), current["value"].as_f64(), current["unit"].as_str()), (Some("price"), Some(5.0), Some("AUD")));
+    assert!(current["as_of"].as_str().unwrap().starts_with("2026-06-01"), "{current}");
+
+    let hood = ok(app.tool("entities_neighbourhood", json!({"entity_id": cafe})).await);
+    let node = hood["nodes"].as_array().unwrap().iter().find(|n| n["id"] == latte.as_str()).unwrap();
+    assert_eq!(node["properties"][0]["value"].as_f64(), Some(5.0), "{hood}");
+
+    // a future as_of would pin a value no later write could replace, so it is refused and stores nothing
+    let next_year = (chrono::Utc::now() + chrono::Duration::days(365)).format("%Y-%m-%d").to_string();
+    let refused = set(0.0, &next_year).await;
+    assert!(err(&refused).contains("as_of is in the future"), "{refused}");
+    let in_two_days = (chrono::Utc::now() + chrono::Duration::days(2)).format("%Y-%m-%d").to_string();
+    assert!(err(&set(0.0, &in_two_days).await).contains("as_of is in the future"));
+    let in_an_hour = (chrono::Utc::now() + chrono::Duration::hours(1)).to_rfc3339();
+    assert!(err(&set(0.0, &in_an_hour).await).contains("as_of is in the future"));
+
+    let mut res = app.db().await.test_raw().query("SELECT VALUE value_num FROM entity_property ORDER BY as_of").await.unwrap();
+    let history: Vec<f64> = res.take(0).unwrap();
+    assert_eq!(history, [4.0, 4.5, 5.0]);
+    let o = ok(app.tool("ontology_get", json!({})).await);
+    assert_eq!(property(&o, "product", "price")["values"], 3);
+
+    // a merged-away entity's values move to the winner; a deleted entity's go with it
+    let dup = write(&app, "Caffe Latte", "product").await["entity"]["id"].as_str().unwrap().to_string();
+    ok(app.tool("entity_set_property", json!({"entity_id": dup, "property": "price", "value": 6, "as_of": "2026-09-01"})).await);
+    ok(app.tool("entity_merge", json!({"winner_id": latte, "loser_id": dup})).await);
+    assert_eq!(ok(app.tool("entities_get", json!({"id": latte})).await)["properties"][0]["value"].as_f64(), Some(6.0));
+
+    // today's date where the day starts before UTC's (Melbourne in the morning) is tomorrow in UTC: accepted
+    let tomorrow_utc = (chrono::Utc::now() + chrono::Duration::days(1)).format("%Y-%m-%d").to_string();
+    ok(set(5.5, &tomorrow_utc).await);
+    assert_eq!(ok(app.tool("entities_get", json!({"id": latte})).await)["properties"][0]["value"].as_f64(), Some(5.5));
+    ok(app.tool("entity_delete", json!({"entity_id": latte})).await);
+    let mut res = app.db().await.test_raw().query("SELECT VALUE id FROM entity_property").await.unwrap();
+    let left: Vec<Value> = res.take(0).unwrap();
+    assert!(left.is_empty(), "{left:?}");
+}
+
+#[tokio::test]
+async fn an_unapproved_property_is_not_shown_and_values_stay_in_their_vault() {
+    let app = TestApp::new().await;
+    let (vault, latte) = latte_with_price(&app).await;
+    ok(app.tool("entity_set_property", json!({"entity_id": latte, "property": "price", "value": 4.5})).await);
+    // an approval taken back hides the value on read
+    assert_eq!(decide_property(&app, &vault, "product", "price", json!({"action": "reject"})).await.0, 200);
+    assert_eq!(ok(app.tool("entities_get", json!({"id": latte})).await)["properties"], json!([]));
+
+    // the approval is the personal vault's: a product in Team has no price property
+    ok(app.tool("vault_create", json!({"name": "Team", "kind": "org"})).await);
+    let team_latte = ok(app.tool("memory_write", json!({"subject_name": "Latte", "subject_kind": "product", "text": "on the menu", "vault_id": "Team"})).await);
+    let team_id = team_latte["entity"]["id"].as_str().unwrap();
+    let refused = app.tool("entity_set_property", json!({"entity_id": team_id, "property": "price", "value": 4.5})).await;
+    assert!(err(&refused).contains("does not exist in this vault"), "{refused}");
+
+    // another member of the org who is not in the vault neither reads nor writes its values
+    let bob = common::register(&app.state, "bob@example.com").await;
+    let got = as_user(&app, &bob, "entity_set_property", json!({"entity_id": latte, "property": "price", "value": 1})).await;
+    assert!(err(&got).contains("not found"), "{got}");
+    let got = as_user(&app, &bob, "entities_get", json!({"id": latte})).await;
+    assert!(got.get("properties").is_none(), "{got}");
+}
+
+#[tokio::test]
+async fn a_rejected_link_type_refuses_the_relation_and_names_the_approved_ones() {
+    let app = TestApp::new().await;
+    let ada = write(&app, "Ada", "person").await["entity"]["id"].as_str().unwrap().to_string();
+    let orders = write(&app, "orders_db", "db").await["entity"]["id"].as_str().unwrap().to_string();
+    let vault = personal(&app).await;
+    let path = format!("/api/vaults/{vault}/ontology/links/decide");
+    let decide = |label: &str, action: &str| {
+        let body = json!({"from_kind": "person", "label": label, "to_kind": "db", "decision": {"action": action}});
+        app.http_session("POST", &path, Some(body))
+    };
+    assert_eq!(decide("owns", "reject").await.0, 200);
+    assert_eq!(decide("maintains", "approve").await.0, 200);
+
+    let refused = app.tool("code_relate", json!({"from_id": ada, "to_id": orders, "label": "owns"})).await;
+    assert!(err(&refused).contains("person owns db was rejected") && err(&refused).contains("person maintains db"), "{refused}");
+    assert_eq!(refused["code"], "ontology.rejected", "{refused}");
+    let (status, body) = app.http("POST", &format!("/api/entities/{ada}/relations"), Some(json!({"to_id": orders, "label": "owns"})), true).await;
+    assert_eq!(status, 400, "{body}");
+
+    // an approved label and a label nobody reviewed both pass; the unknown one shows as observed
+    ok(app.tool("code_relate", json!({"from_id": ada, "to_id": orders, "label": "maintains"})).await);
+    ok(app.tool("code_relate", json!({"from_id": ada, "to_id": orders, "label": "reads"})).await);
+    let o = ok(app.tool("ontology_get", json!({})).await);
+    assert_eq!(link(&o, "person", "reads", "db")["status"], "observed");
+    assert_eq!(link(&o, "person", "owns", "db")["count"], 0);
+
+    // a code entity's parent link is grounded too
+    let repo = ok(app.tool("code_entity_upsert", json!({"kind": "repository", "name": "eunomia"})).await)["id"].as_str().unwrap().to_string();
+    let body = json!({"from_kind": "file", "label": "part_of", "to_kind": "repository", "decision": {"action": "reject"}});
+    assert_eq!(app.http_session("POST", &format!("/api/vaults/{vault}/ontology/links/decide"), Some(body)).await.0, 200);
+    // the file is still written; only its rejected parent link is left out
+    let file = ok(app.tool("code_entity_upsert", json!({"kind": "file", "name": "src/main.rs", "parent_id": repo})).await);
+    let got = ok(app.tool("entities_get", json!({"id": file["id"]})).await);
+    assert_eq!(got["relations"].as_array().map(Vec::len), Some(0), "{got}");
+}
+
+#[tokio::test]
+async fn suggest_proposes_properties_and_only_synonyms_written_in_each_kinds_data() {
+    let answer = json!({
+        "kinds": [
+            {"kind": "product", "description": "Something the cafe sells", "synonyms": ["FW", "Long Black"], "reason": "written in a fact"},
+            {"kind": "cafe", "description": "A place that sells coffee", "synonyms": ["FW"], "reason": "copied from product"},
+        ],
+        "links": [],
+        "properties": [
+            {"kind": "product", "name": "price", "datatype": "money", "unit": "AUD", "description": "What one costs", "synonyms": ["sticker price", "cost"], "reason": "facts give prices"},
+            {"kind": "product", "name": "Bad Name", "datatype": "money"},
+            {"kind": "product", "name": "size", "datatype": "enum"},
+        ],
+    });
+    let completion = json!({"choices": [{"message": {"content": answer.to_string()}}]});
+    let mock = serve(vec![route("POST", "/chat/completions", completion)]).await;
+    let settings = Settings { openai_base_url: mock.base.clone(), openai_api_key: Some("sk-test".into()), openai_chat_model: "test-model".into(), ..test_settings() };
+    let app = TestApp::with_settings(settings).await;
+    ok(app.tool("memory_write", json!({"subject_name": "Flat White", "subject_kind": "product", "text": "Flat White, also called FW, has a cost of 4.50 AUD"})).await);
+    write(&app, "Bean Bar", "cafe").await;
+
+    let out = ok(app.tool("ontology_suggest", json!({})).await);
+    assert_eq!((out["mode"].as_str(), out["skipped"].as_i64()), (Some("model"), Some(2)), "{out}");
+    let o = &out["ontology"];
+    let p = property(o, "product", "price");
+    assert_eq!((p["status"].as_str(), p["origin"].as_str(), p["datatype"].as_str(), p["unit"].as_str()), (Some("proposed"), Some("suggested"), Some("money"), Some("AUD")));
+    assert_eq!(p["synonyms"], json!(["cost"]), "only a synonym found in the kind's data");
+    assert_eq!(kind(o, "product")["synonyms"], json!(["FW"]));
+    assert_eq!(kind(o, "cafe")["synonyms"], json!([]), "a synonym from another kind's data is not copied");
+
+    // the model read the facts as evidence
+    let sent: Vec<_> = mock.requests().into_iter().filter(|r| r.path == "/chat/completions").collect();
+    assert!(sent[0].body.contains("also called FW"), "{}", sent[0].body);
 }

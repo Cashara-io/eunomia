@@ -37,7 +37,7 @@ const TENANT_COPY: &[&str] = &[
     "app_settings", "vault", "vault_member", "connector", "sync_status", "cache_record", "person", "organisation", "location", "repository", "file",
     "symbol", "entity", "memory", "chat_thread", "chat_message", "audit_log", "embed_cache", "pocket_recording", "document", "extension", "extension_event", "skill", "change", "change_seq",
     "redact_backfill", "peer_instance", "peer_share", "peer_link", "peer_item", "credential_ref", "secret_provider", "secret_request", "vault_secret",
-    "ontology_kind", "ontology_link",
+    "ontology_kind", "ontology_link", "ontology_property", "entity_property",
 ];
 const TENANT_EDGES: &[&str] = &["linked_to", "relates_to"];
 

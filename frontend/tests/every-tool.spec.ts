@@ -81,6 +81,18 @@ test("every MCP tool works end to end", async ({ request, baseURL }) => {
   await ok("ontology_propose", { kinds: [{ kind: "db", description: "A database" }] });
   expect((await ok("ontology_get")).kinds.find((k: { kind: string }) => k.kind === "db").status).toBe("proposed");
   expect((await ok("ontology_suggest")).mode).toBeTruthy();
+  // a typed property takes a value only once an owner approved it in the browser
+  const ontology = await ok("ontology_propose", { properties: [{ kind: "db", name: "size_gb", datatype: "number", unit: "GB" }] });
+  expect(ontology.properties[0].status).toBe("proposed");
+  const orders = (await ok("entities_search", { query: "orders_db" })).results[0].id as string;
+  expect((await call("entity_set_property", { entity_id: orders, property: "size_gb", value: 120 })).isError).toBe(true);
+  const vaultOf = (await ok("ontology_get")).vault as string;
+  const decided = await request.post(`/api/vaults/${vaultOf}/ontology/properties/decide`, {
+    data: { kind: "db", name: "size_gb", decision: { action: "approve" } },
+  });
+  expect(decided.ok()).toBeTruthy();
+  expect((await ok("entity_set_property", { entity_id: orders, property: "size_gb", value: 120 })).value.value).toBe(120);
+  expect((await ok("entities_get", { id: orders })).properties[0].property).toBe("size_gb");
   const repo = await ok("code_entity_upsert", { kind: "repository", name: "eunomia", summary: "memory system" });
   const file = await ok("code_entity_upsert", { kind: "file", name: "auth.rs", parent_id: repo.id });
   expect(file.id).toBeTruthy();
