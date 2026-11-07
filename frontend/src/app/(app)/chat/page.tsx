@@ -32,6 +32,49 @@ const EXAMPLES = [
 // `callId`: the model's id for a live call, which pairs it with its result
 type ToolStep = { name: string; args: string; result?: string; running?: boolean; callId?: string };
 
+// What each tool did, in the words a person would use. The raw tool name stays in the
+// opened row for whoever needs it.
+const TOOL_WORDS: Record<string, string> = {
+  recall: "Looked through memories",
+  reflect: "Thought it over from memories",
+  search: "Searched synced records",
+  get: "Opened a synced record",
+  list: "Listed synced records",
+  links: "Followed links between records",
+  docs: "Read the help pages",
+  changes_since: "Checked what changed",
+  memory_write: "Saved a memory",
+  memory_write_batch: "Saved memories",
+  memory_update: "Updated a memory",
+  memory_delete: "Deleted a memory",
+  consolidate_observations: "Summarised memories",
+  entities_search: "Searched people and topics",
+  entities_get: "Opened a person or topic",
+  entities_graph: "Looked at connections",
+  entities_neighbourhood: "Followed connections",
+  entity_update: "Updated a person or topic",
+  entity_merge: "Merged two people or topics",
+  entity_delete: "Deleted a person or topic",
+  entity_types: "Checked the kinds in use",
+  ontology_get: "Checked this space's kinds",
+  show_view: "Showed a view",
+  document_list: "Listed documents",
+  document_get: "Read a document",
+  document_upload: "Saved a document",
+  vault_list: "Listed memory spaces",
+  vault_get: "Opened a memory space",
+  vault_members: "Checked who is in a space",
+  skill_find: "Looked for saved instructions",
+  skill_get: "Read saved instructions",
+  http_request: "Called a web address",
+};
+
+function toolWords(name: string): string {
+  if (TOOL_WORDS[name]) return TOOL_WORDS[name];
+  const words = name.replace(/_/g, " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 // A rendered turn: one person's message, or everything the assistant did
 // between two of them (tool calls, their results, and the reply text).
 type Turn =
@@ -102,9 +145,10 @@ function argsPreview(args: string): string {
   try {
     const parsed = JSON.parse(args);
     if (parsed && typeof parsed === "object") {
-      return Object.entries(parsed)
-        .map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`)
-        .join("  ");
+      // the words a person typed or the model chose (a query, a memory, a headline), not record ids
+      return Object.values(parsed)
+        .filter((v): v is string => typeof v === "string" && v.trim() !== "" && !/^[a-z_]+:[a-z0-9]{8,}$/i.test(v))
+        .join(" · ");
     }
   } catch {
     // not JSON, show as-is
@@ -154,16 +198,13 @@ function ToolRow({ step, live }: { step: ToolStep; live?: boolean }) {
   const inspectable = !step.running && !!(step.args || step.result);
   const row = (
     <>
-      {inspectable ? (
-        <ChevronRight size={13} strokeWidth={1.75} className="chev shrink-0" style={{ color: "var(--ink-faint)" }} />
-      ) : (
-        <Wrench size={13} strokeWidth={1.75} className="shrink-0" style={{ color: "var(--ink-faint)" }} />
-      )}
-      <span className="font-mono text-[12px] shrink-0" style={{ color: "var(--accent-text)" }}>
-        {step.name}
+      {/* the opened rows draw their chevron from summary::before; a running row keeps the same indent */}
+      {!inspectable && <span className="w-[14px] shrink-0" aria-hidden />}
+      <span className="text-[13px] font-medium shrink-0" style={{ color: "var(--ink)" }}>
+        {toolWords(step.name)}
       </span>
       {preview && (
-        <span className="font-mono text-[12px] truncate min-w-0" style={{ color: "var(--ink-dim)" }}>
+        <span className="text-[13px] truncate min-w-0" style={{ color: "var(--ink-dim)" }}>
           {preview}
         </span>
       )}
@@ -177,10 +218,13 @@ function ToolRow({ step, live }: { step: ToolStep; live?: boolean }) {
   if (!inspectable) return <div className={`flex items-center gap-2 min-h-10 px-3 ${live ? "tool-live" : ""}`}>{row}</div>;
   return (
     <details className="tool-row">
-      <summary className="press flex items-center gap-2 min-h-10 px-3 cursor-pointer list-none select-none [&::-webkit-details-marker]:hidden">
+      <summary className="flex items-center gap-2 min-h-10 px-3 cursor-pointer list-none select-none [&::-webkit-details-marker]:hidden">
         {row}
       </summary>
-      <div className="px-2.5 pt-1 pb-2.5 flex flex-col gap-2">
+      <div className="px-3 pt-1 pb-3 flex flex-col gap-2">
+        <div className="label">
+          Tool <code className="font-mono">{step.name}</code>
+        </div>
         {step.args && (
           <div>
             <div className="label mb-1">Arguments</div>
@@ -313,7 +357,7 @@ function ThreadList({
 function EmptyState({ onPick }: { onPick: (text: string) => void }) {
   return (
     <div className="flex-1 flex flex-col justify-center w-full max-w-[560px] mx-auto py-8">
-      <h2 className="text-[22px] font-semibold tracking-[-0.015em]" style={{ color: "var(--ink)" }}>
+      <h2 className="text-[22px] font-medium tracking-[-0.03em]" style={{ color: "var(--ink)" }}>
         Ask your memory anything
       </h2>
       <p className="text-[15px] mt-2 mb-5 leading-relaxed" style={{ color: "var(--ink-dim)" }}>
@@ -749,14 +793,12 @@ export default function ChatPage() {
         .example-row:active { background: var(--surface-raised); }
         .press { transition: transform var(--dur-press) var(--ease-out), background-color var(--dur-hover) ease, color var(--dur-hover) ease; }
         .press:active { transform: scale(0.97); }
-        .chev { transition: transform var(--dur-hover) var(--ease-out); }
-        .tool-row[open] .chev { transform: rotate(90deg); }
         .tool-pre {
           font: 11.5px/1.55 var(--font-mono), ui-monospace, monospace;
           color: var(--ink);
           background: var(--surface-raised);
           border: 1px solid var(--border);
-          border-radius: 2px;
+          border-radius: 10px;
           padding: 8px 10px;
           max-height: 240px;
           overflow: auto;

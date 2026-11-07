@@ -953,12 +953,11 @@ a {
 .md li + li { margin-top: 0.2em; }
 .md li::marker { color: var(--ink-faint); }
 .md a { color: var(--accent-text); text-decoration: underline; }
-.md pre { background: var(--bauhaus-app-ink) !important; color: var(--bauhaus-app-cream); border-color: var(--bauhaus-app-ink) !important; }
 .md strong { font-weight: 600; }
 .md hr { border: 0; border-top: var(--hair) solid var(--border); margin: 1em 0; }
 .md blockquote { border-left: 1px solid var(--border-strong); padding-left: 0.9em; color: var(--ink-dim); }
 .md code { font-family: var(--font-mono), ui-monospace, monospace; font-size: 0.88em; background: var(--surface-raised); border: var(--hair) solid var(--border); border-radius: 4px; padding: 0.08em 0.35em; }
-.md pre { background: var(--surface-raised); border: var(--hair) solid var(--border); border-radius: 8px; padding: 0.75em 0.9em; overflow-x: auto; }
+.md pre { background: var(--surface-raised); border: var(--hair) solid var(--border); border-radius: 10px; padding: 0.75em 0.9em; overflow-x: auto; }
 .md pre code { background: none; border: 0; padding: 0; font-size: 0.86em; }
 .md table { border-collapse: collapse; display: block; overflow-x: auto; font-variant-numeric: tabular-nums; }
 .md th, .md td { border: var(--hair) solid var(--border); padding: 0.35em 0.75em; text-align: left; }
