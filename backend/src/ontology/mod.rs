@@ -10,11 +10,18 @@
 //!   value only for an approved property (migration 0034).
 //! * Compute: [`metric::eval`] runs an approved metric over the typed values and returns the entities
 //!   it used (migration 0035); [`metric::decide_metric`] is decided like a property.
-//! * Expose: the `ontology_*` tools, `entity_set_property` and `metric_eval` (`tools/registry/ontology.rs`).
+//! * Auto-map: [`profile`] profiles record fields and CSV columns, [`automap::automap`] proposes kinds,
+//!   properties (with the fields they come from) and value-checked links from them, and
+//!   [`tabular::import_rows`] turns an approved CSV's rows into entities and values (migration 0036).
+//! * Expose: the `ontology_*` tools, `entity_set_property`, `metric_eval` and `document_import_rows`
+//!   (`tools/registry/ontology.rs`).
 
+pub mod automap;
 pub mod metric;
+pub mod profile;
 pub mod property;
 pub mod suggest;
+pub mod tabular;
 
 use std::collections::BTreeMap;
 

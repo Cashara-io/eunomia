@@ -26,6 +26,7 @@ import {
 } from "@/lib/queries/ontology";
 import type { MetricDecision, PropertyDecision } from "@/lib/gen";
 import type { Vault } from "@/lib/types";
+import AutomapBar, { MatchShare } from "./AutomapBar";
 import { Disclosure } from "./bits";
 
 const STATUS: Record<ViewStatus, { tone: StatusTone; label: string }> = {
@@ -113,6 +114,7 @@ export default function OntologySection({ vault }: { vault: Vault }) {
           {note}
         </p>
       )}
+      {isOwner && <AutomapBar vaultId={vault.id} />}
       {error && <ErrorLine error={error} />}
       {query.isError && <ErrorLine error={failure(query.error, "Could not load the kinds in this space.")} />}
 
@@ -564,6 +566,11 @@ function LinkRow({
         onSave={(description) => onDecide({ action: "describe", description }, "Could not save that description.").then((ok) => ok && setEditing(false))}
         onCancel={() => setEditing(false)}
       />
+      {item.status === "proposed" && item.reason && (
+        <p className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+          <MatchShare reason={item.reason} />
+        </p>
+      )}
       {isOwner && !editing && (
         <div className="flex flex-wrap items-center gap-1.5">
           {item.status !== "approved" && (

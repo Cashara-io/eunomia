@@ -28,7 +28,7 @@ expression: stable
       "to": "repository:<id9>"
     },
     {
-      "id": "relates_to:<id29>",
+      "id": "relates_to:<id30>",
       "from": "file:<id10>",
       "label": "part_of",
       "to": "repository:<id9>"

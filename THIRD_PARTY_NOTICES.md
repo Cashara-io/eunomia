@@ -3,8 +3,10 @@
 ## NVIDIA Auto Ontology
 
 Eunomia's typed properties on ontology kinds, synonyms kept per kind, certified metrics (with the
-check that names the nearest listed values when a metric filter's value matches none), and the plans
-for record auto-mapping follow ideas from NVIDIA Auto Ontology.
+check that names the nearest listed values when a metric filter's value matches none), and record
+auto-mapping (sample-based field profiling with top values, uniqueness, small value sets as enum
+candidates and date-format detection; one kind per record type with every field assigned to one
+property; and dropping a link whose values match nothing) follow ideas from NVIDIA Auto Ontology.
 
 - Project: https://github.com/NVIDIA/auto-ontology
 - Studied at commit `c447003f72a822301e927196a4ecb5b597c308d5` (version 1.2.0)

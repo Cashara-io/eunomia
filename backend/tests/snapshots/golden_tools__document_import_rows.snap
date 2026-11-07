@@ -1,0 +1,26 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "document_id": "document:<id21>",
+  "kind": "menu_item",
+  "rows": 2,
+  "created": 2,
+  "updated": 0,
+  "values": 1,
+  "columns": [
+    {
+      "column": "price",
+      "property": "price"
+    }
+  ],
+  "bad": [
+    {
+      "line": 3,
+      "column": "price",
+      "error": "\"price\" is a money property: the value must be a number, like 4.5 (no currency sign or % in the value: the unit says that), got \"oops\""
+    }
+  ],
+  "bad_count": 1
+}

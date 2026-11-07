@@ -2,6 +2,7 @@
 // (backend `routers/ontology.rs`). Deciding works only from a browser session.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  automapVaultOntology,
   decideVaultOntologyKind,
   decideVaultOntologyLink,
   decideVaultOntologyMetric,
@@ -19,7 +20,7 @@ import { call } from "./client";
 import { entityKeys } from "./entities";
 import { invoke } from "./tools";
 
-export type { KindItem, LinkItem, MetricItem, OntologyOut, PropertyItem, SuggestOut, ViewStatus } from "@/lib/gen";
+export type { AutomapOut, KindItem, LinkCheck, LinkItem, MetricItem, OntologyOut, PropertyItem, SuggestOut, ViewStatus } from "@/lib/gen";
 
 export const ontologyKeys = {
   all: ["ontology"] as const,
@@ -78,5 +79,18 @@ export const useSuggestOntology = (vaultId: string) => {
   return useMutation({
     mutationFn: () => call(suggestVaultOntology({ path: { vault_id: vaultId } })),
     onSuccess: (out) => qc.setQueryData(ontologyKeys.vault(vaultId), out.mode === "model" ? out.ontology : out.profile),
+  });
+};
+
+/** Profiles connected records or one CSV and lets the server's model propose; proposals land in the list. */
+export const useAutomap = (vaultId: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { document_id?: string }) => call(automapVaultOntology({ path: { vault_id: vaultId }, body })),
+    onSuccess: (out) => {
+      if (out.mode === "model") qc.setQueryData(ontologyKeys.vault(vaultId), out.ontology);
+      // a CSV's import plan follows its mapping
+      return qc.invalidateQueries({ queryKey: ["documents"] });
+    },
   });
 };

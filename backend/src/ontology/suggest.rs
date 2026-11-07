@@ -230,12 +230,19 @@ fn render_profile(profile: &OntologyOut, facts: &HashMap<String, Vec<String>>) -
 }
 
 async fn ask(p: &Provider, profile: &OntologyOut, facts: &HashMap<String, Vec<String>>) -> AppResult<ModelAnswer> {
+    let user = format!("<profile>\n{}\n</profile>", render_profile(profile, facts));
+    serde_json::from_value(chat_json(p, SYSTEM_PROMPT, &user).await?).map_err(|e| AppError::internal(format!("model did not return the expected JSON: {e}")))
+}
+
+/// One JSON-mode chat completion: `system` as trusted instructions, `user` as the data. The parsed
+/// answer, or why not.
+pub(super) async fn chat_json(p: &Provider, system: &str, user: &str) -> AppResult<Value> {
     let body = json!({
         "model": provider::chat_model(p).await,
         "response_format": {"type": "json_object"},
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": format!("<profile>\n{}\n</profile>", render_profile(profile, facts))},
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
         ],
     });
     let v: Value = p
@@ -244,7 +251,7 @@ async fn ask(p: &Provider, profile: &OntologyOut, facts: &HashMap<String, Vec<St
         .post(p.url("chat/completions"))
         .bearer_auth(p.bearer())
         .json(&body)
-        .timeout(Duration::from_secs(60))
+        .timeout(Duration::from_secs(90))
         .send()
         .await
         .map_err(|e| AppError::internal(format!("chat completion request failed: {e}")))?

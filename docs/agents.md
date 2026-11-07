@@ -194,6 +194,8 @@ No. The connected agent is the model.
 | `ontology_get` | One vault's kinds and link types, with counts, samples, descriptions, synonyms and review status, and each kind's typed properties and metrics |
 | `ontology_suggest` / `ontology_propose` | Propose kinds, merges, link types, typed properties, metrics and synonyms for a vault owner to approve in the app; without a server model `ontology_suggest` returns the profile for you to review |
 | `metric_eval` | Run an approved metric by name (`avg_price`): the number, its unit, as of when, and the entity ids it came from; optional extra filters, `as_of` and a series by period ([certified metrics](#certified-metrics)) |
+| `ontology_automap` | Profile the fields of synced records (all, one `source` or one `record_type`) or an uploaded CSV (`document_id`), and with a server model propose a kind per record type, a typed property per field and links whose values were checked; without a model, the profiles and matching key fields for you to propose ([auto-mapping](#auto-mapping)) |
+| `document_import_rows` | Import an uploaded CSV's rows as entities of an approved kind with values of its approved properties; idempotent, bad cells reported by line ([auto-mapping](#auto-mapping)) |
 | `entity_set_property` | Set one approved typed property of an entity (a `price` on a `product`), checked against its datatype and kept with its date and source ([typed properties](#typed-properties)) |
 | `entity_update` / `entity_merge` / `entity_delete` | Edit, de-duplicate, delete entities |
 | `code_entity_upsert` / `code_relate` | Map repositories, files, symbols and their relations |
@@ -256,6 +258,38 @@ in its list, a date that is not `YYYY-MM-DD`), and a property rejected with no m
 rejected into another (say `cost` into `price`) writes to that one, and the result's `property_mapped`
 says so. Relations are grounded the same way: a `code_relate` whose link type the owners rejected is
 refused, and the error names the approved link types between the two kinds.
+
+### Auto-mapping
+
+`ontology_automap` builds the ontology from what Eunomia already holds. Say a cafe uploads its supplier
+price list as a CSV (product, supplier, price AUD, unit, lead_time_days, status):
+
+1. `document_upload` the file, then `ontology_automap` `{"document_id": "<its id>"}`. Eunomia profiles each
+   column (type, empty share, uniqueness, top values, enum values, date format, min and max). With a
+   server model it returns `mode: "model"`: one kind (`supply_item`), a property per column with the
+   column it comes from in `source_map`, and links such as `supply_item supplied_by organisation` from
+   the supplier column. Each link was checked first: `links[]` says how many of the column's values match
+   an entity of the target kind (or a record of the target type, for an id field), and a link that matches
+   nothing is dropped. Everything is `proposed`.
+2. Without a server model it returns `mode: "profile_only"` with `profiles` and `key_matches` (id fields
+   whose values are another record type's ids, with the share). Propose yourself with `ontology_propose`,
+   giving each property a `source_map` such as `[{"source": "document", "record_type": "<document id>",
+   "path": "price AUD"}]`, so the import knows which column feeds it.
+3. A vault owner approves the kind and the properties in the app (Kinds and links).
+4. `document_import_rows` `{"document_id": "<id>", "kind": "supply_item", "name_column": "product"}`
+   writes each row as an entity found or created by its name, with a value for each column that feeds an
+   approved property (pass `column_map` `{"price AUD": "price"}` to choose yourself). It is refused
+   before the kind and at least one property are approved. It answers with `created`, `updated`,
+   `values`, the `columns` used or skipped (and why), and `bad` cells with their line and column (a
+   `$32.50` in a money column, a status not in the enum); the rest is still imported. Run it again after
+   a new revision of the file: values are updated in place and no entity is made twice.
+5. A metric over the imported values (`avg_price` on `supply_item`) then answers "what does a supply item
+   cost on average?" through `metric_eval`.
+
+For synced records, `ontology_automap` `{"source": "stripe"}` profiles each record type of that source in
+the vault (payload key paths, nested objects to four levels, at most 60 fields and 12 record types). The
+in-app Chat does not run `document_import_rows`: it writes many entities at once from a file, so it stays a
+button on the document and a tool for agents.
 
 ### Certified metrics
 

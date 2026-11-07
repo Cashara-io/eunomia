@@ -9,6 +9,7 @@ import StatusLabel, { type StatusTone } from "@/components/ui/StatusLabel";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import CopyButton from "@/components/bits/CopyButton";
+import CsvProfile from "@/components/documents/CsvProfile";
 import { downloadDocumentFile, uploadDocumentFile } from "@/lib/api";
 import type { DocumentOut } from "@/lib/gen";
 import { useMe } from "@/lib/queries/auth";
@@ -350,6 +351,8 @@ function DocumentPanel({ id, chunk, onClose }: { id: string; chunk: string | nul
         <DeleteDocument doc={doc} onDeleted={onClose} />
       </div>
       {error && <ErrorLine error={error} />}
+
+      {doc.media_type === "text/csv" && <CsvProfile documentId={doc.id} />}
 
       <div className="flex flex-col gap-2 min-w-0">
         <h3 className="section-title flex items-center gap-2">

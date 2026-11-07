@@ -102,6 +102,24 @@ test("every MCP tool works end to end", async ({ request, baseURL }) => {
   expect(approvedMetric.ok()).toBeTruthy();
   const total = await ok("metric_eval", { metric: "total_size_gb" });
   expect([total.value, total.unit, total.entity_ids]).toEqual([120, "GB", [orders]]);
+  // auto-mapping a CSV, then importing its rows once an owner approved the kind and a property
+  const csv = await ok("document_upload", { filename: "menu.csv", text: "product,price\nLatte,4.50\nMocha,5.00\n" });
+  const mapped = await ok("ontology_automap", { document_id: csv.id });
+  expect(["model", "profile_only"]).toContain(mapped.mode);
+  const importArgs = { document_id: csv.id, kind: "menu_item", name_column: "product" };
+  expect((await call("document_import_rows", importArgs)).isError).toBe(true);
+  await ok("ontology_propose", {
+    kinds: [{ kind: "menu_item" }],
+    properties: [{ kind: "menu_item", name: "price", datatype: "money", unit: "AUD", source_map: [{ source: "document", record_type: csv.id, path: "price" }] }],
+  });
+  for (const [path, data] of [
+    ["kinds", { kind: "menu_item", decision: { action: "approve" } }],
+    ["properties", { kind: "menu_item", name: "price", decision: { action: "approve" } }],
+  ] as const) {
+    expect((await request.post(`/api/vaults/${vaultOf}/ontology/${path}/decide`, { data })).ok()).toBeTruthy();
+  }
+  const imported = await ok("document_import_rows", importArgs);
+  expect([imported.created, imported.values, imported.bad_count]).toEqual([2, 2, 0]);
   const repo = await ok("code_entity_upsert", { kind: "repository", name: "eunomia", summary: "memory system" });
   const file = await ok("code_entity_upsert", { kind: "file", name: "auth.rs", parent_id: repo.id });
   expect(file.id).toBeTruthy();

@@ -1187,7 +1187,9 @@ pub async fn eval(db: &OrgDb, owner: &RecordId, args: &EvalArgs) -> AppResult<Me
         series: None,
     };
     if !extra.is_empty() {
-        out.expr_words.push_str(&format!(", and where {}", extra.iter().map(|c| filter_words(&c.filter)).collect::<Vec<_>>().join(" and ")));
+        let joined = extra.iter().map(|c| filter_words(&c.filter)).collect::<Vec<_>>().join(" and ");
+        let glue = if out.expr_words.contains(" where ") { " and " } else { " where " };
+        out.expr_words.push_str(&format!("{glue}{joined}"));
     }
     if !unlisted.is_empty() {
         // a filter value listed nowhere matches nothing: say so instead of returning 0

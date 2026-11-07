@@ -9,7 +9,9 @@ use std::sync::Arc;
 use serde_json::json;
 
 use super::{bad_args, kind_schema, parse_opt_rid, parse_rid, register, to_tool_value, ToolSpec};
+use crate::ontology::automap::{self, AutomapArgs};
 use crate::ontology::metric::{self, EvalArgs};
+use crate::ontology::tabular::{self, ImportArgs};
 use crate::ontology::property::{self, Datatype};
 use crate::ontology::{self, Proposals};
 
@@ -54,6 +56,20 @@ fn propose_schema() -> serde_json::Value {
                         "synonyms": synonyms_schema(),
                         "merge_into": {"type": "string", "description": "propose folding this property into that one of the same kind (the one to keep)"},
                         "reason": {"type": "string", "description": "why, for the person who reviews it"},
+                        "source_map": {
+                            "type": "array",
+                            "maxItems": 20,
+                            "description": "the record fields or CSV columns its values come from, from ontology_automap's profiles; a CSV import reads it to know which column feeds this property",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "source": {"type": "string", "description": "the records' source (stripe), or document for an uploaded CSV"},
+                                    "record_type": {"type": "string", "description": "the record type (stripe.charge), or the CSV's document id"},
+                                    "path": {"type": "string", "description": "the payload key path (billing.country) or the CSV column"},
+                                },
+                                "required": ["source", "record_type", "path"],
+                            },
+                        },
                     },
                     "required": ["kind", "name", "datatype"],
                 },
@@ -149,6 +165,7 @@ fn vault_only_schema(what: &str) -> serde_json::Value {
 
 pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
     register_eval(registry);
+    register_automap(registry);
     #[derive(serde::Deserialize, Default)]
     struct VaultArgs {
         #[serde(default)]
@@ -302,6 +319,61 @@ pub(super) fn register_eval(registry: &mut HashMap<&'static str, ToolSpec>) {
                     Err(e) => return Ok(bad_args(e)),
                 };
                 Ok(to_tool_value(metric::eval(&state.db, owner, &a).await))
+            })
+        }),
+    );
+}
+
+/// `ontology_automap` and `document_import_rows`: map records and a CSV, then import the CSV's rows.
+fn register_automap(registry: &mut HashMap<&'static str, ToolSpec>) {
+    register(
+        registry,
+        "ontology_automap",
+        json!({
+            "type": "object",
+            "properties": {
+                "source": {"type": "string", "description": "only this source's synced records, e.g. stripe"},
+                "record_type": {"type": "string", "description": "only this record type, e.g. stripe.charge"},
+                "document_id": {"type": "string", "description": "map an uploaded CSV instead of synced records"},
+                "vault_id": {"type": "string", "description": "the vault to map into (a vault id or its name); omit for a CSV's own vault, else your personal vault"},
+            },
+        }),
+        Arc::new(|state, owner, args| {
+            Box::pin(async move {
+                let a: AutomapArgs = match serde_json::from_value(args) {
+                    Ok(a) => a,
+                    Err(e) => return Ok(bad_args(e)),
+                };
+                Ok(to_tool_value(automap::automap(state, &state.settings, owner, &a).await))
+            })
+        }),
+    );
+
+    register(
+        registry,
+        "document_import_rows",
+        json!({
+            "type": "object",
+            "properties": {
+                "document_id": {"type": "string", "description": "an uploaded CSV"},
+                "kind": {"type": "string", "description": "the approved kind each row becomes, e.g. product"},
+                "name_column": {"type": "string", "description": "the column that names each row's entity, e.g. product"},
+                "column_map": {
+                    "type": "object",
+                    "additionalProperties": {"type": "string"},
+                    "description": "column to property name, e.g. {\"price AUD\": \"price\"}; omit to use each property's source_map from ontology_automap, else the property named like the column",
+                },
+                "as_of": {"type": "string", "description": "when the values were true (ISO 8601 date or datetime), if not now"},
+            },
+            "required": ["document_id", "kind", "name_column"],
+        }),
+        Arc::new(|state, owner, args| {
+            Box::pin(async move {
+                let a: ImportArgs = match serde_json::from_value(args) {
+                    Ok(a) => a,
+                    Err(e) => return Ok(bad_args(e)),
+                };
+                Ok(to_tool_value(tabular::import_rows(state, owner, &a, crate::ontology::Origin::Agent).await))
             })
         }),
     );

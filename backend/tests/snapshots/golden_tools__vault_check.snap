@@ -3,7 +3,7 @@ source: tests/golden_tools.rs
 expression: stable
 ---
 {
-  "vault": "vault:<id27>",
+  "vault": "vault:<id28>",
   "ok": true,
   "dangling_memories": [],
   "misfiled_memories": [],
