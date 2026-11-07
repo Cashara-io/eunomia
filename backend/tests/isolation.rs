@@ -464,6 +464,15 @@ const NO_SECRET_ROWS: &[&str] = &[
 fn attack_value(tool: &str, prop: &str, schema: &Value, victim: &Org) -> Value {
     let id = |i: usize| json!(victim.ids.entities[i]);
     match (tool, prop) {
+        // a what-if in the attacker's own vault over the victim's entities and metric: every id must be unknown
+        ("scenario_run", "vault_id") => Value::Null,
+        ("scenario_run", "changes") => json!([
+            {"set": {"entity_id": id(0), "property": "ledger_code", "value": "x"}},
+            {"remove": {"entity_id": id(1)}},
+            {"shift": {"kind": "person", "property": "ledger_code", "delta": 1, "related_to": {"entity_id": id(4)}}},
+        ]),
+        ("scenario_run", "metrics") => json!(["ledger_codes"]),
+        ("scenario_run", "impact_from") => json!([id(4)]),
         (_, p) if p.contains("vault") && p.ends_with("ids") => json!([victim.ids.vault]),
         (_, p) if p.contains("vault") => json!(victim.ids.vault),
         ("get", "id") | ("links", "id") => json!(victim.ids.routed),

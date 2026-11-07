@@ -92,6 +92,7 @@ pub const READ_ONLY_TOOLS: &[&str] = &[
     "entity_types",
     "ontology_get",
     "metric_eval",
+    "scenario_run",
     "vault_list",
     "vault_members",
     "vault_invitations",
@@ -164,6 +165,7 @@ pub fn description(name: &str) -> &'static str {
         "ontology_automap" => "Build the vault's ontology from its records: Eunomia profiles the fields of the synced records it holds (all of them, one `source` or one `record_type`) or the columns of an uploaded CSV (`document_id`): each field's type, empty share, uniqueness, top values, enum values, date format, min and max. With a server model it proposes, per record type, one kind, a typed property for each field (with the field it comes from) and links for fields that hold another record's key or an entity's name. Every link is checked against the values first: one that matches nothing is dropped, and a kept one says the share that matches (\"82% of values match\"). Proposals wait for a vault owner in the Eunomia app. Without a server model it returns `mode: \"profile_only\"` with the profiles and the key fields that match another record type, for you to propose with `ontology_propose`.",
         "document_import_rows" => "Import an uploaded CSV's rows as entities of an approved kind, each found or created by its `name_column`, with a value for each column that feeds an approved property of the kind (from `ontology_automap`'s mapping, or `column_map`). Each value is checked as `entity_set_property` checks it and names the document as its source. Refused until a vault owner approved the kind and at least one property. Running it again updates the values and never duplicates an entity; a bad cell is reported with its line and column and the rest is still imported.",
         "metric_eval" => "Compute one of the vault's metrics by name (`ontology_get` lists them), e.g. {\"metric\": \"avg_price\"}: the server reads each entity's latest property value as of `as_of` (default now), applies the metric's filters and any extra `filters` you pass, and returns `value` with its `unit`, `n_entities` and `entity_ids` (the entities it used: cite them), `status` and `warnings`. Only an approved metric runs; a proposed one needs `allow_unapproved: true` and comes back marked `proposed` (never present it as checked). A rejected metric with a merge target runs that one (`metric_mapped`). With `group_by_grain` a metric with a time property returns `series` by period instead of one value. Read every warning: a filter value listed nowhere returns no value and names the nearest listed ones, so fix the spelling instead of reporting 0. Use this for any number about the vault's entities instead of adding up values yourself.",
+        "scenario_run" => "Answer a what-if (\"what if we raise the latte price by 30 cents?\", \"what if Truck 7 never arrives?\") with numbers the server computes, saving nothing. `changes`, applied in order, each one of: {\"set\": {entity_id, property, value, unit?}} a hypothetical value; {\"scale\": {kind, property, factor, entity_ids?, filters?, related_to?}} e.g. factor 1.1 on every product `related_to` {entity_id: <supplier>, label: \"supplied_by\"}; {\"shift\": {kind, property, delta, entity_ids?, filters?, related_to?}} e.g. delta 0.3 on the price of `entity_ids` [<the latte>]; {\"remove\": {entity_id}} the entity counts in no metric. Only approved properties change, values are checked as `entity_set_property` checks them, and scale and shift take only number, integer, money and percent properties (at most 500 entities each). `metrics` (approved names from `ontology_get`, at most 10) run on the real values (`baseline`) and on the what-if's (`scenario`, with `delta` and `delta_pct`); `changed` lists each value before and after, and `reached` the entities within `depth` relations (default 2) of the changed and removed ones and of `impact_from`, each with the relation it came through. Plain data: you decide what is affected and why. Read `warnings`. Then show it with `show_view` `view` \"scenario\", and say nothing was saved.",
         "entity_set_property" => "Set one typed property of an entity, e.g. the `price` of a `product` to 4.5 (unit AUD). The property must be approved for the entity's kind in its vault (`ontology_get` lists them): an unknown or proposed one is refused (propose it with `ontology_propose` and wait for a vault owner), and a rejected one with a merge target writes there instead (`property_mapped` says so). The value must fit the datatype: a number for money, number and percent, true or false, an ISO date, or one of an enum's values. Each write is kept with its `as_of` date and source: the newest is the current value that `entities_get` and `entities_neighbourhood` show, and older ones stay as history.",
         "entities_get" => "Get one entity with its memories (facts and consolidated observations), its relations to other entities, and the current value of each approved property it has (`properties`: value, unit, as_of, source).",
         "entities_graph" => "Get the entity relationship graph (nodes and edges), optionally restricted to some entity kinds or a vault.",
@@ -657,6 +659,7 @@ mod tests {
             "entity_types",
             "ontology_get",
             "metric_eval",
+            "scenario_run",
             "vault_list",
             "vault_members",
             "vault_invitations",
@@ -765,7 +768,7 @@ mod tests {
             "vault_share_code", "vault_join_shared", "vault_peers", "vault_peer_sync",
             "secret_request", "secret_request_status", "secret_transform", "http_request",
             "ontology_get", "ontology_suggest", "ontology_propose", "entities_neighbourhood", "show_view", "entity_set_property",
-            "metric_eval", "ontology_automap", "document_import_rows",
+            "metric_eval", "scenario_run", "ontology_automap", "document_import_rows",
         ];
         let tools = all_tools();
         for name in expected {
