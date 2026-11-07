@@ -82,6 +82,8 @@ const MAX_UNIT: usize = 32;
 const MAX_ENUM_VALUES: usize = 100;
 const MAX_SYNONYMS: usize = 20;
 const MAX_VALUE_TEXT: usize = 2000;
+/// Most record fields or CSV columns one property is mapped from.
+const MAX_SOURCE_FIELDS: usize = 20;
 /// How far past now an `as_of` may be, for clock skew between the agent and the server.
 const AS_OF_LEEWAY_MINUTES: i64 = 5;
 
@@ -145,6 +147,37 @@ pub(super) fn clean_unit(unit: Option<&str>) -> AppResult<Option<String>> {
     Ok(Some(u.to_string()))
 }
 
+/// A record field or CSV column a property's values come from: `source` and `record_type` name the
+/// records (`stripe`, `stripe.charge`), or `document` and the document id for an uploaded CSV, and
+/// `path` the payload key path or the column.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct SourceField {
+    pub source: String,
+    pub record_type: String,
+    pub path: String,
+}
+
+fn clean_source_map(fields: &[SourceField]) -> AppResult<Vec<SourceField>> {
+    if fields.len() > MAX_SOURCE_FIELDS {
+        return Err(AppError::bad_request(format!("a property is mapped from at most {MAX_SOURCE_FIELDS} fields")));
+    }
+    let mut out: Vec<SourceField> = Vec::new();
+    for f in fields {
+        let trim = |s: &str, what: &str| {
+            let s = s.trim();
+            if s.is_empty() || s.chars().count() > 200 {
+                return Err(AppError::bad_request(format!("a source_map {what} is 1 to 200 characters")));
+            }
+            Ok(s.to_string())
+        };
+        let f = SourceField { source: trim(&f.source, "source")?, record_type: trim(&f.record_type, "record_type")?, path: trim(&f.path, "path")? };
+        if !out.contains(&f) {
+            out.push(f);
+        }
+    }
+    Ok(out)
+}
+
 // ---------------------------------------------------------------------------
 // Proposals
 // ---------------------------------------------------------------------------
@@ -168,6 +201,9 @@ pub struct PropertyProposal {
     pub merge_into: Option<String>,
     #[serde(default)]
     pub reason: Option<String>,
+    /// The record fields or CSV columns its values come from.
+    #[serde(default)]
+    pub source_map: Vec<SourceField>,
 }
 
 pub(super) struct ValidProperty {
@@ -180,6 +216,7 @@ pub(super) struct ValidProperty {
     pub(super) synonyms: Vec<String>,
     merge_into: Option<PropertyName>,
     reason: Option<String>,
+    pub(super) source_map: Vec<SourceField>,
 }
 
 impl PropertyProposal {
@@ -214,6 +251,7 @@ impl PropertyProposal {
             description: clean_text("description", self.description.as_deref())?,
             merge_into,
             reason: clean_text("reason", self.reason.as_deref())?,
+            source_map: clean_source_map(&self.source_map)?,
         })
     }
 }
@@ -247,6 +285,7 @@ pub(super) async fn apply_properties(db: &OrgDb, vault: &RecordId, props: Vec<Va
                 .bind(("merge_into", p.merge_into.as_ref().map(|m| m.0.clone())))
                 .bind(("origin", origin.as_str().to_string()))
                 .bind(("reason", p.reason.clone()))
+                .bind(("source_map", serde_json::to_value(&p.source_map).unwrap_or_default()))
                 .await?;
             let rows: Vec<PropertyRow> = res.take(q::PROPOSE_PROPERTY.slot)?;
             rows.into_iter().next().ok_or_else(|| surrealdb::Error::query("ontology property upsert returned no row".into(), None))
@@ -287,6 +326,15 @@ pub(super) struct PropertyRow {
     #[serde(default)]
     #[surreal(default)]
     reason: Option<String>,
+    #[serde(default)]
+    #[surreal(default)]
+    source_map: Value,
+}
+
+impl PropertyRow {
+    pub(super) fn source_map(&self) -> Vec<SourceField> {
+        serde_json::from_value(self.source_map.clone()).unwrap_or_default()
+    }
 }
 
 #[derive(Debug, Deserialize, SurrealValue)]
@@ -337,6 +385,8 @@ pub struct PropertyItem {
     pub values: i64,
     /// A few of them, as text with their unit.
     pub samples: Vec<String>,
+    /// The record fields or CSV columns it was mapped from.
+    pub source_map: Vec<SourceField>,
 }
 
 /// The vault's properties by kind, each kind's by name. None on a database before migration 0034.
@@ -366,7 +416,9 @@ pub(super) async fn properties_by_kind(db: &OrgDb, vault: &RecordId) -> AppResul
             }
             None => (0, Vec::new()),
         };
+        let source_map = r.source_map();
         out.entry(r.kind.clone()).or_default().push(PropertyItem {
+            source_map,
             datatype,
             status: Status::parse(&r.status)?,
             origin: Origin::parse(&r.origin)?,
@@ -631,6 +683,56 @@ async fn refuse_unknown(db: &OrgDb, vault: &RecordId, kind: &Kind, name: &Proper
     ))
 }
 
+/// The approved property a write of `asked` on `kind` lands on: itself, or the merge target of a
+/// rejected one (`Some` mapping). Refused for a property that is unknown, proposed, or rejected with no
+/// approved target. What `entity_set_property` and a CSV import both check.
+pub(super) async fn resolve_approved(db: &OrgDb, vault: &RecordId, kind: &Kind, asked: &PropertyName) -> AppResult<(PropertyRow, Option<PropertyMapped>)> {
+    let lookup = |name: &PropertyName| {
+        let id = property_rid(vault, kind, name);
+        async move {
+            match q::PROPERTY.on(db).bind(("id", id)).await {
+                Err(e) if no_ontology_table(&e) => Ok(None),
+                res => Ok::<_, AppError>(res?.take::<Vec<PropertyRow>>(0)?.into_iter().next()),
+            }
+        }
+    };
+    let Some(row) = lookup(asked).await? else {
+        return Err(refuse_unknown(db, vault, kind, asked, "does not exist in this vault").await);
+    };
+    match Status::parse(&row.status)? {
+        Status::Approved => Ok((row, None)),
+        Status::Proposed => Err(not_approved(kind, asked)),
+        Status::Rejected => {
+            let Some(target) = row.merge_into.as_deref().map(PropertyName::parse).transpose()? else {
+                return Err(refuse_unknown(db, vault, kind, asked, "was rejected for this vault").await);
+            };
+            match lookup(&target).await? {
+                Some(t) if Status::parse(&t.status)? == Status::Approved => Ok((t, Some(PropertyMapped { from: asked.0.clone(), to: target.0.clone() }))),
+                Some(t) if Status::parse(&t.status)? == Status::Proposed => Err(not_approved(kind, &target)),
+                _ => Err(refuse_unknown(db, vault, kind, &target, "was rejected for this vault").await),
+            }
+        }
+    }
+}
+
+/// When a value was true: `given` (an ISO 8601 date or datetime) or now. Refused in the future: the
+/// newest as_of is the current value and single values cannot be deleted, so a future date would pin a
+/// value that no later write could replace.
+pub(super) fn parse_as_of(given: Option<&str>) -> AppResult<chrono::DateTime<chrono::Utc>> {
+    let given = given.map(str::trim).filter(|s| !s.is_empty());
+    let as_of = match given {
+        Some(s) => crate::cache::search::parse_datetime("as_of", s)?,
+        None => chrono::Utc::now(),
+    };
+    // A bare date reads as midnight UTC, which is still ahead of now for half the world on that day
+    // (Melbourne until 11am), so it gets a day of leeway; a datetime gets a few minutes of clock skew.
+    let leeway = if given.is_some_and(|s| !s.contains('T')) { chrono::Duration::days(1) } else { chrono::Duration::minutes(AS_OF_LEEWAY_MINUTES) };
+    if as_of > chrono::Utc::now() + leeway {
+        return Err(AppError::bad_request("as_of is in the future: give when the value became true, today or earlier"));
+    }
+    Ok(as_of)
+}
+
 /// Writes one value of an approved property on an entity the caller may write to. Refused for a
 /// property that is unknown, proposed, or rejected with no merge target; a rejected one with a target
 /// writes to that property and says so. The value must parse as the property's datatype.
@@ -644,50 +746,11 @@ pub async fn set_property(db: &OrgDb, owner: &RecordId, input: SetProperty<'_>) 
     let vault = entity.vault.clone();
     let kind = Kind::parse(&entity.kind())?;
     let asked = PropertyName::parse(input.property)?;
-    let lookup = |name: &PropertyName| {
-        let id = property_rid(&vault, &kind, name);
-        async move {
-            match q::PROPERTY.on(db).bind(("id", id)).await {
-                Err(e) if no_ontology_table(&e) => Ok(None),
-                res => Ok::<_, AppError>(res?.take::<Vec<PropertyRow>>(0)?.into_iter().next()),
-            }
-        }
-    };
-    let Some(row) = lookup(&asked).await? else {
-        return Err(refuse_unknown(db, &vault, &kind, &asked, "does not exist in this vault").await);
-    };
-    let (row, mapped) = match Status::parse(&row.status)? {
-        Status::Approved => (row, None),
-        Status::Proposed => return Err(not_approved(&kind, &asked)),
-        Status::Rejected => {
-            let Some(target) = row.merge_into.as_deref().map(PropertyName::parse).transpose()? else {
-                return Err(refuse_unknown(db, &vault, &kind, &asked, "was rejected for this vault").await);
-            };
-            match lookup(&target).await? {
-                Some(t) if Status::parse(&t.status)? == Status::Approved => {
-                    (t, Some(PropertyMapped { from: asked.0.clone(), to: target.0.clone() }))
-                }
-                Some(t) if Status::parse(&t.status)? == Status::Proposed => return Err(not_approved(&kind, &target)),
-                _ => return Err(refuse_unknown(db, &vault, &kind, &target, "was rejected for this vault").await),
-            }
-        }
-    };
+    let (row, mapped) = resolve_approved(db, &vault, &kind, &asked).await?;
     let datatype = Datatype::parse(&row.datatype)?;
     let stored = parse_value(datatype, &row.name, row.enum_values.as_deref(), input.value)?;
     let unit = clean_unit(input.unit)?;
-    let given = input.as_of.map(str::trim).filter(|s| !s.is_empty());
-    let as_of = match given {
-        Some(s) => crate::cache::search::parse_datetime("as_of", s)?,
-        None => chrono::Utc::now(),
-    };
-    // A bare date reads as midnight UTC, which is still ahead of now for half the world on that day
-    // (Melbourne until 11am), so it gets a day of leeway; a datetime gets a few minutes of clock skew.
-    let leeway = if given.is_some_and(|s| !s.contains('T')) { chrono::Duration::days(1) } else { chrono::Duration::minutes(AS_OF_LEEWAY_MINUTES) };
-    // the newest as_of is the current value and single values cannot be deleted, so a future date
-    // would pin a value that no later write could replace
-    if as_of > chrono::Utc::now() + leeway {
-        return Err(AppError::bad_request("as_of is in the future: give when the value became true, today or earlier"));
-    }
+    let as_of = parse_as_of(input.as_of)?;
     let source = input.source_record_id.map(|r| cache_record_rid(owner, r));
     let written: Vec<ValueRow> = q::SET_VALUE
         .on(db)
@@ -879,6 +942,7 @@ mod tests {
             synonyms: vec!["Size".into(), " cup size ".into(), "cup size".into()],
             merge_into: None,
             reason: None,
+            source_map: vec![],
         };
         assert!(p("enum", None).validate().is_err());
         assert!(p("text", Some(vec!["a".into()])).validate().is_err());
