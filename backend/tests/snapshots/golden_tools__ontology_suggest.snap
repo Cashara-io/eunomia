@@ -1,0 +1,144 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "mode": "profile_only",
+  "profile": {
+    "vault": "vault:<id2>",
+    "kinds": [
+      {
+        "kind": "person",
+        "built_in": true,
+        "status": "observed",
+        "description": null,
+        "merge_into": null,
+        "origin": null,
+        "reason": null,
+        "entities": 1,
+        "samples": [
+          "Alice"
+        ]
+      },
+      {
+        "kind": "organisation",
+        "built_in": true,
+        "status": "observed",
+        "description": null,
+        "merge_into": null,
+        "origin": null,
+        "reason": null,
+        "entities": 0,
+        "samples": []
+      },
+      {
+        "kind": "location",
+        "built_in": true,
+        "status": "observed",
+        "description": null,
+        "merge_into": null,
+        "origin": null,
+        "reason": null,
+        "entities": 0,
+        "samples": []
+      },
+      {
+        "kind": "repository",
+        "built_in": true,
+        "status": "observed",
+        "description": null,
+        "merge_into": null,
+        "origin": null,
+        "reason": null,
+        "entities": 1,
+        "samples": [
+          "eunomia"
+        ]
+      },
+      {
+        "kind": "file",
+        "built_in": true,
+        "status": "observed",
+        "description": null,
+        "merge_into": null,
+        "origin": null,
+        "reason": null,
+        "entities": 1,
+        "samples": [
+          "main.rs"
+        ]
+      },
+      {
+        "kind": "symbol",
+        "built_in": true,
+        "status": "observed",
+        "description": null,
+        "merge_into": null,
+        "origin": null,
+        "reason": null,
+        "entities": 0,
+        "samples": []
+      },
+      {
+        "kind": "db",
+        "built_in": false,
+        "status": "proposed",
+        "description": "A database a service reads or writes",
+        "merge_into": null,
+        "origin": "agent",
+        "reason": null,
+        "entities": 1,
+        "samples": [
+          "orders_db"
+        ]
+      }
+    ],
+    "links": [
+      {
+        "from_kind": "file",
+        "label": "imports",
+        "to_kind": "repository",
+        "status": "observed",
+        "description": null,
+        "origin": null,
+        "reason": null,
+        "count": 1,
+        "samples": [
+          {
+            "from": "main.rs",
+            "to": "eunomia"
+          }
+        ]
+      },
+      {
+        "from_kind": "file",
+        "label": "part_of",
+        "to_kind": "repository",
+        "status": "observed",
+        "description": null,
+        "origin": null,
+        "reason": null,
+        "count": 1,
+        "samples": [
+          {
+            "from": "main.rs",
+            "to": "eunomia"
+          }
+        ]
+      },
+      {
+        "from_kind": "person",
+        "label": "owns",
+        "to_kind": "db",
+        "status": "proposed",
+        "description": null,
+        "origin": "agent",
+        "reason": null,
+        "count": 0,
+        "samples": []
+      }
+    ]
+  },
+  "hint": "Eunomia has no model configured, so you review the ontology. Read the profile: each kind and link type with its counts and sample names. Then call `ontology_propose` with a one-sentence description for each kind and link type that has none, the kinds that name the same thing as another (`merge_into` the one to keep), and the link types worth keeping. A vault owner approves or rejects proposals in the Eunomia app.",
+  "note": null
+}

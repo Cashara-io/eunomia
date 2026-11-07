@@ -188,7 +188,9 @@ No. The connected agent is the model.
 | `memory_write_batch` | Remember up to 100 facts in one call, one result per fact; for imports |
 | `memory_update` / `memory_delete` | Edit or delete one memory |
 | `entities_search` / `entities_get` / `entities_graph` | Find and read people, orgs, places, code and custom kinds |
-| `entity_types` | The built-in entity kinds and the custom kinds agents created (any new lowercase `subject_kind` creates one) |
+| `entity_types` | The built-in entity kinds and the custom kinds agents created (any new lowercase `subject_kind` creates one), each with its review status |
+| `ontology_get` | One vault's kinds and link types, with counts, samples, descriptions and review status |
+| `ontology_suggest` / `ontology_propose` | Propose kinds, merges and link types for a vault owner to approve in the app; without a server model `ontology_suggest` returns the profile for you to review |
 | `entity_update` / `entity_merge` / `entity_delete` | Edit, de-duplicate, delete entities |
 | `code_entity_upsert` / `code_relate` | Map repositories, files, symbols and their relations |
 | `consolidate_observations` | Fold new facts into each entity's belief |

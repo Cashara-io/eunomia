@@ -7334,6 +7334,216 @@
         ]
       }
     },
+    "/api/vaults/{vault_id}/ontology": {
+      "get": {
+        "tags": [
+          "vaults"
+        ],
+        "summary": "The vault's entity kinds and link types, observed and reviewed",
+        "operationId": "getVaultOntology",
+        "parameters": [
+          {
+            "name": "vault_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OntologyOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/vaults/{vault_id}/ontology/kinds/decide": {
+      "post": {
+        "tags": [
+          "vaults"
+        ],
+        "summary": "Approve, reject (optionally merging into another kind) or describe a kind (owner, browser session only)",
+        "operationId": "decideVaultOntologyKind",
+        "parameters": [
+          {
+            "name": "vault_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KindDecideBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OntologyOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/vaults/{vault_id}/ontology/links/decide": {
+      "post": {
+        "tags": [
+          "vaults"
+        ],
+        "summary": "Approve, reject or describe a link type (owner, browser session only)",
+        "operationId": "decideVaultOntologyLink",
+        "parameters": [
+          {
+            "name": "vault_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkDecideBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OntologyOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
+    "/api/vaults/{vault_id}/ontology/suggest": {
+      "post": {
+        "tags": [
+          "vaults"
+        ],
+        "summary": "Have the server's model propose kinds, merges and link types (the profile alone without a model)",
+        "operationId": "suggestVaultOntology",
+        "parameters": [
+          {
+            "name": "vault_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuggestOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/vaults/{vault_id}/peers": {
       "get": {
         "tags": [
@@ -9881,6 +10091,143 @@
           }
         }
       },
+      "KindDecideBody": {
+        "type": "object",
+        "required": [
+          "kind",
+          "decision"
+        ],
+        "properties": {
+          "decision": {
+            "$ref": "#/components/schemas/KindDecision"
+          },
+          "kind": {
+            "type": "string"
+          }
+        }
+      },
+      "KindDecision": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "approve"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Writes under the kind go to `merge_into` from now on; without it they are refused.",
+            "required": [
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "reject"
+                ]
+              },
+              "merge_into": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Set or (blank) clear the description; the status stays as it is.",
+            "required": [
+              "description",
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "describe"
+                ]
+              },
+              "description": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "KindItem": {
+        "type": "object",
+        "description": "One entity kind of the vault.",
+        "required": [
+          "kind",
+          "built_in",
+          "status",
+          "entities",
+          "samples"
+        ],
+        "properties": {
+          "built_in": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "entities": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Entities of this kind in the vault."
+          },
+          "kind": {
+            "type": "string"
+          },
+          "merge_into": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Rejected: where writes under this kind go instead. Proposed: the merge the proposer suggests."
+          },
+          "origin": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Origin",
+                "description": "Who proposed it; none for a kind that was never reviewed."
+              }
+            ]
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "samples": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "A few of their names."
+          },
+          "status": {
+            "$ref": "#/components/schemas/ViewStatus"
+          }
+        }
+      },
       "LeftBody": {
         "type": "object",
         "required": [
@@ -9889,6 +10236,153 @@
         "properties": {
           "left": {
             "type": "boolean"
+          }
+        }
+      },
+      "LinkDecideBody": {
+        "type": "object",
+        "required": [
+          "from_kind",
+          "label",
+          "to_kind",
+          "decision"
+        ],
+        "properties": {
+          "decision": {
+            "$ref": "#/components/schemas/LinkDecision"
+          },
+          "from_kind": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "to_kind": {
+            "type": "string"
+          }
+        }
+      },
+      "LinkDecision": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "approve"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "reject"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "description",
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "describe"
+                ]
+              },
+              "description": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "LinkItem": {
+        "type": "object",
+        "description": "One link type of the vault: relations labelled `label` from a `from_kind` entity to a `to_kind` one.",
+        "required": [
+          "from_kind",
+          "label",
+          "to_kind",
+          "status",
+          "count",
+          "samples"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Relations of this type in the vault."
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "from_kind": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "origin": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Origin"
+              }
+            ]
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "samples": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LinkSample"
+            }
+          },
+          "status": {
+            "$ref": "#/components/schemas/ViewStatus"
+          },
+          "to_kind": {
+            "type": "string"
+          }
+        }
+      },
+      "LinkSample": {
+        "type": "object",
+        "required": [
+          "from",
+          "to"
+        ],
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
           }
         }
       },
@@ -10368,6 +10862,41 @@
           }
         }
       },
+      "OntologyOut": {
+        "type": "object",
+        "required": [
+          "vault",
+          "kinds",
+          "links"
+        ],
+        "properties": {
+          "kinds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KindItem"
+            },
+            "description": "The built-in kinds first, then the others by name."
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LinkItem"
+            }
+          },
+          "vault": {
+            "type": "string"
+          }
+        }
+      },
+      "Origin": {
+        "type": "string",
+        "description": "Who proposed a row: the server's model, an agent over MCP, or a person in the app.",
+        "enum": [
+          "suggested",
+          "agent",
+          "human"
+        ]
+      },
       "PatchBody": {
         "type": "object",
         "properties": {
@@ -10776,6 +11305,72 @@
           "type": {
             "type": "string",
             "description": "Always `about:blank`."
+          }
+        }
+      },
+      "ProposeOut": {
+        "type": "object",
+        "required": [
+          "kinds",
+          "links"
+        ],
+        "properties": {
+          "kinds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProposedKind"
+            }
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProposedLink"
+            }
+          }
+        }
+      },
+      "ProposedKind": {
+        "type": "object",
+        "description": "A proposed kind after the call: `status` is the row's, so a kind a person already decided shows\nthat decision (the proposal did not change it).",
+        "required": [
+          "kind",
+          "status"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "merge_into": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          }
+        }
+      },
+      "ProposedLink": {
+        "type": "object",
+        "required": [
+          "from_kind",
+          "label",
+          "to_kind",
+          "status"
+        ],
+        "properties": {
+          "from_kind": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          },
+          "to_kind": {
+            "type": "string"
           }
         }
       },
@@ -11817,6 +12412,77 @@
           "preview"
         ]
       },
+      "Status": {
+        "type": "string",
+        "description": "What a person decided about a kind or link, as stored.",
+        "enum": [
+          "proposed",
+          "approved",
+          "rejected"
+        ]
+      },
+      "SuggestOut": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "The server's model proposed; `ontology` is the vault's ontology after the proposals.",
+            "required": [
+              "proposed",
+              "skipped",
+              "ontology",
+              "mode"
+            ],
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "model"
+                ]
+              },
+              "ontology": {
+                "$ref": "#/components/schemas/OntologyOut"
+              },
+              "proposed": {
+                "$ref": "#/components/schemas/ProposeOut"
+              },
+              "skipped": {
+                "type": "integer",
+                "description": "Model proposals left out for an invalid name or field.",
+                "minimum": 0
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "No server model (or it failed): review `profile` yourself and call `ontology_propose`.",
+            "required": [
+              "profile",
+              "hint",
+              "mode"
+            ],
+            "properties": {
+              "hint": {
+                "type": "string"
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "profile_only"
+                ]
+              },
+              "note": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "profile": {
+                "$ref": "#/components/schemas/OntologyOut"
+              }
+            }
+          }
+        ]
+      },
       "SuspendChange": {
         "type": "object",
         "required": [
@@ -12632,6 +13298,16 @@
             "description": "The other side's digest: asked just now (guest), or as of its last exchange (host)."
           }
         }
+      },
+      "ViewStatus": {
+        "type": "string",
+        "description": "A kind or link as the ontology view shows it. `Observed`: used in the vault, never reviewed.",
+        "enum": [
+          "observed",
+          "proposed",
+          "approved",
+          "rejected"
+        ]
       },
       "WebhookOut": {
         "type": "object",

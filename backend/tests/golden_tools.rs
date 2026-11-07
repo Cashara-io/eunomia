@@ -228,6 +228,10 @@ async fn goldens() {
     g.snap("memory_write__custom_kind", "memory_write",
         json!({"subject_name":"orders_db","subject_kind":"db","text":"orders_db runs Postgres 16"})).await;
     g.snap("entity_types", "entity_types", json!({})).await;
+    // -- the project ontology (after entity_types; proposals change no snapshot above) --
+    Box::pin(g.snap("ontology_propose", "ontology_propose", json!({"kinds": [{"kind": "db", "description": "A database a service reads or writes"}], "links": [{"from_kind": "person", "label": "owns", "to_kind": "db"}]}))).await;
+    Box::pin(g.snap("ontology_get", "ontology_get", json!({}))).await;
+    Box::pin(g.snap("ontology_suggest", "ontology_suggest", json!({}))).await;
     // -- bulk writes (after entity_types, so they change no snapshot above): one result per item, a bad one fails alone --
     g.snap("memory_write_batch", "memory_write_batch", json!({"items": [
         {"subject_name": "Import page 1", "subject_kind": "file", "text": "page one says hello"},

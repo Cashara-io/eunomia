@@ -14,7 +14,8 @@ expression: stable
   "custom": [
     {
       "kind": "db",
-      "entities": 1
+      "entities": 1,
+      "status": "observed"
     }
   ]
 }

@@ -44,7 +44,9 @@ Beyond the built-in kinds (person, organisation, location, repository, file,
 symbol), `subject_kind` can be any lowercase name you choose, for example
 `db`, `table`, `field`, `defect`, `decision` or `task`. The first write
 under a new name creates that kind in the vault. Call `entity_types` first
-and reuse a kind that fits, so one thing keeps one kind name.
+and reuse a kind that fits, so one thing keeps one kind name. Prefer kinds
+the vault's owners approved, never write under a rejected one, and suggest
+new kinds with `ontology_propose`.
 
 ## Code
 

@@ -85,6 +85,7 @@ pub fn app_with(state: AppState, limits: ratelimit::RateConfig) -> axum::Router 
         .merge(routers::update::router())
         .merge(routers::https::router())
         .merge(routers::vaults::router())
+        .merge(routers::ontology::router())
         .merge(routers::peers::router())
         .merge(routers::changes::router())
         .merge(routers::connectors::router())

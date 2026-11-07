@@ -268,6 +268,13 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
     // an agent skill with the canary in its description and body (the name is a plain slug an attacker may guess)
     // boxed: this function's future is already near the test thread's stack limit
     Box::pin(call(state, &user, "skill_save", json!({"name": format!("{}-runbook", name.to_lowercase()), "description": format!("{name} runbook {canary}"), "body": format!("steps {canary}")}))).await;
+    // the vault's ontology: a proposed kind and link with the canary in their description and reason
+    Box::pin(call(state, &user, "ontology_propose", json!({
+        "vault_id": vault,
+        "kinds": [{"kind": "db", "description": format!("{name} ledgers {canary}"), "reason": canary}],
+        "links": [{"from_kind": "person", "label": "keeps", "to_kind": "db", "description": format!("keeps {canary}"), "reason": canary}],
+    })))
+    .await;
 
     let (_, body) = raw(router, "POST", "/api/chat/threads", Some(json!({"title": format!("{canary} thread")})), Some(&token), None).await;
     ids.thread = serde_json::from_str::<Value>(&body).unwrap()["id"].as_str().unwrap_or_else(|| panic!("{body}")).to_string();
