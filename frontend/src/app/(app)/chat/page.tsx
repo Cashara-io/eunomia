@@ -17,6 +17,7 @@ import type { ChatMessage, ChatThread } from "@/lib/types";
 import { useMe } from "@/lib/queries/auth";
 import { useSettings } from "@/lib/queries/settings";
 import { chatKeys, historyQuery, threadsQuery, useCreateThread, useDeleteThread, useThreads } from "@/lib/queries/chat";
+import ChatView, { parseView, SHOW_VIEW } from "@/components/chat/views";
 
 // The built-in agent, labelled by the name its system prompt gives it.
 const ASSISTANT = "Eunomia";
@@ -196,6 +197,22 @@ function ToolRow({ step, live }: { step: ToolStep; live?: boolean }) {
   );
 }
 
+/** The views `show_view` drew in this turn, in the order the model drew them. */
+function TurnViews({ steps }: { steps: ToolStep[] }) {
+  const views = steps.flatMap((s) => {
+    const v = s.name === SHOW_VIEW ? parseView(s.result) : null;
+    return v ? [v] : [];
+  });
+  if (views.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-3 mb-3">
+      {views.map((v, i) => (
+        <ChatView key={i} view={v} />
+      ))}
+    </div>
+  );
+}
+
 function ToolSteps({ steps, live }: { steps: ToolStep[]; live?: boolean }) {
   if (steps.length === 0) return null;
   return (
@@ -225,6 +242,7 @@ function TurnView({ turn, me }: { turn: Turn; me: string | null }) {
     <article>
       <TurnHeader name={ASSISTANT} at={turn.at} />
       <ToolSteps steps={turn.steps} />
+      <TurnViews steps={turn.steps} />
       {turn.content && (
         <div className="text-[15px] px-0.5 break-words" style={{ color: "var(--ink)" }}>
           <Markdown text={turn.content} />
@@ -489,7 +507,10 @@ export default function ChatPage() {
           setLiveSteps([...steps]);
         } else if (event.type === "tool_result") {
           const step = steps.find((s) => s.running && s.name === event.name);
-          if (step) step.running = false;
+          if (step) {
+            step.running = false;
+            if (event.view) step.result = JSON.stringify(event.view);
+          }
           setLiveSteps([...steps]);
         } else if (event.type === "error") {
           // code and trace id are optional: older backends send only the message
@@ -498,9 +519,12 @@ export default function ChatPage() {
         }
       }, controller.signal);
       if (reply || steps.length) {
-        // the stream only names tools; reopening the thread loads their full arguments and results
+        // the stream only names tools (and sends a drawn view); reopening the thread loads their full arguments and results
         const tool_calls = steps.map((s, i) => ({ id: `live_${i}`, type: "function" as const, function: { name: s.name, arguments: "" } }));
-        setMessages((prev) => [...(prev ?? []), { role: "assistant", content: reply, tool_calls, created_at: new Date().toISOString() }]);
+        const at = new Date().toISOString();
+        // one result row per call, in order, so the turn pairs each view with its call as history does
+        const results = steps.map((s) => ({ role: "tool" as const, content: s.result ?? "", created_at: at }));
+        setMessages((prev) => [...(prev ?? []), { role: "assistant", content: reply, tool_calls, created_at: at }, ...results]);
       }
       queryClient.invalidateQueries({ queryKey: chatKeys.threads() });
     } catch (e) {
@@ -596,6 +620,7 @@ export default function ChatPage() {
                     </span>
                   </TurnHeader>
                   <ToolSteps steps={liveSteps} live />
+                  <TurnViews steps={liveSteps} />
                   {streamingText && (
                     <div className="settle text-[14px] px-0.5 break-words" style={{ color: "var(--ink)" }}>
                       <Markdown text={streamingText} />

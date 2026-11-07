@@ -129,7 +129,8 @@ export async function downloadExport(): Promise<void> {
 export type ChatStreamEvent =
   | { type: "text"; delta: string }
   | { type: "tool_call"; name: string }
-  | { type: "tool_result"; name: string }
+  // `view`: what a `show_view` call drew (components/chat/views); no other tool's result carries one
+  | { type: "tool_result"; name: string; view?: unknown }
   | { type: "done"; reply: string; tool_calls_made: string[] }
   | { type: "error"; message: string; code?: string; trace_id?: string };
 
