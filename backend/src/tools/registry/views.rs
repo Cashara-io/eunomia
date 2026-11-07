@@ -20,9 +20,10 @@ fn schema() -> serde_json::Value {
     json!({
         "type": "object",
         "properties": {
-            "view": {"type": "string", "enum": ["impact", "subgraph", "metric"], "description": "`impact`: what a change, delay or problem with one entity affects. `subgraph`: how some entities connect. `metric`: an approved metric's number, run again by the server"},
+            "view": {"type": "string", "enum": ["impact", "subgraph", "metric", "scenario"], "description": "`impact`: what a change, delay or problem with one entity affects. `subgraph`: how some entities connect. `metric`: an approved metric's number, run again by the server. `scenario`: a what-if, its metrics before and after, run again by the server"},
             "start_id": {"type": "string", "description": "impact: the entity that changed"},
-            "headline": {"type": "string", "description": "impact: one sentence, what happened (at most 200 characters)"},
+            "headline": {"type": "string", "description": "impact: one sentence, what happened; scenario: one sentence, what the what-if asks (at most 200 characters)"},
+            "scenario": {"type": "object", "description": "scenario: the same arguments you gave scenario_run (changes, metrics, vault_id, as_of, impact_from, depth)"},
             "affected": {
                 "type": "array",
                 "description": "impact: each affected entity once",
@@ -64,6 +65,13 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
         schema(),
         Arc::new(|state, owner, args| {
             Box::pin(async move {
+                let mut args = args;
+                // a scenario's own vault_id may be a name, like every top-level one
+                if let Some(inner) = args.get_mut("scenario")
+                    && let Err(e) = super::resolve_vault_names(&state.db, owner, inner).await
+                {
+                    return Ok(json!({ "error": e }));
+                }
                 let spec: ViewSpec = match serde_json::from_value(args) {
                     Ok(s) => s,
                     Err(e) => return Ok(bad_args(e)),

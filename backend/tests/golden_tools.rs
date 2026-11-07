@@ -250,6 +250,11 @@ async fn goldens() {
     Box::pin(g.snap("metric_eval__proposed", "metric_eval", run.clone())).await;
     g.app.db().await.test_raw().query("UPDATE ontology_metric SET status = 'approved' WHERE name = 'total_size_gb'").await.unwrap().check().unwrap();
     Box::pin(g.snap("metric_eval", "metric_eval", run)).await;
+    // a what-if over it: the metric before and after the databases grow by half, nothing saved
+    let what_if = json!({"changes": [{"scale": {"kind": "db", "property": "size_gb", "factor": 1.5}}], "metrics": ["total_size_gb"], "as_of": "2026-11-02"});
+    Box::pin(g.snap("scenario_run", "scenario_run", what_if.clone())).await;
+    Box::pin(g.snap("show_view__scenario", "show_view", json!({"view": "scenario", "headline": "What if the databases grow by half?", "scenario": what_if}))).await;
+    Box::pin(g.snap("scenario_run__unknown_property", "scenario_run", json!({"changes": [{"scale": {"kind": "person", "property": "name", "factor": 2}}]}))).await;
     // -- auto-mapping: a CSV profiled without a model, its rows refused until an owner approved the mapping, then imported --
     let csv = g.snap("document_upload__csv", "document_upload", json!({"filename": "menu.csv", "text": "product,price\nLatte,4.50\nMocha,oops\n"})).await;
     let csv_id = s(&csv, "/id");
