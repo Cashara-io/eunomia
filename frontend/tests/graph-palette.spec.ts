@@ -62,31 +62,49 @@ test.describe("Entity graph", () => {
     await expect(page.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0);
   });
 
-  test("memory map shows one space at a time, on the shared space picker, including a merge", async ({ page }) => {
+  test("memory map lays several spaces over each other, keeps one, and follows the shared space", async ({ page }) => {
     await registerAndOnboard(page, uniqueEmail("cloud"));
     await seedTwoRelatedPeople(page);
     const team = await tool(page, "vault_create", { name: "Team" });
     await tool(page, "memory_write", { subject_name: "Grace Hopper", subject_kind: "person", text: "Built the first compiler.", vault_id: team.id });
-    const personal = (await tool(page, "vault_list", {})).results.find((v: { kind: string }) => v.kind === "personal");
-    const merged = await tool(page, "vault_merge", { vault_id_a: personal.id, vault_id_b: team.id, name: "Everything" });
-    expect(merged.entities).toBe(3);
 
-    // All three views share one memory space; start this one on Personal (else it opens on the newest shared space).
-    await page.addInitScript(() => window.localStorage.setItem("eunomia.graph.space", ""));
+    // start on Personal (else it opens on the newest shared space); only the first load, so the reload below keeps the pick
+    await page.addInitScript(() => {
+      if (window.localStorage.getItem("eunomia.graph.space") === null) window.localStorage.setItem("eunomia.graph.space", "");
+    });
     await page.goto("/entities");
     await page.getByRole("tab", { name: "Memory map" }).click();
     const map = page.getByRole("img", { name: "Memory map" });
     await expect(map).toBeVisible();
     await expect(page.getByText(/^2 memories/)).toBeVisible();
 
-    const space = page.getByRole("combobox", { name: "Memory space" });
-    await space.click();
-    await page.getByRole("option", { name: "Everything" }).click();
-    await expect(page.getByText(/^3 memories/)).toBeVisible(); // one point per memory
-    await space.click();
-    await page.getByRole("option", { name: "Team" }).click();
-    await expect(page.getByText(/^1 memory/)).toBeVisible();
+    const layers = page.getByRole("group", { name: "Spaces on the map" });
+    const personalChip = layers.getByRole("button", { name: /^Personal/ });
+    const teamChip = layers.getByRole("button", { name: /^Team/ });
+    await expect(personalChip).toHaveAttribute("aria-pressed", "true");
+    await expect(teamChip).toHaveAttribute("aria-pressed", "false");
 
+    // add Team: both spaces, each chip counting its own points
+    await teamChip.click();
+    await expect(page.getByText(/^3 memories/)).toBeVisible();
+    await expect(teamChip).toHaveAttribute("aria-pressed", "true");
+    await expect(teamChip).toContainText("1");
+    await expect(personalChip).toContainText("2");
+
+    // drop Personal: Team alone, and the other views follow to Team
+    await personalChip.click();
+    await expect(page.getByText(/^1 memory/)).toBeVisible();
+    // the last space can't be turned off
+    await teamChip.click();
+    await expect(teamChip).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByText(/^1 memory/)).toBeVisible();
+    await page.getByRole("tab", { name: "Connections" }).click();
+    await expect(page.getByRole("combobox", { name: "Memory space" })).toContainText("Team");
+
+    // and a reload keeps the map's layers
+    await page.reload();
+    await page.getByRole("tab", { name: "Memory map" }).click();
+    await expect(page.getByText(/^1 memory/)).toBeVisible();
     await map.getByRole("button", { name: "Built the first compiler." }).first().press("Enter");
     await expect(page.getByText(/· Fact$/).first()).toBeVisible();
   });

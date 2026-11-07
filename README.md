@@ -36,7 +36,15 @@ things up there. You don't need to know what MCP is to set it up.
 
 **Watch the launch film** (with sound) in [1080p](docs/media/eunomia-launch-film.mp4) (27 MB) or [720p](docs/media/eunomia-launch-film-720p.mp4) (4 MB): your agents forget, Eunomia remembers, and every agent recalls what the team decided.
 
-## What's new in 2.0.9: admin tools, password managers, and a calmer app
+## What's new in 2.1.0: compare spaces on the Memory map
+
+The Memory map (People & topics, Memory map tab) can show several memory spaces
+at once again. Each space has a chip with its colour and how many memories it has
+on the map. Turn chips on and off to layer spaces over each other, and the map
+always keeps at least one. The List and Connections views still show one space at
+a time, and stay on a space the map is showing.
+
+## Also new in 2.0.9: admin tools, password managers, and a calmer app
 
 - **For admins.** Settings has a People directory (make or remove admins, suspend
   and restore accounts) and a workspace audit log. The log records space changes,
