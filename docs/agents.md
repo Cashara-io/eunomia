@@ -189,11 +189,12 @@ No. The connected agent is the model.
 | `memory_update` / `memory_delete` | Edit or delete one memory |
 | `entities_search` / `entities_get` / `entities_graph` | Find and read people, orgs, places, code and custom kinds |
 | `entities_neighbourhood` | The entities within 1 to 3 relations of one entity, both directions, with their latest facts and the review of each link type between them; for working out what a change affects. At most 150 entities and 600 relations (`truncated` says when more were in reach) |
-| `show_view` | Show your answer as a view: `impact` (what a change affects, each entity with its path of relations and why), `subgraph` (how entities connect) or `metric` (an approved metric's number, which the server runs again). Every id is checked; returns the view with names filled in plus a plain-text version |
+| `show_view` | Show your answer as a view: `impact` (what a change affects, each entity with its path of relations and why), `subgraph` (how entities connect), `metric` (an approved metric's number, which the server runs again) or `scenario` (a what-if, which the server runs again). Every id is checked; returns the view with names filled in plus a plain-text version |
 | `entity_types` | The built-in entity kinds and the custom kinds agents created (any new lowercase `subject_kind` creates one), each with its review status |
 | `ontology_get` | One vault's kinds and link types, with counts, samples, descriptions, synonyms and review status, and each kind's typed properties and metrics |
 | `ontology_suggest` / `ontology_propose` | Propose kinds, merges, link types, typed properties, metrics and synonyms for a vault owner to approve in the app; without a server model `ontology_suggest` returns the profile for you to review |
 | `metric_eval` | Run an approved metric by name (`avg_price`): the number, its unit, as of when, and the entity ids it came from; optional extra filters, `as_of` and a series by period ([certified metrics](#certified-metrics)) |
+| `scenario_run` | A what-if: hypothetical changes (`set`, `scale`, `shift`, `remove`) put over the real values in memory, the chosen approved metrics before and after, the values changed and the entities the changes reach. Nothing is saved ([what if](#what-if)) |
 | `ontology_automap` | Profile the fields of synced records (all, one `source` or one `record_type`) or an uploaded CSV (`document_id`), and with a server model propose a kind per record type, a typed property per field and links whose values were checked; without a model, the profiles and matching key fields for you to propose ([auto-mapping](#auto-mapping)) |
 | `document_import_rows` | Import an uploaded CSV's rows as entities of an approved kind with values of its approved properties; idempotent, bad cells reported by line ([auto-mapping](#auto-mapping)) |
 | `entity_set_property` | Set one approved typed property of an entity (a `price` on a `product`), checked against its datatype and kept with its date and source ([typed properties](#typed-properties)) |
@@ -331,6 +332,64 @@ number as checked. A rejected metric with a merge target runs the target (`metri
 `warnings`: an enum filter value listed nowhere ("Lage") returns no value and names the nearest listed
 ones ("Large"), and a text value no entity holds names the nearest stored ones, so fix the spelling
 instead of reporting 0.
+
+### What if
+
+`scenario_run` answers "what happens if I do this?" with numbers the server computes, and saves nothing.
+You decide what changes and which metrics matter; the server checks each change as `entity_set_property`
+checks a value, applies the changes in memory, and runs each metric on the real values and on the changed
+ones with the same code as `metric_eval`.
+
+"What if we raise the latte price by 30 cents?" in the cafe vault above:
+
+1. `ontology_get` shows the approved `price` on `product` and the approved metric `avg_price`.
+2. `entities_search` `{"query": "Latte"}` finds the latte.
+3. `scenario_run`:
+
+```json
+{"changes": [{"shift": {"kind": "product", "property": "price", "delta": 0.3, "entity_ids": ["entity:latte"]}}],
+ "metrics": ["avg_price"]}
+```
+
+returns
+
+```json
+{"changes": ["Latte price up 0.30 AUD"],
+ "baseline": [{"metric": "avg_price", "kind": "product", "value": 4.666667, "unit": "AUD", "n_entities": 3, "status": "approved", "expr_words": "Average price"}],
+ "scenario": [{"metric": "avg_price", "kind": "product", "value": 4.766667, "unit": "AUD", "n_entities": 3, "status": "approved", "expr_words": "Average price", "delta": 0.1, "delta_pct": 2.14}],
+ "changed": [{"entity_id": "entity:latte", "name": "Latte", "kind": "product", "property": "price", "before": 5.0, "after": 5.3, "unit": "AUD"}],
+ "n_changed": 1, "removed": [], "reached": [], "reached_truncated": false, "warnings": [], "as_of": "2026-11-08T09:30:00Z"}
+```
+
+4. Draw it with `show_view` `{"view": "scenario", "headline": "What if the latte costs 30 cents more?",
+   "scenario": <the same arguments>}`, and say nothing was saved.
+
+The four changes, applied in order (at most 20):
+
+- `{"set": {"entity_id", "property", "value", "unit"?}}`: a hypothetical value for one entity.
+- `{"scale": {"kind", "property", "factor", "entity_ids"?, "filters"?, "related_to"?}}`: the property of
+  every entity of the kind that the pickers allow, times `factor` (1.1 is up 10%). "What if Riverside
+  Roasters puts prices up 10%?" is `{"scale": {"kind": "product", "property": "price", "factor": 1.1,
+  "related_to": {"entity_id": "<Riverside Roasters>", "label": "supplied_by"}}}`; `filters` are a metric's
+  filters, such as `[{"property": "status", "op": "eq", "value": "Active"}]`.
+- `{"shift": {...the same, with "delta"}}`: plus `delta` in the property's unit (0.3 is 30 cents in AUD).
+- `{"remove": {"entity_id"}}`: the entity counts in no metric.
+
+Only an approved property changes, a value must fit its datatype, and scale and shift take only number,
+integer, money and percent properties. One scale or shift changes at most 500 entities; past that the rest
+keep their real values and a warning says so. Only approved metrics run (at most 10), unless you pass
+`allow_unapproved`. A call has a time budget of 20 seconds.
+
+`reached` lists the entities within `depth` relations (default 2, at most 3) of the changed and removed
+entities and of `impact_from` (up to 5 ids): each with its kind, depth, the relation it came through
+(`via`, "Truck 7 carries Shipment 88"), the start it came `from` and the relation ids on the way. It is
+plain data, as `entities_neighbourhood` is: you decide what the change affects and why.
+
+"What if Truck 7 never arrives?" in the logistics vault below is `{"changes": [{"remove": {"entity_id":
+"<Truck 7>"}}], "metrics": ["late_shipments"]}`. Truck 7 leaves every metric, and `reached` lists Shipment
+88, the orders it holds and the customers who placed them. Whether a late-shipments count moves depends on
+what the metric reads: removing the truck changes no shipment's status, so say that rather than invent a
+number, and add a `set` of the shipment's `status` to `late` if that is the question.
 
 ### What a change affects
 

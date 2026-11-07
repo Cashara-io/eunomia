@@ -47,7 +47,10 @@ Writes go to the user's personal vault unless a `vault_id` is given; `recall`, `
 cover the personal vault and every org vault the user belongs to unless one is. To work out what a change, \
 delay or problem affects, read `ontology_get` and `entities_neighbourhood`, decide which way the effect travels, \
 and show the answer with `show_view`. For a number about the vault's entities, run an approved metric from `ontology_get` \
-with `metric_eval` and cite the `entity_ids` it returns; never add up values yourself. To map a source's records or an \
+with `metric_eval` and cite the `entity_ids` it returns; never add up values yourself. For a what-if (\"what if we raise \
+the latte price by 30 cents?\", \"what if Truck 7 never arrives?\"), build the changes from the approved properties and \
+run `scenario_run` with the approved metrics: the server computes them before and after and saves nothing; show it with \
+`show_view` `view` \"scenario\". To map a source's records or an \
 uploaded CSV onto the ontology, run `ontology_automap`; once an owner approved a CSV's kind and properties, \
 `document_import_rows` imports its rows.";
 
