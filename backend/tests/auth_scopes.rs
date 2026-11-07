@@ -1053,3 +1053,34 @@ async fn chat_error_events_carry_a_code_and_trace_id() {
     assert_eq!(err["trace_id"].as_str().map(str::len), Some(32), "{err}");
     assert!(err["message"].as_str().unwrap().contains("OpenAI request failed"));
 }
+
+#[tokio::test]
+async fn chat_turns_reasoning_off_when_the_model_refuses_tools_while_reasoning() {
+    use axum::{routing::post, Router};
+    use std::sync::{Arc, Mutex};
+    type Bodies = Arc<Mutex<Vec<String>>>;
+    async fn completions(axum::extract::State(bodies): axum::extract::State<Bodies>, body: String) -> axum::response::Response {
+        use axum::response::IntoResponse;
+        bodies.lock().unwrap().push(body.clone());
+        if !body.contains("\"reasoning_effort\":\"none\"") {
+            let refusal = json!({"error": {"message": "Function tools with reasoning_effort are not supported for gpt-6-luna in /v1/chat/completions. To use function tools, use /v1/responses or set reasoning_effort to 'none'.", "type": "invalid_request_error", "param": "reasoning_effort"}});
+            return (StatusCode::BAD_REQUEST, refusal.to_string()).into_response();
+        }
+        let sse = format!("data: {}\n\ndata: [DONE]\n\n", json!({"choices": [{"delta": {"content": "done"}}]}));
+        ([(header::CONTENT_TYPE, "text/event-stream")], sse).into_response()
+    }
+    let bodies: Bodies = Arc::default();
+    let router = Router::new().route("/v1/chat/completions", post(completions)).with_state(bodies.clone());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+
+    let app = TestApp::new().await;
+    let tok = token(&app, &[scopes::VAULTS_ADMIN], None).await;
+    let (_, events) = chat_events(&app, &tok, &format!("http://{addr}/v1")).await;
+    let done = events.iter().find(|e| e["type"] == "done").unwrap_or_else(|| panic!("no done event: {events:?}"));
+    assert_eq!(done["reply"], "done");
+    let bodies = bodies.lock().unwrap();
+    assert_eq!(bodies.len(), 2, "one refused request, then one retry");
+    assert!(!bodies[0].contains("reasoning_effort"), "the first request leaves reasoning_effort to the model");
+}

@@ -89,6 +89,13 @@ fn chat_may_call(name: &str) -> bool {
     (registry::is_read_only(name) || CHAT_WRITE_TOOLS.contains(&name)) && !registry::is_destructive(name)
 }
 
+/// Some reasoning models (gpt-6-luna) reason by default but refuse function tools on
+/// `chat/completions` unless `reasoning_effort` is `none`. Other models and OpenAI-compatible servers
+/// reject that field, so it is sent only after this refusal.
+fn refuses_tools_while_reasoning(status: reqwest::StatusCode, body: &str) -> bool {
+    status == reqwest::StatusCode::BAD_REQUEST && body.contains("reasoning_effort")
+}
+
 /// A tool result as the model sees it: JSON inside `<untrusted-data>` tags.
 /// `<` only occurs inside JSON strings, so escaping it as `\u003c` keeps
 /// the JSON identical in meaning while making the closing tag unforgeable.
@@ -532,21 +539,31 @@ async fn run_send(
     let url = p.url("chat/completions");
     let model = provider::chat_model(&p).await;
 
+    let mut reasoning_off = false;
     for _ in 0..MAX_TOOL_ITERATIONS {
-        let body = json!({ "model": model, "messages": messages, "tools": tools, "stream": true });
-        let resp = client
-            .post(&url)
-            .bearer_auth(p.bearer())
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| (ErrorCode::Internal, format!("OpenAI request failed: {e}")))?;
-
-        if !resp.status().is_success() {
+        let resp = loop {
+            let mut body = json!({ "model": model, "messages": messages, "tools": tools, "stream": true });
+            if reasoning_off {
+                body["reasoning_effort"] = json!("none");
+            }
+            let resp = client
+                .post(&url)
+                .bearer_auth(p.bearer())
+                .json(&body)
+                .send()
+                .await
+                .map_err(|e| (ErrorCode::Internal, format!("OpenAI request failed: {e}")))?;
+            if resp.status().is_success() {
+                break resp;
+            }
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
+            if refuses_tools_while_reasoning(status, &text) && !reasoning_off {
+                reasoning_off = true;
+                continue;
+            }
             return Err((ErrorCode::Internal, format!("OpenAI request failed ({status}): {text}")));
-        }
+        };
 
         let mut byte_stream = resp.bytes_stream();
         let mut buf = String::new();
