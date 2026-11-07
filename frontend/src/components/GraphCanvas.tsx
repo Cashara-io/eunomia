@@ -350,7 +350,7 @@ export default function GraphCanvas({
             const picked = selectedId === n.id;
             const r = hot || picked ? 16 : 14;
             const color = kindColor(n.kind);
-            const ring = picked ? "var(--accent)" : hot ? "var(--felt)" : "none";
+            const ring = picked || hot ? "var(--accent)" : "none";
             const shape = { fill: color, stroke: ring, strokeWidth: picked || hot ? 2 : 0, opacity: picked || hot ? 1 : 0.85 };
             return (
               <g
