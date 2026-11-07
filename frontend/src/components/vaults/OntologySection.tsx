@@ -105,7 +105,7 @@ export default function OntologySection({ vault }: { vault: Vault }) {
       </h4>
       <ul className="hairline-rows" aria-label="Kinds in this space">
         {!data && !query.isError && [0, 1, 2].map((i) => <SkeletonRow key={i} />)}
-        {data?.kinds.map((k) => (
+        {data?.kinds.filter((k) => !(k.built_in && k.entities === 0 && k.status === "observed")).map((k) => (
           <KindRow
             key={k.kind}
             item={k}
