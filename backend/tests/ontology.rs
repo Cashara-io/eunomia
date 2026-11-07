@@ -587,3 +587,63 @@ async fn over_mcp_a_view_is_its_text_plus_the_structured_view() {
     assert_eq!(hood["nodes"][0]["name"], "Truck 7");
     assert!(rpc["result"].get("structuredContent").is_none(), "{rpc}");
 }
+
+// ------------------------------------------------------------ what a change affects: the in-app chat
+
+/// One chat message as the browser sends it; the SSE events that came back.
+async fn chat(app: &TestApp, message: &str) -> (String, Vec<Value>) {
+    use axum::body::Body;
+    use axum::http::{header, Request};
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+    let (_, thread) = app.http("POST", "/api/chat/threads", Some(json!({})), true).await;
+    let thread_id = thread["id"].as_str().unwrap().to_string();
+    let req = Request::builder()
+        .method("POST")
+        .uri(format!("/api/chat/threads/{thread_id}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::AUTHORIZATION, format!("Bearer {}", app.token))
+        .body(Body::from(json!({"message": message}).to_string()))
+        .unwrap();
+    let resp = app.router.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), 200);
+    let text = String::from_utf8(resp.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
+    (thread_id, text.lines().filter_map(|l| l.strip_prefix("data:")).filter_map(|d| serde_json::from_str(d.trim()).ok()).collect())
+}
+
+#[tokio::test]
+async fn the_chat_streams_the_resolved_view_with_the_show_view_result_only() {
+    let app = TestApp::new().await;
+    let ids = logistics(&app).await;
+    let rel = edges_by_label(&app, &ids["Truck 7"]).await;
+
+    // the model looks the truck up and draws the impact in one round, then answers
+    let view = impact(&ids["Truck 7"], json!([{"entity_id": ids["Shipment 88"], "path": [rel["carries"]], "why": "It is on the truck."}]));
+    let call = |i: usize, id: &str, name: &str, args: Value| json!({"index": i, "id": id, "function": {"name": name, "arguments": args.to_string()}});
+    let tools = json!({"choices": [{"delta": {"tool_calls": [call(0, "c1", "entities_search", json!({"query": "Truck 7"})), call(1, "c2", "show_view", view)]}}]});
+    let reply = json!({"choices": [{"delta": {"content": "Shipment 88 will be late."}}]});
+    let sse = |chunk: Value| format!("data: {chunk}\n\ndata: [DONE]\n\n");
+    let mock = serve(vec![
+        route("POST", "/chat/completions", json!(null)).body("\"role\":\"tool\"").raw(&sse(reply)).header("content-type", "text/event-stream"),
+        route("POST", "/chat/completions", json!(null)).raw(&sse(tools)).header("content-type", "text/event-stream"),
+    ])
+    .await;
+    let (status, _) = app.http("PATCH", "/api/settings", Some(json!({"openai_base_url": mock.base})), true).await;
+    assert_eq!(status, 200);
+
+    let (thread_id, events) = chat(&app, "Truck 7 is late. What does that affect?").await;
+    let results: Vec<&Value> = events.iter().filter(|e| e["type"] == "tool_result").collect();
+    assert_eq!(results.len(), 2, "{events:?}");
+    let search = results.iter().find(|e| e["name"] == "entities_search").unwrap();
+    assert!(search.get("view").is_none(), "only show_view carries a view: {search}");
+    let shown = &results.iter().find(|e| e["name"] == "show_view").unwrap()["view"];
+    assert_eq!((shown["view"].as_str(), shown["start"]["name"].as_str()), (Some("impact"), Some("Truck 7")), "{shown}");
+    assert_eq!(shown["affected"][0]["path"][0]["to"]["name"], "Shipment 88");
+    let done = events.iter().find(|e| e["type"] == "done").unwrap();
+    assert_eq!(done["reply"], "Shipment 88 will be late.");
+
+    // the stored result is the same view, so reopening the thread draws it again
+    let (_, history) = app.http("GET", &format!("/api/chat/threads/{thread_id}/history"), None, true).await;
+    let stored: Vec<Value> = history.as_array().unwrap().iter().filter(|m| m["role"] == "tool").map(|m| serde_json::from_str(m["content"].as_str().unwrap()).unwrap()).collect();
+    assert!(stored.iter().any(|r| r == shown), "{history}");
+}
