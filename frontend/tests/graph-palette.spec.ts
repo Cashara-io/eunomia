@@ -79,8 +79,8 @@ test.describe("Entity graph", () => {
     await expect(page.getByText(/^2 memories/)).toBeVisible();
 
     const layers = page.getByRole("group", { name: "Spaces on the map" });
-    const personalChip = layers.getByRole("button", { name: /^Personal/ });
-    const teamChip = layers.getByRole("button", { name: /^Team/ });
+    const personalChip = layers.getByRole("button", { name: /Personal/ }) // the on-state ✓ (CSS ::before) is part of the name;
+    const teamChip = layers.getByRole("button", { name: /Team/ });
     await expect(personalChip).toHaveAttribute("aria-pressed", "true");
     await expect(teamChip).toHaveAttribute("aria-pressed", "false");
 
