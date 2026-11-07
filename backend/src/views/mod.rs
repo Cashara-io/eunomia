@@ -461,7 +461,8 @@ fn scenario_text(headline: &str, r: &ScenarioOut) -> String {
     }
     if !r.reached.is_empty() {
         let listed = r.reached.iter().map(|e| format!("{} ({}, via {})", e.name, words(&e.kind), e.via)).collect::<Vec<_>>().join("; ");
-        out.push_str(&format!("\nReaches: {listed}."));
+        let steps = r.reached.iter().map(|e| e.depth).max().unwrap_or(1);
+        out.push_str(&format!("\nLinked within {steps} step{} (not all are affected): {listed}.", if steps == 1 { "" } else { "s" }));
     }
     for w in &r.warnings {
         out.push_str(&format!("\nNote: {w}"));

@@ -12,10 +12,18 @@ const withUnit = (value: number, unit: string | null) => `${formatNumber(value, 
 
 const shown = (v: unknown, unit: string | null) => (typeof v === "number" ? withUnit(v, unit) : v == null ? "none" : String(v));
 
+/** The heading over the nearby entities: they are linked to what changed, which is not the same as affected. */
+function linkedWithin(reached: ScenarioRun["reached"]): string {
+  const steps = Math.max(1, ...reached.map((r) => r.depth));
+  return `Linked within ${steps} ${steps === 1 ? "step" : "steps"} (not all are affected)`;
+}
+
 /** "up 0.30 AUD (2.1%)": the move in words, so it never rests on colour. */
 function move(before: number | null, after: number | null, pct: number | null, unit: string | null): string {
   if (before == null || after == null) return after == null ? "no value in the what-if" : "no value before";
-  const d = after - before;
+  // from the figures as shown, so the move always matches what the reader can subtract (15.67 - 15.22 = 0.45)
+  const asShown = (n: number) => Number(formatNumber(n, unit));
+  const d = asShown(after) - asShown(before);
   if (Math.abs(d) < 1e-9) return "no change";
   const share = pct == null ? "" : ` (${Number(Math.abs(pct).toFixed(1))}%)`;
   return `${d > 0 ? "up" : "down"} ${withUnit(Math.abs(d), unit)}${share}`;
@@ -109,7 +117,7 @@ export default function ScenarioView({ view }: { view: Scenario }) {
       )}
       {run.reached.length > 0 && (
         <div className="flex flex-col gap-1.5">
-          <h4 className="label">Reaches</h4>
+          <h4 className="label">{linkedWithin(run.reached)}</h4>
           <ul className="flex flex-wrap gap-1.5">
             {run.reached.map((r) => (
               <li key={r.entity_id}>
