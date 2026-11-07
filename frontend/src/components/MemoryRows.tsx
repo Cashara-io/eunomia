@@ -2,7 +2,7 @@
 
 import { pointKindLabel } from "@/lib/memoryKinds";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Search, X } from "lucide-react";
+import { MagnifyingGlassIcon, XIcon } from "@phosphor-icons/react/ssr";
 import ErrorLine, { failure } from "./ErrorLine";
 import { useCloudSimilarity } from "@/lib/queries/entities";
 import type { InsightPoint } from "@/lib/vectorInsights";
@@ -88,7 +88,7 @@ export default function MemoryRows({ points, vaultIds, nameOf, selection, focusI
     <div className="flex flex-col min-h-0 flex-1">
       <div className="p-3 pb-2 flex flex-col gap-2">
         <div className="field flex items-center gap-2 h-10 px-3">
-          <Search size={13} strokeWidth={1.75} style={{ color: "var(--ink-faint)" }} aria-hidden />
+          <MagnifyingGlassIcon weight="duotone" size={13} style={{ color: "var(--ink-faint)" }} aria-hidden />
           <input
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
@@ -259,7 +259,7 @@ export default function MemoryRows({ points, vaultIds, nameOf, selection, focusI
                       {label(id)}
                     </span>
                     <button type="button" className="shrink-0 mt-0.5" aria-label={`Remove ${label(id)} from the comparison`} onClick={() => onToggle(id)} style={{ color: "var(--ink-faint)" }}>
-                      <X size={12} strokeWidth={1.75} />
+                      <XIcon weight="duotone" size={12} />
                     </button>
                   </li>
                 ))}

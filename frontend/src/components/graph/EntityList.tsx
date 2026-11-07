@@ -4,7 +4,7 @@
 // when one was last saved. Click a row (or Enter on it) to open the same inspector as the graph.
 
 import { useState } from "react";
-import { ArrowDown, ArrowUp } from "lucide-react";
+import { ArrowDownIcon, ArrowUpIcon } from "@phosphor-icons/react/ssr";
 import type { EntityKind, EntitySummary } from "@/lib/types";
 import { useEntityDetails } from "@/lib/queries/entities";
 
@@ -81,7 +81,7 @@ export default function EntityList({
           onClick={() => setSort({ key, desc: on ? !sort.desc : key !== "name" && key !== "memory" })}
         >
           {label}
-          {on && (sort.desc ? <ArrowDown size={13} strokeWidth={1.75} aria-hidden /> : <ArrowUp size={13} strokeWidth={1.75} aria-hidden />)}
+          {on && (sort.desc ? <ArrowDownIcon weight="duotone" size={13} aria-hidden /> : <ArrowUpIcon weight="duotone" size={13} aria-hidden />)}
         </button>
       </th>
     );

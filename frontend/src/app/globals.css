@@ -1076,6 +1076,13 @@ svg[viewBox="0 0 256 256"] > path[opacity="0.2"] {
   opacity: 1;
   fill: var(--duo, var(--vault-project));
 }
+/* Line only where colour would read as a vault on a control: buttons, chips,
+   fields and tabs, plus status and danger. The back layer stays in tiles,
+   headers, list rows and empty states. */
+.btn,
+.pill,
+.field,
+.tab,
 .btn-danger,
 .btn-danger-solid,
 [role="alert"],

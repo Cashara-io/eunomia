@@ -2,7 +2,7 @@
 
 import ErrorLine, { failure } from "@/components/ErrorLine";
 import { useState } from "react";
-import { Download } from "lucide-react";
+import { DownloadSimpleIcon } from "@phosphor-icons/react/ssr";
 import { useAudit } from "@/lib/queries/audit";
 import { useWorkspaceAudit } from "@/lib/queries/admin";
 import type { AuditCategory } from "@/lib/gen";
@@ -158,7 +158,7 @@ function downloadCsv(rows: LogRow[], name: string) {
 function CsvButton({ rows, name }: { rows: LogRow[]; name: string }) {
   return (
     <button type="button" className="btn btn-ghost btn-sm" disabled={rows.length === 0} onClick={() => downloadCsv(rows, name)}>
-      <Download size={14} strokeWidth={1.75} aria-hidden />
+      <DownloadSimpleIcon weight="duotone" size={14} aria-hidden />
       Download CSV
     </button>
   );

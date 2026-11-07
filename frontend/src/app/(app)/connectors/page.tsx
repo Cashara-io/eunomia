@@ -3,7 +3,7 @@
 import SyncSettings from "@/components/SyncSettings";
 import { Fragment, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronRight, Database, Plug, Plus, Search, X } from "lucide-react";
+import { CaretDownIcon, CaretRightIcon, DatabaseIcon, MagnifyingGlassIcon, PlugIcon, PlusIcon, XIcon } from "@phosphor-icons/react/ssr";
 import type { Connector, SourceRow } from "@/lib/types";
 import { useConnectors } from "@/lib/queries/connectors";
 import { useSources } from "@/lib/queries/sources";
@@ -76,7 +76,7 @@ function SourceMark({ kind, size }: { kind: Connector["kind"] | null; size: numb
   const icon = kind ? CONNECTOR_META[kind].icon : null;
   return (
     <span aria-hidden className="inline-flex items-center justify-center shrink-0" style={{ width: size, height: size, color: "var(--ink-dim)" }}>
-      {icon ?? <Database size={18} strokeWidth={1.75} />}
+      {icon ?? <DatabaseIcon weight="duotone" size={18} />}
     </span>
   );
 }
@@ -163,14 +163,14 @@ export default function ConnectorsPage() {
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
-        icon={Plug}
+        icon={PlugIcon}
         title="Connected sources"
         intro="Bring emails, meeting notes and other information into Eunomia. Sign-ins are stored encrypted."
       />
 
       <div className="flex items-center gap-2 flex-wrap">
         <div className="field flex items-center gap-2 h-10 px-3 w-full sm:w-72">
-          <Search size={18} strokeWidth={1.75} color="var(--ink-dim)" aria-hidden />
+          <MagnifyingGlassIcon weight="duotone" size={18} color="var(--ink-dim)" aria-hidden />
           <input
             type="text"
             aria-label="Search sources"
@@ -182,7 +182,7 @@ export default function ConnectorsPage() {
           {query && (
             <Tooltip label="Clear search">
               <button type="button" aria-label="Clear search" className="btn btn-ghost btn-sm -mr-1.5 w-6 px-0" onClick={() => setQuery("")}>
-                <X size={13} strokeWidth={1.75} aria-hidden />
+                <XIcon weight="duotone" size={13} aria-hidden />
               </button>
             </Tooltip>
           )}
@@ -271,14 +271,14 @@ export default function ConnectorsPage() {
                       >
                         {s?.record_types.length ? typeWords(s.record_types) : "Tool calls only"}
                       </span>
-                      <ChevronRight size={16} strokeWidth={1.75} color="var(--ink-dim)" className="hidden md:block" aria-hidden />
+                      <CaretRightIcon weight="duotone" size={16} color="var(--ink-dim)" className="hidden md:block" aria-hidden />
                     </Link>
                     {r.addAfter && r.kind && (
                       <Link
                         href={`/connectors/setup/${r.kind}?new=1`}
                         className="link flex items-center gap-2 px-4 min-h-10 pl-[52px] text-[13px] font-medium"
                       >
-                        <Plus size={14} strokeWidth={1.75} aria-hidden />
+                        <PlusIcon weight="duotone" size={14} aria-hidden />
                         Add another {r.label} connection
                       </Link>
                     )}
@@ -334,7 +334,7 @@ export default function ConnectorsPage() {
                 aria-controls="personal-sources"
                 onClick={() => setShowPersonal((v) => !v)}
               >
-                {personalOpen ? <ChevronDown size={16} strokeWidth={1.75} aria-hidden /> : <ChevronRight size={16} strokeWidth={1.75} aria-hidden />}
+                {personalOpen ? <CaretDownIcon weight="duotone" size={16} aria-hidden /> : <CaretRightIcon weight="duotone" size={16} aria-hidden />}
                 Personal sources ({personalAvailable.length})
               </button>
               {personalOpen && (

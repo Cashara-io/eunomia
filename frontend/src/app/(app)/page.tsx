@@ -5,7 +5,7 @@ import ErrorLine, { failure } from "@/components/ErrorLine";
 import { useState } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, Check, Upload, Users } from "lucide-react";
+import { ArrowRightIcon, CheckIcon, UploadSimpleIcon, UsersIcon, WarningIcon } from "@phosphor-icons/react/ssr";
 import type { EntityDetail, EntityKind, SourceRow, Vault } from "@/lib/types";
 import { entityKeys, type EntityList } from "@/lib/queries/entities";
 import { call } from "@/lib/queries/client";
@@ -58,7 +58,7 @@ function FailureBanner({ rows, dismissed, onDismiss }: { rows: SourceRow[]; dism
           className="flex flex-wrap items-center gap-3 rounded-[12px] px-4 py-3"
           style={{ background: "var(--critical-soft)", border: "1px solid var(--critical)" }}
         >
-          <AlertTriangle size={18} strokeWidth={1.75} color="var(--critical)" className="shrink-0" aria-hidden />
+          <WarningIcon weight="duotone" size={18} color="var(--critical)" className="shrink-0" aria-hidden />
           <div className="flex-1 min-w-[200px]">
             <div className="text-[14px] font-semibold">
               {sourceLabel(s)} could not update {s.sync_status.consecutive_failures} times in a row
@@ -177,7 +177,7 @@ function RecentlyUpdated({ rows, showSpace }: { rows: RecentEntity[]; showSpace:
           Recently updated
         </h2>
         <Link href="/entities" className="link text-[13px] inline-flex items-center gap-1">
-          All people &amp; topics <ArrowRight size={14} strokeWidth={1.75} aria-hidden />
+          All people &amp; topics <ArrowRightIcon weight="duotone" size={14} aria-hidden />
         </Link>
       </div>
       {rows.length === 0 ? (
@@ -216,7 +216,7 @@ function SourcesHealth({ rows }: { rows: SourceRow[] }) {
           Connected sources
         </h2>
         <Link href="/connectors" className="link text-[13px] inline-flex items-center gap-1">
-          Manage <ArrowRight size={14} strokeWidth={1.75} aria-hidden />
+          Manage <ArrowRightIcon weight="duotone" size={14} aria-hidden />
         </Link>
       </div>
       <ul className="hairline-rows border-t">
@@ -320,7 +320,7 @@ function ConnectAnother({ none = false, fromSources = false }: { none?: boolean;
         onClick={() => setOpen((o) => !o)}
         className="link self-start inline-flex items-center gap-1 min-h-11 text-[14px] font-medium"
       >
-        {none ? "Connect an AI app" : "Connect another app"} <ArrowRight size={14} strokeWidth={1.75} aria-hidden className={open ? "rotate-90" : undefined} />
+        {none ? "Connect an AI app" : "Connect another app"} <ArrowRightIcon weight="duotone" size={14} aria-hidden className={open ? "rotate-90" : undefined} />
       </button>
       {open && <AppChoices />}
     </section>
@@ -340,11 +340,11 @@ function OwnInformation({ canUpload }: { canUpload: boolean }) {
       <div className="flex flex-wrap gap-2">
         {canUpload && (
           <Link href="/documents" className="btn">
-            <Upload size={18} strokeWidth={1.75} aria-hidden /> Upload a document
+            <UploadSimpleIcon weight="duotone" size={18} aria-hidden /> Upload a document
           </Link>
         )}
         <Link href="/entities" className="btn">
-          <Users size={18} strokeWidth={1.75} aria-hidden /> Browse people &amp; topics
+          <UsersIcon weight="duotone" size={18} aria-hidden /> Browse people &amp; topics
         </Link>
       </div>
     </section>
@@ -369,7 +369,7 @@ function ConnectedPanel({ connections }: { connections: Connection[] }) {
           style={{ background: "color-mix(in srgb, var(--good) 14%, transparent)", color: "var(--good)" }}
           aria-hidden
         >
-          <Check size={20} strokeWidth={2.25} />
+          <CheckIcon weight="duotone" size={20} />
         </span>
         <div className="flex-1 min-w-0 flex flex-col gap-1">
           <h2 id="connected-title" className="text-[20px] font-semibold tracking-[-0.3px]">
@@ -411,7 +411,7 @@ function ConnectedPanel({ connections }: { connections: Connection[] }) {
       <div className="px-5 sm:px-6 py-3 flex items-center justify-between gap-3 text-[14px]">
         <span style={{ color: "var(--ink-dim)" }}>{connections.length > 6 ? `and ${connections.length - 6} more` : ""}</span>
         <Link href="/settings?tab=apps" className="link inline-flex items-center gap-1 font-medium">
-          Manage connected apps <ArrowRight size={14} strokeWidth={1.75} aria-hidden />
+          Manage connected apps <ArrowRightIcon weight="duotone" size={14} aria-hidden />
         </Link>
       </div>
     </section>

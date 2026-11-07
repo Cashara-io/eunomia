@@ -7,7 +7,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation, type Simulation, type SimulationNodeDatum } from "d3-force";
-import { Eye, EyeOff, Maximize2, Minus, Plus, RotateCcw } from "lucide-react";
+import { ArrowCounterClockwiseIcon, ArrowsOutIcon, EyeIcon, EyeSlashIcon, MinusIcon, PlusIcon } from "@phosphor-icons/react/ssr";
 import { SvgMonogram } from "./graph/Monogram";
 import Tooltip, { TooltipGroup } from "./bits/Tooltip";
 import type { EntityKind } from "@/lib/types";
@@ -424,14 +424,14 @@ export default function GraphCanvas({
 
       <TooltipGroup>
         <div className="panel p-1 absolute bottom-4 flex gap-1" style={{ right: insets.right ? insets.right + 8 : 16 }}>
-          <ToolButton label="Zoom in" icon={<Plus size={16} strokeWidth={1.75} />} run={() => zoomBy(1 + ZOOM_STEP)} />
-          <ToolButton label="Zoom out" icon={<Minus size={16} strokeWidth={1.75} />} run={() => zoomBy(1 - ZOOM_STEP)} />
-          <ToolButton label="Fit to view" icon={<Maximize2 size={16} strokeWidth={1.75} />} run={fitToView} />
-          <ToolButton label="Reset view" icon={<RotateCcw size={16} strokeWidth={1.75} />} run={resetView} />
+          <ToolButton label="Zoom in" icon={<PlusIcon weight="duotone" size={16} />} run={() => zoomBy(1 + ZOOM_STEP)} />
+          <ToolButton label="Zoom out" icon={<MinusIcon weight="duotone" size={16} />} run={() => zoomBy(1 - ZOOM_STEP)} />
+          <ToolButton label="Fit to view" icon={<ArrowsOutIcon weight="duotone" size={16} />} run={fitToView} />
+          <ToolButton label="Reset view" icon={<ArrowCounterClockwiseIcon weight="duotone" size={16} />} run={resetView} />
           {chrome && (
             <ToolButton
               label={chrome.hidden ? "Show controls" : "Hide controls"}
-              icon={chrome.hidden ? <Eye size={16} strokeWidth={1.75} /> : <EyeOff size={16} strokeWidth={1.75} />}
+              icon={chrome.hidden ? <EyeIcon weight="duotone" size={16} /> : <EyeSlashIcon weight="duotone" size={16} />}
               run={chrome.toggle}
             />
           )}

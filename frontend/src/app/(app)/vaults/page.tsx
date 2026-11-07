@@ -3,7 +3,7 @@
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ArrowLeft, Check, ChevronRight, Combine, ChevronDown, Layers, Plus } from "lucide-react";
+import { ArrowLeftIcon, ArrowsMergeIcon, CaretDownIcon, CaretRightIcon, CheckIcon, PlusIcon, StackIcon } from "@phosphor-icons/react/ssr";
 import PageHeader from "@/components/ui/PageHeader";
 import EmptyState from "@/components/ui/EmptyState";
 import StatusLabel from "@/components/ui/StatusLabel";
@@ -132,7 +132,7 @@ function InvitationsPanel() {
               disabled={busyId === inv.vault_id}
               className="btn btn-sm"
             >
-              <Check {...ICON} />
+              <CheckIcon {...ICON} />
               Join
             </button>
           </div>
@@ -192,7 +192,7 @@ function VaultRow({
           {owner ? ` · owned by ${owner}` : ""}
         </span>
       </span>
-      <ChevronRight {...ICON} aria-hidden className="shrink-0" style={{ color: selected ? "var(--ink)" : "var(--ink-dim)" }} />
+      <CaretRightIcon {...ICON} aria-hidden className="shrink-0" style={{ color: selected ? "var(--ink)" : "var(--ink-dim)" }} />
     </button>
   );
 }
@@ -359,7 +359,7 @@ function MergeVaultsCard({
         id="merge-title"
       >
         Advanced: combine two spaces
-        <ChevronDown size={16} strokeWidth={1.75} aria-hidden style={{ transform: open ? "rotate(180deg)" : undefined }} />
+        <CaretDownIcon weight="duotone" size={16} aria-hidden style={{ transform: open ? "rotate(180deg)" : undefined }} />
       </button>
       {open && (
       <div id="merge-panel" className="ledger p-5 flex flex-col gap-4 w-full">
@@ -370,7 +370,7 @@ function MergeVaultsCard({
         </p>
         <div className="flex items-end gap-2 flex-wrap">
           {select(a, setA, "First space")}
-          <Plus
+          <PlusIcon
             {...ICON}
             aria-hidden
             className="mb-3 hidden sm:block"
@@ -393,7 +393,7 @@ function MergeVaultsCard({
             disabled={busy || !a || a === b}
             className="btn"
           >
-            <Combine {...ICON} />
+            <ArrowsMergeIcon {...ICON} />
             {busy ? "Combining…" : "Merge into a new space"}
           </button>
         </div>
@@ -573,7 +573,7 @@ export default function VaultsPage() {
   return (
     <div className="max-w-6xl flex flex-col gap-7">
       <PageHeader
-        icon={Layers}
+        icon={StackIcon}
         title="Memory spaces"
         intro="Keep each project's memories in its own space. Share a space with the people you invite."
         actions={
@@ -581,7 +581,7 @@ export default function VaultsPage() {
             <LiveStatusBadge />
             {/* While the create form is open, its own Create button is the one primary action. */}
             <button onClick={() => setCreating(true)} disabled={creating} className={`btn ${creating ? "" : "btn-primary"}`}>
-              <Plus {...ICON} />
+              <PlusIcon {...ICON} />
               Create space
             </button>
           </>
@@ -630,7 +630,7 @@ export default function VaultsPage() {
           <div className="flex flex-col gap-3 min-w-0">
             {!wide && (
               <button type="button" className="btn btn-ghost btn-sm self-start" onClick={() => setOpened(false)}>
-                <ArrowLeft {...ICON} />
+                <ArrowLeftIcon {...ICON} />
                 All spaces
               </button>
             )}

@@ -4,7 +4,7 @@
 // and sharing it with another Eunomia (both folded away), then "Hand over this space" and "Leave or delete" (copy, leave,
 // delete) at the very bottom.
 import { useEffect, useRef, useState } from "react";
-import { Copy, LogOut, Pencil, Trash2, UserPlus } from "lucide-react";
+import { CopyIcon, PencilSimpleIcon, SignOutIcon, TrashIcon, UserPlusIcon } from "@phosphor-icons/react/ssr";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
@@ -234,7 +234,7 @@ export default function SpaceDetail({
                   aria-label="Rename space"
                   className="btn btn-ghost btn-sm btn-icon shrink-0"
                 >
-                  <Pencil {...ICON} />
+                  <PencilSimpleIcon {...ICON} />
                 </button>
               </Tooltip>
             )}
@@ -381,7 +381,7 @@ export default function SpaceDetail({
                   options={ROLE_OPTIONS}
                 />
                 <button type="submit" disabled={busy || !trimmed} className="btn shrink-0">
-                  {busy || sent ? <SyncMark status={busy ? "running" : "done"} /> : <UserPlus {...ICON} />}
+                  {busy || sent ? <SyncMark status={busy ? "running" : "done"} /> : <UserPlusIcon {...ICON} />}
                   {busy ? "Sending…" : "Send invite"}
                 </button>
               </div>
@@ -458,7 +458,7 @@ export default function SpaceDetail({
                     }}
                     className="btn btn-ghost btn-sm"
                   >
-                    {cloned ? <DrawnCheck /> : <Copy {...ICON} />}
+                    {cloned ? <DrawnCheck /> : <CopyIcon {...ICON} />}
                     Copy
                   </button>
                 }
@@ -471,7 +471,7 @@ export default function SpaceDetail({
               body="You stop seeing its memories. Everyone else keeps access."
               action={
                 <button onClick={() => setConfirm("leave")} className="btn btn-sm">
-                  <LogOut {...ICON} />
+                  <SignOutIcon {...ICON} />
                   Leave space…
                 </button>
               }
@@ -489,7 +489,7 @@ export default function SpaceDetail({
               body="Removes it and everything in it, for everyone. This can't be undone."
               action={
                 <button onClick={() => setConfirm("delete")} className={`btn btn-sm ${RED_ON_HOVER}`}>
-                  <Trash2 {...ICON} />
+                  <TrashIcon {...ICON} />
                   Delete space…
                 </button>
               }

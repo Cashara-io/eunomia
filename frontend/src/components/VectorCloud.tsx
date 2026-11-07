@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { X } from "lucide-react";
+import { XIcon } from "@phosphor-icons/react/ssr";
 import ErrorLine, { failure } from "./ErrorLine";
 import MemoryScatter from "./graph/MemoryScatter";
 import MemoryRows, { MAX_COMPARE } from "./MemoryRows";
@@ -157,7 +157,7 @@ export default function VectorCloud() {
                 aria-label="Close"
                 onClick={() => setSelectedId(null)}
               >
-                <X size={16} strokeWidth={1.75} />
+                <XIcon weight="duotone" size={16} />
               </button>
             </div>
             <p className="text-[14px] leading-snug" style={{ color: "var(--ink)" }}>{selected.label}</p>

@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { X } from "lucide-react";
+import { XIcon } from "@phosphor-icons/react/ssr";
 import CopyButton from "@/components/bits/CopyButton";
 import DecryptReveal from "@/components/bits/DecryptReveal";
 
-export const ICON = { size: 14, strokeWidth: 1.75 } as const;
+export const ICON = { size: 14, weight: "duotone" } as const;
 
 /** A destructive row action that stays quiet at rest and turns red on hover or focus (the Spaces
  * pattern); its confirm step says the rest. `!` because the .btn styles sit outside Tailwind's layers. */
@@ -123,7 +123,7 @@ export function RevokeButton({ label, onRevoke, warn }: { label: string; onRevok
         {busy ? "Revoking…" : "Revoke"}
       </button>
       <button type="button" onClick={() => setArmed(false)} aria-label="Keep" className="btn btn-ghost btn-sm btn-icon">
-        <X {...ICON} />
+        <XIcon {...ICON} />
       </button>
     </span>
   );

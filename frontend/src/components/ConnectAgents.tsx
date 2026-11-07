@@ -9,7 +9,7 @@
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { KeyRound } from "lucide-react";
+import { KeyIcon } from "@phosphor-icons/react/ssr";
 import { useCreateToken } from "@/lib/queries/auth";
 import CopyButton from "@/components/bits/CopyButton";
 import DecryptReveal from "@/components/bits/DecryptReveal";
@@ -123,7 +123,7 @@ export default function ConnectAgents({ onToken, initialClient }: { onToken?: ()
         </div>
       ) : (
         <button onClick={mint} disabled={busy} aria-busy={busy} className="btn btn-primary self-start">
-          <KeyRound size={14} strokeWidth={1.75} aria-hidden />
+          <KeyIcon weight="duotone" size={14} aria-hidden />
           {busy ? "Creating…" : "Generate a token"}
         </button>
       )}

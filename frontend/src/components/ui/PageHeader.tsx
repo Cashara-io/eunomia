@@ -1,4 +1,3 @@
-import type { LucideIcon } from "lucide-react";
 
 /** The page header: a 26px title (a provider mark beside it when there is
  * one), actions on the right, a hairline rule, then at most one short line
@@ -11,8 +10,8 @@ export default function PageHeader({
   actions,
   children,
 }: {
-  /** Accepted for callers that still pass one (Lucide or Phosphor); not drawn. */
-  icon?: LucideIcon | React.ElementType;
+  /** Accepted for callers that still pass one (a Phosphor icon); not drawn. */
+  icon?: React.ElementType;
   /** Accepted from main's design-system callers; this header has a single tone. */
   tone?: string;
   /** A provider mark or other custom identity, used instead of `icon`. */

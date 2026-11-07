@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Code } from "lucide-react";
+import { CodeIcon } from "@phosphor-icons/react/ssr";
 import EntityGraph from "@/components/EntityGraph";
 import PageHeader from "@/components/ui/PageHeader";
 import LiveStatusBadge from "@/components/live/LiveStatusBadge";
@@ -22,7 +22,7 @@ export default function CodePage() {
         header={
           <div className="w-full">
             <PageHeader
-              icon={Code}
+              icon={CodeIcon}
               title="Code map"
               intro="Repositories, files and functions your coding apps have mapped."
               // no Refresh button: the map refreshes on its own; the badge shows only when offline

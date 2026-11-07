@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Download, FileJson, Files, FileText, RotateCw, Trash2, Upload, X } from "lucide-react";
+import { ArrowClockwiseIcon, DownloadSimpleIcon, FileCodeIcon, FileTextIcon, FilesIcon, TrashIcon, UploadSimpleIcon, XIcon } from "@phosphor-icons/react/ssr";
 import PageHeader from "@/components/ui/PageHeader";
 import EmptyState from "@/components/ui/EmptyState";
 import StatusLabel, { type StatusTone } from "@/components/ui/StatusLabel";
@@ -14,7 +14,7 @@ import type { DocumentOut } from "@/lib/gen";
 import { useMe } from "@/lib/queries/auth";
 import { useDeleteDocument, useDocument, useDocuments, useRefreshDocuments, useReindexDocument } from "@/lib/queries/documents";
 
-const ICON = { size: 18, strokeWidth: 1.75 } as const;
+const ICON = { size: 18, weight: "duotone" } as const;
 const ACCEPT = ".txt,.text,.md,.markdown,.json,.csv,.pdf,text/plain,text/markdown,application/json,text/csv,application/pdf";
 const EXTENSIONS = ["txt", "text", "log", "md", "markdown", "json", "csv", "pdf"];
 const TYPE_LABEL: Record<string, string> = {
@@ -118,7 +118,7 @@ function DropZone({ maxBytes, disabled, onFiles }: { maxBytes: number | null; di
         if (!disabled && e.dataTransfer.files.length) onFiles(e.dataTransfer.files);
       }}
     >
-      <Upload size={24} strokeWidth={1.75} aria-hidden style={{ color: "var(--ink)" }} />
+      <UploadSimpleIcon weight="duotone" size={24} aria-hidden style={{ color: "var(--ink)" }} />
       <p className="text-[16px]" style={{ color: "var(--ink)" }}>
         Drop files here, or choose files
       </p>
@@ -153,11 +153,11 @@ function UploadRows({ rows, onDismiss }: { rows: UploadRow[]; onDismiss: (key: s
       {rows.map((r) => (
         <div key={r.key} className="flex flex-col gap-2 px-4 py-3">
           <div className="flex items-center gap-3">
-            <FileText {...ICON} aria-hidden style={{ color: "var(--ink-faint)" }} />
+            <FileTextIcon {...ICON} aria-hidden style={{ color: "var(--ink-faint)" }} />
             <span className="flex-1 min-w-0 truncate text-[13px]">{r.name}</span>
             {r.error ? (
               <button type="button" onClick={() => onDismiss(r.key)} aria-label={`Dismiss ${r.name}`} className="btn btn-ghost btn-icon btn-sm">
-                <X {...ICON} />
+                <XIcon {...ICON} />
               </button>
             ) : (
               <span className="font-mono text-[12px]" style={{ color: "var(--ink-dim)" }}>
@@ -215,7 +215,7 @@ function DeleteDocument({ doc, onDeleted }: { doc: DocumentOut; onDeleted: () =>
         }}
         className="btn btn-danger btn-sm"
       >
-        <Trash2 {...ICON} aria-hidden />
+        <TrashIcon {...ICON} aria-hidden />
         Delete
       </button>
       <ConfirmDialog
@@ -306,7 +306,7 @@ function DocumentPanel({ id, chunk, onClose }: { id: string; chunk: string | nul
           </p>
         </div>
         <button type="button" onClick={onClose} aria-label="Close document" className="btn btn-ghost btn-icon btn-sm">
-          <X {...ICON} />
+          <XIcon {...ICON} />
         </button>
       </div>
 
@@ -335,15 +335,15 @@ function DocumentPanel({ id, chunk, onClose }: { id: string; chunk: string | nul
 
       <div className="flex flex-wrap gap-2">
         <button type="button" onClick={() => save("download")} disabled={busy !== null} aria-busy={busy === "download"} className="btn btn-sm">
-          <Download {...ICON} aria-hidden />
+          <DownloadSimpleIcon {...ICON} aria-hidden />
           {busy === "download" ? "Downloading…" : "Download"}
         </button>
         <button type="button" onClick={() => save("export")} disabled={busy !== null || doc.status !== "ready"} aria-busy={busy === "export"} className="btn btn-sm">
-          <FileJson {...ICON} aria-hidden />
+          <FileCodeIcon {...ICON} aria-hidden />
           {busy === "export" ? "Preparing…" : "Export"}
         </button>
         <button type="button" onClick={runReindex} disabled={reindex.isPending || doc.status === "indexing"} className="btn btn-sm">
-          <RotateCw {...ICON} aria-hidden />
+          <ArrowClockwiseIcon {...ICON} aria-hidden />
           Re-index
         </button>
         <span className="flex-1" />
@@ -424,12 +424,12 @@ function Documents() {
   return (
     <div className="max-w-6xl flex flex-col gap-8">
       <PageHeader
-        icon={Files}
+        icon={FilesIcon}
         title="Documents"
         intro="Notes, specs and exports your AI apps can search. Only you can read them."
         actions={
           !storageOff && <button type="button" onClick={() => input.current?.click()} disabled={storageOff} className="btn btn-primary">
-            <Upload {...ICON} aria-hidden />
+            <UploadSimpleIcon {...ICON} aria-hidden />
             Upload
           </button>
         }
@@ -512,7 +512,7 @@ function Documents() {
                             aria-current={on || undefined}
                             className="link flex items-center gap-2 min-h-11 min-w-0 max-w-full text-left font-medium"
                           >
-                            <FileText {...ICON} aria-hidden className="shrink-0" />
+                            <FileTextIcon {...ICON} aria-hidden className="shrink-0" />
                             <span className="truncate">{d.filename}</span>
                           </button>
                         </td>
