@@ -733,6 +733,25 @@ pub(super) fn parse_as_of(given: Option<&str>) -> AppResult<chrono::DateTime<chr
     Ok(as_of)
 }
 
+/// A value checked as `entity_set_property` checks it, before anything is written.
+pub(super) struct Checked {
+    pub(super) row: PropertyRow,
+    pub(super) mapped: Option<PropertyMapped>,
+    pub(super) datatype: Datatype,
+    pub(super) stored: Stored,
+    pub(super) unit: Option<String>,
+}
+
+/// `value` for `property` of `kind` in `vault`: the property must be approved (or rejected into an
+/// approved one, which takes the value) and the value must parse as its datatype.
+pub(super) async fn check_value(db: &OrgDb, vault: &RecordId, kind: &Kind, property: &str, value: &Value, unit: Option<&str>) -> AppResult<Checked> {
+    let asked = PropertyName::parse(property)?;
+    let (row, mapped) = resolve_approved(db, vault, kind, &asked).await?;
+    let datatype = Datatype::parse(&row.datatype)?;
+    let stored = parse_value(datatype, &row.name, row.enum_values.as_deref(), value)?;
+    Ok(Checked { row, mapped, datatype, stored, unit: clean_unit(unit)? })
+}
+
 /// Writes one value of an approved property on an entity the caller may write to. Refused for a
 /// property that is unknown, proposed, or rejected with no merge target; a rejected one with a target
 /// writes to that property and says so. The value must parse as the property's datatype.
@@ -745,11 +764,7 @@ pub async fn set_property(db: &OrgDb, owner: &RecordId, input: SetProperty<'_>) 
     }
     let vault = entity.vault.clone();
     let kind = Kind::parse(&entity.kind())?;
-    let asked = PropertyName::parse(input.property)?;
-    let (row, mapped) = resolve_approved(db, &vault, &kind, &asked).await?;
-    let datatype = Datatype::parse(&row.datatype)?;
-    let stored = parse_value(datatype, &row.name, row.enum_values.as_deref(), input.value)?;
-    let unit = clean_unit(input.unit)?;
+    let Checked { row, mapped, datatype, stored, unit } = check_value(db, &vault, &kind, input.property, input.value, input.unit).await?;
     let as_of = parse_as_of(input.as_of)?;
     let source = input.source_record_id.map(|r| cache_record_rid(owner, r));
     let written: Vec<ValueRow> = q::SET_VALUE

@@ -1,0 +1,56 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "view": "scenario",
+  "headline": "What if the databases grow by half?",
+  "result": {
+    "vault": "vault:<id2>",
+    "as_of": "<ts>",
+    "changes": [
+      "Db size gb up 50% on 1 db"
+    ],
+    "baseline": [
+      {
+        "metric": "total_size_gb",
+        "kind": "db",
+        "expr_words": "Sum of size gb",
+        "value": 120.0,
+        "unit": "GB",
+        "n_entities": 1,
+        "status": "approved"
+      }
+    ],
+    "scenario": [
+      {
+        "metric": "total_size_gb",
+        "kind": "db",
+        "expr_words": "Sum of size gb",
+        "value": 180.0,
+        "unit": "GB",
+        "n_entities": 1,
+        "status": "approved",
+        "delta": 60.0,
+        "delta_pct": 50.0
+      }
+    ],
+    "changed": [
+      {
+        "entity_id": "entity:<id19>",
+        "name": "orders_db",
+        "kind": "db",
+        "property": "size_gb",
+        "before": 120.0,
+        "after": 180.0,
+        "unit": "GB"
+      }
+    ],
+    "n_changed": 1,
+    "removed": [],
+    "reached": [],
+    "reached_truncated": false,
+    "warnings": []
+  },
+  "text": "What if the databases grow by half?\nWhat if: Db size gb up 50% on 1 db.\n- total size gb: 120 → 180 GB, up 60 GB (50%)\nChanged: orders_db size gb 120 GB → 180 GB.\nNothing was saved: this is a what-if."
+}

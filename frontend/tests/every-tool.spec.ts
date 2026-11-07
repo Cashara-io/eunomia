@@ -102,6 +102,14 @@ test("every MCP tool works end to end", async ({ request, baseURL }) => {
   expect(approvedMetric.ok()).toBeTruthy();
   const total = await ok("metric_eval", { metric: "total_size_gb" });
   expect([total.value, total.unit, total.entity_ids]).toEqual([120, "GB", [orders]]);
+  // a what-if over it: the server's numbers before and after, and nothing saved
+  const whatIf = { changes: [{ scale: { kind: "db", property: "size_gb", factor: 1.5 } }], metrics: ["total_size_gb"] };
+  const scenario = await ok("scenario_run", whatIf);
+  expect([scenario.baseline[0].value, scenario.scenario[0].value, scenario.scenario[0].delta]).toEqual([120, 180, 60]);
+  expect((await ok("metric_eval", { metric: "total_size_gb" })).value).toBe(120);
+  const scenarioView = await call("show_view", { view: "scenario", headline: "What if the databases grow by half?", scenario: whatIf });
+  expect([scenarioView.isError, scenarioView.data.result.scenario[0].value]).toEqual([false, 180]);
+  expect(scenarioView.text).toContain("Nothing was saved: this is a what-if.");
   // auto-mapping a CSV, then importing its rows once an owner approved the kind and a property
   const csv = await ok("document_upload", { filename: "menu.csv", text: "product,price\nLatte,4.50\nMocha,5.00\n" });
   const mapped = await ok("ontology_automap", { document_id: csv.id });

@@ -34,5 +34,33 @@ export type MetricRun = {
 /** A metric's number, with the entities it came from as receipts. */
 export type MetricView = { view: "metric"; metric: MetricRun; entities: EntityRef[]; text: string };
 
+/** One metric in a what-if (`scenario_run`, backend/src/ontology/scenario.rs). */
+export type ScenarioMetric = {
+  metric: string;
+  kind: string;
+  expr_words: string;
+  value: number | null;
+  unit: string | null;
+  n_entities: number;
+  status: "proposed" | "approved" | "rejected";
+};
+
+/** A what-if, as the server ran it: nothing in it was saved. */
+export type ScenarioRun = {
+  vault: string;
+  as_of: string;
+  changes: string[];
+  baseline: ScenarioMetric[];
+  scenario: (ScenarioMetric & { delta: number | null; delta_pct: number | null })[];
+  changed: { entity_id: string; name: string; kind: string; property: string; before: unknown; after: unknown; unit: string | null }[];
+  n_changed: number;
+  removed: { entity_id: string; name: string; kind: string }[];
+  reached: { entity_id: string; name: string; kind: string; depth: number; via: string; from: string; path: string[] }[];
+  reached_truncated: boolean;
+  warnings: string[];
+};
+
+export type ScenarioView = { view: "scenario"; headline: string; result: ScenarioRun; text: string };
+
 /** Any view, known to this app or not: an unknown one still has its text. */
-export type ShownView = ImpactView | SubgraphView | MetricView | { view: string; text: string };
+export type ShownView = ImpactView | SubgraphView | MetricView | ScenarioView | { view: string; text: string };

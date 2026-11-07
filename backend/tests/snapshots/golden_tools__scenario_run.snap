@@ -1,0 +1,51 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "vault": "vault:<id2>",
+  "as_of": "<ts>",
+  "changes": [
+    "Db size gb up 50% on 1 db"
+  ],
+  "baseline": [
+    {
+      "metric": "total_size_gb",
+      "kind": "db",
+      "expr_words": "Sum of size gb",
+      "value": 120.0,
+      "unit": "GB",
+      "n_entities": 1,
+      "status": "approved"
+    }
+  ],
+  "scenario": [
+    {
+      "metric": "total_size_gb",
+      "kind": "db",
+      "expr_words": "Sum of size gb",
+      "value": 180.0,
+      "unit": "GB",
+      "n_entities": 1,
+      "status": "approved",
+      "delta": 60.0,
+      "delta_pct": 50.0
+    }
+  ],
+  "changed": [
+    {
+      "entity_id": "entity:<id19>",
+      "name": "orders_db",
+      "kind": "db",
+      "property": "size_gb",
+      "before": 120.0,
+      "after": 180.0,
+      "unit": "GB"
+    }
+  ],
+  "n_changed": 1,
+  "removed": [],
+  "reached": [],
+  "reached_truncated": false,
+  "warnings": []
+}

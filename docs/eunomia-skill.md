@@ -70,6 +70,18 @@ spelling to fix, not a 0. Never add up or average values yourself. If no
 metric fits, propose one with `ontology_propose` (`metrics`: kind, name,
 expr such as `{"agg": "avg", "property": "price"}`).
 
+## What if
+
+For "what if we raise the latte price by 30 cents?" or "what if Truck 7
+never arrives?", read `ontology_get` for the approved properties and
+metrics, find the entities, and call `scenario_run` with the `changes`
+(`set` one value, `scale` or `shift` a property of the entities that
+`entity_ids`, `filters` or `related_to` pick, `remove` an entity) and the
+`metrics` that matter. The server computes each metric before and after
+and saves nothing. Answer from its numbers, decide from `reached` what the
+change affects, and say it was not saved. If no metric fits, say which one
+to approve and propose it; never make a number up.
+
 ## Mapping records and CSVs
 
 To map a source's records or an uploaded CSV onto the ontology, run

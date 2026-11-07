@@ -3,17 +3,19 @@
 import type { ComponentType } from "react";
 import ImpactView from "./ImpactView";
 import MetricView from "./MetricView";
+import ScenarioView from "./ScenarioView";
 import SubgraphView from "./SubgraphView";
-import type { ImpactView as Impact, MetricView as Metric, ShownView, SubgraphView as Subgraph } from "./types";
+import type { ImpactView as Impact, MetricView as Metric, ScenarioView as Scenario, ShownView, SubgraphView as Subgraph } from "./types";
 
 export const SHOW_VIEW = "show_view";
 
-type Known = Impact | Subgraph | Metric;
+type Known = Impact | Subgraph | Metric | Scenario;
 
 const VIEWS: { [K in Known["view"]]: ComponentType<{ view: Extract<Known, { view: K }> }> } = {
   impact: ImpactView,
   subgraph: SubgraphView,
   metric: MetricView,
+  scenario: ScenarioView,
 };
 
 /** A `show_view` result as stored or streamed, or null when it is not a view (an error, bad JSON). */

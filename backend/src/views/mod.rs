@@ -1,7 +1,9 @@
 //! `show_view`: the model's answer drawn as a view the app knows, instead of free text. A typed
 //! catalogue, one [`ViewSpec`] variant per view: `impact` (what a change to one entity affects, each
-//! affected entity with the chain of relations that reaches it and the model's reason) and `subgraph`
-//! (how some entities connect).
+//! affected entity with the chain of relations that reaches it and the model's reason), `subgraph`
+//! (how some entities connect), `metric` (an approved metric's number) and `scenario` (a what-if: the
+//! metrics before and after hypothetical changes). The server reruns `metric` and `scenario` itself, so
+//! a number on screen is always its own.
 //!
 //! The server resolves every id and checks it before anything is drawn: each entity and relation must
 //! exist in a vault the caller can read, and each impact path must be a connected chain of relations
@@ -20,6 +22,7 @@ use crate::entities::neighbourhood::{load_edges, load_nodes, EdgeRow, NodeRow};
 use crate::entities::service::{accessible, require_entity_id};
 use crate::error::{AppError, AppResult};
 use crate::ontology::metric::{self, EvalArgs, Filter, MetricEvalOut};
+use crate::ontology::scenario::{self, ScenarioArgs, ScenarioOut};
 use crate::pool::OrgDb;
 use crate::rid::RecordIdExt;
 
@@ -66,6 +69,8 @@ pub enum ViewSpec {
         #[serde(default)]
         allow_unapproved: bool,
     },
+    /// The same arguments as `scenario_run`, under `scenario`; there is no field for a number.
+    Scenario { scenario: ScenarioArgs, headline: String },
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -108,6 +113,8 @@ pub enum View {
     Subgraph { title: String, entities: Vec<EntityRef>, relations: Vec<Step> },
     /// `metric` is the server's own run; `entities` are its `entity_ids` with names, the receipts.
     Metric { metric: MetricEvalOut, entities: Vec<EntityRef> },
+    /// `result` is the server's own run of the what-if.
+    Scenario { headline: String, result: ScenarioOut },
 }
 
 /// `show_view`'s result: the view's fields, plus `text`.
@@ -182,6 +189,10 @@ pub async fn show(db: &OrgDb, owner: &RecordId, spec: ViewSpec) -> AppResult<Sho
             let graph = Resolved::load(db, owner, ids, std::iter::empty()).await?;
             let entities = out.entity_ids.iter().filter_map(|id| graph.entity(id).ok()).collect();
             View::Metric { metric: out, entities }
+        }
+        ViewSpec::Scenario { scenario: args, headline } => {
+            let headline = clean("headline", &headline, MAX_HEADLINE)?;
+            View::Scenario { headline, result: scenario::run(db, owner, &args).await? }
         }
     };
     let text = view.text();
@@ -340,6 +351,7 @@ impl View {
                 out
             }
             View::Metric { metric: m, entities } => metric_text(m, entities),
+            View::Scenario { headline, result } => scenario_text(headline, result),
         }
     }
 }
@@ -390,6 +402,72 @@ fn metric_text(m: &MetricEvalOut, entities: &[EntityRef]) -> String {
     for w in &m.warnings {
         out.push_str(&format!("\nNote: {w}"));
     }
+    out
+}
+
+/// A number as [`number`] writes it for `unit`, without the unit.
+fn figure(v: f64, unit: Option<&str>) -> String {
+    let s = number(v, unit);
+    match unit {
+        Some(u) => s.strip_suffix(&format!(" {u}")).unwrap_or(&s).to_string(),
+        None => s,
+    }
+}
+
+/// "15.22 \u{2192} 15.67 AUD, up 0.45 AUD (2.9%)": the move in words, never by colour alone.
+pub fn movement(before: Option<f64>, after: Option<f64>, delta_pct: Option<f64>, unit: Option<&str>) -> String {
+    let tail = unit.map(|u| format!(" {u}")).unwrap_or_default();
+    let (a, b) = match (before, after) {
+        (Some(a), Some(b)) => (a, b),
+        (None, Some(b)) => return format!("no value before, {}{tail} after", figure(b, unit)),
+        (Some(a), None) => return format!("{}{tail} before, no value after", figure(a, unit)),
+        (None, None) => return "no value".into(),
+    };
+    let d = b - a;
+    if d.abs() < 1e-9 {
+        return format!("{}{tail}, no change", figure(a, unit));
+    }
+    let way = if d > 0.0 { "up" } else { "down" };
+    let pct = delta_pct.map(|p| format!(" ({}%)", number((p.abs() * 10.0).round() / 10.0, None))).unwrap_or_default();
+    format!("{} \u{2192} {}{tail}, {way} {}{tail}{pct}", figure(a, unit), figure(b, unit), figure(d.abs(), unit))
+}
+
+fn shown_value(v: &serde_json::Value, unit: Option<&str>) -> String {
+    match v.as_f64() {
+        Some(n) => number(n, unit),
+        None => v.as_str().map(String::from).unwrap_or_else(|| v.to_string()),
+    }
+}
+
+fn scenario_text(headline: &str, r: &ScenarioOut) -> String {
+    let mut out = format!("{headline}\nWhat if: {}.", r.changes.join("; "));
+    for (b, s) in r.baseline.iter().zip(&r.scenario) {
+        let approved = if b.status == crate::ontology::Status::Approved { "" } else { " (not approved yet)" };
+        out.push_str(&format!("\n- {}{approved}: {}", words(&b.metric), movement(b.value, s.value.value, s.delta_pct, b.unit.as_deref())));
+    }
+    if !r.changed.is_empty() {
+        let listed = r
+            .changed
+            .iter()
+            .map(|c| {
+                let before = c.before.as_ref().map(|v| shown_value(v, c.unit.as_deref())).unwrap_or_else(|| "none".into());
+                format!("{} {} {before} \u{2192} {}", c.name, words(&c.property), shown_value(&c.after, c.unit.as_deref()))
+            })
+            .collect::<Vec<_>>()
+            .join("; ");
+        let more = r.n_changed.saturating_sub(r.changed.len());
+        let more = if more > 0 { format!(" and {more} more") } else { String::new() };
+        out.push_str(&format!("\nChanged: {listed}{more}."));
+    }
+    if !r.reached.is_empty() {
+        let listed = r.reached.iter().map(|e| format!("{} ({}, via {})", e.name, words(&e.kind), e.via)).collect::<Vec<_>>().join("; ");
+        let steps = r.reached.iter().map(|e| e.depth).max().unwrap_or(1);
+        out.push_str(&format!("\nLinked within {steps} step{} (not all are affected): {listed}.", if steps == 1 { "" } else { "s" }));
+    }
+    for w in &r.warnings {
+        out.push_str(&format!("\nNote: {w}"));
+    }
+    out.push_str("\nNothing was saved: this is a what-if.");
     out
 }
 

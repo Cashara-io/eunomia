@@ -1,0 +1,9 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "error": "change 1: the property \"name\" on \"person\" does not exist in this vault: propose it with ontology_propose (properties: kind, name, datatype, unit) and wait for a vault owner to approve it.",
+  "code": "validation.invalid",
+  "trace_id": "<trace>"
+}

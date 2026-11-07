@@ -10,16 +10,19 @@
 //!   value only for an approved property (migration 0034).
 //! * Compute: [`metric::eval`] runs an approved metric over the typed values and returns the entities
 //!   it used (migration 0035); [`metric::decide_metric`] is decided like a property.
+//! * What if: [`scenario::run`] puts hypothetical changes over the real values in memory and runs the
+//!   same metrics on both, writing nothing.
 //! * Auto-map: [`profile`] profiles record fields and CSV columns, [`automap::automap`] proposes kinds,
 //!   properties (with the fields they come from) and value-checked links from them, and
 //!   [`tabular::import_rows`] turns an approved CSV's rows into entities and values (migration 0036).
-//! * Expose: the `ontology_*` tools, `entity_set_property`, `metric_eval` and `document_import_rows`
+//! * Expose: the `ontology_*` tools, `entity_set_property`, `metric_eval`, `scenario_run` and `document_import_rows`
 //!   (`tools/registry/ontology.rs`).
 
 pub mod automap;
 pub mod metric;
 pub mod profile;
 pub mod property;
+pub mod scenario;
 pub mod suggest;
 pub mod tabular;
 

@@ -145,6 +145,21 @@ the nearest ones, never as a silent 0. The in-app Chat answers number
 questions this way and draws the result as a `metric` view; it never adds
 up values itself.
 
+Metrics also answer "what if". `scenario_run` takes hypothetical changes: a
+value for one entity's property (`set`), a property of every entity of a
+kind that filters or a relation pick multiplied (`scale`) or moved by an
+amount (`shift`), or an entity taken out of the picture (`remove`). Each
+change is checked as a write would be: only an approved property changes,
+the value must fit its datatype, and only numbers scale or shift. The server
+puts the changes over the real values in memory, runs the chosen metrics on
+both through the same code as `metric_eval`, and returns each number before
+and after with the difference, every value it changed, and the entities
+within a few relations of the changed ones. Nothing is saved: the what-if
+lives only for that one call, and every number in it is the server's. The
+model still decides which changes the question means, which metrics matter,
+and what the reached entities have to do with it. In the in-app Chat the
+answer is drawn as a `scenario` view, which the server runs again itself.
+
 The map can also build itself. `ontology_automap` (or Auto-map in Kinds
 and links) profiles the fields of the records a vault already holds, or the
 columns of an uploaded CSV: each field's type, how often it is empty,

@@ -11,6 +11,7 @@ use serde_json::json;
 use super::{bad_args, kind_schema, parse_opt_rid, parse_rid, register, to_tool_value, ToolSpec};
 use crate::ontology::automap::{self, AutomapArgs};
 use crate::ontology::metric::{self, EvalArgs};
+use crate::ontology::scenario::{self, ScenarioArgs};
 use crate::ontology::tabular::{self, ImportArgs};
 use crate::ontology::property::{self, Datatype};
 use crate::ontology::{self, Proposals};
@@ -165,6 +166,7 @@ fn vault_only_schema(what: &str) -> serde_json::Value {
 
 pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
     register_eval(registry);
+    register_scenario(registry);
     register_automap(registry);
     #[derive(serde::Deserialize, Default)]
     struct VaultArgs {
@@ -319,6 +321,93 @@ pub(super) fn register_eval(registry: &mut HashMap<&'static str, ToolSpec>) {
                     Err(e) => return Ok(bad_args(e)),
                 };
                 Ok(to_tool_value(metric::eval(&state.db, owner, &a).await))
+            })
+        }),
+    );
+}
+
+/// `scenario_run`'s input schema, in its own frame like `propose_schema`; a `scenario` view takes the same.
+#[inline(never)]
+pub(super) fn scenario_schema() -> serde_json::Value {
+    let pick = |what: &str, amount: (&str, &str)| {
+        json!({
+            "type": "object",
+            "description": what,
+            "properties": {
+                "kind": kind_schema(),
+                "property": {"type": "string", "description": "an approved number, integer, money or percent property of the kind"},
+                "entity_ids": {"type": "array", "maxItems": scenario::MAX_TOUCHED, "items": {"type": "string"}, "description": "only these entities of the kind, e.g. just the latte"},
+                amount.0: {"type": "number", "description": amount.1},
+                "filters": filters_schema("pick only the entities whose values pass these, as a metric's filters", metric::MAX_FILTERS),
+                "related_to": {
+                    "type": "object",
+                    "description": "pick only the entities linked to this one, e.g. the products supplied by a supplier",
+                    "properties": {
+                        "entity_id": {"type": "string", "description": "the entity they are linked to, from entities_search"},
+                        "label": {"type": "string", "description": "only by relations with this label, e.g. supplied_by"},
+                    },
+                    "required": ["entity_id"],
+                },
+            },
+            "required": ["kind", "property", amount.0],
+        })
+    };
+    json!({
+        "type": "object",
+        "properties": {
+            "vault_id": {"type": "string", "description": "the vault (a vault id or its name); omit for your personal vault"},
+            "as_of": {"type": "string", "description": "start from each entity's latest value as of this ISO 8601 date or datetime; default now"},
+            "changes": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": scenario::MAX_CHANGES,
+                "description": "applied in order; each item has exactly one of set, scale, shift or remove",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "set": {
+                            "type": "object",
+                            "description": "a hypothetical value for one entity's approved property, checked as entity_set_property checks it",
+                            "properties": {
+                                "entity_id": {"type": "string"},
+                                "property": {"type": "string"},
+                                "value": {"description": "in the property's datatype, as for entity_set_property"},
+                                "unit": {"type": "string"},
+                            },
+                            "required": ["entity_id", "property", "value"],
+                        },
+                        "scale": pick("multiply a property of every entity of a kind the filters pick (at most 500)", ("factor", "1.1 is up 10%, 0.9 down 10%")),
+                        "shift": pick("add to a property of every entity of a kind the filters pick (at most 500)", ("delta", "in the property's unit: 0.3 is up 30 cents for AUD, -2 down 2")),
+                        "remove": {
+                            "type": "object",
+                            "description": "take an entity out of the picture: it counts in no metric (a truck that never arrives, a product dropped)",
+                            "properties": {"entity_id": {"type": "string"}},
+                            "required": ["entity_id"],
+                        },
+                    },
+                },
+            },
+            "metrics": {"type": "array", "maxItems": scenario::MAX_METRICS, "items": {"type": "string"}, "description": "approved metric names from ontology_get, run on the real values and on the what-if's"},
+            "impact_from": {"type": "array", "maxItems": scenario::MAX_IMPACT_FROM, "items": {"type": "string"}, "description": "entity ids to also trace `reached` from, besides the changed ones"},
+            "depth": {"type": "integer", "minimum": 1, "maximum": 3, "description": "how many relations `reached` follows (default 2)"},
+            "allow_unapproved": {"type": "boolean", "description": "run proposed metrics too; their numbers come back marked proposed"},
+        },
+        "required": ["changes"],
+    })
+}
+
+fn register_scenario(registry: &mut HashMap<&'static str, ToolSpec>) {
+    register(
+        registry,
+        "scenario_run",
+        scenario_schema(),
+        Arc::new(|state, owner, args| {
+            Box::pin(async move {
+                let a: ScenarioArgs = match serde_json::from_value(args) {
+                    Ok(a) => a,
+                    Err(e) => return Ok(bad_args(e)),
+                };
+                Ok(to_tool_value(scenario::run(&state.db, owner, &a).await))
             })
         }),
     );

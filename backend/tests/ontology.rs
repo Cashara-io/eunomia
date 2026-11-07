@@ -1914,3 +1914,320 @@ async fn extraction_writes_approved_custom_kinds_and_never_rejected_or_proposed_
     assert_eq!(kind(&o, "junk")["entities"], 0);
     assert_eq!(kind(&o, "draft_kind")["entities"], 0);
 }
+
+// ------------------------------------------------------------ the what-if sandbox
+
+/// The cafe range with `total_price` (sum), `avg_price` (avg) and `products` (count) approved.
+async fn cafe_with_metrics(app: &TestApp) -> (String, std::collections::HashMap<&'static str, String>) {
+    let (vault, ids) = cafe_range(app).await;
+    approved_metrics(app, &vault, json!([
+        {"name": "total_price", "expr": {"agg": "sum", "property": "price"}},
+        {"name": "avg_price", "expr": {"agg": "avg", "property": "price"}},
+        {"name": "products", "expr": {"agg": "count"}},
+    ])).await;
+    (vault, ids)
+}
+
+fn what_if(changes: Value, extra: Value) -> Value {
+    let mut args = json!({"changes": changes, "metrics": ["total_price", "avg_price", "products"]});
+    args.as_object_mut().unwrap().extend(extra.as_object().cloned().unwrap_or_default());
+    args
+}
+
+/// A metric's baseline, scenario and delta values.
+type Move = (Option<f64>, Option<f64>, Option<f64>);
+
+/// Each metric's move, by name.
+fn moves(out: &Value) -> std::collections::HashMap<String, Move> {
+    let base = out["baseline"].as_array().unwrap();
+    let after = out["scenario"].as_array().unwrap();
+    base.iter().zip(after).map(|(b, s)| (b["metric"].as_str().unwrap().to_string(), (b["value"].as_f64(), s["value"].as_f64(), s["delta"].as_f64()))).collect()
+}
+
+fn changed_ids(out: &Value) -> Vec<String> {
+    let mut v: Vec<String> = out["changed"].as_array().unwrap().iter().map(|c| c["entity_id"].as_str().unwrap().to_string()).collect();
+    v.sort();
+    v
+}
+
+#[tokio::test]
+async fn a_what_if_moves_each_metric_by_the_amount_worked_out_by_hand() {
+    let app = TestApp::new().await;
+    let (_, ids) = cafe_with_metrics(&app).await;
+    let run = |changes: Value| app.tool("scenario_run", what_if(changes, json!({})));
+
+    // the real numbers: Latte 5 + Mocha 6 + Tea 3 = 14 over 3 priced products; 4 products in all
+    // shift: the latte up 30 cents gives 14.3, an average of 14.3 / 3
+    let out = ok(run(json!([{"shift": {"kind": "product", "property": "price", "delta": 0.3, "entity_ids": [ids["Latte"]]}}])).await);
+    let m = moves(&out);
+    assert_eq!(m["total_price"], (Some(14.0), Some(14.3), Some(0.3)), "{out}");
+    assert_eq!(m["avg_price"], (Some(4.666667), Some(4.766667), Some(0.1)), "{out}");
+    assert_eq!(m["products"], (Some(4.0), Some(4.0), Some(0.0)), "{out}");
+    assert_eq!(out["scenario"][0]["delta_pct"].as_f64(), Some(2.14), "0.3 of 14 is 2.14%: {out}");
+    assert_eq!(out["changed"], json!([{"entity_id": ids["Latte"], "name": "Latte", "kind": "product", "property": "price", "before": 5.0, "after": 5.3, "unit": "AUD"}]));
+    assert_eq!(out["changes"], json!(["Latte price up 0.30 AUD"]));
+
+    // scale: Riverside Roasters' two products up 10% gives 5.5 + 6.6 + 3 = 15.1
+    let riverside = json!([{"property": "supplier", "op": "eq", "value": "Riverside Roasters"}]);
+    let out = ok(run(json!([{"scale": {"kind": "product", "property": "price", "factor": 1.1, "filters": riverside}}])).await);
+    assert_eq!(moves(&out)["total_price"], (Some(14.0), Some(15.1), Some(1.1)), "{out}");
+    assert_eq!(out["changes"][0], "Product price up 10% on 2 products where supplier is Riverside Roasters");
+
+    // set: the tea at 4 gives 15
+    let out = ok(run(json!([{"set": {"entity_id": ids["Tea"], "property": "price", "value": 4}}])).await);
+    assert_eq!(moves(&out)["total_price"], (Some(14.0), Some(15.0), Some(1.0)), "{out}");
+    assert_eq!(out["changes"], json!(["Tea price set to 4.00 AUD"]));
+
+    // in order: the latte's 5.3 is then scaled with the mocha's 6, so 5.83 + 6.6 + 3 = 15.43
+    let out = ok(run(json!([
+        {"shift": {"kind": "product", "property": "price", "delta": 0.3, "entity_ids": [ids["Latte"]]}},
+        {"scale": {"kind": "product", "property": "price", "factor": 1.1, "filters": [{"property": "size", "op": "eq", "value": "Large"}]}},
+    ])).await);
+    assert_eq!(moves(&out)["total_price"].1, Some(15.43), "{out}");
+    let latte = out["changed"].as_array().unwrap().iter().find(|c| c["name"] == "Latte").unwrap();
+    assert_eq!((latte["before"].as_f64(), latte["after"].as_f64()), (Some(5.0), Some(5.83)), "before is the real value, after the final one");
+    assert_eq!(out["n_changed"], 2);
+}
+
+#[tokio::test]
+async fn a_scale_changes_only_the_entities_its_filters_and_relations_pick() {
+    let app = TestApp::new().await;
+    let (_, ids) = cafe_with_metrics(&app).await;
+    let scale = |pick: Value| {
+        let mut s = json!({"kind": "product", "property": "price", "factor": 2});
+        s.as_object_mut().unwrap().extend(pick.as_object().cloned().unwrap());
+        app.tool("scenario_run", what_if(json!([{"scale": s}]), json!({})))
+    };
+    let out = ok(scale(json!({"filters": [{"property": "size", "op": "eq", "value": "large"}]})).await);
+    assert_eq!(changed_ids(&out), ids_of(&["Latte", "Mocha"], &ids), "{out}");
+    let out = ok(scale(json!({"filters": [{"property": "price", "op": "lt", "value": 5.5}, {"property": "size", "op": "in", "value": ["Small", "Large"]}]})).await);
+    assert_eq!(changed_ids(&out), ids_of(&["Latte", "Tea"], &ids), "{out}");
+    // the scone has no price, so even with every product picked it is not changed, and the warning says so
+    let out = ok(scale(json!({})).await);
+    assert_eq!(changed_ids(&out), ids_of(&["Latte", "Mocha", "Tea"], &ids));
+    assert!(out["warnings"].to_string().contains("1 picked product have no price value"), "{out}");
+    // a filter value listed nowhere is refused, not read as picking nothing
+    assert!(err(&scale(json!({"filters": [{"property": "size", "op": "eq", "value": "Medum"}]})).await).contains("nearest"));
+
+    // related_to: only the products linked to Bean Co by supplied_by
+    let bean_co = write(&app, "Bean Co", "organisation").await["entity"]["id"].as_str().unwrap().to_string();
+    for (from, label) in [("Latte", "supplied by"), ("Tea", "supplied by"), ("Mocha", "competes with")] {
+        ok(app.tool("code_relate", json!({"from_id": ids[from], "to_id": bean_co, "label": label})).await);
+    }
+    let out = ok(scale(json!({"related_to": {"entity_id": bean_co, "label": "supplied_by"}})).await);
+    assert_eq!(changed_ids(&out), ids_of(&["Latte", "Tea"], &ids), "{out}");
+    assert_eq!(out["changes"][0], "Product price up 100% on 2 products supplied by Bean Co");
+    assert_eq!(moves(&out)["total_price"].1, Some(22.0), "10 + 6 + 6");
+    let out = ok(scale(json!({"related_to": {"entity_id": bean_co}})).await);
+    assert_eq!(changed_ids(&out), ids_of(&["Latte", "Mocha", "Tea"], &ids), "any relation without a label");
+}
+
+#[tokio::test]
+async fn a_removed_entity_leaves_the_metrics_and_is_never_reached() {
+    let app = TestApp::new().await;
+    let (_, ids) = cafe_with_metrics(&app).await;
+    let bean_co = write(&app, "Bean Co", "organisation").await["entity"]["id"].as_str().unwrap().to_string();
+    for from in ["Latte", "Mocha"] {
+        ok(app.tool("code_relate", json!({"from_id": ids[from], "to_id": bean_co, "label": "supplied_by"})).await);
+    }
+    let reached = |out: &Value| -> Vec<String> {
+        let mut v: Vec<String> = out["reached"].as_array().unwrap().iter().map(|r| r["name"].as_str().unwrap().to_string()).collect();
+        v.sort();
+        v
+    };
+    // without the removal, Bean Co reaches both its products
+    let out = ok(app.tool("scenario_run", what_if(json!([{"set": {"entity_id": ids["Tea"], "property": "price", "value": 3}}]), json!({"impact_from": [bean_co], "depth": 1}))).await);
+    assert_eq!(reached(&out), ["Latte", "Mocha"], "{out}");
+    let latte = out["reached"].as_array().unwrap().iter().find(|r| r["name"] == "Latte").unwrap();
+    assert_eq!((latte["depth"].as_u64(), latte["via"].as_str(), latte["from"].as_str()), (Some(1), Some("Latte supplied by Bean Co"), Some(bean_co.as_str())));
+    assert_eq!(latte["path"].as_array().unwrap().len(), 1);
+
+    let out = ok(app.tool("scenario_run", what_if(json!([{"remove": {"entity_id": ids["Mocha"]}}]), json!({"impact_from": [bean_co], "depth": 1}))).await);
+    let m = moves(&out);
+    assert_eq!(m["products"], (Some(4.0), Some(3.0), Some(-1.0)), "{out}");
+    assert_eq!(m["total_price"], (Some(14.0), Some(8.0), Some(-6.0)), "{out}");
+    assert_eq!(reached(&out), ["Latte"], "the mocha is gone, so it is not reached: {out}");
+    assert_eq!(out["removed"], json!([{"entity_id": ids["Mocha"], "name": "Mocha", "kind": "product"}]));
+    assert_eq!(out["changes"], json!(["Mocha removed"]));
+    // what the removed entity was linked to is reached from it
+    let out = ok(app.tool("scenario_run", what_if(json!([{"remove": {"entity_id": ids["Mocha"]}}]), json!({"depth": 1}))).await);
+    assert_eq!(reached(&out), ["Bean Co"], "{out}");
+}
+
+/// Rows in every table a what-if could touch.
+async fn row_counts(app: &TestApp) -> Value {
+    let mut res = app
+        .db()
+        .await
+        .test_raw()
+        .query("RETURN { values: count(SELECT id FROM entity_property), entities: count(SELECT id FROM entity), orgs: count(SELECT id FROM organisation), relations: count(SELECT id FROM relates_to), memories: count(SELECT id FROM memory), properties: count(SELECT id FROM ontology_property), metrics: count(SELECT id FROM ontology_metric) }")
+        .await
+        .unwrap();
+    res.take::<Option<Value>>(0).unwrap().unwrap()
+}
+
+#[tokio::test]
+async fn a_what_if_writes_nothing() {
+    let app = TestApp::new().await;
+    let (_, ids) = cafe_with_metrics(&app).await;
+    let bean_co = write(&app, "Bean Co", "organisation").await["entity"]["id"].as_str().unwrap().to_string();
+    ok(app.tool("code_relate", json!({"from_id": ids["Latte"], "to_id": bean_co, "label": "supplied_by"})).await);
+    let before = row_counts(&app).await;
+    let changes = json!([
+        {"set": {"entity_id": ids["Tea"], "property": "price", "value": 9}},
+        {"scale": {"kind": "product", "property": "price", "factor": 3, "related_to": {"entity_id": bean_co}}},
+        {"shift": {"kind": "product", "property": "price", "delta": -1}},
+        {"remove": {"entity_id": bean_co}},
+        {"remove": {"entity_id": ids["Mocha"]}},
+    ]);
+    ok(app.tool("scenario_run", what_if(changes.clone(), json!({"impact_from": [ids["Latte"]]}))).await);
+    ok(app.tool("show_view", json!({"view": "scenario", "headline": "Prices move", "scenario": what_if(changes, json!({}))})).await);
+    assert_eq!(row_counts(&app).await, before);
+    assert_eq!(before["values"].as_u64(), Some(14), "{before}");
+    // the real numbers are the real ones still
+    assert_eq!(ok(app.tool("metric_eval", json!({"metric": "total_price"})).await)["value"].as_f64(), Some(14.0));
+    assert_eq!(ok(app.tool("entities_get", json!({"id": ids["Tea"]})).await)["properties"][1]["value"], json!(3.0));
+}
+
+#[tokio::test]
+async fn a_what_if_refuses_what_a_write_would_refuse() {
+    let app = TestApp::new().await;
+    let (_, ids) = cafe_with_metrics(&app).await;
+    ok(app.tool("ontology_propose", json!({"properties": [{"kind": "product", "name": "weight_g", "datatype": "integer"}]})).await);
+    let run = |change: Value| app.tool("scenario_run", what_if(json!([change]), json!({})));
+    for (change, says) in [
+        (json!({"set": {"entity_id": ids["Tea"], "property": "weight_g", "value": 200}}), "proposed, not approved"),
+        (json!({"set": {"entity_id": ids["Tea"], "property": "calories", "value": 200}}), "does not exist in this vault"),
+        (json!({"set": {"entity_id": ids["Tea"], "property": "price", "value": "$4.50"}}), "the value must be a number"),
+        (json!({"set": {"entity_id": ids["Tea"], "property": "size", "value": "Medium"}}), "takes one of Small, Large"),
+        (json!({"scale": {"kind": "product", "property": "supplier", "factor": 1.1}}), "scale changes a number, integer, money or percent property"),
+        (json!({"shift": {"kind": "product", "property": "size", "delta": 1}}), "shift changes a number"),
+        (json!({"scale": {"kind": "product", "property": "weight_g", "factor": 2}}), "proposed, not approved"),
+        (json!({"scale": {"kind": "product", "property": "price", "factor": -1}}), "between 0 and 1000"),
+        (json!({"scale": {"kind": "product", "property": "price", "factor": 2, "entity_ids": ["entity:nothere"]}}), "unknown entity"),
+        (json!({"remove": {"entity_id": "entity:nothere"}}), "unknown entity"),
+        (json!({"drop": {"entity_id": ids["Tea"]}}), "unknown variant"),
+    ] {
+        let out = run(change.clone()).await;
+        assert!(err(&out).contains(says), "{change}: {out}");
+    }
+    let one = json!({"set": {"entity_id": ids["Tea"], "property": "price", "value": 4}});
+    let many: Vec<Value> = (0..21).map(|_| one.clone()).collect();
+    assert!(err(&app.tool("scenario_run", what_if(json!(many), json!({}))).await).contains("1 to 20 changes"));
+    assert!(err(&app.tool("scenario_run", what_if(json!([]), json!({}))).await).contains("1 to 20 changes"));
+    assert!(err(&app.tool("scenario_run", what_if(json!([one]), json!({"metrics": ["no_such_metric"]}))).await).contains("no metric \"no_such_metric\""));
+}
+
+#[tokio::test]
+async fn an_unapproved_metric_runs_in_a_what_if_only_when_asked() {
+    let app = TestApp::new().await;
+    let (_, ids) = cafe_with_metrics(&app).await;
+    ok(app.tool("ontology_propose", json!({"metrics": [{"kind": "product", "name": "highest_price", "expr": {"agg": "max", "property": "price"}}]})).await);
+    let args = |allow: bool| json!({"changes": [{"set": {"entity_id": ids["Tea"], "property": "price", "value": 9}}], "metrics": ["highest_price"], "allow_unapproved": allow});
+    assert!(err(&app.tool("scenario_run", args(false)).await).contains("proposed, not approved"));
+    let out = ok(app.tool("scenario_run", args(true)).await);
+    assert_eq!(moves(&out)["highest_price"], (Some(6.0), Some(9.0), Some(3.0)), "{out}");
+    assert_eq!(out["scenario"][0]["status"], "proposed");
+}
+
+#[tokio::test]
+async fn a_scale_past_500_entities_changes_500_and_says_so() {
+    let app = TestApp::new().await;
+    let vault = personal(&app).await;
+    ok(app.tool("ontology_propose", json!({"properties": [price("money")]})).await);
+    assert_eq!(decide_property(&app, &vault, "product", "price", json!({"action": "approve"})).await.0, 200);
+    approved_metrics(&app, &vault, json!([{"name": "total_price", "expr": {"agg": "sum", "property": "price"}}])).await;
+    for batch in 0..6 {
+        let items: Vec<Value> = (0..100).map(|i| json!({"subject_name": format!("Cup {}", batch * 100 + i), "subject_kind": "product", "text": "a cup"})).collect();
+        ok(app.tool("memory_write_batch", json!({"items": items})).await);
+    }
+    // a price of 1 on every cup, written as entity_set_property writes it
+    let mut res = app
+        .db()
+        .await
+        .test_raw()
+        .query("LET $p = (SELECT VALUE id FROM ONLY ontology_property WHERE name = 'price' LIMIT 1); FOR $e IN (SELECT VALUE id FROM entity WHERE kind = 'product') { CREATE entity_property SET vault = $e.vault, entity = $e, property = $p, value_num = 1, as_of = time::now() - 1h, origin = 'agent' }; RETURN count(SELECT id FROM entity_property)")
+        .await
+        .unwrap();
+    assert_eq!(res.take::<Option<i64>>(2).unwrap(), Some(600));
+    let out = ok(app.tool("scenario_run", json!({"changes": [{"scale": {"kind": "product", "property": "price", "factor": 2}}], "metrics": ["total_price"]})).await);
+    assert_eq!(out["n_changed"], 500, "{}", out["warnings"]);
+    assert_eq!(out["changed"].as_array().unwrap().len(), 50);
+    assert_eq!(moves(&out)["total_price"], (Some(600.0), Some(1100.0), Some(500.0)), "500 doubled, 100 as they were");
+    assert!(out["warnings"].to_string().contains("this change picks 600 products; a what-if changes at most 500"), "{}", out["warnings"]);
+}
+
+#[tokio::test]
+async fn a_what_if_reads_only_its_own_vault() {
+    let app = TestApp::new().await;
+    let (_, ids) = cafe_with_metrics(&app).await;
+    ok(app.tool("vault_create", json!({"name": "Team", "kind": "org"})).await);
+    let team = ok(app.tool("memory_write", json!({"subject_name": "Team latte", "subject_kind": "product", "text": "on the menu", "vault_id": "Team"})).await);
+    let team_id = team["entity"]["id"].as_str().unwrap().to_string();
+    // a Team entity in a personal what-if, and a personal one in a Team what-if, are both unknown
+    for (args, says) in [
+        (json!({"changes": [{"remove": {"entity_id": team_id}}]}), "unknown entity"),
+        (json!({"changes": [{"set": {"entity_id": ids["Tea"], "property": "price", "value": 1}}], "vault_id": "Team"}), "unknown entity"),
+        (json!({"changes": [{"remove": {"entity_id": ids["Tea"]}}], "impact_from": [team_id]}), "unknown entity"),
+        (json!({"changes": [{"remove": {"entity_id": ids["Tea"]}}], "metrics": ["total_price"], "vault_id": "Team"}), "unknown entity"),
+    ] {
+        let out = app.tool("scenario_run", args.clone()).await;
+        assert!(err(&out).contains(says), "{args}: {out}");
+    }
+    // a member of the org who is not in the personal vault cannot run one there
+    let bob = common::register(&app.state, "bob@example.com").await;
+    let vault = personal(&app).await;
+    let got = as_user(&app, &bob, "scenario_run", json!({"changes": [{"remove": {"entity_id": ids["Tea"]}}], "vault_id": vault})).await;
+    assert!(got.get("error").is_some() && !got.to_string().contains("Tea"), "{got}");
+}
+
+#[tokio::test]
+async fn a_scenario_view_is_the_servers_own_run_and_refuses_a_bad_scenario() {
+    let app = TestApp::new().await;
+    let (_, ids) = cafe_with_metrics(&app).await;
+    let scenario = json!({"changes": [{"shift": {"kind": "product", "property": "price", "delta": 0.3, "entity_ids": [ids["Latte"]]}}], "metrics": ["total_price"]});
+    let out = ok(app.tool("show_view", json!({"view": "scenario", "headline": "What if the latte costs 30 cents more?", "scenario": scenario})).await);
+    assert_eq!((out["view"].as_str(), out["headline"].as_str()), (Some("scenario"), Some("What if the latte costs 30 cents more?")));
+    assert_eq!(out["result"]["scenario"][0]["value"].as_f64(), Some(14.3), "{out}");
+    let text = out["text"].as_str().unwrap();
+    assert!(text.contains("What if: Latte price up 0.30 AUD."), "{text}");
+    assert!(text.contains("- total price: 14.00 \u{2192} 14.30 AUD, up 0.30 AUD (2.1%)"), "{text}");
+    assert!(text.contains("Changed: Latte price 5.00 AUD \u{2192} 5.30 AUD."), "{text}");
+    assert!(text.ends_with("Nothing was saved: this is a what-if."), "{text}");
+
+    // a number from the model has nowhere to go, and a scenario that fails its checks draws nothing
+    let mut forged = json!({"view": "scenario", "headline": "x", "scenario": {"changes": [], "metrics": ["total_price"], "baseline": [{"metric": "total_price", "value": 99}]}});
+    assert!(err(&app.tool("show_view", forged.clone()).await).contains("unknown field `baseline`"));
+    forged["scenario"] = json!({"changes": [{"set": {"entity_id": ids["Tea"], "property": "price", "value": "free"}}]});
+    assert!(err(&app.tool("show_view", forged).await).contains("must be a number"));
+}
+
+#[tokio::test]
+async fn the_chat_runs_a_what_if_and_streams_the_scenario_view() {
+    let app = TestApp::new().await;
+    let (_, ids) = cafe_with_metrics(&app).await;
+    let scenario = json!({"changes": [{"scale": {"kind": "product", "property": "price", "factor": 1.1, "filters": [{"property": "supplier", "op": "eq", "value": "Riverside Roasters"}]}}], "metrics": ["total_price"]});
+    let call = |i: usize, id: &str, name: &str, args: Value| json!({"index": i, "id": id, "function": {"name": name, "arguments": args.to_string()}});
+    let view = json!({"view": "scenario", "headline": "Riverside Roasters up 10%", "scenario": scenario.clone()});
+    let tools = json!({"choices": [{"delta": {"tool_calls": [call(0, "c1", "scenario_run", scenario), call(1, "c2", "show_view", view)]}}]});
+    let reply = json!({"choices": [{"delta": {"content": "Total price goes from 14 to 15.10 AUD. Nothing was saved."}}]});
+    let sse = |chunk: Value| format!("data: {chunk}\n\ndata: [DONE]\n\n");
+    // the second round only answers when the scenario's own numbers reached the model
+    let mock = serve(vec![
+        route("POST", "/chat/completions", json!(null)).body("\\\"value\\\":15.1").raw(&sse(reply)).header("content-type", "text/event-stream"),
+        route("POST", "/chat/completions", json!(null)).raw(&sse(tools)).header("content-type", "text/event-stream"),
+    ])
+    .await;
+    let (status, _) = app.http("PATCH", "/api/settings", Some(json!({"openai_base_url": mock.base})), true).await;
+    assert_eq!(status, 200);
+
+    let (_, events) = chat(&app, "What if Riverside Roasters puts prices up 10%?").await;
+    let results: Vec<&Value> = events.iter().filter(|e| e["type"] == "tool_result").collect();
+    let names: Vec<&str> = results.iter().map(|e| e["name"].as_str().unwrap()).collect();
+    assert_eq!(names, ["scenario_run", "show_view"], "{events:?}");
+    let shown = &results[1]["view"];
+    assert_eq!((shown["view"].as_str(), shown["result"]["scenario"][0]["value"].as_f64()), (Some("scenario"), Some(15.1)), "{shown}");
+    assert_eq!(changed_ids(&shown["result"]), ids_of(&["Latte", "Mocha"], &ids));
+    let done = events.iter().find(|e| e["type"] == "done").unwrap();
+    assert_eq!(done["reply"], "Total price goes from 14 to 15.10 AUD. Nothing was saved.", "{events:?}");
+}
