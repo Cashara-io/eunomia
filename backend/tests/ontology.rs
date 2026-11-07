@@ -1646,9 +1646,12 @@ async fn automap_checks_a_record_key_against_the_target_records_ids() {
          "links": [{"field": "charge", "label": "refunds", "to_kind": "charge", "target": {"source": "stripe", "record_type": "stripe.charge"}}]},
     ]});
     mock.set_routes(vec![route("POST", "/chat/completions", json!({"choices": [{"message": {"content": answer.to_string()}}]}))]);
+    // the vault already has this link type, spelt with a space: the model's paid_by joins it
+    ok(app.tool("ontology_propose", json!({"links": [{"from_kind": "charge", "label": "paid by", "to_kind": "customer"}]})).await);
     let out = ok(app.tool("ontology_automap", json!({"source": "stripe"})).await);
     let o = &out["ontology"];
-    assert_eq!(link(o, "charge", "paid_by", "customer")["reason"], "100% of values match (2 of 2)");
+    assert_eq!(link(o, "charge", "paid by", "customer")["reason"], "100% of values match (2 of 2)");
+    assert!(o["links"].as_array().unwrap().iter().all(|l| l["label"] != "paid_by"), "no near twin: {o}");
     assert!(o["links"].as_array().unwrap().iter().all(|l| l["label"] != "refunds"), "a refund of a charge that is not there: {o}");
     let mapped = out["record_types"].as_array().unwrap().iter().find(|t| t["kind"] == "charge").unwrap();
     assert!(mapped["unmapped"].as_array().unwrap().contains(&json!("status")), "{mapped}");
