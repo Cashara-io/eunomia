@@ -178,14 +178,15 @@ pub const EDGES_AMONG: Stmt = Stmt::new(
 );
 
 // entities/neighbourhood.rs and views/ (`entities_neighbourhood`, `show_view`)
-/// Every relation touching one of `$ids`, in either direction, with both ends' vaults. Each id's
-/// relations come through the `in` and `out` indexes, all in one round trip.
+/// Up to `$limit` relations from each of `$ids`, and up to `$limit` into each, with both ends' vaults:
+/// one list per id and direction. Each id's relations come through the `in` and `out` indexes, all in one
+/// round trip.
 // The caller filters on the vaults: `out = $id AND in.vault = $vault` inside the closure matched nothing
 // on SurrealDB 3.3 (outside one it works).
 pub const EDGES_TOUCHING: Stmt = Stmt::at(
     "entities.edges_touching",
-    r#"LET $outs = array::flatten($ids.map(|$id| (SELECT id, in, out, label, in.vault AS from_vault, out.vault AS to_vault FROM relates_to WHERE in = $id)));
-       LET $ins = array::flatten($ids.map(|$id| (SELECT id, in, out, label, in.vault AS from_vault, out.vault AS to_vault FROM relates_to WHERE out = $id)));
+    r#"LET $outs = $ids.map(|$id| (SELECT id, in, out, label, in.vault AS from_vault, out.vault AS to_vault FROM relates_to WHERE in = $id LIMIT $limit));
+       LET $ins = $ids.map(|$id| (SELECT id, in, out, label, in.vault AS from_vault, out.vault AS to_vault FROM relates_to WHERE out = $id LIMIT $limit));
        RETURN array::concat($outs, $ins);"#,
     2, // two LETs, then the RETURN
 );

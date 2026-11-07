@@ -450,6 +450,68 @@ async fn the_neighbourhood_never_leaves_the_vault_or_opens_one_the_caller_cannot
     assert!(!out.to_string().contains("Truck 7"), "{out}");
 }
 
+/// `n` relations from `from`, labelled `label_0`, `label_1`, ..., each to `to` or, without one, to a new
+/// entity of its own.
+async fn fan_out(app: &TestApp, from: &str, label: &str, n: usize, to: Option<&str>) {
+    app.db()
+        .await
+        .test_raw()
+        .query(
+            "LET $h = (SELECT owner, vault FROM ONLY $from);
+             FOR $i IN 0..$n {
+                 LET $t = $to ?? (CREATE ONLY entity SET owner = $h.owner, vault = $h.vault, kind = 'spoke', name = 'Spoke ' + <string> $i).id;
+                 RELATE $from->relates_to->$t SET label = $label + '_' + <string> $i;
+             };",
+        )
+        .bind(("from", rid::parse(from).unwrap()))
+        .bind(("to", to.map(|t| rid::parse(t).unwrap())))
+        .bind(("n", n as i64))
+        .bind(("label", label.to_string()))
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+}
+
+#[tokio::test]
+async fn a_neighbourhood_around_a_hub_is_capped_and_says_so() {
+    use eunomia_backend::entities::neighbourhood::{MAX_EDGES, MAX_EDGES_PER_ENTITY, MAX_NODES};
+    let app = TestApp::new().await;
+    let id = |v: Value| v["entity"]["id"].as_str().unwrap().to_string();
+    let edges = |n: &Value| n["edges"].as_array().unwrap().len();
+
+    // more neighbours than the node cap: every edge still points at a node that came back
+    let hub = id(write(&app, "Hub", "hub").await);
+    fan_out(&app, &hub, "feeds", MAX_NODES + 50, None).await;
+    let n = ok(app.tool("entities_neighbourhood", json!({"entity_id": hub, "depth": 1})).await);
+    assert_eq!((n["nodes"].as_array().unwrap().len(), edges(&n), n["truncated"].as_bool()), (MAX_NODES, MAX_NODES - 1, Some(true)));
+
+    // more relations from one entity than are read each way
+    let (busy, other) = (id(write(&app, "Busy", "hub").await), id(write(&app, "Other", "hub").await));
+    fan_out(&app, &busy, "pings", MAX_EDGES_PER_ENTITY + 100, Some(&other)).await;
+    let n = ok(app.tool("entities_neighbourhood", json!({"entity_id": busy, "depth": 1})).await);
+    assert_eq!((names(&n), edges(&n), n["truncated"].as_bool()), (vec!["Busy".to_string(), "Other".to_string()], MAX_EDGES_PER_ENTITY, Some(true)));
+
+    // under the per-entity cap everywhere, over the total: start -> a, b; a and b each -> c many times
+    let mut chain = Vec::new();
+    for name in ["Start", "A", "B", "C"] {
+        chain.push(id(write(&app, name, "hub").await));
+    }
+    let [start, a, b, c] = <[String; 4]>::try_from(chain).unwrap();
+    fan_out(&app, &start, "uses", 1, Some(&a)).await;
+    fan_out(&app, &start, "uses", 1, Some(&b)).await;
+    let each = MAX_EDGES / 2 + 100;
+    assert!(each < MAX_EDGES_PER_ENTITY);
+    fan_out(&app, &a, "calls", each, Some(&c)).await;
+    fan_out(&app, &b, "calls", each, Some(&c)).await;
+    let n = ok(app.tool("entities_neighbourhood", json!({"entity_id": start, "depth": 3})).await);
+    assert_eq!((names(&n).len(), edges(&n), n["truncated"].as_bool()), (4, MAX_EDGES, Some(true)), "{}", n["nodes"]);
+
+    // within every cap nothing is cut
+    let n = ok(app.tool("entities_neighbourhood", json!({"entity_id": start, "depth": 1})).await);
+    assert_eq!((edges(&n), n["truncated"].as_bool()), (2, Some(false)));
+}
+
 // ------------------------------------------------------------ what a change affects: the view
 
 /// The relation ids among the logistics chain, by label.

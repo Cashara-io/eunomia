@@ -22,6 +22,10 @@ pub const DEFAULT_DEPTH: u8 = 2;
 pub const MAX_DEPTH: u8 = 3;
 /// Most entities one neighbourhood returns, the start included.
 pub const MAX_NODES: usize = 150;
+/// Most relations one neighbourhood returns.
+pub const MAX_EDGES: usize = 600;
+/// Most relations read from one entity each way, so a hub with thousands of relations costs no more.
+pub const MAX_EDGES_PER_ENTITY: usize = 500;
 
 /// An entity as a neighbourhood or a view shows it.
 #[derive(Debug, Clone, Deserialize, SurrealValue)]
@@ -123,7 +127,8 @@ pub struct Neighbourhood {
     pub nodes: Vec<Node>,
     pub edges: Vec<Edge>,
     pub link_types: Vec<LinkType>,
-    /// More entities were within reach than [`MAX_NODES`].
+    /// More entities or relations were within reach than [`MAX_NODES`], [`MAX_EDGES`] or
+    /// [`MAX_EDGES_PER_ENTITY`] let through.
     pub truncated: bool,
 }
 
@@ -158,18 +163,33 @@ pub async fn neighbourhood(
     let mut truncated = false;
     let mut frontier = vec![start.id.clone()];
     for hop in 1..=depth {
-        if frontier.is_empty() {
+        if frontier.is_empty() || edges.len() >= MAX_EDGES {
             break;
         }
-        let mut res = q::EDGES_TOUCHING.on(db).bind(("ids", frontier)).await?;
-        let touching: Vec<EdgeRow> = res.take(q::EDGES_TOUCHING.slot)?;
+        // one more than the cap, to tell a full list from a cut one
+        let mut res = q::EDGES_TOUCHING.on(db).bind(("ids", frontier)).bind(("limit", MAX_EDGES_PER_ENTITY + 1)).await?;
+        let lists: Vec<Vec<EdgeRow>> = res.take(q::EDGES_TOUCHING.slot)?;
+        let mut touching = Vec::new();
+        for mut list in lists {
+            if list.len() > MAX_EDGES_PER_ENTITY {
+                truncated = true;
+                list.truncate(MAX_EDGES_PER_ENTITY);
+            }
+            touching.extend(list);
+        }
         let mut next = Vec::new();
         // an edge from before relations were confined to one vault stays hidden
         for e in touching.into_iter().filter(|e| e.from_vault.as_ref() == Some(&vault) && e.to_vault.as_ref() == Some(&vault)) {
-            for end in [&e.from, &e.to] {
-                if seen.contains_key(&end.to_string()) {
-                    continue;
-                }
+            if edge_ids.contains(&e.id.to_string()) {
+                continue;
+            }
+            if edges.len() >= MAX_EDGES {
+                truncated = true;
+                break;
+            }
+            // one end is on the frontier, so at most the other is new
+            let new_end = [&e.from, &e.to].into_iter().find(|end| !seen.contains_key(&end.to_string()));
+            if let Some(end) = new_end {
                 if seen.len() >= MAX_NODES {
                     truncated = true;
                     continue;
@@ -178,9 +198,8 @@ pub async fn neighbourhood(
                 order.push(end.clone());
                 next.push(end.clone());
             }
-            if edge_ids.insert(e.id.to_string()) {
-                edges.push(e);
-            }
+            edge_ids.insert(e.id.to_string());
+            edges.push(e);
         }
         frontier = next;
     }
