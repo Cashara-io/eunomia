@@ -444,7 +444,117 @@ async fn the_neighbourhood_never_leaves_the_vault_or_opens_one_the_caller_cannot
 
     // someone outside the personal vault gets not found, not the truck
     let bob = common::register(&app.state, "bob@example.com").await;
+    assert_eq!(bob.org, app.user.org);
     let out = as_user(&app, &bob, "entities_neighbourhood", json!({"entity_id": ids["Truck 7"]})).await;
     assert_eq!(out["code"], "entity.not_found", "{out}");
     assert!(!out.to_string().contains("Truck 7"), "{out}");
+}
+
+// ------------------------------------------------------------ what a change affects: the view
+
+/// The relation ids among the logistics chain, by label.
+async fn edges_by_label(app: &TestApp, from: &str) -> std::collections::HashMap<String, String> {
+    let n = ok(app.tool("entities_neighbourhood", json!({"entity_id": from, "depth": 3})).await);
+    n["edges"].as_array().unwrap().iter().map(|e| (e["label"].as_str().unwrap().to_string(), e["id"].as_str().unwrap().to_string())).collect()
+}
+
+fn impact(start: &str, affected: Value) -> Value {
+    json!({"view": {"view": "impact", "start_id": start, "headline": "  Truck 7 is two hours late.  ", "affected": affected}})
+}
+
+fn refused(out: &Value, needle: &str) {
+    assert_eq!(out["code"], "validation.invalid", "{out}");
+    assert!(out["error"].as_str().unwrap_or_default().contains(needle), "the error names {needle}: {out}");
+}
+
+#[tokio::test]
+async fn an_impact_view_comes_back_resolved_with_names_and_text() {
+    let app = TestApp::new().await;
+    let ids = logistics(&app).await;
+    let rel = edges_by_label(&app, &ids["Truck 7"]).await;
+    let token = format!("ghp_{}", "a1B2c3D4e5".repeat(4));
+    let out = ok(app
+        .tool(
+            "show_view",
+            impact(
+                &ids["Truck 7"],
+                json!([
+                    {"entity_id": ids["Shipment 88"], "path": [rel["carries"]], "why": "It is on the truck."},
+                    {"entity_id": ids["Order 12"], "path": [rel["carries"], rel["fulfils"]], "why": format!("Its shipment is late. {token}")},
+                    // against the stored direction: Ana drives the truck
+                    {"entity_id": ids["Ana"], "path": [rel["drives"]], "why": "Her shift runs over."},
+                ]),
+            ),
+        )
+        .await);
+    assert_eq!((out["view"].as_str(), out["headline"].as_str()), (Some("impact"), Some("Truck 7 is two hours late.")), "{out}");
+    assert_eq!(out["start"], json!({"id": ids["Truck 7"], "name": "Truck 7", "kind": "truck", "vault": personal(&app).await}));
+    let order = &out["affected"][1];
+    assert_eq!((order["entity"]["name"].as_str(), order["entity"]["kind"].as_str()), (Some("Order 12"), Some("order")));
+    let steps: Vec<(String, String, String)> = order["path"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| (s["from"]["name"].as_str().unwrap().into(), s["label"].as_str().unwrap().into(), s["to"]["name"].as_str().unwrap().into()))
+        .collect();
+    assert_eq!(steps, [("Truck 7".into(), "carries".into(), "Shipment 88".into()), ("Shipment 88".into(), "fulfils".into(), "Order 12".into())]);
+    let ana = &out["affected"][2]["path"][0];
+    assert_eq!((ana["from"]["name"].as_str(), ana["to"]["name"].as_str()), (Some("Ana"), Some("Truck 7")), "the stored direction is kept");
+    assert!(!out.to_string().contains(&token), "secrets are dropped from the model's text: {out}");
+    let text = out["text"].as_str().unwrap();
+    assert!(text.starts_with("Truck 7 is two hours late.\n"), "{text}");
+    assert!(text.contains("Order 12 (order), via Truck 7 carries Shipment 88, then Shipment 88 fulfils Order 12."), "{text}");
+
+    let sub = ok(app
+        .tool("show_view", json!({"view": {"view": "subgraph", "title": "How Ana reaches Acme", "entity_ids": [ids["Ana"]], "relation_ids": [rel["drives"], rel["for"]]}}))
+        .await);
+    let names: Vec<&str> = sub["entities"].as_array().unwrap().iter().map(|e| e["name"].as_str().unwrap()).collect();
+    assert_eq!(names, ["Ana", "Truck 7", "Order 12", "Acme"], "a relation's ends are shown too: {sub}");
+    assert!(sub["text"].as_str().unwrap().contains("- Order 12 for Acme"), "{sub}");
+}
+
+#[tokio::test]
+async fn a_view_with_an_invented_id_or_a_broken_path_is_refused_naming_it() {
+    let app = TestApp::new().await;
+    let ids = logistics(&app).await;
+    let rel = edges_by_label(&app, &ids["Truck 7"]).await;
+    let truck = &ids["Truck 7"];
+    let shipment = |path: Value| impact(truck, json!([{"entity_id": ids["Shipment 88"], "path": path, "why": "x"}]));
+
+    refused(&app.tool("show_view", impact("entity:invented1", json!([]))).await, "entity:invented1");
+    let out = app.tool("show_view", impact(truck, json!([{"entity_id": "entity:invented2", "path": [rel["carries"]], "why": "x"}]))).await;
+    refused(&out, "entity:invented2");
+    refused(&app.tool("show_view", shipment(json!(["relates_to:invented3"]))).await, "relates_to:invented3");
+    refused(&app.tool("show_view", shipment(json!([ids["Order 12"]]))).await, &ids["Order 12"]);
+    // the first relation must touch the start
+    let out = app.tool("show_view", impact(truck, json!([{"entity_id": ids["Order 12"], "path": [rel["fulfils"]], "why": "x"}]))).await;
+    refused(&out, "does not start at");
+    // each next relation must touch where the chain got to
+    let out = app.tool("show_view", impact(truck, json!([{"entity_id": ids["Acme"], "path": [rel["carries"], rel["for"]], "why": "x"}]))).await;
+    refused(&out, &format!("broken at relation {}", rel["for"]));
+    // and it must end at the entity it explains
+    let out = app.tool("show_view", impact(truck, json!([{"entity_id": ids["Order 12"], "path": [rel["carries"]], "why": "x"}]))).await;
+    refused(&out, "ends at");
+    refused(&app.tool("show_view", shipment(json!([]))).await, "is empty");
+    // an unknown view is a bad argument, not a new kind of answer
+    let out = app.tool("show_view", json!({"view": {"view": "pie_chart", "title": "x"}})).await;
+    assert!(out["error"].as_str().unwrap().contains("unknown variant"), "{out}");
+}
+
+#[tokio::test]
+async fn a_view_cannot_name_an_entity_the_caller_cannot_read() {
+    let app = TestApp::new().await;
+    let ids = logistics(&app).await;
+    let bob = common::register(&app.state, "bob@example.com").await;
+    assert_eq!(bob.org, app.user.org, "same database: only the vault check keeps Bob's entity out");
+    let secret = ok(as_user(&app, &bob, "memory_write", json!({"subject_name": "Bob Private Depot", "subject_kind": "location", "text": "only Bob sees this"})).await);
+    let hidden = secret["entity"]["id"].as_str().unwrap();
+    let hood = ok(as_user(&app, &bob, "entities_neighbourhood", json!({"entity_id": hidden})).await);
+    assert_eq!(hood["nodes"][0]["name"], "Bob Private Depot");
+
+    for view in [impact(hidden, json!([])), json!({"view": {"view": "subgraph", "title": "x", "entity_ids": [ids["Ana"], hidden]}})] {
+        let out = app.tool("show_view", view).await;
+        refused(&out, hidden);
+        assert!(!out.to_string().contains("Bob Private Depot"), "{out}");
+    }
 }

@@ -442,6 +442,8 @@ fn attack_value(tool: &str, prop: &str, schema: &Value, victim: &Org) -> Value {
         ("entities_get", "id") => id(0),
         // the file: it has relations, one with the canary in its label
         ("entities_neighbourhood", "entity_id") => id(4),
+        // a view over the victim's entities: their names must not come back
+        ("show_view", "view") => json!({"view": "subgraph", "title": "x", "entity_ids": [id(3), id(4)], "relation_ids": []}),
         (_, "parent_id") => id(3),
         (_, "from_id") | (_, "winner_id") | (_, "subject_id") | (_, "entity_id") => id(0),
         (_, "to_id") | (_, "loser_id") => id(1),

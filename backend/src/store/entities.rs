@@ -177,7 +177,7 @@ pub const EDGES_AMONG: Stmt = Stmt::new(
     "SELECT * FROM relates_to WHERE $ids CONTAINS in AND $ids CONTAINS out",
 );
 
-// entities/neighbourhood.rs (`entities_neighbourhood`)
+// entities/neighbourhood.rs and views/ (`entities_neighbourhood`, `show_view`)
 /// Every relation touching one of `$ids`, in either direction, with both ends' vaults. Each id's
 /// relations come through the `in` and `out` indexes, all in one round trip.
 // The caller filters on the vaults: `out = $id AND in.vault = $vault` inside the closure matched nothing
@@ -191,6 +191,8 @@ pub const EDGES_TOUCHING: Stmt = Stmt::at(
 );
 /// Entities by id, in any vault: the caller checks each one's vault.
 pub const NODES_BY_ID: Stmt = Stmt::new("entities.nodes_by_id", "SELECT id, vault, kind, name, summary FROM $ids");
+/// Relations by id, in any vault: the caller checks both ends.
+pub const RELATIONS_BY_ID: Stmt = Stmt::new("entities.relations_by_id", "SELECT id, in, out, label FROM $ids");
 /// The texts of up to three most recent live raw facts of each of `$ids` in `$vault`, in `$ids` order.
 pub const RECENT_FACTS: Stmt = Stmt::new(
     "entities.recent_facts",
@@ -298,6 +300,7 @@ pub const ALL: &[&Stmt] = &[
     &EDGES_AMONG,
     &EDGES_TOUCHING,
     &NODES_BY_ID,
+    &RELATIONS_BY_ID,
     &RECENT_FACTS,
     &SET_SUMMARY,
     &RAW_MEMORIES,

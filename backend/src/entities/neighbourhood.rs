@@ -2,6 +2,8 @@
 //! with their freshest facts and the vault's review of each link type between them. Plain data: the
 //! model reading it decides what a change to the entity affects, from the link labels, their
 //! descriptions and the facts. Nothing here knows which way an effect travels.
+//!
+//! Also the row loaders `views` resolves a `show_view` call with.
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
@@ -72,6 +74,15 @@ pub(crate) async fn load_nodes(db: &OrgDb, ids: Vec<RecordId>) -> AppResult<Hash
         return Ok(HashMap::new());
     }
     let rows: Vec<NodeRow> = q::NODES_BY_ID.on(db).bind(("ids", ids)).await?.take(0)?;
+    Ok(rows.into_iter().map(|r| (r.id.to_string(), r)).collect())
+}
+
+/// The relations among `ids` that exist, by id (any vault: the caller checks both ends).
+pub(crate) async fn load_edges(db: &OrgDb, ids: Vec<RecordId>) -> AppResult<HashMap<String, EdgeRow>> {
+    if ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let rows: Vec<EdgeRow> = q::RELATIONS_BY_ID.on(db).bind(("ids", ids)).await?.take(0)?;
     Ok(rows.into_iter().map(|r| (r.id.to_string(), r)).collect())
 }
 
