@@ -407,12 +407,28 @@ export default function ChatPage() {
       });
   }, [queryClient]);
 
+  // `?ask=` (an entity's "Ask what this affects"): a new draft with the question ready to send. Read once,
+  // so a second run of the effect (React's dev double run) after the URL was cleaned still sees it.
+  const askRef = useRef<string | null | undefined>(undefined);
   useEffect(() => {
+    if (askRef.current === undefined) {
+      const url = new URL(window.location.href);
+      askRef.current = url.searchParams.get("ask");
+      if (askRef.current) {
+        url.searchParams.delete("ask");
+        window.history.replaceState(null, "", url.pathname + url.search);
+      }
+    }
+    const ask = askRef.current;
     queryClient
       .fetchQuery({ ...threadsQuery(), staleTime: 0 })
       .then((list: ChatThread[]) => {
-        // No conversations yet: start on an unsaved draft; the thread is created with the first message.
-        if (list.length === 0) {
+        if (ask) {
+          setInput(ask);
+          inputRef.current?.focus();
+        }
+        // No conversations yet, or a question to ask: start on an unsaved draft; the thread is created with the first message.
+        if (list.length === 0 || ask) {
           setMessages([]);
           return;
         }
