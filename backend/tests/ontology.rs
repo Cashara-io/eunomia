@@ -283,6 +283,7 @@ async fn suggest_with_a_model_records_its_proposals_and_converges() {
             {"kind": "client", "description": "A company that pays us", "merge_into": "customer", "reason": "client and customer name the same thing"},
             {"kind": "customer", "description": "A paying company", "reason": "no description yet"},
             {"kind": "Not A Kind", "description": "dropped"},
+            {"kind": "repository", "description": "dropped: a built-in kind this vault never used"},
         ],
         "links": [{"from_kind": "person", "label": "works_at", "to_kind": "customer", "description": "Where someone works", "reason": "used"}],
     });
@@ -296,7 +297,7 @@ async fn suggest_with_a_model_records_its_proposals_and_converges() {
     assert_eq!(decide_kind(&app, &vault, "customer", json!({"action": "approve"})).await.0, 200);
 
     let out = ok(app.tool("ontology_suggest", json!({})).await);
-    assert_eq!((out["mode"].as_str(), out["skipped"].as_i64()), (Some("model"), Some(1)), "{out}");
+    assert_eq!((out["mode"].as_str(), out["skipped"].as_i64()), (Some("model"), Some(2)), "{out}");
     let o = &out["ontology"];
     let client = kind(o, "client");
     assert_eq!(
@@ -306,6 +307,7 @@ async fn suggest_with_a_model_records_its_proposals_and_converges() {
     // the approved kind keeps its (empty) description: a suggestion never rewrites a decision
     assert_eq!((kind(o, "customer")["status"].as_str(), kind(o, "customer")["description"].as_str()), (Some("approved"), None));
     assert_eq!(link(o, "person", "works_at", "customer")["status"], "proposed");
+    assert_eq!(kind(o, "repository")["status"], "observed");
     // a proposed merge does not move writes yet
     assert_eq!(write(&app, "Initech", "client").await["entity"]["kind"], "client");
 
@@ -313,6 +315,7 @@ async fn suggest_with_a_model_records_its_proposals_and_converges() {
     let sent: Vec<_> = mock.requests().into_iter().filter(|r| r.path == "/chat/completions").collect();
     assert_eq!(sent.len(), 1);
     assert!(sent[0].body.contains("<profile>") && sent[0].body.contains("Acme") && sent[0].body.contains("test-model"), "{}", sent[0].body);
+    assert!(!sent[0].body.contains("symbol"), "unused built-in kinds stay out of the profile: {}", sent[0].body);
 
     // running it again converges: same rows, same statuses
     let again = ok(app.tool("ontology_suggest", json!({})).await);

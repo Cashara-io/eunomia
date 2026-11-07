@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use surrealdb::types::RecordId;
 
-use super::{apply, resolve, view, KindProposal, LinkProposal, OntologyOut, Origin, ProposeOut, MAX_PROPOSED_KINDS, MAX_PROPOSED_LINKS};
+use super::{apply, resolve, view, KindItem, KindProposal, LinkProposal, OntologyOut, Origin, ProposeOut, ViewStatus, MAX_PROPOSED_KINDS, MAX_PROPOSED_LINKS};
 use crate::authz::Action;
 use crate::config::Settings;
 use crate::embeddings::provider::{self, Provider};
@@ -74,7 +74,9 @@ pub async fn suggest(db: &OrgDb, settings: &Settings, owner: &RecordId, vault_id
         .kinds
         .into_iter()
         .take(MAX_PROPOSED_KINDS)
-        .filter_map(|v| serde_json::from_value::<KindProposal>(v).ok()?.validate().ok())
+        .filter_map(|v| serde_json::from_value::<KindProposal>(v).ok())
+        .filter(|k| !profile.kinds.iter().any(|item| item.kind == k.kind && unused_built_in(item)))
+        .filter_map(|k| k.validate().ok())
         .collect();
     let links: Vec<_> = answer
         .links
@@ -87,11 +89,18 @@ pub async fn suggest(db: &OrgDb, settings: &Settings, owner: &RecordId, vault_id
     Ok(SuggestOut::Model { proposed, skipped, ontology: view(db, &vault).await? })
 }
 
+/// A built-in kind the vault never used and nobody reviewed. It is left out of the model's profile and
+/// its proposals, since six unused built-ins at the top of the review bury the merges that matter.
+fn unused_built_in(k: &KindItem) -> bool {
+    k.built_in && k.entities == 0 && k.status == ViewStatus::Observed
+}
+
 /// The profile as the model reads it: no ids, `<` escaped so a name cannot close the block.
 fn render_profile(profile: &OntologyOut) -> String {
     let kinds: Vec<Value> = profile
         .kinds
         .iter()
+        .filter(|k| !unused_built_in(k))
         .map(|k| json!({"kind": k.kind, "built_in": k.built_in, "status": k.status, "description": k.description, "merge_into": k.merge_into, "entities": k.entities, "samples": k.samples}))
         .collect();
     let links: Vec<Value> = profile
