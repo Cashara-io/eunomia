@@ -72,7 +72,7 @@ impl Datatype {
         })
     }
 
-    fn numeric(self) -> bool {
+    pub(super) fn numeric(self) -> bool {
         matches!(self, Datatype::Number | Datatype::Integer | Datatype::Money | Datatype::Percent)
     }
 }
@@ -137,7 +137,7 @@ pub(super) fn clean_synonyms(name: &str, synonyms: &[String]) -> AppResult<Vec<S
     Ok(out)
 }
 
-fn clean_unit(unit: Option<&str>) -> AppResult<Option<String>> {
+pub(super) fn clean_unit(unit: Option<&str>) -> AppResult<Option<String>> {
     let Some(u) = unit.map(str::trim).filter(|u| !u.is_empty()) else { return Ok(None) };
     if u.chars().count() > MAX_UNIT {
         return Err(AppError::bad_request(format!("a unit is at most {MAX_UNIT} characters, got {u:?}")));
@@ -173,9 +173,9 @@ pub struct PropertyProposal {
 pub(super) struct ValidProperty {
     pub(super) kind: Kind,
     pub(super) name: PropertyName,
-    datatype: Datatype,
-    unit: Option<String>,
-    enum_values: Option<Vec<String>>,
+    pub(super) datatype: Datatype,
+    pub(super) unit: Option<String>,
+    pub(super) enum_values: Option<Vec<String>>,
     description: Option<String>,
     pub(super) synonyms: Vec<String>,
     merge_into: Option<PropertyName>,
@@ -266,23 +266,23 @@ pub(super) struct PropertyRow {
     pub(super) id: RecordId,
     pub(super) kind: String,
     pub(super) name: String,
-    datatype: String,
+    pub(super) datatype: String,
     #[serde(default)]
     #[surreal(default)]
-    unit: Option<String>,
+    pub(super) unit: Option<String>,
     #[serde(default)]
     #[surreal(default)]
-    enum_values: Option<Vec<String>>,
+    pub(super) enum_values: Option<Vec<String>>,
     #[serde(default)]
     #[surreal(default)]
     description: Option<String>,
     #[serde(default)]
     #[surreal(default)]
     synonyms: Vec<String>,
-    status: String,
+    pub(super) status: String,
     #[serde(default)]
     #[surreal(default)]
-    merge_into: Option<String>,
+    pub(super) merge_into: Option<String>,
     origin: String,
     #[serde(default)]
     #[surreal(default)]
@@ -465,11 +465,11 @@ pub async fn decide_property(db: &OrgDb, user: &RecordId, vault: &RecordId, kind
 
 /// A value as stored: one of the four columns is set.
 #[derive(Debug, Default, Clone, PartialEq)]
-struct Stored {
-    num: Option<f64>,
-    text: Option<String>,
-    boolean: Option<bool>,
-    date: Option<Datetime>,
+pub(super) struct Stored {
+    pub(super) num: Option<f64>,
+    pub(super) text: Option<String>,
+    pub(super) boolean: Option<bool>,
+    pub(super) date: Option<Datetime>,
 }
 
 fn expected(datatype: Datatype, name: &str, got: &Value) -> AppError {
@@ -486,7 +486,7 @@ fn expected(datatype: Datatype, name: &str, got: &Value) -> AppError {
 }
 
 /// `value` read as `datatype`, or why not. Enum values match ignoring case and are stored as listed.
-fn parse_value(datatype: Datatype, name: &str, enum_values: Option<&[String]>, value: &Value) -> AppResult<Stored> {
+pub(super) fn parse_value(datatype: Datatype, name: &str, enum_values: Option<&[String]>, value: &Value) -> AppResult<Stored> {
     let bad = || expected(datatype, name, value);
     let text = value.as_str().map(str::trim);
     Ok(match datatype {
@@ -543,7 +543,7 @@ fn parse_value(datatype: Datatype, name: &str, enum_values: Option<&[String]>, v
 }
 
 /// A stored value as JSON in its datatype's shape: a number, a bool, a string, a date as YYYY-MM-DD.
-fn to_json(datatype: Datatype, v: &Stored) -> Option<Value> {
+pub(super) fn to_json(datatype: Datatype, v: &Stored) -> Option<Value> {
     Some(match datatype {
         Datatype::Integer => Value::from(v.num? as i64),
         d if d.numeric() => serde_json::Number::from_f64(v.num?).map(Value::Number)?,

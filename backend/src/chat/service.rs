@@ -49,7 +49,8 @@ use crate::tools::registry;
 /// `send_stream` sends a "done" event saying so rather than looping/
 /// truncating silently. A "what does this affect" answer takes five rounds
 /// when the model calls one tool at a time (search, ontology, neighbourhood,
-/// view, reply), six when it fixes an id `show_view` refused.
+/// view, reply), six when it fixes an id `show_view` refused; a number takes
+/// four (ontology, metric_eval, view, reply).
 const MAX_TOOL_ITERATIONS: usize = 10;
 
 pub const DEFAULT_THREAD_TITLE: &str = "New chat";
@@ -73,7 +74,14 @@ find the entity with `entities_search`, read its vault's `ontology_get` and the 
 and decide from the link labels, the link descriptions and the facts which way the effect travels and what it \
 reaches. Then call `show_view` with `view` \"impact\", `start_id`, `headline` and `affected` (each affected entity \
 with the relation ids from the start to it and a one-sentence why) and reply with a short summary; the app draws the view above your reply. If \
-`show_view` names a bad id, fix it and call it again. Do not call `show_view` for other questions. \
+`show_view` names a bad id, fix it and call it again. \
+When the user asks for a number (a total, an average, how many, a share, a trend): read the vault's `ontology_get`, \
+pick the approved metric of the right kind that computes it, run it with `metric_eval` (extra `filters` and `as_of` as the \
+question asks), and answer with its `value` and `unit`, saying how many entities it came from and citing their \
+`entity_ids`; then call `show_view` with `view` \"metric\" and the same arguments, so the app draws the number. Read its \
+`warnings`: a filter value it could not find is a spelling to fix, not a 0. If no approved metric fits, say so and name \
+what could be proposed; never add up, average or count values yourself, and never state a number you did not get from \
+`metric_eval`. Do not call `show_view` for other questions. \
 Never save what you worked out (an impact, a summary, that the user asked something) with `memory_write`: \
 save only a new fact the user tells you, such as the delay itself when it is not already remembered.";
 
@@ -706,7 +714,7 @@ mod tests {
         ] {
             assert!(!chat_may_call(name), "{name}");
         }
-        for name in ["recall", "search", "entities_get", "reflect", "memory_write", "memory_update", "entities_neighbourhood", "show_view", "ontology_get", "entity_set_property"] {
+        for name in ["recall", "search", "entities_get", "reflect", "memory_write", "memory_update", "entities_neighbourhood", "show_view", "ontology_get", "entity_set_property", "metric_eval"] {
             assert!(chat_may_call(name), "{name}");
         }
     }
