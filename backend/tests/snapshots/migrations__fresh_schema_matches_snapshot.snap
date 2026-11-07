@@ -705,6 +705,58 @@ expression: info(&db).await
       "kind": {
         "kind": "NORMAL"
       },
+      "name": "ontology_kind",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "vault",
+            "kind"
+          ],
+          "index": "UNIQUE",
+          "name": "ontology_kind_vault_kind_unique",
+          "table": "ontology_kind"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
+      "name": "ontology_link",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "vault",
+            "from_kind",
+            "label",
+            "to_kind"
+          ],
+          "index": "UNIQUE",
+          "name": "ontology_link_vault_key_unique",
+          "table": "ontology_link"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
       "name": "organisation",
       "permissions": {
         "create": false,
