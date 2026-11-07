@@ -66,7 +66,7 @@ export default function ConnectionHelpPage() {
           <Note>
             The coding app is not installed, or your command window cannot find it. Install the app first, then open a new command window and run the
             command again. You can also{" "}
-            <Link href="/" className="underline" style={{ color: "var(--accent-text)" }}>
+            <Link href="/" className="link">
               choose another app
             </Link>{" "}
             instead of changing computer settings.

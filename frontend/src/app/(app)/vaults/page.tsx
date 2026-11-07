@@ -3,7 +3,7 @@
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ArrowLeft, Check, ChevronRight, Combine, ChevronDown, Layers, Plus } from "lucide-react";
+import { ArrowLeftIcon, ArrowsMergeIcon, CaretDownIcon, CaretRightIcon, CheckIcon, PlusIcon, StackIcon } from "@phosphor-icons/react/ssr";
 import PageHeader from "@/components/ui/PageHeader";
 import EmptyState from "@/components/ui/EmptyState";
 import StatusLabel from "@/components/ui/StatusLabel";
@@ -25,7 +25,8 @@ import LiveStatusBadge from "@/components/live/LiveStatusBadge";
 import { JoinSharedSpace } from "@/components/PeerSharing";
 import { cssVar, prefersReducedMotion } from "@/components/bits/motion";
 import SpaceDetail from "@/components/vaults/SpaceDetail";
-import { ICON, JoinedNotice, SpaceSwatch, ago, inviterWords, peopleLine, sameEmail } from "@/components/vaults/bits";
+import { VaultShape, vaultTone } from "@/components/VaultChip";
+import { ICON, JoinedNotice, ago, inviterWords, peopleLine, sameEmail } from "@/components/vaults/bits";
 
 /* New rows (since the previous load, never the first) settle in. A stable function, so React calls it once per mount. */
 function arrive(el: HTMLElement | null) {
@@ -131,7 +132,7 @@ function InvitationsPanel() {
               disabled={busyId === inv.vault_id}
               className="btn btn-sm"
             >
-              <Check {...ICON} />
+              <CheckIcon {...ICON} />
               Join
             </button>
           </div>
@@ -178,13 +179,12 @@ function VaultRow({
     <button
       onClick={onSelect}
       aria-current={selected || undefined}
-      className="w-full flex items-center gap-3 px-4 py-3.5 min-h-[60px] text-left transition-[background-color] duration-[120ms] hover:bg-[var(--bauhaus-app-soft)]"
-      style={selected ? { background: "var(--bauhaus-app-soft)", boxShadow: "inset 3px 0 0 var(--bauhaus-app-ink)" } : undefined}
+      className="w-full flex items-center gap-3 px-4 py-3.5 min-h-[60px] text-left rounded-[11px] transition-[background-color] duration-[120ms] hover:bg-[var(--surface-raised)]"
+      style={selected ? { background: "var(--accent-soft)", outline: "1px solid var(--accent)", outlineOffset: -1 } : undefined}
     >
       <span className="flex-1 min-w-0">
         <span className="flex items-center gap-2.5 min-w-0">
-          {/* The one dot per space: its colour identity, repeated nowhere else. */}
-          <SpaceSwatch vault={vault} />
+          <VaultShape tone={vaultTone(vault.kind)} />
           <span className="text-[16px] font-medium truncate">{vault.name}</span>
         </span>
         <span className="label block mt-1 truncate">
@@ -192,7 +192,7 @@ function VaultRow({
           {owner ? ` · owned by ${owner}` : ""}
         </span>
       </span>
-      <ChevronRight {...ICON} aria-hidden className="shrink-0" style={{ color: selected ? "var(--ink)" : "var(--ink-dim)" }} />
+      <CaretRightIcon {...ICON} aria-hidden className="shrink-0" style={{ color: selected ? "var(--ink)" : "var(--ink-dim)" }} />
     </button>
   );
 }
@@ -270,7 +270,7 @@ function CreateVaultForm({
 }
 
 /** A quiet action that reads as a link (the page header keeps one primary button). */
-const TEXT_LINK = "inline-flex items-center gap-1 min-h-10 text-[14px] font-medium underline-offset-2 hover:underline";
+const TEXT_LINK = "link inline-flex items-center gap-1 min-h-10 text-[14px] font-medium";
 
 const vaultLabel = (v: Vault) => (v.kind === "personal" ? "Personal" : v.name);
 
@@ -353,14 +353,13 @@ function MergeVaultsCard({
       <button
         type="button"
         className={TEXT_LINK}
-        style={{ color: "var(--accent-text)" }}
         aria-expanded={open}
         aria-controls="merge-panel"
         onClick={() => setOpen((o) => !o)}
         id="merge-title"
       >
         Advanced: combine two spaces
-        <ChevronDown size={16} strokeWidth={1.75} aria-hidden style={{ transform: open ? "rotate(180deg)" : undefined }} />
+        <CaretDownIcon weight="duotone" size={16} aria-hidden style={{ transform: open ? "rotate(180deg)" : undefined }} />
       </button>
       {open && (
       <div id="merge-panel" className="ledger p-5 flex flex-col gap-4 w-full">
@@ -371,7 +370,7 @@ function MergeVaultsCard({
         </p>
         <div className="flex items-end gap-2 flex-wrap">
           {select(a, setA, "First space")}
-          <Plus
+          <PlusIcon
             {...ICON}
             aria-hidden
             className="mb-3 hidden sm:block"
@@ -394,7 +393,7 @@ function MergeVaultsCard({
             disabled={busy || !a || a === b}
             className="btn"
           >
-            <Combine {...ICON} />
+            <ArrowsMergeIcon {...ICON} />
             {busy ? "Combining…" : "Merge into a new space"}
           </button>
         </div>
@@ -574,7 +573,7 @@ export default function VaultsPage() {
   return (
     <div className="max-w-6xl flex flex-col gap-7">
       <PageHeader
-        icon={Layers}
+        icon={StackIcon}
         title="Memory spaces"
         intro="Keep each project's memories in its own space. Share a space with the people you invite."
         actions={
@@ -582,7 +581,7 @@ export default function VaultsPage() {
             <LiveStatusBadge />
             {/* While the create form is open, its own Create button is the one primary action. */}
             <button onClick={() => setCreating(true)} disabled={creating} className={`btn ${creating ? "" : "btn-primary"}`}>
-              <Plus {...ICON} />
+              <PlusIcon {...ICON} />
               Create space
             </button>
           </>
@@ -631,7 +630,7 @@ export default function VaultsPage() {
           <div className="flex flex-col gap-3 min-w-0">
             {!wide && (
               <button type="button" className="btn btn-ghost btn-sm self-start" onClick={() => setOpened(false)}>
-                <ArrowLeft {...ICON} />
+                <ArrowLeftIcon {...ICON} />
                 All spaces
               </button>
             )}
@@ -646,7 +645,7 @@ export default function VaultsPage() {
                 }}
               />
             ) : (
-              <div className="panel p-5 flex flex-col gap-3" aria-hidden>
+              <div className="ledger p-5 flex flex-col gap-3" aria-hidden>
                 <span className="skeleton h-4 w-24" />
                 <span className="skeleton h-5 w-40" />
                 <span className="skeleton h-24 w-full" />

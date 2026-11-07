@@ -6,7 +6,7 @@ import { InputModeTracker } from "@/components/bits/motion";
  * the "by Paperless" mark underneath. Nothing decorative. */
 export default function AuthShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen w-full flex flex-col items-center px-4 py-10 sm:py-16" style={{ background: "var(--bauhaus-app-bg)" }}>
+    <div className="min-h-screen w-full flex flex-col items-center px-4 py-10 sm:py-16" style={{ background: "var(--canvas)" }}>
       <main className="w-full max-w-[420px] flex-1 flex flex-col gap-10 sm:justify-center">
         <Link href="/login" className="inline-flex items-center gap-2 self-center text-[20px] font-semibold tracking-[-0.03em] rounded-[3px]">
           <EunomiaMark size={24} />

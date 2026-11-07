@@ -70,7 +70,7 @@ export function HttpsSection() {
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <StatusLine tone={tone}>{line}</StatusLine>
             {status.state === "active" && status.domain && (
-              <a href={`https://${status.domain}`} className="text-[13px] underline" style={{ color: "var(--accent-text)" }}>
+              <a href={`https://${status.domain}`} className="link text-[13px]">
                 https://{status.domain}
               </a>
             )}

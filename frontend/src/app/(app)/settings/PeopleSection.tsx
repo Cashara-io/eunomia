@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X } from "lucide-react";
+import { XIcon } from "@phosphor-icons/react/ssr";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Tooltip from "@/components/bits/Tooltip";
 import CopyButton from "@/components/bits/CopyButton";
@@ -83,7 +83,7 @@ function RowActions({ p, onError }: { p: Person; onError: (f: Failure | null) =>
           {busy ? c.going : c.go}
         </button>
         <button type="button" className="btn btn-ghost btn-sm btn-icon" aria-label="Cancel" onClick={() => setConfirming(null)}>
-          <X {...ICON} />
+          <XIcon {...ICON} />
         </button>
       </span>
     );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { Users } from "lucide-react";
+import { UsersIcon } from "@phosphor-icons/react/ssr";
 import EntityGraph from "@/components/EntityGraph";
 import LiveStatusBadge from "@/components/live/LiveStatusBadge";
 import VectorCloud from "@/components/VectorCloud";
@@ -59,7 +59,7 @@ export default function EntitiesPage() {
   const header = (
     <div className="w-full">
       <PageHeader
-        icon={Users}
+        icon={UsersIcon}
         title="People & topics"
         intro={current.blurb}
         actions={

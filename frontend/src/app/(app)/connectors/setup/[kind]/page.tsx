@@ -64,7 +64,7 @@ function validate(f: FieldDef, value: string, required: boolean, connector: stri
 function Breadcrumb({ label }: { label: string }) {
   return (
     <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-[13px]" style={{ color: "var(--ink-dim)" }}>
-      <Link href="/connectors" className="underline-offset-2 hover:underline" style={{ color: "var(--accent-text)" }}>
+      <Link href="/connectors" className="link">
         Connected sources
       </Link>
       <CaretRightIcon weight="duotone" size={12} aria-hidden />

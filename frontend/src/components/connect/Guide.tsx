@@ -2,7 +2,7 @@
 
 import { useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { CircleCheck } from "lucide-react";
+import { CheckCircleIcon } from "@phosphor-icons/react/ssr";
 import CopyButton from "@/components/bits/CopyButton";
 import PageHeader from "@/components/ui/PageHeader";
 import { appById, appForConnection, connectionFor, type AiApp, type AppId, type Connection } from "./apps";
@@ -14,7 +14,7 @@ export const EXAMPLE_QUESTION = "Use Eunomia to look for memories about me.";
 export function Trail({ here }: { here: string }) {
   return (
     <nav aria-label="Breadcrumb" className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
-      <Link href="/" className="underline underline-offset-2" style={{ color: "var(--accent-text)" }}>
+      <Link href="/" className="link">
         Connect your AI app
       </Link>{" "}
       / <span aria-current="page">{here}</span>
@@ -42,7 +42,7 @@ export const Note = ({ children }: { children: React.ReactNode }) => (
   </p>
 );
 
-export const Kbd = ({ children }: { children: React.ReactNode }) => <code className="font-mono text-[0.92em] px-1 rounded-[3px]" style={{ background: "var(--bauhaus-app-soft)" }}>{children}</code>;
+export const Kbd = ({ children }: { children: React.ReactNode }) => <code className="font-mono text-[0.92em] px-1 rounded-[3px]" style={{ background: "var(--surface-raised)" }}>{children}</code>;
 
 /** A command to paste into a terminal: ink block, then one primary copy button.
  * Lines never wrap (a flag split across lines is easy to mistype); long ones scroll sideways. */
@@ -52,8 +52,8 @@ export function CommandBlock({ value, label = "Command" }: { value: string; labe
       <pre
         aria-label={label}
         tabIndex={0}
-        className="w-full max-w-full font-mono text-[13px] leading-relaxed whitespace-pre overflow-x-auto px-4 py-3.5 rounded-[2px]"
-        style={{ background: "var(--bauhaus-app-ink)", color: "var(--bauhaus-app-cream)" }}
+        className="w-full max-w-full font-mono text-[13px] leading-relaxed whitespace-pre overflow-x-auto px-4 py-3.5 rounded-[12px]"
+        style={{ background: "var(--surface-raised)", color: "var(--ink)", border: "1px solid var(--border)" }}
       >
         {value}
       </pre>
@@ -189,7 +189,7 @@ export function Approved({ connection, onShowSteps }: { connection: Connection; 
         : `Start a new ${app.name} session and paste the question.`;
   return (
     <div className="flex flex-col gap-8 max-w-[960px]">
-      <PageHeader icon={CircleCheck} title="Connection approved" intro={<Trail here="Ready to use" />} />
+      <PageHeader icon={CheckCircleIcon} title="Connection approved" intro={<Trail here="Ready to use" />} />
       <section className="task-panel p-6 sm:p-8 flex flex-col gap-5" aria-labelledby="approved-title">
         <h2 id="approved-title" className="connect-title">
           Your AI app is connected
@@ -198,16 +198,16 @@ export function Approved({ connection, onShowSteps }: { connection: Connection; 
           Eunomia has confirmed {connection.via === "sign-in" ? "your sign-in" : "that this app is using its key"}. Your app can now use the memories you approved.
         </p>
         <div className="soft-panel px-5 py-4 flex flex-col gap-1.5">
-          <p className="text-[16px] font-semibold" style={{ color: "var(--accent-text)" }}>
+          <p className="text-[16px] font-medium">
             {connection.name} · {connection.via === "sign-in" ? "Access approved" : "Connected with an API token"}
           </p>
           <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
             Your connection is ready. If no memories have been saved yet, a search can return no results. That is normal.
           </p>
         </div>
-        <div className="flex flex-col gap-3 items-start px-5 py-4" style={{ border: "1px solid var(--bauhaus-app-blue)", borderRadius: 2 }}>
+        <div className="soft-panel flex flex-col gap-3 items-start px-5 py-4">
           <p className="text-[16px]">{EXAMPLE_QUESTION}</p>
-          <CopyButton value={EXAMPLE_QUESTION} label="Copy example question" size="sm" className="btn-primary" />
+          <CopyButton value={EXAMPLE_QUESTION} label="Copy example question" size="sm" />
         </div>
         <Note>
           {where} To save your first memory, ask your AI app to remember something (if it has permission to save), or add one from People &amp; topics in Eunomia.

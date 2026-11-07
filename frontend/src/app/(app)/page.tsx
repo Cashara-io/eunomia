@@ -5,7 +5,7 @@ import ErrorLine, { failure } from "@/components/ErrorLine";
 import { useState } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, Check, Upload, Users } from "lucide-react";
+import { ArrowRightIcon, CheckIcon, UploadSimpleIcon, UsersIcon, WarningIcon } from "@phosphor-icons/react/ssr";
 import type { EntityDetail, EntityKind, SourceRow, Vault } from "@/lib/types";
 import { entityKeys, type EntityList } from "@/lib/queries/entities";
 import { call } from "@/lib/queries/client";
@@ -17,6 +17,7 @@ import { adminKeys } from "@/lib/queries/admin";
 import { settingsKeys } from "@/lib/queries/settings";
 import { getEntity, getHttpsStatus, listEntities, listPeople, listVaultPendingInvitations } from "@/lib/gen";
 import type { HttpsStatus } from "@/lib/types";
+import StatusLabel from "@/components/ui/StatusLabel";
 import PageHeader from "@/components/ui/PageHeader";
 import InvitationBanner from "@/components/vaults/InvitationBanner";
 import AppChoices from "@/components/connect/AppChoices";
@@ -54,10 +55,10 @@ function FailureBanner({ rows, dismissed, onDismiss }: { rows: SourceRow[]; dism
         <div
           key={s.key}
           role="alert"
-          className="flex flex-wrap items-center gap-3 rounded-[2px] px-4 py-3"
+          className="flex flex-wrap items-center gap-3 rounded-[12px] px-4 py-3"
           style={{ background: "var(--critical-soft)", border: "1px solid var(--critical)" }}
         >
-          <AlertTriangle size={18} strokeWidth={1.75} color="var(--critical)" className="shrink-0" aria-hidden />
+          <WarningIcon weight="duotone" size={18} color="var(--critical)" className="shrink-0" aria-hidden />
           <div className="flex-1 min-w-[200px]">
             <div className="text-[14px] font-semibold">
               {sourceLabel(s)} could not update {s.sync_status.consecutive_failures} times in a row
@@ -175,8 +176,8 @@ function RecentlyUpdated({ rows, showSpace }: { rows: RecentEntity[]; showSpace:
         <h2 id="recent-title" className="section-title">
           Recently updated
         </h2>
-        <Link href="/entities" className="text-[13px] inline-flex items-center gap-1 underline-offset-2 hover:underline" style={{ color: "var(--accent-text)" }}>
-          All people &amp; topics <ArrowRight size={14} strokeWidth={1.75} aria-hidden />
+        <Link href="/entities" className="link text-[13px] inline-flex items-center gap-1">
+          All people &amp; topics <ArrowRightIcon weight="duotone" size={14} aria-hidden />
         </Link>
       </div>
       {rows.length === 0 ? (
@@ -214,8 +215,8 @@ function SourcesHealth({ rows }: { rows: SourceRow[] }) {
         <h2 id="sources-title" className="section-title">
           Connected sources
         </h2>
-        <Link href="/connectors" className="text-[13px] inline-flex items-center gap-1 underline-offset-2 hover:underline" style={{ color: "var(--accent-text)" }}>
-          Manage <ArrowRight size={14} strokeWidth={1.75} aria-hidden />
+        <Link href="/connectors" className="link text-[13px] inline-flex items-center gap-1">
+          Manage <ArrowRightIcon weight="duotone" size={14} aria-hidden />
         </Link>
       </div>
       <ul className="hairline-rows border-t">
@@ -267,7 +268,7 @@ function AdminSignals({ vaults }: { vaults: Vault[] | undefined }) {
       {signals.map((s, i) => (
         <span key={s.href + s.text}>
           {i > 0 && " · "}
-          <Link href={s.href} className="underline-offset-2 hover:underline" style={{ color: "var(--accent-text)" }}>
+          <Link href={s.href} className="link">
             {s.text}
           </Link>
         </span>
@@ -317,10 +318,9 @@ function ConnectAnother({ none = false, fromSources = false }: { none?: boolean;
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="self-start inline-flex items-center gap-1 min-h-11 text-[14px] font-medium underline-offset-2 hover:underline"
-        style={{ color: "var(--accent-text)" }}
+        className="link self-start inline-flex items-center gap-1 min-h-11 text-[14px] font-medium"
       >
-        {none ? "Connect an AI app" : "Connect another app"} <ArrowRight size={14} strokeWidth={1.75} aria-hidden className={open ? "rotate-90" : undefined} />
+        {none ? "Connect an AI app" : "Connect another app"} <ArrowRightIcon weight="duotone" size={14} aria-hidden className={open ? "rotate-90" : undefined} />
       </button>
       {open && <AppChoices />}
     </section>
@@ -340,11 +340,11 @@ function OwnInformation({ canUpload }: { canUpload: boolean }) {
       <div className="flex flex-wrap gap-2">
         {canUpload && (
           <Link href="/documents" className="btn">
-            <Upload size={18} strokeWidth={1.75} aria-hidden /> Upload a document
+            <UploadSimpleIcon weight="duotone" size={18} aria-hidden /> Upload a document
           </Link>
         )}
         <Link href="/entities" className="btn">
-          <Users size={18} strokeWidth={1.75} aria-hidden /> Browse people &amp; topics
+          <UsersIcon weight="duotone" size={18} aria-hidden /> Browse people &amp; topics
         </Link>
       </div>
     </section>
@@ -362,14 +362,14 @@ function ConnectedPanel({ connections }: { connections: Connection[] }) {
   const app = appForConnection(latest);
   const shown = connections.slice(0, 6);
   return (
-    <section className="panel flex flex-col overflow-hidden" aria-labelledby="connected-title">
+    <section className="ledger flex flex-col overflow-hidden" aria-labelledby="connected-title">
       <div className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-4 border-b">
         <span
           className="shrink-0 grid place-items-center w-10 h-10 rounded-full"
           style={{ background: "color-mix(in srgb, var(--good) 14%, transparent)", color: "var(--good)" }}
           aria-hidden
         >
-          <Check size={20} strokeWidth={2.25} />
+          <CheckIcon weight="duotone" size={20} />
         </span>
         <div className="flex-1 min-w-0 flex flex-col gap-1">
           <h2 id="connected-title" className="text-[20px] font-semibold tracking-[-0.3px]">
@@ -401,20 +401,17 @@ function ConnectedPanel({ connections }: { connections: Connection[] }) {
                   {c.via === "sign-in" ? "Signed in" : "API token"} · {c.at ? `used ${ago(c.at)}` : "not used yet"}
                 </span>
               </span>
-              <span
-                className="shrink-0 w-2 h-2 rounded-full"
-                style={{ background: active ? "var(--good)" : "var(--ink-faint)" }}
-                title={active ? "Used in the last day" : "Not used in the last day"}
-                aria-label={active ? "Active" : "Idle"}
-              />
+              <span className="shrink-0" title={active ? "Used in the last day" : "Not used in the last day"}>
+                <StatusLabel tone={active ? "good" : "neutral"}>{active ? "Active" : "Idle"}</StatusLabel>
+              </span>
             </li>
           );
         })}
       </ul>
       <div className="px-5 sm:px-6 py-3 flex items-center justify-between gap-3 text-[14px]">
         <span style={{ color: "var(--ink-dim)" }}>{connections.length > 6 ? `and ${connections.length - 6} more` : ""}</span>
-        <Link href="/settings?tab=apps" className="inline-flex items-center gap-1 font-medium underline-offset-2 hover:underline" style={{ color: "var(--accent-text)" }}>
-          Manage connected apps <ArrowRight size={14} strokeWidth={1.75} aria-hidden />
+        <Link href="/settings?tab=apps" className="link inline-flex items-center gap-1 font-medium">
+          Manage connected apps <ArrowRightIcon weight="duotone" size={14} aria-hidden />
         </Link>
       </div>
     </section>

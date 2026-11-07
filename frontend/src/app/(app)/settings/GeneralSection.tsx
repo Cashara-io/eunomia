@@ -3,7 +3,7 @@
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
 import { useState } from "react";
-import { Check } from "lucide-react";
+import { CheckIcon } from "@phosphor-icons/react/ssr";
 import type { SettingsUpdate } from "@/lib/gen";
 import { useOpenAiModels, useUpdateSettings } from "@/lib/queries/settings";
 import type { AppSettings } from "@/lib/types";
@@ -202,7 +202,7 @@ export function ModelSection({ settings }: { settings: AppSettings }) {
               {saved ? "Saved." : dirty ? "Unsaved changes" : ""}
             </span>
             <button type="submit" disabled={saving || urlInvalid} className="btn btn-primary">
-              {saved && <Check {...ICON} />}
+              {saved && <CheckIcon {...ICON} />}
               {saving ? "Saving…" : saved ? "Saved" : "Save settings"}
             </button>
           </div>

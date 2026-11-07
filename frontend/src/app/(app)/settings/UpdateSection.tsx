@@ -4,7 +4,7 @@ import { APP_VERSION, UPDATER_OFF, versionLabel } from "@/lib/version";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, Download, RefreshCw } from "lucide-react";
+import { ArrowClockwiseIcon, CheckIcon, DownloadSimpleIcon } from "@phosphor-icons/react/ssr";
 import { updateStatusQuery, useCheckForUpdate, useRequestUpdate } from "@/lib/queries/settings";
 import type { UpdateStatus } from "@/lib/types";
 import SyncMark from "@/components/bits/SyncMark";
@@ -165,7 +165,7 @@ export function UpdateSection() {
         status={<StatusLine tone={tone}>{line}</StatusLine>}
         action={
           <button onClick={checkNow} disabled={checking || busy} className="btn btn-sm shrink-0" aria-label="Check for updates">
-            {checking || checkResult ? <SyncMark status={checking ? "running" : checkResult!} /> : <RefreshCw {...ICON} />}
+            {checking || checkResult ? <SyncMark status={checking ? "running" : checkResult!} /> : <ArrowClockwiseIcon {...ICON} />}
             {checking ? "Checking…" : "Check now"}
           </button>
         }
@@ -178,10 +178,10 @@ export function UpdateSection() {
         {status.update_available && !busy && !done && (
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={requestUpdate} className="btn btn-primary">
-              <Download {...ICON} />
+              <DownloadSimpleIcon {...ICON} />
               Update now
             </button>
-            <a href={notes} target="_blank" rel="noopener noreferrer" className="btn btn-ghost btn-sm" style={{ color: "var(--accent-text)" }}>
+            <a href={notes} target="_blank" rel="noopener noreferrer" className="btn btn-ghost btn-sm">
               What&apos;s new
             </a>
           </div>
@@ -213,7 +213,7 @@ function UpdateSteps({ current, detail }: { current: number; detail: string | nu
           <li key={label} className="flex items-start gap-2.5 text-[13px]" aria-current={state === "now" ? "step" : undefined}>
             <span className="mt-[3px] shrink-0 w-3.5 h-3.5 flex items-center justify-center" aria-hidden>
               {state === "done" ? (
-                <Check size={14} strokeWidth={2} style={{ color: "var(--good)" }} />
+                <CheckIcon weight="duotone" size={14} style={{ color: "var(--good)" }} />
               ) : (
                 <span className="dot" style={{ background: state === "now" ? "var(--accent)" : "var(--border-strong)" }} />
               )}

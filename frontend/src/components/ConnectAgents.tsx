@@ -9,7 +9,7 @@
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { KeyRound } from "lucide-react";
+import { KeyIcon } from "@phosphor-icons/react/ssr";
 import { useCreateToken } from "@/lib/queries/auth";
 import CopyButton from "@/components/bits/CopyButton";
 import DecryptReveal from "@/components/bits/DecryptReveal";
@@ -37,8 +37,8 @@ function Code({ value, label }: { value: string; label: string }) {
     <div className="flex flex-col gap-2 items-start">
       <pre
         aria-label={label}
-        className="w-full text-[13px] font-mono whitespace-pre-wrap [overflow-wrap:anywhere] px-4 py-3 rounded-[2px]"
-        style={{ background: "var(--bauhaus-app-ink)", color: "var(--bauhaus-app-cream)" }}
+        className="w-full text-[13px] font-mono whitespace-pre-wrap [overflow-wrap:anywhere] px-4 py-3 rounded-[12px]"
+        style={{ background: "var(--surface-raised)", color: "var(--ink)", border: "1px solid var(--border)" }}
       >
         {value}
       </pre>
@@ -123,13 +123,13 @@ export default function ConnectAgents({ onToken, initialClient }: { onToken?: ()
         </div>
       ) : (
         <button onClick={mint} disabled={busy} aria-busy={busy} className="btn btn-primary self-start">
-          <KeyRound size={14} strokeWidth={1.75} aria-hidden />
+          <KeyIcon weight="duotone" size={14} aria-hidden />
           {busy ? "Creating…" : "Generate a token"}
         </button>
       )}
       <Hint>
         Named &ldquo;{current.token}&rdquo; under{" "}
-        <Link href="/settings?tab=tokens" className="underline" style={{ color: "var(--accent-text)" }}>
+        <Link href="/settings?tab=tokens" className="link">
           Settings, API tokens
         </Link>
         , so you can revoke it on its own.
@@ -213,7 +213,7 @@ export default function ConnectAgents({ onToken, initialClient }: { onToken?: ()
           <Hint>
             <Mono>{host}</Mono> only works for agents on this {host === "localhost" || host.startsWith("127.") ? "computer" : "network"}.
             For agents elsewhere, give Eunomia a public address under{" "}
-            <Link href="/settings?tab=https" className="underline" style={{ color: "var(--accent-text)" }}>
+            <Link href="/settings?tab=https" className="link">
               Settings, HTTPS
             </Link>
             .
@@ -228,7 +228,7 @@ export default function ConnectAgents({ onToken, initialClient }: { onToken?: ()
         <Hint>
           Or connect every agent on this machine at once (Claude Code, Codex, Cursor, Gemini CLI, …) from the install
           folder.{" "}
-          <Link href="/docs" className="underline" style={{ color: "var(--accent-text)" }}>
+          <Link href="/docs" className="link">
             Read Help
           </Link>
         </Hint>

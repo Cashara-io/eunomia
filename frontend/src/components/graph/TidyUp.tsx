@@ -36,8 +36,7 @@ export default function TidyUp({ entityId, onDone, disabled }: { entityId: strin
       <div className="flex items-center gap-2 flex-wrap">
         <button
           type="button"
-          className="text-[13px] underline-offset-2 hover:underline disabled:opacity-50 disabled:no-underline"
-          style={{ color: "var(--accent-text)" }}
+          className="btn btn-ghost btn-sm -ml-3"
           disabled={disabled || tidy.isPending}
           onClick={() => void run()}
           title="Write one short summary of what these memories say. Nothing is deleted."

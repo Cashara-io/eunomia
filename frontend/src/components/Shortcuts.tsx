@@ -7,7 +7,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { X } from "lucide-react";
+import { XIcon } from "@phosphor-icons/react/ssr";
 import { modKey } from "@/lib/platform";
 
 const GO: { key: string; href: string; label: string }[] = [
@@ -108,7 +108,7 @@ export default function Shortcuts({ paletteOpen, openPalette }: { paletteOpen: b
             Keyboard shortcuts
           </h2>
           <button type="button" autoFocus className="btn btn-ghost btn-icon btn-sm" aria-label="Close" onClick={() => setSheet(false)}>
-            <X size={18} strokeWidth={1.75} aria-hidden />
+            <XIcon weight="duotone" size={18} aria-hidden />
           </button>
         </div>
         <ul className="hairline-rows text-[14px]">

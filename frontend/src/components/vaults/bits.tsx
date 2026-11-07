@@ -2,11 +2,11 @@
 
 // Small shared pieces of the Memory spaces page.
 import Link from "next/link";
-import { ArrowRight, ChevronDown, X } from "lucide-react";
+import { ArrowRightIcon, CaretDownIcon, XIcon } from "@phosphor-icons/react/ssr";
 import { useId, useState, type ReactNode } from "react";
 import type { Vault, VaultMember, VaultRole } from "@/lib/types";
 
-export const ICON = { size: 18, strokeWidth: 1.75 } as const;
+export const ICON = { size: 18, weight: "duotone" } as const;
 
 export function ago(iso: string | null): string | null {
   if (!iso) return null;
@@ -37,27 +37,16 @@ export function RoleChip({ role }: { role: VaultRole }) {
   );
 }
 
-/* The space's identity: a small dot, neutral grey for the personal space and one
-   of a few calm colours for shared spaces (never the danger red). Decorative; the
-   name and the words beside it carry the meaning. */
-const SWATCHES = ["var(--bauhaus-app-yellow)", "var(--bauhaus-app-blue)", "var(--good)"];
-/** A space's colour, shared by its dot here and its points on the Memory map. */
+/* A space's series colour on the Memory map, where several spaces can show at once.
+   Muted hues, never the vault colours: those name the kind of space, not which one. */
+const SWATCHES = ["var(--space-1)", "var(--space-2)", "var(--space-3)"];
+/** A space's colour on the Memory map. */
 export function spaceColor(vault: Pick<Vault, "id" | "kind"> | undefined): string {
   if (!vault || vault.kind === "personal") return "var(--ink-faint)";
   let h = 0;
   for (const ch of vault.id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   return SWATCHES[h % SWATCHES.length];
 }
-export function SpaceSwatch({ vault, size = 8 }: { vault: Vault; size?: number }) {
-  return (
-    <span
-      aria-hidden
-      className="inline-block shrink-0"
-      style={{ width: size, height: size, background: spaceColor(vault), borderRadius: 999 }}
-    />
-  );
-}
-
 /* A check that draws itself once on mount (the shared .bits-draw grammar; reduced motion is handled there). */
 export function DrawnCheck() {
   return (
@@ -105,7 +94,7 @@ export function Disclosure({
           aria-expanded={open}
           aria-controls={id}
           onClick={() => setOpen((o) => !o)}
-          className="w-full flex items-center gap-2 min-h-10 text-left rounded-[4px]"
+          className="w-full flex items-center gap-2 min-h-10 text-left rounded-[10px]"
         >
           <span className="flex-1 min-w-0 flex flex-col">
             <span className="section-title">{title}</span>
@@ -115,7 +104,7 @@ export function Disclosure({
               </span>
             )}
           </span>
-          <ChevronDown {...ICON} aria-hidden className="shrink-0" style={{ color: "var(--ink-dim)", transform: open ? "rotate(180deg)" : undefined }} />
+          <CaretDownIcon {...ICON} aria-hidden className="shrink-0" style={{ color: "var(--ink-dim)", transform: open ? "rotate(180deg)" : undefined }} />
         </button>
       </h3>
       <div id={id} hidden={!open} className="flex flex-col gap-3">
@@ -138,11 +127,11 @@ export function JoinedNotice({ id, name, onDismiss }: { id: string; name: string
       </span>
       <Link href={`/entities?vault=${encodeURIComponent(id)}`} className="btn btn-sm">
         See its people &amp; topics
-        <ArrowRight {...ICON} aria-hidden />
+        <ArrowRightIcon {...ICON} aria-hidden />
       </Link>
       {onDismiss && (
         <button type="button" className="btn btn-ghost btn-sm btn-icon" aria-label="Dismiss" onClick={onDismiss}>
-          <X {...ICON} aria-hidden />
+          <XIcon {...ICON} aria-hidden />
         </button>
       )}
     </div>

@@ -4,7 +4,7 @@ import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertCircle, ArrowUp, Square, ChevronRight, CornerDownLeft, MessagesSquare, RotateCcw, Plus, Trash2, Wrench } from "lucide-react";
+import { ArrowCounterClockwiseIcon, ArrowElbowDownLeftIcon, ArrowUpIcon, ChatsCircleIcon, PlusIcon, SquareIcon, TrashIcon, WarningCircleIcon } from "@phosphor-icons/react/ssr";
 import PageHeader from "@/components/ui/PageHeader";
 import EmptyNote from "@/components/ui/EmptyState";
 import Markdown from "@/components/Markdown";
@@ -31,6 +31,49 @@ const EXAMPLES = [
 
 // `callId`: the model's id for a live call, which pairs it with its result
 type ToolStep = { name: string; args: string; result?: string; running?: boolean; callId?: string };
+
+// What each tool did, in the words a person would use. The raw tool name stays in the
+// opened row for whoever needs it.
+const TOOL_WORDS: Record<string, string> = {
+  recall: "Looked through memories",
+  reflect: "Thought it over from memories",
+  search: "Searched synced records",
+  get: "Opened a synced record",
+  list: "Listed synced records",
+  links: "Followed links between records",
+  docs: "Read the help pages",
+  changes_since: "Checked what changed",
+  memory_write: "Saved a memory",
+  memory_write_batch: "Saved memories",
+  memory_update: "Updated a memory",
+  memory_delete: "Deleted a memory",
+  consolidate_observations: "Summarised memories",
+  entities_search: "Searched people and topics",
+  entities_get: "Opened a person or topic",
+  entities_graph: "Looked at connections",
+  entities_neighbourhood: "Followed connections",
+  entity_update: "Updated a person or topic",
+  entity_merge: "Merged two people or topics",
+  entity_delete: "Deleted a person or topic",
+  entity_types: "Checked the kinds in use",
+  ontology_get: "Checked this space's kinds",
+  show_view: "Showed a view",
+  document_list: "Listed documents",
+  document_get: "Read a document",
+  document_upload: "Saved a document",
+  vault_list: "Listed memory spaces",
+  vault_get: "Opened a memory space",
+  vault_members: "Checked who is in a space",
+  skill_find: "Looked for saved instructions",
+  skill_get: "Read saved instructions",
+  http_request: "Called a web address",
+};
+
+function toolWords(name: string): string {
+  if (TOOL_WORDS[name]) return TOOL_WORDS[name];
+  const words = name.replace(/_/g, " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
 
 // A rendered turn: one person's message, or everything the assistant did
 // between two of them (tool calls, their results, and the reply text).
@@ -102,9 +145,10 @@ function argsPreview(args: string): string {
   try {
     const parsed = JSON.parse(args);
     if (parsed && typeof parsed === "object") {
-      return Object.entries(parsed)
-        .map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`)
-        .join("  ");
+      // the words a person typed or the model chose (a query, a memory, a headline), not record ids
+      return Object.values(parsed)
+        .filter((v): v is string => typeof v === "string" && v.trim() !== "" && !/^[a-z_]+:[a-z0-9]{8,}$/i.test(v))
+        .join(" · ");
     }
   } catch {
     // not JSON, show as-is
@@ -154,16 +198,13 @@ function ToolRow({ step, live }: { step: ToolStep; live?: boolean }) {
   const inspectable = !step.running && !!(step.args || step.result);
   const row = (
     <>
-      {inspectable ? (
-        <ChevronRight size={13} strokeWidth={1.75} className="chev shrink-0" style={{ color: "var(--ink-faint)" }} />
-      ) : (
-        <Wrench size={13} strokeWidth={1.75} className="shrink-0" style={{ color: "var(--ink-faint)" }} />
-      )}
-      <span className="font-mono text-[12px] shrink-0" style={{ color: "var(--accent-text)" }}>
-        {step.name}
+      {/* the opened rows draw their chevron from summary::before; a running row keeps the same indent */}
+      {!inspectable && <span className="w-[14px] shrink-0" aria-hidden />}
+      <span className="text-[13px] font-medium shrink-0" style={{ color: "var(--ink)" }}>
+        {toolWords(step.name)}
       </span>
       {preview && (
-        <span className="font-mono text-[12px] truncate min-w-0" style={{ color: "var(--ink-dim)" }}>
+        <span className="text-[13px] truncate min-w-0" style={{ color: "var(--ink-dim)" }}>
           {preview}
         </span>
       )}
@@ -177,10 +218,13 @@ function ToolRow({ step, live }: { step: ToolStep; live?: boolean }) {
   if (!inspectable) return <div className={`flex items-center gap-2 min-h-10 px-3 ${live ? "tool-live" : ""}`}>{row}</div>;
   return (
     <details className="tool-row">
-      <summary className="press flex items-center gap-2 min-h-10 px-3 cursor-pointer list-none select-none [&::-webkit-details-marker]:hidden">
+      <summary className="flex items-center gap-2 min-h-10 px-3 cursor-pointer list-none select-none [&::-webkit-details-marker]:hidden">
         {row}
       </summary>
-      <div className="px-2.5 pt-1 pb-2.5 flex flex-col gap-2">
+      <div className="px-3 pt-1 pb-3 flex flex-col gap-2">
+        <div className="label">
+          Tool <code className="font-mono">{step.name}</code>
+        </div>
         {step.args && (
           <div>
             <div className="label mb-1">Arguments</div>
@@ -231,8 +275,8 @@ function TurnView({ turn, me }: { turn: Turn; me: string | null }) {
       <article>
         {me ? <TurnHeader name={me} at={turn.at} /> : <div className="h-5 mb-2" />}
         <div
-          className="whitespace-pre-wrap break-words text-[15px] leading-relaxed px-4 py-3 rounded-[2px]"
-          style={{ background: "var(--bauhaus-app-soft)", color: "var(--ink)" }}
+          className="whitespace-pre-wrap break-words text-[15px] leading-relaxed px-4 py-3 rounded-[12px]"
+          style={{ background: "var(--surface-raised)", color: "var(--ink)" }}
         >
           {turn.content}
         </div>
@@ -272,7 +316,7 @@ function ThreadList({
         <h2 className="section-title min-w-0 truncate">Conversations</h2>
         <Tooltip label="New chat">
           <button onClick={onCreate} aria-label="New chat" className="btn btn-ghost btn-icon btn-sm shrink-0">
-            <Plus size={16} strokeWidth={1.75} />
+            <PlusIcon weight="duotone" size={16} />
           </button>
         </Tooltip>
       </div>
@@ -281,7 +325,7 @@ function ThreadList({
         {threads?.map((t) => {
           const active = t.id === activeId;
           return (
-            <div key={t.id} className="thread-row group flex items-center rounded-[3px]" data-active={active || undefined}>
+            <div key={t.id} className="thread-row group flex items-center rounded-[10px]" data-active={active || undefined}>
               <button
                 onClick={() => onSelect(t.id)}
                 aria-current={active ? "true" : undefined}
@@ -294,7 +338,7 @@ function ThreadList({
               </button>
               <Tooltip label="Delete thread">
                 <button onClick={() => onDelete(t.id)} aria-label="Delete thread" className="thread-delete btn btn-ghost btn-icon btn-sm mr-0.5 shrink-0">
-                  <Trash2 size={16} strokeWidth={1.75} />
+                  <TrashIcon weight="duotone" size={16} />
                 </button>
               </Tooltip>
             </div>
@@ -313,7 +357,7 @@ function ThreadList({
 function EmptyState({ onPick }: { onPick: (text: string) => void }) {
   return (
     <div className="flex-1 flex flex-col justify-center w-full max-w-[560px] mx-auto py-8">
-      <h2 className="text-[22px] font-semibold tracking-[-0.015em]" style={{ color: "var(--ink)" }}>
+      <h2 className="text-[22px] font-medium tracking-[-0.03em]" style={{ color: "var(--ink)" }}>
         Ask your memory anything
       </h2>
       <p className="text-[15px] mt-2 mb-5 leading-relaxed" style={{ color: "var(--ink-dim)" }}>
@@ -324,7 +368,7 @@ function EmptyState({ onPick }: { onPick: (text: string) => void }) {
         {EXAMPLES.map((ex) => (
           <button key={ex} onClick={() => onPick(ex)} className="example-row press w-full flex items-center gap-2.5 min-h-11 py-2 px-4 text-left text-[14px]">
             <span className="flex-1">{ex}</span>
-            <CornerDownLeft size={16} strokeWidth={1.75} className="shrink-0" style={{ color: "var(--ink-faint)" }} />
+            <ArrowElbowDownLeftIcon weight="duotone" size={16} className="shrink-0" style={{ color: "var(--ink-faint)" }} />
           </button>
         ))}
       </div>
@@ -571,7 +615,7 @@ export default function ChatPage() {
     <TooltipGroup>
     <div className="flex flex-col gap-6 h-[calc(100dvh-6.5rem)] md:h-[calc(100dvh-3rem)] lg:h-[calc(100dvh-76px)] min-h-[560px]">
       <PageHeader
-        icon={MessagesSquare}
+        icon={ChatsCircleIcon}
         title="Chat"
         intro="Ask a question about your saved memories and documents. Eunomia shows where each answer came from."
       />
@@ -596,13 +640,13 @@ export default function ChatPage() {
             />
             <Tooltip label="New chat">
               <button onClick={createThread} aria-label="New chat" className="btn btn-icon">
-                <Plus size={18} strokeWidth={1.75} />
+                <PlusIcon weight="duotone" size={18} />
               </button>
             </Tooltip>
             {activeId && (
               <Tooltip label="Delete thread">
                 <button onClick={() => deleteThread(activeId)} aria-label="Delete thread" className="btn btn-ghost btn-icon">
-                  <Trash2 size={18} strokeWidth={1.75} />
+                  <TrashIcon weight="duotone" size={18} />
                 </button>
               </Tooltip>
             )}
@@ -650,10 +694,10 @@ export default function ChatPage() {
               {error && (
                 <div
                   role="alert"
-                  className="flex items-start gap-2.5 px-4 py-3 rounded-[2px] text-[14px]"
-                  style={{ background: "var(--critical-soft)", color: "var(--critical)", borderLeft: "3px solid var(--bauhaus-app-red)" }}
+                  className="flex items-start gap-2.5 px-4 py-3 rounded-[10px] text-[14px]"
+                  style={{ background: "var(--critical-soft)", color: "var(--critical)" }}
                 >
-                  <AlertCircle size={18} strokeWidth={1.75} className="shrink-0 mt-px" aria-hidden />
+                  <WarningCircleIcon weight="duotone" size={18} className="shrink-0 mt-px" aria-hidden />
                   <div className="min-w-0 break-words">
                     <div className="font-medium">The assistant couldn&apos;t reply.</div>
                     <div className="mt-0.5" style={{ color: "var(--ink-dim)" }}>
@@ -662,7 +706,7 @@ export default function ChatPage() {
                       ) : needsKey ? (
                         <>
                           No OpenAI API key is set, so the assistant can&apos;t answer yet.{" "}
-                          <Link href="/settings?tab=model" className="underline" style={{ color: "var(--accent-text)" }}>
+                          <Link href="/settings?tab=model" className="link">
                             Add one in Settings
                           </Link>
                           .
@@ -679,7 +723,7 @@ export default function ChatPage() {
                     ) : null}
                     {!needsKey && lastSent && (
                       <button type="button" onClick={() => send(lastSent, true)} className="btn btn-sm mt-2.5">
-                        <RotateCcw size={13} strokeWidth={1.75} /> Retry
+                        <ArrowCounterClockwiseIcon weight="duotone" size={13} /> Retry
                       </button>
                     )}
                   </div>
@@ -720,13 +764,13 @@ export default function ChatPage() {
                   {sending ? (
                     <Tooltip label="Stop">
                       <button type="button" onClick={() => abortRef.current?.abort()} aria-label="Stop" className="btn">
-                        <Square size={12} strokeWidth={2.5} fill="currentColor" aria-hidden /> Stop
+                        <SquareIcon weight="fill" size={12} aria-hidden /> Stop
                       </button>
                     </Tooltip>
                   ) : (
                     <Tooltip label="Send" shortcut="Enter">
                       <button type="submit" disabled={!canSend} aria-label="Send" className="btn btn-primary">
-                        Send <ArrowUp size={16} strokeWidth={2} aria-hidden />
+                        Send <ArrowUpIcon weight="duotone" size={16} aria-hidden />
                       </button>
                     </Tooltip>
                   )}
@@ -741,7 +785,7 @@ export default function ChatPage() {
       <style>{`
         .composer { field-sizing: content; min-height: 24px; max-height: 200px; }
         .thread-row { color: var(--ink); transition: background-color var(--dur-hover) ease, color var(--dur-hover) ease; }
-        .thread-row[data-active] { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--bauhaus-app-blue); font-weight: 600; }
+        .thread-row[data-active] { background: var(--accent-soft); outline: 1px solid var(--accent); outline-offset: -1px; font-weight: 500; }
         .thread-delete { display: none; color: var(--ink-dim); }
         .thread-row:focus-within .thread-delete { display: inline-flex; }
         .thread-row:focus-within .thread-time { display: none; }
@@ -749,14 +793,12 @@ export default function ChatPage() {
         .example-row:active { background: var(--surface-raised); }
         .press { transition: transform var(--dur-press) var(--ease-out), background-color var(--dur-hover) ease, color var(--dur-hover) ease; }
         .press:active { transform: scale(0.97); }
-        .chev { transition: transform var(--dur-hover) var(--ease-out); }
-        .tool-row[open] .chev { transform: rotate(90deg); }
         .tool-pre {
           font: 11.5px/1.55 var(--font-mono), ui-monospace, monospace;
           color: var(--ink);
           background: var(--surface-raised);
           border: 1px solid var(--border);
-          border-radius: 2px;
+          border-radius: 10px;
           padding: 8px 10px;
           max-height: 240px;
           overflow: auto;

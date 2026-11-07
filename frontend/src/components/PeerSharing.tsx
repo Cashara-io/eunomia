@@ -4,7 +4,7 @@
 // to send, the other Eunomias this space is shared with and how syncing is going, and a dialog to
 // join a space someone else shared.
 import { useEffect, useId, useRef, useState } from "react";
-import { LogIn, RefreshCw, Unlink, X } from "lucide-react";
+import { ArrowClockwiseIcon, LinkBreakIcon, SignInIcon, XIcon } from "@phosphor-icons/react/ssr";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Select from "@/components/Select";
 import StatusLabel, { type StatusTone } from "@/components/ui/StatusLabel";
@@ -23,7 +23,7 @@ import {
   type ShareCode,
 } from "@/lib/queries/peers";
 
-const ICON = { size: 16, strokeWidth: 1.75, "aria-hidden": true } as const;
+const ICON = { size: 16, weight: "duotone", "aria-hidden": true } as const;
 
 const ROLE_WORDS: Record<PeerRole, string> = { edit: "Can add and change", read: "Can only read" };
 
@@ -63,7 +63,7 @@ function statusWords(link: PeerLink): [StatusTone, string] {
 function matchWords(link: PeerLink): string {
   if (link.status === "revoked") return "";
   if (link.digests_match === true) return "Copies match ✓";
-  if (link.digests_match === false) return "Copies differ — syncing";
+  if (link.digests_match === false) return "Copies differ, syncing";
   return "Checking…";
 }
 
@@ -116,13 +116,13 @@ function PeerRow({ link, isOwner, vaultId, vaultName }: { link: PeerLink; isOwne
               sync.mutate(link.id, { onError: (e) => setError(failure(e, "Couldn't sync just now.", " It will try again by itself.")) });
             }}
           >
-            <RefreshCw {...ICON} />
+            <ArrowClockwiseIcon {...ICON} />
             {sync.isPending ? "Syncing…" : "Sync now"}
           </button>
         )}
         {isOwner && (
           <button type="button" className="btn btn-sm" onClick={() => setConfirm(true)}>
-            <Unlink {...ICON} />
+            <LinkBreakIcon {...ICON} />
             {link.status === "revoked" ? "Remove" : "Stop sharing…"}
           </button>
         )}
@@ -264,7 +264,7 @@ export default function PeerSharing({ vault }: { vault: { id: string; name: stri
                       {ROLE_WORDS[c.role]} · expires {day(c.expires_at)}
                     </span>
                     <button type="button" className="btn btn-sm" disabled={withdraw.isPending} onClick={() => withdraw.mutate(c.id)}>
-                      <X {...ICON} />
+                      <XIcon {...ICON} />
                       Cancel code
                     </button>
                   </li>
@@ -314,11 +314,10 @@ export function JoinSharedSpace({ onJoined }: { onJoined?: (vaultId: string) => 
     <>
       <button
         type="button"
-        className="inline-flex items-center gap-1.5 min-h-10 text-[14px] font-medium underline-offset-2 hover:underline"
-        style={{ color: "var(--accent-text)" }}
+        className="link inline-flex items-center gap-1.5 min-h-10 text-[14px] font-medium"
         onClick={() => setOpen(true)}
       >
-        <LogIn {...ICON} />
+        <SignInIcon {...ICON} />
         Connect to another Eunomia…
       </button>
       <dialog

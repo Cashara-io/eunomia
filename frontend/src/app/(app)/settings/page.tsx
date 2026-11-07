@@ -149,7 +149,7 @@ function Settings() {
                         tabIndex={on ? 0 : -1}
                         onClick={() => choose(t.id)}
                         onKeyDown={(e) => onKey(e, t.id)}
-                        className="text-left px-3 py-1.5 rounded-[6px] text-[14px] transition-colors hover:bg-[var(--surface-hover)]"
+                        className="text-left px-3 py-1.5 rounded-[10px] text-[14px] transition-colors hover:bg-[var(--surface-hover)]"
                         style={
                           on
                             ? { background: "var(--surface-raised)", color: "var(--ink)", fontWeight: 600 }

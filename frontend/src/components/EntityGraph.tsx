@@ -5,7 +5,7 @@ import Select from "@/components/Select";
 import { Suspense, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import ConfirmButton from "@/components/ConfirmButton";
-import { ArrowLeft, Pencil, Plus, Trash2, X, Zap } from "lucide-react";
+import { ArrowLeftIcon, LightningIcon, PencilSimpleIcon, PlusIcon, TrashIcon, XIcon } from "@phosphor-icons/react/ssr";
 import Link from "next/link";
 import GraphCanvas, { type CanvasInsets } from "./GraphCanvas";
 import SyncMark from "./bits/SyncMark";
@@ -77,7 +77,7 @@ function Byline({ email, at }: { email: string | null | undefined; at?: string |
   const when = ago(at);
   if (!email && !when) return null;
   return (
-    <p className="text-[12px] min-w-0 truncate" style={{ color: "var(--ink-dim)" }} title={email ?? undefined}>
+    <p className="text-[13px] min-w-0 truncate" style={{ color: "var(--ink-dim)" }} title={email ?? undefined}>
       {email && <>Added by {email}</>}
       {email && when && " · "}
       {when && (
@@ -89,7 +89,7 @@ function Byline({ email, at }: { email: string | null | undefined; at?: string |
   );
 }
 
-const ICON = { size: 18, strokeWidth: 1.75 } as const;
+const ICON = { size: 18, weight: "duotone" } as const;
 
 const LIST_LIMIT = 500; // rows the List view reads in one go
 const SPARSE = 3; // fewer nodes than this shows the `guide`
@@ -611,7 +611,7 @@ export default function EntityGraph({
             Add a person or topic
           </h2>
           <button type="button" className="btn btn-ghost btn-icon" onClick={() => setShowCreate(false)} aria-label="Close">
-            <X {...ICON} />
+            <XIcon {...ICON} />
           </button>
         </div>
         <p className="text-[14px] -mt-1" style={{ color: "var(--ink-dim)" }}>
@@ -727,7 +727,7 @@ export default function EntityGraph({
             aria-label="Add person or topic"
             onClick={() => setShowCreate(true)}
           >
-            <Plus size={18} strokeWidth={1.75} aria-hidden />
+            <PlusIcon weight="duotone" size={18} aria-hidden />
             {/* phones keep a short label rather than a bare + */}
             <span className="sm:hidden" aria-hidden>
               Add
@@ -801,7 +801,7 @@ export default function EntityGraph({
       {isPhone && (
         <div className="shrink-0 px-2 pt-2" style={{ borderBottom: "1px solid var(--border)" }}>
           <button type="button" className="btn btn-ghost btn-sm mb-2" onClick={() => setSelected(null)}>
-            <ArrowLeft size={16} strokeWidth={1.75} aria-hidden />
+            <ArrowLeftIcon weight="duotone" size={16} aria-hidden />
             Back
           </button>
         </div>
@@ -810,7 +810,7 @@ export default function EntityGraph({
         <div className="flex items-center gap-3 min-w-0">
           {selected.kind === "person" && <Monogram name={selected.name || selected.id} size={36} color={colorOf("person")} />}
           <div className="min-w-0">
-            <h2 className="text-[20px] font-semibold tracking-[-0.015em] truncate">{selected.name}</h2>
+            <h2 className="text-[20px] font-medium leading-tight tracking-[-0.015em] truncate">{selected.name}</h2>
             <span className="text-[13px] inline-flex items-center gap-1.5 mt-0.5" style={{ color: "var(--ink-dim)" }}>
               <span className="w-2 h-2 rounded-full" style={{ background: kindColor(selected.kind) }} aria-hidden />
               {kindLabel(selected.kind)}
@@ -836,27 +836,27 @@ export default function EntityGraph({
                 className="btn btn-ghost btn-sm btn-icon"
                 aria-label="Ask what this affects"
               >
-                <Zap {...ICON} />
+                <LightningIcon {...ICON} />
               </Link>
             </Tooltip>
             {canDelete(selected.owner_email) && !editing && (
               <Tooltip label="Edit">
                 <button className="btn btn-ghost btn-sm btn-icon" onClick={startEditing} aria-label="Edit">
-                  <Pencil {...ICON} />
+                  <PencilSimpleIcon {...ICON} />
                 </button>
               </Tooltip>
             )}
             {canDelete(selected.owner_email) && (
               <Tooltip label="Delete. Also removes its memories and connections">
                 <ConfirmButton label="Delete" confirmLabel="Delete" onConfirm={deleteSelected} disabled={busy} className="btn btn-ghost btn-sm btn-icon">
-                  <Trash2 {...ICON} />
+                  <TrashIcon {...ICON} />
                 </ConfirmButton>
               </Tooltip>
             )}
             {!isPhone && (
               <Tooltip label="Close" shortcut="Esc">
                 <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setSelected(null)} aria-label="Close">
-                  <X {...ICON} />
+                  <XIcon {...ICON} />
                 </button>
               </Tooltip>
             )}
@@ -868,12 +868,12 @@ export default function EntityGraph({
         <div className="flex flex-col gap-1">
           {topAuthor && <Byline email={topAuthor} />}
           {lastTouched && (
-            <p className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+            <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
               Last memory {ago(lastTouched)}
             </p>
           )}
           {selected.aliases.length > 0 && (
-            <p className="text-[12px] truncate" style={{ color: "var(--ink-dim)" }} title={selected.aliases.join(", ")}>
+            <p className="text-[13px] truncate" style={{ color: "var(--ink-dim)" }} title={selected.aliases.join(", ")}>
               Also called {selected.aliases.join(", ")}
             </p>
           )}
@@ -920,7 +920,7 @@ export default function EntityGraph({
         <section className="flex flex-col gap-2">
           <h3 className="section-title flex items-baseline gap-2">
             Memory
-            <span className="text-[12px] font-normal tabular-nums" style={{ color: "var(--ink-faint)" }}>
+            <span className="font-mono text-[12px] font-normal" style={{ color: "var(--ink-faint)" }}>
               {selected.memory.length}
             </span>
           </h3>
@@ -934,7 +934,7 @@ export default function EntityGraph({
                 <li
                   key={m.id}
                   ref={m.id === freshMemory ? blurIn : m.id === pointedMemory ? scrollToMemory : undefined}
-                  className="group py-2.5 flex items-start justify-between gap-2"
+                  className="group py-3 flex items-start justify-between gap-2"
                   style={m.id === pointedMemory ? { background: "var(--accent-soft)", boxShadow: "-8px 0 0 var(--accent-soft), 8px 0 0 var(--accent-soft)" } : undefined}
                   aria-current={m.id === pointedMemory ? "true" : undefined}
                 >
@@ -943,7 +943,7 @@ export default function EntityGraph({
                     {canDelete(m.owner_email) ? (
                       <EditableMemoryText memory={m} disabled={busy} onSaved={() => void selectNode(selected.id)} />
                     ) : (
-                      <span className="text-[14px] leading-snug">{m.text}</span>
+                      <span className="text-[14px] leading-normal">{m.text}</span>
                     )}
                     <Byline email={soleAuthor !== undefined ? null : m.owner_email} at={m.created_at} />
                   </div>
@@ -956,7 +956,7 @@ export default function EntityGraph({
                         disabled={busy}
                         className="btn btn-ghost btn-sm btn-icon shrink-0 -mr-1"
                       >
-                        <X size={16} strokeWidth={1.75} />
+                        <XIcon weight="duotone" size={16} />
                       </ConfirmButton>
                     </Tooltip>
                   )}
@@ -986,8 +986,8 @@ export default function EntityGraph({
           </form>
           ) : (
             <div className="flex items-center gap-3">
-              <button type="button" className="btn btn-ghost btn-sm self-start -ml-2" onClick={() => setAdding("memory")}>
-                <Plus size={16} strokeWidth={1.75} aria-hidden />
+              <button type="button" className="btn btn-ghost btn-sm self-start -ml-3" onClick={() => setAdding("memory")}>
+                <PlusIcon weight="duotone" size={16} aria-hidden />
                 Add memory
               </button>
               {memoryStatus !== "idle" && (
@@ -1004,7 +1004,7 @@ export default function EntityGraph({
         <section className="flex flex-col gap-2">
           <h3 className="section-title flex items-baseline gap-2">
             Connections
-            <span className="text-[12px] font-normal tabular-nums" style={{ color: "var(--ink-faint)" }}>
+            <span className="font-mono text-[12px] font-normal" style={{ color: "var(--ink-faint)" }}>
               {selected.relations.length}
             </span>
           </h3>
@@ -1019,19 +1019,19 @@ export default function EntityGraph({
                 return (
                   // each connection reads as a sentence: "works on Billing Rewrite" (outgoing) or
                   // "Tom Becker works on this" (incoming), never a bare arrow
-                  <li key={r.id} className="py-2 flex items-baseline gap-1.5 min-w-0 text-[13px]" title={r.owner_email ? `Added by ${r.owner_email}` : undefined}>
+                  <li key={r.id} className="py-2.5 flex items-baseline gap-1.5 min-w-0 text-[14px]" title={r.owner_email ? `Added by ${r.owner_email}` : undefined}>
                     {r.direction === "out" ? (
                       <>
                         <span className="shrink-0" style={{ color: "var(--ink-dim)" }}>
                           {r.label.replace(/_/g, " ")}
                         </span>
-                        <button type="button" className="truncate text-left min-w-0 hover:underline" style={{ color: "var(--accent-text)" }} onClick={() => selectNode(other)}>
+                        <button type="button" className="link truncate text-left min-w-0" onClick={() => selectNode(other)}>
                           {nameOf(other)}
                         </button>
                       </>
                     ) : (
                       <>
-                        <button type="button" className="truncate text-left min-w-0 hover:underline" style={{ color: "var(--accent-text)" }} onClick={() => selectNode(other)}>
+                        <button type="button" className="link truncate text-left min-w-0" onClick={() => selectNode(other)}>
                           {nameOf(other)}
                         </button>
                         <span className="shrink-0" style={{ color: "var(--ink-dim)" }}>
@@ -1074,8 +1074,8 @@ export default function EntityGraph({
           </form>
           ) : (
             graph.nodes.length > 1 && (
-              <button type="button" className="btn btn-ghost btn-sm self-start -ml-2" onClick={() => setAdding("relation")}>
-                <Plus size={16} strokeWidth={1.75} aria-hidden />
+              <button type="button" className="btn btn-ghost btn-sm self-start -ml-3" onClick={() => setAdding("relation")}>
+                <PlusIcon weight="duotone" size={16} aria-hidden />
                 Add connection
               </button>
             )

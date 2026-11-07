@@ -25,7 +25,7 @@ export default function SecretRequestPage() {
       )}
       {request.isError && !notFound && <ErrorLine error={failure(request.error, "Could not load the request.", " Reload the page to try again.")} />}
       {outcome ? (
-        <div className="panel p-5 flex flex-col gap-2" role="status">
+        <div className="ledger p-5 flex flex-col gap-2" role="status">
           <div className="text-[14px] font-medium">{outcome === "filled" ? "Saved" : "Declined"}</div>
           <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
             {outcome === "filled" ? "The agent can now use it without ever seeing it. You can close this tab." : "The agent will be told you declined."}
@@ -36,7 +36,7 @@ export default function SecretRequestPage() {
         </div>
       ) : (
         request.data && (
-          <div className="panel p-5">
+          <div className="ledger p-5">
             <SecretRequestForm request={request.data} onDone={setOutcome} />
           </div>
         )

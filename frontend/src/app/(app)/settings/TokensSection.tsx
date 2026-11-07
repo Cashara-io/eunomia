@@ -3,7 +3,7 @@
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
 import { useRef, useState } from "react";
-import { KeyRound, Pencil, X } from "lucide-react";
+import { KeyIcon, PencilSimpleIcon, XIcon } from "@phosphor-icons/react/ssr";
 import { useCreateToken, useRenameToken, useRevokeToken, useTokens } from "@/lib/queries/auth";
 import { useVaults } from "@/lib/queries/vaults";
 import type { ApiToken, Scope, Vault } from "@/lib/types";
@@ -214,7 +214,7 @@ export function TokensSection() {
             />
           </div>
           <button type="submit" disabled={busy || scopes.length === 0 || !name.trim()} className="btn btn-primary">
-            <KeyRound {...ICON} />
+            <KeyIcon {...ICON} />
             {busy ? "Creating…" : "Create token"}
           </button>
         </div>
@@ -235,7 +235,7 @@ export function TokensSection() {
               </p>
             </div>
             <button onClick={() => setMinted(null)} aria-label="Dismiss" className="btn btn-ghost btn-sm btn-icon">
-              <X {...ICON} />
+              <XIcon {...ICON} />
             </button>
           </div>
           <CopyField value={minted.token} reveal />
@@ -305,7 +305,7 @@ export function TokensSection() {
                             aria-label={`Rename ${t.name}`}
                             className="btn btn-ghost btn-sm btn-icon shrink-0"
                           >
-                            <Pencil {...ICON} />
+                            <PencilSimpleIcon {...ICON} />
                           </button>
                         </Tooltip>
                       </span>

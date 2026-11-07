@@ -4,7 +4,7 @@ import Select from "@/components/Select";
 import { isValidElement, useEffect, useRef, useState, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowLeft, ArrowRight, BookOpen, Link2 } from "lucide-react";
+import { ArrowLeftIcon, ArrowRightIcon, BookOpenIcon, LinkIcon } from "@phosphor-icons/react/ssr";
 import PageHeader from "@/components/ui/PageHeader";
 import { useDoc, useDocs } from "@/lib/queries/tools";
 import ErrorLine, { failure } from "@/components/ErrorLine";
@@ -95,7 +95,7 @@ function Heading({ level, children }: { level: 2 | 3; children?: ReactNode }) {
         className="ml-2 inline-flex align-middle opacity-0 transition-opacity duration-150 group-hover:opacity-100"
         style={{ color: "var(--ink-dim)", textDecoration: "none" }}
       >
-        <Link2 size={14} strokeWidth={1.75} />
+        <LinkIcon weight="duotone" size={14} />
       </a>
     </Tag>
   );
@@ -183,7 +183,7 @@ export default function DocsPage() {
 
   return (
     <div className="flex flex-col gap-7 max-w-[1200px]">
-    <PageHeader icon={BookOpen} title={docTitle} />
+    <PageHeader icon={BookOpenIcon} title={docTitle} />
     <div className="grid gap-5 md:grid-cols-[184px_minmax(0,1fr)] md:gap-10 xl:grid-cols-[184px_minmax(0,760px)_184px]">
       <nav aria-label="Help topics" className="md:sticky md:top-8 md:self-start">
         {topics.length === 0 && (
@@ -212,8 +212,8 @@ export default function DocsPage() {
                       <button
                         onClick={() => setTopic(t.topic)}
                         aria-current={current ? "page" : undefined}
-                        className={`w-full text-left min-h-10 px-3 rounded-[4px] text-[14px] truncate transition-colors duration-150 ${current ? "font-semibold" : "hover:bg-[var(--bauhaus-app-soft)]"}`}
-                        style={current ? { background: "var(--bauhaus-app-blue)", color: "#fff" } : { color: "var(--ink)" }}
+                        className={`w-full text-left min-h-10 px-3 rounded-[10px] text-[14px] truncate transition-colors duration-150 ${current ? "font-semibold" : "hover:bg-[var(--surface-raised)]"}`}
+                        style={current ? { background: "var(--accent)", color: "var(--on-accent)" } : { color: "var(--ink)" }}
                       >
                         {t.title}
                       </button>
@@ -262,7 +262,7 @@ export default function DocsPage() {
             {prev ? (
               <button onClick={() => setTopic(prev.topic)} className="btn h-auto py-2.5 flex-col items-start gap-1 text-left min-w-0 font-medium">
                 <span className="label inline-flex items-center gap-1">
-                  <ArrowLeft size={12} strokeWidth={1.75} /> Previous
+                  <ArrowLeftIcon weight="duotone" size={12} /> Previous
                 </span>
                 <span className="truncate max-w-full">{prev.title}</span>
               </button>
@@ -272,7 +272,7 @@ export default function DocsPage() {
             {next && (
               <button onClick={() => setTopic(next.topic)} className="btn h-auto py-2.5 flex-col items-end gap-1 text-right min-w-0 font-medium">
                 <span className="label inline-flex items-center gap-1">
-                  Next <ArrowRight size={12} strokeWidth={1.75} />
+                  Next <ArrowRightIcon weight="duotone" size={12} />
                 </span>
                 <span className="truncate max-w-full">{next.title}</span>
               </button>
@@ -291,10 +291,10 @@ export default function DocsPage() {
               <li key={h.id}>
                 <a
                   href={`#${h.id}`}
-                  className="block py-1 pl-3 -ml-px transition-colors duration-150"
+                  className="block py-1 pl-3 transition-colors duration-150"
                   style={{
-                    borderLeft: `2px solid ${active === h.id ? "var(--bauhaus-app-blue)" : "transparent"}`,
                     color: active === h.id ? "var(--ink)" : "var(--ink-dim)",
+                    fontWeight: active === h.id ? 500 : undefined,
                   }}
                 >
                   {h.text}

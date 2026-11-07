@@ -120,7 +120,7 @@ export default function LoginPage() {
 
               <p className="mt-2 text-[14px]" style={{ color: "var(--ink-dim)" }}>
                 No account yet?{" "}
-                <Link href="/register" onClick={(e) => { e.preventDefault(); router.push(keepNext("/register")); }} className="font-medium underline" style={{ color: "var(--accent-text)" }}>
+                <Link href="/register" onClick={(e) => { e.preventDefault(); router.push(keepNext("/register")); }} className="link font-medium">
                   Create one
                 </Link>
               </p>
@@ -135,7 +135,7 @@ export default function LoginPage() {
 /** The sign-in answer for a suspended account: the server's words, no code or trace, no alarm. */
 function SuspendedNotice({ message }: { message: string }) {
   return (
-    <div role="status" className="flex items-start gap-2.5 px-3.5 py-2.5 rounded-[2px]" style={{ background: "var(--surface-raised)" }}>
+    <div role="status" className="flex items-start gap-2.5 px-3.5 py-2.5 rounded-[10px]" style={{ background: "var(--surface-raised)" }}>
       <Info size={18} strokeWidth={1.75} aria-hidden className="shrink-0 mt-px" style={{ color: "var(--ink-dim)" }} />
       <p className="text-[14px] leading-snug" style={{ color: "var(--ink)" }}>
         {message}

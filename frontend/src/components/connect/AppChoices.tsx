@@ -21,8 +21,8 @@ export default function AppChoices({ onPick, disabled = false }: { onPick?: (id:
               e.preventDefault();
               if (!disabled) onPick(a.id);
             }}
-            className="flex flex-col gap-1.5 h-full min-w-0 min-h-[76px] px-4 py-3.5 rounded-[3px] transition-colors hover:bg-[var(--bauhaus-app-bg)]"
-            style={{ border: "1px solid var(--bauhaus-app-ink)" }}
+            className="flex flex-col gap-1.5 h-full min-w-0 min-h-[76px] px-4 py-3.5 rounded-[12px] transition-colors hover:bg-[var(--surface-raised)]"
+            style={{ border: "1px solid var(--ink)" }}
           >
             {/* the name stays whole on one line; the short hint may wrap */}
             <span className="flex items-center gap-2.5 text-[16px] font-semibold whitespace-nowrap">

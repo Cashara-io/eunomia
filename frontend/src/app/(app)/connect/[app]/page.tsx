@@ -42,7 +42,7 @@ function LocalNote({ url }: { url: string }) {
       {isAdmin ? (
         <>
           To connect an app on another computer, turn on{" "}
-          <Link href="/settings?tab=https" className="underline" style={{ color: "var(--accent-text)" }}>
+          <Link href="/settings?tab=https" className="link">
             HTTPS in settings
           </Link>
           .
@@ -81,7 +81,7 @@ function NotReachable({ url }: { url: string }) {
       {isAdmin && (
         <Note>
           As an admin, you can turn on{" "}
-          <Link href="/settings?tab=https" className="underline" style={{ color: "var(--accent-text)" }}>
+          <Link href="/settings?tab=https" className="link">
             HTTPS in settings
           </Link>
           .

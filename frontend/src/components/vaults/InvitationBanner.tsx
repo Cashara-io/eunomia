@@ -3,7 +3,7 @@
 // Invitations waiting for you, as a compact banner for Home: who invited you to which space, with Join and
 // Decline. Renders nothing when there are none. After joining it says so and links to the space's people & topics.
 import { useState } from "react";
-import { Check, Mail } from "lucide-react";
+import { CheckIcon, EnvelopeIcon } from "@phosphor-icons/react/ssr";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import { useAcceptInvitation, useDeclineInvitation, useInvitations, useRefreshVaults } from "@/lib/queries/vaults";
 import { ICON, JoinedNotice, inviterWords } from "./bits";
@@ -47,7 +47,7 @@ export default function InvitationBanner({ className = "" }: { className?: strin
           className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5"
           style={i > 0 ? { borderTop: "1px solid var(--border)" } : undefined}
         >
-          <Mail {...ICON} aria-hidden className="shrink-0" style={{ color: "var(--ink-dim)" }} />
+          <EnvelopeIcon {...ICON} aria-hidden className="shrink-0" style={{ color: "var(--ink-dim)" }} />
           <p className="flex-1 min-w-[180px] text-[14px]">
             {inviterWords(inv.invited_by)} invited you to <span className="font-medium">{inv.vault_name}</span>
           </p>
@@ -68,7 +68,7 @@ export default function InvitationBanner({ className = "" }: { className?: strin
               aria-label={`Join ${inv.vault_name}`}
               onClick={() => answer(inv.vault_id, inv.vault_name, true)}
             >
-              <Check {...ICON} aria-hidden />
+              <CheckIcon {...ICON} aria-hidden />
               {busyId === inv.vault_id && accept.isPending ? "Joining…" : "Join"}
             </button>
           </div>
