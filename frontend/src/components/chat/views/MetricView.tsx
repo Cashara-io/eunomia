@@ -5,9 +5,15 @@ import StatusLabel from "@/components/ui/StatusLabel";
 import { entityHref, formatNumber, words } from "./bits";
 import type { MetricRun, MetricView as Metric } from "./types";
 
-/** The run's date. A bare-date run ends at 23:59:59 UTC, so it is read in UTC to stay on its day. */
+/** The run's date in the viewer's zone. A bare-date run ends at 23:59:59 UTC, so that one is read in UTC
+ * to stay on its day. */
 export const asOfDate = (asOf: string) =>
-  new Date(asOf).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  new Date(asOf).toLocaleDateString("en-AU", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    ...(asOf.endsWith("T23:59:59Z") ? { timeZone: "UTC" } : {}),
+  });
 
 const plural = (n: number, kind: string) => `${words(kind)}${n === 1 ? "" : "s"}`;
 
@@ -22,7 +28,8 @@ export function MetricNumber({ run, size = 40 }: { run: MetricRun; size?: number
   }
   return (
     <p className="flex items-baseline gap-2 min-w-0">
-      <span className="font-mono font-medium leading-none" style={{ fontSize: size, letterSpacing: size >= 40 ? "-0.04em" : "-0.015em" }}>
+      {/* Geist, not Mono: a monospace full stop takes a whole cell and reads as "25 . 25" */}
+      <span className="font-medium leading-none" style={{ fontSize: size, letterSpacing: size >= 40 ? "-0.04em" : "-0.015em", fontVariantNumeric: "tabular-nums" }}>
         {formatNumber(run.value, run.unit)}
       </span>
       {run.unit && (
