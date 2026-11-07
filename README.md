@@ -9,16 +9,15 @@
 
 # Eunomia
 
-```bash
-curl -fsSL https://www.buildpaperless.com.au/eunomia/install.sh | bash
-```
-
 **Shared memory for the AI apps you already use.**
 
 Tell one AI app something once, and every app you connect can remember it.
-Eunomia keeps your people, projects, decisions and documents in one place
-that you own, and lets ChatGPT, Claude Code, Codex and other AI apps look
-things up there. You don't need to know what MCP is to set it up.
+Eunomia keeps your people, projects, decisions and documents in one place that
+you host and own, and lets ChatGPT, Claude, Claude Code, Codex and other AI apps
+look things up there.
+
+Free for personal and noncommercial use. Using it in a business needs a paid
+licence ([below](#licence-and-support)).
 
 [![CI](https://github.com/Cashara-io/eunomia/actions/workflows/ci.yml/badge.svg)](https://github.com/Cashara-io/eunomia/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/Cashara-io/eunomia?label=release)](https://github.com/Cashara-io/eunomia/releases/latest)
@@ -26,7 +25,12 @@ things up there. You don't need to know what MCP is to set it up.
 
 ![Scattered knowledge becoming a connected memory graph](docs/images/eunomia-cover.png)
 
-[Connect your AI app](#connect-your-ai-app-in-four-steps) · [Memory spaces](#memory-spaces) · [Get started](#get-started) · [How it works](#how-it-works) · [Documentation](docs/README.md)
+**[I already have an account](#connect-your-ai-app)** ·
+**[I want to install it](#install)** ·
+[Who can see what](#who-can-see-what) ·
+[For admins](#for-admins) ·
+[For developers](#for-developers) ·
+[Docs](docs/README.md)
 
 </div>
 
@@ -34,351 +38,344 @@ things up there. You don't need to know what MCP is to set it up.
 
 [![The Eunomia launch film: memory cards bursting out of the recall bar](docs/images/eunomia-launch-film-poster.jpg)](docs/media/eunomia-launch-film.mp4)
 
-**Watch the launch film** (with sound) in [1080p](docs/media/eunomia-launch-film.mp4) (27 MB) or [720p](docs/media/eunomia-launch-film-720p.mp4) (4 MB): your agents forget, Eunomia remembers, and every agent recalls what the team decided.
+Watch the launch film (with sound) in [1080p](docs/media/eunomia-launch-film.mp4)
+(27 MB) or [720p](docs/media/eunomia-launch-film-720p.mp4) (4 MB).
 
-## What's new in 2.0.9: admin tools, password managers, and a calmer app
+**New in 2.1.0:** the Memory map can show several memory spaces at once again.
+Every release is described on the [releases page](https://github.com/Cashara-io/eunomia/releases).
 
-- **For admins.** Settings has a People directory (make or remove admins, suspend
-  and restore accounts) and a workspace audit log. The log records space changes,
-  sign-ins and settings in plain sentences, and you can export it as CSV. Owners
-  can see and withdraw pending invitations to their spaces.
-- **Password managers.** Agents can use secrets from 1Password or Bitwarden Secrets
-  Manager (preview) through references, without ever seeing the value. When an
-  agent needs a key you haven't stored, it asks you in a pop-up. Turn it on under
-  Connected sources ([docs/password-managers.md](docs/password-managers.md)).
-- **Members first.** Home shows what your team knows before the setup steps. Memory
-  spaces has a simple list and a detail panel. People & topics opens on a sortable
-  list, with the graph a tab away. Search shows which space each result is in.
-- **Connections you control.** Disconnect stops importing and keeps what was already
-  imported. Removing a connection and its data is a separate, confirmed step.
-- **Sharing with another Eunomia needs no setup** on most home networks: share codes
-  include the address your browser opened the app on.
+---
 
-The design system is documented in [DESIGN.md](DESIGN.md).
+# Using Eunomia
 
-## Connect your AI app in four steps
+This part is for everyone, including people whose admin has already set Eunomia up.
 
-1. **Choose your AI app.** Open Eunomia; Home shows ChatGPT, Claude Code, Codex
-   and Other apps.
-2. **Follow its steps.** ChatGPT is set up in your browser (it needs Eunomia on a
-   public `https://` address). Claude Code and Codex are set up with one command
-   you copy into your computer's command window; the guide tells you how to open
-   it on Mac, Windows or Linux.
-3. **Sign in and approve.** Your app opens Eunomia's sign-in page. Use your
-   Eunomia email and password, read what the app is asking to do, and choose
-   **Allow**.
-4. **Try it.** Start a new conversation and ask *"Use Eunomia to look for
-   memories about me."* Press **Check connection** in Eunomia to confirm.
-   Finding no memories on a new account is normal: the connection works, there
-   is simply nothing saved yet.
+## Connect your AI app
 
-Stuck? **Connection help** (linked from every guide) covers the usual problems:
-not sure which app, ChatGPT has no custom-connection option, "command not
-found", no sign-in page, or no memories found.
+1. **Open Eunomia and pick your app on Home.** The choices are:
+   - **ChatGPT**, the web or desktop app.
+   - **Claude Code**, a coding terminal for developers.
+   - **Codex**, a coding app or terminal.
+   - **Other apps**, which covers the everyday **Claude** chat app, Cursor and more.
 
-Prefer to do it from a terminal? The installer connects the AI apps it finds on
-your computer, and `./scripts/connect-agents.sh` does it again later. Exact
-commands and config for each app are in [AI agents & MCP](docs/agents.md).
+   Using Claude to chat (not to code)? Choose **Other apps**.
+2. **Follow the steps for that app.** ChatGPT is set up in your browser. Claude Code and
+   Codex need one command, and the guide shows how to open a command window on Mac,
+   Windows or Linux.
+3. **Sign in and approve.** Your app opens a page that asks **"Allow *app* to use
+   Eunomia?"**. Read what it is asking for, then choose **Allow**.
+4. **Try it.** In a new conversation, ask *"Use Eunomia to look for memories about me."*
+   On a new account it finds nothing. That's normal: the connection works, there is
+   just nothing saved yet.
+
+If ChatGPT can't reach Eunomia, its guide gives you a message to send your admin.
+ChatGPT connects from OpenAI's servers, so Eunomia needs a public `https://` address.
+To disconnect an app later, go to **Settings → Connected apps**. Stuck? Every guide
+links to **Connection help**.
+
+## Try it
+
+> Remember that Ada prefers async updates over meetings.
+
+> In the Marketing space, remember that the launch moved to 12 March.
+
+Then, in another conversation or another app:
+
+> What do you know about Ada?
+
+Your AI app saves to **your personal space** unless you name a space.
+
+## Find your way around
+
+| In the sidebar | What it's for |
+|---|---|
+| **Home** | What your team knows, invitations waiting for you, and connecting an AI app |
+| **Chat** | Ask questions about your memories and documents in the app (needs an AI model, see [For admins](#ai-model)) |
+| **People & topics** | Everyone and everything your AI apps remember. Its tabs: **List** (sortable), **Connections** (a graph of how they relate) and **Memory map** (every memory as a point, with similar ones close together, for one space or several) |
+| **Memory spaces** | Your spaces, who is in them, invitations and sharing |
+| **Documents** | Upload files (text, Markdown, JSON, CSV, text PDFs). Your AI apps can then search them |
+| **Connected sources** | Bring in data from other apps (GitHub, Slack, Notion, Gmail…) |
+| **Help** | The user guides, inside the app |
+| **Settings** | Your account, API tokens, connected apps, and admin pages for admins |
+| **Advanced → AI instructions, Code map** | What Eunomia tells AI apps about using it, and a map of code your agents have described |
+
+Press **⌘K** (Ctrl K on Windows and Linux) to search everything.
 
 ## Memory spaces
 
-A **memory space** keeps one part of your life or work together: your own
-notes, a client, a project, a team. Everything your AI apps remember goes into a
-space, and only the people in that space can read it.
+A **memory space** keeps one part of your life or work together, such as your own
+notes, a client, a project or a team. Everything your AI apps remember goes into a
+space.
 
-- **Your personal space** is created with your account and is private to you.
-- **Shared spaces** are for projects and teams. Invite people by email; they get
-  access only after they accept. Every space always keeps at least one owner.
-- **Copy or combine.** *Copy space* makes a new space with the same memories.
-  *Combine two spaces* makes a new space with both, and leaves the two originals
-  unchanged.
-- **Share with another Eunomia on your network.** An owner can make a one-time
-  share code; someone running their own Eunomia joins with it and gets a full
-  copy of that space that stays in step with yours (changes are exchanged every
-  half minute over an encrypted, authenticated link). Only the owner's Eunomia
-  needs to be reachable.
+- **Your personal space** is created with your account.
+- **Shared spaces** are for projects and teams. An owner invites people by email,
+  and each person gets access when they choose **Join** under **Pending invitations**.
+  Owners can invite people, change roles, rename or delete a space, or hand it over.
+  Members can read and add memories. A space always keeps at least one owner.
+- **Make a copy** creates a new space with the same memories, with only you in it.
+  **Advanced: combine two spaces** (for owners and admins) merges two spaces into a
+  new one and leaves both originals unchanged.
+- **Share with another Eunomia.** An owner can create a one-time share code. Someone
+  running their own Eunomia joins with it and keeps a full copy that stays in step
+  over an encrypted link ([details](docs/peer-vaults.md)).
 
-In the API and agent tools a memory space is called a **vault**; the technical
-details are below.
+In the API and in agent tools, a memory space is called a **vault**.
 
-## Connected sources
+## Who can see what
 
-Bring in what you already have. Choose a source, check that the connection
-works, then import: Eunomia shows where items will go before it starts, honest
-progress while it runs, and how many items arrived when it is done. Sign-in
-problems and import problems are reported separately, each with a way to retry.
+| What | Who can see it |
+|---|---|
+| **Your personal space** | Only you. The app has no option to share it. An agent can invite someone into it through the API, but records you import there still stay yours alone. |
+| **A shared space** | Its members, after they join. Leaving or being removed takes effect immediately. |
+| **Data you import** (Connected sources) | You, unless the source is set to file its records into a shared space. Then that space's members can read them, along with the facts drawn from them ([routing](docs/connectors.md#which-vault-records-go-to)). |
+| **Admins** | Admins manage accounts and can read the workspace audit log: who changed which space, sign-ins and settings. Being an admin doesn't open your spaces. |
+| **Another organisation** on the same server | Nothing. Each organisation's data is kept in its own database, and CI tests that one organisation can't read another's. |
 
-Built-in sources include GitHub, Slack, Notion, Linear, Gmail, Google Calendar,
-Discord, Todoist, Stripe, Up Bank, Spotify, Ed Discussion and PocketAI. You can
-also **upload documents** (text, Markdown, JSON, CSV and text PDFs); their
-passages are found by the same search your AI apps use. See
-[Connectors](#connect-your-agents-and-apps) for the full table.
+The full rules, including what an agent token can reach, are in
+[Concepts](docs/concepts.md#vaults).
 
-## Why Eunomia?
+## Bring in what you already have
 
-An agent's conversation ends; the things it learned should stay useful.
-Eunomia is a self-hosted memory service built around **vaults** (memory spaces
-in the app): separate spaces for the knowledge your agents read and update over
-MCP or REST. Each vault holds its own entities (people & topics), memories and
-relationships, with access controlled by membership.
+- **Upload files** on the **Documents** page.
+- **Connect a source** on **Connected sources**. Built in: GitHub, Linear, Notion,
+  Todoist, Slack, Discord, Gmail, Google Calendar, Ed Discussion, PocketAI (meeting
+  recordings and transcripts), and personal sources (Stripe, Up Bank, Spotify).
+  Eunomia checks the connection first, shows where items will go, and reports progress.
+- **Disconnect** stops importing and keeps what was already imported. **Remove and
+  delete its data** is a separate step that asks you to confirm.
 
-- **Choose the memory scope.** Use a personal vault or a named project/team vault; share access through invitations.
-- **Remember across sessions.** Save facts and experiences about people, organisations, locations and code.
-- **Find context in several ways.** Recall combines semantic search, keywords, memory text, graph links and explicit date ranges.
-- **Bring in your apps.** Sync records from the built-in sources, then search them alongside remembered facts.
-- **Run it for a team.** Each org gets its own database, and tokens can be scoped, limited to one vault and set to expire.
-- **See what's stored.** Explore people & topics and code maps, inspect memories, or compare vaults in a 3D vector cloud.
+Source setup for admins is in [Connectors](docs/connectors.md).
 
-## Vaults (memory spaces) in detail
+---
 
-A vault is the unit of organisation and sharing in Eunomia. Keep a client's
-facts, a project's decisions or a team's working knowledge in its own vault.
-The same person or repository can appear in several vaults, with different
-memories and relationships in each.
+# For admins
 
-```mermaid
-flowchart TD
-    A[Your agents: Claude Code, Codex, Hermes and more] --> B[Authenticated tools and active vault membership]
-    B --> P[Personal vault]
-    B --> J[Project vault: Acme]
-    B --> T[Shared team vault]
-    P --> PM[Your entities, facts and relationships]
-    J --> JM[Project entities, facts and relationships]
-    T --> TM[Team entities, facts and relationships]
-    C[Invited collaborators] --> B
+## Install
+
+Runs on Linux and macOS (on Windows, inside WSL), on **amd64** and **arm64**
+(including Apple Silicon and Raspberry Pi 4/5). It needs Docker with Compose, and the
+installer can install it for you.
+
+```bash
+curl -fsSL https://www.buildpaperless.com.au/eunomia/install.sh | bash -s -- --dir ~/eunomia
 ```
 
-| Vault operation | What it gives you |
-|---|---|
-| **Create** | A named space for a project, client, team or service; your personal vault is created with your account |
-| **Share** | Invite collaborators with owner/member roles; access begins when an invitation is accepted |
-| **Invitations** | See the invitations addressed to you and accept or decline them, from the app or as an agent |
-| **Roles and ownership** | Promote or demote members, or hand a vault to another member; a vault always keeps at least one owner |
-| **Scope** | Pass a vault name or ID as `vault_id` to target its memory; membership is checked on every read and write |
-| **Clone** | Copy a vault's entities, memories and relationships into a new vault you own |
-| **Merge** | Combine two vaults into a new one, folding matching entities and deduplicating facts and relations; both originals stay intact |
+**What the installer does:**
+- It installs anything missing (git, curl, openssl, Docker, jq), asking first when it
+  runs interactively. It uses Homebrew on macOS (with Colima for Docker) and your
+  package manager on Linux.
+- It puts Eunomia in `--dir`, which defaults to `./eunomia` in the current folder.
+- It starts the database, backend, web app, updater and nightly backups.
+- It creates your account and saves the password to `.eunomia-credentials`
+  (readable only by you).
+- It connects the AI apps it finds on this computer by writing their MCP settings.
+  For Claude Code it also adds two hooks to `~/.claude/settings.json`. See
+  [AI agents & MCP](docs/agents.md) for each app's file.
+- It stops before changing anything if a port is taken.
 
-**Writes go to your personal vault by default.** Name a vault to write into
-its project or team context. Without `vault_id`, `recall`, `reflect` and
-`entities_search` search your personal vault plus the project/team vaults
-you belong to. Recall hits identify their vault; an explicit vault narrows
-the search. Another user's shared personal vault is searched only when named.
+Every option, and a manual install without the script, are in
+[Installation](docs/installation.md). Running the installer again is safe.
 
-Sharing a vault shares its memory graph. Raw synced connector records remain
-owned by the user who connected the source. Removing a member or leaving a
-vault takes effect on the next call. A token limited to one vault uses that
-vault as its default and cannot reach any other.
+Then open [localhost:3000](http://localhost:3000). **The first account is the admin.**
+Restart your AI app so it loads Eunomia. For Claude Code, exit and run
+`claude --continue`.
 
-Vaults live inside an org. A self-hosted install is one org by default, so
-everyone who signs up can be invited to its vaults; each org's data sits in
-its own database.
+| Port | Serves | Reachable from |
+|---|---|---|
+| `3000` | The web app, plus `/mcp` for AI apps | Your network (plain http). Set `FRONTEND_BIND=127.0.0.1` to keep it on this machine. |
+| `8001` | The API (the web app forwards to it) | This machine only |
+| `80`, `443` | Only with built-in HTTPS (`--domain`) | The internet |
 
-Vault management works from the app and from your agents' tools alike. Open vault and entity views refresh periodically, so an agent's changes show up without a reload.
+## Remote access and HTTPS
 
-Explore [vault concepts](docs/concepts.md#vaults) and the
-[source-linked vault architecture](docs/architecture.md#vaults-define-the-memory-boundary).
+- **Built-in HTTPS:** `--domain eunomia.example.com --acme-email you@example.com`,
+  or turn it on later in **Settings → HTTPS**. It needs DNS pointing at this machine
+  and ports 80/443 open, and it gets a free Let's Encrypt certificate.
+- **Your own reverse proxy** (Caddy, nginx, Traefik): see
+  [Deployment](docs/deployment.md#your-own-reverse-proxy).
+- **A private network** (Tailscale, a VPN) works for everything except ChatGPT,
+  which needs a public `https://` address.
 
-## Get started
+## Accounts, sign-in and security
 
-Use Linux or macOS, or WSL on Windows. The installer checks for git, Docker
-with Compose, and other prerequisites, and offers to install missing tools.
+- **Who can sign up:** anyone who can reach the server, by default (`SIGNUP=open`).
+  This is so people you invite can create their account first. **Once your team has
+  joined, set `SIGNUP=invite` (with `SIGNUP_ALLOWLIST`) or `closed`.**
+- **Single sign-on:** OpenID Connect (Okta, Entra ID, Google, Keycloak, WorkOS and
+  others) alongside passwords or instead of them (`AUTH_MODE=both` or `oidc`). SAML
+  isn't supported yet. See [Single sign-on](docs/deployment.md#single-sign-on-openid-connect).
+- **Settings → People:** every account in the workspace. Make or remove admins, and
+  suspend or restore accounts. Suspending someone ends their sessions and stops their
+  tokens and connected apps.
+- **Settings → Audit log:** space changes, sign-ins and setting changes, written as
+  sentences, with a failures-only filter and CSV export. Kept for 365 days
+  (`AUDIT_RETENTION_DAYS`).
+- **Tokens for agents** can be limited to read or save, to one space, and to an
+  expiry date (90 days by default).
+- **Admins** are the first account, any address in `EUNOMIA_ADMIN_EMAILS`, and anyone
+  an admin promotes.
 
-It starts the database, backend and web app, sets up updates and nightly
-backups, creates your account, and connects supported agents. Open
-[localhost:3000](http://localhost:3000), sign in, then restart your agent so
-it loads the MCP server.
+## Secrets and your data
 
-Try asking it:
+- **`ENCRYPTION_KEY`** in `.env` encrypts connector credentials and protects each
+  organisation's database password. **Keep a copy off the machine.** Without it the
+  organisation databases can't be opened. See
+  [Rotating ENCRYPTION_KEY](docs/deployment.md#rotating-encryption_key).
+- **Password managers:** agents can use secrets from 1Password or Bitwarden Secrets
+  Manager (preview) by reference, without seeing the values. When an agent needs a key
+  nobody has stored, it asks a person in a pop-up. This is off until you turn it on
+  under Connected sources. A space owner can register any item the provider token can
+  read, so scope that token. See [Password managers](docs/password-managers.md).
+- **AI model calls send content to that model.** The model you configure receives
+  text from memories, documents and chat. A local model server (such as Ollama) keeps
+  that text on your network.
 
-> Create a vault called Acme. In Acme, remember that Ada prefers async updates over meetings.
+## AI model
 
-Then, in another session:
+**You don't need one.** Connected AI apps use their own model to read and write
+memories, and Eunomia's search works on text and links. Adding an OpenAI-compatible
+endpoint in **Settings → AI provider** turns on:
+- search by meaning;
+- automatic extraction of people and facts;
+- summaries;
+- in-app Chat.
 
-> In the Acme vault, what do you know about Ada?
+Local endpoints are allowed by default. Embeddings must have 1,536 dimensions. See
+[AI agents & MCP](docs/agents.md#do-i-need-an-openai-key).
 
-**No model key is required for agent-written memory or text/graph recall.**
-Your connected agent uses its own model. To enable semantic search, automatic
-entity extraction, observation synthesis and in-app chat, configure an
-OpenAI-compatible endpoint in Settings. Auth-free self-hosted endpoints can
-work without a key; embeddings must return 1,536-dimensional vectors.
+## Backups
 
-See [Quickstart](docs/quickstart.md) for the first run and
-[Installation](docs/installation.md) for manual setup and installer options.
+- **Schedule:** the `backup` service saves an encrypted export of every database
+  nightly at 03:00 (set `TZ` in `.env` for local time). It keeps 14 nightly and 8
+  weekly copies in the `eunomia-backups` volume.
+- **No failover:** Eunomia is a single machine with no standby copy. You can lose up to
+  a day of changes.
+- **Off-machine copies:** keep `.env` (it holds `ENCRYPTION_KEY` and
+  `BACKUP_ENCRYPTION_KEY`) and copies of the backups somewhere else. Without
+  `BACKUP_ENCRYPTION_KEY` the backups can't be read.
 
-To give a repo's agents one shared vault and skills, run `npm create eunomia` in
-it. See [Projects](docs/projects.md).
+```bash
+backend/scripts/backup.sh                    # back up now
+backend/scripts/backup.sh list               # list backups
+backend/scripts/restore.sh <backup> --wipe   # restore (the app is offline meanwhile)
+scripts/restore-drill.sh                     # prove a backup restores, into a throwaway database
+```
 
-### Upgrading from 1.x
+Run these from the install folder. **`docker compose down -v` deletes the database
+and the backups on this machine.** Details are in
+[Backups](docs/deployment.md#backups).
 
-2.0 moves to SurrealDB 3.3 and gives each org its own database. Any 1.x
-install can update straight to 2.0 with **Update now** in Settings (instance
-admins only). Taking the 1.4.2 bridge release first is recommended, not
-required: its updater also puts the old release back if the move fails.
+## Updating
 
-During the update Eunomia takes an encrypted `pre-v3` backup, copies your
-data to a new SurrealDB 3 volume, checks every table's row count, and rolls
-back to the old volume if anything doesn't match. On its first boot, 2.0 then
-moves the single database into one org, verified the same way; the old
-database is kept until you remove it. The app is offline while this runs;
-plan for about four times your current data volume in free disk.
+**Settings → Updates → Update now.** Only admins see it. Eunomia checks for a new
+release every 10 minutes. It restarts on the new release's prebuilt images in a few
+seconds and runs any database changes itself.
 
-Keep `ENCRYPTION_KEY`: it now also protects each org's database password. If a
-move fails, the reason is in `docker compose logs surreal-upgrade`; fix it and
-run `docker compose up -d` from the install folder to try again. See
-[Upgrading to SurrealDB 3](docs/upgrading-to-surrealdb-3.md) and
-[Org databases and the one-time move](docs/deployment.md#org-databases-and-the-one-time-move).
+- The update is done by an `updater` container that has the Docker socket and the
+  install folder mounted, so it can restart the stack.
+- It won't update over local edits to tracked files such as `docker-compose.yml`.
+  Put your settings in `.env`.
+- To update from a terminal, or to a specific version, run the installer again
+  (`--ref vX.Y.Z`).
+- **Coming from 1.x:** update with **Update now** as usual. Read
+  [Upgrading to SurrealDB 3](docs/upgrading-to-surrealdb-3.md) first.
+
+More in [Updates](docs/deployment.md#updates).
+
+## Uninstall
+
+```bash
+cd ~/eunomia && docker compose down -v   # deletes the database and on-machine backups: copy them first
+cd .. && rm -rf ~/eunomia
+```
+
+Then remove the `eunomia` entry from each AI app's MCP settings. The file for each app
+is listed in [AI agents & MCP](docs/agents.md). For Claude Code, also remove:
+- the two Eunomia hooks in `~/.claude/settings.json`;
+- `~/.claude/skills/eunomia-memory`;
+- `~/.config/eunomia`.
+
+---
+
+# For developers
 
 ## How it works
 
 ![Eunomia architecture: browser and agents reach the Rust API; job workers sync apps and enrich records; both use SurrealDB's control and per-org databases](docs/diagrams/architecture.svg)
 
-[Explore the interactive architecture](docs/diagrams/architecture.html)
-(download and open locally) · [Read the underlying workings](docs/architecture.md)
+- **Stack:** a Rust backend, a Next.js web app and SurrealDB 3.
+- **Data:** each organisation has its own database, reached with its own database user.
+  Accounts, tokens, the audit log and the job queue live in a separate `control`
+  database.
+- **Background work:** imports, embeddings and fact extraction run as jobs that are
+  retried if they fail.
+- **Recall:** answers combine five ways of searching (meaning, keywords, memory text,
+  graph links and dates) into one ranking.
 
-1. **Choose a vault.** Agents write into your personal vault or a named project/team vault, with membership checked before access.
-2. **Collect.** Sync jobs, queued on each source's schedule or by **Sync now**, and supported webhooks map app data into a common record format.
-3. **Store and enrich.** Records and links are upserted into the org's database. When a model is configured, records are embedded, and background jobs extract entities and facts and consolidate observations.
-4. **Recall.** Five retrieval paths produce candidates. Reciprocal Rank Fusion combines their ranks; recency and agreement between paths adjust the results.
-5. **Use.** Agents, REST clients and in-app chat call one shared tool registry to recall, reflect, write memories and manage graphs and vaults.
+See the [architecture](docs/architecture.md) and the
+[interactive diagram](docs/diagrams/architecture.html) (download and open it locally).
 
-Records and memories are distinct: synced records belong to a user; memories
-belong to a vault. Sharing a vault shares its memories, without sharing a
-member's raw connector data. The code graph is populated by agent calls to
-`code_entity_upsert` and `code_relate`.
+## Connect agents and clients
 
-Each org's data lives in its own SurrealDB database, reached through that
-org's own database user, so a query for one org cannot read another's.
-Accounts, tokens, the audit trail and the job queue live in a separate
-`control` database. Background work runs as leased jobs with retries, so a
-job from a crashed worker is picked up again.
+- **MCP:** `<your Eunomia URL>/mcp`, using a personal access token or MCP OAuth 2.1.
+- **REST:** `POST /api/tools/:name` with the same token. Both share one tool registry.
+- **Install script:** supports Claude Code, Codex, Hermes, Gemini CLI, Cursor, Windsurf,
+  OpenCode, VS Code and Claude Desktop (Claude Desktop needs Node).
+- **Connect more later:** run `./scripts/connect-agents.sh`.
+- **One space and shared skills per repo:** run `npm create eunomia` in it
+  ([Projects](docs/projects.md)).
 
-## Connect your agents and apps
-
-The installer supports Claude Code, Codex, Hermes, Gemini CLI, Cursor,
-Windsurf, OpenCode, VS Code and Claude Desktop. To connect more agents later:
-
-```bash
-./scripts/connect-agents.sh
-```
-
-The MCP endpoint is `<your Eunomia URL>/mcp`. Agents authenticate with a
-personal access token, which can be scoped, limited to one vault and set to
-expire, or sign in through MCP OAuth 2.1. REST clients use the same token with
-`POST /api/tools/:name`. Browser sessions use signed cookies. Mutating tool
-calls are audit-logged. See [AI agents & MCP](docs/agents.md) for
-configuration and the complete tool list.
-
-| Source | Data you can bring in |
-|---|---|
-| Up Bank, Stripe | Banking and payment records |
-| HeyPocket | Meeting recordings and transcripts |
-| GitHub, Linear, Notion, Todoist | Issues, pull requests, documents and tasks |
-| Slack, Discord, Gmail, Google Calendar | Messages, mail and calendar events |
-| Ed Discussion | Course discussion threads, with answers and comments |
-| Spotify | Listening history |
-
-Set credentials and source options on the Connected sources page (`/connectors`). Connector secrets
-are encrypted at rest with AES-256-GCM. Up Bank supports signed webhooks;
-other sources use their sync adapters. A synthetic demo source is available
-for on-demand test data. See [Connectors](docs/connectors.md) for setup details.
+Every tool and its options are in [AI agents & MCP](docs/agents.md). For the
+TypeScript SDK, see [SDK](docs/sdk.md).
 
 ## Develop locally
 
-You need Rust, Bun and Docker. From the repository root, create `.env` if it
-doesn't already exist:
+You need Rust, Bun and Docker.
 
 ```bash
-cp .env.example .env
-openssl rand -base64 32
+cp .env.example .env     # then set ENCRYPTION_KEY to the output of: openssl rand -base64 32
+./run.sh                 # SurrealDB in Docker, the backend on :8001, the web app on :3000
 ```
 
-Put the generated value in `ENCRYPTION_KEY`. Set a stable `JWT_SECRET` too
-if you want browser sessions to survive backend restarts. Then run:
-
-```bash
-./run.sh
-```
-
-This starts SurrealDB 3.3.5 in Docker, the Rust backend on `:8001`, and Next.js
-on `:3000`. The frontend proxies `/api/*` and `/mcp` to the backend. A dev
-volume last used with SurrealDB 2.x must be removed or upgraded first.
-The Compose stack uses prebuilt images; see [Installation](docs/installation.md)
-for that path.
-
-Run checks from the repository root:
+Run the checks:
 
 ```bash
 (cd backend && cargo test --release)
-bash scripts/tests/connect-agents.test.sh
-bash scripts/tests/auto-update.test.sh
-bash scripts/tests/https.test.sh
 (cd frontend && bun run lint && bun run build && bunx tsc --noEmit)
+(cd frontend && E2E_BASE_URL=http://localhost:3000 bun run test)   # with the stack running
 ```
 
-With the stack running and system Chrome installed:
-
-```bash
-(cd frontend && E2E_BASE_URL=http://localhost:3000 bun run test)
-```
-
-[CI](.github/workflows/ci.yml) runs clippy and the backend tests (also under
-the hardened SurrealDB settings, plus the org isolation proof), every script
-test, the frontend checks, Playwright against the Compose stack built from
-the repository with SurrealDB 3.3.5, the 2.x to 3.3 upgrade, and restore
-drills. The [recall evaluation](frontend/tests/recall-eval.spec.ts) measures
-Recall@5 and MRR on a fixed corpus, and checks for cross-vault and cross-user
-leaks. See [Testing](docs/testing.md) for every layer.
-
-Errors carry a stable code and a trace id (RFC 9457 problem+json); logs are
-JSON, and OpenTelemetry export is optional. `eunomia-backend replay <trace_id>`
-re-runs a recorded failure. See [Errors](docs/errors.md),
-[Debugging](docs/debugging.md) and [Observability](docs/observability.md).
-
-## Deploy and back up
-
-Use [Deployment](docs/deployment.md) for HTTPS, production secrets and
-updates. The `backup` service takes an encrypted export of every database
-(control and each org) nightly into the `eunomia-backups` volume. Set
-`BACKUP_ENCRYPTION_KEY` in `.env` and keep a copy off the machine. With the
-stack running:
-
-```bash
-backend/scripts/backup.sh               # back up now
-backend/scripts/backup.sh list          # list backups
-backend/scripts/restore.sh <file> --wipe
-```
-
-Without `--wipe`, restore replays the dump over existing data.
-`scripts/restore-drill.sh` proves a backup restores, using a throwaway
-database. See [Backups](INSTALLATION.md#backups).
-**`docker compose down -v` deletes the data volumes.**
+[Testing](docs/testing.md) covers every layer, including what CI runs: the backend
+under hardened database settings, the proof that organisations are isolated, upgrades
+from earlier releases, restore drills and the recall evaluation. Errors carry a stable
+code and a trace id ([Errors](docs/errors.md), [Debugging](docs/debugging.md),
+[Observability](docs/observability.md)).
 
 ## Documentation
 
 | Guide | What it covers |
 |---|---|
 | [Quickstart](docs/quickstart.md) | Install, sign in and remember your first fact |
-| [Installation](docs/installation.md) | Installer flags, manual setup and supported platforms |
-| [AI agents & MCP](docs/agents.md) | Agent configuration, tokens, OAuth and every tool |
-| [Projects](docs/projects.md) | `npm create eunomia`: one vault and shared skills per repo |
-| [Concepts](docs/concepts.md) | Vaults, facts, observations, graphs and the vector cloud |
-| [Underlying workings](docs/architecture.md) | Source-linked architecture, tenancy, jobs, ingestion, retrieval and access checks |
-| [Connectors](docs/connectors.md) | Source credentials and sync setup |
-| [Deployment](docs/deployment.md) | HTTPS, secrets, updates, org databases and backups |
-| [Upgrading to SurrealDB 3](docs/upgrading-to-surrealdb-3.md) | The 1.x to 2.0 database upgrade, rollback and recovery |
+| [Installation](docs/installation.md) | Installer options, manual setup, platforms |
+| [AI agents & MCP](docs/agents.md) | Agent setup, tokens, OAuth and every tool |
+| [Concepts](docs/concepts.md) | Spaces (vaults), facts, observations, graphs and the memory map |
+| [Connectors](docs/connectors.md) | Source credentials, sync and routing |
+| [Deployment](docs/deployment.md) | HTTPS, settings, SSO, updates and backups |
+| [Password managers](docs/password-managers.md) | 1Password and Bitwarden references, secret requests |
+| [Sharing with another Eunomia](docs/peer-vaults.md) | Share codes and keeping copies in step |
+| [Projects](docs/projects.md) | `npm create eunomia`: one space and shared skills per repo |
+| [Architecture](docs/architecture.md) | Tenancy, jobs, ingestion, retrieval and access checks |
 
-The core user guides are also available on the app's Help page and through
-the `docs` MCP tool. Developer references are listed in the
-[docs index](docs/README.md).
+The user guides are also on the app's **Help** page and available to agents through
+the `docs` tool. The full list is in the [docs index](docs/README.md).
 
-## Support
+## Licence and support
 
-Questions, bugs or commercial licensing: [developers@buildpaperless.com.au](mailto:developers@buildpaperless.com.au).
-Bugs and feature requests can also go in [GitHub issues](https://github.com/Cashara-io/eunomia/issues).
+- **Licence:** free for personal and noncommercial use under the
+  [PolyForm Noncommercial License 1.0.0](LICENSE). Any use inside a business needs a
+  paid commercial licence. Releases up to v2.0.4 remain under the MIT licence.
+- **Commercial licensing and support:**
+  [developers@buildpaperless.com.au](mailto:developers@buildpaperless.com.au).
+- **Bugs and feature requests:** [GitHub issues](https://github.com/Cashara-io/eunomia/issues).
 
-## License
-
-Free for personal and noncommercial use under the [PolyForm Noncommercial License 1.0.0](LICENSE).
-Commercial use needs a paid license: email [developers@buildpaperless.com.au](mailto:developers@buildpaperless.com.au).
-
-© Midhun Kumar
+Built by [Paperless](https://www.buildpaperless.com.au/eunomia). © Midhun Kumar

@@ -1,6 +1,7 @@
 "use client";
 
-// The one memory-space picker for People & topics (List, Connections, Memory map) and Code map.
+// The memory-space picker for People & topics (List and Connections) and Code map. The Memory map
+// shows several spaces at once with its own chips (VectorCloud, graph/space.ts useMapSpaces).
 // `undefined` is Personal, as the graph endpoint reads it.
 
 import Select from "@/components/Select";

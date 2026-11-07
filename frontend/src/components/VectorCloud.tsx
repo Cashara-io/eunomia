@@ -9,8 +9,8 @@ import { pointKindLabel } from "@/lib/memoryKinds";
 import VectorInsights from "./VectorInsights";
 import { useEntityCloud } from "@/lib/queries/entities";
 import { useVaults } from "@/lib/queries/vaults";
-import { chooseSpace, useSharedSpace } from "./graph/space";
-import SpaceSelect, { spaceColor, spaceName } from "./graph/SpaceSelect";
+import { useMapSpaces } from "./graph/space";
+import { spaceColor, spaceName } from "./graph/SpaceSelect";
 
 const PANELS = [
   { id: "rows", label: "Memories" },
@@ -21,12 +21,11 @@ export { pointKindLabel };
 export default function VectorCloud() {
   const vaultsQuery = useVaults();
   const vaults = vaultsQuery.data ?? [];
-  // The map shows the one space the List and Connections views show (shared, see graph/space.ts;
-  // `undefined` there is Personal), picked with the same select.
-  const shared = useSharedSpace();
-  const personal = vaults.find((v) => v.kind === "personal");
-  const space = shared.vaultId ? vaults.find((v) => v.id === shared.vaultId) : personal;
-  const picked = useMemo(() => (shared.ready && space ? [space.id] : []), [shared.ready, space]);
+  // The map lays one or more spaces over each other; it always includes the space the List and
+  // Connections views show (graph/space.ts, useMapSpaces).
+  const layers = useMapSpaces();
+  const pickedKey = layers.ready ? layers.ids.join(",") : "";
+  const picked = useMemo(() => (pickedKey ? pickedKey.split(",") : []), [pickedKey]);
   const cloudQuery = useEntityCloud(picked);
   const data = cloudQuery.data ?? null;
   const error = vaultsQuery.isError
@@ -68,16 +67,44 @@ export default function VectorCloud() {
     } else toggleRow(id);
   }
 
-  function pickSpace(id: string | undefined) {
+  function toggleSpace(id: string) {
     setSelectedId(null);
     setSelection([]);
-    chooseSpace(id);
+    layers.toggle(id);
   }
 
   return (
     <div className="flex flex-col gap-3 flex-1 min-h-0">
       <div className="flex items-center gap-x-4 gap-y-2 flex-wrap">
-        <SpaceSelect className="h-10 text-[14px] w-full sm:w-56" value={shared.vaultId} onChange={pickSpace} />
+        {/* one chip per space: toggles it on the map, and doubles as the legend (its colour, its count) */}
+        {vaults.length > 1 && (
+          <div className="flex gap-2 flex-wrap items-center" role="group" aria-label="Spaces on the map">
+            {vaults.map((v) => {
+              const on = picked.includes(v.id);
+              const only = on && picked.length === 1;
+              const count = on && data ? points.filter((p) => p.vault === v.id).length : null;
+              return (
+                <button
+                  key={v.id}
+                  type="button"
+                  className="pill min-h-10"
+                  aria-pressed={on}
+                  aria-disabled={only || undefined}
+                  title={only ? "The map always shows at least one space" : on ? `Hide ${spaceName(v)}` : `Show ${spaceName(v)} too`}
+                  onClick={() => toggleSpace(v.id)}
+                >
+                  <span className="dot" style={{ background: on ? spaceColor(v) : "var(--border-strong)" }} aria-hidden />
+                  {spaceName(v)}
+                  {count !== null && (
+                    <span className="tabular-nums" style={{ color: "var(--ink-dim)" }}>
+                      {count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
         {data && picked.length > 0 && (
           <span className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
             {points.length === 1 ? "1 memory" : `${points.length} memories`}
@@ -107,7 +134,7 @@ export default function VectorCloud() {
           <div className="absolute inset-4 skeleton" aria-busy="true" aria-label="Loading the memory map" />
         ) : points.length === 0 ? (
           <div className="p-10 text-center text-[13px]" style={{ color: "var(--ink-dim)" }}>
-            Nothing saved in this memory space yet.
+            {picked.length > 1 ? "Nothing saved in these memory spaces yet." : "Nothing saved in this memory space yet."}
           </div>
         ) : (
           <MemoryScatter points={points} selectedId={selectedId} highlightIds={selection} onSelect={pickPoint} ariaLabel="Memory map" />

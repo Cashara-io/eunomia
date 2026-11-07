@@ -56,3 +56,69 @@ export function useSharedSpace(enabled = true): { vaultId: string | undefined; r
     ready: vaultsQuery.isFetched && !counts.pending,
   };
 }
+
+// ---- the Memory map's layers -------------------------------------------------------------------
+// The map can lay several spaces over each other. Its set always holds the space the other views
+// show: pick another space there and the map starts again from that one, unless it is already
+// layered. Remembered in this browser, as ids (Personal by its real id).
+
+const MAP_KEY = "eunomia.map.spaces";
+const mapListeners = new Set<() => void>();
+let mapLoaded = false;
+let mapRaw: string | null = null; // JSON array of vault ids, as stored
+
+function mapSubscribe(l: () => void) {
+  mapListeners.add(l);
+  return () => mapListeners.delete(l);
+}
+function mapSnapshot() {
+  if (!mapLoaded) {
+    mapLoaded = true;
+    try {
+      mapRaw = window.localStorage.getItem(MAP_KEY);
+    } catch {}
+  }
+  return mapRaw;
+}
+function saveMap(ids: string[]) {
+  mapRaw = JSON.stringify(ids);
+  mapLoaded = true;
+  try {
+    window.localStorage.setItem(MAP_KEY, mapRaw);
+  } catch {}
+  mapListeners.forEach((l) => l());
+}
+
+/**
+ * The spaces the Memory map shows, in the order of the space list. `toggle` adds or removes one (the
+ * last one stays), and keeps the other views on a space that is still shown.
+ */
+export function useMapSpaces(): { ids: string[]; ready: boolean; toggle: (id: string) => void } {
+  const shared = useSharedSpace();
+  const raw = useSyncExternalStore(mapSubscribe, mapSnapshot, () => null);
+  const vaults = useVaults().data ?? [];
+  const personal = vaults.find((v) => v.kind === "personal");
+  const current = shared.vaultId ?? personal?.id;
+  let stored: string[] = [];
+  try {
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(parsed)) stored = parsed.filter((x): x is string => typeof x === "string");
+  } catch {}
+  const live = new Set(vaults.map((v) => v.id));
+  const valid = stored.filter((id) => live.has(id));
+  const set = current && valid.includes(current) ? valid : current ? [current] : [];
+  const ids = vaults.map((v) => v.id).filter((id) => set.includes(id));
+
+  function toggle(id: string) {
+    const on = ids.includes(id);
+    if (on && ids.length === 1) return; // the map always shows something
+    const next = on ? ids.filter((x) => x !== id) : [...ids, id];
+    saveMap(next);
+    // the other views follow a space the map still shows
+    if (current && !next.includes(current)) {
+      const keep = next[0];
+      chooseSpace(keep === personal?.id ? undefined : keep);
+    }
+  }
+  return { ids, ready: shared.ready && vaults.length > 0, toggle };
+}
