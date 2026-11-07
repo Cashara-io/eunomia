@@ -38,7 +38,7 @@ function Code({ value, label }: { value: string; label: string }) {
       <pre
         aria-label={label}
         className="w-full text-[13px] font-mono whitespace-pre-wrap [overflow-wrap:anywhere] px-4 py-3 rounded-[12px]"
-        style={{ background: "var(--bauhaus-app-ink)", color: "var(--bauhaus-app-cream)" }}
+        style={{ background: "var(--surface-raised)", color: "var(--ink)", border: "1px solid var(--border)" }}
       >
         {value}
       </pre>

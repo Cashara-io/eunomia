@@ -53,7 +53,7 @@ export function CommandBlock({ value, label = "Command" }: { value: string; labe
         aria-label={label}
         tabIndex={0}
         className="w-full max-w-full font-mono text-[13px] leading-relaxed whitespace-pre overflow-x-auto px-4 py-3.5 rounded-[12px]"
-        style={{ background: "var(--bauhaus-app-ink)", color: "var(--bauhaus-app-cream)" }}
+        style={{ background: "var(--surface-raised)", color: "var(--ink)", border: "1px solid var(--border)" }}
       >
         {value}
       </pre>
@@ -205,9 +205,9 @@ export function Approved({ connection, onShowSteps }: { connection: Connection; 
             Your connection is ready. If no memories have been saved yet, a search can return no results. That is normal.
           </p>
         </div>
-        <div className="task-panel flex flex-col gap-3 items-start px-5 py-4">
+        <div className="soft-panel flex flex-col gap-3 items-start px-5 py-4">
           <p className="text-[16px]">{EXAMPLE_QUESTION}</p>
-          <CopyButton value={EXAMPLE_QUESTION} label="Copy example question" size="sm" className="btn-primary" />
+          <CopyButton value={EXAMPLE_QUESTION} label="Copy example question" size="sm" />
         </div>
         <Note>
           {where} To save your first memory, ask your AI app to remember something (if it has permission to save), or add one from People &amp; topics in Eunomia.

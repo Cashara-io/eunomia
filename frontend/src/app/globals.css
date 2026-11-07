@@ -340,10 +340,10 @@ body {
   border-radius: var(--radius-card);
 }
 
-/* A framed task panel: the one thing to do on this screen (spec: ink edge). */
+/* A framed task panel: the one thing to do on this screen, in a 1px ink frame. */
 .task-panel {
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--ink);
   border-radius: var(--radius-card);
 }
 
