@@ -24,5 +24,6 @@ Control set: 0007 indexes secret audit queries; 0008 adds admin and suspension t
 | tenant | 0031 | credential_refs | L3 Broker | broker core (#122), 2.0.9 | merged |
 | tenant | 0032 | secret_requests | L3 Broker | B4 (#122), 2.0.9 | merged |
 | tenant | 0033 | ontology | Project ontology | feat/project-ontology | locked |
+| tenant | 0034 | ontology_properties | Project ontology properties | feat/ontology-properties | reserved |
 | control | 0007 | secret_audit_index | L3 Broker | #123 (#122), 2.0.9 | merged |
 | control | 0008 | user_admin_suspend | Admin (#144) | #162, 2.0.9 | merged |

@@ -1,4 +1,4 @@
-//! Statements for the project ontology (`ontology`, migration 0033). See the module docs in store/mod.rs.
+//! Statements for the project ontology (`ontology`, migrations 0033 and 0034). See the module docs in store/mod.rs.
 
 use super::Stmt;
 
@@ -79,10 +79,10 @@ pub const PROPOSE_KIND: Stmt = Stmt::at(
         LET $cur = (SELECT VALUE status FROM $id);
         LET $row = IF array::len($cur) = 0 {
             (CREATE $id SET vault = $vault, kind = $kind, description = $description, merge_into = $merge_into,
-                origin = $origin, reason = $reason RETURN AFTER)
+                synonyms = $synonyms, origin = $origin, reason = $reason RETURN AFTER)
         } ELSE IF $cur[0] = "proposed" {
             (UPDATE $id SET description = $description ?? description, merge_into = $merge_into ?? merge_into,
-                reason = $reason ?? reason, updated_at = time::now() RETURN AFTER)
+                synonyms = array::union(synonyms ?? [], $synonyms), reason = $reason ?? reason, updated_at = time::now() RETURN AFTER)
         } ELSE {
             (SELECT * FROM $id)
         };
@@ -155,6 +155,104 @@ pub const DESCRIBE_LINK: Stmt = Stmt::new(
         COMMIT TRANSACTION;"#,
 );
 
+/// One link type's decision, by its derived id: the one read a relation write pays.
+pub const GROUND_LINK: Stmt = Stmt::new("ontology.ground_link", "SELECT VALUE status FROM $id");
+
+/// The approved labels from `$from_kind` to `$to_kind` in `$vault`, to name in the refusal of a rejected one.
+pub const APPROVED_LINKS: Stmt = Stmt::new(
+    "ontology.approved_links",
+    r#"SELECT VALUE label FROM ontology_link WHERE vault = $vault AND from_kind = $from_kind AND to_kind = $to_kind AND status = "approved" ORDER BY label"#,
+);
+
+/// The property rows of `$vault` (slot 0), then per property its value count and a few values (slot 1).
+// ponytail: the stats read every value row of the vault; fine for a review page, not for a hot path.
+pub const PROPERTIES: Stmt = Stmt::new(
+    "ontology.properties",
+    "SELECT * FROM ontology_property WHERE vault = $vault ORDER BY kind, name; \
+     SELECT property, count() AS count, \
+        array::slice(array::distinct({ num: value_num, text: value_text, boolean: value_bool, date: value_date, unit: unit }), 0, 3) AS samples \
+        FROM entity_property WHERE vault = $vault GROUP BY property;",
+);
+
+/// The newest facts of `$vault` with their subject's kind, for the suggest profile: evidence for
+/// properties and synonyms.
+pub const RECENT_FACTS: Stmt = Stmt::new(
+    "ontology.recent_facts",
+    concat!(
+        "SELECT text, ", end_kind!("subject"), " AS kind FROM memory WHERE vault = $vault AND type != \"observation\" ",
+        "ORDER BY created_at DESC LIMIT 400"
+    ),
+);
+
+/// One property, by its derived id.
+pub const PROPERTY: Stmt = Stmt::new("ontology.property", "SELECT * FROM $id");
+
+/// The approved property names of `$kind` in `$vault`, to name in a refusal.
+pub const APPROVED_PROPERTIES: Stmt = Stmt::new(
+    "ontology.approved_properties",
+    r#"SELECT VALUE name FROM ontology_property WHERE vault = $vault AND kind = $kind AND status = "approved" ORDER BY name"#,
+);
+
+/// A property proposal, as for a kind: a decided row is returned as it is.
+pub const PROPOSE_PROPERTY: Stmt = Stmt::at(
+    "ontology.propose_property",
+    r#"BEGIN TRANSACTION;
+        LET $cur = (SELECT VALUE status FROM $id);
+        LET $row = IF array::len($cur) = 0 {
+            (CREATE $id SET vault = $vault, kind = $kind, name = $name, datatype = $datatype, unit = $unit,
+                enum_values = $enum_values, description = $description, synonyms = $synonyms, merge_into = $merge_into,
+                origin = $origin, reason = $reason RETURN AFTER)
+        } ELSE IF $cur[0] = "proposed" {
+            (UPDATE $id SET datatype = $datatype, unit = $unit ?? unit, enum_values = $enum_values ?? enum_values,
+                description = $description ?? description, synonyms = array::union(synonyms ?? [], $synonyms),
+                merge_into = $merge_into ?? merge_into, reason = $reason ?? reason, updated_at = time::now() RETURN AFTER)
+        } ELSE {
+            (SELECT * FROM $id)
+        };
+        RETURN $row;
+        COMMIT TRANSACTION;"#,
+    3,
+);
+
+/// A person's approval or rejection of a property. Properties rejected into this one follow it to its
+/// new target, as kinds do.
+pub const DECIDE_PROPERTY: Stmt = Stmt::new(
+    "ontology.decide_property",
+    r#"BEGIN TRANSACTION;
+        UPDATE $id SET status = $status, merge_into = $merge_into, decided_by = $user, updated_at = time::now();
+        IF $status = "rejected" {
+            UPDATE ontology_property SET merge_into = $merge_into, updated_at = time::now()
+                WHERE vault = $vault AND kind = $kind AND status = "rejected" AND merge_into = $name
+        };
+        COMMIT TRANSACTION;"#,
+);
+
+pub const DESCRIBE_PROPERTY: Stmt =
+    Stmt::new("ontology.describe_property", "UPDATE $id SET description = $description, updated_at = time::now()");
+
+/// One value of one property for one entity.
+pub const SET_VALUE: Stmt = Stmt::new(
+    "ontology.set_value",
+    "CREATE entity_property SET vault = $vault, entity = $entity, property = $property, value_num = $value_num, \
+     value_text = $value_text, value_bool = $value_bool, value_date = $value_date, unit = $unit, as_of = $as_of, \
+     source = $source, origin = $origin RETURN AFTER",
+);
+
+/// The approved properties of `$vault` (slot 0) and every value of the entities in `$ids` there,
+/// newest first (slot 1).
+pub const VALUES_OF: Stmt = Stmt::new(
+    "ontology.values_of",
+    r#"SELECT id, name, datatype, unit FROM ontology_property WHERE vault = $vault AND status = "approved";
+     SELECT entity, property, value_num, value_text, value_bool, value_date, unit, as_of, source, created_at
+        FROM entity_property WHERE entity IN $ids AND vault = $vault ORDER BY as_of DESC, created_at DESC;"#,
+);
+
+/// A deleted entity's values go with it.
+pub const DELETE_VALUES_OF: Stmt = Stmt::new("ontology.delete_values_of", "DELETE entity_property WHERE entity = $id");
+
+/// A merged-away entity's values move to the entity it was merged into.
+pub const MOVE_VALUES: Stmt = Stmt::new("ontology.move_values", "UPDATE entity_property SET entity = $winner WHERE entity = $loser");
+
 pub const ALL: &[&Stmt] = &[
     &PROFILE,
     &REGISTRY,
@@ -168,4 +266,17 @@ pub const ALL: &[&Stmt] = &[
     &DESCRIBE_KIND,
     &DECIDE_LINK,
     &DESCRIBE_LINK,
+    &GROUND_LINK,
+    &APPROVED_LINKS,
+    &PROPERTIES,
+    &RECENT_FACTS,
+    &PROPERTY,
+    &APPROVED_PROPERTIES,
+    &PROPOSE_PROPERTY,
+    &DECIDE_PROPERTY,
+    &DESCRIBE_PROPERTY,
+    &SET_VALUE,
+    &VALUES_OF,
+    &DELETE_VALUES_OF,
+    &MOVE_VALUES,
 ];
