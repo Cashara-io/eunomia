@@ -24,6 +24,7 @@ pub mod migrate;
 pub mod models_user;
 pub mod oauth;
 pub mod oidc;
+pub mod ontology;
 pub mod openapi;
 pub mod peers;
 pub mod pool;
