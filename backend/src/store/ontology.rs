@@ -389,12 +389,15 @@ pub const EXTRACTION_KINDS: Stmt = Stmt::new(
 /// One kind's row by its derived id: an import checks the kind is approved.
 pub const KIND: Stmt = Stmt::new("ontology.kind", "SELECT kind, status FROM $id");
 
-/// One imported value, keyed by (entity, property, document): a re-run of the import updates it in
-/// place instead of adding history.
-pub const UPSERT_IMPORTED_VALUE: Stmt = Stmt::new(
-    "ontology.upsert_imported_value",
-    "UPSERT $id SET vault = $vault, entity = $entity, property = $property, value_num = $value_num, value_text = $value_text, \
-     value_bool = $value_bool, value_date = $value_date, unit = NONE, as_of = $as_of, source = $source, origin = $origin RETURN NONE",
+/// A batch of imported values, each keyed by (entity, property, document) in `$values[*].id`: a re-run
+/// of the import updates them in place instead of adding history.
+pub const UPSERT_IMPORTED_VALUES: Stmt = Stmt::new(
+    "ontology.upsert_imported_values",
+    "FOR $v IN $values { \
+        UPSERT $v.id SET vault = $vault, entity = $v.entity, property = $v.property, value_num = $v.value_num, \
+        value_text = $v.value_text, value_bool = $v.value_bool, value_date = $v.value_date, unit = NONE, as_of = $as_of, \
+        source = $source, origin = $origin RETURN NONE; \
+     };",
 );
 
 /// The values a deleted document's import wrote go with it.
@@ -442,6 +445,6 @@ pub const ALL: &[&Stmt] = &[
     &MATCH_NAMES,
     &EXTRACTION_KINDS,
     &KIND,
-    &UPSERT_IMPORTED_VALUE,
+    &UPSERT_IMPORTED_VALUES,
     &DELETE_IMPORTED_VALUES,
 ];
