@@ -66,6 +66,7 @@ pub struct VaultOut {
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct VaultWithRole {
+    pub is_default: bool,
     pub id: String,
     pub name: String,
     pub kind: String,
@@ -373,13 +374,14 @@ pub async fn list_my_vaults(db: &OrgDb, user_id: &RecordId) -> AppResult<Vec<Vau
         .bind(("user", user_id.clone()))
         .await?;
     let rows: Vec<Row> = res.take(0)?;
+    let personal = personal_vault_id(db, user_id).await?.to_string();
     let only = authz::restricted_vault()?;
     Ok(rows
         .into_iter()
         .filter(|r| only.as_ref().is_none_or(|o| o == &r.vault.id))
         .map(|r| {
             let v: VaultOut = r.vault.into();
-            VaultWithRole { id: v.id, name: v.name, kind: v.kind, created_at: v.created_at, role: r.role }
+            VaultWithRole { is_default: v.id == personal, id: v.id, name: v.name, kind: v.kind, created_at: v.created_at, role: r.role }
         })
         .collect())
 }
@@ -765,7 +767,7 @@ async fn accept_invitation_inner(db: &OrgDb, user_id: &RecordId, vault_id: &Reco
     let vault = rows.into_iter().next().ok_or_else(|| AppError::bad_request("no pending invitation for this vault"))?;
     crate::changes::announce(db, vault_id, crate::changes::VAULT_INVITATION_ACCEPTED, &[]).await;
     let v: VaultOut = vault.into();
-    Ok(VaultWithRole { id: v.id, name: v.name, kind: v.kind, created_at: v.created_at, role: m.role })
+    Ok(VaultWithRole { is_default: vault_id == &personal_vault_id(db, user_id).await?, id: v.id, name: v.name, kind: v.kind, created_at: v.created_at, role: m.role })
 }
 
 /// Decline (delete) a pending invitation into `vault_id`.

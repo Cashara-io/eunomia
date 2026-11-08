@@ -11,7 +11,7 @@ import type { Vault } from "@/lib/types";
 // The colour a space wears everywhere (its dot on Memory spaces, its points on the Memory map).
 export { spaceColor } from "@/components/vaults/bits";
 
-export const spaceName = (v: Pick<Vault, "kind" | "name">) => (v.kind === "personal" ? "Personal" : v.name);
+export const spaceName = (v: Pick<Vault, "is_default" | "name">) => (v.is_default ? "Personal" : v.name);
 
 export default function SpaceSelect({
   value,
@@ -30,7 +30,7 @@ export default function SpaceSelect({
       value={value ?? ""}
       onChange={(v) => onChange(v || undefined)}
       aria-label="Memory space"
-      options={vaults.map((v) => ({ value: v.kind === "personal" ? "" : v.id, label: spaceName(v) }))}
+      options={vaults.map((v) => ({ value: v.is_default ? "" : v.id, label: spaceName(v) }))}
     />
   );
 }

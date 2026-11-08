@@ -5,6 +5,7 @@ expression: stable
 {
   "results": [
     {
+      "is_default": true,
       "id": "vault:<id2>",
       "name": "Personal",
       "kind": "personal",
@@ -12,6 +13,7 @@ expression: stable
       "role": "owner"
     },
     {
+      "is_default": false,
       "id": "vault:<id14>",
       "name": "Team",
       "kind": "org",

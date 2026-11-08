@@ -99,7 +99,7 @@ type Overview = { entities: number; memories: number; memoriesCapped: boolean; l
 /** Totals and recent entities summed over every space the caller belongs to (one list call per space). */
 async function loadOverview(vaults: Vault[]): Promise<Overview> {
   // No space list (it failed to load): fall back to the personal space, which is the default.
-  const spaces: Vault[] = vaults.length > 0 ? vaults : [{ id: "", name: "Personal", kind: "personal", created_at: null, role: "owner" }];
+  const spaces: Vault[] = vaults.length > 0 ? vaults : [{ id: "", name: "Personal", kind: "personal", is_default: true, created_at: null, role: "owner" }];
   const lists = await Promise.all(
     spaces.map(async (v) => ({
       vault: v,
@@ -166,8 +166,8 @@ const ROW_NAME = "min-w-0 text-[14px] font-medium [overflow-wrap:anywhere] sm:tr
 const ROW_META = "col-start-2 sm:col-start-3 text-[12px] whitespace-nowrap";
 
 const entityHref = (e: RecentEntity) =>
-  `/entities?id=${encodeURIComponent(e.id)}${e.vault.kind === "personal" ? "" : `&vault=${encodeURIComponent(e.vault.id)}`}`;
-const spaceName = (v: Vault) => (v.kind === "personal" ? "Personal" : v.name);
+  `/entities?id=${encodeURIComponent(e.id)}${e.vault.is_default ? "" : `&vault=${encodeURIComponent(e.vault.id)}`}`;
+const spaceName = (v: Vault) => (v.is_default ? "Personal" : v.name);
 
 function RecentlyUpdated({ rows, showSpace }: { rows: RecentEntity[]; showSpace: boolean }) {
   return (

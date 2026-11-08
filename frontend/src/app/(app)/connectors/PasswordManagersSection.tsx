@@ -430,7 +430,7 @@ function References({ vaults }: { vaults: { id: string; name: string }[] }) {
   function startNew() {
     setEditingId(null);
     setError(null);
-    const personal = mine.find((v) => v.kind === "personal")?.id;
+    const personal = mine.find((v) => v.is_default)?.id;
     setDraft({ ...emptyDraft, vault_id: vaults.find((v) => v.id === personal)?.id ?? vaults[0]?.id ?? "" });
   }
 

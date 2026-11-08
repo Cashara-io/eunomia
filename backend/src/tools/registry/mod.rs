@@ -622,7 +622,7 @@ mod tests {
     use super::*;
 
     fn vault(id: &str, name: &str, kind: &str) -> VaultWithRole {
-        VaultWithRole { id: id.into(), name: name.into(), kind: kind.into(), created_at: None, role: "owner".into() }
+        VaultWithRole { is_default: false, id: id.into(), name: name.into(), kind: kind.into(), created_at: None, role: "owner".into() }
     }
 
     #[test]

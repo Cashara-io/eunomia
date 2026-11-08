@@ -230,7 +230,7 @@ export type EntityGraph = { nodes: EntityGraphNode[]; edges: EntityGraphEdge[] }
 export type VaultRole = "owner" | "member";
 export type VaultKind = "personal" | "org";
 
-export type Vault = { id: string; name: string; kind: VaultKind; created_at: string | null; role: VaultRole };
+export type Vault = { is_default: boolean; id: string; name: string; kind: VaultKind; created_at: string | null; role: VaultRole };
 export type VaultMember = { email: string; role: VaultRole };
 export type VaultInvitation = {
   vault_id: string;
