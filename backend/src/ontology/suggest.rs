@@ -35,9 +35,12 @@ show its entities have, such as a price, a size or a start date, each with a dat
 such as a fact that says a flat white is also called an FW; never guess one, and never repeat one kind's synonyms on another \
 kind. Metrics: the few numbers the owner would ask about a kind, built only from that kind's properties in the profile \
 (approved or proposed), such as the average price of a product or the number of shipments whose status is Delayed. A \
-metric's expr has agg (sum, avg, min, max over a number, integer, money or percent property; count of entities, or of those \
-with a property; count_distinct of a property's values; ratio of a numerator over a denominator, each its own agg, \
-property and filters), filters [{property, op: eq, ne, gt, gte, lt, lte or in, value}] whose values fit the property's \
+metric's expr has agg (sum, avg, min, max over a number, integer, money or percent property, or over a row: a value \
+worked out per entity as {op: mul, sub, add or div, left, right}, each side a property, a number or another row, such as \
+stock times cost for a stock value or price minus cost for a margin; count of entities, or of those with a property; \
+count_distinct of a property's values; ratio of a numerator over a denominator, each its own agg, property or row and \
+filters, such as the sum of price minus cost over the sum of price for a gross margin), never a derived property an \
+import cannot fill, filters [{property, op: eq, ne, gt, gte, lt, lte or in, value}] whose values fit the property's \
 datatype (an enum value spelt as listed), and for a number over time a date property as time_property with a grain (day, \
 week, month, quarter, year). Propose no metric the properties cannot compute, and none that repeats one already there. \
 Never propose merging a built-in kind away, and leave approved and rejected items alone. Kind names are lowercase: a \
@@ -49,13 +52,15 @@ this exact shape:\n\n\
 \"properties\": [{\"kind\": str, \"name\": str, \"datatype\": str, \"unit\": str or null, \"enum_values\": [str] or null, \
 \"description\": str, \"synonyms\": [str], \"reason\": str}], \
 \"metrics\": [{\"kind\": str, \"name\": str, \"description\": str, \"expr\": {\"agg\": str, \"property\": str or null, \
+\"row\": {\"op\": str, \"left\": str or number or row, \"right\": str or number or row} or null, \
 \"filters\": [{\"property\": str, \"op\": str, \"value\": any}]}, \"unit\": str or null, \"reason\": str}]}";
 
 const HINT: &str = "Eunomia has no model configured, so you review the ontology. Read the profile: each kind and link type \
 with its counts and sample names, and each kind's properties. Then call `ontology_propose` with a one-sentence description for \
 each kind and link type that has none, the kinds that name the same thing as another (`merge_into` the one to keep), the link \
 types worth keeping, the typed properties the kinds' facts show (`properties`: kind, name, datatype, unit), and the metrics \
-those properties can compute (`metrics`: kind, name, description, expr such as {\"agg\": \"avg\", \"property\": \"price\"}). \
+those properties can compute (`metrics`: kind, name, description, expr such as {\"agg\": \"avg\", \"property\": \"price\"}, or a \
+per-entity `row` such as {\"agg\": \"sum\", \"row\": {\"op\": \"mul\", \"left\": \"stock\", \"right\": \"cost\"}}). \
 Give a kind or property `synonyms` only when the vault's own names or facts spell them out. A vault owner approves or \
 rejects proposals in the Eunomia app.";
 

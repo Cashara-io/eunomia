@@ -138,6 +138,64 @@ pub struct Filter {
     pub value: Value,
 }
 
+/// How a row expression combines two values of one entity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum RowOp {
+    Mul,
+    Sub,
+    Add,
+    Div,
+}
+
+impl RowOp {
+    fn symbol(self) -> &'static str {
+        match self {
+            RowOp::Mul => "×",
+            RowOp::Sub => "−",
+            RowOp::Add => "+",
+            RowOp::Div => "÷",
+        }
+    }
+}
+
+/// One side of a row expression: a number, a property of the kind, or another row expression.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(untagged)]
+pub enum RowTerm {
+    Number(f64),
+    Property(String),
+    #[schema(no_recursion)]
+    Row(Box<RowExpr>),
+}
+
+/// A value worked out for each entity before the metric combines them, such as stock × cost: two
+/// terms and an operation, nested at most [`MAX_ROW_DEPTH`] deep. Typed data, never query text.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RowExpr {
+    pub op: RowOp,
+    pub left: RowTerm,
+    pub right: RowTerm,
+}
+
+impl RowExpr {
+    /// Every property it reads.
+    pub fn properties(&self) -> Vec<&str> {
+        [&self.left, &self.right]
+            .into_iter()
+            .flat_map(|t| match t {
+                RowTerm::Number(_) => Vec::new(),
+                RowTerm::Property(p) => vec![p.as_str()],
+                RowTerm::Row(r) => r.properties(),
+            })
+            .collect()
+    }
+}
+
+/// How deep row expressions nest.
+pub const MAX_ROW_DEPTH: usize = 3;
+
 /// One side of a ratio.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
@@ -145,6 +203,9 @@ pub struct SubExpr {
     pub agg: Agg,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub property: Option<String>,
+    /// Instead of a property: a value worked out per entity (sum, avg, min and max only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub row: Option<RowExpr>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub filters: Vec<Filter>,
 }
@@ -159,6 +220,10 @@ pub struct MetricExpr {
     /// entities that have it, or every entity without it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub property: Option<String>,
+    /// Instead of a property: a value worked out per entity, such as stock × cost (sum, avg, min and
+    /// max only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub row: Option<RowExpr>,
     /// Ratio only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub numerator: Option<SubExpr>,
@@ -260,7 +325,183 @@ struct Cond {
 struct Side {
     agg: Agg,
     property: Option<String>,
+    row: Option<RowPlan>,
     filters: Vec<Cond>,
+}
+
+/// What a row expression's value is measured in.
+#[derive(Debug, Clone, PartialEq)]
+enum Dim {
+    /// Money in this currency.
+    Money(String),
+    /// A number, integer or percent, with its unit when it has one.
+    Plain(Option<String>),
+    /// A number written in the expression: it takes the other side's unit.
+    Literal,
+}
+
+impl Dim {
+    fn unit(&self) -> Option<String> {
+        match self {
+            Dim::Money(c) => Some(c.clone()).filter(|c| !c.is_empty()),
+            Dim::Plain(u) => u.clone(),
+            Dim::Literal => None,
+        }
+    }
+}
+
+/// The unit `a op b` is in, or why the two do not combine.
+fn combine(op: RowOp, a: &Dim, b: &Dim) -> Result<Dim, String> {
+    use Dim::*;
+    let currencies = |x: &str, y: &str| format!("{x} and {y} are different currencies");
+    match op {
+        RowOp::Add | RowOp::Sub => match (a, b) {
+            (Literal, x) | (x, Literal) => Ok(x.clone()),
+            (Money(x), Money(y)) if x == y => Ok(Money(x.clone())),
+            (Money(x), Money(y)) => Err(currencies(x, y)),
+            (Plain(x), Plain(y)) if x == y => Ok(Plain(x.clone())),
+            (Plain(_), Plain(_)) => Err("the two sides are in different units".into()),
+            _ => Err("money and a plain number do not add or subtract: their units differ".into()),
+        },
+        RowOp::Mul => match (a, b) {
+            (Literal, x) | (x, Literal) => Ok(x.clone()),
+            (Money(_), Money(_)) => Err("money times money has no meaning".into()),
+            (Money(c), Plain(_)) | (Plain(_), Money(c)) => Ok(Money(c.clone())),
+            (Plain(x), Plain(y)) => Ok(Plain(match (x, y) {
+                (Some(x), Some(y)) => Some(format!("{x}·{y}")),
+                (x, y) => x.clone().or_else(|| y.clone()),
+            })),
+        },
+        RowOp::Div => match (a, b) {
+            (x, Literal) => Ok(x.clone()),
+            (_, Money(_)) if !matches!(a, Money(_)) => Err("dividing by money has no meaning".into()),
+            (Money(x), Money(y)) if x == y => Ok(Plain(None)),
+            (Money(x), Money(y)) => Err(currencies(x, y)),
+            (Money(c), _) => Ok(Money(c.clone())),
+            (Literal, Plain(y)) => Ok(Plain(y.as_ref().map(|y| format!("1/{y}")))),
+            (Plain(x), Plain(y)) => Ok(Plain(match (x, y) {
+                (x, y) if x == y => None,
+                (Some(x), None) => Some(x.clone()),
+                (None, Some(y)) => Some(format!("1/{y}")),
+                (Some(x), Some(y)) => Some(format!("{x}/{y}")),
+                (None, None) => None,
+            })),
+            _ => Err("those two do not divide".into()),
+        },
+    }
+}
+
+/// A checked term of a row expression.
+#[derive(Debug, Clone)]
+enum TermPlan {
+    Num(f64),
+    Prop(String),
+    Row(Box<RowPlan>),
+}
+
+/// A checked row expression: property names as stored, and the unit of its value.
+#[derive(Debug, Clone)]
+struct RowPlan {
+    op: RowOp,
+    left: TermPlan,
+    right: TermPlan,
+    dim: Dim,
+}
+
+/// Why one entity's row value was left out.
+enum Skip {
+    /// A property it reads has no value (or no number).
+    Missing,
+    /// A value is kept in another unit than its property's: (property, unit).
+    Unit(String, String),
+    /// It divides by 0.
+    DivZero,
+}
+
+impl RowPlan {
+    fn expr(&self) -> RowExpr {
+        let term = |t: &TermPlan| match t {
+            TermPlan::Num(n) => RowTerm::Number(*n),
+            TermPlan::Prop(p) => RowTerm::Property(p.clone()),
+            TermPlan::Row(r) => RowTerm::Row(Box::new(r.expr())),
+        };
+        RowExpr { op: self.op, left: term(&self.left), right: term(&self.right) }
+    }
+
+    fn properties(&self, out: &mut BTreeSet<String>) {
+        for t in [&self.left, &self.right] {
+            match t {
+                TermPlan::Num(_) => {}
+                TermPlan::Prop(p) => {
+                    out.insert(p.clone());
+                }
+                TermPlan::Row(r) => r.properties(out),
+            }
+        }
+    }
+
+    /// The value for one entity whose values `get` returns.
+    fn value<'a>(&self, get: &impl Fn(&str) -> Option<&'a Held>, props: &Props) -> Result<f64, Skip> {
+        let term = |t: &TermPlan| -> Result<f64, Skip> {
+            match t {
+                TermPlan::Num(n) => Ok(*n),
+                TermPlan::Prop(p) => {
+                    let h = get(p).ok_or(Skip::Missing)?;
+                    let want = props.get(p).and_then(|i| i.unit.as_ref());
+                    if let (Some(u), Some(want)) = (&h.unit, want)
+                        && u != want
+                    {
+                        return Err(Skip::Unit(p.clone(), u.clone()));
+                    }
+                    h.stored.num.ok_or(Skip::Missing)
+                }
+                TermPlan::Row(r) => r.value(get, props),
+            }
+        };
+        let (a, b) = (term(&self.left)?, term(&self.right)?);
+        match self.op {
+            RowOp::Mul => Ok(a * b),
+            RowOp::Sub => Ok(a - b),
+            RowOp::Add => Ok(a + b),
+            RowOp::Div if b == 0.0 => Err(Skip::DivZero),
+            RowOp::Div => Ok(a / b),
+        }
+    }
+}
+
+fn check_row(props: &Props, kind: &Kind, r: &RowExpr, depth: usize, role: &str) -> AppResult<RowPlan> {
+    if depth > MAX_ROW_DEPTH {
+        return Err(AppError::bad_request(format!("{role}: a row expression nests at most {MAX_ROW_DEPTH} deep")));
+    }
+    let term = |t: &RowTerm| -> AppResult<(TermPlan, Dim)> {
+        match t {
+            RowTerm::Number(n) if n.is_finite() => Ok((TermPlan::Num(*n), Dim::Literal)),
+            RowTerm::Number(_) => Err(AppError::bad_request(format!("{role}: a row's number must be finite"))),
+            RowTerm::Property(p) => {
+                let (name, info) = property_of(props, kind, p, role)?;
+                let dim = match info.datatype {
+                    Datatype::Money => Dim::Money(info.unit.clone().unwrap_or_default()),
+                    d if d.numeric() => Dim::Plain(info.unit.clone()),
+                    d => {
+                        return Err(AppError::bad_request(format!(
+                            "{role}: row maths takes number, integer, money or percent properties; {name:?} is {}",
+                            d.as_str()
+                        )))
+                    }
+                };
+                Ok((TermPlan::Prop(name), dim))
+            }
+            RowTerm::Row(inner) => {
+                let plan = check_row(props, kind, inner, depth + 1, role)?;
+                let dim = plan.dim.clone();
+                Ok((TermPlan::Row(Box::new(plan)), dim))
+            }
+        }
+    };
+    let (left, a) = term(&r.left)?;
+    let (right, b) = term(&r.right)?;
+    let dim = combine(r.op, &a, &b).map_err(|why| AppError::bad_request(format!("{role}: {} {} {}: {why}", term_words(&r.left), r.op.symbol(), term_words(&r.right))))?;
+    Ok(RowPlan { op: r.op, left, right, dim })
 }
 
 /// A checked expression.
@@ -367,8 +608,19 @@ fn hard(e: FilterError) -> AppError {
     }
 }
 
-fn check_side(props: &Props, kind: &Kind, agg: Agg, property: Option<&str>, filters: &[Filter], role: &str) -> AppResult<Side> {
+fn check_side(props: &Props, kind: &Kind, agg: Agg, property: Option<&str>, row: Option<&RowExpr>, filters: &[Filter], role: &str) -> AppResult<Side> {
     let property = property.map(str::trim).filter(|p| !p.is_empty());
+    if let Some(r) = row {
+        if property.is_some() {
+            return Err(AppError::bad_request(format!("{role}: give a property or a row, not both")));
+        }
+        if !agg.numeric_only() {
+            return Err(AppError::bad_request(format!("{role}: {} takes no row: a row works with sum, avg, min and max", agg.as_str())));
+        }
+        let row = check_row(props, kind, r, 1, role)?;
+        let filters = filters.iter().map(|f| check_filter(props, kind, f).map_err(hard)).collect::<AppResult<Vec<_>>>()?;
+        return Ok(Side { agg, property: None, row: Some(row), filters });
+    }
     let property = match (agg, property) {
         (Agg::Ratio, _) => return Err(AppError::bad_request(format!("{role}: a ratio's sides are sum, count, avg, min, max or count_distinct"))),
         (Agg::Count, None) => None,
@@ -386,7 +638,7 @@ fn check_side(props: &Props, kind: &Kind, agg: Agg, property: Option<&str>, filt
         }
     };
     let filters = filters.iter().map(|f| check_filter(props, kind, f).map_err(hard)).collect::<AppResult<Vec<_>>>()?;
-    Ok(Side { agg, property, filters })
+    Ok(Side { agg, property, row: None, filters })
 }
 
 fn check(props: &Props, kind: &Kind, e: &MetricExpr) -> AppResult<Plan> {
@@ -399,18 +651,18 @@ fn check(props: &Props, kind: &Kind, e: &MetricExpr) -> AppResult<Plan> {
             let (Some(n), Some(d)) = (&e.numerator, &e.denominator) else {
                 return Err(AppError::bad_request("a ratio needs a numerator and a denominator"));
             };
-            if e.property.is_some() {
-                return Err(AppError::bad_request("a ratio measures through its numerator and denominator, not a property"));
+            if e.property.is_some() || e.row.is_some() {
+                return Err(AppError::bad_request("a ratio measures through its numerator and denominator, not a property or a row"));
             }
-            let n = check_side(props, kind, n.agg, n.property.as_deref(), &n.filters, "the numerator")?;
-            let d = check_side(props, kind, d.agg, d.property.as_deref(), &d.filters, "the denominator")?;
+            let n = check_side(props, kind, n.agg, n.property.as_deref(), n.row.as_ref(), &n.filters, "the numerator")?;
+            let d = check_side(props, kind, d.agg, d.property.as_deref(), d.row.as_ref(), &d.filters, "the denominator")?;
             (vec![n, d], true)
         }
         agg => {
             if e.numerator.is_some() || e.denominator.is_some() {
                 return Err(AppError::bad_request("only a ratio has a numerator and a denominator"));
             }
-            (vec![check_side(props, kind, agg, e.property.as_deref(), &[], "the metric")?], false)
+            (vec![check_side(props, kind, agg, e.property.as_deref(), e.row.as_ref(), &[], "the metric")?], false)
         }
     };
     let filters = e.filters.iter().map(|f| check_filter(props, kind, f).map_err(hard)).collect::<AppResult<Vec<_>>>()?;
@@ -432,7 +684,7 @@ impl Plan {
     /// The expression as checked: names trimmed, enum values as listed, dates as YYYY-MM-DD.
     fn expr(&self) -> MetricExpr {
         let filters = |c: &[Cond]| c.iter().map(|c| c.filter.clone()).collect::<Vec<_>>();
-        let sub = |s: &Side| SubExpr { agg: s.agg, property: s.property.clone(), filters: filters(&s.filters) };
+        let sub = |s: &Side| SubExpr { agg: s.agg, property: s.property.clone(), row: s.row.as_ref().map(RowPlan::expr), filters: filters(&s.filters) };
         let (time_property, grain) = match &self.time {
             Some((t, g)) => (Some(t.clone()), Some(*g)),
             None => (None, None),
@@ -441,6 +693,7 @@ impl Plan {
             MetricExpr {
                 agg: Agg::Ratio,
                 property: None,
+                row: None,
                 numerator: Some(sub(&self.sides[0])),
                 denominator: Some(sub(&self.sides[1])),
                 filters: filters(&self.filters),
@@ -448,7 +701,16 @@ impl Plan {
                 grain,
             }
         } else {
-            MetricExpr { agg: self.sides[0].agg, property: self.sides[0].property.clone(), numerator: None, denominator: None, filters: filters(&self.filters), time_property, grain }
+            MetricExpr {
+                agg: self.sides[0].agg,
+                property: self.sides[0].property.clone(),
+                row: self.sides[0].row.as_ref().map(RowPlan::expr),
+                numerator: None,
+                denominator: None,
+                filters: filters(&self.filters),
+                time_property,
+                grain,
+            }
         }
     }
 
@@ -457,6 +719,9 @@ impl Plan {
         let mut out = BTreeSet::new();
         for s in &self.sides {
             out.extend(s.property.clone());
+            if let Some(r) = &s.row {
+                r.properties(&mut out);
+            }
             out.extend(s.filters.iter().map(|c| c.filter.property.clone()));
         }
         out.extend(self.filters.iter().map(|c| c.filter.property.clone()));
@@ -490,13 +755,33 @@ fn filter_words(f: &Filter) -> String {
     format!("{} {op} {}", words(&f.property), value_words(&f.value))
 }
 
-fn side_words(kind: &str, agg: Agg, property: Option<&str>, filters: &[Filter]) -> String {
-    let p = property.map(words).unwrap_or_default();
+fn term_words(t: &RowTerm) -> String {
+    match t {
+        RowTerm::Number(n) if n.fract() == 0.0 && n.abs() < 1e15 => format!("{}", *n as i64),
+        RowTerm::Number(n) => n.to_string(),
+        RowTerm::Property(p) => words(p),
+        RowTerm::Row(r) => format!("({})", row_words(r)),
+    }
+}
+
+/// "stock × cost", "(price − cost) ÷ price".
+fn row_words(r: &RowExpr) -> String {
+    format!("{} {} {}", term_words(&r.left), r.op.symbol(), term_words(&r.right))
+}
+
+fn side_words(kind: &str, agg: Agg, property: Option<&str>, row: Option<&RowExpr>, filters: &[Filter]) -> String {
+    let p = match row {
+        // "Sum of (price − cost)": a sum or difference reads as one value
+        Some(r) if matches!(r.op, RowOp::Add | RowOp::Sub) => format!("({})", row_words(r)),
+        Some(r) => row_words(r),
+        None => property.map(words).unwrap_or_default(),
+    };
+    let of = if row.is_some() { " of" } else { "" };
     let mut out = match (agg, property) {
         (Agg::Sum, _) => format!("Sum of {p}"),
-        (Agg::Avg, _) => format!("Average {p}"),
-        (Agg::Min, _) => format!("Lowest {p}"),
-        (Agg::Max, _) => format!("Highest {p}"),
+        (Agg::Avg, _) => format!("Average{of} {p}"),
+        (Agg::Min, _) => format!("Lowest{of} {p}"),
+        (Agg::Max, _) => format!("Highest{of} {p}"),
         (Agg::CountDistinct, _) => format!("Number of different {p} values"),
         (Agg::Count, Some(_)) => format!("Number of {} with a {p}", words(kind)),
         (Agg::Count, None) | (Agg::Ratio, _) => format!("Number of {}", words(kind)),
@@ -513,8 +798,8 @@ fn side_words(kind: &str, agg: Agg, property: Option<&str>, filters: &[Filter]) 
 pub fn expr_words(kind: &str, e: &MetricExpr) -> String {
     let mut out = match (&e.numerator, &e.denominator) {
         (Some(n), Some(d)) if e.agg == Agg::Ratio => {
-            let n = side_words(kind, n.agg, n.property.as_deref(), &n.filters);
-            let d = side_words(kind, d.agg, d.property.as_deref(), &d.filters);
+            let n = side_words(kind, n.agg, n.property.as_deref(), n.row.as_ref(), &n.filters);
+            let d = side_words(kind, d.agg, d.property.as_deref(), d.row.as_ref(), &d.filters);
             let mut d = d.chars();
             let d = d.next().map(|c| c.to_lowercase().collect::<String>() + d.as_str()).unwrap_or_default();
             let mut s = format!("{n}, divided by {d}");
@@ -524,7 +809,7 @@ pub fn expr_words(kind: &str, e: &MetricExpr) -> String {
             }
             s
         }
-        _ => side_words(kind, e.agg, e.property.as_deref(), &e.filters),
+        _ => side_words(kind, e.agg, e.property.as_deref(), e.row.as_ref(), &e.filters),
     };
     if let Some(t) = &e.time_property {
         out.push_str(&format!(", by {} of {}", e.grain.unwrap_or(Grain::Month).word(), words(t)));
@@ -1024,8 +1309,10 @@ fn matches(c: &Cond, held: Option<&Held>) -> bool {
 struct Computed {
     value: Option<f64>,
     used: Vec<String>,
-    /// Values left out for a unit other than the property's.
-    other_units: BTreeMap<String, usize>,
+    /// Values left out for a unit other than the property's, by (property, unit).
+    other_units: BTreeMap<(String, String), usize>,
+    /// Entities left out because their row divides by 0.
+    div_zero: usize,
 }
 
 fn compute(side: &Side, filters: &[Cond], entities: &[&String], values: &Values, props: &Props) -> Computed {
@@ -1033,11 +1320,24 @@ fn compute(side: &Side, filters: &[Cond], entities: &[&String], values: &Values,
     let mut used = Vec::new();
     let mut nums = Vec::new();
     let mut distinct = HashSet::new();
-    let mut other_units: BTreeMap<String, usize> = BTreeMap::new();
+    let mut other_units: BTreeMap<(String, String), usize> = BTreeMap::new();
+    let mut div_zero = 0;
     for e in entities {
         let held = values.get(*e);
         let get = |p: &str| held.and_then(|h| h.get(p));
         if !filters.iter().chain(&side.filters).all(|c| matches(c, get(&c.filter.property))) {
+            continue;
+        }
+        if let Some(r) = &side.row {
+            match r.value(&get, props) {
+                Ok(v) => {
+                    nums.push(v);
+                    used.push((*e).clone());
+                }
+                Err(Skip::Missing) => {}
+                Err(Skip::Unit(p, u)) => *other_units.entry((p, u)).or_default() += 1,
+                Err(Skip::DivZero) => div_zero += 1,
+            }
             continue;
         }
         let Some(p) = &side.property else {
@@ -1049,7 +1349,7 @@ fn compute(side: &Side, filters: &[Cond], entities: &[&String], values: &Values,
             if let (Some(u), Some(want)) = (&h.unit, &unit)
                 && u != want
             {
-                *other_units.entry(u.clone()).or_default() += 1;
+                *other_units.entry((p.clone(), u.clone())).or_default() += 1;
                 continue;
             }
             let Some(n) = h.stored.num else { continue };
@@ -1069,7 +1369,7 @@ fn compute(side: &Side, filters: &[Cond], entities: &[&String], values: &Values,
         Agg::Max => nums.iter().copied().reduce(f64::max),
         Agg::Avg | Agg::Ratio => None,
     };
-    Computed { value, used, other_units }
+    Computed { value, used, other_units, div_zero }
 }
 
 fn round(v: f64) -> f64 {
@@ -1080,10 +1380,15 @@ fn round(v: f64) -> f64 {
 /// The plan's value over `entities`: one side, or numerator over denominator.
 fn value_of(plan: &Plan, entities: &[&String], values: &Values, props: &Props, warnings: &mut Vec<String>) -> (Option<f64>, BTreeSet<String>) {
     let sides: Vec<Computed> = plan.sides.iter().map(|s| compute(s, &plan.filters, entities, values, props)).collect();
-    for (s, c) in plan.sides.iter().zip(&sides) {
-        for (unit, n) in &c.other_units {
-            let p = s.property.as_deref().unwrap_or_default();
+    for c in &sides {
+        for ((p, unit), n) in &c.other_units {
             let w = format!("left out {n} {p:?} value(s) in {unit}, not the property's unit");
+            if !warnings.contains(&w) {
+                warnings.push(w);
+            }
+        }
+        if c.div_zero > 0 {
+            let w = format!("left out {} entities whose row divides by 0", c.div_zero);
             if !warnings.contains(&w) {
                 warnings.push(w);
             }
@@ -1283,8 +1588,9 @@ pub(super) async fn prepare(db: &OrgDb, vault: &RecordId, args: &EvalArgs) -> Ap
         }
     }
     let as_of = parse_as_of(args.as_of.as_deref())?;
-    let unit = row.unit.clone().or_else(|| match plan.ratio {
-        false if plan.sides[0].agg.numeric_only() => plan.sides[0].property.as_ref().and_then(|p| props.get(p)).and_then(|p| p.unit.clone()),
+    let unit = row.unit.clone().or_else(|| match (plan.ratio, &plan.sides[0].row) {
+        (false, Some(r)) => r.dim.unit(),
+        (false, None) if plan.sides[0].agg.numeric_only() => plan.sides[0].property.as_ref().and_then(|p| props.get(p)).and_then(|p| p.unit.clone()),
         _ => None,
     });
     let mut out = MetricEvalOut {
@@ -1473,6 +1779,21 @@ mod tests {
         assert_eq!(back.filters[0].value, json!(["Delayed", "Pending"]));
         assert_eq!(back.grain, Some(Grain::Month));
         assert_eq!(expr_words("shipment", &back), "Sum of price where status is one of Delayed, Pending and shipped on is at least 2026-01-01, by month of shipped on");
+    }
+
+    #[test]
+    fn row_units_combine_only_when_they_mean_something() {
+        let aud = || Dim::Money("AUD".into());
+        let n = || Dim::Plain(None);
+        assert_eq!(combine(RowOp::Mul, &n(), &aud()), Ok(aud()), "a count times a price is money");
+        assert_eq!(combine(RowOp::Sub, &aud(), &aud()), Ok(aud()));
+        assert_eq!(combine(RowOp::Div, &aud(), &aud()), Ok(n()), "money over money is a share");
+        assert_eq!(combine(RowOp::Sub, &aud(), &Dim::Literal), Ok(aud()), "a number written in takes the other side's unit");
+        assert!(combine(RowOp::Sub, &aud(), &Dim::Money("USD".into())).unwrap_err().contains("different currencies"));
+        assert!(combine(RowOp::Mul, &aud(), &aud()).is_err());
+        assert!(combine(RowOp::Add, &aud(), &n()).is_err());
+        assert!(combine(RowOp::Div, &n(), &aud()).is_err());
+        assert_eq!(combine(RowOp::Div, &Dim::Plain(Some("kg".into())), &Dim::Plain(Some("kg".into()))), Ok(n()));
     }
 
     #[test]

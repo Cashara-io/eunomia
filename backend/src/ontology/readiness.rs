@@ -73,10 +73,12 @@ fn waiting(n: usize, one: &str, many: &str) -> Option<String> {
 fn properties_used(e: &MetricExpr) -> BTreeSet<&str> {
     let mut out: BTreeSet<&str> = BTreeSet::new();
     out.extend(e.property.as_deref());
+    out.extend(e.row.iter().flat_map(|r| r.properties()));
     out.extend(e.time_property.as_deref());
     out.extend(e.filters.iter().map(|f| f.property.as_str()));
     for side in [&e.numerator, &e.denominator].into_iter().flatten() {
         out.extend(side.property.as_deref());
+        out.extend(side.row.iter().flat_map(|r| r.properties()));
         out.extend(side.filters.iter().map(|f| f.property.as_str()));
     }
     out

@@ -105,6 +105,16 @@ fn propose_schema() -> serde_json::Value {
                         "to_kind": kind_schema(),
                         "description": {"type": "string"},
                         "reason": {"type": "string"},
+                        "source_map": {
+                            "type": "array",
+                            "maxItems": 20,
+                            "description": "the record fields or CSV columns that name each relation's target (a supplier column); a CSV import finds or creates the target entity by that name and writes the relation",
+                            "items": {
+                                "type": "object",
+                                "properties": {"source": {"type": "string"}, "record_type": {"type": "string"}, "path": {"type": "string"}},
+                                "required": ["source", "record_type", "path"],
+                            },
+                        },
                     },
                     "required": ["from_kind", "label", "to_kind"],
                 },
@@ -130,12 +140,27 @@ fn filters_schema(what: &str, max: usize) -> serde_json::Value {
     })
 }
 
+fn row_schema() -> serde_json::Value {
+    let term = json!({"description": format!("a numeric property's name, a number, or another row {{op, left, right}} (at most {} deep)", metric::MAX_ROW_DEPTH)});
+    json!({
+        "type": "object",
+        "description": "instead of property: a value worked out for each entity, e.g. {\"op\": \"mul\", \"left\": \"stock\", \"right\": \"cost\"} for stock times cost; units must fit (money times a number is money, money minus money of one currency is money); a row that divides by 0 is left out with a warning",
+        "properties": {
+            "op": {"type": "string", "enum": ["mul", "sub", "add", "div"]},
+            "left": term.clone(),
+            "right": term,
+        },
+        "required": ["op", "left", "right"],
+    })
+}
+
 fn expr_schema() -> serde_json::Value {
     let side = json!({
         "type": "object",
         "properties": {
             "agg": {"type": "string", "enum": ["sum", "count", "avg", "min", "max", "count_distinct"]},
             "property": {"type": "string"},
+            "row": row_schema(),
             "filters": filters_schema("this side's own filters", metric::MAX_FILTERS),
         },
         "required": ["agg"],
@@ -144,8 +169,9 @@ fn expr_schema() -> serde_json::Value {
         "type": "object",
         "description": "what the metric computes from the kind's typed properties; never query text",
         "properties": {
-            "agg": {"type": "string", "enum": ["sum", "count", "avg", "min", "max", "count_distinct", "ratio"], "description": "sum, avg, min and max need a number, integer, money or percent property; count counts entities (with property: those that have it); ratio divides numerator by denominator"},
+            "agg": {"type": "string", "enum": ["sum", "count", "avg", "min", "max", "count_distinct", "ratio"], "description": "sum, avg, min and max need a number, integer, money or percent property, or a row; count counts entities (with property: those that have it); ratio divides numerator by denominator"},
             "property": {"type": "string", "description": "the measured property of the kind"},
+            "row": row_schema(),
             "numerator": side.clone(),
             "denominator": side,
             "filters": filters_schema("ANDed; at most 10 in all", metric::MAX_FILTERS),
