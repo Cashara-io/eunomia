@@ -25,6 +25,7 @@ tags="$(printf '%s\n' "$tags" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V)"
 rows="$(awk '
   /^  [A-Za-z0-9_-]+:/ { job = $1 }
   job != "update-path:" { next }
+  /^ *#/ { next }
   /- from: / { if (tag != "") print tag, ref; tag = $3; ref = "-"; next }
   /from_ref: / && tag != "" { ref = $2 }
   END { if (tag != "") print tag, ref }

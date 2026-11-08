@@ -491,7 +491,7 @@ if memtext | grep -qF "$FAKE_GH"; then PLAIN_SECRET=1; log "   $FROM stored the 
 
 # ---- 5. snapshot -------------------------------------------------------------------------------
 log "5. snapshot"
-counts > "$W/counts-before.txt"; ledgers > "$W/ledgers-before.txt"
+counts > "$W/counts-before.txt"; ledgers > "$W/ledgers-before.txt"; EVENTS_BEFORE="$(backfill_events)"
 reads "$W/reads-before.txt" || { cat "$W/reads-before.txt"; die "reads before the update failed"; }
 check "the seed reached the org tables" grep -qE '^org_.*\.memory [1-9]' "$W/counts-before.txt"
 check "recall finds the seeded facts before the update" bash -c "grep '^recall-a ' '$W/reads-before.txt' | grep -q memory"
@@ -556,7 +556,7 @@ if [ "$BACKFILL_RERUNS" = 1 ]; then
   wait_backfilled 900; check "the backfill finished in every org (bounded wait)" test $? -eq 0
   BACKFILL_EVENTS="$(org_dbs | wc -l | tr -d ' ')"
 else
-  BACKFILL_EVENTS="$(backfill_events)"
+  BACKFILL_EVENTS="$EVENTS_BEFORE"
 fi
 wait_jobs 120
 wait_embeddings 600; check "no embedding backlog after the update" test $? -eq 0

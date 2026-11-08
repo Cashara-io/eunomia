@@ -35,8 +35,9 @@ jobs:
           ref: ${{ env.TAG }}
           fetch-depth: 0
       - run: bash scripts/ci/check-release-order.sh "$TAG"
-      # this tag's own update test started from the release before it
-      - run: bash scripts/ci/check-update-path-rows.sh "$TAG"
+      # this tag's own update test started from the release before it (a rebuild of an older tag has no such check)
+      - if: github.event_name == 'push'
+        run: bash scripts/ci/check-update-path-rows.sh "$TAG"
 
   build:
     needs: release-order

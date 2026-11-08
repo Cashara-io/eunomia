@@ -27,6 +27,9 @@ check "an unpublished row built from a branch passes" run
 yml v2.0.7 v2.1.0 v2.1.1
 check "an unpublished row with no from_ref fails" fails run
 check "a row in another job does not count" quiet v9.9.9 run
+yml v2.0.7 v2.0.8 v2.0.9 v2.1.0
+awk '/- from: v2.0.8$/ { print "          # - from: v2.0.6" } { print }' "$T/ci.yml" > "$T/c" && mv "$T/c" "$T/ci.yml"
+check "a commented-out row is ignored" run
 yml v2.0.7 v2.0.10
 check "versions sort as numbers (v2.0.10 is newer than v2.0.9)" env CI_YML="$T/ci.yml" UPDATE_PATH_TAGS=$'v2.0.9\nv2.0.10\nv2.0.7' bash "$S"
 echo "update-path-rows: $PASS passed, $FAIL failed"; [ "$FAIL" -eq 0 ]
