@@ -1,0 +1,59 @@
+TOOL ToolSearch
+{
+  "query": "select:mcp__eunomia-local__ontology_coverage,mcp__eunomia-local__ontology_get,mcp__eunomia-local__metric_eval,mcp__eunomia-local__show_view",
+  "max_results": 4
+}
+
+RESULT
+[{'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__ontology_coverage'}, {'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__ontology_get'}, {'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__metric_eval'}, {'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__show_view'}]
+
+TOOL mcp__eunomia-local__ontology_coverage
+{
+  "question": "What is our average sell price and total stock value at cost?"
+}
+
+RESULT
+[{'type': 'text', 'text': '{"vault":"vault:2oxb9ism79xia4hivfdo","vault_name":"Top End Solar & Electrical","coverage":1.0,"matched":[{"phrase":"average sell price","term":"metric","name":"average_sell_price","of_kind":"product","distance":0.0},{"phrase":"stock value at cost","term":"metric","name":"inventory_cost_value","of_kind":"product","distance":0.0}],"uncovered":[],"chosen_by":"coverage","suggestion":"Every term maps to the vault\'s approved ontology: answer a number with metric_eval and a what-if with scenario_run, passing this vault as vault_id.","mode":"model"}'}]
+
+TOOL mcp__eunomia-local__metric_eval
+{
+  "metric": "average_sell_price",
+  "kind": "product",
+  "vault_id": "vault:2oxb9ism79xia4hivfdo"
+}
+
+RESULT
+[{'type': 'text', 'text': '{"metric":"average_sell_price","kind":"product","vault":"vault:2oxb9ism79xia4hivfdo","description":"Average selling price per stock item.","expr_words":"Average sell price","value":505.838333,"unit":"AUD","as_of":"2026-11-08T17:13:04Z","n_entities":30,"entity_ids":["entity:252l23dihifd130h15c8","entity:2b9dadf9ofxwyirqcwus","entity:2lp01gejqmfo386i60s7","entity:3jqu2eaf7io9gemaiohy","entity:4pfte5w3klwhx91i3r0z","entity:4s3mvd7tyxp5gdf88a4m","entity:636ki25hape3ujwkmr17","entity:6eshpbo1hqvri8vysu5r","entity:7nthfkrzy15bjnbri5cs","entity:8dp6fmr0ntdr8b9bktn8","entity:abbr0eeoot6sx8unho3n","entity:auvfaehc32i2g69wjv5h","entity:cegxu8ncw0u9aclb6rai","entity:df1szg6pqjjatznlcy48","entity:f31ji1ku5djulg96i5l9","entity:fd9j8zgtnm937rchfbm4","entity:g6atedo7qfmmgxrsu3kg","entity:hfhvy48ejbghtthzanuv","entity:huoak6t2794pqu3xnd3i","entity:ih2fpblnfindi91da6a1","entity:imdajmu84ly9ye3vpe2i","entity:j0m0z872d7ofnv3dg21j","entity:q9v7izsqzri8e9kjkcvy","entity:rw4zdzefv7cpt7ilg8fo","entity:sd3ffew5r9q30665fjiz","entity:uvhora90foc9i26z6sh5","entity:vm7j7s8yx0csiz76nfhf","entity:wmuzqw2usx9t155sn8wl","entity:y12x3k3pf6yq20jwq4x7","entity:y6ge5c1cdsupgiot7e5e"],"truncated":false,"status":"approved","warnings":[]}'}]
+
+TOOL mcp__eunomia-local__metric_eval
+{
+  "metric": "inventory_cost_value",
+  "kind": "product",
+  "vault_id": "vault:2oxb9ism79xia4hivfdo"
+}
+
+RESULT
+[{'type': 'text', 'text': '{"metric":"inventory_cost_value","kind":"product","vault":"vault:2oxb9ism79xia4hivfdo","description":"Total stock value at cost: qty on hand times unit cost, summed.","expr_words":"Sum of qty on hand × unit cost","value":67775.75,"unit":"AUD","as_of":"2026-11-08T17:13:05Z","n_entities":28,"entity_ids":["entity:252l23dihifd130h15c8","entity:2b9dadf9ofxwyirqcwus","entity:2lp01gejqmfo386i60s7","entity:3jqu2eaf7io9gemaiohy","entity:4s3mvd7tyxp5gdf88a4m","entity:636ki25hape3ujwkmr17","entity:6eshpbo1hqvri8vysu5r","entity:7nthfkrzy15bjnbri5cs","entity:8dp6fmr0ntdr8b9bktn8","entity:abbr0eeoot6sx8unho3n","entity:auvfaehc32i2g69wjv5h","entity:cegxu8ncw0u9aclb6rai","entity:f31ji1ku5djulg96i5l9","entity:fd9j8zgtnm937rchfbm4","entity:g6atedo7qfmmgxrsu3kg","entity:hfhvy48ejbghtthzanuv","entity:huoak6t2794pqu3xnd3i","entity:ih2fpblnfindi91da6a1","entity:imdajmu84ly9ye3vpe2i","entity:j0m0z872d7ofnv3dg21j","entity:q9v7izsqzri8e9kjkcvy","entity:rw4zdzefv7cpt7ilg8fo","entity:sd3ffew5r9q30665fjiz","entity:uvhora90foc9i26z6sh5","entity:vm7j7s8yx0csiz76nfhf","entity:wmuzqw2usx9t155sn8wl","entity:y12x3k3pf6yq20jwq4x7","entity:y6ge5c1cdsupgiot7e5e"],"truncated":false,"status":"approved","warnings":[]}'}]
+
+**Average sell price: $505.84 AUD. Total stock value at cost: $67,775.75 AUD.**
+
+Both numbers come from Top End Solar & Electrical. They come from approved metrics, as of 8 Nov 2026.
+
+- The average sell price covers 30 products.
+- The stock value is quantity on hand times unit cost, added up. It covers 28 products.
+
+The two products missing from the stock value are `entity:4pfte5w3klwhx91i3r0z` and `entity:df1szg6pqjjatznlcy48`. They are in the price count but not the stock count, so they likely have no quantity or no cost recorded. If they hold real stock, the stock value is too low.
+
+I can look at those two products and see what is missing.
+
+FINAL
+**Average sell price: $505.84 AUD. Total stock value at cost: $67,775.75 AUD.**
+
+Both numbers come from Top End Solar & Electrical. They come from approved metrics, as of 8 Nov 2026.
+
+- The average sell price covers 30 products.
+- The stock value is quantity on hand times unit cost, added up. It covers 28 products.
+
+The two products missing from the stock value are `entity:4pfte5w3klwhx91i3r0z` and `entity:df1szg6pqjjatznlcy48`. They are in the price count but not the stock count, so they likely have no quantity or no cost recorded. If they hold real stock, the stock value is too low.
+
+I can look at those two products and see what is missing.

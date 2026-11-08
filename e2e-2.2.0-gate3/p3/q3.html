@@ -1,0 +1,3448 @@
+<!doctype html><meta charset="utf-8"><style>body{font:15px/1.45 system-ui;margin:32px;background:#f5f5f1;color:#202322}h1{font-size:25px}h2{font-size:20px}h3{font-size:15px;margin:0 0 8px}article,.final{padding:18px;background:white;border:1px solid #d9ded8;margin:12px 0;border-radius:5px}pre{font:12px/1.4 ui-monospace;white-space:pre-wrap;overflow-wrap:anywhere;margin:4px 0}.final pre{font:16px/1.5 system-ui}.result{background:#f1f5f1;padding:10px}summary{font-size:12px;color:#566458}</style><h1>Eunomia 2.2.0 gate 3: p3/q3.jsonl</h1><p>Complete transcript is preserved beside this review as JSONL and text. Expand a tool to inspect its full input and result.</p><h2>Final answer</h2><div class="final"><pre>Ute 3 being a day late puts four jobs at risk. Two of them, TES-101 and TES-102, have no spare day.
+
+Ute 3 carries delivery IN-77, due 11 Nov. A day late means it lands 12 Nov. IN-77 holds stock for four jobs:
+
+- **TES-101** (Maya Chen, Crew A), due 12 Nov. It has no spare day, so it is likely to slip.
+- **TES-102** (Daniel Wilson, Crew B), due 12 Nov. It needs the Clipsal Switchboard from IN-77, and there is no spare day either.
+- **TES-103** (Wattle Creek School, Crew A), due 13 Nov. It needs the Symo inverter and has one spare day, so it is tight but fine.
+- **TES-104** (Red Plains Cattle Station, Crew C), due 14 Nov. It needs the Backup Switch and has two spare days, so it is probably fine.
+
+Crew A also loses its own ute for the day, because Ute 3 is allocated to them.
+
+The map shows the full chain in your app. The records don&#x27;t say whether the other crews&#x27; stock is already on site, so I can&#x27;t say if TES-101 and TES-102 can start without IN-77.
+
+My suggestion: call Maya Chen and Daniel Wilson today about a possible slip. If you can, ask Rexel Darwin and Fronius Australia whether any of IN-77 can be picked up sooner.
+
+Nothing was changed or saved.</pre></div><h2>Tool evidence in call order</h2><article><h3>mcp__eunomia-local__ontology_coverage</h3><pre>{
+  &quot;question&quot;: &quot;Ute 3 is a day late. What does that affect?&quot;
+}</pre><pre class="result">{
+  &quot;vault_name&quot;: &quot;Top End Solar &amp; Electrical&quot;,
+  &quot;coverage&quot;: 0.0,
+  &quot;chosen_by&quot;: &quot;entities&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__ontology_coverage&quot;,
+  &quot;arguments&quot;: {
+    &quot;question&quot;: &quot;Ute 3 is a day late. What does that affect?&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01S6TMLMujJBXsNzVkuyctYX&quot;,
+  &quot;result&quot;: {
+    &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+    &quot;vault_name&quot;: &quot;Top End Solar &amp; Electrical&quot;,
+    &quot;coverage&quot;: 0.0,
+    &quot;matched&quot;: [],
+    &quot;uncovered&quot;: [
+      &quot;day late&quot;
+    ],
+    &quot;chosen_by&quot;: &quot;entities&quot;,
+    &quot;suggestion&quot;: &quot;No space you can read has an approved term for this question; \&quot;Top End Solar &amp; Electrical\&quot; was checked because it holds what the question names. Not covered by an approved kind, property, metric or link: \&quot;day late\&quot;. Say so instead of guessing a number. To make it answerable, propose what is missing with ontology_propose (a property and a metric on the kind it belongs to); a vault owner approves it in Kinds and links.&quot;,
+    &quot;mode&quot;: &quot;model&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entities_search</h3><pre>{
+  &quot;query&quot;: &quot;Ute 3&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entities_search&quot;,
+  &quot;arguments&quot;: {
+    &quot;query&quot;: &quot;Ute 3&quot;
+  },
+  &quot;id&quot;: &quot;toolu_015kp7PFpuodRp7aHuKRcstq&quot;,
+  &quot;result&quot;: {
+    &quot;results&quot;: [
+      {
+        &quot;id&quot;: &quot;entity:f8ochxt8cma6ejtd6m93&quot;,
+        &quot;kind&quot;: &quot;vehicle&quot;,
+        &quot;name&quot;: &quot;Ute 3&quot;,
+        &quot;aliases&quot;: [],
+        &quot;summary&quot;: &quot;&quot;,
+        &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+      },
+      {
+        &quot;id&quot;: &quot;organisation:eq6qvu2nh6948l6a6za9&quot;,
+        &quot;kind&quot;: &quot;organisation&quot;,
+        &quot;name&quot;: &quot;Top End Solar &amp; Electrical&quot;,
+        &quot;aliases&quot;: [],
+        &quot;summary&quot;: &quot;&quot;,
+        &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+      },
+      {
+        &quot;id&quot;: &quot;entity:0njcrujirmngnb9mfre9&quot;,
+        &quot;kind&quot;: &quot;crew&quot;,
+        &quot;name&quot;: &quot;Crew A&quot;,
+        &quot;aliases&quot;: [],
+        &quot;summary&quot;: &quot;&quot;,
+        &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+      },
+      {
+        &quot;id&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+        &quot;kind&quot;: &quot;delivery&quot;,
+        &quot;name&quot;: &quot;IN-77&quot;,
+        &quot;aliases&quot;: [],
+        &quot;summary&quot;: &quot;&quot;,
+        &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+      }
+    ],
+    &quot;total&quot;: 4,
+    &quot;has_more&quot;: false
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entities_neighbourhood</h3><pre>{
+  &quot;entity_id&quot;: &quot;entity:f8ochxt8cma6ejtd6m93&quot;,
+  &quot;vault_id&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+  &quot;depth&quot;: 3
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entities_neighbourhood&quot;,
+  &quot;arguments&quot;: {
+    &quot;entity_id&quot;: &quot;entity:f8ochxt8cma6ejtd6m93&quot;,
+    &quot;vault_id&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+    &quot;depth&quot;: 3
+  },
+  &quot;id&quot;: &quot;toolu_01AWJ8vyR6tpN1DKPg5Vnpzx&quot;,
+  &quot;result&quot;: {
+    &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+    &quot;depth&quot;: 3,
+    &quot;nodes&quot;: [
+      {
+        &quot;id&quot;: &quot;entity:f8ochxt8cma6ejtd6m93&quot;,
+        &quot;name&quot;: &quot;Ute 3&quot;,
+        &quot;kind&quot;: &quot;vehicle&quot;,
+        &quot;facts&quot;: [
+          &quot;Ute 3 carries IN-77: Ute 3 is carrying delivery IN-77, expected 11 November.&quot;,
+          &quot;Crew ute allocated to Crew A. Carrying delivery IN-77.&quot;
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:0njcrujirmngnb9mfre9&quot;,
+        &quot;name&quot;: &quot;Crew A&quot;,
+        &quot;kind&quot;: &quot;crew&quot;,
+        &quot;facts&quot;: [
+          &quot;Works jobs TES-101 (due 12 Nov) and TES-103 (due 13 Nov). Allocated Ute 3.&quot;
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+        &quot;name&quot;: &quot;IN-77&quot;,
+        &quot;kind&quot;: &quot;delivery&quot;,
+        &quot;facts&quot;: [
+          &quot;IN-77 contains Fronius Backup Switch: IN-77 holds 1 Fronius Backup Switch.&quot;,
+          &quot;IN-77 contains Fronius Symo 10kW Inverter: IN-77 holds 1 Fronius Symo 10kW Inverter.&quot;,
+          &quot;IN-77 contains Clipsal Switchboard: IN-77 holds 1 Clipsal Switchboard.&quot;
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:wmuzqw2usx9t155sn8wl&quot;,
+        &quot;name&quot;: &quot;Clipsal Switchboard&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;facts&quot;: [
+          &quot;Stock item from Rexel Darwin. Sell $380, cost $245, 8 on hand (reorder at 10).&quot;
+        ],
+        &quot;properties&quot;: [
+          {
+            &quot;property&quot;: &quot;last_received&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;value&quot;: &quot;2026-11-03&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 8,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 10,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 380.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;value&quot;: &quot;In stock&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;unit_cost&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 245.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          }
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;organisation:1d72xkro2flp4vob5dpr&quot;,
+        &quot;name&quot;: &quot;Fronius Australia&quot;,
+        &quot;kind&quot;: &quot;organisation&quot;,
+        &quot;facts&quot;: [
+          &quot;Supplies inverters and monitoring equipment. Organisation we work with.&quot;,
+          &quot;Fronius Australia is listed as the supplier for Fronius inventory items.&quot;
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:4pfte5w3klwhx91i3r0z&quot;,
+        &quot;name&quot;: &quot;Fronius Backup Switch&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;facts&quot;: [
+          &quot;Stock item from Fronius Australia. Sell $490, unit cost missing in the stock list, 4 on hand. Status back-ordered.&quot;
+        ],
+        &quot;properties&quot;: [
+          {
+            &quot;property&quot;: &quot;last_received&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;value&quot;: &quot;2026-11-07&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 4,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 10,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 490.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;value&quot;: &quot;Back-ordered&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          }
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:huoak6t2794pqu3xnd3i&quot;,
+        &quot;name&quot;: &quot;Fronius Primo 5kW Inverter&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;facts&quot;: [
+          &quot;Stock item from Fronius Australia. Sell $4,890, cost $3,100, only 3 on hand (reorder at 10).&quot;
+        ],
+        &quot;properties&quot;: [
+          {
+            &quot;property&quot;: &quot;last_received&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;value&quot;: &quot;2026-11-07&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 3,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 10,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 4890.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;value&quot;: &quot;In stock&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;unit_cost&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 3100.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          }
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:2b9dadf9ofxwyirqcwus&quot;,
+        &quot;name&quot;: &quot;Fronius Symo 10kW Inverter&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;facts&quot;: [
+          &quot;Stock item from Fronius Australia. Sell $6,350, cost $4,200, only 2 on hand (reorder at 10).&quot;
+        ],
+        &quot;properties&quot;: [
+          {
+            &quot;property&quot;: &quot;last_received&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;value&quot;: &quot;2026-11-06&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 2,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 10,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 6350.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;value&quot;: &quot;In stock&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;unit_cost&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 4200.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          }
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;organisation:9ifpiov3oonxkx79jwnt&quot;,
+        &quot;name&quot;: &quot;Rexel Darwin&quot;,
+        &quot;kind&quot;: &quot;organisation&quot;,
+        &quot;facts&quot;: [
+          &quot;Our electrical wholesaler. Organisation we work with.&quot;,
+          &quot;Rexel Darwin is listed as the supplier for electrical inventory items.&quot;
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:x6f3wdxm6g2euly5aarg&quot;,
+        &quot;name&quot;: &quot;TES-101&quot;,
+        &quot;kind&quot;: &quot;job&quot;,
+        &quot;facts&quot;: [
+          &quot;TES-101 needs Fronius Smart Meter: TES-101 needs 1 Fronius Smart Meter.&quot;,
+          &quot;TES-101 needs Fronius Primo 5kW Inverter: TES-101 needs 1 Fronius Primo 5kW Inverter.&quot;,
+          &quot;TES-101 needs Trina 440W Panel: TES-101 needs 12 Trina 440W Panels.&quot;
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:i365f1twourkj0qnrc9a&quot;,
+        &quot;name&quot;: &quot;TES-102&quot;,
+        &quot;kind&quot;: &quot;job&quot;,
+        &quot;facts&quot;: [
+          &quot;TES-102 needs Weatherproof GPO: TES-102 needs 4 Weatherproof GPOs.&quot;,
+          &quot;TES-102 needs Hager RCBO: TES-102 needs 6 Hager RCBOs.&quot;,
+          &quot;TES-102 needs Clipsal Switchboard: TES-102 needs 1 Clipsal Switchboard.&quot;
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:beorhbu8vzx2c6a35nzb&quot;,
+        &quot;name&quot;: &quot;TES-103&quot;,
+        &quot;kind&quot;: &quot;job&quot;,
+        &quot;facts&quot;: [
+          &quot;TES-103 needs Solar Cable 6mm 100m: TES-103 needs 2 Solar Cable 6mm 100m drums.&quot;,
+          &quot;TES-103 needs Jinko 475W Panel: TES-103 needs 24 Jinko 475W Panels.&quot;,
+          &quot;TES-103 needs Fronius Symo 10kW Inverter: TES-103 needs 1 Fronius Symo 10kW Inverter.&quot;
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:gos3hhmjpzgq81crg5xf&quot;,
+        &quot;name&quot;: &quot;TES-104&quot;,
+        &quot;kind&quot;: &quot;job&quot;,
+        &quot;facts&quot;: [
+          &quot;TES-104 needs Earth Rod: TES-104 needs 4 Earth Rods.&quot;,
+          &quot;TES-104 needs LONGi 500W Panel: TES-104 needs 20 LONGi 500W Panels.&quot;,
+          &quot;TES-104 needs Fronius Backup Switch: TES-104 needs 1 Fronius Backup Switch.&quot;
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:df1szg6pqjjatznlcy48&quot;,
+        &quot;name&quot;: &quot;Cable Tie Pack&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;facts&quot;: [],
+        &quot;properties&quot;: [
+          {
+            &quot;property&quot;: &quot;last_received&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;value&quot;: &quot;2026-11-02&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 180,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 10,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 9.9,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;value&quot;: &quot;In stock&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          }
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:y12x3k3pf6yq20jwq4x7&quot;,
+        &quot;name&quot;: &quot;Conduit 25mm&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;facts&quot;: [],
+        &quot;properties&quot;: [
+          {
+            &quot;property&quot;: &quot;last_received&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;value&quot;: &quot;2026-11-03&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 95,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 10,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 14.5,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;value&quot;: &quot;In stock&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;unit_cost&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 7.25,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          }
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:t4uuxgb3p0xzcigwk097&quot;,
+        &quot;name&quot;: &quot;Crew B&quot;,
+        &quot;kind&quot;: &quot;crew&quot;,
+        &quot;facts&quot;: [
+          &quot;Works jobs TES-102 (due 12 Nov) and TES-105 (due 13 Nov).&quot;
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:jgv2ubmsngc92p7uvm0g&quot;,
+        &quot;name&quot;: &quot;Crew C&quot;,
+        &quot;kind&quot;: &quot;crew&quot;,
+        &quot;facts&quot;: [
+          &quot;Works jobs TES-104 and TES-106, both due 14 November 2026.&quot;
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:o5m54v946e4xl5wvv7tq&quot;,
+        &quot;name&quot;: &quot;Daniel Wilson&quot;,
+        &quot;kind&quot;: &quot;customer&quot;,
+        &quot;facts&quot;: [
+          &quot;Customer in a Palmerston home. Has job TES-102.&quot;
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:abbr0eeoot6sx8unho3n&quot;,
+        &quot;name&quot;: &quot;Earth Rod&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;facts&quot;: [
+          &quot;Stock item from Rexel Darwin. Sell $35, cost $18, 24 on hand.&quot;
+        ],
+        &quot;properties&quot;: [
+          {
+            &quot;property&quot;: &quot;last_received&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;value&quot;: &quot;2026-11-05&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 24,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 10,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 35.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;value&quot;: &quot;In stock&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;unit_cost&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 18.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          }
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:auvfaehc32i2g69wjv5h&quot;,
+        &quot;name&quot;: &quot;Fronius Datamanager&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;facts&quot;: [],
+        &quot;properties&quot;: [
+          {
+            &quot;property&quot;: &quot;last_received&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;value&quot;: &quot;2026-11-04&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 5,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 10,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 280.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;value&quot;: &quot;In stock&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;unit_cost&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 180.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          }
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:3jqu2eaf7io9gemaiohy&quot;,
+        &quot;name&quot;: &quot;Fronius Extension Kit&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;facts&quot;: [],
+        &quot;properties&quot;: [
+          {
+            &quot;property&quot;: &quot;last_received&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;value&quot;: &quot;2026-11-06&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 0,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 10,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 95.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;value&quot;: &quot;Discontinued&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;unit_cost&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 55.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          }
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:g6atedo7qfmmgxrsu3kg&quot;,
+        &quot;name&quot;: &quot;Fronius Mounting Bracket&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;facts&quot;: [],
+        &quot;properties&quot;: [
+          {
+            &quot;property&quot;: &quot;last_received&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;value&quot;: &quot;2026-11-03&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 22,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 10,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 85.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;value&quot;: &quot;In stock&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;unit_cost&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 42.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          }
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:fd9j8zgtnm937rchfbm4&quot;,
+        &quot;name&quot;: &quot;Fronius Smart Meter&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;facts&quot;: [
+          &quot;Stock item from Fronius Australia. Sell $325, cost $210, 12 on hand.&quot;
+        ],
+        &quot;properties&quot;: [
+          {
+            &quot;property&quot;: &quot;last_received&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;value&quot;: &quot;2026-11-05&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 12,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 10,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 325.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;value&quot;: &quot;In stock&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;unit_cost&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 210.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          }
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:y6ge5c1cdsupgiot7e5e&quot;,
+        &quot;name&quot;: &quot;Fronius Surge Protector&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;facts&quot;: [],
+        &quot;properties&quot;: [
+          {
+            &quot;property&quot;: &quot;last_received&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;value&quot;: &quot;2026-11-02&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 10,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 10,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 145.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;value&quot;: &quot;In stock&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;unit_cost&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 90.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          }
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:rw4zdzefv7cpt7ilg8fo&quot;,
+        &quot;name&quot;: &quot;Hager RCBO&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;facts&quot;: [
+          &quot;Stock item from Rexel Darwin. Sell $48, cost $28, 60 on hand.&quot;
+        ],
+        &quot;properties&quot;: [
+          {
+            &quot;property&quot;: &quot;last_received&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;value&quot;: &quot;2026-11-02&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 60,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 10,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 48.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;value&quot;: &quot;In stock&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;unit_cost&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 28.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          }
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:2lp01gejqmfo386i60s7&quot;,
+        &quot;name&quot;: &quot;Jinko 475W Panel&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;facts&quot;: [
+          &quot;Stock item from Solar Juice. Sell $245, cost $155, 40 on hand.&quot;
+        ],
+        &quot;properties&quot;: [
+          {
+            &quot;property&quot;: &quot;last_received&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;value&quot;: &quot;2026-11-04&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 40,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 10,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 245.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;value&quot;: &quot;In stock&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;unit_cost&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 155.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          }
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:sd3ffew5r9q30665fjiz&quot;,
+        &quot;name&quot;: &quot;LED Batten 1200mm&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;facts&quot;: [
+          &quot;Stock item from Rexel Darwin. Sell $65, cost $38, 35 on hand.&quot;
+        ],
+        &quot;properties&quot;: [
+          {
+            &quot;property&quot;: &quot;last_received&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;value&quot;: &quot;2026-11-07&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 35,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 10,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 65.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;value&quot;: &quot;In stock&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;unit_cost&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 38.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          }
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:j0m0z872d7ofnv3dg21j&quot;,
+        &quot;name&quot;: &quot;LONGi 500W Panel&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;facts&quot;: [
+          &quot;Stock item from Solar Juice. Sell $275, cost $175, 32 on hand.&quot;
+        ],
+        &quot;properties&quot;: [
+          {
+            &quot;property&quot;: &quot;last_received&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;value&quot;: &quot;2026-11-03&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 32,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 10,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 275.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;value&quot;: &quot;In stock&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;unit_cost&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 175.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          }
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:wqywsuvd4gezg6mwq76a&quot;,
+        &quot;name&quot;: &quot;Maya Chen&quot;,
+        &quot;kind&quot;: &quot;customer&quot;,
+        &quot;facts&quot;: [
+          &quot;Customer in a Nightcliff home. Has job TES-101.&quot;
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:ih2fpblnfindi91da6a1&quot;,
+        &quot;name&quot;: &quot;Meter Enclosure&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;facts&quot;: [],
+        &quot;properties&quot;: [
+          {
+            &quot;property&quot;: &quot;last_received&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;value&quot;: &quot;2026-11-04&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 11,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 10,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 185.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;value&quot;: &quot;In stock&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;unit_cost&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 110.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          }
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:48t8ep6t7uzty6kvwawc&quot;,
+        &quot;name&quot;: &quot;Red Plains Cattle Station&quot;,
+        &quot;kind&quot;: &quot;customer&quot;,
+        &quot;facts&quot;: [
+          &quot;Customer in Adelaide River. Has job TES-104.&quot;
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:252l23dihifd130h15c8&quot;,
+        &quot;name&quot;: &quot;Solar Cable 6mm 100m&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;facts&quot;: [
+          &quot;Stock item from NT Cable Co. Sell $325, cost $210, 18 on hand. Status back-ordered.&quot;
+        ],
+        &quot;properties&quot;: [
+          {
+            &quot;property&quot;: &quot;last_received&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;value&quot;: &quot;2026-11-06&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 18,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 10,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 325.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;value&quot;: &quot;Back-ordered&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;unit_cost&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 210.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          }
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:6eshpbo1hqvri8vysu5r&quot;,
+        &quot;name&quot;: &quot;Trina 440W Panel&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;facts&quot;: [
+          &quot;Stock item from Solar Juice. Sell $220, cost $140, 45 on hand.&quot;
+        ],
+        &quot;properties&quot;: [
+          {
+            &quot;property&quot;: &quot;last_received&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;value&quot;: &quot;2026-11-05&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 45,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 10,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 220.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;value&quot;: &quot;In stock&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;unit_cost&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 140.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          }
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:s0deleqahzscotg1t2fj&quot;,
+        &quot;name&quot;: &quot;Wattle Creek School&quot;,
+        &quot;kind&quot;: &quot;customer&quot;,
+        &quot;facts&quot;: [
+          &quot;Customer in Berrimah. Has job TES-103.&quot;
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:7nthfkrzy15bjnbri5cs&quot;,
+        &quot;name&quot;: &quot;Weatherproof GPO&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;facts&quot;: [
+          &quot;Stock item from Rexel Darwin. Sell $42, cost $24, 42 on hand.&quot;
+        ],
+        &quot;properties&quot;: [
+          {
+            &quot;property&quot;: &quot;last_received&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;value&quot;: &quot;2026-11-06&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 42,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 10,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 42.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;value&quot;: &quot;In stock&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          },
+          {
+            &quot;property&quot;: &quot;unit_cost&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 24.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T17:12:28Z&quot;,
+            &quot;source&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;
+          }
+        ]
+      }
+    ],
+    &quot;edges&quot;: [
+      {
+        &quot;id&quot;: &quot;relates_to:7r9ip5hxqtd81tx1194e&quot;,
+        &quot;from&quot;: &quot;entity:df1szg6pqjjatznlcy48&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to&quot;: &quot;organisation:9ifpiov3oonxkx79jwnt&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:vt1de75a9jpxz8ddsatu&quot;,
+        &quot;from&quot;: &quot;entity:wmuzqw2usx9t155sn8wl&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to&quot;: &quot;organisation:9ifpiov3oonxkx79jwnt&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:eny9d1gvagf9ioxsy3ih&quot;,
+        &quot;from&quot;: &quot;entity:y12x3k3pf6yq20jwq4x7&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to&quot;: &quot;organisation:9ifpiov3oonxkx79jwnt&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:xqlqgmtbbqkx0qrinzk7&quot;,
+        &quot;from&quot;: &quot;entity:0njcrujirmngnb9mfre9&quot;,
+        &quot;label&quot;: &quot;assigned_to&quot;,
+        &quot;to&quot;: &quot;entity:x6f3wdxm6g2euly5aarg&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:4r5a8ucf40wg6tqbi8r4&quot;,
+        &quot;from&quot;: &quot;entity:0njcrujirmngnb9mfre9&quot;,
+        &quot;label&quot;: &quot;assigned_to&quot;,
+        &quot;to&quot;: &quot;entity:beorhbu8vzx2c6a35nzb&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:ihgns3w3lwe4yorvlviq&quot;,
+        &quot;from&quot;: &quot;entity:t4uuxgb3p0xzcigwk097&quot;,
+        &quot;label&quot;: &quot;assigned_to&quot;,
+        &quot;to&quot;: &quot;entity:i365f1twourkj0qnrc9a&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:m4uacirzomntgcqkrwyz&quot;,
+        &quot;from&quot;: &quot;entity:jgv2ubmsngc92p7uvm0g&quot;,
+        &quot;label&quot;: &quot;assigned_to&quot;,
+        &quot;to&quot;: &quot;entity:gos3hhmjpzgq81crg5xf&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:5ze5ohei7ogio7gkxnmz&quot;,
+        &quot;from&quot;: &quot;entity:o5m54v946e4xl5wvv7tq&quot;,
+        &quot;label&quot;: &quot;has_job&quot;,
+        &quot;to&quot;: &quot;entity:i365f1twourkj0qnrc9a&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:kmf5cwps4yjzmc30vt12&quot;,
+        &quot;from&quot;: &quot;entity:abbr0eeoot6sx8unho3n&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to&quot;: &quot;organisation:9ifpiov3oonxkx79jwnt&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:olph5qe5urm1vfu7bpq8&quot;,
+        &quot;from&quot;: &quot;entity:4pfte5w3klwhx91i3r0z&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to&quot;: &quot;organisation:1d72xkro2flp4vob5dpr&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:7t7cjidel1qdmlbezgm7&quot;,
+        &quot;from&quot;: &quot;entity:auvfaehc32i2g69wjv5h&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to&quot;: &quot;organisation:1d72xkro2flp4vob5dpr&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:c4ztyn8bwsvcmp6z0i8i&quot;,
+        &quot;from&quot;: &quot;entity:3jqu2eaf7io9gemaiohy&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to&quot;: &quot;organisation:1d72xkro2flp4vob5dpr&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:b6uru95gnb2riwoa3bc7&quot;,
+        &quot;from&quot;: &quot;entity:g6atedo7qfmmgxrsu3kg&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to&quot;: &quot;organisation:1d72xkro2flp4vob5dpr&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:gyq30f534hgo2b87gi6y&quot;,
+        &quot;from&quot;: &quot;entity:huoak6t2794pqu3xnd3i&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to&quot;: &quot;organisation:1d72xkro2flp4vob5dpr&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:spwx2ve5rm4my3fqq69m&quot;,
+        &quot;from&quot;: &quot;entity:fd9j8zgtnm937rchfbm4&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to&quot;: &quot;organisation:1d72xkro2flp4vob5dpr&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:45lvo7cjpca49brusyxq&quot;,
+        &quot;from&quot;: &quot;entity:y6ge5c1cdsupgiot7e5e&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to&quot;: &quot;organisation:1d72xkro2flp4vob5dpr&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:3815vhpd0ywsgys5a8id&quot;,
+        &quot;from&quot;: &quot;entity:2b9dadf9ofxwyirqcwus&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to&quot;: &quot;organisation:1d72xkro2flp4vob5dpr&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:10wknnn699ocuyg90t4q&quot;,
+        &quot;from&quot;: &quot;entity:rw4zdzefv7cpt7ilg8fo&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to&quot;: &quot;organisation:9ifpiov3oonxkx79jwnt&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:ej3kygdx4kht01wxn1xg&quot;,
+        &quot;from&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+        &quot;label&quot;: &quot;contains&quot;,
+        &quot;to&quot;: &quot;entity:wmuzqw2usx9t155sn8wl&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:d9r463erw7q5v37nciz0&quot;,
+        &quot;from&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+        &quot;label&quot;: &quot;contains&quot;,
+        &quot;to&quot;: &quot;entity:4pfte5w3klwhx91i3r0z&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:uhoi20mn3v0xujngyxvm&quot;,
+        &quot;from&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+        &quot;label&quot;: &quot;contains&quot;,
+        &quot;to&quot;: &quot;entity:huoak6t2794pqu3xnd3i&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:368t15e8jv3zsnypfc82&quot;,
+        &quot;from&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+        &quot;label&quot;: &quot;contains&quot;,
+        &quot;to&quot;: &quot;entity:2b9dadf9ofxwyirqcwus&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:u5yzh89uxcw4e0jyubxv&quot;,
+        &quot;from&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to&quot;: &quot;organisation:1d72xkro2flp4vob5dpr&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:m6zbffv3kgj95boww8sj&quot;,
+        &quot;from&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to&quot;: &quot;organisation:9ifpiov3oonxkx79jwnt&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:yy26v9e7txat8tqqt3dg&quot;,
+        &quot;from&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+        &quot;label&quot;: &quot;supplies_job&quot;,
+        &quot;to&quot;: &quot;entity:x6f3wdxm6g2euly5aarg&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:63omogmo6b6naz0o3kup&quot;,
+        &quot;from&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+        &quot;label&quot;: &quot;supplies_job&quot;,
+        &quot;to&quot;: &quot;entity:i365f1twourkj0qnrc9a&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:b4q7rk7ighdw43qhnzbi&quot;,
+        &quot;from&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+        &quot;label&quot;: &quot;supplies_job&quot;,
+        &quot;to&quot;: &quot;entity:beorhbu8vzx2c6a35nzb&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:9pnp5qiy0wgs2t2agd4z&quot;,
+        &quot;from&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+        &quot;label&quot;: &quot;supplies_job&quot;,
+        &quot;to&quot;: &quot;entity:gos3hhmjpzgq81crg5xf&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:k1defd5wi1tazyya45x8&quot;,
+        &quot;from&quot;: &quot;entity:sd3ffew5r9q30665fjiz&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to&quot;: &quot;organisation:9ifpiov3oonxkx79jwnt&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:31lg39bkwfdm4hpi7mt8&quot;,
+        &quot;from&quot;: &quot;entity:wqywsuvd4gezg6mwq76a&quot;,
+        &quot;label&quot;: &quot;has_job&quot;,
+        &quot;to&quot;: &quot;entity:x6f3wdxm6g2euly5aarg&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:1i2igrnss1lkpsk7zoxl&quot;,
+        &quot;from&quot;: &quot;entity:ih2fpblnfindi91da6a1&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to&quot;: &quot;organisation:9ifpiov3oonxkx79jwnt&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:6ap97mslfv0ksyo4ccky&quot;,
+        &quot;from&quot;: &quot;entity:48t8ep6t7uzty6kvwawc&quot;,
+        &quot;label&quot;: &quot;has_job&quot;,
+        &quot;to&quot;: &quot;entity:gos3hhmjpzgq81crg5xf&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:7ci10eq6iq0s3zz9cir6&quot;,
+        &quot;from&quot;: &quot;entity:x6f3wdxm6g2euly5aarg&quot;,
+        &quot;label&quot;: &quot;needs&quot;,
+        &quot;to&quot;: &quot;entity:huoak6t2794pqu3xnd3i&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:p0llpm75aqhl2g5ce4l4&quot;,
+        &quot;from&quot;: &quot;entity:x6f3wdxm6g2euly5aarg&quot;,
+        &quot;label&quot;: &quot;needs&quot;,
+        &quot;to&quot;: &quot;entity:fd9j8zgtnm937rchfbm4&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:76g2qj0tyba48bd20zy1&quot;,
+        &quot;from&quot;: &quot;entity:x6f3wdxm6g2euly5aarg&quot;,
+        &quot;label&quot;: &quot;needs&quot;,
+        &quot;to&quot;: &quot;entity:6eshpbo1hqvri8vysu5r&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:qz03dgbgk4mmkmdsukbx&quot;,
+        &quot;from&quot;: &quot;entity:i365f1twourkj0qnrc9a&quot;,
+        &quot;label&quot;: &quot;needs&quot;,
+        &quot;to&quot;: &quot;entity:wmuzqw2usx9t155sn8wl&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:m90pldwgbeagk02qm7f5&quot;,
+        &quot;from&quot;: &quot;entity:i365f1twourkj0qnrc9a&quot;,
+        &quot;label&quot;: &quot;needs&quot;,
+        &quot;to&quot;: &quot;entity:rw4zdzefv7cpt7ilg8fo&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:w1877xk5vez8x4pd4zy7&quot;,
+        &quot;from&quot;: &quot;entity:i365f1twourkj0qnrc9a&quot;,
+        &quot;label&quot;: &quot;needs&quot;,
+        &quot;to&quot;: &quot;entity:7nthfkrzy15bjnbri5cs&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:i7pm3vixwj2ke3ggg8xi&quot;,
+        &quot;from&quot;: &quot;entity:beorhbu8vzx2c6a35nzb&quot;,
+        &quot;label&quot;: &quot;needs&quot;,
+        &quot;to&quot;: &quot;entity:2b9dadf9ofxwyirqcwus&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:383pa7jsp6m0vav935ff&quot;,
+        &quot;from&quot;: &quot;entity:beorhbu8vzx2c6a35nzb&quot;,
+        &quot;label&quot;: &quot;needs&quot;,
+        &quot;to&quot;: &quot;entity:2lp01gejqmfo386i60s7&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:7i6r6kx8b1h15x94dtn7&quot;,
+        &quot;from&quot;: &quot;entity:beorhbu8vzx2c6a35nzb&quot;,
+        &quot;label&quot;: &quot;needs&quot;,
+        &quot;to&quot;: &quot;entity:252l23dihifd130h15c8&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:20pzjbnvc1300yonf4yq&quot;,
+        &quot;from&quot;: &quot;entity:gos3hhmjpzgq81crg5xf&quot;,
+        &quot;label&quot;: &quot;needs&quot;,
+        &quot;to&quot;: &quot;entity:abbr0eeoot6sx8unho3n&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:8us0nvpqv2s9t4rds0mg&quot;,
+        &quot;from&quot;: &quot;entity:gos3hhmjpzgq81crg5xf&quot;,
+        &quot;label&quot;: &quot;needs&quot;,
+        &quot;to&quot;: &quot;entity:4pfte5w3klwhx91i3r0z&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:23nmnmntwdize74iyq77&quot;,
+        &quot;from&quot;: &quot;entity:gos3hhmjpzgq81crg5xf&quot;,
+        &quot;label&quot;: &quot;needs&quot;,
+        &quot;to&quot;: &quot;entity:j0m0z872d7ofnv3dg21j&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:dwe8k938qaw2cqb1k20y&quot;,
+        &quot;from&quot;: &quot;entity:f8ochxt8cma6ejtd6m93&quot;,
+        &quot;label&quot;: &quot;allocated_to&quot;,
+        &quot;to&quot;: &quot;entity:0njcrujirmngnb9mfre9&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+        &quot;from&quot;: &quot;entity:f8ochxt8cma6ejtd6m93&quot;,
+        &quot;label&quot;: &quot;carries&quot;,
+        &quot;to&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:l65cd8vfu6rlx9lf9ttd&quot;,
+        &quot;from&quot;: &quot;entity:s0deleqahzscotg1t2fj&quot;,
+        &quot;label&quot;: &quot;has_job&quot;,
+        &quot;to&quot;: &quot;entity:beorhbu8vzx2c6a35nzb&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:b2mtgr32xc7ilzaiwxhi&quot;,
+        &quot;from&quot;: &quot;entity:7nthfkrzy15bjnbri5cs&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to&quot;: &quot;organisation:9ifpiov3oonxkx79jwnt&quot;
+      }
+    ],
+    &quot;link_types&quot;: [
+      {
+        &quot;from_kind&quot;: &quot;crew&quot;,
+        &quot;label&quot;: &quot;assigned_to&quot;,
+        &quot;to_kind&quot;: &quot;job&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;The crew doing a job.&quot;
+      },
+      {
+        &quot;from_kind&quot;: &quot;customer&quot;,
+        &quot;label&quot;: &quot;has_job&quot;,
+        &quot;to_kind&quot;: &quot;job&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;The customer a job is for.&quot;
+      },
+      {
+        &quot;from_kind&quot;: &quot;delivery&quot;,
+        &quot;label&quot;: &quot;contains&quot;,
+        &quot;to_kind&quot;: &quot;product&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;Stock inside a delivery.&quot;
+      },
+      {
+        &quot;from_kind&quot;: &quot;delivery&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to_kind&quot;: &quot;organisation&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;The supplier sending a delivery.&quot;
+      },
+      {
+        &quot;from_kind&quot;: &quot;delivery&quot;,
+        &quot;label&quot;: &quot;supplies_job&quot;,
+        &quot;to_kind&quot;: &quot;job&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;A delivery holds stock for this job; a delay risks it.&quot;
+      },
+      {
+        &quot;from_kind&quot;: &quot;job&quot;,
+        &quot;label&quot;: &quot;needs&quot;,
+        &quot;to_kind&quot;: &quot;product&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;Stock a job needs. Quantities are in the link reason.&quot;
+      },
+      {
+        &quot;from_kind&quot;: &quot;product&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to_kind&quot;: &quot;organisation&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;The supplier of a stock item.&quot;
+      },
+      {
+        &quot;from_kind&quot;: &quot;vehicle&quot;,
+        &quot;label&quot;: &quot;allocated_to&quot;,
+        &quot;to_kind&quot;: &quot;crew&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;The crew a ute is allocated to.&quot;
+      },
+      {
+        &quot;from_kind&quot;: &quot;vehicle&quot;,
+        &quot;label&quot;: &quot;carries&quot;,
+        &quot;to_kind&quot;: &quot;delivery&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;The ute carrying a delivery.&quot;
+      }
+    ],
+    &quot;truncated&quot;: false
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__ontology_get</h3><pre>{
+  &quot;vault_id&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__ontology_get&quot;,
+  &quot;arguments&quot;: {
+    &quot;vault_id&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01KgQUjQJetzH2QNVYbKYE6F&quot;,
+  &quot;result&quot;: {
+    &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+    &quot;strict&quot;: true,
+    &quot;kinds&quot;: [
+      {
+        &quot;kind&quot;: &quot;person&quot;,
+        &quot;built_in&quot;: true,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: null,
+        &quot;merge_into&quot;: null,
+        &quot;synonyms&quot;: [],
+        &quot;origin&quot;: &quot;human&quot;,
+        &quot;reason&quot;: null,
+        &quot;entities&quot;: 1,
+        &quot;samples&quot;: [
+          &quot;Priya Nair&quot;
+        ],
+        &quot;properties&quot;: [],
+        &quot;metrics&quot;: []
+      },
+      {
+        &quot;kind&quot;: &quot;organisation&quot;,
+        &quot;built_in&quot;: true,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: null,
+        &quot;merge_into&quot;: null,
+        &quot;synonyms&quot;: [],
+        &quot;origin&quot;: &quot;human&quot;,
+        &quot;reason&quot;: null,
+        &quot;entities&quot;: 5,
+        &quot;samples&quot;: [
+          &quot;Fronius Australia&quot;,
+          &quot;NT Cable Co&quot;,
+          &quot;Rexel Darwin&quot;
+        ],
+        &quot;properties&quot;: [],
+        &quot;metrics&quot;: []
+      },
+      {
+        &quot;kind&quot;: &quot;location&quot;,
+        &quot;built_in&quot;: true,
+        &quot;status&quot;: &quot;observed&quot;,
+        &quot;description&quot;: null,
+        &quot;merge_into&quot;: null,
+        &quot;synonyms&quot;: [],
+        &quot;origin&quot;: null,
+        &quot;reason&quot;: null,
+        &quot;entities&quot;: 0,
+        &quot;samples&quot;: [],
+        &quot;properties&quot;: [],
+        &quot;metrics&quot;: []
+      },
+      {
+        &quot;kind&quot;: &quot;repository&quot;,
+        &quot;built_in&quot;: true,
+        &quot;status&quot;: &quot;observed&quot;,
+        &quot;description&quot;: null,
+        &quot;merge_into&quot;: null,
+        &quot;synonyms&quot;: [],
+        &quot;origin&quot;: null,
+        &quot;reason&quot;: null,
+        &quot;entities&quot;: 0,
+        &quot;samples&quot;: [],
+        &quot;properties&quot;: [],
+        &quot;metrics&quot;: []
+      },
+      {
+        &quot;kind&quot;: &quot;file&quot;,
+        &quot;built_in&quot;: true,
+        &quot;status&quot;: &quot;observed&quot;,
+        &quot;description&quot;: null,
+        &quot;merge_into&quot;: null,
+        &quot;synonyms&quot;: [],
+        &quot;origin&quot;: null,
+        &quot;reason&quot;: null,
+        &quot;entities&quot;: 0,
+        &quot;samples&quot;: [],
+        &quot;properties&quot;: [],
+        &quot;metrics&quot;: []
+      },
+      {
+        &quot;kind&quot;: &quot;symbol&quot;,
+        &quot;built_in&quot;: true,
+        &quot;status&quot;: &quot;observed&quot;,
+        &quot;description&quot;: null,
+        &quot;merge_into&quot;: null,
+        &quot;synonyms&quot;: [],
+        &quot;origin&quot;: null,
+        &quot;reason&quot;: null,
+        &quot;entities&quot;: 0,
+        &quot;samples&quot;: [],
+        &quot;properties&quot;: [],
+        &quot;metrics&quot;: []
+      },
+      {
+        &quot;kind&quot;: &quot;crew&quot;,
+        &quot;built_in&quot;: false,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;A work crew (A, B or C) that is assigned jobs and a ute.&quot;,
+        &quot;merge_into&quot;: null,
+        &quot;synonyms&quot;: [],
+        &quot;origin&quot;: &quot;agent&quot;,
+        &quot;reason&quot;: null,
+        &quot;entities&quot;: 3,
+        &quot;samples&quot;: [
+          &quot;Crew A&quot;,
+          &quot;Crew B&quot;,
+          &quot;Crew C&quot;
+        ],
+        &quot;properties&quot;: [],
+        &quot;metrics&quot;: []
+      },
+      {
+        &quot;kind&quot;: &quot;customer&quot;,
+        &quot;built_in&quot;: false,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;A person or organisation we do installation work for.&quot;,
+        &quot;merge_into&quot;: null,
+        &quot;synonyms&quot;: [
+          &quot;client&quot;
+        ],
+        &quot;origin&quot;: &quot;agent&quot;,
+        &quot;reason&quot;: null,
+        &quot;entities&quot;: 6,
+        &quot;samples&quot;: [
+          &quot;Aisha Brown&quot;,
+          &quot;Casuarina Community Hall&quot;,
+          &quot;Daniel Wilson&quot;
+        ],
+        &quot;properties&quot;: [],
+        &quot;metrics&quot;: []
+      },
+      {
+        &quot;kind&quot;: &quot;decision&quot;,
+        &quot;built_in&quot;: false,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;A business decision with an effective date and who approved it.&quot;,
+        &quot;merge_into&quot;: null,
+        &quot;synonyms&quot;: [],
+        &quot;origin&quot;: &quot;agent&quot;,
+        &quot;reason&quot;: null,
+        &quot;entities&quot;: 1,
+        &quot;samples&quot;: [
+          &quot;Call-out fee increase&quot;
+        ],
+        &quot;properties&quot;: [
+          {
+            &quot;name&quot;: &quot;amount&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;enum_values&quot;: null,
+            &quot;description&quot;: &quot;Dollar amount the decision sets, e.g. the call-out fee.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;agent&quot;,
+            &quot;reason&quot;: null,
+            &quot;values&quot;: 0,
+            &quot;samples&quot;: [],
+            &quot;source_map&quot;: []
+          },
+          {
+            &quot;name&quot;: &quot;effective_date&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;unit&quot;: null,
+            &quot;enum_values&quot;: null,
+            &quot;description&quot;: &quot;Date the decision takes effect.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;agent&quot;,
+            &quot;reason&quot;: null,
+            &quot;values&quot;: 0,
+            &quot;samples&quot;: [],
+            &quot;source_map&quot;: []
+          }
+        ],
+        &quot;metrics&quot;: []
+      },
+      {
+        &quot;kind&quot;: &quot;delivery&quot;,
+        &quot;built_in&quot;: false,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;An inbound delivery of stock from suppliers, carried by a vehicle and meant for named jobs.&quot;,
+        &quot;merge_into&quot;: null,
+        &quot;synonyms&quot;: [
+          &quot;inbound delivery&quot;
+        ],
+        &quot;origin&quot;: &quot;agent&quot;,
+        &quot;reason&quot;: null,
+        &quot;entities&quot;: 1,
+        &quot;samples&quot;: [
+          &quot;IN-77&quot;
+        ],
+        &quot;properties&quot;: [
+          {
+            &quot;name&quot;: &quot;expected_date&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;unit&quot;: null,
+            &quot;enum_values&quot;: null,
+            &quot;description&quot;: &quot;Date the delivery is expected.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;agent&quot;,
+            &quot;reason&quot;: null,
+            &quot;values&quot;: 0,
+            &quot;samples&quot;: [],
+            &quot;source_map&quot;: []
+          }
+        ],
+        &quot;metrics&quot;: []
+      },
+      {
+        &quot;kind&quot;: &quot;equipment&quot;,
+        &quot;built_in&quot;: false,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;Office or workshop equipment owned by the business.&quot;,
+        &quot;merge_into&quot;: null,
+        &quot;synonyms&quot;: [],
+        &quot;origin&quot;: &quot;agent&quot;,
+        &quot;reason&quot;: null,
+        &quot;entities&quot;: 1,
+        &quot;samples&quot;: [
+          &quot;Label Printer 2&quot;
+        ],
+        &quot;properties&quot;: [],
+        &quot;metrics&quot;: []
+      },
+      {
+        &quot;kind&quot;: &quot;job&quot;,
+        &quot;built_in&quot;: false,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;A customer job with a TES number, a crew and a due date.&quot;,
+        &quot;merge_into&quot;: null,
+        &quot;synonyms&quot;: [
+          &quot;work order&quot;
+        ],
+        &quot;origin&quot;: &quot;agent&quot;,
+        &quot;reason&quot;: null,
+        &quot;entities&quot;: 6,
+        &quot;samples&quot;: [
+          &quot;TES-101&quot;,
+          &quot;TES-102&quot;,
+          &quot;TES-103&quot;
+        ],
+        &quot;properties&quot;: [
+          {
+            &quot;name&quot;: &quot;due_date&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;unit&quot;: null,
+            &quot;enum_values&quot;: null,
+            &quot;description&quot;: &quot;Date the job is due.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;agent&quot;,
+            &quot;reason&quot;: null,
+            &quot;values&quot;: 0,
+            &quot;samples&quot;: [],
+            &quot;source_map&quot;: []
+          },
+          {
+            &quot;name&quot;: &quot;job_number&quot;,
+            &quot;datatype&quot;: &quot;text&quot;,
+            &quot;unit&quot;: null,
+            &quot;enum_values&quot;: null,
+            &quot;description&quot;: &quot;The TES job number, e.g. TES-101.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;agent&quot;,
+            &quot;reason&quot;: null,
+            &quot;values&quot;: 0,
+            &quot;samples&quot;: [],
+            &quot;source_map&quot;: []
+          },
+          {
+            &quot;name&quot;: &quot;suburb&quot;,
+            &quot;datatype&quot;: &quot;text&quot;,
+            &quot;unit&quot;: null,
+            &quot;enum_values&quot;: null,
+            &quot;description&quot;: &quot;Where the job site is.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;agent&quot;,
+            &quot;reason&quot;: null,
+            &quot;values&quot;: 0,
+            &quot;samples&quot;: [],
+            &quot;source_map&quot;: []
+          }
+        ],
+        &quot;metrics&quot;: [
+          {
+            &quot;name&quot;: &quot;open_jobs&quot;,
+            &quot;description&quot;: &quot;Number of jobs.&quot;,
+            &quot;synonyms&quot;: [
+              &quot;job count&quot;
+            ],
+            &quot;expr&quot;: {
+              &quot;agg&quot;: &quot;count&quot;
+            },
+            &quot;expr_words&quot;: &quot;Number of job&quot;,
+            &quot;unit&quot;: null,
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;agent&quot;,
+            &quot;reason&quot;: null
+          }
+        ]
+      },
+      {
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;built_in&quot;: false,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;A stock item the business buys, holds and sells.&quot;,
+        &quot;merge_into&quot;: null,
+        &quot;synonyms&quot;: [
+          &quot;stock item&quot;,
+          &quot;item&quot;
+        ],
+        &quot;origin&quot;: &quot;suggested&quot;,
+        &quot;reason&quot;: &quot;one kind for the stock.csv records&quot;,
+        &quot;entities&quot;: 30,
+        &quot;samples&quot;: [
+          &quot;Cable Lug Pack&quot;,
+          &quot;Cable Tie Pack&quot;,
+          &quot;Clipsal Switchboard&quot;
+        ],
+        &quot;properties&quot;: [
+          {
+            &quot;name&quot;: &quot;last_received&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;unit&quot;: null,
+            &quot;enum_values&quot;: null,
+            &quot;description&quot;: &quot;Date the product was last received.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;from last received&quot;,
+            &quot;values&quot;: 30,
+            &quot;samples&quot;: [
+              &quot;2026-11-04&quot;,
+              &quot;2026-11-02&quot;,
+              &quot;2026-11-03&quot;
+            ],
+            &quot;source_map&quot;: [
+              {
+                &quot;source&quot;: &quot;document&quot;,
+                &quot;record_type&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;,
+                &quot;path&quot;: &quot;last received&quot;
+              }
+            ]
+          },
+          {
+            &quot;name&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;unit&quot;: null,
+            &quot;enum_values&quot;: null,
+            &quot;description&quot;: &quot;Units on hand.&quot;,
+            &quot;synonyms&quot;: [
+              &quot;stock&quot;,
+              &quot;qty on hand&quot;
+            ],
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;from qty on hand&quot;,
+            &quot;values&quot;: 30,
+            &quot;samples&quot;: [
+              &quot;32&quot;,
+              &quot;24&quot;,
+              &quot;25&quot;
+            ],
+            &quot;source_map&quot;: [
+              {
+                &quot;source&quot;: &quot;document&quot;,
+                &quot;record_type&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;,
+                &quot;path&quot;: &quot;qty on hand&quot;
+              }
+            ]
+          },
+          {
+            &quot;name&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;unit&quot;: null,
+            &quot;enum_values&quot;: null,
+            &quot;description&quot;: &quot;Quantity threshold for reordering.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;from reorder at&quot;,
+            &quot;values&quot;: 30,
+            &quot;samples&quot;: [
+              &quot;10&quot;
+            ],
+            &quot;source_map&quot;: [
+              {
+                &quot;source&quot;: &quot;document&quot;,
+                &quot;record_type&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;,
+                &quot;path&quot;: &quot;reorder at&quot;
+              }
+            ]
+          },
+          {
+            &quot;name&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;enum_values&quot;: null,
+            &quot;description&quot;: &quot;Selling price per unit.&quot;,
+            &quot;synonyms&quot;: [
+              &quot;price&quot;,
+              &quot;sell price AUD&quot;
+            ],
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;from sell price AUD&quot;,
+            &quot;values&quot;: 30,
+            &quot;samples&quot;: [
+              &quot;85.00 AUD&quot;,
+              &quot;42.00 AUD&quot;,
+              &quot;12.50 AUD&quot;
+            ],
+            &quot;source_map&quot;: [
+              {
+                &quot;source&quot;: &quot;document&quot;,
+                &quot;record_type&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;,
+                &quot;path&quot;: &quot;sell price AUD&quot;
+              }
+            ]
+          },
+          {
+            &quot;name&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;unit&quot;: null,
+            &quot;enum_values&quot;: [
+              &quot;Back-ordered&quot;,
+              &quot;Discontinued&quot;,
+              &quot;In stock&quot;
+            ],
+            &quot;description&quot;: &quot;Current stock or availability status.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;from status&quot;,
+            &quot;values&quot;: 30,
+            &quot;samples&quot;: [
+              &quot;In stock&quot;,
+              &quot;Back-ordered&quot;,
+              &quot;Discontinued&quot;
+            ],
+            &quot;source_map&quot;: [
+              {
+                &quot;source&quot;: &quot;document&quot;,
+                &quot;record_type&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;,
+                &quot;path&quot;: &quot;status&quot;
+              }
+            ]
+          },
+          {
+            &quot;name&quot;: &quot;unit_cost&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;enum_values&quot;: null,
+            &quot;description&quot;: &quot;Cost per unit. Blank for Fronius Backup Switch and Cable Tie Pack in the stock list: owner to confirm.&quot;,
+            &quot;synonyms&quot;: [
+              &quot;cost&quot;,
+              &quot;unit cost AUD&quot;
+            ],
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;from unit cost AUD&quot;,
+            &quot;values&quot;: 28,
+            &quot;samples&quot;: [
+              &quot;160.00 AUD&quot;,
+              &quot;95.00 AUD&quot;,
+              &quot;155.00 AUD&quot;
+            ],
+            &quot;source_map&quot;: [
+              {
+                &quot;source&quot;: &quot;document&quot;,
+                &quot;record_type&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;,
+                &quot;path&quot;: &quot;unit cost AUD&quot;
+              }
+            ]
+          }
+        ],
+        &quot;metrics&quot;: [
+          {
+            &quot;name&quot;: &quot;average_sell_price&quot;,
+            &quot;description&quot;: &quot;Average selling price per stock item.&quot;,
+            &quot;synonyms&quot;: [
+              &quot;average sell price&quot;,
+              &quot;avg price&quot;
+            ],
+            &quot;expr&quot;: {
+              &quot;agg&quot;: &quot;avg&quot;,
+              &quot;property&quot;: &quot;sell_price&quot;
+            },
+            &quot;expr_words&quot;: &quot;Average sell price&quot;,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;computed from the stock.csv records&#x27; properties&quot;
+          },
+          {
+            &quot;name&quot;: &quot;average_unit_cost&quot;,
+            &quot;description&quot;: &quot;Average unit cost per stock item.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;expr&quot;: {
+              &quot;agg&quot;: &quot;avg&quot;,
+              &quot;property&quot;: &quot;unit_cost&quot;
+            },
+            &quot;expr_words&quot;: &quot;Average unit cost&quot;,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;agent&quot;,
+            &quot;reason&quot;: null
+          },
+          {
+            &quot;name&quot;: &quot;back_ordered_items&quot;,
+            &quot;description&quot;: &quot;Number of stock items currently back-ordered.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;expr&quot;: {
+              &quot;agg&quot;: &quot;count&quot;,
+              &quot;filters&quot;: [
+                {
+                  &quot;property&quot;: &quot;status&quot;,
+                  &quot;op&quot;: &quot;eq&quot;,
+                  &quot;value&quot;: &quot;Back-ordered&quot;
+                }
+              ]
+            },
+            &quot;expr_words&quot;: &quot;Number of product where status is Back-ordered&quot;,
+            &quot;unit&quot;: null,
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;agent&quot;,
+            &quot;reason&quot;: null
+          },
+          {
+            &quot;name&quot;: &quot;gross_margin&quot;,
+            &quot;description&quot;: &quot;Gross margin: (sell price minus unit cost) over sell price, across stock items.&quot;,
+            &quot;synonyms&quot;: [
+              &quot;gross margin %&quot;,
+              &quot;margin&quot;
+            ],
+            &quot;expr&quot;: {
+              &quot;agg&quot;: &quot;ratio&quot;,
+              &quot;numerator&quot;: {
+                &quot;agg&quot;: &quot;sum&quot;,
+                &quot;row&quot;: {
+                  &quot;op&quot;: &quot;sub&quot;,
+                  &quot;left&quot;: &quot;sell_price&quot;,
+                  &quot;right&quot;: &quot;unit_cost&quot;
+                }
+              },
+              &quot;denominator&quot;: {
+                &quot;agg&quot;: &quot;sum&quot;,
+                &quot;property&quot;: &quot;sell_price&quot;
+              }
+            },
+            &quot;expr_words&quot;: &quot;Sum of (sell price − unit cost), divided by sum of sell price&quot;,
+            &quot;unit&quot;: &quot;percent&quot;,
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;agent&quot;,
+            &quot;reason&quot;: &quot;Items with no unit cost may skew this until costs are confirmed.&quot;
+          },
+          {
+            &quot;name&quot;: &quot;inventory_cost_value&quot;,
+            &quot;description&quot;: &quot;Total stock value at cost: qty on hand times unit cost, summed.&quot;,
+            &quot;synonyms&quot;: [
+              &quot;total stock value at cost&quot;,
+              &quot;stock value at cost&quot;
+            ],
+            &quot;expr&quot;: {
+              &quot;agg&quot;: &quot;sum&quot;,
+              &quot;row&quot;: {
+                &quot;op&quot;: &quot;mul&quot;,
+                &quot;left&quot;: &quot;qty_on_hand&quot;,
+                &quot;right&quot;: &quot;unit_cost&quot;
+              }
+            },
+            &quot;expr_words&quot;: &quot;Sum of qty on hand × unit cost&quot;,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;Two items have no unit cost in the stock list (Fronius Backup Switch, Cable Tie Pack), so the figure leaves them out until costs are confirmed.&quot;
+          },
+          {
+            &quot;name&quot;: &quot;total_stock_value_at_sell&quot;,
+            &quot;description&quot;: &quot;Total stock value at sell price: qty on hand times sell price, summed.&quot;,
+            &quot;synonyms&quot;: [
+              &quot;stock value at retail&quot;
+            ],
+            &quot;expr&quot;: {
+              &quot;agg&quot;: &quot;sum&quot;,
+              &quot;row&quot;: {
+                &quot;op&quot;: &quot;mul&quot;,
+                &quot;left&quot;: &quot;qty_on_hand&quot;,
+                &quot;right&quot;: &quot;sell_price&quot;
+              }
+            },
+            &quot;expr_words&quot;: &quot;Sum of qty on hand × sell price&quot;,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;agent&quot;,
+            &quot;reason&quot;: null
+          },
+          {
+            &quot;name&quot;: &quot;total_units_on_hand&quot;,
+            &quot;description&quot;: &quot;Total quantity of this product currently on hand.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;expr&quot;: {
+              &quot;agg&quot;: &quot;sum&quot;,
+              &quot;property&quot;: &quot;qty_on_hand&quot;
+            },
+            &quot;expr_words&quot;: &quot;Sum of qty on hand&quot;,
+            &quot;unit&quot;: null,
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;computed from the stock.csv records&#x27; properties&quot;
+          }
+        ]
+      },
+      {
+        &quot;kind&quot;: &quot;supplier&quot;,
+        &quot;built_in&quot;: false,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;what the supplier column names&quot;,
+        &quot;merge_into&quot;: null,
+        &quot;synonyms&quot;: [],
+        &quot;origin&quot;: &quot;suggested&quot;,
+        &quot;reason&quot;: &quot;Suppliers are already organisations (Rexel Darwin, Fronius Australia, Solar Juice, NT Cable Co). One kind avoids duplicates.&quot;,
+        &quot;entities&quot;: 0,
+        &quot;samples&quot;: [],
+        &quot;properties&quot;: [],
+        &quot;metrics&quot;: []
+      },
+      {
+        &quot;kind&quot;: &quot;vehicle&quot;,
+        &quot;built_in&quot;: false,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;A crew ute that carries deliveries.&quot;,
+        &quot;merge_into&quot;: null,
+        &quot;synonyms&quot;: [
+          &quot;ute&quot;
+        ],
+        &quot;origin&quot;: &quot;agent&quot;,
+        &quot;reason&quot;: null,
+        &quot;entities&quot;: 1,
+        &quot;samples&quot;: [
+          &quot;Ute 3&quot;
+        ],
+        &quot;properties&quot;: [],
+        &quot;metrics&quot;: []
+      }
+    ],
+    &quot;links&quot;: [
+      {
+        &quot;from_kind&quot;: &quot;crew&quot;,
+        &quot;label&quot;: &quot;assigned_to&quot;,
+        &quot;to_kind&quot;: &quot;job&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;The crew doing a job.&quot;,
+        &quot;origin&quot;: &quot;agent&quot;,
+        &quot;reason&quot;: null,
+        &quot;count&quot;: 6,
+        &quot;samples&quot;: [
+          {
+            &quot;from&quot;: &quot;Crew A&quot;,
+            &quot;to&quot;: &quot;TES-103&quot;
+          },
+          {
+            &quot;from&quot;: &quot;Crew C&quot;,
+            &quot;to&quot;: &quot;TES-106&quot;
+          },
+          {
+            &quot;from&quot;: &quot;Crew B&quot;,
+            &quot;to&quot;: &quot;TES-102&quot;
+          }
+        ]
+      },
+      {
+        &quot;from_kind&quot;: &quot;customer&quot;,
+        &quot;label&quot;: &quot;has_job&quot;,
+        &quot;to_kind&quot;: &quot;job&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;The customer a job is for.&quot;,
+        &quot;origin&quot;: &quot;agent&quot;,
+        &quot;reason&quot;: null,
+        &quot;count&quot;: 6,
+        &quot;samples&quot;: [
+          {
+            &quot;from&quot;: &quot;Maya Chen&quot;,
+            &quot;to&quot;: &quot;TES-101&quot;
+          },
+          {
+            &quot;from&quot;: &quot;Daniel Wilson&quot;,
+            &quot;to&quot;: &quot;TES-102&quot;
+          },
+          {
+            &quot;from&quot;: &quot;Red Plains Cattle Station&quot;,
+            &quot;to&quot;: &quot;TES-104&quot;
+          }
+        ]
+      },
+      {
+        &quot;from_kind&quot;: &quot;decision&quot;,
+        &quot;label&quot;: &quot;approved_by&quot;,
+        &quot;to_kind&quot;: &quot;person&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;Who approved a decision.&quot;,
+        &quot;origin&quot;: &quot;agent&quot;,
+        &quot;reason&quot;: null,
+        &quot;count&quot;: 1,
+        &quot;samples&quot;: [
+          {
+            &quot;from&quot;: &quot;Call-out fee increase&quot;,
+            &quot;to&quot;: &quot;Priya Nair&quot;
+          }
+        ]
+      },
+      {
+        &quot;from_kind&quot;: &quot;delivery&quot;,
+        &quot;label&quot;: &quot;contains&quot;,
+        &quot;to_kind&quot;: &quot;product&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;Stock inside a delivery.&quot;,
+        &quot;origin&quot;: &quot;agent&quot;,
+        &quot;reason&quot;: null,
+        &quot;count&quot;: 4,
+        &quot;samples&quot;: [
+          {
+            &quot;from&quot;: &quot;IN-77&quot;,
+            &quot;to&quot;: &quot;Fronius Symo 10kW Inverter&quot;
+          },
+          {
+            &quot;from&quot;: &quot;IN-77&quot;,
+            &quot;to&quot;: &quot;Fronius Backup Switch&quot;
+          },
+          {
+            &quot;from&quot;: &quot;IN-77&quot;,
+            &quot;to&quot;: &quot;Clipsal Switchboard&quot;
+          }
+        ]
+      },
+      {
+        &quot;from_kind&quot;: &quot;delivery&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to_kind&quot;: &quot;organisation&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;The supplier sending a delivery.&quot;,
+        &quot;origin&quot;: &quot;agent&quot;,
+        &quot;reason&quot;: null,
+        &quot;count&quot;: 2,
+        &quot;samples&quot;: [
+          {
+            &quot;from&quot;: &quot;IN-77&quot;,
+            &quot;to&quot;: &quot;Rexel Darwin&quot;
+          },
+          {
+            &quot;from&quot;: &quot;IN-77&quot;,
+            &quot;to&quot;: &quot;Fronius Australia&quot;
+          }
+        ]
+      },
+      {
+        &quot;from_kind&quot;: &quot;delivery&quot;,
+        &quot;label&quot;: &quot;supplies_job&quot;,
+        &quot;to_kind&quot;: &quot;job&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;A delivery holds stock for this job; a delay risks it.&quot;,
+        &quot;origin&quot;: &quot;agent&quot;,
+        &quot;reason&quot;: null,
+        &quot;count&quot;: 4,
+        &quot;samples&quot;: [
+          {
+            &quot;from&quot;: &quot;IN-77&quot;,
+            &quot;to&quot;: &quot;TES-102&quot;
+          },
+          {
+            &quot;from&quot;: &quot;IN-77&quot;,
+            &quot;to&quot;: &quot;TES-104&quot;
+          },
+          {
+            &quot;from&quot;: &quot;IN-77&quot;,
+            &quot;to&quot;: &quot;TES-103&quot;
+          }
+        ]
+      },
+      {
+        &quot;from_kind&quot;: &quot;job&quot;,
+        &quot;label&quot;: &quot;needs&quot;,
+        &quot;to_kind&quot;: &quot;product&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;Stock a job needs. Quantities are in the link reason.&quot;,
+        &quot;origin&quot;: &quot;agent&quot;,
+        &quot;reason&quot;: null,
+        &quot;count&quot;: 17,
+        &quot;samples&quot;: [
+          {
+            &quot;from&quot;: &quot;TES-104&quot;,
+            &quot;to&quot;: &quot;Earth Rod&quot;
+          },
+          {
+            &quot;from&quot;: &quot;TES-104&quot;,
+            &quot;to&quot;: &quot;LONGi 500W Panel&quot;
+          },
+          {
+            &quot;from&quot;: &quot;TES-103&quot;,
+            &quot;to&quot;: &quot;Jinko 475W Panel&quot;
+          }
+        ]
+      },
+      {
+        &quot;from_kind&quot;: &quot;product&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to_kind&quot;: &quot;organisation&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;The supplier of a stock item.&quot;,
+        &quot;origin&quot;: &quot;agent&quot;,
+        &quot;reason&quot;: null,
+        &quot;count&quot;: 30,
+        &quot;samples&quot;: [
+          {
+            &quot;from&quot;: &quot;Hager RCBO&quot;,
+            &quot;to&quot;: &quot;Rexel Darwin&quot;
+          },
+          {
+            &quot;from&quot;: &quot;Meter Enclosure&quot;,
+            &quot;to&quot;: &quot;Rexel Darwin&quot;
+          },
+          {
+            &quot;from&quot;: &quot;Roof Clamp Pack&quot;,
+            &quot;to&quot;: &quot;Solar Juice&quot;
+          }
+        ]
+      },
+      {
+        &quot;from_kind&quot;: &quot;product&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to_kind&quot;: &quot;supplier&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;Supplier that provides this product.&quot;,
+        &quot;origin&quot;: &quot;suggested&quot;,
+        &quot;reason&quot;: &quot;no supplier exists yet: an import creates the 0 named in supplier once each; 4 name an existing entity (organisation Fronius Australia, organisation NT Cable Co, organisation Rexel Darwin, organisation Solar Juice), which an import links to instead of making new ones&quot;,
+        &quot;count&quot;: 0,
+        &quot;samples&quot;: [],
+        &quot;source_map&quot;: [
+          {
+            &quot;source&quot;: &quot;document&quot;,
+            &quot;record_type&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;,
+            &quot;path&quot;: &quot;supplier&quot;
+          }
+        ]
+      },
+      {
+        &quot;from_kind&quot;: &quot;vehicle&quot;,
+        &quot;label&quot;: &quot;allocated_to&quot;,
+        &quot;to_kind&quot;: &quot;crew&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;The crew a ute is allocated to.&quot;,
+        &quot;origin&quot;: &quot;agent&quot;,
+        &quot;reason&quot;: null,
+        &quot;count&quot;: 1,
+        &quot;samples&quot;: [
+          {
+            &quot;from&quot;: &quot;Ute 3&quot;,
+            &quot;to&quot;: &quot;Crew A&quot;
+          }
+        ]
+      },
+      {
+        &quot;from_kind&quot;: &quot;vehicle&quot;,
+        &quot;label&quot;: &quot;carries&quot;,
+        &quot;to_kind&quot;: &quot;delivery&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;The ute carrying a delivery.&quot;,
+        &quot;origin&quot;: &quot;agent&quot;,
+        &quot;reason&quot;: null,
+        &quot;count&quot;: 1,
+        &quot;samples&quot;: [
+          {
+            &quot;from&quot;: &quot;Ute 3&quot;,
+            &quot;to&quot;: &quot;IN-77&quot;
+          }
+        ]
+      }
+    ]
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__show_view</h3><pre>{
+  &quot;view&quot;: &quot;impact&quot;,
+  &quot;start_id&quot;: &quot;entity:f8ochxt8cma6ejtd6m93&quot;,
+  &quot;headline&quot;: &quot;Ute 3 is a day late, so delivery IN-77 lands 12 Nov, not 11 Nov. Four jobs wait on it.&quot;,
+  &quot;vault_id&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+  &quot;affected&quot;: [
+    {
+      &quot;entity_id&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+      &quot;path&quot;: [
+        &quot;relates_to:vt6pkgdji1entmarp4gh&quot;
+      ],
+      &quot;why&quot;: &quot;Ute 3 carries delivery IN-77, which was due 11 Nov.&quot;
+    },
+    {
+      &quot;entity_id&quot;: &quot;entity:0njcrujirmngnb9mfre9&quot;,
+      &quot;path&quot;: [
+        &quot;relates_to:dwe8k938qaw2cqb1k20y&quot;
+      ],
+      &quot;why&quot;: &quot;Ute 3 is Crew A&#x27;s ute, so Crew A loses its vehicle for a day.&quot;
+    },
+    {
+      &quot;entity_id&quot;: &quot;entity:x6f3wdxm6g2euly5aarg&quot;,
+      &quot;path&quot;: [
+        &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+        &quot;relates_to:yy26v9e7txat8tqqt3dg&quot;
+      ],
+      &quot;why&quot;: &quot;IN-77 holds stock for TES-101, due 12 Nov. Arriving that day leaves no slack.&quot;
+    },
+    {
+      &quot;entity_id&quot;: &quot;entity:i365f1twourkj0qnrc9a&quot;,
+      &quot;path&quot;: [
+        &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+        &quot;relates_to:63omogmo6b6naz0o3kup&quot;
+      ],
+      &quot;why&quot;: &quot;IN-77 holds the Clipsal Switchboard for TES-102, due 12 Nov. No slack.&quot;
+    },
+    {
+      &quot;entity_id&quot;: &quot;entity:beorhbu8vzx2c6a35nzb&quot;,
+      &quot;path&quot;: [
+        &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+        &quot;relates_to:b4q7rk7ighdw43qhnzbi&quot;
+      ],
+      &quot;why&quot;: &quot;IN-77 holds the Symo inverter for TES-103, due 13 Nov. One day of slack.&quot;
+    },
+    {
+      &quot;entity_id&quot;: &quot;entity:gos3hhmjpzgq81crg5xf&quot;,
+      &quot;path&quot;: [
+        &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+        &quot;relates_to:9pnp5qiy0wgs2t2agd4z&quot;
+      ],
+      &quot;why&quot;: &quot;IN-77 holds the Backup Switch for TES-104, due 14 Nov. Two days of slack.&quot;
+    },
+    {
+      &quot;entity_id&quot;: &quot;entity:wqywsuvd4gezg6mwq76a&quot;,
+      &quot;path&quot;: [
+        &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+        &quot;relates_to:yy26v9e7txat8tqqt3dg&quot;,
+        &quot;relates_to:31lg39bkwfdm4hpi7mt8&quot;
+      ],
+      &quot;why&quot;: &quot;Maya Chen is the customer for TES-101, which is at risk.&quot;
+    },
+    {
+      &quot;entity_id&quot;: &quot;entity:o5m54v946e4xl5wvv7tq&quot;,
+      &quot;path&quot;: [
+        &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+        &quot;relates_to:63omogmo6b6naz0o3kup&quot;,
+        &quot;relates_to:5ze5ohei7ogio7gkxnmz&quot;
+      ],
+      &quot;why&quot;: &quot;Daniel Wilson is the customer for TES-102, which is at risk.&quot;
+    },
+    {
+      &quot;entity_id&quot;: &quot;entity:s0deleqahzscotg1t2fj&quot;,
+      &quot;path&quot;: [
+        &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+        &quot;relates_to:b4q7rk7ighdw43qhnzbi&quot;,
+        &quot;relates_to:l65cd8vfu6rlx9lf9ttd&quot;
+      ],
+      &quot;why&quot;: &quot;Wattle Creek School is the customer for TES-103.&quot;
+    },
+    {
+      &quot;entity_id&quot;: &quot;entity:48t8ep6t7uzty6kvwawc&quot;,
+      &quot;path&quot;: [
+        &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+        &quot;relates_to:9pnp5qiy0wgs2t2agd4z&quot;,
+        &quot;relates_to:6ap97mslfv0ksyo4ccky&quot;
+      ],
+      &quot;why&quot;: &quot;Red Plains Cattle Station is the customer for TES-104.&quot;
+    },
+    {
+      &quot;entity_id&quot;: &quot;entity:t4uuxgb3p0xzcigwk097&quot;,
+      &quot;path&quot;: [
+        &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+        &quot;relates_to:63omogmo6b6naz0o3kup&quot;,
+        &quot;relates_to:ihgns3w3lwe4yorvlviq&quot;
+      ],
+      &quot;why&quot;: &quot;Crew B works TES-102 and may wait on the switchboard.&quot;
+    },
+    {
+      &quot;entity_id&quot;: &quot;entity:jgv2ubmsngc92p7uvm0g&quot;,
+      &quot;path&quot;: [
+        &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+        &quot;relates_to:9pnp5qiy0wgs2t2agd4z&quot;,
+        &quot;relates_to:m4uacirzomntgcqkrwyz&quot;
+      ],
+      &quot;why&quot;: &quot;Crew C works TES-104, due 14 Nov.&quot;
+    }
+  ]
+}</pre><pre class="result">{
+  &quot;linked&quot;: true
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__show_view&quot;,
+  &quot;arguments&quot;: {
+    &quot;view&quot;: &quot;impact&quot;,
+    &quot;start_id&quot;: &quot;entity:f8ochxt8cma6ejtd6m93&quot;,
+    &quot;headline&quot;: &quot;Ute 3 is a day late, so delivery IN-77 lands 12 Nov, not 11 Nov. Four jobs wait on it.&quot;,
+    &quot;vault_id&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+    &quot;affected&quot;: [
+      {
+        &quot;entity_id&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:vt6pkgdji1entmarp4gh&quot;
+        ],
+        &quot;why&quot;: &quot;Ute 3 carries delivery IN-77, which was due 11 Nov.&quot;
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:0njcrujirmngnb9mfre9&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:dwe8k938qaw2cqb1k20y&quot;
+        ],
+        &quot;why&quot;: &quot;Ute 3 is Crew A&#x27;s ute, so Crew A loses its vehicle for a day.&quot;
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:x6f3wdxm6g2euly5aarg&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+          &quot;relates_to:yy26v9e7txat8tqqt3dg&quot;
+        ],
+        &quot;why&quot;: &quot;IN-77 holds stock for TES-101, due 12 Nov. Arriving that day leaves no slack.&quot;
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:i365f1twourkj0qnrc9a&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+          &quot;relates_to:63omogmo6b6naz0o3kup&quot;
+        ],
+        &quot;why&quot;: &quot;IN-77 holds the Clipsal Switchboard for TES-102, due 12 Nov. No slack.&quot;
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:beorhbu8vzx2c6a35nzb&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+          &quot;relates_to:b4q7rk7ighdw43qhnzbi&quot;
+        ],
+        &quot;why&quot;: &quot;IN-77 holds the Symo inverter for TES-103, due 13 Nov. One day of slack.&quot;
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:gos3hhmjpzgq81crg5xf&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+          &quot;relates_to:9pnp5qiy0wgs2t2agd4z&quot;
+        ],
+        &quot;why&quot;: &quot;IN-77 holds the Backup Switch for TES-104, due 14 Nov. Two days of slack.&quot;
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:wqywsuvd4gezg6mwq76a&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+          &quot;relates_to:yy26v9e7txat8tqqt3dg&quot;,
+          &quot;relates_to:31lg39bkwfdm4hpi7mt8&quot;
+        ],
+        &quot;why&quot;: &quot;Maya Chen is the customer for TES-101, which is at risk.&quot;
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:o5m54v946e4xl5wvv7tq&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+          &quot;relates_to:63omogmo6b6naz0o3kup&quot;,
+          &quot;relates_to:5ze5ohei7ogio7gkxnmz&quot;
+        ],
+        &quot;why&quot;: &quot;Daniel Wilson is the customer for TES-102, which is at risk.&quot;
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:s0deleqahzscotg1t2fj&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+          &quot;relates_to:b4q7rk7ighdw43qhnzbi&quot;,
+          &quot;relates_to:l65cd8vfu6rlx9lf9ttd&quot;
+        ],
+        &quot;why&quot;: &quot;Wattle Creek School is the customer for TES-103.&quot;
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:48t8ep6t7uzty6kvwawc&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+          &quot;relates_to:9pnp5qiy0wgs2t2agd4z&quot;,
+          &quot;relates_to:6ap97mslfv0ksyo4ccky&quot;
+        ],
+        &quot;why&quot;: &quot;Red Plains Cattle Station is the customer for TES-104.&quot;
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:t4uuxgb3p0xzcigwk097&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+          &quot;relates_to:63omogmo6b6naz0o3kup&quot;,
+          &quot;relates_to:ihgns3w3lwe4yorvlviq&quot;
+        ],
+        &quot;why&quot;: &quot;Crew B works TES-102 and may wait on the switchboard.&quot;
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:jgv2ubmsngc92p7uvm0g&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+          &quot;relates_to:9pnp5qiy0wgs2t2agd4z&quot;,
+          &quot;relates_to:m4uacirzomntgcqkrwyz&quot;
+        ],
+        &quot;why&quot;: &quot;Crew C works TES-104, due 14 Nov.&quot;
+      }
+    ]
+  },
+  &quot;id&quot;: &quot;toolu_01KaomuDP6hYFUH8aVg18sRt&quot;,
+  &quot;result&quot;: {
+    &quot;view&quot;: &quot;impact&quot;,
+    &quot;start&quot;: {
+      &quot;id&quot;: &quot;entity:f8ochxt8cma6ejtd6m93&quot;,
+      &quot;name&quot;: &quot;Ute 3&quot;,
+      &quot;kind&quot;: &quot;vehicle&quot;,
+      &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+    },
+    &quot;headline&quot;: &quot;Ute 3 is a day late, so delivery IN-77 lands 12 Nov, not 11 Nov. Four jobs wait on it.&quot;,
+    &quot;affected&quot;: [
+      {
+        &quot;entity&quot;: {
+          &quot;id&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+          &quot;name&quot;: &quot;IN-77&quot;,
+          &quot;kind&quot;: &quot;delivery&quot;,
+          &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+        },
+        &quot;path&quot;: [
+          {
+            &quot;id&quot;: &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+            &quot;from&quot;: {
+              &quot;id&quot;: &quot;entity:f8ochxt8cma6ejtd6m93&quot;,
+              &quot;name&quot;: &quot;Ute 3&quot;,
+              &quot;kind&quot;: &quot;vehicle&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            },
+            &quot;label&quot;: &quot;carries&quot;,
+            &quot;to&quot;: {
+              &quot;id&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+              &quot;name&quot;: &quot;IN-77&quot;,
+              &quot;kind&quot;: &quot;delivery&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            }
+          }
+        ],
+        &quot;why&quot;: &quot;Ute 3 carries delivery IN-77, which was due 11 Nov.&quot;
+      },
+      {
+        &quot;entity&quot;: {
+          &quot;id&quot;: &quot;entity:0njcrujirmngnb9mfre9&quot;,
+          &quot;name&quot;: &quot;Crew A&quot;,
+          &quot;kind&quot;: &quot;crew&quot;,
+          &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+        },
+        &quot;path&quot;: [
+          {
+            &quot;id&quot;: &quot;relates_to:dwe8k938qaw2cqb1k20y&quot;,
+            &quot;from&quot;: {
+              &quot;id&quot;: &quot;entity:f8ochxt8cma6ejtd6m93&quot;,
+              &quot;name&quot;: &quot;Ute 3&quot;,
+              &quot;kind&quot;: &quot;vehicle&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            },
+            &quot;label&quot;: &quot;allocated_to&quot;,
+            &quot;to&quot;: {
+              &quot;id&quot;: &quot;entity:0njcrujirmngnb9mfre9&quot;,
+              &quot;name&quot;: &quot;Crew A&quot;,
+              &quot;kind&quot;: &quot;crew&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            }
+          }
+        ],
+        &quot;why&quot;: &quot;Ute 3 is Crew A&#x27;s ute, so Crew A loses its vehicle for a day.&quot;
+      },
+      {
+        &quot;entity&quot;: {
+          &quot;id&quot;: &quot;entity:x6f3wdxm6g2euly5aarg&quot;,
+          &quot;name&quot;: &quot;TES-101&quot;,
+          &quot;kind&quot;: &quot;job&quot;,
+          &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+        },
+        &quot;path&quot;: [
+          {
+            &quot;id&quot;: &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+            &quot;from&quot;: {
+              &quot;id&quot;: &quot;entity:f8ochxt8cma6ejtd6m93&quot;,
+              &quot;name&quot;: &quot;Ute 3&quot;,
+              &quot;kind&quot;: &quot;vehicle&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            },
+            &quot;label&quot;: &quot;carries&quot;,
+            &quot;to&quot;: {
+              &quot;id&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+              &quot;name&quot;: &quot;IN-77&quot;,
+              &quot;kind&quot;: &quot;delivery&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            }
+          },
+          {
+            &quot;id&quot;: &quot;relates_to:yy26v9e7txat8tqqt3dg&quot;,
+            &quot;from&quot;: {
+              &quot;id&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+              &quot;name&quot;: &quot;IN-77&quot;,
+              &quot;kind&quot;: &quot;delivery&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            },
+            &quot;label&quot;: &quot;supplies_job&quot;,
+            &quot;to&quot;: {
+              &quot;id&quot;: &quot;entity:x6f3wdxm6g2euly5aarg&quot;,
+              &quot;name&quot;: &quot;TES-101&quot;,
+              &quot;kind&quot;: &quot;job&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            }
+          }
+        ],
+        &quot;why&quot;: &quot;IN-77 holds stock for TES-101, due 12 Nov. Arriving that day leaves no slack.&quot;
+      },
+      {
+        &quot;entity&quot;: {
+          &quot;id&quot;: &quot;entity:i365f1twourkj0qnrc9a&quot;,
+          &quot;name&quot;: &quot;TES-102&quot;,
+          &quot;kind&quot;: &quot;job&quot;,
+          &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+        },
+        &quot;path&quot;: [
+          {
+            &quot;id&quot;: &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+            &quot;from&quot;: {
+              &quot;id&quot;: &quot;entity:f8ochxt8cma6ejtd6m93&quot;,
+              &quot;name&quot;: &quot;Ute 3&quot;,
+              &quot;kind&quot;: &quot;vehicle&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            },
+            &quot;label&quot;: &quot;carries&quot;,
+            &quot;to&quot;: {
+              &quot;id&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+              &quot;name&quot;: &quot;IN-77&quot;,
+              &quot;kind&quot;: &quot;delivery&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            }
+          },
+          {
+            &quot;id&quot;: &quot;relates_to:63omogmo6b6naz0o3kup&quot;,
+            &quot;from&quot;: {
+              &quot;id&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+              &quot;name&quot;: &quot;IN-77&quot;,
+              &quot;kind&quot;: &quot;delivery&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            },
+            &quot;label&quot;: &quot;supplies_job&quot;,
+            &quot;to&quot;: {
+              &quot;id&quot;: &quot;entity:i365f1twourkj0qnrc9a&quot;,
+              &quot;name&quot;: &quot;TES-102&quot;,
+              &quot;kind&quot;: &quot;job&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            }
+          }
+        ],
+        &quot;why&quot;: &quot;IN-77 holds the Clipsal Switchboard for TES-102, due 12 Nov. No slack.&quot;
+      },
+      {
+        &quot;entity&quot;: {
+          &quot;id&quot;: &quot;entity:beorhbu8vzx2c6a35nzb&quot;,
+          &quot;name&quot;: &quot;TES-103&quot;,
+          &quot;kind&quot;: &quot;job&quot;,
+          &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+        },
+        &quot;path&quot;: [
+          {
+            &quot;id&quot;: &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+            &quot;from&quot;: {
+              &quot;id&quot;: &quot;entity:f8ochxt8cma6ejtd6m93&quot;,
+              &quot;name&quot;: &quot;Ute 3&quot;,
+              &quot;kind&quot;: &quot;vehicle&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            },
+            &quot;label&quot;: &quot;carries&quot;,
+            &quot;to&quot;: {
+              &quot;id&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+              &quot;name&quot;: &quot;IN-77&quot;,
+              &quot;kind&quot;: &quot;delivery&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            }
+          },
+          {
+            &quot;id&quot;: &quot;relates_to:b4q7rk7ighdw43qhnzbi&quot;,
+            &quot;from&quot;: {
+              &quot;id&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+              &quot;name&quot;: &quot;IN-77&quot;,
+              &quot;kind&quot;: &quot;delivery&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            },
+            &quot;label&quot;: &quot;supplies_job&quot;,
+            &quot;to&quot;: {
+              &quot;id&quot;: &quot;entity:beorhbu8vzx2c6a35nzb&quot;,
+              &quot;name&quot;: &quot;TES-103&quot;,
+              &quot;kind&quot;: &quot;job&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            }
+          }
+        ],
+        &quot;why&quot;: &quot;IN-77 holds the Symo inverter for TES-103, due 13 Nov. One day of slack.&quot;
+      },
+      {
+        &quot;entity&quot;: {
+          &quot;id&quot;: &quot;entity:gos3hhmjpzgq81crg5xf&quot;,
+          &quot;name&quot;: &quot;TES-104&quot;,
+          &quot;kind&quot;: &quot;job&quot;,
+          &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+        },
+        &quot;path&quot;: [
+          {
+            &quot;id&quot;: &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+            &quot;from&quot;: {
+              &quot;id&quot;: &quot;entity:f8ochxt8cma6ejtd6m93&quot;,
+              &quot;name&quot;: &quot;Ute 3&quot;,
+              &quot;kind&quot;: &quot;vehicle&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            },
+            &quot;label&quot;: &quot;carries&quot;,
+            &quot;to&quot;: {
+              &quot;id&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+              &quot;name&quot;: &quot;IN-77&quot;,
+              &quot;kind&quot;: &quot;delivery&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            }
+          },
+          {
+            &quot;id&quot;: &quot;relates_to:9pnp5qiy0wgs2t2agd4z&quot;,
+            &quot;from&quot;: {
+              &quot;id&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+              &quot;name&quot;: &quot;IN-77&quot;,
+              &quot;kind&quot;: &quot;delivery&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            },
+            &quot;label&quot;: &quot;supplies_job&quot;,
+            &quot;to&quot;: {
+              &quot;id&quot;: &quot;entity:gos3hhmjpzgq81crg5xf&quot;,
+              &quot;name&quot;: &quot;TES-104&quot;,
+              &quot;kind&quot;: &quot;job&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            }
+          }
+        ],
+        &quot;why&quot;: &quot;IN-77 holds the Backup Switch for TES-104, due 14 Nov. Two days of slack.&quot;
+      },
+      {
+        &quot;entity&quot;: {
+          &quot;id&quot;: &quot;entity:wqywsuvd4gezg6mwq76a&quot;,
+          &quot;name&quot;: &quot;Maya Chen&quot;,
+          &quot;kind&quot;: &quot;customer&quot;,
+          &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+        },
+        &quot;path&quot;: [
+          {
+            &quot;id&quot;: &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+            &quot;from&quot;: {
+              &quot;id&quot;: &quot;entity:f8ochxt8cma6ejtd6m93&quot;,
+              &quot;name&quot;: &quot;Ute 3&quot;,
+              &quot;kind&quot;: &quot;vehicle&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            },
+            &quot;label&quot;: &quot;carries&quot;,
+            &quot;to&quot;: {
+              &quot;id&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+              &quot;name&quot;: &quot;IN-77&quot;,
+              &quot;kind&quot;: &quot;delivery&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            }
+          },
+          {
+            &quot;id&quot;: &quot;relates_to:yy26v9e7txat8tqqt3dg&quot;,
+            &quot;from&quot;: {
+              &quot;id&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+              &quot;name&quot;: &quot;IN-77&quot;,
+              &quot;kind&quot;: &quot;delivery&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            },
+            &quot;label&quot;: &quot;supplies_job&quot;,
+            &quot;to&quot;: {
+              &quot;id&quot;: &quot;entity:x6f3wdxm6g2euly5aarg&quot;,
+              &quot;name&quot;: &quot;TES-101&quot;,
+              &quot;kind&quot;: &quot;job&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            }
+          },
+          {
+            &quot;id&quot;: &quot;relates_to:31lg39bkwfdm4hpi7mt8&quot;,
+            &quot;from&quot;: {
+              &quot;id&quot;: &quot;entity:wqywsuvd4gezg6mwq76a&quot;,
+              &quot;name&quot;: &quot;Maya Chen&quot;,
+              &quot;kind&quot;: &quot;customer&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            },
+            &quot;label&quot;: &quot;has_job&quot;,
+            &quot;to&quot;: {
+              &quot;id&quot;: &quot;entity:x6f3wdxm6g2euly5aarg&quot;,
+              &quot;name&quot;: &quot;TES-101&quot;,
+              &quot;kind&quot;: &quot;job&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            }
+          }
+        ],
+        &quot;why&quot;: &quot;Maya Chen is the customer for TES-101, which is at risk.&quot;
+      },
+      {
+        &quot;entity&quot;: {
+          &quot;id&quot;: &quot;entity:o5m54v946e4xl5wvv7tq&quot;,
+          &quot;name&quot;: &quot;Daniel Wilson&quot;,
+          &quot;kind&quot;: &quot;customer&quot;,
+          &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+        },
+        &quot;path&quot;: [
+          {
+            &quot;id&quot;: &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+            &quot;from&quot;: {
+              &quot;id&quot;: &quot;entity:f8ochxt8cma6ejtd6m93&quot;,
+              &quot;name&quot;: &quot;Ute 3&quot;,
+              &quot;kind&quot;: &quot;vehicle&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            },
+            &quot;label&quot;: &quot;carries&quot;,
+            &quot;to&quot;: {
+              &quot;id&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+              &quot;name&quot;: &quot;IN-77&quot;,
+              &quot;kind&quot;: &quot;delivery&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            }
+          },
+          {
+            &quot;id&quot;: &quot;relates_to:63omogmo6b6naz0o3kup&quot;,
+            &quot;from&quot;: {
+              &quot;id&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+              &quot;name&quot;: &quot;IN-77&quot;,
+              &quot;kind&quot;: &quot;delivery&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            },
+            &quot;label&quot;: &quot;supplies_job&quot;,
+            &quot;to&quot;: {
+              &quot;id&quot;: &quot;entity:i365f1twourkj0qnrc9a&quot;,
+              &quot;name&quot;: &quot;TES-102&quot;,
+              &quot;kind&quot;: &quot;job&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            }
+          },
+          {
+            &quot;id&quot;: &quot;relates_to:5ze5ohei7ogio7gkxnmz&quot;,
+            &quot;from&quot;: {
+              &quot;id&quot;: &quot;entity:o5m54v946e4xl5wvv7tq&quot;,
+              &quot;name&quot;: &quot;Daniel Wilson&quot;,
+              &quot;kind&quot;: &quot;customer&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            },
+            &quot;label&quot;: &quot;has_job&quot;,
+            &quot;to&quot;: {
+              &quot;id&quot;: &quot;entity:i365f1twourkj0qnrc9a&quot;,
+              &quot;name&quot;: &quot;TES-102&quot;,
+              &quot;kind&quot;: &quot;job&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            }
+          }
+        ],
+        &quot;why&quot;: &quot;Daniel Wilson is the customer for TES-102, which is at risk.&quot;
+      },
+      {
+        &quot;entity&quot;: {
+          &quot;id&quot;: &quot;entity:s0deleqahzscotg1t2fj&quot;,
+          &quot;name&quot;: &quot;Wattle Creek School&quot;,
+          &quot;kind&quot;: &quot;customer&quot;,
+          &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+        },
+        &quot;path&quot;: [
+          {
+            &quot;id&quot;: &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+            &quot;from&quot;: {
+              &quot;id&quot;: &quot;entity:f8ochxt8cma6ejtd6m93&quot;,
+              &quot;name&quot;: &quot;Ute 3&quot;,
+              &quot;kind&quot;: &quot;vehicle&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            },
+            &quot;label&quot;: &quot;carries&quot;,
+            &quot;to&quot;: {
+              &quot;id&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+              &quot;name&quot;: &quot;IN-77&quot;,
+              &quot;kind&quot;: &quot;delivery&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            }
+          },
+          {
+            &quot;id&quot;: &quot;relates_to:b4q7rk7ighdw43qhnzbi&quot;,
+            &quot;from&quot;: {
+              &quot;id&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+              &quot;name&quot;: &quot;IN-77&quot;,
+              &quot;kind&quot;: &quot;delivery&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            },
+            &quot;label&quot;: &quot;supplies_job&quot;,
+            &quot;to&quot;: {
+              &quot;id&quot;: &quot;entity:beorhbu8vzx2c6a35nzb&quot;,
+              &quot;name&quot;: &quot;TES-103&quot;,
+              &quot;kind&quot;: &quot;job&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            }
+          },
+          {
+            &quot;id&quot;: &quot;relates_to:l65cd8vfu6rlx9lf9ttd&quot;,
+            &quot;from&quot;: {
+              &quot;id&quot;: &quot;entity:s0deleqahzscotg1t2fj&quot;,
+              &quot;name&quot;: &quot;Wattle Creek School&quot;,
+              &quot;kind&quot;: &quot;customer&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            },
+            &quot;label&quot;: &quot;has_job&quot;,
+            &quot;to&quot;: {
+              &quot;id&quot;: &quot;entity:beorhbu8vzx2c6a35nzb&quot;,
+              &quot;name&quot;: &quot;TES-103&quot;,
+              &quot;kind&quot;: &quot;job&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            }
+          }
+        ],
+        &quot;why&quot;: &quot;Wattle Creek School is the customer for TES-103.&quot;
+      },
+      {
+        &quot;entity&quot;: {
+          &quot;id&quot;: &quot;entity:48t8ep6t7uzty6kvwawc&quot;,
+          &quot;name&quot;: &quot;Red Plains Cattle Station&quot;,
+          &quot;kind&quot;: &quot;customer&quot;,
+          &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+        },
+        &quot;path&quot;: [
+          {
+            &quot;id&quot;: &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+            &quot;from&quot;: {
+              &quot;id&quot;: &quot;entity:f8ochxt8cma6ejtd6m93&quot;,
+              &quot;name&quot;: &quot;Ute 3&quot;,
+              &quot;kind&quot;: &quot;vehicle&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            },
+            &quot;label&quot;: &quot;carries&quot;,
+            &quot;to&quot;: {
+              &quot;id&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+              &quot;name&quot;: &quot;IN-77&quot;,
+              &quot;kind&quot;: &quot;delivery&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            }
+          },
+          {
+            &quot;id&quot;: &quot;relates_to:9pnp5qiy0wgs2t2agd4z&quot;,
+            &quot;from&quot;: {
+              &quot;id&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+              &quot;name&quot;: &quot;IN-77&quot;,
+              &quot;kind&quot;: &quot;delivery&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            },
+            &quot;label&quot;: &quot;supplies_job&quot;,
+            &quot;to&quot;: {
+              &quot;id&quot;: &quot;entity:gos3hhmjpzgq81crg5xf&quot;,
+              &quot;name&quot;: &quot;TES-104&quot;,
+              &quot;kind&quot;: &quot;job&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            }
+          },
+          {
+            &quot;id&quot;: &quot;relates_to:6ap97mslfv0ksyo4ccky&quot;,
+            &quot;from&quot;: {
+              &quot;id&quot;: &quot;entity:48t8ep6t7uzty6kvwawc&quot;,
+              &quot;name&quot;: &quot;Red Plains Cattle Station&quot;,
+              &quot;kind&quot;: &quot;customer&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            },
+            &quot;label&quot;: &quot;has_job&quot;,
+            &quot;to&quot;: {
+              &quot;id&quot;: &quot;entity:gos3hhmjpzgq81crg5xf&quot;,
+              &quot;name&quot;: &quot;TES-104&quot;,
+              &quot;kind&quot;: &quot;job&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            }
+          }
+        ],
+        &quot;why&quot;: &quot;Red Plains Cattle Station is the customer for TES-104.&quot;
+      },
+      {
+        &quot;entity&quot;: {
+          &quot;id&quot;: &quot;entity:t4uuxgb3p0xzcigwk097&quot;,
+          &quot;name&quot;: &quot;Crew B&quot;,
+          &quot;kind&quot;: &quot;crew&quot;,
+          &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+        },
+        &quot;path&quot;: [
+          {
+            &quot;id&quot;: &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+            &quot;from&quot;: {
+              &quot;id&quot;: &quot;entity:f8ochxt8cma6ejtd6m93&quot;,
+              &quot;name&quot;: &quot;Ute 3&quot;,
+              &quot;kind&quot;: &quot;vehicle&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            },
+            &quot;label&quot;: &quot;carries&quot;,
+            &quot;to&quot;: {
+              &quot;id&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+              &quot;name&quot;: &quot;IN-77&quot;,
+              &quot;kind&quot;: &quot;delivery&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            }
+          },
+          {
+            &quot;id&quot;: &quot;relates_to:63omogmo6b6naz0o3kup&quot;,
+            &quot;from&quot;: {
+              &quot;id&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+              &quot;name&quot;: &quot;IN-77&quot;,
+              &quot;kind&quot;: &quot;delivery&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            },
+            &quot;label&quot;: &quot;supplies_job&quot;,
+            &quot;to&quot;: {
+              &quot;id&quot;: &quot;entity:i365f1twourkj0qnrc9a&quot;,
+              &quot;name&quot;: &quot;TES-102&quot;,
+              &quot;kind&quot;: &quot;job&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            }
+          },
+          {
+            &quot;id&quot;: &quot;relates_to:ihgns3w3lwe4yorvlviq&quot;,
+            &quot;from&quot;: {
+              &quot;id&quot;: &quot;entity:t4uuxgb3p0xzcigwk097&quot;,
+              &quot;name&quot;: &quot;Crew B&quot;,
+              &quot;kind&quot;: &quot;crew&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            },
+            &quot;label&quot;: &quot;assigned_to&quot;,
+            &quot;to&quot;: {
+              &quot;id&quot;: &quot;entity:i365f1twourkj0qnrc9a&quot;,
+              &quot;name&quot;: &quot;TES-102&quot;,
+              &quot;kind&quot;: &quot;job&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            }
+          }
+        ],
+        &quot;why&quot;: &quot;Crew B works TES-102 and may wait on the switchboard.&quot;
+      },
+      {
+        &quot;entity&quot;: {
+          &quot;id&quot;: &quot;entity:jgv2ubmsngc92p7uvm0g&quot;,
+          &quot;name&quot;: &quot;Crew C&quot;,
+          &quot;kind&quot;: &quot;crew&quot;,
+          &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+        },
+        &quot;path&quot;: [
+          {
+            &quot;id&quot;: &quot;relates_to:vt6pkgdji1entmarp4gh&quot;,
+            &quot;from&quot;: {
+              &quot;id&quot;: &quot;entity:f8ochxt8cma6ejtd6m93&quot;,
+              &quot;name&quot;: &quot;Ute 3&quot;,
+              &quot;kind&quot;: &quot;vehicle&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            },
+            &quot;label&quot;: &quot;carries&quot;,
+            &quot;to&quot;: {
+              &quot;id&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+              &quot;name&quot;: &quot;IN-77&quot;,
+              &quot;kind&quot;: &quot;delivery&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            }
+          },
+          {
+            &quot;id&quot;: &quot;relates_to:9pnp5qiy0wgs2t2agd4z&quot;,
+            &quot;from&quot;: {
+              &quot;id&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+              &quot;name&quot;: &quot;IN-77&quot;,
+              &quot;kind&quot;: &quot;delivery&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            },
+            &quot;label&quot;: &quot;supplies_job&quot;,
+            &quot;to&quot;: {
+              &quot;id&quot;: &quot;entity:gos3hhmjpzgq81crg5xf&quot;,
+              &quot;name&quot;: &quot;TES-104&quot;,
+              &quot;kind&quot;: &quot;job&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            }
+          },
+          {
+            &quot;id&quot;: &quot;relates_to:m4uacirzomntgcqkrwyz&quot;,
+            &quot;from&quot;: {
+              &quot;id&quot;: &quot;entity:jgv2ubmsngc92p7uvm0g&quot;,
+              &quot;name&quot;: &quot;Crew C&quot;,
+              &quot;kind&quot;: &quot;crew&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            },
+            &quot;label&quot;: &quot;assigned_to&quot;,
+            &quot;to&quot;: {
+              &quot;id&quot;: &quot;entity:gos3hhmjpzgq81crg5xf&quot;,
+              &quot;name&quot;: &quot;TES-104&quot;,
+              &quot;kind&quot;: &quot;job&quot;,
+              &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+            }
+          }
+        ],
+        &quot;why&quot;: &quot;Crew C works TES-104, due 14 Nov.&quot;
+      }
+    ],
+    &quot;linked&quot;: true,
+    &quot;text&quot;: &quot;Ute 3 is a day late, so delivery IN-77 lands 12 Nov, not 11 Nov. Four jobs wait on it.\nStarting from Ute 3 (vehicle).\n1. IN-77 (delivery), via Ute 3 carries IN-77. Ute 3 carries delivery IN-77, which was due 11 Nov.\n2. Crew A (crew), via Ute 3 allocated to Crew A. Ute 3 is Crew A&#x27;s ute, so Crew A loses its vehicle for a day.\n3. TES-101 (job), via Ute 3 carries IN-77, then IN-77 supplies job TES-101. IN-77 holds stock for TES-101, due 12 Nov. Arriving that day leaves no slack.\n4. TES-102 (job), via Ute 3 carries IN-77, then IN-77 supplies job TES-102. IN-77 holds the Clipsal Switchboard for TES-102, due 12 Nov. No slack.\n5. TES-103 (job), via Ute 3 carries IN-77, then IN-77 supplies job TES-103. IN-77 holds the Symo inverter for TES-103, due 13 Nov. One day of slack.\n6. TES-104 (job), via Ute 3 carries IN-77, then IN-77 supplies job TES-104. IN-77 holds the Backup Switch for TES-104, due 14 Nov. Two days of slack.\n7. Maya Chen (customer), via Ute 3 carries IN-77, then IN-77 supplies job TES-101, then Maya Chen has job TES-101. Maya Chen is the customer for TES-101, which is at risk.\n8. Daniel Wilson (customer), via Ute 3 carries IN-77, then IN-77 supplies job TES-102, then Daniel Wilson has job TES-102. Daniel Wilson is the customer for TES-102, which is at risk.\n9. Wattle Creek School (customer), via Ute 3 carries IN-77, then IN-77 supplies job TES-103, then Wattle Creek School has job TES-103. Wattle Creek School is the customer for TES-103.\n10. Red Plains Cattle Station (customer), via Ute 3 carries IN-77, then IN-77 supplies job TES-104, then Red Plains Cattle Station has job TES-104. Red Plains Cattle Station is the customer for TES-104.\n11. Crew B (crew), via Ute 3 carries IN-77, then IN-77 supplies job TES-102, then Crew B assigned to TES-102. Crew B works TES-102 and may wait on the switchboard.\n12. Crew C (crew), via Ute 3 carries IN-77, then IN-77 supplies job TES-104, then Crew C assigned to TES-104. Crew C works TES-104, due 14 Nov.&quot;
+  }
+}</pre></details></article>

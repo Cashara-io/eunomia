@@ -1,0 +1,1 @@
+The full chat screenshots expand the transcript scroll containers for capture. Text, tool results, cards and values are unchanged. Original viewport captures are also retained.

@@ -1,0 +1,1181 @@
+I'll load the eunomia-local tools first.
+
+TOOL ToolSearch
+{
+  "query": "select:mcp__eunomia-local__vault_create,mcp__eunomia-local__vault_list,mcp__eunomia-local__memory_write_batch,mcp__eunomia-local__memory_write,mcp__eunomia-local__entity_relate,mcp__eunomia-local__document_upload,mcp__eunomia-local__ontology_automap,mcp__eunomia-local__ontology_propose,mcp__eunomia-local__ontology_get,mcp__eunomia-local__entities_search,mcp__eunomia-local__entity_types,mcp__eunomia-local__ontology_suggest,mcp__eunomia-local__ontology_readiness",
+  "max_results": 20
+}
+
+RESULT
+[{'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__vault_create'}, {'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__vault_list'}, {'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__memory_write_batch'}, {'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__memory_write'}, {'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__entity_relate'}, {'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__document_upload'}, {'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__ontology_automap'}, {'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__ontology_propose'}, {'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__ontology_get'}, {'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__entities_search'}, {'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__entity_types'}, {'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__ontology_suggest'}, {'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__ontology_readiness'}]
+
+TOOL mcp__eunomia-local__vault_list
+{}
+
+RESULT
+[{'type': 'text', 'text': '{"results":[{"is_default":true,"id":"vault:p8360f8493ebc0ab24dd","name":"Personal","kind":"personal","created_at":"2026-11-08T17:09:07.523205051Z","role":"owner"},{"is_default":false,"id":"vault:8iz0hyym38leojujbgo4","name":"Darwin Footy Club","kind":"org","created_at":"2026-11-08T17:09:07.582942635Z","role":"owner"}]}'}]
+
+TOOL mcp__eunomia-local__vault_create
+{
+  "name": "Top End Solar & Electrical",
+  "kind": "org"
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"vault:2oxb9ism79xia4hivfdo","name":"Top End Solar & Electrical","kind":"org","created_at":"2026-11-08T17:09:23.273029420Z"}'}]
+
+TOOL mcp__eunomia-local__document_upload
+{
+  "filename": "stock.csv",
+  "content_type": "text/csv",
+  "vault_id": "Top End Solar & Electrical",
+  "text": "item,supplier,sell price AUD,unit cost AUD,qty on hand,reorder at,status,last received\nFronius Primo 5kW Inverter,Fronius Australia,\"$4,890.00\",\"$3,100.00\",3,10,In stock,07/11/2026\nFronius Symo 10kW Inverter,Fronius Australia,\"$6,350.00\",\"$4,200.00\",2,10,In stock,06/11/2026\nFronius Smart Meter,Fronius Australia,$325.00,$210.00,12,10,In stock,05/11/2026\nFronius Datamanager,Fronius Australia,$280.00,$180.00,5,10,In stock,04/11/2026\nFronius Mounting Bracket,Fronius Australia,$85.00,$42.00,22,10,In stock,03/11/2026\nFronius Surge Protector,Fronius Australia,$145.00,$90.00,10,10,In stock,02/11/2026\nFronius Backup Switch,Fronius Australia,$490.00,,4,10,Back-ordered,07/11/2026\nFronius Extension Kit,Fronius Australia,$95.00,$55.00,0,10,Discontinued,06/11/2026\nTrina 440W Panel,Solar Juice,$220.00,$140.00,45,10,In stock,05/11/2026\nJinko 475W Panel,Solar Juice,$245.00,$155.00,40,10,In stock,04/11/2026\nLONGi 500W Panel,solar juice,$275.00,$175.00,32,10,In stock,03/11/2026\nSolar Rail 4.2m,Solar Juice,$58.00,$32.00,80,10,In stock,02/11/2026\nRoof Clamp Pack,Solar Juice,$34.00,$18.00,65,10,Back-ordered,07/11/2026\nPanel Earthing Kit,Solar Juice,$18.75,$9.50,72,10,In stock,06/11/2026\nDC Isolator,Solar Juice,$62.00,$35.00,25,10,In stock,05/11/2026\nMC4 Connector Pair,Solar Juice,$12.50,$6.20,120,10,In stock,04/11/2026\nClipsal Switchboard,Rexel Darwin,$380.00,$245.00,8,10,In stock,03/11/2026\nHager RCBO,Rexel Darwin,$48.00,$28.00,60,10,In stock,02/11/2026\nLED Batten 1200mm,Rexel Darwin,$65.00,$38.00,35,10,In stock,07/11/2026\nWeatherproof GPO,Rexel Darwin,$42.00,$24.00,42,10,In stock,06/11/2026\nEarth Rod,Rexel Darwin,$35.00,$18.00,24,10,In stock,05/11/2026\nMeter Enclosure,Rexel Darwin,$185.00,$110.00,11,10,In stock,04/11/2026\nConduit 25mm,Rexel Darwin,$14.50,$7.25,95,10,In stock,03/11/2026\nCable Tie Pack,Rexel Darwin,$9.90,,180,10,In stock,02/11/2026\nTPS Cable 2.5mm 100m,NT Cable Co,$245.00,$160.00,20,10,In stock,07/11/2026\nSolar Cable 6mm 100m,NT Cable Co,$325.00,$210.00,18,10,Back-ordered,06/11/2026\nEarth Cable 100m,NT Cable Co,$155.00,$95.00,25,10,In stock,05/11/2026\nOrange Conduit 50mm,NT Cable Co,$38.00,$21.00,55,10,In stock,04/11/2026\nCable Lug Pack,NT Cable Co,$28.00,$14.00,70,10,In stock,03/11/2026\nHeatshrink Kit,NT Cable Co,$19.50,$10.00,90,10,In stock,02/11/2026\n"
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"document:tpfxkz7d23f1swwuzfpi","vault":"vault:2oxb9ism79xia4hivfdo","filename":"stock.csv","media_type":"text/csv","size_bytes":2289,"sha256":"0aeec8fdd4126eb6b8c99bb0ef0f66e6bc22c6df1d8d9fafa3e371675a427b20","revision":1,"status":"indexing","chunk_count":0,"created_at":"2026-11-08T17:09:31.328Z","updated_at":"2026-11-08T17:09:31.328Z","indexed_at":null,"download_url":"/api/documents/document:tpfxkz7d23f1swwuzfpi/download"}'}]
+
+TOOL mcp__eunomia-local__document_upload
+{
+  "filename": "jobs-notes.md",
+  "content_type": "text/markdown",
+  "vault_id": "Top End Solar & Electrical",
+  "text": "# Top End Solar & Electrical, Darwin NT\nThese are fictional test records as at 9 November 2026.\n\n## Open customer jobs\n- Customer Maya Chen, Nightcliff home, job TES-101. Install 12 Trina 440W Panels, one Fronius Primo 5kW Inverter and one Fronius Smart Meter. Crew A, due 12 November.\n- Customer Daniel Wilson, Palmerston home, job TES-102. Needs one Clipsal Switchboard, six Hager RCBOs and four Weatherproof GPOs. Crew B, due 12 November.\n- Customer Wattle Creek School, Berrimah, job TES-103. Needs one Fronius Symo 10kW Inverter, 24 Jinko 475W Panels and two Solar Cable 6mm 100m drums. Crew A, due 13 November.\n- Customer Red Plains Cattle Station, Adelaide River, job TES-104. Needs one Fronius Backup Switch, 20 LONGi 500W Panels and four Earth Rods. Crew C, due 14 November.\n- Customer Aisha Brown, Rapid Creek home, job TES-105. Needs two LED Batten 1200mm fittings and one TPS Cable 2.5mm 100m drum. Crew B, due 13 November.\n- Customer Casuarina Community Hall, job TES-106. Needs six DC Isolators, four Solar Rail 4.2m lengths and two Panel Earthing Kits. Crew C, due 14 November.\n\n## Inbound delivery\nCrew ute Ute 3 is carrying delivery IN-77 from Rexel Darwin and Fronius Australia, expected 11 November. It holds one Fronius Primo 5kW Inverter for TES-101, one Clipsal Switchboard for TES-102, one Fronius Symo 10kW Inverter for TES-103 and one Fronius Backup Switch for TES-104. A one-day delay risks those four jobs. Ute 3 is allocated to Crew A.\n\n## Decisions and unconfirmed information\nDecision: call-out fee goes to $120 from 1 December 2026, approved by owner Priya Nair.\nRumour, unconfirmed: Fronius Australia may raise prices in December. Do not treat it as a confirmed increase.\nRexel Darwin is our electrical wholesaler. Fronius Australia supplies inverters and monitoring equipment. Both are organisations we work with.\nUnlinked equipment: Label Printer 2 sits in the office, with no recorded dependencies.\n"
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"document:i1lvr31y781sr3dubv0h","vault":"vault:2oxb9ism79xia4hivfdo","filename":"jobs-notes.md","media_type":"text/markdown","size_bytes":1934,"sha256":"cb7f43812f3e5cc85599e882a5924a609f1c616672fabe78e7a6c21cd9c62ab2","revision":1,"status":"indexing","chunk_count":0,"created_at":"2026-11-08T17:09:35.421Z","updated_at":"2026-11-08T17:09:35.421Z","indexed_at":null,"download_url":"/api/documents/document:i1lvr31y781sr3dubv0h/download"}'}]
+
+TOOL mcp__eunomia-local__ontology_automap
+{
+  "document_id": "document:tpfxkz7d23f1swwuzfpi",
+  "vault_id": "Top End Solar & Electrical"
+}
+
+TOOL mcp__eunomia-local__entity_types
+{
+  "vault_id": "Top End Solar & Electrical"
+}
+
+RESULT
+[{'type': 'text', 'text': '{"mode":"model","proposed":{"kinds":[{"kind":"product","status":"proposed","merge_into":null},{"kind":"supplier","status":"proposed","merge_into":null}],"links":[{"from_kind":"product","label":"supplied_by","to_kind":"supplier","status":"proposed"}],"properties":[{"kind":"product","name":"sell_price","datatype":"money","status":"proposed","merge_into":null},{"kind":"product","name":"unit_cost","datatype":"money","status":"proposed","merge_into":null},{"kind":"product","name":"qty_on_hand","datatype":"integer","status":"proposed","merge_into":null},{"kind":"product","name":"reorder_at","datatype":"integer","status":"proposed","merge_into":null},{"kind":"product","name":"status","datatype":"enum","status":"proposed","merge_into":null},{"kind":"product","name":"last_received","datatype":"date","status":"proposed","merge_into":null}],"metrics":[{"kind":"product","name":"total_units_on_hand","status":"proposed","merge_into":null},{"kind":"product","name":"inventory_cost_value","status":"proposed","merge_into":null},{"kind":"product","name":"average_sell_price","status":"proposed","merge_into":null}]},"record_types":[{"source":"document","record_type":"document:tpfxkz7d23f1swwuzfpi","kind":"product","name_field":"item","unmapped":[]}],"links":[{"from_kind":"product","label":"supplied_by","to_kind":"supplier","source":"document","record_type":"document:tpfxkz7d23f1swwuzfpi","field":"supplier","values":5,"matched":4,"ratio":0.8,"reused":[{"column":"supplier","name":"Fronius Australia","kind":"organisation","entity_id":"organisation:1d72xkro2flp4vob5dpr"},{"column":"supplier","name":"NT Cable Co","kind":"organisation","entity_id":"organisation:hy4fn9heevdr701qldfj"},{"column":"supplier","name":"Rexel Darwin","kind":"organisation","entity_id":"organisation:9ifpiov3oonxkx79jwnt"},{"column":"supplier","name":"Solar Juice","kind":"organisation","entity_id":"organisation:ahd34eiadror73ie87s9"}],"ambiguous":[],"kept":true,"reason":"no supplier exists yet: an import creates the 0 named in supplier once each; 4 name an existing entity (organisation Fronius Australia, organisation NT Cable Co, organisation Rexel Darwin, organisation Solar Juice), which an import links to instead of making new ones"}],"skipped":0,"ontology":{"vault":"vault:2oxb9ism79xia4hivfdo","strict":false,"kinds":[{"kind":"person","built_in":true,"status":"observed","description":null,"merge_into":null,"synonyms":[],"origin":null,"reason":null,"entities":0,"samples":[],"properties":[],"metrics":[]},{"kind":"organisation","built_in":true,"status":"observed","description":null,"merge_into":null,"synonyms":[],"origin":null,"reason":null,"entities":4,"samples":["Fronius Australia","NT Cable Co","Rexel Darwin"],"properties":[],"metrics":[]},{"kind":"location","built_in":true,"status":"observed","description":null,"merge_into":null,"synonyms":[],"origin":null,"reason":null,"entities":0,"samples":[],"properties":[],"metrics":[]},{"kind":"repository","built_in":true,"status":"observed","description":null,"merge_into":null,"synonyms":[],"origin":null,"reason":null,"entities":0,"samples":[],"properties":[],"metrics":[]},{"kind":"file","built_in":true,"status":"observed","description":null,"merge_into":null,"synonyms":[],"origin":null,"reason":null,"entities":0,"samples":[],"properties":[],"metrics":[]},{"kind":"symbol","built_in":true,"status":"observed","description":null,"merge_into":null,"synonyms":[],"origin":null,"reason":null,"entities":0,"samples":[],"properties":[],"metrics":[]},{"kind":"product","built_in":false,"status":"proposed","description":"A product stocked and sold by the business.","merge_into":null,"synonyms":[],"origin":"suggested","reason":"one kind for the stock.csv records","entities":0,"samples":[],"properties":[{"name":"last_received","datatype":"date","unit":null,"enum_values":null,"description":"Date the product was last received.","synonyms":[],"status":"proposed","merge_into":null,"origin":"suggested","reason":"from last received","values":0,"samples":[],"source_map":[{"source":"document","record_type":"document:tpfxkz7d23f1swwuzfpi","path":"last received"}]},{"name":"qty_on_hand","datatype":"integer","unit":null,"enum_values":null,"description":"Quantity currently on hand.","synonyms":[],"status":"proposed","merge_into":null,"origin":"suggested","reason":"from qty on hand","values":0,"samples":[],"source_map":[{"source":"document","record_type":"document:tpfxkz7d23f1swwuzfpi","path":"qty on hand"}]},{"name":"reorder_at","datatype":"integer","unit":null,"enum_values":null,"description":"Quantity threshold for reordering.","synonyms":[],"status":"proposed","merge_into":null,"origin":"suggested","reason":"from reorder at","values":0,"samples":[],"source_map":[{"source":"document","record_type":"document:tpfxkz7d23f1swwuzfpi","path":"reorder at"}]},{"name":"sell_price","datatype":"money","unit":"AUD","enum_values":null,"description":"Selling price per unit.","synonyms":[],"status":"proposed","merge_into":null,"origin":"suggested","reason":"from sell price AUD","values":0,"samples":[],"source_map":[{"source":"document","record_type":"document:tpfxkz7d23f1swwuzfpi","path":"sell price AUD"}]},{"name":"status","datatype":"enum","unit":null,"enum_values":["Back-ordered","Discontinued","In stock"],"description":"Current stock or availability status.","synonyms":[],"status":"proposed","merge_into":null,"origin":"suggested","reason":"from status","values":0,"samples":[],"source_map":[{"source":"document","record_type":"document:tpfxkz7d23f1swwuzfpi","path":"status"}]},{"name":"unit_cost","datatype":"money","unit":"AUD","enum_values":null,"description":"Cost per unit.","synonyms":[],"status":"proposed","merge_into":null,"origin":"suggested","reason":"from unit cost AUD","values":0,"samples":[],"source_map":[{"source":"document","record_type":"document:tpfxkz7d23f1swwuzfpi","path":"unit cost AUD"}]}],"metrics":[{"name":"average_sell_price","description":"Average selling price per unit.","synonyms":[],"expr":{"agg":"avg","property":"sell_price"},"expr_words":"Average sell price","unit":"AUD","status":"proposed","merge_into":null,"origin":"suggested","reason":"computed from the stock.csv records\' properties"},{"name":"inventory_cost_value","description":"Estimated value of on-hand inventory at unit cost.","synonyms":[],"expr":{"agg":"sum","row":{"op":"mul","left":"qty_on_hand","right":"unit_cost"}},"expr_words":"Sum of qty on hand × unit cost","unit":"AUD","status":"proposed","merge_into":null,"origin":"suggested","reason":"computed from the stock.csv records\' properties"},{"name":"total_units_on_hand","description":"Total quantity of this product currently on hand.","synonyms":[],"expr":{"agg":"sum","property":"qty_on_hand"},"expr_words":"Sum of qty on hand","unit":null,"status":"proposed","merge_into":null,"origin":"suggested","reason":"computed from the stock.csv records\' properties"}]},{"kind":"supplier","built_in":false,"status":"proposed","description":"what the supplier column names","merge_into":null,"synonyms":[],"origin":"suggested","reason":"the supplier column of the stock.csv records names one","entities":0,"samples":[],"properties":[],"metrics":[]}],"links":[{"from_kind":"product","label":"supplied_by","to_kind":"supplier","status":"proposed","description":"Supplier that provides this product.","origin":"suggested","reason":"no supplier exists yet: an import creates the 0 named in supplier once each; 4 name an existing entity (organisation Fronius Australia, organisation NT Cable Co, organisation Rexel Darwin, organisation Solar Juice), which an import links to instead of making new ones","count":0,"samples":[],"source_map":[{"source":"document","record_type":"document:tpfxkz7d23f1swwuzfpi","path":"supplier"}]}]}}'}]
+
+RESULT
+[{'type': 'text', 'text': '{"built_in":["person","organisation","location","repository","file","symbol"],"custom":[]}'}]
+
+TOOL mcp__eunomia-local__memory_write_batch
+{
+  "vault_id": "Top End Solar & Electrical",
+  "items": [
+    {
+      "subject_name": "Maya Chen",
+      "subject_kind": "customer",
+      "type": "world",
+      "text": "Customer in a Nightcliff home. Has job TES-101."
+    },
+    {
+      "subject_name": "Daniel Wilson",
+      "subject_kind": "customer",
+      "type": "world",
+      "text": "Customer in a Palmerston home. Has job TES-102."
+    },
+    {
+      "subject_name": "Wattle Creek School",
+      "subject_kind": "customer",
+      "type": "world",
+      "text": "Customer in Berrimah. Has job TES-103."
+    },
+    {
+      "subject_name": "Red Plains Cattle Station",
+      "subject_kind": "customer",
+      "type": "world",
+      "text": "Customer in Adelaide River. Has job TES-104."
+    },
+    {
+      "subject_name": "Aisha Brown",
+      "subject_kind": "customer",
+      "type": "world",
+      "text": "Customer in a Rapid Creek home. Has job TES-105."
+    },
+    {
+      "subject_name": "Casuarina Community Hall",
+      "subject_kind": "customer",
+      "type": "world",
+      "text": "Customer. Has job TES-106."
+    },
+    {
+      "subject_name": "TES-101",
+      "subject_kind": "job",
+      "type": "world",
+      "text": "Open job for Maya Chen, Nightcliff home. Install 12 Trina 440W Panels, 1 Fronius Primo 5kW Inverter and 1 Fronius Smart Meter. Crew A, due 12 November 2026."
+    },
+    {
+      "subject_name": "TES-102",
+      "subject_kind": "job",
+      "type": "world",
+      "text": "Open job for Daniel Wilson, Palmerston home. Needs 1 Clipsal Switchboard, 6 Hager RCBO and 4 Weatherproof GPO. Crew B, due 12 November 2026."
+    },
+    {
+      "subject_name": "TES-103",
+      "subject_kind": "job",
+      "type": "world",
+      "text": "Open job for Wattle Creek School, Berrimah. Needs 1 Fronius Symo 10kW Inverter, 24 Jinko 475W Panels and 2 Solar Cable 6mm 100m drums. Crew A, due 13 November 2026."
+    },
+    {
+      "subject_name": "TES-104",
+      "subject_kind": "job",
+      "type": "world",
+      "text": "Open job for Red Plains Cattle Station, Adelaide River. Needs 1 Fronius Backup Switch, 20 LONGi 500W Panels and 4 Earth Rods. Crew C, due 14 November 2026."
+    },
+    {
+      "subject_name": "TES-105",
+      "subject_kind": "job",
+      "type": "world",
+      "text": "Open job for Aisha Brown, Rapid Creek home. Needs 2 LED Batten 1200mm and 1 TPS Cable 2.5mm 100m drum. Crew B, due 13 November 2026."
+    },
+    {
+      "subject_name": "TES-106",
+      "subject_kind": "job",
+      "type": "world",
+      "text": "Open job for Casuarina Community Hall. Needs 6 DC Isolators, 4 Solar Rail 4.2m lengths and 2 Panel Earthing Kits. Crew C, due 14 November 2026."
+    },
+    {
+      "subject_name": "Crew A",
+      "subject_kind": "crew",
+      "type": "world",
+      "text": "Works jobs TES-101 (due 12 Nov) and TES-103 (due 13 Nov). Allocated Ute 3."
+    },
+    {
+      "subject_name": "Crew B",
+      "subject_kind": "crew",
+      "type": "world",
+      "text": "Works jobs TES-102 (due 12 Nov) and TES-105 (due 13 Nov)."
+    },
+    {
+      "subject_name": "Crew C",
+      "subject_kind": "crew",
+      "type": "world",
+      "text": "Works jobs TES-104 and TES-106, both due 14 November 2026."
+    },
+    {
+      "subject_name": "Ute 3",
+      "subject_kind": "vehicle",
+      "type": "world",
+      "text": "Crew ute allocated to Crew A. Carrying delivery IN-77."
+    },
+    {
+      "subject_name": "IN-77",
+      "subject_kind": "delivery",
+      "type": "world",
+      "text": "Inbound delivery from Rexel Darwin and Fronius Australia, carried by Ute 3, expected 11 November 2026. Holds 1 Fronius Primo 5kW Inverter for TES-101, 1 Clipsal Switchboard for TES-102, 1 Fronius Symo 10kW Inverter for TES-103 and 1 Fronius Backup Switch for TES-104. A one-day delay risks those four jobs."
+    },
+    {
+      "subject_name": "Call-out fee increase",
+      "subject_kind": "decision",
+      "type": "world",
+      "text": "Decision: call-out fee goes to $120 from 1 December 2026. Approved by owner Priya Nair.",
+      "occurred_at": "2026-11-09"
+    },
+    {
+      "subject_name": "Priya Nair",
+      "subject_kind": "person",
+      "type": "world",
+      "text": "Owner of Top End Solar & Electrical. Approved the call-out fee rise to $120 from 1 December 2026."
+    },
+    {
+      "subject_name": "Fronius Australia",
+      "subject_kind": "organisation",
+      "type": "world",
+      "text": "Supplies inverters and monitoring equipment. Organisation we work with."
+    },
+    {
+      "subject_name": "Fronius Australia",
+      "subject_kind": "organisation",
+      "type": "observation",
+      "text": "UNCONFIRMED RUMOUR only: Fronius Australia may raise prices in December. Not a confirmed increase. Do not use in costings."
+    },
+    {
+      "subject_name": "Rexel Darwin",
+      "subject_kind": "organisation",
+      "type": "world",
+      "text": "Our electrical wholesaler. Organisation we work with."
+    },
+    {
+      "subject_name": "Label Printer 2",
+      "subject_kind": "equipment",
+      "type": "world",
+      "text": "Sits in the office. No recorded dependencies."
+    }
+  ]
+}
+
+RESULT
+[{'type': 'text', 'text': '{"written":23,"failed":0,"results":[{"index":0,"ok":true,"entity_id":"entity:wqywsuvd4gezg6mwq76a","memory_id":"memory:cvznekz921n1sik9kyqo","vault_name":"Top End Solar & Electrical"},{"index":1,"ok":true,"entity_id":"entity:o5m54v946e4xl5wvv7tq","memory_id":"memory:ujgqij7p4t1ir2jnjccu","vault_name":"Top End Solar & Electrical"},{"index":2,"ok":true,"entity_id":"entity:s0deleqahzscotg1t2fj","memory_id":"memory:qwzhvrmooxv7dzocds61","vault_name":"Top End Solar & Electrical"},{"index":3,"ok":true,"entity_id":"entity:48t8ep6t7uzty6kvwawc","memory_id":"memory:eggl2sjde8n89jyjrja8","vault_name":"Top End Solar & Electrical"},{"index":4,"ok":true,"entity_id":"entity:53wbmwtz0965e5dawpl2","memory_id":"memory:hkybkvr3tj3orajivvbk","vault_name":"Top End Solar & Electrical"},{"index":5,"ok":true,"entity_id":"entity:u4vazkyb1c3sjoy06ehv","memory_id":"memory:vzqrvw4qhq6yj7d0adtl","vault_name":"Top End Solar & Electrical"},{"index":6,"ok":true,"entity_id":"entity:x6f3wdxm6g2euly5aarg","memory_id":"memory:197nzo6bnjxtqz6ijyqg","vault_name":"Top End Solar & Electrical"},{"index":7,"ok":true,"entity_id":"entity:i365f1twourkj0qnrc9a","memory_id":"memory:qe582o4fnpo1pq1llc7i","vault_name":"Top End Solar & Electrical"},{"index":8,"ok":true,"entity_id":"entity:beorhbu8vzx2c6a35nzb","memory_id":"memory:il7yhu2aio3hqpa3nz4n","vault_name":"Top End Solar & Electrical"},{"index":9,"ok":true,"entity_id":"entity:gos3hhmjpzgq81crg5xf","memory_id":"memory:pz291lume3zmk2gc7t0g","vault_name":"Top End Solar & Electrical"},{"index":10,"ok":true,"entity_id":"entity:wi9k4y3jg9gi2yleseo8","memory_id":"memory:48495nghi5v814bdcmm0","vault_name":"Top End Solar & Electrical"},{"index":11,"ok":true,"entity_id":"entity:kuda44ivjyfhc1y3b795","memory_id":"memory:d0tzz2pf2rywdx7bdilt","vault_name":"Top End Solar & Electrical"},{"index":12,"ok":true,"entity_id":"entity:0njcrujirmngnb9mfre9","memory_id":"memory:ya9jt0iyxv6lqunq1a3g","vault_name":"Top End Solar & Electrical"},{"index":13,"ok":true,"entity_id":"entity:t4uuxgb3p0xzcigwk097","memory_id":"memory:nagthqgesj8slu9cqg1c","vault_name":"Top End Solar & Electrical"},{"index":14,"ok":true,"entity_id":"entity:jgv2ubmsngc92p7uvm0g","memory_id":"memory:aucq1kdt08yuoac9v4sc","vault_name":"Top End Solar & Electrical"},{"index":15,"ok":true,"entity_id":"entity:f8ochxt8cma6ejtd6m93","memory_id":"memory:7dgjdzllk4csx8lo9j2k","vault_name":"Top End Solar & Electrical"},{"index":16,"ok":true,"entity_id":"entity:lqjtpdeb4y11awo3ums3","memory_id":"memory:0lkl6yvo0ystb5hann37","vault_name":"Top End Solar & Electrical"},{"index":17,"ok":true,"entity_id":"entity:8c9mesw61qmd4024m421","memory_id":"memory:z45ye69nrqkzz8rwpz81","vault_name":"Top End Solar & Electrical"},{"index":18,"ok":true,"entity_id":"person:fkl3k1r8ctmq7j2ldjin","memory_id":"memory:1yioaztdzb6adt2bvfih","vault_name":"Top End Solar & Electrical"},{"index":19,"ok":true,"entity_id":"organisation:1d72xkro2flp4vob5dpr","memory_id":"memory:sp1mwv7s0xrkrb6gckis","vault_name":"Top End Solar & Electrical"},{"index":20,"ok":true,"entity_id":"organisation:1d72xkro2flp4vob5dpr","memory_id":"memory:oa5cb5cb07988b2e2c43","vault_name":"Top End Solar & Electrical"},{"index":21,"ok":true,"entity_id":"organisation:9ifpiov3oonxkx79jwnt","memory_id":"memory:2rn6szdtcb3noaod1nlm","vault_name":"Top End Solar & Electrical"},{"index":22,"ok":true,"entity_id":"entity:ycqhh0ksc94z0pvcymab","memory_id":"memory:gpv0yyundqikasmy4wcq","vault_name":"Top End Solar & Electrical"}]}'}]
+
+Quick update: the space, notes and both files are in. Next I'm creating the stock items the jobs need, so I can link jobs to stock.
+
+TOOL mcp__eunomia-local__memory_write_batch
+{
+  "vault_id": "Top End Solar & Electrical",
+  "items": [
+    {
+      "subject_name": "Trina 440W Panel",
+      "subject_kind": "product",
+      "text": "Stock item from Solar Juice. Sell $220, cost $140, 45 on hand."
+    },
+    {
+      "subject_name": "Fronius Primo 5kW Inverter",
+      "subject_kind": "product",
+      "text": "Stock item from Fronius Australia. Sell $4,890, cost $3,100, only 3 on hand (reorder at 10)."
+    },
+    {
+      "subject_name": "Fronius Smart Meter",
+      "subject_kind": "product",
+      "text": "Stock item from Fronius Australia. Sell $325, cost $210, 12 on hand."
+    },
+    {
+      "subject_name": "Clipsal Switchboard",
+      "subject_kind": "product",
+      "text": "Stock item from Rexel Darwin. Sell $380, cost $245, 8 on hand (reorder at 10)."
+    },
+    {
+      "subject_name": "Hager RCBO",
+      "subject_kind": "product",
+      "text": "Stock item from Rexel Darwin. Sell $48, cost $28, 60 on hand."
+    },
+    {
+      "subject_name": "Weatherproof GPO",
+      "subject_kind": "product",
+      "text": "Stock item from Rexel Darwin. Sell $42, cost $24, 42 on hand."
+    },
+    {
+      "subject_name": "Fronius Symo 10kW Inverter",
+      "subject_kind": "product",
+      "text": "Stock item from Fronius Australia. Sell $6,350, cost $4,200, only 2 on hand (reorder at 10)."
+    },
+    {
+      "subject_name": "Jinko 475W Panel",
+      "subject_kind": "product",
+      "text": "Stock item from Solar Juice. Sell $245, cost $155, 40 on hand."
+    },
+    {
+      "subject_name": "Solar Cable 6mm 100m",
+      "subject_kind": "product",
+      "text": "Stock item from NT Cable Co. Sell $325, cost $210, 18 on hand. Status back-ordered."
+    },
+    {
+      "subject_name": "Fronius Backup Switch",
+      "subject_kind": "product",
+      "text": "Stock item from Fronius Australia. Sell $490, unit cost missing in the stock list, 4 on hand. Status back-ordered."
+    },
+    {
+      "subject_name": "LONGi 500W Panel",
+      "subject_kind": "product",
+      "text": "Stock item from Solar Juice. Sell $275, cost $175, 32 on hand."
+    },
+    {
+      "subject_name": "Earth Rod",
+      "subject_kind": "product",
+      "text": "Stock item from Rexel Darwin. Sell $35, cost $18, 24 on hand."
+    },
+    {
+      "subject_name": "LED Batten 1200mm",
+      "subject_kind": "product",
+      "text": "Stock item from Rexel Darwin. Sell $65, cost $38, 35 on hand."
+    },
+    {
+      "subject_name": "TPS Cable 2.5mm 100m",
+      "subject_kind": "product",
+      "text": "Stock item from NT Cable Co. Sell $245, cost $160, 20 on hand."
+    },
+    {
+      "subject_name": "DC Isolator",
+      "subject_kind": "product",
+      "text": "Stock item from Solar Juice. Sell $62, cost $35, 25 on hand."
+    },
+    {
+      "subject_name": "Solar Rail 4.2m",
+      "subject_kind": "product",
+      "text": "Stock item from Solar Juice. Sell $58, cost $32, 80 on hand."
+    },
+    {
+      "subject_name": "Panel Earthing Kit",
+      "subject_kind": "product",
+      "text": "Stock item from Solar Juice. Sell $18.75, cost $9.50, 72 on hand."
+    }
+  ]
+}
+
+RESULT
+[{'type': 'text', 'text': '{"written":17,"failed":0,"results":[{"index":0,"ok":true,"entity_id":"entity:6eshpbo1hqvri8vysu5r","memory_id":"memory:r142qotnzxfhbvl51qpp","vault_name":"Top End Solar & Electrical"},{"index":1,"ok":true,"entity_id":"entity:huoak6t2794pqu3xnd3i","memory_id":"memory:jra2leltymyrr2xujhp7","vault_name":"Top End Solar & Electrical"},{"index":2,"ok":true,"entity_id":"entity:fd9j8zgtnm937rchfbm4","memory_id":"memory:medgl8fx8gek0wl39lvv","vault_name":"Top End Solar & Electrical"},{"index":3,"ok":true,"entity_id":"entity:wmuzqw2usx9t155sn8wl","memory_id":"memory:0bsxl1rm6fm7pyhi51n8","vault_name":"Top End Solar & Electrical"},{"index":4,"ok":true,"entity_id":"entity:rw4zdzefv7cpt7ilg8fo","memory_id":"memory:kk0f755h68q3of6g3kr4","vault_name":"Top End Solar & Electrical"},{"index":5,"ok":true,"entity_id":"entity:7nthfkrzy15bjnbri5cs","memory_id":"memory:afzqfamchc2y3u6p235d","vault_name":"Top End Solar & Electrical"},{"index":6,"ok":true,"entity_id":"entity:2b9dadf9ofxwyirqcwus","memory_id":"memory:c2z796vdu7led18mxths","vault_name":"Top End Solar & Electrical"},{"index":7,"ok":true,"entity_id":"entity:2lp01gejqmfo386i60s7","memory_id":"memory:phwo5239n1m06fo3z3b3","vault_name":"Top End Solar & Electrical"},{"index":8,"ok":true,"entity_id":"entity:252l23dihifd130h15c8","memory_id":"memory:9b3x149mk97zkldjgk01","vault_name":"Top End Solar & Electrical"},{"index":9,"ok":true,"entity_id":"entity:4pfte5w3klwhx91i3r0z","memory_id":"memory:gw97sv40p0e56v5d16tn","vault_name":"Top End Solar & Electrical"},{"index":10,"ok":true,"entity_id":"entity:j0m0z872d7ofnv3dg21j","memory_id":"memory:0mkvx9qp7b6m76irptmk","vault_name":"Top End Solar & Electrical"},{"index":11,"ok":true,"entity_id":"entity:abbr0eeoot6sx8unho3n","memory_id":"memory:01vx0qj0b12xetlpk93l","vault_name":"Top End Solar & Electrical"},{"index":12,"ok":true,"entity_id":"entity:sd3ffew5r9q30665fjiz","memory_id":"memory:84n9kqa9vm4u0uckdadg","vault_name":"Top End Solar & Electrical"},{"index":13,"ok":true,"entity_id":"entity:uvhora90foc9i26z6sh5","memory_id":"memory:qarfn1e4uwpn36103aba","vault_name":"Top End Solar & Electrical"},{"index":14,"ok":true,"entity_id":"entity:cegxu8ncw0u9aclb6rai","memory_id":"memory:oya5td3zmi2ld23rgdtx","vault_name":"Top End Solar & Electrical"},{"index":15,"ok":true,"entity_id":"entity:hfhvy48ejbghtthzanuv","memory_id":"memory:4t6j9ibrdmym3cnm29w4","vault_name":"Top End Solar & Electrical"},{"index":16,"ok":true,"entity_id":"entity:f31ji1ku5djulg96i5l9","memory_id":"memory:7gm6098z4bh98zii3d8c","vault_name":"Top End Solar & Electrical"}]}'}]
+
+Now the links. I'm sending them all together.
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:wqywsuvd4gezg6mwq76a",
+  "label": "has_job",
+  "to_id": "entity:x6f3wdxm6g2euly5aarg"
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:31lg39bkwfdm4hpi7mt8","in":"entity:wqywsuvd4gezg6mwq76a","out":"entity:x6f3wdxm6g2euly5aarg","label":"has_job","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:14.631108597Z","direction":null,"owner_email":null}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:o5m54v946e4xl5wvv7tq",
+  "label": "has_job",
+  "to_id": "entity:i365f1twourkj0qnrc9a"
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:5ze5ohei7ogio7gkxnmz","in":"entity:o5m54v946e4xl5wvv7tq","out":"entity:i365f1twourkj0qnrc9a","label":"has_job","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:15.330233847Z","direction":null,"owner_email":null}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:s0deleqahzscotg1t2fj",
+  "label": "has_job",
+  "to_id": "entity:beorhbu8vzx2c6a35nzb"
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:l65cd8vfu6rlx9lf9ttd","in":"entity:s0deleqahzscotg1t2fj","out":"entity:beorhbu8vzx2c6a35nzb","label":"has_job","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:16.052747041Z","direction":null,"owner_email":null}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:48t8ep6t7uzty6kvwawc",
+  "label": "has_job",
+  "to_id": "entity:gos3hhmjpzgq81crg5xf"
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:6ap97mslfv0ksyo4ccky","in":"entity:48t8ep6t7uzty6kvwawc","out":"entity:gos3hhmjpzgq81crg5xf","label":"has_job","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:16.746221042Z","direction":null,"owner_email":null}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:53wbmwtz0965e5dawpl2",
+  "label": "has_job",
+  "to_id": "entity:wi9k4y3jg9gi2yleseo8"
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:yr1kb8rwaw2jstzlr0rl","in":"entity:53wbmwtz0965e5dawpl2","out":"entity:wi9k4y3jg9gi2yleseo8","label":"has_job","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:17.386495459Z","direction":null,"owner_email":null}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:u4vazkyb1c3sjoy06ehv",
+  "label": "has_job",
+  "to_id": "entity:kuda44ivjyfhc1y3b795"
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:scy2s9bggtn9sxa3yf5h","in":"entity:u4vazkyb1c3sjoy06ehv","out":"entity:kuda44ivjyfhc1y3b795","label":"has_job","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:18.053324334Z","direction":null,"owner_email":null}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:x6f3wdxm6g2euly5aarg",
+  "label": "needs",
+  "to_id": "entity:6eshpbo1hqvri8vysu5r",
+  "reason": "TES-101 needs 12 Trina 440W Panels."
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:76g2qj0tyba48bd20zy1","in":"entity:x6f3wdxm6g2euly5aarg","out":"entity:6eshpbo1hqvri8vysu5r","label":"needs","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:18.952740751Z","direction":null,"owner_email":null,"reason_memory_id":"memory:r65fcac040b307953b4e"}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:x6f3wdxm6g2euly5aarg",
+  "label": "needs",
+  "to_id": "entity:huoak6t2794pqu3xnd3i",
+  "reason": "TES-101 needs 1 Fronius Primo 5kW Inverter."
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:7ci10eq6iq0s3zz9cir6","in":"entity:x6f3wdxm6g2euly5aarg","out":"entity:huoak6t2794pqu3xnd3i","label":"needs","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:19.872894668Z","direction":null,"owner_email":null,"reason_memory_id":"memory:r53a2d575c7519e41d19"}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:x6f3wdxm6g2euly5aarg",
+  "label": "needs",
+  "to_id": "entity:fd9j8zgtnm937rchfbm4",
+  "reason": "TES-101 needs 1 Fronius Smart Meter."
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:p0llpm75aqhl2g5ce4l4","in":"entity:x6f3wdxm6g2euly5aarg","out":"entity:fd9j8zgtnm937rchfbm4","label":"needs","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:20.719913127Z","direction":null,"owner_email":null,"reason_memory_id":"memory:r7055b3691ce8563f9d3"}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:i365f1twourkj0qnrc9a",
+  "label": "needs",
+  "to_id": "entity:wmuzqw2usx9t155sn8wl",
+  "reason": "TES-102 needs 1 Clipsal Switchboard."
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:qz03dgbgk4mmkmdsukbx","in":"entity:i365f1twourkj0qnrc9a","out":"entity:wmuzqw2usx9t155sn8wl","label":"needs","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:21.622068294Z","direction":null,"owner_email":null,"reason_memory_id":"memory:rb6be4425600bd012699"}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:i365f1twourkj0qnrc9a",
+  "label": "needs",
+  "to_id": "entity:rw4zdzefv7cpt7ilg8fo",
+  "reason": "TES-102 needs 6 Hager RCBOs."
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:m90pldwgbeagk02qm7f5","in":"entity:i365f1twourkj0qnrc9a","out":"entity:rw4zdzefv7cpt7ilg8fo","label":"needs","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:22.523832336Z","direction":null,"owner_email":null,"reason_memory_id":"memory:r05ddff80303b9eb4aba"}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:i365f1twourkj0qnrc9a",
+  "label": "needs",
+  "to_id": "entity:7nthfkrzy15bjnbri5cs",
+  "reason": "TES-102 needs 4 Weatherproof GPOs."
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:w1877xk5vez8x4pd4zy7","in":"entity:i365f1twourkj0qnrc9a","out":"entity:7nthfkrzy15bjnbri5cs","label":"needs","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:23.546103878Z","direction":null,"owner_email":null,"reason_memory_id":"memory:r6ec962f9e87ff9e857f"}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:beorhbu8vzx2c6a35nzb",
+  "label": "needs",
+  "to_id": "entity:2b9dadf9ofxwyirqcwus",
+  "reason": "TES-103 needs 1 Fronius Symo 10kW Inverter."
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:i7pm3vixwj2ke3ggg8xi","in":"entity:beorhbu8vzx2c6a35nzb","out":"entity:2b9dadf9ofxwyirqcwus","label":"needs","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:24.290768045Z","direction":null,"owner_email":null,"reason_memory_id":"memory:rb2da59517e959d0e59b"}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:beorhbu8vzx2c6a35nzb",
+  "label": "needs",
+  "to_id": "entity:2lp01gejqmfo386i60s7",
+  "reason": "TES-103 needs 24 Jinko 475W Panels."
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:383pa7jsp6m0vav935ff","in":"entity:beorhbu8vzx2c6a35nzb","out":"entity:2lp01gejqmfo386i60s7","label":"needs","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:25.189347504Z","direction":null,"owner_email":null,"reason_memory_id":"memory:r40a4cc95998a1524829"}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:beorhbu8vzx2c6a35nzb",
+  "label": "needs",
+  "to_id": "entity:252l23dihifd130h15c8",
+  "reason": "TES-103 needs 2 Solar Cable 6mm 100m drums."
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:7i6r6kx8b1h15x94dtn7","in":"entity:beorhbu8vzx2c6a35nzb","out":"entity:252l23dihifd130h15c8","label":"needs","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:26.028256629Z","direction":null,"owner_email":null,"reason_memory_id":"memory:r1bfbfdc55e82ed45fdc"}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:gos3hhmjpzgq81crg5xf",
+  "label": "needs",
+  "to_id": "entity:4pfte5w3klwhx91i3r0z",
+  "reason": "TES-104 needs 1 Fronius Backup Switch."
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:8us0nvpqv2s9t4rds0mg","in":"entity:gos3hhmjpzgq81crg5xf","out":"entity:4pfte5w3klwhx91i3r0z","label":"needs","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:26.861202171Z","direction":null,"owner_email":null,"reason_memory_id":"memory:r33743da0b6ad77876aa"}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:gos3hhmjpzgq81crg5xf",
+  "label": "needs",
+  "to_id": "entity:j0m0z872d7ofnv3dg21j",
+  "reason": "TES-104 needs 20 LONGi 500W Panels."
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:23nmnmntwdize74iyq77","in":"entity:gos3hhmjpzgq81crg5xf","out":"entity:j0m0z872d7ofnv3dg21j","label":"needs","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:27.624727172Z","direction":null,"owner_email":null,"reason_memory_id":"memory:rfd5a82eb3214079559f"}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:gos3hhmjpzgq81crg5xf",
+  "label": "needs",
+  "to_id": "entity:abbr0eeoot6sx8unho3n",
+  "reason": "TES-104 needs 4 Earth Rods."
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:20pzjbnvc1300yonf4yq","in":"entity:gos3hhmjpzgq81crg5xf","out":"entity:abbr0eeoot6sx8unho3n","label":"needs","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:28.503551547Z","direction":null,"owner_email":null,"reason_memory_id":"memory:r00c4bbd7987b7e5c6b3"}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:wi9k4y3jg9gi2yleseo8",
+  "label": "needs",
+  "to_id": "entity:sd3ffew5r9q30665fjiz",
+  "reason": "TES-105 needs 2 LED Batten 1200mm fittings."
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:g0pt0j36xd20zisko9w6","in":"entity:wi9k4y3jg9gi2yleseo8","out":"entity:sd3ffew5r9q30665fjiz","label":"needs","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:29.306371548Z","direction":null,"owner_email":null,"reason_memory_id":"memory:r594c3bdc130a7b716e5"}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:wi9k4y3jg9gi2yleseo8",
+  "label": "needs",
+  "to_id": "entity:uvhora90foc9i26z6sh5",
+  "reason": "TES-105 needs 1 TPS Cable 2.5mm 100m drum."
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:4ol3jbjcnier4mlln7aa","in":"entity:wi9k4y3jg9gi2yleseo8","out":"entity:uvhora90foc9i26z6sh5","label":"needs","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:30.097291173Z","direction":null,"owner_email":null,"reason_memory_id":"memory:r10cfead66fa8ac19da6"}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:kuda44ivjyfhc1y3b795",
+  "label": "needs",
+  "to_id": "entity:cegxu8ncw0u9aclb6rai",
+  "reason": "TES-106 needs 6 DC Isolators."
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:7lieqbzx1zdxd8nrnmpk","in":"entity:kuda44ivjyfhc1y3b795","out":"entity:cegxu8ncw0u9aclb6rai","label":"needs","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:30.924516882Z","direction":null,"owner_email":null,"reason_memory_id":"memory:r72ff5291150f8992a03"}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:kuda44ivjyfhc1y3b795",
+  "label": "needs",
+  "to_id": "entity:hfhvy48ejbghtthzanuv",
+  "reason": "TES-106 needs 4 Solar Rail 4.2m lengths."
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:j3s5twmo7tqecymkvmaz","in":"entity:kuda44ivjyfhc1y3b795","out":"entity:hfhvy48ejbghtthzanuv","label":"needs","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:31.792062257Z","direction":null,"owner_email":null,"reason_memory_id":"memory:rcd0379216c424753902"}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:kuda44ivjyfhc1y3b795",
+  "label": "needs",
+  "to_id": "entity:f31ji1ku5djulg96i5l9",
+  "reason": "TES-106 needs 2 Panel Earthing Kits."
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:sceoyq7dyzo8wzvkqfgb","in":"entity:kuda44ivjyfhc1y3b795","out":"entity:f31ji1ku5djulg96i5l9","label":"needs","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:32.453888091Z","direction":null,"owner_email":null,"reason_memory_id":"memory:r90786c9effede707a71"}'}]
+
+Now the delivery, ute, crew and supplier links.
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:f8ochxt8cma6ejtd6m93",
+  "label": "carries",
+  "to_id": "entity:lqjtpdeb4y11awo3ums3",
+  "reason": "Ute 3 is carrying delivery IN-77, expected 11 November."
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:vt6pkgdji1entmarp4gh","in":"entity:f8ochxt8cma6ejtd6m93","out":"entity:lqjtpdeb4y11awo3ums3","label":"carries","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:35.617017301Z","direction":null,"owner_email":null,"reason_memory_id":"memory:r0fc2dfeddf42d1d1939"}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:lqjtpdeb4y11awo3ums3",
+  "label": "supplies_job",
+  "to_id": "entity:x6f3wdxm6g2euly5aarg",
+  "reason": "IN-77 holds the Fronius Primo 5kW Inverter for TES-101."
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:yy26v9e7txat8tqqt3dg","in":"entity:lqjtpdeb4y11awo3ums3","out":"entity:x6f3wdxm6g2euly5aarg","label":"supplies_job","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:36.368319468Z","direction":null,"owner_email":null,"reason_memory_id":"memory:r9dde04939dd98c94fc4"}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:lqjtpdeb4y11awo3ums3",
+  "label": "supplies_job",
+  "to_id": "entity:i365f1twourkj0qnrc9a",
+  "reason": "IN-77 holds the Clipsal Switchboard for TES-102."
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:63omogmo6b6naz0o3kup","in":"entity:lqjtpdeb4y11awo3ums3","out":"entity:i365f1twourkj0qnrc9a","label":"supplies_job","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:37.418729885Z","direction":null,"owner_email":null,"reason_memory_id":"memory:ra962957dbcadf56a584"}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:lqjtpdeb4y11awo3ums3",
+  "label": "supplies_job",
+  "to_id": "entity:beorhbu8vzx2c6a35nzb",
+  "reason": "IN-77 holds the Fronius Symo 10kW Inverter for TES-103."
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:b4q7rk7ighdw43qhnzbi","in":"entity:lqjtpdeb4y11awo3ums3","out":"entity:beorhbu8vzx2c6a35nzb","label":"supplies_job","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:38.118497010Z","direction":null,"owner_email":null,"reason_memory_id":"memory:rfe583bf410cce39bbec"}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:lqjtpdeb4y11awo3ums3",
+  "label": "supplies_job",
+  "to_id": "entity:gos3hhmjpzgq81crg5xf",
+  "reason": "IN-77 holds the Fronius Backup Switch for TES-104."
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:9pnp5qiy0wgs2t2agd4z","in":"entity:lqjtpdeb4y11awo3ums3","out":"entity:gos3hhmjpzgq81crg5xf","label":"supplies_job","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:38.818396385Z","direction":null,"owner_email":null,"reason_memory_id":"memory:raf45a5189e43fce235d"}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:lqjtpdeb4y11awo3ums3",
+  "label": "contains",
+  "to_id": "entity:huoak6t2794pqu3xnd3i",
+  "reason": "IN-77 holds 1 Fronius Primo 5kW Inverter."
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:uhoi20mn3v0xujngyxvm","in":"entity:lqjtpdeb4y11awo3ums3","out":"entity:huoak6t2794pqu3xnd3i","label":"contains","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:39.922712178Z","direction":null,"owner_email":null,"reason_memory_id":"memory:r85fe2427cf507fad6e3"}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:lqjtpdeb4y11awo3ums3",
+  "label": "contains",
+  "to_id": "entity:wmuzqw2usx9t155sn8wl",
+  "reason": "IN-77 holds 1 Clipsal Switchboard."
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:ej3kygdx4kht01wxn1xg","in":"entity:lqjtpdeb4y11awo3ums3","out":"entity:wmuzqw2usx9t155sn8wl","label":"contains","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:40.732652595Z","direction":null,"owner_email":null,"reason_memory_id":"memory:r1959743bbfd5f1fffe0"}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:lqjtpdeb4y11awo3ums3",
+  "label": "contains",
+  "to_id": "entity:2b9dadf9ofxwyirqcwus",
+  "reason": "IN-77 holds 1 Fronius Symo 10kW Inverter."
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:368t15e8jv3zsnypfc82","in":"entity:lqjtpdeb4y11awo3ums3","out":"entity:2b9dadf9ofxwyirqcwus","label":"contains","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:41.430605762Z","direction":null,"owner_email":null,"reason_memory_id":"memory:r0ffe78d64d077e24b56"}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:lqjtpdeb4y11awo3ums3",
+  "label": "contains",
+  "to_id": "entity:4pfte5w3klwhx91i3r0z",
+  "reason": "IN-77 holds 1 Fronius Backup Switch."
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:d9r463erw7q5v37nciz0","in":"entity:lqjtpdeb4y11awo3ums3","out":"entity:4pfte5w3klwhx91i3r0z","label":"contains","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:42.414385679Z","direction":null,"owner_email":null,"reason_memory_id":"memory:r83f4bbfb054b23124b1"}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:lqjtpdeb4y11awo3ums3",
+  "label": "supplied_by",
+  "to_id": "organisation:9ifpiov3oonxkx79jwnt"
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:m6zbffv3kgj95boww8sj","in":"entity:lqjtpdeb4y11awo3ums3","out":"organisation:9ifpiov3oonxkx79jwnt","label":"supplied_by","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:43.293250388Z","direction":null,"owner_email":null}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:lqjtpdeb4y11awo3ums3",
+  "label": "supplied_by",
+  "to_id": "organisation:1d72xkro2flp4vob5dpr"
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:u5yzh89uxcw4e0jyubxv","in":"entity:lqjtpdeb4y11awo3ums3","out":"organisation:1d72xkro2flp4vob5dpr","label":"supplied_by","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:44.030928805Z","direction":null,"owner_email":null}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:f8ochxt8cma6ejtd6m93",
+  "label": "allocated_to",
+  "to_id": "entity:0njcrujirmngnb9mfre9"
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:dwe8k938qaw2cqb1k20y","in":"entity:f8ochxt8cma6ejtd6m93","out":"entity:0njcrujirmngnb9mfre9","label":"allocated_to","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:44.765233180Z","direction":null,"owner_email":null}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:0njcrujirmngnb9mfre9",
+  "label": "assigned_to",
+  "to_id": "entity:x6f3wdxm6g2euly5aarg"
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:xqlqgmtbbqkx0qrinzk7","in":"entity:0njcrujirmngnb9mfre9","out":"entity:x6f3wdxm6g2euly5aarg","label":"assigned_to","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:45.553772722Z","direction":null,"owner_email":null}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:0njcrujirmngnb9mfre9",
+  "label": "assigned_to",
+  "to_id": "entity:beorhbu8vzx2c6a35nzb"
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:4r5a8ucf40wg6tqbi8r4","in":"entity:0njcrujirmngnb9mfre9","out":"entity:beorhbu8vzx2c6a35nzb","label":"assigned_to","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:46.302412458Z","direction":null,"owner_email":null}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:t4uuxgb3p0xzcigwk097",
+  "label": "assigned_to",
+  "to_id": "entity:i365f1twourkj0qnrc9a"
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:ihgns3w3lwe4yorvlviq","in":"entity:t4uuxgb3p0xzcigwk097","out":"entity:i365f1twourkj0qnrc9a","label":"assigned_to","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:47.260346208Z","direction":null,"owner_email":null}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:t4uuxgb3p0xzcigwk097",
+  "label": "assigned_to",
+  "to_id": "entity:wi9k4y3jg9gi2yleseo8"
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:qyokzh694g42qb58388t","in":"entity:t4uuxgb3p0xzcigwk097","out":"entity:wi9k4y3jg9gi2yleseo8","label":"assigned_to","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:48.179059251Z","direction":null,"owner_email":null}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:jgv2ubmsngc92p7uvm0g",
+  "label": "assigned_to",
+  "to_id": "entity:gos3hhmjpzgq81crg5xf"
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:m4uacirzomntgcqkrwyz","in":"entity:jgv2ubmsngc92p7uvm0g","out":"entity:gos3hhmjpzgq81crg5xf","label":"assigned_to","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:48.867290293Z","direction":null,"owner_email":null}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:jgv2ubmsngc92p7uvm0g",
+  "label": "assigned_to",
+  "to_id": "entity:kuda44ivjyfhc1y3b795"
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:cdhtzrvx2xfjlugaa7ld","in":"entity:jgv2ubmsngc92p7uvm0g","out":"entity:kuda44ivjyfhc1y3b795","label":"assigned_to","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:49.635352293Z","direction":null,"owner_email":null}'}]
+
+TOOL mcp__eunomia-local__entity_relate
+{
+  "from_id": "entity:8c9mesw61qmd4024m421",
+  "label": "approved_by",
+  "to_id": "person:fkl3k1r8ctmq7j2ldjin"
+}
+
+RESULT
+[{'type': 'text', 'text': '{"id":"relates_to:q8eyy0nrponi2ivajsdi","in":"entity:8c9mesw61qmd4024m421","out":"person:fkl3k1r8ctmq7j2ldjin","label":"approved_by","source":null,"owner":"user:dlyxu5m652qrr4gjdd1e","created_at":"2026-11-08T17:10:50.113095001Z","direction":null,"owner_email":null}'}]
+
+Now the ontology proposal.
+
+TOOL mcp__eunomia-local__ontology_propose
+{
+  "vault_id": "Top End Solar & Electrical",
+  "kinds": [
+    {
+      "kind": "supplier",
+      "merge_into": "organisation",
+      "reason": "Suppliers are already organisations (Rexel Darwin, Fronius Australia, Solar Juice, NT Cable Co). One kind avoids duplicates."
+    },
+    {
+      "kind": "customer",
+      "description": "A person or organisation we do installation work for.",
+      "synonyms": [
+        "client"
+      ]
+    },
+    {
+      "kind": "job",
+      "description": "A customer job with a TES number, a crew and a due date.",
+      "synonyms": [
+        "work order"
+      ]
+    },
+    {
+      "kind": "crew",
+      "description": "A work crew (A, B or C) that is assigned jobs and a ute."
+    },
+    {
+      "kind": "vehicle",
+      "description": "A crew ute that carries deliveries.",
+      "synonyms": [
+        "ute"
+      ]
+    },
+    {
+      "kind": "delivery",
+      "description": "An inbound delivery of stock from suppliers, carried by a vehicle and meant for named jobs.",
+      "synonyms": [
+        "inbound delivery"
+      ]
+    },
+    {
+      "kind": "decision",
+      "description": "A business decision with an effective date and who approved it."
+    },
+    {
+      "kind": "equipment",
+      "description": "Office or workshop equipment owned by the business."
+    },
+    {
+      "kind": "product",
+      "description": "A stock item the business buys, holds and sells.",
+      "synonyms": [
+        "stock item",
+        "item"
+      ]
+    }
+  ],
+  "properties": [
+    {
+      "kind": "job",
+      "name": "job_number",
+      "datatype": "text",
+      "description": "The TES job number, e.g. TES-101."
+    },
+    {
+      "kind": "job",
+      "name": "due_date",
+      "datatype": "date",
+      "description": "Date the job is due."
+    },
+    {
+      "kind": "job",
+      "name": "suburb",
+      "datatype": "text",
+      "description": "Where the job site is."
+    },
+    {
+      "kind": "delivery",
+      "name": "expected_date",
+      "datatype": "date",
+      "description": "Date the delivery is expected."
+    },
+    {
+      "kind": "decision",
+      "name": "effective_date",
+      "datatype": "date",
+      "description": "Date the decision takes effect."
+    },
+    {
+      "kind": "decision",
+      "name": "amount",
+      "datatype": "money",
+      "unit": "AUD",
+      "description": "Dollar amount the decision sets, e.g. the call-out fee."
+    },
+    {
+      "kind": "product",
+      "name": "unit_cost",
+      "datatype": "money",
+      "unit": "AUD",
+      "description": "Cost per unit. Blank for Fronius Backup Switch and Cable Tie Pack in the stock list: owner to confirm.",
+      "synonyms": [
+        "cost",
+        "unit cost AUD"
+      ]
+    },
+    {
+      "kind": "product",
+      "name": "sell_price",
+      "datatype": "money",
+      "unit": "AUD",
+      "description": "Selling price per unit.",
+      "synonyms": [
+        "price",
+        "sell price AUD"
+      ]
+    },
+    {
+      "kind": "product",
+      "name": "qty_on_hand",
+      "datatype": "integer",
+      "description": "Units on hand.",
+      "synonyms": [
+        "stock",
+        "qty on hand"
+      ]
+    }
+  ],
+  "links": [
+    {
+      "from_kind": "customer",
+      "label": "has_job",
+      "to_kind": "job",
+      "description": "The customer a job is for."
+    },
+    {
+      "from_kind": "job",
+      "label": "needs",
+      "to_kind": "product",
+      "description": "Stock a job needs. Quantities are in the link reason."
+    },
+    {
+      "from_kind": "delivery",
+      "label": "supplies_job",
+      "to_kind": "job",
+      "description": "A delivery holds stock for this job; a delay risks it."
+    },
+    {
+      "from_kind": "delivery",
+      "label": "contains",
+      "to_kind": "product",
+      "description": "Stock inside a delivery."
+    },
+    {
+      "from_kind": "vehicle",
+      "label": "carries",
+      "to_kind": "delivery",
+      "description": "The ute carrying a delivery."
+    },
+    {
+      "from_kind": "vehicle",
+      "label": "allocated_to",
+      "to_kind": "crew",
+      "description": "The crew a ute is allocated to."
+    },
+    {
+      "from_kind": "crew",
+      "label": "assigned_to",
+      "to_kind": "job",
+      "description": "The crew doing a job."
+    },
+    {
+      "from_kind": "delivery",
+      "label": "supplied_by",
+      "to_kind": "organisation",
+      "description": "The supplier sending a delivery."
+    },
+    {
+      "from_kind": "product",
+      "label": "supplied_by",
+      "to_kind": "organisation",
+      "description": "The supplier of a stock item."
+    },
+    {
+      "from_kind": "decision",
+      "label": "approved_by",
+      "to_kind": "person",
+      "description": "Who approved a decision."
+    }
+  ],
+  "metrics": [
+    {
+      "kind": "product",
+      "name": "average_sell_price",
+      "description": "Average selling price per stock item.",
+      "expr": {
+        "agg": "avg",
+        "property": "sell_price"
+      },
+      "synonyms": [
+        "average sell price",
+        "avg price"
+      ]
+    },
+    {
+      "kind": "product",
+      "name": "inventory_cost_value",
+      "description": "Total stock value at cost: qty on hand times unit cost, summed.",
+      "expr": {
+        "agg": "sum",
+        "row": {
+          "op": "mul",
+          "left": "qty_on_hand",
+          "right": "unit_cost"
+        }
+      },
+      "unit": "AUD",
+      "synonyms": [
+        "total stock value at cost",
+        "stock value at cost"
+      ],
+      "reason": "Two items have no unit cost in the stock list (Fronius Backup Switch, Cable Tie Pack), so the figure leaves them out until costs are confirmed."
+    },
+    {
+      "kind": "product",
+      "name": "total_stock_value_at_sell",
+      "description": "Total stock value at sell price: qty on hand times sell price, summed.",
+      "expr": {
+        "agg": "sum",
+        "row": {
+          "op": "mul",
+          "left": "qty_on_hand",
+          "right": "sell_price"
+        }
+      },
+      "unit": "AUD",
+      "synonyms": [
+        "stock value at retail"
+      ]
+    },
+    {
+      "kind": "product",
+      "name": "gross_margin",
+      "description": "Gross margin: (sell price minus unit cost) over sell price, across stock items.",
+      "expr": {
+        "agg": "ratio",
+        "numerator": {
+          "agg": "sum",
+          "row": {
+            "op": "sub",
+            "left": "sell_price",
+            "right": "unit_cost"
+          }
+        },
+        "denominator": {
+          "agg": "sum",
+          "property": "sell_price"
+        }
+      },
+      "unit": "percent",
+      "synonyms": [
+        "gross margin %",
+        "margin"
+      ],
+      "reason": "Items with no unit cost may skew this until costs are confirmed."
+    },
+    {
+      "kind": "product",
+      "name": "average_unit_cost",
+      "description": "Average unit cost per stock item.",
+      "expr": {
+        "agg": "avg",
+        "property": "unit_cost"
+      },
+      "unit": "AUD"
+    },
+    {
+      "kind": "product",
+      "name": "back_ordered_items",
+      "description": "Number of stock items currently back-ordered.",
+      "expr": {
+        "agg": "count",
+        "filters": [
+          {
+            "property": "status",
+            "op": "eq",
+            "value": "Back-ordered"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "job",
+      "name": "open_jobs",
+      "description": "Number of jobs.",
+      "expr": {
+        "agg": "count"
+      },
+      "synonyms": [
+        "job count"
+      ]
+    }
+  ],
+  "reason": "Maps the Top End Solar & Electrical notes and stock list."
+}
+
+RESULT
+[{'type': 'text', 'text': '{"kinds":[{"kind":"supplier","status":"proposed","merge_into":"organisation"},{"kind":"customer","status":"proposed","merge_into":null},{"kind":"job","status":"proposed","merge_into":null},{"kind":"crew","status":"proposed","merge_into":null},{"kind":"vehicle","status":"proposed","merge_into":null},{"kind":"delivery","status":"proposed","merge_into":null},{"kind":"decision","status":"proposed","merge_into":null},{"kind":"equipment","status":"proposed","merge_into":null},{"kind":"product","status":"proposed","merge_into":null}],"links":[{"from_kind":"customer","label":"has_job","to_kind":"job","status":"proposed"},{"from_kind":"job","label":"needs","to_kind":"product","status":"proposed"},{"from_kind":"delivery","label":"supplies_job","to_kind":"job","status":"proposed"},{"from_kind":"delivery","label":"contains","to_kind":"product","status":"proposed"},{"from_kind":"vehicle","label":"carries","to_kind":"delivery","status":"proposed"},{"from_kind":"vehicle","label":"allocated_to","to_kind":"crew","status":"proposed"},{"from_kind":"crew","label":"assigned_to","to_kind":"job","status":"proposed"},{"from_kind":"delivery","label":"supplied_by","to_kind":"organisation","status":"proposed"},{"from_kind":"product","label":"supplied_by","to_kind":"organisation","status":"proposed"},{"from_kind":"decision","label":"approved_by","to_kind":"person","status":"proposed"}],"properties":[{"kind":"job","name":"job_number","datatype":"text","status":"proposed","merge_into":null},{"kind":"job","name":"due_date","datatype":"date","status":"proposed","merge_into":null},{"kind":"job","name":"suburb","datatype":"text","status":"proposed","merge_into":null},{"kind":"delivery","name":"expected_date","datatype":"date","status":"proposed","merge_into":null},{"kind":"decision","name":"effective_date","datatype":"date","status":"proposed","merge_into":null},{"kind":"decision","name":"amount","datatype":"money","status":"proposed","merge_into":null},{"kind":"product","name":"unit_cost","datatype":"money","status":"proposed","merge_into":null},{"kind":"product","name":"sell_price","datatype":"money","status":"proposed","merge_into":null},{"kind":"product","name":"qty_on_hand","datatype":"integer","status":"proposed","merge_into":null}],"metrics":[{"kind":"product","name":"average_sell_price","status":"proposed","merge_into":null},{"kind":"product","name":"inventory_cost_value","status":"proposed","merge_into":null},{"kind":"product","name":"total_stock_value_at_sell","status":"proposed","merge_into":null},{"kind":"product","name":"gross_margin","status":"proposed","merge_into":null},{"kind":"product","name":"average_unit_cost","status":"proposed","merge_into":null},{"kind":"product","name":"back_ordered_items","status":"proposed","merge_into":null},{"kind":"job","name":"open_jobs","status":"proposed","merge_into":null}]}'}]
+
+TOOL mcp__eunomia-local__memory_write
+{
+  "vault_id": "Top End Solar & Electrical",
+  "subject_name": "Top End Solar & Electrical",
+  "subject_kind": "organisation",
+  "type": "experience",
+  "text": "On 9 November 2026 the AI mapped the business: uploaded stock.csv and jobs-notes.md, wrote notes, linked customers, jobs, stock, IN-77 and Ute 3, and proposed the ontology. All of it waits for owner approval. The stock CSV import has not run yet, so product entities are placeholders by name."
+}
+
+RESULT
+[{'type': 'text', 'text': '{"entity":{"id":"organisation:eq6qvu2nh6948l6a6za9","kind":"organisation","name":"Top End Solar & Electrical","aliases":[],"summary":"","vault":"vault:2oxb9ism79xia4hivfdo"},"memory":{"id":"memory:1ny5dwmd2m9ex9re80f1","owner":"user:dlyxu5m652qrr4gjdd1e","vault":"vault:2oxb9ism79xia4hivfdo","subject":"organisation:eq6qvu2nh6948l6a6za9","text":"On 9 November 2026 the AI mapped the business: uploaded stock.csv and jobs-notes.md, wrote notes, linked customers, jobs, stock, IN-77 and Ute 3, and proposed the ontology. All of it waits for owner approval. The stock CSV import has not run yet, so product entities are placeholders by name.","source":null,"created_at":"2026-11-08T17:11:11.450343345Z","type":"experience","proof_count":1,"status":null,"source_memories":null,"updated_at":"2026-11-08T17:11:11.450371303Z","version":1,"owner_email":null},"possible_duplicates":[{"id":"organisation:ahd34eiadror73ie87s9","kind":"organisation","name":"Solar Juice","aliases":["solar juice"],"summary":"","vault":"vault:2oxb9ism79xia4hivfdo"}],"vault_name":"Top End Solar & Electrical"}'}]
+
+The space is built and everything is proposed, but nothing is approved. The owner has to approve it before the stock list imports or any number can run.
+
+**Space:** "Top End Solar & Electrical" (an org space).
+
+**Stored**
+- Both files, `stock.csv` and `jobs-notes.md`, are uploaded.
+- 23 notes are written. The kinds are customer, job, crew, vehicle, delivery, decision, equipment and product, plus the existing person and organisation kinds.
+- 17 product placeholders exist, named exactly as in the stock list, so jobs can link to them.
+- The call-out fee decision ($120 from 1 December, approved by Priya Nair) is saved as a fact.
+- The Fronius price rise is saved as an unconfirmed rumour, labelled "do not use in costings".
+
+**Links (50 in all)**
+- Each of the 6 customers is linked to their job.
+- Each job is linked to the stock it needs (17 links), with the quantity in the link reason.
+- Ute 3 carries IN-77 and is allocated to Crew A.
+- IN-77 supplies jobs TES-101 to TES-104, holds the four matching items, and comes from Rexel Darwin and Fronius Australia.
+- Crews are linked to their jobs.
+- The fee decision is linked to Priya Nair.
+- Label Printer 2 has no links, as the notes say.
+
+**Auto-map of the stock CSV:** It proposed a product kind, 6 typed properties and 3 metrics.
+- It also proposed a separate "supplier" kind. I proposed folding that into organisation, since the suppliers already exist as organisations.
+- The CSV rows are not imported yet. That needs owner approval first.
+
+**Ontology proposed**
+- **Kinds:** product, customer, job, crew, vehicle, delivery, decision and equipment, plus the supplier merge.
+- **Properties:**
+  - product: sell_price, unit_cost and qty_on_hand
+  - job: job_number, due_date and suburb
+  - delivery: expected_date
+  - decision: effective_date and amount
+- **Link types (10):** has_job, needs, supplies_job, contains, carries, allocated_to, assigned_to, supplied_by (two of them) and approved_by.
+- **Metrics (7):**
+  - average sell price
+  - total stock value at cost
+  - total stock value at sell price
+  - gross margin
+  - average unit cost
+  - back-ordered item count
+  - job count
+
+**Problems for the owner to know about**
+- Fronius Backup Switch and Cable Tie Pack have no unit cost. Stock value at cost and gross margin will leave them out or skew until someone fills the costs in.
+- The Fronius Primo and Symo inverters are at 3 and 2 units, with reorder at 10. Two other items are also under 10: the Fronius Datamanager (5) and the Clipsal Switchboard (8). Most of the stock list is ordinary, but a few jobs lean on thin stock.
+- A one-day delay on IN-77 hits TES-101 to TES-104.
+
+**Next step for the owner:** approve the proposals in the Eunomia app, then I can import the stock rows and run the metrics.
+
+FINAL
+The space is built and everything is proposed, but nothing is approved. The owner has to approve it before the stock list imports or any number can run.
+
+**Space:** "Top End Solar & Electrical" (an org space).
+
+**Stored**
+- Both files, `stock.csv` and `jobs-notes.md`, are uploaded.
+- 23 notes are written. The kinds are customer, job, crew, vehicle, delivery, decision, equipment and product, plus the existing person and organisation kinds.
+- 17 product placeholders exist, named exactly as in the stock list, so jobs can link to them.
+- The call-out fee decision ($120 from 1 December, approved by Priya Nair) is saved as a fact.
+- The Fronius price rise is saved as an unconfirmed rumour, labelled "do not use in costings".
+
+**Links (50 in all)**
+- Each of the 6 customers is linked to their job.
+- Each job is linked to the stock it needs (17 links), with the quantity in the link reason.
+- Ute 3 carries IN-77 and is allocated to Crew A.
+- IN-77 supplies jobs TES-101 to TES-104, holds the four matching items, and comes from Rexel Darwin and Fronius Australia.
+- Crews are linked to their jobs.
+- The fee decision is linked to Priya Nair.
+- Label Printer 2 has no links, as the notes say.
+
+**Auto-map of the stock CSV:** It proposed a product kind, 6 typed properties and 3 metrics.
+- It also proposed a separate "supplier" kind. I proposed folding that into organisation, since the suppliers already exist as organisations.
+- The CSV rows are not imported yet. That needs owner approval first.
+
+**Ontology proposed**
+- **Kinds:** product, customer, job, crew, vehicle, delivery, decision and equipment, plus the supplier merge.
+- **Properties:**
+  - product: sell_price, unit_cost and qty_on_hand
+  - job: job_number, due_date and suburb
+  - delivery: expected_date
+  - decision: effective_date and amount
+- **Link types (10):** has_job, needs, supplies_job, contains, carries, allocated_to, assigned_to, supplied_by (two of them) and approved_by.
+- **Metrics (7):**
+  - average sell price
+  - total stock value at cost
+  - total stock value at sell price
+  - gross margin
+  - average unit cost
+  - back-ordered item count
+  - job count
+
+**Problems for the owner to know about**
+- Fronius Backup Switch and Cable Tie Pack have no unit cost. Stock value at cost and gross margin will leave them out or skew until someone fills the costs in.
+- The Fronius Primo and Symo inverters are at 3 and 2 units, with reorder at 10. Two other items are also under 10: the Fronius Datamanager (5) and the Clipsal Switchboard (8). Most of the stock list is ordinary, but a few jobs lean on thin stock.
+- A one-day delay on IN-77 hits TES-101 to TES-104.
+
+**Next step for the owner:** approve the proposals in the Eunomia app, then I can import the stock rows and run the metrics.

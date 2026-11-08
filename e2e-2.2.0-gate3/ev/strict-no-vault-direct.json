@@ -1,0 +1,5 @@
+{
+  "error": "vault_id is needed: with none, this fact would go to your personal space under the new kind \"ev_charger\", where the approved-kinds-only rule of \"Top End Solar & Electrical\" never sees it. Pass vault_id with the space it belongs to: \"Darwin Footy Club\", \"Top End Solar & Electrical\", or \"Personal\" if it is private to you.",
+  "code": "validation.invalid",
+  "trace_id": "2e81e129eaeb468290c0a75dcba64789"
+}

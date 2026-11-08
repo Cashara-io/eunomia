@@ -1,0 +1,40 @@
+Chat
+Ask a question about your saved memories and documents. Eunomia shows where each answer came from.
+Conversations
+Label Printer 2 is broken. What does that affect?
+now
+What if Rexel Darwin raises costs 10%?
+now
+Ute 3 is a day late. What does that affect?
+1m
+What is our average sell price and total stock value at cost
+1m
+gate3-1794157746
+4:15 AM
+Label Printer 2 is broken. What does that affect?
+Eunomia
+4:15 AM
+Looked through memories
+Done
+Searched people and topics
+Done
+Checked this space's kinds
+Done
+Followed connections
+Done
+Showed a view
+Done
+Label Printer 2 is broken.
+Starting from
+Label Printer 2
+equipment
+
+Label Printer 2 has no saved links yet, so there is nothing to follow. Link it to the things it touches, then ask again.
+
+There are no recorded dependencies for Label Printer 2, so I can’t identify anything it affects. It’s noted as office equipment, but isn’t linked to any jobs or other entities in the records.
+
+Enter
+send
+Shift Enter
+new line
+Send

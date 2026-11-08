@@ -1,0 +1,73 @@
+{
+  "status": 200,
+  "body": {
+    "document_id": "document:tpfxkz7d23f1swwuzfpi",
+    "kind": "product",
+    "rows": 30,
+    "created": 13,
+    "updated": 17,
+    "values": 178,
+    "linked": 30,
+    "targets_created": 0,
+    "reused": [
+      {
+        "column": "supplier",
+        "name": "Fronius Australia",
+        "kind": "organisation",
+        "entity_id": "organisation:1d72xkro2flp4vob5dpr"
+      },
+      {
+        "column": "supplier",
+        "name": "Solar Juice",
+        "kind": "organisation",
+        "entity_id": "organisation:ahd34eiadror73ie87s9"
+      },
+      {
+        "column": "supplier",
+        "name": "Rexel Darwin",
+        "kind": "organisation",
+        "entity_id": "organisation:9ifpiov3oonxkx79jwnt"
+      },
+      {
+        "column": "supplier",
+        "name": "NT Cable Co",
+        "kind": "organisation",
+        "entity_id": "organisation:hy4fn9heevdr701qldfj"
+      }
+    ],
+    "ambiguous": [],
+    "columns": [
+      {
+        "column": "supplier",
+        "property": null,
+        "link": "supplied_by supplier"
+      },
+      {
+        "column": "sell price AUD",
+        "property": "sell_price"
+      },
+      {
+        "column": "unit cost AUD",
+        "property": "unit_cost"
+      },
+      {
+        "column": "qty on hand",
+        "property": "qty_on_hand"
+      },
+      {
+        "column": "reorder at",
+        "property": "reorder_at"
+      },
+      {
+        "column": "status",
+        "property": "status"
+      },
+      {
+        "column": "last received",
+        "property": "last_received"
+      }
+    ],
+    "bad": [],
+    "bad_count": 0
+  }
+}

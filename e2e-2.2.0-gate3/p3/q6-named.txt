@@ -1,0 +1,90 @@
+TOOL ToolSearch
+{
+  "query": "select:mcp__eunomia-local__vault_list,mcp__eunomia-local__ontology_get,mcp__eunomia-local__ontology_propose,mcp__eunomia-local__memory_write,mcp__eunomia-local__entity_types,mcp__eunomia-local__recall,mcp__eunomia-local__entities_search",
+  "max_results": 10
+}
+
+RESULT
+[{'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__vault_list'}, {'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__ontology_get'}, {'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__ontology_propose'}, {'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__memory_write'}, {'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__entity_types'}, {'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__recall'}, {'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__entities_search'}]
+
+TOOL ToolSearch
+{
+  "query": "select:mcp__eunomia-local__ontology_coverage",
+  "max_results": 1
+}
+
+RESULT
+[{'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__ontology_coverage'}]
+
+TOOL mcp__eunomia-local__vault_list
+{}
+
+RESULT
+[{'type': 'text', 'text': '{"results":[{"is_default":true,"id":"vault:p8360f8493ebc0ab24dd","name":"Personal","kind":"personal","created_at":"2026-11-08T17:09:07.523205051Z","role":"owner"},{"is_default":false,"id":"vault:8iz0hyym38leojujbgo4","name":"Darwin Footy Club","kind":"org","created_at":"2026-11-08T17:09:07.582942635Z","role":"owner"},{"is_default":false,"id":"vault:2oxb9ism79xia4hivfdo","name":"Top End Solar & Electrical","kind":"org","created_at":"2026-11-08T17:09:23.273029420Z","role":"owner"}]}'}]
+
+TOOL mcp__eunomia-local__entity_types
+{
+  "vault_id": "Top End Solar & Electrical"
+}
+
+RESULT
+[{'type': 'text', 'text': '{"built_in":["person","organisation","location","repository","file","symbol"],"custom":[{"kind":"crew","entities":3,"status":"approved","description":"A work crew (A, B or C) that is assigned jobs and a ute.","spaces":["Top End Solar & Electrical"]},{"kind":"customer","entities":6,"status":"approved","description":"A person or organisation we do installation work for.","spaces":["Top End Solar & Electrical"]},{"kind":"decision","entities":1,"status":"approved","description":"A business decision with an effective date and who approved it.","spaces":["Top End Solar & Electrical"]},{"kind":"delivery","entities":1,"status":"approved","description":"An inbound delivery of stock from suppliers, carried by a vehicle and meant for named jobs.","spaces":["Top End Solar & Electrical"]},{"kind":"equipment","entities":1,"status":"approved","description":"Office or workshop equipment owned by the business.","spaces":["Top End Solar & Electrical"]},{"kind":"job","entities":6,"status":"approved","description":"A customer job with a TES number, a crew and a due date.","spaces":["Top End Solar & Electrical"]},{"kind":"product","entities":30,"status":"approved","description":"A stock item the business buys, holds and sells.","spaces":["Top End Solar & Electrical"]},{"kind":"supplier","entities":0,"status":"approved","description":"what the supplier column names","spaces":["Top End Solar & Electrical"]},{"kind":"vehicle","entities":1,"status":"approved","description":"A crew ute that carries deliveries.","spaces":["Top End Solar & Electrical"]}]}'}]
+
+TOOL mcp__eunomia-local__ontology_propose
+{
+  "vault_id": "vault:2oxb9ism79xia4hivfdo",
+  "kinds": [
+    {
+      "kind": "ev_charger",
+      "description": "An electric vehicle charger the business now sells and installs.",
+      "reason": "The owner said Top End Solar & Electrical now sells EV chargers and asked for a new kind called ev_charger.",
+      "synonyms": [
+        "EV charger",
+        "electric vehicle charger"
+      ]
+    }
+  ]
+}
+
+RESULT
+[{'type': 'text', 'text': '{"kinds":[{"kind":"ev_charger","status":"proposed","merge_into":null}],"links":[],"properties":[],"metrics":[]}'}]
+
+TOOL mcp__eunomia-local__memory_write
+{
+  "vault_id": "vault:2oxb9ism79xia4hivfdo",
+  "subject_name": "EV chargers",
+  "subject_kind": "ev_charger",
+  "type": "world",
+  "text": "Top End Solar & Electrical now sells EV chargers.",
+  "occurred_at": "2026-11-09"
+}
+
+RESULT
+{"error":"this vault takes only approved kinds and links, and the kind \"ev_charger\" is not approved: write under a built-in kind (person, organisation, location, repository, file, symbol) or an approved kind (crew, customer, decision, delivery, equipment, job, organisation, person, product, supplier, vehicle). It was filed as a proposal for a vault owner to review.","code":"ontology.rejected","trace_id":"df628d6668a444eaa2f3890ba17c93c8"}
+
+**Not saved yet.** The new kind needs your OK first.
+
+Top End Solar & Electrical only takes kinds that an owner has approved. `ev_charger` is new, so the save was refused. I can't approve it myself.
+
+What I did:
+- I filed `ev_charger` as a proposal in the Top End Solar & Electrical vault. Its description is "An electric vehicle charger the business now sells and installs."
+
+What you do now:
+- Open the Eunomia app and approve `ev_charger` in that vault.
+- Tell me when it's done. I'll then save "Top End Solar & Electrical now sells EV chargers" under that kind.
+
+If you'd rather not wait, I can save the fact now under the existing `organisation` kind, on the Top End Solar & Electrical entry. That wouldn't be under `ev_charger`, which is what you asked for. I'd wait for the approval.
+
+FINAL
+**Not saved yet.** The new kind needs your OK first.
+
+Top End Solar & Electrical only takes kinds that an owner has approved. `ev_charger` is new, so the save was refused. I can't approve it myself.
+
+What I did:
+- I filed `ev_charger` as a proposal in the Top End Solar & Electrical vault. Its description is "An electric vehicle charger the business now sells and installs."
+
+What you do now:
+- Open the Eunomia app and approve `ev_charger` in that vault.
+- Tell me when it's done. I'll then save "Top End Solar & Electrical now sells EV chargers" under that kind.
+
+If you'd rather not wait, I can save the fact now under the existing `organisation` kind, on the Top End Solar & Electrical entry. That wouldn't be under `ev_charger`, which is what you asked for. I'd wait for the approval.

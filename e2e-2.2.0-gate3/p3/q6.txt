@@ -1,0 +1,70 @@
+TOOL ToolSearch
+{
+  "query": "select:mcp__eunomia-local__ontology_get,mcp__eunomia-local__ontology_propose,mcp__eunomia-local__memory_write,mcp__eunomia-local__vault_list,mcp__eunomia-local__entity_types",
+  "max_results": 10
+}
+
+RESULT
+[{'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__ontology_get'}, {'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__ontology_propose'}, {'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__memory_write'}, {'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__vault_list'}, {'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__entity_types'}]
+
+TOOL mcp__eunomia-local__vault_list
+{}
+
+TOOL mcp__eunomia-local__entity_types
+{}
+
+RESULT
+[{'type': 'text', 'text': '{"results":[{"is_default":true,"id":"vault:p8360f8493ebc0ab24dd","name":"Personal","kind":"personal","created_at":"2026-11-08T17:09:07.523205051Z","role":"owner"},{"is_default":false,"id":"vault:8iz0hyym38leojujbgo4","name":"Darwin Footy Club","kind":"org","created_at":"2026-11-08T17:09:07.582942635Z","role":"owner"},{"is_default":false,"id":"vault:2oxb9ism79xia4hivfdo","name":"Top End Solar & Electrical","kind":"org","created_at":"2026-11-08T17:09:23.273029420Z","role":"owner"}]}'}]
+
+RESULT
+[{'type': 'text', 'text': '{"built_in":["person","organisation","location","repository","file","symbol"],"custom":[{"kind":"crew","entities":3,"status":"approved","description":"A work crew (A, B or C) that is assigned jobs and a ute.","spaces":["Top End Solar & Electrical"]},{"kind":"customer","entities":6,"status":"approved","description":"A person or organisation we do installation work for.","spaces":["Top End Solar & Electrical"]},{"kind":"decision","entities":1,"status":"approved","description":"A business decision with an effective date and who approved it.","spaces":["Top End Solar & Electrical"]},{"kind":"delivery","entities":1,"status":"approved","description":"An inbound delivery of stock from suppliers, carried by a vehicle and meant for named jobs.","spaces":["Top End Solar & Electrical"]},{"kind":"equipment","entities":1,"status":"approved","description":"Office or workshop equipment owned by the business.","spaces":["Top End Solar & Electrical"]},{"kind":"job","entities":6,"status":"approved","description":"A customer job with a TES number, a crew and a due date.","spaces":["Top End Solar & Electrical"]},{"kind":"product","entities":30,"status":"approved","description":"A stock item the business buys, holds and sells.","spaces":["Top End Solar & Electrical"]},{"kind":"supplier","entities":0,"status":"approved","description":"what the supplier column names","spaces":["Top End Solar & Electrical"]},{"kind":"topic","entities":3,"status":"observed","spaces":["Darwin Footy Club"]},{"kind":"vehicle","entities":1,"status":"approved","description":"A crew ute that carries deliveries.","spaces":["Top End Solar & Electrical"]}]}'}]
+
+The business vault is "Top End Solar & Electrical". That vault only takes kinds an owner has approved, so I'll propose the new kind first.
+
+TOOL mcp__eunomia-local__ontology_propose
+{
+  "vault_id": "vault:2oxb9ism79xia4hivfdo",
+  "kinds": [
+    {
+      "kind": "ev_charger",
+      "description": "An electric vehicle charger the business sells and installs.",
+      "reason": "The business now sells EV chargers, and no existing kind fits."
+    }
+  ]
+}
+
+RESULT
+[{'type': 'text', 'text': '{"kinds":[{"kind":"ev_charger","status":"proposed","merge_into":null}],"links":[],"properties":[],"metrics":[]}'}]
+
+TOOL mcp__eunomia-local__memory_write
+{
+  "vault_id": "vault:2oxb9ism79xia4hivfdo",
+  "subject_name": "EV chargers",
+  "subject_kind": "ev_charger",
+  "type": "world",
+  "text": "Top End Solar & Electrical now sells EV chargers."
+}
+
+RESULT
+{"error":"this vault takes only approved kinds and links, and the kind \"ev_charger\" is not approved: write under a built-in kind (person, organisation, location, repository, file, symbol) or an approved kind (crew, customer, decision, delivery, equipment, job, organisation, person, product, supplier, vehicle). It was filed as a proposal for a vault owner to review.","code":"ontology.rejected","trace_id":"6de7651da3a840408b46a80400ffd06b"}
+
+I haven't saved it yet. The vault won't take a new kind until an owner approves it.
+
+**What I did:** I filed `ev_charger` as a proposal in the Top End Solar & Electrical vault. Its description is "An electric vehicle charger the business sells and installs."
+
+**What happened:** I tried to write "Top End Solar & Electrical now sells EV chargers" under that kind. The vault refused, because `ev_charger` isn't approved.
+
+**What you do now:** Open the Eunomia app and approve `ev_charger` for Top End Solar & Electrical. Then tell me, and I'll save the fact.
+
+I wouldn't save it under `product` as a stopgap. That would put the fact under the wrong kind, and you asked for `ev_charger`.
+
+FINAL
+I haven't saved it yet. The vault won't take a new kind until an owner approves it.
+
+**What I did:** I filed `ev_charger` as a proposal in the Top End Solar & Electrical vault. Its description is "An electric vehicle charger the business sells and installs."
+
+**What happened:** I tried to write "Top End Solar & Electrical now sells EV chargers" under that kind. The vault refused, because `ev_charger` isn't approved.
+
+**What you do now:** Open the Eunomia app and approve `ev_charger` for Top End Solar & Electrical. Then tell me, and I'll save the fact.
+
+I wouldn't save it under `product` as a stopgap. That would put the fact under the wrong kind, and you asked for `ev_charger`.

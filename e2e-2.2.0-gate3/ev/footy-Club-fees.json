@@ -1,0 +1,27 @@
+{
+  "entity": {
+    "id": "entity:n7q9qbvb9bgvy8ky2awr",
+    "kind": "topic",
+    "name": "Club fees",
+    "aliases": [],
+    "summary": "",
+    "vault": "vault:8iz0hyym38leojujbgo4"
+  },
+  "memory": {
+    "id": "memory:v2gqf28jk0wazwakwqs3",
+    "owner": "user:dlyxu5m652qrr4gjdd1e",
+    "vault": "vault:8iz0hyym38leojujbgo4",
+    "subject": "entity:n7q9qbvb9bgvy8ky2awr",
+    "text": "The annual club fee is $95.",
+    "source": null,
+    "created_at": "2026-11-08T17:09:07.706853968Z",
+    "type": "world",
+    "proof_count": 1,
+    "status": null,
+    "source_memories": null,
+    "updated_at": "2026-11-08T17:09:07.706864635Z",
+    "version": 1,
+    "owner_email": null
+  },
+  "vault_name": "Darwin Footy Club"
+}

@@ -1,0 +1,200 @@
+[
+  {
+    "tool": "ToolSearch",
+    "arguments": {
+      "query": "select:mcp__eunomia-local__vault_list,mcp__eunomia-local__ontology_get,mcp__eunomia-local__ontology_propose,mcp__eunomia-local__memory_write,mcp__eunomia-local__entity_types,mcp__eunomia-local__recall,mcp__eunomia-local__entities_search",
+      "max_results": 10
+    },
+    "id": "toolu_01JEN7zyQgb87MyNe89Z5dxn",
+    "result": "\n\n\n\n\n\n"
+  },
+  {
+    "tool": "ToolSearch",
+    "arguments": {
+      "query": "select:mcp__eunomia-local__ontology_coverage",
+      "max_results": 1
+    },
+    "id": "toolu_018ztwawzm5pBoi3J7b3RNCS",
+    "result": ""
+  },
+  {
+    "tool": "mcp__eunomia-local__vault_list",
+    "arguments": {},
+    "id": "toolu_015nR5wUZX9njCaQatqC9k5M",
+    "result": {
+      "results": [
+        {
+          "is_default": true,
+          "id": "vault:p8360f8493ebc0ab24dd",
+          "name": "Personal",
+          "kind": "personal",
+          "created_at": "2026-11-08T17:09:07.523205051Z",
+          "role": "owner"
+        },
+        {
+          "is_default": false,
+          "id": "vault:8iz0hyym38leojujbgo4",
+          "name": "Darwin Footy Club",
+          "kind": "org",
+          "created_at": "2026-11-08T17:09:07.582942635Z",
+          "role": "owner"
+        },
+        {
+          "is_default": false,
+          "id": "vault:2oxb9ism79xia4hivfdo",
+          "name": "Top End Solar & Electrical",
+          "kind": "org",
+          "created_at": "2026-11-08T17:09:23.273029420Z",
+          "role": "owner"
+        }
+      ]
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_types",
+    "arguments": {
+      "vault_id": "Top End Solar & Electrical"
+    },
+    "id": "toolu_01CttqFVAB6aetoKqxQehWp1",
+    "result": {
+      "built_in": [
+        "person",
+        "organisation",
+        "location",
+        "repository",
+        "file",
+        "symbol"
+      ],
+      "custom": [
+        {
+          "kind": "crew",
+          "entities": 3,
+          "status": "approved",
+          "description": "A work crew (A, B or C) that is assigned jobs and a ute.",
+          "spaces": [
+            "Top End Solar & Electrical"
+          ]
+        },
+        {
+          "kind": "customer",
+          "entities": 6,
+          "status": "approved",
+          "description": "A person or organisation we do installation work for.",
+          "spaces": [
+            "Top End Solar & Electrical"
+          ]
+        },
+        {
+          "kind": "decision",
+          "entities": 1,
+          "status": "approved",
+          "description": "A business decision with an effective date and who approved it.",
+          "spaces": [
+            "Top End Solar & Electrical"
+          ]
+        },
+        {
+          "kind": "delivery",
+          "entities": 1,
+          "status": "approved",
+          "description": "An inbound delivery of stock from suppliers, carried by a vehicle and meant for named jobs.",
+          "spaces": [
+            "Top End Solar & Electrical"
+          ]
+        },
+        {
+          "kind": "equipment",
+          "entities": 1,
+          "status": "approved",
+          "description": "Office or workshop equipment owned by the business.",
+          "spaces": [
+            "Top End Solar & Electrical"
+          ]
+        },
+        {
+          "kind": "job",
+          "entities": 6,
+          "status": "approved",
+          "description": "A customer job with a TES number, a crew and a due date.",
+          "spaces": [
+            "Top End Solar & Electrical"
+          ]
+        },
+        {
+          "kind": "product",
+          "entities": 30,
+          "status": "approved",
+          "description": "A stock item the business buys, holds and sells.",
+          "spaces": [
+            "Top End Solar & Electrical"
+          ]
+        },
+        {
+          "kind": "supplier",
+          "entities": 0,
+          "status": "approved",
+          "description": "what the supplier column names",
+          "spaces": [
+            "Top End Solar & Electrical"
+          ]
+        },
+        {
+          "kind": "vehicle",
+          "entities": 1,
+          "status": "approved",
+          "description": "A crew ute that carries deliveries.",
+          "spaces": [
+            "Top End Solar & Electrical"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__ontology_propose",
+    "arguments": {
+      "vault_id": "vault:2oxb9ism79xia4hivfdo",
+      "kinds": [
+        {
+          "kind": "ev_charger",
+          "description": "An electric vehicle charger the business now sells and installs.",
+          "reason": "The owner said Top End Solar & Electrical now sells EV chargers and asked for a new kind called ev_charger.",
+          "synonyms": [
+            "EV charger",
+            "electric vehicle charger"
+          ]
+        }
+      ]
+    },
+    "id": "toolu_01CitENZsrH4PbpwEQ13JVmQ",
+    "result": {
+      "kinds": [
+        {
+          "kind": "ev_charger",
+          "status": "proposed",
+          "merge_into": null
+        }
+      ],
+      "links": [],
+      "properties": [],
+      "metrics": []
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__memory_write",
+    "arguments": {
+      "vault_id": "vault:2oxb9ism79xia4hivfdo",
+      "subject_name": "EV chargers",
+      "subject_kind": "ev_charger",
+      "type": "world",
+      "text": "Top End Solar & Electrical now sells EV chargers.",
+      "occurred_at": "2026-11-09"
+    },
+    "id": "toolu_01TTgnAZFKeqmmUQrJdRtRZw",
+    "result": {
+      "error": "this vault takes only approved kinds and links, and the kind \"ev_charger\" is not approved: write under a built-in kind (person, organisation, location, repository, file, symbol) or an approved kind (crew, customer, decision, delivery, equipment, job, organisation, person, product, supplier, vehicle). It was filed as a proposal for a vault owner to review.",
+      "code": "ontology.rejected",
+      "trace_id": "df628d6668a444eaa2f3890ba17c93c8"
+    }
+  }
+]

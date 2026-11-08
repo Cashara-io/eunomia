@@ -1,0 +1,42 @@
+[
+  {
+    "result": [
+      {
+        "count": 52
+      }
+    ],
+    "status": "OK",
+    "time": "259.292µs",
+    "type": null
+  },
+  {
+    "result": [
+      {
+        "count": 178
+      }
+    ],
+    "status": "OK",
+    "time": "139.459µs",
+    "type": null
+  },
+  {
+    "result": [
+      {
+        "count": 72
+      }
+    ],
+    "status": "OK",
+    "time": "106.25µs",
+    "type": null
+  },
+  {
+    "result": [
+      {
+        "count": 77
+      }
+    ],
+    "status": "OK",
+    "time": "117.334µs",
+    "type": null
+  }
+]

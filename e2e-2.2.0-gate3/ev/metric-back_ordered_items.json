@@ -1,0 +1,19 @@
+{
+  "metric": "back_ordered_items",
+  "kind": "product",
+  "vault": "vault:2oxb9ism79xia4hivfdo",
+  "description": "Number of stock items currently back-ordered.",
+  "expr_words": "Number of product where status is Back-ordered",
+  "value": 3.0,
+  "unit": null,
+  "as_of": "2026-11-08T17:19:38Z",
+  "n_entities": 3,
+  "entity_ids": [
+    "entity:252l23dihifd130h15c8",
+    "entity:4pfte5w3klwhx91i3r0z",
+    "entity:8dp6fmr0ntdr8b9bktn8"
+  ],
+  "truncated": false,
+  "status": "approved",
+  "warnings": []
+}

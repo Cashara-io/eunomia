@@ -1,0 +1,27 @@
+{
+  "entity": {
+    "id": "entity:ankmb1zlv8s00n3lwzwi",
+    "kind": "topic",
+    "name": "Saturday match",
+    "aliases": [],
+    "summary": "",
+    "vault": "vault:8iz0hyym38leojujbgo4"
+  },
+  "memory": {
+    "id": "memory:v8dfp5bqfqax5hxvvjb8",
+    "owner": "user:dlyxu5m652qrr4gjdd1e",
+    "vault": "vault:8iz0hyym38leojujbgo4",
+    "subject": "entity:ankmb1zlv8s00n3lwzwi",
+    "text": "The next match is at TIO Stadium on Saturday.",
+    "source": null,
+    "created_at": "2026-11-08T17:09:07.730036135Z",
+    "type": "world",
+    "proof_count": 1,
+    "status": null,
+    "source_memories": null,
+    "updated_at": "2026-11-08T17:09:07.730046218Z",
+    "version": 1,
+    "owner_email": null
+  },
+  "vault_name": "Darwin Footy Club"
+}

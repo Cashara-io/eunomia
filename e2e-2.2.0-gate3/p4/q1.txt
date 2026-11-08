@@ -1,0 +1,108 @@
+Chat
+Ask a question about your saved memories and documents. Eunomia shows where each answer came from.
+Conversations
+What is our average sell price and total stock value at cost
+now
+gate3-1794157746
+4:13 AM
+What is our average sell price and total stock value at cost?
+Eunomia
+4:13 AM
+Checked what the space can answer
+Done
+Checked this space's kinds
+Done
+Worked out a number
+Done
+Worked out a number
+Done
+Showed a view
+Done
+Showed a view
+Done
+average sell price
+
+Average selling price per stock item.
+
+505.84
+AUD
+
+Average sell price. As of 9 Nov 2026, from 30 products.
+
+Solar Cable 6mm 100m
+Fronius Symo 10kW Inverter
+Jinko 475W Panel
+Fronius Extension Kit
+Fronius Backup Switch
+Earth Cable 100m
+MC4 Connector Pair
+Trina 440W Panel
+Weatherproof GPO
+Roof Clamp Pack
+Earth Rod
+Fronius Datamanager
+DC Isolator
+Cable Tie Pack
+Panel Earthing Kit
+Fronius Smart Meter
+Fronius Mounting Bracket
+Solar Rail 4.2m
+Fronius Primo 5kW Inverter
+Meter Enclosure
+Heatshrink Kit
+LONGi 500W Panel
+Cable Lug Pack
+Hager RCBO
+LED Batten 1200mm
+TPS Cable 2.5mm 100m
+Orange Conduit 50mm
+Clipsal Switchboard
+Conduit 25mm
+Fronius Surge Protector
+inventory cost value
+
+Total stock value at cost: qty on hand times unit cost, summed.
+
+67775.75
+AUD
+
+Sum of qty on hand × unit cost. As of 9 Nov 2026, from 28 products.
+
+Solar Cable 6mm 100m
+Fronius Symo 10kW Inverter
+Jinko 475W Panel
+Fronius Extension Kit
+Earth Cable 100m
+MC4 Connector Pair
+Trina 440W Panel
+Weatherproof GPO
+Roof Clamp Pack
+Earth Rod
+Fronius Datamanager
+DC Isolator
+Panel Earthing Kit
+Fronius Smart Meter
+Fronius Mounting Bracket
+Solar Rail 4.2m
+Fronius Primo 5kW Inverter
+Meter Enclosure
+Heatshrink Kit
+LONGi 500W Panel
+Cable Lug Pack
+Hager RCBO
+LED Batten 1200mm
+TPS Cable 2.5mm 100m
+Orange Conduit 50mm
+Clipsal Switchboard
+Conduit 25mm
+Fronius Surge Protector
+Average sell price: A$505.84 per product (30 products).
+Total stock value at cost: A$67,775.75 (28 products with recorded costs).
+
+The cost valuation excludes two products with blank unit costs: Fronius Backup Switch and Cable Tie Pack.
+
+Enter
+send
+Shift Enter
+new line
+Send

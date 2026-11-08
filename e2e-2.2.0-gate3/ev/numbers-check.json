@@ -1,0 +1,227 @@
+[
+  {
+    "label": "direct",
+    "kind": "job",
+    "metric": "open_jobs",
+    "actual": 6.0,
+    "recomputed": "6",
+    "difference": "0.0",
+    "pass": true
+  },
+  {
+    "label": "direct",
+    "kind": "product",
+    "metric": "average_sell_price",
+    "actual": 505.838333,
+    "recomputed": "505.8383333333333333333333333",
+    "difference": "3.333333333333333333E-7",
+    "pass": true
+  },
+  {
+    "label": "direct",
+    "kind": "product",
+    "metric": "average_unit_cost",
+    "actual": 336.7125,
+    "recomputed": "336.7125",
+    "difference": "0.0000",
+    "pass": true
+  },
+  {
+    "label": "direct",
+    "kind": "product",
+    "metric": "back_ordered_items",
+    "actual": 3.0,
+    "recomputed": "3",
+    "difference": "0.0",
+    "pass": true
+  },
+  {
+    "label": "direct",
+    "kind": "product",
+    "metric": "gross_margin",
+    "actual": 35.75612,
+    "recomputed": "35.75611999795574181019062708",
+    "difference": "2.04425818980937292E-9",
+    "pass": true
+  },
+  {
+    "label": "direct",
+    "kind": "product",
+    "metric": "inventory_cost_value",
+    "actual": 67775.75,
+    "recomputed": "67775.75",
+    "difference": "0.00",
+    "pass": true
+  },
+  {
+    "label": "direct",
+    "kind": "product",
+    "metric": "total_stock_value_at_sell",
+    "actual": 114123.5,
+    "recomputed": "114123.50",
+    "difference": "0.00",
+    "pass": true
+  },
+  {
+    "label": "direct",
+    "kind": "product",
+    "metric": "total_units_on_hand",
+    "actual": 1270.0,
+    "recomputed": "1270",
+    "difference": "0.0",
+    "pass": true
+  },
+  {
+    "label": "q1.tools",
+    "kind": "product",
+    "metric": "average_sell_price",
+    "actual": 505.838333,
+    "recomputed": "505.8383333333333333333333333",
+    "difference": "3.333333333333333333E-7",
+    "pass": true
+  },
+  {
+    "label": "q1.tools",
+    "kind": "product",
+    "metric": "inventory_cost_value",
+    "actual": 67775.75,
+    "recomputed": "67775.75",
+    "difference": "0.00",
+    "pass": true
+  },
+  {
+    "label": "q4.tools baseline",
+    "kind": "product",
+    "metric": "gross_margin",
+    "actual": 35.75612,
+    "recomputed": "35.75611999795574181019062708",
+    "difference": "2.04425818980937292E-9",
+    "pass": true
+  },
+  {
+    "label": "q4.tools baseline",
+    "kind": "product",
+    "metric": "average_unit_cost",
+    "actual": 336.7125,
+    "recomputed": "336.7125",
+    "difference": "0.0000",
+    "pass": true
+  },
+  {
+    "label": "q4.tools baseline",
+    "kind": "product",
+    "metric": "inventory_cost_value",
+    "actual": 67775.75,
+    "recomputed": "67775.75",
+    "difference": "0.00",
+    "pass": true
+  },
+  {
+    "label": "q4.tools scenario",
+    "kind": "product",
+    "metric": "gross_margin",
+    "actual": 35.435683,
+    "recomputed": "35.43568252670312260438493382",
+    "difference": "4.7329687739561506618E-7",
+    "pass": true
+  },
+  {
+    "label": "q4.tools scenario",
+    "kind": "product",
+    "metric": "average_unit_cost",
+    "actual": 338.391964,
+    "recomputed": "338.3919642857142857142857143",
+    "difference": "2.857142857142857143E-7",
+    "pass": true
+  },
+  {
+    "label": "q4.tools scenario",
+    "kind": "product",
+    "metric": "inventory_cost_value",
+    "actual": 68606.625,
+    "recomputed": "68606.625",
+    "difference": "0.000",
+    "pass": true
+  },
+  {
+    "label": "q2.tools",
+    "kind": "product",
+    "metric": "gross_margin",
+    "actual": 35.275267,
+    "recomputed": "35.27526705012325390304026294",
+    "difference": "5.012325390304026294E-8",
+    "pass": true
+  },
+  {
+    "label": "chat",
+    "kind": "product",
+    "metric": "average_sell_price",
+    "actual": 505.838333,
+    "recomputed": "505.8383333333333333333333333",
+    "difference": "3.333333333333333333E-7",
+    "pass": true
+  },
+  {
+    "label": "chat baseline",
+    "kind": "product",
+    "metric": "average_unit_cost",
+    "actual": 336.7125,
+    "recomputed": "336.7125",
+    "difference": "0.0000",
+    "pass": true
+  },
+  {
+    "label": "chat baseline",
+    "kind": "product",
+    "metric": "gross_margin",
+    "actual": 35.75612,
+    "recomputed": "35.75611999795574181019062708",
+    "difference": "2.04425818980937292E-9",
+    "pass": true
+  },
+  {
+    "label": "chat baseline",
+    "kind": "product",
+    "metric": "inventory_cost_value",
+    "actual": 67775.75,
+    "recomputed": "67775.75",
+    "difference": "0.00",
+    "pass": true
+  },
+  {
+    "label": "chat scenario",
+    "kind": "product",
+    "metric": "average_unit_cost",
+    "actual": 338.391964,
+    "recomputed": "338.3919642857142857142857143",
+    "difference": "2.857142857142857143E-7",
+    "pass": true
+  },
+  {
+    "label": "chat scenario",
+    "kind": "product",
+    "metric": "gross_margin",
+    "actual": 35.435683,
+    "recomputed": "35.43568252670312260438493382",
+    "difference": "4.7329687739561506618E-7",
+    "pass": true
+  },
+  {
+    "label": "chat scenario",
+    "kind": "product",
+    "metric": "inventory_cost_value",
+    "actual": 68606.625,
+    "recomputed": "68606.625",
+    "difference": "0.000",
+    "pass": true
+  },
+  {
+    "label": "chat",
+    "kind": "product",
+    "metric": "inventory_cost_value",
+    "actual": 67775.75,
+    "recomputed": "67775.75",
+    "difference": "0.00",
+    "pass": true
+  }
+]

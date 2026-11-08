@@ -1,0 +1,15 @@
+{
+  "question": "What is our insurance bill?",
+  "result": {
+    "vault": "vault:2oxb9ism79xia4hivfdo",
+    "vault_name": "Top End Solar & Electrical",
+    "coverage": 0.0,
+    "matched": [],
+    "uncovered": [
+      "insurance bill"
+    ],
+    "chosen_by": "ontology",
+    "suggestion": "No space you can read has an approved term for this question or holds what it names; \"Top End Solar & Electrical\" was checked because it has an approved ontology. Not covered by an approved kind, property, metric or link: \"insurance bill\". Say so instead of guessing a number. To make it answerable, propose what is missing with ontology_propose (a property and a metric on the kind it belongs to); a vault owner approves it in Kinds and links.",
+    "mode": "model"
+  }
+}

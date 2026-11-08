@@ -1,0 +1,4 @@
+Ready to answer numbers
+Approved: 11 kinds, 12 properties, 8 metrics, 11 links
+
+Ready means nothing proposed is waiting for you, at least one metric is approved, and every property an approved metric reads is approved and has values. A kind with no metric, like a person or a supplier, never holds it up.

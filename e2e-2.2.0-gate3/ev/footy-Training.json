@@ -1,0 +1,27 @@
+{
+  "entity": {
+    "id": "entity:fmt8lzub7r002t02q5e4",
+    "kind": "topic",
+    "name": "Training",
+    "aliases": [],
+    "summary": "",
+    "vault": "vault:8iz0hyym38leojujbgo4"
+  },
+  "memory": {
+    "id": "memory:vt9121z2ui5iahjjlg9e",
+    "owner": "user:dlyxu5m652qrr4gjdd1e",
+    "vault": "vault:8iz0hyym38leojujbgo4",
+    "subject": "entity:fmt8lzub7r002t02q5e4",
+    "text": "Training is Tuesdays at Marrara at 6 pm.",
+    "source": null,
+    "created_at": "2026-11-08T17:09:07.594270093Z",
+    "type": "world",
+    "proof_count": 1,
+    "status": null,
+    "source_memories": null,
+    "updated_at": "2026-11-08T17:09:07.594279843Z",
+    "version": 1,
+    "owner_email": null
+  },
+  "vault_name": "Darwin Footy Club"
+}

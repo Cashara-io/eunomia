@@ -1,0 +1,233 @@
+{
+  "verified_rows": 30,
+  "mismatches": [],
+  "sample_five": [
+    {
+      "name": "Cable Tie Pack",
+      "expected": {
+        "sell_price": 9.9,
+        "unit_cost": null,
+        "qty_on_hand": 180,
+        "reorder_at": 10,
+        "status": "In stock",
+        "last_received": "2026-11-02"
+      },
+      "actual": {
+        "status": "In stock",
+        "qty_on_hand": 180.0,
+        "reorder_at": 10.0,
+        "sell_price": 9.9,
+        "last_received": "2026-11-02T00:00:00Z"
+      },
+      "supplier": [
+        {
+          "id": "organisation:9ifpiov3oonxkx79jwnt",
+          "kind": "organisation",
+          "name": "Rexel Darwin",
+          "vault": "vault:2oxb9ism79xia4hivfdo"
+        }
+      ]
+    },
+    {
+      "name": "TPS Cable 2.5mm 100m",
+      "expected": {
+        "sell_price": 245.0,
+        "unit_cost": 160.0,
+        "qty_on_hand": 20,
+        "reorder_at": 10,
+        "status": "In stock",
+        "last_received": "2026-11-07"
+      },
+      "actual": {
+        "unit_cost": 160.0,
+        "last_received": "2026-11-07T00:00:00Z",
+        "sell_price": 245.0,
+        "reorder_at": 10.0,
+        "qty_on_hand": 20.0,
+        "status": "In stock"
+      },
+      "supplier": [
+        {
+          "id": "organisation:hy4fn9heevdr701qldfj",
+          "kind": "organisation",
+          "name": "NT Cable Co",
+          "vault": "vault:2oxb9ism79xia4hivfdo"
+        }
+      ]
+    },
+    {
+      "name": "Fronius Extension Kit",
+      "expected": {
+        "sell_price": 95.0,
+        "unit_cost": 55.0,
+        "qty_on_hand": 0,
+        "reorder_at": 10,
+        "status": "Discontinued",
+        "last_received": "2026-11-06"
+      },
+      "actual": {
+        "qty_on_hand": 0.0,
+        "sell_price": 95.0,
+        "reorder_at": 10.0,
+        "last_received": "2026-11-06T00:00:00Z",
+        "status": "Discontinued",
+        "unit_cost": 55.0
+      },
+      "supplier": [
+        {
+          "id": "organisation:1d72xkro2flp4vob5dpr",
+          "kind": "organisation",
+          "name": "Fronius Australia",
+          "vault": "vault:2oxb9ism79xia4hivfdo"
+        }
+      ]
+    },
+    {
+      "name": "Fronius Primo 5kW Inverter",
+      "expected": {
+        "sell_price": 4890.0,
+        "unit_cost": 3100.0,
+        "qty_on_hand": 3,
+        "reorder_at": 10,
+        "status": "In stock",
+        "last_received": "2026-11-07"
+      },
+      "actual": {
+        "status": "In stock",
+        "qty_on_hand": 3.0,
+        "reorder_at": 10.0,
+        "sell_price": 4890.0,
+        "last_received": "2026-11-07T00:00:00Z",
+        "unit_cost": 3100.0
+      },
+      "supplier": [
+        {
+          "id": "organisation:1d72xkro2flp4vob5dpr",
+          "kind": "organisation",
+          "name": "Fronius Australia",
+          "vault": "vault:2oxb9ism79xia4hivfdo"
+        }
+      ]
+    },
+    {
+      "name": "Fronius Backup Switch",
+      "expected": {
+        "sell_price": 490.0,
+        "unit_cost": null,
+        "qty_on_hand": 4,
+        "reorder_at": 10,
+        "status": "Back-ordered",
+        "last_received": "2026-11-07"
+      },
+      "actual": {
+        "qty_on_hand": 4.0,
+        "status": "Back-ordered",
+        "reorder_at": 10.0,
+        "sell_price": 490.0,
+        "last_received": "2026-11-07T00:00:00Z"
+      },
+      "supplier": [
+        {
+          "id": "organisation:1d72xkro2flp4vob5dpr",
+          "kind": "organisation",
+          "name": "Fronius Australia",
+          "vault": "vault:2oxb9ism79xia4hivfdo"
+        }
+      ]
+    }
+  ],
+  "duplicate_names": {},
+  "other_spaces_entities": [
+    {
+      "alias_keys": [],
+      "aliases": [],
+      "created_at": "2026-11-08T17:09:07.727825927Z",
+      "id": "entity:ankmb1zlv8s00n3lwzwi",
+      "kind": "topic",
+      "name": "Saturday match",
+      "name_key": "saturday match",
+      "owner": "user:dlyxu5m652qrr4gjdd1e",
+      "summary": "",
+      "updated_at": "2026-11-08T17:09:07.727835593Z",
+      "vault": "vault:8iz0hyym38leojujbgo4"
+    },
+    {
+      "alias_keys": [],
+      "aliases": [],
+      "created_at": "2026-11-08T17:09:07.591875260Z",
+      "id": "entity:fmt8lzub7r002t02q5e4",
+      "kind": "topic",
+      "name": "Training",
+      "name_key": "training",
+      "owner": "user:dlyxu5m652qrr4gjdd1e",
+      "summary": "",
+      "updated_at": "2026-11-08T17:09:07.592149468Z",
+      "vault": "vault:8iz0hyym38leojujbgo4"
+    },
+    {
+      "alias_keys": [],
+      "aliases": [],
+      "created_at": "2026-11-08T17:09:07.704717218Z",
+      "id": "entity:n7q9qbvb9bgvy8ky2awr",
+      "kind": "topic",
+      "name": "Club fees",
+      "name_key": "club fees",
+      "owner": "user:dlyxu5m652qrr4gjdd1e",
+      "summary": "",
+      "updated_at": "2026-11-08T17:09:07.704726927Z",
+      "vault": "vault:8iz0hyym38leojujbgo4"
+    }
+  ],
+  "supplier_entities": [
+    {
+      "id": "organisation:1d72xkro2flp4vob5dpr",
+      "kind": "organisation",
+      "name": "Fronius Australia",
+      "vault": "vault:2oxb9ism79xia4hivfdo"
+    },
+    {
+      "id": "organisation:9ifpiov3oonxkx79jwnt",
+      "kind": "organisation",
+      "name": "Rexel Darwin",
+      "vault": "vault:2oxb9ism79xia4hivfdo"
+    },
+    {
+      "id": "organisation:ahd34eiadror73ie87s9",
+      "kind": "organisation",
+      "name": "Solar Juice",
+      "vault": "vault:2oxb9ism79xia4hivfdo"
+    },
+    {
+      "id": "organisation:hy4fn9heevdr701qldfj",
+      "kind": "organisation",
+      "name": "NT Cable Co",
+      "vault": "vault:2oxb9ism79xia4hivfdo"
+    }
+  ],
+  "memberships": [
+    {
+      "created_at": "2026-11-08T17:09:23.273128711Z",
+      "id": "vault_member:8t2w5wnrflx8lo0h9tmu",
+      "role": "owner",
+      "status": "active",
+      "user": "user:dlyxu5m652qrr4gjdd1e",
+      "vault": "vault:2oxb9ism79xia4hivfdo"
+    },
+    {
+      "created_at": "2026-11-08T17:09:07.583018926Z",
+      "id": "vault_member:vvwk3wu7h7jh9r86672t",
+      "role": "owner",
+      "status": "active",
+      "user": "user:dlyxu5m652qrr4gjdd1e",
+      "vault": "vault:8iz0hyym38leojujbgo4"
+    },
+    {
+      "created_at": "2026-11-08T17:09:07.523288551Z",
+      "id": "vault_member:wrbkdibeb8mc4uxyopbv",
+      "role": "owner",
+      "status": "active",
+      "user": "user:dlyxu5m652qrr4gjdd1e",
+      "vault": "vault:p8360f8493ebc0ab24dd"
+    }
+  ]
+}

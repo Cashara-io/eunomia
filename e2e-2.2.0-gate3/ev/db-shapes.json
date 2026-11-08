@@ -1,0 +1,123 @@
+[
+  {
+    "result": [
+      {
+        "as_of": "2026-11-08T17:12:28.441483Z",
+        "created_at": "2026-11-08T17:12:28.651319256Z",
+        "entity": "entity:4s3mvd7tyxp5gdf88a4m",
+        "id": "entity_property:i002d5259795218cf62b",
+        "origin": "human",
+        "property": "ontology_property:p441fb0af8c127b8936c",
+        "source": "document:tpfxkz7d23f1swwuzfpi",
+        "value_text": "In stock",
+        "vault": "vault:2oxb9ism79xia4hivfdo"
+      },
+      {
+        "as_of": "2026-11-08T17:12:28.441483Z",
+        "created_at": "2026-11-08T17:12:28.645125297Z",
+        "entity": "entity:g6atedo7qfmmgxrsu3kg",
+        "id": "entity_property:i01f2de8ebf587ceaf6e",
+        "origin": "human",
+        "property": "ontology_property:p3aead7101655ddb0cfc",
+        "source": "document:tpfxkz7d23f1swwuzfpi",
+        "value_num": 85.0,
+        "vault": "vault:2oxb9ism79xia4hivfdo"
+      }
+    ],
+    "status": "OK",
+    "time": "269.583\u00b5s",
+    "type": null
+  },
+  {
+    "result": [
+      {
+        "created_at": "2026-11-08T17:12:28.569751380Z",
+        "id": "relates_to:10wknnn699ocuyg90t4q",
+        "in": "entity:rw4zdzefv7cpt7ilg8fo",
+        "label": "supplied_by",
+        "out": "organisation:9ifpiov3oonxkx79jwnt",
+        "owner": "user:dlyxu5m652qrr4gjdd1e"
+      },
+      {
+        "created_at": "2026-11-08T17:12:28.589387339Z",
+        "id": "relates_to:1i2igrnss1lkpsk7zoxl",
+        "in": "entity:ih2fpblnfindi91da6a1",
+        "label": "supplied_by",
+        "out": "organisation:9ifpiov3oonxkx79jwnt",
+        "owner": "user:dlyxu5m652qrr4gjdd1e"
+      }
+    ],
+    "status": "OK",
+    "time": "92.625\u00b5s",
+    "type": null
+  },
+  {
+    "result": {
+      "accesses": {},
+      "analyzers": {
+        "cache_text_analyzer": "DEFINE ANALYZER cache_text_analyzer TOKENIZERS BLANK,CLASS FILTERS LOWERCASE, SNOWBALL(ENGLISH)"
+      },
+      "apis": {},
+      "buckets": {
+        "documents": "DEFINE BUCKET documents BACKEND 'file:/data/documents/org_ad42707627ce9d58b48997c4ef2078cc' PERMISSIONS FULL"
+      },
+      "configs": {},
+      "functions": {},
+      "models": {},
+      "modules": {},
+      "params": {},
+      "sequences": {},
+      "tables": {
+        "_migration": "DEFINE TABLE _migration TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "_migration_lock": "DEFINE TABLE _migration_lock TYPE ANY SCHEMALESS PERMISSIONS NONE",
+        "app_settings": "DEFINE TABLE app_settings TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "audit_log": "DEFINE TABLE audit_log TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "cache_record": "DEFINE TABLE cache_record TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "change": "DEFINE TABLE change TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "change_seq": "DEFINE TABLE change_seq TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "chat_message": "DEFINE TABLE chat_message TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "chat_thread": "DEFINE TABLE chat_thread TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "connector": "DEFINE TABLE connector TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "credential_ref": "DEFINE TABLE credential_ref TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "document": "DEFINE TABLE document TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "embed_cache": "DEFINE TABLE embed_cache TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "entity": "DEFINE TABLE entity TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "entity_property": "DEFINE TABLE entity_property TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "extension": "DEFINE TABLE extension TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "extension_event": "DEFINE TABLE extension_event TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "file": "DEFINE TABLE file TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "linked_to": "DEFINE TABLE linked_to TYPE RELATION IN cache_record OUT cache_record SCHEMAFULL PERMISSIONS NONE",
+        "location": "DEFINE TABLE location TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "memory": "DEFINE TABLE memory TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "ontology_kind": "DEFINE TABLE ontology_kind TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "ontology_link": "DEFINE TABLE ontology_link TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "ontology_metric": "DEFINE TABLE ontology_metric TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "ontology_property": "DEFINE TABLE ontology_property TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "organisation": "DEFINE TABLE organisation TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "peer_instance": "DEFINE TABLE peer_instance TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "peer_item": "DEFINE TABLE peer_item TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "peer_link": "DEFINE TABLE peer_link TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "peer_share": "DEFINE TABLE peer_share TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "person": "DEFINE TABLE person TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "pocket_recording": "DEFINE TABLE pocket_recording TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "redact_backfill": "DEFINE TABLE redact_backfill TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "relates_to": "DEFINE TABLE relates_to TYPE RELATION IN person | organisation | location | repository | file | symbol | entity OUT person | organisation | location | repository | file | symbol | entity SCHEMAFULL PERMISSIONS NONE",
+        "repository": "DEFINE TABLE repository TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "secret_provider": "DEFINE TABLE secret_provider TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "secret_request": "DEFINE TABLE secret_request TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "skill": "DEFINE TABLE skill TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "symbol": "DEFINE TABLE symbol TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "sync_status": "DEFINE TABLE sync_status TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "vault": "DEFINE TABLE vault TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "vault_member": "DEFINE TABLE vault_member TYPE NORMAL SCHEMAFULL PERMISSIONS NONE",
+        "vault_secret": "DEFINE TABLE vault_secret TYPE NORMAL SCHEMAFULL PERMISSIONS NONE"
+      },
+      "users": {
+        "app": "DEFINE USER app ON DATABASE PASSHASH '[REDACTED]' PASSSCRAM '[REDACTED]' ROLES EDITOR DURATION FOR TOKEN 1h, FOR SESSION NONE"
+      }
+    },
+    "status": "OK",
+    "time": "2.435209ms",
+    "type": null
+  }
+]

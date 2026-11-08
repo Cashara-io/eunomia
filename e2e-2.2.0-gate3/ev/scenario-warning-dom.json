@@ -1,0 +1,6 @@
+{
+  "warnings": [
+    "1 picked product have no unit cost value, so the change left them out",
+    "gross_margin: left out 2 entities missing a value one side needs, so both sides of the ratio use the same entities"
+  ]
+}

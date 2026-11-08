@@ -1,0 +1,903 @@
+{
+  "vault": "vault:2oxb9ism79xia4hivfdo",
+  "strict": true,
+  "kinds": [
+    {
+      "kind": "person",
+      "built_in": true,
+      "status": "approved",
+      "description": null,
+      "merge_into": null,
+      "synonyms": [],
+      "origin": "human",
+      "reason": null,
+      "entities": 1,
+      "samples": [
+        "Priya Nair"
+      ],
+      "properties": [],
+      "metrics": []
+    },
+    {
+      "kind": "organisation",
+      "built_in": true,
+      "status": "approved",
+      "description": null,
+      "merge_into": null,
+      "synonyms": [],
+      "origin": "human",
+      "reason": null,
+      "entities": 5,
+      "samples": [
+        "Fronius Australia",
+        "NT Cable Co",
+        "Rexel Darwin"
+      ],
+      "properties": [],
+      "metrics": []
+    },
+    {
+      "kind": "location",
+      "built_in": true,
+      "status": "observed",
+      "description": null,
+      "merge_into": null,
+      "synonyms": [],
+      "origin": null,
+      "reason": null,
+      "entities": 0,
+      "samples": [],
+      "properties": [],
+      "metrics": []
+    },
+    {
+      "kind": "repository",
+      "built_in": true,
+      "status": "observed",
+      "description": null,
+      "merge_into": null,
+      "synonyms": [],
+      "origin": null,
+      "reason": null,
+      "entities": 0,
+      "samples": [],
+      "properties": [],
+      "metrics": []
+    },
+    {
+      "kind": "file",
+      "built_in": true,
+      "status": "observed",
+      "description": null,
+      "merge_into": null,
+      "synonyms": [],
+      "origin": null,
+      "reason": null,
+      "entities": 0,
+      "samples": [],
+      "properties": [],
+      "metrics": []
+    },
+    {
+      "kind": "symbol",
+      "built_in": true,
+      "status": "observed",
+      "description": null,
+      "merge_into": null,
+      "synonyms": [],
+      "origin": null,
+      "reason": null,
+      "entities": 0,
+      "samples": [],
+      "properties": [],
+      "metrics": []
+    },
+    {
+      "kind": "crew",
+      "built_in": false,
+      "status": "approved",
+      "description": "A work crew (A, B or C) that is assigned jobs and a ute.",
+      "merge_into": null,
+      "synonyms": [],
+      "origin": "agent",
+      "reason": null,
+      "entities": 3,
+      "samples": [
+        "Crew A",
+        "Crew B",
+        "Crew C"
+      ],
+      "properties": [],
+      "metrics": []
+    },
+    {
+      "kind": "customer",
+      "built_in": false,
+      "status": "approved",
+      "description": "A person or organisation we do installation work for.",
+      "merge_into": null,
+      "synonyms": [
+        "client"
+      ],
+      "origin": "agent",
+      "reason": null,
+      "entities": 6,
+      "samples": [
+        "Aisha Brown",
+        "Casuarina Community Hall",
+        "Daniel Wilson"
+      ],
+      "properties": [],
+      "metrics": []
+    },
+    {
+      "kind": "decision",
+      "built_in": false,
+      "status": "approved",
+      "description": "A business decision with an effective date and who approved it.",
+      "merge_into": null,
+      "synonyms": [],
+      "origin": "agent",
+      "reason": null,
+      "entities": 1,
+      "samples": [
+        "Call-out fee increase"
+      ],
+      "properties": [
+        {
+          "name": "amount",
+          "datatype": "money",
+          "unit": "AUD",
+          "enum_values": null,
+          "description": "Dollar amount the decision sets, e.g. the call-out fee.",
+          "synonyms": [],
+          "status": "approved",
+          "merge_into": null,
+          "origin": "agent",
+          "reason": null,
+          "values": 0,
+          "samples": [],
+          "source_map": []
+        },
+        {
+          "name": "effective_date",
+          "datatype": "date",
+          "unit": null,
+          "enum_values": null,
+          "description": "Date the decision takes effect.",
+          "synonyms": [],
+          "status": "approved",
+          "merge_into": null,
+          "origin": "agent",
+          "reason": null,
+          "values": 0,
+          "samples": [],
+          "source_map": []
+        }
+      ],
+      "metrics": []
+    },
+    {
+      "kind": "delivery",
+      "built_in": false,
+      "status": "approved",
+      "description": "An inbound delivery of stock from suppliers, carried by a vehicle and meant for named jobs.",
+      "merge_into": null,
+      "synonyms": [
+        "inbound delivery"
+      ],
+      "origin": "agent",
+      "reason": null,
+      "entities": 1,
+      "samples": [
+        "IN-77"
+      ],
+      "properties": [
+        {
+          "name": "expected_date",
+          "datatype": "date",
+          "unit": null,
+          "enum_values": null,
+          "description": "Date the delivery is expected.",
+          "synonyms": [],
+          "status": "approved",
+          "merge_into": null,
+          "origin": "agent",
+          "reason": null,
+          "values": 0,
+          "samples": [],
+          "source_map": []
+        }
+      ],
+      "metrics": []
+    },
+    {
+      "kind": "equipment",
+      "built_in": false,
+      "status": "approved",
+      "description": "Office or workshop equipment owned by the business.",
+      "merge_into": null,
+      "synonyms": [],
+      "origin": "agent",
+      "reason": null,
+      "entities": 1,
+      "samples": [
+        "Label Printer 2"
+      ],
+      "properties": [],
+      "metrics": []
+    },
+    {
+      "kind": "job",
+      "built_in": false,
+      "status": "approved",
+      "description": "A customer job with a TES number, a crew and a due date.",
+      "merge_into": null,
+      "synonyms": [
+        "work order"
+      ],
+      "origin": "agent",
+      "reason": null,
+      "entities": 6,
+      "samples": [
+        "TES-101",
+        "TES-102",
+        "TES-103"
+      ],
+      "properties": [
+        {
+          "name": "due_date",
+          "datatype": "date",
+          "unit": null,
+          "enum_values": null,
+          "description": "Date the job is due.",
+          "synonyms": [],
+          "status": "approved",
+          "merge_into": null,
+          "origin": "agent",
+          "reason": null,
+          "values": 0,
+          "samples": [],
+          "source_map": []
+        },
+        {
+          "name": "job_number",
+          "datatype": "text",
+          "unit": null,
+          "enum_values": null,
+          "description": "The TES job number, e.g. TES-101.",
+          "synonyms": [],
+          "status": "approved",
+          "merge_into": null,
+          "origin": "agent",
+          "reason": null,
+          "values": 0,
+          "samples": [],
+          "source_map": []
+        },
+        {
+          "name": "suburb",
+          "datatype": "text",
+          "unit": null,
+          "enum_values": null,
+          "description": "Where the job site is.",
+          "synonyms": [],
+          "status": "approved",
+          "merge_into": null,
+          "origin": "agent",
+          "reason": null,
+          "values": 0,
+          "samples": [],
+          "source_map": []
+        }
+      ],
+      "metrics": [
+        {
+          "name": "open_jobs",
+          "description": "Number of jobs.",
+          "synonyms": [
+            "job count"
+          ],
+          "expr": {
+            "agg": "count"
+          },
+          "expr_words": "Number of job",
+          "unit": null,
+          "status": "approved",
+          "merge_into": null,
+          "origin": "agent",
+          "reason": null
+        }
+      ]
+    },
+    {
+      "kind": "product",
+      "built_in": false,
+      "status": "approved",
+      "description": "A stock item the business buys, holds and sells.",
+      "merge_into": null,
+      "synonyms": [
+        "stock item",
+        "item"
+      ],
+      "origin": "suggested",
+      "reason": "one kind for the stock.csv records",
+      "entities": 30,
+      "samples": [
+        "Cable Lug Pack",
+        "Cable Tie Pack",
+        "Clipsal Switchboard"
+      ],
+      "properties": [
+        {
+          "name": "last_received",
+          "datatype": "date",
+          "unit": null,
+          "enum_values": null,
+          "description": "Date the product was last received.",
+          "synonyms": [],
+          "status": "approved",
+          "merge_into": null,
+          "origin": "suggested",
+          "reason": "from last received",
+          "values": 30,
+          "samples": [
+            "2026-11-04",
+            "2026-11-02",
+            "2026-11-03"
+          ],
+          "source_map": [
+            {
+              "source": "document",
+              "record_type": "document:tpfxkz7d23f1swwuzfpi",
+              "path": "last received"
+            }
+          ]
+        },
+        {
+          "name": "qty_on_hand",
+          "datatype": "integer",
+          "unit": null,
+          "enum_values": null,
+          "description": "Units on hand.",
+          "synonyms": [
+            "stock",
+            "qty on hand"
+          ],
+          "status": "approved",
+          "merge_into": null,
+          "origin": "suggested",
+          "reason": "from qty on hand",
+          "values": 30,
+          "samples": [
+            "32",
+            "24",
+            "25"
+          ],
+          "source_map": [
+            {
+              "source": "document",
+              "record_type": "document:tpfxkz7d23f1swwuzfpi",
+              "path": "qty on hand"
+            }
+          ]
+        },
+        {
+          "name": "reorder_at",
+          "datatype": "integer",
+          "unit": null,
+          "enum_values": null,
+          "description": "Quantity threshold for reordering.",
+          "synonyms": [],
+          "status": "approved",
+          "merge_into": null,
+          "origin": "suggested",
+          "reason": "from reorder at",
+          "values": 30,
+          "samples": [
+            "10"
+          ],
+          "source_map": [
+            {
+              "source": "document",
+              "record_type": "document:tpfxkz7d23f1swwuzfpi",
+              "path": "reorder at"
+            }
+          ]
+        },
+        {
+          "name": "sell_price",
+          "datatype": "money",
+          "unit": "AUD",
+          "enum_values": null,
+          "description": "Selling price per unit.",
+          "synonyms": [
+            "price",
+            "sell price AUD"
+          ],
+          "status": "approved",
+          "merge_into": null,
+          "origin": "suggested",
+          "reason": "from sell price AUD",
+          "values": 30,
+          "samples": [
+            "85.00 AUD",
+            "42.00 AUD",
+            "12.50 AUD"
+          ],
+          "source_map": [
+            {
+              "source": "document",
+              "record_type": "document:tpfxkz7d23f1swwuzfpi",
+              "path": "sell price AUD"
+            }
+          ]
+        },
+        {
+          "name": "status",
+          "datatype": "enum",
+          "unit": null,
+          "enum_values": [
+            "Back-ordered",
+            "Discontinued",
+            "In stock"
+          ],
+          "description": "Current stock or availability status.",
+          "synonyms": [],
+          "status": "approved",
+          "merge_into": null,
+          "origin": "suggested",
+          "reason": "from status",
+          "values": 30,
+          "samples": [
+            "In stock",
+            "Back-ordered",
+            "Discontinued"
+          ],
+          "source_map": [
+            {
+              "source": "document",
+              "record_type": "document:tpfxkz7d23f1swwuzfpi",
+              "path": "status"
+            }
+          ]
+        },
+        {
+          "name": "unit_cost",
+          "datatype": "money",
+          "unit": "AUD",
+          "enum_values": null,
+          "description": "Cost per unit. Blank for Fronius Backup Switch and Cable Tie Pack in the stock list: owner to confirm.",
+          "synonyms": [
+            "cost",
+            "unit cost AUD"
+          ],
+          "status": "approved",
+          "merge_into": null,
+          "origin": "suggested",
+          "reason": "from unit cost AUD",
+          "values": 28,
+          "samples": [
+            "160.00 AUD",
+            "95.00 AUD",
+            "155.00 AUD"
+          ],
+          "source_map": [
+            {
+              "source": "document",
+              "record_type": "document:tpfxkz7d23f1swwuzfpi",
+              "path": "unit cost AUD"
+            }
+          ]
+        }
+      ],
+      "metrics": [
+        {
+          "name": "average_sell_price",
+          "description": "Average selling price per stock item.",
+          "synonyms": [
+            "average sell price",
+            "avg price"
+          ],
+          "expr": {
+            "agg": "avg",
+            "property": "sell_price"
+          },
+          "expr_words": "Average sell price",
+          "unit": "AUD",
+          "status": "approved",
+          "merge_into": null,
+          "origin": "suggested",
+          "reason": "computed from the stock.csv records' properties"
+        },
+        {
+          "name": "average_unit_cost",
+          "description": "Average unit cost per stock item.",
+          "synonyms": [],
+          "expr": {
+            "agg": "avg",
+            "property": "unit_cost"
+          },
+          "expr_words": "Average unit cost",
+          "unit": "AUD",
+          "status": "approved",
+          "merge_into": null,
+          "origin": "agent",
+          "reason": null
+        },
+        {
+          "name": "back_ordered_items",
+          "description": "Number of stock items currently back-ordered.",
+          "synonyms": [],
+          "expr": {
+            "agg": "count",
+            "filters": [
+              {
+                "property": "status",
+                "op": "eq",
+                "value": "Back-ordered"
+              }
+            ]
+          },
+          "expr_words": "Number of product where status is Back-ordered",
+          "unit": null,
+          "status": "approved",
+          "merge_into": null,
+          "origin": "agent",
+          "reason": null
+        },
+        {
+          "name": "gross_margin",
+          "description": "Gross margin: (sell price minus unit cost) over sell price, across stock items.",
+          "synonyms": [
+            "gross margin %",
+            "margin"
+          ],
+          "expr": {
+            "agg": "ratio",
+            "numerator": {
+              "agg": "sum",
+              "row": {
+                "op": "sub",
+                "left": "sell_price",
+                "right": "unit_cost"
+              }
+            },
+            "denominator": {
+              "agg": "sum",
+              "property": "sell_price"
+            }
+          },
+          "expr_words": "Sum of (sell price \u2212 unit cost), divided by sum of sell price",
+          "unit": "percent",
+          "status": "approved",
+          "merge_into": null,
+          "origin": "agent",
+          "reason": "Items with no unit cost may skew this until costs are confirmed."
+        },
+        {
+          "name": "inventory_cost_value",
+          "description": "Total stock value at cost: qty on hand times unit cost, summed.",
+          "synonyms": [
+            "total stock value at cost",
+            "stock value at cost"
+          ],
+          "expr": {
+            "agg": "sum",
+            "row": {
+              "op": "mul",
+              "left": "qty_on_hand",
+              "right": "unit_cost"
+            }
+          },
+          "expr_words": "Sum of qty on hand \u00d7 unit cost",
+          "unit": "AUD",
+          "status": "approved",
+          "merge_into": null,
+          "origin": "suggested",
+          "reason": "Two items have no unit cost in the stock list (Fronius Backup Switch, Cable Tie Pack), so the figure leaves them out until costs are confirmed."
+        },
+        {
+          "name": "total_stock_value_at_sell",
+          "description": "Total stock value at sell price: qty on hand times sell price, summed.",
+          "synonyms": [
+            "stock value at retail"
+          ],
+          "expr": {
+            "agg": "sum",
+            "row": {
+              "op": "mul",
+              "left": "qty_on_hand",
+              "right": "sell_price"
+            }
+          },
+          "expr_words": "Sum of qty on hand \u00d7 sell price",
+          "unit": "AUD",
+          "status": "approved",
+          "merge_into": null,
+          "origin": "agent",
+          "reason": null
+        },
+        {
+          "name": "total_units_on_hand",
+          "description": "Total quantity of this product currently on hand.",
+          "synonyms": [],
+          "expr": {
+            "agg": "sum",
+            "property": "qty_on_hand"
+          },
+          "expr_words": "Sum of qty on hand",
+          "unit": null,
+          "status": "approved",
+          "merge_into": null,
+          "origin": "suggested",
+          "reason": "computed from the stock.csv records' properties"
+        }
+      ]
+    },
+    {
+      "kind": "supplier",
+      "built_in": false,
+      "status": "approved",
+      "description": "what the supplier column names",
+      "merge_into": null,
+      "synonyms": [],
+      "origin": "suggested",
+      "reason": "Suppliers are already organisations (Rexel Darwin, Fronius Australia, Solar Juice, NT Cable Co). One kind avoids duplicates.",
+      "entities": 0,
+      "samples": [],
+      "properties": [],
+      "metrics": []
+    },
+    {
+      "kind": "vehicle",
+      "built_in": false,
+      "status": "approved",
+      "description": "A crew ute that carries deliveries.",
+      "merge_into": null,
+      "synonyms": [
+        "ute"
+      ],
+      "origin": "agent",
+      "reason": null,
+      "entities": 1,
+      "samples": [
+        "Ute 3"
+      ],
+      "properties": [],
+      "metrics": []
+    }
+  ],
+  "links": [
+    {
+      "from_kind": "crew",
+      "label": "assigned_to",
+      "to_kind": "job",
+      "status": "approved",
+      "description": "The crew doing a job.",
+      "origin": "agent",
+      "reason": null,
+      "count": 6,
+      "samples": [
+        {
+          "from": "Crew A",
+          "to": "TES-103"
+        },
+        {
+          "from": "Crew C",
+          "to": "TES-106"
+        },
+        {
+          "from": "Crew B",
+          "to": "TES-102"
+        }
+      ]
+    },
+    {
+      "from_kind": "customer",
+      "label": "has_job",
+      "to_kind": "job",
+      "status": "approved",
+      "description": "The customer a job is for.",
+      "origin": "agent",
+      "reason": null,
+      "count": 6,
+      "samples": [
+        {
+          "from": "Maya Chen",
+          "to": "TES-101"
+        },
+        {
+          "from": "Daniel Wilson",
+          "to": "TES-102"
+        },
+        {
+          "from": "Red Plains Cattle Station",
+          "to": "TES-104"
+        }
+      ]
+    },
+    {
+      "from_kind": "decision",
+      "label": "approved_by",
+      "to_kind": "person",
+      "status": "approved",
+      "description": "Who approved a decision.",
+      "origin": "agent",
+      "reason": null,
+      "count": 1,
+      "samples": [
+        {
+          "from": "Call-out fee increase",
+          "to": "Priya Nair"
+        }
+      ]
+    },
+    {
+      "from_kind": "delivery",
+      "label": "contains",
+      "to_kind": "product",
+      "status": "approved",
+      "description": "Stock inside a delivery.",
+      "origin": "agent",
+      "reason": null,
+      "count": 4,
+      "samples": [
+        {
+          "from": "IN-77",
+          "to": "Fronius Symo 10kW Inverter"
+        },
+        {
+          "from": "IN-77",
+          "to": "Fronius Backup Switch"
+        },
+        {
+          "from": "IN-77",
+          "to": "Clipsal Switchboard"
+        }
+      ]
+    },
+    {
+      "from_kind": "delivery",
+      "label": "supplied_by",
+      "to_kind": "organisation",
+      "status": "approved",
+      "description": "The supplier sending a delivery.",
+      "origin": "agent",
+      "reason": null,
+      "count": 2,
+      "samples": [
+        {
+          "from": "IN-77",
+          "to": "Rexel Darwin"
+        },
+        {
+          "from": "IN-77",
+          "to": "Fronius Australia"
+        }
+      ]
+    },
+    {
+      "from_kind": "delivery",
+      "label": "supplies_job",
+      "to_kind": "job",
+      "status": "approved",
+      "description": "A delivery holds stock for this job; a delay risks it.",
+      "origin": "agent",
+      "reason": null,
+      "count": 4,
+      "samples": [
+        {
+          "from": "IN-77",
+          "to": "TES-102"
+        },
+        {
+          "from": "IN-77",
+          "to": "TES-104"
+        },
+        {
+          "from": "IN-77",
+          "to": "TES-103"
+        }
+      ]
+    },
+    {
+      "from_kind": "job",
+      "label": "needs",
+      "to_kind": "product",
+      "status": "approved",
+      "description": "Stock a job needs. Quantities are in the link reason.",
+      "origin": "agent",
+      "reason": null,
+      "count": 17,
+      "samples": [
+        {
+          "from": "TES-104",
+          "to": "Earth Rod"
+        },
+        {
+          "from": "TES-104",
+          "to": "LONGi 500W Panel"
+        },
+        {
+          "from": "TES-103",
+          "to": "Jinko 475W Panel"
+        }
+      ]
+    },
+    {
+      "from_kind": "product",
+      "label": "supplied_by",
+      "to_kind": "organisation",
+      "status": "approved",
+      "description": "The supplier of a stock item.",
+      "origin": "agent",
+      "reason": null,
+      "count": 30,
+      "samples": [
+        {
+          "from": "Hager RCBO",
+          "to": "Rexel Darwin"
+        },
+        {
+          "from": "Meter Enclosure",
+          "to": "Rexel Darwin"
+        },
+        {
+          "from": "Roof Clamp Pack",
+          "to": "Solar Juice"
+        }
+      ]
+    },
+    {
+      "from_kind": "product",
+      "label": "supplied_by",
+      "to_kind": "supplier",
+      "status": "approved",
+      "description": "Supplier that provides this product.",
+      "origin": "suggested",
+      "reason": "no supplier exists yet: an import creates the 0 named in supplier once each; 4 name an existing entity (organisation Fronius Australia, organisation NT Cable Co, organisation Rexel Darwin, organisation Solar Juice), which an import links to instead of making new ones",
+      "count": 0,
+      "samples": [],
+      "source_map": [
+        {
+          "source": "document",
+          "record_type": "document:tpfxkz7d23f1swwuzfpi",
+          "path": "supplier"
+        }
+      ]
+    },
+    {
+      "from_kind": "vehicle",
+      "label": "allocated_to",
+      "to_kind": "crew",
+      "status": "approved",
+      "description": "The crew a ute is allocated to.",
+      "origin": "agent",
+      "reason": null,
+      "count": 1,
+      "samples": [
+        {
+          "from": "Ute 3",
+          "to": "Crew A"
+        }
+      ]
+    },
+    {
+      "from_kind": "vehicle",
+      "label": "carries",
+      "to_kind": "delivery",
+      "status": "approved",
+      "description": "The ute carrying a delivery.",
+      "origin": "agent",
+      "reason": null,
+      "count": 1,
+      "samples": [
+        {
+          "from": "Ute 3",
+          "to": "IN-77"
+        }
+      ]
+    }
+  ]
+}

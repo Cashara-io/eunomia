@@ -1,0 +1,209 @@
+<!doctype html><meta charset="utf-8"><style>body{font:15px/1.45 system-ui;margin:32px;background:#f5f5f1;color:#202322}h1{font-size:25px}h2{font-size:20px}h3{font-size:15px;margin:0 0 8px}article,.final{padding:18px;background:white;border:1px solid #d9ded8;margin:12px 0;border-radius:5px}pre{font:12px/1.4 ui-monospace;white-space:pre-wrap;overflow-wrap:anywhere;margin:4px 0}.final pre{font:16px/1.5 system-ui}.result{background:#f1f5f1;padding:10px}summary{font-size:12px;color:#566458}</style><h1>Eunomia 2.2.0 gate 3: p3/q6.jsonl</h1><p>Complete transcript is preserved beside this review as JSONL and text. Expand a tool to inspect its full input and result.</p><h2>Final answer</h2><div class="final"><pre>I haven&#x27;t saved it yet. The vault won&#x27;t take a new kind until an owner approves it.
+
+**What I did:** I filed `ev_charger` as a proposal in the Top End Solar &amp; Electrical vault. Its description is &quot;An electric vehicle charger the business sells and installs.&quot;
+
+**What happened:** I tried to write &quot;Top End Solar &amp; Electrical now sells EV chargers&quot; under that kind. The vault refused, because `ev_charger` isn&#x27;t approved.
+
+**What you do now:** Open the Eunomia app and approve `ev_charger` for Top End Solar &amp; Electrical. Then tell me, and I&#x27;ll save the fact.
+
+I wouldn&#x27;t save it under `product` as a stopgap. That would put the fact under the wrong kind, and you asked for `ev_charger`.</pre></div><h2>Tool evidence in call order</h2><article><h3>mcp__eunomia-local__vault_list</h3><pre>{}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__vault_list&quot;,
+  &quot;arguments&quot;: {},
+  &quot;id&quot;: &quot;toolu_01AoiicRpUEfEK6rYoaFWqEw&quot;,
+  &quot;result&quot;: {
+    &quot;results&quot;: [
+      {
+        &quot;is_default&quot;: true,
+        &quot;id&quot;: &quot;vault:p8360f8493ebc0ab24dd&quot;,
+        &quot;name&quot;: &quot;Personal&quot;,
+        &quot;kind&quot;: &quot;personal&quot;,
+        &quot;created_at&quot;: &quot;2026-11-08T17:09:07.523205051Z&quot;,
+        &quot;role&quot;: &quot;owner&quot;
+      },
+      {
+        &quot;is_default&quot;: false,
+        &quot;id&quot;: &quot;vault:8iz0hyym38leojujbgo4&quot;,
+        &quot;name&quot;: &quot;Darwin Footy Club&quot;,
+        &quot;kind&quot;: &quot;org&quot;,
+        &quot;created_at&quot;: &quot;2026-11-08T17:09:07.582942635Z&quot;,
+        &quot;role&quot;: &quot;owner&quot;
+      },
+      {
+        &quot;is_default&quot;: false,
+        &quot;id&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+        &quot;name&quot;: &quot;Top End Solar &amp; Electrical&quot;,
+        &quot;kind&quot;: &quot;org&quot;,
+        &quot;created_at&quot;: &quot;2026-11-08T17:09:23.273029420Z&quot;,
+        &quot;role&quot;: &quot;owner&quot;
+      }
+    ]
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_types</h3><pre>{}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_types&quot;,
+  &quot;arguments&quot;: {},
+  &quot;id&quot;: &quot;toolu_01DBQqzQPpKBCNZMY6iMJrKa&quot;,
+  &quot;result&quot;: {
+    &quot;built_in&quot;: [
+      &quot;person&quot;,
+      &quot;organisation&quot;,
+      &quot;location&quot;,
+      &quot;repository&quot;,
+      &quot;file&quot;,
+      &quot;symbol&quot;
+    ],
+    &quot;custom&quot;: [
+      {
+        &quot;kind&quot;: &quot;crew&quot;,
+        &quot;entities&quot;: 3,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;A work crew (A, B or C) that is assigned jobs and a ute.&quot;,
+        &quot;spaces&quot;: [
+          &quot;Top End Solar &amp; Electrical&quot;
+        ]
+      },
+      {
+        &quot;kind&quot;: &quot;customer&quot;,
+        &quot;entities&quot;: 6,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;A person or organisation we do installation work for.&quot;,
+        &quot;spaces&quot;: [
+          &quot;Top End Solar &amp; Electrical&quot;
+        ]
+      },
+      {
+        &quot;kind&quot;: &quot;decision&quot;,
+        &quot;entities&quot;: 1,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;A business decision with an effective date and who approved it.&quot;,
+        &quot;spaces&quot;: [
+          &quot;Top End Solar &amp; Electrical&quot;
+        ]
+      },
+      {
+        &quot;kind&quot;: &quot;delivery&quot;,
+        &quot;entities&quot;: 1,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;An inbound delivery of stock from suppliers, carried by a vehicle and meant for named jobs.&quot;,
+        &quot;spaces&quot;: [
+          &quot;Top End Solar &amp; Electrical&quot;
+        ]
+      },
+      {
+        &quot;kind&quot;: &quot;equipment&quot;,
+        &quot;entities&quot;: 1,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;Office or workshop equipment owned by the business.&quot;,
+        &quot;spaces&quot;: [
+          &quot;Top End Solar &amp; Electrical&quot;
+        ]
+      },
+      {
+        &quot;kind&quot;: &quot;job&quot;,
+        &quot;entities&quot;: 6,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;A customer job with a TES number, a crew and a due date.&quot;,
+        &quot;spaces&quot;: [
+          &quot;Top End Solar &amp; Electrical&quot;
+        ]
+      },
+      {
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;entities&quot;: 30,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;A stock item the business buys, holds and sells.&quot;,
+        &quot;spaces&quot;: [
+          &quot;Top End Solar &amp; Electrical&quot;
+        ]
+      },
+      {
+        &quot;kind&quot;: &quot;supplier&quot;,
+        &quot;entities&quot;: 0,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;what the supplier column names&quot;,
+        &quot;spaces&quot;: [
+          &quot;Top End Solar &amp; Electrical&quot;
+        ]
+      },
+      {
+        &quot;kind&quot;: &quot;topic&quot;,
+        &quot;entities&quot;: 3,
+        &quot;status&quot;: &quot;observed&quot;,
+        &quot;spaces&quot;: [
+          &quot;Darwin Footy Club&quot;
+        ]
+      },
+      {
+        &quot;kind&quot;: &quot;vehicle&quot;,
+        &quot;entities&quot;: 1,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;A crew ute that carries deliveries.&quot;,
+        &quot;spaces&quot;: [
+          &quot;Top End Solar &amp; Electrical&quot;
+        ]
+      }
+    ]
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__ontology_propose</h3><pre>{
+  &quot;vault_id&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+  &quot;kinds&quot;: [
+    {
+      &quot;kind&quot;: &quot;ev_charger&quot;,
+      &quot;description&quot;: &quot;An electric vehicle charger the business sells and installs.&quot;,
+      &quot;reason&quot;: &quot;The business now sells EV chargers, and no existing kind fits.&quot;
+    }
+  ]
+}</pre><pre class="result">{
+  &quot;kinds&quot;: 1,
+  &quot;links&quot;: 0,
+  &quot;properties&quot;: 0,
+  &quot;metrics&quot;: 0
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__ontology_propose&quot;,
+  &quot;arguments&quot;: {
+    &quot;vault_id&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+    &quot;kinds&quot;: [
+      {
+        &quot;kind&quot;: &quot;ev_charger&quot;,
+        &quot;description&quot;: &quot;An electric vehicle charger the business sells and installs.&quot;,
+        &quot;reason&quot;: &quot;The business now sells EV chargers, and no existing kind fits.&quot;
+      }
+    ]
+  },
+  &quot;id&quot;: &quot;toolu_015uNMcrQeVXB5TsJgPDLYS9&quot;,
+  &quot;result&quot;: {
+    &quot;kinds&quot;: [
+      {
+        &quot;kind&quot;: &quot;ev_charger&quot;,
+        &quot;status&quot;: &quot;proposed&quot;,
+        &quot;merge_into&quot;: null
+      }
+    ],
+    &quot;links&quot;: [],
+    &quot;properties&quot;: [],
+    &quot;metrics&quot;: []
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__memory_write</h3><pre>{
+  &quot;vault_id&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+  &quot;subject_name&quot;: &quot;EV chargers&quot;,
+  &quot;subject_kind&quot;: &quot;ev_charger&quot;,
+  &quot;type&quot;: &quot;world&quot;,
+  &quot;text&quot;: &quot;Top End Solar &amp; Electrical now sells EV chargers.&quot;
+}</pre><pre class="result">{
+  &quot;error&quot;: &quot;this vault takes only approved kinds and links, and the kind \&quot;ev_charger\&quot; is not approved: write under a built-in kind (person, organisation, location, repository, file, symbol) or an approved kind (crew, customer, decision, delivery, equipment, job, organisation, person, product, supplier, vehicle). It was filed as a proposal for a vault owner to review.&quot;,
+  &quot;code&quot;: &quot;ontology.rejected&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__memory_write&quot;,
+  &quot;arguments&quot;: {
+    &quot;vault_id&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+    &quot;subject_name&quot;: &quot;EV chargers&quot;,
+    &quot;subject_kind&quot;: &quot;ev_charger&quot;,
+    &quot;type&quot;: &quot;world&quot;,
+    &quot;text&quot;: &quot;Top End Solar &amp; Electrical now sells EV chargers.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01VSuAaF1HaQzAFXBbb9yRri&quot;,
+  &quot;result&quot;: {
+    &quot;error&quot;: &quot;this vault takes only approved kinds and links, and the kind \&quot;ev_charger\&quot; is not approved: write under a built-in kind (person, organisation, location, repository, file, symbol) or an approved kind (crew, customer, decision, delivery, equipment, job, organisation, person, product, supplier, vehicle). It was filed as a proposal for a vault owner to review.&quot;,
+    &quot;code&quot;: &quot;ontology.rejected&quot;,
+    &quot;trace_id&quot;: &quot;6de7651da3a840408b46a80400ffd06b&quot;
+  }
+}</pre></details></article>

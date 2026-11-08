@@ -1,0 +1,22 @@
+{
+  "metric": "open_jobs",
+  "kind": "job",
+  "vault": "vault:2oxb9ism79xia4hivfdo",
+  "description": "Number of jobs.",
+  "expr_words": "Number of job",
+  "value": 6.0,
+  "unit": null,
+  "as_of": "2026-11-08T17:19:38Z",
+  "n_entities": 6,
+  "entity_ids": [
+    "entity:beorhbu8vzx2c6a35nzb",
+    "entity:gos3hhmjpzgq81crg5xf",
+    "entity:i365f1twourkj0qnrc9a",
+    "entity:kuda44ivjyfhc1y3b795",
+    "entity:wi9k4y3jg9gi2yleseo8",
+    "entity:x6f3wdxm6g2euly5aarg"
+  ],
+  "truncated": false,
+  "status": "approved",
+  "warnings": []
+}

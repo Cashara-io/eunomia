@@ -1,0 +1,37 @@
+{
+  "ports": {
+    "8481": {
+      "terminated": [
+        {
+          "pid": 7438,
+          "command": "/Users/avi/.t3/worktrees/eunomia/t3-9faae89b/backend/target/debug/eunomia-backend",
+          "signal": "TERM"
+        }
+      ],
+      "free": true
+    },
+    "3480": {
+      "terminated": [
+        {
+          "pid": 4176,
+          "command": "next-server (v16.3.4)",
+          "signal": "TERM"
+        }
+      ],
+      "free": true
+    },
+    "8100": {
+      "free": true
+    }
+  },
+  "container_absent": true,
+  "backend_target_absent": true,
+  "other_containers": [
+    "eu209-surrealdb-1 127.0.0.1:8000->8000/tcp",
+    "eu209-secrets-helper-1 8080/tcp",
+    "eunomia-reel-frontend-1 0.0.0.0:3000->3000/tcp",
+    "eunomia-reel-backend-1 127.0.0.1:8001->8001/tcp",
+    "eunomia-reel-surrealdb-1 "
+  ],
+  "product_diff": ""
+}

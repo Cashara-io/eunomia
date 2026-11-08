@@ -1,0 +1,23 @@
+[
+  {
+    "quantity": "margin before",
+    "displayed": 35.8,
+    "exact": 35.756119997956,
+    "difference": 0.043880002044,
+    "pass": false
+  },
+  {
+    "quantity": "margin after",
+    "displayed": 35.4,
+    "exact": 35.435682526703,
+    "difference": 0.035682526703,
+    "pass": false
+  },
+  {
+    "quantity": "margin drop in points",
+    "displayed": 0.4,
+    "exact": 0.320437471253,
+    "difference": 0.079562528747,
+    "pass": false
+  }
+]

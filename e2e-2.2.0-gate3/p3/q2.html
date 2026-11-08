@@ -1,0 +1,591 @@
+<!doctype html><meta charset="utf-8"><style>body{font:15px/1.45 system-ui;margin:32px;background:#f5f5f1;color:#202322}h1{font-size:25px}h2{font-size:20px}h3{font-size:15px;margin:0 0 8px}article,.final{padding:18px;background:white;border:1px solid #d9ded8;margin:12px 0;border-radius:5px}pre{font:12px/1.4 ui-monospace;white-space:pre-wrap;overflow-wrap:anywhere;margin:4px 0}.final pre{font:16px/1.5 system-ui}.result{background:#f1f5f1;padding:10px}summary{font-size:12px;color:#566458}</style><h1>Eunomia 2.2.0 gate 3: p3/q2.jsonl</h1><p>Complete transcript is preserved beside this review as JSONL and text. Expand a tool to inspect its full input and result.</p><h2>Final answer</h2><div class="final"><pre>**Gross margin on Fronius Australia items is about 35.3%.**
+
+- It covers 7 of the 8 products Fronius Australia supplies.
+- The 8th is the Fronius Backup Switch. It has no unit cost in the stock list, so the sum leaves it out. The real margin could be a bit different once you confirm that cost.
+- The figure comes from the approved `gross_margin` metric: (sell price minus unit cost) divided by sell price. It is a price-weighted margin across the 7 products. It is not weighted by how many you sell.
+
+**What to do:** Tell me the Backup Switch&#x27;s cost and I&#x27;ll save it. Then the number will cover all 8.</pre></div><h2>Tool evidence in call order</h2><article><h3>mcp__eunomia-local__ontology_coverage</h3><pre>{
+  &quot;question&quot;: &quot;What is our gross margin on Fronius Australia items?&quot;
+}</pre><pre class="result">{
+  &quot;vault_name&quot;: &quot;Top End Solar &amp; Electrical&quot;,
+  &quot;coverage&quot;: 1.0,
+  &quot;chosen_by&quot;: &quot;coverage&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__ontology_coverage&quot;,
+  &quot;arguments&quot;: {
+    &quot;question&quot;: &quot;What is our gross margin on Fronius Australia items?&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01CA1iQHJ9zJcprja219MjHi&quot;,
+  &quot;result&quot;: {
+    &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+    &quot;vault_name&quot;: &quot;Top End Solar &amp; Electrical&quot;,
+    &quot;coverage&quot;: 1.0,
+    &quot;matched&quot;: [
+      {
+        &quot;phrase&quot;: &quot;gross margin&quot;,
+        &quot;term&quot;: &quot;metric&quot;,
+        &quot;name&quot;: &quot;gross_margin&quot;,
+        &quot;of_kind&quot;: &quot;product&quot;,
+        &quot;distance&quot;: 0.0
+      },
+      {
+        &quot;phrase&quot;: &quot;items&quot;,
+        &quot;term&quot;: &quot;kind&quot;,
+        &quot;name&quot;: &quot;product&quot;,
+        &quot;distance&quot;: 0.0
+      }
+    ],
+    &quot;uncovered&quot;: [],
+    &quot;chosen_by&quot;: &quot;coverage&quot;,
+    &quot;suggestion&quot;: &quot;Every term maps to the vault&#x27;s approved ontology: answer a number with metric_eval and a what-if with scenario_run, passing this vault as vault_id.&quot;,
+    &quot;mode&quot;: &quot;model&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entities_search</h3><pre>{
+  &quot;query&quot;: &quot;Fronius Australia&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entities_search&quot;,
+  &quot;arguments&quot;: {
+    &quot;query&quot;: &quot;Fronius Australia&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01PN9agcxsKLsnssQcFK3ZXm&quot;,
+  &quot;result&quot;: {
+    &quot;results&quot;: [
+      {
+        &quot;id&quot;: &quot;organisation:1d72xkro2flp4vob5dpr&quot;,
+        &quot;kind&quot;: &quot;organisation&quot;,
+        &quot;name&quot;: &quot;Fronius Australia&quot;,
+        &quot;aliases&quot;: [],
+        &quot;summary&quot;: &quot;&quot;,
+        &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+      },
+      {
+        &quot;id&quot;: &quot;entity:4pfte5w3klwhx91i3r0z&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;name&quot;: &quot;Fronius Backup Switch&quot;,
+        &quot;aliases&quot;: [],
+        &quot;summary&quot;: &quot;&quot;,
+        &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+      },
+      {
+        &quot;id&quot;: &quot;entity:huoak6t2794pqu3xnd3i&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;name&quot;: &quot;Fronius Primo 5kW Inverter&quot;,
+        &quot;aliases&quot;: [],
+        &quot;summary&quot;: &quot;&quot;,
+        &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+      },
+      {
+        &quot;id&quot;: &quot;entity:fd9j8zgtnm937rchfbm4&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;name&quot;: &quot;Fronius Smart Meter&quot;,
+        &quot;aliases&quot;: [],
+        &quot;summary&quot;: &quot;&quot;,
+        &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+      },
+      {
+        &quot;id&quot;: &quot;entity:2b9dadf9ofxwyirqcwus&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;name&quot;: &quot;Fronius Symo 10kW Inverter&quot;,
+        &quot;aliases&quot;: [],
+        &quot;summary&quot;: &quot;&quot;,
+        &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+      },
+      {
+        &quot;id&quot;: &quot;entity:lqjtpdeb4y11awo3ums3&quot;,
+        &quot;kind&quot;: &quot;delivery&quot;,
+        &quot;name&quot;: &quot;IN-77&quot;,
+        &quot;aliases&quot;: [],
+        &quot;summary&quot;: &quot;&quot;,
+        &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;
+      }
+    ],
+    &quot;total&quot;: 6,
+    &quot;has_more&quot;: false
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__ontology_get</h3><pre>{
+  &quot;vault_id&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+  &quot;kind&quot;: &quot;product&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__ontology_get&quot;,
+  &quot;arguments&quot;: {
+    &quot;vault_id&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+    &quot;kind&quot;: &quot;product&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01HVLgrX5abKeazbqHEcRvts&quot;,
+  &quot;result&quot;: {
+    &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+    &quot;strict&quot;: true,
+    &quot;kinds&quot;: [
+      {
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;built_in&quot;: false,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;A stock item the business buys, holds and sells.&quot;,
+        &quot;merge_into&quot;: null,
+        &quot;synonyms&quot;: [
+          &quot;stock item&quot;,
+          &quot;item&quot;
+        ],
+        &quot;origin&quot;: &quot;suggested&quot;,
+        &quot;reason&quot;: &quot;one kind for the stock.csv records&quot;,
+        &quot;entities&quot;: 30,
+        &quot;samples&quot;: [
+          &quot;Cable Lug Pack&quot;,
+          &quot;Cable Tie Pack&quot;,
+          &quot;Clipsal Switchboard&quot;
+        ],
+        &quot;properties&quot;: [
+          {
+            &quot;name&quot;: &quot;last_received&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;unit&quot;: null,
+            &quot;enum_values&quot;: null,
+            &quot;description&quot;: &quot;Date the product was last received.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;from last received&quot;,
+            &quot;values&quot;: 30,
+            &quot;samples&quot;: [
+              &quot;2026-11-04&quot;,
+              &quot;2026-11-02&quot;,
+              &quot;2026-11-03&quot;
+            ],
+            &quot;source_map&quot;: [
+              {
+                &quot;source&quot;: &quot;document&quot;,
+                &quot;record_type&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;,
+                &quot;path&quot;: &quot;last received&quot;
+              }
+            ]
+          },
+          {
+            &quot;name&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;unit&quot;: null,
+            &quot;enum_values&quot;: null,
+            &quot;description&quot;: &quot;Units on hand.&quot;,
+            &quot;synonyms&quot;: [
+              &quot;stock&quot;,
+              &quot;qty on hand&quot;
+            ],
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;from qty on hand&quot;,
+            &quot;values&quot;: 30,
+            &quot;samples&quot;: [
+              &quot;32&quot;,
+              &quot;24&quot;,
+              &quot;25&quot;
+            ],
+            &quot;source_map&quot;: [
+              {
+                &quot;source&quot;: &quot;document&quot;,
+                &quot;record_type&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;,
+                &quot;path&quot;: &quot;qty on hand&quot;
+              }
+            ]
+          },
+          {
+            &quot;name&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;unit&quot;: null,
+            &quot;enum_values&quot;: null,
+            &quot;description&quot;: &quot;Quantity threshold for reordering.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;from reorder at&quot;,
+            &quot;values&quot;: 30,
+            &quot;samples&quot;: [
+              &quot;10&quot;
+            ],
+            &quot;source_map&quot;: [
+              {
+                &quot;source&quot;: &quot;document&quot;,
+                &quot;record_type&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;,
+                &quot;path&quot;: &quot;reorder at&quot;
+              }
+            ]
+          },
+          {
+            &quot;name&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;enum_values&quot;: null,
+            &quot;description&quot;: &quot;Selling price per unit.&quot;,
+            &quot;synonyms&quot;: [
+              &quot;price&quot;,
+              &quot;sell price AUD&quot;
+            ],
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;from sell price AUD&quot;,
+            &quot;values&quot;: 30,
+            &quot;samples&quot;: [
+              &quot;85.00 AUD&quot;,
+              &quot;42.00 AUD&quot;,
+              &quot;12.50 AUD&quot;
+            ],
+            &quot;source_map&quot;: [
+              {
+                &quot;source&quot;: &quot;document&quot;,
+                &quot;record_type&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;,
+                &quot;path&quot;: &quot;sell price AUD&quot;
+              }
+            ]
+          },
+          {
+            &quot;name&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;unit&quot;: null,
+            &quot;enum_values&quot;: [
+              &quot;Back-ordered&quot;,
+              &quot;Discontinued&quot;,
+              &quot;In stock&quot;
+            ],
+            &quot;description&quot;: &quot;Current stock or availability status.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;from status&quot;,
+            &quot;values&quot;: 30,
+            &quot;samples&quot;: [
+              &quot;In stock&quot;,
+              &quot;Back-ordered&quot;,
+              &quot;Discontinued&quot;
+            ],
+            &quot;source_map&quot;: [
+              {
+                &quot;source&quot;: &quot;document&quot;,
+                &quot;record_type&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;,
+                &quot;path&quot;: &quot;status&quot;
+              }
+            ]
+          },
+          {
+            &quot;name&quot;: &quot;unit_cost&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;enum_values&quot;: null,
+            &quot;description&quot;: &quot;Cost per unit. Blank for Fronius Backup Switch and Cable Tie Pack in the stock list: owner to confirm.&quot;,
+            &quot;synonyms&quot;: [
+              &quot;cost&quot;,
+              &quot;unit cost AUD&quot;
+            ],
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;from unit cost AUD&quot;,
+            &quot;values&quot;: 28,
+            &quot;samples&quot;: [
+              &quot;160.00 AUD&quot;,
+              &quot;95.00 AUD&quot;,
+              &quot;155.00 AUD&quot;
+            ],
+            &quot;source_map&quot;: [
+              {
+                &quot;source&quot;: &quot;document&quot;,
+                &quot;record_type&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;,
+                &quot;path&quot;: &quot;unit cost AUD&quot;
+              }
+            ]
+          }
+        ],
+        &quot;metrics&quot;: [
+          {
+            &quot;name&quot;: &quot;average_sell_price&quot;,
+            &quot;description&quot;: &quot;Average selling price per stock item.&quot;,
+            &quot;synonyms&quot;: [
+              &quot;average sell price&quot;,
+              &quot;avg price&quot;
+            ],
+            &quot;expr&quot;: {
+              &quot;agg&quot;: &quot;avg&quot;,
+              &quot;property&quot;: &quot;sell_price&quot;
+            },
+            &quot;expr_words&quot;: &quot;Average sell price&quot;,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;computed from the stock.csv records&#x27; properties&quot;
+          },
+          {
+            &quot;name&quot;: &quot;average_unit_cost&quot;,
+            &quot;description&quot;: &quot;Average unit cost per stock item.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;expr&quot;: {
+              &quot;agg&quot;: &quot;avg&quot;,
+              &quot;property&quot;: &quot;unit_cost&quot;
+            },
+            &quot;expr_words&quot;: &quot;Average unit cost&quot;,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;agent&quot;,
+            &quot;reason&quot;: null
+          },
+          {
+            &quot;name&quot;: &quot;back_ordered_items&quot;,
+            &quot;description&quot;: &quot;Number of stock items currently back-ordered.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;expr&quot;: {
+              &quot;agg&quot;: &quot;count&quot;,
+              &quot;filters&quot;: [
+                {
+                  &quot;property&quot;: &quot;status&quot;,
+                  &quot;op&quot;: &quot;eq&quot;,
+                  &quot;value&quot;: &quot;Back-ordered&quot;
+                }
+              ]
+            },
+            &quot;expr_words&quot;: &quot;Number of product where status is Back-ordered&quot;,
+            &quot;unit&quot;: null,
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;agent&quot;,
+            &quot;reason&quot;: null
+          },
+          {
+            &quot;name&quot;: &quot;gross_margin&quot;,
+            &quot;description&quot;: &quot;Gross margin: (sell price minus unit cost) over sell price, across stock items.&quot;,
+            &quot;synonyms&quot;: [
+              &quot;gross margin %&quot;,
+              &quot;margin&quot;
+            ],
+            &quot;expr&quot;: {
+              &quot;agg&quot;: &quot;ratio&quot;,
+              &quot;numerator&quot;: {
+                &quot;agg&quot;: &quot;sum&quot;,
+                &quot;row&quot;: {
+                  &quot;op&quot;: &quot;sub&quot;,
+                  &quot;left&quot;: &quot;sell_price&quot;,
+                  &quot;right&quot;: &quot;unit_cost&quot;
+                }
+              },
+              &quot;denominator&quot;: {
+                &quot;agg&quot;: &quot;sum&quot;,
+                &quot;property&quot;: &quot;sell_price&quot;
+              }
+            },
+            &quot;expr_words&quot;: &quot;Sum of (sell price − unit cost), divided by sum of sell price&quot;,
+            &quot;unit&quot;: &quot;percent&quot;,
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;agent&quot;,
+            &quot;reason&quot;: &quot;Items with no unit cost may skew this until costs are confirmed.&quot;
+          },
+          {
+            &quot;name&quot;: &quot;inventory_cost_value&quot;,
+            &quot;description&quot;: &quot;Total stock value at cost: qty on hand times unit cost, summed.&quot;,
+            &quot;synonyms&quot;: [
+              &quot;total stock value at cost&quot;,
+              &quot;stock value at cost&quot;
+            ],
+            &quot;expr&quot;: {
+              &quot;agg&quot;: &quot;sum&quot;,
+              &quot;row&quot;: {
+                &quot;op&quot;: &quot;mul&quot;,
+                &quot;left&quot;: &quot;qty_on_hand&quot;,
+                &quot;right&quot;: &quot;unit_cost&quot;
+              }
+            },
+            &quot;expr_words&quot;: &quot;Sum of qty on hand × unit cost&quot;,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;Two items have no unit cost in the stock list (Fronius Backup Switch, Cable Tie Pack), so the figure leaves them out until costs are confirmed.&quot;
+          },
+          {
+            &quot;name&quot;: &quot;total_stock_value_at_sell&quot;,
+            &quot;description&quot;: &quot;Total stock value at sell price: qty on hand times sell price, summed.&quot;,
+            &quot;synonyms&quot;: [
+              &quot;stock value at retail&quot;
+            ],
+            &quot;expr&quot;: {
+              &quot;agg&quot;: &quot;sum&quot;,
+              &quot;row&quot;: {
+                &quot;op&quot;: &quot;mul&quot;,
+                &quot;left&quot;: &quot;qty_on_hand&quot;,
+                &quot;right&quot;: &quot;sell_price&quot;
+              }
+            },
+            &quot;expr_words&quot;: &quot;Sum of qty on hand × sell price&quot;,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;agent&quot;,
+            &quot;reason&quot;: null
+          },
+          {
+            &quot;name&quot;: &quot;total_units_on_hand&quot;,
+            &quot;description&quot;: &quot;Total quantity of this product currently on hand.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;expr&quot;: {
+              &quot;agg&quot;: &quot;sum&quot;,
+              &quot;property&quot;: &quot;qty_on_hand&quot;
+            },
+            &quot;expr_words&quot;: &quot;Sum of qty on hand&quot;,
+            &quot;unit&quot;: null,
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;computed from the stock.csv records&#x27; properties&quot;
+          }
+        ]
+      }
+    ],
+    &quot;links&quot;: [
+      {
+        &quot;from_kind&quot;: &quot;delivery&quot;,
+        &quot;label&quot;: &quot;contains&quot;,
+        &quot;to_kind&quot;: &quot;product&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;Stock inside a delivery.&quot;,
+        &quot;origin&quot;: &quot;agent&quot;,
+        &quot;reason&quot;: null,
+        &quot;count&quot;: 4,
+        &quot;samples&quot;: [
+          {
+            &quot;from&quot;: &quot;IN-77&quot;,
+            &quot;to&quot;: &quot;Fronius Symo 10kW Inverter&quot;
+          },
+          {
+            &quot;from&quot;: &quot;IN-77&quot;,
+            &quot;to&quot;: &quot;Fronius Backup Switch&quot;
+          },
+          {
+            &quot;from&quot;: &quot;IN-77&quot;,
+            &quot;to&quot;: &quot;Clipsal Switchboard&quot;
+          }
+        ]
+      },
+      {
+        &quot;from_kind&quot;: &quot;job&quot;,
+        &quot;label&quot;: &quot;needs&quot;,
+        &quot;to_kind&quot;: &quot;product&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;Stock a job needs. Quantities are in the link reason.&quot;,
+        &quot;origin&quot;: &quot;agent&quot;,
+        &quot;reason&quot;: null,
+        &quot;count&quot;: 17,
+        &quot;samples&quot;: [
+          {
+            &quot;from&quot;: &quot;TES-104&quot;,
+            &quot;to&quot;: &quot;Earth Rod&quot;
+          },
+          {
+            &quot;from&quot;: &quot;TES-104&quot;,
+            &quot;to&quot;: &quot;LONGi 500W Panel&quot;
+          },
+          {
+            &quot;from&quot;: &quot;TES-103&quot;,
+            &quot;to&quot;: &quot;Jinko 475W Panel&quot;
+          }
+        ]
+      },
+      {
+        &quot;from_kind&quot;: &quot;product&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to_kind&quot;: &quot;organisation&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;The supplier of a stock item.&quot;,
+        &quot;origin&quot;: &quot;agent&quot;,
+        &quot;reason&quot;: null,
+        &quot;count&quot;: 30,
+        &quot;samples&quot;: [
+          {
+            &quot;from&quot;: &quot;Hager RCBO&quot;,
+            &quot;to&quot;: &quot;Rexel Darwin&quot;
+          },
+          {
+            &quot;from&quot;: &quot;Meter Enclosure&quot;,
+            &quot;to&quot;: &quot;Rexel Darwin&quot;
+          },
+          {
+            &quot;from&quot;: &quot;Roof Clamp Pack&quot;,
+            &quot;to&quot;: &quot;Solar Juice&quot;
+          }
+        ]
+      },
+      {
+        &quot;from_kind&quot;: &quot;product&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to_kind&quot;: &quot;supplier&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;Supplier that provides this product.&quot;,
+        &quot;origin&quot;: &quot;suggested&quot;,
+        &quot;reason&quot;: &quot;no supplier exists yet: an import creates the 0 named in supplier once each; 4 name an existing entity (organisation Fronius Australia, organisation NT Cable Co, organisation Rexel Darwin, organisation Solar Juice), which an import links to instead of making new ones&quot;,
+        &quot;count&quot;: 0,
+        &quot;samples&quot;: [],
+        &quot;source_map&quot;: [
+          {
+            &quot;source&quot;: &quot;document&quot;,
+            &quot;record_type&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;,
+            &quot;path&quot;: &quot;supplier&quot;
+          }
+        ]
+      }
+    ]
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__metric_eval</h3><pre>{
+  &quot;metric&quot;: &quot;gross_margin&quot;,
+  &quot;kind&quot;: &quot;product&quot;,
+  &quot;vault_id&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+  &quot;related_to&quot;: {
+    &quot;entity_id&quot;: &quot;organisation:1d72xkro2flp4vob5dpr&quot;,
+    &quot;label&quot;: &quot;supplied_by&quot;
+  }
+}</pre><pre class="result">{
+  &quot;metric&quot;: &quot;gross_margin&quot;,
+  &quot;value&quot;: 35.275267,
+  &quot;unit&quot;: &quot;%&quot;,
+  &quot;n_entities&quot;: 7,
+  &quot;warnings&quot;: [
+    &quot;left out 1 entity missing a value one side needs, so both sides of the ratio use the same entities&quot;
+  ]
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__metric_eval&quot;,
+  &quot;arguments&quot;: {
+    &quot;metric&quot;: &quot;gross_margin&quot;,
+    &quot;kind&quot;: &quot;product&quot;,
+    &quot;vault_id&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+    &quot;related_to&quot;: {
+      &quot;entity_id&quot;: &quot;organisation:1d72xkro2flp4vob5dpr&quot;,
+      &quot;label&quot;: &quot;supplied_by&quot;
+    }
+  },
+  &quot;id&quot;: &quot;toolu_01NvwX5DN56aw2D1Htcmue9G&quot;,
+  &quot;result&quot;: {
+    &quot;metric&quot;: &quot;gross_margin&quot;,
+    &quot;kind&quot;: &quot;product&quot;,
+    &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+    &quot;description&quot;: &quot;Gross margin: (sell price minus unit cost) over sell price, across stock items.&quot;,
+    &quot;expr_words&quot;: &quot;Sum of (sell price − unit cost), divided by sum of sell price, on 8 products supplied by Fronius Australia&quot;,
+    &quot;value&quot;: 35.275267,
+    &quot;unit&quot;: &quot;%&quot;,
+    &quot;as_of&quot;: &quot;2026-11-08T17:13:53Z&quot;,
+    &quot;n_entities&quot;: 7,
+    &quot;entity_ids&quot;: [
+      &quot;entity:2b9dadf9ofxwyirqcwus&quot;,
+      &quot;entity:3jqu2eaf7io9gemaiohy&quot;,
+      &quot;entity:auvfaehc32i2g69wjv5h&quot;,
+      &quot;entity:fd9j8zgtnm937rchfbm4&quot;,
+      &quot;entity:g6atedo7qfmmgxrsu3kg&quot;,
+      &quot;entity:huoak6t2794pqu3xnd3i&quot;,
+      &quot;entity:y6ge5c1cdsupgiot7e5e&quot;
+    ],
+    &quot;truncated&quot;: false,
+    &quot;status&quot;: &quot;approved&quot;,
+    &quot;warnings&quot;: [
+      &quot;left out 1 entity missing a value one side needs, so both sides of the ratio use the same entities&quot;
+    ]
+  }
+}</pre></details></article>

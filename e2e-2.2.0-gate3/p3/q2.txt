@@ -1,0 +1,64 @@
+TOOL ToolSearch
+{
+  "query": "select:mcp__eunomia-local__ontology_coverage,mcp__eunomia-local__ontology_get,mcp__eunomia-local__metric_eval,mcp__eunomia-local__entities_search,mcp__eunomia-local__show_view,mcp__eunomia-local__recall",
+  "max_results": 10
+}
+
+RESULT
+[{'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__ontology_coverage'}, {'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__ontology_get'}, {'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__metric_eval'}, {'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__entities_search'}, {'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__show_view'}, {'type': 'tool_reference', 'tool_name': 'mcp__eunomia-local__recall'}]
+
+TOOL mcp__eunomia-local__ontology_coverage
+{
+  "question": "What is our gross margin on Fronius Australia items?"
+}
+
+TOOL mcp__eunomia-local__entities_search
+{
+  "query": "Fronius Australia"
+}
+
+RESULT
+[{'type': 'text', 'text': '{"results":[{"id":"organisation:1d72xkro2flp4vob5dpr","kind":"organisation","name":"Fronius Australia","aliases":[],"summary":"","vault":"vault:2oxb9ism79xia4hivfdo"},{"id":"entity:4pfte5w3klwhx91i3r0z","kind":"product","name":"Fronius Backup Switch","aliases":[],"summary":"","vault":"vault:2oxb9ism79xia4hivfdo"},{"id":"entity:huoak6t2794pqu3xnd3i","kind":"product","name":"Fronius Primo 5kW Inverter","aliases":[],"summary":"","vault":"vault:2oxb9ism79xia4hivfdo"},{"id":"entity:fd9j8zgtnm937rchfbm4","kind":"product","name":"Fronius Smart Meter","aliases":[],"summary":"","vault":"vault:2oxb9ism79xia4hivfdo"},{"id":"entity:2b9dadf9ofxwyirqcwus","kind":"product","name":"Fronius Symo 10kW Inverter","aliases":[],"summary":"","vault":"vault:2oxb9ism79xia4hivfdo"},{"id":"entity:lqjtpdeb4y11awo3ums3","kind":"delivery","name":"IN-77","aliases":[],"summary":"","vault":"vault:2oxb9ism79xia4hivfdo"}],"total":6,"has_more":false}'}]
+
+RESULT
+[{'type': 'text', 'text': '{"vault":"vault:2oxb9ism79xia4hivfdo","vault_name":"Top End Solar & Electrical","coverage":1.0,"matched":[{"phrase":"gross margin","term":"metric","name":"gross_margin","of_kind":"product","distance":0.0},{"phrase":"items","term":"kind","name":"product","distance":0.0}],"uncovered":[],"chosen_by":"coverage","suggestion":"Every term maps to the vault\'s approved ontology: answer a number with metric_eval and a what-if with scenario_run, passing this vault as vault_id.","mode":"model"}'}]
+
+TOOL mcp__eunomia-local__ontology_get
+{
+  "vault_id": "vault:2oxb9ism79xia4hivfdo",
+  "kind": "product"
+}
+
+RESULT
+[{'type': 'text', 'text': '{"vault":"vault:2oxb9ism79xia4hivfdo","strict":true,"kinds":[{"kind":"product","built_in":false,"status":"approved","description":"A stock item the business buys, holds and sells.","merge_into":null,"synonyms":["stock item","item"],"origin":"suggested","reason":"one kind for the stock.csv records","entities":30,"samples":["Cable Lug Pack","Cable Tie Pack","Clipsal Switchboard"],"properties":[{"name":"last_received","datatype":"date","unit":null,"enum_values":null,"description":"Date the product was last received.","synonyms":[],"status":"approved","merge_into":null,"origin":"suggested","reason":"from last received","values":30,"samples":["2026-11-04","2026-11-02","2026-11-03"],"source_map":[{"source":"document","record_type":"document:tpfxkz7d23f1swwuzfpi","path":"last received"}]},{"name":"qty_on_hand","datatype":"integer","unit":null,"enum_values":null,"description":"Units on hand.","synonyms":["stock","qty on hand"],"status":"approved","merge_into":null,"origin":"suggested","reason":"from qty on hand","values":30,"samples":["32","24","25"],"source_map":[{"source":"document","record_type":"document:tpfxkz7d23f1swwuzfpi","path":"qty on hand"}]},{"name":"reorder_at","datatype":"integer","unit":null,"enum_values":null,"description":"Quantity threshold for reordering.","synonyms":[],"status":"approved","merge_into":null,"origin":"suggested","reason":"from reorder at","values":30,"samples":["10"],"source_map":[{"source":"document","record_type":"document:tpfxkz7d23f1swwuzfpi","path":"reorder at"}]},{"name":"sell_price","datatype":"money","unit":"AUD","enum_values":null,"description":"Selling price per unit.","synonyms":["price","sell price AUD"],"status":"approved","merge_into":null,"origin":"suggested","reason":"from sell price AUD","values":30,"samples":["85.00 AUD","42.00 AUD","12.50 AUD"],"source_map":[{"source":"document","record_type":"document:tpfxkz7d23f1swwuzfpi","path":"sell price AUD"}]},{"name":"status","datatype":"enum","unit":null,"enum_values":["Back-ordered","Discontinued","In stock"],"description":"Current stock or availability status.","synonyms":[],"status":"approved","merge_into":null,"origin":"suggested","reason":"from status","values":30,"samples":["In stock","Back-ordered","Discontinued"],"source_map":[{"source":"document","record_type":"document:tpfxkz7d23f1swwuzfpi","path":"status"}]},{"name":"unit_cost","datatype":"money","unit":"AUD","enum_values":null,"description":"Cost per unit. Blank for Fronius Backup Switch and Cable Tie Pack in the stock list: owner to confirm.","synonyms":["cost","unit cost AUD"],"status":"approved","merge_into":null,"origin":"suggested","reason":"from unit cost AUD","values":28,"samples":["160.00 AUD","95.00 AUD","155.00 AUD"],"source_map":[{"source":"document","record_type":"document:tpfxkz7d23f1swwuzfpi","path":"unit cost AUD"}]}],"metrics":[{"name":"average_sell_price","description":"Average selling price per stock item.","synonyms":["average sell price","avg price"],"expr":{"agg":"avg","property":"sell_price"},"expr_words":"Average sell price","unit":"AUD","status":"approved","merge_into":null,"origin":"suggested","reason":"computed from the stock.csv records\' properties"},{"name":"average_unit_cost","description":"Average unit cost per stock item.","synonyms":[],"expr":{"agg":"avg","property":"unit_cost"},"expr_words":"Average unit cost","unit":"AUD","status":"approved","merge_into":null,"origin":"agent","reason":null},{"name":"back_ordered_items","description":"Number of stock items currently back-ordered.","synonyms":[],"expr":{"agg":"count","filters":[{"property":"status","op":"eq","value":"Back-ordered"}]},"expr_words":"Number of product where status is Back-ordered","unit":null,"status":"approved","merge_into":null,"origin":"agent","reason":null},{"name":"gross_margin","description":"Gross margin: (sell price minus unit cost) over sell price, across stock items.","synonyms":["gross margin %","margin"],"expr":{"agg":"ratio","numerator":{"agg":"sum","row":{"op":"sub","left":"sell_price","right":"unit_cost"}},"denominator":{"agg":"sum","property":"sell_price"}},"expr_words":"Sum of (sell price − unit cost), divided by sum of sell price","unit":"percent","status":"approved","merge_into":null,"origin":"agent","reason":"Items with no unit cost may skew this until costs are confirmed."},{"name":"inventory_cost_value","description":"Total stock value at cost: qty on hand times unit cost, summed.","synonyms":["total stock value at cost","stock value at cost"],"expr":{"agg":"sum","row":{"op":"mul","left":"qty_on_hand","right":"unit_cost"}},"expr_words":"Sum of qty on hand × unit cost","unit":"AUD","status":"approved","merge_into":null,"origin":"suggested","reason":"Two items have no unit cost in the stock list (Fronius Backup Switch, Cable Tie Pack), so the figure leaves them out until costs are confirmed."},{"name":"total_stock_value_at_sell","description":"Total stock value at sell price: qty on hand times sell price, summed.","synonyms":["stock value at retail"],"expr":{"agg":"sum","row":{"op":"mul","left":"qty_on_hand","right":"sell_price"}},"expr_words":"Sum of qty on hand × sell price","unit":"AUD","status":"approved","merge_into":null,"origin":"agent","reason":null},{"name":"total_units_on_hand","description":"Total quantity of this product currently on hand.","synonyms":[],"expr":{"agg":"sum","property":"qty_on_hand"},"expr_words":"Sum of qty on hand","unit":null,"status":"approved","merge_into":null,"origin":"suggested","reason":"computed from the stock.csv records\' properties"}]}],"links":[{"from_kind":"delivery","label":"contains","to_kind":"product","status":"approved","description":"Stock inside a delivery.","origin":"agent","reason":null,"count":4,"samples":[{"from":"IN-77","to":"Fronius Symo 10kW Inverter"},{"from":"IN-77","to":"Fronius Backup Switch"},{"from":"IN-77","to":"Clipsal Switchboard"}]},{"from_kind":"job","label":"needs","to_kind":"product","status":"approved","description":"Stock a job needs. Quantities are in the link reason.","origin":"agent","reason":null,"count":17,"samples":[{"from":"TES-104","to":"Earth Rod"},{"from":"TES-104","to":"LONGi 500W Panel"},{"from":"TES-103","to":"Jinko 475W Panel"}]},{"from_kind":"product","label":"supplied_by","to_kind":"organisation","status":"approved","description":"The supplier of a stock item.","origin":"agent","reason":null,"count":30,"samples":[{"from":"Hager RCBO","to":"Rexel Darwin"},{"from":"Meter Enclosure","to":"Rexel Darwin"},{"from":"Roof Clamp Pack","to":"Solar Juice"}]},{"from_kind":"product","label":"supplied_by","to_kind":"supplier","status":"approved","description":"Supplier that provides this product.","origin":"suggested","reason":"no supplier exists yet: an import creates the 0 named in supplier once each; 4 name an existing entity (organisation Fronius Australia, organisation NT Cable Co, organisation Rexel Darwin, organisation Solar Juice), which an import links to instead of making new ones","count":0,"samples":[],"source_map":[{"source":"document","record_type":"document:tpfxkz7d23f1swwuzfpi","path":"supplier"}]}]}'}]
+
+TOOL mcp__eunomia-local__metric_eval
+{
+  "metric": "gross_margin",
+  "kind": "product",
+  "vault_id": "vault:2oxb9ism79xia4hivfdo",
+  "related_to": {
+    "entity_id": "organisation:1d72xkro2flp4vob5dpr",
+    "label": "supplied_by"
+  }
+}
+
+RESULT
+[{'type': 'text', 'text': '{"metric":"gross_margin","kind":"product","vault":"vault:2oxb9ism79xia4hivfdo","description":"Gross margin: (sell price minus unit cost) over sell price, across stock items.","expr_words":"Sum of (sell price − unit cost), divided by sum of sell price, on 8 products supplied by Fronius Australia","value":35.275267,"unit":"%","as_of":"2026-11-08T17:13:53Z","n_entities":7,"entity_ids":["entity:2b9dadf9ofxwyirqcwus","entity:3jqu2eaf7io9gemaiohy","entity:auvfaehc32i2g69wjv5h","entity:fd9j8zgtnm937rchfbm4","entity:g6atedo7qfmmgxrsu3kg","entity:huoak6t2794pqu3xnd3i","entity:y6ge5c1cdsupgiot7e5e"],"truncated":false,"status":"approved","warnings":["left out 1 entity missing a value one side needs, so both sides of the ratio use the same entities"]}'}]
+
+**Gross margin on Fronius Australia items is about 35.3%.**
+
+- It covers 7 of the 8 products Fronius Australia supplies.
+- The 8th is the Fronius Backup Switch. It has no unit cost in the stock list, so the sum leaves it out. The real margin could be a bit different once you confirm that cost.
+- The figure comes from the approved `gross_margin` metric: (sell price minus unit cost) divided by sell price. It is a price-weighted margin across the 7 products. It is not weighted by how many you sell.
+
+**What to do:** Tell me the Backup Switch's cost and I'll save it. Then the number will cover all 8.
+
+FINAL
+**Gross margin on Fronius Australia items is about 35.3%.**
+
+- It covers 7 of the 8 products Fronius Australia supplies.
+- The 8th is the Fronius Backup Switch. It has no unit cost in the stock list, so the sum leaves it out. The real margin could be a bit different once you confirm that cost.
+- The figure comes from the approved `gross_margin` metric: (sell price minus unit cost) divided by sell price. It is a price-weighted margin across the 7 products. It is not weighted by how many you sell.
+
+**What to do:** Tell me the Backup Switch's cost and I'll save it. Then the number will cover all 8.

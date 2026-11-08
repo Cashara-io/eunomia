@@ -1,0 +1,102 @@
+Chat
+Ask a question about your saved memories and documents. Eunomia shows where each answer came from.
+Conversations
+Ute 3 is a day late. What does that affect?
+now
+What is our average sell price and total stock value at cost
+now
+gate3-1794157746
+4:14 AM
+Ute 3 is a day late. What does that affect?
+Eunomia
+4:14 AM
+Searched people and topics
+Done
+Checked this space's kinds
+Done
+Followed connections
+Done
+Looked through memories
+Done
+Showed a view
+Done
+Ute 3 is a day late.
+Starting from
+Ute 3
+vehicle
+Directly linked
+IN-77
+delivery
+Ute 3 carries IN-77.
+
+Ute 3 carries delivery IN-77, so the delivery is delayed.
+
+Crew A
+crew
+Ute 3 allocated to Crew A.
+
+Ute 3 is allocated to Crew A, so its availability may affect that crew.
+
+2 links away
+TES-101
+job
+Ute 3 carries IN-77, then IN-77 supplies job TES-101.
+
+IN-77 is meant to supply TES-101, putting this job at risk.
+
+TES-102
+job
+Ute 3 carries IN-77, then IN-77 supplies job TES-102.
+
+IN-77 is meant to supply TES-102, putting this job at risk.
+
+TES-103
+job
+Ute 3 carries IN-77, then IN-77 supplies job TES-103.
+
+IN-77 is meant to supply TES-103, putting this job at risk.
+
+TES-104
+job
+Ute 3 carries IN-77, then IN-77 supplies job TES-104.
+
+IN-77 is meant to supply TES-104, putting this job at risk.
+
+3 links away
+Solar Cable 6mm 100m
+product
+Ute 3 carries IN-77, then IN-77 supplies job TES-103, then TES-103 needs Solar Cable 6mm 100m.
+
+TES-103 needs Solar Cable 6mm, and its job is at risk because IN-77 is delayed.
+
+Fronius Symo 10kW Inverter
+product
+Ute 3 carries IN-77, then IN-77 supplies job TES-103, then TES-103 needs Fronius Symo 10kW Inverter.
+
+TES-103 needs the Fronius Symo inverter supplied by IN-77.
+
+Clipsal Switchboard
+product
+Ute 3 carries IN-77, then IN-77 supplies job TES-102, then TES-102 needs Clipsal Switchboard.
+
+TES-102 needs the Clipsal Switchboard carried in IN-77.
+
+Fronius Backup Switch
+product
+Ute 3 carries IN-77, then IN-77 supplies job TES-104, then TES-104 needs Fronius Backup Switch.
+
+TES-104 needs the Fronius Backup Switch carried in IN-77.
+
+Fronius Primo 5kW Inverter
+product
+Ute 3 carries IN-77, then IN-77 supplies job TES-101, then TES-101 needs Fronius Primo 5kW Inverter.
+
+TES-101 needs the Fronius Primo inverter carried in IN-77.
+
+Ute 3’s delay holds up delivery IN-77, putting jobs TES-101, TES-102, TES-103 and TES-104 at risk. The affected delivery includes a Fronius Primo inverter for TES-101, a Clipsal Switchboard for TES-102, a Fronius Symo inverter for TES-103, and a Fronius Backup Switch for TES-104. Crew A may also be affected because Ute 3 is allocated to it.
+
+Enter
+send
+Shift Enter
+new line
+Send

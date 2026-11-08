@@ -1,0 +1,22 @@
+{
+  "ports": {
+    "8481": {
+      "terminated": [
+        {
+          "pid": 7438,
+          "command": "/Users/avi/.t3/worktrees/eunomia/t3-9faae89b/backend/target/debug/eunomia-backend",
+          "signal": "TERM"
+        }
+      ]
+    },
+    "3480": {
+      "terminated": [
+        {
+          "pid": 4176,
+          "command": "next-server (v16.3.4)",
+          "signal": "TERM"
+        }
+      ]
+    }
+  }
+}

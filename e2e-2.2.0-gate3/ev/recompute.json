@@ -1,0 +1,88 @@
+{
+  "overall": {
+    "rows": 30,
+    "costed_rows": 28,
+    "average_sell_price": "505.8383333333333333333333333",
+    "total_stock_value_at_cost": "67775.75",
+    "retail_all_rows": "114123.50",
+    "retail_costed_rows": "110381.50",
+    "gross_margin_stock_weighted": "0.3859863292308946698495671829",
+    "gross_margin_unweighted": "0.3575611999795574181019062708",
+    "average_unit_margin": "187.4035714285714285714285714"
+  },
+  "fronius": {
+    "rows": 8,
+    "costed_rows": 7,
+    "average_sell_price": "1582.50",
+    "total_stock_value_at_cost": "22944.00",
+    "retail_all_rows": "37950.00",
+    "retail_costed_rows": "35990.00",
+    "gross_margin_stock_weighted": "0.3624895804390108363434287302",
+    "gross_margin_unweighted": "0.3527526705012325390304026294",
+    "average_unit_margin": "613.2857142857142857142857143"
+  },
+  "scenario_rexel_plus_10pct": {
+    "rows": 30,
+    "costed_rows": 28,
+    "average_sell_price": "505.8383333333333333333333333",
+    "total_stock_value_at_cost": "68606.625",
+    "retail_all_rows": "114123.50",
+    "retail_costed_rows": "110381.50",
+    "gross_margin_stock_weighted": "0.3784590261955128350312325888",
+    "gross_margin_unweighted": "0.3543568252670312260438493382",
+    "average_unit_margin": "185.7241071428571428571428571"
+  },
+  "scenario_deltas": {
+    "average_sell_price": "0E-25",
+    "total_stock_value_at_cost": "830.875",
+    "retail_all_rows": "0.00",
+    "retail_costed_rows": "0.00",
+    "gross_margin_stock_weighted": "-0.0075273030353818348183345941",
+    "gross_margin_unweighted": "-0.0032043747125261920580569326",
+    "average_unit_margin": "-1.6794642857142857142857143"
+  },
+  "rexel_changed_rows": [
+    {
+      "name": "Clipsal Switchboard",
+      "before": "245.00",
+      "after": "269.500",
+      "delta": "24.500"
+    },
+    {
+      "name": "Hager RCBO",
+      "before": "28.00",
+      "after": "30.800",
+      "delta": "2.800"
+    },
+    {
+      "name": "LED Batten 1200mm",
+      "before": "38.00",
+      "after": "41.800",
+      "delta": "3.800"
+    },
+    {
+      "name": "Weatherproof GPO",
+      "before": "24.00",
+      "after": "26.400",
+      "delta": "2.400"
+    },
+    {
+      "name": "Earth Rod",
+      "before": "18.00",
+      "after": "19.800",
+      "delta": "1.800"
+    },
+    {
+      "name": "Meter Enclosure",
+      "before": "110.00",
+      "after": "121.000",
+      "delta": "11.000"
+    },
+    {
+      "name": "Conduit 25mm",
+      "before": "7.25",
+      "after": "7.975",
+      "delta": "0.725"
+    }
+  ]
+}

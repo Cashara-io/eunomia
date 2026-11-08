@@ -1,0 +1,134 @@
+Chat
+Ask a question about your saved memories and documents. Eunomia shows where each answer came from.
+Conversations
+What if Rexel Darwin raises costs 10%?
+now
+Ute 3 is a day late. What does that affect?
+1m
+What is our average sell price and total stock value at cost
+1m
+gate3-1794157746
+4:14 AM
+What if Rexel Darwin raises costs 10%?
+Eunomia
+4:15 AM
+Checked what the space can answer
+Done
+Checked this space's kinds
+Done
+Searched people and topics
+Done
+Followed connections
+Done
+Tried a what-if
+Done
+Showed a view
+Done
+What if Rexel Darwin raises costs 10%?
+Product unit cost up 10% on 7 products supplied by Rexel Darwin
+average unit cost
+
+336.71
+→
+338.39
+AUD
+
+up 1.68 AUD (0.5%) · Average unit cost, from 28 products
+
+gross margin
+
+35.8
+→
+35.4
+%
+
+down 0.4 points · Sum of (sell price − unit cost), divided by sum of sell price, from 28 products
+
+inventory cost value
+
+67775.75
+→
+68606.63
+AUD
+
+up 830.88 AUD (1.2%) · Sum of qty on hand × unit cost, from 28 products
+
+Changed
+Weatherproof GPO
+unit cost
+24.00 AUD → 26.40 AUD
+Earth Rod
+unit cost
+18.00 AUD → 19.80 AUD
+Meter Enclosure
+unit cost
+110.00 AUD → 121.00 AUD
+Hager RCBO
+unit cost
+28.00 AUD → 30.80 AUD
+LED Batten 1200mm
+unit cost
+38.00 AUD → 41.80 AUD
+Clipsal Switchboard
+unit cost
+245.00 AUD → 269.50 AUD
+Conduit 25mm
+unit cost
+7.25 AUD → 7.97 AUD
+Linked within 2 steps (not all are affected)
+Cable Tie Pack
+product
+IN-77
+delivery
+TES-102
+job
+TES-104
+job
+TES-105
+job
+Aisha Brown
+customer
+Crew B
+crew
+Crew C
+crew
+Daniel Wilson
+customer
+Fronius Australia
+organisation
+Fronius Backup Switch
+product
+Fronius Primo 5kW Inverter
+product
+Fronius Symo 10kW Inverter
+product
+LONGi 500W Panel
+product
+Red Plains Cattle Station
+customer
+TES-101
+job
+TES-103
+job
+TPS Cable 2.5mm 100m
+product
+Ute 3
+vehicle
+1 picked product have no unit cost value, so the change left them out
+gross_margin: left out 2 entities missing a value one side needs, so both sides of the ratio use the same entities
+
+Nothing was saved: this is a what-if. As of 9 Nov 2026.
+
+If Rexel Darwin raised costs by 10%, the model applies that increase to 7 stocked products supplied by Rexel:
+
+Average unit cost: A$336.71 → A$338.39
+Gross margin: 35.76% → 35.44% (down about 0.32 percentage points)
+Inventory cost value: A$67,775.75 → A$68,606.63 (up A$830.88)
+
+One Rexel-supplied product has no recorded unit cost, so it was excluded. The linked jobs and delivery shown in the impact view are connected to Rexel or those products; that doesn’t mean each is directly changed. Nothing was saved.
+
+Enter
+send
+Shift Enter
+new line
+Send

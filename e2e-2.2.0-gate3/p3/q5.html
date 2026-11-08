@@ -1,0 +1,337 @@
+<!doctype html><meta charset="utf-8"><style>body{font:15px/1.45 system-ui;margin:32px;background:#f5f5f1;color:#202322}h1{font-size:25px}h2{font-size:20px}h3{font-size:15px;margin:0 0 8px}article,.final{padding:18px;background:white;border:1px solid #d9ded8;margin:12px 0;border-radius:5px}pre{font:12px/1.4 ui-monospace;white-space:pre-wrap;overflow-wrap:anywhere;margin:4px 0}.final pre{font:16px/1.5 system-ui}.result{background:#f1f5f1;padding:10px}summary{font-size:12px;color:#566458}</style><h1>Eunomia 2.2.0 gate 3: p3/q5.jsonl</h1><p>Complete transcript is preserved beside this review as JSONL and text. Expand a tool to inspect its full input and result.</p><h2>Final answer</h2><div class="final"><pre>I can&#x27;t tell you. There is no insurance bill in our records.
+
+I checked three places in Top End Solar &amp; Electrical:
+- **The business rules:** nothing there covers insurance, so I can&#x27;t run a number.
+- **Memory:** nothing about insurance.
+- **Synced records and files:** the search only found the stock list and the jobs notes. Neither mentions insurance.
+
+I didn&#x27;t guess a number.
+
+**What to do:** Upload the insurance bill or policy, or tell me the amount. Then I can save it. I&#x27;d go with uploading the bill, because then the amount, the insurer and the due date are all saved together.</pre></div><h2>Tool evidence in call order</h2><article><h3>mcp__eunomia-local__ontology_coverage</h3><pre>{
+  &quot;question&quot;: &quot;What is our insurance bill?&quot;
+}</pre><pre class="result">{
+  &quot;vault_name&quot;: &quot;Top End Solar &amp; Electrical&quot;,
+  &quot;coverage&quot;: 0.0,
+  &quot;chosen_by&quot;: &quot;ontology&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__ontology_coverage&quot;,
+  &quot;arguments&quot;: {
+    &quot;question&quot;: &quot;What is our insurance bill?&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01FqNc5hcMUNf1oMqdr7xnYo&quot;,
+  &quot;result&quot;: {
+    &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+    &quot;vault_name&quot;: &quot;Top End Solar &amp; Electrical&quot;,
+    &quot;coverage&quot;: 0.0,
+    &quot;matched&quot;: [],
+    &quot;uncovered&quot;: [
+      &quot;insurance bill&quot;
+    ],
+    &quot;chosen_by&quot;: &quot;ontology&quot;,
+    &quot;suggestion&quot;: &quot;No space you can read has an approved term for this question or holds what it names; \&quot;Top End Solar &amp; Electrical\&quot; was checked because it has an approved ontology. Not covered by an approved kind, property, metric or link: \&quot;insurance bill\&quot;. Say so instead of guessing a number. To make it answerable, propose what is missing with ontology_propose (a property and a metric on the kind it belongs to); a vault owner approves it in Kinds and links.&quot;,
+    &quot;mode&quot;: &quot;model&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__recall</h3><pre>{
+  &quot;query&quot;: &quot;insurance bill&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__recall&quot;,
+  &quot;arguments&quot;: {
+    &quot;query&quot;: &quot;insurance bill&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01CUeXP5oWDg1WQgvw1XZVhw&quot;,
+  &quot;result&quot;: {
+    &quot;results&quot;: [
+      {
+        &quot;id&quot;: &quot;memory:z45ye69nrqkzz8rwpz81&quot;,
+        &quot;kind&quot;: &quot;memory&quot;,
+        &quot;text&quot;: &quot;Decision: call-out fee goes to $120 from 1 December 2026. Approved by owner Priya Nair.&quot;,
+        &quot;source&quot;: null,
+        &quot;occurred_at&quot;: &quot;2026-11-09T00:00:00+00:00&quot;,
+        &quot;score&quot;: 1.0,
+        &quot;arms_hit&quot;: 1,
+        &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+        &quot;vault_name&quot;: &quot;Top End Solar &amp; Electrical&quot;
+      },
+      {
+        &quot;id&quot;: &quot;documents:document.chunk:tpfxkz7d23f1swwuzfpi:1:0&quot;,
+        &quot;kind&quot;: &quot;cache_record&quot;,
+        &quot;text&quot;: &quot;stock.csv\nitem,supplier,sell price AUD,unit cost AUD,qty on hand,reorder at,status,last received\nFronius Primo 5kW Inverter,Fronius Australia,\&quot;$4,890.00\&quot;,\&quot;$3,100.00\&quot;,3,10,In stock,07/11/2026\nFronius Symo 10kW Inverter,Fronius Australia,\&quot;$6,350.00\&quot;,\&quot;$4,200.00\&quot;,2,10,In stock,06/11/2026\nFronius Smart Meter,Fronius Australia,$325.00,$210.00,12,10,In stock,05/11/2026\nFronius Datamanager,Fronius Australia,$280.00,$180.00,5,10,In stock,04/11/2026\nFronius Mounting Bracket,Fronius Australia,$85.00,$42.00,22,10,In stock,03/11/2026\nFronius Surge Protector,Fronius Australia,$145.00,$90.00,10,10,In stock,02/11/2026\nFronius Backup Switch,Fronius Australia,$490.00,,4,10,Back-ordered,07/11/2026\nFronius Extension Kit,Fronius Australia,$95.00,$55.00,0,10,Discontinued,06/11/2026\nTrina 440W Panel,Solar Juice,$220.00,$140.00,45,10,In stock,05/11/2026\nJinko 475W Panel,Solar Juice,$245.00,$155.00,40,10,In stock,04/11/2026\nLONGi 500W Panel,solar juice,$275.00,$175.00,32,10,In stock,03/11/2026\nSolar Rail 4.2m,Solar Juice,$58.00,$32.00,80,10,In stock,02/11/2026\nRoof Clamp Pack,Solar Juice,$34.00,$18.00,65,10,Back-ordered,07/11/2026\nPanel Earthing Kit,Solar Juice,$18.75,$9.50,72,10,In stock,06/11/2026\nDC Isolator,Solar Juice,$62.00,$35.00,25,10,In stock,05/11/2026\nMC4 Connector Pair,Solar Juice,$12.50,$6.20,120,10,In stock,04/11/2026\nClipsal Switchboard,Rexel Darwin,$380.00,$245.00,8,10,In stock,03/11/2026\nHager RCBO,Rexel Darwin,$48.00,$28.00,60,10,In stock,02/11/2026\nLED Batten 1200mm,Rexel Darwin,$65.00,$38.00,35,10,In stock,07/11/2026\nWeatherproof GPO,Rexel Darwin,$42.00,$24.00,42,10,In stock,06/11/2026\nEarth Rod,Rexel Darwin,$35.00,$18.00,24,10,In stock,05/11/2026\nMeter Enclosure,Rexel Darwin,$185.00,$110.00,11,10,In stock,04/11/2026\nConduit 25mm,Rexel Darwin,$14.50,$7.25,95,10,In stock,03/11/2026\nCable Tie Pack,Rexel Darwin,$9.90,,180,10,In stock,02/11/2026\nTPS Cable 2.5mm 100m,NT Cable Co,$245.00,$160.00,20,10,In stock,07/11/2026\nSolar Cable 6mm 100m,NT Cable Co,$325.00,$210.00,18,10,Back-ordered,06/11/2026\nEarth Cable 100m,NT Cable Co,$155.00,$95.00,25,10,In stock,05/11/2026\nOrange Conduit 50mm,NT Cable Co,$38.00,$21.00,55,10,In stock,04/11/2026\nCable Lug Pack,NT Cable Co,$28.00,$14.00,70,10,In stock,03/11/2026\nHeatshrink Kit,NT Cable Co,$19.50,$10.00,90,10,In stock,02/11/2026&quot;,
+        &quot;source&quot;: &quot;documents&quot;,
+        &quot;occurred_at&quot;: &quot;2026-11-08T17:09:31.328978507+00:00&quot;,
+        &quot;score&quot;: 1.0,
+        &quot;arms_hit&quot;: 1,
+        &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+        &quot;vault_name&quot;: &quot;Top End Solar &amp; Electrical&quot;,
+        &quot;document&quot;: {
+          &quot;document_id&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;,
+          &quot;chunk_id&quot;: &quot;documents:document.chunk:tpfxkz7d23f1swwuzfpi:1:0&quot;,
+          &quot;filename&quot;: &quot;stock.csv&quot;,
+          &quot;revision&quot;: 1,
+          &quot;part&quot;: 0,
+          &quot;char_start&quot;: 0,
+          &quot;char_end&quot;: 2289,
+          &quot;download_url&quot;: &quot;/api/documents/document:tpfxkz7d23f1swwuzfpi/download&quot;
+        }
+      },
+      {
+        &quot;id&quot;: &quot;memory:v2gqf28jk0wazwakwqs3&quot;,
+        &quot;kind&quot;: &quot;memory&quot;,
+        &quot;text&quot;: &quot;The annual club fee is $95.&quot;,
+        &quot;source&quot;: null,
+        &quot;occurred_at&quot;: &quot;2026-11-08T17:09:07.706864635+00:00&quot;,
+        &quot;score&quot;: 1.0,
+        &quot;arms_hit&quot;: 1,
+        &quot;vault&quot;: &quot;vault:8iz0hyym38leojujbgo4&quot;,
+        &quot;vault_name&quot;: &quot;Darwin Footy Club&quot;
+      },
+      {
+        &quot;id&quot;: &quot;memory:1yioaztdzb6adt2bvfih&quot;,
+        &quot;kind&quot;: &quot;memory&quot;,
+        &quot;text&quot;: &quot;Owner of Top End Solar &amp; Electrical. Approved the call-out fee rise to $120 from 1 December 2026.&quot;,
+        &quot;source&quot;: null,
+        &quot;occurred_at&quot;: &quot;2026-11-08T17:10:00.071480715+00:00&quot;,
+        &quot;score&quot;: 0.984,
+        &quot;arms_hit&quot;: 1,
+        &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+        &quot;vault_name&quot;: &quot;Top End Solar &amp; Electrical&quot;
+      },
+      {
+        &quot;id&quot;: &quot;documents:document.chunk:i1lvr31y781sr3dubv0h:1:0&quot;,
+        &quot;kind&quot;: &quot;cache_record&quot;,
+        &quot;text&quot;: &quot;jobs-notes.md\n# Top End Solar &amp; Electrical, Darwin NT\nThese are fictional test records as at 9 November 2026.\n\n## Open customer jobs\n- Customer Maya Chen, Nightcliff home, job TES-101. Install 12 Trina 440W Panels, one Fronius Primo 5kW Inverter and one Fronius Smart Meter. Crew A, due 12 November.\n- Customer Daniel Wilson, Palmerston home, job TES-102. Needs one Clipsal Switchboard, six Hager RCBOs and four Weatherproof GPOs. Crew B, due 12 November.\n- Customer Wattle Creek School, Berrimah, job TES-103. Needs one Fronius Symo 10kW Inverter, 24 Jinko 475W Panels and two Solar Cable 6mm 100m drums. Crew A, due 13 November.\n- Customer Red Plains Cattle Station, Adelaide River, job TES-104. Needs one Fronius Backup Switch, 20 LONGi 500W Panels and four Earth Rods. Crew C, due 14 November.\n- Customer Aisha Brown, Rapid Creek home, job TES-105. Needs two LED Batten 1200mm fittings and one TPS Cable 2.5mm 100m drum. Crew B, due 13 November.\n- Customer Casuarina Community Hall, job TES-106. Needs six DC Isolators, four Solar Rail 4.2m lengths and two Panel Earthing Kits. Crew C, due 14 November.\n\n## Inbound delivery\nCrew ute Ute 3 is carrying delivery IN-77 from Rexel Darwin and Fronius Australia, expected 11 November. It holds one Fronius Primo 5kW Inverter for TES-101, one Clipsal Switchboard for TES-102, one Fronius Symo 10kW Inverter for TES-103 and one Fronius Backup Switch for TES-104. A one-day delay risks those four jobs. Ute 3 is allocated to Crew A.\n\n## Decisions and unconfirmed information\nDecision: call-out fee goes to $120 from 1 December 2026, approved by owner Priya Nair.\nRumour, unconfirmed: Fronius Australia may raise prices in December. Do not treat it as a confirmed increase.\nRexel Darwin is our electrical wholesaler. Fronius Australia supplies inverters and monitoring equipment. Both are organisations we work with.\nUnlinked equipment: Label Printer 2 sits in the office, with no recorded dependencies.&quot;,
+        &quot;source&quot;: &quot;documents&quot;,
+        &quot;occurred_at&quot;: &quot;2026-11-08T17:09:35.421108134+00:00&quot;,
+        &quot;score&quot;: 0.984,
+        &quot;arms_hit&quot;: 1,
+        &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+        &quot;vault_name&quot;: &quot;Top End Solar &amp; Electrical&quot;,
+        &quot;document&quot;: {
+          &quot;document_id&quot;: &quot;document:i1lvr31y781sr3dubv0h&quot;,
+          &quot;chunk_id&quot;: &quot;documents:document.chunk:i1lvr31y781sr3dubv0h:1:0&quot;,
+          &quot;filename&quot;: &quot;jobs-notes.md&quot;,
+          &quot;revision&quot;: 1,
+          &quot;part&quot;: 0,
+          &quot;char_start&quot;: 0,
+          &quot;char_end&quot;: 1934,
+          &quot;download_url&quot;: &quot;/api/documents/document:i1lvr31y781sr3dubv0h/download&quot;
+        }
+      },
+      {
+        &quot;id&quot;: &quot;memory:7dgjdzllk4csx8lo9j2k&quot;,
+        &quot;kind&quot;: &quot;memory&quot;,
+        &quot;text&quot;: &quot;Crew ute allocated to Crew A. Carrying delivery IN-77.&quot;,
+        &quot;source&quot;: null,
+        &quot;occurred_at&quot;: &quot;2026-11-08T17:09:59.931666173+00:00&quot;,
+        &quot;score&quot;: 0.968,
+        &quot;arms_hit&quot;: 1,
+        &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+        &quot;vault_name&quot;: &quot;Top End Solar &amp; Electrical&quot;
+      },
+      {
+        &quot;id&quot;: &quot;memory:oa5cb5cb07988b2e2c43&quot;,
+        &quot;kind&quot;: &quot;memory&quot;,
+        &quot;text&quot;: &quot;UNCONFIRMED RUMOUR only: Fronius Australia may raise prices in December. Not a confirmed increase. Do not use in costings.&quot;,
+        &quot;source&quot;: null,
+        &quot;occurred_at&quot;: &quot;2026-11-08T17:10:00.031352381+00:00&quot;,
+        &quot;score&quot;: 0.953,
+        &quot;arms_hit&quot;: 1,
+        &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+        &quot;vault_name&quot;: &quot;Top End Solar &amp; Electrical&quot;
+      },
+      {
+        &quot;id&quot;: &quot;memory:afzqfamchc2y3u6p235d&quot;,
+        &quot;kind&quot;: &quot;memory&quot;,
+        &quot;text&quot;: &quot;Stock item from Rexel Darwin. Sell $42, cost $24, 42 on hand.&quot;,
+        &quot;source&quot;: null,
+        &quot;occurred_at&quot;: &quot;2026-11-08T17:10:08.340220635+00:00&quot;,
+        &quot;score&quot;: 0.938,
+        &quot;arms_hit&quot;: 1,
+        &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+        &quot;vault_name&quot;: &quot;Top End Solar &amp; Electrical&quot;
+      },
+      {
+        &quot;id&quot;: &quot;memory:phwo5239n1m06fo3z3b3&quot;,
+        &quot;kind&quot;: &quot;memory&quot;,
+        &quot;text&quot;: &quot;Stock item from Solar Juice. Sell $245, cost $155, 40 on hand.&quot;,
+        &quot;source&quot;: null,
+        &quot;occurred_at&quot;: &quot;2026-11-08T17:10:08.338396844+00:00&quot;,
+        &quot;score&quot;: 0.924,
+        &quot;arms_hit&quot;: 1,
+        &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+        &quot;vault_name&quot;: &quot;Top End Solar &amp; Electrical&quot;
+      },
+      {
+        &quot;id&quot;: &quot;memory:84n9kqa9vm4u0uckdadg&quot;,
+        &quot;kind&quot;: &quot;memory&quot;,
+        &quot;text&quot;: &quot;Stock item from Rexel Darwin. Sell $65, cost $38, 35 on hand.&quot;,
+        &quot;source&quot;: null,
+        &quot;occurred_at&quot;: &quot;2026-11-08T17:10:08.395991260+00:00&quot;,
+        &quot;score&quot;: 0.91,
+        &quot;arms_hit&quot;: 1,
+        &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+        &quot;vault_name&quot;: &quot;Top End Solar &amp; Electrical&quot;
+      },
+      {
+        &quot;id&quot;: &quot;memory:qwzhvrmooxv7dzocds61&quot;,
+        &quot;kind&quot;: &quot;memory&quot;,
+        &quot;text&quot;: &quot;Customer in Berrimah. Has job TES-103.&quot;,
+        &quot;source&quot;: null,
+        &quot;occurred_at&quot;: &quot;2026-11-08T17:09:59.678134923+00:00&quot;,
+        &quot;score&quot;: 0.897,
+        &quot;arms_hit&quot;: 1,
+        &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+        &quot;vault_name&quot;: &quot;Top End Solar &amp; Electrical&quot;
+      },
+      {
+        &quot;id&quot;: &quot;memory:medgl8fx8gek0wl39lvv&quot;,
+        &quot;kind&quot;: &quot;memory&quot;,
+        &quot;text&quot;: &quot;Stock item from Fronius Australia. Sell $325, cost $210, 12 on hand.&quot;,
+        &quot;source&quot;: null,
+        &quot;occurred_at&quot;: &quot;2026-11-08T17:10:08.190152427+00:00&quot;,
+        &quot;score&quot;: 0.884,
+        &quot;arms_hit&quot;: 1,
+        &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+        &quot;vault_name&quot;: &quot;Top End Solar &amp; Electrical&quot;
+      },
+      {
+        &quot;id&quot;: &quot;memory:kk0f755h68q3of6g3kr4&quot;,
+        &quot;kind&quot;: &quot;memory&quot;,
+        &quot;text&quot;: &quot;Stock item from Rexel Darwin. Sell $48, cost $28, 60 on hand.&quot;,
+        &quot;source&quot;: null,
+        &quot;occurred_at&quot;: &quot;2026-11-08T17:10:08.205086343+00:00&quot;,
+        &quot;score&quot;: 0.871,
+        &quot;arms_hit&quot;: 1,
+        &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+        &quot;vault_name&quot;: &quot;Top End Solar &amp; Electrical&quot;
+      },
+      {
+        &quot;id&quot;: &quot;memory:r0fc2dfeddf42d1d1939&quot;,
+        &quot;kind&quot;: &quot;memory&quot;,
+        &quot;text&quot;: &quot;Ute 3 carries IN-77: Ute 3 is carrying delivery IN-77, expected 11 November.&quot;,
+        &quot;source&quot;: null,
+        &quot;occurred_at&quot;: &quot;2026-11-08T17:10:35.617488217+00:00&quot;,
+        &quot;score&quot;: 0.859,
+        &quot;arms_hit&quot;: 1,
+        &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+        &quot;vault_name&quot;: &quot;Top End Solar &amp; Electrical&quot;
+      },
+      {
+        &quot;id&quot;: &quot;memory:raf45a5189e43fce235d&quot;,
+        &quot;kind&quot;: &quot;memory&quot;,
+        &quot;text&quot;: &quot;IN-77 supplies job TES-104: IN-77 holds the Fronius Backup Switch for TES-104.&quot;,
+        &quot;source&quot;: null,
+        &quot;occurred_at&quot;: &quot;2026-11-08T17:10:38.818871260+00:00&quot;,
+        &quot;score&quot;: 0.847,
+        &quot;arms_hit&quot;: 1,
+        &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+        &quot;vault_name&quot;: &quot;Top End Solar &amp; Electrical&quot;
+      },
+      {
+        &quot;id&quot;: &quot;memory:c2z796vdu7led18mxths&quot;,
+        &quot;kind&quot;: &quot;memory&quot;,
+        &quot;text&quot;: &quot;Stock item from Fronius Australia. Sell $6,350, cost $4,200, only 2 on hand (reorder at 10).&quot;,
+        &quot;source&quot;: null,
+        &quot;occurred_at&quot;: &quot;2026-11-08T17:10:08.335765469+00:00&quot;,
+        &quot;score&quot;: 0.836,
+        &quot;arms_hit&quot;: 1,
+        &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+        &quot;vault_name&quot;: &quot;Top End Solar &amp; Electrical&quot;
+      },
+      {
+        &quot;id&quot;: &quot;memory:qarfn1e4uwpn36103aba&quot;,
+        &quot;kind&quot;: &quot;memory&quot;,
+        &quot;text&quot;: &quot;Stock item from NT Cable Co. Sell $245, cost $160, 20 on hand.&quot;,
+        &quot;source&quot;: null,
+        &quot;occurred_at&quot;: &quot;2026-11-08T17:10:08.468323677+00:00&quot;,
+        &quot;score&quot;: 0.824,
+        &quot;arms_hit&quot;: 1,
+        &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+        &quot;vault_name&quot;: &quot;Top End Solar &amp; Electrical&quot;
+      },
+      {
+        &quot;id&quot;: &quot;memory:jra2leltymyrr2xujhp7&quot;,
+        &quot;kind&quot;: &quot;memory&quot;,
+        &quot;text&quot;: &quot;Stock item from Fronius Australia. Sell $4,890, cost $3,100, only 3 on hand (reorder at 10).&quot;,
+        &quot;source&quot;: null,
+        &quot;occurred_at&quot;: &quot;2026-11-08T17:10:08.191161468+00:00&quot;,
+        &quot;score&quot;: 0.813,
+        &quot;arms_hit&quot;: 1,
+        &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+        &quot;vault_name&quot;: &quot;Top End Solar &amp; Electrical&quot;
+      },
+      {
+        &quot;id&quot;: &quot;memory:0mkvx9qp7b6m76irptmk&quot;,
+        &quot;kind&quot;: &quot;memory&quot;,
+        &quot;text&quot;: &quot;Stock item from Solar Juice. Sell $275, cost $175, 32 on hand.&quot;,
+        &quot;source&quot;: null,
+        &quot;occurred_at&quot;: &quot;2026-11-08T17:10:08.373012427+00:00&quot;,
+        &quot;score&quot;: 0.803,
+        &quot;arms_hit&quot;: 1,
+        &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+        &quot;vault_name&quot;: &quot;Top End Solar &amp; Electrical&quot;
+      },
+      {
+        &quot;id&quot;: &quot;memory:r142qotnzxfhbvl51qpp&quot;,
+        &quot;kind&quot;: &quot;memory&quot;,
+        &quot;text&quot;: &quot;Stock item from Solar Juice. Sell $220, cost $140, 45 on hand.&quot;,
+        &quot;source&quot;: null,
+        &quot;occurred_at&quot;: &quot;2026-11-08T17:10:08.189209177+00:00&quot;,
+        &quot;score&quot;: 0.792,
+        &quot;arms_hit&quot;: 1,
+        &quot;vault&quot;: &quot;vault:2oxb9ism79xia4hivfdo&quot;,
+        &quot;vault_name&quot;: &quot;Top End Solar &amp; Electrical&quot;
+      }
+    ]
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__search</h3><pre>{
+  &quot;query&quot;: &quot;insurance&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__search&quot;,
+  &quot;arguments&quot;: {
+    &quot;query&quot;: &quot;insurance&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01DWSh435jBWAAohxMW7hQB7&quot;,
+  &quot;result&quot;: {
+    &quot;results&quot;: [
+      {
+        &quot;id&quot;: &quot;documents:document.chunk:i1lvr31y781sr3dubv0h:1:0&quot;,
+        &quot;source&quot;: &quot;documents&quot;,
+        &quot;type&quot;: &quot;document.chunk&quot;,
+        &quot;title&quot;: &quot;jobs-notes.md&quot;,
+        &quot;snippet&quot;: &quot;# Top End Solar &amp; Electrical, Darwin NT\nThese are fictional test records as at 9 November 2026.\n\n## Open customer jobs\n- Customer Maya Chen, Nightcliff home, job TES-101. Install 12 Trina 440W Panels,…&quot;,
+        &quot;occurred_at&quot;: &quot;2026-11-08T17:09:35.421108134Z&quot;,
+        &quot;url&quot;: null,
+        &quot;document&quot;: {
+          &quot;document_id&quot;: &quot;document:i1lvr31y781sr3dubv0h&quot;,
+          &quot;chunk_id&quot;: &quot;documents:document.chunk:i1lvr31y781sr3dubv0h:1:0&quot;,
+          &quot;filename&quot;: &quot;jobs-notes.md&quot;,
+          &quot;revision&quot;: 1,
+          &quot;part&quot;: 0,
+          &quot;char_start&quot;: 0,
+          &quot;char_end&quot;: 1934,
+          &quot;download_url&quot;: &quot;/api/documents/document:i1lvr31y781sr3dubv0h/download&quot;
+        }
+      },
+      {
+        &quot;id&quot;: &quot;documents:document.chunk:tpfxkz7d23f1swwuzfpi:1:0&quot;,
+        &quot;source&quot;: &quot;documents&quot;,
+        &quot;type&quot;: &quot;document.chunk&quot;,
+        &quot;title&quot;: &quot;stock.csv&quot;,
+        &quot;snippet&quot;: &quot;item,supplier,sell price AUD,unit cost AUD,qty on hand,reorder at,status,last received\nFronius Primo 5kW Inverter,Fronius Australia,\&quot;$4,890.00\&quot;,\&quot;$3,100.00\&quot;,3,10,In stock,07/11/2026\nFronius Symo 10kW I…&quot;,
+        &quot;occurred_at&quot;: &quot;2026-11-08T17:09:31.328978507Z&quot;,
+        &quot;url&quot;: null,
+        &quot;document&quot;: {
+          &quot;document_id&quot;: &quot;document:tpfxkz7d23f1swwuzfpi&quot;,
+          &quot;chunk_id&quot;: &quot;documents:document.chunk:tpfxkz7d23f1swwuzfpi:1:0&quot;,
+          &quot;filename&quot;: &quot;stock.csv&quot;,
+          &quot;revision&quot;: 1,
+          &quot;part&quot;: 0,
+          &quot;char_start&quot;: 0,
+          &quot;char_end&quot;: 2289,
+          &quot;download_url&quot;: &quot;/api/documents/document:tpfxkz7d23f1swwuzfpi/download&quot;
+        }
+      }
+    ],
+    &quot;has_more&quot;: false
+  }
+}</pre></details></article>
