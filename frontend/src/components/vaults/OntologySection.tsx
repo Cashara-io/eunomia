@@ -16,6 +16,8 @@ import {
   useDecideMetric,
   useDecideProperty,
   useOntology,
+  useReadiness,
+  useSetStrict,
   useSuggestOntology,
   useTryMetric,
   type KindItem,
@@ -121,6 +123,8 @@ function OntologyBody({ vault }: { vault: Vault }) {
           {note}
         </p>
       )}
+      <ReadinessPanel vaultId={vault.id} />
+      {data && <StrictSwitch vaultId={vault.id} on={data.strict} isOwner={isOwner} onError={setError} />}
       {isOwner && <AutomapBar vaultId={vault.id} />}
       {error && <ErrorLine error={error} />}
       {query.isError && <ErrorLine error={failure(query.error, "Could not load the kinds in this space.")} />}
@@ -198,6 +202,76 @@ function OntologyBody({ vault }: { vault: Vault }) {
   );
 }
 
+const counted = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** Whether the space can answer number questions yet, and what still stands in the way. */
+function ReadinessPanel({ vaultId }: { vaultId: string }) {
+  const query = useReadiness(vaultId);
+  const r = query.data;
+  if (query.isError) return <ErrorLine error={failure(query.error, "Could not check whether this space is ready.")} />;
+  if (!r) return <span className="skeleton h-12 w-full" />;
+  const approved = [
+    counted(r.kinds.approved, "kind", "kinds"),
+    counted(r.properties.approved, "property", "properties"),
+    counted(r.metrics.approved, "metric", "metrics"),
+    counted(r.links.approved, "link", "links"),
+  ].join(", ");
+  return (
+    <section aria-label="Ready for numbers" className="flex flex-col gap-1.5 py-1">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <StatusLabel tone={r.ready ? "good" : "warning"}>{r.ready ? "Ready to answer numbers" : "Not ready to answer every number yet"}</StatusLabel>
+        <span className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+          Approved: {approved}
+        </span>
+      </div>
+      {r.blockers.length > 0 && (
+        <ul className="flex flex-col gap-0.5 text-[13px] list-disc pl-5" aria-label="What is in the way">
+          {r.blockers.slice(0, 5).map((b) => (
+            <li key={b}>{b}</li>
+          ))}
+          {r.blockers.length > 5 && <li style={{ color: "var(--ink-dim)" }}>and {r.blockers.length - 5} more</li>}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/** "Only approved kinds and links": an owner's switch; members see whether it is on. */
+function StrictSwitch({ vaultId, on, isOwner, onError }: { vaultId: string; on: boolean; isOwner: boolean; onError: (f: Failure | null) => void }) {
+  const setStrict = useSetStrict(vaultId);
+  async function toggle(next: boolean) {
+    onError(null);
+    try {
+      await setStrict.mutateAsync(next);
+    } catch (e) {
+      onError(failure(e, "Could not change that. Try again."));
+    }
+  }
+  return (
+    <label htmlFor={`strict-${vaultId}`} className={`flex items-start gap-3 max-w-[68ch] ${isOwner ? "cursor-pointer" : ""}`}>
+      <input
+        id={`strict-${vaultId}`}
+        type="checkbox"
+        role="switch"
+        className="mt-1"
+        style={{ accentColor: "var(--accent)" }}
+        checked={on}
+        disabled={!isOwner || setStrict.isPending}
+        onChange={(e) => toggle(e.target.checked)}
+      />
+      <span className="flex flex-col gap-0.5">
+        <span className="text-[14px] font-medium">Only approved kinds and links</span>
+        <span className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+          {on
+            ? "On. AI apps can only save things under the kinds and links approved here. Anything else is turned away and shows up below as a suggestion to review."
+            : "Off. AI apps can save things under any kind or link; new ones show up below as in use. Turn this on to accept only what you approved."}
+          {!isOwner && " Only an owner of this space can change it."}
+        </span>
+      </span>
+    </label>
+  );
+}
+
 function SkeletonRow() {
   return (
     <li className="flex items-center gap-2 h-11">
@@ -254,10 +328,9 @@ function KindRow({
         onSave={(description) => onDecide({ action: "describe", description }, "Could not save that description.").then((ok) => ok && setEditing(false))}
         onCancel={() => setEditing(false)}
       />
-      {detail && (
+      {(detail || (item.status === "proposed" && item.reason)) && (
         <p className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
-          {detail}
-          {item.reason ? ` ${item.reason}` : ""}
+          {[detail, item.reason].filter(Boolean).join(" ")}
         </p>
       )}
       {isOwner && !editing && (

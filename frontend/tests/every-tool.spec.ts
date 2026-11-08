@@ -102,6 +102,14 @@ test("every MCP tool works end to end", async ({ request, baseURL }) => {
   expect(approvedMetric.ok()).toBeTruthy();
   const total = await ok("metric_eval", { metric: "total_size_gb" });
   expect([total.value, total.unit, total.entity_ids]).toEqual([120, "GB", [orders]]);
+  // coverage: the approved metric's name is covered, a term nobody approved is not
+  const covered = await ok("ontology_coverage", { question: "What is the total size gb of our databases?" });
+  expect(covered.matched.map((m: { name: string }) => m.name)).toContain("total_size_gb");
+  const uncovered = await ok("ontology_coverage", { question: "What is the gross margin?" });
+  expect([uncovered.coverage, uncovered.uncovered]).toEqual([0, ["gross margin"]]);
+  // readiness: the db kind is still only proposed
+  const ready = await ok("ontology_readiness");
+  expect(ready.blockers).toContain("1 kind is proposed and needs an owner");
   // a what-if over it: the server's numbers before and after, and nothing saved
   const whatIf = { changes: [{ scale: { kind: "db", property: "size_gb", factor: 1.5 } }], metrics: ["total_size_gb"] };
   const scenario = await ok("scenario_run", whatIf);

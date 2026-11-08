@@ -59,6 +59,8 @@ const TOOL_WORDS: Record<string, string> = {
   ontology_get: "Checked this space's kinds",
   metric_eval: "Worked out a number",
   scenario_run: "Tried a what-if",
+  ontology_coverage: "Checked what the space can answer",
+  ontology_readiness: "Checked whether the space is ready",
   entity_set_property: "Saved a value",
   show_view: "Showed a view",
   document_list: "Listed documents",
