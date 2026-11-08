@@ -790,7 +790,7 @@ pub async fn decide_link(
 // ---------------------------------------------------------------------------
 
 /// A write under a rejected kind that went to its merge target instead.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, utoipa::ToSchema)]
 pub struct KindMapped {
     pub from: String,
     pub to: String,

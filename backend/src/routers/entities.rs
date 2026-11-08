@@ -17,7 +17,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use surrealdb::types::RecordId;
 
@@ -253,20 +253,29 @@ async fn entity_graph(
     tag = "entities",
     summary = "Create or upsert an entity",
     request_body = EntityCreate,
-    responses((status = 200, body = service::EntityOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    responses((status = 200, body = EntityCreated), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
 )]
 async fn create_entity(
     State(state): State<AppState>,
     user: User,
     Json(body): Json<EntityCreate>,
-) -> AppResult<Json<service::EntityOut>> {
+) -> AppResult<Json<EntityCreated>> {
     let state = state.org(&user.org).await?;
     known_kind_or_400(&body.kind)?;
     let vault_rid = body.vault_id.as_deref().map(parse_record_id).transpose()?;
-    Ok(Json(
-        service::upsert_entity(&state.db, &user.id, &body.kind, &body.name, body.aliases, vault_rid.as_ref()).await?,
-    ))
+    let up = service::upsert_grounded(&state.db, &user.id, &body.kind, &body.name, body.aliases, vault_rid.as_ref()).await?;
+    Ok(Json(EntityCreated { entity: up.entity, kind_mapped: up.kind_mapped }))
+}
+
+/// The entity a create found or made. `kind_mapped` is set when the vault's owners rejected the kind
+/// asked for and the entity went to its merge target instead.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+struct EntityCreated {
+    #[serde(flatten)]
+    entity: service::EntityOut,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    kind_mapped: Option<crate::ontology::KindMapped>,
 }
 
 #[derive(Debug, Deserialize, utoipa::ToSchema)]

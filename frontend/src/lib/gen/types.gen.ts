@@ -601,6 +601,14 @@ export type EntityCreate = {
     vault_id?: string | null;
 };
 
+/**
+ * The entity a create found or made. `kind_mapped` is set when the vault's owners rejected the kind
+ * asked for and the entity went to its merge target instead.
+ */
+export type EntityCreated = EntityOut & {
+    kind_mapped?: null | KindMapped;
+};
+
 export type EntityDetail = {
     aliases: Array<string>;
     id: string;
@@ -1233,6 +1241,14 @@ export type KindItem = {
      * Other names written in the vault's data for this kind.
      */
     synonyms: Array<string>;
+};
+
+/**
+ * A write under a rejected kind that went to its merge target instead.
+ */
+export type KindMapped = {
+    from: string;
+    to: string;
 };
 
 export type LeftBody = {
@@ -4139,7 +4155,7 @@ export type CreateEntityErrors = {
 export type CreateEntityError = CreateEntityErrors[keyof CreateEntityErrors];
 
 export type CreateEntityResponses = {
-    200: EntityOut;
+    200: EntityCreated;
 };
 
 export type CreateEntityResponse = CreateEntityResponses[keyof CreateEntityResponses];
