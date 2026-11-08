@@ -92,7 +92,7 @@ test.describe("Kinds and links", () => {
     await expect(section).toBeVisible();
     expect(reads).toHaveLength(0);
     await section.click();
-    await expect(page.getByRole("list", { name: "Kinds in this space" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Kinds", exact: true })).toBeVisible();
     await expect.poll(() => reads.length).toBe(1);
   });
 });

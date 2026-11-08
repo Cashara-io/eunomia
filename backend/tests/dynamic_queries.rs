@@ -216,6 +216,21 @@ async fn entities_and_vaults(app: &TestApp) -> Value {
     let graph = app.tool("entities_graph", json!({"kinds": ["person", "organisation", "db"]})).await;
     assert!(graph.get("error").is_none(), "{graph}");
 
+    // alias_keys_of, which a CSV import reads once: every entity table, custom kinds by kind
+    let db = app.db().await;
+    let vault = eunomia_backend::vaults::service::personal_vault_id(&db, &app.user.id).await.unwrap();
+    for kind in KINDS {
+        let table = eunomia_backend::entities::service::kind_table(kind).unwrap();
+        let keys: Vec<Vec<String>> = eunomia_backend::store::entities::alias_keys_of(&db, table)
+            .bind(("vault", vault.clone()))
+            .bind(("kind", kind.to_string()))
+            .await
+            .unwrap()
+            .take(0)
+            .unwrap();
+        assert!(keys.iter().flatten().all(|k| *k == k.to_lowercase()), "{kind}: {keys:?}");
+    }
+
     // vault clone and merge (find_by_name, entities_in_vault, copy_entity, count_entities)
     let vaults = app.tool("vault_list", json!({})).await;
     let a = vaults["results"][0]["id"].as_str().unwrap().to_string();
