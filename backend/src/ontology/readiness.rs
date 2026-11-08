@@ -1,6 +1,10 @@
 //! Whether a vault's ontology is ready to answer number and what-if questions: its kinds, properties,
 //! metrics and link types counted by status, and what still blocks it, in plain words. Read-only; the
 //! owner fixes a blocker in the Eunomia app (Kinds and links).
+//!
+//! Ready means: nothing proposed is waiting for an owner, at least one metric is approved, and every
+//! property an approved metric reads is approved and has values. A kind with no metric is not a
+//! blocker: most kinds (people, organisations, vehicles) are never counted.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -8,6 +12,7 @@ use serde::Serialize;
 use surrealdb::types::RecordId;
 
 use super::metric::MetricExpr;
+use super::property::PropertyItem;
 use super::{resolve, view, OntologyOut, Status, ViewStatus};
 use crate::authz::Action;
 use crate::error::AppResult;
@@ -43,7 +48,8 @@ pub struct ReadinessOut {
     pub properties: StatusCounts,
     pub metrics: StatusCounts,
     pub links: StatusCounts,
-    /// No blockers.
+    /// No blockers: nothing proposed is waiting, a metric is approved, and every property an approved
+    /// metric reads is approved and has values.
     pub ready: bool,
     /// What stops the vault answering numbers, each in one sentence, for the owner.
     pub blockers: Vec<String>,
@@ -78,48 +84,43 @@ fn properties_used(e: &MetricExpr) -> BTreeSet<&str> {
 
 pub(super) fn assess(o: &OntologyOut) -> ReadinessOut {
     let (mut kinds, mut properties, mut metrics, mut links) = (StatusCounts::default(), StatusCounts::default(), StatusCounts::default(), StatusCounts::default());
-    let mut blockers = Vec::new();
     let mut metric_blockers = Vec::new();
-    let mut bare_kinds = Vec::new();
     for k in o.kinds.iter().filter(|k| !(k.built_in && k.entities == 0 && k.status == ViewStatus::Observed)) {
         kinds.add(k.status);
-        let status_of: BTreeMap<&str, Status> = k.properties.iter().map(|p| (p.name.as_str(), p.status)).collect();
+        let by_name: BTreeMap<&str, &PropertyItem> = k.properties.iter().map(|p| (p.name.as_str(), p)).collect();
         for p in &k.properties {
             properties.add(p.status.into());
         }
         for m in &k.metrics {
             metrics.add(m.status.into());
-            if m.status == Status::Rejected {
+            // a proposed metric already waits for an owner, and a rejected one never runs
+            if m.status != Status::Approved {
                 continue;
             }
             for p in properties_used(&m.expr) {
-                let why = match status_of.get(p) {
+                let why = match by_name.get(p) {
                     None => format!("metric {} on {} uses {p}, which is not a property of {}", m.name, k.kind, k.kind),
-                    Some(Status::Rejected) => format!("metric {} on {} uses a rejected property, {p}", m.name, k.kind),
-                    Some(Status::Proposed) => format!("metric {} on {} uses {p}, which is proposed, not approved", m.name, k.kind),
-                    Some(Status::Approved) => continue,
+                    Some(i) if i.status == Status::Rejected => format!("metric {} on {} uses a rejected property, {p}", m.name, k.kind),
+                    Some(i) if i.status == Status::Proposed => format!("metric {} on {} uses {p}, which is proposed, not approved", m.name, k.kind),
+                    Some(i) if i.values == 0 => format!("metric {} on {} uses {p}, which has no values yet: import them or set them", m.name, k.kind),
+                    Some(_) => continue,
                 };
                 metric_blockers.push(why);
             }
-        }
-        if k.status == ViewStatus::Approved && !k.metrics.iter().any(|m| m.status == Status::Approved) {
-            let has_property = k.properties.iter().any(|p| p.status == Status::Approved);
-            bare_kinds.push(if has_property {
-                format!("no approved metric on kind {}", k.kind)
-            } else {
-                format!("no approved property or metric on kind {}", k.kind)
-            });
         }
     }
     for l in &o.links {
         links.add(l.status);
     }
+    let mut blockers = Vec::new();
     blockers.extend(waiting(kinds.proposed, "kind", "kinds"));
     blockers.extend(waiting(properties.proposed, "property", "properties"));
     blockers.extend(waiting(metrics.proposed, "metric", "metrics"));
     blockers.extend(waiting(links.proposed, "link type", "link types"));
+    if metrics.approved == 0 {
+        blockers.push("no metric is approved yet, so there is no number to compute".to_string());
+    }
     blockers.extend(metric_blockers);
-    blockers.extend(bare_kinds);
     ReadinessOut { vault: o.vault.clone(), strict: o.strict, kinds, properties, metrics, links, ready: blockers.is_empty(), blockers }
 }
 
