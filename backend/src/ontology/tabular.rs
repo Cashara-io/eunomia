@@ -29,6 +29,8 @@ use crate::store::ontology as q;
 pub const MAX_TABLE_BYTES: usize = 2 * 1024 * 1024;
 pub const MAX_COLUMNS: usize = 60;
 pub const MAX_ROWS: usize = 5000;
+/// Rows an import gets for one rate-limit unit, as a batch of facts gets ten.
+pub const IMPORT_ROWS_PER_UNIT: usize = 500;
 /// Bad cells listed in an import's answer; the count covers the rest.
 const MAX_BAD_LISTED: usize = 100;
 /// The source a CSV's fields carry in a profile and a property's `source_map`.
@@ -281,6 +283,8 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
         _ => return Err(not_ready(&kind, "is not approved for this vault yet")),
     }
     let table = parse(&doc.bytes)?;
+    // the request already paid one unit; each further IMPORT_ROWS_PER_UNIT rows cost one more
+    crate::gate::charge_more(table.rows.len().div_ceil(IMPORT_ROWS_PER_UNIT).saturating_sub(1))?;
     let doc_id = doc.id.to_string();
     let name_at = table
         .columns
@@ -378,7 +382,7 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
             (false, true) => out.updated += 1,
             _ => {}
         }
-        let entity: RecordId = crate::rid::parse(&up.entity.id).map_err(|_| AppError::internal("entity id did not round-trip"))?;
+        let entity: RecordId = crate::rid::parse(&entity.id).map_err(|_| AppError::internal("entity id did not round-trip"))?;
         for (i, row, datatype) in &targets {
             let cell = cells[*i].trim();
             if cell.is_empty() {

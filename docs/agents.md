@@ -558,5 +558,7 @@ the extra calls get `429 rate.limited` with `Retry-After`. Use
 `memory_write_batch` instead. It takes up to 100 facts per call, writes each
 exactly like `memory_write`, and returns one result per fact, so a bad item
 fails alone. A batch costs one request per 10 facts, so 900 facts are 9 calls
-and 90 requests, well inside a minute's limit. If a client still gets a 429,
+and 90 requests, well inside a minute's limit. A CSV import (`document_import_rows`)
+costs one request per 500 rows, counted once the file is read, so a 5,000-row
+file is 10 requests. If a client still gets a 429,
 it should wait `Retry-After` seconds and resend that batch.
