@@ -3444,3 +3444,34 @@ async fn a_ratio_uses_the_same_entities_on_both_sides_and_a_metric_narrows_to_on
     let view = ok(app.tool("show_view", json!({"view": "scenario", "headline": "Coastal raises costs", "scenario": args})).await);
     assert!(view["text"].as_str().unwrap().contains("- gross margin: 38.1% \u{2192} 33.9%, down 4.2 points\n"), "{view}");
 }
+
+#[tokio::test]
+async fn relation_boundary_refuses_overlong_labels_in_strict_mode() {
+    let app = TestApp::new().await;
+    let a = write(&app, "Alice", "person").await["entity"]["id"].clone();
+    let b = write(&app, "Bob", "person").await["entity"]["id"].clone();
+    assert_eq!(set_strict(&app, &personal(&app).await, true).await.0, 200);
+    for tool in ["entity_relate", "code_relate"] {
+        let out = app.tool(tool, json!({"from_id": a, "to_id": b, "label": "x".repeat(65)})).await;
+        assert!(out.get("error").is_some(), "overlong label was accepted");
+    }
+    assert_eq!(ok(app.tool("entities_get", json!({"id": a})).await)["relations"], json!([]));
+}
+
+#[tokio::test]
+async fn relation_boundary_refuses_secret_labels_before_storage_or_proposals() {
+    let app = TestApp::new().await;
+    let a = write(&app, "Alice", "person").await["entity"]["id"].clone();
+    let b = write(&app, "Bob", "person").await["entity"]["id"].clone();
+    let fake_token = format!("ghp_{}", "FAKE0".repeat(8));
+    for strict in [false, true] {
+        assert_eq!(set_strict(&app, &personal(&app).await, strict).await.0, 200);
+        for tool in ["entity_relate", "code_relate"] {
+            let out = app.tool(tool, json!({"from_id": a, "to_id": b, "label": fake_token})).await;
+            assert!(out.get("error").is_some(), "secret label was accepted");
+            assert!(!out.to_string().contains(&fake_token), "secret echoed in refusal");
+        }
+    }
+    assert_eq!(ok(app.tool("entities_get", json!({"id": a})).await)["relations"], json!([]));
+    assert!(!ok(app.tool("ontology_get", json!({})).await).to_string().contains(&fake_token));
+}

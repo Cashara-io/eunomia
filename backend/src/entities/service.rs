@@ -960,6 +960,7 @@ pub async fn relate_with_reason(
 /// [`add_relation`] for a caller that already checked it may write in `vault`, that both ends are in it
 /// and that the link type is allowed (a CSV import). Idempotent; true when it wrote a new relation.
 pub(crate) async fn relate_in_vault(db: &OrgDb, owner: &RecordId, vault: &RecordId, from_id: &RecordId, to_id: &RecordId, label: &str) -> AppResult<bool> {
+    crate::ontology::Label::parse(label)?;
     if find_relation(db, from_id, to_id, label).await?.is_some() {
         return Ok(false);
     }
