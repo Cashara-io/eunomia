@@ -377,6 +377,19 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
     );
 }
 
+/// `related_to`, as `metric_eval`, `scenario_run` and a metric view take it.
+pub(super) fn related_schema(description: &str) -> serde_json::Value {
+    json!({
+        "type": "object",
+        "description": description,
+        "properties": {
+            "entity_id": {"type": "string", "description": "the entity they are linked to, from entities_search"},
+            "label": {"type": "string", "description": "only by relations with this label, e.g. supplied_by"},
+        },
+        "required": ["entity_id"],
+    })
+}
+
 /// `metric_eval`'s input schema, in its own frame like `propose_schema`.
 #[inline(never)]
 fn eval_schema() -> serde_json::Value {
@@ -387,6 +400,7 @@ fn eval_schema() -> serde_json::Value {
             "kind": {"type": "string", "description": "its kind, when several kinds have a metric of that name"},
             "vault_id": {"type": "string", "description": "the vault (a vault id or its name); omit for your personal vault"},
             "filters": filters_schema("extra filters for this run, ANDed with the metric's own", metric::MAX_FILTERS),
+            "related_to": related_schema("run the metric only on the entities linked to this one, e.g. the gross margin on the products supplied by one supplier"),
             "as_of": {"type": "string", "description": "use each entity's latest value as of this ISO 8601 date or datetime (a date includes its whole day); default now"},
             "group_by_grain": {"type": "boolean", "description": "a series by the metric's time_property and grain instead of one value"},
             "allow_unapproved": {"type": "boolean", "description": "run a proposed metric to try it; the result says it is unapproved. Never quote such a number as checked"},
@@ -425,15 +439,7 @@ pub(super) fn scenario_schema() -> serde_json::Value {
                 "entity_ids": {"type": "array", "maxItems": scenario::MAX_TOUCHED, "items": {"type": "string"}, "description": "only these entities of the kind, e.g. just the latte"},
                 amount.0: {"type": "number", "description": amount.1},
                 "filters": filters_schema("pick only the entities whose values pass these, as a metric's filters", metric::MAX_FILTERS),
-                "related_to": {
-                    "type": "object",
-                    "description": "pick only the entities linked to this one, e.g. the products supplied by a supplier",
-                    "properties": {
-                        "entity_id": {"type": "string", "description": "the entity they are linked to, from entities_search"},
-                        "label": {"type": "string", "description": "only by relations with this label, e.g. supplied_by"},
-                    },
-                    "required": ["entity_id"],
-                },
+                "related_to": related_schema("pick only the entities linked to this one, e.g. the products supplied by a supplier"),
             },
             "required": ["kind", "property", amount.0],
         })

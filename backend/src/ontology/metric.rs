@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use surrealdb::types::{Datetime, RecordId, SurrealValue};
 
+use super::scenario::{plural, Named, Related, RelatedTo};
 use super::property::{clean_synonyms, clean_unit, parse_value, property_rid, to_json, Datatype, PropertyName, PropertyRow, Stored, ValidProperty};
 use super::{clean_text, decider, no_ontology_table, resolve, view, Kind, OntologyOut, Origin, Status};
 use crate::authz::Action;
@@ -515,6 +516,8 @@ struct Plan {
     ratio: bool,
     filters: Vec<Cond>,
     time: Option<(String, Grain)>,
+    /// A ratio whose unit is a percent: its value is the fraction times 100.
+    percent: bool,
 }
 
 /// Characters with a meaning in query text, which no filter value needs. Values are always parameters,
@@ -680,7 +683,7 @@ fn check(props: &Props, kind: &Kind, e: &MetricExpr) -> AppResult<Plan> {
         (None, Some(_)) => return Err(AppError::bad_request("a grain needs a time_property to group by")),
         (None, None) => None,
     };
-    Ok(Plan { sides, ratio, filters, time })
+    Ok(Plan { sides, ratio, filters, time, percent: false })
 }
 
 impl Plan {
@@ -1137,6 +1140,9 @@ pub struct EvalArgs {
     pub group_by_grain: bool,
     #[serde(default)]
     pub allow_unapproved: bool,
+    /// Only the kind's entities linked to this one, as a what-if's `related_to` picks them.
+    #[serde(default)]
+    pub related_to: Option<RelatedTo>,
 }
 
 /// A run of a rejected metric that went to its merge target instead.
@@ -1318,6 +1324,8 @@ struct Computed {
     div_zero: usize,
     /// Entities left out because their row is too large for a number.
     too_large: usize,
+    /// Entities the filters pick that have no usable value for this side: none, or one it cannot use.
+    skipped: HashSet<String>,
 }
 
 fn compute(side: &Side, filters: &[Cond], entities: &[&String], values: &Values, props: &Props) -> Computed {
@@ -1328,6 +1336,7 @@ fn compute(side: &Side, filters: &[Cond], entities: &[&String], values: &Values,
     let mut other_units: BTreeMap<(String, String), usize> = BTreeMap::new();
     let mut div_zero = 0;
     let mut too_large = 0;
+    let mut skipped = HashSet::new();
     for e in entities {
         let held = values.get(*e);
         let get = |p: &str| held.and_then(|h| h.get(p));
@@ -1339,27 +1348,38 @@ fn compute(side: &Side, filters: &[Cond], entities: &[&String], values: &Values,
                 Ok(v) => {
                     nums.push(v);
                     used.push((*e).clone());
+                    continue;
                 }
                 Err(Skip::Missing) => {}
                 Err(Skip::Unit(p, u)) => *other_units.entry((p, u)).or_default() += 1,
                 Err(Skip::DivZero) => div_zero += 1,
                 Err(Skip::TooLarge) => too_large += 1,
             }
+            skipped.insert((*e).clone());
             continue;
         }
         let Some(p) = &side.property else {
             used.push((*e).clone());
             continue;
         };
-        let Some(h) = get(p) else { continue };
+        let Some(h) = get(p) else {
+            if side.agg.numeric_only() {
+                skipped.insert((*e).clone());
+            }
+            continue;
+        };
         if side.agg.numeric_only() {
             if let (Some(u), Some(want)) = (&h.unit, &unit)
                 && u != want
             {
                 *other_units.entry((p.clone(), u.clone())).or_default() += 1;
+                skipped.insert((*e).clone());
                 continue;
             }
-            let Some(n) = h.stored.num else { continue };
+            let Some(n) = h.stored.num else {
+                skipped.insert((*e).clone());
+                continue;
+            };
             nums.push(n);
         } else if side.agg == Agg::CountDistinct {
             let s = &h.stored;
@@ -1376,7 +1396,7 @@ fn compute(side: &Side, filters: &[Cond], entities: &[&String], values: &Values,
         Agg::Max => nums.iter().copied().reduce(f64::max),
         Agg::Avg | Agg::Ratio => None,
     };
-    Computed { value, used, other_units, div_zero, too_large }
+    Computed { value, used, other_units, div_zero, too_large, skipped }
 }
 
 fn round(v: f64) -> f64 {
@@ -1384,9 +1404,11 @@ fn round(v: f64) -> f64 {
     if r == 0.0 { 0.0 } else { r }
 }
 
-/// The plan's value over `entities`: one side, or numerator over denominator.
+/// The plan's value over `entities`: one side, or numerator over denominator. A ratio's two sides run
+/// over the same entities, so one with a value missing on either side is left out of both.
 fn value_of(plan: &Plan, entities: &[&String], values: &Values, props: &Props, warnings: &mut Vec<String>) -> (Option<f64>, BTreeSet<String>) {
-    let sides: Vec<Computed> = plan.sides.iter().map(|s| compute(s, &plan.filters, entities, values, props)).collect();
+    let run = |entities: &[&String]| -> Vec<Computed> { plan.sides.iter().map(|s| compute(s, &plan.filters, entities, values, props)).collect() };
+    let mut sides = run(entities);
     for c in &sides {
         for ((p, unit), n) in &c.other_units {
             let w = format!("left out {n} {p:?} value(s) in {unit}, not the property's unit");
@@ -1401,10 +1423,23 @@ fn value_of(plan: &Plan, entities: &[&String], values: &Values, props: &Props, w
             }
         }
     }
+    if plan.ratio {
+        let skipped: HashSet<String> = sides.iter().flat_map(|c| c.skipped.iter().cloned()).collect();
+        let dropped = sides.iter().flat_map(|c| &c.used).filter(|e| skipped.contains(*e)).collect::<HashSet<_>>().len();
+        if dropped > 0 {
+            let kept: Vec<&String> = entities.iter().copied().filter(|e| !skipped.contains(*e)).collect();
+            sides = run(&kept);
+            let noun = if dropped == 1 { "entity" } else { "entities" };
+            let w = format!("left out {dropped} {noun} missing a value one side needs, so both sides of the ratio use the same entities");
+            if !warnings.contains(&w) {
+                warnings.push(w);
+            }
+        }
+    }
     let used: BTreeSet<String> = sides.iter().flat_map(|c| c.used.iter().cloned()).collect();
     let value = if plan.ratio {
         match (sides[0].value, sides[1].value) {
-            (Some(n), Some(d)) if d != 0.0 => Some(n / d),
+            (Some(n), Some(d)) if d != 0.0 => Some(if plan.percent { n / d * 100.0 } else { n / d }),
             _ => None,
         }
     } else {
@@ -1443,9 +1478,17 @@ pub async fn eval(db: &OrgDb, owner: &RecordId, args: &EvalArgs) -> AppResult<Me
     let vault_id = args.vault_id.as_deref().map(str::trim).filter(|v| !v.is_empty()).map(|v| crate::rid::parse(v).map_err(|_| AppError::coded(ErrorCode::VaultNotFound, "Vault not found."))).transpose()?;
     let vault = resolve(db, owner, vault_id.as_ref(), Action::ReadMemories).await?;
     match prepare(db, &vault, args).await {
-        Err(e) if vault_id.is_none() && e.code == ErrorCode::ResourceNotFound => {
-            let homes = super::scope::elsewhere(db, owner, &vault, |v| exists(db, v, &args.metric, args.kind.as_deref())).await?;
-            Err(super::scope::found_in(e, args.metric.trim(), &homes))
+        Err(e) if vault_id.is_none() && matches!(e.code, ErrorCode::ResourceNotFound | ErrorCode::EntityNotFound) => {
+            let has = |v: RecordId| async move {
+                if !exists(db, v.clone(), &args.metric, args.kind.as_deref()).await? {
+                    return Ok(false);
+                }
+                let Some(r) = &args.related_to else { return Ok(true) };
+                Ok(Named::load(db, &v, [r.entity_id.as_str()]).await.is_ok_and(|n| n.get(&r.entity_id).is_ok()))
+            };
+            let homes = super::scope::elsewhere(db, owner, &vault, has).await?;
+            let what = if args.related_to.is_some() { "The metric and the entity it is narrowed to" } else { args.metric.trim() };
+            Err(super::scope::found_in(e, what, &homes))
         }
         prepared => prepared?.run(None),
     }
@@ -1600,6 +1643,9 @@ pub(super) async fn prepare(db: &OrgDb, vault: &RecordId, args: &EvalArgs) -> Ap
         (false, None) if plan.sides[0].agg.numeric_only() => plan.sides[0].property.as_ref().and_then(|p| props.get(p)).and_then(|p| p.unit.clone()),
         _ => None,
     });
+    // a ratio is a fraction; labelled a percent, it is shown as one, so 0.44 becomes 44 %
+    let percent = crate::views::is_percent(unit.as_deref());
+    let unit = if percent { Some("%".to_string()) } else { unit };
     let mut out = MetricEvalOut {
         metric: row.name.clone(),
         kind: kind.as_str().to_string(),
@@ -1625,7 +1671,15 @@ pub(super) async fn prepare(db: &OrgDb, vault: &RecordId, args: &EvalArgs) -> Ap
     let names: BTreeSet<String> = plan.properties().into_iter().chain(extra.iter().map(|c| c.filter.property.clone())).collect();
     let mut all_filters = plan.filters.clone();
     all_filters.extend(extra);
-    let plan = Plan { filters: all_filters, ..plan };
+    let plan = Plan { filters: all_filters, percent: plan.ratio && percent, ..plan };
+    // the entity is checked before any values are read, so a bad id fails fast
+    let related = match &args.related_to {
+        None => None,
+        Some(r) => {
+            let named = Named::load(db, &vault, [r.entity_id.as_str()]).await?;
+            Some(Related::load(db, &vault, &named, r, &mut out.warnings).await?)
+        }
+    };
     let mut prepared = Prepared { out, plan, props, kind, entities: Vec::new(), values: HashMap::new(), series: args.group_by_grain, nothing: false };
     if !unlisted.is_empty() {
         // a filter value listed nowhere matches nothing: say so instead of returning 0
@@ -1637,6 +1691,20 @@ pub(super) async fn prepare(db: &OrgDb, vault: &RecordId, args: &EvalArgs) -> Ap
         return Ok(prepared);
     }
     (prepared.entities, prepared.values) = load_values(db, &vault, &prepared.kind, &names, as_of).await?;
+    if let Some(r) = related {
+        let kind = prepared.kind.as_str();
+        prepared.entities.retain(|e| r.ids.contains(e));
+        if prepared.entities.is_empty() {
+            prepared.out.warnings.push(format!("{}, so nothing was computed: this is not a 0", r.none_linked(kind)));
+            if args.group_by_grain {
+                prepared.out.series = Some(Vec::new());
+            }
+            prepared.nothing = true;
+        } else {
+            let n = prepared.entities.len();
+            prepared.out.expr_words.push_str(&format!(", on {n} {} {}", plural(n, kind), r.said));
+        }
+    }
     Ok(prepared)
 }
 
