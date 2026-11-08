@@ -3211,14 +3211,22 @@ async fn a_property_named_like_the_column_wins_over_a_link_guessed_from_the_kind
     let vault = personal(&app).await;
     ok(app.tool("ontology_propose", json!({
         "kinds": [{"kind": "part"}, {"kind": "supplier"}],
-        "properties": [{"kind": "part", "name": "supplier", "datatype": "text"}],
+        "properties": [
+            {"kind": "part", "name": "supplier", "datatype": "text"},
+            {"kind": "part", "name": "price", "datatype": "money", "unit": "AUD", "source_map": [{"source": "document", "record_type": doc, "path": "price AUD"}]},
+        ],
         "links": [{"from_kind": "part", "label": "supplied_by", "to_kind": "supplier"}],
     })).await);
     for k in ["part", "supplier"] {
         assert_eq!(decide_kind(&app, &vault, k, json!({"action": "approve"})).await.0, 200);
     }
-    assert_eq!(decide_property(&app, &vault, "part", "supplier", json!({"action": "approve"})).await.0, 200);
+    for p in ["supplier", "price"] {
+        assert_eq!(decide_property(&app, &vault, "part", p, json!({"action": "approve"})).await.0, 200);
+    }
     assert_eq!(decide_link(&app, &vault, "part", "supplied_by", "supplier").await, 200);
+    let (_, profile) = app.http("GET", &format!("/api/documents/{doc}/profile"), None, true).await;
+    let plan = profile["import"]["columns"].as_array().unwrap().iter().find(|c| c["column"] == "supplier").unwrap().clone();
+    assert_eq!((plan["property"].as_str(), plan["link"].as_str()), (Some("supplier"), None), "the preview says what the import does: {profile}");
     let out = ok(app.tool("document_import_rows", json!({"document_id": doc, "kind": "part", "name_column": "part"})).await);
     let col = out["columns"].as_array().unwrap().iter().find(|c| c["column"] == "supplier").unwrap().clone();
     assert_eq!((col["property"].as_str(), col["link"].as_str()), (Some("supplier"), None), "{out}");

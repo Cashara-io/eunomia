@@ -241,8 +241,14 @@ async fn plan(db: &OrgDb, vault: &RecordId, document_id: &str, columns: &[String
         None => Vec::new(),
     };
     let mut plans = plans;
+    // the order document_import_rows takes: a link fed by the column, then a property named like it, then a link guessed from the kind's name
     for c in plans.iter_mut().filter(|c| c.property.is_none()) {
-        c.link = link_for(&links, document_id, &c.column).map(LinkFrom::words);
+        let named = props.iter().find(|p| p.status == Status::Approved && p.name == property_name_for(&c.column));
+        match (links.iter().find(|l| l.fed_by(document_id, &c.column)), named) {
+            (Some(l), _) => c.link = Some(l.words()),
+            (None, Some(p)) => (c.property, c.status) = (Some(p.name.clone()), Some(p.status)),
+            (None, None) => c.link = link_for(&links, document_id, &c.column).map(LinkFrom::words),
+        }
     }
     let kind_status = match &kind {
         Some(k) => kind_status(db, vault, &Kind::parse(k)?).await?,
