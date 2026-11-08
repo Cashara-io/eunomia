@@ -1,0 +1,17 @@
+Four customer orders are at risk. Reefer 2 carries load IN-42, which was due 11 November. A day late means 12 November.
+
+**At risk:**
+- **FFI-101, Bathers Beach Bistro, due 12 Nov.** It needs 2 Dhufish. We only have 3 on hand, so check the stock first. The rest of this order (prawns and ice) is in stock.
+- **FFI-102, Portside Fish and Chips, due 12 Nov.** It needs 6 Gummy Shark. We have 16 on hand, so this one looks safe.
+- **FFI-103, Harbour Lights Hotel Group, due 13 Nov.** It needs 3 Greenlip Abalone. We have 8 on hand, but that item shows as "on order". Check it.
+- **FFI-104, Saltwater Table Restaurant, due 12 Nov.** It needs 4 Snapper Fillets. We have 12 on hand, so this one looks safe.
+
+The stock numbers come from the catalogue. They may not mean the stock is free for these orders.
+
+**Not affected:** FFI-105 and FFI-106 (due 14 Nov). Nothing links them to this truck.
+
+**Who handles it:** Amelia Russo, the dispatch lead for IN-42.
+
+**What to do now:** Call the three customers due 12 November first. FFI-103 has a day to spare.
+
+I'd start with Bathers Beach Bistro. Dhufish is the item most likely to run short.

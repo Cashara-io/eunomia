@@ -1,0 +1,67 @@
+Chat
+Ask a question about your saved memories and documents. Eunomia shows where each answer came from.
+Conversations
+What is happening with Esperance Abalone?
+now
+What if Southern Ice Works raises costs 10%?
+now
+Reefer 2 is running a day late. What does that affect?
+1m
+What is our average sell price and total stock value at cost
+2m
+gate4-1794165946
+6:32 AM
+What is happening with Esperance Abalone?
+Eunomia
+6:32 AM
+Looked through memories
+Done
+Searched people and topics
+Done
+Checked this space's kinds
+Done
+Followed connections
+Done
+Opened a person or topic
+Done
+Opened a person or topic
+Done
+Showed a view
+Done
+Esperance Abalone has a Greenlip Abalone consignment on order.
+Starting from
+Esperance Abalone
+organisation
+Directly linked
+Greenlip Abalone 1kg
+product
+Esperance Abalone supplies Greenlip Abalone 1kg.
+
+Esperance Abalone supplies Greenlip Abalone 1kg, currently listed as On order with 8 on hand against a reorder point of 10.
+
+Harbour Lights Hotel Group
+customer
+Esperance Abalone has consignment on order for Harbour Lights Hotel Group.
+
+Esperance Abalone has a consignment on order for Harbour Lights Hotel Group.
+
+2 links away
+FFI-103
+order
+Esperance Abalone supplies Greenlip Abalone 1kg, then FFI-103 requires Greenlip Abalone 1kg.
+
+Harbour Lights' open order FFI-103 requires this Greenlip Abalone product (3 units), due 13 November 2026.
+
+IN-42
+inbound load
+Esperance Abalone supplies Greenlip Abalone 1kg, then IN-42 contains Greenlip Abalone 1kg.
+
+Inbound load IN-42 includes 3 units of Greenlip Abalone, due in with the load expected 11 November.
+
+Esperance Abalone is listed as a supplier of several abalone products. The immediate watch item is Greenlip Abalone 1kg: it’s marked On order, with 8 on hand against a reorder point of 10. Three units are associated with Harbour Lights Hotel Group’s open order FFI-103, due 13 November 2026; the same quantity is listed on inbound load IN-42, expected 11 November.
+
+Enter
+send
+Shift Enter
+new line
+Send

@@ -1,0 +1,27 @@
+It's a small hit. Your overall margin drops from 35.76% to 35.64%, a loss of 0.12 points.
+
+Nothing was saved. This was only a what-if.
+
+**What changes**
+- Southern Ice Works supplies 8 of your products. Their costs go up 10%.
+- Stock value at cost goes from $27,424.50 to $27,639.88. That is $215.38 more.
+- Average cost per product goes from $85.18 to $85.34.
+
+**Why it's small**
+- Ice products are cheap, so a 10% rise adds only cents per item.
+- The biggest jump is Dry Ice 2kg, from $13.00 to $14.30.
+- Block Ice 20kg goes from $7.25 to $7.98.
+- Flake Ice 10kg goes from $5.10 to $5.61.
+
+**Orders and customers that use these products**
+- FFI-101 (Bathers Beach Bistro) uses Block Ice.
+- FFI-102 (Portside Fish and Chips) uses Flake Ice.
+- FFI-103 (Harbour Lights Hotel Group) uses Party Ice.
+- FFI-104 (Saltwater Table Restaurant) uses Crushed Ice.
+- FFI-106 (West End Oyster Bar) uses Gel Ice Packs.
+
+Your sell prices stay the same in this test. So the extra cost comes straight out of your profit.
+
+**Check the number:** two products have no cost on file, so the margin figure leaves them out. It covers 28 of your 30 products.
+
+**What to do now:** nothing is urgent. If you want to keep the full margin, raising ice prices by about 10% would cover it. I'd hold off, because the loss is tiny.

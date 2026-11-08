@@ -1,0 +1,1886 @@
+[
+  {
+    "tool": "mcp__eunomia-local__ontology_coverage",
+    "arguments": {
+      "question": "What if Southern Ice Works raises costs 10%?"
+    },
+    "id": "toolu_01YFLKpPU98LSq7q2d58htWD",
+    "result": {
+      "vault": "vault:rf0gaym72n9pkdbsg4a1",
+      "vault_name": "Fremantle Fish & Ice Co",
+      "coverage": 1.0,
+      "matched": [
+        {
+          "phrase": "costs",
+          "term": "property",
+          "name": "unit_cost",
+          "of_kind": "product",
+          "distance": 0.0
+        }
+      ],
+      "uncovered": [],
+      "chosen_by": "coverage",
+      "suggestion": "Every term maps to the vault's approved ontology: answer a number with metric_eval and a what-if with scenario_run, passing this vault as vault_id.",
+      "mode": "model"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entities_search",
+    "arguments": {
+      "query": "Southern Ice Works"
+    },
+    "id": "toolu_018zstQvJZT6E1BVX2W53Jo6",
+    "result": {
+      "results": [
+        {
+          "id": "organisation:7uqu9jwq62muit42lorh",
+          "kind": "organisation",
+          "name": "Southern Ice Works",
+          "aliases": [
+            "southern ice works"
+          ],
+          "summary": "",
+          "vault": "vault:rf0gaym72n9pkdbsg4a1"
+        }
+      ],
+      "total": 1,
+      "has_more": false
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__ontology_get",
+    "arguments": {
+      "vault_id": "vault:rf0gaym72n9pkdbsg4a1",
+      "kind": "product"
+    },
+    "id": "toolu_01RA8B6AearVwYux2E4YH2iJ",
+    "result": {
+      "vault": "vault:rf0gaym72n9pkdbsg4a1",
+      "strict": true,
+      "kinds": [
+        {
+          "kind": "product",
+          "built_in": false,
+          "status": "approved",
+          "description": "A product in the supplier inventory, with its pricing, stock level, availability, and latest landing date.",
+          "merge_into": null,
+          "synonyms": [],
+          "origin": "suggested",
+          "reason": "one kind for the catalogue.csv records",
+          "entities": 30,
+          "samples": [
+            "Abalone Mince 1kg",
+            "Abalone Shell Pack",
+            "Abalone Slices 500g"
+          ],
+          "properties": [
+            {
+              "name": "last_landed",
+              "datatype": "date",
+              "unit": null,
+              "enum_values": null,
+              "description": "Date the product was last landed.",
+              "synonyms": [],
+              "status": "approved",
+              "merge_into": null,
+              "origin": "suggested",
+              "reason": "from last landed",
+              "values": 30,
+              "samples": [
+                "2026-11-06",
+                "2026-11-05",
+                "2026-11-04"
+              ],
+              "source_map": [
+                {
+                  "source": "document",
+                  "record_type": "document:e4f6egzn8wveubiomvaj",
+                  "path": "last landed"
+                }
+              ]
+            },
+            {
+              "name": "qty_on_hand",
+              "datatype": "integer",
+              "unit": "items",
+              "enum_values": null,
+              "description": "Quantity currently on hand.",
+              "synonyms": [],
+              "status": "approved",
+              "merge_into": null,
+              "origin": "suggested",
+              "reason": "from qty on hand",
+              "values": 30,
+              "samples": [
+                "3 items",
+                "57 items",
+                "43 items"
+              ],
+              "source_map": [
+                {
+                  "source": "document",
+                  "record_type": "document:e4f6egzn8wveubiomvaj",
+                  "path": "qty on hand"
+                }
+              ]
+            },
+            {
+              "name": "reorder_at",
+              "datatype": "integer",
+              "unit": "items",
+              "enum_values": null,
+              "description": "Stock quantity at which the product should be reordered.",
+              "synonyms": [],
+              "status": "approved",
+              "merge_into": null,
+              "origin": "suggested",
+              "reason": "from reorder at",
+              "values": 30,
+              "samples": [
+                "10 items"
+              ],
+              "source_map": [
+                {
+                  "source": "document",
+                  "record_type": "document:e4f6egzn8wveubiomvaj",
+                  "path": "reorder at"
+                }
+              ]
+            },
+            {
+              "name": "sell_price",
+              "datatype": "money",
+              "unit": "AUD",
+              "enum_values": null,
+              "description": "Selling price of the product.",
+              "synonyms": [],
+              "status": "approved",
+              "merge_into": null,
+              "origin": "suggested",
+              "reason": "from sell price AUD",
+              "values": 30,
+              "samples": [
+                "195.00 AUD",
+                "3.95 AUD",
+                "1180.00 AUD"
+              ],
+              "source_map": [
+                {
+                  "source": "document",
+                  "record_type": "document:e4f6egzn8wveubiomvaj",
+                  "path": "sell price AUD"
+                }
+              ]
+            },
+            {
+              "name": "status",
+              "datatype": "enum",
+              "unit": null,
+              "enum_values": [
+                "Available",
+                "Discontinued",
+                "On order"
+              ],
+              "description": "Current product availability status.",
+              "synonyms": [],
+              "status": "approved",
+              "merge_into": null,
+              "origin": "suggested",
+              "reason": "from status",
+              "values": 30,
+              "samples": [
+                "Available",
+                "On order",
+                "Discontinued"
+              ],
+              "source_map": [
+                {
+                  "source": "document",
+                  "record_type": "document:e4f6egzn8wveubiomvaj",
+                  "path": "status"
+                }
+              ]
+            },
+            {
+              "name": "unit_cost",
+              "datatype": "money",
+              "unit": "AUD",
+              "enum_values": null,
+              "description": "Unit cost of the product.",
+              "synonyms": [],
+              "status": "approved",
+              "merge_into": null,
+              "origin": "suggested",
+              "reason": "from unit cost AUD",
+              "values": 28,
+              "samples": [
+                "14.00 AUD",
+                "108.00 AUD",
+                "57.00 AUD"
+              ],
+              "source_map": [
+                {
+                  "source": "document",
+                  "record_type": "document:e4f6egzn8wveubiomvaj",
+                  "path": "unit cost AUD"
+                }
+              ]
+            }
+          ],
+          "metrics": [
+            {
+              "name": "available_product_count",
+              "description": "Number of products with status Available.",
+              "synonyms": [],
+              "expr": {
+                "agg": "count",
+                "property": "status",
+                "filters": [
+                  {
+                    "property": "status",
+                    "op": "eq",
+                    "value": "Available"
+                  }
+                ]
+              },
+              "expr_words": "Number of product with a status where status is Available",
+              "unit": "items",
+              "status": "approved",
+              "merge_into": null,
+              "origin": "agent",
+              "reason": "Shows how much of the range can be sold now."
+            },
+            {
+              "name": "avg_sell_price",
+              "description": "Average sell price per product, in AUD.",
+              "synonyms": [
+                "average sell price",
+                "average price"
+              ],
+              "expr": {
+                "agg": "avg",
+                "property": "sell_price"
+              },
+              "expr_words": "Average sell price",
+              "unit": "AUD",
+              "status": "approved",
+              "merge_into": null,
+              "origin": "agent",
+              "reason": "The owner asked for average sell price."
+            },
+            {
+              "name": "avg_unit_cost",
+              "description": "Average unit cost per product, in AUD. Products with no cost are left out.",
+              "synonyms": [],
+              "expr": {
+                "agg": "avg",
+                "property": "unit_cost"
+              },
+              "expr_words": "Average unit cost",
+              "unit": "AUD",
+              "status": "approved",
+              "merge_into": null,
+              "origin": "agent",
+              "reason": "Useful beside average sell price."
+            },
+            {
+              "name": "gross_margin",
+              "description": "Gross margin across products, calculated from selling prices and unit costs.",
+              "synonyms": [],
+              "expr": {
+                "agg": "ratio",
+                "numerator": {
+                  "agg": "sum",
+                  "row": {
+                    "op": "sub",
+                    "left": "sell_price",
+                    "right": "unit_cost"
+                  }
+                },
+                "denominator": {
+                  "agg": "sum",
+                  "property": "sell_price"
+                }
+              },
+              "expr_words": "Sum of (sell price − unit cost), divided by sum of sell price",
+              "unit": "percent",
+              "status": "approved",
+              "merge_into": null,
+              "origin": "suggested",
+              "reason": "computed from the catalogue.csv records' properties"
+            },
+            {
+              "name": "inventory_cost_value",
+              "description": "Estimated total cost value of current stock.",
+              "synonyms": [],
+              "expr": {
+                "agg": "sum",
+                "row": {
+                  "op": "mul",
+                  "left": "qty_on_hand",
+                  "right": "unit_cost"
+                }
+              },
+              "expr_words": "Sum of qty on hand × unit cost",
+              "unit": "AUD",
+              "status": "rejected",
+              "merge_into": null,
+              "origin": "suggested",
+              "reason": "computed from the catalogue.csv records' properties"
+            },
+            {
+              "name": "product_count",
+              "description": "Number of products.",
+              "synonyms": [],
+              "expr": {
+                "agg": "count",
+                "property": "qty_on_hand"
+              },
+              "expr_words": "Number of product with a qty on hand",
+              "unit": "items",
+              "status": "approved",
+              "merge_into": null,
+              "origin": "suggested",
+              "reason": "computed from the catalogue.csv records' properties"
+            },
+            {
+              "name": "total_stock_value_at_cost",
+              "description": "Total stock value at cost: quantity on hand times unit cost, summed over products. Products with no unit cost are left out.",
+              "synonyms": [
+                "stock value at cost",
+                "inventory value at cost"
+              ],
+              "expr": {
+                "agg": "sum",
+                "row": {
+                  "op": "mul",
+                  "left": "qty_on_hand",
+                  "right": "unit_cost"
+                }
+              },
+              "expr_words": "Sum of qty on hand × unit cost",
+              "unit": "AUD",
+              "status": "approved",
+              "merge_into": null,
+              "origin": "agent",
+              "reason": "The owner asked for total stock value at cost. Same working as inventory_cost_value, named as asked. The owner can merge the two."
+            }
+          ]
+        }
+      ],
+      "links": [
+        {
+          "from_kind": "inbound_load",
+          "label": "contains",
+          "to_kind": "product",
+          "status": "approved",
+          "description": "The load holds this product.",
+          "origin": "agent",
+          "reason": "IN-42 contents.",
+          "count": 4,
+          "samples": [
+            {
+              "from": "IN-42",
+              "to": "Greenlip Abalone 1kg"
+            },
+            {
+              "from": "IN-42",
+              "to": "Gummy Shark 5kg"
+            },
+            {
+              "from": "IN-42",
+              "to": "Dhufish Whole 10kg"
+            }
+          ]
+        },
+        {
+          "from_kind": "order",
+          "label": "requires",
+          "to_kind": "product",
+          "status": "approved",
+          "description": "The order needs this product.",
+          "origin": "agent",
+          "reason": "Orders to required products.",
+          "count": 15,
+          "samples": [
+            {
+              "from": "FFI-102",
+              "to": "Flake Ice 10kg"
+            },
+            {
+              "from": "FFI-101",
+              "to": "King Prawns U10 5kg"
+            },
+            {
+              "from": "FFI-105",
+              "to": "Octopus 5kg"
+            }
+          ]
+        },
+        {
+          "from_kind": "organisation",
+          "label": "supplies",
+          "to_kind": "product",
+          "status": "approved",
+          "description": "The organisation supplies this product.",
+          "origin": "agent",
+          "reason": "Used for Esperance Abalone and Greenlip Abalone.",
+          "count": 1,
+          "samples": [
+            {
+              "from": "Esperance Abalone",
+              "to": "Greenlip Abalone 1kg"
+            }
+          ]
+        },
+        {
+          "from_kind": "product",
+          "label": "supplied_by",
+          "to_kind": "organisation",
+          "status": "approved",
+          "description": "The organisation that supplies this product. Reads product to supplier.",
+          "origin": "agent",
+          "reason": "Clearer direction than the automap link product supplies organisation, which reads backwards. Same CSV supplier column.",
+          "count": 30,
+          "samples": [
+            {
+              "from": "Prawn Cutlets 2kg",
+              "to": "Shark Bay Prawns"
+            },
+            {
+              "from": "Snapper Fillets 5kg",
+              "to": "Abrolhos Fishers Co-op"
+            },
+            {
+              "from": "King Prawns U10 5kg",
+              "to": "Shark Bay Prawns"
+            }
+          ],
+          "source_map": [
+            {
+              "source": "document",
+              "record_type": "document:e4f6egzn8wveubiomvaj",
+              "path": "supplier"
+            }
+          ]
+        },
+        {
+          "from_kind": "product",
+          "label": "supplies",
+          "to_kind": "organisation",
+          "status": "rejected",
+          "description": "Organisation that supplies this product.",
+          "origin": "suggested",
+          "reason": "100% of values match (5 of 5)",
+          "count": 0,
+          "samples": [],
+          "source_map": [
+            {
+              "source": "document",
+              "record_type": "document:e4f6egzn8wveubiomvaj",
+              "path": "supplier"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entities_neighbourhood",
+    "arguments": {
+      "entity_id": "organisation:7uqu9jwq62muit42lorh",
+      "depth": 1
+    },
+    "id": "toolu_01FyQpW441GAVeM3FpZfhzRK",
+    "result": {
+      "vault": "vault:rf0gaym72n9pkdbsg4a1",
+      "depth": 1,
+      "nodes": [
+        {
+          "id": "organisation:7uqu9jwq62muit42lorh",
+          "name": "Southern Ice Works",
+          "kind": "organisation",
+          "facts": [
+            "Southern Ice Works is listed as a supplier of ice and insulated packaging products in the catalogue dated 2026-11-08.",
+            "Southern Ice Works supplies ice and insulated packaging. We work with them."
+          ]
+        },
+        {
+          "id": "entity:v1wgb5l21pseykea1qlx",
+          "name": "Block Ice 20kg",
+          "kind": "product",
+          "facts": [
+            "Product required by FFI-101 (10)."
+          ],
+          "properties": [
+            {
+              "property": "last_landed",
+              "datatype": "date",
+              "value": "2026-11-05",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "qty_on_hand",
+              "datatype": "integer",
+              "value": 95,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "reorder_at",
+              "datatype": "integer",
+              "value": 10,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "sell_price",
+              "datatype": "money",
+              "value": 18.5,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "status",
+              "datatype": "enum",
+              "value": "Available",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "unit_cost",
+              "datatype": "money",
+              "value": 7.25,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            }
+          ]
+        },
+        {
+          "id": "entity:olzecfi09wy9257qadsw",
+          "name": "Crushed Ice 5kg",
+          "kind": "product",
+          "facts": [
+            "Product required by FFI-104 (6)."
+          ],
+          "properties": [
+            {
+              "property": "last_landed",
+              "datatype": "date",
+              "value": "2026-11-07",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "qty_on_hand",
+              "datatype": "integer",
+              "value": 65,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "reorder_at",
+              "datatype": "integer",
+              "value": 10,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "sell_price",
+              "datatype": "money",
+              "value": 7.45,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "status",
+              "datatype": "enum",
+              "value": "Available",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "unit_cost",
+              "datatype": "money",
+              "value": 3.2,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            }
+          ]
+        },
+        {
+          "id": "entity:xqnkeai40qcw2o64mdr6",
+          "name": "Dry Ice 2kg",
+          "kind": "product",
+          "facts": [],
+          "properties": [
+            {
+              "property": "last_landed",
+              "datatype": "date",
+              "value": "2026-11-04",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "qty_on_hand",
+              "datatype": "integer",
+              "value": 13,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "reorder_at",
+              "datatype": "integer",
+              "value": 10,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "sell_price",
+              "datatype": "money",
+              "value": 24.0,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "status",
+              "datatype": "enum",
+              "value": "Available",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "unit_cost",
+              "datatype": "money",
+              "value": 13.0,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            }
+          ]
+        },
+        {
+          "id": "entity:1sfkjfqzvoe0itr0wygd",
+          "name": "Flake Ice 10kg",
+          "kind": "product",
+          "facts": [
+            "Product required by FFI-102 (12)."
+          ],
+          "properties": [
+            {
+              "property": "last_landed",
+              "datatype": "date",
+              "value": "2026-11-06",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "qty_on_hand",
+              "datatype": "integer",
+              "value": 80,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "reorder_at",
+              "datatype": "integer",
+              "value": 10,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "sell_price",
+              "datatype": "money",
+              "value": 12.5,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "status",
+              "datatype": "enum",
+              "value": "Available",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "unit_cost",
+              "datatype": "money",
+              "value": 5.1,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            }
+          ]
+        },
+        {
+          "id": "entity:hy2hjhlctg2q8baflnhs",
+          "name": "Gel Ice Pack 1kg",
+          "kind": "product",
+          "facts": [
+            "Product required by FFI-106 (6)."
+          ],
+          "properties": [
+            {
+              "property": "last_landed",
+              "datatype": "date",
+              "value": "2026-11-05",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "qty_on_hand",
+              "datatype": "integer",
+              "value": 57,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "reorder_at",
+              "datatype": "integer",
+              "value": 10,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "sell_price",
+              "datatype": "money",
+              "value": 6.5,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "status",
+              "datatype": "enum",
+              "value": "Available",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "unit_cost",
+              "datatype": "money",
+              "value": 2.4,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            }
+          ]
+        },
+        {
+          "id": "entity:of21g5fl0c8h7p8pqd30",
+          "name": "Ice Brick 500g",
+          "kind": "product",
+          "facts": [],
+          "properties": [
+            {
+              "property": "last_landed",
+              "datatype": "date",
+              "value": "2026-11-07",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "qty_on_hand",
+              "datatype": "integer",
+              "value": 61,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "reorder_at",
+              "datatype": "integer",
+              "value": 10,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "sell_price",
+              "datatype": "money",
+              "value": 3.95,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "status",
+              "datatype": "enum",
+              "value": "Available",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "unit_cost",
+              "datatype": "money",
+              "value": 1.8,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            }
+          ]
+        },
+        {
+          "id": "entity:scvuccjbx6vmw90ml8zr",
+          "name": "Insulated Seafood Carton",
+          "kind": "product",
+          "facts": [],
+          "properties": [
+            {
+              "property": "last_landed",
+              "datatype": "date",
+              "value": "2026-11-06",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "qty_on_hand",
+              "datatype": "integer",
+              "value": 40,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "reorder_at",
+              "datatype": "integer",
+              "value": 10,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "sell_price",
+              "datatype": "money",
+              "value": 14.5,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "status",
+              "datatype": "enum",
+              "value": "Available",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "unit_cost",
+              "datatype": "money",
+              "value": 6.75,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            }
+          ]
+        },
+        {
+          "id": "entity:evv28m6h4tck901uzp6t",
+          "name": "Party Ice 5kg",
+          "kind": "product",
+          "facts": [
+            "Product required by FFI-103 (8)."
+          ],
+          "properties": [
+            {
+              "property": "last_landed",
+              "datatype": "date",
+              "value": "2026-11-08",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "qty_on_hand",
+              "datatype": "integer",
+              "value": 43,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "reorder_at",
+              "datatype": "integer",
+              "value": 10,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "sell_price",
+              "datatype": "money",
+              "value": 8.9,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "status",
+              "datatype": "enum",
+              "value": "Available",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "unit_cost",
+              "datatype": "money",
+              "value": 3.8,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            }
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "relates_to:hm5s092iw4d385svr8dd",
+          "from": "entity:v1wgb5l21pseykea1qlx",
+          "label": "supplied_by",
+          "to": "organisation:7uqu9jwq62muit42lorh"
+        },
+        {
+          "id": "relates_to:x7hgfesvh71ceh5sv0k4",
+          "from": "entity:olzecfi09wy9257qadsw",
+          "label": "supplied_by",
+          "to": "organisation:7uqu9jwq62muit42lorh"
+        },
+        {
+          "id": "relates_to:mbkrt7lqkathnypuud6x",
+          "from": "entity:xqnkeai40qcw2o64mdr6",
+          "label": "supplied_by",
+          "to": "organisation:7uqu9jwq62muit42lorh"
+        },
+        {
+          "id": "relates_to:vibbxbaahltiv2gjvcwa",
+          "from": "entity:1sfkjfqzvoe0itr0wygd",
+          "label": "supplied_by",
+          "to": "organisation:7uqu9jwq62muit42lorh"
+        },
+        {
+          "id": "relates_to:m2obbcgp6bncqml21b76",
+          "from": "entity:hy2hjhlctg2q8baflnhs",
+          "label": "supplied_by",
+          "to": "organisation:7uqu9jwq62muit42lorh"
+        },
+        {
+          "id": "relates_to:62gg62r22ypfubw458xd",
+          "from": "entity:of21g5fl0c8h7p8pqd30",
+          "label": "supplied_by",
+          "to": "organisation:7uqu9jwq62muit42lorh"
+        },
+        {
+          "id": "relates_to:wgc7ea7ukiwwygvpqlaz",
+          "from": "entity:scvuccjbx6vmw90ml8zr",
+          "label": "supplied_by",
+          "to": "organisation:7uqu9jwq62muit42lorh"
+        },
+        {
+          "id": "relates_to:zmivwpclui291iszrjzb",
+          "from": "entity:evv28m6h4tck901uzp6t",
+          "label": "supplied_by",
+          "to": "organisation:7uqu9jwq62muit42lorh"
+        }
+      ],
+      "link_types": [
+        {
+          "from_kind": "product",
+          "label": "supplied_by",
+          "to_kind": "organisation",
+          "status": "approved",
+          "description": "The organisation that supplies this product. Reads product to supplier."
+        }
+      ],
+      "truncated": false
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__scenario_run",
+    "arguments": {
+      "vault_id": "vault:rf0gaym72n9pkdbsg4a1",
+      "changes": [
+        {
+          "scale": {
+            "kind": "product",
+            "property": "unit_cost",
+            "factor": 1.1,
+            "related_to": {
+              "entity_id": "organisation:7uqu9jwq62muit42lorh",
+              "label": "supplied_by"
+            }
+          }
+        }
+      ],
+      "metrics": [
+        "gross_margin",
+        "avg_unit_cost",
+        "total_stock_value_at_cost"
+      ]
+    },
+    "id": "toolu_01YGfCnYhff1XW7TRYntPu9k",
+    "result": {
+      "vault": "vault:rf0gaym72n9pkdbsg4a1",
+      "as_of": "2026-11-08T19:30:49Z",
+      "changes": [
+        "Product unit cost up 10% on 8 products supplied by Southern Ice Works"
+      ],
+      "baseline": [
+        {
+          "metric": "gross_margin",
+          "kind": "product",
+          "expr_words": "Sum of (sell price − unit cost), divided by sum of sell price",
+          "value": 35.76142,
+          "unit": "%",
+          "n_entities": 28,
+          "status": "approved"
+        },
+        {
+          "metric": "avg_unit_cost",
+          "kind": "product",
+          "expr_words": "Average unit cost",
+          "value": 85.180357,
+          "unit": "AUD",
+          "n_entities": 28,
+          "status": "approved"
+        },
+        {
+          "metric": "total_stock_value_at_cost",
+          "kind": "product",
+          "expr_words": "Sum of qty on hand × unit cost",
+          "value": 27424.5,
+          "unit": "AUD",
+          "n_entities": 28,
+          "status": "approved"
+        }
+      ],
+      "scenario": [
+        {
+          "metric": "gross_margin",
+          "kind": "product",
+          "expr_words": "Sum of (sell price − unit cost), divided by sum of sell price",
+          "value": 35.644796,
+          "unit": "%",
+          "n_entities": 28,
+          "status": "approved",
+          "delta": -0.116624,
+          "delta_pct": -0.33
+        },
+        {
+          "metric": "avg_unit_cost",
+          "kind": "product",
+          "expr_words": "Average unit cost",
+          "value": 85.335,
+          "unit": "AUD",
+          "n_entities": 28,
+          "status": "approved",
+          "delta": 0.154643,
+          "delta_pct": 0.18
+        },
+        {
+          "metric": "total_stock_value_at_cost",
+          "kind": "product",
+          "expr_words": "Sum of qty on hand × unit cost",
+          "value": 27639.875,
+          "unit": "AUD",
+          "n_entities": 28,
+          "status": "approved",
+          "delta": 215.375,
+          "delta_pct": 0.79
+        }
+      ],
+      "changed": [
+        {
+          "entity_id": "entity:1sfkjfqzvoe0itr0wygd",
+          "name": "Flake Ice 10kg",
+          "kind": "product",
+          "property": "unit_cost",
+          "before": 5.1,
+          "after": 5.61,
+          "unit": "AUD"
+        },
+        {
+          "entity_id": "entity:evv28m6h4tck901uzp6t",
+          "name": "Party Ice 5kg",
+          "kind": "product",
+          "property": "unit_cost",
+          "before": 3.8,
+          "after": 4.18,
+          "unit": "AUD"
+        },
+        {
+          "entity_id": "entity:hy2hjhlctg2q8baflnhs",
+          "name": "Gel Ice Pack 1kg",
+          "kind": "product",
+          "property": "unit_cost",
+          "before": 2.4,
+          "after": 2.64,
+          "unit": "AUD"
+        },
+        {
+          "entity_id": "entity:of21g5fl0c8h7p8pqd30",
+          "name": "Ice Brick 500g",
+          "kind": "product",
+          "property": "unit_cost",
+          "before": 1.8,
+          "after": 1.98,
+          "unit": "AUD"
+        },
+        {
+          "entity_id": "entity:olzecfi09wy9257qadsw",
+          "name": "Crushed Ice 5kg",
+          "kind": "product",
+          "property": "unit_cost",
+          "before": 3.2,
+          "after": 3.52,
+          "unit": "AUD"
+        },
+        {
+          "entity_id": "entity:scvuccjbx6vmw90ml8zr",
+          "name": "Insulated Seafood Carton",
+          "kind": "product",
+          "property": "unit_cost",
+          "before": 6.75,
+          "after": 7.425,
+          "unit": "AUD"
+        },
+        {
+          "entity_id": "entity:v1wgb5l21pseykea1qlx",
+          "name": "Block Ice 20kg",
+          "kind": "product",
+          "property": "unit_cost",
+          "before": 7.25,
+          "after": 7.975,
+          "unit": "AUD"
+        },
+        {
+          "entity_id": "entity:xqnkeai40qcw2o64mdr6",
+          "name": "Dry Ice 2kg",
+          "kind": "product",
+          "property": "unit_cost",
+          "before": 13.0,
+          "after": 14.3,
+          "unit": "AUD"
+        }
+      ],
+      "n_changed": 8,
+      "removed": [],
+      "reached": [
+        {
+          "entity_id": "entity:bs8dwvtgywjeuj4lb9j6",
+          "name": "FFI-101",
+          "kind": "order",
+          "depth": 1,
+          "via": "FFI-101 requires Block Ice 20kg",
+          "from": "entity:v1wgb5l21pseykea1qlx",
+          "path": [
+            "relates_to:nkm3h481z4klgf5a8mdt"
+          ]
+        },
+        {
+          "entity_id": "entity:kl4ea8we5ugms10whjm8",
+          "name": "FFI-102",
+          "kind": "order",
+          "depth": 1,
+          "via": "FFI-102 requires Flake Ice 10kg",
+          "from": "entity:1sfkjfqzvoe0itr0wygd",
+          "path": [
+            "relates_to:0etfspyi0chdzmpcuvrv"
+          ]
+        },
+        {
+          "entity_id": "entity:ovl5njex4v2o2um1n9pj",
+          "name": "FFI-103",
+          "kind": "order",
+          "depth": 1,
+          "via": "FFI-103 requires Party Ice 5kg",
+          "from": "entity:evv28m6h4tck901uzp6t",
+          "path": [
+            "relates_to:3owqlfdeikw2dxb8t2ij"
+          ]
+        },
+        {
+          "entity_id": "entity:gsj8anu1g7y6hxd2vmh2",
+          "name": "FFI-104",
+          "kind": "order",
+          "depth": 1,
+          "via": "FFI-104 requires Crushed Ice 5kg",
+          "from": "entity:olzecfi09wy9257qadsw",
+          "path": [
+            "relates_to:el7xw206be3rh8p3ndxt"
+          ]
+        },
+        {
+          "entity_id": "entity:8rq9qkw3g7cl7rav96rb",
+          "name": "FFI-106",
+          "kind": "order",
+          "depth": 1,
+          "via": "FFI-106 requires Gel Ice Pack 1kg",
+          "from": "entity:hy2hjhlctg2q8baflnhs",
+          "path": [
+            "relates_to:n6utd7ie81pej3cparc8"
+          ]
+        },
+        {
+          "entity_id": "organisation:7uqu9jwq62muit42lorh",
+          "name": "Southern Ice Works",
+          "kind": "organisation",
+          "depth": 1,
+          "via": "Flake Ice 10kg supplied by Southern Ice Works",
+          "from": "entity:1sfkjfqzvoe0itr0wygd",
+          "path": [
+            "relates_to:vibbxbaahltiv2gjvcwa"
+          ]
+        },
+        {
+          "entity_id": "entity:gc3l2fncxr8vnto1spk9",
+          "name": "Bathers Beach Bistro",
+          "kind": "customer",
+          "depth": 2,
+          "via": "Bathers Beach Bistro placed FFI-101",
+          "from": "entity:v1wgb5l21pseykea1qlx",
+          "path": [
+            "relates_to:nkm3h481z4klgf5a8mdt",
+            "relates_to:o9argb942yw64ddsunvp"
+          ]
+        },
+        {
+          "entity_id": "entity:3xmqlzc97hgyg9atd25d",
+          "name": "Brownlip Abalone 1kg",
+          "kind": "product",
+          "depth": 2,
+          "via": "FFI-106 requires Brownlip Abalone 1kg",
+          "from": "entity:hy2hjhlctg2q8baflnhs",
+          "path": [
+            "relates_to:n6utd7ie81pej3cparc8",
+            "relates_to:3buxpjxbjg1xxr1a2pux"
+          ]
+        },
+        {
+          "entity_id": "entity:bs3cbh9kzfcstrg0qjpe",
+          "name": "Cooked Prawns 2kg",
+          "kind": "product",
+          "depth": 2,
+          "via": "FFI-106 requires Cooked Prawns 2kg",
+          "from": "entity:hy2hjhlctg2q8baflnhs",
+          "path": [
+            "relates_to:n6utd7ie81pej3cparc8",
+            "relates_to:6qi3u2qu3y77ezsg07yr"
+          ]
+        },
+        {
+          "entity_id": "entity:qcbe9ysvbeep437q79bc",
+          "name": "Dhufish Whole 10kg",
+          "kind": "product",
+          "depth": 2,
+          "via": "FFI-101 requires Dhufish Whole 10kg",
+          "from": "entity:v1wgb5l21pseykea1qlx",
+          "path": [
+            "relates_to:nkm3h481z4klgf5a8mdt",
+            "relates_to:4ugdgeeqkurkkvg7i6cw"
+          ]
+        },
+        {
+          "entity_id": "entity:rcrjvcfua61c8sgp7cuz",
+          "name": "Greenlip Abalone 1kg",
+          "kind": "product",
+          "depth": 2,
+          "via": "FFI-103 requires Greenlip Abalone 1kg",
+          "from": "entity:evv28m6h4tck901uzp6t",
+          "path": [
+            "relates_to:3owqlfdeikw2dxb8t2ij",
+            "relates_to:thaho4bsyow5megh9wfd"
+          ]
+        },
+        {
+          "entity_id": "entity:3f5cm4iqh3oirr0hmryw",
+          "name": "Gummy Shark 5kg",
+          "kind": "product",
+          "depth": 2,
+          "via": "FFI-102 requires Gummy Shark 5kg",
+          "from": "entity:1sfkjfqzvoe0itr0wygd",
+          "path": [
+            "relates_to:0etfspyi0chdzmpcuvrv",
+            "relates_to:8v2kqrtpa1e7r58tet0a"
+          ]
+        },
+        {
+          "entity_id": "entity:m09ye57js78gw9bpezrx",
+          "name": "Harbour Lights Hotel Group",
+          "kind": "customer",
+          "depth": 2,
+          "via": "Harbour Lights Hotel Group placed FFI-103",
+          "from": "entity:evv28m6h4tck901uzp6t",
+          "path": [
+            "relates_to:3owqlfdeikw2dxb8t2ij",
+            "relates_to:orwyoe1j46m22oxbclmm"
+          ]
+        },
+        {
+          "entity_id": "entity:0alo8zj8lgw4phgycnmq",
+          "name": "IN-42",
+          "kind": "inbound_load",
+          "depth": 2,
+          "via": "IN-42 supplies FFI-102",
+          "from": "entity:1sfkjfqzvoe0itr0wygd",
+          "path": [
+            "relates_to:0etfspyi0chdzmpcuvrv",
+            "relates_to:ak7xmnw62gry0pgfnioq"
+          ]
+        },
+        {
+          "entity_id": "entity:48xpq68q4urz8ypimn5y",
+          "name": "King Prawns U10 5kg",
+          "kind": "product",
+          "depth": 2,
+          "via": "FFI-101 requires King Prawns U10 5kg",
+          "from": "entity:v1wgb5l21pseykea1qlx",
+          "path": [
+            "relates_to:nkm3h481z4klgf5a8mdt",
+            "relates_to:0naftds3hpaerdvn01dm"
+          ]
+        },
+        {
+          "entity_id": "entity:3sb2tcg3mvrd6kv51znr",
+          "name": "Portside Fish and Chips",
+          "kind": "customer",
+          "depth": 2,
+          "via": "Portside Fish and Chips placed FFI-102",
+          "from": "entity:1sfkjfqzvoe0itr0wygd",
+          "path": [
+            "relates_to:0etfspyi0chdzmpcuvrv",
+            "relates_to:mkxhmgpeylqhxmnqfgc6"
+          ]
+        },
+        {
+          "entity_id": "entity:ugt6rofftccvjjuomjay",
+          "name": "Reefer 2",
+          "kind": "truck",
+          "depth": 2,
+          "via": "Reefer 2 serves FFI-102",
+          "from": "entity:1sfkjfqzvoe0itr0wygd",
+          "path": [
+            "relates_to:0etfspyi0chdzmpcuvrv",
+            "relates_to:4c7j9r6kqc2ugq35r2oh"
+          ]
+        },
+        {
+          "entity_id": "entity:n8v4fraa6w49xnctd09p",
+          "name": "Saltwater Table Restaurant",
+          "kind": "customer",
+          "depth": 2,
+          "via": "Saltwater Table Restaurant placed FFI-104",
+          "from": "entity:olzecfi09wy9257qadsw",
+          "path": [
+            "relates_to:el7xw206be3rh8p3ndxt",
+            "relates_to:z1rrjcxw3989we7eh9iq"
+          ]
+        },
+        {
+          "entity_id": "entity:b6ob6x2weevj5neiyhnv",
+          "name": "Snapper Fillets 5kg",
+          "kind": "product",
+          "depth": 2,
+          "via": "FFI-104 requires Snapper Fillets 5kg",
+          "from": "entity:olzecfi09wy9257qadsw",
+          "path": [
+            "relates_to:el7xw206be3rh8p3ndxt",
+            "relates_to:ak9pu5dxu6fl8d1sx6vv"
+          ]
+        },
+        {
+          "entity_id": "entity:sbtlnm1mp6dimx9zyqad",
+          "name": "Tiger Prawns 5kg",
+          "kind": "product",
+          "depth": 2,
+          "via": "FFI-103 requires Tiger Prawns 5kg",
+          "from": "entity:evv28m6h4tck901uzp6t",
+          "path": [
+            "relates_to:3owqlfdeikw2dxb8t2ij",
+            "relates_to:40tlqoee918enu6wjxiq"
+          ]
+        },
+        {
+          "entity_id": "entity:ffuygjtryhu0940o77hd",
+          "name": "West End Oyster Bar",
+          "kind": "customer",
+          "depth": 2,
+          "via": "West End Oyster Bar placed FFI-106",
+          "from": "entity:hy2hjhlctg2q8baflnhs",
+          "path": [
+            "relates_to:n6utd7ie81pej3cparc8",
+            "relates_to:edeu55ddzga0uz6n0hke"
+          ]
+        }
+      ],
+      "reached_truncated": false,
+      "warnings": [
+        "gross margin: left out 2 entities missing a value one side needs, so both sides of the ratio use the same entities"
+      ]
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__show_view",
+    "arguments": {
+      "view": "scenario",
+      "headline": "Southern Ice Works raises its costs 10%",
+      "scenario": {
+        "vault_id": "vault:rf0gaym72n9pkdbsg4a1",
+        "changes": [
+          {
+            "scale": {
+              "kind": "product",
+              "property": "unit_cost",
+              "factor": 1.1,
+              "related_to": {
+                "entity_id": "organisation:7uqu9jwq62muit42lorh",
+                "label": "supplied_by"
+              }
+            }
+          }
+        ],
+        "metrics": [
+          "gross_margin",
+          "avg_unit_cost",
+          "total_stock_value_at_cost"
+        ]
+      }
+    },
+    "id": "toolu_014C7AURCLJPhpSjTTBPByQE",
+    "result": {
+      "view": "scenario",
+      "headline": "Southern Ice Works raises its costs 10%",
+      "result": {
+        "vault": "vault:rf0gaym72n9pkdbsg4a1",
+        "as_of": "2026-11-08T19:30:51Z",
+        "changes": [
+          "Product unit cost up 10% on 8 products supplied by Southern Ice Works"
+        ],
+        "baseline": [
+          {
+            "metric": "gross_margin",
+            "kind": "product",
+            "expr_words": "Sum of (sell price − unit cost), divided by sum of sell price",
+            "value": 35.76142,
+            "unit": "%",
+            "n_entities": 28,
+            "status": "approved"
+          },
+          {
+            "metric": "avg_unit_cost",
+            "kind": "product",
+            "expr_words": "Average unit cost",
+            "value": 85.180357,
+            "unit": "AUD",
+            "n_entities": 28,
+            "status": "approved"
+          },
+          {
+            "metric": "total_stock_value_at_cost",
+            "kind": "product",
+            "expr_words": "Sum of qty on hand × unit cost",
+            "value": 27424.5,
+            "unit": "AUD",
+            "n_entities": 28,
+            "status": "approved"
+          }
+        ],
+        "scenario": [
+          {
+            "metric": "gross_margin",
+            "kind": "product",
+            "expr_words": "Sum of (sell price − unit cost), divided by sum of sell price",
+            "value": 35.644796,
+            "unit": "%",
+            "n_entities": 28,
+            "status": "approved",
+            "delta": -0.116624,
+            "delta_pct": -0.33
+          },
+          {
+            "metric": "avg_unit_cost",
+            "kind": "product",
+            "expr_words": "Average unit cost",
+            "value": 85.335,
+            "unit": "AUD",
+            "n_entities": 28,
+            "status": "approved",
+            "delta": 0.154643,
+            "delta_pct": 0.18
+          },
+          {
+            "metric": "total_stock_value_at_cost",
+            "kind": "product",
+            "expr_words": "Sum of qty on hand × unit cost",
+            "value": 27639.875,
+            "unit": "AUD",
+            "n_entities": 28,
+            "status": "approved",
+            "delta": 215.375,
+            "delta_pct": 0.79
+          }
+        ],
+        "changed": [
+          {
+            "entity_id": "entity:1sfkjfqzvoe0itr0wygd",
+            "name": "Flake Ice 10kg",
+            "kind": "product",
+            "property": "unit_cost",
+            "before": 5.1,
+            "after": 5.61,
+            "unit": "AUD"
+          },
+          {
+            "entity_id": "entity:evv28m6h4tck901uzp6t",
+            "name": "Party Ice 5kg",
+            "kind": "product",
+            "property": "unit_cost",
+            "before": 3.8,
+            "after": 4.18,
+            "unit": "AUD"
+          },
+          {
+            "entity_id": "entity:hy2hjhlctg2q8baflnhs",
+            "name": "Gel Ice Pack 1kg",
+            "kind": "product",
+            "property": "unit_cost",
+            "before": 2.4,
+            "after": 2.64,
+            "unit": "AUD"
+          },
+          {
+            "entity_id": "entity:of21g5fl0c8h7p8pqd30",
+            "name": "Ice Brick 500g",
+            "kind": "product",
+            "property": "unit_cost",
+            "before": 1.8,
+            "after": 1.98,
+            "unit": "AUD"
+          },
+          {
+            "entity_id": "entity:olzecfi09wy9257qadsw",
+            "name": "Crushed Ice 5kg",
+            "kind": "product",
+            "property": "unit_cost",
+            "before": 3.2,
+            "after": 3.52,
+            "unit": "AUD"
+          },
+          {
+            "entity_id": "entity:scvuccjbx6vmw90ml8zr",
+            "name": "Insulated Seafood Carton",
+            "kind": "product",
+            "property": "unit_cost",
+            "before": 6.75,
+            "after": 7.425,
+            "unit": "AUD"
+          },
+          {
+            "entity_id": "entity:v1wgb5l21pseykea1qlx",
+            "name": "Block Ice 20kg",
+            "kind": "product",
+            "property": "unit_cost",
+            "before": 7.25,
+            "after": 7.975,
+            "unit": "AUD"
+          },
+          {
+            "entity_id": "entity:xqnkeai40qcw2o64mdr6",
+            "name": "Dry Ice 2kg",
+            "kind": "product",
+            "property": "unit_cost",
+            "before": 13,
+            "after": 14.3,
+            "unit": "AUD"
+          }
+        ],
+        "n_changed": 8,
+        "removed": [],
+        "reached": [
+          {
+            "entity_id": "entity:bs8dwvtgywjeuj4lb9j6",
+            "name": "FFI-101",
+            "kind": "order",
+            "depth": 1,
+            "via": "FFI-101 requires Block Ice 20kg",
+            "from": "entity:v1wgb5l21pseykea1qlx",
+            "path": [
+              "relates_to:nkm3h481z4klgf5a8mdt"
+            ]
+          },
+          {
+            "entity_id": "entity:kl4ea8we5ugms10whjm8",
+            "name": "FFI-102",
+            "kind": "order",
+            "depth": 1,
+            "via": "FFI-102 requires Flake Ice 10kg",
+            "from": "entity:1sfkjfqzvoe0itr0wygd",
+            "path": [
+              "relates_to:0etfspyi0chdzmpcuvrv"
+            ]
+          },
+          {
+            "entity_id": "entity:ovl5njex4v2o2um1n9pj",
+            "name": "FFI-103",
+            "kind": "order",
+            "depth": 1,
+            "via": "FFI-103 requires Party Ice 5kg",
+            "from": "entity:evv28m6h4tck901uzp6t",
+            "path": [
+              "relates_to:3owqlfdeikw2dxb8t2ij"
+            ]
+          },
+          {
+            "entity_id": "entity:gsj8anu1g7y6hxd2vmh2",
+            "name": "FFI-104",
+            "kind": "order",
+            "depth": 1,
+            "via": "FFI-104 requires Crushed Ice 5kg",
+            "from": "entity:olzecfi09wy9257qadsw",
+            "path": [
+              "relates_to:el7xw206be3rh8p3ndxt"
+            ]
+          },
+          {
+            "entity_id": "entity:8rq9qkw3g7cl7rav96rb",
+            "name": "FFI-106",
+            "kind": "order",
+            "depth": 1,
+            "via": "FFI-106 requires Gel Ice Pack 1kg",
+            "from": "entity:hy2hjhlctg2q8baflnhs",
+            "path": [
+              "relates_to:n6utd7ie81pej3cparc8"
+            ]
+          },
+          {
+            "entity_id": "organisation:7uqu9jwq62muit42lorh",
+            "name": "Southern Ice Works",
+            "kind": "organisation",
+            "depth": 1,
+            "via": "Flake Ice 10kg supplied by Southern Ice Works",
+            "from": "entity:1sfkjfqzvoe0itr0wygd",
+            "path": [
+              "relates_to:vibbxbaahltiv2gjvcwa"
+            ]
+          },
+          {
+            "entity_id": "entity:gc3l2fncxr8vnto1spk9",
+            "name": "Bathers Beach Bistro",
+            "kind": "customer",
+            "depth": 2,
+            "via": "Bathers Beach Bistro placed FFI-101",
+            "from": "entity:v1wgb5l21pseykea1qlx",
+            "path": [
+              "relates_to:nkm3h481z4klgf5a8mdt",
+              "relates_to:o9argb942yw64ddsunvp"
+            ]
+          },
+          {
+            "entity_id": "entity:3xmqlzc97hgyg9atd25d",
+            "name": "Brownlip Abalone 1kg",
+            "kind": "product",
+            "depth": 2,
+            "via": "FFI-106 requires Brownlip Abalone 1kg",
+            "from": "entity:hy2hjhlctg2q8baflnhs",
+            "path": [
+              "relates_to:n6utd7ie81pej3cparc8",
+              "relates_to:3buxpjxbjg1xxr1a2pux"
+            ]
+          },
+          {
+            "entity_id": "entity:bs3cbh9kzfcstrg0qjpe",
+            "name": "Cooked Prawns 2kg",
+            "kind": "product",
+            "depth": 2,
+            "via": "FFI-106 requires Cooked Prawns 2kg",
+            "from": "entity:hy2hjhlctg2q8baflnhs",
+            "path": [
+              "relates_to:n6utd7ie81pej3cparc8",
+              "relates_to:6qi3u2qu3y77ezsg07yr"
+            ]
+          },
+          {
+            "entity_id": "entity:qcbe9ysvbeep437q79bc",
+            "name": "Dhufish Whole 10kg",
+            "kind": "product",
+            "depth": 2,
+            "via": "FFI-101 requires Dhufish Whole 10kg",
+            "from": "entity:v1wgb5l21pseykea1qlx",
+            "path": [
+              "relates_to:nkm3h481z4klgf5a8mdt",
+              "relates_to:4ugdgeeqkurkkvg7i6cw"
+            ]
+          },
+          {
+            "entity_id": "entity:rcrjvcfua61c8sgp7cuz",
+            "name": "Greenlip Abalone 1kg",
+            "kind": "product",
+            "depth": 2,
+            "via": "FFI-103 requires Greenlip Abalone 1kg",
+            "from": "entity:evv28m6h4tck901uzp6t",
+            "path": [
+              "relates_to:3owqlfdeikw2dxb8t2ij",
+              "relates_to:thaho4bsyow5megh9wfd"
+            ]
+          },
+          {
+            "entity_id": "entity:3f5cm4iqh3oirr0hmryw",
+            "name": "Gummy Shark 5kg",
+            "kind": "product",
+            "depth": 2,
+            "via": "FFI-102 requires Gummy Shark 5kg",
+            "from": "entity:1sfkjfqzvoe0itr0wygd",
+            "path": [
+              "relates_to:0etfspyi0chdzmpcuvrv",
+              "relates_to:8v2kqrtpa1e7r58tet0a"
+            ]
+          },
+          {
+            "entity_id": "entity:m09ye57js78gw9bpezrx",
+            "name": "Harbour Lights Hotel Group",
+            "kind": "customer",
+            "depth": 2,
+            "via": "Harbour Lights Hotel Group placed FFI-103",
+            "from": "entity:evv28m6h4tck901uzp6t",
+            "path": [
+              "relates_to:3owqlfdeikw2dxb8t2ij",
+              "relates_to:orwyoe1j46m22oxbclmm"
+            ]
+          },
+          {
+            "entity_id": "entity:0alo8zj8lgw4phgycnmq",
+            "name": "IN-42",
+            "kind": "inbound_load",
+            "depth": 2,
+            "via": "IN-42 supplies FFI-102",
+            "from": "entity:1sfkjfqzvoe0itr0wygd",
+            "path": [
+              "relates_to:0etfspyi0chdzmpcuvrv",
+              "relates_to:ak7xmnw62gry0pgfnioq"
+            ]
+          },
+          {
+            "entity_id": "entity:48xpq68q4urz8ypimn5y",
+            "name": "King Prawns U10 5kg",
+            "kind": "product",
+            "depth": 2,
+            "via": "FFI-101 requires King Prawns U10 5kg",
+            "from": "entity:v1wgb5l21pseykea1qlx",
+            "path": [
+              "relates_to:nkm3h481z4klgf5a8mdt",
+              "relates_to:0naftds3hpaerdvn01dm"
+            ]
+          },
+          {
+            "entity_id": "entity:3sb2tcg3mvrd6kv51znr",
+            "name": "Portside Fish and Chips",
+            "kind": "customer",
+            "depth": 2,
+            "via": "Portside Fish and Chips placed FFI-102",
+            "from": "entity:1sfkjfqzvoe0itr0wygd",
+            "path": [
+              "relates_to:0etfspyi0chdzmpcuvrv",
+              "relates_to:mkxhmgpeylqhxmnqfgc6"
+            ]
+          },
+          {
+            "entity_id": "entity:ugt6rofftccvjjuomjay",
+            "name": "Reefer 2",
+            "kind": "truck",
+            "depth": 2,
+            "via": "Reefer 2 serves FFI-102",
+            "from": "entity:1sfkjfqzvoe0itr0wygd",
+            "path": [
+              "relates_to:0etfspyi0chdzmpcuvrv",
+              "relates_to:4c7j9r6kqc2ugq35r2oh"
+            ]
+          },
+          {
+            "entity_id": "entity:n8v4fraa6w49xnctd09p",
+            "name": "Saltwater Table Restaurant",
+            "kind": "customer",
+            "depth": 2,
+            "via": "Saltwater Table Restaurant placed FFI-104",
+            "from": "entity:olzecfi09wy9257qadsw",
+            "path": [
+              "relates_to:el7xw206be3rh8p3ndxt",
+              "relates_to:z1rrjcxw3989we7eh9iq"
+            ]
+          },
+          {
+            "entity_id": "entity:b6ob6x2weevj5neiyhnv",
+            "name": "Snapper Fillets 5kg",
+            "kind": "product",
+            "depth": 2,
+            "via": "FFI-104 requires Snapper Fillets 5kg",
+            "from": "entity:olzecfi09wy9257qadsw",
+            "path": [
+              "relates_to:el7xw206be3rh8p3ndxt",
+              "relates_to:ak9pu5dxu6fl8d1sx6vv"
+            ]
+          },
+          {
+            "entity_id": "entity:sbtlnm1mp6dimx9zyqad",
+            "name": "Tiger Prawns 5kg",
+            "kind": "product",
+            "depth": 2,
+            "via": "FFI-103 requires Tiger Prawns 5kg",
+            "from": "entity:evv28m6h4tck901uzp6t",
+            "path": [
+              "relates_to:3owqlfdeikw2dxb8t2ij",
+              "relates_to:40tlqoee918enu6wjxiq"
+            ]
+          },
+          {
+            "entity_id": "entity:ffuygjtryhu0940o77hd",
+            "name": "West End Oyster Bar",
+            "kind": "customer",
+            "depth": 2,
+            "via": "West End Oyster Bar placed FFI-106",
+            "from": "entity:hy2hjhlctg2q8baflnhs",
+            "path": [
+              "relates_to:n6utd7ie81pej3cparc8",
+              "relates_to:edeu55ddzga0uz6n0hke"
+            ]
+          }
+        ],
+        "reached_truncated": false,
+        "warnings": [
+          "gross margin: left out 2 entities missing a value one side needs, so both sides of the ratio use the same entities"
+        ]
+      },
+      "text": "Southern Ice Works raises its costs 10%\nWhat if: Product unit cost up 10% on 8 products supplied by Southern Ice Works.\n- gross margin: 35.76% → 35.64%, down 0.12 points (exact: -0.116624 points)\n- avg unit cost: 85.180 → 85.335 AUD, up 0.155 AUD (0.2%) (exact: 0.154643 AUD)\n- total stock value at cost: 27424.50 → 27639.88 AUD, up 215.38 AUD (0.8%) (exact: 215.375 AUD)\nChanged: Flake Ice 10kg unit cost 5.10 AUD → 5.61 AUD; Party Ice 5kg unit cost 3.80 AUD → 4.18 AUD; Gel Ice Pack 1kg unit cost 2.40 AUD → 2.64 AUD; Ice Brick 500g unit cost 1.80 AUD → 1.98 AUD; Crushed Ice 5kg unit cost 3.20 AUD → 3.52 AUD; Insulated Seafood Carton unit cost 6.75 AUD → 7.43 AUD; Block Ice 20kg unit cost 7.25 AUD → 7.98 AUD; Dry Ice 2kg unit cost 13.00 AUD → 14.30 AUD.\nLinked within 2 steps (not all are affected): FFI-101 (order, via FFI-101 requires Block Ice 20kg); FFI-102 (order, via FFI-102 requires Flake Ice 10kg); FFI-103 (order, via FFI-103 requires Party Ice 5kg); FFI-104 (order, via FFI-104 requires Crushed Ice 5kg); FFI-106 (order, via FFI-106 requires Gel Ice Pack 1kg); Southern Ice Works (organisation, via Flake Ice 10kg supplied by Southern Ice Works); Bathers Beach Bistro (customer, via Bathers Beach Bistro placed FFI-101); Brownlip Abalone 1kg (product, via FFI-106 requires Brownlip Abalone 1kg); Cooked Prawns 2kg (product, via FFI-106 requires Cooked Prawns 2kg); Dhufish Whole 10kg (product, via FFI-101 requires Dhufish Whole 10kg); Greenlip Abalone 1kg (product, via FFI-103 requires Greenlip Abalone 1kg); Gummy Shark 5kg (product, via FFI-102 requires Gummy Shark 5kg); Harbour Lights Hotel Group (customer, via Harbour Lights Hotel Group placed FFI-103); IN-42 (inbound load, via IN-42 supplies FFI-102); King Prawns U10 5kg (product, via FFI-101 requires King Prawns U10 5kg); Portside Fish and Chips (customer, via Portside Fish and Chips placed FFI-102); Reefer 2 (truck, via Reefer 2 serves FFI-102); Saltwater Table Restaurant (customer, via Saltwater Table Restaurant placed FFI-104); Snapper Fillets 5kg (product, via FFI-104 requires Snapper Fillets 5kg); Tiger Prawns 5kg (product, via FFI-103 requires Tiger Prawns 5kg); West End Oyster Bar (customer, via West End Oyster Bar placed FFI-106).\nNote: gross margin: left out 2 entities missing a value one side needs, so both sides of the ratio use the same entities\nNothing was saved: this is a what-if."
+    }
+  }
+]

@@ -1,0 +1,55 @@
+<!doctype html><meta charset="utf-8"><style>body{font:15px/1.45 system-ui;margin:32px;background:#f5f5f1;color:#202322}h1{font-size:25px}h2{font-size:20px}h3{font-size:15px;margin:0 0 8px}article,.final{padding:18px;background:white;border:1px solid #d9ded8;margin:12px 0;border-radius:5px}pre{font:12px/1.4 ui-monospace;white-space:pre-wrap;overflow-wrap:anywhere;margin:4px 0}.final pre{font:16px/1.5 system-ui}.result{background:#f1f5f1;padding:10px}summary{font-size:12px;color:#566458}</style><h1>Eunomia 2.2.0 gate 3: p3/q6.jsonl</h1><p>Complete transcript is preserved beside this review as JSONL and text. Expand a tool to inspect its full input and result.</p><h2>Final answer</h2><div class="final"><pre>Not saved yet. The business vault won&#x27;t take a new kind until an owner approves it.
+
+**What happened:** The vault &quot;Fremantle Fish &amp; Ice Co&quot; only accepts kinds an owner has approved. `live_seafood` is new, so it was filed as a proposal. The fact was not written.
+
+**What you do:** Open the Eunomia app and approve the `live_seafood` kind. Then tell me, and I&#x27;ll save the crayfish fact right away.
+
+**Other option:** I can save it now under the approved kind `product`. You asked for `live_seafood`, so I haven&#x27;t done this.
+
+I&#x27;d wait for the approval. That way it ends up where you wanted.</pre></div><h2>Tool evidence in call order</h2><article><h3>mcp__eunomia-local__memory_write</h3><pre>{
+  &quot;subject_name&quot;: &quot;Live crayfish&quot;,
+  &quot;subject_kind&quot;: &quot;live_seafood&quot;,
+  &quot;text&quot;: &quot;We now sell live crayfish.&quot;,
+  &quot;type&quot;: &quot;world&quot;
+}</pre><pre class="result">{
+  &quot;error&quot;: &quot;vault_id is needed: with none, this fact would go to your personal space under the new kind \&quot;live_seafood\&quot;, where the approved-kinds-only rule of \&quot;Fremantle Fish &amp; Ice Co\&quot; never sees it. Pass vault_id with the space it belongs to: \&quot;Freo Rowing Club\&quot;, \&quot;Fremantle Fish &amp; Ice Co\&quot;, or \&quot;Personal\&quot; if it is private to you.&quot;,
+  &quot;code&quot;: &quot;validation.invalid&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__memory_write&quot;,
+  &quot;arguments&quot;: {
+    &quot;subject_name&quot;: &quot;Live crayfish&quot;,
+    &quot;subject_kind&quot;: &quot;live_seafood&quot;,
+    &quot;text&quot;: &quot;We now sell live crayfish.&quot;,
+    &quot;type&quot;: &quot;world&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01HHyfWMMGYGjmJJEFEbRAuo&quot;,
+  &quot;result&quot;: {
+    &quot;error&quot;: &quot;vault_id is needed: with none, this fact would go to your personal space under the new kind \&quot;live_seafood\&quot;, where the approved-kinds-only rule of \&quot;Fremantle Fish &amp; Ice Co\&quot; never sees it. Pass vault_id with the space it belongs to: \&quot;Freo Rowing Club\&quot;, \&quot;Fremantle Fish &amp; Ice Co\&quot;, or \&quot;Personal\&quot; if it is private to you.&quot;,
+    &quot;code&quot;: &quot;validation.invalid&quot;,
+    &quot;trace_id&quot;: &quot;e0cbf7409186458e9ee1a365ab54aec6&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__memory_write</h3><pre>{
+  &quot;subject_name&quot;: &quot;Live crayfish&quot;,
+  &quot;subject_kind&quot;: &quot;live_seafood&quot;,
+  &quot;text&quot;: &quot;We now sell live crayfish.&quot;,
+  &quot;type&quot;: &quot;world&quot;,
+  &quot;vault_id&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+}</pre><pre class="result">{
+  &quot;error&quot;: &quot;this vault takes only approved kinds and links, and the kind \&quot;live_seafood\&quot; is not approved: write under a built-in kind (person, organisation, location, repository, file, symbol) or an approved kind (customer, decision, equipment, inbound_load, order, organisation, person, product, project, truck). It was filed as a proposal for a vault owner to review.&quot;,
+  &quot;code&quot;: &quot;ontology.rejected&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__memory_write&quot;,
+  &quot;arguments&quot;: {
+    &quot;subject_name&quot;: &quot;Live crayfish&quot;,
+    &quot;subject_kind&quot;: &quot;live_seafood&quot;,
+    &quot;text&quot;: &quot;We now sell live crayfish.&quot;,
+    &quot;type&quot;: &quot;world&quot;,
+    &quot;vault_id&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01GAsqYwwUsRbiJtjDvxfKzu&quot;,
+  &quot;result&quot;: {
+    &quot;error&quot;: &quot;this vault takes only approved kinds and links, and the kind \&quot;live_seafood\&quot; is not approved: write under a built-in kind (person, organisation, location, repository, file, symbol) or an approved kind (customer, decision, equipment, inbound_load, order, organisation, person, product, project, truck). It was filed as a proposal for a vault owner to review.&quot;,
+    &quot;code&quot;: &quot;ontology.rejected&quot;,
+    &quot;trace_id&quot;: &quot;406d2b596afc4bd5b5bb3272e93f3073&quot;
+  }
+}</pre></details></article>

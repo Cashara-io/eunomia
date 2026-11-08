@@ -1,0 +1,7 @@
+Average sell price is **$130.79 AUD**. Total stock value at cost is **$27,424.50 AUD**.
+
+- The average sell price covers all 30 products.
+- The stock value covers 28 products. Two products have no unit cost on file, so they are left out. The real total is a bit higher.
+- The average is a plain average per product. It does not weigh by how much stock you hold or sell.
+
+To fix the gap, add the unit cost for those two products in the catalogue.

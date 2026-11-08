@@ -1,0 +1,620 @@
+<!doctype html><meta charset="utf-8"><style>body{font:15px/1.45 system-ui;margin:32px;background:#f5f5f1;color:#202322}h1{font-size:25px}h2{font-size:20px}h3{font-size:15px;margin:0 0 8px}article,.final{padding:18px;background:white;border:1px solid #d9ded8;margin:12px 0;border-radius:5px}pre{font:12px/1.4 ui-monospace;white-space:pre-wrap;overflow-wrap:anywhere;margin:4px 0}.final pre{font:16px/1.5 system-ui}.result{background:#f1f5f1;padding:10px}summary{font-size:12px;color:#566458}</style><h1>Eunomia 2.2.0 gate 3: p3/q1.jsonl</h1><p>Complete transcript is preserved beside this review as JSONL and text. Expand a tool to inspect its full input and result.</p><h2>Final answer</h2><div class="final"><pre>Average sell price is **$130.79 AUD**. Total stock value at cost is **$27,424.50 AUD**.
+
+- The average sell price covers all 30 products.
+- The stock value covers 28 products. Two products have no unit cost on file, so they are left out. The real total is a bit higher.
+- The average is a plain average per product. It does not weigh by how much stock you hold or sell.
+
+To fix the gap, add the unit cost for those two products in the catalogue.</pre></div><h2>Tool evidence in call order</h2><article><h3>mcp__eunomia-local__ontology_coverage</h3><pre>{
+  &quot;question&quot;: &quot;What is our average sell price and total stock value at cost?&quot;
+}</pre><pre class="result">{
+  &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;,
+  &quot;coverage&quot;: 1.0,
+  &quot;chosen_by&quot;: &quot;coverage&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__ontology_coverage&quot;,
+  &quot;arguments&quot;: {
+    &quot;question&quot;: &quot;What is our average sell price and total stock value at cost?&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01REDijc29AXkmVFRxtZNL4z&quot;,
+  &quot;result&quot;: {
+    &quot;vault&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+    &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;,
+    &quot;coverage&quot;: 1.0,
+    &quot;matched&quot;: [
+      {
+        &quot;phrase&quot;: &quot;sell price&quot;,
+        &quot;term&quot;: &quot;property&quot;,
+        &quot;name&quot;: &quot;sell_price&quot;,
+        &quot;of_kind&quot;: &quot;product&quot;,
+        &quot;distance&quot;: 0.0
+      },
+      {
+        &quot;phrase&quot;: &quot;stock value&quot;,
+        &quot;term&quot;: &quot;metric&quot;,
+        &quot;name&quot;: &quot;total_stock_value_at_cost&quot;,
+        &quot;of_kind&quot;: &quot;product&quot;,
+        &quot;distance&quot;: 0.509
+      },
+      {
+        &quot;phrase&quot;: &quot;cost&quot;,
+        &quot;term&quot;: &quot;property&quot;,
+        &quot;name&quot;: &quot;unit_cost&quot;,
+        &quot;of_kind&quot;: &quot;product&quot;,
+        &quot;distance&quot;: 0.578
+      },
+      {
+        &quot;phrase&quot;: &quot;stock&quot;,
+        &quot;term&quot;: &quot;metric&quot;,
+        &quot;name&quot;: &quot;total_stock_value_at_cost&quot;,
+        &quot;of_kind&quot;: &quot;product&quot;,
+        &quot;distance&quot;: 0.0
+      }
+    ],
+    &quot;uncovered&quot;: [],
+    &quot;chosen_by&quot;: &quot;coverage&quot;,
+    &quot;suggestion&quot;: &quot;Every term maps to the vault&#x27;s approved ontology: answer a number with metric_eval and a what-if with scenario_run, passing this vault as vault_id.&quot;,
+    &quot;mode&quot;: &quot;model&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__ontology_get</h3><pre>{
+  &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+  &quot;kind&quot;: &quot;product&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__ontology_get&quot;,
+  &quot;arguments&quot;: {
+    &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+    &quot;kind&quot;: &quot;product&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01JiJgGfRJ1iwW3jSs6TNsHM&quot;,
+  &quot;result&quot;: {
+    &quot;vault&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+    &quot;strict&quot;: true,
+    &quot;kinds&quot;: [
+      {
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;built_in&quot;: false,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;A product in the supplier inventory, with its pricing, stock level, availability, and latest landing date.&quot;,
+        &quot;merge_into&quot;: null,
+        &quot;synonyms&quot;: [],
+        &quot;origin&quot;: &quot;suggested&quot;,
+        &quot;reason&quot;: &quot;one kind for the catalogue.csv records&quot;,
+        &quot;entities&quot;: 30,
+        &quot;samples&quot;: [
+          &quot;Abalone Mince 1kg&quot;,
+          &quot;Abalone Shell Pack&quot;,
+          &quot;Abalone Slices 500g&quot;
+        ],
+        &quot;properties&quot;: [
+          {
+            &quot;name&quot;: &quot;last_landed&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;unit&quot;: null,
+            &quot;enum_values&quot;: null,
+            &quot;description&quot;: &quot;Date the product was last landed.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;from last landed&quot;,
+            &quot;values&quot;: 30,
+            &quot;samples&quot;: [
+              &quot;2026-11-06&quot;,
+              &quot;2026-11-05&quot;,
+              &quot;2026-11-04&quot;
+            ],
+            &quot;source_map&quot;: [
+              {
+                &quot;source&quot;: &quot;document&quot;,
+                &quot;record_type&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;,
+                &quot;path&quot;: &quot;last landed&quot;
+              }
+            ]
+          },
+          {
+            &quot;name&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;unit&quot;: &quot;items&quot;,
+            &quot;enum_values&quot;: null,
+            &quot;description&quot;: &quot;Quantity currently on hand.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;from qty on hand&quot;,
+            &quot;values&quot;: 30,
+            &quot;samples&quot;: [
+              &quot;3 items&quot;,
+              &quot;57 items&quot;,
+              &quot;43 items&quot;
+            ],
+            &quot;source_map&quot;: [
+              {
+                &quot;source&quot;: &quot;document&quot;,
+                &quot;record_type&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;,
+                &quot;path&quot;: &quot;qty on hand&quot;
+              }
+            ]
+          },
+          {
+            &quot;name&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;unit&quot;: &quot;items&quot;,
+            &quot;enum_values&quot;: null,
+            &quot;description&quot;: &quot;Stock quantity at which the product should be reordered.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;from reorder at&quot;,
+            &quot;values&quot;: 30,
+            &quot;samples&quot;: [
+              &quot;10 items&quot;
+            ],
+            &quot;source_map&quot;: [
+              {
+                &quot;source&quot;: &quot;document&quot;,
+                &quot;record_type&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;,
+                &quot;path&quot;: &quot;reorder at&quot;
+              }
+            ]
+          },
+          {
+            &quot;name&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;enum_values&quot;: null,
+            &quot;description&quot;: &quot;Selling price of the product.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;from sell price AUD&quot;,
+            &quot;values&quot;: 30,
+            &quot;samples&quot;: [
+              &quot;195.00 AUD&quot;,
+              &quot;3.95 AUD&quot;,
+              &quot;1180.00 AUD&quot;
+            ],
+            &quot;source_map&quot;: [
+              {
+                &quot;source&quot;: &quot;document&quot;,
+                &quot;record_type&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;,
+                &quot;path&quot;: &quot;sell price AUD&quot;
+              }
+            ]
+          },
+          {
+            &quot;name&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;unit&quot;: null,
+            &quot;enum_values&quot;: [
+              &quot;Available&quot;,
+              &quot;Discontinued&quot;,
+              &quot;On order&quot;
+            ],
+            &quot;description&quot;: &quot;Current product availability status.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;from status&quot;,
+            &quot;values&quot;: 30,
+            &quot;samples&quot;: [
+              &quot;Available&quot;,
+              &quot;On order&quot;,
+              &quot;Discontinued&quot;
+            ],
+            &quot;source_map&quot;: [
+              {
+                &quot;source&quot;: &quot;document&quot;,
+                &quot;record_type&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;,
+                &quot;path&quot;: &quot;status&quot;
+              }
+            ]
+          },
+          {
+            &quot;name&quot;: &quot;unit_cost&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;enum_values&quot;: null,
+            &quot;description&quot;: &quot;Unit cost of the product.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;from unit cost AUD&quot;,
+            &quot;values&quot;: 28,
+            &quot;samples&quot;: [
+              &quot;14.00 AUD&quot;,
+              &quot;108.00 AUD&quot;,
+              &quot;57.00 AUD&quot;
+            ],
+            &quot;source_map&quot;: [
+              {
+                &quot;source&quot;: &quot;document&quot;,
+                &quot;record_type&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;,
+                &quot;path&quot;: &quot;unit cost AUD&quot;
+              }
+            ]
+          }
+        ],
+        &quot;metrics&quot;: [
+          {
+            &quot;name&quot;: &quot;available_product_count&quot;,
+            &quot;description&quot;: &quot;Number of products with status Available.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;expr&quot;: {
+              &quot;agg&quot;: &quot;count&quot;,
+              &quot;property&quot;: &quot;status&quot;,
+              &quot;filters&quot;: [
+                {
+                  &quot;property&quot;: &quot;status&quot;,
+                  &quot;op&quot;: &quot;eq&quot;,
+                  &quot;value&quot;: &quot;Available&quot;
+                }
+              ]
+            },
+            &quot;expr_words&quot;: &quot;Number of product with a status where status is Available&quot;,
+            &quot;unit&quot;: &quot;items&quot;,
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;agent&quot;,
+            &quot;reason&quot;: &quot;Shows how much of the range can be sold now.&quot;
+          },
+          {
+            &quot;name&quot;: &quot;avg_sell_price&quot;,
+            &quot;description&quot;: &quot;Average sell price per product, in AUD.&quot;,
+            &quot;synonyms&quot;: [
+              &quot;average sell price&quot;,
+              &quot;average price&quot;
+            ],
+            &quot;expr&quot;: {
+              &quot;agg&quot;: &quot;avg&quot;,
+              &quot;property&quot;: &quot;sell_price&quot;
+            },
+            &quot;expr_words&quot;: &quot;Average sell price&quot;,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;agent&quot;,
+            &quot;reason&quot;: &quot;The owner asked for average sell price.&quot;
+          },
+          {
+            &quot;name&quot;: &quot;avg_unit_cost&quot;,
+            &quot;description&quot;: &quot;Average unit cost per product, in AUD. Products with no cost are left out.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;expr&quot;: {
+              &quot;agg&quot;: &quot;avg&quot;,
+              &quot;property&quot;: &quot;unit_cost&quot;
+            },
+            &quot;expr_words&quot;: &quot;Average unit cost&quot;,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;agent&quot;,
+            &quot;reason&quot;: &quot;Useful beside average sell price.&quot;
+          },
+          {
+            &quot;name&quot;: &quot;gross_margin&quot;,
+            &quot;description&quot;: &quot;Gross margin across products, calculated from selling prices and unit costs.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;expr&quot;: {
+              &quot;agg&quot;: &quot;ratio&quot;,
+              &quot;numerator&quot;: {
+                &quot;agg&quot;: &quot;sum&quot;,
+                &quot;row&quot;: {
+                  &quot;op&quot;: &quot;sub&quot;,
+                  &quot;left&quot;: &quot;sell_price&quot;,
+                  &quot;right&quot;: &quot;unit_cost&quot;
+                }
+              },
+              &quot;denominator&quot;: {
+                &quot;agg&quot;: &quot;sum&quot;,
+                &quot;property&quot;: &quot;sell_price&quot;
+              }
+            },
+            &quot;expr_words&quot;: &quot;Sum of (sell price − unit cost), divided by sum of sell price&quot;,
+            &quot;unit&quot;: &quot;percent&quot;,
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;computed from the catalogue.csv records&#x27; properties&quot;
+          },
+          {
+            &quot;name&quot;: &quot;inventory_cost_value&quot;,
+            &quot;description&quot;: &quot;Estimated total cost value of current stock.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;expr&quot;: {
+              &quot;agg&quot;: &quot;sum&quot;,
+              &quot;row&quot;: {
+                &quot;op&quot;: &quot;mul&quot;,
+                &quot;left&quot;: &quot;qty_on_hand&quot;,
+                &quot;right&quot;: &quot;unit_cost&quot;
+              }
+            },
+            &quot;expr_words&quot;: &quot;Sum of qty on hand × unit cost&quot;,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;status&quot;: &quot;rejected&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;computed from the catalogue.csv records&#x27; properties&quot;
+          },
+          {
+            &quot;name&quot;: &quot;product_count&quot;,
+            &quot;description&quot;: &quot;Number of products.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;expr&quot;: {
+              &quot;agg&quot;: &quot;count&quot;,
+              &quot;property&quot;: &quot;qty_on_hand&quot;
+            },
+            &quot;expr_words&quot;: &quot;Number of product with a qty on hand&quot;,
+            &quot;unit&quot;: &quot;items&quot;,
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;computed from the catalogue.csv records&#x27; properties&quot;
+          },
+          {
+            &quot;name&quot;: &quot;total_stock_value_at_cost&quot;,
+            &quot;description&quot;: &quot;Total stock value at cost: quantity on hand times unit cost, summed over products. Products with no unit cost are left out.&quot;,
+            &quot;synonyms&quot;: [
+              &quot;stock value at cost&quot;,
+              &quot;inventory value at cost&quot;
+            ],
+            &quot;expr&quot;: {
+              &quot;agg&quot;: &quot;sum&quot;,
+              &quot;row&quot;: {
+                &quot;op&quot;: &quot;mul&quot;,
+                &quot;left&quot;: &quot;qty_on_hand&quot;,
+                &quot;right&quot;: &quot;unit_cost&quot;
+              }
+            },
+            &quot;expr_words&quot;: &quot;Sum of qty on hand × unit cost&quot;,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;agent&quot;,
+            &quot;reason&quot;: &quot;The owner asked for total stock value at cost. Same working as inventory_cost_value, named as asked. The owner can merge the two.&quot;
+          }
+        ]
+      }
+    ],
+    &quot;links&quot;: [
+      {
+        &quot;from_kind&quot;: &quot;inbound_load&quot;,
+        &quot;label&quot;: &quot;contains&quot;,
+        &quot;to_kind&quot;: &quot;product&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;The load holds this product.&quot;,
+        &quot;origin&quot;: &quot;agent&quot;,
+        &quot;reason&quot;: &quot;IN-42 contents.&quot;,
+        &quot;count&quot;: 4,
+        &quot;samples&quot;: [
+          {
+            &quot;from&quot;: &quot;IN-42&quot;,
+            &quot;to&quot;: &quot;Greenlip Abalone 1kg&quot;
+          },
+          {
+            &quot;from&quot;: &quot;IN-42&quot;,
+            &quot;to&quot;: &quot;Gummy Shark 5kg&quot;
+          },
+          {
+            &quot;from&quot;: &quot;IN-42&quot;,
+            &quot;to&quot;: &quot;Dhufish Whole 10kg&quot;
+          }
+        ]
+      },
+      {
+        &quot;from_kind&quot;: &quot;order&quot;,
+        &quot;label&quot;: &quot;requires&quot;,
+        &quot;to_kind&quot;: &quot;product&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;The order needs this product.&quot;,
+        &quot;origin&quot;: &quot;agent&quot;,
+        &quot;reason&quot;: &quot;Orders to required products.&quot;,
+        &quot;count&quot;: 15,
+        &quot;samples&quot;: [
+          {
+            &quot;from&quot;: &quot;FFI-102&quot;,
+            &quot;to&quot;: &quot;Flake Ice 10kg&quot;
+          },
+          {
+            &quot;from&quot;: &quot;FFI-101&quot;,
+            &quot;to&quot;: &quot;King Prawns U10 5kg&quot;
+          },
+          {
+            &quot;from&quot;: &quot;FFI-105&quot;,
+            &quot;to&quot;: &quot;Octopus 5kg&quot;
+          }
+        ]
+      },
+      {
+        &quot;from_kind&quot;: &quot;organisation&quot;,
+        &quot;label&quot;: &quot;supplies&quot;,
+        &quot;to_kind&quot;: &quot;product&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;The organisation supplies this product.&quot;,
+        &quot;origin&quot;: &quot;agent&quot;,
+        &quot;reason&quot;: &quot;Used for Esperance Abalone and Greenlip Abalone.&quot;,
+        &quot;count&quot;: 1,
+        &quot;samples&quot;: [
+          {
+            &quot;from&quot;: &quot;Esperance Abalone&quot;,
+            &quot;to&quot;: &quot;Greenlip Abalone 1kg&quot;
+          }
+        ]
+      },
+      {
+        &quot;from_kind&quot;: &quot;product&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to_kind&quot;: &quot;organisation&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;The organisation that supplies this product. Reads product to supplier.&quot;,
+        &quot;origin&quot;: &quot;agent&quot;,
+        &quot;reason&quot;: &quot;Clearer direction than the automap link product supplies organisation, which reads backwards. Same CSV supplier column.&quot;,
+        &quot;count&quot;: 30,
+        &quot;samples&quot;: [
+          {
+            &quot;from&quot;: &quot;Prawn Cutlets 2kg&quot;,
+            &quot;to&quot;: &quot;Shark Bay Prawns&quot;
+          },
+          {
+            &quot;from&quot;: &quot;Snapper Fillets 5kg&quot;,
+            &quot;to&quot;: &quot;Abrolhos Fishers Co-op&quot;
+          },
+          {
+            &quot;from&quot;: &quot;King Prawns U10 5kg&quot;,
+            &quot;to&quot;: &quot;Shark Bay Prawns&quot;
+          }
+        ],
+        &quot;source_map&quot;: [
+          {
+            &quot;source&quot;: &quot;document&quot;,
+            &quot;record_type&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;,
+            &quot;path&quot;: &quot;supplier&quot;
+          }
+        ]
+      },
+      {
+        &quot;from_kind&quot;: &quot;product&quot;,
+        &quot;label&quot;: &quot;supplies&quot;,
+        &quot;to_kind&quot;: &quot;organisation&quot;,
+        &quot;status&quot;: &quot;rejected&quot;,
+        &quot;description&quot;: &quot;Organisation that supplies this product.&quot;,
+        &quot;origin&quot;: &quot;suggested&quot;,
+        &quot;reason&quot;: &quot;100% of values match (5 of 5)&quot;,
+        &quot;count&quot;: 0,
+        &quot;samples&quot;: [],
+        &quot;source_map&quot;: [
+          {
+            &quot;source&quot;: &quot;document&quot;,
+            &quot;record_type&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;,
+            &quot;path&quot;: &quot;supplier&quot;
+          }
+        ]
+      }
+    ]
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__metric_eval</h3><pre>{
+  &quot;metric&quot;: &quot;avg_sell_price&quot;,
+  &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;
+}</pre><pre class="result">{
+  &quot;metric&quot;: &quot;avg_sell_price&quot;,
+  &quot;value&quot;: 130.793333,
+  &quot;unit&quot;: &quot;AUD&quot;,
+  &quot;n_entities&quot;: 30,
+  &quot;warnings&quot;: []
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__metric_eval&quot;,
+  &quot;arguments&quot;: {
+    &quot;metric&quot;: &quot;avg_sell_price&quot;,
+    &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01LGEMrbxrPoKCZ2u4wgsYsd&quot;,
+  &quot;result&quot;: {
+    &quot;metric&quot;: &quot;avg_sell_price&quot;,
+    &quot;kind&quot;: &quot;product&quot;,
+    &quot;vault&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+    &quot;description&quot;: &quot;Average sell price per product, in AUD.&quot;,
+    &quot;expr_words&quot;: &quot;Average sell price&quot;,
+    &quot;value&quot;: 130.793333,
+    &quot;unit&quot;: &quot;AUD&quot;,
+    &quot;as_of&quot;: &quot;2026-11-08T19:30:01Z&quot;,
+    &quot;n_entities&quot;: 30,
+    &quot;entity_ids&quot;: [
+      &quot;entity:1sfkjfqzvoe0itr0wygd&quot;,
+      &quot;entity:1slqfcbtxhazogb9kdog&quot;,
+      &quot;entity:3f5cm4iqh3oirr0hmryw&quot;,
+      &quot;entity:3xmqlzc97hgyg9atd25d&quot;,
+      &quot;entity:3ysnde7cmyepfhd9c8ae&quot;,
+      &quot;entity:48xpq68q4urz8ypimn5y&quot;,
+      &quot;entity:b6ob6x2weevj5neiyhnv&quot;,
+      &quot;entity:bs3cbh9kzfcstrg0qjpe&quot;,
+      &quot;entity:de8jtqpgxmmapnnvkf3p&quot;,
+      &quot;entity:dqcf8eagd4qb72ggtv79&quot;,
+      &quot;entity:e0iphic63gcnf6zem3qg&quot;,
+      &quot;entity:evv28m6h4tck901uzp6t&quot;,
+      &quot;entity:hy2hjhlctg2q8baflnhs&quot;,
+      &quot;entity:ib5ksevuo0kj7olkajpn&quot;,
+      &quot;entity:ihk7677amxlghoviypls&quot;,
+      &quot;entity:of21g5fl0c8h7p8pqd30&quot;,
+      &quot;entity:olzecfi09wy9257qadsw&quot;,
+      &quot;entity:osmhd3pmpnhvdazii77h&quot;,
+      &quot;entity:owjtwfz6v0k3hb5y4sws&quot;,
+      &quot;entity:qcbe9ysvbeep437q79bc&quot;,
+      &quot;entity:qgzfd4458113xh5gc7nn&quot;,
+      &quot;entity:qlzilhoa5xpe1x34wgd1&quot;,
+      &quot;entity:rcrjvcfua61c8sgp7cuz&quot;,
+      &quot;entity:sbtlnm1mp6dimx9zyqad&quot;,
+      &quot;entity:scvuccjbx6vmw90ml8zr&quot;,
+      &quot;entity:ue54w2vb7py1yhffz8xm&quot;,
+      &quot;entity:uw0zadzbt2vvx7er1z1e&quot;,
+      &quot;entity:v1wgb5l21pseykea1qlx&quot;,
+      &quot;entity:xqnkeai40qcw2o64mdr6&quot;,
+      &quot;entity:yk9ezwv4jeak8oeeh3vz&quot;
+    ],
+    &quot;truncated&quot;: false,
+    &quot;status&quot;: &quot;approved&quot;,
+    &quot;warnings&quot;: []
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__metric_eval</h3><pre>{
+  &quot;metric&quot;: &quot;total_stock_value_at_cost&quot;,
+  &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;
+}</pre><pre class="result">{
+  &quot;metric&quot;: &quot;total_stock_value_at_cost&quot;,
+  &quot;value&quot;: 27424.5,
+  &quot;unit&quot;: &quot;AUD&quot;,
+  &quot;n_entities&quot;: 28,
+  &quot;warnings&quot;: []
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__metric_eval&quot;,
+  &quot;arguments&quot;: {
+    &quot;metric&quot;: &quot;total_stock_value_at_cost&quot;,
+    &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;
+  },
+  &quot;id&quot;: &quot;toolu_018PBdNJMS2pYsjR59QPZyze&quot;,
+  &quot;result&quot;: {
+    &quot;metric&quot;: &quot;total_stock_value_at_cost&quot;,
+    &quot;kind&quot;: &quot;product&quot;,
+    &quot;vault&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+    &quot;description&quot;: &quot;Total stock value at cost: quantity on hand times unit cost, summed over products. Products with no unit cost are left out.&quot;,
+    &quot;expr_words&quot;: &quot;Sum of qty on hand × unit cost&quot;,
+    &quot;value&quot;: 27424.5,
+    &quot;unit&quot;: &quot;AUD&quot;,
+    &quot;as_of&quot;: &quot;2026-11-08T19:30:01Z&quot;,
+    &quot;n_entities&quot;: 28,
+    &quot;entity_ids&quot;: [
+      &quot;entity:1sfkjfqzvoe0itr0wygd&quot;,
+      &quot;entity:1slqfcbtxhazogb9kdog&quot;,
+      &quot;entity:3f5cm4iqh3oirr0hmryw&quot;,
+      &quot;entity:3xmqlzc97hgyg9atd25d&quot;,
+      &quot;entity:3ysnde7cmyepfhd9c8ae&quot;,
+      &quot;entity:48xpq68q4urz8ypimn5y&quot;,
+      &quot;entity:b6ob6x2weevj5neiyhnv&quot;,
+      &quot;entity:bs3cbh9kzfcstrg0qjpe&quot;,
+      &quot;entity:de8jtqpgxmmapnnvkf3p&quot;,
+      &quot;entity:dqcf8eagd4qb72ggtv79&quot;,
+      &quot;entity:e0iphic63gcnf6zem3qg&quot;,
+      &quot;entity:evv28m6h4tck901uzp6t&quot;,
+      &quot;entity:hy2hjhlctg2q8baflnhs&quot;,
+      &quot;entity:ib5ksevuo0kj7olkajpn&quot;,
+      &quot;entity:ihk7677amxlghoviypls&quot;,
+      &quot;entity:of21g5fl0c8h7p8pqd30&quot;,
+      &quot;entity:olzecfi09wy9257qadsw&quot;,
+      &quot;entity:osmhd3pmpnhvdazii77h&quot;,
+      &quot;entity:owjtwfz6v0k3hb5y4sws&quot;,
+      &quot;entity:qcbe9ysvbeep437q79bc&quot;,
+      &quot;entity:qlzilhoa5xpe1x34wgd1&quot;,
+      &quot;entity:rcrjvcfua61c8sgp7cuz&quot;,
+      &quot;entity:sbtlnm1mp6dimx9zyqad&quot;,
+      &quot;entity:scvuccjbx6vmw90ml8zr&quot;,
+      &quot;entity:ue54w2vb7py1yhffz8xm&quot;,
+      &quot;entity:v1wgb5l21pseykea1qlx&quot;,
+      &quot;entity:xqnkeai40qcw2o64mdr6&quot;,
+      &quot;entity:yk9ezwv4jeak8oeeh3vz&quot;
+    ],
+    &quot;truncated&quot;: false,
+    &quot;status&quot;: &quot;approved&quot;,
+    &quot;warnings&quot;: []
+  }
+}</pre></details></article>

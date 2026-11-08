@@ -1,0 +1,769 @@
+{
+  "vault": "vault:rf0gaym72n9pkdbsg4a1",
+  "strict": false,
+  "kinds": [
+    {
+      "kind": "person",
+      "built_in": true,
+      "status": "observed",
+      "description": null,
+      "merge_into": null,
+      "synonyms": [],
+      "origin": null,
+      "reason": null,
+      "entities": 1,
+      "samples": [
+        "Amelia Russo"
+      ],
+      "properties": [],
+      "metrics": []
+    },
+    {
+      "kind": "organisation",
+      "built_in": true,
+      "status": "observed",
+      "description": null,
+      "merge_into": null,
+      "synonyms": [],
+      "origin": null,
+      "reason": null,
+      "entities": 4,
+      "samples": [
+        "Abrolhos Fishers Co-op",
+        "Esperance Abalone",
+        "Shark Bay Prawns"
+      ],
+      "properties": [],
+      "metrics": []
+    },
+    {
+      "kind": "location",
+      "built_in": true,
+      "status": "observed",
+      "description": null,
+      "merge_into": null,
+      "synonyms": [],
+      "origin": null,
+      "reason": null,
+      "entities": 0,
+      "samples": [],
+      "properties": [],
+      "metrics": []
+    },
+    {
+      "kind": "repository",
+      "built_in": true,
+      "status": "observed",
+      "description": null,
+      "merge_into": null,
+      "synonyms": [],
+      "origin": null,
+      "reason": null,
+      "entities": 0,
+      "samples": [],
+      "properties": [],
+      "metrics": []
+    },
+    {
+      "kind": "file",
+      "built_in": true,
+      "status": "observed",
+      "description": null,
+      "merge_into": null,
+      "synonyms": [],
+      "origin": null,
+      "reason": null,
+      "entities": 0,
+      "samples": [],
+      "properties": [],
+      "metrics": []
+    },
+    {
+      "kind": "symbol",
+      "built_in": true,
+      "status": "observed",
+      "description": null,
+      "merge_into": null,
+      "synonyms": [],
+      "origin": null,
+      "reason": null,
+      "entities": 0,
+      "samples": [],
+      "properties": [],
+      "metrics": []
+    },
+    {
+      "kind": "customer",
+      "built_in": false,
+      "status": "proposed",
+      "description": "A business that buys seafood and ice from Fremantle Fish & Ice Co.",
+      "merge_into": null,
+      "synonyms": [],
+      "origin": "agent",
+      "reason": "Six customers in the ops notes.",
+      "entities": 6,
+      "samples": [
+        "Bathers Beach Bistro",
+        "Harbour Lights Hotel Group",
+        "Portside Fish and Chips"
+      ],
+      "properties": [],
+      "metrics": []
+    },
+    {
+      "kind": "decision",
+      "built_in": false,
+      "status": "proposed",
+      "description": "A business decision with an owner who approved it and an effective date.",
+      "merge_into": null,
+      "synonyms": [],
+      "origin": "agent",
+      "reason": "The delivery minimum decision.",
+      "entities": 1,
+      "samples": [
+        "Delivery minimum change"
+      ],
+      "properties": [],
+      "metrics": []
+    },
+    {
+      "kind": "equipment",
+      "built_in": false,
+      "status": "proposed",
+      "description": "A piece of business equipment, such as the Office Label Printer.",
+      "merge_into": null,
+      "synonyms": [],
+      "origin": "agent",
+      "reason": "The printer in the ops notes. It has no dependencies on purpose.",
+      "entities": 1,
+      "samples": [
+        "Office Label Printer"
+      ],
+      "properties": [],
+      "metrics": []
+    },
+    {
+      "kind": "inbound_load",
+      "built_in": false,
+      "status": "proposed",
+      "description": "A load of stock arriving on a truck, with an expected date, such as IN-42.",
+      "merge_into": null,
+      "synonyms": [],
+      "origin": "agent",
+      "reason": "IN-42 in the ops notes.",
+      "entities": 1,
+      "samples": [
+        "IN-42"
+      ],
+      "properties": [
+        {
+          "name": "expected_date",
+          "datatype": "date",
+          "unit": null,
+          "enum_values": null,
+          "description": "The date the inbound load is expected to arrive.",
+          "synonyms": [],
+          "status": "proposed",
+          "merge_into": null,
+          "origin": "agent",
+          "reason": "IN-42 is expected 11 November 2026.",
+          "values": 0,
+          "samples": [],
+          "source_map": []
+        }
+      ],
+      "metrics": []
+    },
+    {
+      "kind": "order",
+      "built_in": false,
+      "status": "proposed",
+      "description": "An open customer order with an FFI number and a due date.",
+      "merge_into": null,
+      "synonyms": [],
+      "origin": "agent",
+      "reason": "Six open orders in the ops notes.",
+      "entities": 6,
+      "samples": [
+        "FFI-101",
+        "FFI-102",
+        "FFI-103"
+      ],
+      "properties": [
+        {
+          "name": "due_date",
+          "datatype": "date",
+          "unit": null,
+          "enum_values": null,
+          "description": "The date the customer order is due.",
+          "synonyms": [],
+          "status": "proposed",
+          "merge_into": null,
+          "origin": "agent",
+          "reason": "Every order in the notes has a due date.",
+          "values": 0,
+          "samples": [],
+          "source_map": []
+        }
+      ],
+      "metrics": []
+    },
+    {
+      "kind": "product",
+      "built_in": false,
+      "status": "proposed",
+      "description": "A product in the supplier inventory, with its pricing, stock level, availability, and latest landing date.",
+      "merge_into": null,
+      "synonyms": [],
+      "origin": "suggested",
+      "reason": "one kind for the catalogue.csv records",
+      "entities": 15,
+      "samples": [
+        "Block Ice 20kg",
+        "Brownlip Abalone 1kg",
+        "Cooked Prawns 2kg"
+      ],
+      "properties": [
+        {
+          "name": "last_landed",
+          "datatype": "date",
+          "unit": null,
+          "enum_values": null,
+          "description": "Date the product was last landed.",
+          "synonyms": [],
+          "status": "proposed",
+          "merge_into": null,
+          "origin": "suggested",
+          "reason": "from last landed",
+          "values": 0,
+          "samples": [],
+          "source_map": [
+            {
+              "source": "document",
+              "record_type": "document:e4f6egzn8wveubiomvaj",
+              "path": "last landed"
+            }
+          ]
+        },
+        {
+          "name": "qty_on_hand",
+          "datatype": "integer",
+          "unit": "items",
+          "enum_values": null,
+          "description": "Quantity currently on hand.",
+          "synonyms": [],
+          "status": "proposed",
+          "merge_into": null,
+          "origin": "suggested",
+          "reason": "from qty on hand",
+          "values": 0,
+          "samples": [],
+          "source_map": [
+            {
+              "source": "document",
+              "record_type": "document:e4f6egzn8wveubiomvaj",
+              "path": "qty on hand"
+            }
+          ]
+        },
+        {
+          "name": "reorder_at",
+          "datatype": "integer",
+          "unit": "items",
+          "enum_values": null,
+          "description": "Stock quantity at which the product should be reordered.",
+          "synonyms": [],
+          "status": "proposed",
+          "merge_into": null,
+          "origin": "suggested",
+          "reason": "from reorder at",
+          "values": 0,
+          "samples": [],
+          "source_map": [
+            {
+              "source": "document",
+              "record_type": "document:e4f6egzn8wveubiomvaj",
+              "path": "reorder at"
+            }
+          ]
+        },
+        {
+          "name": "sell_price",
+          "datatype": "money",
+          "unit": "AUD",
+          "enum_values": null,
+          "description": "Selling price of the product.",
+          "synonyms": [],
+          "status": "proposed",
+          "merge_into": null,
+          "origin": "suggested",
+          "reason": "from sell price AUD",
+          "values": 0,
+          "samples": [],
+          "source_map": [
+            {
+              "source": "document",
+              "record_type": "document:e4f6egzn8wveubiomvaj",
+              "path": "sell price AUD"
+            }
+          ]
+        },
+        {
+          "name": "status",
+          "datatype": "enum",
+          "unit": null,
+          "enum_values": [
+            "Available",
+            "Discontinued",
+            "On order"
+          ],
+          "description": "Current product availability status.",
+          "synonyms": [],
+          "status": "proposed",
+          "merge_into": null,
+          "origin": "suggested",
+          "reason": "from status",
+          "values": 0,
+          "samples": [],
+          "source_map": [
+            {
+              "source": "document",
+              "record_type": "document:e4f6egzn8wveubiomvaj",
+              "path": "status"
+            }
+          ]
+        },
+        {
+          "name": "unit_cost",
+          "datatype": "money",
+          "unit": "AUD",
+          "enum_values": null,
+          "description": "Unit cost of the product.",
+          "synonyms": [],
+          "status": "proposed",
+          "merge_into": null,
+          "origin": "suggested",
+          "reason": "from unit cost AUD",
+          "values": 0,
+          "samples": [],
+          "source_map": [
+            {
+              "source": "document",
+              "record_type": "document:e4f6egzn8wveubiomvaj",
+              "path": "unit cost AUD"
+            }
+          ]
+        }
+      ],
+      "metrics": [
+        {
+          "name": "available_product_count",
+          "description": "Number of products with status Available.",
+          "synonyms": [],
+          "expr": {
+            "agg": "count",
+            "property": "status",
+            "filters": [
+              {
+                "property": "status",
+                "op": "eq",
+                "value": "Available"
+              }
+            ]
+          },
+          "expr_words": "Number of product with a status where status is Available",
+          "unit": "items",
+          "status": "proposed",
+          "merge_into": null,
+          "origin": "agent",
+          "reason": "Shows how much of the range can be sold now."
+        },
+        {
+          "name": "avg_sell_price",
+          "description": "Average sell price per product, in AUD.",
+          "synonyms": [
+            "average sell price",
+            "average price"
+          ],
+          "expr": {
+            "agg": "avg",
+            "property": "sell_price"
+          },
+          "expr_words": "Average sell price",
+          "unit": "AUD",
+          "status": "proposed",
+          "merge_into": null,
+          "origin": "agent",
+          "reason": "The owner asked for average sell price."
+        },
+        {
+          "name": "avg_unit_cost",
+          "description": "Average unit cost per product, in AUD. Products with no cost are left out.",
+          "synonyms": [],
+          "expr": {
+            "agg": "avg",
+            "property": "unit_cost"
+          },
+          "expr_words": "Average unit cost",
+          "unit": "AUD",
+          "status": "proposed",
+          "merge_into": null,
+          "origin": "agent",
+          "reason": "Useful beside average sell price."
+        },
+        {
+          "name": "gross_margin",
+          "description": "Gross margin across products, calculated from selling prices and unit costs.",
+          "synonyms": [],
+          "expr": {
+            "agg": "ratio",
+            "numerator": {
+              "agg": "sum",
+              "row": {
+                "op": "sub",
+                "left": "sell_price",
+                "right": "unit_cost"
+              }
+            },
+            "denominator": {
+              "agg": "sum",
+              "property": "sell_price"
+            }
+          },
+          "expr_words": "Sum of (sell price \u2212 unit cost), divided by sum of sell price",
+          "unit": "percent",
+          "status": "proposed",
+          "merge_into": null,
+          "origin": "suggested",
+          "reason": "computed from the catalogue.csv records' properties"
+        },
+        {
+          "name": "inventory_cost_value",
+          "description": "Estimated total cost value of current stock.",
+          "synonyms": [],
+          "expr": {
+            "agg": "sum",
+            "row": {
+              "op": "mul",
+              "left": "qty_on_hand",
+              "right": "unit_cost"
+            }
+          },
+          "expr_words": "Sum of qty on hand \u00d7 unit cost",
+          "unit": "AUD",
+          "status": "proposed",
+          "merge_into": null,
+          "origin": "suggested",
+          "reason": "computed from the catalogue.csv records' properties"
+        },
+        {
+          "name": "product_count",
+          "description": "Number of products.",
+          "synonyms": [],
+          "expr": {
+            "agg": "count",
+            "property": "qty_on_hand"
+          },
+          "expr_words": "Number of product with a qty on hand",
+          "unit": "items",
+          "status": "proposed",
+          "merge_into": null,
+          "origin": "suggested",
+          "reason": "computed from the catalogue.csv records' properties"
+        },
+        {
+          "name": "total_stock_value_at_cost",
+          "description": "Total stock value at cost: quantity on hand times unit cost, summed over products. Products with no unit cost are left out.",
+          "synonyms": [
+            "stock value at cost",
+            "inventory value at cost"
+          ],
+          "expr": {
+            "agg": "sum",
+            "row": {
+              "op": "mul",
+              "left": "qty_on_hand",
+              "right": "unit_cost"
+            }
+          },
+          "expr_words": "Sum of qty on hand \u00d7 unit cost",
+          "unit": "AUD",
+          "status": "proposed",
+          "merge_into": null,
+          "origin": "agent",
+          "reason": "The owner asked for total stock value at cost. Same working as inventory_cost_value, named as asked. The owner can merge the two."
+        }
+      ]
+    },
+    {
+      "kind": "project",
+      "built_in": false,
+      "status": "observed",
+      "description": null,
+      "merge_into": null,
+      "synonyms": [],
+      "origin": null,
+      "reason": null,
+      "entities": 1,
+      "samples": [
+        "Fremantle Fish & Ice Co setup"
+      ],
+      "properties": [],
+      "metrics": []
+    },
+    {
+      "kind": "truck",
+      "built_in": false,
+      "status": "proposed",
+      "description": "A vehicle that carries inbound loads, such as refrigerated truck Reefer 2.",
+      "merge_into": null,
+      "synonyms": [],
+      "origin": "agent",
+      "reason": "Reefer 2 in the ops notes.",
+      "entities": 1,
+      "samples": [
+        "Reefer 2"
+      ],
+      "properties": [],
+      "metrics": []
+    }
+  ],
+  "links": [
+    {
+      "from_kind": "customer",
+      "label": "placed",
+      "to_kind": "order",
+      "status": "proposed",
+      "description": "The customer placed this order.",
+      "origin": "agent",
+      "reason": "Customers to orders.",
+      "count": 6,
+      "samples": [
+        {
+          "from": "Quay Seafood Kitchen",
+          "to": "FFI-105"
+        },
+        {
+          "from": "West End Oyster Bar",
+          "to": "FFI-106"
+        },
+        {
+          "from": "Portside Fish and Chips",
+          "to": "FFI-102"
+        }
+      ]
+    },
+    {
+      "from_kind": "decision",
+      "label": "approved_by",
+      "to_kind": "person",
+      "status": "proposed",
+      "description": "The person who approved the decision.",
+      "origin": "agent",
+      "reason": "Delivery minimum approved by Amelia Russo.",
+      "count": 1,
+      "samples": [
+        {
+          "from": "Delivery minimum change",
+          "to": "Amelia Russo"
+        }
+      ]
+    },
+    {
+      "from_kind": "inbound_load",
+      "label": "contains",
+      "to_kind": "product",
+      "status": "proposed",
+      "description": "The load holds this product.",
+      "origin": "agent",
+      "reason": "IN-42 contents.",
+      "count": 4,
+      "samples": [
+        {
+          "from": "IN-42",
+          "to": "Greenlip Abalone 1kg"
+        },
+        {
+          "from": "IN-42",
+          "to": "Gummy Shark 5kg"
+        },
+        {
+          "from": "IN-42",
+          "to": "Dhufish Whole 10kg"
+        }
+      ]
+    },
+    {
+      "from_kind": "inbound_load",
+      "label": "supplies",
+      "to_kind": "order",
+      "status": "proposed",
+      "description": "The load holds stock for this order. A delay puts the order at risk.",
+      "origin": "agent",
+      "reason": "IN-42 to FFI-101 to FFI-104.",
+      "count": 4,
+      "samples": [
+        {
+          "from": "IN-42",
+          "to": "FFI-102"
+        },
+        {
+          "from": "IN-42",
+          "to": "FFI-101"
+        },
+        {
+          "from": "IN-42",
+          "to": "FFI-103"
+        }
+      ]
+    },
+    {
+      "from_kind": "order",
+      "label": "requires",
+      "to_kind": "product",
+      "status": "proposed",
+      "description": "The order needs this product.",
+      "origin": "agent",
+      "reason": "Orders to required products.",
+      "count": 15,
+      "samples": [
+        {
+          "from": "FFI-102",
+          "to": "Flake Ice 10kg"
+        },
+        {
+          "from": "FFI-101",
+          "to": "King Prawns U10 5kg"
+        },
+        {
+          "from": "FFI-105",
+          "to": "Octopus 5kg"
+        }
+      ]
+    },
+    {
+      "from_kind": "organisation",
+      "label": "has_consignment_on_order_for",
+      "to_kind": "customer",
+      "status": "proposed",
+      "description": "The supplier has a consignment on order for this customer.",
+      "origin": "agent",
+      "reason": "Esperance Abalone and Harbour Lights Hotel Group.",
+      "count": 1,
+      "samples": [
+        {
+          "from": "Esperance Abalone",
+          "to": "Harbour Lights Hotel Group"
+        }
+      ]
+    },
+    {
+      "from_kind": "organisation",
+      "label": "supplies",
+      "to_kind": "product",
+      "status": "proposed",
+      "description": "The organisation supplies this product.",
+      "origin": "agent",
+      "reason": "Used for Esperance Abalone and Greenlip Abalone.",
+      "count": 1,
+      "samples": [
+        {
+          "from": "Esperance Abalone",
+          "to": "Greenlip Abalone 1kg"
+        }
+      ]
+    },
+    {
+      "from_kind": "person",
+      "label": "leads_dispatch_for",
+      "to_kind": "inbound_load",
+      "status": "proposed",
+      "description": "The person leads dispatch for this load.",
+      "origin": "agent",
+      "reason": "Amelia Russo and IN-42.",
+      "count": 1,
+      "samples": [
+        {
+          "from": "Amelia Russo",
+          "to": "IN-42"
+        }
+      ]
+    },
+    {
+      "from_kind": "product",
+      "label": "supplied_by",
+      "to_kind": "organisation",
+      "status": "proposed",
+      "description": "The organisation that supplies this product. Reads product to supplier.",
+      "origin": "agent",
+      "reason": "Clearer direction than the automap link product supplies organisation, which reads backwards. Same CSV supplier column.",
+      "count": 0,
+      "samples": [],
+      "source_map": [
+        {
+          "source": "document",
+          "record_type": "document:e4f6egzn8wveubiomvaj",
+          "path": "supplier"
+        }
+      ]
+    },
+    {
+      "from_kind": "product",
+      "label": "supplies",
+      "to_kind": "organisation",
+      "status": "proposed",
+      "description": "Organisation that supplies this product.",
+      "origin": "suggested",
+      "reason": "100% of values match (5 of 5)",
+      "count": 0,
+      "samples": [],
+      "source_map": [
+        {
+          "source": "document",
+          "record_type": "document:e4f6egzn8wveubiomvaj",
+          "path": "supplier"
+        }
+      ]
+    },
+    {
+      "from_kind": "truck",
+      "label": "carries",
+      "to_kind": "inbound_load",
+      "status": "proposed",
+      "description": "The truck is carrying this inbound load.",
+      "origin": "agent",
+      "reason": "Reefer 2 carries IN-42.",
+      "count": 1,
+      "samples": [
+        {
+          "from": "Reefer 2",
+          "to": "IN-42"
+        }
+      ]
+    },
+    {
+      "from_kind": "truck",
+      "label": "serves",
+      "to_kind": "order",
+      "status": "proposed",
+      "description": "Stock on this truck is meant for this order.",
+      "origin": "agent",
+      "reason": "Reefer 2 serves four orders.",
+      "count": 4,
+      "samples": [
+        {
+          "from": "Reefer 2",
+          "to": "FFI-102"
+        },
+        {
+          "from": "Reefer 2",
+          "to": "FFI-103"
+        },
+        {
+          "from": "Reefer 2",
+          "to": "FFI-101"
+        }
+      ]
+    }
+  ]
+}

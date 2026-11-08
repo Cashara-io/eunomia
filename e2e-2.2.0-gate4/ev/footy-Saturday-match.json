@@ -1,0 +1,27 @@
+{
+  "entity": {
+    "id": "entity:xvf9a50870glfltsqt8u",
+    "kind": "topic",
+    "name": "Saturday match",
+    "aliases": [],
+    "summary": "",
+    "vault": "vault:1eavkczl9x5mewq2zj5h"
+  },
+  "memory": {
+    "id": "memory:v9n2k11q8rids5s41kyr",
+    "owner": "user:b558qrfkf1zsce3nwg9a",
+    "vault": "vault:1eavkczl9x5mewq2zj5h",
+    "subject": "entity:xvf9a50870glfltsqt8u",
+    "text": "The next regatta is on the Swan River on Saturday.",
+    "source": null,
+    "created_at": "2026-11-08T19:25:47.158779389Z",
+    "type": "world",
+    "proof_count": 1,
+    "status": null,
+    "source_memories": null,
+    "updated_at": "2026-11-08T19:25:47.158790055Z",
+    "version": 1,
+    "owner_email": null
+  },
+  "vault_name": "Freo Rowing Club"
+}

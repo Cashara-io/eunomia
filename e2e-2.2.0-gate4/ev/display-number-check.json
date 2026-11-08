@@ -1,0 +1,544 @@
+[
+  {
+    "label": "MCP Q1 average 130.79",
+    "actual": "130.79",
+    "independent": "130.7933333333333333333333333",
+    "difference": "0.0033333333333333333333333",
+    "pass": true
+  },
+  {
+    "label": "MCP Q1 cost 27424.50",
+    "actual": "27424.5",
+    "independent": "27424.50",
+    "difference": "0.00",
+    "pass": true
+  },
+  {
+    "label": "MCP Q2 margin 35.7%",
+    "actual": "35.7",
+    "independent": "35.68033273915626856803327392",
+    "difference": "0.01966726084373143196672608",
+    "pass": false
+  },
+  {
+    "label": "MCP Q4 baseline margin",
+    "actual": "35.76",
+    "independent": "35.76141995259642318465847878",
+    "difference": "0.00141995259642318465847878",
+    "pass": true
+  },
+  {
+    "label": "MCP Q4 scenario margin",
+    "actual": "35.64",
+    "independent": "35.64479638009049773755656109",
+    "difference": "0.00479638009049773755656109",
+    "pass": true
+  },
+  {
+    "label": "MCP Q4 margin delta",
+    "actual": "-0.12",
+    "independent": "-0.11662357250592544710191769",
+    "difference": "0.00337642749407455289808231",
+    "pass": true
+  },
+  {
+    "label": "MCP Q4 cost before",
+    "actual": "27424.5",
+    "independent": "27424.50",
+    "difference": "0.00",
+    "pass": true
+  },
+  {
+    "label": "MCP Q4 cost after",
+    "actual": "27639.88",
+    "independent": "27639.875",
+    "difference": "0.005",
+    "pass": true
+  },
+  {
+    "label": "MCP Q4 cost delta",
+    "actual": "215.38",
+    "independent": "215.375",
+    "difference": "0.005",
+    "pass": true
+  },
+  {
+    "label": "MCP Q4 avg cost before",
+    "actual": "85.18",
+    "independent": "85.18035714285714285714285714",
+    "difference": "0.00035714285714285714285714",
+    "pass": true
+  },
+  {
+    "label": "MCP Q4 avg cost after",
+    "actual": "85.34",
+    "independent": "85.335",
+    "difference": "0.005",
+    "pass": true
+  },
+  {
+    "label": "UI avg cost before",
+    "actual": "85.180",
+    "independent": "85.18035714285714285714285714",
+    "difference": "0.00035714285714285714285714",
+    "pass": true
+  },
+  {
+    "label": "UI avg cost after",
+    "actual": "85.335",
+    "independent": "85.335",
+    "difference": "0.000",
+    "pass": true
+  },
+  {
+    "label": "UI avg cost delta",
+    "actual": "0.155",
+    "independent": "0.15464285714285714285714286",
+    "difference": "0.00035714285714285714285714",
+    "pass": true
+  },
+  {
+    "label": "UI avg cost shown end minus start",
+    "actual": "0.155",
+    "independent": "0.155",
+    "difference": "0.000",
+    "pass": true,
+    "rule": "exact equality of displayed decimals"
+  },
+  {
+    "label": "UI gross margin before",
+    "actual": "35.76",
+    "independent": "35.76141995259642318465847878",
+    "difference": "0.00141995259642318465847878",
+    "pass": true
+  },
+  {
+    "label": "UI gross margin after",
+    "actual": "35.64",
+    "independent": "35.64479638009049773755656109",
+    "difference": "0.00479638009049773755656109",
+    "pass": true
+  },
+  {
+    "label": "UI gross margin delta",
+    "actual": "-0.12",
+    "independent": "-0.11662357250592544710191769",
+    "difference": "0.00337642749407455289808231",
+    "pass": true
+  },
+  {
+    "label": "UI gross margin shown end minus start",
+    "actual": "-0.12",
+    "independent": "-0.12",
+    "difference": "0.00",
+    "pass": true,
+    "rule": "exact equality of displayed decimals"
+  },
+  {
+    "label": "UI stock cost before",
+    "actual": "27424.50",
+    "independent": "27424.50",
+    "difference": "0.00",
+    "pass": true
+  },
+  {
+    "label": "UI stock cost after",
+    "actual": "27639.88",
+    "independent": "27639.875",
+    "difference": "0.005",
+    "pass": true
+  },
+  {
+    "label": "UI stock cost delta",
+    "actual": "215.38",
+    "independent": "215.375",
+    "difference": "0.005",
+    "pass": true
+  },
+  {
+    "label": "UI stock cost shown end minus start",
+    "actual": "215.38",
+    "independent": "215.38",
+    "difference": "0.00",
+    "pass": true,
+    "rule": "exact equality of displayed decimals"
+  },
+  {
+    "label": "MCP Q4 margin shown endpoints subtract to stated delta",
+    "actual": "-0.12",
+    "independent": "-0.12",
+    "difference": "0.00",
+    "pass": true,
+    "rule": "exact equality of displayed decimals"
+  },
+  {
+    "label": "MCP Q4 money shown endpoints subtract to stated delta",
+    "actual": "215.38",
+    "independent": "215.38",
+    "difference": "0.00",
+    "pass": true,
+    "rule": "exact equality of displayed decimals"
+  },
+  {
+    "label": "UI avg cost relative change 0.2%",
+    "actual": "0.2",
+    "independent": "0.1815475566549967505922307742",
+    "difference": "0.0184524433450032494077692258",
+    "pass": false
+  },
+  {
+    "label": "UI stock cost relative change 0.8%",
+    "actual": "0.8",
+    "independent": "0.7853379277653193312548998159",
+    "difference": "0.0146620722346806687451001841",
+    "pass": false
+  },
+  {
+    "label": "p3 exact delta gross_margin",
+    "actual": "-0.116624",
+    "independent": "-0.11662357250592544710191769",
+    "difference": "4.2749407455289808231E-7",
+    "pass": true
+  },
+  {
+    "label": "p3 relative delta gross_margin",
+    "actual": "-0.33",
+    "independent": "-0.3261156086808785755764667343",
+    "difference": "0.0038843913191214244235332657",
+    "pass": true
+  },
+  {
+    "label": "p3 exact delta avg_unit_cost",
+    "actual": "0.154643",
+    "independent": "0.15464285714285714285714286",
+    "difference": "1.4285714285714285714E-7",
+    "pass": true
+  },
+  {
+    "label": "p3 relative delta avg_unit_cost",
+    "actual": "0.18",
+    "independent": "0.1815475569594726432728414839",
+    "difference": "0.0015475569594726432728414839",
+    "pass": true
+  },
+  {
+    "label": "p3 exact delta total_stock_value_at_cost",
+    "actual": "215.375",
+    "independent": "215.375",
+    "difference": "0.000",
+    "pass": true
+  },
+  {
+    "label": "p3 relative delta total_stock_value_at_cost",
+    "actual": "0.79",
+    "independent": "0.7853379277653193312548998159",
+    "difference": "0.0046620722346806687451001841",
+    "pass": true
+  },
+  {
+    "label": "p3 changed before Flake Ice 10kg",
+    "actual": "5.1",
+    "independent": "5.10",
+    "difference": "0.00",
+    "pass": true
+  },
+  {
+    "label": "p3 changed after Flake Ice 10kg",
+    "actual": "5.61",
+    "independent": "5.610",
+    "difference": "0.000",
+    "pass": true
+  },
+  {
+    "label": "p3 changed before Party Ice 5kg",
+    "actual": "3.8",
+    "independent": "3.80",
+    "difference": "0.00",
+    "pass": true
+  },
+  {
+    "label": "p3 changed after Party Ice 5kg",
+    "actual": "4.18",
+    "independent": "4.180",
+    "difference": "0.000",
+    "pass": true
+  },
+  {
+    "label": "p3 changed before Gel Ice Pack 1kg",
+    "actual": "2.4",
+    "independent": "2.40",
+    "difference": "0.00",
+    "pass": true
+  },
+  {
+    "label": "p3 changed after Gel Ice Pack 1kg",
+    "actual": "2.64",
+    "independent": "2.640",
+    "difference": "0.000",
+    "pass": true
+  },
+  {
+    "label": "p3 changed before Ice Brick 500g",
+    "actual": "1.8",
+    "independent": "1.80",
+    "difference": "0.00",
+    "pass": true
+  },
+  {
+    "label": "p3 changed after Ice Brick 500g",
+    "actual": "1.98",
+    "independent": "1.980",
+    "difference": "0.000",
+    "pass": true
+  },
+  {
+    "label": "p3 changed before Crushed Ice 5kg",
+    "actual": "3.2",
+    "independent": "3.20",
+    "difference": "0.00",
+    "pass": true
+  },
+  {
+    "label": "p3 changed after Crushed Ice 5kg",
+    "actual": "3.52",
+    "independent": "3.520",
+    "difference": "0.000",
+    "pass": true
+  },
+  {
+    "label": "p3 changed before Insulated Seafood Carton",
+    "actual": "6.75",
+    "independent": "6.75",
+    "difference": "0.00",
+    "pass": true
+  },
+  {
+    "label": "p3 changed after Insulated Seafood Carton",
+    "actual": "7.425",
+    "independent": "7.425",
+    "difference": "0.000",
+    "pass": true
+  },
+  {
+    "label": "p3 changed before Block Ice 20kg",
+    "actual": "7.25",
+    "independent": "7.25",
+    "difference": "0.00",
+    "pass": true
+  },
+  {
+    "label": "p3 changed after Block Ice 20kg",
+    "actual": "7.975",
+    "independent": "7.975",
+    "difference": "0.000",
+    "pass": true
+  },
+  {
+    "label": "p3 changed before Dry Ice 2kg",
+    "actual": "13.0",
+    "independent": "13.00",
+    "difference": "0.00",
+    "pass": true
+  },
+  {
+    "label": "p3 changed after Dry Ice 2kg",
+    "actual": "14.3",
+    "independent": "14.300",
+    "difference": "0.000",
+    "pass": true
+  },
+  {
+    "label": "chat exact delta avg_unit_cost",
+    "actual": "0.154643",
+    "independent": "0.15464285714285714285714286",
+    "difference": "1.4285714285714285714E-7",
+    "pass": true
+  },
+  {
+    "label": "chat relative delta avg_unit_cost",
+    "actual": "0.18",
+    "independent": "0.1815475569594726432728414839",
+    "difference": "0.0015475569594726432728414839",
+    "pass": true
+  },
+  {
+    "label": "chat exact delta gross_margin",
+    "actual": "-0.116624",
+    "independent": "-0.11662357250592544710191769",
+    "difference": "4.2749407455289808231E-7",
+    "pass": true
+  },
+  {
+    "label": "chat relative delta gross_margin",
+    "actual": "-0.33",
+    "independent": "-0.3261156086808785755764667343",
+    "difference": "0.0038843913191214244235332657",
+    "pass": true
+  },
+  {
+    "label": "chat exact delta total_stock_value_at_cost",
+    "actual": "215.375",
+    "independent": "215.375",
+    "difference": "0.000",
+    "pass": true
+  },
+  {
+    "label": "chat relative delta total_stock_value_at_cost",
+    "actual": "0.79",
+    "independent": "0.7853379277653193312548998159",
+    "difference": "0.0046620722346806687451001841",
+    "pass": true
+  },
+  {
+    "label": "chat changed before Flake Ice 10kg",
+    "actual": "5.1",
+    "independent": "5.10",
+    "difference": "0.00",
+    "pass": true
+  },
+  {
+    "label": "chat changed after Flake Ice 10kg",
+    "actual": "5.61",
+    "independent": "5.610",
+    "difference": "0.000",
+    "pass": true
+  },
+  {
+    "label": "chat changed before Party Ice 5kg",
+    "actual": "3.8",
+    "independent": "3.80",
+    "difference": "0.00",
+    "pass": true
+  },
+  {
+    "label": "chat changed after Party Ice 5kg",
+    "actual": "4.18",
+    "independent": "4.180",
+    "difference": "0.000",
+    "pass": true
+  },
+  {
+    "label": "chat changed before Gel Ice Pack 1kg",
+    "actual": "2.4",
+    "independent": "2.40",
+    "difference": "0.00",
+    "pass": true
+  },
+  {
+    "label": "chat changed after Gel Ice Pack 1kg",
+    "actual": "2.64",
+    "independent": "2.640",
+    "difference": "0.000",
+    "pass": true
+  },
+  {
+    "label": "chat changed before Ice Brick 500g",
+    "actual": "1.8",
+    "independent": "1.80",
+    "difference": "0.00",
+    "pass": true
+  },
+  {
+    "label": "chat changed after Ice Brick 500g",
+    "actual": "1.98",
+    "independent": "1.980",
+    "difference": "0.000",
+    "pass": true
+  },
+  {
+    "label": "chat changed before Crushed Ice 5kg",
+    "actual": "3.2",
+    "independent": "3.20",
+    "difference": "0.00",
+    "pass": true
+  },
+  {
+    "label": "chat changed after Crushed Ice 5kg",
+    "actual": "3.52",
+    "independent": "3.520",
+    "difference": "0.000",
+    "pass": true
+  },
+  {
+    "label": "chat changed before Insulated Seafood Carton",
+    "actual": "6.75",
+    "independent": "6.75",
+    "difference": "0.00",
+    "pass": true
+  },
+  {
+    "label": "chat changed after Insulated Seafood Carton",
+    "actual": "7.425",
+    "independent": "7.425",
+    "difference": "0.000",
+    "pass": true
+  },
+  {
+    "label": "chat changed before Block Ice 20kg",
+    "actual": "7.25",
+    "independent": "7.25",
+    "difference": "0.00",
+    "pass": true
+  },
+  {
+    "label": "chat changed after Block Ice 20kg",
+    "actual": "7.975",
+    "independent": "7.975",
+    "difference": "0.000",
+    "pass": true
+  },
+  {
+    "label": "chat changed before Dry Ice 2kg",
+    "actual": "13.0",
+    "independent": "13.00",
+    "difference": "0.00",
+    "pass": true
+  },
+  {
+    "label": "chat changed after Dry Ice 2kg",
+    "actual": "14.3",
+    "independent": "14.300",
+    "difference": "0.000",
+    "pass": true
+  },
+  {
+    "label": "UI half-away money Block Ice 20kg",
+    "actual": "7.98",
+    "independent": "7.98",
+    "difference": "0.00",
+    "pass": true,
+    "rule": "exact equality of displayed decimals"
+  },
+  {
+    "label": "UI half-away money Insulated Seafood Carton",
+    "actual": "7.43",
+    "independent": "7.43",
+    "difference": "0.00",
+    "pass": true,
+    "rule": "exact equality of displayed decimals"
+  },
+  {
+    "label": "UI/MCP half-away stock total",
+    "actual": "27639.88",
+    "independent": "27639.88",
+    "difference": "0.00",
+    "pass": true,
+    "rule": "exact equality of displayed decimals"
+  },
+  {
+    "label": "UI/MCP half-away stock delta",
+    "actual": "215.38",
+    "independent": "215.38",
+    "difference": "0.00",
+    "pass": true,
+    "rule": "exact equality of displayed decimals"
+  },
+  {
+    "label": "Half-cent average cost app versus MCP cents text",
+    "actual": "85.335",
+    "independent": "85.34",
+    "difference": "0.005",
+    "pass": false,
+    "rule": "Exact same displayed half-cent money, independent ROUND_HALF_UP to cents; numeric tolerance alone passes"
+  }
+]

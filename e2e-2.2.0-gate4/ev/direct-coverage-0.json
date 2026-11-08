@@ -1,0 +1,10 @@
+{
+  "vault": "vault:rf0gaym72n9pkdbsg4a1",
+  "vault_name": "Fremantle Fish & Ice Co",
+  "coverage": 0.0,
+  "matched": [],
+  "uncovered": [],
+  "chosen_by": "entities",
+  "suggestion": "No space you can read has an approved term for this question; \"Fremantle Fish & Ice Co\" was checked because it holds what the question names. No data terms found in the question: there is nothing to check against the ontology.",
+  "mode": "model"
+}

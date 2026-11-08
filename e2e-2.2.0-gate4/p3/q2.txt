@@ -1,0 +1,7 @@
+Your gross margin on Shark Bay Prawns products is **35.7%**.
+
+Gross margin here means the share of the sell price left after the unit cost.
+
+One catch: Shark Bay Prawns supplies 8 products, but the number covers only 7. One product is missing a price or a cost, so I left it out. The real margin could be a bit different.
+
+What to do now: fill in the missing price or cost on that product. Then I can run it again. I can find which product it is if you want.

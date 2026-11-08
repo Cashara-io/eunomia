@@ -1,0 +1,18 @@
+{
+  "vault": "vault:rf0gaym72n9pkdbsg4a1",
+  "vault_name": "Fremantle Fish & Ice Co",
+  "coverage": 1.0,
+  "matched": [
+    {
+      "phrase": "costs",
+      "term": "property",
+      "name": "unit_cost",
+      "of_kind": "product",
+      "distance": 0.0
+    }
+  ],
+  "uncovered": [],
+  "chosen_by": "coverage",
+  "suggestion": "Every term maps to the vault's approved ontology: answer a number with metric_eval and a what-if with scenario_run, passing this vault as vault_id.",
+  "mode": "model"
+}

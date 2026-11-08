@@ -1,0 +1,5 @@
+{
+  "error": "vault_id is needed: with none, this fact would go to your personal space under the new kind \"live_seafood\", where the approved-kinds-only rule of \"Fremantle Fish & Ice Co\" never sees it. Pass vault_id with the space it belongs to: \"Freo Rowing Club\", \"Fremantle Fish & Ice Co\", or \"Personal\" if it is private to you.",
+  "code": "validation.invalid",
+  "trace_id": "3c43f264025349488c4ed53afcf2e675"
+}

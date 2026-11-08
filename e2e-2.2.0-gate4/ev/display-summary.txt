@@ -1,0 +1,56 @@
+{
+  "overall": {
+    "average_sell_price": "130.7933333333333333333333333",
+    "total_stock_at_cost": "27424.50",
+    "gross_margin_unweighted_pct": "35.76141995259642318465847878",
+    "costed_rows": 28,
+    "total_stock_at_sell": "46227.40"
+  },
+  "shark_bay": {
+    "average_sell_price": "110.9375",
+    "total_stock_at_cost": "11621.25",
+    "gross_margin_unweighted_pct": "35.68033273915626856803327392",
+    "costed_rows": 7,
+    "total_stock_at_sell": "18607.50"
+  },
+  "scenario": {
+    "average_sell_price": "130.7933333333333333333333333",
+    "total_stock_at_cost": "27639.875",
+    "gross_margin_unweighted_pct": "35.64479638009049773755656109",
+    "costed_rows": 28,
+    "total_stock_at_sell": "46227.40"
+  },
+  "delta": {
+    "average_sell_price": "0E-25",
+    "total_stock_at_cost": "215.375",
+    "gross_margin_unweighted_pct": "-0.11662357250592544710191769",
+    "total_stock_at_sell": "0.00"
+  },
+  "money_scenario": "27639.88"
+}
+{
+  "checks": 75,
+  "failures": [
+    {
+      "label": "MCP Q2 margin 35.7%",
+      "actual": "35.7",
+      "independent": "35.68033273915626856803327392",
+      "difference": "0.01966726084373143196672608",
+      "pass": false
+    },
+    {
+      "label": "UI avg cost relative change 0.2%",
+      "actual": "0.2",
+      "independent": "0.1815475566549967505922307742",
+      "difference": "0.0184524433450032494077692258",
+      "pass": false
+    },
+    {
+      "label": "UI stock cost relative change 0.8%",
+      "actual": "0.8",
+      "independent": "0.7853379277653193312548998159",
+      "difference": "0.0146620722346806687451001841",
+      "pass": false
+    }
+  ]
+}

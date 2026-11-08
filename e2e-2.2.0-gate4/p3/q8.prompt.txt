@@ -1,0 +1,1 @@
+You are the AI assistant for our business. Use only the eunomia-local MCP tools to answer. Do not use em dashes. Question from the owner: What is happening with Esperance Abalone?

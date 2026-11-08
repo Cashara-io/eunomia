@@ -1,0 +1,31 @@
+product,supplier,sell price AUD,unit cost AUD,qty on hand,reorder at,status,last landed
+Dhufish Whole 10kg,Abrolhos Fishers Co-op,"$1,180.00",$785.00,3,10,Available,04/11/2026
+Snapper Fillets 5kg,Abrolhos Fishers Co-op,$245.00,$158.00,12,10,Available,05/11/2026
+Gummy Shark 5kg,Abrolhos Fishers Co-op,$185.00,$116.00,16,10,Available,06/11/2026
+Spanish Mackerel 5kg,Abrolhos Fishers Co-op,$210.00,$138.00,9,10,Available,07/11/2026
+Sardines 2kg,Abrolhos Fishers Co-op,$28.00,$17.50,45,10,Available,08/11/2026
+Whiting Fillets 2kg,Abrolhos Fishers Co-op,$72.00,$46.00,20,10,Available,04/11/2026
+Octopus 5kg,Abrolhos Fishers Co-op,$165.00,,7,10,On order,05/11/2026
+Fish Frames 10kg,Abrolhos Fishers Co-op,$35.00,$14.00,0,10,Discontinued,06/11/2026
+King Prawns U10 5kg,Shark Bay Prawns,$265.00,$174.00,17,10,Available,07/11/2026
+Tiger Prawns 5kg,Shark Bay Prawns,$195.00,$128.00,23,10,Available,08/11/2026
+Banana Prawns 5kg,Shark Bay Prawns,$145.00,$92.00,31,10,Available,04/11/2026
+Prawn Cutlets 2kg,Shark Bay Prawns,$98.00,$61.00,14,10,Available,05/11/2026
+Prawn Meat 1kg,Shark Bay Prawns,$42.00,$26.00,33,10,Available,06/11/2026
+Cooked Prawns 2kg,Shark Bay Prawns,$84.00,$55.00,19,10,Available,07/11/2026
+Prawn Skewers 20pk,Shark Bay Prawns,$46.00,,11,10,On order,08/11/2026
+Prawn Shells 5kg,Shark Bay Prawns,$12.50,$5.25,21,10,Available,04/11/2026
+Block Ice 20kg,Southern Ice Works,$18.50,$7.25,95,10,Available,05/11/2026
+Flake Ice 10kg,Southern Ice Works,$12.50,$5.10,80,10,Available,06/11/2026
+Crushed Ice 5kg,Southern Ice Works,$7.45,$3.20,65,10,Available,07/11/2026
+Party Ice 5kg,Southern Ice Works,$8.90,$3.80,43,10,Available,08/11/2026
+Dry Ice 2kg,Southern Ice Works,$24.00,$13.00,13,10,Available,04/11/2026
+Gel Ice Pack 1kg,Southern Ice Works,$6.50,$2.40,57,10,Available,05/11/2026
+Insulated Seafood Carton,Southern Ice Works,$14.50,$6.75,40,10,Available,06/11/2026
+Ice Brick 500g,southern ice works,$3.95,$1.80,61,10,Available,07/11/2026
+Greenlip Abalone 1kg,Esperance Abalone,$148.00,$96.00,8,10,On order,08/11/2026
+Brownlip Abalone 1kg,Esperance Abalone,$165.00,$108.00,9,10,Available,04/11/2026
+Abalone Slices 500g,Esperance Abalone,$89.00,$57.00,16,10,Available,05/11/2026
+Abalone Mince 1kg,Esperance Abalone,$76.00,$44.00,14,10,Available,06/11/2026
+Abalone Shell Pack,Esperance Abalone,$22.00,$11.00,25,10,Available,07/11/2026
+Premium Abalone Gift Box,Esperance Abalone,$320.00,$210.00,5,10,Available,08/11/2026

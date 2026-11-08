@@ -1,0 +1,122 @@
+[
+  {
+    "result": [
+      {
+        "count": 50
+      }
+    ],
+    "status": "OK",
+    "time": "207.584µs",
+    "type": null
+  },
+  {
+    "result": [
+      {
+        "count": 5
+      }
+    ],
+    "status": "OK",
+    "time": "101.292µs",
+    "type": null
+  },
+  {
+    "result": [
+      {
+        "count": 1
+      }
+    ],
+    "status": "OK",
+    "time": "66.084µs",
+    "type": null
+  },
+  {
+    "result": [
+      {
+        "count": 0
+      }
+    ],
+    "status": "OK",
+    "time": "53.792µs",
+    "type": null
+  },
+  {
+    "result": [
+      {
+        "count": 2
+      }
+    ],
+    "status": "OK",
+    "time": "67.958µs",
+    "type": null
+  },
+  {
+    "result": [
+      {
+        "count": 178
+      }
+    ],
+    "status": "OK",
+    "time": "66.792µs",
+    "type": null
+  },
+  {
+    "result": [
+      {
+        "count": 68
+      }
+    ],
+    "status": "OK",
+    "time": "62.083µs",
+    "type": null
+  },
+  {
+    "result": [
+      {
+        "count": 82
+      }
+    ],
+    "status": "OK",
+    "time": "64.208µs",
+    "type": null
+  },
+  {
+    "result": [
+      {
+        "count": 11
+      }
+    ],
+    "status": "OK",
+    "time": "63.958µs",
+    "type": null
+  },
+  {
+    "result": [
+      {
+        "count": 8
+      }
+    ],
+    "status": "OK",
+    "time": "71.708µs",
+    "type": null
+  },
+  {
+    "result": [
+      {
+        "count": 7
+      }
+    ],
+    "status": "OK",
+    "time": "52.625µs",
+    "type": null
+  },
+  {
+    "result": [
+      {
+        "count": 12
+      }
+    ],
+    "status": "OK",
+    "time": "52.042µs",
+    "type": null
+  }
+]

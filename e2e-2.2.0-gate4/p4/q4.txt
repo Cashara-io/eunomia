@@ -1,0 +1,138 @@
+Chat
+Ask a question about your saved memories and documents. Eunomia shows where each answer came from.
+Conversations
+What if Southern Ice Works raises costs 10%?
+now
+Reefer 2 is running a day late. What does that affect?
+1m
+What is our average sell price and total stock value at cost
+1m
+gate4-1794165946
+6:32 AM
+What if Southern Ice Works raises costs 10%?
+Eunomia
+6:32 AM
+Checked what the space can answer
+Done
+Checked this space's kinds
+Done
+Searched people and topics
+Done
+Followed connections
+Done
+Tried a what-if
+Done
+Showed a view
+Done
+What if Southern Ice Works raises costs 10%?
+Product unit cost up 10% on 8 products supplied by Southern Ice Works
+avg unit cost
+
+85.180
+→
+85.335
+AUD
+
+up 0.155 AUD (0.2%) · Average unit cost, from 28 products
+
+gross margin
+
+35.76
+→
+35.64
+%
+
+down 0.12 points · Sum of (sell price − unit cost), divided by sum of sell price, from 28 products
+
+total stock value at cost
+
+27424.50
+→
+27639.88
+AUD
+
+up 215.38 AUD (0.8%) · Sum of qty on hand × unit cost, from 28 products
+
+Changed
+Flake Ice 10kg
+unit cost
+5.10 AUD → 5.61 AUD
+Party Ice 5kg
+unit cost
+3.80 AUD → 4.18 AUD
+Gel Ice Pack 1kg
+unit cost
+2.40 AUD → 2.64 AUD
+Ice Brick 500g
+unit cost
+1.80 AUD → 1.98 AUD
+Crushed Ice 5kg
+unit cost
+3.20 AUD → 3.52 AUD
+Insulated Seafood Carton
+unit cost
+6.75 AUD → 7.43 AUD
+Block Ice 20kg
+unit cost
+7.25 AUD → 7.98 AUD
+Dry Ice 2kg
+unit cost
+13.00 AUD → 14.30 AUD
+Linked within 2 steps (not all are affected)
+FFI-101
+order
+FFI-102
+order
+FFI-103
+order
+FFI-104
+order
+FFI-106
+order
+Bathers Beach Bistro
+customer
+Brownlip Abalone 1kg
+product
+Cooked Prawns 2kg
+product
+Dhufish Whole 10kg
+product
+Greenlip Abalone 1kg
+product
+Gummy Shark 5kg
+product
+Harbour Lights Hotel Group
+customer
+IN-42
+inbound load
+King Prawns U10 5kg
+product
+Portside Fish and Chips
+customer
+Reefer 2
+truck
+Saltwater Table Restaurant
+customer
+Snapper Fillets 5kg
+product
+Tiger Prawns 5kg
+product
+West End Oyster Bar
+customer
+gross margin: left out 2 entities missing a value one side needs, so both sides of the ratio use the same entities
+
+Nothing was saved: this is a what-if. As of 9 Nov 2026.
+
+If Southern Ice Works raises unit costs by 10%, the scenario affects its 8 linked products:
+
+Average unit cost: AUD 85.180 → AUD 85.335
+Gross margin: 35.76% → 35.64% (down 0.12 percentage points)
+Total stock value at cost: AUD 27,424.50 → AUD 27,639.88
+
+Related orders and customers are linked through products those orders require; that doesn’t mean they’re directly affected. The calculation notes that two products missing a required value were excluded from the gross-margin calculation. Nothing was saved.
+
+Enter
+send
+Shift Enter
+new line
+Send

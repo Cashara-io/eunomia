@@ -1,0 +1,3111 @@
+<!doctype html><meta charset="utf-8"><style>body{font:15px/1.45 system-ui;margin:32px;background:#f5f5f1;color:#202322}h1{font-size:25px}h2{font-size:20px}h3{font-size:15px;margin:0 0 8px}article,.final{padding:18px;background:white;border:1px solid #d9ded8;margin:12px 0;border-radius:5px}pre{font:12px/1.4 ui-monospace;white-space:pre-wrap;overflow-wrap:anywhere;margin:4px 0}.final pre{font:16px/1.5 system-ui}.result{background:#f1f5f1;padding:10px}summary{font-size:12px;color:#566458}</style><h1>Eunomia 2.2.0 gate 3: p1/transcript.jsonl</h1><p>Complete transcript is preserved beside this review as JSONL and text. Expand a tool to inspect its full input and result.</p><h2>Final answer</h2><div class="final"><pre>Everything is done, and nothing is approved. The owner now has to approve the proposals before the CSV rows can be imported.
+
+**What I built** in the new space &quot;Fremantle Fish &amp; Ice Co&quot;:
+- **Notes as memories, written first:**
+  - 6 customers
+  - 6 orders (FFI-101 to FFI-106)
+  - 15 products named in the orders
+  - Reefer 2 (a truck)
+  - IN-42 (the inbound load)
+  - Amelia Russo (owner and dispatch lead)
+  - The delivery minimum decision
+  - The Office Label Printer
+- **Suppliers:** Shark Bay Prawns, Southern Ice Works and Esperance Abalone. I also added Abrolhos Fishers Co-op, which is only in the CSV, not the notes.
+- **Rumour:** The Shark Bay Prawns price rise is saved as &quot;UNCONFIRMED RUMOUR&quot;. The $250 delivery minimum from 1 December 2026 is saved as a decision.
+- **Links:**
+  - Customers to their orders (6).
+  - Orders to the products they need (15).
+  - Reefer 2 carries IN-42.
+  - Reefer 2 serves FFI-101 to FFI-104.
+  - IN-42 supplies those same four orders.
+  - IN-42 contains their 4 products.
+  - Amelia leads dispatch for IN-42.
+  - The decision is approved by Amelia.
+  - Esperance Abalone supplies Greenlip Abalone 1kg and has a consignment on order for Harbour Lights Hotel Group.
+- **Printer:** I left it unlinked on purpose.
+- **Uploads, done after the notes:** `ops-notes.md` and `catalogue.csv`. The CSV is auto-mapped.
+
+**Proposed, waiting for the owner:**
+- **Kinds:** product, customer, order, truck, inbound load, decision and equipment.
+- **Properties on product:** sell price, unit cost, qty on hand, reorder at, status and last landed. I also added an order due date and a load expected date.
+- **Link types:** 11, including product `supplied_by` supplier.
+- **Metrics:**
+  - average sell price
+  - total stock value at cost
+  - gross margin
+  - average unit cost
+  - available product count
+  - product count
+
+**Things to know:**
+- **Duplicate metric:** Auto-map also proposed `inventory_cost_value`, which does the same sum as my `total_stock_value_at_cost`. The owner should keep one.
+- **Backwards link:** Auto-map&#x27;s supplier link reads &quot;product supplies organisation&quot;, which is backwards. My `supplied_by` fixes it, so the owner should reject the auto-mapped one.
+- **Missing costs:** Octopus 5kg and Prawn Skewers 20pk have no unit cost. Their costs will be missing from the stock value and margin numbers.
+- **My slip:** I typed the wrong id on 4 links, and the server refused them. I fixed them and all four are in.
+
+**Next step:** After the owner approves the product kind and its properties, run the CSV row import. I did not run it.</pre></div><h2>Tool evidence in call order</h2><article><h3>mcp__eunomia-local__vault_create</h3><pre>{
+  &quot;name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;,
+  &quot;kind&quot;: &quot;org&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__vault_create&quot;,
+  &quot;arguments&quot;: {
+    &quot;name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;,
+    &quot;kind&quot;: &quot;org&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01QXgaQFdgALdnpqxymWe41i&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+    &quot;name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;,
+    &quot;kind&quot;: &quot;org&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:25:51.070708751Z&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_types</h3><pre>{
+  &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_types&quot;,
+  &quot;arguments&quot;: {
+    &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01VviLf7mdustPyMxugqUEfv&quot;,
+  &quot;result&quot;: {
+    &quot;built_in&quot;: [
+      &quot;person&quot;,
+      &quot;organisation&quot;,
+      &quot;location&quot;,
+      &quot;repository&quot;,
+      &quot;file&quot;,
+      &quot;symbol&quot;
+    ],
+    &quot;custom&quot;: []
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__memory_write_batch</h3><pre>{
+  &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__memory_write_batch&quot;,
+  &quot;arguments&quot;: {
+    &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+    &quot;items&quot;: [
+      {
+        &quot;subject_name&quot;: &quot;Shark Bay Prawns&quot;,
+        &quot;subject_kind&quot;: &quot;organisation&quot;,
+        &quot;type&quot;: &quot;world&quot;,
+        &quot;text&quot;: &quot;Shark Bay Prawns is our prawn supplier. We work with them.&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;Southern Ice Works&quot;,
+        &quot;subject_kind&quot;: &quot;organisation&quot;,
+        &quot;type&quot;: &quot;world&quot;,
+        &quot;text&quot;: &quot;Southern Ice Works supplies ice and insulated packaging. We work with them.&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;Esperance Abalone&quot;,
+        &quot;subject_kind&quot;: &quot;organisation&quot;,
+        &quot;type&quot;: &quot;world&quot;,
+        &quot;text&quot;: &quot;Esperance Abalone has a Greenlip Abalone 1kg consignment on order for Harbour Lights Hotel Group.&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;Abrolhos Fishers Co-op&quot;,
+        &quot;subject_kind&quot;: &quot;organisation&quot;,
+        &quot;type&quot;: &quot;world&quot;,
+        &quot;text&quot;: &quot;Abrolhos Fishers Co-op appears as a fish supplier in the catalogue (from catalogue.csv). Not mentioned in the ops notes.&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;Shark Bay Prawns&quot;,
+        &quot;subject_kind&quot;: &quot;organisation&quot;,
+        &quot;type&quot;: &quot;world&quot;,
+        &quot;text&quot;: &quot;UNCONFIRMED RUMOUR: Shark Bay Prawns may raise prices in December 2026. No increase is confirmed. Do not treat as fact.&quot;,
+        &quot;occurred_at&quot;: &quot;2026-11-09&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;Delivery minimum change&quot;,
+        &quot;subject_kind&quot;: &quot;decision&quot;,
+        &quot;type&quot;: &quot;world&quot;,
+        &quot;text&quot;: &quot;Decision: delivery minimum goes to $250 from 1 December 2026, approved by owner Amelia Russo.&quot;,
+        &quot;occurred_at&quot;: &quot;2026-11-09&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;Amelia Russo&quot;,
+        &quot;subject_kind&quot;: &quot;person&quot;,
+        &quot;type&quot;: &quot;world&quot;,
+        &quot;text&quot;: &quot;Amelia Russo is the owner and the dispatch lead. She approved the delivery minimum of $250 from 1 December 2026.&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;Office Label Printer&quot;,
+        &quot;subject_kind&quot;: &quot;equipment&quot;,
+        &quot;type&quot;: &quot;world&quot;,
+        &quot;text&quot;: &quot;Office Label Printer sits in dispatch. It has no recorded dependencies and is deliberately unlinked.&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;Reefer 2&quot;,
+        &quot;subject_kind&quot;: &quot;truck&quot;,
+        &quot;type&quot;: &quot;world&quot;,
+        &quot;text&quot;: &quot;Reefer 2 is a refrigerated truck carrying inbound load IN-42, expected 11 November 2026.&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;IN-42&quot;,
+        &quot;subject_kind&quot;: &quot;inbound_load&quot;,
+        &quot;type&quot;: &quot;world&quot;,
+        &quot;text&quot;: &quot;Inbound load IN-42 is on Reefer 2, expected 11 November 2026. It carries two Dhufish Whole 10kg for FFI-101, six Gummy Shark 5kg for FFI-102, three Greenlip Abalone 1kg for FFI-103 and four Snapper Fillets 5kg for FFI-104. A one-day delay risks those four orders.&quot;,
+        &quot;occurred_at&quot;: &quot;2026-11-11&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;Bathers Beach Bistro&quot;,
+        &quot;subject_kind&quot;: &quot;customer&quot;,
+        &quot;type&quot;: &quot;world&quot;,
+        &quot;text&quot;: &quot;Customer with open order FFI-101.&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;Portside Fish and Chips&quot;,
+        &quot;subject_kind&quot;: &quot;customer&quot;,
+        &quot;type&quot;: &quot;world&quot;,
+        &quot;text&quot;: &quot;Customer with open order FFI-102.&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;Harbour Lights Hotel Group&quot;,
+        &quot;subject_kind&quot;: &quot;customer&quot;,
+        &quot;type&quot;: &quot;world&quot;,
+        &quot;text&quot;: &quot;Customer with open order FFI-103. Esperance Abalone has a Greenlip Abalone 1kg consignment on order for them.&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;Saltwater Table Restaurant&quot;,
+        &quot;subject_kind&quot;: &quot;customer&quot;,
+        &quot;type&quot;: &quot;world&quot;,
+        &quot;text&quot;: &quot;Customer with open order FFI-104.&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;Quay Seafood Kitchen&quot;,
+        &quot;subject_kind&quot;: &quot;customer&quot;,
+        &quot;type&quot;: &quot;world&quot;,
+        &quot;text&quot;: &quot;Customer with open order FFI-105.&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;West End Oyster Bar&quot;,
+        &quot;subject_kind&quot;: &quot;customer&quot;,
+        &quot;type&quot;: &quot;world&quot;,
+        &quot;text&quot;: &quot;Customer with open order FFI-106.&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;FFI-101&quot;,
+        &quot;subject_kind&quot;: &quot;order&quot;,
+        &quot;type&quot;: &quot;world&quot;,
+        &quot;text&quot;: &quot;Open order for Bathers Beach Bistro, due 12 November 2026. Needs 2 Dhufish Whole 10kg, 4 King Prawns U10 5kg, 10 Block Ice 20kg.&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;FFI-102&quot;,
+        &quot;subject_kind&quot;: &quot;order&quot;,
+        &quot;type&quot;: &quot;world&quot;,
+        &quot;text&quot;: &quot;Open order for Portside Fish and Chips, due 12 November 2026. Needs 6 Gummy Shark 5kg, 12 Flake Ice 10kg.&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;FFI-103&quot;,
+        &quot;subject_kind&quot;: &quot;order&quot;,
+        &quot;type&quot;: &quot;world&quot;,
+        &quot;text&quot;: &quot;Open order for Harbour Lights Hotel Group, due 13 November 2026. Needs 3 Greenlip Abalone 1kg, 5 Tiger Prawns 5kg, 8 Party Ice 5kg.&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;FFI-104&quot;,
+        &quot;subject_kind&quot;: &quot;order&quot;,
+        &quot;type&quot;: &quot;world&quot;,
+        &quot;text&quot;: &quot;Open order for Saltwater Table Restaurant, due 12 November 2026. Needs 4 Snapper Fillets 5kg, 6 Crushed Ice 5kg.&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;FFI-105&quot;,
+        &quot;subject_kind&quot;: &quot;order&quot;,
+        &quot;type&quot;: &quot;world&quot;,
+        &quot;text&quot;: &quot;Open order for Quay Seafood Kitchen, due 14 November 2026. Needs 3 Octopus 5kg, 5 Prawn Meat 1kg.&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;FFI-106&quot;,
+        &quot;subject_kind&quot;: &quot;order&quot;,
+        &quot;type&quot;: &quot;world&quot;,
+        &quot;text&quot;: &quot;Open order for West End Oyster Bar, due 14 November 2026. Needs 2 Brownlip Abalone 1kg, 4 Cooked Prawns 2kg, 6 Gel Ice Pack 1kg.&quot;
+      }
+    ]
+  },
+  &quot;id&quot;: &quot;toolu_01PW82oDMEdGdPDSymWnQKNH&quot;,
+  &quot;result&quot;: {
+    &quot;written&quot;: 22,
+    &quot;failed&quot;: 0,
+    &quot;results&quot;: [
+      {
+        &quot;index&quot;: 0,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;organisation:rjdxg4396oo1kmir5z1i&quot;,
+        &quot;memory_id&quot;: &quot;memory:gmquqbba6y7rqyugd6ti&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 1,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;organisation:7uqu9jwq62muit42lorh&quot;,
+        &quot;memory_id&quot;: &quot;memory:bsq46o8mv3groyeky6f6&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 2,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;organisation:rwpzzr9tw4k3vqdhcdhx&quot;,
+        &quot;memory_id&quot;: &quot;memory:8nufr2t0r6usz3twyodq&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 3,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;organisation:o85rwnaefwkvoaujob1g&quot;,
+        &quot;memory_id&quot;: &quot;memory:ayx7zmqk5uxp0is49anw&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 4,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;organisation:rjdxg4396oo1kmir5z1i&quot;,
+        &quot;memory_id&quot;: &quot;memory:nyda6sao23z815vkkupj&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 5,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;entity:3s3x11rghqn1b0qxof5c&quot;,
+        &quot;memory_id&quot;: &quot;memory:vdrszanat6dsponktfer&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 6,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;person:300jj1lfln6hltr75sn3&quot;,
+        &quot;memory_id&quot;: &quot;memory:kkdseyg1i20dde3nf6en&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 7,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;entity:dtpv30dfvq24il7c2aaa&quot;,
+        &quot;memory_id&quot;: &quot;memory:3yide5euxzi2okjevi0j&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 8,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;entity:ugt6rofftccvjjuomjay&quot;,
+        &quot;memory_id&quot;: &quot;memory:qj3ve6p1khm14fdcdqgy&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 9,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+        &quot;memory_id&quot;: &quot;memory:oja8tpa1d4e73kbcca4p&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 10,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;entity:gc3l2fncxr8vnto1spk9&quot;,
+        &quot;memory_id&quot;: &quot;memory:f04z535y67w4b4ptmtlb&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 11,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;entity:3sb2tcg3mvrd6kv51znr&quot;,
+        &quot;memory_id&quot;: &quot;memory:gq4ro1u1l3uqgr4mi3sy&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 12,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;entity:m09ye57js78gw9bpezrx&quot;,
+        &quot;memory_id&quot;: &quot;memory:mpdb95uu7sg6s35dc664&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 13,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;entity:n8v4fraa6w49xnctd09p&quot;,
+        &quot;memory_id&quot;: &quot;memory:sorkztzahcqo6fthz3kg&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 14,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;entity:8z3o10w16x7m0s1166f8&quot;,
+        &quot;memory_id&quot;: &quot;memory:p26c5ajf39wfqckrmqjm&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 15,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;entity:ffuygjtryhu0940o77hd&quot;,
+        &quot;memory_id&quot;: &quot;memory:hu8g76aptk8t6bhxpqnk&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 16,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;entity:bs8dwvtgywjeuj4lb9j6&quot;,
+        &quot;memory_id&quot;: &quot;memory:a79mq504fb4agwjunf34&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 17,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;entity:kl4ea8we5ugms10whjm8&quot;,
+        &quot;memory_id&quot;: &quot;memory:vxat8vmzuuf61icd6pkd&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 18,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;entity:ovl5njex4v2o2um1n9pj&quot;,
+        &quot;memory_id&quot;: &quot;memory:6evicp8k6e9cshfuatgf&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 19,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;entity:gsj8anu1g7y6hxd2vmh2&quot;,
+        &quot;memory_id&quot;: &quot;memory:fc4m7ckw6tzugy55agxy&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 20,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;entity:fa1r6qd1zv9x99tvr7i0&quot;,
+        &quot;memory_id&quot;: &quot;memory:ohlp93wv58zypbjqblbx&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 21,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;entity:8rq9qkw3g7cl7rav96rb&quot;,
+        &quot;memory_id&quot;: &quot;memory:9odt9828223loe1q97nx&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      }
+    ]
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__memory_write_batch</h3><pre>{
+  &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__memory_write_batch&quot;,
+  &quot;arguments&quot;: {
+    &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+    &quot;items&quot;: [
+      {
+        &quot;subject_name&quot;: &quot;Dhufish Whole 10kg&quot;,
+        &quot;subject_kind&quot;: &quot;product&quot;,
+        &quot;text&quot;: &quot;Product required by FFI-101 (2) and carried on IN-42 (2).&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;King Prawns U10 5kg&quot;,
+        &quot;subject_kind&quot;: &quot;product&quot;,
+        &quot;text&quot;: &quot;Product required by FFI-101 (4).&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;Block Ice 20kg&quot;,
+        &quot;subject_kind&quot;: &quot;product&quot;,
+        &quot;text&quot;: &quot;Product required by FFI-101 (10).&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;Gummy Shark 5kg&quot;,
+        &quot;subject_kind&quot;: &quot;product&quot;,
+        &quot;text&quot;: &quot;Product required by FFI-102 (6) and carried on IN-42 (6).&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;Flake Ice 10kg&quot;,
+        &quot;subject_kind&quot;: &quot;product&quot;,
+        &quot;text&quot;: &quot;Product required by FFI-102 (12).&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;Greenlip Abalone 1kg&quot;,
+        &quot;subject_kind&quot;: &quot;product&quot;,
+        &quot;text&quot;: &quot;Product required by FFI-103 (3) and carried on IN-42 (3). Esperance Abalone has a consignment on order for Harbour Lights Hotel Group.&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;Tiger Prawns 5kg&quot;,
+        &quot;subject_kind&quot;: &quot;product&quot;,
+        &quot;text&quot;: &quot;Product required by FFI-103 (5).&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;Party Ice 5kg&quot;,
+        &quot;subject_kind&quot;: &quot;product&quot;,
+        &quot;text&quot;: &quot;Product required by FFI-103 (8).&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;Snapper Fillets 5kg&quot;,
+        &quot;subject_kind&quot;: &quot;product&quot;,
+        &quot;text&quot;: &quot;Product required by FFI-104 (4) and carried on IN-42 (4).&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;Crushed Ice 5kg&quot;,
+        &quot;subject_kind&quot;: &quot;product&quot;,
+        &quot;text&quot;: &quot;Product required by FFI-104 (6).&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;Octopus 5kg&quot;,
+        &quot;subject_kind&quot;: &quot;product&quot;,
+        &quot;text&quot;: &quot;Product required by FFI-105 (3).&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;Prawn Meat 1kg&quot;,
+        &quot;subject_kind&quot;: &quot;product&quot;,
+        &quot;text&quot;: &quot;Product required by FFI-105 (5).&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;Brownlip Abalone 1kg&quot;,
+        &quot;subject_kind&quot;: &quot;product&quot;,
+        &quot;text&quot;: &quot;Product required by FFI-106 (2).&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;Cooked Prawns 2kg&quot;,
+        &quot;subject_kind&quot;: &quot;product&quot;,
+        &quot;text&quot;: &quot;Product required by FFI-106 (4).&quot;
+      },
+      {
+        &quot;subject_name&quot;: &quot;Gel Ice Pack 1kg&quot;,
+        &quot;subject_kind&quot;: &quot;product&quot;,
+        &quot;text&quot;: &quot;Product required by FFI-106 (6).&quot;
+      }
+    ]
+  },
+  &quot;id&quot;: &quot;toolu_01L7MEdKjJkmL7Dvojgbz4g2&quot;,
+  &quot;result&quot;: {
+    &quot;written&quot;: 15,
+    &quot;failed&quot;: 0,
+    &quot;results&quot;: [
+      {
+        &quot;index&quot;: 0,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;entity:qcbe9ysvbeep437q79bc&quot;,
+        &quot;memory_id&quot;: &quot;memory:4zxichzxjegedqhhetx2&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 1,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;entity:48xpq68q4urz8ypimn5y&quot;,
+        &quot;memory_id&quot;: &quot;memory:1l0n55y7kk3uqz3a5m5p&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 2,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;entity:v1wgb5l21pseykea1qlx&quot;,
+        &quot;memory_id&quot;: &quot;memory:wsz3kt88i32i6zhyurm5&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 3,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;entity:3f5cm4iqh3oirr0hmryw&quot;,
+        &quot;memory_id&quot;: &quot;memory:grxhx71ib37cnwps48x2&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 4,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;entity:1sfkjfqzvoe0itr0wygd&quot;,
+        &quot;memory_id&quot;: &quot;memory:yo7p2p30pnbx3s1whcyw&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 5,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;entity:rcrjvcfua61c8sgp7cuz&quot;,
+        &quot;memory_id&quot;: &quot;memory:2p0rz9fkwllz1njan8b8&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 6,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;entity:sbtlnm1mp6dimx9zyqad&quot;,
+        &quot;memory_id&quot;: &quot;memory:e4hokozvcs36aol2l1jk&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 7,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;entity:evv28m6h4tck901uzp6t&quot;,
+        &quot;memory_id&quot;: &quot;memory:u0a1nhlb0ia515y90w59&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 8,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;entity:b6ob6x2weevj5neiyhnv&quot;,
+        &quot;memory_id&quot;: &quot;memory:iqppf9qfmsgtmq52bxgn&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 9,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;entity:olzecfi09wy9257qadsw&quot;,
+        &quot;memory_id&quot;: &quot;memory:8t2vythrq9gswyvrlen0&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 10,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;entity:uw0zadzbt2vvx7er1z1e&quot;,
+        &quot;memory_id&quot;: &quot;memory:ysp52gfyp8ftbotooxbz&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 11,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;entity:de8jtqpgxmmapnnvkf3p&quot;,
+        &quot;memory_id&quot;: &quot;memory:jdoisfpt4ke5665qqnn9&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 12,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;entity:3xmqlzc97hgyg9atd25d&quot;,
+        &quot;memory_id&quot;: &quot;memory:nxuclql1v2td0fw6lyhr&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 13,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;entity:bs3cbh9kzfcstrg0qjpe&quot;,
+        &quot;memory_id&quot;: &quot;memory:bpa9sadz3axltda05tl7&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      },
+      {
+        &quot;index&quot;: 14,
+        &quot;ok&quot;: true,
+        &quot;entity_id&quot;: &quot;entity:hy2hjhlctg2q8baflnhs&quot;,
+        &quot;memory_id&quot;: &quot;memory:4nrmltch4zke32vj9bre&quot;,
+        &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+      }
+    ]
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:gc3l2fncxr8vnto1spk9&quot;,
+  &quot;label&quot;: &quot;placed&quot;,
+  &quot;to_id&quot;: &quot;entity:bs8dwvtgywjeuj4lb9j6&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:gc3l2fncxr8vnto1spk9&quot;,
+    &quot;label&quot;: &quot;placed&quot;,
+    &quot;to_id&quot;: &quot;entity:bs8dwvtgywjeuj4lb9j6&quot;
+  },
+  &quot;id&quot;: &quot;toolu_018mqpZfki4zTcKRUicVS3BA&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:o9argb942yw64ddsunvp&quot;,
+    &quot;in&quot;: &quot;entity:gc3l2fncxr8vnto1spk9&quot;,
+    &quot;out&quot;: &quot;entity:bs8dwvtgywjeuj4lb9j6&quot;,
+    &quot;label&quot;: &quot;placed&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:20.437376501Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:3sb2tcg3mvrd6kv51znr&quot;,
+  &quot;label&quot;: &quot;placed&quot;,
+  &quot;to_id&quot;: &quot;entity:kl4ea8we5ugms10whjm8&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:3sb2tcg3mvrd6kv51znr&quot;,
+    &quot;label&quot;: &quot;placed&quot;,
+    &quot;to_id&quot;: &quot;entity:kl4ea8we5ugms10whjm8&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01Jbf17YcgFqqNstwyjTqxLD&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:mkxhmgpeylqhxmnqfgc6&quot;,
+    &quot;in&quot;: &quot;entity:3sb2tcg3mvrd6kv51znr&quot;,
+    &quot;out&quot;: &quot;entity:kl4ea8we5ugms10whjm8&quot;,
+    &quot;label&quot;: &quot;placed&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:21.015161334Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:m09ye57js78gw9bpezrx&quot;,
+  &quot;label&quot;: &quot;placed&quot;,
+  &quot;to_id&quot;: &quot;entity:ovl5njex4v2o2um1n9pj&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:m09ye57js78gw9bpezrx&quot;,
+    &quot;label&quot;: &quot;placed&quot;,
+    &quot;to_id&quot;: &quot;entity:ovl5njex4v2o2um1n9pj&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01Fj6TrLmtUMn9Rabor7bRTd&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:orwyoe1j46m22oxbclmm&quot;,
+    &quot;in&quot;: &quot;entity:m09ye57js78gw9bpezrx&quot;,
+    &quot;out&quot;: &quot;entity:ovl5njex4v2o2um1n9pj&quot;,
+    &quot;label&quot;: &quot;placed&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:21.656149418Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:n8v4fraa6w49xnctd09p&quot;,
+  &quot;label&quot;: &quot;placed&quot;,
+  &quot;to_id&quot;: &quot;entity:gsj8anu1g7y6hxd2vmh2&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:n8v4fraa6w49xnctd09p&quot;,
+    &quot;label&quot;: &quot;placed&quot;,
+    &quot;to_id&quot;: &quot;entity:gsj8anu1g7y6hxd2vmh2&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01BiVX22eCXi4AcQYk7jKsnT&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:z1rrjcxw3989we7eh9iq&quot;,
+    &quot;in&quot;: &quot;entity:n8v4fraa6w49xnctd09p&quot;,
+    &quot;out&quot;: &quot;entity:gsj8anu1g7y6hxd2vmh2&quot;,
+    &quot;label&quot;: &quot;placed&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:22.258875043Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:8z3o10w16x7m0s1166f8&quot;,
+  &quot;label&quot;: &quot;placed&quot;,
+  &quot;to_id&quot;: &quot;entity:fa1r6qd1zv9x99tvr7i0&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:8z3o10w16x7m0s1166f8&quot;,
+    &quot;label&quot;: &quot;placed&quot;,
+    &quot;to_id&quot;: &quot;entity:fa1r6qd1zv9x99tvr7i0&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01HRZSXQLKD4Q4HptwyN1Pk1&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:b8ld2ot12kzg7tl2t95f&quot;,
+    &quot;in&quot;: &quot;entity:8z3o10w16x7m0s1166f8&quot;,
+    &quot;out&quot;: &quot;entity:fa1r6qd1zv9x99tvr7i0&quot;,
+    &quot;label&quot;: &quot;placed&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:22.860387835Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:ffuygjtryhu0940o77hd&quot;,
+  &quot;label&quot;: &quot;placed&quot;,
+  &quot;to_id&quot;: &quot;entity:8rq9qkw3g7cl7rav96rb&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:ffuygjtryhu0940o77hd&quot;,
+    &quot;label&quot;: &quot;placed&quot;,
+    &quot;to_id&quot;: &quot;entity:8rq9qkw3g7cl7rav96rb&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01SBYabptohMemwmrG6nbJcb&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:edeu55ddzga0uz6n0hke&quot;,
+    &quot;in&quot;: &quot;entity:ffuygjtryhu0940o77hd&quot;,
+    &quot;out&quot;: &quot;entity:8rq9qkw3g7cl7rav96rb&quot;,
+    &quot;label&quot;: &quot;placed&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:23.461875961Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:bs8dwvtgywjeuj4lb9j6&quot;,
+  &quot;label&quot;: &quot;requires&quot;,
+  &quot;to_id&quot;: &quot;entity:qcbe9ysvbeep437q79bc&quot;,
+  &quot;reason&quot;: &quot;FFI-101 needs 2 Dhufish Whole 10kg.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:bs8dwvtgywjeuj4lb9j6&quot;,
+    &quot;label&quot;: &quot;requires&quot;,
+    &quot;to_id&quot;: &quot;entity:qcbe9ysvbeep437q79bc&quot;,
+    &quot;reason&quot;: &quot;FFI-101 needs 2 Dhufish Whole 10kg.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01T28gKQyBV9MpVRbdqjUaqj&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:4ugdgeeqkurkkvg7i6cw&quot;,
+    &quot;in&quot;: &quot;entity:bs8dwvtgywjeuj4lb9j6&quot;,
+    &quot;out&quot;: &quot;entity:qcbe9ysvbeep437q79bc&quot;,
+    &quot;label&quot;: &quot;requires&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:24.289657044Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:r26adfd50dceac5f5ba5&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:bs8dwvtgywjeuj4lb9j6&quot;,
+  &quot;label&quot;: &quot;requires&quot;,
+  &quot;to_id&quot;: &quot;entity:48xpq68q4urz8ypimn5y&quot;,
+  &quot;reason&quot;: &quot;FFI-101 needs 4 King Prawns U10 5kg.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:bs8dwvtgywjeuj4lb9j6&quot;,
+    &quot;label&quot;: &quot;requires&quot;,
+    &quot;to_id&quot;: &quot;entity:48xpq68q4urz8ypimn5y&quot;,
+    &quot;reason&quot;: &quot;FFI-101 needs 4 King Prawns U10 5kg.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01VmcXhG6MccmJJ3k2w3opxJ&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:0naftds3hpaerdvn01dm&quot;,
+    &quot;in&quot;: &quot;entity:bs8dwvtgywjeuj4lb9j6&quot;,
+    &quot;out&quot;: &quot;entity:48xpq68q4urz8ypimn5y&quot;,
+    &quot;label&quot;: &quot;requires&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:25.154654920Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:ra8ed05591e3a35e21a2&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:bs8dwvtgywjeuj4lb9j6&quot;,
+  &quot;label&quot;: &quot;requires&quot;,
+  &quot;to_id&quot;: &quot;entity:v1wgb5l21pseykea1qlx&quot;,
+  &quot;reason&quot;: &quot;FFI-101 needs 10 Block Ice 20kg.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:bs8dwvtgywjeuj4lb9j6&quot;,
+    &quot;label&quot;: &quot;requires&quot;,
+    &quot;to_id&quot;: &quot;entity:v1wgb5l21pseykea1qlx&quot;,
+    &quot;reason&quot;: &quot;FFI-101 needs 10 Block Ice 20kg.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01EK9EtSbBiznQcSbaM9ReTk&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:nkm3h481z4klgf5a8mdt&quot;,
+    &quot;in&quot;: &quot;entity:bs8dwvtgywjeuj4lb9j6&quot;,
+    &quot;out&quot;: &quot;entity:v1wgb5l21pseykea1qlx&quot;,
+    &quot;label&quot;: &quot;requires&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:25.926036545Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:r40b9669649eb8e6b14e&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:kl4ea8we5ugms10whjm8&quot;,
+  &quot;label&quot;: &quot;requires&quot;,
+  &quot;to_id&quot;: &quot;entity:3f5cm4iqh3oirr0hmryw&quot;,
+  &quot;reason&quot;: &quot;FFI-102 needs 6 Gummy Shark 5kg.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:kl4ea8we5ugms10whjm8&quot;,
+    &quot;label&quot;: &quot;requires&quot;,
+    &quot;to_id&quot;: &quot;entity:3f5cm4iqh3oirr0hmryw&quot;,
+    &quot;reason&quot;: &quot;FFI-102 needs 6 Gummy Shark 5kg.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01JpqD9baN6TeMGtHvjPHoW7&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:8v2kqrtpa1e7r58tet0a&quot;,
+    &quot;in&quot;: &quot;entity:kl4ea8we5ugms10whjm8&quot;,
+    &quot;out&quot;: &quot;entity:3f5cm4iqh3oirr0hmryw&quot;,
+    &quot;label&quot;: &quot;requires&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:26.725579504Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:r4788cbe51edd39a9e15&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:kl4ea8we5ugms10whjm8&quot;,
+  &quot;label&quot;: &quot;requires&quot;,
+  &quot;to_id&quot;: &quot;entity:1sfkjfqzvoe0itr0wygd&quot;,
+  &quot;reason&quot;: &quot;FFI-102 needs 12 Flake Ice 10kg.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:kl4ea8we5ugms10whjm8&quot;,
+    &quot;label&quot;: &quot;requires&quot;,
+    &quot;to_id&quot;: &quot;entity:1sfkjfqzvoe0itr0wygd&quot;,
+    &quot;reason&quot;: &quot;FFI-102 needs 12 Flake Ice 10kg.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_013twNZgfnfocWMBx29dJYKi&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:0etfspyi0chdzmpcuvrv&quot;,
+    &quot;in&quot;: &quot;entity:kl4ea8we5ugms10whjm8&quot;,
+    &quot;out&quot;: &quot;entity:1sfkjfqzvoe0itr0wygd&quot;,
+    &quot;label&quot;: &quot;requires&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:27.492565171Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:r77db4e3f0b16121b4c9&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:ovl5njex4v2o2um1n9pj&quot;,
+  &quot;label&quot;: &quot;requires&quot;,
+  &quot;to_id&quot;: &quot;entity:rcrjvcfua61c8sgp7cuz&quot;,
+  &quot;reason&quot;: &quot;FFI-103 needs 3 Greenlip Abalone 1kg.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:ovl5njex4v2o2um1n9pj&quot;,
+    &quot;label&quot;: &quot;requires&quot;,
+    &quot;to_id&quot;: &quot;entity:rcrjvcfua61c8sgp7cuz&quot;,
+    &quot;reason&quot;: &quot;FFI-103 needs 3 Greenlip Abalone 1kg.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_013NtkhjGDNdmjLPrsm6HKNy&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:thaho4bsyow5megh9wfd&quot;,
+    &quot;in&quot;: &quot;entity:ovl5njex4v2o2um1n9pj&quot;,
+    &quot;out&quot;: &quot;entity:rcrjvcfua61c8sgp7cuz&quot;,
+    &quot;label&quot;: &quot;requires&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:28.364180421Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:r7e505e83c19341cb6e7&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:ovl5njex4v2o2um1n9pj&quot;,
+  &quot;label&quot;: &quot;requires&quot;,
+  &quot;to_id&quot;: &quot;entity:sbtlnm1mp6dimx9zyqad&quot;,
+  &quot;reason&quot;: &quot;FFI-103 needs 5 Tiger Prawns 5kg.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:ovl5njex4v2o2um1n9pj&quot;,
+    &quot;label&quot;: &quot;requires&quot;,
+    &quot;to_id&quot;: &quot;entity:sbtlnm1mp6dimx9zyqad&quot;,
+    &quot;reason&quot;: &quot;FFI-103 needs 5 Tiger Prawns 5kg.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01GWctc1cBx2G2JPHLYCnPJn&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:40tlqoee918enu6wjxiq&quot;,
+    &quot;in&quot;: &quot;entity:ovl5njex4v2o2um1n9pj&quot;,
+    &quot;out&quot;: &quot;entity:sbtlnm1mp6dimx9zyqad&quot;,
+    &quot;label&quot;: &quot;requires&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:29.195123463Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:r0dd87c6a480b20aedc3&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:ovl5njex4v2o2um1n9pj&quot;,
+  &quot;label&quot;: &quot;requires&quot;,
+  &quot;to_id&quot;: &quot;entity:evv28m6h4tck901uzp6t&quot;,
+  &quot;reason&quot;: &quot;FFI-103 needs 8 Party Ice 5kg.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:ovl5njex4v2o2um1n9pj&quot;,
+    &quot;label&quot;: &quot;requires&quot;,
+    &quot;to_id&quot;: &quot;entity:evv28m6h4tck901uzp6t&quot;,
+    &quot;reason&quot;: &quot;FFI-103 needs 8 Party Ice 5kg.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01XR1BVPpC55w6cjR6G3i4wu&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:3owqlfdeikw2dxb8t2ij&quot;,
+    &quot;in&quot;: &quot;entity:ovl5njex4v2o2um1n9pj&quot;,
+    &quot;out&quot;: &quot;entity:evv28m6h4tck901uzp6t&quot;,
+    &quot;label&quot;: &quot;requires&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:30.057187630Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:r37a7808544c7710d567&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:gsj8anu1g7y6hxd2vmh2&quot;,
+  &quot;label&quot;: &quot;requires&quot;,
+  &quot;to_id&quot;: &quot;entity:b6ob6x2weevj5neiyhnv&quot;,
+  &quot;reason&quot;: &quot;FFI-104 needs 4 Snapper Fillets 5kg.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:gsj8anu1g7y6hxd2vmh2&quot;,
+    &quot;label&quot;: &quot;requires&quot;,
+    &quot;to_id&quot;: &quot;entity:b6ob6x2weevj5neiyhnv&quot;,
+    &quot;reason&quot;: &quot;FFI-104 needs 4 Snapper Fillets 5kg.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01UDsMkKgedbvnsrubBV7tcv&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:ak9pu5dxu6fl8d1sx6vv&quot;,
+    &quot;in&quot;: &quot;entity:gsj8anu1g7y6hxd2vmh2&quot;,
+    &quot;out&quot;: &quot;entity:b6ob6x2weevj5neiyhnv&quot;,
+    &quot;label&quot;: &quot;requires&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:30.956380839Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:r683c7b6a9a89fd3862c&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:gsj8anu1g7y6hxd2vmh2&quot;,
+  &quot;label&quot;: &quot;requires&quot;,
+  &quot;to_id&quot;: &quot;entity:olzecfi09wy9257qadsw&quot;,
+  &quot;reason&quot;: &quot;FFI-104 needs 6 Crushed Ice 5kg.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:gsj8anu1g7y6hxd2vmh2&quot;,
+    &quot;label&quot;: &quot;requires&quot;,
+    &quot;to_id&quot;: &quot;entity:olzecfi09wy9257qadsw&quot;,
+    &quot;reason&quot;: &quot;FFI-104 needs 6 Crushed Ice 5kg.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01Kx8CaJE3VRPzQtDLDyhzXa&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:el7xw206be3rh8p3ndxt&quot;,
+    &quot;in&quot;: &quot;entity:gsj8anu1g7y6hxd2vmh2&quot;,
+    &quot;out&quot;: &quot;entity:olzecfi09wy9257qadsw&quot;,
+    &quot;label&quot;: &quot;requires&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:31.794706006Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:r97f97a031d3a0f4cc06&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:fa1r6qd1zv9x99tvr7i0&quot;,
+  &quot;label&quot;: &quot;requires&quot;,
+  &quot;to_id&quot;: &quot;entity:uw0zadzbt2vvx7er1z1e&quot;,
+  &quot;reason&quot;: &quot;FFI-105 needs 3 Octopus 5kg.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:fa1r6qd1zv9x99tvr7i0&quot;,
+    &quot;label&quot;: &quot;requires&quot;,
+    &quot;to_id&quot;: &quot;entity:uw0zadzbt2vvx7er1z1e&quot;,
+    &quot;reason&quot;: &quot;FFI-105 needs 3 Octopus 5kg.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01KNGBRRnvseAG44VFLCwcKT&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:1eim6szqcna87isj4x63&quot;,
+    &quot;in&quot;: &quot;entity:fa1r6qd1zv9x99tvr7i0&quot;,
+    &quot;out&quot;: &quot;entity:uw0zadzbt2vvx7er1z1e&quot;,
+    &quot;label&quot;: &quot;requires&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:32.732761965Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:r20dc369d3df83a87e3c&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:fa1r6qd1zv9x99tvr7i0&quot;,
+  &quot;label&quot;: &quot;requires&quot;,
+  &quot;to_id&quot;: &quot;entity:de8jtqpgxmmapnnvkf3p&quot;,
+  &quot;reason&quot;: &quot;FFI-105 needs 5 Prawn Meat 1kg.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:fa1r6qd1zv9x99tvr7i0&quot;,
+    &quot;label&quot;: &quot;requires&quot;,
+    &quot;to_id&quot;: &quot;entity:de8jtqpgxmmapnnvkf3p&quot;,
+    &quot;reason&quot;: &quot;FFI-105 needs 5 Prawn Meat 1kg.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_012T4qMr8TvugkgxFoTxx8kP&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:8ypqx4yfci9qabhfsvxh&quot;,
+    &quot;in&quot;: &quot;entity:fa1r6qd1zv9x99tvr7i0&quot;,
+    &quot;out&quot;: &quot;entity:de8jtqpgxmmapnnvkf3p&quot;,
+    &quot;label&quot;: &quot;requires&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:33.594000507Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:r814b6d5bb96aa2b4468&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:8rq9qkw3g7cl7rav96rb&quot;,
+  &quot;label&quot;: &quot;requires&quot;,
+  &quot;to_id&quot;: &quot;entity:3xmqlzc97hgyg9atd25d&quot;,
+  &quot;reason&quot;: &quot;FFI-106 needs 2 Brownlip Abalone 1kg.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:8rq9qkw3g7cl7rav96rb&quot;,
+    &quot;label&quot;: &quot;requires&quot;,
+    &quot;to_id&quot;: &quot;entity:3xmqlzc97hgyg9atd25d&quot;,
+    &quot;reason&quot;: &quot;FFI-106 needs 2 Brownlip Abalone 1kg.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01Hooucp94XCgJoje24naJZW&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:3buxpjxbjg1xxr1a2pux&quot;,
+    &quot;in&quot;: &quot;entity:8rq9qkw3g7cl7rav96rb&quot;,
+    &quot;out&quot;: &quot;entity:3xmqlzc97hgyg9atd25d&quot;,
+    &quot;label&quot;: &quot;requires&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:34.458631507Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:r40ed6a88b44ee06c655&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:8rq9qkw3g7cl7rav96rb&quot;,
+  &quot;label&quot;: &quot;requires&quot;,
+  &quot;to_id&quot;: &quot;entity:bs3cbh9kzfcstrg0qjpe&quot;,
+  &quot;reason&quot;: &quot;FFI-106 needs 4 Cooked Prawns 2kg.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:8rq9qkw3g7cl7rav96rb&quot;,
+    &quot;label&quot;: &quot;requires&quot;,
+    &quot;to_id&quot;: &quot;entity:bs3cbh9kzfcstrg0qjpe&quot;,
+    &quot;reason&quot;: &quot;FFI-106 needs 4 Cooked Prawns 2kg.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01NbJeSKnotPrB6smHXu7RN5&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:6qi3u2qu3y77ezsg07yr&quot;,
+    &quot;in&quot;: &quot;entity:8rq9qkw3g7cl7rav96rb&quot;,
+    &quot;out&quot;: &quot;entity:bs3cbh9kzfcstrg0qjpe&quot;,
+    &quot;label&quot;: &quot;requires&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:35.290559925Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:rd76f2d6743f4e5578d6&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:8rq9qkw3g7cl7rav96rb&quot;,
+  &quot;label&quot;: &quot;requires&quot;,
+  &quot;to_id&quot;: &quot;entity:hy2hjhlctg2q8baflnhs&quot;,
+  &quot;reason&quot;: &quot;FFI-106 needs 6 Gel Ice Pack 1kg.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:8rq9qkw3g7cl7rav96rb&quot;,
+    &quot;label&quot;: &quot;requires&quot;,
+    &quot;to_id&quot;: &quot;entity:hy2hjhlctg2q8baflnhs&quot;,
+    &quot;reason&quot;: &quot;FFI-106 needs 6 Gel Ice Pack 1kg.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_014PXi6JF34ke2gfPMHPwHxt&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:n6utd7ie81pej3cparc8&quot;,
+    &quot;in&quot;: &quot;entity:8rq9qkw3g7cl7rav96rb&quot;,
+    &quot;out&quot;: &quot;entity:hy2hjhlctg2q8baflnhs&quot;,
+    &quot;label&quot;: &quot;requires&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:36.158952842Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:r9933ef485bbbb32535b&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:ugt6rofftccvjjuomjay&quot;,
+  &quot;label&quot;: &quot;carries&quot;,
+  &quot;to_id&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+  &quot;reason&quot;: &quot;Reefer 2 is carrying inbound load IN-42.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:ugt6rofftccvjjuomjay&quot;,
+    &quot;label&quot;: &quot;carries&quot;,
+    &quot;to_id&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+    &quot;reason&quot;: &quot;Reefer 2 is carrying inbound load IN-42.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01A4H6gNAsiEZpreHpZZtiF1&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:rolcp2cmgyxp73gtn3o3&quot;,
+    &quot;in&quot;: &quot;entity:ugt6rofftccvjjuomjay&quot;,
+    &quot;out&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+    &quot;label&quot;: &quot;carries&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:38.640837718Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:r3ee788ca13f65306530&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:ugt6rofftccvjjuomjay&quot;,
+  &quot;label&quot;: &quot;serves&quot;,
+  &quot;to_id&quot;: &quot;entity:bs8dwvtgywjeuj4lb9j6&quot;,
+  &quot;reason&quot;: &quot;IN-42 on Reefer 2 carries 2 Dhufish for FFI-101.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:ugt6rofftccvjjuomjay&quot;,
+    &quot;label&quot;: &quot;serves&quot;,
+    &quot;to_id&quot;: &quot;entity:bs8dwvtgywjeuj4lb9j6&quot;,
+    &quot;reason&quot;: &quot;IN-42 on Reefer 2 carries 2 Dhufish for FFI-101.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_016zqw1F5DYud2PY1QfLHt5N&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:ozg6eht7p7zyqcpbeb7j&quot;,
+    &quot;in&quot;: &quot;entity:ugt6rofftccvjjuomjay&quot;,
+    &quot;out&quot;: &quot;entity:bs8dwvtgywjeuj4lb9j6&quot;,
+    &quot;label&quot;: &quot;serves&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:39.583174052Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:r6aa61c90b4661b462da&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:ugt6rofftccvjjuomjay&quot;,
+  &quot;label&quot;: &quot;serves&quot;,
+  &quot;to_id&quot;: &quot;entity:kl4ea8we5ugms10whjm8&quot;,
+  &quot;reason&quot;: &quot;IN-42 on Reefer 2 carries 6 Gummy Shark for FFI-102.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:ugt6rofftccvjjuomjay&quot;,
+    &quot;label&quot;: &quot;serves&quot;,
+    &quot;to_id&quot;: &quot;entity:kl4ea8we5ugms10whjm8&quot;,
+    &quot;reason&quot;: &quot;IN-42 on Reefer 2 carries 6 Gummy Shark for FFI-102.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01JLUD2po1fUVwEJ7cMNvqWG&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:4c7j9r6kqc2ugq35r2oh&quot;,
+    &quot;in&quot;: &quot;entity:ugt6rofftccvjjuomjay&quot;,
+    &quot;out&quot;: &quot;entity:kl4ea8we5ugms10whjm8&quot;,
+    &quot;label&quot;: &quot;serves&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:40.379149177Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:r54513dcb7b6784b07a5&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:ugt6rofftccvjjuomjay&quot;,
+  &quot;label&quot;: &quot;serves&quot;,
+  &quot;to_id&quot;: &quot;entity:ovl5njex4v2o2um1n9pj&quot;,
+  &quot;reason&quot;: &quot;IN-42 on Reefer 2 carries 3 Greenlip Abalone for FFI-103.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:ugt6rofftccvjjuomjay&quot;,
+    &quot;label&quot;: &quot;serves&quot;,
+    &quot;to_id&quot;: &quot;entity:ovl5njex4v2o2um1n9pj&quot;,
+    &quot;reason&quot;: &quot;IN-42 on Reefer 2 carries 3 Greenlip Abalone for FFI-103.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01CbzhCETQywg5CgMgjufAff&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:8p28pzhrazxaflq0086b&quot;,
+    &quot;in&quot;: &quot;entity:ugt6rofftccvjjuomjay&quot;,
+    &quot;out&quot;: &quot;entity:ovl5njex4v2o2um1n9pj&quot;,
+    &quot;label&quot;: &quot;serves&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:41.216279219Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:rbc7be6b8474b0e1f53a&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:ugt6rofftccvjjuomjay&quot;,
+  &quot;label&quot;: &quot;serves&quot;,
+  &quot;to_id&quot;: &quot;entity:gsj8anu1g7y6hxd2vmh2&quot;,
+  &quot;reason&quot;: &quot;IN-42 on Reefer 2 carries 4 Snapper Fillets for FFI-104.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:ugt6rofftccvjjuomjay&quot;,
+    &quot;label&quot;: &quot;serves&quot;,
+    &quot;to_id&quot;: &quot;entity:gsj8anu1g7y6hxd2vmh2&quot;,
+    &quot;reason&quot;: &quot;IN-42 on Reefer 2 carries 4 Snapper Fillets for FFI-104.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01KXLhuBzTQFsWSALVDyJzcj&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:vqeah6wga6l0xiffz0wl&quot;,
+    &quot;in&quot;: &quot;entity:ugt6rofftccvjjuomjay&quot;,
+    &quot;out&quot;: &quot;entity:gsj8anu1g7y6hxd2vmh2&quot;,
+    &quot;label&quot;: &quot;serves&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:42.049284719Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:r767fcf6d37a8853a78a&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+  &quot;label&quot;: &quot;supplies&quot;,
+  &quot;to_id&quot;: &quot;entity:bs8dwvtgywjeuj4lb9j6&quot;,
+  &quot;reason&quot;: &quot;IN-42 holds stock for FFI-101.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+    &quot;label&quot;: &quot;supplies&quot;,
+    &quot;to_id&quot;: &quot;entity:bs8dwvtgywjeuj4lb9j6&quot;,
+    &quot;reason&quot;: &quot;IN-42 holds stock for FFI-101.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01L6R3ycwhzkPF7ST3VScucy&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:hw6l48768gnn4m0rkghp&quot;,
+    &quot;in&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+    &quot;out&quot;: &quot;entity:bs8dwvtgywjeuj4lb9j6&quot;,
+    &quot;label&quot;: &quot;supplies&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:43.036007220Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:rbe32ce1980eacca35c6&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+  &quot;label&quot;: &quot;supplies&quot;,
+  &quot;to_id&quot;: &quot;entity:kl4ea8we5ugms10whjm8&quot;,
+  &quot;reason&quot;: &quot;IN-42 holds stock for FFI-102.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+    &quot;label&quot;: &quot;supplies&quot;,
+    &quot;to_id&quot;: &quot;entity:kl4ea8we5ugms10whjm8&quot;,
+    &quot;reason&quot;: &quot;IN-42 holds stock for FFI-102.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01X5VFH6YPrKV1g2aU7ChCqp&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:ak7xmnw62gry0pgfnioq&quot;,
+    &quot;in&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+    &quot;out&quot;: &quot;entity:kl4ea8we5ugms10whjm8&quot;,
+    &quot;label&quot;: &quot;supplies&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:43.843535137Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:r0ca8861f79b070f97bc&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+  &quot;label&quot;: &quot;supplies&quot;,
+  &quot;to_id&quot;: &quot;entity:ovl5njex4v2o2um1n9pj&quot;,
+  &quot;reason&quot;: &quot;IN-42 holds stock for FFI-103.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+    &quot;label&quot;: &quot;supplies&quot;,
+    &quot;to_id&quot;: &quot;entity:ovl5njex4v2o2um1n9pj&quot;,
+    &quot;reason&quot;: &quot;IN-42 holds stock for FFI-103.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01GRXrAekpwP8fgpVMGShxvi&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:ibumtop21oqefsawxi1f&quot;,
+    &quot;in&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+    &quot;out&quot;: &quot;entity:ovl5njex4v2o2um1n9pj&quot;,
+    &quot;label&quot;: &quot;supplies&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:44.745456804Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:r64c66d88504642b22fa&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+  &quot;label&quot;: &quot;supplies&quot;,
+  &quot;to_id&quot;: &quot;entity:gsj8anu1g7y6hxd2vmh2&quot;,
+  &quot;reason&quot;: &quot;IN-42 holds stock for FFI-104.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+    &quot;label&quot;: &quot;supplies&quot;,
+    &quot;to_id&quot;: &quot;entity:gsj8anu1g7y6hxd2vmh2&quot;,
+    &quot;reason&quot;: &quot;IN-42 holds stock for FFI-104.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01JDf4BMejg22gKrFMaTs3wY&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:uvcjgbr4wxlgelpm2mcw&quot;,
+    &quot;in&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+    &quot;out&quot;: &quot;entity:gsj8anu1g7y6hxd2vmh2&quot;,
+    &quot;label&quot;: &quot;supplies&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:45.608521263Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:rfcc52e8571198be3290&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+  &quot;label&quot;: &quot;contains&quot;,
+  &quot;to_id&quot;: &quot;entity:qcbe9ysvbeep437q79bc&quot;,
+  &quot;reason&quot;: &quot;IN-42 holds 2 Dhufish Whole 10kg.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+    &quot;label&quot;: &quot;contains&quot;,
+    &quot;to_id&quot;: &quot;entity:qcbe9ysvbeep437q79bc&quot;,
+    &quot;reason&quot;: &quot;IN-42 holds 2 Dhufish Whole 10kg.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01GDcsE7skChQVVrsJZJJNeK&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:dkfez6i3h24yrgbvdo7f&quot;,
+    &quot;in&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+    &quot;out&quot;: &quot;entity:qcbe9ysvbeep437q79bc&quot;,
+    &quot;label&quot;: &quot;contains&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:46.508426805Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:rdb1034ba3a024f09d3c&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+  &quot;label&quot;: &quot;contains&quot;,
+  &quot;to_id&quot;: &quot;entity:3f5cm4iqh3oirr0hmryw&quot;,
+  &quot;reason&quot;: &quot;IN-42 holds 6 Gummy Shark 5kg.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+    &quot;label&quot;: &quot;contains&quot;,
+    &quot;to_id&quot;: &quot;entity:3f5cm4iqh3oirr0hmryw&quot;,
+    &quot;reason&quot;: &quot;IN-42 holds 6 Gummy Shark 5kg.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01RtBWvzTgEozrdMXDKBP2Uj&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:7rjzxazz4zpfpj66qskw&quot;,
+    &quot;in&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+    &quot;out&quot;: &quot;entity:3f5cm4iqh3oirr0hmryw&quot;,
+    &quot;label&quot;: &quot;contains&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:47.408882472Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:r4f80b95f36ca7ae7f06&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+  &quot;label&quot;: &quot;contains&quot;,
+  &quot;to_id&quot;: &quot;entity:rcrjvcfua61c8sgp7cuz&quot;,
+  &quot;reason&quot;: &quot;IN-42 holds 3 Greenlip Abalone 1kg.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+    &quot;label&quot;: &quot;contains&quot;,
+    &quot;to_id&quot;: &quot;entity:rcrjvcfua61c8sgp7cuz&quot;,
+    &quot;reason&quot;: &quot;IN-42 holds 3 Greenlip Abalone 1kg.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01Mt7MdE7tC6moF963o2CzoF&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:2q7fjl9tx7ru7jyrguye&quot;,
+    &quot;in&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+    &quot;out&quot;: &quot;entity:rcrjvcfua61c8sgp7cuz&quot;,
+    &quot;label&quot;: &quot;contains&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:48.411563917Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:r1faa9b3d15a2fc7b485&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+  &quot;label&quot;: &quot;contains&quot;,
+  &quot;to_id&quot;: &quot;entity:b6ob6x2weevj5neiyhnv&quot;,
+  &quot;reason&quot;: &quot;IN-42 holds 4 Snapper Fillets 5kg.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+    &quot;label&quot;: &quot;contains&quot;,
+    &quot;to_id&quot;: &quot;entity:b6ob6x2weevj5neiyhnv&quot;,
+    &quot;reason&quot;: &quot;IN-42 holds 4 Snapper Fillets 5kg.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01UfzMMv7saSA9QGTJi1LoN6&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:nbpikxn2kqxzkdpf5ir6&quot;,
+    &quot;in&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+    &quot;out&quot;: &quot;entity:b6ob6x2weevj5neiyhnv&quot;,
+    &quot;label&quot;: &quot;contains&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:26:49.376892667Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:r5c6c53c558e67250440&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:300jj1lfln6hltr75sn3&quot;,
+  &quot;label&quot;: &quot;leads_dispatch_for&quot;,
+  &quot;to_id&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+  &quot;reason&quot;: &quot;Amelia Russo is the dispatch lead for IN-42.&quot;
+}</pre><pre class="result">{
+  &quot;error&quot;: &quot;not a member of both entities&#x27; vaults&quot;,
+  &quot;code&quot;: &quot;vault.forbidden&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:300jj1lfln6hltr75sn3&quot;,
+    &quot;label&quot;: &quot;leads_dispatch_for&quot;,
+    &quot;to_id&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+    &quot;reason&quot;: &quot;Amelia Russo is the dispatch lead for IN-42.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_011bh5ymzMv4LPuuTZFbhD4t&quot;,
+  &quot;result&quot;: {
+    &quot;error&quot;: &quot;not a member of both entities&#x27; vaults&quot;,
+    &quot;code&quot;: &quot;vault.forbidden&quot;,
+    &quot;trace_id&quot;: &quot;7b60b3ae80ec4a31b58627bca255e59b&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:3s3x11rghqn1b0qxof5c&quot;,
+  &quot;label&quot;: &quot;approved_by&quot;,
+  &quot;to_id&quot;: &quot;entity:300jj1lfln6hltr75sn3&quot;,
+  &quot;reason&quot;: &quot;Owner Amelia Russo approved the $250 delivery minimum.&quot;
+}</pre><pre class="result">{
+  &quot;error&quot;: &quot;not a member of both entities&#x27; vaults&quot;,
+  &quot;code&quot;: &quot;vault.forbidden&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:3s3x11rghqn1b0qxof5c&quot;,
+    &quot;label&quot;: &quot;approved_by&quot;,
+    &quot;to_id&quot;: &quot;entity:300jj1lfln6hltr75sn3&quot;,
+    &quot;reason&quot;: &quot;Owner Amelia Russo approved the $250 delivery minimum.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01Frv1PURtKuoX5DM3gr1KGf&quot;,
+  &quot;result&quot;: {
+    &quot;error&quot;: &quot;not a member of both entities&#x27; vaults&quot;,
+    &quot;code&quot;: &quot;vault.forbidden&quot;,
+    &quot;trace_id&quot;: &quot;8f9f749a833d4fe7a3922e242f05061e&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:rwpzzr9tw4k3vqdhcdhx&quot;,
+  &quot;label&quot;: &quot;has_consignment_on_order_for&quot;,
+  &quot;to_id&quot;: &quot;entity:m09ye57js78gw9bpezrx&quot;,
+  &quot;reason&quot;: &quot;Esperance Abalone has a Greenlip Abalone 1kg consignment on order for Harbour Lights Hotel Group.&quot;
+}</pre><pre class="result">{
+  &quot;error&quot;: &quot;not a member of both entities&#x27; vaults&quot;,
+  &quot;code&quot;: &quot;vault.forbidden&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:rwpzzr9tw4k3vqdhcdhx&quot;,
+    &quot;label&quot;: &quot;has_consignment_on_order_for&quot;,
+    &quot;to_id&quot;: &quot;entity:m09ye57js78gw9bpezrx&quot;,
+    &quot;reason&quot;: &quot;Esperance Abalone has a Greenlip Abalone 1kg consignment on order for Harbour Lights Hotel Group.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01Xqf6tiwSmC3eVGEqgHGpzk&quot;,
+  &quot;result&quot;: {
+    &quot;error&quot;: &quot;not a member of both entities&#x27; vaults&quot;,
+    &quot;code&quot;: &quot;vault.forbidden&quot;,
+    &quot;trace_id&quot;: &quot;d790d6ec86294c3dbd866c840cb6cb74&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:rwpzzr9tw4k3vqdhcdhx&quot;,
+  &quot;label&quot;: &quot;supplies&quot;,
+  &quot;to_id&quot;: &quot;entity:rcrjvcfua61c8sgp7cuz&quot;,
+  &quot;reason&quot;: &quot;The consignment on order is Greenlip Abalone 1kg.&quot;
+}</pre><pre class="result">{
+  &quot;error&quot;: &quot;not a member of both entities&#x27; vaults&quot;,
+  &quot;code&quot;: &quot;vault.forbidden&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:rwpzzr9tw4k3vqdhcdhx&quot;,
+    &quot;label&quot;: &quot;supplies&quot;,
+    &quot;to_id&quot;: &quot;entity:rcrjvcfua61c8sgp7cuz&quot;,
+    &quot;reason&quot;: &quot;The consignment on order is Greenlip Abalone 1kg.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01JvJQ3ecx3WEt2QbjFRtkHp&quot;,
+  &quot;result&quot;: {
+    &quot;error&quot;: &quot;not a member of both entities&#x27; vaults&quot;,
+    &quot;code&quot;: &quot;vault.forbidden&quot;,
+    &quot;trace_id&quot;: &quot;bc17f123f4bc4a648022f1d34aa4c70e&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entities_search</h3><pre>{
+  &quot;query&quot;: &quot;Esperance Abalone&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entities_search&quot;,
+  &quot;arguments&quot;: {
+    &quot;query&quot;: &quot;Esperance Abalone&quot;
+  },
+  &quot;id&quot;: &quot;toolu_016fgWUz5yCvsCd3CjWAxrvL&quot;,
+  &quot;result&quot;: {
+    &quot;results&quot;: [
+      {
+        &quot;id&quot;: &quot;organisation:rwpzzr9tw4k3vqdhcdhx&quot;,
+        &quot;kind&quot;: &quot;organisation&quot;,
+        &quot;name&quot;: &quot;Esperance Abalone&quot;,
+        &quot;aliases&quot;: [],
+        &quot;summary&quot;: &quot;&quot;,
+        &quot;vault&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;
+      },
+      {
+        &quot;id&quot;: &quot;entity:rcrjvcfua61c8sgp7cuz&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;name&quot;: &quot;Greenlip Abalone 1kg&quot;,
+        &quot;aliases&quot;: [],
+        &quot;summary&quot;: &quot;&quot;,
+        &quot;vault&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;
+      },
+      {
+        &quot;id&quot;: &quot;entity:m09ye57js78gw9bpezrx&quot;,
+        &quot;kind&quot;: &quot;customer&quot;,
+        &quot;name&quot;: &quot;Harbour Lights Hotel Group&quot;,
+        &quot;aliases&quot;: [],
+        &quot;summary&quot;: &quot;&quot;,
+        &quot;vault&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;
+      }
+    ],
+    &quot;total&quot;: 3,
+    &quot;has_more&quot;: false
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entities_search</h3><pre>{
+  &quot;query&quot;: &quot;Amelia Russo&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entities_search&quot;,
+  &quot;arguments&quot;: {
+    &quot;query&quot;: &quot;Amelia Russo&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01Hvma1upGayjvikJ1TnzN6c&quot;,
+  &quot;result&quot;: {
+    &quot;results&quot;: [
+      {
+        &quot;id&quot;: &quot;person:300jj1lfln6hltr75sn3&quot;,
+        &quot;kind&quot;: &quot;person&quot;,
+        &quot;name&quot;: &quot;Amelia Russo&quot;,
+        &quot;aliases&quot;: [],
+        &quot;summary&quot;: &quot;&quot;,
+        &quot;vault&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;
+      },
+      {
+        &quot;id&quot;: &quot;entity:3s3x11rghqn1b0qxof5c&quot;,
+        &quot;kind&quot;: &quot;decision&quot;,
+        &quot;name&quot;: &quot;Delivery minimum change&quot;,
+        &quot;aliases&quot;: [],
+        &quot;summary&quot;: &quot;&quot;,
+        &quot;vault&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;
+      }
+    ],
+    &quot;total&quot;: 2,
+    &quot;has_more&quot;: false
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;person:300jj1lfln6hltr75sn3&quot;,
+  &quot;label&quot;: &quot;leads_dispatch_for&quot;,
+  &quot;to_id&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+  &quot;reason&quot;: &quot;Amelia Russo is the dispatch lead for IN-42.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;person:300jj1lfln6hltr75sn3&quot;,
+    &quot;label&quot;: &quot;leads_dispatch_for&quot;,
+    &quot;to_id&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+    &quot;reason&quot;: &quot;Amelia Russo is the dispatch lead for IN-42.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01TFrmziaDLB1w28khPMQq1y&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:mnt5seg76uk4kmfrdqra&quot;,
+    &quot;in&quot;: &quot;person:300jj1lfln6hltr75sn3&quot;,
+    &quot;out&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+    &quot;label&quot;: &quot;leads_dispatch_for&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:27:00.662180339Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:r86cad7cfa8734778cc9&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;entity:3s3x11rghqn1b0qxof5c&quot;,
+  &quot;label&quot;: &quot;approved_by&quot;,
+  &quot;to_id&quot;: &quot;person:300jj1lfln6hltr75sn3&quot;,
+  &quot;reason&quot;: &quot;Owner Amelia Russo approved the $250 delivery minimum.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;entity:3s3x11rghqn1b0qxof5c&quot;,
+    &quot;label&quot;: &quot;approved_by&quot;,
+    &quot;to_id&quot;: &quot;person:300jj1lfln6hltr75sn3&quot;,
+    &quot;reason&quot;: &quot;Owner Amelia Russo approved the $250 delivery minimum.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_0184JRYZij2EpUgV8otSDvgi&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:7f5dwocve93hk9n39lms&quot;,
+    &quot;in&quot;: &quot;entity:3s3x11rghqn1b0qxof5c&quot;,
+    &quot;out&quot;: &quot;person:300jj1lfln6hltr75sn3&quot;,
+    &quot;label&quot;: &quot;approved_by&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:27:01.533724423Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:r3eb823d54282aeb8107&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;organisation:rwpzzr9tw4k3vqdhcdhx&quot;,
+  &quot;label&quot;: &quot;has_consignment_on_order_for&quot;,
+  &quot;to_id&quot;: &quot;entity:m09ye57js78gw9bpezrx&quot;,
+  &quot;reason&quot;: &quot;Esperance Abalone has a Greenlip Abalone 1kg consignment on order for Harbour Lights Hotel Group.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;organisation:rwpzzr9tw4k3vqdhcdhx&quot;,
+    &quot;label&quot;: &quot;has_consignment_on_order_for&quot;,
+    &quot;to_id&quot;: &quot;entity:m09ye57js78gw9bpezrx&quot;,
+    &quot;reason&quot;: &quot;Esperance Abalone has a Greenlip Abalone 1kg consignment on order for Harbour Lights Hotel Group.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01S1o1imgouy2sjnMn8LM5gC&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:u9fib52wv9t7pyprjn7q&quot;,
+    &quot;in&quot;: &quot;organisation:rwpzzr9tw4k3vqdhcdhx&quot;,
+    &quot;out&quot;: &quot;entity:m09ye57js78gw9bpezrx&quot;,
+    &quot;label&quot;: &quot;has_consignment_on_order_for&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:27:02.531447007Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:r943210fe2dbe3c482e1&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entity_relate</h3><pre>{
+  &quot;from_id&quot;: &quot;organisation:rwpzzr9tw4k3vqdhcdhx&quot;,
+  &quot;label&quot;: &quot;supplies&quot;,
+  &quot;to_id&quot;: &quot;entity:rcrjvcfua61c8sgp7cuz&quot;,
+  &quot;reason&quot;: &quot;The consignment on order is Greenlip Abalone 1kg.&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entity_relate&quot;,
+  &quot;arguments&quot;: {
+    &quot;from_id&quot;: &quot;organisation:rwpzzr9tw4k3vqdhcdhx&quot;,
+    &quot;label&quot;: &quot;supplies&quot;,
+    &quot;to_id&quot;: &quot;entity:rcrjvcfua61c8sgp7cuz&quot;,
+    &quot;reason&quot;: &quot;The consignment on order is Greenlip Abalone 1kg.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01ThmnDF9P6n4qYNnd1bg3By&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;relates_to:yjf9wtcpzx4d87dc3qms&quot;,
+    &quot;in&quot;: &quot;organisation:rwpzzr9tw4k3vqdhcdhx&quot;,
+    &quot;out&quot;: &quot;entity:rcrjvcfua61c8sgp7cuz&quot;,
+    &quot;label&quot;: &quot;supplies&quot;,
+    &quot;source&quot;: null,
+    &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+    &quot;created_at&quot;: &quot;2026-11-08T19:27:03.423378590Z&quot;,
+    &quot;direction&quot;: null,
+    &quot;owner_email&quot;: null,
+    &quot;reason_memory_id&quot;: &quot;memory:r784c8645e4e08b2caee&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__document_upload</h3><pre>{
+  &quot;filename&quot;: &quot;ops-notes.md&quot;,
+  &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+  &quot;content_type&quot;: &quot;text/markdown&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__document_upload&quot;,
+  &quot;arguments&quot;: {
+    &quot;filename&quot;: &quot;ops-notes.md&quot;,
+    &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+    &quot;content_type&quot;: &quot;text/markdown&quot;,
+    &quot;text&quot;: &quot;# Fremantle Fish &amp; Ice Co, Fremantle WA\nFictional test records as at 9 November 2026.\n\n## Open customer orders\n- Bathers Beach Bistro, order FFI-101, due 12 November. Needs two Dhufish Whole 10kg, four King Prawns U10 5kg and ten Block Ice 20kg.\n- Portside Fish and Chips, order FFI-102, due 12 November. Needs six Gummy Shark 5kg and twelve Flake Ice 10kg.\n- Harbour Lights Hotel Group, order FFI-103, due 13 November. Needs three Greenlip Abalone 1kg, five Tiger Prawns 5kg and eight Party Ice 5kg.\n- Saltwater Table Restaurant, order FFI-104, due 12 November. Needs four Snapper Fillets 5kg and six Crushed Ice 5kg.\n- Quay Seafood Kitchen, order FFI-105, due 14 November. Needs three Octopus 5kg and five Prawn Meat 1kg.\n- West End Oyster Bar, order FFI-106, due 14 November. Needs two Brownlip Abalone 1kg, four Cooked Prawns 2kg and six Gel Ice Pack 1kg.\n\n## Inbound load\nRefrigerated truck Reefer 2 is carrying inbound load IN-42, expected 11 November 2026. It carries two Dhufish Whole 10kg for FFI-101, six Gummy Shark 5kg for FFI-102, three Greenlip Abalone 1kg for FFI-103 and four Snapper Fillets 5kg for FFI-104. A one-day delay risks those four orders. Dispatch lead is Amelia Russo.\n\n## Decisions and unconfirmed information\nDecision: delivery minimum goes to $250 from 1 December 2026, approved by owner Amelia Russo.\nRumour, unconfirmed: Shark Bay Prawns may raise prices in December. No increase is confirmed.\nShark Bay Prawns is our prawn supplier. Southern Ice Works supplies ice and insulated packaging. Both are organisations we work with.\nEsperance Abalone has a Greenlip Abalone 1kg consignment on order for Harbour Lights Hotel Group.\nUnlinked equipment: Office Label Printer sits in dispatch, with no recorded dependencies.\n&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01VeJcxWn7tGrvZAtSrzBQcN&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;document:scb7kg4m1s63ajnslsuo&quot;,
+    &quot;vault&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+    &quot;filename&quot;: &quot;ops-notes.md&quot;,
+    &quot;media_type&quot;: &quot;text/markdown&quot;,
+    &quot;size_bytes&quot;: 1749,
+    &quot;sha256&quot;: &quot;56f92533bd98a32e0eb866c152cb127b54f5027c96d4fa284fa605d529153150&quot;,
+    &quot;revision&quot;: 1,
+    &quot;status&quot;: &quot;indexing&quot;,
+    &quot;chunk_count&quot;: 0,
+    &quot;created_at&quot;: &quot;2026-11-08T19:27:08.931Z&quot;,
+    &quot;updated_at&quot;: &quot;2026-11-08T19:27:08.931Z&quot;,
+    &quot;indexed_at&quot;: null,
+    &quot;download_url&quot;: &quot;/api/documents/document:scb7kg4m1s63ajnslsuo/download&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__document_upload</h3><pre>{
+  &quot;filename&quot;: &quot;catalogue.csv&quot;,
+  &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+  &quot;content_type&quot;: &quot;text/csv&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__document_upload&quot;,
+  &quot;arguments&quot;: {
+    &quot;filename&quot;: &quot;catalogue.csv&quot;,
+    &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+    &quot;content_type&quot;: &quot;text/csv&quot;,
+    &quot;text&quot;: &quot;product,supplier,sell price AUD,unit cost AUD,qty on hand,reorder at,status,last landed\nDhufish Whole 10kg,Abrolhos Fishers Co-op,\&quot;$1,180.00\&quot;,$785.00,3,10,Available,04/11/2026\nSnapper Fillets 5kg,Abrolhos Fishers Co-op,$245.00,$158.00,12,10,Available,05/11/2026\nGummy Shark 5kg,Abrolhos Fishers Co-op,$185.00,$116.00,16,10,Available,06/11/2026\nSpanish Mackerel 5kg,Abrolhos Fishers Co-op,$210.00,$138.00,9,10,Available,07/11/2026\nSardines 2kg,Abrolhos Fishers Co-op,$28.00,$17.50,45,10,Available,08/11/2026\nWhiting Fillets 2kg,Abrolhos Fishers Co-op,$72.00,$46.00,20,10,Available,04/11/2026\nOctopus 5kg,Abrolhos Fishers Co-op,$165.00,,7,10,On order,05/11/2026\nFish Frames 10kg,Abrolhos Fishers Co-op,$35.00,$14.00,0,10,Discontinued,06/11/2026\nKing Prawns U10 5kg,Shark Bay Prawns,$265.00,$174.00,17,10,Available,07/11/2026\nTiger Prawns 5kg,Shark Bay Prawns,$195.00,$128.00,23,10,Available,08/11/2026\nBanana Prawns 5kg,Shark Bay Prawns,$145.00,$92.00,31,10,Available,04/11/2026\nPrawn Cutlets 2kg,Shark Bay Prawns,$98.00,$61.00,14,10,Available,05/11/2026\nPrawn Meat 1kg,Shark Bay Prawns,$42.00,$26.00,33,10,Available,06/11/2026\nCooked Prawns 2kg,Shark Bay Prawns,$84.00,$55.00,19,10,Available,07/11/2026\nPrawn Skewers 20pk,Shark Bay Prawns,$46.00,,11,10,On order,08/11/2026\nPrawn Shells 5kg,Shark Bay Prawns,$12.50,$5.25,21,10,Available,04/11/2026\nBlock Ice 20kg,Southern Ice Works,$18.50,$7.25,95,10,Available,05/11/2026\nFlake Ice 10kg,Southern Ice Works,$12.50,$5.10,80,10,Available,06/11/2026\nCrushed Ice 5kg,Southern Ice Works,$7.45,$3.20,65,10,Available,07/11/2026\nParty Ice 5kg,Southern Ice Works,$8.90,$3.80,43,10,Available,08/11/2026\nDry Ice 2kg,Southern Ice Works,$24.00,$13.00,13,10,Available,04/11/2026\nGel Ice Pack 1kg,Southern Ice Works,$6.50,$2.40,57,10,Available,05/11/2026\nInsulated Seafood Carton,Southern Ice Works,$14.50,$6.75,40,10,Available,06/11/2026\nIce Brick 500g,southern ice works,$3.95,$1.80,61,10,Available,07/11/2026\nGreenlip Abalone 1kg,Esperance Abalone,$148.00,$96.00,8,10,On order,08/11/2026\nBrownlip Abalone 1kg,Esperance Abalone,$165.00,$108.00,9,10,Available,04/11/2026\nAbalone Slices 500g,Esperance Abalone,$89.00,$57.00,16,10,Available,05/11/2026\nAbalone Mince 1kg,Esperance Abalone,$76.00,$44.00,14,10,Available,06/11/2026\nAbalone Shell Pack,Esperance Abalone,$22.00,$11.00,25,10,Available,07/11/2026\nPremium Abalone Gift Box,Esperance Abalone,$320.00,$210.00,5,10,Available,08/11/2026\n&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01XpqGQd19JSZXbuQZhzHKFd&quot;,
+  &quot;result&quot;: {
+    &quot;id&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;,
+    &quot;vault&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+    &quot;filename&quot;: &quot;catalogue.csv&quot;,
+    &quot;media_type&quot;: &quot;text/csv&quot;,
+    &quot;size_bytes&quot;: 2423,
+    &quot;sha256&quot;: &quot;8fd071d608e3a1eef9f6e7f1347ec266024f5c2e7bbc0c87575371f46a0bb44a&quot;,
+    &quot;revision&quot;: 1,
+    &quot;status&quot;: &quot;indexing&quot;,
+    &quot;chunk_count&quot;: 0,
+    &quot;created_at&quot;: &quot;2026-11-08T19:27:15.672Z&quot;,
+    &quot;updated_at&quot;: &quot;2026-11-08T19:27:15.673Z&quot;,
+    &quot;indexed_at&quot;: null,
+    &quot;download_url&quot;: &quot;/api/documents/document:e4f6egzn8wveubiomvaj/download&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__ontology_automap</h3><pre>{
+  &quot;document_id&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;,
+  &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__ontology_automap&quot;,
+  &quot;arguments&quot;: {
+    &quot;document_id&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;,
+    &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;
+  },
+  &quot;id&quot;: &quot;toolu_012gKp289taecePPAUTvjNQ9&quot;,
+  &quot;result&quot;: {
+    &quot;mode&quot;: &quot;model&quot;,
+    &quot;proposed&quot;: {
+      &quot;kinds&quot;: [
+        {
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;status&quot;: &quot;proposed&quot;,
+          &quot;merge_into&quot;: null
+        }
+      ],
+      &quot;links&quot;: [
+        {
+          &quot;from_kind&quot;: &quot;product&quot;,
+          &quot;label&quot;: &quot;supplies&quot;,
+          &quot;to_kind&quot;: &quot;organisation&quot;,
+          &quot;status&quot;: &quot;proposed&quot;
+        }
+      ],
+      &quot;properties&quot;: [
+        {
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;name&quot;: &quot;sell_price&quot;,
+          &quot;datatype&quot;: &quot;money&quot;,
+          &quot;status&quot;: &quot;proposed&quot;,
+          &quot;merge_into&quot;: null
+        },
+        {
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;name&quot;: &quot;unit_cost&quot;,
+          &quot;datatype&quot;: &quot;money&quot;,
+          &quot;status&quot;: &quot;proposed&quot;,
+          &quot;merge_into&quot;: null
+        },
+        {
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;name&quot;: &quot;qty_on_hand&quot;,
+          &quot;datatype&quot;: &quot;integer&quot;,
+          &quot;status&quot;: &quot;proposed&quot;,
+          &quot;merge_into&quot;: null
+        },
+        {
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;name&quot;: &quot;reorder_at&quot;,
+          &quot;datatype&quot;: &quot;integer&quot;,
+          &quot;status&quot;: &quot;proposed&quot;,
+          &quot;merge_into&quot;: null
+        },
+        {
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;name&quot;: &quot;status&quot;,
+          &quot;datatype&quot;: &quot;enum&quot;,
+          &quot;status&quot;: &quot;proposed&quot;,
+          &quot;merge_into&quot;: null
+        },
+        {
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;name&quot;: &quot;last_landed&quot;,
+          &quot;datatype&quot;: &quot;date&quot;,
+          &quot;status&quot;: &quot;proposed&quot;,
+          &quot;merge_into&quot;: null
+        }
+      ],
+      &quot;metrics&quot;: [
+        {
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;name&quot;: &quot;inventory_cost_value&quot;,
+          &quot;status&quot;: &quot;proposed&quot;,
+          &quot;merge_into&quot;: null
+        },
+        {
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;name&quot;: &quot;gross_margin&quot;,
+          &quot;status&quot;: &quot;proposed&quot;,
+          &quot;merge_into&quot;: null
+        },
+        {
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;name&quot;: &quot;product_count&quot;,
+          &quot;status&quot;: &quot;proposed&quot;,
+          &quot;merge_into&quot;: null
+        }
+      ]
+    },
+    &quot;record_types&quot;: [
+      {
+        &quot;source&quot;: &quot;document&quot;,
+        &quot;record_type&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;name_field&quot;: &quot;product&quot;,
+        &quot;unmapped&quot;: []
+      }
+    ],
+    &quot;links&quot;: [
+      {
+        &quot;from_kind&quot;: &quot;product&quot;,
+        &quot;label&quot;: &quot;supplies&quot;,
+        &quot;to_kind&quot;: &quot;organisation&quot;,
+        &quot;source&quot;: &quot;document&quot;,
+        &quot;record_type&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;,
+        &quot;field&quot;: &quot;supplier&quot;,
+        &quot;values&quot;: 5,
+        &quot;matched&quot;: 5,
+        &quot;ratio&quot;: 1.0,
+        &quot;reused&quot;: [],
+        &quot;ambiguous&quot;: [],
+        &quot;kept&quot;: true,
+        &quot;reason&quot;: &quot;100% of values match (5 of 5)&quot;
+      }
+    ],
+    &quot;skipped&quot;: 0,
+    &quot;ontology&quot;: {
+      &quot;vault&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+      &quot;strict&quot;: false,
+      &quot;kinds&quot;: [
+        {
+          &quot;kind&quot;: &quot;person&quot;,
+          &quot;built_in&quot;: true,
+          &quot;status&quot;: &quot;observed&quot;,
+          &quot;description&quot;: null,
+          &quot;merge_into&quot;: null,
+          &quot;synonyms&quot;: [],
+          &quot;origin&quot;: null,
+          &quot;reason&quot;: null,
+          &quot;entities&quot;: 1,
+          &quot;samples&quot;: [
+            &quot;Amelia Russo&quot;
+          ],
+          &quot;properties&quot;: [],
+          &quot;metrics&quot;: []
+        },
+        {
+          &quot;kind&quot;: &quot;organisation&quot;,
+          &quot;built_in&quot;: true,
+          &quot;status&quot;: &quot;observed&quot;,
+          &quot;description&quot;: null,
+          &quot;merge_into&quot;: null,
+          &quot;synonyms&quot;: [],
+          &quot;origin&quot;: null,
+          &quot;reason&quot;: null,
+          &quot;entities&quot;: 4,
+          &quot;samples&quot;: [
+            &quot;Abrolhos Fishers Co-op&quot;,
+            &quot;Esperance Abalone&quot;,
+            &quot;Shark Bay Prawns&quot;
+          ],
+          &quot;properties&quot;: [],
+          &quot;metrics&quot;: []
+        },
+        {
+          &quot;kind&quot;: &quot;location&quot;,
+          &quot;built_in&quot;: true,
+          &quot;status&quot;: &quot;observed&quot;,
+          &quot;description&quot;: null,
+          &quot;merge_into&quot;: null,
+          &quot;synonyms&quot;: [],
+          &quot;origin&quot;: null,
+          &quot;reason&quot;: null,
+          &quot;entities&quot;: 0,
+          &quot;samples&quot;: [],
+          &quot;properties&quot;: [],
+          &quot;metrics&quot;: []
+        },
+        {
+          &quot;kind&quot;: &quot;repository&quot;,
+          &quot;built_in&quot;: true,
+          &quot;status&quot;: &quot;observed&quot;,
+          &quot;description&quot;: null,
+          &quot;merge_into&quot;: null,
+          &quot;synonyms&quot;: [],
+          &quot;origin&quot;: null,
+          &quot;reason&quot;: null,
+          &quot;entities&quot;: 0,
+          &quot;samples&quot;: [],
+          &quot;properties&quot;: [],
+          &quot;metrics&quot;: []
+        },
+        {
+          &quot;kind&quot;: &quot;file&quot;,
+          &quot;built_in&quot;: true,
+          &quot;status&quot;: &quot;observed&quot;,
+          &quot;description&quot;: null,
+          &quot;merge_into&quot;: null,
+          &quot;synonyms&quot;: [],
+          &quot;origin&quot;: null,
+          &quot;reason&quot;: null,
+          &quot;entities&quot;: 0,
+          &quot;samples&quot;: [],
+          &quot;properties&quot;: [],
+          &quot;metrics&quot;: []
+        },
+        {
+          &quot;kind&quot;: &quot;symbol&quot;,
+          &quot;built_in&quot;: true,
+          &quot;status&quot;: &quot;observed&quot;,
+          &quot;description&quot;: null,
+          &quot;merge_into&quot;: null,
+          &quot;synonyms&quot;: [],
+          &quot;origin&quot;: null,
+          &quot;reason&quot;: null,
+          &quot;entities&quot;: 0,
+          &quot;samples&quot;: [],
+          &quot;properties&quot;: [],
+          &quot;metrics&quot;: []
+        },
+        {
+          &quot;kind&quot;: &quot;customer&quot;,
+          &quot;built_in&quot;: false,
+          &quot;status&quot;: &quot;observed&quot;,
+          &quot;description&quot;: null,
+          &quot;merge_into&quot;: null,
+          &quot;synonyms&quot;: [],
+          &quot;origin&quot;: null,
+          &quot;reason&quot;: null,
+          &quot;entities&quot;: 6,
+          &quot;samples&quot;: [
+            &quot;Bathers Beach Bistro&quot;,
+            &quot;Harbour Lights Hotel Group&quot;,
+            &quot;Portside Fish and Chips&quot;
+          ],
+          &quot;properties&quot;: [],
+          &quot;metrics&quot;: []
+        },
+        {
+          &quot;kind&quot;: &quot;decision&quot;,
+          &quot;built_in&quot;: false,
+          &quot;status&quot;: &quot;observed&quot;,
+          &quot;description&quot;: null,
+          &quot;merge_into&quot;: null,
+          &quot;synonyms&quot;: [],
+          &quot;origin&quot;: null,
+          &quot;reason&quot;: null,
+          &quot;entities&quot;: 1,
+          &quot;samples&quot;: [
+            &quot;Delivery minimum change&quot;
+          ],
+          &quot;properties&quot;: [],
+          &quot;metrics&quot;: []
+        },
+        {
+          &quot;kind&quot;: &quot;equipment&quot;,
+          &quot;built_in&quot;: false,
+          &quot;status&quot;: &quot;observed&quot;,
+          &quot;description&quot;: null,
+          &quot;merge_into&quot;: null,
+          &quot;synonyms&quot;: [],
+          &quot;origin&quot;: null,
+          &quot;reason&quot;: null,
+          &quot;entities&quot;: 1,
+          &quot;samples&quot;: [
+            &quot;Office Label Printer&quot;
+          ],
+          &quot;properties&quot;: [],
+          &quot;metrics&quot;: []
+        },
+        {
+          &quot;kind&quot;: &quot;inbound_load&quot;,
+          &quot;built_in&quot;: false,
+          &quot;status&quot;: &quot;observed&quot;,
+          &quot;description&quot;: null,
+          &quot;merge_into&quot;: null,
+          &quot;synonyms&quot;: [],
+          &quot;origin&quot;: null,
+          &quot;reason&quot;: null,
+          &quot;entities&quot;: 1,
+          &quot;samples&quot;: [
+            &quot;IN-42&quot;
+          ],
+          &quot;properties&quot;: [],
+          &quot;metrics&quot;: []
+        },
+        {
+          &quot;kind&quot;: &quot;order&quot;,
+          &quot;built_in&quot;: false,
+          &quot;status&quot;: &quot;observed&quot;,
+          &quot;description&quot;: null,
+          &quot;merge_into&quot;: null,
+          &quot;synonyms&quot;: [],
+          &quot;origin&quot;: null,
+          &quot;reason&quot;: null,
+          &quot;entities&quot;: 6,
+          &quot;samples&quot;: [
+            &quot;FFI-101&quot;,
+            &quot;FFI-102&quot;,
+            &quot;FFI-103&quot;
+          ],
+          &quot;properties&quot;: [],
+          &quot;metrics&quot;: []
+        },
+        {
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;built_in&quot;: false,
+          &quot;status&quot;: &quot;proposed&quot;,
+          &quot;description&quot;: &quot;A product in the supplier inventory, with its pricing, stock level, availability, and latest landing date.&quot;,
+          &quot;merge_into&quot;: null,
+          &quot;synonyms&quot;: [],
+          &quot;origin&quot;: &quot;suggested&quot;,
+          &quot;reason&quot;: &quot;one kind for the catalogue.csv records&quot;,
+          &quot;entities&quot;: 15,
+          &quot;samples&quot;: [
+            &quot;Block Ice 20kg&quot;,
+            &quot;Brownlip Abalone 1kg&quot;,
+            &quot;Cooked Prawns 2kg&quot;
+          ],
+          &quot;properties&quot;: [
+            {
+              &quot;name&quot;: &quot;last_landed&quot;,
+              &quot;datatype&quot;: &quot;date&quot;,
+              &quot;unit&quot;: null,
+              &quot;enum_values&quot;: null,
+              &quot;description&quot;: &quot;Date the product was last landed.&quot;,
+              &quot;synonyms&quot;: [],
+              &quot;status&quot;: &quot;proposed&quot;,
+              &quot;merge_into&quot;: null,
+              &quot;origin&quot;: &quot;suggested&quot;,
+              &quot;reason&quot;: &quot;from last landed&quot;,
+              &quot;values&quot;: 0,
+              &quot;samples&quot;: [],
+              &quot;source_map&quot;: [
+                {
+                  &quot;source&quot;: &quot;document&quot;,
+                  &quot;record_type&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;,
+                  &quot;path&quot;: &quot;last landed&quot;
+                }
+              ]
+            },
+            {
+              &quot;name&quot;: &quot;qty_on_hand&quot;,
+              &quot;datatype&quot;: &quot;integer&quot;,
+              &quot;unit&quot;: &quot;items&quot;,
+              &quot;enum_values&quot;: null,
+              &quot;description&quot;: &quot;Quantity currently on hand.&quot;,
+              &quot;synonyms&quot;: [],
+              &quot;status&quot;: &quot;proposed&quot;,
+              &quot;merge_into&quot;: null,
+              &quot;origin&quot;: &quot;suggested&quot;,
+              &quot;reason&quot;: &quot;from qty on hand&quot;,
+              &quot;values&quot;: 0,
+              &quot;samples&quot;: [],
+              &quot;source_map&quot;: [
+                {
+                  &quot;source&quot;: &quot;document&quot;,
+                  &quot;record_type&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;,
+                  &quot;path&quot;: &quot;qty on hand&quot;
+                }
+              ]
+            },
+            {
+              &quot;name&quot;: &quot;reorder_at&quot;,
+              &quot;datatype&quot;: &quot;integer&quot;,
+              &quot;unit&quot;: &quot;items&quot;,
+              &quot;enum_values&quot;: null,
+              &quot;description&quot;: &quot;Stock quantity at which the product should be reordered.&quot;,
+              &quot;synonyms&quot;: [],
+              &quot;status&quot;: &quot;proposed&quot;,
+              &quot;merge_into&quot;: null,
+              &quot;origin&quot;: &quot;suggested&quot;,
+              &quot;reason&quot;: &quot;from reorder at&quot;,
+              &quot;values&quot;: 0,
+              &quot;samples&quot;: [],
+              &quot;source_map&quot;: [
+                {
+                  &quot;source&quot;: &quot;document&quot;,
+                  &quot;record_type&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;,
+                  &quot;path&quot;: &quot;reorder at&quot;
+                }
+              ]
+            },
+            {
+              &quot;name&quot;: &quot;sell_price&quot;,
+              &quot;datatype&quot;: &quot;money&quot;,
+              &quot;unit&quot;: &quot;AUD&quot;,
+              &quot;enum_values&quot;: null,
+              &quot;description&quot;: &quot;Selling price of the product.&quot;,
+              &quot;synonyms&quot;: [],
+              &quot;status&quot;: &quot;proposed&quot;,
+              &quot;merge_into&quot;: null,
+              &quot;origin&quot;: &quot;suggested&quot;,
+              &quot;reason&quot;: &quot;from sell price AUD&quot;,
+              &quot;values&quot;: 0,
+              &quot;samples&quot;: [],
+              &quot;source_map&quot;: [
+                {
+                  &quot;source&quot;: &quot;document&quot;,
+                  &quot;record_type&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;,
+                  &quot;path&quot;: &quot;sell price AUD&quot;
+                }
+              ]
+            },
+            {
+              &quot;name&quot;: &quot;status&quot;,
+              &quot;datatype&quot;: &quot;enum&quot;,
+              &quot;unit&quot;: null,
+              &quot;enum_values&quot;: [
+                &quot;Available&quot;,
+                &quot;Discontinued&quot;,
+                &quot;On order&quot;
+              ],
+              &quot;description&quot;: &quot;Current product availability status.&quot;,
+              &quot;synonyms&quot;: [],
+              &quot;status&quot;: &quot;proposed&quot;,
+              &quot;merge_into&quot;: null,
+              &quot;origin&quot;: &quot;suggested&quot;,
+              &quot;reason&quot;: &quot;from status&quot;,
+              &quot;values&quot;: 0,
+              &quot;samples&quot;: [],
+              &quot;source_map&quot;: [
+                {
+                  &quot;source&quot;: &quot;document&quot;,
+                  &quot;record_type&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;,
+                  &quot;path&quot;: &quot;status&quot;
+                }
+              ]
+            },
+            {
+              &quot;name&quot;: &quot;unit_cost&quot;,
+              &quot;datatype&quot;: &quot;money&quot;,
+              &quot;unit&quot;: &quot;AUD&quot;,
+              &quot;enum_values&quot;: null,
+              &quot;description&quot;: &quot;Unit cost of the product.&quot;,
+              &quot;synonyms&quot;: [],
+              &quot;status&quot;: &quot;proposed&quot;,
+              &quot;merge_into&quot;: null,
+              &quot;origin&quot;: &quot;suggested&quot;,
+              &quot;reason&quot;: &quot;from unit cost AUD&quot;,
+              &quot;values&quot;: 0,
+              &quot;samples&quot;: [],
+              &quot;source_map&quot;: [
+                {
+                  &quot;source&quot;: &quot;document&quot;,
+                  &quot;record_type&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;,
+                  &quot;path&quot;: &quot;unit cost AUD&quot;
+                }
+              ]
+            }
+          ],
+          &quot;metrics&quot;: [
+            {
+              &quot;name&quot;: &quot;gross_margin&quot;,
+              &quot;description&quot;: &quot;Gross margin across products, calculated from selling prices and unit costs.&quot;,
+              &quot;synonyms&quot;: [],
+              &quot;expr&quot;: {
+                &quot;agg&quot;: &quot;ratio&quot;,
+                &quot;numerator&quot;: {
+                  &quot;agg&quot;: &quot;sum&quot;,
+                  &quot;row&quot;: {
+                    &quot;op&quot;: &quot;sub&quot;,
+                    &quot;left&quot;: &quot;sell_price&quot;,
+                    &quot;right&quot;: &quot;unit_cost&quot;
+                  }
+                },
+                &quot;denominator&quot;: {
+                  &quot;agg&quot;: &quot;sum&quot;,
+                  &quot;property&quot;: &quot;sell_price&quot;
+                }
+              },
+              &quot;expr_words&quot;: &quot;Sum of (sell price − unit cost), divided by sum of sell price&quot;,
+              &quot;unit&quot;: &quot;percent&quot;,
+              &quot;status&quot;: &quot;proposed&quot;,
+              &quot;merge_into&quot;: null,
+              &quot;origin&quot;: &quot;suggested&quot;,
+              &quot;reason&quot;: &quot;computed from the catalogue.csv records&#x27; properties&quot;
+            },
+            {
+              &quot;name&quot;: &quot;inventory_cost_value&quot;,
+              &quot;description&quot;: &quot;Estimated total cost value of current stock.&quot;,
+              &quot;synonyms&quot;: [],
+              &quot;expr&quot;: {
+                &quot;agg&quot;: &quot;sum&quot;,
+                &quot;row&quot;: {
+                  &quot;op&quot;: &quot;mul&quot;,
+                  &quot;left&quot;: &quot;qty_on_hand&quot;,
+                  &quot;right&quot;: &quot;unit_cost&quot;
+                }
+              },
+              &quot;expr_words&quot;: &quot;Sum of qty on hand × unit cost&quot;,
+              &quot;unit&quot;: &quot;AUD&quot;,
+              &quot;status&quot;: &quot;proposed&quot;,
+              &quot;merge_into&quot;: null,
+              &quot;origin&quot;: &quot;suggested&quot;,
+              &quot;reason&quot;: &quot;computed from the catalogue.csv records&#x27; properties&quot;
+            },
+            {
+              &quot;name&quot;: &quot;product_count&quot;,
+              &quot;description&quot;: &quot;Number of products.&quot;,
+              &quot;synonyms&quot;: [],
+              &quot;expr&quot;: {
+                &quot;agg&quot;: &quot;count&quot;,
+                &quot;property&quot;: &quot;qty_on_hand&quot;
+              },
+              &quot;expr_words&quot;: &quot;Number of product with a qty on hand&quot;,
+              &quot;unit&quot;: &quot;items&quot;,
+              &quot;status&quot;: &quot;proposed&quot;,
+              &quot;merge_into&quot;: null,
+              &quot;origin&quot;: &quot;suggested&quot;,
+              &quot;reason&quot;: &quot;computed from the catalogue.csv records&#x27; properties&quot;
+            }
+          ]
+        },
+        {
+          &quot;kind&quot;: &quot;truck&quot;,
+          &quot;built_in&quot;: false,
+          &quot;status&quot;: &quot;observed&quot;,
+          &quot;description&quot;: null,
+          &quot;merge_into&quot;: null,
+          &quot;synonyms&quot;: [],
+          &quot;origin&quot;: null,
+          &quot;reason&quot;: null,
+          &quot;entities&quot;: 1,
+          &quot;samples&quot;: [
+            &quot;Reefer 2&quot;
+          ],
+          &quot;properties&quot;: [],
+          &quot;metrics&quot;: []
+        }
+      ],
+      &quot;links&quot;: [
+        {
+          &quot;from_kind&quot;: &quot;customer&quot;,
+          &quot;label&quot;: &quot;placed&quot;,
+          &quot;to_kind&quot;: &quot;order&quot;,
+          &quot;status&quot;: &quot;observed&quot;,
+          &quot;description&quot;: null,
+          &quot;origin&quot;: null,
+          &quot;reason&quot;: null,
+          &quot;count&quot;: 6,
+          &quot;samples&quot;: [
+            {
+              &quot;from&quot;: &quot;Quay Seafood Kitchen&quot;,
+              &quot;to&quot;: &quot;FFI-105&quot;
+            },
+            {
+              &quot;from&quot;: &quot;West End Oyster Bar&quot;,
+              &quot;to&quot;: &quot;FFI-106&quot;
+            },
+            {
+              &quot;from&quot;: &quot;Portside Fish and Chips&quot;,
+              &quot;to&quot;: &quot;FFI-102&quot;
+            }
+          ]
+        },
+        {
+          &quot;from_kind&quot;: &quot;decision&quot;,
+          &quot;label&quot;: &quot;approved_by&quot;,
+          &quot;to_kind&quot;: &quot;person&quot;,
+          &quot;status&quot;: &quot;observed&quot;,
+          &quot;description&quot;: null,
+          &quot;origin&quot;: null,
+          &quot;reason&quot;: null,
+          &quot;count&quot;: 1,
+          &quot;samples&quot;: [
+            {
+              &quot;from&quot;: &quot;Delivery minimum change&quot;,
+              &quot;to&quot;: &quot;Amelia Russo&quot;
+            }
+          ]
+        },
+        {
+          &quot;from_kind&quot;: &quot;inbound_load&quot;,
+          &quot;label&quot;: &quot;contains&quot;,
+          &quot;to_kind&quot;: &quot;product&quot;,
+          &quot;status&quot;: &quot;observed&quot;,
+          &quot;description&quot;: null,
+          &quot;origin&quot;: null,
+          &quot;reason&quot;: null,
+          &quot;count&quot;: 4,
+          &quot;samples&quot;: [
+            {
+              &quot;from&quot;: &quot;IN-42&quot;,
+              &quot;to&quot;: &quot;Greenlip Abalone 1kg&quot;
+            },
+            {
+              &quot;from&quot;: &quot;IN-42&quot;,
+              &quot;to&quot;: &quot;Gummy Shark 5kg&quot;
+            },
+            {
+              &quot;from&quot;: &quot;IN-42&quot;,
+              &quot;to&quot;: &quot;Dhufish Whole 10kg&quot;
+            }
+          ]
+        },
+        {
+          &quot;from_kind&quot;: &quot;inbound_load&quot;,
+          &quot;label&quot;: &quot;supplies&quot;,
+          &quot;to_kind&quot;: &quot;order&quot;,
+          &quot;status&quot;: &quot;observed&quot;,
+          &quot;description&quot;: null,
+          &quot;origin&quot;: null,
+          &quot;reason&quot;: null,
+          &quot;count&quot;: 4,
+          &quot;samples&quot;: [
+            {
+              &quot;from&quot;: &quot;IN-42&quot;,
+              &quot;to&quot;: &quot;FFI-102&quot;
+            },
+            {
+              &quot;from&quot;: &quot;IN-42&quot;,
+              &quot;to&quot;: &quot;FFI-101&quot;
+            },
+            {
+              &quot;from&quot;: &quot;IN-42&quot;,
+              &quot;to&quot;: &quot;FFI-103&quot;
+            }
+          ]
+        },
+        {
+          &quot;from_kind&quot;: &quot;order&quot;,
+          &quot;label&quot;: &quot;requires&quot;,
+          &quot;to_kind&quot;: &quot;product&quot;,
+          &quot;status&quot;: &quot;observed&quot;,
+          &quot;description&quot;: null,
+          &quot;origin&quot;: null,
+          &quot;reason&quot;: null,
+          &quot;count&quot;: 15,
+          &quot;samples&quot;: [
+            {
+              &quot;from&quot;: &quot;FFI-102&quot;,
+              &quot;to&quot;: &quot;Flake Ice 10kg&quot;
+            },
+            {
+              &quot;from&quot;: &quot;FFI-101&quot;,
+              &quot;to&quot;: &quot;King Prawns U10 5kg&quot;
+            },
+            {
+              &quot;from&quot;: &quot;FFI-105&quot;,
+              &quot;to&quot;: &quot;Octopus 5kg&quot;
+            }
+          ]
+        },
+        {
+          &quot;from_kind&quot;: &quot;organisation&quot;,
+          &quot;label&quot;: &quot;has_consignment_on_order_for&quot;,
+          &quot;to_kind&quot;: &quot;customer&quot;,
+          &quot;status&quot;: &quot;observed&quot;,
+          &quot;description&quot;: null,
+          &quot;origin&quot;: null,
+          &quot;reason&quot;: null,
+          &quot;count&quot;: 1,
+          &quot;samples&quot;: [
+            {
+              &quot;from&quot;: &quot;Esperance Abalone&quot;,
+              &quot;to&quot;: &quot;Harbour Lights Hotel Group&quot;
+            }
+          ]
+        },
+        {
+          &quot;from_kind&quot;: &quot;organisation&quot;,
+          &quot;label&quot;: &quot;supplies&quot;,
+          &quot;to_kind&quot;: &quot;product&quot;,
+          &quot;status&quot;: &quot;observed&quot;,
+          &quot;description&quot;: null,
+          &quot;origin&quot;: null,
+          &quot;reason&quot;: null,
+          &quot;count&quot;: 1,
+          &quot;samples&quot;: [
+            {
+              &quot;from&quot;: &quot;Esperance Abalone&quot;,
+              &quot;to&quot;: &quot;Greenlip Abalone 1kg&quot;
+            }
+          ]
+        },
+        {
+          &quot;from_kind&quot;: &quot;person&quot;,
+          &quot;label&quot;: &quot;leads_dispatch_for&quot;,
+          &quot;to_kind&quot;: &quot;inbound_load&quot;,
+          &quot;status&quot;: &quot;observed&quot;,
+          &quot;description&quot;: null,
+          &quot;origin&quot;: null,
+          &quot;reason&quot;: null,
+          &quot;count&quot;: 1,
+          &quot;samples&quot;: [
+            {
+              &quot;from&quot;: &quot;Amelia Russo&quot;,
+              &quot;to&quot;: &quot;IN-42&quot;
+            }
+          ]
+        },
+        {
+          &quot;from_kind&quot;: &quot;product&quot;,
+          &quot;label&quot;: &quot;supplies&quot;,
+          &quot;to_kind&quot;: &quot;organisation&quot;,
+          &quot;status&quot;: &quot;proposed&quot;,
+          &quot;description&quot;: &quot;Organisation that supplies this product.&quot;,
+          &quot;origin&quot;: &quot;suggested&quot;,
+          &quot;reason&quot;: &quot;100% of values match (5 of 5)&quot;,
+          &quot;count&quot;: 0,
+          &quot;samples&quot;: [],
+          &quot;source_map&quot;: [
+            {
+              &quot;source&quot;: &quot;document&quot;,
+              &quot;record_type&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;,
+              &quot;path&quot;: &quot;supplier&quot;
+            }
+          ]
+        },
+        {
+          &quot;from_kind&quot;: &quot;truck&quot;,
+          &quot;label&quot;: &quot;carries&quot;,
+          &quot;to_kind&quot;: &quot;inbound_load&quot;,
+          &quot;status&quot;: &quot;observed&quot;,
+          &quot;description&quot;: null,
+          &quot;origin&quot;: null,
+          &quot;reason&quot;: null,
+          &quot;count&quot;: 1,
+          &quot;samples&quot;: [
+            {
+              &quot;from&quot;: &quot;Reefer 2&quot;,
+              &quot;to&quot;: &quot;IN-42&quot;
+            }
+          ]
+        },
+        {
+          &quot;from_kind&quot;: &quot;truck&quot;,
+          &quot;label&quot;: &quot;serves&quot;,
+          &quot;to_kind&quot;: &quot;order&quot;,
+          &quot;status&quot;: &quot;observed&quot;,
+          &quot;description&quot;: null,
+          &quot;origin&quot;: null,
+          &quot;reason&quot;: null,
+          &quot;count&quot;: 4,
+          &quot;samples&quot;: [
+            {
+              &quot;from&quot;: &quot;Reefer 2&quot;,
+              &quot;to&quot;: &quot;FFI-102&quot;
+            },
+            {
+              &quot;from&quot;: &quot;Reefer 2&quot;,
+              &quot;to&quot;: &quot;FFI-103&quot;
+            },
+            {
+              &quot;from&quot;: &quot;Reefer 2&quot;,
+              &quot;to&quot;: &quot;FFI-101&quot;
+            }
+          ]
+        }
+      ]
+    }
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__ontology_propose</h3><pre>{
+  &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+  &quot;kinds&quot;: [
+    {
+      &quot;kind&quot;: &quot;customer&quot;,
+      &quot;description&quot;: &quot;A business that buys seafood and ice from Fremantle Fish &amp; Ice Co.&quot;,
+      &quot;reason&quot;: &quot;Six customers in the ops notes.&quot;
+    },
+    {
+      &quot;kind&quot;: &quot;order&quot;,
+      &quot;description&quot;: &quot;An open customer order with an FFI number and a due date.&quot;,
+      &quot;reason&quot;: &quot;Six open orders in the ops notes.&quot;
+    },
+    {
+      &quot;kind&quot;: &quot;truck&quot;,
+      &quot;description&quot;: &quot;A vehicle that carries inbound loads, such as refrigerated truck Reefer 2.&quot;,
+      &quot;reason&quot;: &quot;Reefer 2 in the ops notes.&quot;
+    },
+    {
+      &quot;kind&quot;: &quot;inbound_load&quot;,
+      &quot;description&quot;: &quot;A load of stock arriving on a truck, with an expected date, such as IN-42.&quot;,
+      &quot;reason&quot;: &quot;IN-42 in the ops notes.&quot;
+    },
+    {
+      &quot;kind&quot;: &quot;decision&quot;,
+      &quot;description&quot;: &quot;A business decision with an owner who approved it and an effective date.&quot;,
+      &quot;reason&quot;: &quot;The delivery minimum decision.&quot;
+    },
+    {
+      &quot;kind&quot;: &quot;equipment&quot;,
+      &quot;description&quot;: &quot;A piece of business equipment, such as the Office Label Printer.&quot;,
+      &quot;reason&quot;: &quot;The printer in the ops notes. It has no dependencies on purpose.&quot;
+    }
+  ],
+  &quot;properties&quot;: [
+    {
+      &quot;kind&quot;: &quot;order&quot;,
+      &quot;name&quot;: &quot;due_date&quot;,
+      &quot;datatype&quot;: &quot;date&quot;,
+      &quot;description&quot;: &quot;The date the customer order is due.&quot;,
+      &quot;reason&quot;: &quot;Every order in the notes has a due date.&quot;
+    },
+    {
+      &quot;kind&quot;: &quot;inbound_load&quot;,
+      &quot;name&quot;: &quot;expected_date&quot;,
+      &quot;datatype&quot;: &quot;date&quot;,
+      &quot;description&quot;: &quot;The date the inbound load is expected to arrive.&quot;,
+      &quot;reason&quot;: &quot;IN-42 is expected 11 November 2026.&quot;
+    }
+  ],
+  &quot;links&quot;: [
+    {
+      &quot;from_kind&quot;: &quot;customer&quot;,
+      &quot;label&quot;: &quot;placed&quot;,
+      &quot;to_kind&quot;: &quot;order&quot;,
+      &quot;description&quot;: &quot;The customer placed this order.&quot;,
+      &quot;reason&quot;: &quot;Customers to orders.&quot;
+    },
+    {
+      &quot;from_kind&quot;: &quot;order&quot;,
+      &quot;label&quot;: &quot;requires&quot;,
+      &quot;to_kind&quot;: &quot;product&quot;,
+      &quot;description&quot;: &quot;The order needs this product.&quot;,
+      &quot;reason&quot;: &quot;Orders to required products.&quot;
+    },
+    {
+      &quot;from_kind&quot;: &quot;truck&quot;,
+      &quot;label&quot;: &quot;carries&quot;,
+      &quot;to_kind&quot;: &quot;inbound_load&quot;,
+      &quot;description&quot;: &quot;The truck is carrying this inbound load.&quot;,
+      &quot;reason&quot;: &quot;Reefer 2 carries IN-42.&quot;
+    },
+    {
+      &quot;from_kind&quot;: &quot;truck&quot;,
+      &quot;label&quot;: &quot;serves&quot;,
+      &quot;to_kind&quot;: &quot;order&quot;,
+      &quot;description&quot;: &quot;Stock on this truck is meant for this order.&quot;,
+      &quot;reason&quot;: &quot;Reefer 2 serves four orders.&quot;
+    },
+    {
+      &quot;from_kind&quot;: &quot;inbound_load&quot;,
+      &quot;label&quot;: &quot;supplies&quot;,
+      &quot;to_kind&quot;: &quot;order&quot;,
+      &quot;description&quot;: &quot;The load holds stock for this order. A delay puts the order at risk.&quot;,
+      &quot;reason&quot;: &quot;IN-42 to FFI-101 to FFI-104.&quot;
+    },
+    {
+      &quot;from_kind&quot;: &quot;inbound_load&quot;,
+      &quot;label&quot;: &quot;contains&quot;,
+      &quot;to_kind&quot;: &quot;product&quot;,
+      &quot;description&quot;: &quot;The load holds this product.&quot;,
+      &quot;reason&quot;: &quot;IN-42 contents.&quot;
+    },
+    {
+      &quot;from_kind&quot;: &quot;person&quot;,
+      &quot;label&quot;: &quot;leads_dispatch_for&quot;,
+      &quot;to_kind&quot;: &quot;inbound_load&quot;,
+      &quot;description&quot;: &quot;The person leads dispatch for this load.&quot;,
+      &quot;reason&quot;: &quot;Amelia Russo and IN-42.&quot;
+    },
+    {
+      &quot;from_kind&quot;: &quot;decision&quot;,
+      &quot;label&quot;: &quot;approved_by&quot;,
+      &quot;to_kind&quot;: &quot;person&quot;,
+      &quot;description&quot;: &quot;The person who approved the decision.&quot;,
+      &quot;reason&quot;: &quot;Delivery minimum approved by Amelia Russo.&quot;
+    },
+    {
+      &quot;from_kind&quot;: &quot;organisation&quot;,
+      &quot;label&quot;: &quot;supplies&quot;,
+      &quot;to_kind&quot;: &quot;product&quot;,
+      &quot;description&quot;: &quot;The organisation supplies this product.&quot;,
+      &quot;reason&quot;: &quot;Used for Esperance Abalone and Greenlip Abalone.&quot;
+    },
+    {
+      &quot;from_kind&quot;: &quot;organisation&quot;,
+      &quot;label&quot;: &quot;has_consignment_on_order_for&quot;,
+      &quot;to_kind&quot;: &quot;customer&quot;,
+      &quot;description&quot;: &quot;The supplier has a consignment on order for this customer.&quot;,
+      &quot;reason&quot;: &quot;Esperance Abalone and Harbour Lights Hotel Group.&quot;
+    },
+    {
+      &quot;from_kind&quot;: &quot;product&quot;,
+      &quot;label&quot;: &quot;supplied_by&quot;,
+      &quot;to_kind&quot;: &quot;organisation&quot;,
+      &quot;description&quot;: &quot;The organisation that supplies this product. Reads product to supplier.&quot;,
+      &quot;reason&quot;: &quot;Clearer direction than the automap link product supplies organisation, which reads backwards. Same CSV supplier column.&quot;,
+      &quot;source_map&quot;: [
+        {
+          &quot;source&quot;: &quot;document&quot;,
+          &quot;record_type&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;,
+          &quot;path&quot;: &quot;supplier&quot;
+        }
+      ]
+    }
+  ],
+  &quot;metrics&quot;: [
+    {
+      &quot;kind&quot;: &quot;product&quot;,
+      &quot;name&quot;: &quot;avg_sell_price&quot;,
+      &quot;description&quot;: &quot;Average sell price per product, in AUD.&quot;,
+      &quot;expr&quot;: {
+        &quot;agg&quot;: &quot;avg&quot;,
+        &quot;property&quot;: &quot;sell_price&quot;
+      },
+      &quot;unit&quot;: &quot;AUD&quot;,
+      &quot;synonyms&quot;: [
+        &quot;average sell price&quot;,
+        &quot;average price&quot;
+      ],
+      &quot;reason&quot;: &quot;The owner asked for average sell price.&quot;
+    },
+    {
+      &quot;kind&quot;: &quot;product&quot;,
+      &quot;name&quot;: &quot;total_stock_value_at_cost&quot;,
+      &quot;description&quot;: &quot;Total stock value at cost: quantity on hand times unit cost, summed over products. Products with no unit cost are left out.&quot;,
+      &quot;expr&quot;: {
+        &quot;agg&quot;: &quot;sum&quot;,
+        &quot;row&quot;: {
+          &quot;op&quot;: &quot;mul&quot;,
+          &quot;left&quot;: &quot;qty_on_hand&quot;,
+          &quot;right&quot;: &quot;unit_cost&quot;
+        }
+      },
+      &quot;unit&quot;: &quot;AUD&quot;,
+      &quot;synonyms&quot;: [
+        &quot;stock value at cost&quot;,
+        &quot;inventory value at cost&quot;
+      ],
+      &quot;reason&quot;: &quot;The owner asked for total stock value at cost. Same working as inventory_cost_value, named as asked. The owner can merge the two.&quot;
+    },
+    {
+      &quot;kind&quot;: &quot;product&quot;,
+      &quot;name&quot;: &quot;avg_unit_cost&quot;,
+      &quot;description&quot;: &quot;Average unit cost per product, in AUD. Products with no cost are left out.&quot;,
+      &quot;expr&quot;: {
+        &quot;agg&quot;: &quot;avg&quot;,
+        &quot;property&quot;: &quot;unit_cost&quot;
+      },
+      &quot;unit&quot;: &quot;AUD&quot;,
+      &quot;reason&quot;: &quot;Useful beside average sell price.&quot;
+    },
+    {
+      &quot;kind&quot;: &quot;product&quot;,
+      &quot;name&quot;: &quot;available_product_count&quot;,
+      &quot;description&quot;: &quot;Number of products with status Available.&quot;,
+      &quot;expr&quot;: {
+        &quot;agg&quot;: &quot;count&quot;,
+        &quot;property&quot;: &quot;status&quot;,
+        &quot;filters&quot;: [
+          {
+            &quot;property&quot;: &quot;status&quot;,
+            &quot;op&quot;: &quot;eq&quot;,
+            &quot;value&quot;: &quot;Available&quot;
+          }
+        ]
+      },
+      &quot;unit&quot;: &quot;items&quot;,
+      &quot;reason&quot;: &quot;Shows how much of the range can be sold now.&quot;
+    }
+  ]
+}</pre><pre class="result">{
+  &quot;kinds&quot;: 6,
+  &quot;links&quot;: 11,
+  &quot;properties&quot;: 2,
+  &quot;metrics&quot;: 4
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__ontology_propose&quot;,
+  &quot;arguments&quot;: {
+    &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+    &quot;kinds&quot;: [
+      {
+        &quot;kind&quot;: &quot;customer&quot;,
+        &quot;description&quot;: &quot;A business that buys seafood and ice from Fremantle Fish &amp; Ice Co.&quot;,
+        &quot;reason&quot;: &quot;Six customers in the ops notes.&quot;
+      },
+      {
+        &quot;kind&quot;: &quot;order&quot;,
+        &quot;description&quot;: &quot;An open customer order with an FFI number and a due date.&quot;,
+        &quot;reason&quot;: &quot;Six open orders in the ops notes.&quot;
+      },
+      {
+        &quot;kind&quot;: &quot;truck&quot;,
+        &quot;description&quot;: &quot;A vehicle that carries inbound loads, such as refrigerated truck Reefer 2.&quot;,
+        &quot;reason&quot;: &quot;Reefer 2 in the ops notes.&quot;
+      },
+      {
+        &quot;kind&quot;: &quot;inbound_load&quot;,
+        &quot;description&quot;: &quot;A load of stock arriving on a truck, with an expected date, such as IN-42.&quot;,
+        &quot;reason&quot;: &quot;IN-42 in the ops notes.&quot;
+      },
+      {
+        &quot;kind&quot;: &quot;decision&quot;,
+        &quot;description&quot;: &quot;A business decision with an owner who approved it and an effective date.&quot;,
+        &quot;reason&quot;: &quot;The delivery minimum decision.&quot;
+      },
+      {
+        &quot;kind&quot;: &quot;equipment&quot;,
+        &quot;description&quot;: &quot;A piece of business equipment, such as the Office Label Printer.&quot;,
+        &quot;reason&quot;: &quot;The printer in the ops notes. It has no dependencies on purpose.&quot;
+      }
+    ],
+    &quot;properties&quot;: [
+      {
+        &quot;kind&quot;: &quot;order&quot;,
+        &quot;name&quot;: &quot;due_date&quot;,
+        &quot;datatype&quot;: &quot;date&quot;,
+        &quot;description&quot;: &quot;The date the customer order is due.&quot;,
+        &quot;reason&quot;: &quot;Every order in the notes has a due date.&quot;
+      },
+      {
+        &quot;kind&quot;: &quot;inbound_load&quot;,
+        &quot;name&quot;: &quot;expected_date&quot;,
+        &quot;datatype&quot;: &quot;date&quot;,
+        &quot;description&quot;: &quot;The date the inbound load is expected to arrive.&quot;,
+        &quot;reason&quot;: &quot;IN-42 is expected 11 November 2026.&quot;
+      }
+    ],
+    &quot;links&quot;: [
+      {
+        &quot;from_kind&quot;: &quot;customer&quot;,
+        &quot;label&quot;: &quot;placed&quot;,
+        &quot;to_kind&quot;: &quot;order&quot;,
+        &quot;description&quot;: &quot;The customer placed this order.&quot;,
+        &quot;reason&quot;: &quot;Customers to orders.&quot;
+      },
+      {
+        &quot;from_kind&quot;: &quot;order&quot;,
+        &quot;label&quot;: &quot;requires&quot;,
+        &quot;to_kind&quot;: &quot;product&quot;,
+        &quot;description&quot;: &quot;The order needs this product.&quot;,
+        &quot;reason&quot;: &quot;Orders to required products.&quot;
+      },
+      {
+        &quot;from_kind&quot;: &quot;truck&quot;,
+        &quot;label&quot;: &quot;carries&quot;,
+        &quot;to_kind&quot;: &quot;inbound_load&quot;,
+        &quot;description&quot;: &quot;The truck is carrying this inbound load.&quot;,
+        &quot;reason&quot;: &quot;Reefer 2 carries IN-42.&quot;
+      },
+      {
+        &quot;from_kind&quot;: &quot;truck&quot;,
+        &quot;label&quot;: &quot;serves&quot;,
+        &quot;to_kind&quot;: &quot;order&quot;,
+        &quot;description&quot;: &quot;Stock on this truck is meant for this order.&quot;,
+        &quot;reason&quot;: &quot;Reefer 2 serves four orders.&quot;
+      },
+      {
+        &quot;from_kind&quot;: &quot;inbound_load&quot;,
+        &quot;label&quot;: &quot;supplies&quot;,
+        &quot;to_kind&quot;: &quot;order&quot;,
+        &quot;description&quot;: &quot;The load holds stock for this order. A delay puts the order at risk.&quot;,
+        &quot;reason&quot;: &quot;IN-42 to FFI-101 to FFI-104.&quot;
+      },
+      {
+        &quot;from_kind&quot;: &quot;inbound_load&quot;,
+        &quot;label&quot;: &quot;contains&quot;,
+        &quot;to_kind&quot;: &quot;product&quot;,
+        &quot;description&quot;: &quot;The load holds this product.&quot;,
+        &quot;reason&quot;: &quot;IN-42 contents.&quot;
+      },
+      {
+        &quot;from_kind&quot;: &quot;person&quot;,
+        &quot;label&quot;: &quot;leads_dispatch_for&quot;,
+        &quot;to_kind&quot;: &quot;inbound_load&quot;,
+        &quot;description&quot;: &quot;The person leads dispatch for this load.&quot;,
+        &quot;reason&quot;: &quot;Amelia Russo and IN-42.&quot;
+      },
+      {
+        &quot;from_kind&quot;: &quot;decision&quot;,
+        &quot;label&quot;: &quot;approved_by&quot;,
+        &quot;to_kind&quot;: &quot;person&quot;,
+        &quot;description&quot;: &quot;The person who approved the decision.&quot;,
+        &quot;reason&quot;: &quot;Delivery minimum approved by Amelia Russo.&quot;
+      },
+      {
+        &quot;from_kind&quot;: &quot;organisation&quot;,
+        &quot;label&quot;: &quot;supplies&quot;,
+        &quot;to_kind&quot;: &quot;product&quot;,
+        &quot;description&quot;: &quot;The organisation supplies this product.&quot;,
+        &quot;reason&quot;: &quot;Used for Esperance Abalone and Greenlip Abalone.&quot;
+      },
+      {
+        &quot;from_kind&quot;: &quot;organisation&quot;,
+        &quot;label&quot;: &quot;has_consignment_on_order_for&quot;,
+        &quot;to_kind&quot;: &quot;customer&quot;,
+        &quot;description&quot;: &quot;The supplier has a consignment on order for this customer.&quot;,
+        &quot;reason&quot;: &quot;Esperance Abalone and Harbour Lights Hotel Group.&quot;
+      },
+      {
+        &quot;from_kind&quot;: &quot;product&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to_kind&quot;: &quot;organisation&quot;,
+        &quot;description&quot;: &quot;The organisation that supplies this product. Reads product to supplier.&quot;,
+        &quot;reason&quot;: &quot;Clearer direction than the automap link product supplies organisation, which reads backwards. Same CSV supplier column.&quot;,
+        &quot;source_map&quot;: [
+          {
+            &quot;source&quot;: &quot;document&quot;,
+            &quot;record_type&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;,
+            &quot;path&quot;: &quot;supplier&quot;
+          }
+        ]
+      }
+    ],
+    &quot;metrics&quot;: [
+      {
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;name&quot;: &quot;avg_sell_price&quot;,
+        &quot;description&quot;: &quot;Average sell price per product, in AUD.&quot;,
+        &quot;expr&quot;: {
+          &quot;agg&quot;: &quot;avg&quot;,
+          &quot;property&quot;: &quot;sell_price&quot;
+        },
+        &quot;unit&quot;: &quot;AUD&quot;,
+        &quot;synonyms&quot;: [
+          &quot;average sell price&quot;,
+          &quot;average price&quot;
+        ],
+        &quot;reason&quot;: &quot;The owner asked for average sell price.&quot;
+      },
+      {
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;name&quot;: &quot;total_stock_value_at_cost&quot;,
+        &quot;description&quot;: &quot;Total stock value at cost: quantity on hand times unit cost, summed over products. Products with no unit cost are left out.&quot;,
+        &quot;expr&quot;: {
+          &quot;agg&quot;: &quot;sum&quot;,
+          &quot;row&quot;: {
+            &quot;op&quot;: &quot;mul&quot;,
+            &quot;left&quot;: &quot;qty_on_hand&quot;,
+            &quot;right&quot;: &quot;unit_cost&quot;
+          }
+        },
+        &quot;unit&quot;: &quot;AUD&quot;,
+        &quot;synonyms&quot;: [
+          &quot;stock value at cost&quot;,
+          &quot;inventory value at cost&quot;
+        ],
+        &quot;reason&quot;: &quot;The owner asked for total stock value at cost. Same working as inventory_cost_value, named as asked. The owner can merge the two.&quot;
+      },
+      {
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;name&quot;: &quot;avg_unit_cost&quot;,
+        &quot;description&quot;: &quot;Average unit cost per product, in AUD. Products with no cost are left out.&quot;,
+        &quot;expr&quot;: {
+          &quot;agg&quot;: &quot;avg&quot;,
+          &quot;property&quot;: &quot;unit_cost&quot;
+        },
+        &quot;unit&quot;: &quot;AUD&quot;,
+        &quot;reason&quot;: &quot;Useful beside average sell price.&quot;
+      },
+      {
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;name&quot;: &quot;available_product_count&quot;,
+        &quot;description&quot;: &quot;Number of products with status Available.&quot;,
+        &quot;expr&quot;: {
+          &quot;agg&quot;: &quot;count&quot;,
+          &quot;property&quot;: &quot;status&quot;,
+          &quot;filters&quot;: [
+            {
+              &quot;property&quot;: &quot;status&quot;,
+              &quot;op&quot;: &quot;eq&quot;,
+              &quot;value&quot;: &quot;Available&quot;
+            }
+          ]
+        },
+        &quot;unit&quot;: &quot;items&quot;,
+        &quot;reason&quot;: &quot;Shows how much of the range can be sold now.&quot;
+      }
+    ]
+  },
+  &quot;id&quot;: &quot;toolu_01LxedPd52j91nvJkBEMgiSd&quot;,
+  &quot;result&quot;: {
+    &quot;kinds&quot;: [
+      {
+        &quot;kind&quot;: &quot;customer&quot;,
+        &quot;status&quot;: &quot;proposed&quot;,
+        &quot;merge_into&quot;: null
+      },
+      {
+        &quot;kind&quot;: &quot;order&quot;,
+        &quot;status&quot;: &quot;proposed&quot;,
+        &quot;merge_into&quot;: null
+      },
+      {
+        &quot;kind&quot;: &quot;truck&quot;,
+        &quot;status&quot;: &quot;proposed&quot;,
+        &quot;merge_into&quot;: null
+      },
+      {
+        &quot;kind&quot;: &quot;inbound_load&quot;,
+        &quot;status&quot;: &quot;proposed&quot;,
+        &quot;merge_into&quot;: null
+      },
+      {
+        &quot;kind&quot;: &quot;decision&quot;,
+        &quot;status&quot;: &quot;proposed&quot;,
+        &quot;merge_into&quot;: null
+      },
+      {
+        &quot;kind&quot;: &quot;equipment&quot;,
+        &quot;status&quot;: &quot;proposed&quot;,
+        &quot;merge_into&quot;: null
+      }
+    ],
+    &quot;links&quot;: [
+      {
+        &quot;from_kind&quot;: &quot;customer&quot;,
+        &quot;label&quot;: &quot;placed&quot;,
+        &quot;to_kind&quot;: &quot;order&quot;,
+        &quot;status&quot;: &quot;proposed&quot;
+      },
+      {
+        &quot;from_kind&quot;: &quot;order&quot;,
+        &quot;label&quot;: &quot;requires&quot;,
+        &quot;to_kind&quot;: &quot;product&quot;,
+        &quot;status&quot;: &quot;proposed&quot;
+      },
+      {
+        &quot;from_kind&quot;: &quot;truck&quot;,
+        &quot;label&quot;: &quot;carries&quot;,
+        &quot;to_kind&quot;: &quot;inbound_load&quot;,
+        &quot;status&quot;: &quot;proposed&quot;
+      },
+      {
+        &quot;from_kind&quot;: &quot;truck&quot;,
+        &quot;label&quot;: &quot;serves&quot;,
+        &quot;to_kind&quot;: &quot;order&quot;,
+        &quot;status&quot;: &quot;proposed&quot;
+      },
+      {
+        &quot;from_kind&quot;: &quot;inbound_load&quot;,
+        &quot;label&quot;: &quot;supplies&quot;,
+        &quot;to_kind&quot;: &quot;order&quot;,
+        &quot;status&quot;: &quot;proposed&quot;
+      },
+      {
+        &quot;from_kind&quot;: &quot;inbound_load&quot;,
+        &quot;label&quot;: &quot;contains&quot;,
+        &quot;to_kind&quot;: &quot;product&quot;,
+        &quot;status&quot;: &quot;proposed&quot;
+      },
+      {
+        &quot;from_kind&quot;: &quot;person&quot;,
+        &quot;label&quot;: &quot;leads_dispatch_for&quot;,
+        &quot;to_kind&quot;: &quot;inbound_load&quot;,
+        &quot;status&quot;: &quot;proposed&quot;
+      },
+      {
+        &quot;from_kind&quot;: &quot;decision&quot;,
+        &quot;label&quot;: &quot;approved_by&quot;,
+        &quot;to_kind&quot;: &quot;person&quot;,
+        &quot;status&quot;: &quot;proposed&quot;
+      },
+      {
+        &quot;from_kind&quot;: &quot;organisation&quot;,
+        &quot;label&quot;: &quot;supplies&quot;,
+        &quot;to_kind&quot;: &quot;product&quot;,
+        &quot;status&quot;: &quot;proposed&quot;
+      },
+      {
+        &quot;from_kind&quot;: &quot;organisation&quot;,
+        &quot;label&quot;: &quot;has_consignment_on_order_for&quot;,
+        &quot;to_kind&quot;: &quot;customer&quot;,
+        &quot;status&quot;: &quot;proposed&quot;
+      },
+      {
+        &quot;from_kind&quot;: &quot;product&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to_kind&quot;: &quot;organisation&quot;,
+        &quot;status&quot;: &quot;proposed&quot;
+      }
+    ],
+    &quot;properties&quot;: [
+      {
+        &quot;kind&quot;: &quot;order&quot;,
+        &quot;name&quot;: &quot;due_date&quot;,
+        &quot;datatype&quot;: &quot;date&quot;,
+        &quot;status&quot;: &quot;proposed&quot;,
+        &quot;merge_into&quot;: null
+      },
+      {
+        &quot;kind&quot;: &quot;inbound_load&quot;,
+        &quot;name&quot;: &quot;expected_date&quot;,
+        &quot;datatype&quot;: &quot;date&quot;,
+        &quot;status&quot;: &quot;proposed&quot;,
+        &quot;merge_into&quot;: null
+      }
+    ],
+    &quot;metrics&quot;: [
+      {
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;name&quot;: &quot;avg_sell_price&quot;,
+        &quot;status&quot;: &quot;proposed&quot;,
+        &quot;merge_into&quot;: null
+      },
+      {
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;name&quot;: &quot;total_stock_value_at_cost&quot;,
+        &quot;status&quot;: &quot;proposed&quot;,
+        &quot;merge_into&quot;: null
+      },
+      {
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;name&quot;: &quot;avg_unit_cost&quot;,
+        &quot;status&quot;: &quot;proposed&quot;,
+        &quot;merge_into&quot;: null
+      },
+      {
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;name&quot;: &quot;available_product_count&quot;,
+        &quot;status&quot;: &quot;proposed&quot;,
+        &quot;merge_into&quot;: null
+      }
+    ]
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__memory_write</h3><pre>{
+  &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+  &quot;subject_name&quot;: &quot;Fremantle Fish &amp; Ice Co setup&quot;,
+  &quot;subject_kind&quot;: &quot;project&quot;,
+  &quot;type&quot;: &quot;experience&quot;,
+  &quot;text&quot;: &quot;On 9 Nov 2026 the vault was set up: notes written as memories, entities linked, ops-notes.md and catalogue.csv uploaded, CSV auto-mapped. Kinds, properties, links and metrics are all proposed and wait for the owner. No rows imported yet. Octopus 5kg and Prawn Skewers 20pk have no unit cost in the CSV. The Shark Bay Prawns price rise is an unconfirmed rumour.&quot;
+}</pre><pre class="result">{
+  &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__memory_write&quot;,
+  &quot;arguments&quot;: {
+    &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+    &quot;subject_name&quot;: &quot;Fremantle Fish &amp; Ice Co setup&quot;,
+    &quot;subject_kind&quot;: &quot;project&quot;,
+    &quot;type&quot;: &quot;experience&quot;,
+    &quot;text&quot;: &quot;On 9 Nov 2026 the vault was set up: notes written as memories, entities linked, ops-notes.md and catalogue.csv uploaded, CSV auto-mapped. Kinds, properties, links and metrics are all proposed and wait for the owner. No rows imported yet. Octopus 5kg and Prawn Skewers 20pk have no unit cost in the CSV. The Shark Bay Prawns price rise is an unconfirmed rumour.&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01UwdSQstVpxju82QeEG7Cjm&quot;,
+  &quot;result&quot;: {
+    &quot;entity&quot;: {
+      &quot;id&quot;: &quot;entity:mdmu657gvycnhdqujg41&quot;,
+      &quot;kind&quot;: &quot;project&quot;,
+      &quot;name&quot;: &quot;Fremantle Fish &amp; Ice Co setup&quot;,
+      &quot;aliases&quot;: [],
+      &quot;summary&quot;: &quot;&quot;,
+      &quot;vault&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;
+    },
+    &quot;memory&quot;: {
+      &quot;id&quot;: &quot;memory:z9o1ywrh605zykxnoee5&quot;,
+      &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+      &quot;vault&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+      &quot;subject&quot;: &quot;entity:mdmu657gvycnhdqujg41&quot;,
+      &quot;text&quot;: &quot;On 9 Nov 2026 the vault was set up: notes written as memories, entities linked, ops-notes.md and catalogue.csv uploaded, CSV auto-mapped. Kinds, properties, links and metrics are all proposed and wait for the owner. No rows imported yet. Octopus 5kg and Prawn Skewers 20pk have no unit cost in the CSV. The Shark Bay Prawns price rise is an unconfirmed rumour.&quot;,
+      &quot;source&quot;: null,
+      &quot;created_at&quot;: &quot;2026-11-08T19:27:47.716461500Z&quot;,
+      &quot;type&quot;: &quot;experience&quot;,
+      &quot;proof_count&quot;: 1,
+      &quot;status&quot;: null,
+      &quot;source_memories&quot;: null,
+      &quot;updated_at&quot;: &quot;2026-11-08T19:27:47.716489291Z&quot;,
+      &quot;version&quot;: 1,
+      &quot;owner_email&quot;: null
+    },
+    &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+  }
+}</pre></details></article>

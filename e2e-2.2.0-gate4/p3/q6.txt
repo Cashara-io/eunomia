@@ -1,0 +1,9 @@
+Not saved yet. The business vault won't take a new kind until an owner approves it.
+
+**What happened:** The vault "Fremantle Fish & Ice Co" only accepts kinds an owner has approved. `live_seafood` is new, so it was filed as a proposal. The fact was not written.
+
+**What you do:** Open the Eunomia app and approve the `live_seafood` kind. Then tell me, and I'll save the crayfish fact right away.
+
+**Other option:** I can save it now under the approved kind `product`. You asked for `live_seafood`, so I haven't done this.
+
+I'd wait for the approval. That way it ends up where you wanted.

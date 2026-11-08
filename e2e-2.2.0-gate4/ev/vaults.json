@@ -1,0 +1,28 @@
+{
+  "results": [
+    {
+      "is_default": true,
+      "id": "vault:pe3e12a6efbc4cccf104",
+      "name": "Personal",
+      "kind": "personal",
+      "created_at": "2026-11-08T19:25:46.946952847Z",
+      "role": "owner"
+    },
+    {
+      "is_default": false,
+      "id": "vault:1eavkczl9x5mewq2zj5h",
+      "name": "Freo Rowing Club",
+      "kind": "org",
+      "created_at": "2026-11-08T19:25:47.008151972Z",
+      "role": "owner"
+    },
+    {
+      "is_default": false,
+      "id": "vault:rf0gaym72n9pkdbsg4a1",
+      "name": "Fremantle Fish & Ice Co",
+      "kind": "org",
+      "created_at": "2026-11-08T19:25:51.070708751Z",
+      "role": "owner"
+    }
+  ]
+}

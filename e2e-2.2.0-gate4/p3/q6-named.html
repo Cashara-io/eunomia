@@ -1,0 +1,124 @@
+<!doctype html><meta charset="utf-8"><style>body{font:15px/1.45 system-ui;margin:32px;background:#f5f5f1;color:#202322}h1{font-size:25px}h2{font-size:20px}h3{font-size:15px;margin:0 0 8px}article,.final{padding:18px;background:white;border:1px solid #d9ded8;margin:12px 0;border-radius:5px}pre{font:12px/1.4 ui-monospace;white-space:pre-wrap;overflow-wrap:anywhere;margin:4px 0}.final pre{font:16px/1.5 system-ui}.result{background:#f1f5f1;padding:10px}summary{font-size:12px;color:#566458}</style><h1>Eunomia 2.2.0 gate 3: p3/q6-named.jsonl</h1><p>Complete transcript is preserved beside this review as JSONL and text. Expand a tool to inspect its full input and result.</p><h2>Final answer</h2><div class="final"><pre>The fact is saved, but not under live_seafood yet.
+
+**Why:** The Fremantle Fish &amp; Ice Co vault only takes kinds an owner has approved. Your new kind, live_seafood, is now waiting as a proposal. You own the vault, so you can approve it in the Eunomia app.
+
+**My mistake:** My first try saved the fact on the company itself, as an organisation note. That was not what you asked for. The note reads &quot;Fremantle Fish &amp; Ice Co now sells live crayfish.&quot; It is harmless, but it is in the wrong place. I have not deleted it.
+
+**What to do:**
+1. Approve live_seafood in the Eunomia app.
+2. Tell me, and I&#x27;ll save the crayfish fact under it.
+
+I&#x27;d also delete the misfiled note once the real one is saved. Want me to do that then?</pre></div><h2>Tool evidence in call order</h2><article><h3>mcp__eunomia-local__vault_list</h3><pre>{}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__vault_list&quot;,
+  &quot;arguments&quot;: {},
+  &quot;id&quot;: &quot;toolu_016ehsNkxjcFU2ErW2gEjKWZ&quot;,
+  &quot;result&quot;: {
+    &quot;results&quot;: [
+      {
+        &quot;is_default&quot;: true,
+        &quot;id&quot;: &quot;vault:pe3e12a6efbc4cccf104&quot;,
+        &quot;name&quot;: &quot;Personal&quot;,
+        &quot;kind&quot;: &quot;personal&quot;,
+        &quot;created_at&quot;: &quot;2026-11-08T19:25:46.946952847Z&quot;,
+        &quot;role&quot;: &quot;owner&quot;
+      },
+      {
+        &quot;is_default&quot;: false,
+        &quot;id&quot;: &quot;vault:1eavkczl9x5mewq2zj5h&quot;,
+        &quot;name&quot;: &quot;Freo Rowing Club&quot;,
+        &quot;kind&quot;: &quot;org&quot;,
+        &quot;created_at&quot;: &quot;2026-11-08T19:25:47.008151972Z&quot;,
+        &quot;role&quot;: &quot;owner&quot;
+      },
+      {
+        &quot;is_default&quot;: false,
+        &quot;id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+        &quot;name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;,
+        &quot;kind&quot;: &quot;org&quot;,
+        &quot;created_at&quot;: &quot;2026-11-08T19:25:51.070708751Z&quot;,
+        &quot;role&quot;: &quot;owner&quot;
+      }
+    ]
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__memory_write</h3><pre>{
+  &quot;subject_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;,
+  &quot;subject_kind&quot;: &quot;organisation&quot;,
+  &quot;text&quot;: &quot;Fremantle Fish &amp; Ice Co now sells live crayfish.&quot;,
+  &quot;type&quot;: &quot;world&quot;,
+  &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;
+}</pre><pre class="result">{
+  &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__memory_write&quot;,
+  &quot;arguments&quot;: {
+    &quot;subject_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;,
+    &quot;subject_kind&quot;: &quot;organisation&quot;,
+    &quot;text&quot;: &quot;Fremantle Fish &amp; Ice Co now sells live crayfish.&quot;,
+    &quot;type&quot;: &quot;world&quot;,
+    &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01Jn3jH3fpmGQ9Z2X2vwarb9&quot;,
+  &quot;result&quot;: {
+    &quot;entity&quot;: {
+      &quot;id&quot;: &quot;organisation:nr42lg236k4p3w899wov&quot;,
+      &quot;kind&quot;: &quot;organisation&quot;,
+      &quot;name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;,
+      &quot;aliases&quot;: [],
+      &quot;summary&quot;: &quot;&quot;,
+      &quot;vault&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;
+    },
+    &quot;memory&quot;: {
+      &quot;id&quot;: &quot;memory:rmfdjljh39si0t7yg9gf&quot;,
+      &quot;owner&quot;: &quot;user:b558qrfkf1zsce3nwg9a&quot;,
+      &quot;vault&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+      &quot;subject&quot;: &quot;organisation:nr42lg236k4p3w899wov&quot;,
+      &quot;text&quot;: &quot;Fremantle Fish &amp; Ice Co now sells live crayfish.&quot;,
+      &quot;source&quot;: null,
+      &quot;created_at&quot;: &quot;2026-11-08T19:31:18.757356500Z&quot;,
+      &quot;type&quot;: &quot;world&quot;,
+      &quot;proof_count&quot;: 1,
+      &quot;status&quot;: null,
+      &quot;source_memories&quot;: null,
+      &quot;updated_at&quot;: &quot;2026-11-08T19:31:18.757381167Z&quot;,
+      &quot;version&quot;: 1,
+      &quot;owner_email&quot;: null
+    },
+    &quot;possible_duplicates&quot;: [
+      {
+        &quot;id&quot;: &quot;organisation:7uqu9jwq62muit42lorh&quot;,
+        &quot;kind&quot;: &quot;organisation&quot;,
+        &quot;name&quot;: &quot;Southern Ice Works&quot;,
+        &quot;aliases&quot;: [
+          &quot;southern ice works&quot;
+        ],
+        &quot;summary&quot;: &quot;&quot;,
+        &quot;vault&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;
+      }
+    ],
+    &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__memory_write</h3><pre>{
+  &quot;subject_name&quot;: &quot;Live crayfish&quot;,
+  &quot;subject_kind&quot;: &quot;live_seafood&quot;,
+  &quot;text&quot;: &quot;Fremantle Fish &amp; Ice Co now sells live crayfish.&quot;,
+  &quot;type&quot;: &quot;world&quot;,
+  &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;
+}</pre><pre class="result">{
+  &quot;error&quot;: &quot;this vault takes only approved kinds and links, and the kind \&quot;live_seafood\&quot; is not approved: write under a built-in kind (person, organisation, location, repository, file, symbol) or an approved kind (customer, decision, equipment, inbound_load, order, organisation, person, product, project, truck). It was filed as a proposal for a vault owner to review.&quot;,
+  &quot;code&quot;: &quot;ontology.rejected&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__memory_write&quot;,
+  &quot;arguments&quot;: {
+    &quot;subject_name&quot;: &quot;Live crayfish&quot;,
+    &quot;subject_kind&quot;: &quot;live_seafood&quot;,
+    &quot;text&quot;: &quot;Fremantle Fish &amp; Ice Co now sells live crayfish.&quot;,
+    &quot;type&quot;: &quot;world&quot;,
+    &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01GzW3X5gjvmqdBkVqfmGCwH&quot;,
+  &quot;result&quot;: {
+    &quot;error&quot;: &quot;this vault takes only approved kinds and links, and the kind \&quot;live_seafood\&quot; is not approved: write under a built-in kind (person, organisation, location, repository, file, symbol) or an approved kind (customer, decision, equipment, inbound_load, order, organisation, person, product, project, truck). It was filed as a proposal for a vault owner to review.&quot;,
+    &quot;code&quot;: &quot;ontology.rejected&quot;,
+    &quot;trace_id&quot;: &quot;882e51e189504b9387937348cb0cf869&quot;
+  }
+}</pre></details></article>

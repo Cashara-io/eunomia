@@ -1,0 +1,73 @@
+Chat
+Ask a question about your saved memories and documents. Eunomia shows where each answer came from.
+Conversations
+Reefer 2 is running a day late. What does that affect?
+now
+What is our average sell price and total stock value at cost
+now
+gate4-1794165946
+6:31 AM
+Reefer 2 is running a day late. What does that affect?
+Eunomia
+6:31 AM
+Looked through memories
+Done
+Searched people and topics
+Done
+Checked this space's kinds
+Done
+Followed connections
+Done
+Opened a person or topic
+Done
+Showed a view
+Done
+Reefer 2 is running a day late.
+Starting from
+Reefer 2
+truck
+Directly linked
+IN-42
+inbound load
+Reefer 2 carries IN-42.
+
+Reefer 2 carries inbound load IN-42, so the load arrives a day late.
+
+FFI-101
+order
+Reefer 2 serves FFI-101.
+
+IN-42 stock is intended for FFI-101; its Dhufish supply is delayed.
+
+FFI-102
+order
+Reefer 2 serves FFI-102.
+
+IN-42 stock is intended for FFI-102; its Gummy Shark supply is delayed.
+
+FFI-103
+order
+Reefer 2 serves FFI-103.
+
+IN-42 stock is intended for FFI-103; its Greenlip Abalone supply is delayed.
+
+FFI-104
+order
+Reefer 2 serves FFI-104.
+
+IN-42 stock is intended for FFI-104; its Snapper Fillets supply is delayed.
+
+The delay puts IN-42 a day behind and risks four orders:
+
+FFI-101 — Bathers Beach Bistro: 2 Dhufish
+FFI-102 — Portside Fish and Chips: 6 Gummy Shark
+FFI-103 — Harbour Lights Hotel Group: 3 Greenlip Abalone
+FFI-104 — Saltwater Table Restaurant: 4 Snapper Fillets
+
+Those are the items on the truck intended for each order; the records flag the four orders as at risk.
+
+Enter
+send
+Shift Enter
+new line
+Send

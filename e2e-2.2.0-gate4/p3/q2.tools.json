@@ -1,0 +1,99 @@
+[
+  {
+    "tool": "mcp__eunomia-local__ontology_coverage",
+    "arguments": {
+      "question": "What is our gross margin on Shark Bay Prawns products?"
+    },
+    "id": "toolu_01SnPH5Vvp9TTCVzBjskU6vJ",
+    "result": {
+      "vault": "vault:rf0gaym72n9pkdbsg4a1",
+      "vault_name": "Fremantle Fish & Ice Co",
+      "coverage": 1.0,
+      "matched": [
+        {
+          "phrase": "gross margin",
+          "term": "metric",
+          "name": "gross_margin",
+          "of_kind": "product",
+          "distance": 0.0
+        },
+        {
+          "phrase": "products",
+          "term": "kind",
+          "name": "product",
+          "distance": 0.0
+        }
+      ],
+      "uncovered": [],
+      "chosen_by": "coverage",
+      "suggestion": "Every term maps to the vault's approved ontology: answer a number with metric_eval and a what-if with scenario_run, passing this vault as vault_id.",
+      "mode": "model"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entities_search",
+    "arguments": {
+      "query": "Shark Bay Prawns"
+    },
+    "id": "toolu_01DAisxHXkM4kiDm2hJRZBdA",
+    "result": {
+      "results": [
+        {
+          "id": "organisation:rjdxg4396oo1kmir5z1i",
+          "kind": "organisation",
+          "name": "Shark Bay Prawns",
+          "aliases": [],
+          "summary": "",
+          "vault": "vault:rf0gaym72n9pkdbsg4a1"
+        },
+        {
+          "id": "entity:mdmu657gvycnhdqujg41",
+          "kind": "project",
+          "name": "Fremantle Fish & Ice Co setup",
+          "aliases": [],
+          "summary": "",
+          "vault": "vault:rf0gaym72n9pkdbsg4a1"
+        }
+      ],
+      "total": 2,
+      "has_more": false
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__metric_eval",
+    "arguments": {
+      "metric": "gross_margin",
+      "vault_id": "vault:rf0gaym72n9pkdbsg4a1",
+      "related_to": {
+        "entity_id": "organisation:rjdxg4396oo1kmir5z1i",
+        "label": "supplied_by"
+      }
+    },
+    "id": "toolu_01V6haitU63J9QckXbJuqhHE",
+    "result": {
+      "metric": "gross_margin",
+      "kind": "product",
+      "vault": "vault:rf0gaym72n9pkdbsg4a1",
+      "description": "Gross margin across products, calculated from selling prices and unit costs.",
+      "expr_words": "Sum of (sell price − unit cost), divided by sum of sell price, on 8 products supplied by Shark Bay Prawns",
+      "value": 35.680333,
+      "unit": "%",
+      "as_of": "2026-11-08T19:30:16Z",
+      "n_entities": 7,
+      "entity_ids": [
+        "entity:48xpq68q4urz8ypimn5y",
+        "entity:bs3cbh9kzfcstrg0qjpe",
+        "entity:de8jtqpgxmmapnnvkf3p",
+        "entity:ib5ksevuo0kj7olkajpn",
+        "entity:ihk7677amxlghoviypls",
+        "entity:osmhd3pmpnhvdazii77h",
+        "entity:sbtlnm1mp6dimx9zyqad"
+      ],
+      "truncated": false,
+      "status": "approved",
+      "warnings": [
+        "left out 1 entity missing a value one side needs, so both sides of the ratio use the same entities"
+      ]
+    }
+  }
+]

@@ -1,0 +1,592 @@
+[
+  {
+    "tool": "mcp__eunomia-local__ontology_coverage",
+    "arguments": {
+      "question": "What is our average sell price and total stock value at cost?"
+    },
+    "id": "toolu_01REDijc29AXkmVFRxtZNL4z",
+    "result": {
+      "vault": "vault:rf0gaym72n9pkdbsg4a1",
+      "vault_name": "Fremantle Fish & Ice Co",
+      "coverage": 1.0,
+      "matched": [
+        {
+          "phrase": "sell price",
+          "term": "property",
+          "name": "sell_price",
+          "of_kind": "product",
+          "distance": 0.0
+        },
+        {
+          "phrase": "stock value",
+          "term": "metric",
+          "name": "total_stock_value_at_cost",
+          "of_kind": "product",
+          "distance": 0.509
+        },
+        {
+          "phrase": "cost",
+          "term": "property",
+          "name": "unit_cost",
+          "of_kind": "product",
+          "distance": 0.578
+        },
+        {
+          "phrase": "stock",
+          "term": "metric",
+          "name": "total_stock_value_at_cost",
+          "of_kind": "product",
+          "distance": 0.0
+        }
+      ],
+      "uncovered": [],
+      "chosen_by": "coverage",
+      "suggestion": "Every term maps to the vault's approved ontology: answer a number with metric_eval and a what-if with scenario_run, passing this vault as vault_id.",
+      "mode": "model"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__ontology_get",
+    "arguments": {
+      "vault_id": "vault:rf0gaym72n9pkdbsg4a1",
+      "kind": "product"
+    },
+    "id": "toolu_01JiJgGfRJ1iwW3jSs6TNsHM",
+    "result": {
+      "vault": "vault:rf0gaym72n9pkdbsg4a1",
+      "strict": true,
+      "kinds": [
+        {
+          "kind": "product",
+          "built_in": false,
+          "status": "approved",
+          "description": "A product in the supplier inventory, with its pricing, stock level, availability, and latest landing date.",
+          "merge_into": null,
+          "synonyms": [],
+          "origin": "suggested",
+          "reason": "one kind for the catalogue.csv records",
+          "entities": 30,
+          "samples": [
+            "Abalone Mince 1kg",
+            "Abalone Shell Pack",
+            "Abalone Slices 500g"
+          ],
+          "properties": [
+            {
+              "name": "last_landed",
+              "datatype": "date",
+              "unit": null,
+              "enum_values": null,
+              "description": "Date the product was last landed.",
+              "synonyms": [],
+              "status": "approved",
+              "merge_into": null,
+              "origin": "suggested",
+              "reason": "from last landed",
+              "values": 30,
+              "samples": [
+                "2026-11-06",
+                "2026-11-05",
+                "2026-11-04"
+              ],
+              "source_map": [
+                {
+                  "source": "document",
+                  "record_type": "document:e4f6egzn8wveubiomvaj",
+                  "path": "last landed"
+                }
+              ]
+            },
+            {
+              "name": "qty_on_hand",
+              "datatype": "integer",
+              "unit": "items",
+              "enum_values": null,
+              "description": "Quantity currently on hand.",
+              "synonyms": [],
+              "status": "approved",
+              "merge_into": null,
+              "origin": "suggested",
+              "reason": "from qty on hand",
+              "values": 30,
+              "samples": [
+                "3 items",
+                "57 items",
+                "43 items"
+              ],
+              "source_map": [
+                {
+                  "source": "document",
+                  "record_type": "document:e4f6egzn8wveubiomvaj",
+                  "path": "qty on hand"
+                }
+              ]
+            },
+            {
+              "name": "reorder_at",
+              "datatype": "integer",
+              "unit": "items",
+              "enum_values": null,
+              "description": "Stock quantity at which the product should be reordered.",
+              "synonyms": [],
+              "status": "approved",
+              "merge_into": null,
+              "origin": "suggested",
+              "reason": "from reorder at",
+              "values": 30,
+              "samples": [
+                "10 items"
+              ],
+              "source_map": [
+                {
+                  "source": "document",
+                  "record_type": "document:e4f6egzn8wveubiomvaj",
+                  "path": "reorder at"
+                }
+              ]
+            },
+            {
+              "name": "sell_price",
+              "datatype": "money",
+              "unit": "AUD",
+              "enum_values": null,
+              "description": "Selling price of the product.",
+              "synonyms": [],
+              "status": "approved",
+              "merge_into": null,
+              "origin": "suggested",
+              "reason": "from sell price AUD",
+              "values": 30,
+              "samples": [
+                "195.00 AUD",
+                "3.95 AUD",
+                "1180.00 AUD"
+              ],
+              "source_map": [
+                {
+                  "source": "document",
+                  "record_type": "document:e4f6egzn8wveubiomvaj",
+                  "path": "sell price AUD"
+                }
+              ]
+            },
+            {
+              "name": "status",
+              "datatype": "enum",
+              "unit": null,
+              "enum_values": [
+                "Available",
+                "Discontinued",
+                "On order"
+              ],
+              "description": "Current product availability status.",
+              "synonyms": [],
+              "status": "approved",
+              "merge_into": null,
+              "origin": "suggested",
+              "reason": "from status",
+              "values": 30,
+              "samples": [
+                "Available",
+                "On order",
+                "Discontinued"
+              ],
+              "source_map": [
+                {
+                  "source": "document",
+                  "record_type": "document:e4f6egzn8wveubiomvaj",
+                  "path": "status"
+                }
+              ]
+            },
+            {
+              "name": "unit_cost",
+              "datatype": "money",
+              "unit": "AUD",
+              "enum_values": null,
+              "description": "Unit cost of the product.",
+              "synonyms": [],
+              "status": "approved",
+              "merge_into": null,
+              "origin": "suggested",
+              "reason": "from unit cost AUD",
+              "values": 28,
+              "samples": [
+                "14.00 AUD",
+                "108.00 AUD",
+                "57.00 AUD"
+              ],
+              "source_map": [
+                {
+                  "source": "document",
+                  "record_type": "document:e4f6egzn8wveubiomvaj",
+                  "path": "unit cost AUD"
+                }
+              ]
+            }
+          ],
+          "metrics": [
+            {
+              "name": "available_product_count",
+              "description": "Number of products with status Available.",
+              "synonyms": [],
+              "expr": {
+                "agg": "count",
+                "property": "status",
+                "filters": [
+                  {
+                    "property": "status",
+                    "op": "eq",
+                    "value": "Available"
+                  }
+                ]
+              },
+              "expr_words": "Number of product with a status where status is Available",
+              "unit": "items",
+              "status": "approved",
+              "merge_into": null,
+              "origin": "agent",
+              "reason": "Shows how much of the range can be sold now."
+            },
+            {
+              "name": "avg_sell_price",
+              "description": "Average sell price per product, in AUD.",
+              "synonyms": [
+                "average sell price",
+                "average price"
+              ],
+              "expr": {
+                "agg": "avg",
+                "property": "sell_price"
+              },
+              "expr_words": "Average sell price",
+              "unit": "AUD",
+              "status": "approved",
+              "merge_into": null,
+              "origin": "agent",
+              "reason": "The owner asked for average sell price."
+            },
+            {
+              "name": "avg_unit_cost",
+              "description": "Average unit cost per product, in AUD. Products with no cost are left out.",
+              "synonyms": [],
+              "expr": {
+                "agg": "avg",
+                "property": "unit_cost"
+              },
+              "expr_words": "Average unit cost",
+              "unit": "AUD",
+              "status": "approved",
+              "merge_into": null,
+              "origin": "agent",
+              "reason": "Useful beside average sell price."
+            },
+            {
+              "name": "gross_margin",
+              "description": "Gross margin across products, calculated from selling prices and unit costs.",
+              "synonyms": [],
+              "expr": {
+                "agg": "ratio",
+                "numerator": {
+                  "agg": "sum",
+                  "row": {
+                    "op": "sub",
+                    "left": "sell_price",
+                    "right": "unit_cost"
+                  }
+                },
+                "denominator": {
+                  "agg": "sum",
+                  "property": "sell_price"
+                }
+              },
+              "expr_words": "Sum of (sell price − unit cost), divided by sum of sell price",
+              "unit": "percent",
+              "status": "approved",
+              "merge_into": null,
+              "origin": "suggested",
+              "reason": "computed from the catalogue.csv records' properties"
+            },
+            {
+              "name": "inventory_cost_value",
+              "description": "Estimated total cost value of current stock.",
+              "synonyms": [],
+              "expr": {
+                "agg": "sum",
+                "row": {
+                  "op": "mul",
+                  "left": "qty_on_hand",
+                  "right": "unit_cost"
+                }
+              },
+              "expr_words": "Sum of qty on hand × unit cost",
+              "unit": "AUD",
+              "status": "rejected",
+              "merge_into": null,
+              "origin": "suggested",
+              "reason": "computed from the catalogue.csv records' properties"
+            },
+            {
+              "name": "product_count",
+              "description": "Number of products.",
+              "synonyms": [],
+              "expr": {
+                "agg": "count",
+                "property": "qty_on_hand"
+              },
+              "expr_words": "Number of product with a qty on hand",
+              "unit": "items",
+              "status": "approved",
+              "merge_into": null,
+              "origin": "suggested",
+              "reason": "computed from the catalogue.csv records' properties"
+            },
+            {
+              "name": "total_stock_value_at_cost",
+              "description": "Total stock value at cost: quantity on hand times unit cost, summed over products. Products with no unit cost are left out.",
+              "synonyms": [
+                "stock value at cost",
+                "inventory value at cost"
+              ],
+              "expr": {
+                "agg": "sum",
+                "row": {
+                  "op": "mul",
+                  "left": "qty_on_hand",
+                  "right": "unit_cost"
+                }
+              },
+              "expr_words": "Sum of qty on hand × unit cost",
+              "unit": "AUD",
+              "status": "approved",
+              "merge_into": null,
+              "origin": "agent",
+              "reason": "The owner asked for total stock value at cost. Same working as inventory_cost_value, named as asked. The owner can merge the two."
+            }
+          ]
+        }
+      ],
+      "links": [
+        {
+          "from_kind": "inbound_load",
+          "label": "contains",
+          "to_kind": "product",
+          "status": "approved",
+          "description": "The load holds this product.",
+          "origin": "agent",
+          "reason": "IN-42 contents.",
+          "count": 4,
+          "samples": [
+            {
+              "from": "IN-42",
+              "to": "Greenlip Abalone 1kg"
+            },
+            {
+              "from": "IN-42",
+              "to": "Gummy Shark 5kg"
+            },
+            {
+              "from": "IN-42",
+              "to": "Dhufish Whole 10kg"
+            }
+          ]
+        },
+        {
+          "from_kind": "order",
+          "label": "requires",
+          "to_kind": "product",
+          "status": "approved",
+          "description": "The order needs this product.",
+          "origin": "agent",
+          "reason": "Orders to required products.",
+          "count": 15,
+          "samples": [
+            {
+              "from": "FFI-102",
+              "to": "Flake Ice 10kg"
+            },
+            {
+              "from": "FFI-101",
+              "to": "King Prawns U10 5kg"
+            },
+            {
+              "from": "FFI-105",
+              "to": "Octopus 5kg"
+            }
+          ]
+        },
+        {
+          "from_kind": "organisation",
+          "label": "supplies",
+          "to_kind": "product",
+          "status": "approved",
+          "description": "The organisation supplies this product.",
+          "origin": "agent",
+          "reason": "Used for Esperance Abalone and Greenlip Abalone.",
+          "count": 1,
+          "samples": [
+            {
+              "from": "Esperance Abalone",
+              "to": "Greenlip Abalone 1kg"
+            }
+          ]
+        },
+        {
+          "from_kind": "product",
+          "label": "supplied_by",
+          "to_kind": "organisation",
+          "status": "approved",
+          "description": "The organisation that supplies this product. Reads product to supplier.",
+          "origin": "agent",
+          "reason": "Clearer direction than the automap link product supplies organisation, which reads backwards. Same CSV supplier column.",
+          "count": 30,
+          "samples": [
+            {
+              "from": "Prawn Cutlets 2kg",
+              "to": "Shark Bay Prawns"
+            },
+            {
+              "from": "Snapper Fillets 5kg",
+              "to": "Abrolhos Fishers Co-op"
+            },
+            {
+              "from": "King Prawns U10 5kg",
+              "to": "Shark Bay Prawns"
+            }
+          ],
+          "source_map": [
+            {
+              "source": "document",
+              "record_type": "document:e4f6egzn8wveubiomvaj",
+              "path": "supplier"
+            }
+          ]
+        },
+        {
+          "from_kind": "product",
+          "label": "supplies",
+          "to_kind": "organisation",
+          "status": "rejected",
+          "description": "Organisation that supplies this product.",
+          "origin": "suggested",
+          "reason": "100% of values match (5 of 5)",
+          "count": 0,
+          "samples": [],
+          "source_map": [
+            {
+              "source": "document",
+              "record_type": "document:e4f6egzn8wveubiomvaj",
+              "path": "supplier"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__metric_eval",
+    "arguments": {
+      "metric": "avg_sell_price",
+      "vault_id": "vault:rf0gaym72n9pkdbsg4a1"
+    },
+    "id": "toolu_01LGEMrbxrPoKCZ2u4wgsYsd",
+    "result": {
+      "metric": "avg_sell_price",
+      "kind": "product",
+      "vault": "vault:rf0gaym72n9pkdbsg4a1",
+      "description": "Average sell price per product, in AUD.",
+      "expr_words": "Average sell price",
+      "value": 130.793333,
+      "unit": "AUD",
+      "as_of": "2026-11-08T19:30:01Z",
+      "n_entities": 30,
+      "entity_ids": [
+        "entity:1sfkjfqzvoe0itr0wygd",
+        "entity:1slqfcbtxhazogb9kdog",
+        "entity:3f5cm4iqh3oirr0hmryw",
+        "entity:3xmqlzc97hgyg9atd25d",
+        "entity:3ysnde7cmyepfhd9c8ae",
+        "entity:48xpq68q4urz8ypimn5y",
+        "entity:b6ob6x2weevj5neiyhnv",
+        "entity:bs3cbh9kzfcstrg0qjpe",
+        "entity:de8jtqpgxmmapnnvkf3p",
+        "entity:dqcf8eagd4qb72ggtv79",
+        "entity:e0iphic63gcnf6zem3qg",
+        "entity:evv28m6h4tck901uzp6t",
+        "entity:hy2hjhlctg2q8baflnhs",
+        "entity:ib5ksevuo0kj7olkajpn",
+        "entity:ihk7677amxlghoviypls",
+        "entity:of21g5fl0c8h7p8pqd30",
+        "entity:olzecfi09wy9257qadsw",
+        "entity:osmhd3pmpnhvdazii77h",
+        "entity:owjtwfz6v0k3hb5y4sws",
+        "entity:qcbe9ysvbeep437q79bc",
+        "entity:qgzfd4458113xh5gc7nn",
+        "entity:qlzilhoa5xpe1x34wgd1",
+        "entity:rcrjvcfua61c8sgp7cuz",
+        "entity:sbtlnm1mp6dimx9zyqad",
+        "entity:scvuccjbx6vmw90ml8zr",
+        "entity:ue54w2vb7py1yhffz8xm",
+        "entity:uw0zadzbt2vvx7er1z1e",
+        "entity:v1wgb5l21pseykea1qlx",
+        "entity:xqnkeai40qcw2o64mdr6",
+        "entity:yk9ezwv4jeak8oeeh3vz"
+      ],
+      "truncated": false,
+      "status": "approved",
+      "warnings": []
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__metric_eval",
+    "arguments": {
+      "metric": "total_stock_value_at_cost",
+      "vault_id": "vault:rf0gaym72n9pkdbsg4a1"
+    },
+    "id": "toolu_018PBdNJMS2pYsjR59QPZyze",
+    "result": {
+      "metric": "total_stock_value_at_cost",
+      "kind": "product",
+      "vault": "vault:rf0gaym72n9pkdbsg4a1",
+      "description": "Total stock value at cost: quantity on hand times unit cost, summed over products. Products with no unit cost are left out.",
+      "expr_words": "Sum of qty on hand × unit cost",
+      "value": 27424.5,
+      "unit": "AUD",
+      "as_of": "2026-11-08T19:30:01Z",
+      "n_entities": 28,
+      "entity_ids": [
+        "entity:1sfkjfqzvoe0itr0wygd",
+        "entity:1slqfcbtxhazogb9kdog",
+        "entity:3f5cm4iqh3oirr0hmryw",
+        "entity:3xmqlzc97hgyg9atd25d",
+        "entity:3ysnde7cmyepfhd9c8ae",
+        "entity:48xpq68q4urz8ypimn5y",
+        "entity:b6ob6x2weevj5neiyhnv",
+        "entity:bs3cbh9kzfcstrg0qjpe",
+        "entity:de8jtqpgxmmapnnvkf3p",
+        "entity:dqcf8eagd4qb72ggtv79",
+        "entity:e0iphic63gcnf6zem3qg",
+        "entity:evv28m6h4tck901uzp6t",
+        "entity:hy2hjhlctg2q8baflnhs",
+        "entity:ib5ksevuo0kj7olkajpn",
+        "entity:ihk7677amxlghoviypls",
+        "entity:of21g5fl0c8h7p8pqd30",
+        "entity:olzecfi09wy9257qadsw",
+        "entity:osmhd3pmpnhvdazii77h",
+        "entity:owjtwfz6v0k3hb5y4sws",
+        "entity:qcbe9ysvbeep437q79bc",
+        "entity:qlzilhoa5xpe1x34wgd1",
+        "entity:rcrjvcfua61c8sgp7cuz",
+        "entity:sbtlnm1mp6dimx9zyqad",
+        "entity:scvuccjbx6vmw90ml8zr",
+        "entity:ue54w2vb7py1yhffz8xm",
+        "entity:v1wgb5l21pseykea1qlx",
+        "entity:xqnkeai40qcw2o64mdr6",
+        "entity:yk9ezwv4jeak8oeeh3vz"
+      ],
+      "truncated": false,
+      "status": "approved",
+      "warnings": []
+    }
+  }
+]

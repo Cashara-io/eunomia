@@ -1,0 +1,290 @@
+[
+  {
+    "tool": "mcp__eunomia-local__recall",
+    "arguments": {
+      "query": "Esperance Abalone"
+    },
+    "id": "toolu_01LPRafBDLs9qVcR1D8jVPQb",
+    "result": {
+      "results": [
+        {
+          "id": "documents:document.chunk:e4f6egzn8wveubiomvaj:1:0",
+          "kind": "cache_record",
+          "text": "catalogue.csv\nproduct,supplier,sell price AUD,unit cost AUD,qty on hand,reorder at,status,last landed\nDhufish Whole 10kg,Abrolhos Fishers Co-op,\"$1,180.00\",$785.00,3,10,Available,04/11/2026\nSnapper Fillets 5kg,Abrolhos Fishers Co-op,$245.00,$158.00,12,10,Available,05/11/2026\nGummy Shark 5kg,Abrolhos Fishers Co-op,$185.00,$116.00,16,10,Available,06/11/2026\nSpanish Mackerel 5kg,Abrolhos Fishers Co-op,$210.00,$138.00,9,10,Available,07/11/2026\nSardines 2kg,Abrolhos Fishers Co-op,$28.00,$17.50,45,10,Available,08/11/2026\nWhiting Fillets 2kg,Abrolhos Fishers Co-op,$72.00,$46.00,20,10,Available,04/11/2026\nOctopus 5kg,Abrolhos Fishers Co-op,$165.00,,7,10,On order,05/11/2026\nFish Frames 10kg,Abrolhos Fishers Co-op,$35.00,$14.00,0,10,Discontinued,06/11/2026\nKing Prawns U10 5kg,Shark Bay Prawns,$265.00,$174.00,17,10,Available,07/11/2026\nTiger Prawns 5kg,Shark Bay Prawns,$195.00,$128.00,23,10,Available,08/11/2026\nBanana Prawns 5kg,Shark Bay Prawns,$145.00,$92.00,31,10,Available,04/11/2026\nPrawn Cutlets 2kg,Shark Bay Prawns,$98.00,$61.00,14,10,Available,05/11/2026\nPrawn Meat 1kg,Shark Bay Prawns,$42.00,$26.00,33,10,Available,06/11/2026\nCooked Prawns 2kg,Shark Bay Prawns,$84.00,$55.00,19,10,Available,07/11/2026\nPrawn Skewers 20pk,Shark Bay Prawns,$46.00,,11,10,On order,08/11/2026\nPrawn Shells 5kg,Shark Bay Prawns,$12.50,$5.25,21,10,Available,04/11/2026\nBlock Ice 20kg,Southern Ice Works,$18.50,$7.25,95,10,Available,05/11/2026\nFlake Ice 10kg,Southern Ice Works,$12.50,$5.10,80,10,Available,06/11/2026\nCrushed Ice 5kg,Southern Ice Works,$7.45,$3.20,65,10,Available,07/11/2026\nParty Ice 5kg,Southern Ice Works,$8.90,$3.80,43,10,Available,08/11/2026\nDry Ice 2kg,Southern Ice Works,$24.00,$13.00,13,10,Available,04/11/2026\nGel Ice Pack 1kg,Southern Ice Works,$6.50,$2.40,57,10,Available,05/11/2026\nInsulated Seafood Carton,Southern Ice Works,$14.50,$6.75,40,10,Available,06/11/2026\nIce Brick 500g,southern ice works,$3.95,$1.80,61,10,Available,07/11/2026\nGreenlip Abalone 1kg,Esperance Abalone,$148.00,$96.00,8,10,On order,08/11/2026\nBrownlip Abalone 1kg,Esperance Abalone,$165.00,$108.00,9,10,Available,04/11/2026\nAbalone Slices 500g,Esperance Abalone,$89.00,$57.00,16,10,Available,05/11/2026\nAbalone Mince 1kg,Esperance Abalone,$76.00,$44.00,14,10,Available,06/11/2026\nAbalone Shell Pack,Esperance Abalone,$22.00,$11.00,25,10,Available,07/11/2026\nPremium Abalone Gift Box,Esperance Abalone,$320.00,$210.00,5,10,Available,08/11/2026",
+          "source": "documents",
+          "occurred_at": "2026-11-08T19:27:15.672989805+00:00",
+          "score": 1.0,
+          "arms_hit": 3,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co",
+          "document": {
+            "document_id": "document:e4f6egzn8wveubiomvaj",
+            "chunk_id": "documents:document.chunk:e4f6egzn8wveubiomvaj:1:0",
+            "filename": "catalogue.csv",
+            "revision": 1,
+            "part": 0,
+            "char_start": 0,
+            "char_end": 2423,
+            "download_url": "/api/documents/document:e4f6egzn8wveubiomvaj/download"
+          }
+        },
+        {
+          "id": "memory:8faacyzlxekatkh2vdsp",
+          "kind": "memory",
+          "text": "Esperance Abalone is listed as a supplier of abalone products in the catalogue dated 2026-11-08.",
+          "source": "documents:document.chunk:e4f6egzn8wveubiomvaj:1:0",
+          "occurred_at": "2026-11-08T19:27:22.115886877+00:00",
+          "score": 0.989,
+          "arms_hit": 3,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "memory:o15529bbe0b722278a32",
+          "kind": "memory",
+          "text": "Esperance Abalone supplies abalone products, including Greenlip Abalone in 1 kg consignments. It has a Greenlip Abalone 1 kg consignment on order for Harbour Lights Hotel Group.",
+          "source": null,
+          "occurred_at": "2026-11-08T19:27:25.326744961+00:00",
+          "score": 0.974,
+          "arms_hit": 3,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "memory:8nufr2t0r6usz3twyodq",
+          "kind": "memory",
+          "text": "Esperance Abalone has a Greenlip Abalone 1kg consignment on order for Harbour Lights Hotel Group.",
+          "source": null,
+          "occurred_at": "2026-11-08T19:26:03.236434549+00:00",
+          "score": 0.974,
+          "arms_hit": 3,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "memory:r784c8645e4e08b2caee",
+          "kind": "memory",
+          "text": "Esperance Abalone supplies Greenlip Abalone 1kg: The consignment on order is Greenlip Abalone 1kg.",
+          "source": null,
+          "occurred_at": "2026-11-08T19:27:03.423791257+00:00",
+          "score": 0.974,
+          "arms_hit": 3,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "memory:r943210fe2dbe3c482e1",
+          "kind": "memory",
+          "text": "Esperance Abalone has consignment on order for Harbour Lights Hotel Group: Esperance Abalone has a Greenlip Abalone 1kg consignment on order for Harbour Lights Hotel Group.",
+          "source": null,
+          "occurred_at": "2026-11-08T19:27:02.531872757+00:00",
+          "score": 0.963,
+          "arms_hit": 3,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "memory:mpdb95uu7sg6s35dc664",
+          "kind": "memory",
+          "text": "Customer with open order FFI-103. Esperance Abalone has a Greenlip Abalone 1kg consignment on order for them.",
+          "source": null,
+          "occurred_at": "2026-11-08T19:26:03.426412590+00:00",
+          "score": 0.902,
+          "arms_hit": 3,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "memory:2p0rz9fkwllz1njan8b8",
+          "kind": "memory",
+          "text": "Product required by FFI-103 (3) and carried on IN-42 (3). Esperance Abalone has a consignment on order for Harbour Lights Hotel Group.",
+          "source": null,
+          "occurred_at": "2026-11-08T19:26:11.708369261+00:00",
+          "score": 0.884,
+          "arms_hit": 3,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "documents:document.chunk:scb7kg4m1s63ajnslsuo:1:0",
+          "kind": "cache_record",
+          "text": "ops-notes.md\n# Fremantle Fish & Ice Co, Fremantle WA\nFictional test records as at 9 November 2026.\n\n## Open customer orders\n- Bathers Beach Bistro, order FFI-101, due 12 November. Needs two Dhufish Whole 10kg, four King Prawns U10 5kg and ten Block Ice 20kg.\n- Portside Fish and Chips, order FFI-102, due 12 November. Needs six Gummy Shark 5kg and twelve Flake Ice 10kg.\n- Harbour Lights Hotel Group, order FFI-103, due 13 November. Needs three Greenlip Abalone 1kg, five Tiger Prawns 5kg and eight Party Ice 5kg.\n- Saltwater Table Restaurant, order FFI-104, due 12 November. Needs four Snapper Fillets 5kg and six Crushed Ice 5kg.\n- Quay Seafood Kitchen, order FFI-105, due 14 November. Needs three Octopus 5kg and five Prawn Meat 1kg.\n- West End Oyster Bar, order FFI-106, due 14 November. Needs two Brownlip Abalone 1kg, four Cooked Prawns 2kg and six Gel Ice Pack 1kg.\n\n## Inbound load\nRefrigerated truck Reefer 2 is carrying inbound load IN-42, expected 11 November 2026. It carries two Dhufish Whole 10kg for FFI-101, six Gummy Shark 5kg for FFI-102, three Greenlip Abalone 1kg for FFI-103 and four Snapper Fillets 5kg for FFI-104. A one-day delay risks those four orders. Dispatch lead is Amelia Russo.\n\n## Decisions and unconfirmed information\nDecision: delivery minimum goes to $250 from 1 December 2026, approved by owner Amelia Russo.\nRumour, unconfirmed: Shark Bay Prawns may raise prices in December. No increase is confirmed.\nShark Bay Prawns is our prawn supplier. Southern Ice Works supplies ice and insulated packaging. Both are organisations we work with.\nEsperance Abalone has a Greenlip Abalone 1kg consignment on order for Harbour Lights Hotel Group.\nUnlinked equipment: Office Label Printer sits in dispatch, with no recorded dependencies.",
+          "source": "documents",
+          "occurred_at": "2026-11-08T19:27:08.931932260+00:00",
+          "score": 0.633,
+          "arms_hit": 2,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co",
+          "document": {
+            "document_id": "document:scb7kg4m1s63ajnslsuo",
+            "chunk_id": "documents:document.chunk:scb7kg4m1s63ajnslsuo:1:0",
+            "filename": "ops-notes.md",
+            "revision": 1,
+            "part": 0,
+            "char_start": 0,
+            "char_end": 1749,
+            "download_url": "/api/documents/document:scb7kg4m1s63ajnslsuo/download"
+          }
+        },
+        {
+          "id": "memory:r40ed6a88b44ee06c655",
+          "kind": "memory",
+          "text": "FFI-106 requires Brownlip Abalone 1kg: FFI-106 needs 2 Brownlip Abalone 1kg.",
+          "source": null,
+          "occurred_at": "2026-11-08T19:26:34.459086591+00:00",
+          "score": 0.565,
+          "arms_hit": 2,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "memory:r1faa9b3d15a2fc7b485",
+          "kind": "memory",
+          "text": "IN-42 contains Greenlip Abalone 1kg: IN-42 holds 3 Greenlip Abalone 1kg.",
+          "source": null,
+          "occurred_at": "2026-11-08T19:26:48.411955667+00:00",
+          "score": 0.561,
+          "arms_hit": 2,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "memory:9odt9828223loe1q97nx",
+          "kind": "memory",
+          "text": "Open order for West End Oyster Bar, due 14 November 2026. Needs 2 Brownlip Abalone 1kg, 4 Cooked Prawns 2kg, 6 Gel Ice Pack 1kg.",
+          "source": null,
+          "occurred_at": "2026-11-08T19:26:03.808495924+00:00",
+          "score": 0.557,
+          "arms_hit": 2,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "memory:6evicp8k6e9cshfuatgf",
+          "kind": "memory",
+          "text": "Open order for Harbour Lights Hotel Group, due 13 November 2026. Needs 3 Greenlip Abalone 1kg, 5 Tiger Prawns 5kg, 8 Party Ice 5kg.",
+          "source": null,
+          "occurred_at": "2026-11-08T19:26:03.693141299+00:00",
+          "score": 0.557,
+          "arms_hit": 2,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "memory:r7e505e83c19341cb6e7",
+          "kind": "memory",
+          "text": "FFI-103 requires Greenlip Abalone 1kg: FFI-103 needs 3 Greenlip Abalone 1kg.",
+          "source": null,
+          "occurred_at": "2026-11-08T19:26:28.364995463+00:00",
+          "score": 0.557,
+          "arms_hit": 2,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "memory:rbc7be6b8474b0e1f53a",
+          "kind": "memory",
+          "text": "Reefer 2 serves FFI-103: IN-42 on Reefer 2 carries 3 Greenlip Abalone for FFI-103.",
+          "source": null,
+          "occurred_at": "2026-11-08T19:26:41.216790969+00:00",
+          "score": 0.534,
+          "arms_hit": 2,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "memory:oja8tpa1d4e73kbcca4p",
+          "kind": "memory",
+          "text": "Inbound load IN-42 is on Reefer 2, expected 11 November 2026. It carries two Dhufish Whole 10kg for FFI-101, six Gummy Shark 5kg for FFI-102, three Greenlip Abalone 1kg for FFI-103 and four Snapper Fillets 5kg for FFI-104. A one-day delay risks those four orders.",
+          "source": null,
+          "occurred_at": "2026-11-11T00:00:00+00:00",
+          "score": 0.52,
+          "arms_hit": 2,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "memory:nxuclql1v2td0fw6lyhr",
+          "kind": "memory",
+          "text": "Product required by FFI-106 (2).",
+          "source": null,
+          "occurred_at": "2026-11-08T19:26:11.852611636+00:00",
+          "score": 0.428,
+          "arms_hit": 2,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "memory:v9n2k11q8rids5s41kyr",
+          "kind": "memory",
+          "text": "The next regatta is on the Swan River on Saturday.",
+          "source": null,
+          "occurred_at": "2026-11-08T19:25:47.158790055+00:00",
+          "score": 0.306,
+          "arms_hit": 1,
+          "vault": "vault:1eavkczl9x5mewq2zj5h",
+          "vault_name": "Freo Rowing Club"
+        },
+        {
+          "id": "relates_to:u9fib52wv9t7pyprjn7q",
+          "kind": "relation",
+          "text": "Esperance Abalone has consignment on order for Harbour Lights Hotel Group",
+          "source": null,
+          "occurred_at": "2026-11-08T19:27:02.531447007+00:00",
+          "score": 0.279,
+          "arms_hit": 1,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "relates_to:yjf9wtcpzx4d87dc3qms",
+          "kind": "relation",
+          "text": "Esperance Abalone supplies Greenlip Abalone 1kg",
+          "source": null,
+          "occurred_at": "2026-11-08T19:27:03.423378590+00:00",
+          "score": 0.275,
+          "arms_hit": 1,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        }
+      ]
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entities_search",
+    "arguments": {
+      "query": "Esperance Abalone"
+    },
+    "id": "toolu_01QFt2ztMUtFM7Ur798suFHT",
+    "result": {
+      "results": [
+        {
+          "id": "organisation:rwpzzr9tw4k3vqdhcdhx",
+          "kind": "organisation",
+          "name": "Esperance Abalone",
+          "aliases": [],
+          "summary": "",
+          "vault": "vault:rf0gaym72n9pkdbsg4a1"
+        },
+        {
+          "id": "entity:rcrjvcfua61c8sgp7cuz",
+          "kind": "product",
+          "name": "Greenlip Abalone 1kg",
+          "aliases": [],
+          "summary": "",
+          "vault": "vault:rf0gaym72n9pkdbsg4a1"
+        },
+        {
+          "id": "entity:m09ye57js78gw9bpezrx",
+          "kind": "customer",
+          "name": "Harbour Lights Hotel Group",
+          "aliases": [],
+          "summary": "",
+          "vault": "vault:rf0gaym72n9pkdbsg4a1"
+        }
+      ],
+      "total": 3,
+      "has_more": false
+    }
+  }
+]

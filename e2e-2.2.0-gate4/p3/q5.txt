@@ -1,0 +1,7 @@
+I can't tell you. Your records have no electricity bill in them.
+
+I searched the Fremantle Fish & Ice Co records. They hold the product list, open orders, the delivery truck and a few decisions. Nothing about power costs or utility bills.
+
+To fix it, you could do one of these:
+1. Send me the bill, as a file or a number, and I'll save it. This is the one I'd pick.
+2. Have an owner approve a new "electricity bill" item in the app, so it can be tracked and totalled over time.

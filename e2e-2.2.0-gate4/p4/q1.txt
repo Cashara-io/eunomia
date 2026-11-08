@@ -1,0 +1,108 @@
+Chat
+Ask a question about your saved memories and documents. Eunomia shows where each answer came from.
+Conversations
+What is our average sell price and total stock value at cost
+now
+gate4-1794165946
+6:30 AM
+What is our average sell price and total stock value at cost?
+Eunomia
+6:30 AM
+Checked what the space can answer
+Done
+Checked this space's kinds
+Done
+Worked out a number
+Done
+Worked out a number
+Done
+Showed a view
+Done
+Showed a view
+Done
+avg sell price
+
+Average sell price per product, in AUD.
+
+130.79
+AUD
+
+Average sell price. As of 9 Nov 2026, from 30 products.
+
+Flake Ice 10kg
+Whiting Fillets 2kg
+Gummy Shark 5kg
+Brownlip Abalone 1kg
+Premium Abalone Gift Box
+King Prawns U10 5kg
+Snapper Fillets 5kg
+Cooked Prawns 2kg
+Prawn Meat 1kg
+Fish Frames 10kg
+Abalone Slices 500g
+Party Ice 5kg
+Gel Ice Pack 1kg
+Prawn Shells 5kg
+Prawn Cutlets 2kg
+Ice Brick 500g
+Crushed Ice 5kg
+Banana Prawns 5kg
+Sardines 2kg
+Dhufish Whole 10kg
+Prawn Skewers 20pk
+Abalone Shell Pack
+Greenlip Abalone 1kg
+Tiger Prawns 5kg
+Insulated Seafood Carton
+Abalone Mince 1kg
+Octopus 5kg
+Block Ice 20kg
+Dry Ice 2kg
+Spanish Mackerel 5kg
+total stock value at cost
+
+Total stock value at cost: quantity on hand times unit cost, summed over products. Products with no unit cost are left out.
+
+27424.50
+AUD
+
+Sum of qty on hand × unit cost. As of 9 Nov 2026, from 28 products.
+
+Flake Ice 10kg
+Whiting Fillets 2kg
+Gummy Shark 5kg
+Brownlip Abalone 1kg
+Premium Abalone Gift Box
+King Prawns U10 5kg
+Snapper Fillets 5kg
+Cooked Prawns 2kg
+Prawn Meat 1kg
+Fish Frames 10kg
+Abalone Slices 500g
+Party Ice 5kg
+Gel Ice Pack 1kg
+Prawn Shells 5kg
+Prawn Cutlets 2kg
+Ice Brick 500g
+Crushed Ice 5kg
+Banana Prawns 5kg
+Sardines 2kg
+Dhufish Whole 10kg
+Abalone Shell Pack
+Greenlip Abalone 1kg
+Tiger Prawns 5kg
+Insulated Seafood Carton
+Abalone Mince 1kg
+Block Ice 20kg
+Dry Ice 2kg
+Spanish Mackerel 5kg
+Average sell price: A$130.79 per product, based on 30 products.
+Total stock value at cost: A$27,424.50, based on 28 products with unit-cost data.
+
+As of 8 November 2026.
+
+Enter
+send
+Shift Enter
+new line
+Send

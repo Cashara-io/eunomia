@@ -1,0 +1,57 @@
+You are Fremantle Fish & Ice Co's AI. Use only the eunomia-local MCP tools. Create an org space called Fremantle Fish & Ice Co, upload both raw materials, write the notes as memories with sensible kinds, link the things that relate using entity_relate (customers to orders, orders to required products, Reefer 2 to the inbound load and the orders it serves), upload and auto-map the CSV, and propose kinds, typed properties, link types and useful certified metrics including average sell price, total stock value at cost and gross margin. Write the notes and their supplier organisations BEFORE uploading or auto-mapping the CSV. Do not pre-map the raw data or approve anything, the owner will approve. Preserve rumours as unconfirmed. Report your work. Do not use em dashes.
+
+FILE ops-notes.md
+# Fremantle Fish & Ice Co, Fremantle WA
+Fictional test records as at 9 November 2026.
+
+## Open customer orders
+- Bathers Beach Bistro, order FFI-101, due 12 November. Needs two Dhufish Whole 10kg, four King Prawns U10 5kg and ten Block Ice 20kg.
+- Portside Fish and Chips, order FFI-102, due 12 November. Needs six Gummy Shark 5kg and twelve Flake Ice 10kg.
+- Harbour Lights Hotel Group, order FFI-103, due 13 November. Needs three Greenlip Abalone 1kg, five Tiger Prawns 5kg and eight Party Ice 5kg.
+- Saltwater Table Restaurant, order FFI-104, due 12 November. Needs four Snapper Fillets 5kg and six Crushed Ice 5kg.
+- Quay Seafood Kitchen, order FFI-105, due 14 November. Needs three Octopus 5kg and five Prawn Meat 1kg.
+- West End Oyster Bar, order FFI-106, due 14 November. Needs two Brownlip Abalone 1kg, four Cooked Prawns 2kg and six Gel Ice Pack 1kg.
+
+## Inbound load
+Refrigerated truck Reefer 2 is carrying inbound load IN-42, expected 11 November 2026. It carries two Dhufish Whole 10kg for FFI-101, six Gummy Shark 5kg for FFI-102, three Greenlip Abalone 1kg for FFI-103 and four Snapper Fillets 5kg for FFI-104. A one-day delay risks those four orders. Dispatch lead is Amelia Russo.
+
+## Decisions and unconfirmed information
+Decision: delivery minimum goes to $250 from 1 December 2026, approved by owner Amelia Russo.
+Rumour, unconfirmed: Shark Bay Prawns may raise prices in December. No increase is confirmed.
+Shark Bay Prawns is our prawn supplier. Southern Ice Works supplies ice and insulated packaging. Both are organisations we work with.
+Esperance Abalone has a Greenlip Abalone 1kg consignment on order for Harbour Lights Hotel Group.
+Unlinked equipment: Office Label Printer sits in dispatch, with no recorded dependencies.
+
+FILE catalogue.csv
+product,supplier,sell price AUD,unit cost AUD,qty on hand,reorder at,status,last landed
+Dhufish Whole 10kg,Abrolhos Fishers Co-op,"$1,180.00",$785.00,3,10,Available,04/11/2026
+Snapper Fillets 5kg,Abrolhos Fishers Co-op,$245.00,$158.00,12,10,Available,05/11/2026
+Gummy Shark 5kg,Abrolhos Fishers Co-op,$185.00,$116.00,16,10,Available,06/11/2026
+Spanish Mackerel 5kg,Abrolhos Fishers Co-op,$210.00,$138.00,9,10,Available,07/11/2026
+Sardines 2kg,Abrolhos Fishers Co-op,$28.00,$17.50,45,10,Available,08/11/2026
+Whiting Fillets 2kg,Abrolhos Fishers Co-op,$72.00,$46.00,20,10,Available,04/11/2026
+Octopus 5kg,Abrolhos Fishers Co-op,$165.00,,7,10,On order,05/11/2026
+Fish Frames 10kg,Abrolhos Fishers Co-op,$35.00,$14.00,0,10,Discontinued,06/11/2026
+King Prawns U10 5kg,Shark Bay Prawns,$265.00,$174.00,17,10,Available,07/11/2026
+Tiger Prawns 5kg,Shark Bay Prawns,$195.00,$128.00,23,10,Available,08/11/2026
+Banana Prawns 5kg,Shark Bay Prawns,$145.00,$92.00,31,10,Available,04/11/2026
+Prawn Cutlets 2kg,Shark Bay Prawns,$98.00,$61.00,14,10,Available,05/11/2026
+Prawn Meat 1kg,Shark Bay Prawns,$42.00,$26.00,33,10,Available,06/11/2026
+Cooked Prawns 2kg,Shark Bay Prawns,$84.00,$55.00,19,10,Available,07/11/2026
+Prawn Skewers 20pk,Shark Bay Prawns,$46.00,,11,10,On order,08/11/2026
+Prawn Shells 5kg,Shark Bay Prawns,$12.50,$5.25,21,10,Available,04/11/2026
+Block Ice 20kg,Southern Ice Works,$18.50,$7.25,95,10,Available,05/11/2026
+Flake Ice 10kg,Southern Ice Works,$12.50,$5.10,80,10,Available,06/11/2026
+Crushed Ice 5kg,Southern Ice Works,$7.45,$3.20,65,10,Available,07/11/2026
+Party Ice 5kg,Southern Ice Works,$8.90,$3.80,43,10,Available,08/11/2026
+Dry Ice 2kg,Southern Ice Works,$24.00,$13.00,13,10,Available,04/11/2026
+Gel Ice Pack 1kg,Southern Ice Works,$6.50,$2.40,57,10,Available,05/11/2026
+Insulated Seafood Carton,Southern Ice Works,$14.50,$6.75,40,10,Available,06/11/2026
+Ice Brick 500g,southern ice works,$3.95,$1.80,61,10,Available,07/11/2026
+Greenlip Abalone 1kg,Esperance Abalone,$148.00,$96.00,8,10,On order,08/11/2026
+Brownlip Abalone 1kg,Esperance Abalone,$165.00,$108.00,9,10,Available,04/11/2026
+Abalone Slices 500g,Esperance Abalone,$89.00,$57.00,16,10,Available,05/11/2026
+Abalone Mince 1kg,Esperance Abalone,$76.00,$44.00,14,10,Available,06/11/2026
+Abalone Shell Pack,Esperance Abalone,$22.00,$11.00,25,10,Available,07/11/2026
+Premium Abalone Gift Box,Esperance Abalone,$320.00,$210.00,5,10,Available,08/11/2026
+

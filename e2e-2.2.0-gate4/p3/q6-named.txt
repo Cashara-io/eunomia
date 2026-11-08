@@ -1,0 +1,11 @@
+The fact is saved, but not under live_seafood yet.
+
+**Why:** The Fremantle Fish & Ice Co vault only takes kinds an owner has approved. Your new kind, live_seafood, is now waiting as a proposal. You own the vault, so you can approve it in the Eunomia app.
+
+**My mistake:** My first try saved the fact on the company itself, as an organisation note. That was not what you asked for. The note reads "Fremantle Fish & Ice Co now sells live crayfish." It is harmless, but it is in the wrong place. I have not deleted it.
+
+**What to do:**
+1. Approve live_seafood in the Eunomia app.
+2. Tell me, and I'll save the crayfish fact under it.
+
+I'd also delete the misfiled note once the real one is saved. Want me to do that then?

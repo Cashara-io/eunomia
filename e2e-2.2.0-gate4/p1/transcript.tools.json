@@ -1,0 +1,2666 @@
+[
+  {
+    "tool": "mcp__eunomia-local__vault_create",
+    "arguments": {
+      "name": "Fremantle Fish & Ice Co",
+      "kind": "org"
+    },
+    "id": "toolu_01QXgaQFdgALdnpqxymWe41i",
+    "result": {
+      "id": "vault:rf0gaym72n9pkdbsg4a1",
+      "name": "Fremantle Fish & Ice Co",
+      "kind": "org",
+      "created_at": "2026-11-08T19:25:51.070708751Z"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_types",
+    "arguments": {
+      "vault_id": "vault:rf0gaym72n9pkdbsg4a1"
+    },
+    "id": "toolu_01VviLf7mdustPyMxugqUEfv",
+    "result": {
+      "built_in": [
+        "person",
+        "organisation",
+        "location",
+        "repository",
+        "file",
+        "symbol"
+      ],
+      "custom": []
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__memory_write_batch",
+    "arguments": {
+      "vault_id": "vault:rf0gaym72n9pkdbsg4a1",
+      "items": [
+        {
+          "subject_name": "Shark Bay Prawns",
+          "subject_kind": "organisation",
+          "type": "world",
+          "text": "Shark Bay Prawns is our prawn supplier. We work with them."
+        },
+        {
+          "subject_name": "Southern Ice Works",
+          "subject_kind": "organisation",
+          "type": "world",
+          "text": "Southern Ice Works supplies ice and insulated packaging. We work with them."
+        },
+        {
+          "subject_name": "Esperance Abalone",
+          "subject_kind": "organisation",
+          "type": "world",
+          "text": "Esperance Abalone has a Greenlip Abalone 1kg consignment on order for Harbour Lights Hotel Group."
+        },
+        {
+          "subject_name": "Abrolhos Fishers Co-op",
+          "subject_kind": "organisation",
+          "type": "world",
+          "text": "Abrolhos Fishers Co-op appears as a fish supplier in the catalogue (from catalogue.csv). Not mentioned in the ops notes."
+        },
+        {
+          "subject_name": "Shark Bay Prawns",
+          "subject_kind": "organisation",
+          "type": "world",
+          "text": "UNCONFIRMED RUMOUR: Shark Bay Prawns may raise prices in December 2026. No increase is confirmed. Do not treat as fact.",
+          "occurred_at": "2026-11-09"
+        },
+        {
+          "subject_name": "Delivery minimum change",
+          "subject_kind": "decision",
+          "type": "world",
+          "text": "Decision: delivery minimum goes to $250 from 1 December 2026, approved by owner Amelia Russo.",
+          "occurred_at": "2026-11-09"
+        },
+        {
+          "subject_name": "Amelia Russo",
+          "subject_kind": "person",
+          "type": "world",
+          "text": "Amelia Russo is the owner and the dispatch lead. She approved the delivery minimum of $250 from 1 December 2026."
+        },
+        {
+          "subject_name": "Office Label Printer",
+          "subject_kind": "equipment",
+          "type": "world",
+          "text": "Office Label Printer sits in dispatch. It has no recorded dependencies and is deliberately unlinked."
+        },
+        {
+          "subject_name": "Reefer 2",
+          "subject_kind": "truck",
+          "type": "world",
+          "text": "Reefer 2 is a refrigerated truck carrying inbound load IN-42, expected 11 November 2026."
+        },
+        {
+          "subject_name": "IN-42",
+          "subject_kind": "inbound_load",
+          "type": "world",
+          "text": "Inbound load IN-42 is on Reefer 2, expected 11 November 2026. It carries two Dhufish Whole 10kg for FFI-101, six Gummy Shark 5kg for FFI-102, three Greenlip Abalone 1kg for FFI-103 and four Snapper Fillets 5kg for FFI-104. A one-day delay risks those four orders.",
+          "occurred_at": "2026-11-11"
+        },
+        {
+          "subject_name": "Bathers Beach Bistro",
+          "subject_kind": "customer",
+          "type": "world",
+          "text": "Customer with open order FFI-101."
+        },
+        {
+          "subject_name": "Portside Fish and Chips",
+          "subject_kind": "customer",
+          "type": "world",
+          "text": "Customer with open order FFI-102."
+        },
+        {
+          "subject_name": "Harbour Lights Hotel Group",
+          "subject_kind": "customer",
+          "type": "world",
+          "text": "Customer with open order FFI-103. Esperance Abalone has a Greenlip Abalone 1kg consignment on order for them."
+        },
+        {
+          "subject_name": "Saltwater Table Restaurant",
+          "subject_kind": "customer",
+          "type": "world",
+          "text": "Customer with open order FFI-104."
+        },
+        {
+          "subject_name": "Quay Seafood Kitchen",
+          "subject_kind": "customer",
+          "type": "world",
+          "text": "Customer with open order FFI-105."
+        },
+        {
+          "subject_name": "West End Oyster Bar",
+          "subject_kind": "customer",
+          "type": "world",
+          "text": "Customer with open order FFI-106."
+        },
+        {
+          "subject_name": "FFI-101",
+          "subject_kind": "order",
+          "type": "world",
+          "text": "Open order for Bathers Beach Bistro, due 12 November 2026. Needs 2 Dhufish Whole 10kg, 4 King Prawns U10 5kg, 10 Block Ice 20kg."
+        },
+        {
+          "subject_name": "FFI-102",
+          "subject_kind": "order",
+          "type": "world",
+          "text": "Open order for Portside Fish and Chips, due 12 November 2026. Needs 6 Gummy Shark 5kg, 12 Flake Ice 10kg."
+        },
+        {
+          "subject_name": "FFI-103",
+          "subject_kind": "order",
+          "type": "world",
+          "text": "Open order for Harbour Lights Hotel Group, due 13 November 2026. Needs 3 Greenlip Abalone 1kg, 5 Tiger Prawns 5kg, 8 Party Ice 5kg."
+        },
+        {
+          "subject_name": "FFI-104",
+          "subject_kind": "order",
+          "type": "world",
+          "text": "Open order for Saltwater Table Restaurant, due 12 November 2026. Needs 4 Snapper Fillets 5kg, 6 Crushed Ice 5kg."
+        },
+        {
+          "subject_name": "FFI-105",
+          "subject_kind": "order",
+          "type": "world",
+          "text": "Open order for Quay Seafood Kitchen, due 14 November 2026. Needs 3 Octopus 5kg, 5 Prawn Meat 1kg."
+        },
+        {
+          "subject_name": "FFI-106",
+          "subject_kind": "order",
+          "type": "world",
+          "text": "Open order for West End Oyster Bar, due 14 November 2026. Needs 2 Brownlip Abalone 1kg, 4 Cooked Prawns 2kg, 6 Gel Ice Pack 1kg."
+        }
+      ]
+    },
+    "id": "toolu_01PW82oDMEdGdPDSymWnQKNH",
+    "result": {
+      "written": 22,
+      "failed": 0,
+      "results": [
+        {
+          "index": 0,
+          "ok": true,
+          "entity_id": "organisation:rjdxg4396oo1kmir5z1i",
+          "memory_id": "memory:gmquqbba6y7rqyugd6ti",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 1,
+          "ok": true,
+          "entity_id": "organisation:7uqu9jwq62muit42lorh",
+          "memory_id": "memory:bsq46o8mv3groyeky6f6",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 2,
+          "ok": true,
+          "entity_id": "organisation:rwpzzr9tw4k3vqdhcdhx",
+          "memory_id": "memory:8nufr2t0r6usz3twyodq",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 3,
+          "ok": true,
+          "entity_id": "organisation:o85rwnaefwkvoaujob1g",
+          "memory_id": "memory:ayx7zmqk5uxp0is49anw",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 4,
+          "ok": true,
+          "entity_id": "organisation:rjdxg4396oo1kmir5z1i",
+          "memory_id": "memory:nyda6sao23z815vkkupj",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 5,
+          "ok": true,
+          "entity_id": "entity:3s3x11rghqn1b0qxof5c",
+          "memory_id": "memory:vdrszanat6dsponktfer",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 6,
+          "ok": true,
+          "entity_id": "person:300jj1lfln6hltr75sn3",
+          "memory_id": "memory:kkdseyg1i20dde3nf6en",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 7,
+          "ok": true,
+          "entity_id": "entity:dtpv30dfvq24il7c2aaa",
+          "memory_id": "memory:3yide5euxzi2okjevi0j",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 8,
+          "ok": true,
+          "entity_id": "entity:ugt6rofftccvjjuomjay",
+          "memory_id": "memory:qj3ve6p1khm14fdcdqgy",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 9,
+          "ok": true,
+          "entity_id": "entity:0alo8zj8lgw4phgycnmq",
+          "memory_id": "memory:oja8tpa1d4e73kbcca4p",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 10,
+          "ok": true,
+          "entity_id": "entity:gc3l2fncxr8vnto1spk9",
+          "memory_id": "memory:f04z535y67w4b4ptmtlb",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 11,
+          "ok": true,
+          "entity_id": "entity:3sb2tcg3mvrd6kv51znr",
+          "memory_id": "memory:gq4ro1u1l3uqgr4mi3sy",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 12,
+          "ok": true,
+          "entity_id": "entity:m09ye57js78gw9bpezrx",
+          "memory_id": "memory:mpdb95uu7sg6s35dc664",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 13,
+          "ok": true,
+          "entity_id": "entity:n8v4fraa6w49xnctd09p",
+          "memory_id": "memory:sorkztzahcqo6fthz3kg",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 14,
+          "ok": true,
+          "entity_id": "entity:8z3o10w16x7m0s1166f8",
+          "memory_id": "memory:p26c5ajf39wfqckrmqjm",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 15,
+          "ok": true,
+          "entity_id": "entity:ffuygjtryhu0940o77hd",
+          "memory_id": "memory:hu8g76aptk8t6bhxpqnk",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 16,
+          "ok": true,
+          "entity_id": "entity:bs8dwvtgywjeuj4lb9j6",
+          "memory_id": "memory:a79mq504fb4agwjunf34",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 17,
+          "ok": true,
+          "entity_id": "entity:kl4ea8we5ugms10whjm8",
+          "memory_id": "memory:vxat8vmzuuf61icd6pkd",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 18,
+          "ok": true,
+          "entity_id": "entity:ovl5njex4v2o2um1n9pj",
+          "memory_id": "memory:6evicp8k6e9cshfuatgf",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 19,
+          "ok": true,
+          "entity_id": "entity:gsj8anu1g7y6hxd2vmh2",
+          "memory_id": "memory:fc4m7ckw6tzugy55agxy",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 20,
+          "ok": true,
+          "entity_id": "entity:fa1r6qd1zv9x99tvr7i0",
+          "memory_id": "memory:ohlp93wv58zypbjqblbx",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 21,
+          "ok": true,
+          "entity_id": "entity:8rq9qkw3g7cl7rav96rb",
+          "memory_id": "memory:9odt9828223loe1q97nx",
+          "vault_name": "Fremantle Fish & Ice Co"
+        }
+      ]
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__memory_write_batch",
+    "arguments": {
+      "vault_id": "vault:rf0gaym72n9pkdbsg4a1",
+      "items": [
+        {
+          "subject_name": "Dhufish Whole 10kg",
+          "subject_kind": "product",
+          "text": "Product required by FFI-101 (2) and carried on IN-42 (2)."
+        },
+        {
+          "subject_name": "King Prawns U10 5kg",
+          "subject_kind": "product",
+          "text": "Product required by FFI-101 (4)."
+        },
+        {
+          "subject_name": "Block Ice 20kg",
+          "subject_kind": "product",
+          "text": "Product required by FFI-101 (10)."
+        },
+        {
+          "subject_name": "Gummy Shark 5kg",
+          "subject_kind": "product",
+          "text": "Product required by FFI-102 (6) and carried on IN-42 (6)."
+        },
+        {
+          "subject_name": "Flake Ice 10kg",
+          "subject_kind": "product",
+          "text": "Product required by FFI-102 (12)."
+        },
+        {
+          "subject_name": "Greenlip Abalone 1kg",
+          "subject_kind": "product",
+          "text": "Product required by FFI-103 (3) and carried on IN-42 (3). Esperance Abalone has a consignment on order for Harbour Lights Hotel Group."
+        },
+        {
+          "subject_name": "Tiger Prawns 5kg",
+          "subject_kind": "product",
+          "text": "Product required by FFI-103 (5)."
+        },
+        {
+          "subject_name": "Party Ice 5kg",
+          "subject_kind": "product",
+          "text": "Product required by FFI-103 (8)."
+        },
+        {
+          "subject_name": "Snapper Fillets 5kg",
+          "subject_kind": "product",
+          "text": "Product required by FFI-104 (4) and carried on IN-42 (4)."
+        },
+        {
+          "subject_name": "Crushed Ice 5kg",
+          "subject_kind": "product",
+          "text": "Product required by FFI-104 (6)."
+        },
+        {
+          "subject_name": "Octopus 5kg",
+          "subject_kind": "product",
+          "text": "Product required by FFI-105 (3)."
+        },
+        {
+          "subject_name": "Prawn Meat 1kg",
+          "subject_kind": "product",
+          "text": "Product required by FFI-105 (5)."
+        },
+        {
+          "subject_name": "Brownlip Abalone 1kg",
+          "subject_kind": "product",
+          "text": "Product required by FFI-106 (2)."
+        },
+        {
+          "subject_name": "Cooked Prawns 2kg",
+          "subject_kind": "product",
+          "text": "Product required by FFI-106 (4)."
+        },
+        {
+          "subject_name": "Gel Ice Pack 1kg",
+          "subject_kind": "product",
+          "text": "Product required by FFI-106 (6)."
+        }
+      ]
+    },
+    "id": "toolu_01L7MEdKjJkmL7Dvojgbz4g2",
+    "result": {
+      "written": 15,
+      "failed": 0,
+      "results": [
+        {
+          "index": 0,
+          "ok": true,
+          "entity_id": "entity:qcbe9ysvbeep437q79bc",
+          "memory_id": "memory:4zxichzxjegedqhhetx2",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 1,
+          "ok": true,
+          "entity_id": "entity:48xpq68q4urz8ypimn5y",
+          "memory_id": "memory:1l0n55y7kk3uqz3a5m5p",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 2,
+          "ok": true,
+          "entity_id": "entity:v1wgb5l21pseykea1qlx",
+          "memory_id": "memory:wsz3kt88i32i6zhyurm5",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 3,
+          "ok": true,
+          "entity_id": "entity:3f5cm4iqh3oirr0hmryw",
+          "memory_id": "memory:grxhx71ib37cnwps48x2",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 4,
+          "ok": true,
+          "entity_id": "entity:1sfkjfqzvoe0itr0wygd",
+          "memory_id": "memory:yo7p2p30pnbx3s1whcyw",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 5,
+          "ok": true,
+          "entity_id": "entity:rcrjvcfua61c8sgp7cuz",
+          "memory_id": "memory:2p0rz9fkwllz1njan8b8",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 6,
+          "ok": true,
+          "entity_id": "entity:sbtlnm1mp6dimx9zyqad",
+          "memory_id": "memory:e4hokozvcs36aol2l1jk",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 7,
+          "ok": true,
+          "entity_id": "entity:evv28m6h4tck901uzp6t",
+          "memory_id": "memory:u0a1nhlb0ia515y90w59",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 8,
+          "ok": true,
+          "entity_id": "entity:b6ob6x2weevj5neiyhnv",
+          "memory_id": "memory:iqppf9qfmsgtmq52bxgn",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 9,
+          "ok": true,
+          "entity_id": "entity:olzecfi09wy9257qadsw",
+          "memory_id": "memory:8t2vythrq9gswyvrlen0",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 10,
+          "ok": true,
+          "entity_id": "entity:uw0zadzbt2vvx7er1z1e",
+          "memory_id": "memory:ysp52gfyp8ftbotooxbz",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 11,
+          "ok": true,
+          "entity_id": "entity:de8jtqpgxmmapnnvkf3p",
+          "memory_id": "memory:jdoisfpt4ke5665qqnn9",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 12,
+          "ok": true,
+          "entity_id": "entity:3xmqlzc97hgyg9atd25d",
+          "memory_id": "memory:nxuclql1v2td0fw6lyhr",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 13,
+          "ok": true,
+          "entity_id": "entity:bs3cbh9kzfcstrg0qjpe",
+          "memory_id": "memory:bpa9sadz3axltda05tl7",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "index": 14,
+          "ok": true,
+          "entity_id": "entity:hy2hjhlctg2q8baflnhs",
+          "memory_id": "memory:4nrmltch4zke32vj9bre",
+          "vault_name": "Fremantle Fish & Ice Co"
+        }
+      ]
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:gc3l2fncxr8vnto1spk9",
+      "label": "placed",
+      "to_id": "entity:bs8dwvtgywjeuj4lb9j6"
+    },
+    "id": "toolu_018mqpZfki4zTcKRUicVS3BA",
+    "result": {
+      "id": "relates_to:o9argb942yw64ddsunvp",
+      "in": "entity:gc3l2fncxr8vnto1spk9",
+      "out": "entity:bs8dwvtgywjeuj4lb9j6",
+      "label": "placed",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:20.437376501Z",
+      "direction": null,
+      "owner_email": null
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:3sb2tcg3mvrd6kv51znr",
+      "label": "placed",
+      "to_id": "entity:kl4ea8we5ugms10whjm8"
+    },
+    "id": "toolu_01Jbf17YcgFqqNstwyjTqxLD",
+    "result": {
+      "id": "relates_to:mkxhmgpeylqhxmnqfgc6",
+      "in": "entity:3sb2tcg3mvrd6kv51znr",
+      "out": "entity:kl4ea8we5ugms10whjm8",
+      "label": "placed",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:21.015161334Z",
+      "direction": null,
+      "owner_email": null
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:m09ye57js78gw9bpezrx",
+      "label": "placed",
+      "to_id": "entity:ovl5njex4v2o2um1n9pj"
+    },
+    "id": "toolu_01Fj6TrLmtUMn9Rabor7bRTd",
+    "result": {
+      "id": "relates_to:orwyoe1j46m22oxbclmm",
+      "in": "entity:m09ye57js78gw9bpezrx",
+      "out": "entity:ovl5njex4v2o2um1n9pj",
+      "label": "placed",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:21.656149418Z",
+      "direction": null,
+      "owner_email": null
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:n8v4fraa6w49xnctd09p",
+      "label": "placed",
+      "to_id": "entity:gsj8anu1g7y6hxd2vmh2"
+    },
+    "id": "toolu_01BiVX22eCXi4AcQYk7jKsnT",
+    "result": {
+      "id": "relates_to:z1rrjcxw3989we7eh9iq",
+      "in": "entity:n8v4fraa6w49xnctd09p",
+      "out": "entity:gsj8anu1g7y6hxd2vmh2",
+      "label": "placed",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:22.258875043Z",
+      "direction": null,
+      "owner_email": null
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:8z3o10w16x7m0s1166f8",
+      "label": "placed",
+      "to_id": "entity:fa1r6qd1zv9x99tvr7i0"
+    },
+    "id": "toolu_01HRZSXQLKD4Q4HptwyN1Pk1",
+    "result": {
+      "id": "relates_to:b8ld2ot12kzg7tl2t95f",
+      "in": "entity:8z3o10w16x7m0s1166f8",
+      "out": "entity:fa1r6qd1zv9x99tvr7i0",
+      "label": "placed",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:22.860387835Z",
+      "direction": null,
+      "owner_email": null
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:ffuygjtryhu0940o77hd",
+      "label": "placed",
+      "to_id": "entity:8rq9qkw3g7cl7rav96rb"
+    },
+    "id": "toolu_01SBYabptohMemwmrG6nbJcb",
+    "result": {
+      "id": "relates_to:edeu55ddzga0uz6n0hke",
+      "in": "entity:ffuygjtryhu0940o77hd",
+      "out": "entity:8rq9qkw3g7cl7rav96rb",
+      "label": "placed",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:23.461875961Z",
+      "direction": null,
+      "owner_email": null
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:bs8dwvtgywjeuj4lb9j6",
+      "label": "requires",
+      "to_id": "entity:qcbe9ysvbeep437q79bc",
+      "reason": "FFI-101 needs 2 Dhufish Whole 10kg."
+    },
+    "id": "toolu_01T28gKQyBV9MpVRbdqjUaqj",
+    "result": {
+      "id": "relates_to:4ugdgeeqkurkkvg7i6cw",
+      "in": "entity:bs8dwvtgywjeuj4lb9j6",
+      "out": "entity:qcbe9ysvbeep437q79bc",
+      "label": "requires",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:24.289657044Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:r26adfd50dceac5f5ba5"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:bs8dwvtgywjeuj4lb9j6",
+      "label": "requires",
+      "to_id": "entity:48xpq68q4urz8ypimn5y",
+      "reason": "FFI-101 needs 4 King Prawns U10 5kg."
+    },
+    "id": "toolu_01VmcXhG6MccmJJ3k2w3opxJ",
+    "result": {
+      "id": "relates_to:0naftds3hpaerdvn01dm",
+      "in": "entity:bs8dwvtgywjeuj4lb9j6",
+      "out": "entity:48xpq68q4urz8ypimn5y",
+      "label": "requires",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:25.154654920Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:ra8ed05591e3a35e21a2"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:bs8dwvtgywjeuj4lb9j6",
+      "label": "requires",
+      "to_id": "entity:v1wgb5l21pseykea1qlx",
+      "reason": "FFI-101 needs 10 Block Ice 20kg."
+    },
+    "id": "toolu_01EK9EtSbBiznQcSbaM9ReTk",
+    "result": {
+      "id": "relates_to:nkm3h481z4klgf5a8mdt",
+      "in": "entity:bs8dwvtgywjeuj4lb9j6",
+      "out": "entity:v1wgb5l21pseykea1qlx",
+      "label": "requires",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:25.926036545Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:r40b9669649eb8e6b14e"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:kl4ea8we5ugms10whjm8",
+      "label": "requires",
+      "to_id": "entity:3f5cm4iqh3oirr0hmryw",
+      "reason": "FFI-102 needs 6 Gummy Shark 5kg."
+    },
+    "id": "toolu_01JpqD9baN6TeMGtHvjPHoW7",
+    "result": {
+      "id": "relates_to:8v2kqrtpa1e7r58tet0a",
+      "in": "entity:kl4ea8we5ugms10whjm8",
+      "out": "entity:3f5cm4iqh3oirr0hmryw",
+      "label": "requires",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:26.725579504Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:r4788cbe51edd39a9e15"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:kl4ea8we5ugms10whjm8",
+      "label": "requires",
+      "to_id": "entity:1sfkjfqzvoe0itr0wygd",
+      "reason": "FFI-102 needs 12 Flake Ice 10kg."
+    },
+    "id": "toolu_013twNZgfnfocWMBx29dJYKi",
+    "result": {
+      "id": "relates_to:0etfspyi0chdzmpcuvrv",
+      "in": "entity:kl4ea8we5ugms10whjm8",
+      "out": "entity:1sfkjfqzvoe0itr0wygd",
+      "label": "requires",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:27.492565171Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:r77db4e3f0b16121b4c9"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:ovl5njex4v2o2um1n9pj",
+      "label": "requires",
+      "to_id": "entity:rcrjvcfua61c8sgp7cuz",
+      "reason": "FFI-103 needs 3 Greenlip Abalone 1kg."
+    },
+    "id": "toolu_013NtkhjGDNdmjLPrsm6HKNy",
+    "result": {
+      "id": "relates_to:thaho4bsyow5megh9wfd",
+      "in": "entity:ovl5njex4v2o2um1n9pj",
+      "out": "entity:rcrjvcfua61c8sgp7cuz",
+      "label": "requires",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:28.364180421Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:r7e505e83c19341cb6e7"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:ovl5njex4v2o2um1n9pj",
+      "label": "requires",
+      "to_id": "entity:sbtlnm1mp6dimx9zyqad",
+      "reason": "FFI-103 needs 5 Tiger Prawns 5kg."
+    },
+    "id": "toolu_01GWctc1cBx2G2JPHLYCnPJn",
+    "result": {
+      "id": "relates_to:40tlqoee918enu6wjxiq",
+      "in": "entity:ovl5njex4v2o2um1n9pj",
+      "out": "entity:sbtlnm1mp6dimx9zyqad",
+      "label": "requires",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:29.195123463Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:r0dd87c6a480b20aedc3"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:ovl5njex4v2o2um1n9pj",
+      "label": "requires",
+      "to_id": "entity:evv28m6h4tck901uzp6t",
+      "reason": "FFI-103 needs 8 Party Ice 5kg."
+    },
+    "id": "toolu_01XR1BVPpC55w6cjR6G3i4wu",
+    "result": {
+      "id": "relates_to:3owqlfdeikw2dxb8t2ij",
+      "in": "entity:ovl5njex4v2o2um1n9pj",
+      "out": "entity:evv28m6h4tck901uzp6t",
+      "label": "requires",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:30.057187630Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:r37a7808544c7710d567"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:gsj8anu1g7y6hxd2vmh2",
+      "label": "requires",
+      "to_id": "entity:b6ob6x2weevj5neiyhnv",
+      "reason": "FFI-104 needs 4 Snapper Fillets 5kg."
+    },
+    "id": "toolu_01UDsMkKgedbvnsrubBV7tcv",
+    "result": {
+      "id": "relates_to:ak9pu5dxu6fl8d1sx6vv",
+      "in": "entity:gsj8anu1g7y6hxd2vmh2",
+      "out": "entity:b6ob6x2weevj5neiyhnv",
+      "label": "requires",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:30.956380839Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:r683c7b6a9a89fd3862c"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:gsj8anu1g7y6hxd2vmh2",
+      "label": "requires",
+      "to_id": "entity:olzecfi09wy9257qadsw",
+      "reason": "FFI-104 needs 6 Crushed Ice 5kg."
+    },
+    "id": "toolu_01Kx8CaJE3VRPzQtDLDyhzXa",
+    "result": {
+      "id": "relates_to:el7xw206be3rh8p3ndxt",
+      "in": "entity:gsj8anu1g7y6hxd2vmh2",
+      "out": "entity:olzecfi09wy9257qadsw",
+      "label": "requires",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:31.794706006Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:r97f97a031d3a0f4cc06"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:fa1r6qd1zv9x99tvr7i0",
+      "label": "requires",
+      "to_id": "entity:uw0zadzbt2vvx7er1z1e",
+      "reason": "FFI-105 needs 3 Octopus 5kg."
+    },
+    "id": "toolu_01KNGBRRnvseAG44VFLCwcKT",
+    "result": {
+      "id": "relates_to:1eim6szqcna87isj4x63",
+      "in": "entity:fa1r6qd1zv9x99tvr7i0",
+      "out": "entity:uw0zadzbt2vvx7er1z1e",
+      "label": "requires",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:32.732761965Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:r20dc369d3df83a87e3c"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:fa1r6qd1zv9x99tvr7i0",
+      "label": "requires",
+      "to_id": "entity:de8jtqpgxmmapnnvkf3p",
+      "reason": "FFI-105 needs 5 Prawn Meat 1kg."
+    },
+    "id": "toolu_012T4qMr8TvugkgxFoTxx8kP",
+    "result": {
+      "id": "relates_to:8ypqx4yfci9qabhfsvxh",
+      "in": "entity:fa1r6qd1zv9x99tvr7i0",
+      "out": "entity:de8jtqpgxmmapnnvkf3p",
+      "label": "requires",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:33.594000507Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:r814b6d5bb96aa2b4468"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:8rq9qkw3g7cl7rav96rb",
+      "label": "requires",
+      "to_id": "entity:3xmqlzc97hgyg9atd25d",
+      "reason": "FFI-106 needs 2 Brownlip Abalone 1kg."
+    },
+    "id": "toolu_01Hooucp94XCgJoje24naJZW",
+    "result": {
+      "id": "relates_to:3buxpjxbjg1xxr1a2pux",
+      "in": "entity:8rq9qkw3g7cl7rav96rb",
+      "out": "entity:3xmqlzc97hgyg9atd25d",
+      "label": "requires",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:34.458631507Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:r40ed6a88b44ee06c655"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:8rq9qkw3g7cl7rav96rb",
+      "label": "requires",
+      "to_id": "entity:bs3cbh9kzfcstrg0qjpe",
+      "reason": "FFI-106 needs 4 Cooked Prawns 2kg."
+    },
+    "id": "toolu_01NbJeSKnotPrB6smHXu7RN5",
+    "result": {
+      "id": "relates_to:6qi3u2qu3y77ezsg07yr",
+      "in": "entity:8rq9qkw3g7cl7rav96rb",
+      "out": "entity:bs3cbh9kzfcstrg0qjpe",
+      "label": "requires",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:35.290559925Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:rd76f2d6743f4e5578d6"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:8rq9qkw3g7cl7rav96rb",
+      "label": "requires",
+      "to_id": "entity:hy2hjhlctg2q8baflnhs",
+      "reason": "FFI-106 needs 6 Gel Ice Pack 1kg."
+    },
+    "id": "toolu_014PXi6JF34ke2gfPMHPwHxt",
+    "result": {
+      "id": "relates_to:n6utd7ie81pej3cparc8",
+      "in": "entity:8rq9qkw3g7cl7rav96rb",
+      "out": "entity:hy2hjhlctg2q8baflnhs",
+      "label": "requires",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:36.158952842Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:r9933ef485bbbb32535b"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:ugt6rofftccvjjuomjay",
+      "label": "carries",
+      "to_id": "entity:0alo8zj8lgw4phgycnmq",
+      "reason": "Reefer 2 is carrying inbound load IN-42."
+    },
+    "id": "toolu_01A4H6gNAsiEZpreHpZZtiF1",
+    "result": {
+      "id": "relates_to:rolcp2cmgyxp73gtn3o3",
+      "in": "entity:ugt6rofftccvjjuomjay",
+      "out": "entity:0alo8zj8lgw4phgycnmq",
+      "label": "carries",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:38.640837718Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:r3ee788ca13f65306530"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:ugt6rofftccvjjuomjay",
+      "label": "serves",
+      "to_id": "entity:bs8dwvtgywjeuj4lb9j6",
+      "reason": "IN-42 on Reefer 2 carries 2 Dhufish for FFI-101."
+    },
+    "id": "toolu_016zqw1F5DYud2PY1QfLHt5N",
+    "result": {
+      "id": "relates_to:ozg6eht7p7zyqcpbeb7j",
+      "in": "entity:ugt6rofftccvjjuomjay",
+      "out": "entity:bs8dwvtgywjeuj4lb9j6",
+      "label": "serves",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:39.583174052Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:r6aa61c90b4661b462da"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:ugt6rofftccvjjuomjay",
+      "label": "serves",
+      "to_id": "entity:kl4ea8we5ugms10whjm8",
+      "reason": "IN-42 on Reefer 2 carries 6 Gummy Shark for FFI-102."
+    },
+    "id": "toolu_01JLUD2po1fUVwEJ7cMNvqWG",
+    "result": {
+      "id": "relates_to:4c7j9r6kqc2ugq35r2oh",
+      "in": "entity:ugt6rofftccvjjuomjay",
+      "out": "entity:kl4ea8we5ugms10whjm8",
+      "label": "serves",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:40.379149177Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:r54513dcb7b6784b07a5"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:ugt6rofftccvjjuomjay",
+      "label": "serves",
+      "to_id": "entity:ovl5njex4v2o2um1n9pj",
+      "reason": "IN-42 on Reefer 2 carries 3 Greenlip Abalone for FFI-103."
+    },
+    "id": "toolu_01CbzhCETQywg5CgMgjufAff",
+    "result": {
+      "id": "relates_to:8p28pzhrazxaflq0086b",
+      "in": "entity:ugt6rofftccvjjuomjay",
+      "out": "entity:ovl5njex4v2o2um1n9pj",
+      "label": "serves",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:41.216279219Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:rbc7be6b8474b0e1f53a"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:ugt6rofftccvjjuomjay",
+      "label": "serves",
+      "to_id": "entity:gsj8anu1g7y6hxd2vmh2",
+      "reason": "IN-42 on Reefer 2 carries 4 Snapper Fillets for FFI-104."
+    },
+    "id": "toolu_01KXLhuBzTQFsWSALVDyJzcj",
+    "result": {
+      "id": "relates_to:vqeah6wga6l0xiffz0wl",
+      "in": "entity:ugt6rofftccvjjuomjay",
+      "out": "entity:gsj8anu1g7y6hxd2vmh2",
+      "label": "serves",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:42.049284719Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:r767fcf6d37a8853a78a"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:0alo8zj8lgw4phgycnmq",
+      "label": "supplies",
+      "to_id": "entity:bs8dwvtgywjeuj4lb9j6",
+      "reason": "IN-42 holds stock for FFI-101."
+    },
+    "id": "toolu_01L6R3ycwhzkPF7ST3VScucy",
+    "result": {
+      "id": "relates_to:hw6l48768gnn4m0rkghp",
+      "in": "entity:0alo8zj8lgw4phgycnmq",
+      "out": "entity:bs8dwvtgywjeuj4lb9j6",
+      "label": "supplies",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:43.036007220Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:rbe32ce1980eacca35c6"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:0alo8zj8lgw4phgycnmq",
+      "label": "supplies",
+      "to_id": "entity:kl4ea8we5ugms10whjm8",
+      "reason": "IN-42 holds stock for FFI-102."
+    },
+    "id": "toolu_01X5VFH6YPrKV1g2aU7ChCqp",
+    "result": {
+      "id": "relates_to:ak7xmnw62gry0pgfnioq",
+      "in": "entity:0alo8zj8lgw4phgycnmq",
+      "out": "entity:kl4ea8we5ugms10whjm8",
+      "label": "supplies",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:43.843535137Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:r0ca8861f79b070f97bc"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:0alo8zj8lgw4phgycnmq",
+      "label": "supplies",
+      "to_id": "entity:ovl5njex4v2o2um1n9pj",
+      "reason": "IN-42 holds stock for FFI-103."
+    },
+    "id": "toolu_01GRXrAekpwP8fgpVMGShxvi",
+    "result": {
+      "id": "relates_to:ibumtop21oqefsawxi1f",
+      "in": "entity:0alo8zj8lgw4phgycnmq",
+      "out": "entity:ovl5njex4v2o2um1n9pj",
+      "label": "supplies",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:44.745456804Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:r64c66d88504642b22fa"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:0alo8zj8lgw4phgycnmq",
+      "label": "supplies",
+      "to_id": "entity:gsj8anu1g7y6hxd2vmh2",
+      "reason": "IN-42 holds stock for FFI-104."
+    },
+    "id": "toolu_01JDf4BMejg22gKrFMaTs3wY",
+    "result": {
+      "id": "relates_to:uvcjgbr4wxlgelpm2mcw",
+      "in": "entity:0alo8zj8lgw4phgycnmq",
+      "out": "entity:gsj8anu1g7y6hxd2vmh2",
+      "label": "supplies",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:45.608521263Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:rfcc52e8571198be3290"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:0alo8zj8lgw4phgycnmq",
+      "label": "contains",
+      "to_id": "entity:qcbe9ysvbeep437q79bc",
+      "reason": "IN-42 holds 2 Dhufish Whole 10kg."
+    },
+    "id": "toolu_01GDcsE7skChQVVrsJZJJNeK",
+    "result": {
+      "id": "relates_to:dkfez6i3h24yrgbvdo7f",
+      "in": "entity:0alo8zj8lgw4phgycnmq",
+      "out": "entity:qcbe9ysvbeep437q79bc",
+      "label": "contains",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:46.508426805Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:rdb1034ba3a024f09d3c"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:0alo8zj8lgw4phgycnmq",
+      "label": "contains",
+      "to_id": "entity:3f5cm4iqh3oirr0hmryw",
+      "reason": "IN-42 holds 6 Gummy Shark 5kg."
+    },
+    "id": "toolu_01RtBWvzTgEozrdMXDKBP2Uj",
+    "result": {
+      "id": "relates_to:7rjzxazz4zpfpj66qskw",
+      "in": "entity:0alo8zj8lgw4phgycnmq",
+      "out": "entity:3f5cm4iqh3oirr0hmryw",
+      "label": "contains",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:47.408882472Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:r4f80b95f36ca7ae7f06"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:0alo8zj8lgw4phgycnmq",
+      "label": "contains",
+      "to_id": "entity:rcrjvcfua61c8sgp7cuz",
+      "reason": "IN-42 holds 3 Greenlip Abalone 1kg."
+    },
+    "id": "toolu_01Mt7MdE7tC6moF963o2CzoF",
+    "result": {
+      "id": "relates_to:2q7fjl9tx7ru7jyrguye",
+      "in": "entity:0alo8zj8lgw4phgycnmq",
+      "out": "entity:rcrjvcfua61c8sgp7cuz",
+      "label": "contains",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:48.411563917Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:r1faa9b3d15a2fc7b485"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:0alo8zj8lgw4phgycnmq",
+      "label": "contains",
+      "to_id": "entity:b6ob6x2weevj5neiyhnv",
+      "reason": "IN-42 holds 4 Snapper Fillets 5kg."
+    },
+    "id": "toolu_01UfzMMv7saSA9QGTJi1LoN6",
+    "result": {
+      "id": "relates_to:nbpikxn2kqxzkdpf5ir6",
+      "in": "entity:0alo8zj8lgw4phgycnmq",
+      "out": "entity:b6ob6x2weevj5neiyhnv",
+      "label": "contains",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:26:49.376892667Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:r5c6c53c558e67250440"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:300jj1lfln6hltr75sn3",
+      "label": "leads_dispatch_for",
+      "to_id": "entity:0alo8zj8lgw4phgycnmq",
+      "reason": "Amelia Russo is the dispatch lead for IN-42."
+    },
+    "id": "toolu_011bh5ymzMv4LPuuTZFbhD4t",
+    "result": {
+      "error": "not a member of both entities' vaults",
+      "code": "vault.forbidden",
+      "trace_id": "7b60b3ae80ec4a31b58627bca255e59b"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:3s3x11rghqn1b0qxof5c",
+      "label": "approved_by",
+      "to_id": "entity:300jj1lfln6hltr75sn3",
+      "reason": "Owner Amelia Russo approved the $250 delivery minimum."
+    },
+    "id": "toolu_01Frv1PURtKuoX5DM3gr1KGf",
+    "result": {
+      "error": "not a member of both entities' vaults",
+      "code": "vault.forbidden",
+      "trace_id": "8f9f749a833d4fe7a3922e242f05061e"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:rwpzzr9tw4k3vqdhcdhx",
+      "label": "has_consignment_on_order_for",
+      "to_id": "entity:m09ye57js78gw9bpezrx",
+      "reason": "Esperance Abalone has a Greenlip Abalone 1kg consignment on order for Harbour Lights Hotel Group."
+    },
+    "id": "toolu_01Xqf6tiwSmC3eVGEqgHGpzk",
+    "result": {
+      "error": "not a member of both entities' vaults",
+      "code": "vault.forbidden",
+      "trace_id": "d790d6ec86294c3dbd866c840cb6cb74"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:rwpzzr9tw4k3vqdhcdhx",
+      "label": "supplies",
+      "to_id": "entity:rcrjvcfua61c8sgp7cuz",
+      "reason": "The consignment on order is Greenlip Abalone 1kg."
+    },
+    "id": "toolu_01JvJQ3ecx3WEt2QbjFRtkHp",
+    "result": {
+      "error": "not a member of both entities' vaults",
+      "code": "vault.forbidden",
+      "trace_id": "bc17f123f4bc4a648022f1d34aa4c70e"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entities_search",
+    "arguments": {
+      "query": "Esperance Abalone"
+    },
+    "id": "toolu_016fgWUz5yCvsCd3CjWAxrvL",
+    "result": {
+      "results": [
+        {
+          "id": "organisation:rwpzzr9tw4k3vqdhcdhx",
+          "kind": "organisation",
+          "name": "Esperance Abalone",
+          "aliases": [],
+          "summary": "",
+          "vault": "vault:rf0gaym72n9pkdbsg4a1"
+        },
+        {
+          "id": "entity:rcrjvcfua61c8sgp7cuz",
+          "kind": "product",
+          "name": "Greenlip Abalone 1kg",
+          "aliases": [],
+          "summary": "",
+          "vault": "vault:rf0gaym72n9pkdbsg4a1"
+        },
+        {
+          "id": "entity:m09ye57js78gw9bpezrx",
+          "kind": "customer",
+          "name": "Harbour Lights Hotel Group",
+          "aliases": [],
+          "summary": "",
+          "vault": "vault:rf0gaym72n9pkdbsg4a1"
+        }
+      ],
+      "total": 3,
+      "has_more": false
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entities_search",
+    "arguments": {
+      "query": "Amelia Russo"
+    },
+    "id": "toolu_01Hvma1upGayjvikJ1TnzN6c",
+    "result": {
+      "results": [
+        {
+          "id": "person:300jj1lfln6hltr75sn3",
+          "kind": "person",
+          "name": "Amelia Russo",
+          "aliases": [],
+          "summary": "",
+          "vault": "vault:rf0gaym72n9pkdbsg4a1"
+        },
+        {
+          "id": "entity:3s3x11rghqn1b0qxof5c",
+          "kind": "decision",
+          "name": "Delivery minimum change",
+          "aliases": [],
+          "summary": "",
+          "vault": "vault:rf0gaym72n9pkdbsg4a1"
+        }
+      ],
+      "total": 2,
+      "has_more": false
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "person:300jj1lfln6hltr75sn3",
+      "label": "leads_dispatch_for",
+      "to_id": "entity:0alo8zj8lgw4phgycnmq",
+      "reason": "Amelia Russo is the dispatch lead for IN-42."
+    },
+    "id": "toolu_01TFrmziaDLB1w28khPMQq1y",
+    "result": {
+      "id": "relates_to:mnt5seg76uk4kmfrdqra",
+      "in": "person:300jj1lfln6hltr75sn3",
+      "out": "entity:0alo8zj8lgw4phgycnmq",
+      "label": "leads_dispatch_for",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:27:00.662180339Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:r86cad7cfa8734778cc9"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "entity:3s3x11rghqn1b0qxof5c",
+      "label": "approved_by",
+      "to_id": "person:300jj1lfln6hltr75sn3",
+      "reason": "Owner Amelia Russo approved the $250 delivery minimum."
+    },
+    "id": "toolu_0184JRYZij2EpUgV8otSDvgi",
+    "result": {
+      "id": "relates_to:7f5dwocve93hk9n39lms",
+      "in": "entity:3s3x11rghqn1b0qxof5c",
+      "out": "person:300jj1lfln6hltr75sn3",
+      "label": "approved_by",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:27:01.533724423Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:r3eb823d54282aeb8107"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "organisation:rwpzzr9tw4k3vqdhcdhx",
+      "label": "has_consignment_on_order_for",
+      "to_id": "entity:m09ye57js78gw9bpezrx",
+      "reason": "Esperance Abalone has a Greenlip Abalone 1kg consignment on order for Harbour Lights Hotel Group."
+    },
+    "id": "toolu_01S1o1imgouy2sjnMn8LM5gC",
+    "result": {
+      "id": "relates_to:u9fib52wv9t7pyprjn7q",
+      "in": "organisation:rwpzzr9tw4k3vqdhcdhx",
+      "out": "entity:m09ye57js78gw9bpezrx",
+      "label": "has_consignment_on_order_for",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:27:02.531447007Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:r943210fe2dbe3c482e1"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entity_relate",
+    "arguments": {
+      "from_id": "organisation:rwpzzr9tw4k3vqdhcdhx",
+      "label": "supplies",
+      "to_id": "entity:rcrjvcfua61c8sgp7cuz",
+      "reason": "The consignment on order is Greenlip Abalone 1kg."
+    },
+    "id": "toolu_01ThmnDF9P6n4qYNnd1bg3By",
+    "result": {
+      "id": "relates_to:yjf9wtcpzx4d87dc3qms",
+      "in": "organisation:rwpzzr9tw4k3vqdhcdhx",
+      "out": "entity:rcrjvcfua61c8sgp7cuz",
+      "label": "supplies",
+      "source": null,
+      "owner": "user:b558qrfkf1zsce3nwg9a",
+      "created_at": "2026-11-08T19:27:03.423378590Z",
+      "direction": null,
+      "owner_email": null,
+      "reason_memory_id": "memory:r784c8645e4e08b2caee"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__document_upload",
+    "arguments": {
+      "filename": "ops-notes.md",
+      "vault_id": "vault:rf0gaym72n9pkdbsg4a1",
+      "content_type": "text/markdown",
+      "text": "# Fremantle Fish & Ice Co, Fremantle WA\nFictional test records as at 9 November 2026.\n\n## Open customer orders\n- Bathers Beach Bistro, order FFI-101, due 12 November. Needs two Dhufish Whole 10kg, four King Prawns U10 5kg and ten Block Ice 20kg.\n- Portside Fish and Chips, order FFI-102, due 12 November. Needs six Gummy Shark 5kg and twelve Flake Ice 10kg.\n- Harbour Lights Hotel Group, order FFI-103, due 13 November. Needs three Greenlip Abalone 1kg, five Tiger Prawns 5kg and eight Party Ice 5kg.\n- Saltwater Table Restaurant, order FFI-104, due 12 November. Needs four Snapper Fillets 5kg and six Crushed Ice 5kg.\n- Quay Seafood Kitchen, order FFI-105, due 14 November. Needs three Octopus 5kg and five Prawn Meat 1kg.\n- West End Oyster Bar, order FFI-106, due 14 November. Needs two Brownlip Abalone 1kg, four Cooked Prawns 2kg and six Gel Ice Pack 1kg.\n\n## Inbound load\nRefrigerated truck Reefer 2 is carrying inbound load IN-42, expected 11 November 2026. It carries two Dhufish Whole 10kg for FFI-101, six Gummy Shark 5kg for FFI-102, three Greenlip Abalone 1kg for FFI-103 and four Snapper Fillets 5kg for FFI-104. A one-day delay risks those four orders. Dispatch lead is Amelia Russo.\n\n## Decisions and unconfirmed information\nDecision: delivery minimum goes to $250 from 1 December 2026, approved by owner Amelia Russo.\nRumour, unconfirmed: Shark Bay Prawns may raise prices in December. No increase is confirmed.\nShark Bay Prawns is our prawn supplier. Southern Ice Works supplies ice and insulated packaging. Both are organisations we work with.\nEsperance Abalone has a Greenlip Abalone 1kg consignment on order for Harbour Lights Hotel Group.\nUnlinked equipment: Office Label Printer sits in dispatch, with no recorded dependencies.\n"
+    },
+    "id": "toolu_01VeJcxWn7tGrvZAtSrzBQcN",
+    "result": {
+      "id": "document:scb7kg4m1s63ajnslsuo",
+      "vault": "vault:rf0gaym72n9pkdbsg4a1",
+      "filename": "ops-notes.md",
+      "media_type": "text/markdown",
+      "size_bytes": 1749,
+      "sha256": "56f92533bd98a32e0eb866c152cb127b54f5027c96d4fa284fa605d529153150",
+      "revision": 1,
+      "status": "indexing",
+      "chunk_count": 0,
+      "created_at": "2026-11-08T19:27:08.931Z",
+      "updated_at": "2026-11-08T19:27:08.931Z",
+      "indexed_at": null,
+      "download_url": "/api/documents/document:scb7kg4m1s63ajnslsuo/download"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__document_upload",
+    "arguments": {
+      "filename": "catalogue.csv",
+      "vault_id": "vault:rf0gaym72n9pkdbsg4a1",
+      "content_type": "text/csv",
+      "text": "product,supplier,sell price AUD,unit cost AUD,qty on hand,reorder at,status,last landed\nDhufish Whole 10kg,Abrolhos Fishers Co-op,\"$1,180.00\",$785.00,3,10,Available,04/11/2026\nSnapper Fillets 5kg,Abrolhos Fishers Co-op,$245.00,$158.00,12,10,Available,05/11/2026\nGummy Shark 5kg,Abrolhos Fishers Co-op,$185.00,$116.00,16,10,Available,06/11/2026\nSpanish Mackerel 5kg,Abrolhos Fishers Co-op,$210.00,$138.00,9,10,Available,07/11/2026\nSardines 2kg,Abrolhos Fishers Co-op,$28.00,$17.50,45,10,Available,08/11/2026\nWhiting Fillets 2kg,Abrolhos Fishers Co-op,$72.00,$46.00,20,10,Available,04/11/2026\nOctopus 5kg,Abrolhos Fishers Co-op,$165.00,,7,10,On order,05/11/2026\nFish Frames 10kg,Abrolhos Fishers Co-op,$35.00,$14.00,0,10,Discontinued,06/11/2026\nKing Prawns U10 5kg,Shark Bay Prawns,$265.00,$174.00,17,10,Available,07/11/2026\nTiger Prawns 5kg,Shark Bay Prawns,$195.00,$128.00,23,10,Available,08/11/2026\nBanana Prawns 5kg,Shark Bay Prawns,$145.00,$92.00,31,10,Available,04/11/2026\nPrawn Cutlets 2kg,Shark Bay Prawns,$98.00,$61.00,14,10,Available,05/11/2026\nPrawn Meat 1kg,Shark Bay Prawns,$42.00,$26.00,33,10,Available,06/11/2026\nCooked Prawns 2kg,Shark Bay Prawns,$84.00,$55.00,19,10,Available,07/11/2026\nPrawn Skewers 20pk,Shark Bay Prawns,$46.00,,11,10,On order,08/11/2026\nPrawn Shells 5kg,Shark Bay Prawns,$12.50,$5.25,21,10,Available,04/11/2026\nBlock Ice 20kg,Southern Ice Works,$18.50,$7.25,95,10,Available,05/11/2026\nFlake Ice 10kg,Southern Ice Works,$12.50,$5.10,80,10,Available,06/11/2026\nCrushed Ice 5kg,Southern Ice Works,$7.45,$3.20,65,10,Available,07/11/2026\nParty Ice 5kg,Southern Ice Works,$8.90,$3.80,43,10,Available,08/11/2026\nDry Ice 2kg,Southern Ice Works,$24.00,$13.00,13,10,Available,04/11/2026\nGel Ice Pack 1kg,Southern Ice Works,$6.50,$2.40,57,10,Available,05/11/2026\nInsulated Seafood Carton,Southern Ice Works,$14.50,$6.75,40,10,Available,06/11/2026\nIce Brick 500g,southern ice works,$3.95,$1.80,61,10,Available,07/11/2026\nGreenlip Abalone 1kg,Esperance Abalone,$148.00,$96.00,8,10,On order,08/11/2026\nBrownlip Abalone 1kg,Esperance Abalone,$165.00,$108.00,9,10,Available,04/11/2026\nAbalone Slices 500g,Esperance Abalone,$89.00,$57.00,16,10,Available,05/11/2026\nAbalone Mince 1kg,Esperance Abalone,$76.00,$44.00,14,10,Available,06/11/2026\nAbalone Shell Pack,Esperance Abalone,$22.00,$11.00,25,10,Available,07/11/2026\nPremium Abalone Gift Box,Esperance Abalone,$320.00,$210.00,5,10,Available,08/11/2026\n"
+    },
+    "id": "toolu_01XpqGQd19JSZXbuQZhzHKFd",
+    "result": {
+      "id": "document:e4f6egzn8wveubiomvaj",
+      "vault": "vault:rf0gaym72n9pkdbsg4a1",
+      "filename": "catalogue.csv",
+      "media_type": "text/csv",
+      "size_bytes": 2423,
+      "sha256": "8fd071d608e3a1eef9f6e7f1347ec266024f5c2e7bbc0c87575371f46a0bb44a",
+      "revision": 1,
+      "status": "indexing",
+      "chunk_count": 0,
+      "created_at": "2026-11-08T19:27:15.672Z",
+      "updated_at": "2026-11-08T19:27:15.673Z",
+      "indexed_at": null,
+      "download_url": "/api/documents/document:e4f6egzn8wveubiomvaj/download"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__ontology_automap",
+    "arguments": {
+      "document_id": "document:e4f6egzn8wveubiomvaj",
+      "vault_id": "vault:rf0gaym72n9pkdbsg4a1"
+    },
+    "id": "toolu_012gKp289taecePPAUTvjNQ9",
+    "result": {
+      "mode": "model",
+      "proposed": {
+        "kinds": [
+          {
+            "kind": "product",
+            "status": "proposed",
+            "merge_into": null
+          }
+        ],
+        "links": [
+          {
+            "from_kind": "product",
+            "label": "supplies",
+            "to_kind": "organisation",
+            "status": "proposed"
+          }
+        ],
+        "properties": [
+          {
+            "kind": "product",
+            "name": "sell_price",
+            "datatype": "money",
+            "status": "proposed",
+            "merge_into": null
+          },
+          {
+            "kind": "product",
+            "name": "unit_cost",
+            "datatype": "money",
+            "status": "proposed",
+            "merge_into": null
+          },
+          {
+            "kind": "product",
+            "name": "qty_on_hand",
+            "datatype": "integer",
+            "status": "proposed",
+            "merge_into": null
+          },
+          {
+            "kind": "product",
+            "name": "reorder_at",
+            "datatype": "integer",
+            "status": "proposed",
+            "merge_into": null
+          },
+          {
+            "kind": "product",
+            "name": "status",
+            "datatype": "enum",
+            "status": "proposed",
+            "merge_into": null
+          },
+          {
+            "kind": "product",
+            "name": "last_landed",
+            "datatype": "date",
+            "status": "proposed",
+            "merge_into": null
+          }
+        ],
+        "metrics": [
+          {
+            "kind": "product",
+            "name": "inventory_cost_value",
+            "status": "proposed",
+            "merge_into": null
+          },
+          {
+            "kind": "product",
+            "name": "gross_margin",
+            "status": "proposed",
+            "merge_into": null
+          },
+          {
+            "kind": "product",
+            "name": "product_count",
+            "status": "proposed",
+            "merge_into": null
+          }
+        ]
+      },
+      "record_types": [
+        {
+          "source": "document",
+          "record_type": "document:e4f6egzn8wveubiomvaj",
+          "kind": "product",
+          "name_field": "product",
+          "unmapped": []
+        }
+      ],
+      "links": [
+        {
+          "from_kind": "product",
+          "label": "supplies",
+          "to_kind": "organisation",
+          "source": "document",
+          "record_type": "document:e4f6egzn8wveubiomvaj",
+          "field": "supplier",
+          "values": 5,
+          "matched": 5,
+          "ratio": 1.0,
+          "reused": [],
+          "ambiguous": [],
+          "kept": true,
+          "reason": "100% of values match (5 of 5)"
+        }
+      ],
+      "skipped": 0,
+      "ontology": {
+        "vault": "vault:rf0gaym72n9pkdbsg4a1",
+        "strict": false,
+        "kinds": [
+          {
+            "kind": "person",
+            "built_in": true,
+            "status": "observed",
+            "description": null,
+            "merge_into": null,
+            "synonyms": [],
+            "origin": null,
+            "reason": null,
+            "entities": 1,
+            "samples": [
+              "Amelia Russo"
+            ],
+            "properties": [],
+            "metrics": []
+          },
+          {
+            "kind": "organisation",
+            "built_in": true,
+            "status": "observed",
+            "description": null,
+            "merge_into": null,
+            "synonyms": [],
+            "origin": null,
+            "reason": null,
+            "entities": 4,
+            "samples": [
+              "Abrolhos Fishers Co-op",
+              "Esperance Abalone",
+              "Shark Bay Prawns"
+            ],
+            "properties": [],
+            "metrics": []
+          },
+          {
+            "kind": "location",
+            "built_in": true,
+            "status": "observed",
+            "description": null,
+            "merge_into": null,
+            "synonyms": [],
+            "origin": null,
+            "reason": null,
+            "entities": 0,
+            "samples": [],
+            "properties": [],
+            "metrics": []
+          },
+          {
+            "kind": "repository",
+            "built_in": true,
+            "status": "observed",
+            "description": null,
+            "merge_into": null,
+            "synonyms": [],
+            "origin": null,
+            "reason": null,
+            "entities": 0,
+            "samples": [],
+            "properties": [],
+            "metrics": []
+          },
+          {
+            "kind": "file",
+            "built_in": true,
+            "status": "observed",
+            "description": null,
+            "merge_into": null,
+            "synonyms": [],
+            "origin": null,
+            "reason": null,
+            "entities": 0,
+            "samples": [],
+            "properties": [],
+            "metrics": []
+          },
+          {
+            "kind": "symbol",
+            "built_in": true,
+            "status": "observed",
+            "description": null,
+            "merge_into": null,
+            "synonyms": [],
+            "origin": null,
+            "reason": null,
+            "entities": 0,
+            "samples": [],
+            "properties": [],
+            "metrics": []
+          },
+          {
+            "kind": "customer",
+            "built_in": false,
+            "status": "observed",
+            "description": null,
+            "merge_into": null,
+            "synonyms": [],
+            "origin": null,
+            "reason": null,
+            "entities": 6,
+            "samples": [
+              "Bathers Beach Bistro",
+              "Harbour Lights Hotel Group",
+              "Portside Fish and Chips"
+            ],
+            "properties": [],
+            "metrics": []
+          },
+          {
+            "kind": "decision",
+            "built_in": false,
+            "status": "observed",
+            "description": null,
+            "merge_into": null,
+            "synonyms": [],
+            "origin": null,
+            "reason": null,
+            "entities": 1,
+            "samples": [
+              "Delivery minimum change"
+            ],
+            "properties": [],
+            "metrics": []
+          },
+          {
+            "kind": "equipment",
+            "built_in": false,
+            "status": "observed",
+            "description": null,
+            "merge_into": null,
+            "synonyms": [],
+            "origin": null,
+            "reason": null,
+            "entities": 1,
+            "samples": [
+              "Office Label Printer"
+            ],
+            "properties": [],
+            "metrics": []
+          },
+          {
+            "kind": "inbound_load",
+            "built_in": false,
+            "status": "observed",
+            "description": null,
+            "merge_into": null,
+            "synonyms": [],
+            "origin": null,
+            "reason": null,
+            "entities": 1,
+            "samples": [
+              "IN-42"
+            ],
+            "properties": [],
+            "metrics": []
+          },
+          {
+            "kind": "order",
+            "built_in": false,
+            "status": "observed",
+            "description": null,
+            "merge_into": null,
+            "synonyms": [],
+            "origin": null,
+            "reason": null,
+            "entities": 6,
+            "samples": [
+              "FFI-101",
+              "FFI-102",
+              "FFI-103"
+            ],
+            "properties": [],
+            "metrics": []
+          },
+          {
+            "kind": "product",
+            "built_in": false,
+            "status": "proposed",
+            "description": "A product in the supplier inventory, with its pricing, stock level, availability, and latest landing date.",
+            "merge_into": null,
+            "synonyms": [],
+            "origin": "suggested",
+            "reason": "one kind for the catalogue.csv records",
+            "entities": 15,
+            "samples": [
+              "Block Ice 20kg",
+              "Brownlip Abalone 1kg",
+              "Cooked Prawns 2kg"
+            ],
+            "properties": [
+              {
+                "name": "last_landed",
+                "datatype": "date",
+                "unit": null,
+                "enum_values": null,
+                "description": "Date the product was last landed.",
+                "synonyms": [],
+                "status": "proposed",
+                "merge_into": null,
+                "origin": "suggested",
+                "reason": "from last landed",
+                "values": 0,
+                "samples": [],
+                "source_map": [
+                  {
+                    "source": "document",
+                    "record_type": "document:e4f6egzn8wveubiomvaj",
+                    "path": "last landed"
+                  }
+                ]
+              },
+              {
+                "name": "qty_on_hand",
+                "datatype": "integer",
+                "unit": "items",
+                "enum_values": null,
+                "description": "Quantity currently on hand.",
+                "synonyms": [],
+                "status": "proposed",
+                "merge_into": null,
+                "origin": "suggested",
+                "reason": "from qty on hand",
+                "values": 0,
+                "samples": [],
+                "source_map": [
+                  {
+                    "source": "document",
+                    "record_type": "document:e4f6egzn8wveubiomvaj",
+                    "path": "qty on hand"
+                  }
+                ]
+              },
+              {
+                "name": "reorder_at",
+                "datatype": "integer",
+                "unit": "items",
+                "enum_values": null,
+                "description": "Stock quantity at which the product should be reordered.",
+                "synonyms": [],
+                "status": "proposed",
+                "merge_into": null,
+                "origin": "suggested",
+                "reason": "from reorder at",
+                "values": 0,
+                "samples": [],
+                "source_map": [
+                  {
+                    "source": "document",
+                    "record_type": "document:e4f6egzn8wveubiomvaj",
+                    "path": "reorder at"
+                  }
+                ]
+              },
+              {
+                "name": "sell_price",
+                "datatype": "money",
+                "unit": "AUD",
+                "enum_values": null,
+                "description": "Selling price of the product.",
+                "synonyms": [],
+                "status": "proposed",
+                "merge_into": null,
+                "origin": "suggested",
+                "reason": "from sell price AUD",
+                "values": 0,
+                "samples": [],
+                "source_map": [
+                  {
+                    "source": "document",
+                    "record_type": "document:e4f6egzn8wveubiomvaj",
+                    "path": "sell price AUD"
+                  }
+                ]
+              },
+              {
+                "name": "status",
+                "datatype": "enum",
+                "unit": null,
+                "enum_values": [
+                  "Available",
+                  "Discontinued",
+                  "On order"
+                ],
+                "description": "Current product availability status.",
+                "synonyms": [],
+                "status": "proposed",
+                "merge_into": null,
+                "origin": "suggested",
+                "reason": "from status",
+                "values": 0,
+                "samples": [],
+                "source_map": [
+                  {
+                    "source": "document",
+                    "record_type": "document:e4f6egzn8wveubiomvaj",
+                    "path": "status"
+                  }
+                ]
+              },
+              {
+                "name": "unit_cost",
+                "datatype": "money",
+                "unit": "AUD",
+                "enum_values": null,
+                "description": "Unit cost of the product.",
+                "synonyms": [],
+                "status": "proposed",
+                "merge_into": null,
+                "origin": "suggested",
+                "reason": "from unit cost AUD",
+                "values": 0,
+                "samples": [],
+                "source_map": [
+                  {
+                    "source": "document",
+                    "record_type": "document:e4f6egzn8wveubiomvaj",
+                    "path": "unit cost AUD"
+                  }
+                ]
+              }
+            ],
+            "metrics": [
+              {
+                "name": "gross_margin",
+                "description": "Gross margin across products, calculated from selling prices and unit costs.",
+                "synonyms": [],
+                "expr": {
+                  "agg": "ratio",
+                  "numerator": {
+                    "agg": "sum",
+                    "row": {
+                      "op": "sub",
+                      "left": "sell_price",
+                      "right": "unit_cost"
+                    }
+                  },
+                  "denominator": {
+                    "agg": "sum",
+                    "property": "sell_price"
+                  }
+                },
+                "expr_words": "Sum of (sell price − unit cost), divided by sum of sell price",
+                "unit": "percent",
+                "status": "proposed",
+                "merge_into": null,
+                "origin": "suggested",
+                "reason": "computed from the catalogue.csv records' properties"
+              },
+              {
+                "name": "inventory_cost_value",
+                "description": "Estimated total cost value of current stock.",
+                "synonyms": [],
+                "expr": {
+                  "agg": "sum",
+                  "row": {
+                    "op": "mul",
+                    "left": "qty_on_hand",
+                    "right": "unit_cost"
+                  }
+                },
+                "expr_words": "Sum of qty on hand × unit cost",
+                "unit": "AUD",
+                "status": "proposed",
+                "merge_into": null,
+                "origin": "suggested",
+                "reason": "computed from the catalogue.csv records' properties"
+              },
+              {
+                "name": "product_count",
+                "description": "Number of products.",
+                "synonyms": [],
+                "expr": {
+                  "agg": "count",
+                  "property": "qty_on_hand"
+                },
+                "expr_words": "Number of product with a qty on hand",
+                "unit": "items",
+                "status": "proposed",
+                "merge_into": null,
+                "origin": "suggested",
+                "reason": "computed from the catalogue.csv records' properties"
+              }
+            ]
+          },
+          {
+            "kind": "truck",
+            "built_in": false,
+            "status": "observed",
+            "description": null,
+            "merge_into": null,
+            "synonyms": [],
+            "origin": null,
+            "reason": null,
+            "entities": 1,
+            "samples": [
+              "Reefer 2"
+            ],
+            "properties": [],
+            "metrics": []
+          }
+        ],
+        "links": [
+          {
+            "from_kind": "customer",
+            "label": "placed",
+            "to_kind": "order",
+            "status": "observed",
+            "description": null,
+            "origin": null,
+            "reason": null,
+            "count": 6,
+            "samples": [
+              {
+                "from": "Quay Seafood Kitchen",
+                "to": "FFI-105"
+              },
+              {
+                "from": "West End Oyster Bar",
+                "to": "FFI-106"
+              },
+              {
+                "from": "Portside Fish and Chips",
+                "to": "FFI-102"
+              }
+            ]
+          },
+          {
+            "from_kind": "decision",
+            "label": "approved_by",
+            "to_kind": "person",
+            "status": "observed",
+            "description": null,
+            "origin": null,
+            "reason": null,
+            "count": 1,
+            "samples": [
+              {
+                "from": "Delivery minimum change",
+                "to": "Amelia Russo"
+              }
+            ]
+          },
+          {
+            "from_kind": "inbound_load",
+            "label": "contains",
+            "to_kind": "product",
+            "status": "observed",
+            "description": null,
+            "origin": null,
+            "reason": null,
+            "count": 4,
+            "samples": [
+              {
+                "from": "IN-42",
+                "to": "Greenlip Abalone 1kg"
+              },
+              {
+                "from": "IN-42",
+                "to": "Gummy Shark 5kg"
+              },
+              {
+                "from": "IN-42",
+                "to": "Dhufish Whole 10kg"
+              }
+            ]
+          },
+          {
+            "from_kind": "inbound_load",
+            "label": "supplies",
+            "to_kind": "order",
+            "status": "observed",
+            "description": null,
+            "origin": null,
+            "reason": null,
+            "count": 4,
+            "samples": [
+              {
+                "from": "IN-42",
+                "to": "FFI-102"
+              },
+              {
+                "from": "IN-42",
+                "to": "FFI-101"
+              },
+              {
+                "from": "IN-42",
+                "to": "FFI-103"
+              }
+            ]
+          },
+          {
+            "from_kind": "order",
+            "label": "requires",
+            "to_kind": "product",
+            "status": "observed",
+            "description": null,
+            "origin": null,
+            "reason": null,
+            "count": 15,
+            "samples": [
+              {
+                "from": "FFI-102",
+                "to": "Flake Ice 10kg"
+              },
+              {
+                "from": "FFI-101",
+                "to": "King Prawns U10 5kg"
+              },
+              {
+                "from": "FFI-105",
+                "to": "Octopus 5kg"
+              }
+            ]
+          },
+          {
+            "from_kind": "organisation",
+            "label": "has_consignment_on_order_for",
+            "to_kind": "customer",
+            "status": "observed",
+            "description": null,
+            "origin": null,
+            "reason": null,
+            "count": 1,
+            "samples": [
+              {
+                "from": "Esperance Abalone",
+                "to": "Harbour Lights Hotel Group"
+              }
+            ]
+          },
+          {
+            "from_kind": "organisation",
+            "label": "supplies",
+            "to_kind": "product",
+            "status": "observed",
+            "description": null,
+            "origin": null,
+            "reason": null,
+            "count": 1,
+            "samples": [
+              {
+                "from": "Esperance Abalone",
+                "to": "Greenlip Abalone 1kg"
+              }
+            ]
+          },
+          {
+            "from_kind": "person",
+            "label": "leads_dispatch_for",
+            "to_kind": "inbound_load",
+            "status": "observed",
+            "description": null,
+            "origin": null,
+            "reason": null,
+            "count": 1,
+            "samples": [
+              {
+                "from": "Amelia Russo",
+                "to": "IN-42"
+              }
+            ]
+          },
+          {
+            "from_kind": "product",
+            "label": "supplies",
+            "to_kind": "organisation",
+            "status": "proposed",
+            "description": "Organisation that supplies this product.",
+            "origin": "suggested",
+            "reason": "100% of values match (5 of 5)",
+            "count": 0,
+            "samples": [],
+            "source_map": [
+              {
+                "source": "document",
+                "record_type": "document:e4f6egzn8wveubiomvaj",
+                "path": "supplier"
+              }
+            ]
+          },
+          {
+            "from_kind": "truck",
+            "label": "carries",
+            "to_kind": "inbound_load",
+            "status": "observed",
+            "description": null,
+            "origin": null,
+            "reason": null,
+            "count": 1,
+            "samples": [
+              {
+                "from": "Reefer 2",
+                "to": "IN-42"
+              }
+            ]
+          },
+          {
+            "from_kind": "truck",
+            "label": "serves",
+            "to_kind": "order",
+            "status": "observed",
+            "description": null,
+            "origin": null,
+            "reason": null,
+            "count": 4,
+            "samples": [
+              {
+                "from": "Reefer 2",
+                "to": "FFI-102"
+              },
+              {
+                "from": "Reefer 2",
+                "to": "FFI-103"
+              },
+              {
+                "from": "Reefer 2",
+                "to": "FFI-101"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__ontology_propose",
+    "arguments": {
+      "vault_id": "vault:rf0gaym72n9pkdbsg4a1",
+      "kinds": [
+        {
+          "kind": "customer",
+          "description": "A business that buys seafood and ice from Fremantle Fish & Ice Co.",
+          "reason": "Six customers in the ops notes."
+        },
+        {
+          "kind": "order",
+          "description": "An open customer order with an FFI number and a due date.",
+          "reason": "Six open orders in the ops notes."
+        },
+        {
+          "kind": "truck",
+          "description": "A vehicle that carries inbound loads, such as refrigerated truck Reefer 2.",
+          "reason": "Reefer 2 in the ops notes."
+        },
+        {
+          "kind": "inbound_load",
+          "description": "A load of stock arriving on a truck, with an expected date, such as IN-42.",
+          "reason": "IN-42 in the ops notes."
+        },
+        {
+          "kind": "decision",
+          "description": "A business decision with an owner who approved it and an effective date.",
+          "reason": "The delivery minimum decision."
+        },
+        {
+          "kind": "equipment",
+          "description": "A piece of business equipment, such as the Office Label Printer.",
+          "reason": "The printer in the ops notes. It has no dependencies on purpose."
+        }
+      ],
+      "properties": [
+        {
+          "kind": "order",
+          "name": "due_date",
+          "datatype": "date",
+          "description": "The date the customer order is due.",
+          "reason": "Every order in the notes has a due date."
+        },
+        {
+          "kind": "inbound_load",
+          "name": "expected_date",
+          "datatype": "date",
+          "description": "The date the inbound load is expected to arrive.",
+          "reason": "IN-42 is expected 11 November 2026."
+        }
+      ],
+      "links": [
+        {
+          "from_kind": "customer",
+          "label": "placed",
+          "to_kind": "order",
+          "description": "The customer placed this order.",
+          "reason": "Customers to orders."
+        },
+        {
+          "from_kind": "order",
+          "label": "requires",
+          "to_kind": "product",
+          "description": "The order needs this product.",
+          "reason": "Orders to required products."
+        },
+        {
+          "from_kind": "truck",
+          "label": "carries",
+          "to_kind": "inbound_load",
+          "description": "The truck is carrying this inbound load.",
+          "reason": "Reefer 2 carries IN-42."
+        },
+        {
+          "from_kind": "truck",
+          "label": "serves",
+          "to_kind": "order",
+          "description": "Stock on this truck is meant for this order.",
+          "reason": "Reefer 2 serves four orders."
+        },
+        {
+          "from_kind": "inbound_load",
+          "label": "supplies",
+          "to_kind": "order",
+          "description": "The load holds stock for this order. A delay puts the order at risk.",
+          "reason": "IN-42 to FFI-101 to FFI-104."
+        },
+        {
+          "from_kind": "inbound_load",
+          "label": "contains",
+          "to_kind": "product",
+          "description": "The load holds this product.",
+          "reason": "IN-42 contents."
+        },
+        {
+          "from_kind": "person",
+          "label": "leads_dispatch_for",
+          "to_kind": "inbound_load",
+          "description": "The person leads dispatch for this load.",
+          "reason": "Amelia Russo and IN-42."
+        },
+        {
+          "from_kind": "decision",
+          "label": "approved_by",
+          "to_kind": "person",
+          "description": "The person who approved the decision.",
+          "reason": "Delivery minimum approved by Amelia Russo."
+        },
+        {
+          "from_kind": "organisation",
+          "label": "supplies",
+          "to_kind": "product",
+          "description": "The organisation supplies this product.",
+          "reason": "Used for Esperance Abalone and Greenlip Abalone."
+        },
+        {
+          "from_kind": "organisation",
+          "label": "has_consignment_on_order_for",
+          "to_kind": "customer",
+          "description": "The supplier has a consignment on order for this customer.",
+          "reason": "Esperance Abalone and Harbour Lights Hotel Group."
+        },
+        {
+          "from_kind": "product",
+          "label": "supplied_by",
+          "to_kind": "organisation",
+          "description": "The organisation that supplies this product. Reads product to supplier.",
+          "reason": "Clearer direction than the automap link product supplies organisation, which reads backwards. Same CSV supplier column.",
+          "source_map": [
+            {
+              "source": "document",
+              "record_type": "document:e4f6egzn8wveubiomvaj",
+              "path": "supplier"
+            }
+          ]
+        }
+      ],
+      "metrics": [
+        {
+          "kind": "product",
+          "name": "avg_sell_price",
+          "description": "Average sell price per product, in AUD.",
+          "expr": {
+            "agg": "avg",
+            "property": "sell_price"
+          },
+          "unit": "AUD",
+          "synonyms": [
+            "average sell price",
+            "average price"
+          ],
+          "reason": "The owner asked for average sell price."
+        },
+        {
+          "kind": "product",
+          "name": "total_stock_value_at_cost",
+          "description": "Total stock value at cost: quantity on hand times unit cost, summed over products. Products with no unit cost are left out.",
+          "expr": {
+            "agg": "sum",
+            "row": {
+              "op": "mul",
+              "left": "qty_on_hand",
+              "right": "unit_cost"
+            }
+          },
+          "unit": "AUD",
+          "synonyms": [
+            "stock value at cost",
+            "inventory value at cost"
+          ],
+          "reason": "The owner asked for total stock value at cost. Same working as inventory_cost_value, named as asked. The owner can merge the two."
+        },
+        {
+          "kind": "product",
+          "name": "avg_unit_cost",
+          "description": "Average unit cost per product, in AUD. Products with no cost are left out.",
+          "expr": {
+            "agg": "avg",
+            "property": "unit_cost"
+          },
+          "unit": "AUD",
+          "reason": "Useful beside average sell price."
+        },
+        {
+          "kind": "product",
+          "name": "available_product_count",
+          "description": "Number of products with status Available.",
+          "expr": {
+            "agg": "count",
+            "property": "status",
+            "filters": [
+              {
+                "property": "status",
+                "op": "eq",
+                "value": "Available"
+              }
+            ]
+          },
+          "unit": "items",
+          "reason": "Shows how much of the range can be sold now."
+        }
+      ]
+    },
+    "id": "toolu_01LxedPd52j91nvJkBEMgiSd",
+    "result": {
+      "kinds": [
+        {
+          "kind": "customer",
+          "status": "proposed",
+          "merge_into": null
+        },
+        {
+          "kind": "order",
+          "status": "proposed",
+          "merge_into": null
+        },
+        {
+          "kind": "truck",
+          "status": "proposed",
+          "merge_into": null
+        },
+        {
+          "kind": "inbound_load",
+          "status": "proposed",
+          "merge_into": null
+        },
+        {
+          "kind": "decision",
+          "status": "proposed",
+          "merge_into": null
+        },
+        {
+          "kind": "equipment",
+          "status": "proposed",
+          "merge_into": null
+        }
+      ],
+      "links": [
+        {
+          "from_kind": "customer",
+          "label": "placed",
+          "to_kind": "order",
+          "status": "proposed"
+        },
+        {
+          "from_kind": "order",
+          "label": "requires",
+          "to_kind": "product",
+          "status": "proposed"
+        },
+        {
+          "from_kind": "truck",
+          "label": "carries",
+          "to_kind": "inbound_load",
+          "status": "proposed"
+        },
+        {
+          "from_kind": "truck",
+          "label": "serves",
+          "to_kind": "order",
+          "status": "proposed"
+        },
+        {
+          "from_kind": "inbound_load",
+          "label": "supplies",
+          "to_kind": "order",
+          "status": "proposed"
+        },
+        {
+          "from_kind": "inbound_load",
+          "label": "contains",
+          "to_kind": "product",
+          "status": "proposed"
+        },
+        {
+          "from_kind": "person",
+          "label": "leads_dispatch_for",
+          "to_kind": "inbound_load",
+          "status": "proposed"
+        },
+        {
+          "from_kind": "decision",
+          "label": "approved_by",
+          "to_kind": "person",
+          "status": "proposed"
+        },
+        {
+          "from_kind": "organisation",
+          "label": "supplies",
+          "to_kind": "product",
+          "status": "proposed"
+        },
+        {
+          "from_kind": "organisation",
+          "label": "has_consignment_on_order_for",
+          "to_kind": "customer",
+          "status": "proposed"
+        },
+        {
+          "from_kind": "product",
+          "label": "supplied_by",
+          "to_kind": "organisation",
+          "status": "proposed"
+        }
+      ],
+      "properties": [
+        {
+          "kind": "order",
+          "name": "due_date",
+          "datatype": "date",
+          "status": "proposed",
+          "merge_into": null
+        },
+        {
+          "kind": "inbound_load",
+          "name": "expected_date",
+          "datatype": "date",
+          "status": "proposed",
+          "merge_into": null
+        }
+      ],
+      "metrics": [
+        {
+          "kind": "product",
+          "name": "avg_sell_price",
+          "status": "proposed",
+          "merge_into": null
+        },
+        {
+          "kind": "product",
+          "name": "total_stock_value_at_cost",
+          "status": "proposed",
+          "merge_into": null
+        },
+        {
+          "kind": "product",
+          "name": "avg_unit_cost",
+          "status": "proposed",
+          "merge_into": null
+        },
+        {
+          "kind": "product",
+          "name": "available_product_count",
+          "status": "proposed",
+          "merge_into": null
+        }
+      ]
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__memory_write",
+    "arguments": {
+      "vault_id": "vault:rf0gaym72n9pkdbsg4a1",
+      "subject_name": "Fremantle Fish & Ice Co setup",
+      "subject_kind": "project",
+      "type": "experience",
+      "text": "On 9 Nov 2026 the vault was set up: notes written as memories, entities linked, ops-notes.md and catalogue.csv uploaded, CSV auto-mapped. Kinds, properties, links and metrics are all proposed and wait for the owner. No rows imported yet. Octopus 5kg and Prawn Skewers 20pk have no unit cost in the CSV. The Shark Bay Prawns price rise is an unconfirmed rumour."
+    },
+    "id": "toolu_01UwdSQstVpxju82QeEG7Cjm",
+    "result": {
+      "entity": {
+        "id": "entity:mdmu657gvycnhdqujg41",
+        "kind": "project",
+        "name": "Fremantle Fish & Ice Co setup",
+        "aliases": [],
+        "summary": "",
+        "vault": "vault:rf0gaym72n9pkdbsg4a1"
+      },
+      "memory": {
+        "id": "memory:z9o1ywrh605zykxnoee5",
+        "owner": "user:b558qrfkf1zsce3nwg9a",
+        "vault": "vault:rf0gaym72n9pkdbsg4a1",
+        "subject": "entity:mdmu657gvycnhdqujg41",
+        "text": "On 9 Nov 2026 the vault was set up: notes written as memories, entities linked, ops-notes.md and catalogue.csv uploaded, CSV auto-mapped. Kinds, properties, links and metrics are all proposed and wait for the owner. No rows imported yet. Octopus 5kg and Prawn Skewers 20pk have no unit cost in the CSV. The Shark Bay Prawns price rise is an unconfirmed rumour.",
+        "source": null,
+        "created_at": "2026-11-08T19:27:47.716461500Z",
+        "type": "experience",
+        "proof_count": 1,
+        "status": null,
+        "source_memories": null,
+        "updated_at": "2026-11-08T19:27:47.716489291Z",
+        "version": 1,
+        "owner_email": null
+      },
+      "vault_name": "Fremantle Fish & Ice Co"
+    }
+  }
+]

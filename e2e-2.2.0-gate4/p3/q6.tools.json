@@ -1,0 +1,33 @@
+[
+  {
+    "tool": "mcp__eunomia-local__memory_write",
+    "arguments": {
+      "subject_name": "Live crayfish",
+      "subject_kind": "live_seafood",
+      "text": "We now sell live crayfish.",
+      "type": "world"
+    },
+    "id": "toolu_01HHyfWMMGYGjmJJEFEbRAuo",
+    "result": {
+      "error": "vault_id is needed: with none, this fact would go to your personal space under the new kind \"live_seafood\", where the approved-kinds-only rule of \"Fremantle Fish & Ice Co\" never sees it. Pass vault_id with the space it belongs to: \"Freo Rowing Club\", \"Fremantle Fish & Ice Co\", or \"Personal\" if it is private to you.",
+      "code": "validation.invalid",
+      "trace_id": "e0cbf7409186458e9ee1a365ab54aec6"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__memory_write",
+    "arguments": {
+      "subject_name": "Live crayfish",
+      "subject_kind": "live_seafood",
+      "text": "We now sell live crayfish.",
+      "type": "world",
+      "vault_id": "Fremantle Fish & Ice Co"
+    },
+    "id": "toolu_01GAsqYwwUsRbiJtjDvxfKzu",
+    "result": {
+      "error": "this vault takes only approved kinds and links, and the kind \"live_seafood\" is not approved: write under a built-in kind (person, organisation, location, repository, file, symbol) or an approved kind (customer, decision, equipment, inbound_load, order, organisation, person, product, project, truck). It was filed as a proposal for a vault owner to review.",
+      "code": "ontology.rejected",
+      "trace_id": "406d2b596afc4bd5b5bb3272e93f3073"
+    }
+  }
+]

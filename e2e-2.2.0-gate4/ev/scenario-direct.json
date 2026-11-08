@@ -1,0 +1,399 @@
+{
+  "vault": "vault:rf0gaym72n9pkdbsg4a1",
+  "as_of": "2026-11-08T19:37:26Z",
+  "changes": [
+    "Product unit cost up 10% on 8 products supplied by Southern Ice Works"
+  ],
+  "baseline": [
+    {
+      "metric": "gross_margin",
+      "kind": "product",
+      "expr_words": "Sum of (sell price − unit cost), divided by sum of sell price",
+      "value": 35.76142,
+      "unit": "%",
+      "n_entities": 28,
+      "status": "approved"
+    },
+    {
+      "metric": "avg_unit_cost",
+      "kind": "product",
+      "expr_words": "Average unit cost",
+      "value": 85.180357,
+      "unit": "AUD",
+      "n_entities": 28,
+      "status": "approved"
+    },
+    {
+      "metric": "total_stock_value_at_cost",
+      "kind": "product",
+      "expr_words": "Sum of qty on hand × unit cost",
+      "value": 27424.5,
+      "unit": "AUD",
+      "n_entities": 28,
+      "status": "approved"
+    }
+  ],
+  "scenario": [
+    {
+      "metric": "gross_margin",
+      "kind": "product",
+      "expr_words": "Sum of (sell price − unit cost), divided by sum of sell price",
+      "value": 35.644796,
+      "unit": "%",
+      "n_entities": 28,
+      "status": "approved",
+      "delta": -0.116624,
+      "delta_pct": -0.33
+    },
+    {
+      "metric": "avg_unit_cost",
+      "kind": "product",
+      "expr_words": "Average unit cost",
+      "value": 85.335,
+      "unit": "AUD",
+      "n_entities": 28,
+      "status": "approved",
+      "delta": 0.154643,
+      "delta_pct": 0.18
+    },
+    {
+      "metric": "total_stock_value_at_cost",
+      "kind": "product",
+      "expr_words": "Sum of qty on hand × unit cost",
+      "value": 27639.875,
+      "unit": "AUD",
+      "n_entities": 28,
+      "status": "approved",
+      "delta": 215.375,
+      "delta_pct": 0.79
+    }
+  ],
+  "changed": [
+    {
+      "entity_id": "entity:1sfkjfqzvoe0itr0wygd",
+      "name": "Flake Ice 10kg",
+      "kind": "product",
+      "property": "unit_cost",
+      "before": 5.1,
+      "after": 5.61,
+      "unit": "AUD"
+    },
+    {
+      "entity_id": "entity:evv28m6h4tck901uzp6t",
+      "name": "Party Ice 5kg",
+      "kind": "product",
+      "property": "unit_cost",
+      "before": 3.8,
+      "after": 4.18,
+      "unit": "AUD"
+    },
+    {
+      "entity_id": "entity:hy2hjhlctg2q8baflnhs",
+      "name": "Gel Ice Pack 1kg",
+      "kind": "product",
+      "property": "unit_cost",
+      "before": 2.4,
+      "after": 2.64,
+      "unit": "AUD"
+    },
+    {
+      "entity_id": "entity:of21g5fl0c8h7p8pqd30",
+      "name": "Ice Brick 500g",
+      "kind": "product",
+      "property": "unit_cost",
+      "before": 1.8,
+      "after": 1.98,
+      "unit": "AUD"
+    },
+    {
+      "entity_id": "entity:olzecfi09wy9257qadsw",
+      "name": "Crushed Ice 5kg",
+      "kind": "product",
+      "property": "unit_cost",
+      "before": 3.2,
+      "after": 3.52,
+      "unit": "AUD"
+    },
+    {
+      "entity_id": "entity:scvuccjbx6vmw90ml8zr",
+      "name": "Insulated Seafood Carton",
+      "kind": "product",
+      "property": "unit_cost",
+      "before": 6.75,
+      "after": 7.425,
+      "unit": "AUD"
+    },
+    {
+      "entity_id": "entity:v1wgb5l21pseykea1qlx",
+      "name": "Block Ice 20kg",
+      "kind": "product",
+      "property": "unit_cost",
+      "before": 7.25,
+      "after": 7.975,
+      "unit": "AUD"
+    },
+    {
+      "entity_id": "entity:xqnkeai40qcw2o64mdr6",
+      "name": "Dry Ice 2kg",
+      "kind": "product",
+      "property": "unit_cost",
+      "before": 13.0,
+      "after": 14.3,
+      "unit": "AUD"
+    }
+  ],
+  "n_changed": 8,
+  "removed": [],
+  "reached": [
+    {
+      "entity_id": "entity:bs8dwvtgywjeuj4lb9j6",
+      "name": "FFI-101",
+      "kind": "order",
+      "depth": 1,
+      "via": "FFI-101 requires Block Ice 20kg",
+      "from": "entity:v1wgb5l21pseykea1qlx",
+      "path": [
+        "relates_to:nkm3h481z4klgf5a8mdt"
+      ]
+    },
+    {
+      "entity_id": "entity:kl4ea8we5ugms10whjm8",
+      "name": "FFI-102",
+      "kind": "order",
+      "depth": 1,
+      "via": "FFI-102 requires Flake Ice 10kg",
+      "from": "entity:1sfkjfqzvoe0itr0wygd",
+      "path": [
+        "relates_to:0etfspyi0chdzmpcuvrv"
+      ]
+    },
+    {
+      "entity_id": "entity:ovl5njex4v2o2um1n9pj",
+      "name": "FFI-103",
+      "kind": "order",
+      "depth": 1,
+      "via": "FFI-103 requires Party Ice 5kg",
+      "from": "entity:evv28m6h4tck901uzp6t",
+      "path": [
+        "relates_to:3owqlfdeikw2dxb8t2ij"
+      ]
+    },
+    {
+      "entity_id": "entity:gsj8anu1g7y6hxd2vmh2",
+      "name": "FFI-104",
+      "kind": "order",
+      "depth": 1,
+      "via": "FFI-104 requires Crushed Ice 5kg",
+      "from": "entity:olzecfi09wy9257qadsw",
+      "path": [
+        "relates_to:el7xw206be3rh8p3ndxt"
+      ]
+    },
+    {
+      "entity_id": "entity:8rq9qkw3g7cl7rav96rb",
+      "name": "FFI-106",
+      "kind": "order",
+      "depth": 1,
+      "via": "FFI-106 requires Gel Ice Pack 1kg",
+      "from": "entity:hy2hjhlctg2q8baflnhs",
+      "path": [
+        "relates_to:n6utd7ie81pej3cparc8"
+      ]
+    },
+    {
+      "entity_id": "organisation:7uqu9jwq62muit42lorh",
+      "name": "Southern Ice Works",
+      "kind": "organisation",
+      "depth": 1,
+      "via": "Flake Ice 10kg supplied by Southern Ice Works",
+      "from": "entity:1sfkjfqzvoe0itr0wygd",
+      "path": [
+        "relates_to:vibbxbaahltiv2gjvcwa"
+      ]
+    },
+    {
+      "entity_id": "entity:gc3l2fncxr8vnto1spk9",
+      "name": "Bathers Beach Bistro",
+      "kind": "customer",
+      "depth": 2,
+      "via": "Bathers Beach Bistro placed FFI-101",
+      "from": "entity:v1wgb5l21pseykea1qlx",
+      "path": [
+        "relates_to:nkm3h481z4klgf5a8mdt",
+        "relates_to:o9argb942yw64ddsunvp"
+      ]
+    },
+    {
+      "entity_id": "entity:3xmqlzc97hgyg9atd25d",
+      "name": "Brownlip Abalone 1kg",
+      "kind": "product",
+      "depth": 2,
+      "via": "FFI-106 requires Brownlip Abalone 1kg",
+      "from": "entity:hy2hjhlctg2q8baflnhs",
+      "path": [
+        "relates_to:n6utd7ie81pej3cparc8",
+        "relates_to:3buxpjxbjg1xxr1a2pux"
+      ]
+    },
+    {
+      "entity_id": "entity:bs3cbh9kzfcstrg0qjpe",
+      "name": "Cooked Prawns 2kg",
+      "kind": "product",
+      "depth": 2,
+      "via": "FFI-106 requires Cooked Prawns 2kg",
+      "from": "entity:hy2hjhlctg2q8baflnhs",
+      "path": [
+        "relates_to:n6utd7ie81pej3cparc8",
+        "relates_to:6qi3u2qu3y77ezsg07yr"
+      ]
+    },
+    {
+      "entity_id": "entity:qcbe9ysvbeep437q79bc",
+      "name": "Dhufish Whole 10kg",
+      "kind": "product",
+      "depth": 2,
+      "via": "FFI-101 requires Dhufish Whole 10kg",
+      "from": "entity:v1wgb5l21pseykea1qlx",
+      "path": [
+        "relates_to:nkm3h481z4klgf5a8mdt",
+        "relates_to:4ugdgeeqkurkkvg7i6cw"
+      ]
+    },
+    {
+      "entity_id": "entity:rcrjvcfua61c8sgp7cuz",
+      "name": "Greenlip Abalone 1kg",
+      "kind": "product",
+      "depth": 2,
+      "via": "FFI-103 requires Greenlip Abalone 1kg",
+      "from": "entity:evv28m6h4tck901uzp6t",
+      "path": [
+        "relates_to:3owqlfdeikw2dxb8t2ij",
+        "relates_to:thaho4bsyow5megh9wfd"
+      ]
+    },
+    {
+      "entity_id": "entity:3f5cm4iqh3oirr0hmryw",
+      "name": "Gummy Shark 5kg",
+      "kind": "product",
+      "depth": 2,
+      "via": "FFI-102 requires Gummy Shark 5kg",
+      "from": "entity:1sfkjfqzvoe0itr0wygd",
+      "path": [
+        "relates_to:0etfspyi0chdzmpcuvrv",
+        "relates_to:8v2kqrtpa1e7r58tet0a"
+      ]
+    },
+    {
+      "entity_id": "entity:m09ye57js78gw9bpezrx",
+      "name": "Harbour Lights Hotel Group",
+      "kind": "customer",
+      "depth": 2,
+      "via": "Harbour Lights Hotel Group placed FFI-103",
+      "from": "entity:evv28m6h4tck901uzp6t",
+      "path": [
+        "relates_to:3owqlfdeikw2dxb8t2ij",
+        "relates_to:orwyoe1j46m22oxbclmm"
+      ]
+    },
+    {
+      "entity_id": "entity:0alo8zj8lgw4phgycnmq",
+      "name": "IN-42",
+      "kind": "inbound_load",
+      "depth": 2,
+      "via": "IN-42 supplies FFI-102",
+      "from": "entity:1sfkjfqzvoe0itr0wygd",
+      "path": [
+        "relates_to:0etfspyi0chdzmpcuvrv",
+        "relates_to:ak7xmnw62gry0pgfnioq"
+      ]
+    },
+    {
+      "entity_id": "entity:48xpq68q4urz8ypimn5y",
+      "name": "King Prawns U10 5kg",
+      "kind": "product",
+      "depth": 2,
+      "via": "FFI-101 requires King Prawns U10 5kg",
+      "from": "entity:v1wgb5l21pseykea1qlx",
+      "path": [
+        "relates_to:nkm3h481z4klgf5a8mdt",
+        "relates_to:0naftds3hpaerdvn01dm"
+      ]
+    },
+    {
+      "entity_id": "entity:3sb2tcg3mvrd6kv51znr",
+      "name": "Portside Fish and Chips",
+      "kind": "customer",
+      "depth": 2,
+      "via": "Portside Fish and Chips placed FFI-102",
+      "from": "entity:1sfkjfqzvoe0itr0wygd",
+      "path": [
+        "relates_to:0etfspyi0chdzmpcuvrv",
+        "relates_to:mkxhmgpeylqhxmnqfgc6"
+      ]
+    },
+    {
+      "entity_id": "entity:ugt6rofftccvjjuomjay",
+      "name": "Reefer 2",
+      "kind": "truck",
+      "depth": 2,
+      "via": "Reefer 2 serves FFI-102",
+      "from": "entity:1sfkjfqzvoe0itr0wygd",
+      "path": [
+        "relates_to:0etfspyi0chdzmpcuvrv",
+        "relates_to:4c7j9r6kqc2ugq35r2oh"
+      ]
+    },
+    {
+      "entity_id": "entity:n8v4fraa6w49xnctd09p",
+      "name": "Saltwater Table Restaurant",
+      "kind": "customer",
+      "depth": 2,
+      "via": "Saltwater Table Restaurant placed FFI-104",
+      "from": "entity:olzecfi09wy9257qadsw",
+      "path": [
+        "relates_to:el7xw206be3rh8p3ndxt",
+        "relates_to:z1rrjcxw3989we7eh9iq"
+      ]
+    },
+    {
+      "entity_id": "entity:b6ob6x2weevj5neiyhnv",
+      "name": "Snapper Fillets 5kg",
+      "kind": "product",
+      "depth": 2,
+      "via": "FFI-104 requires Snapper Fillets 5kg",
+      "from": "entity:olzecfi09wy9257qadsw",
+      "path": [
+        "relates_to:el7xw206be3rh8p3ndxt",
+        "relates_to:ak9pu5dxu6fl8d1sx6vv"
+      ]
+    },
+    {
+      "entity_id": "entity:sbtlnm1mp6dimx9zyqad",
+      "name": "Tiger Prawns 5kg",
+      "kind": "product",
+      "depth": 2,
+      "via": "FFI-103 requires Tiger Prawns 5kg",
+      "from": "entity:evv28m6h4tck901uzp6t",
+      "path": [
+        "relates_to:3owqlfdeikw2dxb8t2ij",
+        "relates_to:40tlqoee918enu6wjxiq"
+      ]
+    },
+    {
+      "entity_id": "entity:ffuygjtryhu0940o77hd",
+      "name": "West End Oyster Bar",
+      "kind": "customer",
+      "depth": 2,
+      "via": "West End Oyster Bar placed FFI-106",
+      "from": "entity:hy2hjhlctg2q8baflnhs",
+      "path": [
+        "relates_to:n6utd7ie81pej3cparc8",
+        "relates_to:edeu55ddzga0uz6n0hke"
+      ]
+    }
+  ],
+  "reached_truncated": false,
+  "warnings": [
+    "gross margin: left out 2 entities missing a value one side needs, so both sides of the ratio use the same entities"
+  ]
+}

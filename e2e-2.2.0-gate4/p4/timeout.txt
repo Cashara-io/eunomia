@@ -1,0 +1,28 @@
+Chat
+Ask a question about your saved memories and documents. Eunomia shows where each answer came from.
+Conversations
+What is our average sell price and total stock value at cost
+now
+Office Label Printer is broken. What does that affect?
+3m
+What is happening with Esperance Abalone?
+4m
+What if Southern Ice Works raises costs 10%?
+5m
+Reefer 2 is running a day late. What does that affect?
+5m
+What is our average sell price and total stock value at cost
+6m
+gate4-1794165946
+6:37 AM
+What is our average sell price and total stock value at cost?
+The assistant couldn't reply.
+The model did not answer within 1 second, so this reply was stopped. Send your message again to retry.
+internal
+Trace e4b83eb54b9979d65b05ef1745e66697
+Retry
+Enter
+send
+Shift Enter
+new line
+Send

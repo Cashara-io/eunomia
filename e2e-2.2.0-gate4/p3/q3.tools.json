@@ -1,0 +1,1505 @@
+[
+  {
+    "tool": "mcp__eunomia-local__entities_search",
+    "arguments": {
+      "query": "Reefer 2"
+    },
+    "id": "toolu_01Cu1Qz76tVn5tX9pQychrYu",
+    "result": {
+      "results": [
+        {
+          "id": "entity:ugt6rofftccvjjuomjay",
+          "kind": "truck",
+          "name": "Reefer 2",
+          "aliases": [],
+          "summary": "",
+          "vault": "vault:rf0gaym72n9pkdbsg4a1"
+        },
+        {
+          "id": "entity:0alo8zj8lgw4phgycnmq",
+          "kind": "inbound_load",
+          "name": "IN-42",
+          "aliases": [],
+          "summary": "",
+          "vault": "vault:rf0gaym72n9pkdbsg4a1"
+        }
+      ],
+      "total": 2,
+      "has_more": false
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__recall",
+    "arguments": {
+      "query": "Reefer 2 delay"
+    },
+    "id": "toolu_01JuF9is7GY9SnVCcFPCMYh5",
+    "result": {
+      "results": [
+        {
+          "id": "memory:r3ee788ca13f65306530",
+          "kind": "memory",
+          "text": "Reefer 2 carries IN-42: Reefer 2 is carrying inbound load IN-42.",
+          "source": null,
+          "occurred_at": "2026-11-08T19:26:38.641326093+00:00",
+          "score": 1.0,
+          "arms_hit": 3,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "memory:qj3ve6p1khm14fdcdqgy",
+          "kind": "memory",
+          "text": "Reefer 2 is a refrigerated truck carrying inbound load IN-42, expected 11 November 2026.",
+          "source": null,
+          "occurred_at": "2026-11-08T19:26:03.389284424+00:00",
+          "score": 0.975,
+          "arms_hit": 3,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "documents:document.chunk:scb7kg4m1s63ajnslsuo:1:0",
+          "kind": "cache_record",
+          "text": "ops-notes.md\n# Fremantle Fish & Ice Co, Fremantle WA\nFictional test records as at 9 November 2026.\n\n## Open customer orders\n- Bathers Beach Bistro, order FFI-101, due 12 November. Needs two Dhufish Whole 10kg, four King Prawns U10 5kg and ten Block Ice 20kg.\n- Portside Fish and Chips, order FFI-102, due 12 November. Needs six Gummy Shark 5kg and twelve Flake Ice 10kg.\n- Harbour Lights Hotel Group, order FFI-103, due 13 November. Needs three Greenlip Abalone 1kg, five Tiger Prawns 5kg and eight Party Ice 5kg.\n- Saltwater Table Restaurant, order FFI-104, due 12 November. Needs four Snapper Fillets 5kg and six Crushed Ice 5kg.\n- Quay Seafood Kitchen, order FFI-105, due 14 November. Needs three Octopus 5kg and five Prawn Meat 1kg.\n- West End Oyster Bar, order FFI-106, due 14 November. Needs two Brownlip Abalone 1kg, four Cooked Prawns 2kg and six Gel Ice Pack 1kg.\n\n## Inbound load\nRefrigerated truck Reefer 2 is carrying inbound load IN-42, expected 11 November 2026. It carries two Dhufish Whole 10kg for FFI-101, six Gummy Shark 5kg for FFI-102, three Greenlip Abalone 1kg for FFI-103 and four Snapper Fillets 5kg for FFI-104. A one-day delay risks those four orders. Dispatch lead is Amelia Russo.\n\n## Decisions and unconfirmed information\nDecision: delivery minimum goes to $250 from 1 December 2026, approved by owner Amelia Russo.\nRumour, unconfirmed: Shark Bay Prawns may raise prices in December. No increase is confirmed.\nShark Bay Prawns is our prawn supplier. Southern Ice Works supplies ice and insulated packaging. Both are organisations we work with.\nEsperance Abalone has a Greenlip Abalone 1kg consignment on order for Harbour Lights Hotel Group.\nUnlinked equipment: Office Label Printer sits in dispatch, with no recorded dependencies.",
+          "source": "documents",
+          "occurred_at": "2026-11-08T19:27:08.931932260+00:00",
+          "score": 0.657,
+          "arms_hit": 2,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co",
+          "document": {
+            "document_id": "document:scb7kg4m1s63ajnslsuo",
+            "chunk_id": "documents:document.chunk:scb7kg4m1s63ajnslsuo:1:0",
+            "filename": "ops-notes.md",
+            "revision": 1,
+            "part": 0,
+            "char_start": 0,
+            "char_end": 1749,
+            "download_url": "/api/documents/document:scb7kg4m1s63ajnslsuo/download"
+          }
+        },
+        {
+          "id": "memory:oja8tpa1d4e73kbcca4p",
+          "kind": "memory",
+          "text": "Inbound load IN-42 is on Reefer 2, expected 11 November 2026. It carries two Dhufish Whole 10kg for FFI-101, six Gummy Shark 5kg for FFI-102, three Greenlip Abalone 1kg for FFI-103 and four Snapper Fillets 5kg for FFI-104. A one-day delay risks those four orders.",
+          "source": null,
+          "occurred_at": "2026-11-11T00:00:00+00:00",
+          "score": 0.646,
+          "arms_hit": 2,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "documents:document.chunk:e4f6egzn8wveubiomvaj:1:0",
+          "kind": "cache_record",
+          "text": "catalogue.csv\nproduct,supplier,sell price AUD,unit cost AUD,qty on hand,reorder at,status,last landed\nDhufish Whole 10kg,Abrolhos Fishers Co-op,\"$1,180.00\",$785.00,3,10,Available,04/11/2026\nSnapper Fillets 5kg,Abrolhos Fishers Co-op,$245.00,$158.00,12,10,Available,05/11/2026\nGummy Shark 5kg,Abrolhos Fishers Co-op,$185.00,$116.00,16,10,Available,06/11/2026\nSpanish Mackerel 5kg,Abrolhos Fishers Co-op,$210.00,$138.00,9,10,Available,07/11/2026\nSardines 2kg,Abrolhos Fishers Co-op,$28.00,$17.50,45,10,Available,08/11/2026\nWhiting Fillets 2kg,Abrolhos Fishers Co-op,$72.00,$46.00,20,10,Available,04/11/2026\nOctopus 5kg,Abrolhos Fishers Co-op,$165.00,,7,10,On order,05/11/2026\nFish Frames 10kg,Abrolhos Fishers Co-op,$35.00,$14.00,0,10,Discontinued,06/11/2026\nKing Prawns U10 5kg,Shark Bay Prawns,$265.00,$174.00,17,10,Available,07/11/2026\nTiger Prawns 5kg,Shark Bay Prawns,$195.00,$128.00,23,10,Available,08/11/2026\nBanana Prawns 5kg,Shark Bay Prawns,$145.00,$92.00,31,10,Available,04/11/2026\nPrawn Cutlets 2kg,Shark Bay Prawns,$98.00,$61.00,14,10,Available,05/11/2026\nPrawn Meat 1kg,Shark Bay Prawns,$42.00,$26.00,33,10,Available,06/11/2026\nCooked Prawns 2kg,Shark Bay Prawns,$84.00,$55.00,19,10,Available,07/11/2026\nPrawn Skewers 20pk,Shark Bay Prawns,$46.00,,11,10,On order,08/11/2026\nPrawn Shells 5kg,Shark Bay Prawns,$12.50,$5.25,21,10,Available,04/11/2026\nBlock Ice 20kg,Southern Ice Works,$18.50,$7.25,95,10,Available,05/11/2026\nFlake Ice 10kg,Southern Ice Works,$12.50,$5.10,80,10,Available,06/11/2026\nCrushed Ice 5kg,Southern Ice Works,$7.45,$3.20,65,10,Available,07/11/2026\nParty Ice 5kg,Southern Ice Works,$8.90,$3.80,43,10,Available,08/11/2026\nDry Ice 2kg,Southern Ice Works,$24.00,$13.00,13,10,Available,04/11/2026\nGel Ice Pack 1kg,Southern Ice Works,$6.50,$2.40,57,10,Available,05/11/2026\nInsulated Seafood Carton,Southern Ice Works,$14.50,$6.75,40,10,Available,06/11/2026\nIce Brick 500g,southern ice works,$3.95,$1.80,61,10,Available,07/11/2026\nGreenlip Abalone 1kg,Esperance Abalone,$148.00,$96.00,8,10,On order,08/11/2026\nBrownlip Abalone 1kg,Esperance Abalone,$165.00,$108.00,9,10,Available,04/11/2026\nAbalone Slices 500g,Esperance Abalone,$89.00,$57.00,16,10,Available,05/11/2026\nAbalone Mince 1kg,Esperance Abalone,$76.00,$44.00,14,10,Available,06/11/2026\nAbalone Shell Pack,Esperance Abalone,$22.00,$11.00,25,10,Available,07/11/2026\nPremium Abalone Gift Box,Esperance Abalone,$320.00,$210.00,5,10,Available,08/11/2026",
+          "source": "documents",
+          "occurred_at": "2026-11-08T19:27:15.672989805+00:00",
+          "score": 0.646,
+          "arms_hit": 2,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co",
+          "document": {
+            "document_id": "document:e4f6egzn8wveubiomvaj",
+            "chunk_id": "documents:document.chunk:e4f6egzn8wveubiomvaj:1:0",
+            "filename": "catalogue.csv",
+            "revision": 1,
+            "part": 0,
+            "char_start": 0,
+            "char_end": 2423,
+            "download_url": "/api/documents/document:e4f6egzn8wveubiomvaj/download"
+          }
+        },
+        {
+          "id": "memory:r767fcf6d37a8853a78a",
+          "kind": "memory",
+          "text": "Reefer 2 serves FFI-104: IN-42 on Reefer 2 carries 4 Snapper Fillets for FFI-104.",
+          "source": null,
+          "occurred_at": "2026-11-08T19:26:42.049511136+00:00",
+          "score": 0.637,
+          "arms_hit": 2,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "memory:r54513dcb7b6784b07a5",
+          "kind": "memory",
+          "text": "Reefer 2 serves FFI-102: IN-42 on Reefer 2 carries 6 Gummy Shark for FFI-102.",
+          "source": null,
+          "occurred_at": "2026-11-08T19:26:40.379770385+00:00",
+          "score": 0.631,
+          "arms_hit": 2,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "memory:r6aa61c90b4661b462da",
+          "kind": "memory",
+          "text": "Reefer 2 serves FFI-101: IN-42 on Reefer 2 carries 2 Dhufish for FFI-101.",
+          "source": null,
+          "occurred_at": "2026-11-08T19:26:39.583660885+00:00",
+          "score": 0.631,
+          "arms_hit": 2,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "memory:rbc7be6b8474b0e1f53a",
+          "kind": "memory",
+          "text": "Reefer 2 serves FFI-103: IN-42 on Reefer 2 carries 3 Greenlip Abalone for FFI-103.",
+          "source": null,
+          "occurred_at": "2026-11-08T19:26:41.216790969+00:00",
+          "score": 0.627,
+          "arms_hit": 2,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "memory:r4788cbe51edd39a9e15",
+          "kind": "memory",
+          "text": "FFI-102 requires Gummy Shark 5kg: FFI-102 needs 6 Gummy Shark 5kg.",
+          "source": null,
+          "occurred_at": "2026-11-08T19:26:26.726171087+00:00",
+          "score": 0.522,
+          "arms_hit": 2,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "memory:vxat8vmzuuf61icd6pkd",
+          "kind": "memory",
+          "text": "Open order for Portside Fish and Chips, due 12 November 2026. Needs 6 Gummy Shark 5kg, 12 Flake Ice 10kg.",
+          "source": null,
+          "occurred_at": "2026-11-08T19:26:03.686724799+00:00",
+          "score": 0.521,
+          "arms_hit": 2,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "memory:r37a7808544c7710d567",
+          "kind": "memory",
+          "text": "FFI-103 requires Party Ice 5kg: FFI-103 needs 8 Party Ice 5kg.",
+          "source": null,
+          "occurred_at": "2026-11-08T19:26:30.057595797+00:00",
+          "score": 0.511,
+          "arms_hit": 2,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "memory:r40b9669649eb8e6b14e",
+          "kind": "memory",
+          "text": "FFI-101 requires Block Ice 20kg: FFI-101 needs 10 Block Ice 20kg.",
+          "source": null,
+          "occurred_at": "2026-11-08T19:26:25.926501003+00:00",
+          "score": 0.487,
+          "arms_hit": 2,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "memory:r26adfd50dceac5f5ba5",
+          "kind": "memory",
+          "text": "FFI-101 requires Dhufish Whole 10kg: FFI-101 needs 2 Dhufish Whole 10kg.",
+          "source": null,
+          "occurred_at": "2026-11-08T19:26:24.290182336+00:00",
+          "score": 0.468,
+          "arms_hit": 2,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "memory:r0dd87c6a480b20aedc3",
+          "kind": "memory",
+          "text": "FFI-103 requires Tiger Prawns 5kg: FFI-103 needs 5 Tiger Prawns 5kg.",
+          "source": null,
+          "occurred_at": "2026-11-08T19:26:29.195613380+00:00",
+          "score": 0.46,
+          "arms_hit": 2,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "memory:a79mq504fb4agwjunf34",
+          "kind": "memory",
+          "text": "Open order for Bathers Beach Bistro, due 12 November 2026. Needs 2 Dhufish Whole 10kg, 4 King Prawns U10 5kg, 10 Block Ice 20kg.",
+          "source": null,
+          "occurred_at": "2026-11-08T19:26:03.506736882+00:00",
+          "score": 0.451,
+          "arms_hit": 2,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "memory:6evicp8k6e9cshfuatgf",
+          "kind": "memory",
+          "text": "Open order for Harbour Lights Hotel Group, due 13 November 2026. Needs 3 Greenlip Abalone 1kg, 5 Tiger Prawns 5kg, 8 Party Ice 5kg.",
+          "source": null,
+          "occurred_at": "2026-11-08T19:26:03.693141299+00:00",
+          "score": 0.45,
+          "arms_hit": 2,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "memory:r4f80b95f36ca7ae7f06",
+          "kind": "memory",
+          "text": "IN-42 contains Gummy Shark 5kg: IN-42 holds 6 Gummy Shark 5kg.",
+          "source": null,
+          "occurred_at": "2026-11-08T19:26:47.409334430+00:00",
+          "score": 0.449,
+          "arms_hit": 2,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "memory:r1faa9b3d15a2fc7b485",
+          "kind": "memory",
+          "text": "IN-42 contains Greenlip Abalone 1kg: IN-42 holds 3 Greenlip Abalone 1kg.",
+          "source": null,
+          "occurred_at": "2026-11-08T19:26:48.411955667+00:00",
+          "score": 0.429,
+          "arms_hit": 2,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        },
+        {
+          "id": "memory:fc4m7ckw6tzugy55agxy",
+          "kind": "memory",
+          "text": "Open order for Saltwater Table Restaurant, due 12 November 2026. Needs 4 Snapper Fillets 5kg, 6 Crushed Ice 5kg.",
+          "source": null,
+          "occurred_at": "2026-11-08T19:26:03.705202382+00:00",
+          "score": 0.425,
+          "arms_hit": 2,
+          "vault": "vault:rf0gaym72n9pkdbsg4a1",
+          "vault_name": "Fremantle Fish & Ice Co"
+        }
+      ]
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__entities_neighbourhood",
+    "arguments": {
+      "entity_id": "entity:ugt6rofftccvjjuomjay",
+      "depth": 2
+    },
+    "id": "toolu_01F8BgbUnrSGeQfuqFSA3jxW",
+    "result": {
+      "vault": "vault:rf0gaym72n9pkdbsg4a1",
+      "depth": 2,
+      "nodes": [
+        {
+          "id": "entity:ugt6rofftccvjjuomjay",
+          "name": "Reefer 2",
+          "kind": "truck",
+          "facts": [
+            "Reefer 2 serves FFI-104: IN-42 on Reefer 2 carries 4 Snapper Fillets for FFI-104.",
+            "Reefer 2 serves FFI-103: IN-42 on Reefer 2 carries 3 Greenlip Abalone for FFI-103.",
+            "Reefer 2 serves FFI-102: IN-42 on Reefer 2 carries 6 Gummy Shark for FFI-102."
+          ]
+        },
+        {
+          "id": "entity:bs8dwvtgywjeuj4lb9j6",
+          "name": "FFI-101",
+          "kind": "order",
+          "facts": [
+            "FFI-101 requires Block Ice 20kg: FFI-101 needs 10 Block Ice 20kg.",
+            "FFI-101 requires King Prawns U10 5kg: FFI-101 needs 4 King Prawns U10 5kg.",
+            "FFI-101 requires Dhufish Whole 10kg: FFI-101 needs 2 Dhufish Whole 10kg."
+          ]
+        },
+        {
+          "id": "entity:kl4ea8we5ugms10whjm8",
+          "name": "FFI-102",
+          "kind": "order",
+          "facts": [
+            "FFI-102 requires Flake Ice 10kg: FFI-102 needs 12 Flake Ice 10kg.",
+            "FFI-102 requires Gummy Shark 5kg: FFI-102 needs 6 Gummy Shark 5kg.",
+            "Open order for Portside Fish and Chips, due 12 November 2026. Needs 6 Gummy Shark 5kg, 12 Flake Ice 10kg."
+          ]
+        },
+        {
+          "id": "entity:ovl5njex4v2o2um1n9pj",
+          "name": "FFI-103",
+          "kind": "order",
+          "facts": [
+            "FFI-103 requires Party Ice 5kg: FFI-103 needs 8 Party Ice 5kg.",
+            "FFI-103 requires Tiger Prawns 5kg: FFI-103 needs 5 Tiger Prawns 5kg.",
+            "FFI-103 requires Greenlip Abalone 1kg: FFI-103 needs 3 Greenlip Abalone 1kg."
+          ]
+        },
+        {
+          "id": "entity:gsj8anu1g7y6hxd2vmh2",
+          "name": "FFI-104",
+          "kind": "order",
+          "facts": [
+            "FFI-104 requires Crushed Ice 5kg: FFI-104 needs 6 Crushed Ice 5kg.",
+            "FFI-104 requires Snapper Fillets 5kg: FFI-104 needs 4 Snapper Fillets 5kg.",
+            "Open order for Saltwater Table Restaurant, due 12 November 2026. Needs 4 Snapper Fillets 5kg, 6 Crushed Ice 5kg."
+          ]
+        },
+        {
+          "id": "entity:0alo8zj8lgw4phgycnmq",
+          "name": "IN-42",
+          "kind": "inbound_load",
+          "facts": [
+            "IN-42 contains Snapper Fillets 5kg: IN-42 holds 4 Snapper Fillets 5kg.",
+            "IN-42 contains Greenlip Abalone 1kg: IN-42 holds 3 Greenlip Abalone 1kg.",
+            "IN-42 contains Gummy Shark 5kg: IN-42 holds 6 Gummy Shark 5kg."
+          ]
+        },
+        {
+          "id": "person:300jj1lfln6hltr75sn3",
+          "name": "Amelia Russo",
+          "kind": "person",
+          "facts": [
+            "Amelia Russo leads dispatch for IN-42: Amelia Russo is the dispatch lead for IN-42.",
+            "Amelia Russo is the owner and the dispatch lead. She approved the delivery minimum of $250 from 1 December 2026."
+          ]
+        },
+        {
+          "id": "entity:gc3l2fncxr8vnto1spk9",
+          "name": "Bathers Beach Bistro",
+          "kind": "customer",
+          "facts": [
+            "Customer with open order FFI-101."
+          ]
+        },
+        {
+          "id": "entity:v1wgb5l21pseykea1qlx",
+          "name": "Block Ice 20kg",
+          "kind": "product",
+          "facts": [
+            "Product required by FFI-101 (10)."
+          ],
+          "properties": [
+            {
+              "property": "last_landed",
+              "datatype": "date",
+              "value": "2026-11-05",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "qty_on_hand",
+              "datatype": "integer",
+              "value": 95,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "reorder_at",
+              "datatype": "integer",
+              "value": 10,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "sell_price",
+              "datatype": "money",
+              "value": 18.5,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "status",
+              "datatype": "enum",
+              "value": "Available",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "unit_cost",
+              "datatype": "money",
+              "value": 7.25,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            }
+          ]
+        },
+        {
+          "id": "entity:olzecfi09wy9257qadsw",
+          "name": "Crushed Ice 5kg",
+          "kind": "product",
+          "facts": [
+            "Product required by FFI-104 (6)."
+          ],
+          "properties": [
+            {
+              "property": "last_landed",
+              "datatype": "date",
+              "value": "2026-11-07",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "qty_on_hand",
+              "datatype": "integer",
+              "value": 65,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "reorder_at",
+              "datatype": "integer",
+              "value": 10,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "sell_price",
+              "datatype": "money",
+              "value": 7.45,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "status",
+              "datatype": "enum",
+              "value": "Available",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "unit_cost",
+              "datatype": "money",
+              "value": 3.2,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            }
+          ]
+        },
+        {
+          "id": "entity:qcbe9ysvbeep437q79bc",
+          "name": "Dhufish Whole 10kg",
+          "kind": "product",
+          "facts": [
+            "Product required by FFI-101 (2) and carried on IN-42 (2)."
+          ],
+          "properties": [
+            {
+              "property": "last_landed",
+              "datatype": "date",
+              "value": "2026-11-04",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "qty_on_hand",
+              "datatype": "integer",
+              "value": 3,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "reorder_at",
+              "datatype": "integer",
+              "value": 10,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "sell_price",
+              "datatype": "money",
+              "value": 1180.0,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "status",
+              "datatype": "enum",
+              "value": "Available",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "unit_cost",
+              "datatype": "money",
+              "value": 785.0,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            }
+          ]
+        },
+        {
+          "id": "entity:1sfkjfqzvoe0itr0wygd",
+          "name": "Flake Ice 10kg",
+          "kind": "product",
+          "facts": [
+            "Product required by FFI-102 (12)."
+          ],
+          "properties": [
+            {
+              "property": "last_landed",
+              "datatype": "date",
+              "value": "2026-11-06",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "qty_on_hand",
+              "datatype": "integer",
+              "value": 80,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "reorder_at",
+              "datatype": "integer",
+              "value": 10,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "sell_price",
+              "datatype": "money",
+              "value": 12.5,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "status",
+              "datatype": "enum",
+              "value": "Available",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "unit_cost",
+              "datatype": "money",
+              "value": 5.1,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            }
+          ]
+        },
+        {
+          "id": "entity:rcrjvcfua61c8sgp7cuz",
+          "name": "Greenlip Abalone 1kg",
+          "kind": "product",
+          "facts": [
+            "Product required by FFI-103 (3) and carried on IN-42 (3). Esperance Abalone has a consignment on order for Harbour Lights Hotel Group."
+          ],
+          "properties": [
+            {
+              "property": "last_landed",
+              "datatype": "date",
+              "value": "2026-11-08",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "qty_on_hand",
+              "datatype": "integer",
+              "value": 8,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "reorder_at",
+              "datatype": "integer",
+              "value": 10,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "sell_price",
+              "datatype": "money",
+              "value": 148.0,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "status",
+              "datatype": "enum",
+              "value": "On order",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "unit_cost",
+              "datatype": "money",
+              "value": 96.0,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            }
+          ]
+        },
+        {
+          "id": "entity:3f5cm4iqh3oirr0hmryw",
+          "name": "Gummy Shark 5kg",
+          "kind": "product",
+          "facts": [
+            "Product required by FFI-102 (6) and carried on IN-42 (6)."
+          ],
+          "properties": [
+            {
+              "property": "last_landed",
+              "datatype": "date",
+              "value": "2026-11-06",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "qty_on_hand",
+              "datatype": "integer",
+              "value": 16,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "reorder_at",
+              "datatype": "integer",
+              "value": 10,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "sell_price",
+              "datatype": "money",
+              "value": 185.0,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "status",
+              "datatype": "enum",
+              "value": "Available",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "unit_cost",
+              "datatype": "money",
+              "value": 116.0,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            }
+          ]
+        },
+        {
+          "id": "entity:m09ye57js78gw9bpezrx",
+          "name": "Harbour Lights Hotel Group",
+          "kind": "customer",
+          "facts": [
+            "Customer with open order FFI-103. Esperance Abalone has a Greenlip Abalone 1kg consignment on order for them."
+          ]
+        },
+        {
+          "id": "entity:48xpq68q4urz8ypimn5y",
+          "name": "King Prawns U10 5kg",
+          "kind": "product",
+          "facts": [
+            "Product required by FFI-101 (4)."
+          ],
+          "properties": [
+            {
+              "property": "last_landed",
+              "datatype": "date",
+              "value": "2026-11-07",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "qty_on_hand",
+              "datatype": "integer",
+              "value": 17,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "reorder_at",
+              "datatype": "integer",
+              "value": 10,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "sell_price",
+              "datatype": "money",
+              "value": 265.0,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "status",
+              "datatype": "enum",
+              "value": "Available",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "unit_cost",
+              "datatype": "money",
+              "value": 174.0,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            }
+          ]
+        },
+        {
+          "id": "entity:evv28m6h4tck901uzp6t",
+          "name": "Party Ice 5kg",
+          "kind": "product",
+          "facts": [
+            "Product required by FFI-103 (8)."
+          ],
+          "properties": [
+            {
+              "property": "last_landed",
+              "datatype": "date",
+              "value": "2026-11-08",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "qty_on_hand",
+              "datatype": "integer",
+              "value": 43,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "reorder_at",
+              "datatype": "integer",
+              "value": 10,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "sell_price",
+              "datatype": "money",
+              "value": 8.9,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "status",
+              "datatype": "enum",
+              "value": "Available",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "unit_cost",
+              "datatype": "money",
+              "value": 3.8,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            }
+          ]
+        },
+        {
+          "id": "entity:3sb2tcg3mvrd6kv51znr",
+          "name": "Portside Fish and Chips",
+          "kind": "customer",
+          "facts": [
+            "Customer with open order FFI-102."
+          ]
+        },
+        {
+          "id": "entity:n8v4fraa6w49xnctd09p",
+          "name": "Saltwater Table Restaurant",
+          "kind": "customer",
+          "facts": [
+            "Customer with open order FFI-104."
+          ]
+        },
+        {
+          "id": "entity:b6ob6x2weevj5neiyhnv",
+          "name": "Snapper Fillets 5kg",
+          "kind": "product",
+          "facts": [
+            "Product required by FFI-104 (4) and carried on IN-42 (4)."
+          ],
+          "properties": [
+            {
+              "property": "last_landed",
+              "datatype": "date",
+              "value": "2026-11-05",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "qty_on_hand",
+              "datatype": "integer",
+              "value": 12,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "reorder_at",
+              "datatype": "integer",
+              "value": 10,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "sell_price",
+              "datatype": "money",
+              "value": 245.0,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "status",
+              "datatype": "enum",
+              "value": "Available",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "unit_cost",
+              "datatype": "money",
+              "value": 158.0,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            }
+          ]
+        },
+        {
+          "id": "entity:sbtlnm1mp6dimx9zyqad",
+          "name": "Tiger Prawns 5kg",
+          "kind": "product",
+          "facts": [
+            "Product required by FFI-103 (5)."
+          ],
+          "properties": [
+            {
+              "property": "last_landed",
+              "datatype": "date",
+              "value": "2026-11-08",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "qty_on_hand",
+              "datatype": "integer",
+              "value": 23,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "reorder_at",
+              "datatype": "integer",
+              "value": 10,
+              "unit": "items",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "sell_price",
+              "datatype": "money",
+              "value": 195.0,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "status",
+              "datatype": "enum",
+              "value": "Available",
+              "unit": null,
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            },
+            {
+              "property": "unit_cost",
+              "datatype": "money",
+              "value": 128.0,
+              "unit": "AUD",
+              "as_of": "2026-11-08T19:29:23Z",
+              "source": "document:e4f6egzn8wveubiomvaj"
+            }
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "relates_to:mnt5seg76uk4kmfrdqra",
+          "from": "person:300jj1lfln6hltr75sn3",
+          "label": "leads_dispatch_for",
+          "to": "entity:0alo8zj8lgw4phgycnmq"
+        },
+        {
+          "id": "relates_to:o9argb942yw64ddsunvp",
+          "from": "entity:gc3l2fncxr8vnto1spk9",
+          "label": "placed",
+          "to": "entity:bs8dwvtgywjeuj4lb9j6"
+        },
+        {
+          "id": "relates_to:nkm3h481z4klgf5a8mdt",
+          "from": "entity:bs8dwvtgywjeuj4lb9j6",
+          "label": "requires",
+          "to": "entity:v1wgb5l21pseykea1qlx"
+        },
+        {
+          "id": "relates_to:4ugdgeeqkurkkvg7i6cw",
+          "from": "entity:bs8dwvtgywjeuj4lb9j6",
+          "label": "requires",
+          "to": "entity:qcbe9ysvbeep437q79bc"
+        },
+        {
+          "id": "relates_to:0naftds3hpaerdvn01dm",
+          "from": "entity:bs8dwvtgywjeuj4lb9j6",
+          "label": "requires",
+          "to": "entity:48xpq68q4urz8ypimn5y"
+        },
+        {
+          "id": "relates_to:0etfspyi0chdzmpcuvrv",
+          "from": "entity:kl4ea8we5ugms10whjm8",
+          "label": "requires",
+          "to": "entity:1sfkjfqzvoe0itr0wygd"
+        },
+        {
+          "id": "relates_to:8v2kqrtpa1e7r58tet0a",
+          "from": "entity:kl4ea8we5ugms10whjm8",
+          "label": "requires",
+          "to": "entity:3f5cm4iqh3oirr0hmryw"
+        },
+        {
+          "id": "relates_to:thaho4bsyow5megh9wfd",
+          "from": "entity:ovl5njex4v2o2um1n9pj",
+          "label": "requires",
+          "to": "entity:rcrjvcfua61c8sgp7cuz"
+        },
+        {
+          "id": "relates_to:3owqlfdeikw2dxb8t2ij",
+          "from": "entity:ovl5njex4v2o2um1n9pj",
+          "label": "requires",
+          "to": "entity:evv28m6h4tck901uzp6t"
+        },
+        {
+          "id": "relates_to:40tlqoee918enu6wjxiq",
+          "from": "entity:ovl5njex4v2o2um1n9pj",
+          "label": "requires",
+          "to": "entity:sbtlnm1mp6dimx9zyqad"
+        },
+        {
+          "id": "relates_to:el7xw206be3rh8p3ndxt",
+          "from": "entity:gsj8anu1g7y6hxd2vmh2",
+          "label": "requires",
+          "to": "entity:olzecfi09wy9257qadsw"
+        },
+        {
+          "id": "relates_to:ak9pu5dxu6fl8d1sx6vv",
+          "from": "entity:gsj8anu1g7y6hxd2vmh2",
+          "label": "requires",
+          "to": "entity:b6ob6x2weevj5neiyhnv"
+        },
+        {
+          "id": "relates_to:orwyoe1j46m22oxbclmm",
+          "from": "entity:m09ye57js78gw9bpezrx",
+          "label": "placed",
+          "to": "entity:ovl5njex4v2o2um1n9pj"
+        },
+        {
+          "id": "relates_to:dkfez6i3h24yrgbvdo7f",
+          "from": "entity:0alo8zj8lgw4phgycnmq",
+          "label": "contains",
+          "to": "entity:qcbe9ysvbeep437q79bc"
+        },
+        {
+          "id": "relates_to:2q7fjl9tx7ru7jyrguye",
+          "from": "entity:0alo8zj8lgw4phgycnmq",
+          "label": "contains",
+          "to": "entity:rcrjvcfua61c8sgp7cuz"
+        },
+        {
+          "id": "relates_to:7rjzxazz4zpfpj66qskw",
+          "from": "entity:0alo8zj8lgw4phgycnmq",
+          "label": "contains",
+          "to": "entity:3f5cm4iqh3oirr0hmryw"
+        },
+        {
+          "id": "relates_to:nbpikxn2kqxzkdpf5ir6",
+          "from": "entity:0alo8zj8lgw4phgycnmq",
+          "label": "contains",
+          "to": "entity:b6ob6x2weevj5neiyhnv"
+        },
+        {
+          "id": "relates_to:hw6l48768gnn4m0rkghp",
+          "from": "entity:0alo8zj8lgw4phgycnmq",
+          "label": "supplies",
+          "to": "entity:bs8dwvtgywjeuj4lb9j6"
+        },
+        {
+          "id": "relates_to:ak7xmnw62gry0pgfnioq",
+          "from": "entity:0alo8zj8lgw4phgycnmq",
+          "label": "supplies",
+          "to": "entity:kl4ea8we5ugms10whjm8"
+        },
+        {
+          "id": "relates_to:ibumtop21oqefsawxi1f",
+          "from": "entity:0alo8zj8lgw4phgycnmq",
+          "label": "supplies",
+          "to": "entity:ovl5njex4v2o2um1n9pj"
+        },
+        {
+          "id": "relates_to:uvcjgbr4wxlgelpm2mcw",
+          "from": "entity:0alo8zj8lgw4phgycnmq",
+          "label": "supplies",
+          "to": "entity:gsj8anu1g7y6hxd2vmh2"
+        },
+        {
+          "id": "relates_to:mkxhmgpeylqhxmnqfgc6",
+          "from": "entity:3sb2tcg3mvrd6kv51znr",
+          "label": "placed",
+          "to": "entity:kl4ea8we5ugms10whjm8"
+        },
+        {
+          "id": "relates_to:rolcp2cmgyxp73gtn3o3",
+          "from": "entity:ugt6rofftccvjjuomjay",
+          "label": "carries",
+          "to": "entity:0alo8zj8lgw4phgycnmq"
+        },
+        {
+          "id": "relates_to:ozg6eht7p7zyqcpbeb7j",
+          "from": "entity:ugt6rofftccvjjuomjay",
+          "label": "serves",
+          "to": "entity:bs8dwvtgywjeuj4lb9j6"
+        },
+        {
+          "id": "relates_to:4c7j9r6kqc2ugq35r2oh",
+          "from": "entity:ugt6rofftccvjjuomjay",
+          "label": "serves",
+          "to": "entity:kl4ea8we5ugms10whjm8"
+        },
+        {
+          "id": "relates_to:8p28pzhrazxaflq0086b",
+          "from": "entity:ugt6rofftccvjjuomjay",
+          "label": "serves",
+          "to": "entity:ovl5njex4v2o2um1n9pj"
+        },
+        {
+          "id": "relates_to:vqeah6wga6l0xiffz0wl",
+          "from": "entity:ugt6rofftccvjjuomjay",
+          "label": "serves",
+          "to": "entity:gsj8anu1g7y6hxd2vmh2"
+        },
+        {
+          "id": "relates_to:z1rrjcxw3989we7eh9iq",
+          "from": "entity:n8v4fraa6w49xnctd09p",
+          "label": "placed",
+          "to": "entity:gsj8anu1g7y6hxd2vmh2"
+        }
+      ],
+      "link_types": [
+        {
+          "from_kind": "customer",
+          "label": "placed",
+          "to_kind": "order",
+          "status": "approved",
+          "description": "The customer placed this order."
+        },
+        {
+          "from_kind": "inbound_load",
+          "label": "contains",
+          "to_kind": "product",
+          "status": "approved",
+          "description": "The load holds this product."
+        },
+        {
+          "from_kind": "inbound_load",
+          "label": "supplies",
+          "to_kind": "order",
+          "status": "approved",
+          "description": "The load holds stock for this order. A delay puts the order at risk."
+        },
+        {
+          "from_kind": "order",
+          "label": "requires",
+          "to_kind": "product",
+          "status": "approved",
+          "description": "The order needs this product."
+        },
+        {
+          "from_kind": "person",
+          "label": "leads_dispatch_for",
+          "to_kind": "inbound_load",
+          "status": "approved",
+          "description": "The person leads dispatch for this load."
+        },
+        {
+          "from_kind": "truck",
+          "label": "carries",
+          "to_kind": "inbound_load",
+          "status": "approved",
+          "description": "The truck is carrying this inbound load."
+        },
+        {
+          "from_kind": "truck",
+          "label": "serves",
+          "to_kind": "order",
+          "status": "approved",
+          "description": "Stock on this truck is meant for this order."
+        }
+      ],
+      "truncated": false
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__show_view",
+    "arguments": {
+      "view": "impact",
+      "start_id": "entity:ugt6rofftccvjjuomjay",
+      "headline": "Reefer 2 is a day late, so load IN-42 lands 12 November, not 11 November.",
+      "affected": [
+        {
+          "entity_id": "entity:0alo8zj8lgw4phgycnmq",
+          "path": [
+            "relates_to:rolcp2cmgyxp73gtn3o3"
+          ],
+          "why": "Reefer 2 carries load IN-42, so the load arrives a day late."
+        },
+        {
+          "entity_id": "entity:bs8dwvtgywjeuj4lb9j6",
+          "path": [
+            "relates_to:ozg6eht7p7zyqcpbeb7j"
+          ],
+          "why": "Order FFI-101 (Bathers Beach Bistro, due 12 Nov) needs 2 Dhufish from this truck."
+        },
+        {
+          "entity_id": "entity:kl4ea8we5ugms10whjm8",
+          "path": [
+            "relates_to:4c7j9r6kqc2ugq35r2oh"
+          ],
+          "why": "Order FFI-102 (Portside Fish and Chips, due 12 Nov) needs 6 Gummy Shark from this truck."
+        },
+        {
+          "entity_id": "entity:ovl5njex4v2o2um1n9pj",
+          "path": [
+            "relates_to:8p28pzhrazxaflq0086b"
+          ],
+          "why": "Order FFI-103 (Harbour Lights, due 13 Nov) needs 3 Greenlip Abalone from this truck."
+        },
+        {
+          "entity_id": "entity:gsj8anu1g7y6hxd2vmh2",
+          "path": [
+            "relates_to:vqeah6wga6l0xiffz0wl",
+            "relates_to:z1rrjcxw3989we7eh9iq"
+          ],
+          "why": "Order FFI-104 (Saltwater Table, due 12 Nov) needs 4 Snapper Fillets from this truck."
+        },
+        {
+          "entity_id": "person:300jj1lfln6hltr75sn3",
+          "path": [
+            "relates_to:rolcp2cmgyxp73gtn3o3",
+            "relates_to:mnt5seg76uk4kmfrdqra"
+          ],
+          "why": "Amelia Russo leads dispatch for IN-42 and has to handle the delay."
+        }
+      ]
+    },
+    "id": "toolu_01HnTWqGHEmkDU6kNDsUPdmm",
+    "result": {
+      "error": "the path to entity:gsj8anu1g7y6hxd2vmh2 ends at entity:n8v4fraa6w49xnctd09p instead",
+      "code": "validation.invalid",
+      "trace_id": "250067402bea444b97be7764a55303e3"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__show_view",
+    "arguments": {
+      "view": "impact",
+      "start_id": "entity:ugt6rofftccvjjuomjay",
+      "headline": "Reefer 2 is a day late, so load IN-42 lands 12 November, not 11 November.",
+      "affected": [
+        {
+          "entity_id": "entity:0alo8zj8lgw4phgycnmq",
+          "path": [
+            "relates_to:rolcp2cmgyxp73gtn3o3"
+          ],
+          "why": "Reefer 2 carries load IN-42, so the load arrives a day late."
+        },
+        {
+          "entity_id": "entity:bs8dwvtgywjeuj4lb9j6",
+          "path": [
+            "relates_to:ozg6eht7p7zyqcpbeb7j"
+          ],
+          "why": "Order FFI-101 (Bathers Beach Bistro, due 12 Nov) needs 2 Dhufish from this truck."
+        },
+        {
+          "entity_id": "entity:kl4ea8we5ugms10whjm8",
+          "path": [
+            "relates_to:4c7j9r6kqc2ugq35r2oh"
+          ],
+          "why": "Order FFI-102 (Portside Fish and Chips, due 12 Nov) needs 6 Gummy Shark from this truck."
+        },
+        {
+          "entity_id": "entity:ovl5njex4v2o2um1n9pj",
+          "path": [
+            "relates_to:8p28pzhrazxaflq0086b"
+          ],
+          "why": "Order FFI-103 (Harbour Lights, due 13 Nov) needs 3 Greenlip Abalone from this truck."
+        },
+        {
+          "entity_id": "entity:gsj8anu1g7y6hxd2vmh2",
+          "path": [
+            "relates_to:vqeah6wga6l0xiffz0wl"
+          ],
+          "why": "Order FFI-104 (Saltwater Table, due 12 Nov) needs 4 Snapper Fillets from this truck."
+        },
+        {
+          "entity_id": "person:300jj1lfln6hltr75sn3",
+          "path": [
+            "relates_to:rolcp2cmgyxp73gtn3o3",
+            "relates_to:mnt5seg76uk4kmfrdqra"
+          ],
+          "why": "Amelia Russo leads dispatch for IN-42 and has to handle the delay."
+        }
+      ]
+    },
+    "id": "toolu_01CtipqNyWV4prreBwngutoR",
+    "result": {
+      "view": "impact",
+      "start": {
+        "id": "entity:ugt6rofftccvjjuomjay",
+        "name": "Reefer 2",
+        "kind": "truck",
+        "vault": "vault:rf0gaym72n9pkdbsg4a1"
+      },
+      "headline": "Reefer 2 is a day late, so load IN-42 lands 12 November, not 11 November.",
+      "affected": [
+        {
+          "entity": {
+            "id": "entity:0alo8zj8lgw4phgycnmq",
+            "name": "IN-42",
+            "kind": "inbound_load",
+            "vault": "vault:rf0gaym72n9pkdbsg4a1"
+          },
+          "path": [
+            {
+              "id": "relates_to:rolcp2cmgyxp73gtn3o3",
+              "from": {
+                "id": "entity:ugt6rofftccvjjuomjay",
+                "name": "Reefer 2",
+                "kind": "truck",
+                "vault": "vault:rf0gaym72n9pkdbsg4a1"
+              },
+              "label": "carries",
+              "to": {
+                "id": "entity:0alo8zj8lgw4phgycnmq",
+                "name": "IN-42",
+                "kind": "inbound_load",
+                "vault": "vault:rf0gaym72n9pkdbsg4a1"
+              }
+            }
+          ],
+          "why": "Reefer 2 carries load IN-42, so the load arrives a day late."
+        },
+        {
+          "entity": {
+            "id": "entity:bs8dwvtgywjeuj4lb9j6",
+            "name": "FFI-101",
+            "kind": "order",
+            "vault": "vault:rf0gaym72n9pkdbsg4a1"
+          },
+          "path": [
+            {
+              "id": "relates_to:ozg6eht7p7zyqcpbeb7j",
+              "from": {
+                "id": "entity:ugt6rofftccvjjuomjay",
+                "name": "Reefer 2",
+                "kind": "truck",
+                "vault": "vault:rf0gaym72n9pkdbsg4a1"
+              },
+              "label": "serves",
+              "to": {
+                "id": "entity:bs8dwvtgywjeuj4lb9j6",
+                "name": "FFI-101",
+                "kind": "order",
+                "vault": "vault:rf0gaym72n9pkdbsg4a1"
+              }
+            }
+          ],
+          "why": "Order FFI-101 (Bathers Beach Bistro, due 12 Nov) needs 2 Dhufish from this truck."
+        },
+        {
+          "entity": {
+            "id": "entity:kl4ea8we5ugms10whjm8",
+            "name": "FFI-102",
+            "kind": "order",
+            "vault": "vault:rf0gaym72n9pkdbsg4a1"
+          },
+          "path": [
+            {
+              "id": "relates_to:4c7j9r6kqc2ugq35r2oh",
+              "from": {
+                "id": "entity:ugt6rofftccvjjuomjay",
+                "name": "Reefer 2",
+                "kind": "truck",
+                "vault": "vault:rf0gaym72n9pkdbsg4a1"
+              },
+              "label": "serves",
+              "to": {
+                "id": "entity:kl4ea8we5ugms10whjm8",
+                "name": "FFI-102",
+                "kind": "order",
+                "vault": "vault:rf0gaym72n9pkdbsg4a1"
+              }
+            }
+          ],
+          "why": "Order FFI-102 (Portside Fish and Chips, due 12 Nov) needs 6 Gummy Shark from this truck."
+        },
+        {
+          "entity": {
+            "id": "entity:ovl5njex4v2o2um1n9pj",
+            "name": "FFI-103",
+            "kind": "order",
+            "vault": "vault:rf0gaym72n9pkdbsg4a1"
+          },
+          "path": [
+            {
+              "id": "relates_to:8p28pzhrazxaflq0086b",
+              "from": {
+                "id": "entity:ugt6rofftccvjjuomjay",
+                "name": "Reefer 2",
+                "kind": "truck",
+                "vault": "vault:rf0gaym72n9pkdbsg4a1"
+              },
+              "label": "serves",
+              "to": {
+                "id": "entity:ovl5njex4v2o2um1n9pj",
+                "name": "FFI-103",
+                "kind": "order",
+                "vault": "vault:rf0gaym72n9pkdbsg4a1"
+              }
+            }
+          ],
+          "why": "Order FFI-103 (Harbour Lights, due 13 Nov) needs 3 Greenlip Abalone from this truck."
+        },
+        {
+          "entity": {
+            "id": "entity:gsj8anu1g7y6hxd2vmh2",
+            "name": "FFI-104",
+            "kind": "order",
+            "vault": "vault:rf0gaym72n9pkdbsg4a1"
+          },
+          "path": [
+            {
+              "id": "relates_to:vqeah6wga6l0xiffz0wl",
+              "from": {
+                "id": "entity:ugt6rofftccvjjuomjay",
+                "name": "Reefer 2",
+                "kind": "truck",
+                "vault": "vault:rf0gaym72n9pkdbsg4a1"
+              },
+              "label": "serves",
+              "to": {
+                "id": "entity:gsj8anu1g7y6hxd2vmh2",
+                "name": "FFI-104",
+                "kind": "order",
+                "vault": "vault:rf0gaym72n9pkdbsg4a1"
+              }
+            }
+          ],
+          "why": "Order FFI-104 (Saltwater Table, due 12 Nov) needs 4 Snapper Fillets from this truck."
+        },
+        {
+          "entity": {
+            "id": "person:300jj1lfln6hltr75sn3",
+            "name": "Amelia Russo",
+            "kind": "person",
+            "vault": "vault:rf0gaym72n9pkdbsg4a1"
+          },
+          "path": [
+            {
+              "id": "relates_to:rolcp2cmgyxp73gtn3o3",
+              "from": {
+                "id": "entity:ugt6rofftccvjjuomjay",
+                "name": "Reefer 2",
+                "kind": "truck",
+                "vault": "vault:rf0gaym72n9pkdbsg4a1"
+              },
+              "label": "carries",
+              "to": {
+                "id": "entity:0alo8zj8lgw4phgycnmq",
+                "name": "IN-42",
+                "kind": "inbound_load",
+                "vault": "vault:rf0gaym72n9pkdbsg4a1"
+              }
+            },
+            {
+              "id": "relates_to:mnt5seg76uk4kmfrdqra",
+              "from": {
+                "id": "person:300jj1lfln6hltr75sn3",
+                "name": "Amelia Russo",
+                "kind": "person",
+                "vault": "vault:rf0gaym72n9pkdbsg4a1"
+              },
+              "label": "leads_dispatch_for",
+              "to": {
+                "id": "entity:0alo8zj8lgw4phgycnmq",
+                "name": "IN-42",
+                "kind": "inbound_load",
+                "vault": "vault:rf0gaym72n9pkdbsg4a1"
+              }
+            }
+          ],
+          "why": "Amelia Russo leads dispatch for IN-42 and has to handle the delay."
+        }
+      ],
+      "linked": true,
+      "text": "Reefer 2 is a day late, so load IN-42 lands 12 November, not 11 November.\nStarting from Reefer 2 (truck).\n1. IN-42 (inbound load), via Reefer 2 carries IN-42. Reefer 2 carries load IN-42, so the load arrives a day late.\n2. FFI-101 (order), via Reefer 2 serves FFI-101. Order FFI-101 (Bathers Beach Bistro, due 12 Nov) needs 2 Dhufish from this truck.\n3. FFI-102 (order), via Reefer 2 serves FFI-102. Order FFI-102 (Portside Fish and Chips, due 12 Nov) needs 6 Gummy Shark from this truck.\n4. FFI-103 (order), via Reefer 2 serves FFI-103. Order FFI-103 (Harbour Lights, due 13 Nov) needs 3 Greenlip Abalone from this truck.\n5. FFI-104 (order), via Reefer 2 serves FFI-104. Order FFI-104 (Saltwater Table, due 12 Nov) needs 4 Snapper Fillets from this truck.\n6. Amelia Russo (person), via Reefer 2 carries IN-42, then Amelia Russo leads dispatch for IN-42. Amelia Russo leads dispatch for IN-42 and has to handle the delay."
+    }
+  }
+]

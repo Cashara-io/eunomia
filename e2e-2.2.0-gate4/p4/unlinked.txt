@@ -1,0 +1,42 @@
+Chat
+Ask a question about your saved memories and documents. Eunomia shows where each answer came from.
+Conversations
+Office Label Printer is broken. What does that affect?
+now
+What is happening with Esperance Abalone?
+now
+What if Southern Ice Works raises costs 10%?
+1m
+Reefer 2 is running a day late. What does that affect?
+2m
+What is our average sell price and total stock value at cost
+2m
+gate4-1794165946
+6:33 AM
+Office Label Printer is broken. What does that affect?
+Eunomia
+6:33 AM
+Looked through memories
+Done
+Searched people and topics
+Done
+Checked this space's kinds
+Done
+Followed connections
+Done
+Showed a view
+Done
+Office Label Printer is broken.
+Starting from
+Office Label Printer
+equipment
+
+Office Label Printer has no saved links yet, so there is nothing to follow. Link it to the things it touches, then ask again.
+
+The Office Label Printer has no recorded links to other equipment, orders, or processes, so I can’t identify downstream effects from the saved data. Its record says it sits in dispatch and is deliberately unlinked. The impact view is shown above; linking it to the things it supports would let me trace what a breakdown affects.
+
+Enter
+send
+Shift Enter
+new line
+Send

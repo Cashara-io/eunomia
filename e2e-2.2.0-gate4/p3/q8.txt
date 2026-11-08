@@ -1,0 +1,22 @@
+**Short answer:** Esperance Abalone has one thing in motion. A Greenlip Abalone shipment is on its way, and it matters for one customer order.
+
+**What is happening**
+- They supply our abalone. We list 6 of their products.
+- Greenlip Abalone 1kg is "on order". We have 8 on hand. We reorder at 10. So we are low.
+- The 3 Greenlip are on truck Reefer 2, load IN-42. It is due 11 November.
+- Those 3 are for Harbour Lights Hotel Group, order FFI-103, due 13 November.
+
+**Risk**
+- If Reefer 2 is one day late, FFI-103 is at risk. That load also carries stock for 3 other orders.
+- Dispatch lead is Amelia Russo.
+
+**Stock on their other products**
+- Brownlip Abalone 1kg: 9 on hand. Below the reorder line of 10. West End Oyster Bar needs 2 on 14 November.
+- Premium Abalone Gift Box: 5 on hand. Also below 10.
+- Abalone Slices (16), Mince (14) and Shell Pack (25) are fine.
+
+**What to do now**
+- Check that Reefer 2 is still on time for 11 November.
+- Think about reordering Brownlip and the Gift Box. Both are under the reorder line.
+
+Sources: catalogue.csv and ops-notes.md.

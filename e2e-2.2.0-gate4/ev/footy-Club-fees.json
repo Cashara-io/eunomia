@@ -1,0 +1,27 @@
+{
+  "entity": {
+    "id": "entity:o3fcs1929i31kikkbir9",
+    "kind": "topic",
+    "name": "Club fees",
+    "aliases": [],
+    "summary": "",
+    "vault": "vault:1eavkczl9x5mewq2zj5h"
+  },
+  "memory": {
+    "id": "memory:2x1ao9dmw6fslj4fku62",
+    "owner": "user:b558qrfkf1zsce3nwg9a",
+    "vault": "vault:1eavkczl9x5mewq2zj5h",
+    "subject": "entity:o3fcs1929i31kikkbir9",
+    "text": "The annual club fee is $95.",
+    "source": null,
+    "created_at": "2026-11-08T19:25:47.137302222Z",
+    "type": "world",
+    "proof_count": 1,
+    "status": null,
+    "source_memories": null,
+    "updated_at": "2026-11-08T19:25:47.137310639Z",
+    "version": 1,
+    "owner_email": null
+  },
+  "vault_name": "Freo Rowing Club"
+}

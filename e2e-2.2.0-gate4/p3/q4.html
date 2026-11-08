@@ -1,0 +1,2032 @@
+<!doctype html><meta charset="utf-8"><style>body{font:15px/1.45 system-ui;margin:32px;background:#f5f5f1;color:#202322}h1{font-size:25px}h2{font-size:20px}h3{font-size:15px;margin:0 0 8px}article,.final{padding:18px;background:white;border:1px solid #d9ded8;margin:12px 0;border-radius:5px}pre{font:12px/1.4 ui-monospace;white-space:pre-wrap;overflow-wrap:anywhere;margin:4px 0}.final pre{font:16px/1.5 system-ui}.result{background:#f1f5f1;padding:10px}summary{font-size:12px;color:#566458}</style><h1>Eunomia 2.2.0 gate 3: p3/q4.jsonl</h1><p>Complete transcript is preserved beside this review as JSONL and text. Expand a tool to inspect its full input and result.</p><h2>Final answer</h2><div class="final"><pre>It&#x27;s a small hit. Your overall margin drops from 35.76% to 35.64%, a loss of 0.12 points.
+
+Nothing was saved. This was only a what-if.
+
+**What changes**
+- Southern Ice Works supplies 8 of your products. Their costs go up 10%.
+- Stock value at cost goes from $27,424.50 to $27,639.88. That is $215.38 more.
+- Average cost per product goes from $85.18 to $85.34.
+
+**Why it&#x27;s small**
+- Ice products are cheap, so a 10% rise adds only cents per item.
+- The biggest jump is Dry Ice 2kg, from $13.00 to $14.30.
+- Block Ice 20kg goes from $7.25 to $7.98.
+- Flake Ice 10kg goes from $5.10 to $5.61.
+
+**Orders and customers that use these products**
+- FFI-101 (Bathers Beach Bistro) uses Block Ice.
+- FFI-102 (Portside Fish and Chips) uses Flake Ice.
+- FFI-103 (Harbour Lights Hotel Group) uses Party Ice.
+- FFI-104 (Saltwater Table Restaurant) uses Crushed Ice.
+- FFI-106 (West End Oyster Bar) uses Gel Ice Packs.
+
+Your sell prices stay the same in this test. So the extra cost comes straight out of your profit.
+
+**Check the number:** two products have no cost on file, so the margin figure leaves them out. It covers 28 of your 30 products.
+
+**What to do now:** nothing is urgent. If you want to keep the full margin, raising ice prices by about 10% would cover it. I&#x27;d hold off, because the loss is tiny.</pre></div><h2>Tool evidence in call order</h2><article><h3>mcp__eunomia-local__ontology_coverage</h3><pre>{
+  &quot;question&quot;: &quot;What if Southern Ice Works raises costs 10%?&quot;
+}</pre><pre class="result">{
+  &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;,
+  &quot;coverage&quot;: 1.0,
+  &quot;chosen_by&quot;: &quot;coverage&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__ontology_coverage&quot;,
+  &quot;arguments&quot;: {
+    &quot;question&quot;: &quot;What if Southern Ice Works raises costs 10%?&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01YFLKpPU98LSq7q2d58htWD&quot;,
+  &quot;result&quot;: {
+    &quot;vault&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+    &quot;vault_name&quot;: &quot;Fremantle Fish &amp; Ice Co&quot;,
+    &quot;coverage&quot;: 1.0,
+    &quot;matched&quot;: [
+      {
+        &quot;phrase&quot;: &quot;costs&quot;,
+        &quot;term&quot;: &quot;property&quot;,
+        &quot;name&quot;: &quot;unit_cost&quot;,
+        &quot;of_kind&quot;: &quot;product&quot;,
+        &quot;distance&quot;: 0.0
+      }
+    ],
+    &quot;uncovered&quot;: [],
+    &quot;chosen_by&quot;: &quot;coverage&quot;,
+    &quot;suggestion&quot;: &quot;Every term maps to the vault&#x27;s approved ontology: answer a number with metric_eval and a what-if with scenario_run, passing this vault as vault_id.&quot;,
+    &quot;mode&quot;: &quot;model&quot;
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entities_search</h3><pre>{
+  &quot;query&quot;: &quot;Southern Ice Works&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entities_search&quot;,
+  &quot;arguments&quot;: {
+    &quot;query&quot;: &quot;Southern Ice Works&quot;
+  },
+  &quot;id&quot;: &quot;toolu_018zstQvJZT6E1BVX2W53Jo6&quot;,
+  &quot;result&quot;: {
+    &quot;results&quot;: [
+      {
+        &quot;id&quot;: &quot;organisation:7uqu9jwq62muit42lorh&quot;,
+        &quot;kind&quot;: &quot;organisation&quot;,
+        &quot;name&quot;: &quot;Southern Ice Works&quot;,
+        &quot;aliases&quot;: [
+          &quot;southern ice works&quot;
+        ],
+        &quot;summary&quot;: &quot;&quot;,
+        &quot;vault&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;
+      }
+    ],
+    &quot;total&quot;: 1,
+    &quot;has_more&quot;: false
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__ontology_get</h3><pre>{
+  &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+  &quot;kind&quot;: &quot;product&quot;
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__ontology_get&quot;,
+  &quot;arguments&quot;: {
+    &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+    &quot;kind&quot;: &quot;product&quot;
+  },
+  &quot;id&quot;: &quot;toolu_01RA8B6AearVwYux2E4YH2iJ&quot;,
+  &quot;result&quot;: {
+    &quot;vault&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+    &quot;strict&quot;: true,
+    &quot;kinds&quot;: [
+      {
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;built_in&quot;: false,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;A product in the supplier inventory, with its pricing, stock level, availability, and latest landing date.&quot;,
+        &quot;merge_into&quot;: null,
+        &quot;synonyms&quot;: [],
+        &quot;origin&quot;: &quot;suggested&quot;,
+        &quot;reason&quot;: &quot;one kind for the catalogue.csv records&quot;,
+        &quot;entities&quot;: 30,
+        &quot;samples&quot;: [
+          &quot;Abalone Mince 1kg&quot;,
+          &quot;Abalone Shell Pack&quot;,
+          &quot;Abalone Slices 500g&quot;
+        ],
+        &quot;properties&quot;: [
+          {
+            &quot;name&quot;: &quot;last_landed&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;unit&quot;: null,
+            &quot;enum_values&quot;: null,
+            &quot;description&quot;: &quot;Date the product was last landed.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;from last landed&quot;,
+            &quot;values&quot;: 30,
+            &quot;samples&quot;: [
+              &quot;2026-11-06&quot;,
+              &quot;2026-11-05&quot;,
+              &quot;2026-11-04&quot;
+            ],
+            &quot;source_map&quot;: [
+              {
+                &quot;source&quot;: &quot;document&quot;,
+                &quot;record_type&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;,
+                &quot;path&quot;: &quot;last landed&quot;
+              }
+            ]
+          },
+          {
+            &quot;name&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;unit&quot;: &quot;items&quot;,
+            &quot;enum_values&quot;: null,
+            &quot;description&quot;: &quot;Quantity currently on hand.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;from qty on hand&quot;,
+            &quot;values&quot;: 30,
+            &quot;samples&quot;: [
+              &quot;3 items&quot;,
+              &quot;57 items&quot;,
+              &quot;43 items&quot;
+            ],
+            &quot;source_map&quot;: [
+              {
+                &quot;source&quot;: &quot;document&quot;,
+                &quot;record_type&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;,
+                &quot;path&quot;: &quot;qty on hand&quot;
+              }
+            ]
+          },
+          {
+            &quot;name&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;unit&quot;: &quot;items&quot;,
+            &quot;enum_values&quot;: null,
+            &quot;description&quot;: &quot;Stock quantity at which the product should be reordered.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;from reorder at&quot;,
+            &quot;values&quot;: 30,
+            &quot;samples&quot;: [
+              &quot;10 items&quot;
+            ],
+            &quot;source_map&quot;: [
+              {
+                &quot;source&quot;: &quot;document&quot;,
+                &quot;record_type&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;,
+                &quot;path&quot;: &quot;reorder at&quot;
+              }
+            ]
+          },
+          {
+            &quot;name&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;enum_values&quot;: null,
+            &quot;description&quot;: &quot;Selling price of the product.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;from sell price AUD&quot;,
+            &quot;values&quot;: 30,
+            &quot;samples&quot;: [
+              &quot;195.00 AUD&quot;,
+              &quot;3.95 AUD&quot;,
+              &quot;1180.00 AUD&quot;
+            ],
+            &quot;source_map&quot;: [
+              {
+                &quot;source&quot;: &quot;document&quot;,
+                &quot;record_type&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;,
+                &quot;path&quot;: &quot;sell price AUD&quot;
+              }
+            ]
+          },
+          {
+            &quot;name&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;unit&quot;: null,
+            &quot;enum_values&quot;: [
+              &quot;Available&quot;,
+              &quot;Discontinued&quot;,
+              &quot;On order&quot;
+            ],
+            &quot;description&quot;: &quot;Current product availability status.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;from status&quot;,
+            &quot;values&quot;: 30,
+            &quot;samples&quot;: [
+              &quot;Available&quot;,
+              &quot;On order&quot;,
+              &quot;Discontinued&quot;
+            ],
+            &quot;source_map&quot;: [
+              {
+                &quot;source&quot;: &quot;document&quot;,
+                &quot;record_type&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;,
+                &quot;path&quot;: &quot;status&quot;
+              }
+            ]
+          },
+          {
+            &quot;name&quot;: &quot;unit_cost&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;enum_values&quot;: null,
+            &quot;description&quot;: &quot;Unit cost of the product.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;from unit cost AUD&quot;,
+            &quot;values&quot;: 28,
+            &quot;samples&quot;: [
+              &quot;14.00 AUD&quot;,
+              &quot;108.00 AUD&quot;,
+              &quot;57.00 AUD&quot;
+            ],
+            &quot;source_map&quot;: [
+              {
+                &quot;source&quot;: &quot;document&quot;,
+                &quot;record_type&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;,
+                &quot;path&quot;: &quot;unit cost AUD&quot;
+              }
+            ]
+          }
+        ],
+        &quot;metrics&quot;: [
+          {
+            &quot;name&quot;: &quot;available_product_count&quot;,
+            &quot;description&quot;: &quot;Number of products with status Available.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;expr&quot;: {
+              &quot;agg&quot;: &quot;count&quot;,
+              &quot;property&quot;: &quot;status&quot;,
+              &quot;filters&quot;: [
+                {
+                  &quot;property&quot;: &quot;status&quot;,
+                  &quot;op&quot;: &quot;eq&quot;,
+                  &quot;value&quot;: &quot;Available&quot;
+                }
+              ]
+            },
+            &quot;expr_words&quot;: &quot;Number of product with a status where status is Available&quot;,
+            &quot;unit&quot;: &quot;items&quot;,
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;agent&quot;,
+            &quot;reason&quot;: &quot;Shows how much of the range can be sold now.&quot;
+          },
+          {
+            &quot;name&quot;: &quot;avg_sell_price&quot;,
+            &quot;description&quot;: &quot;Average sell price per product, in AUD.&quot;,
+            &quot;synonyms&quot;: [
+              &quot;average sell price&quot;,
+              &quot;average price&quot;
+            ],
+            &quot;expr&quot;: {
+              &quot;agg&quot;: &quot;avg&quot;,
+              &quot;property&quot;: &quot;sell_price&quot;
+            },
+            &quot;expr_words&quot;: &quot;Average sell price&quot;,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;agent&quot;,
+            &quot;reason&quot;: &quot;The owner asked for average sell price.&quot;
+          },
+          {
+            &quot;name&quot;: &quot;avg_unit_cost&quot;,
+            &quot;description&quot;: &quot;Average unit cost per product, in AUD. Products with no cost are left out.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;expr&quot;: {
+              &quot;agg&quot;: &quot;avg&quot;,
+              &quot;property&quot;: &quot;unit_cost&quot;
+            },
+            &quot;expr_words&quot;: &quot;Average unit cost&quot;,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;agent&quot;,
+            &quot;reason&quot;: &quot;Useful beside average sell price.&quot;
+          },
+          {
+            &quot;name&quot;: &quot;gross_margin&quot;,
+            &quot;description&quot;: &quot;Gross margin across products, calculated from selling prices and unit costs.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;expr&quot;: {
+              &quot;agg&quot;: &quot;ratio&quot;,
+              &quot;numerator&quot;: {
+                &quot;agg&quot;: &quot;sum&quot;,
+                &quot;row&quot;: {
+                  &quot;op&quot;: &quot;sub&quot;,
+                  &quot;left&quot;: &quot;sell_price&quot;,
+                  &quot;right&quot;: &quot;unit_cost&quot;
+                }
+              },
+              &quot;denominator&quot;: {
+                &quot;agg&quot;: &quot;sum&quot;,
+                &quot;property&quot;: &quot;sell_price&quot;
+              }
+            },
+            &quot;expr_words&quot;: &quot;Sum of (sell price − unit cost), divided by sum of sell price&quot;,
+            &quot;unit&quot;: &quot;percent&quot;,
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;computed from the catalogue.csv records&#x27; properties&quot;
+          },
+          {
+            &quot;name&quot;: &quot;inventory_cost_value&quot;,
+            &quot;description&quot;: &quot;Estimated total cost value of current stock.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;expr&quot;: {
+              &quot;agg&quot;: &quot;sum&quot;,
+              &quot;row&quot;: {
+                &quot;op&quot;: &quot;mul&quot;,
+                &quot;left&quot;: &quot;qty_on_hand&quot;,
+                &quot;right&quot;: &quot;unit_cost&quot;
+              }
+            },
+            &quot;expr_words&quot;: &quot;Sum of qty on hand × unit cost&quot;,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;status&quot;: &quot;rejected&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;computed from the catalogue.csv records&#x27; properties&quot;
+          },
+          {
+            &quot;name&quot;: &quot;product_count&quot;,
+            &quot;description&quot;: &quot;Number of products.&quot;,
+            &quot;synonyms&quot;: [],
+            &quot;expr&quot;: {
+              &quot;agg&quot;: &quot;count&quot;,
+              &quot;property&quot;: &quot;qty_on_hand&quot;
+            },
+            &quot;expr_words&quot;: &quot;Number of product with a qty on hand&quot;,
+            &quot;unit&quot;: &quot;items&quot;,
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;suggested&quot;,
+            &quot;reason&quot;: &quot;computed from the catalogue.csv records&#x27; properties&quot;
+          },
+          {
+            &quot;name&quot;: &quot;total_stock_value_at_cost&quot;,
+            &quot;description&quot;: &quot;Total stock value at cost: quantity on hand times unit cost, summed over products. Products with no unit cost are left out.&quot;,
+            &quot;synonyms&quot;: [
+              &quot;stock value at cost&quot;,
+              &quot;inventory value at cost&quot;
+            ],
+            &quot;expr&quot;: {
+              &quot;agg&quot;: &quot;sum&quot;,
+              &quot;row&quot;: {
+                &quot;op&quot;: &quot;mul&quot;,
+                &quot;left&quot;: &quot;qty_on_hand&quot;,
+                &quot;right&quot;: &quot;unit_cost&quot;
+              }
+            },
+            &quot;expr_words&quot;: &quot;Sum of qty on hand × unit cost&quot;,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;status&quot;: &quot;approved&quot;,
+            &quot;merge_into&quot;: null,
+            &quot;origin&quot;: &quot;agent&quot;,
+            &quot;reason&quot;: &quot;The owner asked for total stock value at cost. Same working as inventory_cost_value, named as asked. The owner can merge the two.&quot;
+          }
+        ]
+      }
+    ],
+    &quot;links&quot;: [
+      {
+        &quot;from_kind&quot;: &quot;inbound_load&quot;,
+        &quot;label&quot;: &quot;contains&quot;,
+        &quot;to_kind&quot;: &quot;product&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;The load holds this product.&quot;,
+        &quot;origin&quot;: &quot;agent&quot;,
+        &quot;reason&quot;: &quot;IN-42 contents.&quot;,
+        &quot;count&quot;: 4,
+        &quot;samples&quot;: [
+          {
+            &quot;from&quot;: &quot;IN-42&quot;,
+            &quot;to&quot;: &quot;Greenlip Abalone 1kg&quot;
+          },
+          {
+            &quot;from&quot;: &quot;IN-42&quot;,
+            &quot;to&quot;: &quot;Gummy Shark 5kg&quot;
+          },
+          {
+            &quot;from&quot;: &quot;IN-42&quot;,
+            &quot;to&quot;: &quot;Dhufish Whole 10kg&quot;
+          }
+        ]
+      },
+      {
+        &quot;from_kind&quot;: &quot;order&quot;,
+        &quot;label&quot;: &quot;requires&quot;,
+        &quot;to_kind&quot;: &quot;product&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;The order needs this product.&quot;,
+        &quot;origin&quot;: &quot;agent&quot;,
+        &quot;reason&quot;: &quot;Orders to required products.&quot;,
+        &quot;count&quot;: 15,
+        &quot;samples&quot;: [
+          {
+            &quot;from&quot;: &quot;FFI-102&quot;,
+            &quot;to&quot;: &quot;Flake Ice 10kg&quot;
+          },
+          {
+            &quot;from&quot;: &quot;FFI-101&quot;,
+            &quot;to&quot;: &quot;King Prawns U10 5kg&quot;
+          },
+          {
+            &quot;from&quot;: &quot;FFI-105&quot;,
+            &quot;to&quot;: &quot;Octopus 5kg&quot;
+          }
+        ]
+      },
+      {
+        &quot;from_kind&quot;: &quot;organisation&quot;,
+        &quot;label&quot;: &quot;supplies&quot;,
+        &quot;to_kind&quot;: &quot;product&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;The organisation supplies this product.&quot;,
+        &quot;origin&quot;: &quot;agent&quot;,
+        &quot;reason&quot;: &quot;Used for Esperance Abalone and Greenlip Abalone.&quot;,
+        &quot;count&quot;: 1,
+        &quot;samples&quot;: [
+          {
+            &quot;from&quot;: &quot;Esperance Abalone&quot;,
+            &quot;to&quot;: &quot;Greenlip Abalone 1kg&quot;
+          }
+        ]
+      },
+      {
+        &quot;from_kind&quot;: &quot;product&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to_kind&quot;: &quot;organisation&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;The organisation that supplies this product. Reads product to supplier.&quot;,
+        &quot;origin&quot;: &quot;agent&quot;,
+        &quot;reason&quot;: &quot;Clearer direction than the automap link product supplies organisation, which reads backwards. Same CSV supplier column.&quot;,
+        &quot;count&quot;: 30,
+        &quot;samples&quot;: [
+          {
+            &quot;from&quot;: &quot;Prawn Cutlets 2kg&quot;,
+            &quot;to&quot;: &quot;Shark Bay Prawns&quot;
+          },
+          {
+            &quot;from&quot;: &quot;Snapper Fillets 5kg&quot;,
+            &quot;to&quot;: &quot;Abrolhos Fishers Co-op&quot;
+          },
+          {
+            &quot;from&quot;: &quot;King Prawns U10 5kg&quot;,
+            &quot;to&quot;: &quot;Shark Bay Prawns&quot;
+          }
+        ],
+        &quot;source_map&quot;: [
+          {
+            &quot;source&quot;: &quot;document&quot;,
+            &quot;record_type&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;,
+            &quot;path&quot;: &quot;supplier&quot;
+          }
+        ]
+      },
+      {
+        &quot;from_kind&quot;: &quot;product&quot;,
+        &quot;label&quot;: &quot;supplies&quot;,
+        &quot;to_kind&quot;: &quot;organisation&quot;,
+        &quot;status&quot;: &quot;rejected&quot;,
+        &quot;description&quot;: &quot;Organisation that supplies this product.&quot;,
+        &quot;origin&quot;: &quot;suggested&quot;,
+        &quot;reason&quot;: &quot;100% of values match (5 of 5)&quot;,
+        &quot;count&quot;: 0,
+        &quot;samples&quot;: [],
+        &quot;source_map&quot;: [
+          {
+            &quot;source&quot;: &quot;document&quot;,
+            &quot;record_type&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;,
+            &quot;path&quot;: &quot;supplier&quot;
+          }
+        ]
+      }
+    ]
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__entities_neighbourhood</h3><pre>{
+  &quot;entity_id&quot;: &quot;organisation:7uqu9jwq62muit42lorh&quot;,
+  &quot;depth&quot;: 1
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__entities_neighbourhood&quot;,
+  &quot;arguments&quot;: {
+    &quot;entity_id&quot;: &quot;organisation:7uqu9jwq62muit42lorh&quot;,
+    &quot;depth&quot;: 1
+  },
+  &quot;id&quot;: &quot;toolu_01FyQpW441GAVeM3FpZfhzRK&quot;,
+  &quot;result&quot;: {
+    &quot;vault&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+    &quot;depth&quot;: 1,
+    &quot;nodes&quot;: [
+      {
+        &quot;id&quot;: &quot;organisation:7uqu9jwq62muit42lorh&quot;,
+        &quot;name&quot;: &quot;Southern Ice Works&quot;,
+        &quot;kind&quot;: &quot;organisation&quot;,
+        &quot;facts&quot;: [
+          &quot;Southern Ice Works is listed as a supplier of ice and insulated packaging products in the catalogue dated 2026-11-08.&quot;,
+          &quot;Southern Ice Works supplies ice and insulated packaging. We work with them.&quot;
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:v1wgb5l21pseykea1qlx&quot;,
+        &quot;name&quot;: &quot;Block Ice 20kg&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;facts&quot;: [
+          &quot;Product required by FFI-101 (10).&quot;
+        ],
+        &quot;properties&quot;: [
+          {
+            &quot;property&quot;: &quot;last_landed&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;value&quot;: &quot;2026-11-05&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 95,
+            &quot;unit&quot;: &quot;items&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 10,
+            &quot;unit&quot;: &quot;items&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 18.5,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;value&quot;: &quot;Available&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;unit_cost&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 7.25,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          }
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:olzecfi09wy9257qadsw&quot;,
+        &quot;name&quot;: &quot;Crushed Ice 5kg&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;facts&quot;: [
+          &quot;Product required by FFI-104 (6).&quot;
+        ],
+        &quot;properties&quot;: [
+          {
+            &quot;property&quot;: &quot;last_landed&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;value&quot;: &quot;2026-11-07&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 65,
+            &quot;unit&quot;: &quot;items&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 10,
+            &quot;unit&quot;: &quot;items&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 7.45,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;value&quot;: &quot;Available&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;unit_cost&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 3.2,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          }
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:xqnkeai40qcw2o64mdr6&quot;,
+        &quot;name&quot;: &quot;Dry Ice 2kg&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;facts&quot;: [],
+        &quot;properties&quot;: [
+          {
+            &quot;property&quot;: &quot;last_landed&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;value&quot;: &quot;2026-11-04&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 13,
+            &quot;unit&quot;: &quot;items&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 10,
+            &quot;unit&quot;: &quot;items&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 24.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;value&quot;: &quot;Available&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;unit_cost&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 13.0,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          }
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:1sfkjfqzvoe0itr0wygd&quot;,
+        &quot;name&quot;: &quot;Flake Ice 10kg&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;facts&quot;: [
+          &quot;Product required by FFI-102 (12).&quot;
+        ],
+        &quot;properties&quot;: [
+          {
+            &quot;property&quot;: &quot;last_landed&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;value&quot;: &quot;2026-11-06&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 80,
+            &quot;unit&quot;: &quot;items&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 10,
+            &quot;unit&quot;: &quot;items&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 12.5,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;value&quot;: &quot;Available&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;unit_cost&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 5.1,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          }
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:hy2hjhlctg2q8baflnhs&quot;,
+        &quot;name&quot;: &quot;Gel Ice Pack 1kg&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;facts&quot;: [
+          &quot;Product required by FFI-106 (6).&quot;
+        ],
+        &quot;properties&quot;: [
+          {
+            &quot;property&quot;: &quot;last_landed&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;value&quot;: &quot;2026-11-05&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 57,
+            &quot;unit&quot;: &quot;items&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 10,
+            &quot;unit&quot;: &quot;items&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 6.5,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;value&quot;: &quot;Available&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;unit_cost&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 2.4,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          }
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:of21g5fl0c8h7p8pqd30&quot;,
+        &quot;name&quot;: &quot;Ice Brick 500g&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;facts&quot;: [],
+        &quot;properties&quot;: [
+          {
+            &quot;property&quot;: &quot;last_landed&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;value&quot;: &quot;2026-11-07&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 61,
+            &quot;unit&quot;: &quot;items&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 10,
+            &quot;unit&quot;: &quot;items&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 3.95,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;value&quot;: &quot;Available&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;unit_cost&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 1.8,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          }
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:scvuccjbx6vmw90ml8zr&quot;,
+        &quot;name&quot;: &quot;Insulated Seafood Carton&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;facts&quot;: [],
+        &quot;properties&quot;: [
+          {
+            &quot;property&quot;: &quot;last_landed&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;value&quot;: &quot;2026-11-06&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 40,
+            &quot;unit&quot;: &quot;items&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 10,
+            &quot;unit&quot;: &quot;items&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 14.5,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;value&quot;: &quot;Available&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;unit_cost&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 6.75,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          }
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;entity:evv28m6h4tck901uzp6t&quot;,
+        &quot;name&quot;: &quot;Party Ice 5kg&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;facts&quot;: [
+          &quot;Product required by FFI-103 (8).&quot;
+        ],
+        &quot;properties&quot;: [
+          {
+            &quot;property&quot;: &quot;last_landed&quot;,
+            &quot;datatype&quot;: &quot;date&quot;,
+            &quot;value&quot;: &quot;2026-11-08&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;qty_on_hand&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 43,
+            &quot;unit&quot;: &quot;items&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;reorder_at&quot;,
+            &quot;datatype&quot;: &quot;integer&quot;,
+            &quot;value&quot;: 10,
+            &quot;unit&quot;: &quot;items&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;sell_price&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 8.9,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;status&quot;,
+            &quot;datatype&quot;: &quot;enum&quot;,
+            &quot;value&quot;: &quot;Available&quot;,
+            &quot;unit&quot;: null,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          },
+          {
+            &quot;property&quot;: &quot;unit_cost&quot;,
+            &quot;datatype&quot;: &quot;money&quot;,
+            &quot;value&quot;: 3.8,
+            &quot;unit&quot;: &quot;AUD&quot;,
+            &quot;as_of&quot;: &quot;2026-11-08T19:29:23Z&quot;,
+            &quot;source&quot;: &quot;document:e4f6egzn8wveubiomvaj&quot;
+          }
+        ]
+      }
+    ],
+    &quot;edges&quot;: [
+      {
+        &quot;id&quot;: &quot;relates_to:hm5s092iw4d385svr8dd&quot;,
+        &quot;from&quot;: &quot;entity:v1wgb5l21pseykea1qlx&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to&quot;: &quot;organisation:7uqu9jwq62muit42lorh&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:x7hgfesvh71ceh5sv0k4&quot;,
+        &quot;from&quot;: &quot;entity:olzecfi09wy9257qadsw&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to&quot;: &quot;organisation:7uqu9jwq62muit42lorh&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:mbkrt7lqkathnypuud6x&quot;,
+        &quot;from&quot;: &quot;entity:xqnkeai40qcw2o64mdr6&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to&quot;: &quot;organisation:7uqu9jwq62muit42lorh&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:vibbxbaahltiv2gjvcwa&quot;,
+        &quot;from&quot;: &quot;entity:1sfkjfqzvoe0itr0wygd&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to&quot;: &quot;organisation:7uqu9jwq62muit42lorh&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:m2obbcgp6bncqml21b76&quot;,
+        &quot;from&quot;: &quot;entity:hy2hjhlctg2q8baflnhs&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to&quot;: &quot;organisation:7uqu9jwq62muit42lorh&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:62gg62r22ypfubw458xd&quot;,
+        &quot;from&quot;: &quot;entity:of21g5fl0c8h7p8pqd30&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to&quot;: &quot;organisation:7uqu9jwq62muit42lorh&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:wgc7ea7ukiwwygvpqlaz&quot;,
+        &quot;from&quot;: &quot;entity:scvuccjbx6vmw90ml8zr&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to&quot;: &quot;organisation:7uqu9jwq62muit42lorh&quot;
+      },
+      {
+        &quot;id&quot;: &quot;relates_to:zmivwpclui291iszrjzb&quot;,
+        &quot;from&quot;: &quot;entity:evv28m6h4tck901uzp6t&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to&quot;: &quot;organisation:7uqu9jwq62muit42lorh&quot;
+      }
+    ],
+    &quot;link_types&quot;: [
+      {
+        &quot;from_kind&quot;: &quot;product&quot;,
+        &quot;label&quot;: &quot;supplied_by&quot;,
+        &quot;to_kind&quot;: &quot;organisation&quot;,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;description&quot;: &quot;The organisation that supplies this product. Reads product to supplier.&quot;
+      }
+    ],
+    &quot;truncated&quot;: false
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__scenario_run</h3><pre>{
+  &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+  &quot;changes&quot;: [
+    {
+      &quot;scale&quot;: {
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;property&quot;: &quot;unit_cost&quot;,
+        &quot;factor&quot;: 1.1,
+        &quot;related_to&quot;: {
+          &quot;entity_id&quot;: &quot;organisation:7uqu9jwq62muit42lorh&quot;,
+          &quot;label&quot;: &quot;supplied_by&quot;
+        }
+      }
+    }
+  ],
+  &quot;metrics&quot;: [
+    &quot;gross_margin&quot;,
+    &quot;avg_unit_cost&quot;,
+    &quot;total_stock_value_at_cost&quot;
+  ]
+}</pre><pre class="result">{
+  &quot;n_changed&quot;: 8,
+  &quot;warnings&quot;: [
+    &quot;gross margin: left out 2 entities missing a value one side needs, so both sides of the ratio use the same entities&quot;
+  ],
+  &quot;baseline&quot;: [
+    {
+      &quot;metric&quot;: &quot;gross_margin&quot;,
+      &quot;kind&quot;: &quot;product&quot;,
+      &quot;expr_words&quot;: &quot;Sum of (sell price − unit cost), divided by sum of sell price&quot;,
+      &quot;value&quot;: 35.76142,
+      &quot;unit&quot;: &quot;%&quot;,
+      &quot;n_entities&quot;: 28,
+      &quot;status&quot;: &quot;approved&quot;
+    },
+    {
+      &quot;metric&quot;: &quot;avg_unit_cost&quot;,
+      &quot;kind&quot;: &quot;product&quot;,
+      &quot;expr_words&quot;: &quot;Average unit cost&quot;,
+      &quot;value&quot;: 85.180357,
+      &quot;unit&quot;: &quot;AUD&quot;,
+      &quot;n_entities&quot;: 28,
+      &quot;status&quot;: &quot;approved&quot;
+    },
+    {
+      &quot;metric&quot;: &quot;total_stock_value_at_cost&quot;,
+      &quot;kind&quot;: &quot;product&quot;,
+      &quot;expr_words&quot;: &quot;Sum of qty on hand × unit cost&quot;,
+      &quot;value&quot;: 27424.5,
+      &quot;unit&quot;: &quot;AUD&quot;,
+      &quot;n_entities&quot;: 28,
+      &quot;status&quot;: &quot;approved&quot;
+    }
+  ],
+  &quot;scenario&quot;: [
+    {
+      &quot;metric&quot;: &quot;gross_margin&quot;,
+      &quot;kind&quot;: &quot;product&quot;,
+      &quot;expr_words&quot;: &quot;Sum of (sell price − unit cost), divided by sum of sell price&quot;,
+      &quot;value&quot;: 35.644796,
+      &quot;unit&quot;: &quot;%&quot;,
+      &quot;n_entities&quot;: 28,
+      &quot;status&quot;: &quot;approved&quot;,
+      &quot;delta&quot;: -0.116624,
+      &quot;delta_pct&quot;: -0.33
+    },
+    {
+      &quot;metric&quot;: &quot;avg_unit_cost&quot;,
+      &quot;kind&quot;: &quot;product&quot;,
+      &quot;expr_words&quot;: &quot;Average unit cost&quot;,
+      &quot;value&quot;: 85.335,
+      &quot;unit&quot;: &quot;AUD&quot;,
+      &quot;n_entities&quot;: 28,
+      &quot;status&quot;: &quot;approved&quot;,
+      &quot;delta&quot;: 0.154643,
+      &quot;delta_pct&quot;: 0.18
+    },
+    {
+      &quot;metric&quot;: &quot;total_stock_value_at_cost&quot;,
+      &quot;kind&quot;: &quot;product&quot;,
+      &quot;expr_words&quot;: &quot;Sum of qty on hand × unit cost&quot;,
+      &quot;value&quot;: 27639.875,
+      &quot;unit&quot;: &quot;AUD&quot;,
+      &quot;n_entities&quot;: 28,
+      &quot;status&quot;: &quot;approved&quot;,
+      &quot;delta&quot;: 215.375,
+      &quot;delta_pct&quot;: 0.79
+    }
+  ]
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__scenario_run&quot;,
+  &quot;arguments&quot;: {
+    &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+    &quot;changes&quot;: [
+      {
+        &quot;scale&quot;: {
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;property&quot;: &quot;unit_cost&quot;,
+          &quot;factor&quot;: 1.1,
+          &quot;related_to&quot;: {
+            &quot;entity_id&quot;: &quot;organisation:7uqu9jwq62muit42lorh&quot;,
+            &quot;label&quot;: &quot;supplied_by&quot;
+          }
+        }
+      }
+    ],
+    &quot;metrics&quot;: [
+      &quot;gross_margin&quot;,
+      &quot;avg_unit_cost&quot;,
+      &quot;total_stock_value_at_cost&quot;
+    ]
+  },
+  &quot;id&quot;: &quot;toolu_01YGfCnYhff1XW7TRYntPu9k&quot;,
+  &quot;result&quot;: {
+    &quot;vault&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+    &quot;as_of&quot;: &quot;2026-11-08T19:30:49Z&quot;,
+    &quot;changes&quot;: [
+      &quot;Product unit cost up 10% on 8 products supplied by Southern Ice Works&quot;
+    ],
+    &quot;baseline&quot;: [
+      {
+        &quot;metric&quot;: &quot;gross_margin&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;expr_words&quot;: &quot;Sum of (sell price − unit cost), divided by sum of sell price&quot;,
+        &quot;value&quot;: 35.76142,
+        &quot;unit&quot;: &quot;%&quot;,
+        &quot;n_entities&quot;: 28,
+        &quot;status&quot;: &quot;approved&quot;
+      },
+      {
+        &quot;metric&quot;: &quot;avg_unit_cost&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;expr_words&quot;: &quot;Average unit cost&quot;,
+        &quot;value&quot;: 85.180357,
+        &quot;unit&quot;: &quot;AUD&quot;,
+        &quot;n_entities&quot;: 28,
+        &quot;status&quot;: &quot;approved&quot;
+      },
+      {
+        &quot;metric&quot;: &quot;total_stock_value_at_cost&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;expr_words&quot;: &quot;Sum of qty on hand × unit cost&quot;,
+        &quot;value&quot;: 27424.5,
+        &quot;unit&quot;: &quot;AUD&quot;,
+        &quot;n_entities&quot;: 28,
+        &quot;status&quot;: &quot;approved&quot;
+      }
+    ],
+    &quot;scenario&quot;: [
+      {
+        &quot;metric&quot;: &quot;gross_margin&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;expr_words&quot;: &quot;Sum of (sell price − unit cost), divided by sum of sell price&quot;,
+        &quot;value&quot;: 35.644796,
+        &quot;unit&quot;: &quot;%&quot;,
+        &quot;n_entities&quot;: 28,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;delta&quot;: -0.116624,
+        &quot;delta_pct&quot;: -0.33
+      },
+      {
+        &quot;metric&quot;: &quot;avg_unit_cost&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;expr_words&quot;: &quot;Average unit cost&quot;,
+        &quot;value&quot;: 85.335,
+        &quot;unit&quot;: &quot;AUD&quot;,
+        &quot;n_entities&quot;: 28,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;delta&quot;: 0.154643,
+        &quot;delta_pct&quot;: 0.18
+      },
+      {
+        &quot;metric&quot;: &quot;total_stock_value_at_cost&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;expr_words&quot;: &quot;Sum of qty on hand × unit cost&quot;,
+        &quot;value&quot;: 27639.875,
+        &quot;unit&quot;: &quot;AUD&quot;,
+        &quot;n_entities&quot;: 28,
+        &quot;status&quot;: &quot;approved&quot;,
+        &quot;delta&quot;: 215.375,
+        &quot;delta_pct&quot;: 0.79
+      }
+    ],
+    &quot;changed&quot;: [
+      {
+        &quot;entity_id&quot;: &quot;entity:1sfkjfqzvoe0itr0wygd&quot;,
+        &quot;name&quot;: &quot;Flake Ice 10kg&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;property&quot;: &quot;unit_cost&quot;,
+        &quot;before&quot;: 5.1,
+        &quot;after&quot;: 5.61,
+        &quot;unit&quot;: &quot;AUD&quot;
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:evv28m6h4tck901uzp6t&quot;,
+        &quot;name&quot;: &quot;Party Ice 5kg&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;property&quot;: &quot;unit_cost&quot;,
+        &quot;before&quot;: 3.8,
+        &quot;after&quot;: 4.18,
+        &quot;unit&quot;: &quot;AUD&quot;
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:hy2hjhlctg2q8baflnhs&quot;,
+        &quot;name&quot;: &quot;Gel Ice Pack 1kg&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;property&quot;: &quot;unit_cost&quot;,
+        &quot;before&quot;: 2.4,
+        &quot;after&quot;: 2.64,
+        &quot;unit&quot;: &quot;AUD&quot;
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:of21g5fl0c8h7p8pqd30&quot;,
+        &quot;name&quot;: &quot;Ice Brick 500g&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;property&quot;: &quot;unit_cost&quot;,
+        &quot;before&quot;: 1.8,
+        &quot;after&quot;: 1.98,
+        &quot;unit&quot;: &quot;AUD&quot;
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:olzecfi09wy9257qadsw&quot;,
+        &quot;name&quot;: &quot;Crushed Ice 5kg&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;property&quot;: &quot;unit_cost&quot;,
+        &quot;before&quot;: 3.2,
+        &quot;after&quot;: 3.52,
+        &quot;unit&quot;: &quot;AUD&quot;
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:scvuccjbx6vmw90ml8zr&quot;,
+        &quot;name&quot;: &quot;Insulated Seafood Carton&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;property&quot;: &quot;unit_cost&quot;,
+        &quot;before&quot;: 6.75,
+        &quot;after&quot;: 7.425,
+        &quot;unit&quot;: &quot;AUD&quot;
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:v1wgb5l21pseykea1qlx&quot;,
+        &quot;name&quot;: &quot;Block Ice 20kg&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;property&quot;: &quot;unit_cost&quot;,
+        &quot;before&quot;: 7.25,
+        &quot;after&quot;: 7.975,
+        &quot;unit&quot;: &quot;AUD&quot;
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:xqnkeai40qcw2o64mdr6&quot;,
+        &quot;name&quot;: &quot;Dry Ice 2kg&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;property&quot;: &quot;unit_cost&quot;,
+        &quot;before&quot;: 13.0,
+        &quot;after&quot;: 14.3,
+        &quot;unit&quot;: &quot;AUD&quot;
+      }
+    ],
+    &quot;n_changed&quot;: 8,
+    &quot;removed&quot;: [],
+    &quot;reached&quot;: [
+      {
+        &quot;entity_id&quot;: &quot;entity:bs8dwvtgywjeuj4lb9j6&quot;,
+        &quot;name&quot;: &quot;FFI-101&quot;,
+        &quot;kind&quot;: &quot;order&quot;,
+        &quot;depth&quot;: 1,
+        &quot;via&quot;: &quot;FFI-101 requires Block Ice 20kg&quot;,
+        &quot;from&quot;: &quot;entity:v1wgb5l21pseykea1qlx&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:nkm3h481z4klgf5a8mdt&quot;
+        ]
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:kl4ea8we5ugms10whjm8&quot;,
+        &quot;name&quot;: &quot;FFI-102&quot;,
+        &quot;kind&quot;: &quot;order&quot;,
+        &quot;depth&quot;: 1,
+        &quot;via&quot;: &quot;FFI-102 requires Flake Ice 10kg&quot;,
+        &quot;from&quot;: &quot;entity:1sfkjfqzvoe0itr0wygd&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:0etfspyi0chdzmpcuvrv&quot;
+        ]
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:ovl5njex4v2o2um1n9pj&quot;,
+        &quot;name&quot;: &quot;FFI-103&quot;,
+        &quot;kind&quot;: &quot;order&quot;,
+        &quot;depth&quot;: 1,
+        &quot;via&quot;: &quot;FFI-103 requires Party Ice 5kg&quot;,
+        &quot;from&quot;: &quot;entity:evv28m6h4tck901uzp6t&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:3owqlfdeikw2dxb8t2ij&quot;
+        ]
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:gsj8anu1g7y6hxd2vmh2&quot;,
+        &quot;name&quot;: &quot;FFI-104&quot;,
+        &quot;kind&quot;: &quot;order&quot;,
+        &quot;depth&quot;: 1,
+        &quot;via&quot;: &quot;FFI-104 requires Crushed Ice 5kg&quot;,
+        &quot;from&quot;: &quot;entity:olzecfi09wy9257qadsw&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:el7xw206be3rh8p3ndxt&quot;
+        ]
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:8rq9qkw3g7cl7rav96rb&quot;,
+        &quot;name&quot;: &quot;FFI-106&quot;,
+        &quot;kind&quot;: &quot;order&quot;,
+        &quot;depth&quot;: 1,
+        &quot;via&quot;: &quot;FFI-106 requires Gel Ice Pack 1kg&quot;,
+        &quot;from&quot;: &quot;entity:hy2hjhlctg2q8baflnhs&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:n6utd7ie81pej3cparc8&quot;
+        ]
+      },
+      {
+        &quot;entity_id&quot;: &quot;organisation:7uqu9jwq62muit42lorh&quot;,
+        &quot;name&quot;: &quot;Southern Ice Works&quot;,
+        &quot;kind&quot;: &quot;organisation&quot;,
+        &quot;depth&quot;: 1,
+        &quot;via&quot;: &quot;Flake Ice 10kg supplied by Southern Ice Works&quot;,
+        &quot;from&quot;: &quot;entity:1sfkjfqzvoe0itr0wygd&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:vibbxbaahltiv2gjvcwa&quot;
+        ]
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:gc3l2fncxr8vnto1spk9&quot;,
+        &quot;name&quot;: &quot;Bathers Beach Bistro&quot;,
+        &quot;kind&quot;: &quot;customer&quot;,
+        &quot;depth&quot;: 2,
+        &quot;via&quot;: &quot;Bathers Beach Bistro placed FFI-101&quot;,
+        &quot;from&quot;: &quot;entity:v1wgb5l21pseykea1qlx&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:nkm3h481z4klgf5a8mdt&quot;,
+          &quot;relates_to:o9argb942yw64ddsunvp&quot;
+        ]
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:3xmqlzc97hgyg9atd25d&quot;,
+        &quot;name&quot;: &quot;Brownlip Abalone 1kg&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;depth&quot;: 2,
+        &quot;via&quot;: &quot;FFI-106 requires Brownlip Abalone 1kg&quot;,
+        &quot;from&quot;: &quot;entity:hy2hjhlctg2q8baflnhs&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:n6utd7ie81pej3cparc8&quot;,
+          &quot;relates_to:3buxpjxbjg1xxr1a2pux&quot;
+        ]
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:bs3cbh9kzfcstrg0qjpe&quot;,
+        &quot;name&quot;: &quot;Cooked Prawns 2kg&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;depth&quot;: 2,
+        &quot;via&quot;: &quot;FFI-106 requires Cooked Prawns 2kg&quot;,
+        &quot;from&quot;: &quot;entity:hy2hjhlctg2q8baflnhs&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:n6utd7ie81pej3cparc8&quot;,
+          &quot;relates_to:6qi3u2qu3y77ezsg07yr&quot;
+        ]
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:qcbe9ysvbeep437q79bc&quot;,
+        &quot;name&quot;: &quot;Dhufish Whole 10kg&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;depth&quot;: 2,
+        &quot;via&quot;: &quot;FFI-101 requires Dhufish Whole 10kg&quot;,
+        &quot;from&quot;: &quot;entity:v1wgb5l21pseykea1qlx&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:nkm3h481z4klgf5a8mdt&quot;,
+          &quot;relates_to:4ugdgeeqkurkkvg7i6cw&quot;
+        ]
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:rcrjvcfua61c8sgp7cuz&quot;,
+        &quot;name&quot;: &quot;Greenlip Abalone 1kg&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;depth&quot;: 2,
+        &quot;via&quot;: &quot;FFI-103 requires Greenlip Abalone 1kg&quot;,
+        &quot;from&quot;: &quot;entity:evv28m6h4tck901uzp6t&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:3owqlfdeikw2dxb8t2ij&quot;,
+          &quot;relates_to:thaho4bsyow5megh9wfd&quot;
+        ]
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:3f5cm4iqh3oirr0hmryw&quot;,
+        &quot;name&quot;: &quot;Gummy Shark 5kg&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;depth&quot;: 2,
+        &quot;via&quot;: &quot;FFI-102 requires Gummy Shark 5kg&quot;,
+        &quot;from&quot;: &quot;entity:1sfkjfqzvoe0itr0wygd&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:0etfspyi0chdzmpcuvrv&quot;,
+          &quot;relates_to:8v2kqrtpa1e7r58tet0a&quot;
+        ]
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:m09ye57js78gw9bpezrx&quot;,
+        &quot;name&quot;: &quot;Harbour Lights Hotel Group&quot;,
+        &quot;kind&quot;: &quot;customer&quot;,
+        &quot;depth&quot;: 2,
+        &quot;via&quot;: &quot;Harbour Lights Hotel Group placed FFI-103&quot;,
+        &quot;from&quot;: &quot;entity:evv28m6h4tck901uzp6t&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:3owqlfdeikw2dxb8t2ij&quot;,
+          &quot;relates_to:orwyoe1j46m22oxbclmm&quot;
+        ]
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+        &quot;name&quot;: &quot;IN-42&quot;,
+        &quot;kind&quot;: &quot;inbound_load&quot;,
+        &quot;depth&quot;: 2,
+        &quot;via&quot;: &quot;IN-42 supplies FFI-102&quot;,
+        &quot;from&quot;: &quot;entity:1sfkjfqzvoe0itr0wygd&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:0etfspyi0chdzmpcuvrv&quot;,
+          &quot;relates_to:ak7xmnw62gry0pgfnioq&quot;
+        ]
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:48xpq68q4urz8ypimn5y&quot;,
+        &quot;name&quot;: &quot;King Prawns U10 5kg&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;depth&quot;: 2,
+        &quot;via&quot;: &quot;FFI-101 requires King Prawns U10 5kg&quot;,
+        &quot;from&quot;: &quot;entity:v1wgb5l21pseykea1qlx&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:nkm3h481z4klgf5a8mdt&quot;,
+          &quot;relates_to:0naftds3hpaerdvn01dm&quot;
+        ]
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:3sb2tcg3mvrd6kv51znr&quot;,
+        &quot;name&quot;: &quot;Portside Fish and Chips&quot;,
+        &quot;kind&quot;: &quot;customer&quot;,
+        &quot;depth&quot;: 2,
+        &quot;via&quot;: &quot;Portside Fish and Chips placed FFI-102&quot;,
+        &quot;from&quot;: &quot;entity:1sfkjfqzvoe0itr0wygd&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:0etfspyi0chdzmpcuvrv&quot;,
+          &quot;relates_to:mkxhmgpeylqhxmnqfgc6&quot;
+        ]
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:ugt6rofftccvjjuomjay&quot;,
+        &quot;name&quot;: &quot;Reefer 2&quot;,
+        &quot;kind&quot;: &quot;truck&quot;,
+        &quot;depth&quot;: 2,
+        &quot;via&quot;: &quot;Reefer 2 serves FFI-102&quot;,
+        &quot;from&quot;: &quot;entity:1sfkjfqzvoe0itr0wygd&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:0etfspyi0chdzmpcuvrv&quot;,
+          &quot;relates_to:4c7j9r6kqc2ugq35r2oh&quot;
+        ]
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:n8v4fraa6w49xnctd09p&quot;,
+        &quot;name&quot;: &quot;Saltwater Table Restaurant&quot;,
+        &quot;kind&quot;: &quot;customer&quot;,
+        &quot;depth&quot;: 2,
+        &quot;via&quot;: &quot;Saltwater Table Restaurant placed FFI-104&quot;,
+        &quot;from&quot;: &quot;entity:olzecfi09wy9257qadsw&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:el7xw206be3rh8p3ndxt&quot;,
+          &quot;relates_to:z1rrjcxw3989we7eh9iq&quot;
+        ]
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:b6ob6x2weevj5neiyhnv&quot;,
+        &quot;name&quot;: &quot;Snapper Fillets 5kg&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;depth&quot;: 2,
+        &quot;via&quot;: &quot;FFI-104 requires Snapper Fillets 5kg&quot;,
+        &quot;from&quot;: &quot;entity:olzecfi09wy9257qadsw&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:el7xw206be3rh8p3ndxt&quot;,
+          &quot;relates_to:ak9pu5dxu6fl8d1sx6vv&quot;
+        ]
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:sbtlnm1mp6dimx9zyqad&quot;,
+        &quot;name&quot;: &quot;Tiger Prawns 5kg&quot;,
+        &quot;kind&quot;: &quot;product&quot;,
+        &quot;depth&quot;: 2,
+        &quot;via&quot;: &quot;FFI-103 requires Tiger Prawns 5kg&quot;,
+        &quot;from&quot;: &quot;entity:evv28m6h4tck901uzp6t&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:3owqlfdeikw2dxb8t2ij&quot;,
+          &quot;relates_to:40tlqoee918enu6wjxiq&quot;
+        ]
+      },
+      {
+        &quot;entity_id&quot;: &quot;entity:ffuygjtryhu0940o77hd&quot;,
+        &quot;name&quot;: &quot;West End Oyster Bar&quot;,
+        &quot;kind&quot;: &quot;customer&quot;,
+        &quot;depth&quot;: 2,
+        &quot;via&quot;: &quot;West End Oyster Bar placed FFI-106&quot;,
+        &quot;from&quot;: &quot;entity:hy2hjhlctg2q8baflnhs&quot;,
+        &quot;path&quot;: [
+          &quot;relates_to:n6utd7ie81pej3cparc8&quot;,
+          &quot;relates_to:edeu55ddzga0uz6n0hke&quot;
+        ]
+      }
+    ],
+    &quot;reached_truncated&quot;: false,
+    &quot;warnings&quot;: [
+      &quot;gross margin: left out 2 entities missing a value one side needs, so both sides of the ratio use the same entities&quot;
+    ]
+  }
+}</pre></details></article><article><h3>mcp__eunomia-local__show_view</h3><pre>{
+  &quot;view&quot;: &quot;scenario&quot;,
+  &quot;headline&quot;: &quot;Southern Ice Works raises its costs 10%&quot;,
+  &quot;scenario&quot;: {
+    &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+    &quot;changes&quot;: [
+      {
+        &quot;scale&quot;: {
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;property&quot;: &quot;unit_cost&quot;,
+          &quot;factor&quot;: 1.1,
+          &quot;related_to&quot;: {
+            &quot;entity_id&quot;: &quot;organisation:7uqu9jwq62muit42lorh&quot;,
+            &quot;label&quot;: &quot;supplied_by&quot;
+          }
+        }
+      }
+    ],
+    &quot;metrics&quot;: [
+      &quot;gross_margin&quot;,
+      &quot;avg_unit_cost&quot;,
+      &quot;total_stock_value_at_cost&quot;
+    ]
+  }
+}</pre><details><summary>Full tool input and result</summary><pre>{
+  &quot;tool&quot;: &quot;mcp__eunomia-local__show_view&quot;,
+  &quot;arguments&quot;: {
+    &quot;view&quot;: &quot;scenario&quot;,
+    &quot;headline&quot;: &quot;Southern Ice Works raises its costs 10%&quot;,
+    &quot;scenario&quot;: {
+      &quot;vault_id&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+      &quot;changes&quot;: [
+        {
+          &quot;scale&quot;: {
+            &quot;kind&quot;: &quot;product&quot;,
+            &quot;property&quot;: &quot;unit_cost&quot;,
+            &quot;factor&quot;: 1.1,
+            &quot;related_to&quot;: {
+              &quot;entity_id&quot;: &quot;organisation:7uqu9jwq62muit42lorh&quot;,
+              &quot;label&quot;: &quot;supplied_by&quot;
+            }
+          }
+        }
+      ],
+      &quot;metrics&quot;: [
+        &quot;gross_margin&quot;,
+        &quot;avg_unit_cost&quot;,
+        &quot;total_stock_value_at_cost&quot;
+      ]
+    }
+  },
+  &quot;id&quot;: &quot;toolu_014C7AURCLJPhpSjTTBPByQE&quot;,
+  &quot;result&quot;: {
+    &quot;view&quot;: &quot;scenario&quot;,
+    &quot;headline&quot;: &quot;Southern Ice Works raises its costs 10%&quot;,
+    &quot;result&quot;: {
+      &quot;vault&quot;: &quot;vault:rf0gaym72n9pkdbsg4a1&quot;,
+      &quot;as_of&quot;: &quot;2026-11-08T19:30:51Z&quot;,
+      &quot;changes&quot;: [
+        &quot;Product unit cost up 10% on 8 products supplied by Southern Ice Works&quot;
+      ],
+      &quot;baseline&quot;: [
+        {
+          &quot;metric&quot;: &quot;gross_margin&quot;,
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;expr_words&quot;: &quot;Sum of (sell price − unit cost), divided by sum of sell price&quot;,
+          &quot;value&quot;: 35.76142,
+          &quot;unit&quot;: &quot;%&quot;,
+          &quot;n_entities&quot;: 28,
+          &quot;status&quot;: &quot;approved&quot;
+        },
+        {
+          &quot;metric&quot;: &quot;avg_unit_cost&quot;,
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;expr_words&quot;: &quot;Average unit cost&quot;,
+          &quot;value&quot;: 85.180357,
+          &quot;unit&quot;: &quot;AUD&quot;,
+          &quot;n_entities&quot;: 28,
+          &quot;status&quot;: &quot;approved&quot;
+        },
+        {
+          &quot;metric&quot;: &quot;total_stock_value_at_cost&quot;,
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;expr_words&quot;: &quot;Sum of qty on hand × unit cost&quot;,
+          &quot;value&quot;: 27424.5,
+          &quot;unit&quot;: &quot;AUD&quot;,
+          &quot;n_entities&quot;: 28,
+          &quot;status&quot;: &quot;approved&quot;
+        }
+      ],
+      &quot;scenario&quot;: [
+        {
+          &quot;metric&quot;: &quot;gross_margin&quot;,
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;expr_words&quot;: &quot;Sum of (sell price − unit cost), divided by sum of sell price&quot;,
+          &quot;value&quot;: 35.644796,
+          &quot;unit&quot;: &quot;%&quot;,
+          &quot;n_entities&quot;: 28,
+          &quot;status&quot;: &quot;approved&quot;,
+          &quot;delta&quot;: -0.116624,
+          &quot;delta_pct&quot;: -0.33
+        },
+        {
+          &quot;metric&quot;: &quot;avg_unit_cost&quot;,
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;expr_words&quot;: &quot;Average unit cost&quot;,
+          &quot;value&quot;: 85.335,
+          &quot;unit&quot;: &quot;AUD&quot;,
+          &quot;n_entities&quot;: 28,
+          &quot;status&quot;: &quot;approved&quot;,
+          &quot;delta&quot;: 0.154643,
+          &quot;delta_pct&quot;: 0.18
+        },
+        {
+          &quot;metric&quot;: &quot;total_stock_value_at_cost&quot;,
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;expr_words&quot;: &quot;Sum of qty on hand × unit cost&quot;,
+          &quot;value&quot;: 27639.875,
+          &quot;unit&quot;: &quot;AUD&quot;,
+          &quot;n_entities&quot;: 28,
+          &quot;status&quot;: &quot;approved&quot;,
+          &quot;delta&quot;: 215.375,
+          &quot;delta_pct&quot;: 0.79
+        }
+      ],
+      &quot;changed&quot;: [
+        {
+          &quot;entity_id&quot;: &quot;entity:1sfkjfqzvoe0itr0wygd&quot;,
+          &quot;name&quot;: &quot;Flake Ice 10kg&quot;,
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;property&quot;: &quot;unit_cost&quot;,
+          &quot;before&quot;: 5.1,
+          &quot;after&quot;: 5.61,
+          &quot;unit&quot;: &quot;AUD&quot;
+        },
+        {
+          &quot;entity_id&quot;: &quot;entity:evv28m6h4tck901uzp6t&quot;,
+          &quot;name&quot;: &quot;Party Ice 5kg&quot;,
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;property&quot;: &quot;unit_cost&quot;,
+          &quot;before&quot;: 3.8,
+          &quot;after&quot;: 4.18,
+          &quot;unit&quot;: &quot;AUD&quot;
+        },
+        {
+          &quot;entity_id&quot;: &quot;entity:hy2hjhlctg2q8baflnhs&quot;,
+          &quot;name&quot;: &quot;Gel Ice Pack 1kg&quot;,
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;property&quot;: &quot;unit_cost&quot;,
+          &quot;before&quot;: 2.4,
+          &quot;after&quot;: 2.64,
+          &quot;unit&quot;: &quot;AUD&quot;
+        },
+        {
+          &quot;entity_id&quot;: &quot;entity:of21g5fl0c8h7p8pqd30&quot;,
+          &quot;name&quot;: &quot;Ice Brick 500g&quot;,
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;property&quot;: &quot;unit_cost&quot;,
+          &quot;before&quot;: 1.8,
+          &quot;after&quot;: 1.98,
+          &quot;unit&quot;: &quot;AUD&quot;
+        },
+        {
+          &quot;entity_id&quot;: &quot;entity:olzecfi09wy9257qadsw&quot;,
+          &quot;name&quot;: &quot;Crushed Ice 5kg&quot;,
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;property&quot;: &quot;unit_cost&quot;,
+          &quot;before&quot;: 3.2,
+          &quot;after&quot;: 3.52,
+          &quot;unit&quot;: &quot;AUD&quot;
+        },
+        {
+          &quot;entity_id&quot;: &quot;entity:scvuccjbx6vmw90ml8zr&quot;,
+          &quot;name&quot;: &quot;Insulated Seafood Carton&quot;,
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;property&quot;: &quot;unit_cost&quot;,
+          &quot;before&quot;: 6.75,
+          &quot;after&quot;: 7.425,
+          &quot;unit&quot;: &quot;AUD&quot;
+        },
+        {
+          &quot;entity_id&quot;: &quot;entity:v1wgb5l21pseykea1qlx&quot;,
+          &quot;name&quot;: &quot;Block Ice 20kg&quot;,
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;property&quot;: &quot;unit_cost&quot;,
+          &quot;before&quot;: 7.25,
+          &quot;after&quot;: 7.975,
+          &quot;unit&quot;: &quot;AUD&quot;
+        },
+        {
+          &quot;entity_id&quot;: &quot;entity:xqnkeai40qcw2o64mdr6&quot;,
+          &quot;name&quot;: &quot;Dry Ice 2kg&quot;,
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;property&quot;: &quot;unit_cost&quot;,
+          &quot;before&quot;: 13,
+          &quot;after&quot;: 14.3,
+          &quot;unit&quot;: &quot;AUD&quot;
+        }
+      ],
+      &quot;n_changed&quot;: 8,
+      &quot;removed&quot;: [],
+      &quot;reached&quot;: [
+        {
+          &quot;entity_id&quot;: &quot;entity:bs8dwvtgywjeuj4lb9j6&quot;,
+          &quot;name&quot;: &quot;FFI-101&quot;,
+          &quot;kind&quot;: &quot;order&quot;,
+          &quot;depth&quot;: 1,
+          &quot;via&quot;: &quot;FFI-101 requires Block Ice 20kg&quot;,
+          &quot;from&quot;: &quot;entity:v1wgb5l21pseykea1qlx&quot;,
+          &quot;path&quot;: [
+            &quot;relates_to:nkm3h481z4klgf5a8mdt&quot;
+          ]
+        },
+        {
+          &quot;entity_id&quot;: &quot;entity:kl4ea8we5ugms10whjm8&quot;,
+          &quot;name&quot;: &quot;FFI-102&quot;,
+          &quot;kind&quot;: &quot;order&quot;,
+          &quot;depth&quot;: 1,
+          &quot;via&quot;: &quot;FFI-102 requires Flake Ice 10kg&quot;,
+          &quot;from&quot;: &quot;entity:1sfkjfqzvoe0itr0wygd&quot;,
+          &quot;path&quot;: [
+            &quot;relates_to:0etfspyi0chdzmpcuvrv&quot;
+          ]
+        },
+        {
+          &quot;entity_id&quot;: &quot;entity:ovl5njex4v2o2um1n9pj&quot;,
+          &quot;name&quot;: &quot;FFI-103&quot;,
+          &quot;kind&quot;: &quot;order&quot;,
+          &quot;depth&quot;: 1,
+          &quot;via&quot;: &quot;FFI-103 requires Party Ice 5kg&quot;,
+          &quot;from&quot;: &quot;entity:evv28m6h4tck901uzp6t&quot;,
+          &quot;path&quot;: [
+            &quot;relates_to:3owqlfdeikw2dxb8t2ij&quot;
+          ]
+        },
+        {
+          &quot;entity_id&quot;: &quot;entity:gsj8anu1g7y6hxd2vmh2&quot;,
+          &quot;name&quot;: &quot;FFI-104&quot;,
+          &quot;kind&quot;: &quot;order&quot;,
+          &quot;depth&quot;: 1,
+          &quot;via&quot;: &quot;FFI-104 requires Crushed Ice 5kg&quot;,
+          &quot;from&quot;: &quot;entity:olzecfi09wy9257qadsw&quot;,
+          &quot;path&quot;: [
+            &quot;relates_to:el7xw206be3rh8p3ndxt&quot;
+          ]
+        },
+        {
+          &quot;entity_id&quot;: &quot;entity:8rq9qkw3g7cl7rav96rb&quot;,
+          &quot;name&quot;: &quot;FFI-106&quot;,
+          &quot;kind&quot;: &quot;order&quot;,
+          &quot;depth&quot;: 1,
+          &quot;via&quot;: &quot;FFI-106 requires Gel Ice Pack 1kg&quot;,
+          &quot;from&quot;: &quot;entity:hy2hjhlctg2q8baflnhs&quot;,
+          &quot;path&quot;: [
+            &quot;relates_to:n6utd7ie81pej3cparc8&quot;
+          ]
+        },
+        {
+          &quot;entity_id&quot;: &quot;organisation:7uqu9jwq62muit42lorh&quot;,
+          &quot;name&quot;: &quot;Southern Ice Works&quot;,
+          &quot;kind&quot;: &quot;organisation&quot;,
+          &quot;depth&quot;: 1,
+          &quot;via&quot;: &quot;Flake Ice 10kg supplied by Southern Ice Works&quot;,
+          &quot;from&quot;: &quot;entity:1sfkjfqzvoe0itr0wygd&quot;,
+          &quot;path&quot;: [
+            &quot;relates_to:vibbxbaahltiv2gjvcwa&quot;
+          ]
+        },
+        {
+          &quot;entity_id&quot;: &quot;entity:gc3l2fncxr8vnto1spk9&quot;,
+          &quot;name&quot;: &quot;Bathers Beach Bistro&quot;,
+          &quot;kind&quot;: &quot;customer&quot;,
+          &quot;depth&quot;: 2,
+          &quot;via&quot;: &quot;Bathers Beach Bistro placed FFI-101&quot;,
+          &quot;from&quot;: &quot;entity:v1wgb5l21pseykea1qlx&quot;,
+          &quot;path&quot;: [
+            &quot;relates_to:nkm3h481z4klgf5a8mdt&quot;,
+            &quot;relates_to:o9argb942yw64ddsunvp&quot;
+          ]
+        },
+        {
+          &quot;entity_id&quot;: &quot;entity:3xmqlzc97hgyg9atd25d&quot;,
+          &quot;name&quot;: &quot;Brownlip Abalone 1kg&quot;,
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;depth&quot;: 2,
+          &quot;via&quot;: &quot;FFI-106 requires Brownlip Abalone 1kg&quot;,
+          &quot;from&quot;: &quot;entity:hy2hjhlctg2q8baflnhs&quot;,
+          &quot;path&quot;: [
+            &quot;relates_to:n6utd7ie81pej3cparc8&quot;,
+            &quot;relates_to:3buxpjxbjg1xxr1a2pux&quot;
+          ]
+        },
+        {
+          &quot;entity_id&quot;: &quot;entity:bs3cbh9kzfcstrg0qjpe&quot;,
+          &quot;name&quot;: &quot;Cooked Prawns 2kg&quot;,
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;depth&quot;: 2,
+          &quot;via&quot;: &quot;FFI-106 requires Cooked Prawns 2kg&quot;,
+          &quot;from&quot;: &quot;entity:hy2hjhlctg2q8baflnhs&quot;,
+          &quot;path&quot;: [
+            &quot;relates_to:n6utd7ie81pej3cparc8&quot;,
+            &quot;relates_to:6qi3u2qu3y77ezsg07yr&quot;
+          ]
+        },
+        {
+          &quot;entity_id&quot;: &quot;entity:qcbe9ysvbeep437q79bc&quot;,
+          &quot;name&quot;: &quot;Dhufish Whole 10kg&quot;,
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;depth&quot;: 2,
+          &quot;via&quot;: &quot;FFI-101 requires Dhufish Whole 10kg&quot;,
+          &quot;from&quot;: &quot;entity:v1wgb5l21pseykea1qlx&quot;,
+          &quot;path&quot;: [
+            &quot;relates_to:nkm3h481z4klgf5a8mdt&quot;,
+            &quot;relates_to:4ugdgeeqkurkkvg7i6cw&quot;
+          ]
+        },
+        {
+          &quot;entity_id&quot;: &quot;entity:rcrjvcfua61c8sgp7cuz&quot;,
+          &quot;name&quot;: &quot;Greenlip Abalone 1kg&quot;,
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;depth&quot;: 2,
+          &quot;via&quot;: &quot;FFI-103 requires Greenlip Abalone 1kg&quot;,
+          &quot;from&quot;: &quot;entity:evv28m6h4tck901uzp6t&quot;,
+          &quot;path&quot;: [
+            &quot;relates_to:3owqlfdeikw2dxb8t2ij&quot;,
+            &quot;relates_to:thaho4bsyow5megh9wfd&quot;
+          ]
+        },
+        {
+          &quot;entity_id&quot;: &quot;entity:3f5cm4iqh3oirr0hmryw&quot;,
+          &quot;name&quot;: &quot;Gummy Shark 5kg&quot;,
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;depth&quot;: 2,
+          &quot;via&quot;: &quot;FFI-102 requires Gummy Shark 5kg&quot;,
+          &quot;from&quot;: &quot;entity:1sfkjfqzvoe0itr0wygd&quot;,
+          &quot;path&quot;: [
+            &quot;relates_to:0etfspyi0chdzmpcuvrv&quot;,
+            &quot;relates_to:8v2kqrtpa1e7r58tet0a&quot;
+          ]
+        },
+        {
+          &quot;entity_id&quot;: &quot;entity:m09ye57js78gw9bpezrx&quot;,
+          &quot;name&quot;: &quot;Harbour Lights Hotel Group&quot;,
+          &quot;kind&quot;: &quot;customer&quot;,
+          &quot;depth&quot;: 2,
+          &quot;via&quot;: &quot;Harbour Lights Hotel Group placed FFI-103&quot;,
+          &quot;from&quot;: &quot;entity:evv28m6h4tck901uzp6t&quot;,
+          &quot;path&quot;: [
+            &quot;relates_to:3owqlfdeikw2dxb8t2ij&quot;,
+            &quot;relates_to:orwyoe1j46m22oxbclmm&quot;
+          ]
+        },
+        {
+          &quot;entity_id&quot;: &quot;entity:0alo8zj8lgw4phgycnmq&quot;,
+          &quot;name&quot;: &quot;IN-42&quot;,
+          &quot;kind&quot;: &quot;inbound_load&quot;,
+          &quot;depth&quot;: 2,
+          &quot;via&quot;: &quot;IN-42 supplies FFI-102&quot;,
+          &quot;from&quot;: &quot;entity:1sfkjfqzvoe0itr0wygd&quot;,
+          &quot;path&quot;: [
+            &quot;relates_to:0etfspyi0chdzmpcuvrv&quot;,
+            &quot;relates_to:ak7xmnw62gry0pgfnioq&quot;
+          ]
+        },
+        {
+          &quot;entity_id&quot;: &quot;entity:48xpq68q4urz8ypimn5y&quot;,
+          &quot;name&quot;: &quot;King Prawns U10 5kg&quot;,
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;depth&quot;: 2,
+          &quot;via&quot;: &quot;FFI-101 requires King Prawns U10 5kg&quot;,
+          &quot;from&quot;: &quot;entity:v1wgb5l21pseykea1qlx&quot;,
+          &quot;path&quot;: [
+            &quot;relates_to:nkm3h481z4klgf5a8mdt&quot;,
+            &quot;relates_to:0naftds3hpaerdvn01dm&quot;
+          ]
+        },
+        {
+          &quot;entity_id&quot;: &quot;entity:3sb2tcg3mvrd6kv51znr&quot;,
+          &quot;name&quot;: &quot;Portside Fish and Chips&quot;,
+          &quot;kind&quot;: &quot;customer&quot;,
+          &quot;depth&quot;: 2,
+          &quot;via&quot;: &quot;Portside Fish and Chips placed FFI-102&quot;,
+          &quot;from&quot;: &quot;entity:1sfkjfqzvoe0itr0wygd&quot;,
+          &quot;path&quot;: [
+            &quot;relates_to:0etfspyi0chdzmpcuvrv&quot;,
+            &quot;relates_to:mkxhmgpeylqhxmnqfgc6&quot;
+          ]
+        },
+        {
+          &quot;entity_id&quot;: &quot;entity:ugt6rofftccvjjuomjay&quot;,
+          &quot;name&quot;: &quot;Reefer 2&quot;,
+          &quot;kind&quot;: &quot;truck&quot;,
+          &quot;depth&quot;: 2,
+          &quot;via&quot;: &quot;Reefer 2 serves FFI-102&quot;,
+          &quot;from&quot;: &quot;entity:1sfkjfqzvoe0itr0wygd&quot;,
+          &quot;path&quot;: [
+            &quot;relates_to:0etfspyi0chdzmpcuvrv&quot;,
+            &quot;relates_to:4c7j9r6kqc2ugq35r2oh&quot;
+          ]
+        },
+        {
+          &quot;entity_id&quot;: &quot;entity:n8v4fraa6w49xnctd09p&quot;,
+          &quot;name&quot;: &quot;Saltwater Table Restaurant&quot;,
+          &quot;kind&quot;: &quot;customer&quot;,
+          &quot;depth&quot;: 2,
+          &quot;via&quot;: &quot;Saltwater Table Restaurant placed FFI-104&quot;,
+          &quot;from&quot;: &quot;entity:olzecfi09wy9257qadsw&quot;,
+          &quot;path&quot;: [
+            &quot;relates_to:el7xw206be3rh8p3ndxt&quot;,
+            &quot;relates_to:z1rrjcxw3989we7eh9iq&quot;
+          ]
+        },
+        {
+          &quot;entity_id&quot;: &quot;entity:b6ob6x2weevj5neiyhnv&quot;,
+          &quot;name&quot;: &quot;Snapper Fillets 5kg&quot;,
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;depth&quot;: 2,
+          &quot;via&quot;: &quot;FFI-104 requires Snapper Fillets 5kg&quot;,
+          &quot;from&quot;: &quot;entity:olzecfi09wy9257qadsw&quot;,
+          &quot;path&quot;: [
+            &quot;relates_to:el7xw206be3rh8p3ndxt&quot;,
+            &quot;relates_to:ak9pu5dxu6fl8d1sx6vv&quot;
+          ]
+        },
+        {
+          &quot;entity_id&quot;: &quot;entity:sbtlnm1mp6dimx9zyqad&quot;,
+          &quot;name&quot;: &quot;Tiger Prawns 5kg&quot;,
+          &quot;kind&quot;: &quot;product&quot;,
+          &quot;depth&quot;: 2,
+          &quot;via&quot;: &quot;FFI-103 requires Tiger Prawns 5kg&quot;,
+          &quot;from&quot;: &quot;entity:evv28m6h4tck901uzp6t&quot;,
+          &quot;path&quot;: [
+            &quot;relates_to:3owqlfdeikw2dxb8t2ij&quot;,
+            &quot;relates_to:40tlqoee918enu6wjxiq&quot;
+          ]
+        },
+        {
+          &quot;entity_id&quot;: &quot;entity:ffuygjtryhu0940o77hd&quot;,
+          &quot;name&quot;: &quot;West End Oyster Bar&quot;,
+          &quot;kind&quot;: &quot;customer&quot;,
+          &quot;depth&quot;: 2,
+          &quot;via&quot;: &quot;West End Oyster Bar placed FFI-106&quot;,
+          &quot;from&quot;: &quot;entity:hy2hjhlctg2q8baflnhs&quot;,
+          &quot;path&quot;: [
+            &quot;relates_to:n6utd7ie81pej3cparc8&quot;,
+            &quot;relates_to:edeu55ddzga0uz6n0hke&quot;
+          ]
+        }
+      ],
+      &quot;reached_truncated&quot;: false,
+      &quot;warnings&quot;: [
+        &quot;gross margin: left out 2 entities missing a value one side needs, so both sides of the ratio use the same entities&quot;
+      ]
+    },
+    &quot;text&quot;: &quot;Southern Ice Works raises its costs 10%\nWhat if: Product unit cost up 10% on 8 products supplied by Southern Ice Works.\n- gross margin: 35.76% → 35.64%, down 0.12 points (exact: -0.116624 points)\n- avg unit cost: 85.180 → 85.335 AUD, up 0.155 AUD (0.2%) (exact: 0.154643 AUD)\n- total stock value at cost: 27424.50 → 27639.88 AUD, up 215.38 AUD (0.8%) (exact: 215.375 AUD)\nChanged: Flake Ice 10kg unit cost 5.10 AUD → 5.61 AUD; Party Ice 5kg unit cost 3.80 AUD → 4.18 AUD; Gel Ice Pack 1kg unit cost 2.40 AUD → 2.64 AUD; Ice Brick 500g unit cost 1.80 AUD → 1.98 AUD; Crushed Ice 5kg unit cost 3.20 AUD → 3.52 AUD; Insulated Seafood Carton unit cost 6.75 AUD → 7.43 AUD; Block Ice 20kg unit cost 7.25 AUD → 7.98 AUD; Dry Ice 2kg unit cost 13.00 AUD → 14.30 AUD.\nLinked within 2 steps (not all are affected): FFI-101 (order, via FFI-101 requires Block Ice 20kg); FFI-102 (order, via FFI-102 requires Flake Ice 10kg); FFI-103 (order, via FFI-103 requires Party Ice 5kg); FFI-104 (order, via FFI-104 requires Crushed Ice 5kg); FFI-106 (order, via FFI-106 requires Gel Ice Pack 1kg); Southern Ice Works (organisation, via Flake Ice 10kg supplied by Southern Ice Works); Bathers Beach Bistro (customer, via Bathers Beach Bistro placed FFI-101); Brownlip Abalone 1kg (product, via FFI-106 requires Brownlip Abalone 1kg); Cooked Prawns 2kg (product, via FFI-106 requires Cooked Prawns 2kg); Dhufish Whole 10kg (product, via FFI-101 requires Dhufish Whole 10kg); Greenlip Abalone 1kg (product, via FFI-103 requires Greenlip Abalone 1kg); Gummy Shark 5kg (product, via FFI-102 requires Gummy Shark 5kg); Harbour Lights Hotel Group (customer, via Harbour Lights Hotel Group placed FFI-103); IN-42 (inbound load, via IN-42 supplies FFI-102); King Prawns U10 5kg (product, via FFI-101 requires King Prawns U10 5kg); Portside Fish and Chips (customer, via Portside Fish and Chips placed FFI-102); Reefer 2 (truck, via Reefer 2 serves FFI-102); Saltwater Table Restaurant (customer, via Saltwater Table Restaurant placed FFI-104); Snapper Fillets 5kg (product, via FFI-104 requires Snapper Fillets 5kg); Tiger Prawns 5kg (product, via FFI-103 requires Tiger Prawns 5kg); West End Oyster Bar (customer, via West End Oyster Bar placed FFI-106).\nNote: gross margin: left out 2 entities missing a value one side needs, so both sides of the ratio use the same entities\nNothing was saved: this is a what-if.&quot;
+  }
+}</pre></details></article>

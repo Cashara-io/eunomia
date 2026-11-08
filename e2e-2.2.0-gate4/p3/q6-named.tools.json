@@ -1,0 +1,101 @@
+[
+  {
+    "tool": "mcp__eunomia-local__vault_list",
+    "arguments": {},
+    "id": "toolu_016ehsNkxjcFU2ErW2gEjKWZ",
+    "result": {
+      "results": [
+        {
+          "is_default": true,
+          "id": "vault:pe3e12a6efbc4cccf104",
+          "name": "Personal",
+          "kind": "personal",
+          "created_at": "2026-11-08T19:25:46.946952847Z",
+          "role": "owner"
+        },
+        {
+          "is_default": false,
+          "id": "vault:1eavkczl9x5mewq2zj5h",
+          "name": "Freo Rowing Club",
+          "kind": "org",
+          "created_at": "2026-11-08T19:25:47.008151972Z",
+          "role": "owner"
+        },
+        {
+          "is_default": false,
+          "id": "vault:rf0gaym72n9pkdbsg4a1",
+          "name": "Fremantle Fish & Ice Co",
+          "kind": "org",
+          "created_at": "2026-11-08T19:25:51.070708751Z",
+          "role": "owner"
+        }
+      ]
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__memory_write",
+    "arguments": {
+      "subject_name": "Fremantle Fish & Ice Co",
+      "subject_kind": "organisation",
+      "text": "Fremantle Fish & Ice Co now sells live crayfish.",
+      "type": "world",
+      "vault_id": "vault:rf0gaym72n9pkdbsg4a1"
+    },
+    "id": "toolu_01Jn3jH3fpmGQ9Z2X2vwarb9",
+    "result": {
+      "entity": {
+        "id": "organisation:nr42lg236k4p3w899wov",
+        "kind": "organisation",
+        "name": "Fremantle Fish & Ice Co",
+        "aliases": [],
+        "summary": "",
+        "vault": "vault:rf0gaym72n9pkdbsg4a1"
+      },
+      "memory": {
+        "id": "memory:rmfdjljh39si0t7yg9gf",
+        "owner": "user:b558qrfkf1zsce3nwg9a",
+        "vault": "vault:rf0gaym72n9pkdbsg4a1",
+        "subject": "organisation:nr42lg236k4p3w899wov",
+        "text": "Fremantle Fish & Ice Co now sells live crayfish.",
+        "source": null,
+        "created_at": "2026-11-08T19:31:18.757356500Z",
+        "type": "world",
+        "proof_count": 1,
+        "status": null,
+        "source_memories": null,
+        "updated_at": "2026-11-08T19:31:18.757381167Z",
+        "version": 1,
+        "owner_email": null
+      },
+      "possible_duplicates": [
+        {
+          "id": "organisation:7uqu9jwq62muit42lorh",
+          "kind": "organisation",
+          "name": "Southern Ice Works",
+          "aliases": [
+            "southern ice works"
+          ],
+          "summary": "",
+          "vault": "vault:rf0gaym72n9pkdbsg4a1"
+        }
+      ],
+      "vault_name": "Fremantle Fish & Ice Co"
+    }
+  },
+  {
+    "tool": "mcp__eunomia-local__memory_write",
+    "arguments": {
+      "subject_name": "Live crayfish",
+      "subject_kind": "live_seafood",
+      "text": "Fremantle Fish & Ice Co now sells live crayfish.",
+      "type": "world",
+      "vault_id": "vault:rf0gaym72n9pkdbsg4a1"
+    },
+    "id": "toolu_01GzW3X5gjvmqdBkVqfmGCwH",
+    "result": {
+      "error": "this vault takes only approved kinds and links, and the kind \"live_seafood\" is not approved: write under a built-in kind (person, organisation, location, repository, file, symbol) or an approved kind (customer, decision, equipment, inbound_load, order, organisation, person, product, project, truck). It was filed as a proposal for a vault owner to review.",
+      "code": "ontology.rejected",
+      "trace_id": "882e51e189504b9387937348cb0cf869"
+    }
+  }
+]

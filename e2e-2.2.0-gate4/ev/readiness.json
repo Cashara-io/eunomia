@@ -1,0 +1,30 @@
+{
+  "vault": "vault:rf0gaym72n9pkdbsg4a1",
+  "strict": true,
+  "kinds": {
+    "approved": 10,
+    "proposed": 0,
+    "rejected": 0,
+    "observed": 0
+  },
+  "properties": {
+    "approved": 8,
+    "proposed": 0,
+    "rejected": 0,
+    "observed": 0
+  },
+  "metrics": {
+    "approved": 6,
+    "proposed": 0,
+    "rejected": 1,
+    "observed": 0
+  },
+  "links": {
+    "approved": 11,
+    "proposed": 0,
+    "rejected": 1,
+    "observed": 0
+  },
+  "ready": true,
+  "blockers": []
+}

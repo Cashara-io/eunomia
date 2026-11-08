@@ -1,0 +1,46 @@
+Everything is done, and nothing is approved. The owner now has to approve the proposals before the CSV rows can be imported.
+
+**What I built** in the new space "Fremantle Fish & Ice Co":
+- **Notes as memories, written first:**
+  - 6 customers
+  - 6 orders (FFI-101 to FFI-106)
+  - 15 products named in the orders
+  - Reefer 2 (a truck)
+  - IN-42 (the inbound load)
+  - Amelia Russo (owner and dispatch lead)
+  - The delivery minimum decision
+  - The Office Label Printer
+- **Suppliers:** Shark Bay Prawns, Southern Ice Works and Esperance Abalone. I also added Abrolhos Fishers Co-op, which is only in the CSV, not the notes.
+- **Rumour:** The Shark Bay Prawns price rise is saved as "UNCONFIRMED RUMOUR". The $250 delivery minimum from 1 December 2026 is saved as a decision.
+- **Links:**
+  - Customers to their orders (6).
+  - Orders to the products they need (15).
+  - Reefer 2 carries IN-42.
+  - Reefer 2 serves FFI-101 to FFI-104.
+  - IN-42 supplies those same four orders.
+  - IN-42 contains their 4 products.
+  - Amelia leads dispatch for IN-42.
+  - The decision is approved by Amelia.
+  - Esperance Abalone supplies Greenlip Abalone 1kg and has a consignment on order for Harbour Lights Hotel Group.
+- **Printer:** I left it unlinked on purpose.
+- **Uploads, done after the notes:** `ops-notes.md` and `catalogue.csv`. The CSV is auto-mapped.
+
+**Proposed, waiting for the owner:**
+- **Kinds:** product, customer, order, truck, inbound load, decision and equipment.
+- **Properties on product:** sell price, unit cost, qty on hand, reorder at, status and last landed. I also added an order due date and a load expected date.
+- **Link types:** 11, including product `supplied_by` supplier.
+- **Metrics:**
+  - average sell price
+  - total stock value at cost
+  - gross margin
+  - average unit cost
+  - available product count
+  - product count
+
+**Things to know:**
+- **Duplicate metric:** Auto-map also proposed `inventory_cost_value`, which does the same sum as my `total_stock_value_at_cost`. The owner should keep one.
+- **Backwards link:** Auto-map's supplier link reads "product supplies organisation", which is backwards. My `supplied_by` fixes it, so the owner should reject the auto-mapped one.
+- **Missing costs:** Octopus 5kg and Prawn Skewers 20pk have no unit cost. Their costs will be missing from the stock value and margin numbers.
+- **My slip:** I typed the wrong id on 4 links, and the server refused them. I fixed them and all four are in.
+
+**Next step:** After the owner approves the product kind and its properties, run the CSV row import. I did not run it.
