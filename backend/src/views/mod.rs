@@ -380,8 +380,8 @@ pub fn is_percent(unit: Option<&str>) -> bool {
 
 fn rounded_units(value: f64, places: usize) -> f64 {
     let scaled = value.abs() * 10_f64.powi(places as i32);
-    // Absorb the multiplication's binary error at a decimal half, such as 1.005 * 100.
-    (scaled + f64::EPSILON * scaled).round().copysign(value)
+    // Absorb binary error at a decimal half without moving large whole amounts.
+    (scaled + (f64::EPSILON * scaled).min(0.25)).round().copysign(value)
 }
 
 fn fixed(value: f64, places: usize) -> String {
@@ -598,7 +598,7 @@ mod tests {
 
     #[test]
     fn money_rounds_half_away_from_zero() {
-        for (value, expected) in [(68606.625, "68606.63 AUD"), (-68606.625, "-68606.63 AUD"), (1.005, "1.01 AUD"), (-1.005, "-1.01 AUD")] {
+        for (value, expected) in [(68606.625, "68606.63 AUD"), (-68606.625, "-68606.63 AUD"), (1.005, "1.01 AUD"), (-1.005, "-1.01 AUD"), (1e15, "1000000000000000.00 AUD")] {
             assert_eq!(number(value, Some("AUD")), expected);
         }
         assert_ne!(number(0.004, Some("AUD")), "0.00 AUD");

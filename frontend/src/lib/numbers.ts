@@ -4,8 +4,8 @@ const isMoney = (unit: string | null | undefined) => !!unit && /^[A-Z]{3}$/.test
 
 function roundedUnits(value: number, places: number): number {
   const scaled = Math.abs(value) * 10 ** places;
-  // Absorb the multiplication's binary error at a decimal half, such as 1.005 * 100.
-  return Math.sign(value) * Math.round(scaled + Number.EPSILON * scaled);
+  // Absorb binary error at a decimal half without moving large whole amounts.
+  return Math.sign(value) * Math.round(scaled + Math.min(Number.EPSILON * scaled, 0.25));
 }
 
 function fixed(value: number, places: number): string {

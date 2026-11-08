@@ -18,7 +18,7 @@ test("scenario precision preserves raw moves and endpoint arithmetic", () => {
 });
 
 test("money rounds half away from zero", () => {
-  for (const [value, expected] of [[68606.625, "68606.63"], [-68606.625, "-68606.63"], [1.005, "1.01"], [-1.005, "-1.01"]] as const) {
+  for (const [value, expected] of [[68606.625, "68606.63"], [-68606.625, "-68606.63"], [1.005, "1.01"], [-1.005, "-1.01"], [1e15, "1000000000000000.00"]] as const) {
     expect(formatNumber(value, "AUD")).toBe(expected);
   }
 });
