@@ -15279,6 +15279,7 @@
       "VaultWithRole": {
         "type": "object",
         "required": [
+          "is_default",
           "id",
           "name",
           "kind",
@@ -15293,6 +15294,9 @@
           },
           "id": {
             "type": "string"
+          },
+          "is_default": {
+            "type": "boolean"
           },
           "kind": {
             "type": "string"

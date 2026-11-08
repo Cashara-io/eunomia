@@ -39,8 +39,8 @@ pub async fn entities_search(
 /// The built-in kinds and the custom kinds in the caller's personal vault plus every org vault they
 /// belong to (or `vault_ids`), the same read scope as [`entities_search`].
 pub async fn entity_types(db: &OrgDb, owner: &RecordId, vault_ids: &[RecordId]) -> AppResult<service::EntityTypesOut> {
-    let vaults = crate::vaults::service::read_scope(db, owner, vault_ids).await?.vaults;
-    service::entity_types(db, &vaults).await
+    let scope = crate::vaults::service::read_scope(db, owner, vault_ids).await?;
+    service::entity_types(db, &scope.vaults, &scope.names).await
 }
 
 pub async fn entities_get(db: &OrgDb, control: &ControlDb, owner: &RecordId, id: &RecordId) -> AppResult<Option<service::EntityDetail>> {

@@ -66,6 +66,7 @@ pub struct VaultOut {
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct VaultWithRole {
+    pub is_default: bool,
     pub id: String,
     pub name: String,
     pub kind: String,
@@ -140,13 +141,16 @@ struct CountRow {
     count: i64,
 }
 
-/// Called once, at registration. Every user has exactly one `kind="personal"`
-/// vault -- it's never shared by anyone else joining it as an owner-less
-/// member, only ever by the user inviting others into it.
+/// The id signup uses, also preferred when several owned Personal vaults qualify as the default.
+pub(crate) fn personal_vault_record_id(user_id: &RecordId) -> RecordId {
+    RecordId::from_table_key("vault", crate::tx::stable_key('p', &user_id.to_string()))
+}
+
+/// Called once, at registration. Creates the user's own Personal vault and owner membership.
 pub async fn create_personal_vault(db: &OrgDb, user_id: &RecordId) -> AppResult<RecordId> {
     // Deterministic id: a second personal vault for the same user collides on
     // the key, so "one personal vault per user" holds even under a race.
-    let vault_id = RecordId::from_table_key("vault", crate::tx::stable_key('p', &user_id.to_string()));
+    let vault_id = personal_vault_record_id(user_id);
     with_retry_dup(|| async {
         store::vaults::CREATE_PERSONAL.on(db)
         .bind(("vault", vault_id.clone()))
@@ -277,16 +281,9 @@ pub async fn default_vault_id(db: &OrgDb, user_id: &RecordId) -> AppResult<Recor
 /// The user's own personal vault, whatever the credential is restricted to. The
 /// only vault that also draws on the user's synced source records.
 pub async fn personal_vault_id(db: &OrgDb, user_id: &RecordId) -> AppResult<RecordId> {
-    #[derive(Deserialize, SurrealValue)]
-    struct Row {
-        vault: RecordId,
-    }
-    let mut res = store::vaults::DEFAULT_ID.on(db)
-        .bind(("user", user_id.clone()))
-        .await?;
-    let rows: Vec<Row> = res.take(0)?;
-    rows.into_iter().next().map(|r| r.vault).ok_or_else(|| {
-        AppError::internal(format!("user {} has no personal vault -- registration should have created one", user_id.to_string()))
+    let rows = memberships(db, user_id).await?;
+    default_personal_vault_id(user_id, &rows).ok_or_else(|| {
+        AppError::bad_request("You have no active owned Personal vault. Pass vault_id to choose a space.")
     })
 }
 
@@ -297,29 +294,46 @@ pub async fn personal_vault_id(db: &OrgDb, user_id: &RecordId) -> AppResult<Reco
 /// vault. The same checks `authz::authorize` makes for `ReadMemories`, without a query per vault.
 pub struct ReadScope {
     pub vaults: Vec<RecordId>,
-    /// The user's own personal vault (whatever the credential is restricted to).
-    pub personal: RecordId,
+    /// The user's default owned Personal vault, if one exists.
+    pub personal: Option<RecordId>,
     /// Vault id -> name, for the vaults the credential may see.
     pub names: HashMap<String, String>,
 }
 
+/// One vault the user is an active member of.
+#[derive(Debug, Clone, Deserialize, SurrealValue)]
+pub struct Membership {
+    pub vault: RecordId,
+    pub role: String,
+    pub vault_created_at: Option<Datetime>,
+    #[serde(default)]
+    #[surreal(default)]
+    pub kind: Option<String>,
+    #[serde(default)]
+    #[surreal(default)]
+    pub name: Option<String>,
+}
+
+/// Ownership works for legacy IDs and follows transfers. Prefer signup's id, then vault creation
+/// time (missing dates last), then id to keep equal-age vaults deterministic.
+fn default_personal_vault_id(user_id: &RecordId, rows: &[Membership]) -> Option<RecordId> {
+    let signup = personal_vault_record_id(user_id);
+    rows.iter()
+        .filter(|r| r.role == "owner" && r.kind.as_deref() == Some("personal"))
+        .min_by_key(|r| (r.vault != signup, r.vault_created_at.is_none(), r.vault_created_at, r.vault.to_string()))
+        .map(|r| r.vault.clone())
+}
+
+/// Every vault `user_id` is an active member of, oldest membership first, whatever the credential is
+/// restricted to. One query.
+pub async fn memberships(db: &OrgDb, user_id: &RecordId) -> AppResult<Vec<Membership>> {
+    Ok(store::vaults::MY_MEMBERSHIPS.on(db).bind(("user", user_id.clone())).await?.take(0)?)
+}
+
 pub async fn read_scope(db: &OrgDb, user_id: &RecordId, vault_ids: &[RecordId]) -> AppResult<ReadScope> {
     authz::require_scope(Action::ReadMemories.scope())?;
-    #[derive(Deserialize, SurrealValue)]
-    struct Row {
-        vault: RecordId,
-        #[serde(default)]
-        #[surreal(default)]
-        kind: Option<String>,
-        #[serde(default)]
-        #[surreal(default)]
-        name: Option<String>,
-    }
-    let mut res = store::vaults::MY_MEMBERSHIPS.on(db).bind(("user", user_id.clone())).await?;
-    let rows: Vec<Row> = res.take(0)?;
-    let personal = rows.iter().find(|r| r.kind.as_deref() == Some("personal")).map(|r| r.vault.clone()).ok_or_else(|| {
-        AppError::internal(format!("user {} has no personal vault -- registration should have created one", user_id.to_string()))
-    })?;
+    let rows = memberships(db, user_id).await?;
+    let personal = default_personal_vault_id(user_id, &rows);
     let only = authz::restricted_vault()?;
     let member = |v: &RecordId| {
         if rows.iter().any(|r| &r.vault == v) {
@@ -344,7 +358,7 @@ pub async fn read_scope(db: &OrgDb, user_id: &RecordId, vault_ids: &[RecordId]) 
             member(o)?;
             vec![o.clone()]
         }
-        ([], None) => std::iter::once(personal.clone())
+        ([], None) => personal.iter().cloned()
             .chain(rows.iter().filter(|r| r.kind.as_deref() == Some("org")).map(|r| r.vault.clone()))
             .collect(),
     };
@@ -357,22 +371,19 @@ pub async fn read_scope(db: &OrgDb, user_id: &RecordId, vault_ids: &[RecordId]) 
 }
 
 pub async fn list_my_vaults(db: &OrgDb, user_id: &RecordId) -> AppResult<Vec<VaultWithRole>> {
-    #[derive(Deserialize, SurrealValue)]
-    struct Row {
-        vault: VaultFullRow,
-        role: String,
-    }
-    let mut res = store::vaults::LIST_MINE.on(db)
-        .bind(("user", user_id.clone()))
-        .await?;
-    let rows: Vec<Row> = res.take(0)?;
+    let rows = memberships(db, user_id).await?;
+    let personal = default_personal_vault_id(user_id, &rows);
     let only = authz::restricted_vault()?;
     Ok(rows
         .into_iter()
-        .filter(|r| only.as_ref().is_none_or(|o| o == &r.vault.id))
-        .map(|r| {
-            let v: VaultOut = r.vault.into();
-            VaultWithRole { id: v.id, name: v.name, kind: v.kind, created_at: v.created_at, role: r.role }
+        .filter(|r| only.as_ref().is_none_or(|o| o == &r.vault))
+        .map(|r| VaultWithRole {
+            is_default: personal.as_ref() == Some(&r.vault),
+            id: r.vault.to_string(),
+            name: r.name.unwrap_or_default(),
+            kind: r.kind.unwrap_or_else(default_kind),
+            created_at: r.vault_created_at,
+            role: r.role,
         })
         .collect())
 }
@@ -758,7 +769,8 @@ async fn accept_invitation_inner(db: &OrgDb, user_id: &RecordId, vault_id: &Reco
     let vault = rows.into_iter().next().ok_or_else(|| AppError::bad_request("no pending invitation for this vault"))?;
     crate::changes::announce(db, vault_id, crate::changes::VAULT_INVITATION_ACCEPTED, &[]).await;
     let v: VaultOut = vault.into();
-    Ok(VaultWithRole { id: v.id, name: v.name, kind: v.kind, created_at: v.created_at, role: m.role })
+    let personal = default_personal_vault_id(user_id, &memberships(db, user_id).await?);
+    Ok(VaultWithRole { is_default: personal.as_ref() == Some(vault_id), id: v.id, name: v.name, kind: v.kind, created_at: v.created_at, role: m.role })
 }
 
 /// Decline (delete) a pending invitation into `vault_id`.

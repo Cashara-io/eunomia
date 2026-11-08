@@ -2850,6 +2850,7 @@ export type VaultRename = {
 export type VaultWithRole = {
     created_at?: string | null;
     id: string;
+    is_default: boolean;
     kind: string;
     name: string;
     role: string;

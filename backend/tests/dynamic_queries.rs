@@ -172,6 +172,22 @@ async fn entities_and_vaults(app: &TestApp) -> Value {
     assert!(recalled.get("error").is_none(), "{recalled}");
     let found = app.tool("entities_search", json!({"query": "Thing person"})).await;
     let person = found["results"][0]["id"].as_str().expect("entity id").to_string();
+    let db = app.db().await;
+    let vault = eunomia_backend::rid::parse(found["results"][0]["vault"].as_str().unwrap()).unwrap();
+    let named: Vec<Value> = eunomia_backend::store::entities::names_by_prefix(&db)
+        .bind(("vaults", vec![vault.clone()])).bind(("key", "thing"))
+        .bind(("lower", "thing ")).bind(("upper", "thing!"))
+        .await.unwrap().take(0).unwrap();
+    assert_eq!(named.len(), 7, "{named:?}");
+    for table in eunomia_backend::entities::service::ENTITY_TABLES {
+        for prefix in [false, true] {
+            eunomia_backend::store::entities::explain_name_lookup(&db, table, prefix)
+                .bind(("vault", vault.clone())).bind(("key", "thing"))
+                .bind(("lower", "thing ")).bind(("upper", "thing!"))
+                .await.unwrap().check().unwrap();
+        }
+    }
+
     let other = app.tool("entities_search", json!({"query": "Thing organisation"})).await["results"][0]["id"].as_str().unwrap().to_string();
     let custom = app.tool("entities_search", json!({"query": "Thing", "kind": "db"})).await;
     assert_eq!(custom["results"].as_array().map(Vec::len), Some(1), "{custom}");

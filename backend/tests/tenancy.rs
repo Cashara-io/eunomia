@@ -209,6 +209,30 @@ async fn the_move_carries_a_2x_export_into_one_org_and_is_a_noop_the_second_time
     assert_eq!(count(db.test_raw(), "memory").await, 3);
 }
 
+#[tokio::test]
+async fn a_moved_legacy_personal_vault_remains_the_default_for_writes_and_reads() {
+    let (state, _old) = state_with_legacy().await;
+    run_move(&state).await;
+    let owner = eunomia_backend::rid::parse("user:u").unwrap();
+    let user = eunomia_backend::models_user::load_user(&state.control, owner, "a@b.c".into()).await.unwrap();
+    let call = |name: &'static str, args: Value| {
+        let (state, user) = (&state, &user);
+        async move { common::sys(eunomia_backend::tools::registry::call(state, user, name, args)).await.unwrap() }
+    };
+    let write = call("memory_write", json!({
+        "subject_name": "Legacy Default Probe", "subject_kind": "person", "text": "Legacy Default Probe likes mango"
+    })).await;
+    assert_eq!(write["memory"]["vault"], "vault:v", "{write}");
+    let list = call("vault_list", json!({})).await;
+    let defaults: Vec<_> = list["results"].as_array().unwrap().iter().filter(|v| v["is_default"] == true).collect();
+    assert_eq!(defaults.len(), 1, "{list}");
+    assert_eq!(defaults[0]["id"], "vault:v");
+    for (name, row) in [("recall", "memory"), ("reflect", "memory"), ("entities_search", "entity")] {
+        let found = call(name, json!({"query": "Legacy Default Probe"})).await;
+        assert!(found.to_string().contains(write[row]["id"].as_str().unwrap()), "{name}: {found}");
+    }
+}
+
 /// From SurrealDB 3.3.4 `INSERT IGNORE` raises a row's ASSERT or type error instead of skipping the row.
 /// The move keeps the old behaviour: a row the new schema refuses is left out, the good rows of the
 /// same batch land, and the skipped rows are counted (report, audit event) without their values. A

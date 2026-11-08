@@ -293,7 +293,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                             .await;
                             match out {
                                 Ok(o) => {
-                                    let mut v = json!({"index": index, "ok": true, "entity_id": o.entity.id, "memory_id": o.memory.id});
+                                    let mut v = json!({"index": index, "ok": true, "entity_id": o.entity.id, "memory_id": o.memory.id, "vault_name": o.vault_name});
                                     if !o.memory.redacted.is_empty() {
                                         v["redacted"] = json!(o.memory.redacted);
                                     }

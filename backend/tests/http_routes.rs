@@ -188,3 +188,42 @@ async fn tool_errors_carry_code_and_trace_id() {
     assert_eq!(v["code"], "validation.invalid");
     assert!(is_trace_id(v["trace_id"].as_str().unwrap()));
 }
+
+#[tokio::test]
+async fn vault_list_marks_only_the_callers_default_personal_space() {
+    use eunomia_backend::{rid::RecordIdExt, vaults::service as vaults};
+    let app = TestApp::new().await;
+    let bob = common::register(&app.state, "bob@example.com").await;
+    let db = app.db().await;
+    let (alice_personal, bob_personal) = common::sys(async {
+        let alice_personal = vaults::personal_vault_id(&db, &app.user.id).await.unwrap();
+        let bob_personal = vaults::personal_vault_id(&db, &bob.id).await.unwrap();
+        vaults::invite_member(&db, app.control(), &bob.id, &bob_personal, &app.user.email, "owner").await.unwrap();
+        vaults::accept_invitation(&db, app.control(), &app.user.id, &bob_personal).await.unwrap();
+        vaults::create_vault(&db, app.control(), &app.user.id, "Extra personal", "personal").await.unwrap();
+        (alice_personal, bob_personal)
+    }).await;
+    let (status, out) = app.http_session("GET", "/api/vaults", None).await;
+    assert_eq!(status, StatusCode::OK, "{out}");
+    let rows = out["results"].as_array().unwrap();
+    assert_eq!(rows.len(), 3, "{out}");
+    for row in rows {
+        assert_eq!(row["is_default"], row["id"] == alice_personal.to_string(), "{out}");
+    }
+    let defaults: Vec<_> = rows.iter().filter(|v| v["is_default"] == true).collect();
+    assert_eq!(defaults.len(), 1, "sharing and ownership do not make a vault the default: {out}");
+    assert_eq!(defaults[0]["id"], alice_personal.to_string());
+    assert!(rows.iter().any(|v| v["id"] == bob_personal.to_string() && v["is_default"] == false), "{out}");
+    let (status, entity) = app.http_session("POST", "/api/entities", Some(json!({
+        "kind": "person", "name": "Alice's new topic", "vault_id": defaults[0]["id"],
+    }))).await;
+    assert_eq!(status, StatusCode::OK, "{entity}");
+    assert_eq!(entity["vault"], alice_personal.to_string());
+    let token = eunomia_backend::models_user::create_api_token_with(
+        app.control(), &app.user.id, "shared only", &["memory:read".into()], Some(&bob_personal), None,
+    ).await.unwrap().token;
+    let ((status, out), _) = http(&app.router, "GET", "/api/vaults", None, Some(&token), None).await;
+    assert_eq!(status, StatusCode::OK, "{out}");
+    assert_eq!(out["results"].as_array().unwrap().len(), 1);
+    assert_eq!(out["results"][0]["is_default"], false, "{out}");
+}

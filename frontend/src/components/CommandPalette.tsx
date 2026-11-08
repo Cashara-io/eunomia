@@ -153,7 +153,7 @@ function Palette({ onClose }: { onClose: () => void }) {
   const vaults = useVaults().data ?? [];
   const spaceName = (id?: string) => {
     const v = id ? vaults.find((x) => x.id === id) : undefined;
-    return v ? (v.kind === "personal" ? "Personal" : v.name) : null;
+    return v ? (v.is_default ? "Personal" : v.name) : null;
   };
 
   // Data search, debounced -- only fires once the nav/connector match is

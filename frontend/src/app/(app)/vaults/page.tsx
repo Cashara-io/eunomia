@@ -272,7 +272,7 @@ function CreateVaultForm({
 /** A quiet action that reads as a link (the page header keeps one primary button). */
 const TEXT_LINK = "link inline-flex items-center gap-1 min-h-10 text-[14px] font-medium";
 
-const vaultLabel = (v: Vault) => (v.kind === "personal" ? "Personal" : v.name);
+const vaultLabel = (v: Vault) => (v.is_default ? "Personal" : v.name);
 
 function MergeVaultsCard({
   vaults,
@@ -545,7 +545,7 @@ export default function VaultsPage() {
   const personal = vaults?.filter((v) => v.kind === "personal") ?? [];
   const org = vaults?.filter((v) => v.kind !== "personal") ?? [];
   // Open on the first shared space: that is where the people are.
-  const selected = vaults?.find((v) => v.id === selectedId) ?? org[0] ?? personal[0] ?? null;
+  const selected = vaults?.find((v) => v.id === selectedId) ?? org[0] ?? personal.find((v) => v.is_default) ?? personal[0] ?? null;
 
   // Joining another Eunomia and combining spaces are for admins and people who run a shared space.
   const canManage = isAdmin || org.some((v) => v.role === "owner");

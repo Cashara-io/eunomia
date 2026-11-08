@@ -119,7 +119,7 @@ async fn proposals_wait_for_a_person_and_never_undo_a_decision() {
 
     // entity_types carries the review: an approved kind is listed before anything uses it
     let types = ok(app.tool("entity_types", json!({})).await);
-    assert_eq!(types["custom"], json!([{"kind": "customer", "entities": 0, "status": "approved", "description": "A paying client"}]));
+    assert_eq!(types["custom"], json!([{"kind": "customer", "entities": 0, "status": "approved", "description": "A paying client", "spaces": ["Personal"]}]));
 
     // the link is approved too, and stays so
     let (status, o) = app
@@ -339,7 +339,7 @@ async fn writes_still_work_on_an_org_database_before_the_migration() {
     app.db().await.test_raw().query("REMOVE TABLE ontology_kind").await.unwrap().check().unwrap();
     assert_eq!(write(&app, "orders_db", "db").await["entity"]["kind"], "db");
     let types = ok(app.tool("entity_types", json!({})).await);
-    assert_eq!(types["custom"], json!([{"kind": "db", "entities": 1, "status": "observed"}]));
+    assert_eq!(types["custom"], json!([{"kind": "db", "entities": 1, "status": "observed", "spaces": ["Personal"]}]));
 }
 
 
@@ -3045,6 +3045,151 @@ async fn the_chat_answers_a_number_from_the_space_coverage_returned() {
     assert_eq!(results[2]["value"].as_f64(), Some(664.475), "{results:?}");
 }
 
+#[tokio::test]
+async fn a_plain_word_of_one_approved_property_counts_as_a_match() {
+    let app = TestApp::new().await;
+    let vault = personal(&app).await;
+    write(&app, "Drip line", "product").await;
+    ok(app.tool("ontology_propose", json!({"kinds": [{"kind": "product"}],
+        "properties": [{"kind": "product", "name": "unit_cost", "datatype": "money", "unit": "AUD"}, {"kind": "product", "name": "sell_price", "datatype": "money", "unit": "AUD"}]})).await);
+    assert_eq!(decide_kind(&app, &vault, "product", json!({"action": "approve"})).await.0, 200);
+    for p in ["unit_cost", "sell_price"] {
+        assert_eq!(decide_property(&app, &vault, "product", p, json!({"action": "approve"})).await.0, 200);
+    }
+    // the gate's case: "costs" gave 0.0 though unit_cost is approved
+    let out = ok(app.tool("ontology_coverage", json!({"question": "What are our costs?"})).await);
+    assert_eq!((out["coverage"].as_f64(), matched_names(&out)), (Some(1.0), vec![("costs".into(), "property".into(), "unit_cost".into())]), "{out}");
+    // a second property with the word makes it a guess, so neither is taken
+    ok(app.tool("ontology_propose", json!({"properties": [{"kind": "product", "name": "freight_cost", "datatype": "money"}]})).await);
+    assert_eq!(decide_property(&app, &vault, "product", "freight_cost", json!({"action": "approve"})).await.0, 200);
+    let out = ok(app.tool("ontology_coverage", json!({"question": "What are our costs?"})).await);
+    assert_eq!((out["coverage"].as_f64(), out["uncovered"].clone()), (Some(0.0), json!(["costs"])), "{out}");
+}
+
+/// A space of bob's that the test user cannot read, holding `entity` and a proposed ontology.
+async fn bobs_secret_space(app: &TestApp, entity: &str) -> (eunomia_backend::models_user::User, String) {
+    let bob = common::register(&app.state, "bob@example.com").await;
+    let secret = ok(as_user(app, &bob, "vault_create", json!({"name": "Secret Co", "kind": "org"})).await)["id"].as_str().unwrap().to_string();
+    ok(as_user(app, &bob, "memory_write", json!({"subject_name": entity, "subject_kind": "organisation", "text": "a supplier", "vault_id": "Secret Co"})).await);
+    ok(as_user(app, &bob, "ontology_propose", json!({"vault_id": "Secret Co", "kinds": [{"kind": "rainfall_reading"}]})).await);
+    (bob, secret)
+}
+
+#[tokio::test]
+async fn a_question_no_space_covers_goes_to_the_space_that_holds_what_it_names() {
+    let app = TestApp::new().await;
+    let team = northside(&app).await;
+    ok(app.tool("memory_write", json!({"subject_name": "Coastal Irrigation Co", "subject_kind": "organisation", "text": "Coastal Irrigation Co supplies our drip line", "vault_id": "Northside Bikes"})).await);
+    let (_, secret) = bobs_secret_space(&app, "Coastal Irrigation Co").await;
+    let no_leak = |out: &Value| assert!(!out.to_string().contains("Secret Co") && !out.to_string().contains(&secret), "a space the caller cannot read is never named: {out}");
+
+    // no phrase matches an approved term anywhere; the org space holds what the question names
+    let out = ok(app.tool("ontology_coverage", json!({"question": "What is the rainfall at Coastal Irrigation?"})).await);
+    assert_eq!((out["coverage"].as_f64(), out["vault"].as_str(), out["chosen_by"].as_str()), (Some(0.0), Some(team.as_str()), Some("entities")), "not the personal space: {out}");
+    assert!(out["suggestion"].as_str().unwrap().contains("\"Northside Bikes\" was checked because it holds what the question names"), "{out}");
+    no_leak(&out);
+
+    // nothing named is held anywhere: the space that has an approved ontology
+    let out = ok(app.tool("ontology_coverage", json!({"question": "What is the rainfall in Geelong?"})).await);
+    assert_eq!((out["vault"].as_str(), out["chosen_by"].as_str()), (Some(team.as_str()), Some("ontology")), "{out}");
+    no_leak(&out);
+
+    // a match still decides, and naming a space still checks only it
+    let out = ok(app.tool("ontology_coverage", json!({"question": "What is the average price of our parts?"})).await);
+    assert_eq!((out["vault"].as_str(), out["chosen_by"].as_str()), (Some(team.as_str()), Some("coverage")), "{out}");
+    let mine = personal(&app).await;
+    let out = ok(app.tool("ontology_coverage", json!({"question": "What is the rainfall at Coastal Irrigation?", "vault_id": mine})).await);
+    assert_eq!((out["vault"].as_str(), out["chosen_by"].as_str()), (Some(mine.as_str()), Some("vault_id")), "{out}");
+}
+
+#[tokio::test]
+async fn a_question_no_space_covers_says_so_and_lists_the_readable_spaces() {
+    let app = TestApp::new().await;
+    ok(app.tool("vault_create", json!({"name": "Empty Co", "kind": "org"})).await);
+    let (_, secret) = bobs_secret_space(&app, "Geelong").await;
+    let out = ok(app.tool("ontology_coverage", json!({"question": "What is the rainfall in Geelong?"})).await);
+    assert_eq!(out["chosen_by"], "none", "{out}");
+    let spaces: Vec<&str> = out["spaces"].as_array().unwrap().iter().map(|s| s["name"].as_str().unwrap()).collect();
+    assert_eq!(spaces, ["Personal", "Empty Co"], "{out}");
+    let s = out["suggestion"].as_str().unwrap();
+    assert!(s.starts_with("No space you can read covers this question") && s.contains("\"Personal\", \"Empty Co\"") && s.contains("Ask the user"), "{s}");
+    assert!(!out.to_string().contains("Secret Co") && !out.to_string().contains(&secret), "{out}");
+
+    // with one readable space nothing changes
+    let solo = TestApp::new().await;
+    let out = ok(solo.tool("ontology_coverage", json!({"question": "What is the rainfall in Geelong?"})).await);
+    assert_eq!((out["chosen_by"].as_str(), out.get("spaces")), (Some("coverage"), None), "{out}");
+}
+
+// ------------------------------------------------------------ a write that names no space
+
+/// The gate's owner: a personal space plus "Geelong Garden Supply" with approved kind `product` and
+/// strict mode on. Returns the org vault's id.
+async fn strict_garden_supply(app: &TestApp) -> String {
+    let team = ok(app.tool("vault_create", json!({"name": "Geelong Garden Supply", "kind": "org"})).await)["id"].as_str().unwrap().to_string();
+    ok(app.tool("memory_write", json!({"subject_name": "Drip line", "subject_kind": "product", "text": "We sell drip line", "vault_id": "Geelong Garden Supply"})).await);
+    assert_eq!(decide_kind(app, &team, "product", json!({"action": "approve"})).await.0, 200);
+    assert_eq!(set_strict(app, &team, true).await.0, 200);
+    team
+}
+
+fn chickens(extra: Value) -> Value {
+    let mut args = json!({"subject_name": "Chickens", "subject_kind": "livestock", "text": "We now sell chickens."});
+    args.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+    args
+}
+
+#[tokio::test]
+async fn a_new_kind_with_no_space_named_is_refused_while_an_org_space_is_strict() {
+    let app = TestApp::new().await;
+    // a kind the personal space already has, written before the org space existed
+    write(&app, "Sourdough", "recipe").await;
+    let team = strict_garden_supply(&app).await;
+
+    // the gate's write: no vault_id, a kind the personal space does not have
+    let out = app.tool("memory_write", chickens(json!({}))).await;
+    assert_eq!(out["code"], "validation.invalid", "{out}");
+    let msg = err(&out);
+    assert!(msg.contains("vault_id") && msg.contains("\"Geelong Garden Supply\"") && msg.contains("\"Personal\" if it is private"), "names the spaces to pick from: {msg}");
+    let found = ok(app.tool("entities_search", json!({"query": "Chickens"})).await);
+    assert_eq!(found["total"], 0, "nothing was written: {found}");
+    // the batch says so per item, and the rest still writes
+    let out = ok(app.tool("memory_write_batch", json!({"items": [chickens(json!({})), {"subject_name": "Ana", "subject_kind": "person", "text": "Ana runs the yard"}]})).await);
+    assert_eq!((out["written"].as_u64(), out["results"][0]["code"].as_str(), out["results"][1]["vault_name"].as_str()), (Some(1), Some("validation.invalid"), Some("Personal")), "{out}");
+
+    // named, each space decides for itself: the org space refuses and files it, the personal one takes it
+    let out = app.tool("memory_write", chickens(json!({"vault_id": "Geelong Garden Supply"}))).await;
+    assert_eq!(out["code"], "ontology.rejected", "{out}");
+    let out = ok(app.tool("memory_write", chickens(json!({"vault_id": "Personal"}))).await);
+    assert_eq!((out["entity"]["kind"].as_str(), out["vault_name"].as_str()), (Some("livestock"), Some("Personal")), "{out}");
+    // then the personal space has the kind, so a later write with no vault goes there as before
+    let out = ok(app.tool("memory_write", json!({"subject_name": "Ducks", "subject_kind": "livestock", "text": "Ducks too"})).await);
+    assert_eq!(out["vault_name"], "Personal", "{out}");
+
+    // a kind the personal space has, and a built-in kind, still write with no vault_id
+    assert_eq!(write(&app, "Focaccia", "recipe").await["vault_name"], "Personal");
+    assert_eq!(write(&app, "Jesse", "person").await["vault_name"], "Personal");
+    let org = ok(app.tool("memory_write", json!({"subject_name": "Hose", "subject_kind": "product", "text": "We sell hose", "vault_id": team})).await);
+    assert_eq!(org["vault_name"], "Geelong Garden Supply", "{org}");
+
+    // entity_types with no vault says which space each kind is in
+    let types = ok(app.tool("entity_types", json!({})).await);
+    let spaces = |k: &str| types["custom"].as_array().unwrap().iter().find(|c| c["kind"] == k).unwrap_or_else(|| panic!("{k} in {types}"))["spaces"].clone();
+    assert_eq!((spaces("product"), spaces("recipe"), spaces("livestock")), (json!(["Geelong Garden Supply"]), json!(["Personal"]), json!(["Personal"])), "{types}");
+
+    // strict mode off: a new kind with no vault goes to the personal space as before
+    assert_eq!(set_strict(&app, &team, false).await.0, 200);
+    assert_eq!(write(&app, "Hens", "poultry").await["vault_name"], "Personal");
+}
+
+#[tokio::test]
+async fn with_no_strict_org_space_a_new_kind_with_no_space_named_writes_as_before() {
+    let app = TestApp::new().await;
+    ok(app.tool("vault_create", json!({"name": "Geelong Garden Supply", "kind": "org"})).await);
+    let out = ok(app.tool("memory_write", chickens(json!({}))).await);
+    assert_eq!((out["entity"]["kind"].as_str(), out["vault_name"].as_str()), (Some("livestock"), Some("Personal")), "{out}");
+}
+
 // ------------------------------------------------------------ the gate's bike shop: links and row maths
 
 const PARTS: &str = include_str!("fixtures/parts.csv");
@@ -3447,6 +3592,125 @@ async fn a_ratio_uses_the_same_entities_on_both_sides_and_a_metric_narrows_to_on
     assert_eq!((b["value"].as_f64(), s["value"].as_f64(), s["delta"].as_f64(), s["unit"].as_str()), (Some(38.062307), Some(33.895036), Some(-4.167271), Some("%")), "{out}");
     let view = ok(app.tool("show_view", json!({"view": "scenario", "headline": "Coastal raises costs", "scenario": args})).await);
     assert!(view["text"].as_str().unwrap().contains("- gross margin: 38.1% \u{2192} 33.9%, down 4.2 points\n"), "{view}");
+}
+
+#[tokio::test]
+async fn gate2_rest_cannot_seed_a_new_personal_kind_past_a_strict_space() {
+    let app = TestApp::new().await;
+    strict_garden_supply(&app).await;
+    let token = eunomia_backend::models_user::create_api_token_with(
+        &app.state.control, &app.user.id, "writer", &["memory:write".into()], None, None,
+    ).await.unwrap().token;
+    let body = json!({"kind": "livestock", "name": "Chickens"});
+    let ((status, out), _) = common::http(&app.router, "POST", "/api/entities", Some(body.clone()), Some(&token), None).await;
+    assert_eq!(status, 400, "{out}");
+    let message = out["detail"].as_str().unwrap();
+    assert!(message.contains("vault_id") && message.contains("Geelong Garden Supply") && message.contains("Personal"), "{out}");
+    let (status, out) = app.http_session("POST", "/api/entities", Some(body.clone())).await;
+    assert_eq!(status, 400, "the browser gets the same error: {out}");
+    assert_eq!(out["detail"], message);
+    let refused = app.tool("memory_write", chickens(json!({}))).await;
+    assert!(refused.get("error").is_some(), "REST did not seed the kind: {refused}");
+    let db = app.db().await;
+    assert!(common::sys(eunomia_backend::entities::service::upsert_entity_created(
+        &db, &app.user.id, "livestock", "Chickens", None, None,
+    )).await.is_err());
+    let mine = personal(&app).await;
+    let mut explicit = body;
+    explicit["vault_id"] = json!(mine);
+    let ((status, out), _) = common::http(&app.router, "POST", "/api/entities", Some(explicit.clone()), Some(&token), None).await;
+    assert_eq!(status, 200, "{out}");
+    assert_eq!(out["vault"], mine);
+    explicit["name"] = json!("Ducks");
+    let (status, out) = app.http_session("POST", "/api/entities", Some(explicit)).await;
+    assert_eq!(status, 200, "selected-space Memory page creation: {out}");
+    assert_eq!(out["vault"], mine);
+}
+
+#[tokio::test]
+async fn gate2_short_names_are_not_hidden_by_personal_substring_matches() {
+    let app = TestApp::new().await;
+    let team = ok(app.tool("vault_create", json!({"name": "Team", "kind": "org"})).await)["id"].as_str().unwrap().to_string();
+    let mine = rid::parse(&personal(&app).await).unwrap();
+    let db = app.db().await;
+    common::sys(async {
+        for i in 0..60 {
+            eunomia_backend::entities::service::upsert_entity(&db, &app.user.id, "file", &format!("Space heater {i}"), None, Some(&mine)).await.unwrap();
+        }
+    }).await;
+    ok(app.tool("memory_write", json!({"subject_name": "ACE", "subject_kind": "organisation", "text": "Our supplier", "vault_id": team})).await);
+    bobs_secret_space(&app, "ACE").await;
+    let out = ok(app.tool("ontology_coverage", json!({"question": "Where is ACE?"})).await);
+    assert_eq!(out["chosen_by"], "entities", "{out}");
+    assert_eq!(out["vault"], team, "{out}");
+    ok(app.tool("memory_write", json!({"subject_name": "BP", "subject_kind": "organisation", "text": "Another supplier", "vault_id": team})).await);
+    let out = ok(app.tool("ontology_coverage", json!({"question": "Where is BP?"})).await);
+    assert_eq!(out["chosen_by"], "entities", "{out}");
+    assert_eq!(out["vault"], team, "{out}");
+}
+
+#[tokio::test]
+async fn gate2_named_space_lookup_uses_name_key_indexes() {
+    fn index_scan(node: &Value) -> Option<&Value> {
+        if node["operator"] == "IndexScan" {
+            return Some(node);
+        }
+        node["children"].as_array()?.iter().find_map(index_scan)
+    }
+    let app = TestApp::new().await;
+    let vault = rid::parse(&personal(&app).await).unwrap();
+    let db = app.db().await;
+    for table in eunomia_backend::entities::service::ENTITY_TABLES {
+        for prefix in [false, true] {
+            let plan: Vec<Value> = eunomia_backend::store::entities::explain_name_lookup(&db, table, prefix)
+                .bind(("vault", vault.clone())).bind(("key", "coastal irrigation"))
+                .bind(("lower", "coastal irrigation ")).bind(("upper", "coastal irrigation!"))
+                .await.unwrap().take(0).unwrap();
+            let shown = serde_json::to_string(&plan).unwrap();
+            assert!(shown.contains("IndexScan") && shown.contains("name_key"), "{table}, prefix={prefix}: {shown}");
+            assert!(!shown.contains("TableScan"), "{shown}");
+            let scan = index_scan(&plan[0]).expect("index scan");
+            assert!(scan["attributes"]["index"].as_str().unwrap().contains("name_key"), "{shown}");
+            assert_eq!(scan["attributes"]["limit"], "8", "the index walk itself must stop: {shown}");
+            assert!(!shown.contains("Sort"), "names must come from the index in order: {shown}");
+            if prefix {
+                assert!(scan["attributes"]["access"].as_str().unwrap().contains("MoreThanEqual 'coastal irrigation '"), "{shown}");
+            }
+            println!("{table}, prefix={prefix}: {shown}");
+        }
+    }
+}
+
+#[tokio::test]
+async fn gate2_a_long_question_caps_name_lookups_and_never_searches_memory_text() {
+    let app = TestApp::new().await;
+    ok(app.tool("vault_create", json!({"name": "Team", "kind": "org"})).await);
+    let question = (0..100).map(|i| format!("word{i}")).collect::<Vec<_>>().join(" ");
+    use tracing_subscriber::layer::SubscriberExt;
+    let ops = Ops::default();
+    {
+        let _held = tracing::subscriber::set_default(tracing_subscriber::registry().with(ops.clone()));
+        ok(app.tool("ontology_coverage", json!({"question": question})).await);
+    }
+    let queries = ops.0.lock().unwrap();
+    assert_eq!(queries.iter().filter(|q| *q == "entities.names_by_prefix").count(), 16, "{queries:?}");
+    assert!(!queries.iter().any(|q| q == "entities.search"), "no general or memory-text search: {queries:?}");
+}
+
+#[tokio::test]
+async fn gate2_name_lookup_honours_vault_restricted_tokens() {
+    let app = TestApp::new().await;
+    let team = ok(app.tool("vault_create", json!({"name": "Team", "kind": "org"})).await)["id"].as_str().unwrap().to_string();
+    let other = ok(app.tool("vault_create", json!({"name": "Other", "kind": "org"})).await)["id"].as_str().unwrap().to_string();
+    ok(app.tool("memory_write", json!({"subject_name": "ACE", "subject_kind": "organisation", "text": "Supplier", "vault_id": other})).await);
+    let only = rid::parse(&team).unwrap();
+    let token = eunomia_backend::models_user::create_api_token_with(
+        &app.state.control, &app.user.id, "reader", &["memory:read".into()], Some(&only), None,
+    ).await.unwrap().token;
+    let ((status, out), _) = common::http(&app.router, "POST", "/api/tools/ontology_coverage", Some(json!({"question": "Where is ACE?"})), Some(&token), None).await;
+    assert_eq!(status, 200, "{out}");
+    assert_eq!(out["vault"], team, "{out}");
+    assert!(!out.to_string().contains(&other) && !out.to_string().contains("Personal"), "{out}");
 }
 
 #[tokio::test]

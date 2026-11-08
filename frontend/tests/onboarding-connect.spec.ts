@@ -88,6 +88,45 @@ test.describe("Onboarding: Connect your AI", () => {
     await expect(page.getByRole("heading", { name: "Connect your AI app" })).toBeHidden();
   });
 
+  test("finishing setup owns navigation while a me refresh sees onboarding complete", async ({ page }) => {
+    const refresh = Promise.withResolvers<void>();
+    const saved = Promise.withResolvers<void>();
+    const completion = Promise.withResolvers<void>();
+    let heldRefresh = false;
+    await page.route("**/api/auth/me", async (route) => {
+      if (!heldRefresh) {
+        heldRefresh = true;
+        await refresh.promise;
+      }
+      await route.continue();
+    });
+    await page.route("**/api/settings/complete-onboarding", async (route) => {
+      const response = await route.fetch();
+      saved.resolve();
+      await completion.promise;
+      await route.fulfill({ response });
+    });
+    try {
+      await registerToConnectStep(page);
+      await page.getByRole("button", { name: "Set up later" }).click();
+      await saved.promise;
+      const me = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/auth/me");
+      refresh.resolve();
+      expect((await (await me).json()).onboarded).toBe(true);
+      // A refreshed session must not navigate before the Finish handler settles.
+      await expect(page.getByLabel("Loading", { exact: true })).toBeVisible();
+      await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+      await expect(page).toHaveURL(/\/onboarding(?:\?|$)/);
+      completion.resolve();
+      await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
+      await page.getByRole("link", { name: "Documents", exact: true }).first().click();
+      await expect(page.getByRole("heading", { name: "Documents", level: 1 })).toBeVisible();
+    } finally {
+      refresh.resolve();
+      completion.resolve();
+    }
+  });
+
   test("set up later leaves without minting a token, and members see no token method", async ({ page }) => {
     await registerToConnectStep(page);
     await expect(page.getByText("Advanced: use an API token")).toHaveCount(0);

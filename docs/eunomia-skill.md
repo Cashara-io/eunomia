@@ -143,6 +143,11 @@ keep each area's memory in its vault:
 - When the work clearly belongs to one of those areas, pass `vault_id` with
   the vault's **name** (e.g. `vault_id: "Acme"`) to `memory_write`, and to
   `recall`/`entities_search` to narrow them to it.
+- A fact about the user's business goes to its org vault. A `memory_write`
+  with no `vault_id` that would start a new kind is refused while one of the
+  user's org vaults takes only approved kinds; the error names the vaults to
+  pick from. `entity_types` lists the `spaces` each kind is in, and a write's
+  result names the space it went to (`vault_name`).
 - Check a hit's date (`occurred_at`) before trusting a time-sensitive fact.
 - If `memory_write` returns `possible_duplicates`, merge the real duplicate
   with `entity_merge`.

@@ -305,5 +305,6 @@ async fn migrate_tenant(state: AppState, job: Job) -> Result<(), JobError> {
         return Err(JobError::permanent(ErrorCode::TenantProvisioningDisabled, "this build cannot migrate org databases"));
     };
     p.migrate_org(&state.control, &org).await?;
+    state.pool.evict(&org);
     Ok(())
 }

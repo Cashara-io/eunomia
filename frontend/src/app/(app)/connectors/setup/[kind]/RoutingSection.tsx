@@ -30,7 +30,7 @@ const FIELDS: Record<string, { label: string; placeholder: string }> = {
 };
 const fieldInfo = (f: string) => FIELDS[f] ?? { label: f, placeholder: "" };
 
-const vaultLabel = (v: Vault) => (v.kind === "personal" && v.role === "owner" ? "Personal" : v.name);
+const vaultLabel = (v: Vault) => (v.is_default ? "Personal" : v.name);
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
@@ -60,8 +60,8 @@ export default function RoutingSection({ label, connector }: { label: string; co
   const saved: Routing = { default_vault: connector.routing?.default_vault, rules: connector.routing?.rules ?? [] };
   const routing = draft ?? saved;
   const fields = connector.routing_fields?.length ? connector.routing_fields : ["title"];
-  const personal = vaults?.find((v) => v.kind === "personal" && v.role === "owner");
-  const vaultOptions = (vaults ?? []).map((v) => ({ value: v.id, label: vaultLabel(v), hint: v.kind === "personal" && v.role === "owner" ? "default" : undefined }));
+  const personal = vaults?.find((v) => v.is_default);
+  const vaultOptions = (vaults ?? []).map((v) => ({ value: v.id, label: vaultLabel(v), hint: v.is_default ? "default" : undefined }));
 
   function edit(next: Routing) {
     setDraft(next);
@@ -133,7 +133,7 @@ export default function RoutingSection({ label, connector }: { label: string; co
         <p className="text-[14px] leading-relaxed" style={{ color: "var(--ink-dim)" }}>
           {(() => {
             const dest = vaults?.find((v) => v.id === (routing.default_vault ?? personal?.id));
-            const shared = dest && !(dest.kind === "personal" && dest.role === "owner");
+            const shared = dest && !dest.is_default;
             return dest ? (
               <>
                 New {label} items are saved in <VaultChip tone={vaultTone(dest.kind)} name={vaultLabel(dest)} />.{" "}

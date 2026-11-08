@@ -34,8 +34,7 @@ export default function OnboardingPage() {
   // A Continue appears once a token was minted on the Connect step (admins only); otherwise "Set up later" is the one exit.
   const [connected, setConnected] = useState(false);
 
-  // Set while this page navigates on its own (to an app's guide), so the "already onboarded" redirect
-  // below doesn't race it to Home once finishing setup refreshes `me`.
+  // A me refresh can finish before the completion request, so only the active handler may navigate.
   const navigating = useRef(false);
   const { isError, data } = meQuery;
   useEffect(() => {
@@ -52,6 +51,7 @@ export default function OnboardingPage() {
 
   /** `from` is the button a pointer click started this from; it sparks on success. Navigation is never delayed. */
   async function finish(from?: Element | null) {
+    navigating.current = true;
     await completeOnboarding.mutateAsync();
     spark(from, { count: 8 });
     router.replace(nextPath());
@@ -69,6 +69,7 @@ export default function OnboardingPage() {
       if (Object.keys(changes).length) await updateSettings.mutateAsync(changes);
       await finish(from);
     } catch (err) {
+      navigating.current = false;
       setError(failure(err, "Could not save the key. Check the URL and key, or skip for now."));
       setBusy(false);
     }

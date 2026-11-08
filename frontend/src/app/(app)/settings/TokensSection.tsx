@@ -46,7 +46,7 @@ export function TokensSection() {
   const [scopes, setScopes] = useState<Scope[]>(DEFAULT_SCOPES);
   // Untouched (null) means the safer default: your personal space, not every space. "All my memory spaces" stays one click away.
   const [vaultChoice, setVaultChoice] = useState<string | null>(null);
-  const personal = vaultList.find((v) => v.kind === "personal" && v.role === "owner");
+  const personal = vaultList.find((v) => v.is_default);
   const vaultId = vaultChoice ?? personal?.id ?? "";
   const setVaultId = setVaultChoice;
   // New tokens expire after 90 days unless you pick otherwise.

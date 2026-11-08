@@ -79,7 +79,7 @@ test("every MCP tool works end to end", async ({ request, baseURL }) => {
   expect(shown.text).toContain("Charles Babbage");
   expect((await call("show_view", { view: "impact", start_id: "person:invented", headline: "x", affected: [] })).isError).toBe(true);
   await ok("memory_write", { subject_name: "orders_db", subject_kind: "db", text: "Runs Postgres 16." });
-  expect((await ok("entity_types")).custom).toEqual([{ kind: "db", entities: 1, status: "observed" }]);
+  expect((await ok("entity_types")).custom).toEqual([{ kind: "db", entities: 1, status: "observed", spaces: ["Personal"] }]);
   await ok("ontology_propose", { kinds: [{ kind: "db", description: "A database" }] });
   expect((await ok("ontology_get")).kinds.find((k: { kind: string }) => k.kind === "db").status).toBe("proposed");
   expect((await ok("ontology_suggest")).mode).toBeTruthy();

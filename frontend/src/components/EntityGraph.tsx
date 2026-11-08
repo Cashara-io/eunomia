@@ -318,7 +318,7 @@ export default function EntityGraph({
   const [pendingFocus, setPendingFocus] = useState<{ id: string | null; vault: string | null } | null>(null);
   const toGraphVault = (id: string | null | undefined): string | undefined => {
     if (!id) return undefined;
-    return myVaults.find((v) => v.id === id)?.kind === "personal" ? undefined : id;
+    return myVaults.find((v) => v.id === id)?.is_default ? undefined : id;
   };
   useEffect(() => {
     if (!pendingFocus || !vaultsQuery.isFetched) return;
@@ -365,11 +365,13 @@ export default function EntityGraph({
         .split(",")
         .map((a) => a.trim())
         .filter(Boolean);
+      const targetVault = vaultId ?? myVaults.find((v) => v.is_default)?.id;
+      if (!targetVault) throw new Error("Your Personal space could not be loaded. Try again.");
       const created = await createEntityMutation.mutateAsync({
         kind: createForm.kind,
         name,
         aliases: aliases.length ? aliases : undefined,
-        vault_id: vaultId,
+        vault_id: targetVault,
       });
       setShowCreate(false);
       setCreateForm({ kind: shownKinds[0], name: "", aliases: "" });

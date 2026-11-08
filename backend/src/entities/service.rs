@@ -158,6 +158,9 @@ struct MemoryRow {
     subject: RecordId,
     #[serde(default)]
     #[surreal(default)]
+    vault_name: String,
+    #[serde(default)]
+    #[surreal(default)]
     text: String,
     #[serde(default)]
     #[surreal(default)]
@@ -339,6 +342,8 @@ pub struct WriteMemoryOut {
     /// `subject_kind` was rejected for the vault, so the fact was written under its merge target.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kind_mapped: Option<crate::ontology::KindMapped>,
+    /// The name of the space (vault) the fact was written to.
+    pub vault_name: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -460,6 +465,9 @@ pub async fn upsert_grounded(
 ) -> AppResult<Upserted> {
     let table = kind_table(kind)?;
     let vault = resolve_vault(db, owner, vault_id, Action::WriteMemories).await?;
+    if vault_id.is_none() {
+        check_unnamed_write(db, owner, kind, &vault).await?;
+    }
     let kind_mapped = if table == CUSTOM_TABLE { crate::ontology::ground(db, &vault, kind).await? } else { None };
     let kind = kind_mapped.as_ref().map_or(kind, |m| m.to.as_str());
     let (entity, created) = upsert_in_vault(db, owner, kind, name, aliases, &vault, Lookups::NameAndAlias).await?;
@@ -520,6 +528,9 @@ pub async fn upsert_entity_created(
 ) -> AppResult<(EntityOut, bool)> {
     kind_table(kind)?;
     let vault = resolve_vault(db, owner, vault_id, Action::WriteMemories).await?;
+    if vault_id.is_none() {
+        check_unnamed_write(db, owner, kind, &vault).await?;
+    }
     upsert_in_vault(db, owner, kind, name, aliases, &vault, Lookups::NameAndAlias).await
 }
 
@@ -658,6 +669,13 @@ async fn check_custom_kind_room(db: &OrgDb, vault: &RecordId, kind: &str) -> App
 #[derive(Deserialize, SurrealValue)]
 struct CustomKindRow {
     kind: String,
+}
+
+/// A custom kind's entity count in one vault.
+#[derive(Deserialize, SurrealValue)]
+struct KindInVault {
+    kind: String,
+    vault: RecordId,
     #[serde(default)]
     #[surreal(default)]
     count: i64,
@@ -676,6 +694,9 @@ pub struct CustomKind {
     /// A rejected kind: writes under it go to this kind instead.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub merge_into: Option<String>,
+    /// The listed spaces (vault names) that hold entities of this kind or approved it, in listing order:
+    /// a write under it goes to one of these only when `vault_id` names it.
+    pub spaces: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -685,35 +706,93 @@ pub struct EntityTypesOut {
 }
 
 /// The built-in kinds, then every custom kind used in `vaults` (already resolved and checked by the
-/// caller) or approved in one, with its entity count and review.
-pub async fn entity_types(db: &OrgDb, vaults: &[RecordId]) -> AppResult<EntityTypesOut> {
+/// caller) or approved in one, with its entity count, its review and the spaces it is in (`names`:
+/// vault id to name).
+pub async fn entity_types(db: &OrgDb, vaults: &[RecordId], names: &HashMap<String, String>) -> AppResult<EntityTypesOut> {
     use crate::ontology::{Status, ViewStatus};
-    let rows: Vec<CustomKindRow> = match q::CUSTOM_KINDS_IN.on(db).bind(("vaults", vaults.to_vec())).await {
+    let rows: Vec<KindInVault> = match q::CUSTOM_KINDS_IN.on(db).bind(("vaults", vaults.to_vec())).await {
         Err(e) if no_custom_table(&e) => Vec::new(),
         res => res?.take(0)?,
     };
     let mut reviewed = crate::ontology::reviewed_kinds(db, vaults).await?;
     reviewed.sort_by_key(|r| vaults.iter().position(|v| *v == r.vault));
-    let mut kinds: std::collections::BTreeMap<String, i64> = rows.into_iter().map(|r| (r.kind, r.count)).collect();
+    // kind -> (entities, the vaults it is in)
+    let mut kinds: std::collections::BTreeMap<String, (i64, Vec<RecordId>)> = std::collections::BTreeMap::new();
+    for r in rows {
+        let k = kinds.entry(r.kind).or_default();
+        k.0 += r.count;
+        k.1.push(r.vault);
+    }
     for r in &reviewed {
         if is_custom_kind(&r.kind) && r.status()? == Status::Approved {
-            kinds.entry(r.kind.clone()).or_insert(0);
+            kinds.entry(r.kind.clone()).or_default().1.push(r.vault.clone());
         }
     }
     let custom = kinds
         .into_iter()
-        .map(|(kind, entities)| {
+        .map(|(kind, (entities, ins))| {
             let review = reviewed.iter().find(|r| r.kind == kind);
+            let spaces = vaults.iter().filter(|v| ins.contains(v)).map(|v| names.get(&v.to_string()).cloned().unwrap_or_else(|| v.to_string())).collect();
             Ok(CustomKind {
                 status: review.map(|r| r.status()).transpose()?.map_or(ViewStatus::Observed, ViewStatus::from),
                 description: review.and_then(|r| r.description.clone()),
                 merge_into: review.and_then(|r| r.merge_into.clone()),
                 kind,
                 entities,
+                spaces,
             })
         })
         .collect::<AppResult<Vec<_>>>()?;
     Ok(EntityTypesOut { built_in: KINDS.to_vec(), custom })
+}
+
+/// Whether custom kind `kind` is already in `vault`: an entity has it, or an owner or agent reviewed it.
+async fn kind_in(db: &OrgDb, vault: &RecordId, kind: &str) -> AppResult<bool> {
+    let vaults = [vault.clone()];
+    let rows: Vec<KindInVault> = match q::CUSTOM_KINDS_IN.on(db).bind(("vaults", vaults.to_vec())).await {
+        Err(e) if no_custom_table(&e) => Vec::new(),
+        res => res?.take(0)?,
+    };
+    Ok(rows.iter().any(|r| r.kind == kind) || crate::ontology::reviewed_kinds(db, &vaults).await?.iter().any(|r| r.kind == kind))
+}
+
+/// A write that names no vault goes to the personal one, where no org vault's strict mode sees it. When
+/// it would start a custom kind the personal vault does not have while the user belongs to an org vault
+/// that takes only approved kinds, the fact is likely the business's: refused, naming the vaults the
+/// user can write to, so the caller passes `vault_id` (the personal one too, when that is meant). A
+/// vault-restricted credential writes to its own vault, so it is never asked.
+async fn check_unnamed_write(db: &OrgDb, owner: &RecordId, kind: &str, personal: &RecordId) -> AppResult<()> {
+    if kind_table(kind)? != CUSTOM_TABLE || authz::restricted_vault()?.is_some() {
+        return Ok(());
+    }
+    if kind_in(db, personal, kind).await? {
+        return Ok(());
+    }
+    let mine = vaults_service::memberships(db, owner).await?;
+    let orgs: Vec<&vaults_service::Membership> = mine.iter().filter(|m| m.kind.as_deref() == Some("org")).collect();
+    let mut strict = Vec::new();
+    for m in &orgs {
+        if crate::ontology::strict(db, &m.vault).await? {
+            strict.push(*m);
+        }
+    }
+    if strict.is_empty() {
+        return Ok(());
+    }
+    // a name two of the user's vaults share would not resolve, so those are given by id
+    let shown = |m: &vaults_service::Membership| {
+        let name = m.name.clone().unwrap_or_default();
+        let shared = name.is_empty() || mine.iter().filter(|o| o.name.as_deref().is_some_and(|n| n.eq_ignore_ascii_case(&name))).count() > 1;
+        format!("\"{}\"", if shared { m.vault.to_string() } else { name })
+    };
+    let own = mine.iter().find(|m| &m.vault == personal).map_or_else(|| format!("\"{}\"", personal.to_string()), shown);
+    let spaces: Vec<String> = orgs.iter().map(|m| shown(m)).collect();
+    let rule = strict.iter().map(|m| shown(m)).collect::<Vec<_>>().join(", ");
+    Err(AppError::bad_request(format!(
+        "vault_id is needed: with none, this fact would go to your personal space under the new kind {kind:?}, where the approved-kinds-only rule of {rule} never sees it. \
+         Pass vault_id with the space it belongs to: {}, or {own} if it is private to you.",
+        spaces.join(", ")
+    )))
 }
 
 /// Other `kind` entities in the entity's vault whose name or an alias shares a word (3+ letters) with
@@ -770,7 +849,7 @@ pub async fn add_memory(
             format!("not a member of {}'s vault", subject_row.vault.to_string()),
         ));
     }
-    insert_memory(db, owner, subject_id, &subject_row.vault, text, source_record_id, mem_type).await
+    Ok(insert_memory(db, owner, subject_id, &subject_row.vault, text, source_record_id, mem_type).await?.0)
 }
 
 /// [`add_memory`] once the subject and its vault are known and the caller may write there.
@@ -782,7 +861,7 @@ async fn insert_memory(
     text: &str,
     source_record_id: Option<&str>,
     mem_type: &str,
-) -> AppResult<MemoryOut> {
+) -> AppResult<(MemoryOut, String)> {
     // every memory write (tools, REST, extraction) lands here, so this is the one place secrets are dropped
     let mut redacted = Vec::new();
     let text = crate::redact::redact(text, &mut redacted);
@@ -821,7 +900,7 @@ async fn insert_memory(
     let op = if memory.version > 1 { changes::UPDATED } else { changes::CREATED };
     changes::record(db, vault, op, changes::MEMORY, &memory.id).await;
 
-    Ok(MemoryOut { redacted, ..memory_out(&memory, None) })
+    Ok((MemoryOut { redacted, ..memory_out(&memory, None) }, memory.vault_name))
 }
 
 /// Deterministic id of a subject's observation when it is first created, so
@@ -854,9 +933,9 @@ pub async fn write_memory(
     let entity_rid: RecordId =
         crate::rid::parse(&entity.id).map_err(|_| AppError::internal("entity id did not round-trip"))?;
     let vault: RecordId = crate::rid::parse(&entity.vault).map_err(|_| AppError::internal("vault id did not round-trip"))?;
-    let memory = insert_memory(db, owner, &entity_rid, &vault, text, source_record_id, mem_type).await?;
+    let (memory, vault_name) = insert_memory(db, owner, &entity_rid, &vault, text, source_record_id, mem_type).await?;
     let possible_duplicates = if created { possible_duplicates(db, &entity).await? } else { Vec::new() };
-    Ok(WriteMemoryOut { entity, memory, possible_duplicates, kind_mapped })
+    Ok(WriteMemoryOut { entity, memory, possible_duplicates, kind_mapped, vault_name })
 }
 
 /// RELATE two entities, idempotent on the (in, out, label) unique index -- a
@@ -1551,6 +1630,18 @@ pub async fn upsert_code_entity(
     }
 
     Ok(entity)
+}
+
+#[derive(Deserialize, SurrealValue)]
+pub(crate) struct NamedEntity {
+    pub vault: RecordId,
+    pub name: String,
+}
+
+pub(crate) async fn names_by_prefix(db: &OrgDb, vaults: &[RecordId], key: &str) -> AppResult<Vec<NamedEntity>> {
+    // The successor of a space is !, so the range includes only names continuing with a space.
+    Ok(q::names_by_prefix(db).bind(("vaults", vaults.to_vec())).bind(("key", key.to_string()))
+        .bind(("lower", format!("{key} "))).bind(("upper", format!("{key}!"))).await?.take(0)?)
 }
 
 #[cfg(test)]

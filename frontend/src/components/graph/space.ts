@@ -97,7 +97,7 @@ export function useMapSpaces(): { ids: string[]; ready: boolean; toggle: (id: st
   const shared = useSharedSpace();
   const raw = useSyncExternalStore(mapSubscribe, mapSnapshot, () => null);
   const vaults = useVaults().data ?? [];
-  const personal = vaults.find((v) => v.kind === "personal");
+  const personal = vaults.find((v) => v.is_default);
   const current = shared.vaultId ?? personal?.id;
   let stored: string[] = [];
   try {

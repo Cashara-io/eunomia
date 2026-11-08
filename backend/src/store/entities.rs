@@ -20,9 +20,9 @@ pub const WRITE_OBSERVATION: Stmt = Stmt::at(
         };
         LET $target = array::concat($cur, $legacy);
         LET $row = IF array::len($target) > 0 {
-            (UPDATE $target[0] SET text = $text, version = version + 1, status = "fresh", updated_at = time::now() RETURN AFTER)
+            (UPDATE $target[0] SET text = $text, version = version + 1, status = "fresh", updated_at = time::now() RETURN *, vault.name AS vault_name)
         } ELSE {
-            (CREATE $obs_id SET owner = $owner, vault = $vault, subject = $subject, text = $text, type = "observation", status = "fresh", source = $source RETURN AFTER)
+            (CREATE $obs_id SET owner = $owner, vault = $vault, subject = $subject, text = $text, type = "observation", status = "fresh", source = $source RETURN *, vault.name AS vault_name)
         };
         RETURN $row;
         COMMIT TRANSACTION;"#,
@@ -32,7 +32,7 @@ pub const WRITE_OBSERVATION: Stmt = Stmt::at(
 pub const WRITE_FACT: Stmt = Stmt::at(
     "entities.write_fact",
     r#"BEGIN TRANSACTION;
-        CREATE memory SET owner = $owner, vault = $vault, subject = $subject, text = $text, type = $type, source = $source RETURN AFTER;
+        CREATE memory SET owner = $owner, vault = $vault, subject = $subject, text = $text, type = $type, source = $source RETURN *, vault.name AS vault_name;
         LET $cur = (SELECT VALUE id FROM $obs_id);
         IF array::len($cur) > 0 {
             UPDATE $obs_id SET status = "stale" WHERE status != "stale"
@@ -308,7 +308,7 @@ pub const CUSTOM_KIND_ROOM: Stmt = Stmt::new(
 /// Every custom kind in `$vaults`, with how many entities it has there.
 pub const CUSTOM_KINDS_IN: Stmt = Stmt::new(
     "entities.custom_kinds_in",
-    "SELECT kind, count() AS count FROM entity WHERE vault IN $vaults GROUP BY kind ORDER BY kind",
+    "SELECT kind, vault, count() AS count FROM entity WHERE vault IN $vaults GROUP BY kind, vault ORDER BY kind",
 );
 
 // extract.rs
@@ -482,4 +482,34 @@ pub fn search_entities<'a>(db: &'a OrgDb, kinds: &[&str], by_kind: bool, with_fa
             rows.join(", ")
         ),
     )
+}
+
+fn name_lookup_select(table: &str, prefix: bool) -> String {
+    if prefix {
+        // 3.3.5 leaves a compound range's upper bound as a residual filter. Limit the ordered
+        // lower-bound index read first, so a missing prefix cannot scan the rest of the vault.
+        format!("SELECT vault, name FROM (SELECT vault, name, name_key FROM {table} \
+                 WHERE vault = $vault AND name_key >= $lower ORDER BY name_key LIMIT 8) WHERE name_key < $upper")
+    } else {
+        format!("SELECT vault, name FROM {table} WHERE vault = $vault AND name_key = $key LIMIT 8")
+    }
+}
+
+/// Separate exact and word-prefix index reads, limited per table and vault so Personal cannot crowd
+/// out another space. Scalar vault equality lets the compound name_key index use its trailing range.
+pub fn names_by_prefix<'a>(db: &'a OrgDb) -> Q<'a> {
+    let selects: Vec<String> = crate::entities::service::ENTITY_TABLES.iter()
+        // Custom entities only gain a cross-kind name index in migration 0039.
+        .filter(|table| **table != "entity" || db.schema_version() >= 39)
+        .flat_map(|table| [false, true].map(|prefix| format!("({})", name_lookup_select(table, prefix))))
+        .collect();
+    dynamic(db, "entities.names_by_prefix", format!(
+        "RETURN array::flatten($vaults.map(|$vault| array::concat({})))", selects.join(", ")
+    ))
+}
+
+#[cfg(feature = "test-support")]
+pub fn explain_name_lookup<'a>(db: &'a OrgDb, table: &str, prefix: bool) -> Q<'a> {
+    assert!(crate::entities::service::ENTITY_TABLES.contains(&table));
+    dynamic(db, "entities.explain_name_lookup", format!("{} EXPLAIN", name_lookup_select(table, prefix)))
 }

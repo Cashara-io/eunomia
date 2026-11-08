@@ -11,6 +11,7 @@ expression: stable
     "total size",
     "databases"
   ],
-  "suggestion": "Not covered by an approved kind, property, metric or link: \"total size\", \"databases\". Say so instead of guessing a number. To make it answerable, propose what is missing with ontology_propose (a property and a metric on the kind it belongs to); a vault owner approves it in Kinds and links.",
+  "chosen_by": "ontology",
+  "suggestion": "No space you can read has an approved term for this question or holds what it names; \"Personal\" was checked because it has an approved ontology. Not covered by an approved kind, property, metric or link: \"total size\", \"databases\". Say so instead of guessing a number. To make it answerable, propose what is missing with ontology_propose (a property and a metric on the kind it belongs to); a vault owner approves it in Kinds and links.",
   "mode": "words"
 }

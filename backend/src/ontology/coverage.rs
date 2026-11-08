@@ -85,6 +85,13 @@ pub struct VaultCoverage {
     pub coverage: f64,
 }
 
+/// A vault the caller can read.
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+pub struct Space {
+    pub vault: String,
+    pub name: String,
+}
+
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct CoverageOut {
     /// The vault the answer is from: the one named, or else the readable vault that covers the
@@ -105,6 +112,13 @@ pub struct CoverageOut {
     /// vault was named).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub also: Vec<VaultCoverage>,
+    /// Why `vault` was picked: `vault_id` (named), `coverage` (it matched the most), and when no readable
+    /// vault matches anything, `entities` (it holds what the question names), `ontology` (it has an
+    /// approved ontology) or `none` (no vault covers it: `spaces` lists the ones to ask about).
+    pub chosen_by: String,
+    /// Every vault the caller can read, when none covers the question (`chosen_by` is `none`).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub spaces: Vec<Space>,
     /// What to do next, in one or two sentences.
     pub suggestion: String,
     /// `model` when the model picked the phrases and embeddings matched them, `words` when phrases are
@@ -334,6 +348,23 @@ fn partial<'a>(phrase: &str, candidates: &'a [Candidate], fits: impl Fn(&Candida
         .map(|(_, c)| c)
 }
 
+/// The term a one-word phrase is a whole word of ("costs" in `unit_cost`), when exactly one term of the
+/// first sort that has any (properties, then metrics, kinds and link types) has it, among those `fits`
+/// lets through. Two properties with the word are two guesses, so neither is taken.
+fn word_of<'a>(phrase: &str, candidates: &'a [Candidate], fits: impl Fn(&Candidate) -> bool) -> Option<&'a Candidate> {
+    let p = words(phrase);
+    let [w] = p.as_slice() else { return None };
+    for term in [Term::Property, Term::Metric, Term::Kind, Term::Link] {
+        let mut hits = candidates.iter().filter(|c| c.term == term && fits(c) && c.keys.iter().any(|k| k.len() > 1 && k.contains(w)));
+        match (hits.next(), hits.next()) {
+            (None, _) => continue,
+            (Some(c), None) => return Some(c),
+            (Some(_), Some(_)) => return None,
+        }
+    }
+    None
+}
+
 const PHRASE_PROMPT: &str = "You read one question a person asked about their business data, between <question> tags. \
 List the terms the data must define before the question can be answered: what is measured or counted (gross margin, price, \
 lead time, revenue), the kinds of things involved (product, supplier, order) and how they relate (supplied by, delivered to). \
@@ -386,6 +417,10 @@ pub async fn coverage(db: &OrgDb, settings: &Settings, owner: &RecordId, questio
         None => scope::readable(db, owner).await?,
     };
 
+    if vaults.is_empty() {
+        return Err(AppError::bad_request("No spaces are included in default reads. Pass vault_id to choose a space."));
+    }
+
     let p = provider::resolve(db, settings, owner).await?;
     let with_model = settings.embeddings_backend == "openai" && p.configured();
     let phrases = if with_model { model_phrases(&p, question).await.ok() } else { None };
@@ -409,10 +444,17 @@ pub async fn coverage(db: &OrgDb, settings: &Settings, owner: &RecordId, questio
     let share = |f: &Found| if phrases.is_empty() { 0.0 } else { ((f.matched.len() as f64 / phrases.len() as f64) * 100.0).round() / 100.0 };
     // most phrases matched, then nearest; the default vault comes first, so it wins a tie
     let score = |f: &Found| (f.matched.len(), std::cmp::Reverse((f.matched.iter().map(|m| m.distance).sum::<f64>() * 1000.0).round() as i64));
-    let mut best = 0;
-    for (i, f) in found.iter().enumerate() {
-        if score(f) > score(&found[best]) {
-            best = i;
+    let mut best = first_max(found.iter().map(score));
+    let mut chosen_by = if vault_id.is_some() { "vault_id" } else { "coverage" };
+    // a tie at nothing matched must not fall to the default vault just because it is listed first
+    if vault_id.is_none() && vaults.len() > 1 && !phrases.is_empty() && found[best].matched.is_empty() {
+        let held = held_by(db, &vaults, question).await?;
+        if held.iter().any(|h| *h > 0) {
+            (best, chosen_by) = (first_max(held.into_iter()), "entities");
+        } else if found.iter().any(|f| f.approved > 0) {
+            (best, chosen_by) = (first_max(found.iter().map(|f| f.approved)), "ontology");
+        } else {
+            chosen_by = "none";
         }
     }
     let mut also: Vec<VaultCoverage> = vaults
@@ -425,14 +467,25 @@ pub async fn coverage(db: &OrgDb, settings: &Settings, owner: &RecordId, questio
     also.sort_by(|a, b| b.coverage.total_cmp(&a.coverage));
     let coverage = share(&found[best]);
     let vault = vaults[best].clone();
-    let Found { mut matched, mut uncovered, mut needs_metric } = found.into_iter().nth(best).expect("one vault at least");
+    let Found { mut matched, mut uncovered, mut needs_metric, .. } = found.into_iter().nth(best).expect("one vault at least");
     // keep the question's order
     let order: HashMap<&String, usize> = phrases.iter().enumerate().map(|(i, p)| (p, i)).collect();
     matched.sort_by_key(|m| order.get(&m.phrase).copied().unwrap_or(usize::MAX));
     uncovered.sort_by_key(|p| order.get(p).copied().unwrap_or(usize::MAX));
     needs_metric.sort_by_key(|m| order.get(&m.phrase).copied().unwrap_or(usize::MAX));
 
-    let suggestion = suggest(&phrases, &matched, &uncovered, &needs_metric);
+    let quoted = |names: &mut dyn Iterator<Item = &str>| names.map(|n| format!("\"{n}\"")).collect::<Vec<_>>().join(", ");
+    let suggestion = match chosen_by {
+        "none" => format!(
+            "No space you can read covers this question: none has an approved term for {} or holds what it names. The spaces you can read are {}. Ask the user which space they mean, or pass vault_id to check one, instead of guessing.",
+            quoted(&mut uncovered.iter().map(String::as_str)),
+            quoted(&mut vaults.iter().map(|v| v.name.as_str()))
+        ),
+        "entities" => format!("No space you can read has an approved term for this question; \"{}\" was checked because it holds what the question names. {}", vault.name, suggest(&phrases, &matched, &uncovered, &needs_metric)),
+        "ontology" => format!("No space you can read has an approved term for this question or holds what it names; \"{}\" was checked because it has an approved ontology. {}", vault.name, suggest(&phrases, &matched, &uncovered, &needs_metric)),
+        _ => suggest(&phrases, &matched, &uncovered, &needs_metric),
+    };
+    let spaces = if chosen_by == "none" { vaults.iter().map(|v| Space { vault: v.id.to_string(), name: v.name.clone() }).collect() } else { Vec::new() };
     Ok(CoverageOut {
         vault: vault.id.to_string(),
         vault_name: vault.name,
@@ -441,10 +494,71 @@ pub async fn coverage(db: &OrgDb, settings: &Settings, owner: &RecordId, questio
         uncovered,
         needs_metric,
         also,
+        chosen_by: chosen_by.to_string(),
+        spaces,
         suggestion,
         mode: mode.to_string(),
         warning,
     })
+}
+
+/// The index of the first largest item (0 when there are none).
+fn first_max<T: PartialOrd>(items: impl Iterator<Item = T>) -> usize {
+    let mut best: Option<(usize, T)> = None;
+    for (i, x) in items.enumerate() {
+        if best.as_ref().is_none_or(|(_, b)| x > *b) {
+            best = Some((i, x));
+        }
+    }
+    best.map_or(0, |(i, _)| i)
+}
+
+/// The longest run of words a name in the question is looked up by, and how many lookups one question
+/// may make.
+const MAX_NAME_WORDS: usize = 4;
+const MAX_NAME_SEARCHES: usize = 16;
+
+fn plain_words(s: &str) -> Vec<String> {
+    s.to_lowercase().split(|c: char| !(c.is_alphanumeric() || c == '\'')).map(|w| w.trim_matches('\'')).filter(|w| !w.is_empty()).map(String::from).collect()
+}
+
+/// For each of `vaults`, how many of the question's words name an entity it holds: "Coastal Irrigation"
+/// names "Coastal Irrigation Co" (whole words at the start of its name). Runs of the question's words
+/// are looked up longest first, and a word that named something is not looked up again. Only `vaults`
+/// (the ones the caller can read) are searched.
+async fn held_by(db: &OrgDb, vaults: &[Readable], question: &str) -> AppResult<Vec<usize>> {
+    let ids: Vec<RecordId> = vaults.iter().map(|v| v.id.clone()).collect();
+    let mut held = vec![0; vaults.len()];
+    let mut searches = 0;
+    for phrase in split_phrases(question) {
+        let run = plain_words(&phrase);
+        let mut used = vec![false; run.len()];
+        for len in (1..=run.len().min(MAX_NAME_WORDS)).rev() {
+            for start in 0..=run.len() - len {
+                let gram = &run[start..start + len];
+                if used[start..start + len].iter().any(|u| *u) {
+                    continue;
+                }
+                if searches == MAX_NAME_SEARCHES {
+                    return Ok(held);
+                }
+                searches += 1;
+                let names = |s: &str| plain_words(s).windows(len).any(|w| w == gram);
+                let found = crate::entities::service::names_by_prefix(db, &ids, &gram.join(" ")).await?;
+                let mut hit = vec![false; vaults.len()];
+                for e in found.iter().filter(|e| names(&e.name)) {
+                    if let Some(i) = vaults.iter().position(|v| v.id == e.vault) {
+                        hit[i] = true;
+                    }
+                }
+                if hit.iter().any(|h| *h) {
+                    used[start..start + len].iter_mut().for_each(|u| *u = true);
+                    held.iter_mut().zip(hit).filter(|(_, h)| *h).for_each(|(n, _)| *n += len);
+                }
+            }
+        }
+    }
+    Ok(held)
 }
 
 /// One vault's answer for the question's phrases.
@@ -452,6 +566,8 @@ struct Found {
     matched: Vec<Matched>,
     uncovered: Vec<String>,
     needs_metric: Vec<Matched>,
+    /// Approved terms the vault has, built-in kinds left out.
+    approved: usize,
 }
 
 /// Each vault's matches for `phrases`, in the order of `vaults`. With embeddings the phrases are
@@ -497,7 +613,8 @@ async fn near_terms(db: &OrgDb, vault: &RecordId, phrases: &[String], spec: &str
 /// a number matches only a metric, or a property whose own name or synonym it is.
 fn match_phrases(phrases: &[String], terms: &[Candidate], near: &HashMap<String, Vec<(f64, String)>>) -> Found {
     let by_id: HashMap<String, &Candidate> = terms.iter().filter_map(|c| c.id.as_ref().map(|id| (id.to_string(), c))).collect();
-    let mut found = Found { matched: Vec::new(), uncovered: Vec::new(), needs_metric: Vec::new() };
+    let approved = terms.iter().filter(|c| c.id.is_some()).count();
+    let mut found = Found { matched: Vec::new(), uncovered: Vec::new(), needs_metric: Vec::new(), approved };
     let named = |phrase: &String, c: &Candidate, distance: f64| Matched { phrase: phrase.clone(), term: c.term, name: c.name.clone(), of_kind: c.of_kind.clone(), distance };
     let any = |_: &Candidate| true;
     // a name or synonym first; then, with a model, the nearest term by meaning; a run of words last
@@ -509,12 +626,15 @@ fn match_phrases(phrases: &[String], terms: &[Candidate], near: &HashMap<String,
         }
         let near: Vec<(f64, &Candidate)> = near.get(phrase).into_iter().flatten().filter_map(|(d, id)| by_id.get(id).map(|c| (*d, *c))).collect();
         let fits = |c: &Candidate| !number || c.term == Term::Metric || (c.term == Term::Property && names_the_measure(phrase, c));
-        match (near.iter().find(|(_, c)| fits(c)), partial(phrase, terms, fits)) {
+        match (near.iter().find(|(_, c)| fits(c)), partial(phrase, terms, fits).or_else(|| word_of(phrase, terms, fits))) {
             (Some((d, c)), _) => found.matched.push(named(phrase, c, *d)),
             (None, Some(c)) => found.matched.push(named(phrase, c, 0.0)),
             (None, None) => {
                 found.uncovered.push(phrase.clone());
-                let named_only = exact(phrase, terms, any).map(|c| (0.0, c)).or_else(|| near.first().copied()).or_else(|| partial(phrase, terms, any).map(|c| (0.0, c)));
+                let named_only = exact(phrase, terms, any)
+                    .map(|c| (0.0, c))
+                    .or_else(|| near.first().copied())
+                    .or_else(|| partial(phrase, terms, any).or_else(|| word_of(phrase, terms, any)).map(|c| (0.0, c)));
                 if let Some((d, c)) = named_only.filter(|_| number) {
                     found.needs_metric.push(named(phrase, c, d));
                 }
@@ -618,5 +738,26 @@ mod tests {
         assert_eq!((found.matched.len(), found.needs_metric[0].distance), (0, 0.53));
         let near = HashMap::from([("stock level".to_string(), vec![(0.41, "ontology_property:stock".to_string())])]);
         assert_eq!(match_phrases(&ask("stock level"), &[stock], &near).matched[0].distance, 0.41);
+    }
+
+    #[test]
+    fn a_plain_word_of_exactly_one_terms_name_is_a_partial_match() {
+        let unit_cost = Candidate { of_kind: Some("product".into()), ..cand(Term::Property, "unit_cost", &[]) };
+        let at_cost = cand(Term::Metric, "total_stock_value_at_cost", &[]);
+        let ask = |p: &str| vec![p.to_string()];
+        let none = HashMap::new();
+        let found = match_phrases(&ask("costs"), &[unit_cost.clone(), at_cost.clone()], &none);
+        assert_eq!((found.matched[0].term, found.matched[0].name.as_str()), (Term::Property, "unit_cost"), "one property has the word");
+        assert!(match_phrases(&ask("costs"), &[unit_cost.clone(), cand(Term::Property, "freight_cost", &[])], &none).matched.is_empty(), "two are a guess");
+        assert_eq!(match_phrases(&ask("cost"), std::slice::from_ref(&at_cost), &none).matched[0].name, "total_stock_value_at_cost", "a metric when no property has it");
+        assert!(match_phrases(&ask("unit price"), std::slice::from_ref(&unit_cost), &none).matched.is_empty(), "only a one-word phrase");
+        assert!(match_phrases(&ask("costly"), std::slice::from_ref(&unit_cost), &none).matched.is_empty(), "a whole word only");
+
+        // a number still needs a metric or a property that names the measure
+        let call = cand(Term::Kind, "margin_call", &[]);
+        let found = match_phrases(&ask("margin"), std::slice::from_ref(&call), &none);
+        assert_eq!((found.matched.len(), found.needs_metric[0].name.as_str()), (0, "margin_call"), "{:?}", found.matched);
+        let gm = cand(Term::Metric, "gross_margin", &[]);
+        assert_eq!(match_phrases(&ask("margin"), &[call, gm], &none).matched[0].name, "gross_margin");
     }
 }
