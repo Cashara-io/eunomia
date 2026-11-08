@@ -89,7 +89,7 @@ async fn an_agent_writes_under_its_own_kind_and_finds_it_again() {
     // vault clone keeps custom kinds
     let cloned = ok(app.tool("vault_clone", json!({"vault_id": "Personal", "name": "Copy"})).await);
     let types = ok(app.tool("entity_types", json!({"vault_id": cloned["id"]})).await);
-    assert_eq!(types["custom"], json!([{"kind": "db", "entities": 1, "status": "observed", "spaces": ["Personal"]}, {"kind": "decision", "entities": 1, "status": "observed", "spaces": ["Personal"]}, {"kind": "table", "entities": 1, "status": "observed", "spaces": ["Personal"]}]));
+    assert_eq!(types["custom"], json!([{"kind": "db", "entities": 1, "status": "observed", "spaces": ["Copy"]}, {"kind": "decision", "entities": 1, "status": "observed", "spaces": ["Copy"]}, {"kind": "table", "entities": 1, "status": "observed", "spaces": ["Copy"]}]));
 }
 
 #[tokio::test]
