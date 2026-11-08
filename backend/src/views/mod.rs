@@ -68,6 +68,8 @@ pub enum ViewSpec {
         group_by_grain: bool,
         #[serde(default)]
         allow_unapproved: bool,
+        #[serde(default)]
+        related_to: Option<scenario::RelatedTo>,
     },
     /// The same arguments as `scenario_run`, under `scenario`; there is no field for a number.
     Scenario { scenario: ScenarioArgs, headline: String },
@@ -182,8 +184,8 @@ pub async fn show(db: &OrgDb, owner: &RecordId, spec: ViewSpec) -> AppResult<Sho
             }
             View::Subgraph { title: clean("title", &title, MAX_HEADLINE)?, entities, relations }
         }
-        ViewSpec::Metric { metric, kind, vault_id, filters, as_of, group_by_grain, allow_unapproved } => {
-            let args = EvalArgs { metric, kind, vault_id, filters, as_of, group_by_grain, allow_unapproved };
+        ViewSpec::Metric { metric, kind, vault_id, filters, as_of, group_by_grain, allow_unapproved, related_to } => {
+            let args = EvalArgs { metric, kind, vault_id, filters, as_of, group_by_grain, allow_unapproved, related_to };
             let out = metric::eval(db, owner, &args).await?;
             let ids = out.entity_ids.iter().map(String::as_str);
             let graph = Resolved::load(db, owner, ids, std::iter::empty()).await?;
@@ -356,17 +358,29 @@ impl View {
     }
 }
 
-/// A metric's number as people write it: money to the cent, whole numbers bare, others to two places.
+/// Whether a unit says the number is a percent: "%", "percent", "percentage" or "pct".
+pub fn is_percent(unit: Option<&str>) -> bool {
+    unit.is_some_and(|u| matches!(u.trim().to_ascii_lowercase().as_str(), "%" | "percent" | "percentage" | "pct"))
+}
+
+/// `value` to at most `places` decimals, trailing zeros dropped.
+fn places(value: f64, places: usize) -> String {
+    if value.fract() == 0.0 && value.abs() < 1e15 {
+        return format!("{}", value as i64);
+    }
+    let s = format!("{value:.places$}");
+    let s = s.trim_end_matches('0').trim_end_matches('.');
+    if s == "-0" { "0".to_string() } else { s.to_string() }
+}
+
+/// A metric's number as people write it: money to the cent, a percent to one place ("44.1%"), whole
+/// numbers bare, others to two places.
 pub fn number(value: f64, unit: Option<&str>) -> String {
+    if is_percent(unit) {
+        return format!("{}%", places(value, 1));
+    }
     let money = unit.is_some_and(|u| u.len() == 3 && u.chars().all(|c| c.is_ascii_uppercase()));
-    let n = if money {
-        format!("{value:.2}")
-    } else if value.fract() == 0.0 && value.abs() < 1e15 {
-        format!("{}", value as i64)
-    } else {
-        let s = format!("{value:.2}");
-        s.trim_end_matches('0').trim_end_matches('.').to_string()
-    };
+    let n = if money { format!("{value:.2}") } else { places(value, 2) };
     match unit {
         Some(u) => format!("{n} {u}"),
         None => n,
@@ -407,6 +421,9 @@ fn metric_text(m: &MetricEvalOut, entities: &[EntityRef]) -> String {
 
 /// A number as [`number`] writes it for `unit`, without the unit.
 fn figure(v: f64, unit: Option<&str>) -> String {
+    if is_percent(unit) {
+        return places(v, 1);
+    }
     let s = number(v, unit);
     match unit {
         Some(u) => s.strip_suffix(&format!(" {u}")).unwrap_or(&s).to_string(),
@@ -414,9 +431,25 @@ fn figure(v: f64, unit: Option<&str>) -> String {
     }
 }
 
-/// "15.22 \u{2192} 15.67 AUD, up 0.45 AUD (2.9%)": the move in words, never by colour alone.
+/// "15.22 \u{2192} 15.67 AUD, up 0.45 AUD (2.9%)": the move in words, never by colour alone. A percent
+/// moves in points, from the figures as shown: "44.1% \u{2192} 42.4%, down 1.7 points".
 pub fn movement(before: Option<f64>, after: Option<f64>, delta_pct: Option<f64>, unit: Option<&str>) -> String {
-    let tail = unit.map(|u| format!(" {u}")).unwrap_or_default();
+    if let (true, Some(a), Some(b)) = (is_percent(unit), before, after) {
+        let shown = |v: f64| (v * 10.0).round() / 10.0;
+        let d = shown(b) - shown(a);
+        if d.abs() < 1e-9 {
+            return format!("{}%, no change", figure(a, unit));
+        }
+        let way = if d > 0.0 { "up" } else { "down" };
+        let points = places((d.abs() * 10.0).round() / 10.0, 1);
+        let noun = if points == "1" { "point" } else { "points" };
+        return format!("{}% \u{2192} {}%, {way} {points} {noun}", figure(a, unit), figure(b, unit));
+    }
+    let tail = match unit {
+        Some(_) if is_percent(unit) => "%".to_string(),
+        Some(u) => format!(" {u}"),
+        None => String::new(),
+    };
     let (a, b) = match (before, after) {
         (Some(a), Some(b)) => (a, b),
         (None, Some(b)) => return format!("no value before, {}{tail} after", figure(b, unit)),
@@ -498,6 +531,18 @@ mod tests {
              1. Shipment 88 (shipment), via Truck 7 carries Shipment 88. It is on the truck.\n\
              2. Order 12 (order), via Truck 7 carries Shipment 88, then Shipment 88 part of Order 12. Its shipment is late."
         );
+    }
+
+    #[test]
+    fn a_percent_reads_as_one_and_moves_in_points() {
+        assert_eq!(number(44.0584, Some("%")), "44.1%");
+        assert_eq!(number(45.0, Some("percent")), "45%");
+        assert_eq!(number(15.2, Some("AUD")), "15.20 AUD");
+        assert_eq!(number(2.5, None), "2.5");
+        assert_eq!(movement(Some(44.0584), Some(42.39), Some(-3.79), Some("%")), "44.1% \u{2192} 42.4%, down 1.7 points");
+        assert_eq!(movement(Some(44.0), Some(45.0), Some(2.27), Some("%")), "44% \u{2192} 45%, up 1 point");
+        assert_eq!(movement(Some(15.22), Some(15.67), Some(2.96), Some("AUD")), "15.22 \u{2192} 15.67 AUD, up 0.45 AUD (3%)");
+        assert!(is_percent(Some(" Percent ")) && !is_percent(Some("AUD")) && !is_percent(None));
     }
 
     #[test]

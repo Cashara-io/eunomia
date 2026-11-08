@@ -195,7 +195,7 @@ No. The connected agent is the model.
 | `ontology_suggest` / `ontology_propose` | Propose kinds, merges, link types, typed properties, metrics and synonyms for a vault owner to approve in the app; without a server model `ontology_suggest` returns the profile for you to review |
 | `ontology_coverage` | Whether a question can be answered from the vault's approved ontology: its key phrases, each matched to an approved kind, property, metric or link type (or not), a `coverage` share and a suggestion. Call it before a number or a what-if ([coverage](#coverage-and-readiness)) |
 | `ontology_readiness` | The vault's kinds, properties, metrics and link types by status, whether it takes only approved kinds and links, and what still blocks answering numbers, in plain words ([readiness](#coverage-and-readiness)) |
-| `metric_eval` | Run an approved metric by name (`avg_price`): the number, its unit, as of when, and the entity ids it came from; optional extra filters, `as_of` and a series by period ([certified metrics](#certified-metrics)) |
+| `metric_eval` | Run an approved metric by name (`avg_price`): the number, its unit, as of when, and the entity ids it came from; optional extra filters, `related_to` (only the entities linked to one, such as one supplier's products), `as_of` and a series by period ([certified metrics](#certified-metrics)) |
 | `scenario_run` | A what-if: hypothetical changes (`set`, `scale`, `shift`, `remove`) put over the real values in memory, the chosen approved metrics before and after, the values changed and the entities the changes reach. Nothing is saved ([what if](#what-if)) |
 | `ontology_automap` | Profile the fields of synced records (all, one `source` or one `record_type`) or an uploaded CSV (`document_id`), and with a server model propose a kind per record type, a typed property per field and links whose values were checked; without a model, the profiles and matching key fields for you to propose ([auto-mapping](#auto-mapping)) |
 | `document_import_rows` | Import an uploaded CSV's rows as entities of an approved kind with values of its approved properties; idempotent, bad cells reported by line ([auto-mapping](#auto-mapping)) |
@@ -334,9 +334,18 @@ and each side is a numeric property, a number or another row (at most 3 deep). T
 a ratio of `{"agg": "sum", "row": {"op": "sub", "left": "price", "right": "cost"}}` over
 `{"agg": "sum", "property": "price"}`. Units are checked when proposed: money times a number is money, money
 minus money of one currency is money, money over money is a share, and money times money is refused. An entity
-whose row divides by 0 is left out and counted in `warnings`. A what-if's changed values flow through rows too.
+whose row divides by 0 is left out and counted in `warnings`. A ratio's two sides always use the same entities:
+one missing a value either side needs (a blank cost) is left out of both, and `warnings` counts it ("left out 1
+entity missing a value one side needs"). A ratio with the unit `percent` (or `%`) comes back as a percent: 0.44
+is `value` 44 with `unit` "%", and views write it "44%" and a move in points ("down 1.7 points"). A what-if's
+changed values flow through rows too.
 
-`metric_eval` also takes extra `filters` (ANDed with the metric's own), `as_of` (each entity's latest value
+`metric_eval` also takes `related_to` `{"entity_id", "label"}`, as `scenario_run` does: only the kind's entities
+linked to that entity (by relations with that label, when given) count. "What is our gross margin on Barwon
+Soil & Mulch products?" is `{"metric": "gross_margin", "related_to": {"entity_id": "<Barwon's id>", "label":
+"supplied_by"}}`, and `expr_words` ends with the pick in words (", on 7 products supplied by Barwon Soil &
+Mulch"). An entity none of the kind is linked to gives no value and a warning, never a 0. It also takes extra
+`filters` (ANDed with the metric's own), `as_of` (each entity's latest value
 by then; a bare date includes its day), `group_by_grain` (a `series` of `{period, value, n}` instead of one
 value) and `kind` (when two kinds have a metric of that name). A proposed metric is refused unless you pass
 `allow_unapproved: true`; it then runs with `status: "proposed"` and a warning, so never present that

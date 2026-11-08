@@ -2674,9 +2674,9 @@ async fn readiness_counts_each_sort_by_status_and_names_the_blockers() {
     ok(app.tool("ontology_propose", json!({"metrics": [{"kind": "product", "name": "avg_weight", "expr": {"agg": "avg", "property": "weight"}}]})).await);
     assert_eq!(decide_property(&app, &vault, "product", "weight", json!({"action": "reject"})).await.0, 200);
     // an approved metric over an approved property that holds no values yet
-    ok(app.tool("ontology_propose", json!({"properties": [{"kind": "product", "name": "stock", "datatype": "integer"}], "metrics": [{"kind": "product", "name": "total_stock", "expr": {"agg": "sum", "property": "stock"}}]})).await);
-    assert_eq!(decide_property(&app, &vault, "product", "stock", json!({"action": "approve"})).await.0, 200);
-    assert_eq!(decide_metric(&app, &vault, "product", "total_stock", json!({"action": "approve"})).await.0, 200);
+    ok(app.tool("ontology_propose", json!({"properties": [{"kind": "product", "name": "units_on_hand", "datatype": "integer"}], "metrics": [{"kind": "product", "name": "total_units_on_hand", "expr": {"agg": "sum", "property": "units_on_hand"}}]})).await);
+    assert_eq!(decide_property(&app, &vault, "product", "units_on_hand", json!({"action": "approve"})).await.0, 200);
+    assert_eq!(decide_metric(&app, &vault, "product", "total_units_on_hand", json!({"action": "approve"})).await.0, 200);
 
     let out = ok(app.tool("ontology_readiness", json!({})).await);
     assert_eq!(out["kinds"], json!({"approved": 2, "proposed": 0, "rejected": 0, "observed": 0}), "{out}");
@@ -2689,7 +2689,7 @@ async fn readiness_counts_each_sort_by_status_and_names_the_blockers() {
         json!([
             "1 property is proposed and needs an owner",
             "2 metrics are proposed and need an owner",
-            "metric total_stock on product uses stock, which has no values yet: import them or set them",
+            "metric total units on hand on product uses units on hand, which has no values yet: import them or set them",
         ]),
         "{out}"
     );
@@ -2703,7 +2703,7 @@ async fn readiness_counts_each_sort_by_status_and_names_the_blockers() {
     }
     let found = ok(app.tool("entities_search", json!({"query": "Latte"})).await);
     let latte = found["results"].as_array().unwrap().iter().find(|r| r["name"] == "Latte").unwrap()["id"].as_str().unwrap().to_string();
-    ok(app.tool("entity_set_property", json!({"entity_id": latte, "property": "stock", "value": 4})).await);
+    ok(app.tool("entity_set_property", json!({"entity_id": latte, "property": "units_on_hand", "value": 4})).await);
     let out = ok(app.tool("ontology_readiness", json!({})).await);
     assert_eq!((out["ready"].as_bool(), out["blockers"].clone()), (Some(true), json!([])), "{out}");
 }
@@ -3235,6 +3235,7 @@ async fn automap_links_parts_to_suppliers_the_import_creates_once_and_row_maths_
     let words = |name: &str| metric(o, "part", name)["expr_words"].as_str().unwrap().to_string();
     assert_eq!(words("total_stock_value"), "Sum of stock × cost");
     assert_eq!(words("gross_margin"), "Sum of (price − cost), divided by sum of price");
+    assert_eq!(metric(o, "part", "gross_margin")["reason"], "computed from the parts.csv records' properties", "the file's name, never its id: {o}");
     assert!(kind(o, "part")["metrics"].as_array().unwrap().iter().all(|m| m["name"] != "bad_value"), "{o}");
 
     // the owner approves the map
@@ -3376,4 +3377,91 @@ async fn a_property_named_like_the_column_wins_over_a_link_guessed_from_the_kind
     let col = out["columns"].as_array().unwrap().iter().find(|c| c["column"] == "supplier").unwrap().clone();
     assert_eq!((col["property"].as_str(), col["link"].as_str()), (Some("supplier"), None), "{out}");
     assert_eq!((out["targets_created"].as_u64(), out["linked"].as_u64()), (Some(0), Some(0)), "{out}");
+}
+
+const GARDEN: &str = include_str!("fixtures/garden.csv");
+
+/// garden.csv as products linked to their suppliers, with a percent gross margin and stock value at cost.
+async fn garden(app: &TestApp) -> std::collections::HashMap<String, String> {
+    let doc = upload_csv(app, "garden.csv", GARDEN).await;
+    let vault = personal(app).await;
+    let source = |col: &str| json!([{"source": "document", "record_type": doc, "path": col}]);
+    ok(app.tool("ontology_propose", json!({
+        "kinds": [{"kind": "product"}, {"kind": "supplier"}],
+        "properties": [
+            {"kind": "product", "name": "price", "datatype": "money", "unit": "AUD", "source_map": source("price AUD")},
+            {"kind": "product", "name": "cost", "datatype": "money", "unit": "AUD", "source_map": source("cost AUD")},
+            {"kind": "product", "name": "stock", "datatype": "integer", "source_map": source("stock")},
+        ],
+        "links": [{"from_kind": "product", "label": "supplied_by", "to_kind": "supplier", "source_map": source("supplier")}],
+        "metrics": [
+            {"kind": "product", "name": "gross_margin", "unit": "percent", "expr": {"agg": "ratio",
+                "numerator": {"agg": "sum", "row": {"op": "mul", "left": {"op": "sub", "left": "price", "right": "cost"}, "right": "stock"}},
+                "denominator": {"agg": "sum", "row": {"op": "mul", "left": "price", "right": "stock"}}}},
+            {"kind": "product", "name": "stock_value", "expr": {"agg": "sum", "row": {"op": "mul", "left": "stock", "right": "cost"}}},
+        ],
+    })).await);
+    for k in ["product", "supplier"] {
+        assert_eq!(decide_kind(app, &vault, k, json!({"action": "approve"})).await.0, 200);
+    }
+    for p in ["price", "cost", "stock"] {
+        assert_eq!(decide_property(app, &vault, "product", p, json!({"action": "approve"})).await.0, 200);
+    }
+    for m in ["gross_margin", "stock_value"] {
+        assert_eq!(decide_metric(app, &vault, "product", m, json!({"action": "approve"})).await.0, 200);
+    }
+    assert_eq!(decide_link(app, &vault, "product", "supplied_by", "supplier").await, 200);
+    let out = ok(app.tool("document_import_rows", json!({"document_id": doc, "kind": "product", "name_column": "product"})).await);
+    assert_eq!((out["created"].as_u64(), out["targets_created"].as_u64(), out["linked"].as_u64()), (Some(8), Some(3), Some(8)), "{out}");
+    let mut ids = std::collections::HashMap::new();
+    for name in ["Barwon Soil & Mulch", "Coastal Irrigation Co"] {
+        let found = ok(app.tool("entities_search", json!({"query": name, "kind": "supplier"})).await);
+        let hit = found["results"].as_array().unwrap().iter().find(|r| r["name"] == name).unwrap_or_else(|| panic!("{found}"));
+        ids.insert(name.to_string(), hit["id"].as_str().unwrap().to_string());
+    }
+    ids
+}
+
+#[tokio::test]
+async fn a_ratio_uses_the_same_entities_on_both_sides_and_a_metric_narrows_to_one_suppliers_products() {
+    let app = TestApp::new().await;
+    let suppliers = garden(&app).await;
+    let (barwon, coastal) = (suppliers["Barwon Soil & Mulch"].clone(), suppliers["Coastal Irrigation Co"].clone());
+    let eval = |args: Value| app.tool("metric_eval", args);
+
+    // worked out from garden.csv: Turf Underlay has no cost, so it is left out of both sides of the margin
+    let gm = ok(eval(json!({"metric": "gross_margin"})).await);
+    assert_eq!((gm["value"].as_f64(), gm["unit"].as_str(), gm["n_entities"].as_u64()), (Some(38.062307), Some("%"), Some(7)), "a fraction shown as a percent is times 100: {gm}");
+    assert!(gm["warnings"].to_string().contains("left out 1 entity missing a value one side needs"), "{gm}");
+    // a sum is unchanged: the blank cost is simply not added
+    let sv = ok(eval(json!({"metric": "stock_value"})).await);
+    assert_eq!((sv["value"].as_f64(), sv["unit"].as_str(), sv["n_entities"].as_u64()), (Some(3246.65), Some("AUD"), Some(7)), "{sv}");
+    assert!(!sv["warnings"].to_string().contains("one side needs"), "{sv}");
+
+    // narrowed by the link: Barwon's 3 products, the lower-case spelling included, 2 of them costed
+    let on_barwon = ok(eval(json!({"metric": "gross_margin", "related_to": {"entity_id": barwon, "label": "supplied_by"}})).await);
+    assert_eq!((on_barwon["value"].as_f64(), on_barwon["n_entities"].as_u64()), (Some(46.615087), Some(2)), "{on_barwon}");
+    assert!(on_barwon["expr_words"].as_str().unwrap().ends_with(", on 3 products supplied by Barwon Soil & Mulch"), "{on_barwon}");
+    assert!(on_barwon["warnings"].to_string().contains("left out 1 entity missing a value one side needs"), "{on_barwon}");
+    let any_label = ok(eval(json!({"metric": "gross_margin", "related_to": {"entity_id": barwon}})).await);
+    assert_eq!(any_label["value"], on_barwon["value"], "{any_label}");
+    // an entity nothing of the kind links to gives no value, never a 0; an unknown id is refused
+    let leaf = write(&app, "Leaf Co", "organisation").await["entity"]["id"].as_str().unwrap().to_string();
+    let none = ok(eval(json!({"metric": "gross_margin", "related_to": {"entity_id": leaf, "label": "supplied_by"}})).await);
+    assert_eq!((none["value"].clone(), none["n_entities"].as_u64()), (Value::Null, Some(0)), "{none}");
+    assert!(none["warnings"].to_string().contains("no products are linked to Leaf Co by supplied by links, so nothing was computed"), "{none}");
+    assert!(err(&eval(json!({"metric": "gross_margin", "related_to": {"entity_id": "entity:nowhere"}})).await).contains("unknown entity"));
+
+    // the metric view reruns it with the same pick and writes the percent as one
+    let view = ok(app.tool("show_view", json!({"view": "metric", "metric": "gross_margin", "related_to": {"entity_id": barwon, "label": "supplied_by"}})).await);
+    let text = view["text"].as_str().unwrap();
+    assert!(text.starts_with("gross_margin: 46.6%\n") && text.contains("on 3 products supplied by Barwon Soil & Mulch."), "{text}");
+
+    // the what-if inherits both: Coastal's costs up 10% moves the margin from 38.06% to 33.90%
+    let args = json!({"changes": [{"scale": {"kind": "product", "property": "cost", "factor": 1.1, "related_to": {"entity_id": coastal, "label": "supplied_by"}}}], "metrics": ["gross_margin"]});
+    let out = ok(app.tool("scenario_run", args.clone()).await);
+    let (b, s) = (&out["baseline"][0], &out["scenario"][0]);
+    assert_eq!((b["value"].as_f64(), s["value"].as_f64(), s["delta"].as_f64(), s["unit"].as_str()), (Some(38.062307), Some(33.895036), Some(-4.167271), Some("%")), "{out}");
+    let view = ok(app.tool("show_view", json!({"view": "scenario", "headline": "Coastal raises costs", "scenario": args})).await);
+    assert!(view["text"].as_str().unwrap().contains("- gross margin: 38.1% \u{2192} 33.9%, down 4.2 points\n"), "{view}");
 }

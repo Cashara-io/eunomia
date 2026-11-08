@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ChartBarIcon, WarningIcon } from "@phosphor-icons/react/ssr";
 import Duo from "@/components/ui/Duo";
 import StatusLabel from "@/components/ui/StatusLabel";
-import { entityHref, formatNumber, words } from "./bits";
+import { entityHref, formatNumber, withUnit, words } from "./bits";
 import type { MetricRun, MetricView as Metric } from "./types";
 
 /** The run's date in the viewer's zone. A bare-date run ends at 23:59:59 UTC, so that one is read in UTC
@@ -90,7 +90,7 @@ export default function MetricView({ view }: { view: Metric }) {
             {run.series.map((p) => (
               <tr key={p.period}>
                 <td className="font-mono">{p.period}</td>
-                <td className="font-mono text-right">{p.value == null ? "none" : `${formatNumber(p.value, run.unit)}${run.unit ? ` ${run.unit}` : ""}`}</td>
+                <td className="font-mono text-right">{p.value == null ? "none" : withUnit(p.value, run.unit)}</td>
                 <td className="font-mono text-right">{p.n}</td>
               </tr>
             ))}
