@@ -98,9 +98,6 @@ pub async fn memory_write(
     occurred_at: Option<&str>,
 ) -> AppResult<service::WriteMemoryOut> {
     let occurred_at = occurred_at.map(|s| crate::cache::search::parse_datetime("occurred_at", s).map(surrealdb::types::Datetime::from)).transpose()?;
-    if vault_id.is_none() {
-        service::check_unnamed_write(&state.db, owner, subject_kind).await?;
-    }
     let out = service::write_memory(&state.db, owner, subject_name, subject_kind, text, source_record_id, mem_type, vault_id).await?;
     let memory_rid = crate::rid::parse(&out.memory.id).map_err(|_| crate::error::AppError::internal("memory id did not round-trip"))?;
     if let Some(at) = occurred_at {

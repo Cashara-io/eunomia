@@ -3465,3 +3465,36 @@ async fn a_ratio_uses_the_same_entities_on_both_sides_and_a_metric_narrows_to_on
     let view = ok(app.tool("show_view", json!({"view": "scenario", "headline": "Coastal raises costs", "scenario": args})).await);
     assert!(view["text"].as_str().unwrap().contains("- gross margin: 38.1% \u{2192} 33.9%, down 4.2 points\n"), "{view}");
 }
+
+#[tokio::test]
+async fn gate2_rest_cannot_seed_a_new_personal_kind_past_a_strict_space() {
+    let app = TestApp::new().await;
+    strict_garden_supply(&app).await;
+    let token = eunomia_backend::models_user::create_api_token_with(
+        &app.state.control, &app.user.id, "writer", &["memory:write".into()], None, None,
+    ).await.unwrap().token;
+    let body = json!({"kind": "livestock", "name": "Chickens"});
+    let ((status, out), _) = common::http(&app.router, "POST", "/api/entities", Some(body.clone()), Some(&token), None).await;
+    assert_eq!(status, 400, "{out}");
+    let message = out["detail"].as_str().unwrap();
+    assert!(message.contains("vault_id") && message.contains("Geelong Garden Supply") && message.contains("Personal"), "{out}");
+    let (status, out) = app.http_session("POST", "/api/entities", Some(body.clone())).await;
+    assert_eq!(status, 400, "the browser gets the same error: {out}");
+    assert_eq!(out["detail"], message);
+    let refused = app.tool("memory_write", chickens(json!({}))).await;
+    assert!(refused.get("error").is_some(), "REST did not seed the kind: {refused}");
+    let db = app.db().await;
+    assert!(common::sys(eunomia_backend::entities::service::upsert_entity_created(
+        &db, &app.user.id, "livestock", "Chickens", None, None,
+    )).await.is_err());
+    let mine = personal(&app).await;
+    let mut explicit = body;
+    explicit["vault_id"] = json!(mine);
+    let ((status, out), _) = common::http(&app.router, "POST", "/api/entities", Some(explicit.clone()), Some(&token), None).await;
+    assert_eq!(status, 200, "{out}");
+    assert_eq!(out["vault"], mine);
+    explicit["name"] = json!("Ducks");
+    let (status, out) = app.http_session("POST", "/api/entities", Some(explicit)).await;
+    assert_eq!(status, 200, "selected-space Memory page creation: {out}");
+    assert_eq!(out["vault"], mine);
+}

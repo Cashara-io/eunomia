@@ -461,6 +461,9 @@ pub async fn upsert_grounded(
     vault_id: Option<&RecordId>,
 ) -> AppResult<Upserted> {
     let table = kind_table(kind)?;
+    if vault_id.is_none() {
+        check_unnamed_write(db, owner, kind).await?;
+    }
     let vault = resolve_vault(db, owner, vault_id, Action::WriteMemories).await?;
     let kind_mapped = if table == CUSTOM_TABLE { crate::ontology::ground(db, &vault, kind).await? } else { None };
     let kind = kind_mapped.as_ref().map_or(kind, |m| m.to.as_str());
@@ -521,6 +524,9 @@ pub async fn upsert_entity_created(
     vault_id: Option<&RecordId>,
 ) -> AppResult<(EntityOut, bool)> {
     kind_table(kind)?;
+    if vault_id.is_none() {
+        check_unnamed_write(db, owner, kind).await?;
+    }
     let vault = resolve_vault(db, owner, vault_id, Action::WriteMemories).await?;
     upsert_in_vault(db, owner, kind, name, aliases, &vault, Lookups::NameAndAlias).await
 }
@@ -752,7 +758,7 @@ async fn kind_in(db: &OrgDb, vault: &RecordId, kind: &str) -> AppResult<bool> {
 /// that takes only approved kinds, the fact is likely the business's: refused, naming the vaults the
 /// user can write to, so the caller passes `vault_id` (the personal one too, when that is meant). A
 /// vault-restricted credential writes to its own vault, so it is never asked.
-pub async fn check_unnamed_write(db: &OrgDb, owner: &RecordId, kind: &str) -> AppResult<()> {
+async fn check_unnamed_write(db: &OrgDb, owner: &RecordId, kind: &str) -> AppResult<()> {
     if kind_table(kind)? != CUSTOM_TABLE || authz::restricted_vault()?.is_some() {
         return Ok(());
     }

@@ -369,7 +369,7 @@ export default function EntityGraph({
         kind: createForm.kind,
         name,
         aliases: aliases.length ? aliases : undefined,
-        vault_id: vaultId,
+        vault_id: vaultId ?? myVaults.find((v) => v.kind === "personal")?.id,
       });
       setShowCreate(false);
       setCreateForm({ kind: shownKinds[0], name: "", aliases: "" });
