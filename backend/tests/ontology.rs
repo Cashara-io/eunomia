@@ -2736,6 +2736,34 @@ async fn extraction_in_a_strict_vault_skips_links_that_are_not_approved_and_file
     assert_eq!(link(&o, "person", "buys_from", "organisation")["status"], "proposed", "and the refused link is filed: {o}");
 }
 
+#[tokio::test]
+async fn strict_mode_lets_the_code_map_link_its_own_kinds_and_files_nothing_for_them() {
+    let app = TestApp::new().await;
+    let vault = personal(&app).await;
+    let widget = write(&app, "Widget 1", "widget").await["entity"]["id"].as_str().unwrap().to_string();
+    assert_eq!(decide_kind(&app, &vault, "widget", json!({"action": "approve"})).await.0, 200);
+    assert_eq!(set_strict(&app, &vault, true).await.0, 200);
+
+    let id = |v: Value| ok(v)["id"].as_str().unwrap().to_string();
+    let repo = id(app.tool("code_entity_upsert", json!({"kind": "repository", "name": "eunomia"})).await);
+    let file = id(app.tool("code_entity_upsert", json!({"kind": "file", "name": "main.rs", "parent_id": repo})).await);
+    let main = id(app.tool("code_entity_upsert", json!({"kind": "symbol", "name": "main", "parent_id": file})).await);
+    let run = id(app.tool("code_entity_upsert", json!({"kind": "symbol", "name": "run", "parent_id": file})).await);
+    ok(app.tool("code_relate", json!({"from_id": main, "to_id": run, "label": "calls"})).await);
+    ok(app.tool("code_relate", json!({"from_id": file, "to_id": repo, "label": "imports"})).await);
+
+    let db = app.db().await;
+    let mut labels: Vec<String> = db.test_raw().query("SELECT VALUE label FROM relates_to").await.unwrap().take(0).unwrap();
+    labels.sort();
+    assert_eq!(labels, ["calls", "defined_in", "defined_in", "imports", "part_of"]);
+    let filed: Vec<String> = db.test_raw().query("SELECT VALUE label FROM ontology_link").await.unwrap().take(0).unwrap();
+    assert!(filed.is_empty(), "nothing is filed for the code map: {filed:?}");
+
+    // a link to a custom kind still needs an approved link type
+    let out = app.tool("code_relate", json!({"from_id": main, "to_id": widget, "label": "renders"})).await;
+    assert_eq!(out["code"], "ontology.rejected", "{out}");
+}
+
 #[test]
 fn the_ontology_tool_eval_list_names_only_registered_tools() {
     let evals: Value = serde_json::from_str(include_str!("../../docs/evals/ontology-tools.json")).unwrap();

@@ -851,6 +851,8 @@ pub async fn ground_link(db: &OrgDb, vault: &RecordId, from_kind: &str, label: &
     match status.first().map(String::as_str) {
         Some(s) if s == Status::Approved.as_str() => return Ok(()),
         Some(s) if s == Status::Rejected.as_str() => {}
+        // the code map's own links (part_of, defined_in, calls, imports) need no owner's review
+        _ if [from_kind, to_kind].iter().all(|k| crate::entities::service::CODE_KINDS.contains(k)) => return Ok(()),
         _ => return strict_link(db, vault, &key).await,
     }
     let approved: Vec<String> = q::APPROVED_LINKS
