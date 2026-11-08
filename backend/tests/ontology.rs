@@ -119,7 +119,7 @@ async fn proposals_wait_for_a_person_and_never_undo_a_decision() {
 
     // entity_types carries the review: an approved kind is listed before anything uses it
     let types = ok(app.tool("entity_types", json!({})).await);
-    assert_eq!(types["custom"], json!([{"kind": "customer", "entities": 0, "status": "approved", "description": "A paying client"}]));
+    assert_eq!(types["custom"], json!([{"kind": "customer", "entities": 0, "status": "approved", "description": "A paying client", "spaces": ["Personal"]}]));
 
     // the link is approved too, and stays so
     let (status, o) = app
@@ -339,7 +339,7 @@ async fn writes_still_work_on_an_org_database_before_the_migration() {
     app.db().await.test_raw().query("REMOVE TABLE ontology_kind").await.unwrap().check().unwrap();
     assert_eq!(write(&app, "orders_db", "db").await["entity"]["kind"], "db");
     let types = ok(app.tool("entity_types", json!({})).await);
-    assert_eq!(types["custom"], json!([{"kind": "db", "entities": 1, "status": "observed"}]));
+    assert_eq!(types["custom"], json!([{"kind": "db", "entities": 1, "status": "observed", "spaces": ["Personal"]}]));
 }
 
 
@@ -3119,6 +3119,75 @@ async fn a_question_no_space_covers_says_so_and_lists_the_readable_spaces() {
     let solo = TestApp::new().await;
     let out = ok(solo.tool("ontology_coverage", json!({"question": "What is the rainfall in Geelong?"})).await);
     assert_eq!((out["chosen_by"].as_str(), out.get("spaces")), (Some("coverage"), None), "{out}");
+}
+
+// ------------------------------------------------------------ a write that names no space
+
+/// The gate's owner: a personal space plus "Geelong Garden Supply" with approved kind `product` and
+/// strict mode on. Returns the org vault's id.
+async fn strict_garden_supply(app: &TestApp) -> String {
+    let team = ok(app.tool("vault_create", json!({"name": "Geelong Garden Supply", "kind": "org"})).await)["id"].as_str().unwrap().to_string();
+    ok(app.tool("memory_write", json!({"subject_name": "Drip line", "subject_kind": "product", "text": "We sell drip line", "vault_id": "Geelong Garden Supply"})).await);
+    assert_eq!(decide_kind(app, &team, "product", json!({"action": "approve"})).await.0, 200);
+    assert_eq!(set_strict(app, &team, true).await.0, 200);
+    team
+}
+
+fn chickens(extra: Value) -> Value {
+    let mut args = json!({"subject_name": "Chickens", "subject_kind": "livestock", "text": "We now sell chickens."});
+    args.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+    args
+}
+
+#[tokio::test]
+async fn a_new_kind_with_no_space_named_is_refused_while_an_org_space_is_strict() {
+    let app = TestApp::new().await;
+    // a kind the personal space already has, written before the org space existed
+    write(&app, "Sourdough", "recipe").await;
+    let team = strict_garden_supply(&app).await;
+
+    // the gate's write: no vault_id, a kind the personal space does not have
+    let out = app.tool("memory_write", chickens(json!({}))).await;
+    assert_eq!(out["code"], "validation.invalid", "{out}");
+    let msg = err(&out);
+    assert!(msg.contains("vault_id") && msg.contains("\"Geelong Garden Supply\"") && msg.contains("\"Personal\" if it is private"), "names the spaces to pick from: {msg}");
+    let found = ok(app.tool("entities_search", json!({"query": "Chickens"})).await);
+    assert_eq!(found["total"], 0, "nothing was written: {found}");
+    // the batch says so per item, and the rest still writes
+    let out = ok(app.tool("memory_write_batch", json!({"items": [chickens(json!({})), {"subject_name": "Ana", "subject_kind": "person", "text": "Ana runs the yard"}]})).await);
+    assert_eq!((out["written"].as_u64(), out["results"][0]["code"].as_str(), out["results"][1]["vault_name"].as_str()), (Some(1), Some("validation.invalid"), Some("Personal")), "{out}");
+
+    // named, each space decides for itself: the org space refuses and files it, the personal one takes it
+    let out = app.tool("memory_write", chickens(json!({"vault_id": "Geelong Garden Supply"}))).await;
+    assert_eq!(out["code"], "ontology.rejected", "{out}");
+    let out = ok(app.tool("memory_write", chickens(json!({"vault_id": "Personal"}))).await);
+    assert_eq!((out["entity"]["kind"].as_str(), out["vault_name"].as_str()), (Some("livestock"), Some("Personal")), "{out}");
+    // then the personal space has the kind, so a later write with no vault goes there as before
+    let out = ok(app.tool("memory_write", json!({"subject_name": "Ducks", "subject_kind": "livestock", "text": "Ducks too"})).await);
+    assert_eq!(out["vault_name"], "Personal", "{out}");
+
+    // a kind the personal space has, and a built-in kind, still write with no vault_id
+    assert_eq!(write(&app, "Focaccia", "recipe").await["vault_name"], "Personal");
+    assert_eq!(write(&app, "Jesse", "person").await["vault_name"], "Personal");
+    let org = ok(app.tool("memory_write", json!({"subject_name": "Hose", "subject_kind": "product", "text": "We sell hose", "vault_id": team})).await);
+    assert_eq!(org["vault_name"], "Geelong Garden Supply", "{org}");
+
+    // entity_types with no vault says which space each kind is in
+    let types = ok(app.tool("entity_types", json!({})).await);
+    let spaces = |k: &str| types["custom"].as_array().unwrap().iter().find(|c| c["kind"] == k).unwrap_or_else(|| panic!("{k} in {types}"))["spaces"].clone();
+    assert_eq!((spaces("product"), spaces("recipe"), spaces("livestock")), (json!(["Geelong Garden Supply"]), json!(["Personal"]), json!(["Personal"])), "{types}");
+
+    // strict mode off: a new kind with no vault goes to the personal space as before
+    assert_eq!(set_strict(&app, &team, false).await.0, 200);
+    assert_eq!(write(&app, "Hens", "poultry").await["vault_name"], "Personal");
+}
+
+#[tokio::test]
+async fn with_no_strict_org_space_a_new_kind_with_no_space_named_writes_as_before() {
+    let app = TestApp::new().await;
+    ok(app.tool("vault_create", json!({"name": "Geelong Garden Supply", "kind": "org"})).await);
+    let out = ok(app.tool("memory_write", chickens(json!({}))).await);
+    assert_eq!((out["entity"]["kind"].as_str(), out["vault_name"].as_str()), (Some("livestock"), Some("Personal")), "{out}");
 }
 
 // ------------------------------------------------------------ the gate's bike shop: links and row maths

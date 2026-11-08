@@ -39,8 +39,8 @@ pub async fn entities_search(
 /// The built-in kinds and the custom kinds in the caller's personal vault plus every org vault they
 /// belong to (or `vault_ids`), the same read scope as [`entities_search`].
 pub async fn entity_types(db: &OrgDb, owner: &RecordId, vault_ids: &[RecordId]) -> AppResult<service::EntityTypesOut> {
-    let vaults = crate::vaults::service::read_scope(db, owner, vault_ids).await?.vaults;
-    service::entity_types(db, &vaults).await
+    let scope = crate::vaults::service::read_scope(db, owner, vault_ids).await?;
+    service::entity_types(db, &scope.vaults, &scope.names).await
 }
 
 pub async fn entities_get(db: &OrgDb, control: &ControlDb, owner: &RecordId, id: &RecordId) -> AppResult<Option<service::EntityDetail>> {
@@ -98,6 +98,9 @@ pub async fn memory_write(
     occurred_at: Option<&str>,
 ) -> AppResult<service::WriteMemoryOut> {
     let occurred_at = occurred_at.map(|s| crate::cache::search::parse_datetime("occurred_at", s).map(surrealdb::types::Datetime::from)).transpose()?;
+    if vault_id.is_none() {
+        service::check_unnamed_write(&state.db, owner, subject_kind).await?;
+    }
     let out = service::write_memory(&state.db, owner, subject_name, subject_kind, text, source_record_id, mem_type, vault_id).await?;
     let memory_rid = crate::rid::parse(&out.memory.id).map_err(|_| crate::error::AppError::internal("memory id did not round-trip"))?;
     if let Some(at) = occurred_at {

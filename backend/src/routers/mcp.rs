@@ -43,7 +43,9 @@ locations, code) with remembered facts, plus records synced from their connected
 Use `recall` before answering questions about the user's world, `search`/`get` for raw synced records, \
 and `memory_write` to remember new facts. You are the model: if the server has no OpenAI key, `reflect` \
 returns the recalled memories for you to answer from (cite them by index) instead of a synthesized answer. \
-Writes go to the user's personal vault unless a `vault_id` is given; `recall`, `reflect` and `entities_search` \
+Writes go to the user's personal vault unless a `vault_id` is given (a business fact goes to its org vault: \
+a write with no `vault_id` that would start a new kind is refused while an org vault takes only approved kinds, \
+naming the vaults to pick from); `recall`, `reflect` and `entities_search` \
 cover the personal vault and every org vault the user belongs to unless one is. To work out what a change, \
 delay or problem affects, read `ontology_get` and `entities_neighbourhood`, decide which way the effect travels, \
 and show the answer with `show_view`. Before answering a number or a what-if, call `ontology_coverage` with the question (no `vault_id` unless the user named a vault: it then checks every vault the user can read and returns the best one as `vault`); pass that `vault` as `vault_id` to every call that follows. When it lists `uncovered` phrases, tell the user what the vault is missing and what to propose instead of guessing. For a number about the vault's entities, run an approved metric from `ontology_get` \

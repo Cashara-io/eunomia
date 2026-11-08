@@ -26,5 +26,6 @@ expression: stable
     "updated_at": "<ts>",
     "version": 1,
     "owner_email": null
-  }
+  },
+  "vault_name": "Personal"
 }

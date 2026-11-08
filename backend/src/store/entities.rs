@@ -277,7 +277,7 @@ pub const CUSTOM_KIND_ROOM: Stmt = Stmt::new(
 /// Every custom kind in `$vaults`, with how many entities it has there.
 pub const CUSTOM_KINDS_IN: Stmt = Stmt::new(
     "entities.custom_kinds_in",
-    "SELECT kind, count() AS count FROM entity WHERE vault IN $vaults GROUP BY kind ORDER BY kind",
+    "SELECT kind, vault, count() AS count FROM entity WHERE vault IN $vaults GROUP BY kind, vault ORDER BY kind",
 );
 
 // extract.rs

@@ -15,7 +15,10 @@ expression: stable
     {
       "kind": "db",
       "entities": 1,
-      "status": "observed"
+      "status": "observed",
+      "spaces": [
+        "Personal"
+      ]
     }
   ]
 }

@@ -303,20 +303,27 @@ pub struct ReadScope {
     pub names: HashMap<String, String>,
 }
 
+/// One vault the user is an active member of.
+#[derive(Debug, Clone, Deserialize, SurrealValue)]
+pub struct Membership {
+    pub vault: RecordId,
+    #[serde(default)]
+    #[surreal(default)]
+    pub kind: Option<String>,
+    #[serde(default)]
+    #[surreal(default)]
+    pub name: Option<String>,
+}
+
+/// Every vault `user_id` is an active member of, oldest membership first, whatever the credential is
+/// restricted to. One query.
+pub async fn memberships(db: &OrgDb, user_id: &RecordId) -> AppResult<Vec<Membership>> {
+    Ok(store::vaults::MY_MEMBERSHIPS.on(db).bind(("user", user_id.clone())).await?.take(0)?)
+}
+
 pub async fn read_scope(db: &OrgDb, user_id: &RecordId, vault_ids: &[RecordId]) -> AppResult<ReadScope> {
     authz::require_scope(Action::ReadMemories.scope())?;
-    #[derive(Deserialize, SurrealValue)]
-    struct Row {
-        vault: RecordId,
-        #[serde(default)]
-        #[surreal(default)]
-        kind: Option<String>,
-        #[serde(default)]
-        #[surreal(default)]
-        name: Option<String>,
-    }
-    let mut res = store::vaults::MY_MEMBERSHIPS.on(db).bind(("user", user_id.clone())).await?;
-    let rows: Vec<Row> = res.take(0)?;
+    let rows = memberships(db, user_id).await?;
     let personal = rows.iter().find(|r| r.kind.as_deref() == Some("personal")).map(|r| r.vault.clone()).ok_or_else(|| {
         AppError::internal(format!("user {} has no personal vault -- registration should have created one", user_id.to_string()))
     })?;

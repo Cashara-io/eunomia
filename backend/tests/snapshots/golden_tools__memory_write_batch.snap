@@ -10,7 +10,8 @@ expression: stable
       "index": "<unstable>",
       "ok": true,
       "entity_id": "file:<id22>",
-      "memory_id": "memory:<id23>"
+      "memory_id": "memory:<id23>",
+      "vault_name": "Personal"
     },
     {
       "index": "<unstable>",
@@ -22,7 +23,8 @@ expression: stable
       "index": "<unstable>",
       "ok": true,
       "entity_id": "file:<id24>",
-      "memory_id": "memory:<id25>"
+      "memory_id": "memory:<id25>",
+      "vault_name": "Personal"
     }
   ]
 }

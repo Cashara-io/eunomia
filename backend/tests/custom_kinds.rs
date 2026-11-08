@@ -47,7 +47,7 @@ async fn an_agent_writes_under_its_own_kind_and_finds_it_again() {
 
     let types = ok(app.tool("entity_types", json!({})).await);
     assert_eq!(types["built_in"], json!(["person", "organisation", "location", "repository", "file", "symbol"]));
-    assert_eq!(types["custom"], json!([{"kind": "db", "entities": 1, "status": "observed"}, {"kind": "table", "entities": 1, "status": "observed"}]));
+    assert_eq!(types["custom"], json!([{"kind": "db", "entities": 1, "status": "observed", "spaces": ["Personal"]}, {"kind": "table", "entities": 1, "status": "observed", "spaces": ["Personal"]}]));
 
     // get, search (by name, by kind, by fact text), recall and the graph all see it
     let got = ok(app.tool("entities_get", json!({"id": id})).await);
@@ -89,7 +89,7 @@ async fn an_agent_writes_under_its_own_kind_and_finds_it_again() {
     // vault clone keeps custom kinds
     let cloned = ok(app.tool("vault_clone", json!({"vault_id": "Personal", "name": "Copy"})).await);
     let types = ok(app.tool("entity_types", json!({"vault_id": cloned["id"]})).await);
-    assert_eq!(types["custom"], json!([{"kind": "db", "entities": 1, "status": "observed"}, {"kind": "decision", "entities": 1, "status": "observed"}, {"kind": "table", "entities": 1, "status": "observed"}]));
+    assert_eq!(types["custom"], json!([{"kind": "db", "entities": 1, "status": "observed", "spaces": ["Personal"]}, {"kind": "decision", "entities": 1, "status": "observed", "spaces": ["Personal"]}, {"kind": "table", "entities": 1, "status": "observed", "spaces": ["Personal"]}]));
 }
 
 #[tokio::test]
@@ -156,7 +156,7 @@ async fn a_custom_kind_stays_in_its_vault() {
 
     // vault A: all there
     let types = ok(call(&app, &alice, "entity_types", json!({"vault_id": "A"})).await);
-    assert_eq!(types["custom"], json!([{"kind": "db", "entities": 1, "status": "observed"}]));
+    assert_eq!(types["custom"], json!([{"kind": "db", "entities": 1, "status": "observed", "spaces": ["A"]}]));
     assert_eq!(names(&ok(call(&app, &alice, "entities_search", json!({"query": "ledger", "vault_id": "A"})).await)), ["ledger_db"]);
 
     // bob, not a member of A: nothing by default, refused when he names it, not found by id
