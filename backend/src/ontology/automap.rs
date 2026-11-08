@@ -314,6 +314,8 @@ fn render_ontology(o: &OntologyOut) -> Value {
 /// Profiles what `args` names and, with a server model, records the model's checked proposals.
 pub async fn automap(state: &OrgState, settings: &Settings, owner: &RecordId, args: &AutomapArgs) -> AppResult<AutomapOut> {
     let db = &state.db;
+    // a CSV's record type is its document id; reasons people read name the file instead
+    let mut filename: Option<(String, String)> = None;
     let (vault, samples) = match &args.document_id {
         Some(id) => {
             let doc = crate::documents::load_csv(state, owner, id, Action::WriteMemories).await?;
@@ -324,7 +326,9 @@ pub async fn automap(state: &OrgState, settings: &Settings, owner: &RecordId, ar
                 }
             }
             let table = tabular::parse(&doc.bytes)?;
-            (doc.vault.clone(), vec![tabular::sample(&crate::rid::RecordIdExt::to_string(&doc.id), &table)])
+            let doc_id = crate::rid::RecordIdExt::to_string(&doc.id);
+            filename = Some((doc_id.clone(), doc.filename.clone()));
+            (doc.vault.clone(), vec![tabular::sample(&doc_id, &table)])
         }
         None => {
             let vault_rid = args.vault_id.as_deref().map(crate::rid::parse).transpose().map_err(|_| AppError::bad_request("vault_id is not a vault id"))?;
@@ -374,6 +378,10 @@ pub async fn automap(state: &OrgState, settings: &Settings, owner: &RecordId, ar
     let mut new_targets: BTreeSet<String> = BTreeSet::new();
     let mut pending_metrics = Vec::new();
     let mut seen_types = BTreeSet::new();
+    let records = |record_type: &str| match &filename {
+        Some((id, name)) if id == record_type => name.clone(),
+        _ => record_type.to_string(),
+    };
     for t in types {
         let Ok(t) = serde_json::from_value::<ModelType>(t) else {
             skipped += 1;
@@ -391,7 +399,7 @@ pub async fn automap(state: &OrgState, settings: &Settings, owner: &RecordId, ar
             }
         };
         let fields: Vec<&str> = profiles[i].fields.iter().map(|f| f.path.as_str()).collect();
-        let reason = format!("one kind for the {} records", t.record_type);
+        let reason = format!("one kind for the {} records", records(&t.record_type));
         match (KindProposal { kind: kind.as_str().into(), description: t.description.clone(), merge_into: None, synonyms: vec![], reason: Some(reason) }).validate() {
             Ok(k) => kinds.push(k),
             Err(_) => skipped += 1,
@@ -453,7 +461,7 @@ pub async fn automap(state: &OrgState, settings: &Settings, owner: &RecordId, ar
             // a target kind with no entity yet (new, or never used) has nothing to match: an import creates each named one
             let creates = ml.target.is_none() && !run_kinds.contains(to_kind.as_str()) && known.get(to_kind.as_str()).is_none_or(|(_, n)| *n == 0);
             if !exists(to_kind.as_str()) && !run_kinds.contains(to_kind.as_str()) && new_targets.insert(to_kind.as_str().to_string()) {
-                let reason = format!("the {} column of the {} records names one", ml.field, t.record_type);
+                let reason = format!("the {} column of the {} records names one", ml.field, records(&t.record_type));
                 let description = Some(format!("what the {} column names", ml.field));
                 match (KindProposal { kind: to_kind.as_str().into(), description, merge_into: None, synonyms: vec![], reason: Some(reason) }).validate() {
                     Ok(k) => kinds.push(k),
@@ -508,7 +516,7 @@ pub async fn automap(state: &OrgState, settings: &Settings, owner: &RecordId, ar
                     description: m.description,
                     synonyms: vec![],
                     merge_into: None,
-                    reason: Some(format!("computed from the {} records' properties", t.record_type)),
+                    reason: Some(format!("computed from the {} records' properties", records(&t.record_type))),
                 }),
                 Err(_) => skipped += 1,
             }

@@ -140,6 +140,10 @@ proposed one runs only when the caller asks to try it (and the result says
 it is unapproved), and a rejected one runs the metric it was merged into.
 Each run reads every entity's latest value as of a date (default now) and
 returns the number with its unit and the ids of the entities it came from.
+A run can be narrowed to the entities linked to one entity, such as the
+gross margin on one supplier's products, and the result says that pick in
+words. A ratio's two sides always count the same entities, so a blank cell
+on one side leaves that entity out of both, with a warning.
 A filter value that matches no listed value comes back as a warning naming
 the nearest ones, never as a silent 0. The in-app Chat answers number
 questions this way and draws the result as a `metric` view; it never adds

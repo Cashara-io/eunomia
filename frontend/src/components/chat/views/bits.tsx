@@ -32,11 +32,19 @@ export function PathSentence({ path }: { path: Step[] }) {
   );
 }
 
-/** A metric's number as people write it: money (a three-letter currency) to the cent, whole numbers
- * bare, others to two places. Matches the server's text (backend/src/views/mod.rs, `number`). */
+/** Whether a unit says the number is a percent. Matches the server's `is_percent`. */
+export const isPercent = (unit: string | null | undefined) => !!unit && ["%", "percent", "percentage", "pct"].includes(unit.trim().toLowerCase());
+
+/** A metric's number as people write it, without its unit: money (a three-letter currency) to the cent,
+ * a percent to one place, whole numbers bare, others to two places. Matches the server's text
+ * (backend/src/views/mod.rs, `number`). */
 export function formatNumber(value: number, unit: string | null | undefined): string {
   const money = !!unit && /^[A-Z]{3}$/.test(unit);
   if (money) return value.toFixed(2);
   if (Number.isInteger(value)) return String(value);
-  return String(Number(value.toFixed(2)));
+  return String(Number(value.toFixed(isPercent(unit) ? 1 : 2)));
 }
+
+/** The number with its unit: "44.1%", "15.22 AUD". */
+export const withUnit = (value: number, unit: string | null | undefined) =>
+  isPercent(unit) ? `${formatNumber(value, unit)}%` : `${formatNumber(value, unit)}${unit ? ` ${unit}` : ""}`;

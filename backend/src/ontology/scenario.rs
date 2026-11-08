@@ -220,7 +220,7 @@ fn capital(s: &str) -> String {
     c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default()
 }
 
-fn plural(n: usize, kind: &str) -> String {
+pub(super) fn plural(n: usize, kind: &str) -> String {
     let w = words(kind);
     if n == 1 { w } else { format!("{w}s") }
 }
@@ -251,12 +251,40 @@ struct Pick {
     related: Option<Related>,
 }
 
-struct Related {
-    ids: HashSet<String>,
+pub(super) struct Related {
+    pub(super) ids: HashSet<String>,
     /// "supplied by Riverside Roasters"
-    said: String,
-    target: String,
-    label: Option<String>,
+    pub(super) said: String,
+    pub(super) target: String,
+    pub(super) label: Option<String>,
+}
+
+impl Related {
+    /// The entities linked to `r.entity_id` (one of `named`, so in the vault), by relations labelled
+    /// `r.label` when given.
+    pub(super) async fn load(db: &OrgDb, vault: &RecordId, named: &Named, r: &RelatedTo, warnings: &mut Vec<String>) -> AppResult<Self> {
+        let target = named.get(&r.entity_id)?;
+        let (edges, cut) = relations_of(db, vault, &target.id).await?;
+        if cut {
+            warnings.push(format!("{} has more relations than one call reads: only the first ones picked entities", target.name));
+        }
+        let label = r.label.as_deref().map(str::trim).filter(|l| !l.is_empty());
+        let edges: Vec<_> = edges.into_iter().filter(|e| label.is_none_or(|l| same_label(&e.label, l))).collect();
+        let ids: HashSet<String> = edges.iter().map(|e| if e.from == target.id { e.to.to_string() } else { e.from.to_string() }).collect();
+        // "supplied by Riverside Roasters" when the picked entities are the relation's `from` end
+        let said = match (label, edges.first().filter(|_| edges.iter().all(|e| e.to == target.id))) {
+            (Some(_), Some(e)) => format!("{} {}", words(&e.label), target.name),
+            (Some(l), None) => format!("linked to {} by {}", target.name, words(l)),
+            (None, _) => format!("linked to {}", target.name),
+        };
+        Ok(Related { ids, said, target: target.name.clone(), label: label.map(words) })
+    }
+
+    /// The warning for a kind none of whose entities are linked to the target.
+    pub(super) fn none_linked(&self, kind: &str) -> String {
+        let by = self.label.as_ref().map(|l| format!(" by {l} links")).unwrap_or_default();
+        format!("no {} are linked to {}{by}", plural(2, kind), self.target)
+    }
 }
 
 /// One change, checked.
@@ -267,23 +295,23 @@ enum Step {
 }
 
 /// The entities a scenario names, loaded once; each must be in the scenario's vault.
-struct Named(HashMap<String, NodeRow>);
+pub(super) struct Named(HashMap<String, NodeRow>);
 
 impl Named {
-    async fn load(db: &OrgDb, vault: &RecordId, args: &ScenarioArgs) -> AppResult<Self> {
-        let mut ids = Vec::new();
-        for id in named_ids(args) {
+    pub(super) async fn load<'a>(db: &OrgDb, vault: &RecordId, ids: impl IntoIterator<Item = &'a str>) -> AppResult<Self> {
+        let mut rids = Vec::new();
+        for id in ids {
             let rid = crate::rid::parse(id).map_err(|_| unknown_entity(id))?;
             require_entity_id(&rid).map_err(|_| unknown_entity(id))?;
-            ids.push(rid);
+            rids.push(rid);
         }
-        let mut nodes = load_nodes(db, ids).await?;
+        let mut nodes = load_nodes(db, rids).await?;
         // an entity in another vault is as unknown here as one that does not exist
         nodes.retain(|_, n| &n.vault == vault);
         Ok(Named(nodes))
     }
 
-    fn get(&self, id: &str) -> AppResult<NodeRow> {
+    pub(super) fn get(&self, id: &str) -> AppResult<NodeRow> {
         let key = crate::rid::parse(id).map(|r| r.to_string()).unwrap_or_default();
         self.0.get(&key).cloned().ok_or_else(|| unknown_entity(id))
     }
@@ -363,23 +391,7 @@ async fn pick(db: &OrgDb, vault: &RecordId, named: &Named, kind: &Kind, wanted: 
     };
     let related = match related_to {
         None => None,
-        Some(r) => {
-            let target = named.get(&r.entity_id)?;
-            let (edges, cut) = relations_of(db, vault, &target.id).await?;
-            if cut {
-                warnings.push(format!("{} has more relations than one what-if reads: only the first ones picked entities", target.name));
-            }
-            let label = r.label.as_deref().map(str::trim).filter(|l| !l.is_empty());
-            let edges: Vec<_> = edges.into_iter().filter(|e| label.is_none_or(|l| same_label(&e.label, l))).collect();
-            let ids: HashSet<String> = edges.iter().map(|e| if e.from == target.id { e.to.to_string() } else { e.from.to_string() }).collect();
-            // "supplied by Riverside Roasters" when the picked entities are the relation's `from` end
-            let said = match (label, edges.first().filter(|_| edges.iter().all(|e| e.to == target.id))) {
-                (Some(_), Some(e)) => format!("{} {}", words(&e.label), target.name),
-                (Some(l), None) => format!("linked to {} by {}", target.name, words(l)),
-                (None, _) => format!("linked to {}", target.name),
-            };
-            Some(Related { ids, said, target: target.name.clone(), label: label.map(words) })
-        }
+        Some(r) => Some(Related::load(db, vault, named, r, warnings).await?),
     };
     Ok(Pick { selector, only, related })
 }
@@ -484,7 +496,7 @@ async fn run_within_budget(db: &OrgDb, vault: &RecordId, args: &ScenarioArgs) ->
         return Err(AppError::bad_request(format!("impact_from lists at most {MAX_IMPACT_FROM} entities")));
     }
     let as_of = metric::parse_as_of(args.as_of.as_deref())?;
-    let named = Named::load(db, &vault, args).await?;
+    let named = Named::load(db, &vault, named_ids(args)).await?;
     let mut warnings: Vec<String> = Vec::new();
 
     let mut steps = Vec::new();
@@ -610,12 +622,8 @@ async fn run_within_budget(db: &OrgDb, vault: &RecordId, args: &ScenarioArgs) ->
                 // a related_to entity none of the kind is linked to: say that, not "on 0 products"
                 if let Some(r) = pick.related.as_ref().filter(|r| !entities.iter().any(|e| r.ids.contains(e))) {
                     let kinds = plural(2, kind.as_str());
-                    let by = r.label.as_ref().map(|l| format!(" by {l} links")).unwrap_or_default();
                     let said = format!("{} {} {amount}: no {kinds} are linked to {}", capital(&words(kind.as_str())), words(property), r.target);
-                    warnings.push(format!(
-                        "no {kinds} are linked to {}{by}, so \"{said}\" changed nothing: pick the {kinds} with filters or entity_ids instead, or link them first",
-                        r.target
-                    ));
+                    warnings.push(format!("{}, so \"{said}\" changed nothing: pick the {kinds} with filters or entity_ids instead, or link them first", r.none_linked(kind.as_str())));
                     changes.push(said);
                     continue;
                 }
