@@ -286,6 +286,20 @@ async fn personal_default_follows_transferred_ownership() {
 }
 
 #[tokio::test]
+async fn coverage_reads_orgs_without_a_personal_default() {
+    let w = world().await;
+    join_bobs_personal(&w).await;
+    delete_alices_personal(&w).await;
+    for args in [json!({"question": "Quinn Teammate"}), json!({"question": "Quinn Teammate", "vault_id": w.shared})] {
+        let out = w.ok(&w.alice, "ontology_coverage", args).await;
+        assert_eq!(out["vault"], w.shared, "{out}");
+    }
+    w.ok(&w.alice, "vault_delete", json!({"vault_id": w.shared})).await;
+    let out = w.call(&w.alice, "ontology_coverage", json!({"question": "Quinn Teammate"})).await;
+    assert!(out["error"].as_str().is_some_and(|e| e.contains("vault_id")), "{out}");
+}
+
+#[tokio::test]
 async fn multiple_owned_personals_prefer_signup_then_vault_creation_then_id() {
     let app = common::TestApp::new().await;
     let db = app.db().await;

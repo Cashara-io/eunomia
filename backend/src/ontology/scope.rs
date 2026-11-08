@@ -21,17 +21,15 @@ pub(crate) struct Readable {
 }
 
 /// The vaults the caller can read: the default vault first (the personal one, or a vault-restricted
-/// credential's own), then every org vault they are an active member of.
+/// credential's own), then every org vault they are an active member of. Without a Personal default,
+/// only the org vaults are included. `read_scope` already supplies this order.
 pub(crate) async fn readable(db: &OrgDb, owner: &RecordId) -> AppResult<Vec<Readable>> {
     let scope = vaults::read_scope(db, owner, &[]).await?;
-    let default = vaults::default_vault_id(db, owner).await?;
-    let mut out: Vec<Readable> = scope
+    Ok(scope
         .vaults
         .iter()
         .map(|v| Readable { id: v.clone(), name: scope.names.get(&v.to_string()).cloned().unwrap_or_default() })
-        .collect();
-    out.sort_by_key(|r| r.id != default);
-    Ok(out)
+        .collect())
 }
 
 /// The readable vaults other than `default` for which `has` is true.

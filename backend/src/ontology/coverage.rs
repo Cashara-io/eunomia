@@ -417,6 +417,10 @@ pub async fn coverage(db: &OrgDb, settings: &Settings, owner: &RecordId, questio
         None => scope::readable(db, owner).await?,
     };
 
+    if vaults.is_empty() {
+        return Err(AppError::bad_request("No spaces are included in default reads. Pass vault_id to choose a space."));
+    }
+
     let p = provider::resolve(db, settings, owner).await?;
     let with_model = settings.embeddings_backend == "openai" && p.configured();
     let phrases = if with_model { model_phrases(&p, question).await.ok() } else { None };
