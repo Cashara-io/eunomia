@@ -20,9 +20,9 @@ pub const WRITE_OBSERVATION: Stmt = Stmt::at(
         };
         LET $target = array::concat($cur, $legacy);
         LET $row = IF array::len($target) > 0 {
-            (UPDATE $target[0] SET text = $text, version = version + 1, status = "fresh", updated_at = time::now() RETURN AFTER)
+            (UPDATE $target[0] SET text = $text, version = version + 1, status = "fresh", updated_at = time::now() RETURN *, vault.name AS vault_name)
         } ELSE {
-            (CREATE $obs_id SET owner = $owner, vault = $vault, subject = $subject, text = $text, type = "observation", status = "fresh", source = $source RETURN AFTER)
+            (CREATE $obs_id SET owner = $owner, vault = $vault, subject = $subject, text = $text, type = "observation", status = "fresh", source = $source RETURN *, vault.name AS vault_name)
         };
         RETURN $row;
         COMMIT TRANSACTION;"#,
@@ -32,7 +32,7 @@ pub const WRITE_OBSERVATION: Stmt = Stmt::at(
 pub const WRITE_FACT: Stmt = Stmt::at(
     "entities.write_fact",
     r#"BEGIN TRANSACTION;
-        CREATE memory SET owner = $owner, vault = $vault, subject = $subject, text = $text, type = $type, source = $source RETURN AFTER;
+        CREATE memory SET owner = $owner, vault = $vault, subject = $subject, text = $text, type = $type, source = $source RETURN *, vault.name AS vault_name;
         LET $cur = (SELECT VALUE id FROM $obs_id);
         IF array::len($cur) > 0 {
             UPDATE $obs_id SET status = "stale" WHERE status != "stale"

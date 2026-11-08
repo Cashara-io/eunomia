@@ -158,6 +158,9 @@ struct MemoryRow {
     subject: RecordId,
     #[serde(default)]
     #[surreal(default)]
+    vault_name: String,
+    #[serde(default)]
+    #[surreal(default)]
     text: String,
     #[serde(default)]
     #[surreal(default)]
@@ -461,10 +464,10 @@ pub async fn upsert_grounded(
     vault_id: Option<&RecordId>,
 ) -> AppResult<Upserted> {
     let table = kind_table(kind)?;
-    if vault_id.is_none() {
-        check_unnamed_write(db, owner, kind).await?;
-    }
     let vault = resolve_vault(db, owner, vault_id, Action::WriteMemories).await?;
+    if vault_id.is_none() {
+        check_unnamed_write(db, owner, kind, &vault).await?;
+    }
     let kind_mapped = if table == CUSTOM_TABLE { crate::ontology::ground(db, &vault, kind).await? } else { None };
     let kind = kind_mapped.as_ref().map_or(kind, |m| m.to.as_str());
     let (entity, created) = upsert_in_vault(db, owner, kind, name, aliases, &vault, Lookups::NameAndAlias).await?;
@@ -524,10 +527,10 @@ pub async fn upsert_entity_created(
     vault_id: Option<&RecordId>,
 ) -> AppResult<(EntityOut, bool)> {
     kind_table(kind)?;
-    if vault_id.is_none() {
-        check_unnamed_write(db, owner, kind).await?;
-    }
     let vault = resolve_vault(db, owner, vault_id, Action::WriteMemories).await?;
+    if vault_id.is_none() {
+        check_unnamed_write(db, owner, kind, &vault).await?;
+    }
     upsert_in_vault(db, owner, kind, name, aliases, &vault, Lookups::NameAndAlias).await
 }
 
@@ -758,15 +761,14 @@ async fn kind_in(db: &OrgDb, vault: &RecordId, kind: &str) -> AppResult<bool> {
 /// that takes only approved kinds, the fact is likely the business's: refused, naming the vaults the
 /// user can write to, so the caller passes `vault_id` (the personal one too, when that is meant). A
 /// vault-restricted credential writes to its own vault, so it is never asked.
-async fn check_unnamed_write(db: &OrgDb, owner: &RecordId, kind: &str) -> AppResult<()> {
+async fn check_unnamed_write(db: &OrgDb, owner: &RecordId, kind: &str, personal: &RecordId) -> AppResult<()> {
     if kind_table(kind)? != CUSTOM_TABLE || authz::restricted_vault()?.is_some() {
         return Ok(());
     }
-    let mine = vaults_service::memberships(db, owner).await?;
-    let personal = vaults_service::personal_vault_id(db, owner).await?;
-    if kind_in(db, &personal, kind).await? {
+    if kind_in(db, personal, kind).await? {
         return Ok(());
     }
+    let mine = vaults_service::memberships(db, owner).await?;
     let orgs: Vec<&vaults_service::Membership> = mine.iter().filter(|m| m.kind.as_deref() == Some("org")).collect();
     let mut strict = Vec::new();
     for m in &orgs {
@@ -783,7 +785,7 @@ async fn check_unnamed_write(db: &OrgDb, owner: &RecordId, kind: &str) -> AppRes
         let shared = name.is_empty() || mine.iter().filter(|o| o.name.as_deref().is_some_and(|n| n.eq_ignore_ascii_case(&name))).count() > 1;
         format!("\"{}\"", if shared { m.vault.to_string() } else { name })
     };
-    let own = mine.iter().find(|m| m.vault == personal).map_or_else(|| format!("\"{}\"", personal.to_string()), shown);
+    let own = mine.iter().find(|m| &m.vault == personal).map_or_else(|| format!("\"{}\"", personal.to_string()), shown);
     let spaces: Vec<String> = orgs.iter().map(|m| shown(m)).collect();
     let rule = strict.iter().map(|m| shown(m)).collect::<Vec<_>>().join(", ");
     Err(AppError::bad_request(format!(
@@ -847,7 +849,7 @@ pub async fn add_memory(
             format!("not a member of {}'s vault", subject_row.vault.to_string()),
         ));
     }
-    insert_memory(db, owner, subject_id, &subject_row.vault, text, source_record_id, mem_type).await
+    Ok(insert_memory(db, owner, subject_id, &subject_row.vault, text, source_record_id, mem_type).await?.0)
 }
 
 /// [`add_memory`] once the subject and its vault are known and the caller may write there.
@@ -859,7 +861,7 @@ async fn insert_memory(
     text: &str,
     source_record_id: Option<&str>,
     mem_type: &str,
-) -> AppResult<MemoryOut> {
+) -> AppResult<(MemoryOut, String)> {
     // every memory write (tools, REST, extraction) lands here, so this is the one place secrets are dropped
     let mut redacted = Vec::new();
     let text = crate::redact::redact(text, &mut redacted);
@@ -898,7 +900,7 @@ async fn insert_memory(
     let op = if memory.version > 1 { changes::UPDATED } else { changes::CREATED };
     changes::record(db, vault, op, changes::MEMORY, &memory.id).await;
 
-    Ok(MemoryOut { redacted, ..memory_out(&memory, None) })
+    Ok((MemoryOut { redacted, ..memory_out(&memory, None) }, memory.vault_name))
 }
 
 /// Deterministic id of a subject's observation when it is first created, so
@@ -931,9 +933,8 @@ pub async fn write_memory(
     let entity_rid: RecordId =
         crate::rid::parse(&entity.id).map_err(|_| AppError::internal("entity id did not round-trip"))?;
     let vault: RecordId = crate::rid::parse(&entity.vault).map_err(|_| AppError::internal("vault id did not round-trip"))?;
-    let memory = insert_memory(db, owner, &entity_rid, &vault, text, source_record_id, mem_type).await?;
+    let (memory, vault_name) = insert_memory(db, owner, &entity_rid, &vault, text, source_record_id, mem_type).await?;
     let possible_duplicates = if created { possible_duplicates(db, &entity).await? } else { Vec::new() };
-    let vault_name = vaults_service::memberships(db, owner).await?.into_iter().find(|m| m.vault == vault).and_then(|m| m.name).unwrap_or_default();
     Ok(WriteMemoryOut { entity, memory, possible_duplicates, kind_mapped, vault_name })
 }
 
