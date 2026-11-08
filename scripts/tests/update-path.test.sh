@@ -216,15 +216,16 @@ wait_tenants() { # wait_tenants SECONDS : every org's tenant row and ledger at L
   done
   log "tenants not at $LATEST_TENANT after $1 s"; ledgers; return 1
 }
-# Tenant 0022 rebuilt these HNSW indexes ("table:index").
-VECTOR_INDEXES="memory:memory_embedding_idx skill:skill_embedding_idx cache_record:cache_record_embedding_idx"
+# Tenant 0022 rebuilt these HNSW indexes ("table:index"); 0037_ontology_coverage adds the four on the
+# ontology terms, which coverage matches a question's phrases against.
+VECTOR_INDEXES="memory:memory_embedding_idx skill:skill_embedding_idx cache_record:cache_record_embedding_idx ontology_kind:ontology_kind_embedding_idx ontology_link:ontology_link_embedding_idx ontology_property:ontology_property_embedding_idx ontology_metric:ontology_metric_embedding_idx"
 ledger_has() { # ledger_has VERSION NAME : every org ledger has that migration
   local db
   for db in $(org_dbs); do
     [ "$(echo "SELECT VALUE name FROM _migration WHERE version = $1;" | sql "$db" | jq -r '.[0].result[0] // empty')" = "$2" ] || { log "   $db: no $1_$2 in the ledger"; return 1; }
   done
 }
-vector_indexes() { # vector_indexes : every org database defines the three HNSW indexes (INFO FOR TABLE)
+vector_indexes() { # vector_indexes : every org database defines the HNSW indexes (INFO FOR TABLE)
   local db ti
   for db in $(org_dbs); do
     for ti in $VECTOR_INDEXES; do
@@ -233,7 +234,7 @@ vector_indexes() { # vector_indexes : every org database defines the three HNSW 
     done
   done
 }
-wait_vector_builds() { # wait_vector_builds SECONDS : no background build of the three indexes still running
+wait_vector_builds() { # wait_vector_builds SECONDS : no background build of the HNSW indexes still running
   local until=$((SECONDS + $1)) db ti busy
   while [ $SECONDS -lt $until ]; do
     busy=0
@@ -595,11 +596,12 @@ if grep -q '\.ontology_metric ' "$W/new-expected.txt"; then
 fi
 check "the fixed reads unchanged" diff "$W/reads-before.txt" "$W/reads-after.txt"
 diff "$W/reads-before.txt" "$W/reads-after.txt" | head -20
-# Tenant 0022 (rebuild_vector_indexes): in every org ledger, the three HNSW indexes defined, and the
+# Tenant 0022 (rebuild_vector_indexes) and 0037 (ontology_coverage): in every org ledger, the HNSW indexes defined, and the
 # rebuilt indexes answer kNN over the live rows (the reads above go through recall and skill_find, whose
 # exact-scan fallback would hide a broken index, so this queries the index itself). Row counts: above.
 check "every org ledger has 0022_rebuild_vector_indexes" ledger_has 22 rebuild_vector_indexes
-check "every org defines the three HNSW indexes" vector_indexes
+check "every org ledger has 0037_ontology_coverage" ledger_has 37 ontology_coverage
+check "every org defines the HNSW indexes" vector_indexes
 wait_vector_builds 300; check "the rebuilt vector indexes finished building" test $? -eq 0
 knn_live > "$W/knn-after.txt" 2>&1; rc=$?
 sed 's/^/   knn: /' "$W/knn-after.txt"
