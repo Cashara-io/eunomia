@@ -49,6 +49,9 @@ pub struct Settings {
     /// another orchestrator) it is on, and `SECRETS_HELPER_URL` is simply tried. Off, every resolution and
     /// "Test connection" fails at once with `secret.unavailable` (`helper_disabled`), with no network call.
     pub secrets_helper_enabled: bool,
+    /// `EUNOMIA_CHAT_MODEL_TIMEOUT_SECS`: how long one model call of the in-app chat (the request and
+    /// its whole streamed reply) may take before the turn ends with an error, default 90.
+    pub chat_model_timeout_secs: u64,
 }
 
 /// `EUNOMIA_COMPOSE_PROFILES` -> is the `secrets` profile on (see `Settings::secrets_helper_enabled`).
@@ -104,6 +107,7 @@ impl Settings {
             secrets_helper_url: env_or("SECRETS_HELPER_URL", crate::secrets::client::DEFAULT_URL).trim_end_matches('/').to_string(),
             secrets_helper_key: env_or("SECRETS_HELPER_KEY", "").trim().to_string(),
             secrets_helper_enabled: secrets_profile_on(env::var("EUNOMIA_COMPOSE_PROFILES").ok().as_deref()),
+            chat_model_timeout_secs: env::var("EUNOMIA_CHAT_MODEL_TIMEOUT_SECS").ok().and_then(|v| v.trim().parse().ok()).filter(|n| *n > 0).unwrap_or(90),
         }
     }
 }
