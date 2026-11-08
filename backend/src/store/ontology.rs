@@ -119,21 +119,52 @@ pub const PROPOSE_LINK: Stmt = Stmt::at(
     3,
 );
 
-/// A strict-mode refusal's kind, filed as an agent's proposal. Only creates the row, so an existing
-/// proposal keeps its reason.
-pub const FILE_KIND: Stmt = Stmt::new(
+/// The open proposals agents filed in `$vault`, of every sort.
+macro_rules! open_agent_proposals {
+    () => {
+        r#"(array::len(SELECT VALUE id FROM ontology_kind WHERE vault = $vault AND status = "proposed" AND origin = "agent")
+            + array::len(SELECT VALUE id FROM ontology_link WHERE vault = $vault AND status = "proposed" AND origin = "agent")
+            + array::len(SELECT VALUE id FROM ontology_property WHERE vault = $vault AND status = "proposed" AND origin = "agent")
+            + array::len(SELECT VALUE id FROM ontology_metric WHERE vault = $vault AND status = "proposed" AND origin = "agent"))"#
+    };
+}
+
+/// A strict-mode refusal's kind, filed as an agent's proposal unless the vault already has `$cap` open
+/// agent proposals. Only creates the row, so an existing proposal keeps its reason. Returns whether the
+/// kind is on file.
+pub const FILE_KIND: Stmt = Stmt::at(
     "ontology.file_kind",
-    r#"IF array::len(SELECT VALUE id FROM $id) = 0 {
-        CREATE $id SET vault = $vault, kind = $kind, origin = "agent", reason = $reason RETURN NONE
-    };"#,
+    concat!(
+        r#"BEGIN TRANSACTION;
+        LET $new = array::len(SELECT VALUE id FROM $id) = 0;
+        LET $file = $new AND "#,
+        open_agent_proposals!(),
+        r#" < $cap;
+        IF $file {
+            CREATE $id SET vault = $vault, kind = $kind, origin = "agent", reason = $reason RETURN NONE
+        };
+        RETURN !$new OR $file;
+        COMMIT TRANSACTION;"#
+    ),
+    4, // BEGIN 0, two LETs 1 and 2, IF 3, RETURN 4
 );
 
 /// [`FILE_KIND`] for a link type.
-pub const FILE_LINK: Stmt = Stmt::new(
+pub const FILE_LINK: Stmt = Stmt::at(
     "ontology.file_link",
-    r#"IF array::len(SELECT VALUE id FROM $id) = 0 {
-        CREATE $id SET vault = $vault, from_kind = $from_kind, label = $label, to_kind = $to_kind, origin = "agent", reason = $reason RETURN NONE
-    };"#,
+    concat!(
+        r#"BEGIN TRANSACTION;
+        LET $new = array::len(SELECT VALUE id FROM $id) = 0;
+        LET $file = $new AND "#,
+        open_agent_proposals!(),
+        r#" < $cap;
+        IF $file {
+            CREATE $id SET vault = $vault, from_kind = $from_kind, label = $label, to_kind = $to_kind, origin = "agent", reason = $reason RETURN NONE
+        };
+        RETURN !$new OR $file;
+        COMMIT TRANSACTION;"#
+    ),
+    4,
 );
 
 /// A person's approval or rejection of a kind (a row is made for a kind only observed so far). Kinds

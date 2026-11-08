@@ -2787,6 +2787,28 @@ async fn a_strict_refusal_keeps_the_reason_on_an_existing_proposal() {
     assert_eq!(reasons, ["Sam wants owners tracked"]);
 }
 
+#[tokio::test]
+async fn strict_mode_stops_filing_proposals_once_the_owner_has_a_backlog() {
+    let app = TestApp::new().await;
+    let vault = personal(&app).await;
+    let names: Vec<String> = (0..50u8).map(|i| format!("waiting_{}{}", (b'a' + i / 26) as char, (b'a' + i % 26) as char)).collect();
+    ok(app.tool("ontology_propose", json!({"kinds": names.iter().map(|k| json!({"kind": k})).collect::<Vec<_>>()})).await);
+    assert_eq!(set_strict(&app, &vault, true).await.0, 200);
+    let sprocket = || app.tool("memory_write", json!({"subject_name": "Thing", "subject_kind": "sprocket", "text": "A thing"}));
+    let filed = || async { app.db().await.test_raw().query("SELECT VALUE kind FROM ontology_kind WHERE kind = 'sprocket'").await.unwrap().take::<Vec<String>>(0).unwrap() };
+
+    let out = sprocket().await;
+    assert_eq!(out["code"], "ontology.rejected", "{out}");
+    assert!(err(&out).contains("backlog of 50"), "{out}");
+    assert!(filed().await.is_empty(), "not filed while 50 wait");
+
+    // one decided: the next refusal files again
+    assert_eq!(decide_kind(&app, &vault, &names[0], json!({"action": "approve"})).await.0, 200);
+    let out = sprocket().await;
+    assert!(err(&out).contains("It was filed"), "{out}");
+    assert_eq!(filed().await, ["sprocket"]);
+}
+
 #[test]
 fn the_ontology_tool_eval_list_names_only_registered_tools() {
     let evals: Value = serde_json::from_str(include_str!("../../docs/evals/ontology-tools.json")).unwrap();

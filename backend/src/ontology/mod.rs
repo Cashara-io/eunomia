@@ -879,28 +879,42 @@ pub async fn strict(db: &OrgDb, vault: &RecordId) -> AppResult<bool> {
 
 const STRICT_REASON: &str = "An agent wrote under it while this vault takes only approved kinds and links.";
 
+/// Open agent proposals a vault may hold before strict-mode refusals stop filing new ones.
+pub const MAX_AGENT_BACKLOG: usize = 50;
+
+fn filed_note(filed: Option<bool>) -> String {
+    if filed == Some(true) {
+        "It was filed as a proposal for a vault owner to review.".to_string()
+    } else {
+        format!("It was not filed as a proposal: a vault owner has a backlog of {MAX_AGENT_BACKLOG} agent proposals to review first.")
+    }
+}
+
 /// In a strict vault, a write under custom kind `kind` (proposed, or never reviewed) is refused naming
 /// the approved kinds, and the kind is filed as a proposal so an owner sees what was wanted.
 async fn strict_kind(db: &OrgDb, vault: &RecordId, kind: &Kind) -> AppResult<()> {
     if !strict(db, vault).await? {
         return Ok(());
     }
-    q::FILE_KIND
+    let filed: Option<bool> = q::FILE_KIND
         .on(db)
         .bind(("id", kind_rid(vault, kind)))
         .bind(("vault", vault.clone()))
         .bind(("kind", kind.0.clone()))
         .bind(("reason", STRICT_REASON.to_string()))
+        .bind(("cap", MAX_AGENT_BACKLOG as i64))
         .await?
-        .check()?;
+        .check()?
+        .take(q::FILE_KIND.slot)?;
     let approved: Vec<String> = q::APPROVED_KINDS.on(db).bind(("vault", vault.clone())).await?.take(0)?;
     let custom = if approved.is_empty() { String::new() } else { format!(" or an approved kind ({})", approved.join(", ")) };
     Err(AppError::coded(
         ErrorCode::OntologyRejected,
         format!(
-            "this vault takes only approved kinds and links, and the kind {:?} is not approved: write under a built-in kind ({}){custom}. It was filed as a proposal for a vault owner to review.",
+            "this vault takes only approved kinds and links, and the kind {:?} is not approved: write under a built-in kind ({}){custom}. {}",
             kind.0,
-            KINDS.join(", ")
+            KINDS.join(", "),
+            filed_note(filed)
         ),
     ))
 }
@@ -910,7 +924,7 @@ async fn strict_link(db: &OrgDb, vault: &RecordId, key: &LinkKey) -> AppResult<(
     if !strict(db, vault).await? {
         return Ok(());
     }
-    q::FILE_LINK
+    let filed: Option<bool> = q::FILE_LINK
         .on(db)
         .bind(("id", link_rid(vault, key)))
         .bind(("vault", vault.clone()))
@@ -918,8 +932,10 @@ async fn strict_link(db: &OrgDb, vault: &RecordId, key: &LinkKey) -> AppResult<(
         .bind(("label", key.label.0.clone()))
         .bind(("to_kind", key.to_kind.0.clone()))
         .bind(("reason", STRICT_REASON.to_string()))
+        .bind(("cap", MAX_AGENT_BACKLOG as i64))
         .await?
-        .check()?;
+        .check()?
+        .take(q::FILE_LINK.slot)?;
     let approved: Vec<String> = q::APPROVED_LINKS
         .on(db)
         .bind(("vault", vault.clone()))
@@ -936,8 +952,9 @@ async fn strict_link(db: &OrgDb, vault: &RecordId, key: &LinkKey) -> AppResult<(
     Err(AppError::coded(
         ErrorCode::OntologyRejected,
         format!(
-            "this vault takes only approved kinds and links, and the link type {from} {} {to} is not approved; {alternatives}. It was filed as a proposal for a vault owner to review.",
-            key.label.0
+            "this vault takes only approved kinds and links, and the link type {from} {} {to} is not approved; {alternatives}. {}",
+            key.label.0,
+            filed_note(filed)
         ),
     ))
 }
