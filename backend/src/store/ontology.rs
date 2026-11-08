@@ -407,7 +407,8 @@ pub const SET_TERM_EMBEDDING: Stmt =
     Stmt::new("ontology.set_term_embedding", "UPDATE $id SET embedding = $embedding, embedding_spec = $spec, embedding_text = $text RETURN NONE");
 
 /// The approved terms of `$vault` nearest `$vector` (same `$spec`), by the HNSW indexes: up to three
-/// per sort, with their cosine distance.
+/// per sort, with their cosine distance. SurrealDB 3.3.5 applies the other conditions inside the kNN
+/// search, so nearer terms in another vault of the org never crowd this vault's out.
 pub const COVERAGE_NEAREST: Stmt = Stmt::new(
     "ontology.coverage_nearest",
     r#"SELECT id, vector::distance::knn() AS distance FROM ontology_kind

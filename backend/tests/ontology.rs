@@ -2522,7 +2522,7 @@ async fn coverage_without_a_model_matches_names_and_synonyms_of_approved_terms_o
 
 /// A stand-in model: the chat picks phrases by a fixed table, and embeddings are word counts hashed
 /// into the vector, so texts that share words are near and others far.
-async fn coverage_model(phrases: Vec<(&'static str, Value)>) -> String {
+async fn coverage_model(phrases: Vec<(&'static str, Value)>, embeddings_work: bool) -> String {
     use axum::{routing::post, Json, Router};
     use std::hash::{Hash, Hasher};
     fn vector(text: &str) -> Vec<f32> {
@@ -2546,9 +2546,12 @@ async fn coverage_model(phrases: Vec<(&'static str, Value)>) -> String {
             }
         }
     };
-    let embed = |Json(body): Json<Value>| async move {
+    let embed = move |Json(body): Json<Value>| async move {
+        if !embeddings_work {
+            return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": {"message": "down"}})));
+        }
         let data: Vec<Value> = body["input"].as_array().unwrap().iter().enumerate().map(|(i, t)| json!({"index": i, "embedding": vector(t.as_str().unwrap())})).collect();
-        Json(json!({"data": data}))
+        (axum::http::StatusCode::OK, Json(json!({"data": data})))
     };
     let router = Router::new().route("/v1/chat/completions", post(chat)).route("/v1/embeddings", post(embed));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -2563,7 +2566,7 @@ async fn coverage_with_a_model_matches_by_meaning_and_never_by_a_proposed_or_rej
         ("selling price", json!(["average selling price", "products"])),
         ("unit spend", json!(["lowest unit spend"])),
         ("our gross margin", json!(["gross margin"])),
-    ])
+    ], true)
     .await;
     let app = TestApp::with_settings(Settings { openai_base_url: base, openai_api_key: Some("sk-test".into()), openai_chat_model: "test-model".into(), ..test_settings() }).await;
     cafe_for_coverage(&app).await;
@@ -2807,6 +2810,30 @@ async fn strict_mode_stops_filing_proposals_once_the_owner_has_a_backlog() {
     let out = sprocket().await;
     assert!(err(&out).contains("It was filed"), "{out}");
     assert_eq!(filed().await, ["sprocket"]);
+}
+
+#[tokio::test]
+async fn coverage_finds_a_vaults_term_when_another_vault_holds_nearer_ones() {
+    let base = coverage_model(vec![("roasts beans", json!(["company that roasts beans"]))], true).await;
+    let app = TestApp::with_settings(Settings { openai_base_url: base, openai_api_key: Some("sk-test".into()), openai_chat_model: "test-model".into(), ..test_settings() }).await;
+    let vault = cafe_for_coverage(&app).await;
+    ok(app.tool("ontology_propose", json!({"kinds": [{"kind": "supplier", "description": "company that roasts beans"}]})).await);
+    assert_eq!(decide_kind(&app, &vault, "supplier", json!({"action": "approve"})).await.0, 200);
+    // another vault in the org holds more kinds than one kNN read takes, each nearer the phrase
+    let team = ok(app.tool("vault_create", json!({"name": "Team", "kind": "org"})).await)["id"].as_str().unwrap().to_string();
+    let near = ["alpha", "bravo", "charlie", "delta", "echo"];
+    let kinds: Vec<Value> = near.iter().map(|k| json!({"kind": k, "description": "company that roasts beans, company that roasts beans"})).collect();
+    ok(app.tool("ontology_propose", json!({"vault_id": team, "kinds": kinds})).await);
+    for k in near {
+        assert_eq!(decide_kind(&app, &team, k, json!({"action": "approve"})).await.0, 200);
+    }
+    let question = "Which company that roasts beans do we use?";
+    let out = ok(app.tool("ontology_coverage", json!({"vault_id": team, "question": question})).await);
+    assert_eq!(out["matched"][0]["term"], "kind", "the team's terms have vectors: {out}");
+
+    let out = ok(app.tool("ontology_coverage", json!({"question": question})).await);
+    assert_eq!((out["mode"].as_str(), out["coverage"].as_f64()), (Some("model"), Some(1.0)), "{out}");
+    assert_eq!(out["matched"][0]["name"], "supplier", "{out}");
 }
 
 #[test]
