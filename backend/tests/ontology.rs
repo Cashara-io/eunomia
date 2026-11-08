@@ -3332,6 +3332,10 @@ async fn automap_and_import_link_a_supplier_column_to_the_organisation_already_t
     assert_eq!(decide_property(&app, &vault, "product", "price", json!({"action": "approve"})).await.0, 200);
     assert_eq!(decide_link(&app, &vault, "product", "supplied_by", "supplier").await, 200);
 
+    let (_, preview) = app.http("GET", &format!("/api/documents/{doc}/profile"), None, true).await;
+    assert_eq!(preview["import"]["reused"], check["reused"]);
+    assert_eq!(preview["import"]["ambiguous"], check["ambiguous"]);
+
     // strict: linking a product to an organisation is a link type no owner approved yet, so those cells wait
     assert_eq!(set_strict(&app, &vault, true).await.0, 200);
     let args = json!({"document_id": doc, "kind": "product", "name_column": "product"});
@@ -3508,4 +3512,79 @@ async fn relation_reason_failure_rolls_back_the_relation_and_retry_succeeds() {
     let got = ok(app.tool("entities_get", json!({"id": a})).await);
     assert_eq!(got["relations"].as_array().unwrap().len(), 1);
     assert_eq!(got["memory"].as_array().unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn rejected_named_targets_are_skipped_or_resolved_in_automap_preview_and_import() {
+    let mock = serve(vec![route("POST", "/chat/completions", json!({}))]).await;
+    let app = TestApp::with_settings(model_app_settings(&mock)).await;
+    let vault = personal(&app).await;
+    write(&app, "Acme", "vendor").await;
+    assert_eq!(decide_kind(&app, &vault, "vendor", json!({"action": "reject"})).await.0, 200);
+    let doc = upload_csv(&app, "products.csv", "product,supplier,price AUD\nWidget,Acme,$2.00\n").await;
+    mock.set_routes(vec![route("POST", "/chat/completions", json!({"choices": [{"message": {"content": garden_answer(&doc).to_string()}}]}))]);
+    let auto = ok(app.tool("ontology_automap", json!({"document_id": doc})).await);
+    assert_eq!(auto["links"][0]["reused"], json!([]));
+    assert_eq!(auto["links"][0]["skipped"][0]["name"], "Acme");
+    for k in ["product", "supplier"] {
+        assert_eq!(decide_kind(&app, &vault, k, json!({"action": "approve"})).await.0, 200);
+    }
+    assert_eq!(decide_property(&app, &vault, "product", "price", json!({"action": "approve"})).await.0, 200);
+    assert_eq!(decide_link(&app, &vault, "product", "supplied_by", "supplier").await, 200);
+    let (_, profile) = app.http("GET", &format!("/api/documents/{doc}/profile"), None, true).await;
+    assert_eq!(profile["import"]["skipped"][0]["name"], "Acme");
+    let args = json!({"document_id": doc, "kind": "product", "name_column": "product"});
+    let out = ok(app.tool("document_import_rows", args.clone()).await);
+    assert_eq!(out["linked"], 0);
+    assert_eq!(out["targets_created"], 0);
+    assert_eq!(out["skipped"][0]["name"], "Acme");
+    assert_eq!(decide_kind(&app, &vault, "vendor", json!({"action": "reject", "merge_into": "organisation"})).await.0, 200);
+    let absent = ok(app.tool("document_import_rows", args.clone()).await);
+    assert_eq!(absent["linked"], 0);
+    assert_eq!(absent["skipped"][0]["name"], "Acme");
+    let replacement = write(&app, "Acme", "organisation").await["entity"]["id"].clone();
+    let out = ok(app.tool("document_import_rows", args).await);
+    assert_eq!(out["linked"], 1);
+    assert_eq!(out["reused"][0]["entity_id"], replacement);
+    let auto = ok(app.tool("ontology_automap", json!({"document_id": doc})).await);
+    assert_eq!(auto["links"][0]["reused"][0]["entity_id"], replacement);
+}
+
+#[tokio::test]
+async fn preview_column_precedence_matches_import_for_competing_properties_and_links() {
+    let app = TestApp::new().await;
+    let doc = upload_csv(&app, "products.csv", "product,supplier,price\nWidget,Acme,2\n").await;
+    let vault = personal(&app).await;
+    let source = |col: &str| json!([{"source": "document", "record_type": doc, "path": col}]);
+    ok(app.tool("ontology_propose", json!({
+        "kinds": [{"kind": "product"}, {"kind": "supplier"}],
+        "properties": [
+            {"kind": "product", "name": "price", "datatype": "number", "source_map": source("price")},
+            {"kind": "product", "name": "supplier_text", "datatype": "text", "source_map": source("supplier")}
+        ],
+        "links": [{"from_kind": "product", "label": "supplied_by", "to_kind": "supplier", "source_map": source("supplier")}]
+    })).await);
+    for k in ["product", "supplier"] {
+        assert_eq!(decide_kind(&app, &vault, k, json!({"action": "approve"})).await.0, 200);
+    }
+    assert_eq!(decide_property(&app, &vault, "product", "price", json!({"action": "approve"})).await.0, 200);
+    assert_eq!(decide_link(&app, &vault, "product", "supplied_by", "supplier").await, 200);
+    let args = json!({"document_id": doc, "kind": "product", "name_column": "product"});
+    let (_, profile) = app.http("GET", &format!("/api/documents/{doc}/profile"), None, true).await;
+    let planned = &profile["import"]["columns"][1];
+    assert!(planned["property"].is_null());
+    assert_eq!(planned["link"], "supplied_by supplier");
+    assert_eq!(ok(app.tool("document_import_rows", args.clone()).await)["columns"][0]["link"], planned["link"]);
+    ok(app.tool("ontology_propose", json!({"properties": [
+        {"kind": "product", "name": "supplier_other", "datatype": "text", "source_map": source("supplier")}
+    ]})).await);
+    for p in ["supplier_text", "supplier_other"] {
+        assert_eq!(decide_property(&app, &vault, "product", p, json!({"action": "approve"})).await.0, 200);
+    }
+    let (_, profile) = app.http("GET", &format!("/api/documents/{doc}/profile"), None, true).await;
+    let planned = &profile["import"]["columns"][1];
+    assert!(planned["property"].is_null() && planned["link"].is_null());
+    let out = ok(app.tool("document_import_rows", args).await);
+    assert!(out["columns"][0]["property"].is_null() && out["columns"][0]["link"].is_null());
+    assert!(out["columns"][0]["skipped"].as_str().unwrap().contains("column_map"));
 }

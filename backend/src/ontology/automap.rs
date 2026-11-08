@@ -123,6 +123,9 @@ pub struct LinkCheck {
     pub reused: Vec<tabular::ReusedTarget>,
     /// Values that name two or more entities: an import skips them until they are merged.
     pub ambiguous: Vec<tabular::AmbiguousTarget>,
+    /// Names whose rejected kind has no existing approved replacement.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub skipped: Vec<tabular::SkippedTarget>,
     /// Proposed (some values match) or dropped (none do).
     pub kept: bool,
     /// The match share in words, as the link's proposal reason says it.
@@ -478,20 +481,21 @@ pub async fn automap(state: &OrgState, settings: &Settings, owner: &RecordId, ar
             // what the values already name in any kind, as the import finds it: one entity of another kind
             // is reused, two or more are skipped
             let keys: Vec<String> = lowered.iter().cloned().collect::<BTreeSet<_>>().into_iter().collect();
-            let named = tabular::named_any_kind(db, &vault, keys.clone()).await?;
-            let (mut reused, mut ambiguous) = (Vec::new(), Vec::new());
+            let named = tabular::resolved_names(db, &vault, keys.clone()).await?;
+            let (mut reused, mut ambiguous, mut refused) = (Vec::new(), Vec::new(), Vec::new());
             for key in &keys {
                 let spelled = values.iter().find(|v| &v.to_lowercase() == key).cloned().unwrap_or_default();
-                match named.get(key).map(Vec::as_slice).unwrap_or_default() {
-                    [one] if one.kind != to_kind.as_str() => {
+                match named.get(key) {
+                    Some(tabular::NamedMatch::One(one)) if one.kind != to_kind.as_str() => {
                         reused.push(tabular::ReusedTarget { column: ml.field.clone(), name: one.name.clone(), kind: one.kind.clone(), entity_id: one.id.to_string() })
                     }
-                    many @ [_, _, ..] => ambiguous.push(tabular::AmbiguousTarget { column: ml.field.clone(), name: spelled, kinds: many.iter().map(|e| e.kind.clone()).collect() }),
+                    Some(tabular::NamedMatch::Ambiguous(kinds)) => ambiguous.push(tabular::AmbiguousTarget { column: ml.field.clone(), name: spelled, kinds: kinds.clone() }),
+                    Some(tabular::NamedMatch::Skipped { kind, reason }) => refused.push(tabular::SkippedTarget { column: ml.field.clone(), name: spelled, kind: kind.clone(), reason: reason.clone() }),
                     _ => {}
                 }
             }
             let (matched, reason) = if creates {
-                let n = keys.len().saturating_sub(reused.len() + ambiguous.len());
+                let n = keys.len().saturating_sub(reused.len() + ambiguous.len() + refused.len());
                 let created = format!("no {} exists yet: an import creates the {n} named in {} once each", to_kind.as_str().replace('_', " "), ml.field);
                 (reused.len(), created + &reuse_words(&reused, &ambiguous))
             } else {
@@ -504,8 +508,12 @@ pub async fn automap(state: &OrgState, settings: &Settings, owner: &RecordId, ar
                 let is_reused = |v: &str| reused.iter().any(|r| r.name.to_lowercase() == v.to_lowercase());
                 hits.extend(values.iter().filter(|v| names.contains(&v.to_lowercase()) || is_reused(v)).cloned());
                 // a value naming two entities is no match: the import skips it
-                hits.retain(|h| !ambiguous.iter().any(|a| a.name.to_lowercase() == h.to_lowercase()));
+                hits.retain(|h| !ambiguous.iter().any(|a| a.name.to_lowercase() == h.to_lowercase()) && !refused.iter().any(|a| a.name.to_lowercase() == h.to_lowercase()));
                 (hits.len(), match_words(hits.len(), values.len()) + &reuse_words(&reused, &ambiguous))
+            };
+            let reason = if refused.is_empty() { reason } else {
+                let names = refused.iter().map(|r| format!("{}: {}", r.name, r.reason)).collect::<Vec<_>>().join(", ");
+                reason + &format!("; skipped {} rejected-kind names ({names})", refused.len())
             };
             let kept = creates || matched > 0;
             checks.push(LinkCheck {
@@ -520,6 +528,7 @@ pub async fn automap(state: &OrgState, settings: &Settings, owner: &RecordId, ar
                 ratio: ratio(matched, values.len()),
                 reused,
                 ambiguous,
+                skipped: refused,
                 kept,
                 reason: reason.clone(),
             });

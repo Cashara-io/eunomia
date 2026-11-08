@@ -1076,6 +1076,10 @@ export type ImportOut = {
      * Data rows in the file.
      */
     rows: number;
+    /**
+     * Names skipped because their kind was rejected and has no existing approved replacement.
+     */
+    skipped?: Array<SkippedTarget>;
     targets_created: number;
     updated: number;
     /**
@@ -1088,6 +1092,7 @@ export type ImportOut = {
  * What an import of the CSV would do now.
  */
 export type ImportPlan = {
+    ambiguous: Array<AmbiguousTarget>;
     columns: Array<ColumnPlan>;
     /**
      * The kind its mapped properties belong to, once auto-mapping proposed them.
@@ -1102,6 +1107,8 @@ export type ImportPlan = {
      * The kind is approved and at least one mapped property is: `document_import_rows` will run.
      */
     ready: boolean;
+    reused: Array<ReusedTarget>;
+    skipped?: Array<SkippedTarget>;
 };
 
 /**
@@ -1321,6 +1328,10 @@ export type LinkCheck = {
      * an import links to it instead of making a new one. They count as matched.
      */
     reused: Array<ReusedTarget>;
+    /**
+     * Names whose rejected kind has no existing approved replacement.
+     */
+    skipped?: Array<SkippedTarget>;
     source: string;
     to_kind: string;
     values: number;
@@ -2432,6 +2443,16 @@ export type Similarity = {
      * "semantic" (model embeddings) or "lexical" (hashed words, no model)
      */
     space: string;
+};
+
+/**
+ * A name whose rejected kind cannot be reused.
+ */
+export type SkippedTarget = {
+    column: string;
+    kind: string;
+    name: string;
+    reason: string;
 };
 
 /**

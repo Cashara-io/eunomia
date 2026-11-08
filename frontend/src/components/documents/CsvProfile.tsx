@@ -26,6 +26,30 @@ const TYPE: Record<string, string> = {
 const words = (name: string) => name.replace(/_/g, " ");
 const percent = (share: number) => `${Math.round(share * 100)}%`;
 
+function LinkTargets({ result, preview = false }: { result: Pick<ImportOut, "reused" | "ambiguous" | "skipped">; preview?: boolean }) {
+  return (
+    <div className="flex flex-col gap-1 text-[13px]">
+      {result.reused.length > 0 && (
+        <p data-testid="import-reused">
+          {preview ? "Will link to" : "Linked to"} {result.reused.length === 1 ? "an entity" : "entities"} you already have instead of adding new ones:{" "}
+          {result.reused.map((r) => `${r.name} (${words(r.kind)})`).join(", ")}.
+        </p>
+      )}
+      {result.ambiguous.length > 0 && (
+        <p data-testid="import-ambiguous" style={{ color: "var(--ink-dim)" }}>
+          {preview ? "Will skip" : "Not linked"}, because each names more than one entity: {result.ambiguous.map((a) => `${a.name} (${a.kinds.map(words).join(" and ")})`).join(", ")}.
+          Merge the duplicates, then import again.
+        </p>
+      )}
+      {result.skipped && result.skipped.length > 0 && (
+        <p data-testid="import-skipped" style={{ color: "var(--ink-dim)" }}>
+          {preview ? "Will skip" : "Not linked"}: {result.skipped.map((r) => `${r.name}: ${r.reason}`).join("; ")}.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function Imported({ out }: { out: ImportOut }) {
   const n = (count: number, one: string, many: string) => (
     <>
@@ -43,18 +67,7 @@ function Imported({ out }: { out: ImportOut }) {
           Linked {n(out.linked, "row", "rows")}, adding {n(out.targets_created, "new entity", "new entities")} they name.
         </p>
       )}
-      {out.reused.length > 0 && (
-        <p data-testid="import-reused">
-          Linked to {out.reused.length === 1 ? "an entity" : "entities"} you already had instead of adding new ones:{" "}
-          {out.reused.map((r) => `${r.name} (${words(r.kind)})`).join(", ")}.
-        </p>
-      )}
-      {out.ambiguous.length > 0 && (
-        <p data-testid="import-ambiguous" style={{ color: "var(--ink-dim)" }}>
-          Not linked, because each names more than one entity: {out.ambiguous.map((a) => `${a.name} (${a.kinds.map(words).join(" and ")})`).join(", ")}.
-          Merge the duplicates, then import again.
-        </p>
-      )}
+      <LinkTargets result={out} />
       {out.bad_count > 0 && (
         <>
           <p style={{ color: "var(--ink-dim)" }}>
@@ -187,6 +200,7 @@ export default function CsvProfile({ documentId }: { documentId: string }) {
           </button>
         </div>
       )}
+      {plan.ready && !out && <LinkTargets result={plan} preview />}
       {out && <Imported out={out} />}
       {error && <ErrorLine error={error} />}
     </div>
