@@ -275,6 +275,7 @@ jobs:
           - from: v2.0.8
           - from: v2.0.9
           - from: v2.1.0
+          - from: v2.1.1
     steps:
       - uses: actions/checkout@v4
         with:
