@@ -365,6 +365,9 @@ returns
 4. Draw it with `show_view` `{"view": "scenario", "headline": "What if the latte costs 30 cents more?",
    "scenario": <the same arguments>}`, and say nothing was saved.
 
+Each of `metrics` is an approved metric's name, or `{"metric": "avg_price", "kind": "product"}` when two kinds
+have a metric of that name.
+
 The four changes, applied in order (at most 20):
 
 - `{"set": {"entity_id", "property", "value", "unit"?}}`: a hypothetical value for one entity.
