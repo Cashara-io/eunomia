@@ -26,6 +26,11 @@ Use it so the user never has to repeat themselves.
 - If the fact happened or became true at another time than now (a decision
   made last March, a past job), pass `occurred_at` (ISO date), so date-range
   recall finds it.
+- When you learn how two things connect (a truck carries an order, a
+  product is supplied by an organisation, a person works at a company),
+  link them with `entity_relate` (`from_id`, `label`, `to_id`, an optional
+  one-sentence `reason`), not only in a fact. Links are what impact and
+  what-if follow: an entity with no links shows nothing it affects.
 - Wrong or outdated memory: `memory_update` it. Delete only when asked
   (`memory_delete`).
 - Never store secrets, credentials, or one-off small talk.
@@ -100,13 +105,16 @@ the vault's `ontology_get` and the entity's `entities_neighbourhood`, and
 decide from the link labels, the link descriptions and the facts which way
 the effect travels. Then call `show_view` with `"view": "impact"`,
 `start_id`, `headline` and `affected`: each affected entity with `path`
-(the relation ids from the start to it) and `why` (one sentence). If it refuses an id, fix that id and call it again.
+(the relation ids from the start to it) and `why` (one sentence). If it refuses an id, fix that id and call it again. If the
+entity has no links, the facts may still name what it touches: link those
+with `entity_relate` first, then draw the view.
 
 ## Code
 
 When you learn how a codebase fits together, map it with
 `code_entity_upsert` (repository, file, symbol) and `code_relate` (`calls`,
-`imports`, …).
+`imports`, …). `code_relate` is for code only: link people, organisations
+and business things with `entity_relate`.
 
 ## Documents
 

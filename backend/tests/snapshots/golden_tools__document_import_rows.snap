@@ -3,7 +3,7 @@ source: tests/golden_tools.rs
 expression: stable
 ---
 {
-  "document_id": "document:<id21>",
+  "document_id": "document:<id23>",
   "kind": "menu_item",
   "rows": 2,
   "created": 2,
@@ -11,6 +11,8 @@ expression: stable
   "values": 1,
   "linked": 0,
   "targets_created": 0,
+  "reused": [],
+  "ambiguous": [],
   "columns": [
     {
       "column": "price",

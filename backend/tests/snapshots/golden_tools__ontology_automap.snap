@@ -7,12 +7,12 @@ expression: stable
   "profiles": [
     {
       "source": "document",
-      "record_type": "document:<id21>",
+      "record_type": "document:<id23>",
       "records": 2,
       "fields": [
         {
           "source": "document",
-          "record_type": "document:<id21>",
+          "record_type": "document:<id23>",
           "path": "product",
           "inferred_type": "text",
           "null_rate": 0.0,
@@ -36,7 +36,7 @@ expression: stable
         },
         {
           "source": "document",
-          "record_type": "document:<id21>",
+          "record_type": "document:<id23>",
           "path": "price",
           "inferred_type": "text",
           "null_rate": 0.0,

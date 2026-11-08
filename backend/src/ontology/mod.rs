@@ -148,10 +148,17 @@ pub struct Label(String);
 impl Label {
     pub fn parse(s: &str) -> AppResult<Self> {
         let s = s.trim();
+        if crate::redact::redact(s, &mut Vec::new()) != s {
+            return Err(AppError::bad_request("a link label must not contain a secret"));
+        }
         if s.is_empty() || s.chars().count() > MAX_LABEL {
             return Err(AppError::bad_request(format!("a link label is 1 to {MAX_LABEL} characters, got {s:?}")));
         }
         Ok(Label(s.to_string()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
@@ -886,8 +893,7 @@ pub async fn ground(db: &OrgDb, vault: &RecordId, kind: &str) -> AppResult<Optio
 pub const CODE_LINK_LABELS: &[&str] = &["part_of", "defined_in", "calls", "imports"];
 
 pub async fn ground_link(db: &OrgDb, vault: &RecordId, from_kind: &str, label: &str, to_kind: &str) -> AppResult<()> {
-    // a label or kind that is not a valid ontology key cannot have been rejected
-    let Ok(key) = LinkKey::parse(from_kind, label, to_kind) else { return Ok(()) };
+    let key = LinkKey::parse(from_kind, label, to_kind)?;
     let status: Vec<String> = match q::GROUND_LINK.on(db).bind(("id", link_rid(vault, &key))).await {
         Err(e) if no_ontology_table(&e) => return Ok(()),
         res => res?.take(0)?,

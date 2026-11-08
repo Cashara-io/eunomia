@@ -3379,6 +3379,134 @@ async fn a_property_named_like_the_column_wins_over_a_link_guessed_from_the_kind
     assert_eq!((out["targets_created"].as_u64(), out["linked"].as_u64()), (Some(0), Some(0)), "{out}");
 }
 
+// ------------------------------------------------------------ the second gate: business links, no twin suppliers
+
+#[tokio::test]
+async fn entity_relate_links_business_things_saves_its_reason_once_and_is_grounded() {
+    let app = TestApp::new().await;
+    let vault = personal(&app).await;
+    let truck = write(&app, "Truck 4", "truck").await["entity"]["id"].as_str().unwrap().to_string();
+    let order = write(&app, "GGS-5012", "order").await["entity"]["id"].as_str().unwrap().to_string();
+    let token = format!("ghp_{}", "a1B2c3D4e5".repeat(4));
+    let carries = json!({"from_id": truck, "label": "carries", "to_id": order, "reason": format!("It is on Monday's run sheet. {token}")});
+    let first = ok(app.tool("entity_relate", carries.clone()).await);
+    assert_eq!((first["in"].as_str(), first["label"].as_str(), first["out"].as_str()), (Some(truck.as_str()), Some("carries"), Some(order.as_str())), "{first}");
+    assert!(first["reason_memory_id"].is_string() && first["redacted"].as_array().is_some_and(|r| !r.is_empty()), "{first}");
+    let again = ok(app.tool("entity_relate", carries).await);
+    assert_eq!((again["id"].as_str(), again.get("reason_memory_id")), (first["id"].as_str(), None), "the same link twice is one relation and one fact: {again}");
+    let got = ok(app.tool("entities_get", json!({"id": truck})).await);
+    let facts: Vec<&str> = got["memory"].as_array().unwrap().iter().map(|m| m["text"].as_str().unwrap()).collect();
+    assert_eq!(facts.len(), 2, "{facts:?}");
+    assert!(facts.iter().any(|f| f.starts_with("Truck 4 carries GGS-5012: It is on Monday's run sheet.")), "{facts:?}");
+    assert!(!got.to_string().contains(&token), "the reason's secret is redacted: {got}");
+    // impact now has a link to follow
+    let n = ok(app.tool("entities_neighbourhood", json!({"entity_id": truck})).await);
+    assert_eq!(names(&n), ["GGS-5012", "Truck 4"], "{n}");
+
+    // strict: an unreviewed link type is refused, filed for the owner, and saves no reason fact
+    assert_eq!(decide_link(&app, &vault, "truck", "carries", "order").await, 200);
+    assert_eq!(set_strict(&app, &vault, true).await.0, 200);
+    let out = app.tool("entity_relate", json!({"from_id": truck, "label": "hauls", "to_id": order, "reason": "A new word for it."})).await;
+    assert_eq!(out["code"], "ontology.rejected", "{out}");
+    assert!(err(&out).contains("truck carries order"), "names the approved link: {out}");
+    let o = ok(app.tool("ontology_get", json!({})).await);
+    assert_eq!(link(&o, "truck", "hauls", "order")["status"], "proposed", "{o}");
+    assert_eq!(ok(app.tool("entities_get", json!({"id": truck})).await)["memory"].as_array().unwrap().len(), 2, "no fact for a refused link");
+    ok(app.tool("entity_relate", json!({"from_id": truck, "label": "carries", "to_id": order})).await);
+}
+
+#[tokio::test]
+async fn an_impact_view_from_an_entity_with_no_links_says_there_is_nothing_to_follow() {
+    let app = TestApp::new().await;
+    let truck = write(&app, "Truck 4", "truck").await["entity"]["id"].as_str().unwrap().to_string();
+    let bare = ok(app.tool("show_view", json!({"view": "impact", "start_id": truck, "headline": "Truck 4 is a day late."})).await);
+    assert_eq!(bare["linked"], false, "{bare}");
+    let text = bare["text"].as_str().unwrap();
+    assert!(text.contains("Truck 4 has no saved links to follow") && !text.contains("Nothing else is affected"), "{text}");
+
+    let order = write(&app, "GGS-5012", "order").await["entity"]["id"].as_str().unwrap().to_string();
+    ok(app.tool("entity_relate", json!({"from_id": truck, "label": "carries", "to_id": order})).await);
+    let linked = ok(app.tool("show_view", json!({"view": "impact", "start_id": truck, "headline": "Truck 4 is a day late."})).await);
+    assert_eq!(linked["linked"], true, "{linked}");
+    assert!(linked["text"].as_str().unwrap().ends_with("Nothing else is affected."), "{linked}");
+}
+
+const LINK_GARDEN: &str = "product,supplier,price AUD\n\
+Drip Line 13mm,Coastal Irrigation Co,$24.00\n\
+Sprinkler Head,coastal irrigation co,$8.50\n\
+Pine Bark Mulch,Barwon Soil & Mulch,$75.00\n\
+Garden Twine,Twine Works,$4.00\n";
+
+fn garden_answer(doc: &str) -> Value {
+    json!({"record_types": [{
+        "source": "document", "record_type": doc, "kind": "product", "name_field": "product",
+        "properties": [{"name": "price", "datatype": "money", "unit": "AUD", "fields": ["price AUD"]}],
+        "links": [{"field": "supplier", "label": "supplied_by", "to_kind": "supplier", "target": null}],
+        "metrics": [],
+    }]})
+}
+
+#[tokio::test]
+async fn automap_and_import_link_a_supplier_column_to_the_organisation_already_there_and_skip_a_name_two_entities_share() {
+    let mock = serve(vec![route("POST", "/chat/completions", json!({}))]).await;
+    let app = TestApp::with_settings(model_app_settings(&mock)).await;
+    let vault = personal(&app).await;
+    // what document indexing made before the CSV came
+    let coastal = ok(app.tool("memory_write", json!({"subject_name": "Coastal Irrigation Co", "subject_kind": "organisation", "text": "Coastal Irrigation Co plans a price rise"})).await)["entity"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    write(&app, "Barwon Soil & Mulch", "organisation").await;
+    write(&app, "Barwon Soil & Mulch", "customer").await;
+    let doc = upload_csv(&app, "products.csv", LINK_GARDEN).await;
+    mock.set_routes(vec![route("POST", "/chat/completions", json!({"choices": [{"message": {"content": garden_answer(&doc).to_string()}}]}))]);
+
+    // auto-map looks past the supplier kind: one value names the organisation, one names two entities
+    let out = ok(app.tool("ontology_automap", json!({"document_id": doc})).await);
+    let check = out["links"].as_array().unwrap().iter().find(|c| c["label"] == "supplied_by").unwrap().clone();
+    assert_eq!(check["reused"], json!([{"column": "supplier", "name": "Coastal Irrigation Co", "kind": "organisation", "entity_id": coastal}]), "{check}");
+    assert_eq!(check["ambiguous"], json!([{"column": "supplier", "name": "Barwon Soil & Mulch", "kinds": ["organisation", "customer"]}]), "{check}");
+    assert_eq!((check["matched"].as_u64(), check["kept"].as_bool()), (Some(1), Some(true)), "{check}");
+    let reason = check["reason"].as_str().unwrap();
+    assert!(reason.starts_with("no supplier exists yet: an import creates the 1 named in supplier once each"), "{reason}");
+    assert!(reason.contains("organisation Coastal Irrigation Co") && reason.contains("Barwon Soil & Mulch: organisation and customer"), "{reason}");
+
+    for k in ["product", "supplier"] {
+        assert_eq!(decide_kind(&app, &vault, k, json!({"action": "approve"})).await.0, 200);
+    }
+    assert_eq!(decide_property(&app, &vault, "product", "price", json!({"action": "approve"})).await.0, 200);
+    assert_eq!(decide_link(&app, &vault, "product", "supplied_by", "supplier").await, 200);
+
+    let (_, preview) = app.http("GET", &format!("/api/documents/{doc}/profile"), None, true).await;
+    assert_eq!(preview["import"]["reused"], check["reused"]);
+    assert_eq!(preview["import"]["ambiguous"], check["ambiguous"]);
+
+    // strict: linking a product to an organisation is a link type no owner approved yet, so those cells wait
+    assert_eq!(set_strict(&app, &vault, true).await.0, 200);
+    let args = json!({"document_id": doc, "kind": "product", "name_column": "product"});
+    let first = ok(app.tool("document_import_rows", args.clone()).await);
+    assert_eq!((first["created"].as_u64(), first["targets_created"].as_u64(), first["linked"].as_u64(), first["bad_count"].as_u64()), (Some(4), Some(1), Some(1), Some(2)), "{first}");
+    assert!(first["bad"][0]["error"].as_str().unwrap().contains("is an existing organisation"), "{first}");
+    assert_eq!(first["reused"], json!([]), "{first}");
+    assert_eq!(first["ambiguous"], json!([{"column": "supplier", "name": "Barwon Soil & Mulch", "kinds": ["organisation", "customer"]}]), "{first}");
+
+    // the owner approves it: both spellings link to the one organisation, still an organisation
+    assert_eq!(decide_link(&app, &vault, "product", "supplied_by", "organisation").await, 200);
+    let second = ok(app.tool("document_import_rows", args.clone()).await);
+    assert_eq!((second["created"].as_u64(), second["targets_created"].as_u64(), second["linked"].as_u64(), second["bad_count"].as_u64()), (Some(0), Some(0), Some(2), Some(0)), "{second}");
+    assert_eq!(second["reused"], json!([{"column": "supplier", "name": "Coastal Irrigation Co", "kind": "organisation", "entity_id": coastal}]), "{second}");
+    let third = ok(app.tool("document_import_rows", args).await);
+    assert_eq!((third["targets_created"].as_u64(), third["linked"].as_u64()), (Some(0), Some(0)), "a re-run adds nothing: {third}");
+
+    let o = ok(app.tool("ontology_get", json!({})).await);
+    assert_eq!(kind(&o, "supplier")["entities"], 1, "only Twine Works is a new supplier: {o}");
+    let found = ok(app.tool("entities_search", json!({"query": "Coastal Irrigation Co"})).await);
+    let hits: Vec<(&str, &str)> = found["results"].as_array().unwrap().iter().map(|r| (r["name"].as_str().unwrap(), r["kind"].as_str().unwrap())).collect();
+    assert_eq!(hits, [("Coastal Irrigation Co", "organisation")], "one entity, its kind kept: {found}");
+    let n = ok(app.tool("entities_neighbourhood", json!({"entity_id": coastal})).await);
+    assert_eq!(names(&n), ["Coastal Irrigation Co", "Drip Line 13mm", "Sprinkler Head"], "{n}");
+}
+
 const GARDEN: &str = include_str!("fixtures/garden.csv");
 
 /// garden.csv as products linked to their suppliers, with a percent gross margin and stock value at cost.
@@ -3583,4 +3711,172 @@ async fn gate2_name_lookup_honours_vault_restricted_tokens() {
     assert_eq!(status, 200, "{out}");
     assert_eq!(out["vault"], team, "{out}");
     assert!(!out.to_string().contains(&other) && !out.to_string().contains("Personal"), "{out}");
+}
+
+#[tokio::test]
+async fn relation_boundary_refuses_overlong_labels_in_strict_mode() {
+    let app = TestApp::new().await;
+    let a = write(&app, "Alice", "person").await["entity"]["id"].clone();
+    let b = write(&app, "Bob", "person").await["entity"]["id"].clone();
+    assert_eq!(set_strict(&app, &personal(&app).await, true).await.0, 200);
+    for tool in ["entity_relate", "code_relate"] {
+        let out = app.tool(tool, json!({"from_id": a, "to_id": b, "label": "x".repeat(65)})).await;
+        assert!(out.get("error").is_some(), "overlong label was accepted");
+    }
+    assert_eq!(ok(app.tool("entities_get", json!({"id": a})).await)["relations"], json!([]));
+}
+
+#[tokio::test]
+async fn a_padded_label_is_stored_as_the_approved_label_it_was_grounded_as() {
+    let app = TestApp::new().await;
+    let vault = personal(&app).await;
+    let a = write(&app, "Alice", "person").await["entity"]["id"].clone();
+    let b = write(&app, "Bob", "person").await["entity"]["id"].clone();
+    ok(app.tool("ontology_propose", json!({"links": [{"from_kind": "person", "label": "knows", "to_kind": "person"}]})).await);
+    assert_eq!(decide_link(&app, &vault, "person", "knows", "person").await, 200);
+    assert_eq!(set_strict(&app, &vault, true).await.0, 200);
+    let padded = format!("  knows{}", " ".repeat(65));
+    ok(app.tool("code_relate", json!({"from_id": a, "to_id": b, "label": padded})).await);
+    ok(app.tool("entity_relate", json!({"from_id": a, "to_id": b, "label": padded, "reason": "old friends"})).await);
+    let rels = ok(app.tool("entities_get", json!({"id": a})).await)["relations"].clone();
+    let labels: Vec<&str> = rels.as_array().unwrap().iter().filter_map(|r| r["label"].as_str()).collect();
+    assert_eq!(labels, ["knows"], "one relation, stored under the approved label: {rels}");
+
+    // an edge stored padded before labels were trimmed is found again, not duplicated
+    let c = write(&app, "Cleo", "person").await["entity"]["id"].as_str().unwrap().to_string();
+    let a = a.as_str().unwrap();
+    app.db().await.test_raw().query(format!("RELATE {a}->relates_to->{c} SET label = ' knows ', owner = $u"))
+        .bind(("u", app.user.id.clone())).await.unwrap().check().unwrap();
+    ok(app.tool("code_relate", json!({"from_id": a, "to_id": c, "label": "knows"})).await);
+    ok(app.tool("entity_relate", json!({"from_id": a, "to_id": c, "label": "knows", "reason": "met at work"})).await);
+    let rels = ok(app.tool("entities_get", json!({"id": a})).await)["relations"].clone();
+    let to_cleo = rels.as_array().unwrap().iter().filter(|r| r.to_string().contains(&c)).count();
+    assert_eq!(to_cleo, 1, "the legacy padded edge is reused: {rels}");
+}
+
+#[tokio::test]
+async fn relation_boundary_refuses_secret_labels_before_storage_or_proposals() {
+    let app = TestApp::new().await;
+    let a = write(&app, "Alice", "person").await["entity"]["id"].clone();
+    let b = write(&app, "Bob", "person").await["entity"]["id"].clone();
+    let fake_token = format!("ghp_{}", "FAKE0".repeat(8));
+    for strict in [false, true] {
+        assert_eq!(set_strict(&app, &personal(&app).await, strict).await.0, 200);
+        for tool in ["entity_relate", "code_relate"] {
+            let out = app.tool(tool, json!({"from_id": a, "to_id": b, "label": fake_token})).await;
+            assert!(out.get("error").is_some(), "secret label was accepted");
+            assert!(!out.to_string().contains(&fake_token), "secret echoed in refusal");
+        }
+    }
+    assert_eq!(ok(app.tool("entities_get", json!({"id": a})).await)["relations"], json!([]));
+    assert!(!ok(app.tool("ontology_get", json!({})).await).to_string().contains(&fake_token));
+}
+
+#[tokio::test]
+async fn relation_reason_concurrent_retries_and_a_missing_reason_converge() {
+    let app = TestApp::new().await;
+    let a = write(&app, "Alice", "person").await["entity"]["id"].clone();
+    let b = write(&app, "Bob", "person").await["entity"]["id"].clone();
+    let args = json!({"from_id": a, "to_id": b, "label": "knows", "reason": "They met at work."});
+    let (one, two) = tokio::join!(app.tool("entity_relate", args.clone()), app.tool("entity_relate", args.clone()));
+    assert_eq!(ok(one)["id"], ok(two)["id"]);
+    let got = ok(app.tool("entities_get", json!({"id": a})).await);
+    assert_eq!(got["relations"].as_array().unwrap().len(), 1);
+    assert_eq!(got["memory"].as_array().unwrap().len(), 2);
+    // Simulate an old partial write, or deletion of the reason, then retry.
+    app.db().await.test_raw().query("DELETE memory WHERE text = 'Alice knows Bob: They met at work.'").await.unwrap().check().unwrap();
+    ok(app.tool("entity_relate", args).await);
+    assert_eq!(ok(app.tool("entities_get", json!({"id": a})).await)["memory"].as_array().unwrap().len(), 2, "retry restores exactly one reason");
+}
+
+#[tokio::test]
+async fn relation_reason_failure_rolls_back_the_relation_and_retry_succeeds() {
+    let app = TestApp::new().await;
+    let a = write(&app, "Alice", "person").await["entity"]["id"].clone();
+    let b = write(&app, "Bob", "person").await["entity"]["id"].clone();
+    let db = app.db().await;
+    db.test_raw().query("DEFINE EVENT refuse_reason ON memory WHEN $event = 'CREATE' THEN { THROW 'forced reason failure'; }").await.unwrap().check().unwrap();
+    let args = json!({"from_id": a, "to_id": b, "label": "knows", "reason": "They met at work."});
+    assert!(app.tool("entity_relate", args.clone()).await.get("error").is_some());
+    assert_eq!(ok(app.tool("entities_get", json!({"id": a})).await)["relations"], json!([]), "a failed reason must roll back its relation");
+    db.test_raw().query("REMOVE EVENT refuse_reason ON memory").await.unwrap().check().unwrap();
+    ok(app.tool("entity_relate", args).await);
+    let got = ok(app.tool("entities_get", json!({"id": a})).await);
+    assert_eq!(got["relations"].as_array().unwrap().len(), 1);
+    assert_eq!(got["memory"].as_array().unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn rejected_named_targets_are_skipped_or_resolved_in_automap_preview_and_import() {
+    let mock = serve(vec![route("POST", "/chat/completions", json!({}))]).await;
+    let app = TestApp::with_settings(model_app_settings(&mock)).await;
+    let vault = personal(&app).await;
+    write(&app, "Acme", "vendor").await;
+    assert_eq!(decide_kind(&app, &vault, "vendor", json!({"action": "reject"})).await.0, 200);
+    let doc = upload_csv(&app, "products.csv", "product,supplier,price AUD\nWidget,Acme,$2.00\n").await;
+    mock.set_routes(vec![route("POST", "/chat/completions", json!({"choices": [{"message": {"content": garden_answer(&doc).to_string()}}]}))]);
+    let auto = ok(app.tool("ontology_automap", json!({"document_id": doc})).await);
+    assert_eq!(auto["links"][0]["reused"], json!([]));
+    assert_eq!(auto["links"][0]["skipped"][0]["name"], "Acme");
+    for k in ["product", "supplier"] {
+        assert_eq!(decide_kind(&app, &vault, k, json!({"action": "approve"})).await.0, 200);
+    }
+    assert_eq!(decide_property(&app, &vault, "product", "price", json!({"action": "approve"})).await.0, 200);
+    assert_eq!(decide_link(&app, &vault, "product", "supplied_by", "supplier").await, 200);
+    let (_, profile) = app.http("GET", &format!("/api/documents/{doc}/profile"), None, true).await;
+    assert_eq!(profile["import"]["skipped"][0]["name"], "Acme");
+    let args = json!({"document_id": doc, "kind": "product", "name_column": "product"});
+    let out = ok(app.tool("document_import_rows", args.clone()).await);
+    assert_eq!(out["linked"], 0);
+    assert_eq!(out["targets_created"], 0);
+    assert_eq!(out["skipped"][0]["name"], "Acme");
+    assert_eq!(decide_kind(&app, &vault, "vendor", json!({"action": "reject", "merge_into": "organisation"})).await.0, 200);
+    let absent = ok(app.tool("document_import_rows", args.clone()).await);
+    assert_eq!(absent["linked"], 0);
+    assert_eq!(absent["skipped"][0]["name"], "Acme");
+    let replacement = write(&app, "Acme", "organisation").await["entity"]["id"].clone();
+    let out = ok(app.tool("document_import_rows", args).await);
+    assert_eq!(out["linked"], 1);
+    assert_eq!(out["reused"][0]["entity_id"], replacement);
+    let auto = ok(app.tool("ontology_automap", json!({"document_id": doc})).await);
+    assert_eq!(auto["links"][0]["reused"][0]["entity_id"], replacement);
+}
+
+#[tokio::test]
+async fn preview_column_precedence_matches_import_for_competing_properties_and_links() {
+    let app = TestApp::new().await;
+    let doc = upload_csv(&app, "products.csv", "product,supplier,price\nWidget,Acme,2\n").await;
+    let vault = personal(&app).await;
+    let source = |col: &str| json!([{"source": "document", "record_type": doc, "path": col}]);
+    ok(app.tool("ontology_propose", json!({
+        "kinds": [{"kind": "product"}, {"kind": "supplier"}],
+        "properties": [
+            {"kind": "product", "name": "price", "datatype": "number", "source_map": source("price")},
+            {"kind": "product", "name": "supplier_text", "datatype": "text", "source_map": source("supplier")}
+        ],
+        "links": [{"from_kind": "product", "label": "supplied_by", "to_kind": "supplier", "source_map": source("supplier")}]
+    })).await);
+    for k in ["product", "supplier"] {
+        assert_eq!(decide_kind(&app, &vault, k, json!({"action": "approve"})).await.0, 200);
+    }
+    assert_eq!(decide_property(&app, &vault, "product", "price", json!({"action": "approve"})).await.0, 200);
+    assert_eq!(decide_link(&app, &vault, "product", "supplied_by", "supplier").await, 200);
+    let args = json!({"document_id": doc, "kind": "product", "name_column": "product"});
+    let (_, profile) = app.http("GET", &format!("/api/documents/{doc}/profile"), None, true).await;
+    let planned = &profile["import"]["columns"][1];
+    assert!(planned["property"].is_null());
+    assert_eq!(planned["link"], "supplied_by supplier");
+    assert_eq!(ok(app.tool("document_import_rows", args.clone()).await)["columns"][0]["link"], planned["link"]);
+    ok(app.tool("ontology_propose", json!({"properties": [
+        {"kind": "product", "name": "supplier_other", "datatype": "text", "source_map": source("supplier")}
+    ]})).await);
+    for p in ["supplier_text", "supplier_other"] {
+        assert_eq!(decide_property(&app, &vault, "product", p, json!({"action": "approve"})).await.0, 200);
+    }
+    let (_, profile) = app.http("GET", &format!("/api/documents/{doc}/profile"), None, true).await;
+    let planned = &profile["import"]["columns"][1];
+    assert!(planned["property"].is_null() && planned["link"].is_null());
+    let out = ok(app.tool("document_import_rows", args).await);
+    assert!(out["columns"][0]["property"].is_null() && out["columns"][0]["link"].is_null());
+    assert!(out["columns"][0]["skipped"].as_str().unwrap().contains("column_map"));
 }

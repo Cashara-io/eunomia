@@ -187,6 +187,10 @@ pub struct ImportPlan {
     pub name_column: Option<String>,
     /// The kind is approved and at least one mapped property is: `document_import_rows` will run.
     pub ready: bool,
+    pub reused: Vec<ReusedTarget>,
+    pub ambiguous: Vec<AmbiguousTarget>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub skipped: Vec<SkippedTarget>,
 }
 
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
@@ -211,10 +215,10 @@ async fn kind_status(db: &OrgDb, vault: &RecordId, kind: &Kind) -> AppResult<Opt
     rows.into_iter().next().map(|r| Status::parse(&r.status)).transpose()
 }
 
-async fn plan(db: &OrgDb, vault: &RecordId, document_id: &str, columns: &[String]) -> AppResult<ImportPlan> {
+async fn plan(db: &OrgDb, vault: &RecordId, document_id: &str, table: &Table) -> AppResult<ImportPlan> {
+    let columns = &table.columns;
     let by_kind = property::properties_by_kind(db, vault).await?;
     let fed_by = |p: &property::PropertyItem, col: &str| p.source_map.iter().any(|f| f.source == SOURCE && f.record_type == document_id && f.path == col);
-    // the kind most of this document's columns were mapped onto
     let kind = by_kind
         .iter()
         .map(|(k, props)| (k, columns.iter().filter(|c| props.iter().any(|p| fed_by(p, c))).count()))
@@ -222,33 +226,47 @@ async fn plan(db: &OrgDb, vault: &RecordId, document_id: &str, columns: &[String
         .max_by_key(|(_, n)| *n)
         .map(|(k, _)| k.clone());
     let props = kind.as_ref().and_then(|k| by_kind.get(k)).cloned().unwrap_or_default();
-    let plans: Vec<ColumnPlan> = columns
-        .iter()
-        .map(|c| {
-            let fed: Vec<_> = props.iter().filter(|p| fed_by(p, c)).collect();
-            let approved: Vec<_> = fed.iter().filter(|p| p.status == Status::Approved).collect();
-            // a column two approved properties claim has no default: the import asks for a column_map
-            let p = match (approved.as_slice(), fed.as_slice()) {
-                ([one], _) => Some(**one),
-                ([], [one]) => Some(*one),
-                _ => None,
-            };
-            ColumnPlan { column: c.clone(), property: p.map(|p| p.name.clone()), status: p.map(|p| p.status), link: None }
-        })
-        .collect();
     let links = match &kind {
         Some(k) => approved_links_from(db, vault, k).await?,
         None => Vec::new(),
     };
-    let mut plans = plans;
-    // the order document_import_rows takes: a link fed by the column, then a property named like it, then a link guessed from the kind's name
-    for c in plans.iter_mut().filter(|c| c.property.is_none()) {
-        let named = props.iter().find(|p| p.status == Status::Approved && p.name == property_name_for(&c.column));
-        match (links.iter().find(|l| l.fed_by(document_id, &c.column)), named) {
-            (Some(l), _) => c.link = Some(l.words()),
-            (None, Some(p)) => (c.property, c.status) = (Some(p.name.clone()), Some(p.status)),
-            (None, None) => c.link = link_for(&links, document_id, &c.column).map(LinkFrom::words),
+    let mut plans = Vec::new();
+    let (mut reused, mut ambiguous, mut skipped) = (Vec::new(), Vec::new(), Vec::new());
+    for (i, c) in columns.iter().enumerate() {
+        let fed: Vec<_> = props.iter().filter(|p| fed_by(p, c)).collect();
+        let approved: Vec<_> = fed.iter().filter(|p| p.status == Status::Approved).collect();
+        let mut col = ColumnPlan { column: c.clone(), property: None, status: None, link: None };
+        if approved.len() > 1 {
+            plans.push(col);
+            continue;
         }
+        let named = props.iter().find(|p| p.status == Status::Approved && p.name == property_name_for(c));
+        let link = if approved.is_empty() {
+            links.iter().find(|l| l.fed_by(document_id, c)).or_else(|| if named.is_none() { link_for(&links, document_id, c) } else { None })
+        } else {
+            None
+        };
+        if let Some(l) = link {
+            col.link = Some(l.words());
+            let keys: Vec<String> = table.rows.iter().filter(|(_, cells)| cells.len() == columns.len())
+                .filter_map(|(_, cells)| cells.get(i)).map(|v| v.trim().to_lowercase()).filter(|v| !v.is_empty())
+                .collect::<std::collections::BTreeSet<_>>().into_iter().collect();
+            let matches = resolved_names(db, vault, keys.clone()).await?;
+            for key in keys {
+                let spelled = table.rows.iter().filter_map(|(_, cells)| cells.get(i)).find(|v| v.trim().to_lowercase() == key).map(|v| v.trim()).unwrap_or_default();
+                match matches.get(&key) {
+                    Some(NamedMatch::One(one)) if one.kind != l.to_kind => reused.push(ReusedTarget { column: c.clone(), name: one.name.clone(), kind: one.kind.clone(), entity_id: one.id.to_string() }),
+                    Some(NamedMatch::Ambiguous(kinds)) => ambiguous.push(AmbiguousTarget { column: c.clone(), name: spelled.to_string(), kinds: kinds.clone() }),
+                    Some(NamedMatch::Skipped { kind, reason }) => skipped.push(SkippedTarget { column: c.clone(), name: spelled.to_string(), kind: kind.clone(), reason: reason.clone() }),
+                    _ => {}
+                }
+            }
+        } else {
+            let p = approved.first().map(|p| **p).or(named).or(match fed.as_slice() { [one] => Some(*one), _ => None });
+            col.property = p.map(|p| p.name.clone());
+            col.status = p.map(|p| p.status);
+        }
+        plans.push(col);
     }
     let kind_status = match &kind {
         Some(k) => kind_status(db, vault, &Kind::parse(k)?).await?,
@@ -256,7 +274,7 @@ async fn plan(db: &OrgDb, vault: &RecordId, document_id: &str, columns: &[String
     };
     let name_column = plans.iter().find(|c| c.property.is_none() && c.link.is_none()).or(plans.first()).map(|c| c.column.clone());
     let ready = kind_status == Some(Status::Approved) && plans.iter().any(|c| c.status == Some(Status::Approved));
-    Ok(ImportPlan { kind, kind_status, columns: plans, name_column, ready })
+    Ok(ImportPlan { kind, kind_status, columns: plans, name_column, ready, reused, ambiguous, skipped })
 }
 
 /// The profile of an uploaded CSV the caller may read, and what an import would do now.
@@ -265,7 +283,7 @@ pub async fn document_profile(state: &OrgState, user: &RecordId, id: &str) -> Ap
     let table = parse(&doc.bytes)?;
     let doc_id = doc.id.to_string();
     let profile = profile::profile(&sample(&doc_id, &table));
-    let import = plan(&state.db, &doc.vault, &doc_id, &table.columns).await?;
+    let import = plan(&state.db, &doc.vault, &doc_id, &table).await?;
     Ok(TableProfile { document_id: doc_id, filename: doc.filename, rows: table.rows.len(), columns: table.columns, profile, import })
 }
 
@@ -311,6 +329,111 @@ pub struct BadCell {
     pub error: String,
 }
 
+/// An entity that already existed under a link column's value, in another kind than the link's
+/// target: linked to as it is, never retyped and never duplicated.
+#[derive(Debug, Clone, Serialize, PartialEq, utoipa::ToSchema)]
+pub struct ReusedTarget {
+    pub column: String,
+    pub name: String,
+    pub kind: String,
+    pub entity_id: String,
+}
+
+/// A link column's value that names two or more entities in the vault: skipped, never guessed, until a
+/// person merges them (`entity_merge`) or the column is mapped another way.
+#[derive(Debug, Clone, Serialize, PartialEq, utoipa::ToSchema)]
+pub struct AmbiguousTarget {
+    pub column: String,
+    pub name: String,
+    /// The kind of each entity it names.
+    pub kinds: Vec<String>,
+}
+
+/// A name whose rejected kind cannot be reused.
+#[derive(Debug, Clone, Serialize, PartialEq, utoipa::ToSchema)]
+pub struct SkippedTarget {
+    pub column: String,
+    pub name: String,
+    pub kind: String,
+    pub reason: String,
+}
+
+pub(super) enum NamedMatch {
+    One(Named),
+    Ambiguous(Vec<String>),
+    Skipped { kind: String, reason: String },
+}
+
+/// An entity of any kind, found by its name key.
+#[derive(Debug, Clone, Deserialize, SurrealValue)]
+pub(super) struct Named {
+    pub id: RecordId,
+    pub name: String,
+    pub name_key: String,
+    pub kind: String,
+}
+
+/// The entities of every kind in `vault` named like each of `keys` (lowercase), by key.
+pub(super) async fn named_any_kind(db: &OrgDb, vault: &RecordId, keys: Vec<String>) -> AppResult<HashMap<String, Vec<Named>>> {
+    if keys.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let rows: Vec<Named> = q::NAMED_ANY_KIND.on(db).bind(("vault", vault.clone())).bind(("keys", keys)).await?.take(0)?;
+    let mut out: HashMap<String, Vec<Named>> = HashMap::new();
+    for r in rows {
+        out.entry(r.name_key.clone()).or_default().push(r);
+    }
+    Ok(out)
+}
+
+/// Resolve rejected kinds before counting matches, so a merged kind and its replacement are one
+/// candidate. Never create a replacement while resolving a name that already exists.
+pub(super) async fn resolved_names(db: &OrgDb, vault: &RecordId, keys: Vec<String>) -> AppResult<HashMap<String, NamedMatch>> {
+    let named = named_any_kind(db, vault, keys).await?;
+    let mut decisions: HashMap<String, Result<Option<String>, String>> = HashMap::new();
+    let mut out = HashMap::new();
+    for (key, candidates) in named {
+        let mut resolved = Vec::new();
+        let mut refusal = None;
+        for candidate in &candidates {
+            if !decisions.contains_key(&candidate.kind) {
+                let decision = if kind_status(db, vault, &Kind::parse(&candidate.kind)?).await? == Some(Status::Rejected) {
+                    super::ground(db, vault, &candidate.kind).await.map(|m| m.map(|m| m.to)).map_err(|e| e.message)
+                } else {
+                    Ok(None)
+                };
+                decisions.insert(candidate.kind.clone(), decision);
+            }
+            let target = match &decisions[&candidate.kind] {
+                Ok(None) => candidate,
+                Ok(Some(kind)) => match candidates.iter().find(|c| &c.kind == kind) {
+                    Some(replacement) if super::KINDS.contains(&kind.as_str()) || kind_status(db, vault, &Kind::parse(kind)?).await? == Some(Status::Approved) => replacement,
+                    _ => {
+                        refusal = Some((candidate.kind.clone(), format!("the kind {} was rejected: no approved {kind} with this name exists", candidate.kind)));
+                        break;
+                    }
+                },
+                Err(reason) => {
+                    refusal = Some((candidate.kind.clone(), reason.clone()));
+                    break;
+                }
+            };
+            if !resolved.iter().any(|c: &&Named| c.id == target.id) {
+                resolved.push(target);
+            }
+        }
+        let matched = if let Some((kind, reason)) = refusal {
+            NamedMatch::Skipped { kind, reason }
+        } else if resolved.len() == 1 {
+            NamedMatch::One(resolved[0].clone())
+        } else {
+            NamedMatch::Ambiguous(resolved.iter().map(|c| c.kind.clone()).collect())
+        };
+        out.insert(key, matched);
+    }
+    Ok(out)
+}
+
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct ImportOut {
     pub document_id: String,
@@ -325,6 +448,14 @@ pub struct ImportOut {
     /// Relations this run wrote (a re-run writes none), and the link targets it created by name.
     pub linked: usize,
     pub targets_created: usize,
+    /// Link targets that already existed in another kind (an organisation a supplier column names),
+    /// linked to instead of a new entity.
+    pub reused: Vec<ReusedTarget>,
+    /// Link column values that name more than one entity, skipped.
+    pub ambiguous: Vec<AmbiguousTarget>,
+    /// Names skipped because their kind was rejected and has no existing approved replacement.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub skipped: Vec<SkippedTarget>,
     pub columns: Vec<ColumnUse>,
     /// Rows and cells left out, at most 100 listed.
     pub bad: Vec<BadCell>,
@@ -453,12 +584,25 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
         values: 0,
         linked: 0,
         targets_created: 0,
+        reused: Vec::new(),
+        ambiguous: Vec::new(),
+        skipped: Vec::new(),
         columns,
         bad: Vec::new(),
         bad_count: 0,
     };
     // each target once per run, by its name in any case
     let mut found: HashMap<(usize, String), RecordId> = HashMap::new();
+    // what the link columns' values already name, in any kind, read once: a supplier column naming an
+    // organisation that document indexing made links to it instead of making a twin supplier
+    let link_keys: HashSet<String> = link_targets
+        .iter()
+        .flat_map(|(i, _)| table.rows.iter().filter_map(move |(_, c)| c.get(*i)).map(|v| v.trim().to_lowercase()).filter(|v| !v.is_empty()))
+        .collect();
+    let named = resolved_names(db, &doc.vault, link_keys.into_iter().collect()).await?;
+    // whether each link column may point at each other kind it meets, grounded once
+    let mut grounded: HashMap<(usize, String), Result<(), String>> = HashMap::new();
+    let mut skipped: HashSet<(usize, String)> = HashSet::new();
     let mut seen: HashMap<String, ()> = HashMap::new();
     let mut names: HashMap<String, u64> = HashMap::new();
     let mut pending: Vec<ImportedValue> = Vec::new();
@@ -525,9 +669,41 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
                 continue;
             }
             let key = (*i, cell.to_lowercase());
-            let target = match found.get(&key) {
-                Some(t) => t.clone(),
-                None => match crate::entities::service::upsert_in_vault(db, user, &link.kind, cell, None, &doc.vault, Lookups::NameAndAlias).await {
+            let existing = named.get(&key.1);
+            let target = match (found.get(&key), existing) {
+                (Some(t), _) => t.clone(),
+                (None, Some(NamedMatch::Skipped { kind, reason })) => {
+                    if skipped.insert(key.clone()) {
+                        out.skipped.push(SkippedTarget { column: table.columns[*i].clone(), name: cell.to_string(), kind: kind.clone(), reason: reason.clone() });
+                    }
+                    continue;
+                }
+                (None, Some(NamedMatch::Ambiguous(kinds))) => {
+                    if skipped.insert(key.clone()) {
+                        out.ambiguous.push(AmbiguousTarget { column: table.columns[*i].clone(), name: cell.to_string(), kinds: kinds.clone() });
+                    }
+                    continue;
+                }
+                (None, Some(NamedMatch::One(one))) => {
+                    if one.kind != link.kind {
+                        let allowed = match grounded.get(&(*i, one.kind.clone())) {
+                            Some(a) => a.clone(),
+                            None => {
+                                let a = super::ground_link(db, &doc.vault, kind.as_str(), &link.label, &one.kind).await.map_err(|e| e.message);
+                                grounded.insert((*i, one.kind.clone()), a.clone());
+                                a
+                            }
+                        };
+                        if let Err(e) = allowed {
+                            bad(&mut out, *line, Some(&table.columns[*i]), format!("{cell:?} is an existing {}: {e}", one.kind.replace('_', " ")));
+                            continue;
+                        }
+                        out.reused.push(ReusedTarget { column: table.columns[*i].clone(), name: one.name.clone(), kind: one.kind.clone(), entity_id: one.id.to_string() });
+                    }
+                    found.insert(key, one.id.clone());
+                    one.id.clone()
+                }
+                (None, None) => match crate::entities::service::upsert_in_vault(db, user, &link.kind, cell, None, &doc.vault, Lookups::NameAndAlias).await {
                     Ok((t, created)) => {
                         out.targets_created += usize::from(created);
                         let t: RecordId = crate::rid::parse(&t.id).map_err(|_| AppError::internal("entity id did not round-trip"))?;

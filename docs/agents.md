@@ -201,7 +201,8 @@ No. The connected agent is the model.
 | `document_import_rows` | Import an uploaded CSV's rows as entities of an approved kind with values of its approved properties; idempotent, bad cells reported by line ([auto-mapping](#auto-mapping)) |
 | `entity_set_property` | Set one approved typed property of an entity (a `price` on a `product`), checked against its datatype and kept with its date and source ([typed properties](#typed-properties)) |
 | `entity_update` / `entity_merge` / `entity_delete` | Edit, de-duplicate, delete entities |
-| `code_entity_upsert` / `code_relate` | Map repositories, files, symbols and their relations |
+| `entity_relate` | Link two business entities in one vault (a truck `carries` an order, a product `supplied_by` an organisation), with an optional `reason` saved as a fact; grounded like any relation, idempotent. Impact and what-if follow these links ([linking business things](#linking-business-things)) |
+| `code_entity_upsert` / `code_relate` | Map repositories, files, symbols and their relations (code only; business links use `entity_relate`) |
 | `consolidate_observations` | Fold new facts into each entity's belief |
 | `vault_list` / `vault_create` / `vault_clone` / `vault_merge` | Manage vaults (separate scopes for projects, clients, teams, …); merge two into a new one. Any tool's `vault_id` also accepts a vault's name |
 | `vault_invite` / `vault_members` / `vault_remove_member` / `vault_leave` / `vault_rename` / `vault_delete` | Sharing |
@@ -259,8 +260,30 @@ What is refused, with an error that says why: a property that does not exist or 
 it and wait), a value that does not fit the datatype (a money value with a currency sign, an enum value not
 in its list, a date that is not `YYYY-MM-DD`), and a property rejected with no merge target. A property
 rejected into another (say `cost` into `price`) writes to that one, and the result's `property_mapped`
-says so. Relations are grounded the same way: a `code_relate` whose link type the owners rejected is
-refused, and the error names the approved link types between the two kinds.
+says so. Relations are grounded the same way: an `entity_relate` or `code_relate` whose link type the owners
+rejected is refused, and the error names the approved link types between the two kinds.
+
+### Linking business things
+
+Impact (`entities_neighbourhood`, then `show_view` impact) and what-if (`scenario_run`'s `related_to` and
+`reached`) follow saved links between entities. A fact like "Truck 4 carries GGS-5012" is not a link, so
+when an agent learns how two things connect it calls `entity_relate`:
+
+`{"from_id": "<Truck 4 id>", "label": "carries", "to_id": "<GGS-5012 id>", "reason": "GGS-5012 is on Truck 4's run sheet for Monday."}`
+
+- The label reads `from label to`, lowercase words joined by `_`. Reuse a label the vault already has
+  between the two kinds (`ontology_get`); a new one shows as observed until an owner reviews it.
+- Both entities must be in one vault the caller can write to. A rejected link type is refused, naming the
+  approved ones; a vault that takes only approved kinds and links refuses an unreviewed one and files it as
+  a proposal.
+- A label is at most 64 characters and must not contain a secret. Invalid labels are refused.
+- `reason` is saved once as a fact on `from_id` ("Truck 4 carries GGS-5012: ..."),
+  with secrets redacted as in any memory. The relation and reason commit together. Concurrent retries
+  leave one relation and one reason; a retry restores a missing reason.
+- The built-in chat may call it too. `code_relate` stays for repositories, files and symbols.
+
+An impact view whose start has no saved links says so ("has no saved links to follow") rather than
+"Nothing else is affected".
 
 ### Auto-mapping
 
@@ -601,10 +624,11 @@ Every tool that changes a vault has a matching action in the web app, except whe
 | `document_*` | Documents page |
 | `memory_write_batch` | None: bulk import is for agents and scripts. Upload a document instead |
 | `code_entity_upsert` / `code_relate` | Code map shows them; only coding agents write them |
+| `entity_relate` | The entity graph shows the links; the chat and agents write them |
 | `skill_*` | None yet (see [agent skills](#agent-skills)) |
 
-The other direction has one deliberate gap: the built-in **chat** may only read and call `memory_write`
-and `memory_update`. It cannot delete, merge, share, invite or change vaults, even when you ask it to,
+The other direction has one deliberate gap: the built-in **chat** may only read and call `memory_write`,
+`memory_update`, `entity_set_property` and `entity_relate`. It cannot delete, merge, share, invite or change vaults, even when you ask it to,
 because a chat reply should never be able to destroy or expose data (`CHAT_WRITE_TOOLS` in
 `backend/src/chat/service.rs`). Do those from the pages above, or from an agent you connected.
 

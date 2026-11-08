@@ -1,4 +1,4 @@
-//! Entities: search, get, graph, neighbourhood (read-only), update, delete and merge.
+//! Entities: search, get, graph, neighbourhood (read-only), relate, update, delete and merge.
 //! Part of the tool registry (see `registry/mod.rs`); one `register` call per tool.
 
 use std::collections::HashMap;
@@ -202,6 +202,48 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     Err(e) => return Ok(e),
                 };
                 Ok(to_tool_value(neighbourhood::neighbourhood(&state.db, owner, &rid, a.depth, vault_id.as_ref()).await))
+            })
+        }),
+    );
+
+    #[derive(serde::Deserialize)]
+    struct EntityRelateArgs {
+        from_id: String,
+        label: String,
+        to_id: String,
+        #[serde(default)]
+        reason: Option<String>,
+    }
+
+    register(
+        registry,
+        "entity_relate",
+        json!({
+            "type": "object",
+            "properties": {
+                "from_id": {"type": "string", "description": "the entity the link starts from, e.g. the truck"},
+                "label": {"type": "string", "description": "lowercase words joined by _, read from_id label to_id, e.g. carries, supplied_by, ordered_by"},
+                "to_id": {"type": "string", "description": "the entity it points to, e.g. the order"},
+                "reason": {"type": "string", "description": "why they are linked, in one sentence; saved once as a fact on from_id; retries restore a missing reason"},
+            },
+            "required": ["from_id", "label", "to_id"],
+        }),
+        Arc::new(|state, owner, args| {
+            Box::pin(async move {
+                let a: EntityRelateArgs = match serde_json::from_value(args) {
+                    Ok(a) => a,
+                    Err(e) => return Ok(bad_args(e)),
+                };
+                let from_id = match parse_rid("from_id", &a.from_id) {
+                    Ok(v) => v,
+                    Err(e) => return Ok(e),
+                };
+                let to_id = match parse_rid("to_id", &a.to_id) {
+                    Ok(v) => v,
+                    Err(e) => return Ok(e),
+                };
+                let result = entities_tools::entity_relate(&state.db, owner, &from_id, &to_id, &a.label, a.reason.as_deref()).await;
+                Ok(to_tool_value(result))
             })
         }),
     );

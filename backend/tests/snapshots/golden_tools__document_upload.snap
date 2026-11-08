@@ -3,7 +3,7 @@ source: tests/golden_tools.rs
 expression: stable
 ---
 {
-  "id": "document:<id18>",
+  "id": "document:<id20>",
   "vault": "vault:<id2>",
   "filename": "anvil-budget.md",
   "media_type": "text/markdown",
@@ -15,5 +15,5 @@ expression: stable
   "created_at": "<ts>",
   "updated_at": "<ts>",
   "indexed_at": null,
-  "download_url": "/api/documents/document:<id18>/download"
+  "download_url": "/api/documents/document:<id20>/download"
 }

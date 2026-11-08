@@ -8,7 +8,8 @@ export type Step = { id: string; from: EntityRef; label: string; to: EntityRef }
 
 export type Affected = { entity: EntityRef; path: Step[]; why: string };
 
-export type ImpactView = { view: "impact"; start: EntityRef; headline: string; affected: Affected[]; text: string };
+/** `linked` is false when the start has no saved links at all, so there was nothing to follow. */
+export type ImpactView = { view: "impact"; start: EntityRef; headline: string; affected: Affected[]; linked?: boolean; text: string };
 
 export type SubgraphView = { view: "subgraph"; title: string; entities: EntityRef[]; relations: Step[]; text: string };
 

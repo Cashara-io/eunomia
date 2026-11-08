@@ -3,7 +3,7 @@ source: tests/golden_tools.rs
 expression: stable
 ---
 {
-  "id": "vault:<id14>",
+  "id": "vault:<id16>",
   "name": "Team",
   "kind": "org",
   "created_at": "<ts>"

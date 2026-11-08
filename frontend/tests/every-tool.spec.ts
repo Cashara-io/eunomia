@@ -58,11 +58,13 @@ test("every MCP tool works end to end", async ({ request, baseURL }) => {
   expect((await ok("entity_update", { entity_id: ada.entity.id, summary: "Mathematician" })).summary).toBe("Mathematician");
   expect((await ok("entities_search", { query: "Lovelace" })).results.length).toBeGreaterThanOrEqual(2);
   await ok("code_relate", { from_id: ada.entity.id, to_id: babbage.entity.id, label: "collaborated_with" });
+  const link = await ok("entity_relate", { from_id: babbage.entity.id, label: "corresponded_with", to_id: ada.entity.id, reason: "They wrote letters about the engine." });
+  expect(link.reason_memory_id).toBeTruthy();
   const merged = await ok("entity_merge", { winner_id: ada.entity.id, loser_id: ada2.entity.id });
   expect(merged.aliases).toContain("A. Lovelace");
   const detail = await ok("entities_get", { id: ada.entity.id });
   expect(detail.memory.length).toBe(2);
-  expect(detail.relations.length).toBe(1);
+  expect(detail.relations.length).toBe(2);
   expect((await ok("entities_graph")).edges.length).toBeGreaterThanOrEqual(1);
   const hood = await ok("entities_neighbourhood", { entity_id: ada.entity.id });
   expect(hood.nodes.map((n: { name: string }) => n.name)).toContain("Charles Babbage");

@@ -83,6 +83,36 @@ pub async fn code_relate(
     service::add_relation(db, owner, from_id, to_id, label, source_record_id).await
 }
 
+/// `entity_relate`'s result: the relation, and the fact saved for its reason, when this call first wrote or restored it.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct EntityRelateOut {
+    #[serde(flatten)]
+    pub relation: service::RelationOut,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason_memory_id: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub redacted: Vec<crate::redact::Redaction>,
+}
+
+/// A labelled relation between two business entities (a truck `carries` an order, a product
+/// `supplied_by` an organisation), with the same checks as `code_relate`, and an optional reason saved
+/// as a fact on `from_id`.
+pub async fn entity_relate(
+    db: &OrgDb,
+    owner: &RecordId,
+    from_id: &RecordId,
+    to_id: &RecordId,
+    label: &str,
+    reason: Option<&str>,
+) -> AppResult<EntityRelateOut> {
+    let (relation, memory) = service::relate_with_reason(db, owner, from_id, to_id, label, reason).await?;
+    let (reason_memory_id, redacted) = match memory {
+        Some(m) => (Some(m.id), m.redacted),
+        None => (None, Vec::new()),
+    };
+    Ok(EntityRelateOut { relation, reason_memory_id, redacted })
+}
+
 /// Writes the fact. With a chat model, a `supersede` job then marks the earlier facts about the
 /// subject it makes no longer true (see `supersede`); the write does not wait for the model.
 #[allow(clippy::too_many_arguments)]

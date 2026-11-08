@@ -949,24 +949,10 @@ pub async fn add_relation(
     label: &str,
     source_record_id: Option<&str>,
 ) -> AppResult<RelationOut> {
-    let in_row = select_entity(db, from_id).await?;
-    let out_row = select_entity(db, to_id).await?;
-    let in_ok = match &in_row {
-        Some(r) => accessible(db, owner, &r.vault, Action::WriteMemories).await?,
-        None => false,
-    };
-    let out_ok = match &out_row {
-        Some(r) => accessible(db, owner, &r.vault, Action::WriteMemories).await?,
-        None => false,
-    };
-    let (Some(in_row), Some(out_row)) = (in_row, out_row) else {
-        return Err(AppError::coded(crate::error::ErrorCode::VaultForbidden, "not a member of both entities' vaults"));
-    };
-    if !in_ok || !out_ok {
-        return Err(AppError::coded(crate::error::ErrorCode::VaultForbidden, "not a member of both entities' vaults"));
-    }
-    same_vault(&in_row, &out_row)?;
-    crate::ontology::ground_link(db, &in_row.vault, &in_row.kind(), label, &out_row.kind()).await?;
+    // grounding, lookup and storage all use the parsed label, so a padded one cannot pass as another
+    let label = crate::ontology::Label::parse(label)?;
+    let label = label.as_str();
+    let (in_row, _) = relation_endpoints(db, owner, from_id, to_id, label).await?;
 
     if let Some(existing) = find_relation(db, from_id, to_id, label).await? {
         return Ok(relation_out(&existing, None, None));
@@ -1006,9 +992,92 @@ pub async fn add_relation(
     }
 }
 
+async fn relation_endpoints(db: &OrgDb, owner: &RecordId, from_id: &RecordId, to_id: &RecordId, label: &str) -> AppResult<(EntityRow, EntityRow)> {
+    let in_row = select_entity(db, from_id).await?;
+    let out_row = select_entity(db, to_id).await?;
+    let in_ok = match &in_row {
+        Some(r) => accessible(db, owner, &r.vault, Action::WriteMemories).await?,
+        None => false,
+    };
+    let out_ok = match &out_row {
+        Some(r) => accessible(db, owner, &r.vault, Action::WriteMemories).await?,
+        None => false,
+    };
+    let (Some(in_row), Some(out_row)) = (in_row, out_row) else {
+        return Err(AppError::coded(crate::error::ErrorCode::VaultForbidden, "not a member of both entities' vaults"));
+    };
+    if !in_ok || !out_ok {
+        return Err(AppError::coded(crate::error::ErrorCode::VaultForbidden, "not a member of both entities' vaults"));
+    }
+    same_vault(&in_row, &out_row)?;
+    crate::ontology::ground_link(db, &in_row.vault, &in_row.kind(), label, &out_row.kind()).await?;
+
+    Ok((in_row, out_row))
+}
+
+/// Most characters in the reason [`relate_with_reason`] saves with a link.
+pub const MAX_LINK_REASON: usize = 500;
+
+/// The same checks as [`add_relation`], with the relation and its reason fact in one transaction.
+/// A deterministic fact id makes overlapping retries and repairs converge on one reason per relation.
+pub async fn relate_with_reason(
+    db: &OrgDb,
+    owner: &RecordId,
+    from_id: &RecordId,
+    to_id: &RecordId,
+    label: &str,
+    reason: Option<&str>,
+) -> AppResult<(RelationOut, Option<MemoryOut>)> {
+    let reason = reason.map(str::trim).filter(|r| !r.is_empty());
+    if reason.is_some_and(|r| r.chars().count() > MAX_LINK_REASON) {
+        return Err(AppError::bad_request(format!("reason is at most {MAX_LINK_REASON} characters")));
+    }
+    let Some(reason) = reason else { return add_relation(db, owner, from_id, to_id, label, None).await.map(|r| (r, None)) };
+    let label = crate::ontology::Label::parse(label)?;
+    let label = label.as_str();
+    let (from, to) = relation_endpoints(db, owner, from_id, to_id, label).await?;
+    let mut redacted = Vec::new();
+    let text = crate::redact::redact(&format!("{} {} {}: {reason}", from.name, label.replace('_', " "), to.name), &mut redacted);
+    let key = serde_json::to_string(&(from_id.to_string(), to_id.to_string(), label)).expect("relation key");
+    let reason_id = RecordId::from_table_key("memory", crate::tx::stable_key('r', &key));
+    #[derive(Deserialize, SurrealValue)]
+    struct Written {
+        relation: RelationRow,
+        #[serde(default)]
+        #[surreal(default)]
+        memory: Option<MemoryRow>,
+        created: bool,
+    }
+    let written = with_retry_dup(|| async {
+        let mut res = q::RELATE_WITH_REASON.on(db)
+            .bind(("in", from_id.clone()))
+            .bind(("out", to_id.clone()))
+            .bind(("label", label.to_string()))
+            .bind(("owner", owner.clone()))
+            .bind(("vault", from.vault.clone()))
+            .bind(("reason_id", reason_id.clone()))
+            .bind(("text", text.clone()))
+            .bind(("obs_id", observation_rid(from_id)))
+            .await?.check()?;
+        res.take::<Option<Written>>(q::RELATE_WITH_REASON.slot)?
+            .ok_or_else(|| surrealdb::Error::query("relation write returned no row".into(), None))
+    }).await?;
+    if written.created {
+        changes::record(db, &from.vault, changes::CREATED, changes::RELATION, &written.relation.id).await;
+    }
+    let memory = if let Some(row) = written.memory {
+        changes::record(db, &from.vault, changes::CREATED, changes::MEMORY, &row.id).await;
+        Some(MemoryOut { redacted, ..memory_out(&row, None) })
+    } else {
+        None
+    };
+    Ok((relation_out(&written.relation, None, None), memory))
+}
+
 /// [`add_relation`] for a caller that already checked it may write in `vault`, that both ends are in it
 /// and that the link type is allowed (a CSV import). Idempotent; true when it wrote a new relation.
 pub(crate) async fn relate_in_vault(db: &OrgDb, owner: &RecordId, vault: &RecordId, from_id: &RecordId, to_id: &RecordId, label: &str) -> AppResult<bool> {
+    crate::ontology::Label::parse(label)?;
     if find_relation(db, from_id, to_id, label).await?.is_some() {
         return Ok(false);
     }

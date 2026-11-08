@@ -3,7 +3,7 @@ source: tests/golden_tools.rs
 expression: stable
 ---
 {
-  "id": "skill:<id26>",
+  "id": "skill:<id28>",
   "name": "anvil-budget",
   "vault": "vault:<id2>",
   "embedded": false

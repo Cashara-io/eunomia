@@ -8414,6 +8414,30 @@
           "ratio"
         ]
       },
+      "AmbiguousTarget": {
+        "type": "object",
+        "description": "A link column's value that names two or more entities in the vault: skipped, never guessed, until a\nperson merges them (`entity_merge`) or the column is mapped another way.",
+        "required": [
+          "column",
+          "name",
+          "kinds"
+        ],
+        "properties": {
+          "column": {
+            "type": "string"
+          },
+          "kinds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The kind of each entity it names."
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
       "AuditCategory": {
         "type": "string",
         "description": "Which kind of event a filter chip asks for.",
@@ -10694,11 +10718,20 @@
           "values",
           "linked",
           "targets_created",
+          "reused",
+          "ambiguous",
           "columns",
           "bad",
           "bad_count"
         ],
         "properties": {
+          "ambiguous": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AmbiguousTarget"
+            },
+            "description": "Link column values that name more than one entity, skipped."
+          },
           "bad": {
             "type": "array",
             "items": {
@@ -10732,10 +10765,24 @@
             "description": "Relations this run wrote (a re-run writes none), and the link targets it created by name.",
             "minimum": 0
           },
+          "reused": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReusedTarget"
+            },
+            "description": "Link targets that already existed in another kind (an organisation a supplier column names),\nlinked to instead of a new entity."
+          },
           "rows": {
             "type": "integer",
             "description": "Data rows in the file.",
             "minimum": 0
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SkippedTarget"
+            },
+            "description": "Names skipped because their kind was rejected and has no existing approved replacement."
           },
           "targets_created": {
             "type": "integer",
@@ -10757,9 +10804,17 @@
         "description": "What an import of the CSV would do now.",
         "required": [
           "columns",
-          "ready"
+          "ready",
+          "reused",
+          "ambiguous"
         ],
         "properties": {
+          "ambiguous": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AmbiguousTarget"
+            }
+          },
           "columns": {
             "type": "array",
             "items": {
@@ -10794,6 +10849,18 @@
           "ready": {
             "type": "boolean",
             "description": "The kind is approved and at least one mapped property is: `document_import_rows` will run."
+          },
+          "reused": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReusedTarget"
+            }
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SkippedTarget"
+            }
           }
         }
       },
@@ -11278,10 +11345,19 @@
           "values",
           "matched",
           "ratio",
+          "reused",
+          "ambiguous",
           "kept",
           "reason"
         ],
         "properties": {
+          "ambiguous": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AmbiguousTarget"
+            },
+            "description": "Values that name two or more entities: an import skips them until they are merged."
+          },
           "field": {
             "type": "string"
           },
@@ -11309,6 +11385,20 @@
           },
           "record_type": {
             "type": "string"
+          },
+          "reused": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReusedTarget"
+            },
+            "description": "Values that name an existing entity of another kind (an organisation a supplier column names):\nan import links to it instead of making a new one. They count as matched."
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SkippedTarget"
+            },
+            "description": "Names whose rejected kind has no existing approved replacement."
           },
           "source": {
             "type": "string"
@@ -13660,6 +13750,30 @@
           }
         }
       },
+      "ReusedTarget": {
+        "type": "object",
+        "description": "An entity that already existed under a link column's value, in another kind than the link's\ntarget: linked to as it is, never retyped and never duplicated.",
+        "required": [
+          "column",
+          "name",
+          "kind",
+          "entity_id"
+        ],
+        "properties": {
+          "column": {
+            "type": "string"
+          },
+          "entity_id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
       "RoleRequest": {
         "type": "object",
         "required": [
@@ -14045,6 +14159,30 @@
           "space": {
             "type": "string",
             "description": "\"semantic\" (model embeddings) or \"lexical\" (hashed words, no model)"
+          }
+        }
+      },
+      "SkippedTarget": {
+        "type": "object",
+        "description": "A name whose rejected kind cannot be reused.",
+        "required": [
+          "column",
+          "name",
+          "kind",
+          "reason"
+        ],
+        "properties": {
+          "column": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
           }
         }
       },

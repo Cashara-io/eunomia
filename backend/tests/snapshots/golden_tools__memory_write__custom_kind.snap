@@ -4,7 +4,7 @@ expression: stable
 ---
 {
   "entity": {
-    "id": "entity:<id19>",
+    "id": "entity:<id21>",
     "kind": "db",
     "name": "orders_db",
     "aliases": [],
@@ -12,10 +12,10 @@ expression: stable
     "vault": "vault:<id2>"
   },
   "memory": {
-    "id": "memory:<id20>",
+    "id": "memory:<id22>",
     "owner": "user:<id4>",
     "vault": "vault:<id2>",
-    "subject": "entity:<id19>",
+    "subject": "entity:<id21>",
     "text": "orders_db runs Postgres 16",
     "source": null,
     "created_at": "<ts>",
