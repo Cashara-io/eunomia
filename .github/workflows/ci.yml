@@ -271,6 +271,8 @@ jobs:
         include:
           - from: v2.0.7                        # published releases, pulled from ghcr
           - from: v2.0.8
+          - from: v2.0.9
+          - from: v2.1.0
     steps:
       - uses: actions/checkout@v4
         with:

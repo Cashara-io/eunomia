@@ -29,12 +29,12 @@ CI (`.github/workflows/ci.yml`) runs on every push to `main` and on every pull r
 - `upgrade-surreal-v3`: `scripts/tests/upgrade-surreal-v3.test.sh` (real 2.x to 3.3 move; the large-table case `UPGRADE_TEST_LARGE=1` is not run in CI).
 - `restore-drill`: `scripts/restore-drill.sh` then `scripts/restore-drill-tenancy.sh`.
 - `secrets-helper-compose`: `scripts/tests/secrets-helper-compose.test.sh`, the backend and the real sidecar on the compose networks with the `secrets` profile on (the backend reports the helper running): Test connection through it to a mock 1Password Connect container, reachable from the backend only, no published port, nothing written to its filesystem, no token in its environment or logs.
-- `update-path`: an install on a previous release updated to this build through the real updater (below), in two rows, from the published `v2.0.7` and `v2.0.8` (`scripts/tests/update-path.test.sh v2.0.8`). A row for a release that is not published yet adds `from_ref` (below).
+- `update-path`: an install on a previous release updated to this build through the real updater (below), in four rows, from the published `v2.0.7`, `v2.0.8`, `v2.0.9` and `v2.1.0` (`scripts/tests/update-path.test.sh v2.1.0`). A row for a release that is not published yet adds `from_ref` (below).
 - Not in CI: Chaos, k6, fuzz.
 
 ## Update path
 
-`bash scripts/tests/update-path.test.sh <from-tag>` (CI job `update-path`, rows `v2.0.7` and `v2.0.8`; needs Docker, `jq` and a clone with the release tags) proves that an install on a released tag takes the current checkout through the real update path:
+`bash scripts/tests/update-path.test.sh <from-tag>` (CI job `update-path`, rows `v2.0.7`, `v2.0.8`, `v2.0.9` and `v2.1.0`; needs Docker, `jq` and a clone with the release tags) proves that an install on a released tag takes the current checkout through the real update path:
 
 1. Builds this checkout's backend, frontend and backup images and tags them `v9.9.9-ci`, a local-only tag that sorts above every release. It is never pushed: pushing any `v*` tag publishes images and offers it to every install.
 2. A local bare repo stands in for GitHub: the real tags up to `<from-tag>`, plus `v9.9.9-ci` on HEAD.
