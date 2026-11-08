@@ -3045,6 +3045,82 @@ async fn the_chat_answers_a_number_from_the_space_coverage_returned() {
     assert_eq!(results[2]["value"].as_f64(), Some(664.475), "{results:?}");
 }
 
+#[tokio::test]
+async fn a_plain_word_of_one_approved_property_counts_as_a_match() {
+    let app = TestApp::new().await;
+    let vault = personal(&app).await;
+    write(&app, "Drip line", "product").await;
+    ok(app.tool("ontology_propose", json!({"kinds": [{"kind": "product"}],
+        "properties": [{"kind": "product", "name": "unit_cost", "datatype": "money", "unit": "AUD"}, {"kind": "product", "name": "sell_price", "datatype": "money", "unit": "AUD"}]})).await);
+    assert_eq!(decide_kind(&app, &vault, "product", json!({"action": "approve"})).await.0, 200);
+    for p in ["unit_cost", "sell_price"] {
+        assert_eq!(decide_property(&app, &vault, "product", p, json!({"action": "approve"})).await.0, 200);
+    }
+    // the gate's case: "costs" gave 0.0 though unit_cost is approved
+    let out = ok(app.tool("ontology_coverage", json!({"question": "What are our costs?"})).await);
+    assert_eq!((out["coverage"].as_f64(), matched_names(&out)), (Some(1.0), vec![("costs".into(), "property".into(), "unit_cost".into())]), "{out}");
+    // a second property with the word makes it a guess, so neither is taken
+    ok(app.tool("ontology_propose", json!({"properties": [{"kind": "product", "name": "freight_cost", "datatype": "money"}]})).await);
+    assert_eq!(decide_property(&app, &vault, "product", "freight_cost", json!({"action": "approve"})).await.0, 200);
+    let out = ok(app.tool("ontology_coverage", json!({"question": "What are our costs?"})).await);
+    assert_eq!((out["coverage"].as_f64(), out["uncovered"].clone()), (Some(0.0), json!(["costs"])), "{out}");
+}
+
+/// A space of bob's that the test user cannot read, holding `entity` and a proposed ontology.
+async fn bobs_secret_space(app: &TestApp, entity: &str) -> (eunomia_backend::models_user::User, String) {
+    let bob = common::register(&app.state, "bob@example.com").await;
+    let secret = ok(as_user(app, &bob, "vault_create", json!({"name": "Secret Co", "kind": "org"})).await)["id"].as_str().unwrap().to_string();
+    ok(as_user(app, &bob, "memory_write", json!({"subject_name": entity, "subject_kind": "organisation", "text": "a supplier", "vault_id": "Secret Co"})).await);
+    ok(as_user(app, &bob, "ontology_propose", json!({"vault_id": "Secret Co", "kinds": [{"kind": "rainfall_reading"}]})).await);
+    (bob, secret)
+}
+
+#[tokio::test]
+async fn a_question_no_space_covers_goes_to_the_space_that_holds_what_it_names() {
+    let app = TestApp::new().await;
+    let team = northside(&app).await;
+    ok(app.tool("memory_write", json!({"subject_name": "Coastal Irrigation Co", "subject_kind": "organisation", "text": "Coastal Irrigation Co supplies our drip line", "vault_id": "Northside Bikes"})).await);
+    let (_, secret) = bobs_secret_space(&app, "Coastal Irrigation Co").await;
+    let no_leak = |out: &Value| assert!(!out.to_string().contains("Secret Co") && !out.to_string().contains(&secret), "a space the caller cannot read is never named: {out}");
+
+    // no phrase matches an approved term anywhere; the org space holds what the question names
+    let out = ok(app.tool("ontology_coverage", json!({"question": "What is the rainfall at Coastal Irrigation?"})).await);
+    assert_eq!((out["coverage"].as_f64(), out["vault"].as_str(), out["chosen_by"].as_str()), (Some(0.0), Some(team.as_str()), Some("entities")), "not the personal space: {out}");
+    assert!(out["suggestion"].as_str().unwrap().contains("\"Northside Bikes\" was checked because it holds what the question names"), "{out}");
+    no_leak(&out);
+
+    // nothing named is held anywhere: the space that has an approved ontology
+    let out = ok(app.tool("ontology_coverage", json!({"question": "What is the rainfall in Geelong?"})).await);
+    assert_eq!((out["vault"].as_str(), out["chosen_by"].as_str()), (Some(team.as_str()), Some("ontology")), "{out}");
+    no_leak(&out);
+
+    // a match still decides, and naming a space still checks only it
+    let out = ok(app.tool("ontology_coverage", json!({"question": "What is the average price of our parts?"})).await);
+    assert_eq!((out["vault"].as_str(), out["chosen_by"].as_str()), (Some(team.as_str()), Some("coverage")), "{out}");
+    let mine = personal(&app).await;
+    let out = ok(app.tool("ontology_coverage", json!({"question": "What is the rainfall at Coastal Irrigation?", "vault_id": mine})).await);
+    assert_eq!((out["vault"].as_str(), out["chosen_by"].as_str()), (Some(mine.as_str()), Some("vault_id")), "{out}");
+}
+
+#[tokio::test]
+async fn a_question_no_space_covers_says_so_and_lists_the_readable_spaces() {
+    let app = TestApp::new().await;
+    ok(app.tool("vault_create", json!({"name": "Empty Co", "kind": "org"})).await);
+    let (_, secret) = bobs_secret_space(&app, "Geelong").await;
+    let out = ok(app.tool("ontology_coverage", json!({"question": "What is the rainfall in Geelong?"})).await);
+    assert_eq!(out["chosen_by"], "none", "{out}");
+    let spaces: Vec<&str> = out["spaces"].as_array().unwrap().iter().map(|s| s["name"].as_str().unwrap()).collect();
+    assert_eq!(spaces, ["Personal", "Empty Co"], "{out}");
+    let s = out["suggestion"].as_str().unwrap();
+    assert!(s.starts_with("No space you can read covers this question") && s.contains("\"Personal\", \"Empty Co\"") && s.contains("Ask the user"), "{s}");
+    assert!(!out.to_string().contains("Secret Co") && !out.to_string().contains(&secret), "{out}");
+
+    // with one readable space nothing changes
+    let solo = TestApp::new().await;
+    let out = ok(solo.tool("ontology_coverage", json!({"question": "What is the rainfall in Geelong?"})).await);
+    assert_eq!((out["chosen_by"].as_str(), out.get("spaces")), (Some("coverage"), None), "{out}");
+}
+
 // ------------------------------------------------------------ the gate's bike shop: links and row maths
 
 const PARTS: &str = include_str!("fixtures/parts.csv");
