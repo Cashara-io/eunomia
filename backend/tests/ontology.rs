@@ -929,6 +929,42 @@ async fn the_chat_cannot_save_its_own_conclusion_but_saves_what_the_user_said() 
     assert!(history.to_string().contains("Not saved"), "the model is told why: {history}");
 }
 
+/// The model's turns in order, each served once its request holds the turn's `after` fragment (the
+/// tool result it answers; "" for the first). Later turns are matched first.
+async fn chat_turns(app: &TestApp, turns: Vec<(&'static str, Value)>) -> eunomia_backend::sources::mock::Mock {
+    let sse = |chunks: &Value| chunks.as_array().unwrap().iter().map(|c| format!("data: {c}\n\n")).collect::<String>() + "data: [DONE]\n\n";
+    let routes = turns
+        .iter()
+        .rev()
+        .map(|(after, t)| route("POST", "/chat/completions", json!(null)).body(after).raw(&sse(t)).header("content-type", "text/event-stream"))
+        .collect();
+    let mock = serve(routes).await;
+    let (status, _) = app.http("PATCH", "/api/settings", Some(json!({"openai_base_url": mock.base})), true).await;
+    assert_eq!(status, 200);
+    mock
+}
+
+fn tool_call(i: usize, id: &str, name: &str, args: Value) -> Value {
+    json!({"index": i, "id": id, "function": {"name": name, "arguments": args.to_string()}})
+}
+
+#[tokio::test]
+async fn the_chat_saves_what_the_user_said_while_its_reply_says_it_is_saving_it() {
+    let app = TestApp::new().await;
+    let text = "Jo's phone number is 0412 345 678";
+    let save = json!([
+        {"choices": [{"delta": {"content": format!("Saved: {text}")}}]},
+        {"choices": [{"delta": {"tool_calls": [tool_call(0, "c1", "memory_write", json!({"subject_name": "Jo", "subject_kind": "person", "text": text}))]}}]},
+    ]);
+    let done = json!([{"choices": [{"delta": {"content": "Done."}}]}]);
+    let _mock = chat_turns(&app, vec![("", save), ("\"tool_call_id\":\"c1\"", done)]).await;
+
+    let (thread_id, _) = chat(&app, "Jo's number is 0412 345 678").await;
+    let texts: Vec<Value> = app.db().await.test_raw().query("SELECT VALUE text FROM memory").await.unwrap().take(0).unwrap();
+    let (_, history) = app.http("GET", &format!("/api/chat/threads/{thread_id}/history"), None, true).await;
+    assert!(texts.contains(&json!(text)), "the reply's own words are not a reason to refuse: {texts:?} {history}");
+}
+
 // ------------------------------------------------------------ typed properties and grounded links
 
 /// A property decision as the owner's browser session sends it.

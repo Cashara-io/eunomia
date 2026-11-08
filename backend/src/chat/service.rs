@@ -698,7 +698,6 @@ async fn run_send(
         persist(db, owner, thread_id, "assistant", &content, Some(tool_calls_dump.clone()), None)
             .await
             .map_err(|e| (e.code, e.message))?;
-        said.row("assistant", &content);
         messages.push(json!({ "role": "assistant", "content": content, "tool_calls": tool_calls_dump }));
 
         for tc in ordered {
@@ -727,6 +726,8 @@ async fn run_send(
             let view = (name == crate::views::TOOL && result.get("error").is_none()).then_some(result);
             let _ = tx.send(ChatEvent::ToolResult { id: tc.id, name, view }).await;
         }
+        // after the calls: a reply that says what it is saving ("Saved: ...") must not refuse that save
+        said.row("assistant", &content);
     }
 
     let limit_msg = format!(
