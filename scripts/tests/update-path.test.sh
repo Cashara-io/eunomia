@@ -483,6 +483,10 @@ wait_embeddings 600; check "every seeded memory and record embedded before the s
 embed_backlog > "$W/embed-backlog-before.txt"
 n_orgs() { [ "$(org_dbs | wc -l | tr -d ' ')" -eq "$1" ]; }
 check "two users, two org databases" n_orgs 2
+# <from-tag> already at this build's detector version (2.0.9 on) has run this backfill: it must not run again
+FROM_DETECTOR="$(sed -n 's/^pub const DETECTOR_VERSION: i64 = \([0-9]*\);$/\1/p' "$I/backend/src/redact.rs" 2>/dev/null)"
+BACKFILL_RERUNS=1; [ "${FROM_DETECTOR:-0}" -lt "$DETECTOR_VERSION" ] || BACKFILL_RERUNS=0
+log "   $FROM runs detector v${FROM_DETECTOR:-none}, this build v$DETECTOR_VERSION: the backfill $([ "$BACKFILL_RERUNS" = 1 ] && echo runs || echo does not run) on update"
 if memtext | grep -qF "$FAKE_GH"; then PLAIN_SECRET=1; log "   $FROM stored the fake token in plain text (the backfill has work)"; else log "   INFO: $FROM already redacted the fake token on write"; fi
 
 # ---- 5. snapshot -------------------------------------------------------------------------------
@@ -548,7 +552,12 @@ if [ "$PLAIN_SECRET" = 1 ]; then wait_redacted 900; check "the backfill rewrote 
 # Every org runs this build's backfill once, even with nothing to rewrite: a <from-tag> that already
 # redacted on write (2.0.8) still has orgs marked done for an older detector version. Wait for all of
 # them, so the checks below do not race it.
-wait_backfilled 900; check "the backfill finished in every org (bounded wait)" test $? -eq 0
+if [ "$BACKFILL_RERUNS" = 1 ]; then
+  wait_backfilled 900; check "the backfill finished in every org (bounded wait)" test $? -eq 0
+  BACKFILL_EVENTS="$(org_dbs | wc -l | tr -d ' ')"
+else
+  BACKFILL_EVENTS="$(backfill_events)"
+fi
 wait_jobs 120
 wait_embeddings 600; check "no embedding backlog after the update" test $? -eq 0
 counts > "$W/counts-after.txt"; ledgers > "$W/ledgers-after.txt"
@@ -573,12 +582,14 @@ leaks() { echo "SELECT count() FROM memory WHERE string::contains(text, '$FAKE_G
 check "no memory row holds the fake token" test "$(leaks)" = 0
 backfill_rows() { local d; for d in $(org_dbs); do echo "SELECT count() FROM redact_backfill:v$DETECTOR_VERSION WHERE done_at != NONE GROUP ALL;" | sql "$d" | jq -r '.[0].result[0].count // 0'; done | sort -u | tr '\n' ' '; }
 check "a finished redact_backfill:v$DETECTOR_VERSION marker in every org" test "$(backfill_rows)" = "1 "
-check "one redact.backfill audit event per org" test "$(backfill_events)" = "$(org_dbs | wc -l | tr -d ' ')"
+check "redact.backfill audit events: one per org when it runs, none new when $FROM already ran it" test "$(backfill_events)" = "$BACKFILL_EVENTS"
 logged() { echo "SELECT count() FROM change WHERE op = 'updated' AND actor = 'system' AND item = '$SECRET_FACT' GROUP ALL;" | sql "$ORG_A" | jq -r '.[0].result[0].count // 0'; }
 check "the rewrite is in the change log as an update by system" test "$(logged)" = "$PLAIN_SECRET"
 # the credential broker (tenant 0031): its tables exist in every org and are empty after the update
 broker_rows() { grep -E '^org_[^ ]*\.(credential_ref|secret_provider) ' "$W/new-after.txt" | awk '{ s += $2; n++ } END { print n + 0, s + 0 }'; }
-check "the broker tables are new and empty in every org" test "$(broker_rows)" = "$(( $(org_dbs | wc -l | tr -d ' ') * 2 )) 0"
+if grep -q '\.credential_ref ' "$W/new-expected.txt"; then
+  check "the broker tables are new and empty in every org" test "$(broker_rows)" = "$(( $(org_dbs | wc -l | tr -d ' ') * 2 )) 0"
+fi
 # secret requests (tenant 0032): new and empty in every org, where the update added them
 request_rows() { grep -E '^org_[^ ]*\.(secret_request|vault_secret) ' "$W/new-after.txt" | awk '{ s += $2; n++ } END { print n + 0, s + 0 }'; }
 if grep -q '\.vault_secret ' "$W/new-expected.txt"; then
@@ -635,7 +646,7 @@ counts > "$W/counts-again.txt"; stable "$W/counts-again.txt" > "$W/stable-again.
 check "counts unchanged after the re-run" diff "$W/stable-expected.txt" "$W/stable-again.txt"
 diff "$W/stable-expected.txt" "$W/stable-again.txt" | head -20
 check "the new tables' counts unchanged after the re-run (the backfill does not run twice)" diff "$W/new-expected.txt" <(added "$W/counts-before.txt" "$W/counts-again.txt")
-check "still one redact.backfill event per org" test "$(backfill_events)" = "$(org_dbs | wc -l | tr -d ' ')"
+check "no new redact.backfill event on the re-run" test "$(backfill_events)" = "$BACKFILL_EVENTS"
 check "the fact is still redacted" bash -c 'case "$1" in *"[redacted: github token]"*) exit 0;; esac; exit 1' _ "$(memtext)"
 
 # ---- 9b. the change log on the upgraded stack --------------------------------------------------
