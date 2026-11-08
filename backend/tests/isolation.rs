@@ -485,6 +485,8 @@ fn attack_value(tool: &str, prop: &str, schema: &Value, victim: &Org) -> Value {
         ("entity_set_property", "property") => json!("ledger_code"),
         // the victim's approved metric
         ("metric_eval", "metric") => json!("ledger_codes"),
+        // a question in the victim's words about their approved terms: no term, name or canary of theirs comes back
+        ("ontology_coverage", "question") => json!(format!("How many ledger codes do {} people hold?", victim.word("Holdings"))),
         ("metric_eval", "kind") => json!("person"),
         // the file: it has relations, one with the canary in its label
         ("entities_neighbourhood", "entity_id") => id(4),
