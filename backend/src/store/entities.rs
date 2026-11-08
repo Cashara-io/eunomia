@@ -450,3 +450,31 @@ pub fn search_entities<'a>(db: &'a OrgDb, kinds: &[&str], by_kind: bool, with_fa
         ),
     )
 }
+
+fn name_lookup_select(table: &str, prefix: bool) -> String {
+    if prefix {
+        // 3.3.5 leaves a compound range's upper bound as a residual filter. Limit the ordered
+        // lower-bound index read first, so a missing prefix cannot scan the rest of the vault.
+        format!("SELECT vault, name FROM (SELECT vault, name, name_key FROM {table} \
+                 WHERE vault = $vault AND name_key >= $lower ORDER BY name_key LIMIT 8) WHERE name_key < $upper")
+    } else {
+        format!("SELECT vault, name FROM {table} WHERE vault = $vault AND name_key = $key LIMIT 8")
+    }
+}
+
+/// Separate exact and word-prefix index reads, limited per table and vault so Personal cannot crowd
+/// out another space. Scalar vault equality lets the compound name_key index use its trailing range.
+pub fn names_by_prefix<'a>(db: &'a OrgDb) -> Q<'a> {
+    let selects: Vec<String> = crate::entities::service::ENTITY_TABLES.iter()
+        .flat_map(|table| [false, true].map(|prefix| format!("({})", name_lookup_select(table, prefix))))
+        .collect();
+    dynamic(db, "entities.names_by_prefix", format!(
+        "RETURN array::flatten($vaults.map(|$vault| array::concat({})))", selects.join(", ")
+    ))
+}
+
+#[cfg(feature = "test-support")]
+pub fn explain_name_lookup<'a>(db: &'a OrgDb, table: &str, prefix: bool) -> Q<'a> {
+    assert!(crate::entities::service::ENTITY_TABLES.contains(&table));
+    dynamic(db, "entities.explain_name_lookup", format!("{} EXPLAIN", name_lookup_select(table, prefix)))
+}

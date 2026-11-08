@@ -519,7 +519,7 @@ fn plain_words(s: &str) -> Vec<String> {
 }
 
 /// For each of `vaults`, how many of the question's words name an entity it holds: "Coastal Irrigation"
-/// names "Coastal Irrigation Co" (whole words of its name or an alias). Runs of the question's words
+/// names "Coastal Irrigation Co" (whole words at the start of its name). Runs of the question's words
 /// are looked up longest first, and a word that named something is not looked up again. Only `vaults`
 /// (the ones the caller can read) are searched.
 async fn held_by(db: &OrgDb, vaults: &[Readable], question: &str) -> AppResult<Vec<usize>> {
@@ -532,7 +532,7 @@ async fn held_by(db: &OrgDb, vaults: &[Readable], question: &str) -> AppResult<V
         for len in (1..=run.len().min(MAX_NAME_WORDS)).rev() {
             for start in 0..=run.len() - len {
                 let gram = &run[start..start + len];
-                if used[start..start + len].iter().any(|u| *u) || (len == 1 && gram[0].chars().count() < 3) {
+                if used[start..start + len].iter().any(|u| *u) {
                     continue;
                 }
                 if searches == MAX_NAME_SEARCHES {
@@ -540,10 +540,10 @@ async fn held_by(db: &OrgDb, vaults: &[Readable], question: &str) -> AppResult<V
                 }
                 searches += 1;
                 let names = |s: &str| plain_words(s).windows(len).any(|w| w == gram);
-                let found = crate::entities::service::search_entities(db, &ids, &gram.join(" "), None, 50, 0).await?;
+                let found = crate::entities::service::names_by_prefix(db, &ids, &gram.join(" ")).await?;
                 let mut hit = vec![false; vaults.len()];
-                for e in found.results.iter().filter(|e| names(&e.name) || e.aliases.iter().any(|a| names(a))) {
-                    if let Some(i) = vaults.iter().position(|v| v.id.to_string() == e.vault) {
+                for e in found.iter().filter(|e| names(&e.name)) {
+                    if let Some(i) = vaults.iter().position(|v| v.id == e.vault) {
                         hit[i] = true;
                     }
                 }

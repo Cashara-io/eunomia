@@ -3498,3 +3498,89 @@ async fn gate2_rest_cannot_seed_a_new_personal_kind_past_a_strict_space() {
     assert_eq!(status, 200, "selected-space Memory page creation: {out}");
     assert_eq!(out["vault"], mine);
 }
+
+#[tokio::test]
+async fn gate2_short_names_are_not_hidden_by_personal_substring_matches() {
+    let app = TestApp::new().await;
+    let team = ok(app.tool("vault_create", json!({"name": "Team", "kind": "org"})).await)["id"].as_str().unwrap().to_string();
+    let mine = rid::parse(&personal(&app).await).unwrap();
+    let db = app.db().await;
+    common::sys(async {
+        for i in 0..60 {
+            eunomia_backend::entities::service::upsert_entity(&db, &app.user.id, "file", &format!("Space heater {i}"), None, Some(&mine)).await.unwrap();
+        }
+    }).await;
+    ok(app.tool("memory_write", json!({"subject_name": "ACE", "subject_kind": "organisation", "text": "Our supplier", "vault_id": team})).await);
+    bobs_secret_space(&app, "ACE").await;
+    let out = ok(app.tool("ontology_coverage", json!({"question": "Where is ACE?"})).await);
+    assert_eq!(out["chosen_by"], "entities", "{out}");
+    assert_eq!(out["vault"], team, "{out}");
+    ok(app.tool("memory_write", json!({"subject_name": "BP", "subject_kind": "organisation", "text": "Another supplier", "vault_id": team})).await);
+    let out = ok(app.tool("ontology_coverage", json!({"question": "Where is BP?"})).await);
+    assert_eq!(out["chosen_by"], "entities", "{out}");
+    assert_eq!(out["vault"], team, "{out}");
+}
+
+#[tokio::test]
+async fn gate2_named_space_lookup_uses_name_key_indexes() {
+    fn index_scan(node: &Value) -> Option<&Value> {
+        if node["operator"] == "IndexScan" {
+            return Some(node);
+        }
+        node["children"].as_array()?.iter().find_map(index_scan)
+    }
+    let app = TestApp::new().await;
+    let vault = rid::parse(&personal(&app).await).unwrap();
+    let db = app.db().await;
+    for table in eunomia_backend::entities::service::ENTITY_TABLES {
+        for prefix in [false, true] {
+            let plan: Vec<Value> = eunomia_backend::store::entities::explain_name_lookup(&db, table, prefix)
+                .bind(("vault", vault.clone())).bind(("key", "coastal irrigation"))
+                .bind(("lower", "coastal irrigation ")).bind(("upper", "coastal irrigation!"))
+                .await.unwrap().take(0).unwrap();
+            let shown = serde_json::to_string(&plan).unwrap();
+            assert!(shown.contains("IndexScan") && shown.contains("name_key"), "{table}, prefix={prefix}: {shown}");
+            assert!(!shown.contains("TableScan"), "{shown}");
+            let scan = index_scan(&plan[0]).expect("index scan");
+            assert!(scan["attributes"]["index"].as_str().unwrap().contains("name_key"), "{shown}");
+            assert_eq!(scan["attributes"]["limit"], "8", "the index walk itself must stop: {shown}");
+            assert!(!shown.contains("Sort"), "names must come from the index in order: {shown}");
+            if prefix {
+                assert!(scan["attributes"]["access"].as_str().unwrap().contains("MoreThanEqual 'coastal irrigation '"), "{shown}");
+            }
+            println!("{table}, prefix={prefix}: {shown}");
+        }
+    }
+}
+
+#[tokio::test]
+async fn gate2_a_long_question_caps_name_lookups_and_never_searches_memory_text() {
+    let app = TestApp::new().await;
+    ok(app.tool("vault_create", json!({"name": "Team", "kind": "org"})).await);
+    let question = (0..100).map(|i| format!("word{i}")).collect::<Vec<_>>().join(" ");
+    use tracing_subscriber::layer::SubscriberExt;
+    let ops = Ops::default();
+    {
+        let _held = tracing::subscriber::set_default(tracing_subscriber::registry().with(ops.clone()));
+        ok(app.tool("ontology_coverage", json!({"question": question})).await);
+    }
+    let queries = ops.0.lock().unwrap();
+    assert_eq!(queries.iter().filter(|q| *q == "entities.names_by_prefix").count(), 16, "{queries:?}");
+    assert!(!queries.iter().any(|q| q == "entities.search"), "no general or memory-text search: {queries:?}");
+}
+
+#[tokio::test]
+async fn gate2_name_lookup_honours_vault_restricted_tokens() {
+    let app = TestApp::new().await;
+    let team = ok(app.tool("vault_create", json!({"name": "Team", "kind": "org"})).await)["id"].as_str().unwrap().to_string();
+    let other = ok(app.tool("vault_create", json!({"name": "Other", "kind": "org"})).await)["id"].as_str().unwrap().to_string();
+    ok(app.tool("memory_write", json!({"subject_name": "ACE", "subject_kind": "organisation", "text": "Supplier", "vault_id": other})).await);
+    let only = rid::parse(&team).unwrap();
+    let token = eunomia_backend::models_user::create_api_token_with(
+        &app.state.control, &app.user.id, "reader", &["memory:read".into()], Some(&only), None,
+    ).await.unwrap().token;
+    let ((status, out), _) = common::http(&app.router, "POST", "/api/tools/ontology_coverage", Some(json!({"question": "Where is ACE?"})), Some(&token), None).await;
+    assert_eq!(status, 200, "{out}");
+    assert_eq!(out["vault"], team, "{out}");
+    assert!(!out.to_string().contains(&other) && !out.to_string().contains("Personal"), "{out}");
+}

@@ -1562,6 +1562,18 @@ pub async fn upsert_code_entity(
     Ok(entity)
 }
 
+#[derive(Deserialize, SurrealValue)]
+pub(crate) struct NamedEntity {
+    pub vault: RecordId,
+    pub name: String,
+}
+
+pub(crate) async fn names_by_prefix(db: &OrgDb, vaults: &[RecordId], key: &str) -> AppResult<Vec<NamedEntity>> {
+    // The successor of a space is !, so the range includes only names continuing with a space.
+    Ok(q::names_by_prefix(db).bind(("vaults", vaults.to_vec())).bind(("key", key.to_string()))
+        .bind(("lower", format!("{key} "))).bind(("upper", format!("{key}!"))).await?.take(0)?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::check_memory_edit;

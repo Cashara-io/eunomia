@@ -402,6 +402,15 @@ expression: info(&db).await
           "index": "UNIQUE",
           "name": "entity_vault_kind_name_key_unique",
           "table": "entity"
+        },
+        {
+          "cols": [
+            "vault",
+            "name_key"
+          ],
+          "index": "",
+          "name": "entity_vault_name_key_idx",
+          "table": "entity"
         }
       ]
     },
