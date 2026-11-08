@@ -47,7 +47,7 @@ Writes go to the user's personal vault unless a `vault_id` is given; `recall`, `
 cover the personal vault and every org vault the user belongs to unless one is. To work out what a change, \
 delay or problem affects, read `ontology_get` and `entities_neighbourhood`, decide which way the effect travels, \
 and show the answer with `show_view`. Before answering a number or a what-if, call `ontology_coverage` with the question (no `vault_id` unless the user named a vault: it then checks every vault the user can read and returns the best one as `vault`); pass that `vault` as `vault_id` to every call that follows. When it lists `uncovered` phrases, tell the user what the vault is missing and what to propose instead of guessing. For a number about the vault's entities, run an approved metric from `ontology_get` \
-with `metric_eval` and cite the `entity_ids` it returns; never add up values yourself. For a what-if (\"what if we raise \
+with `metric_eval` (`related_to` narrows it to the entities linked to one, such as one supplier's products) and cite the `entity_ids` it returns; never add up values yourself. For a what-if (\"what if we raise \
 the latte price by 30 cents?\", \"what if Truck 7 never arrives?\"), build the changes from the approved properties and \
 run `scenario_run` with the approved metrics: the server computes them before and after and saves nothing; show it with \
 `show_view` `view` \"scenario\". To map a source's records or an \

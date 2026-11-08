@@ -2,13 +2,11 @@ import Link from "next/link";
 import { ArrowsLeftRightIcon } from "@phosphor-icons/react/ssr";
 import Duo from "@/components/ui/Duo";
 import StatusLabel from "@/components/ui/StatusLabel";
-import { formatNumber, words } from "./bits";
+import { formatNumber, isPercent, withUnit, words } from "./bits";
 import { asOfDate, MetricWarnings } from "./MetricView";
 import type { ScenarioRun, ScenarioView as Scenario } from "./types";
 
 const href = (id: string, vault: string) => `/entities?id=${encodeURIComponent(id)}&vault=${encodeURIComponent(vault)}`;
-
-const withUnit = (value: number, unit: string | null) => `${formatNumber(value, unit)}${unit ? ` ${unit}` : ""}`;
 
 const shown = (v: unknown, unit: string | null) => (typeof v === "number" ? withUnit(v, unit) : v == null ? "none" : String(v));
 
@@ -18,13 +16,18 @@ function linkedWithin(reached: ScenarioRun["reached"]): string {
   return `Linked within ${steps} ${steps === 1 ? "step" : "steps"} (not all are affected)`;
 }
 
-/** "up 0.30 AUD (2.1%)": the move in words, so it never rests on colour. */
+/** "up 0.30 AUD (2.1%)": the move in words, so it never rests on colour. A percent moves in points
+ * ("down 1.7 points"), as the server's text says it. */
 function move(before: number | null, after: number | null, pct: number | null, unit: string | null): string {
   if (before == null || after == null) return after == null ? "no value in the what-if" : "no value before";
   // from the figures as shown, so the move always matches what the reader can subtract (15.67 - 15.22 = 0.45)
   const asShown = (n: number) => Number(formatNumber(n, unit));
   const d = asShown(after) - asShown(before);
   if (Math.abs(d) < 1e-9) return "no change";
+  if (isPercent(unit)) {
+    const points = formatNumber(Math.abs(d), unit);
+    return `${d > 0 ? "up" : "down"} ${points} ${points === "1" ? "point" : "points"}`;
+  }
   const share = pct == null ? "" : ` (${Number(Math.abs(pct).toFixed(1))}%)`;
   return `${d > 0 ? "up" : "down"} ${withUnit(Math.abs(d), unit)}${share}`;
 }

@@ -50,6 +50,7 @@ fn schema() -> serde_json::Value {
             "kind": {"type": "string", "description": "metric: its kind, when several kinds have one of that name"},
             "vault_id": {"type": "string", "description": "metric: the vault, as for metric_eval"},
             "filters": {"type": "array", "items": {"type": "object"}, "description": "metric: the extra filters you gave metric_eval"},
+            "related_to": super::ontology::related_schema("metric: the related_to you gave metric_eval"),
             "as_of": {"type": "string", "description": "metric: as for metric_eval"},
             "group_by_grain": {"type": "boolean", "description": "metric: draw the series"},
             "allow_unapproved": {"type": "boolean", "description": "metric: only to show a proposed metric the user asked to try; it is drawn as not approved"},
