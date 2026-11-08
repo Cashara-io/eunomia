@@ -338,11 +338,16 @@ pub async fn get(db: &OrgDb, owner: &RecordId, vault_id: Option<&RecordId>) -> A
 /// What `vault` uses merged with its registry rows. The caller checked access.
 pub(crate) async fn view(db: &OrgDb, vault: &RecordId) -> AppResult<OntologyOut> {
     let mut profile = q::PROFILE.on(db).bind(("vault", vault.clone())).await?;
-    let mut registry = q::REGISTRY.on(db).bind(("vault", vault.clone())).await?;
     let counts: Vec<KindCount> = profile.take(q::PROFILE_KINDS_SLOT)?;
     let link_counts: Vec<LinkCount> = profile.take(q::PROFILE_LINKS_SLOT)?;
-    let kind_rows: Vec<KindRow> = registry.take(0)?;
-    let link_rows: Vec<LinkRow> = registry.take(1)?;
+    // before migration 0033 there are no decisions yet: everything shows as observed
+    let (kind_rows, link_rows): (Vec<KindRow>, Vec<LinkRow>) = match q::REGISTRY.on(db).bind(("vault", vault.clone())).await {
+        Err(e) if no_ontology_table(&e) => (Vec::new(), Vec::new()),
+        res => {
+            let mut registry = res?;
+            (registry.take(0)?, registry.take(1)?)
+        }
+    };
     let properties = property::properties_by_kind(db, vault).await?;
     let metrics = metric::metrics_by_kind(db, vault).await?;
     Ok(OntologyOut { vault: vault.to_string(), kinds: merge_kinds(counts, kind_rows, properties, metrics)?, links: merge_links(link_counts, link_rows)? })
