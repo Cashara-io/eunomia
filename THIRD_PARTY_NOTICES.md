@@ -6,7 +6,9 @@ Eunomia's typed properties on ontology kinds, synonyms kept per kind, certified 
 check that names the nearest listed values when a metric filter's value matches none), and record
 auto-mapping (sample-based field profiling with top values, uniqueness, small value sets as enum
 candidates and date-format detection; one kind per record type with every field assigned to one
-property; and dropping a link whose values match nothing) follow ideas from NVIDIA Auto Ontology.
+property; and dropping a link whose values match nothing), the answerability check (a question's key
+phrases matched to the approved terms under a distance threshold, coverage being the share matched) and the
+readiness summary with an agent eval list follow ideas from NVIDIA Auto Ontology.
 
 - Project: https://github.com/NVIDIA/auto-ontology
 - Studied at commit `c447003f72a822301e927196a4ecb5b597c308d5` (version 1.2.0)
