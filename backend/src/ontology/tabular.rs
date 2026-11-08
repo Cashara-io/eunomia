@@ -368,8 +368,15 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
                 .filter(|v| !rows.iter().any(|r| &r.name == *v))
                 .and_then(|v| links.iter().find(|l| same_label(&l.label, v) || l.words() == v.trim())),
             None => {
-                let claimed = rows.iter().any(|r| r.status == Status::Approved.as_str() && r.source_map().iter().any(|f| f.source == SOURCE && f.record_type == doc_id && &f.path == col));
-                if claimed { None } else { link_for(&links, &doc_id, col) }
+                let approved = |r: &&property::PropertyRow| r.status == Status::Approved.as_str();
+                let claimed = rows.iter().filter(approved).any(|r| r.source_map().iter().any(|f| f.source == SOURCE && f.record_type == doc_id && &f.path == col));
+                // a property named like the column wins over a link guessed from the kind's name
+                let named = rows.iter().filter(approved).any(|r| r.name == property_name_for(col));
+                match (claimed, named) {
+                    (true, _) => None,
+                    (false, true) => links.iter().find(|l| l.fed_by(&doc_id, col)),
+                    (false, false) => link_for(&links, &doc_id, col),
+                }
             }
         };
         if let Some(l) = as_link {

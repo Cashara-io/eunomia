@@ -113,7 +113,7 @@ pub const PROPOSE_LINK: Stmt = Stmt::at(
         } ELSE IF $cur[0] = "proposed" {
             UPDATE $id SET description = $description ?? description, reason = $reason ?? reason, updated_at = time::now()
         };
-        IF array::len($source_map) > 0 {
+        IF array::len($source_map) > 0 AND (array::len($cur) = 0 OR $cur[0] = "proposed") {
             UPDATE $id SET source_map = array::union(source_map ?? [], $source_map)
         };
         RETURN (SELECT * FROM $id);

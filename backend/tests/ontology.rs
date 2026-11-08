@@ -3104,6 +3104,11 @@ async fn automap_links_parts_to_suppliers_the_import_creates_once_and_row_maths_
         assert_eq!(decide_metric(&app, &vault, "part", m, json!({"action": "approve"})).await.0, 200, "{m}");
     }
     assert_eq!(decide_link(&app, &vault, "part", "supplied_by", "supplier").await, 200);
+    // a later proposal cannot move the columns of a link the owner already decided
+    let moved = json!([{"source": "document", "record_type": doc, "path": "price AUD"}]);
+    ok(app.tool("ontology_propose", json!({"links": [{"from_kind": "part", "label": "supplied_by", "to_kind": "supplier", "source_map": moved}]})).await);
+    let o = ok(app.tool("ontology_get", json!({})).await);
+    assert_eq!(link(&o, "part", "supplied_by", "supplier")["source_map"], json!([{"source": "document", "record_type": doc, "path": "supplier"}]), "{o}");
     let (_, profile) = app.http("GET", &format!("/api/documents/{doc}/profile"), None, true).await;
     let plan = profile["import"]["columns"].as_array().unwrap().iter().find(|c| c["column"] == "supplier").unwrap().clone();
     assert_eq!((plan["link"].as_str(), profile["import"]["name_column"].as_str()), (Some("supplied_by supplier"), Some("part")), "{profile}");
@@ -3190,4 +3195,32 @@ async fn row_maths_is_typed_checked_for_units_and_skips_a_row_that_divides_by_ze
     let off = ok(app.tool("metric_eval", json!({"metric": "margin_at_10_off"})).await);
     assert_eq!((off["expr_words"].as_str(), off["unit"].as_str()), (Some("Highest of ((price × 0.9) − cost)"), Some("AUD")), "{off}");
     assert_eq!(off["value"].as_f64(), Some(219.1), "1249 × 0.9 − 905, the groupset");
+
+    // a row too large for a number is left out and counted, never summed as infinity or null
+    ok(propose("cost_times_huge", json!({"agg": "sum", "row": row("mul", json!("cost"), json!(1e308))})).await);
+    assert_eq!(decide_metric(&app, &vault, "part", "cost_times_huge", json!({"action": "approve"})).await.0, 200);
+    let huge = ok(app.tool("metric_eval", json!({"metric": "cost_times_huge"})).await);
+    assert!(huge["warnings"].to_string().contains("left out 25 entities whose row is too large to compute"), "{huge}");
+    assert_eq!(huge["n_entities"].as_u64(), Some(0), "{huge}");
+}
+
+#[tokio::test]
+async fn a_property_named_like_the_column_wins_over_a_link_guessed_from_the_kind_name() {
+    let app = TestApp::new().await;
+    let doc = upload_csv(&app, "parts.csv", PARTS).await;
+    let vault = personal(&app).await;
+    ok(app.tool("ontology_propose", json!({
+        "kinds": [{"kind": "part"}, {"kind": "supplier"}],
+        "properties": [{"kind": "part", "name": "supplier", "datatype": "text"}],
+        "links": [{"from_kind": "part", "label": "supplied_by", "to_kind": "supplier"}],
+    })).await);
+    for k in ["part", "supplier"] {
+        assert_eq!(decide_kind(&app, &vault, k, json!({"action": "approve"})).await.0, 200);
+    }
+    assert_eq!(decide_property(&app, &vault, "part", "supplier", json!({"action": "approve"})).await.0, 200);
+    assert_eq!(decide_link(&app, &vault, "part", "supplied_by", "supplier").await, 200);
+    let out = ok(app.tool("document_import_rows", json!({"document_id": doc, "kind": "part", "name_column": "part"})).await);
+    let col = out["columns"].as_array().unwrap().iter().find(|c| c["column"] == "supplier").unwrap().clone();
+    assert_eq!((col["property"].as_str(), col["link"].as_str()), (Some("supplier"), None), "{out}");
+    assert_eq!((out["targets_created"].as_u64(), out["linked"].as_u64()), (Some(0), Some(0)), "{out}");
 }

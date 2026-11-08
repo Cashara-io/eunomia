@@ -416,6 +416,8 @@ enum Skip {
     Unit(String, String),
     /// It divides by 0.
     DivZero,
+    /// Its result is too large for a number (infinite).
+    TooLarge,
 }
 
 impl RowPlan {
@@ -459,13 +461,14 @@ impl RowPlan {
             }
         };
         let (a, b) = (term(&self.left)?, term(&self.right)?);
-        match self.op {
-            RowOp::Mul => Ok(a * b),
-            RowOp::Sub => Ok(a - b),
-            RowOp::Add => Ok(a + b),
-            RowOp::Div if b == 0.0 => Err(Skip::DivZero),
-            RowOp::Div => Ok(a / b),
-        }
+        let v = match self.op {
+            RowOp::Mul => a * b,
+            RowOp::Sub => a - b,
+            RowOp::Add => a + b,
+            RowOp::Div if b == 0.0 => return Err(Skip::DivZero),
+            RowOp::Div => a / b,
+        };
+        if v.is_finite() { Ok(v) } else { Err(Skip::TooLarge) }
     }
 }
 
@@ -1313,6 +1316,8 @@ struct Computed {
     other_units: BTreeMap<(String, String), usize>,
     /// Entities left out because their row divides by 0.
     div_zero: usize,
+    /// Entities left out because their row is too large for a number.
+    too_large: usize,
 }
 
 fn compute(side: &Side, filters: &[Cond], entities: &[&String], values: &Values, props: &Props) -> Computed {
@@ -1322,6 +1327,7 @@ fn compute(side: &Side, filters: &[Cond], entities: &[&String], values: &Values,
     let mut distinct = HashSet::new();
     let mut other_units: BTreeMap<(String, String), usize> = BTreeMap::new();
     let mut div_zero = 0;
+    let mut too_large = 0;
     for e in entities {
         let held = values.get(*e);
         let get = |p: &str| held.and_then(|h| h.get(p));
@@ -1337,6 +1343,7 @@ fn compute(side: &Side, filters: &[Cond], entities: &[&String], values: &Values,
                 Err(Skip::Missing) => {}
                 Err(Skip::Unit(p, u)) => *other_units.entry((p, u)).or_default() += 1,
                 Err(Skip::DivZero) => div_zero += 1,
+                Err(Skip::TooLarge) => too_large += 1,
             }
             continue;
         }
@@ -1369,7 +1376,7 @@ fn compute(side: &Side, filters: &[Cond], entities: &[&String], values: &Values,
         Agg::Max => nums.iter().copied().reduce(f64::max),
         Agg::Avg | Agg::Ratio => None,
     };
-    Computed { value, used, other_units, div_zero }
+    Computed { value, used, other_units, div_zero, too_large }
 }
 
 fn round(v: f64) -> f64 {
@@ -1387,9 +1394,9 @@ fn value_of(plan: &Plan, entities: &[&String], values: &Values, props: &Props, w
                 warnings.push(w);
             }
         }
-        if c.div_zero > 0 {
-            let w = format!("left out {} entities whose row divides by 0", c.div_zero);
-            if !warnings.contains(&w) {
+        for (n, why) in [(c.div_zero, "divides by 0"), (c.too_large, "is too large to compute")] {
+            let w = format!("left out {n} entities whose row {why}");
+            if n > 0 && !warnings.contains(&w) {
                 warnings.push(w);
             }
         }

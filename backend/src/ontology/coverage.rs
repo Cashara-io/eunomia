@@ -306,6 +306,13 @@ fn asks_for_number(phrase: &str) -> bool {
     w.iter().any(|w| MEASURE_WORDS.contains(&w.as_str())) || w.windows(2).any(|p| p[0] == "number" && p[1] == "of")
 }
 
+/// Whether a property's own name holds every measure word the phrase asks with: "gst rate on lattes" is
+/// the property `gst_rate`, but "total stock value" is not `stock_value` (the total needs a metric).
+fn names_the_measure(phrase: &str, c: &Candidate) -> bool {
+    let asked: Vec<String> = words(phrase).into_iter().filter(|w| MEASURE_WORDS.contains(&w.as_str())).collect();
+    !asked.is_empty() && c.keys.iter().any(|k| asked.iter().all(|w| k.contains(w)))
+}
+
 /// The term whose name or a synonym is the phrase, word for word, among those `fits` lets through.
 fn exact<'a>(phrase: &str, candidates: &'a [Candidate], fits: impl Fn(&Candidate) -> bool) -> Option<&'a Candidate> {
     let p = words(phrase);
@@ -501,7 +508,7 @@ fn match_phrases(phrases: &[String], terms: &[Candidate], near: &HashMap<String,
             continue;
         }
         let near: Vec<(f64, &Candidate)> = near.get(phrase).into_iter().flatten().filter_map(|(d, id)| by_id.get(id).map(|c| (*d, *c))).collect();
-        let fits = |c: &Candidate| !number || c.term == Term::Metric;
+        let fits = |c: &Candidate| !number || c.term == Term::Metric || (c.term == Term::Property && names_the_measure(phrase, c));
         match (near.iter().find(|(_, c)| fits(c)), partial(phrase, terms, fits)) {
             (Some((d, c)), _) => found.matched.push(named(phrase, c, *d)),
             (None, Some(c)) => found.matched.push(named(phrase, c, 0.0)),
@@ -597,6 +604,12 @@ mod tests {
 
         let found = match_phrases(&ask("stock"), std::slice::from_ref(&stock), &none);
         assert_eq!(found.matched[0].name, "stock", "a plain term still matches a property");
+
+        let gst = cand(Term::Property, "gst_rate", &[]);
+        let found = match_phrases(&ask("gst rate on lattes"), std::slice::from_ref(&gst), &none);
+        assert_eq!((found.matched.len(), found.needs_metric.len()), (1, 0), "a property that names the measure answers it");
+        let found = match_phrases(&ask("total stock value"), &[stock.clone(), cand(Term::Property, "stock_value", &[])], &none);
+        assert!(found.matched.is_empty(), "a total still needs a metric");
 
         // the gate's case: by meaning "total stock value" was 0.53 from the property stock
         let stock = Candidate { id: Some(RecordId::new("ontology_property", "stock")), ..stock };
