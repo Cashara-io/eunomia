@@ -66,7 +66,7 @@ pub async fn search(
 ) -> AppResult<Value> {
     let (since, until) = cs::parse_range(since, until)?;
     let rs = vaults_service::read_scope(db, owner, vault_ids).await?;
-    let scope = cs::RecordScope::vaults(owner, &rs.personal, &rs.vaults);
+    let scope = cs::RecordScope::vaults(owner, rs.personal.as_ref(), &rs.vaults);
     let non_empty = |v: Option<&[String]>| v.filter(|v| !v.is_empty()).map(<[String]>::to_vec);
     let params = SearchParams {
         filter: RecordFilter {
@@ -144,7 +144,7 @@ pub async fn list(
     let limit = limit.clamp(0, 200) as usize;
     let offset = offset.max(0) as usize;
     let rs = vaults_service::read_scope(db, owner, &[]).await?;
-    let scope = cs::RecordScope::vaults(owner, &rs.personal, &rs.vaults);
+    let scope = cs::RecordScope::vaults(owner, rs.personal.as_ref(), &rs.vaults);
     let (recs, total) = cs::list(db, &scope, type_, &filters, sort, limit, offset).await?;
     let results: Vec<Value> = recs.iter().map(hit).collect();
     let has_more = (offset + results.len()) < total as usize;

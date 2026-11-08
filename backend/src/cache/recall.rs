@@ -824,7 +824,7 @@ pub async fn recall(
     let pool = limit.saturating_mul(4).max(40);
 
     let rs = vaults_service::read_scope(db, owner, vault_ids).await?;
-    let scope = cs::RecordScope::vaults(owner, &rs.personal, &rs.vaults);
+    let scope = cs::RecordScope::vaults(owner, rs.personal.as_ref(), &rs.vaults);
     let records = record_arms(db, settings, &scope, query, time_range, pool).await?;
 
     let mut scored = Vec::new();

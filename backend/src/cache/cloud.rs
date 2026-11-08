@@ -216,7 +216,7 @@ async fn load_space(db: &OrgDb, settings: &Settings, owner: &RecordId, vault_ids
             continue;
         }
         crate::authz::authorize(db, owner, crate::authz::Action::ReadMemories, v).await?;
-        items.extend(layer_items(db, &cs::RecordScope::vaults(owner, &personal, std::slice::from_ref(v)), v).await?);
+        items.extend(layer_items(db, &cs::RecordScope::vaults(owner, Some(&personal), std::slice::from_ref(v)), v).await?);
     }
 
     let semantic = if embeddings::available(db, settings, owner).await {

@@ -14,7 +14,7 @@ use eunomia_backend::entities::consolidate;
 use eunomia_backend::models_user::{self, User};
 use eunomia_backend::tools::registry;
 use eunomia_backend::vaults::service as vaults;
-use eunomia_backend::rid;
+use eunomia_backend::rid::{self, RecordIdExt};
 use serde_json::{json, Value};
 
 const ALICE_SECRET: &str = "ALICESECRET kiwi";
@@ -168,7 +168,7 @@ async fn a_member_of_other_peoples_personal_vaults_still_defaults_to_their_own()
 }
 
 async fn join_bobs_personal(w: &World) {
-    w.ok(&w.bob, "vault_invite", json!({"vault_id": w.bob_personal, "email": w.alice.user.email, "role": "owner"})).await;
+    w.ok(&w.bob, "vault_invite", json!({"vault_id": w.bob_personal, "email": w.alice.user.email, "role": "member"})).await;
     accept(w, &w.alice, &w.bob_personal).await;
 }
 
@@ -240,7 +240,7 @@ async fn own_personal_vault_requires_active_membership() {
 }
 
 #[tokio::test]
-async fn readding_personal_membership_does_not_change_the_default() {
+async fn readding_personal_membership_only_restores_the_default_with_ownership() {
     let w = world().await;
     join_bobs_personal(&w).await;
     w.ok(&w.alice, "vault_transfer_ownership", json!({"vault_id": w.alice_personal, "email": w.bob.user.email})).await;
@@ -249,14 +249,74 @@ async fn readding_personal_membership_does_not_change_the_default() {
     accept(&w, &w.alice, &w.alice_personal).await;
     let (status, list) = w.get(&w.alice, "/api/vaults").await;
     assert_eq!(status, 200, "{list}");
-    let defaults: Vec<_> = list["results"].as_array().unwrap().iter().filter(|v| v["is_default"] == true).collect();
-    assert_eq!(defaults.len(), 1, "{list}");
-    assert_eq!(defaults[0]["id"], w.alice_personal, "membership age and role do not define Personal");
-    assert_eq!(defaults[0]["role"], "member");
-    let out = w.ok(&w.alice, "memory_write", json!({"subject_name": "Rejoined Probe", "subject_kind": "person", "text": "private"})).await;
+    assert!(list["results"].as_array().unwrap().iter().all(|v| v["is_default"] == false), "{list}");
+    let out = w.call(&w.alice, "memory_write", json!({"subject_name": "Rejoined Probe", "subject_kind": "person", "text": "private"})).await;
+    assert!(out["error"].as_str().is_some_and(|e| e.contains("vault_id")), "{out}");
+    w.ok(&w.bob, "vault_transfer_ownership", json!({"vault_id": w.alice_personal, "email": w.alice.user.email})).await;
+    let out = w.ok(&w.alice, "memory_write", json!({"subject_name": "Restored Probe", "subject_kind": "person", "text": "private"})).await;
     assert_eq!(out["memory"]["vault"], w.alice_personal);
+}
+
+#[tokio::test]
+async fn personal_default_follows_transferred_ownership() {
+    let w = world().await;
+    join_bobs_personal(&w).await;
+    w.ok(&w.alice, "vault_transfer_ownership", json!({"vault_id": w.alice_personal, "email": w.bob.user.email})).await;
+    let db = w.app.db().await;
+    common::sys(async {
+        assert!(vaults::personal_vault_id(&db, &w.alice.user.id).await.is_err());
+        assert_eq!(vaults::personal_vault_id(&db, &w.bob.user.id).await.unwrap(), rid::parse(&w.bob_personal).unwrap());
+    }).await;
+    let out = w.call(&w.alice, "memory_write", json!({"subject_name": "Transferred Probe", "subject_kind": "person", "text": "private"})).await;
+    assert!(out["error"].as_str().is_some_and(|e| e.contains("vault_id")), "{out}");
+    let (status, list) = w.get(&w.alice, "/api/vaults").await;
+    assert_eq!(status, 200, "{list}");
+    assert!(list["results"].as_array().unwrap().iter().all(|v| v["is_default"] == false), "{list}");
     let found = w.ok(&w.alice, "entities_search", json!({"query": "Zed"})).await;
-    assert!(s(&found).contains(&w.alice_zed) && !s(&found).contains(&w.bob_zed), "{found}");
+    assert!(!s(&found).contains(&w.alice_zed), "{found}");
+    w.ok(&w.bob, "vault_transfer_ownership", json!({"vault_id": w.bob_personal, "email": w.alice.user.email})).await;
+    let out = w.ok(&w.alice, "memory_write", json!({"subject_name": "Received Probe", "subject_kind": "person", "text": "private"})).await;
+    assert_eq!(out["memory"]["vault"], w.bob_personal);
+    assert_eq!(common::sys(vaults::personal_vault_id(&db, &w.bob.user.id)).await.unwrap(), rid::parse(&w.alice_personal).unwrap());
+    let found = w.ok(&w.alice, "entities_search", json!({"query": "Zed"})).await;
+    assert!(s(&found).contains(&w.bob_zed) && !s(&found).contains(&w.alice_zed), "{found}");
+    let (status, list) = w.get(&w.alice, "/api/vaults").await;
+    assert_eq!(status, 200, "{list}");
+    assert!(list["results"].as_array().unwrap().iter().any(|v| v["id"] == w.bob_personal && v["is_default"] == true), "{list}");
+}
+
+#[tokio::test]
+async fn multiple_owned_personals_prefer_signup_then_vault_creation_then_id() {
+    let app = common::TestApp::new().await;
+    let db = app.db().await;
+    let original = common::sys(vaults::personal_vault_id(&db, &app.user.id)).await.unwrap();
+    db.test_raw().query(
+        "CREATE vault:older SET name = 'Older', kind = 'personal', created_at = d'2000-01-01T00:00:00Z';
+         CREATE vault:newer SET name = 'Newer', kind = 'personal', created_at = d'2001-01-01T00:00:00Z';
+         CREATE vault:pending SET name = 'Pending', kind = 'personal', created_at = d'1990-01-01T00:00:00Z';
+         CREATE vault_member SET user = $user, vault = vault:older, role = 'owner', created_at = d'2005-01-01T00:00:00Z';
+         CREATE vault_member SET user = $user, vault = vault:newer, role = 'owner', created_at = d'2004-01-01T00:00:00Z';
+         CREATE vault_member SET user = $user, vault = vault:pending, role = 'owner', status = 'pending';"
+    ).bind(("user", app.user.id.clone())).await.unwrap().check().unwrap();
+    common::sys(async {
+        assert_eq!(vaults::personal_vault_id(&db, &app.user.id).await.unwrap(), original);
+        vaults::delete_vault(&db, &app.state.control, &app.user.id, &original).await.unwrap();
+        for expected in ["vault:older", "vault:newer"] {
+            let expected = rid::parse(expected).unwrap();
+            assert_eq!(vaults::personal_vault_id(&db, &app.user.id).await.unwrap(), expected);
+            let scope = vaults::read_scope(&db, &app.user.id, &[]).await.unwrap();
+            assert_eq!(scope.vaults, vec![expected.clone()]);
+            let list = vaults::list_my_vaults(&db, &app.user.id).await.unwrap();
+            let defaults: Vec<_> = list.iter().filter(|v| v.is_default).collect();
+            assert_eq!(defaults.len(), 1);
+            assert_eq!(defaults[0].id, expected.to_string());
+            db.test_raw().query("UPDATE vault:newer SET created_at = d'2000-01-01T00:00:00Z'").await.unwrap().check().unwrap();
+        }
+        let pending = rid::parse("vault:pending").unwrap();
+        let accepted = vaults::accept_invitation(&db, &app.state.control, &app.user.id, &pending).await.unwrap();
+        assert!(accepted.is_default);
+        assert_eq!(vaults::personal_vault_id(&db, &app.user.id).await.unwrap(), pending);
+    }).await;
 }
 
 #[tokio::test]

@@ -74,21 +74,10 @@ pub const MEMBERSHIP_ANY: Stmt =
 pub const ACCESSIBLE_IDS: Stmt =
     Stmt::new("vaults.accessible_ids", r#"SELECT vault FROM vault_member WHERE user = $user AND status = "active""#);
 
-pub const DEFAULT_ID: Stmt = Stmt::new(
-    "vaults.default_id",
-    r#"SELECT vault FROM vault_member WHERE vault = $vault AND user = $user AND status = "active" AND vault.kind = "personal" LIMIT 1"#,
-);
-
-/// Every vault a user is an active member of, with its kind and name, oldest membership first
-/// (`vaults::service::read_scope`).
+/// Active memberships, including the ownership and vault age used to choose a Personal default.
 pub const MY_MEMBERSHIPS: Stmt = Stmt::new(
     "vaults.my_memberships",
-    r#"SELECT vault, vault.kind AS kind, vault.name AS name, created_at FROM vault_member WHERE user = $user AND status = "active" ORDER BY created_at"#,
-);
-
-pub const LIST_MINE: Stmt = Stmt::new(
-    "vaults.list_mine",
-    r#"SELECT vault.* AS vault, role FROM vault_member WHERE user = $user AND status = "active""#,
+    r#"SELECT vault, role, vault.kind AS kind, vault.name AS name, vault.created_at AS vault_created_at, created_at FROM vault_member WHERE user = $user AND status = "active" ORDER BY created_at"#,
 );
 
 pub const RENAME: Stmt = Stmt::new("vaults.rename", "UPDATE $id SET name = $name RETURN AFTER");
@@ -228,9 +217,7 @@ pub const ALL: &[&Stmt] = &[
     &MEMBERSHIP_ACTIVE,
     &MEMBERSHIP_ANY,
     &ACCESSIBLE_IDS,
-    &DEFAULT_ID,
     &MY_MEMBERSHIPS,
-    &LIST_MINE,
     &RENAME,
     &DELETE_VAULT,
     &INVITE,

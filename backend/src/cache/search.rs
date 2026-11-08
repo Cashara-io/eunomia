@@ -216,8 +216,8 @@ impl RecordScope {
     }
 
     /// What `owner` reads across `vaults`, already authorized; `personal` is their personal vault.
-    pub fn vaults(owner: &RecordId, personal: &RecordId, vaults: &[RecordId]) -> Self {
-        RecordScope { owner: owner.clone(), own: vaults.contains(personal), vaults: vaults.to_vec(), personal: Some(personal.clone()) }
+    pub fn vaults(owner: &RecordId, personal: Option<&RecordId>, vaults: &[RecordId]) -> Self {
+        RecordScope { owner: owner.clone(), own: personal.is_some_and(|p| vaults.contains(p)), vaults: vaults.to_vec(), personal: personal.cloned() }
     }
 
     pub fn owner(&self) -> &RecordId {
@@ -248,7 +248,7 @@ impl RecordScope {
 /// personal vault (none is ever made without one) sees only what is filed in `vaults`.
 pub async fn scope_for(db: &OrgDb, owner: &RecordId, vaults: &[RecordId]) -> AppResult<RecordScope> {
     Ok(match crate::vaults::service::personal_vault_id(db, owner).await {
-        Ok(personal) => RecordScope::vaults(owner, &personal, vaults),
+        Ok(personal) => RecordScope::vaults(owner, Some(&personal), vaults),
         Err(_) => RecordScope { owner: owner.clone(), own: false, vaults: vaults.to_vec(), personal: None },
     })
 }
