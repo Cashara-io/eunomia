@@ -502,41 +502,8 @@ fn local_money(cell: &str, unit: Option<&str>) -> Option<String> {
     {
         return None;
     }
-    let plain = without_thousands(amount.trim())?;
+    let plain = super::profile::without_thousands(amount.trim())?;
     super::profile::plain_number(&plain).map(|n| n.to_string())
-}
-
-/// `1,200.50` as `1200.50`. A comma counts only between groups of exactly three digits after a first
-/// group of one to three digits that is not `0`, so `1,5`, `0,500` or `1.234,56` (a decimal comma) is
-/// refused rather than read as another number.
-fn without_thousands(s: &str) -> Option<String> {
-    if !s.contains(',') {
-        return Some(s.to_string());
-    }
-    let (sign, s) = match s.strip_prefix('-').or_else(|| s.strip_prefix('+')) {
-        Some(rest) => (&s[..1], rest),
-        None => ("", s),
-    };
-    let (int, frac) = match s.split_once('.') {
-        Some((i, f)) => (i, Some(f)),
-        None => (s, None),
-    };
-    let mut groups = int.split(',');
-    let first = groups.next()?;
-    let digits = |g: &str| !g.is_empty() && g.chars().all(|c| c.is_ascii_digit());
-    if first.len() > 3 || !digits(first) || first.starts_with('0') {
-        return None;
-    }
-    let rest: Vec<&str> = groups.collect();
-    if rest.iter().any(|g| g.len() != 3 || !digits(g)) || frac.is_some_and(|f| f.contains(',')) {
-        return None;
-    }
-    let mut out = format!("{sign}{}", int.replace(',', ""));
-    if let Some(f) = frac {
-        out.push('.');
-        out.push_str(f);
-    }
-    Some(out)
 }
 
 fn bad(out: &mut ImportOut, line: u64, column: Option<&str>, error: String) {
