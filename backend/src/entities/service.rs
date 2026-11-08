@@ -462,7 +462,7 @@ pub async fn upsert_grounded(
     let vault = resolve_vault(db, owner, vault_id, Action::WriteMemories).await?;
     let kind_mapped = if table == CUSTOM_TABLE { crate::ontology::ground(db, &vault, kind).await? } else { None };
     let kind = kind_mapped.as_ref().map_or(kind, |m| m.to.as_str());
-    let (entity, created) = upsert_in_vault(db, owner, kind, name, aliases, &vault).await?;
+    let (entity, created) = upsert_in_vault(db, owner, kind, name, aliases, &vault, Lookups::NameAndAlias).await?;
     Ok(Upserted { entity, created, kind_mapped })
 }
 
@@ -520,17 +520,27 @@ pub async fn upsert_entity_created(
 ) -> AppResult<(EntityOut, bool)> {
     kind_table(kind)?;
     let vault = resolve_vault(db, owner, vault_id, Action::WriteMemories).await?;
-    upsert_in_vault(db, owner, kind, name, aliases, &vault).await
+    upsert_in_vault(db, owner, kind, name, aliases, &vault, Lookups::NameAndAlias).await
+}
+
+/// How [`upsert_in_vault`] finds an existing entity for a name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Lookups {
+    /// By name, then by alias.
+    NameAndAlias,
+    /// By name only: the caller knows no entity of the kind has the name as an alias.
+    NameOnly,
 }
 
 /// [`upsert_entity_created`] once the caller resolved `vault` and may write there.
-async fn upsert_in_vault(
+pub(crate) async fn upsert_in_vault(
     db: &OrgDb,
     owner: &RecordId,
     kind: &str,
     name: &str,
     aliases: Option<Vec<String>>,
     vault: &RecordId,
+    lookups: Lookups,
 ) -> AppResult<(EntityOut, bool)> {
     let table = kind_table(kind)?;
     let aliases = aliases.unwrap_or_default();
@@ -559,17 +569,18 @@ async fn upsert_in_vault(
             // ride along with the name's own lookup, in the same round trip. The name's own key wins.
             let with_variants = i == 0 && !variants.is_empty();
             let lookup = if with_variants { q::find_by_key_or_variants(db, table).bind(("needles", variants.clone())) } else { q::find_by_key(db, table) };
-            let mut res = lookup.bind(("vault", vault.clone())).bind(("kind", kind.to_string())).bind(("needle", key)).await?.check()?;
-            let by_name: Vec<EntityRow> = res.take(0)?;
-            let by_alias: Vec<EntityRow> = res.take(1)?;
+            let no_alias = i == 0 && lookups == Lookups::NameOnly;
+            let mut res = lookup.bind(("vault", vault.clone())).bind(("kind", kind.to_string())).bind(("needle", key)).bind(("no_alias", no_alias)).await?.check()?;
+            let by_name: Vec<EntityRow> = res.take(1)?;
+            let by_alias: Vec<EntityRow> = res.take(2)?;
             if let Some(row) = by_name.into_iter().chain(by_alias).next() {
                 aliases.extend(extra.into_iter().flatten().cloned());
                 found = Some(row);
                 break;
             }
             if with_variants {
-                let by_name: Vec<EntityRow> = res.take(2)?;
-                let by_alias: Vec<EntityRow> = res.take(3)?;
+                let by_name: Vec<EntityRow> = res.take(3)?;
+                let by_alias: Vec<EntityRow> = res.take(4)?;
                 if let Some(row) = by_name.into_iter().chain(by_alias).next() {
                     let spelled = name.split_whitespace().collect::<Vec<_>>().join(" ");
                     if spelled != row.name {
@@ -631,11 +642,11 @@ async fn upsert_in_vault(
 // cap and leave it one over; a per-vault kind registry with a unique index would make it exact.
 async fn check_custom_kind_room(db: &OrgDb, vault: &RecordId, kind: &str) -> AppResult<()> {
     let mut res = q::CUSTOM_KIND_ROOM.on(db).bind(("vault", vault.clone())).bind(("kind", kind.to_string())).await?.check()?;
-    let known: Vec<RecordId> = res.take(0)?;
+    let known: Vec<RecordId> = res.take(1)?;
     if !known.is_empty() {
         return Ok(());
     }
-    let kinds: Vec<CustomKindRow> = res.take(1)?;
+    let kinds: Vec<CustomKindRow> = res.take(2)?;
     if kinds.len() >= MAX_CUSTOM_KINDS {
         return Err(AppError::bad_request(format!(
             "this vault already has {MAX_CUSTOM_KINDS} custom entity kinds, the most it can hold; reuse one (`entity_types` lists them)"
