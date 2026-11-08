@@ -592,6 +592,10 @@ export type DocumentOut = {
      */
     status: string;
     updated_at: string;
+    /**
+     * The vault (memory space) the document is in.
+     */
+    vault: string;
 };
 
 export type EntityCreate = {
@@ -1954,7 +1958,8 @@ export type ReadinessOut = {
     metrics: StatusCounts;
     properties: StatusCounts;
     /**
-     * No blockers.
+     * No blockers: nothing proposed is waiting, a metric is approved, and every property an approved
+     * metric reads is approved and has values.
      */
     ready: boolean;
     /**
@@ -3916,6 +3921,11 @@ export type ListDocumentsData = {
          * The vault (`vault:...`); default: the caller's personal vault (a vault-restricted token's own).
          */
         vault_id?: string;
+        /**
+         * Without `vault_id`: every vault the caller can read (their personal vault and each org vault
+         * they belong to) instead of the default one.
+         */
+        all_vaults?: boolean;
     };
     url: '/api/documents';
 };

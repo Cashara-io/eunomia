@@ -4,6 +4,7 @@ expression: stable
 ---
 {
   "id": "document:<id18>",
+  "vault": "vault:<id2>",
   "filename": "anvil-budget.md",
   "media_type": "text/markdown",
   "size_bytes": 50,

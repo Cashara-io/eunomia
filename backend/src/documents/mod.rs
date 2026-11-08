@@ -202,6 +202,8 @@ pub(crate) struct DocRow {
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct DocumentOut {
     pub id: String,
+    /// The vault (memory space) the document is in.
+    pub vault: String,
     pub filename: String,
     pub media_type: String,
     pub size_bytes: i64,
@@ -232,6 +234,7 @@ impl From<&DocRow> for DocumentOut {
         DocumentOut {
             download_url: download_path(&id),
             id,
+            vault: r.vault.to_string(),
             filename: r.filename.clone(),
             media_type: r.media_type.clone(),
             size_bytes: r.size_bytes,
@@ -354,17 +357,26 @@ async fn load(db: &OrgDb, user: &RecordId, id: &RecordId, include_deleted: bool,
     }
 }
 
-pub async fn list(state: &OrgState, user: &RecordId, vault_id: Option<&str>, limit: i64, offset: i64) -> AppResult<DocumentList> {
-    let vault = target_vault(&state.db, user, vault_id, Action::ReadMemories).await?;
+/// The documents of `vault_id` (the caller's default vault when omitted), or with `all_vaults` and no
+/// `vault_id` of every vault the caller can read (personal and org), newest first.
+pub async fn list(state: &OrgState, user: &RecordId, vault_id: Option<&str>, all_vaults: bool, limit: i64, offset: i64) -> AppResult<DocumentList> {
     let (limit, offset) = (limit.clamp(1, 200), offset.max(0));
-    let mut res = q::LIST.on(&state.db).bind(("vault", vault.clone())).bind(("limit", limit)).bind(("offset", offset)).await?;
-    let rows: Vec<DocRow> = res.take(0)?;
     #[derive(serde::Deserialize, SurrealValue)]
     struct Count {
         count: i64,
     }
-    let mut res = q::COUNT.on(&state.db).bind(("vault", vault)).await?;
-    let total = res.take::<Vec<Count>>(0)?.first().map_or(0, |c| c.count);
+    let (rows, counts): (Vec<DocRow>, Vec<Count>) = if all_vaults && vault_id.is_none() {
+        let vaults = crate::vaults::service::read_scope(&state.db, user, &[]).await?.vaults;
+        let mut res = q::LIST_IN.on(&state.db).bind(("vaults", vaults.clone())).bind(("limit", limit)).bind(("offset", offset)).await?;
+        let rows = res.take(0)?;
+        (rows, q::COUNT_IN.on(&state.db).bind(("vaults", vaults)).await?.take(0)?)
+    } else {
+        let vault = target_vault(&state.db, user, vault_id, Action::ReadMemories).await?;
+        let mut res = q::LIST.on(&state.db).bind(("vault", vault.clone())).bind(("limit", limit)).bind(("offset", offset)).await?;
+        let rows = res.take(0)?;
+        (rows, q::COUNT.on(&state.db).bind(("vault", vault)).await?.take(0)?)
+    };
+    let total = counts.first().map_or(0, |c| c.count);
     let results: Vec<DocumentOut> = rows.iter().map(DocumentOut::from).collect();
     let has_more = offset + (results.len() as i64) < total;
     Ok(DocumentList {

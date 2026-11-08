@@ -141,7 +141,8 @@ export default function CsvProfile({ documentId }: { documentId: string }) {
 
       {!plan.kind && (
         <p className="text-[12.5px]" style={{ color: "var(--ink-dim)" }}>
-          To import these rows as entities, open this file&apos;s memory space, run Auto-map on it in Kinds and links, and approve what it suggests.
+          To import these rows as entities, open this file&apos;s memory space, run Auto-map on it in Kinds and links, and approve what it
+          suggests. Then come back here to import them.
         </p>
       )}
       {plan.kind && !plan.ready && (

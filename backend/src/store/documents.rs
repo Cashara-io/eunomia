@@ -30,6 +30,13 @@ pub const LIST: Stmt = Stmt::new(
 );
 pub const COUNT: Stmt =
     Stmt::new("documents.count", "SELECT count() FROM document WHERE vault = $vault AND status != \"deleted\" GROUP ALL");
+/// [`LIST`] and [`COUNT`] over several vaults at once (the Documents page's every readable space).
+pub const LIST_IN: Stmt = Stmt::new(
+    "documents.list_in",
+    "SELECT * FROM document WHERE vault IN $vaults AND status != \"deleted\" ORDER BY created_at DESC LIMIT $limit START $offset",
+);
+pub const COUNT_IN: Stmt =
+    Stmt::new("documents.count_in", "SELECT count() FROM document WHERE vault IN $vaults AND status != \"deleted\" GROUP ALL");
 /// Every document of a vault, deleted ones too (a vault clone, merge or delete).
 pub const IN_VAULT: Stmt = Stmt::new("documents.in_vault", "SELECT * FROM document WHERE vault = $vault");
 
@@ -117,6 +124,8 @@ pub const ALL: &[&Stmt] = &[
     &GET_ANY,
     &LIST,
     &COUNT,
+    &LIST_IN,
+    &COUNT_IN,
     &IN_VAULT,
     &COPY,
     &REVISE,
