@@ -11,6 +11,9 @@
 //! text is trimmed, capped and has secrets dropped as in a memory. The result is the resolved view, with
 //! names and kinds from the database, plus [`Shown::text`], a plain rendering for a terminal.
 
+mod decimal;
+use decimal::Decimal;
+
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 
@@ -378,35 +381,24 @@ pub fn is_percent(unit: Option<&str>) -> bool {
     unit.is_some_and(|u| matches!(u.trim().to_ascii_lowercase().as_str(), "%" | "percent" | "percentage" | "pct"))
 }
 
-fn rounded_units(value: f64, places: usize) -> f64 {
-    let scaled = value.abs() * 10_f64.powi(places as i32);
-    // Absorb binary error at a decimal half without moving large whole amounts.
-    (scaled + (f64::EPSILON * scaled).min(0.25)).round().copysign(value)
-}
-
 fn fixed(value: f64, places: usize) -> String {
-    let rounded = rounded_units(value, places) / 10_f64.powi(places as i32);
-    let rounded = if rounded.is_finite() { rounded } else { value };
-    let rounded = if rounded == 0.0 { 0.0 } else { rounded };
-    format!("{rounded:.places$}")
-}
-
-fn significant_places(value: f64) -> usize {
-    if value == 0.0 { 0 } else { (1.0 - value.abs().log10().floor()).max(0.0) as usize }
+    if value.is_finite() { Decimal::new(value).fixed(places) } else { "none".into() }
 }
 
 fn places(value: f64, places: usize) -> String {
     let s = fixed(value, places);
-    if places == 0 { s } else { s.trim_end_matches('0').trim_end_matches('.').to_string() }
+    if places == 0 || !s.contains('.') { s } else { s.trim_end_matches('0').trim_end_matches('.').to_string() }
 }
 
 pub fn money(value: f64) -> String {
-    let places = if value != 0.0 && value.abs() < 0.01 { significant_places(value) } else { 2 };
-    fixed(value, places)
+    if !value.is_finite() { return "none".into(); }
+    let decimal = Decimal::new(value);
+    decimal.fixed(decimal.money_places())
 }
 
 /// A metric's number as people write it, with money rounded half away from zero.
 pub fn number(value: f64, unit: Option<&str>) -> String {
+    if !value.is_finite() { return "none".into(); }
     if is_percent(unit) {
         return format!("{}%", places(value, 1));
     }
@@ -462,36 +454,66 @@ fn figure(v: f64, unit: Option<&str>) -> String {
     }
 }
 
-/// The raw move, with enough shared precision for two significant figures and endpoints that add up.
+struct ScenarioNumbers {
+    before: String,
+    after: String,
+    movement: String,
+    #[allow(dead_code)]
+    exact_delta: String,
+}
+
+fn scenario_numbers(a: f64, b: f64, delta_pct: Option<f64>, unit: Option<&str>) -> ScenarioNumbers {
+    let (a, b) = (Decimal::new(a), Decimal::new(b));
+    let d = Decimal::difference(&a, &b);
+    let delta_unit = if is_percent(unit) { Some("points") } else { unit };
+    let exact_delta = format!("{}{}", d.exact(), delta_unit.map(|u| format!(" {u}")).unwrap_or_default());
+    let adds_up = |p| match (a.scaled(p), b.scaled(p), d.scaled(p)) {
+        (Some(a), Some(b), Some(d)) => b.checked_sub(a) == Some(d),
+        _ => false,
+    };
+    let mut precision = d.significant_places().max(if is_percent(unit) { 1 } else { 2 }).min(6);
+    while precision < 6 && !adds_up(precision) && a.scaled(precision).is_some() && b.scaled(precision).is_some() {
+        precision += 1;
+    }
+    let guaranteed = d.significant_places() <= 6 && adds_up(precision);
+    let amount = d.fixed(precision).trim_start_matches('-').to_string();
+    let movement = if d.is_zero() {
+        "no change".to_string()
+    } else if !guaranteed {
+        format!("exact change: {exact_delta}")
+    } else {
+        let way = if d.negative { "down" } else { "up" };
+        if is_percent(unit) {
+            let noun = if amount.trim_end_matches('0').trim_end_matches('.') == "1" { "point" } else { "points" };
+            format!("{way} {amount} {noun}")
+        } else {
+            let tail = unit.map(|u| format!(" {u}")).unwrap_or_default();
+            let pct = delta_pct.filter(|p| p.is_finite()).map(|p| format!(" ({}%)", places(p.abs(), 1))).unwrap_or_default();
+            format!("{way} {amount}{tail}{pct}")
+        }
+    };
+    ScenarioNumbers { before: a.fixed(precision), after: b.fixed(precision), movement, exact_delta }
+}
+
+/// Decimal endpoints and delta share a precision only when their displayed integers add up.
 pub fn movement(before: Option<f64>, after: Option<f64>, delta_pct: Option<f64>, unit: Option<&str>) -> String {
     let tail = match unit {
         Some(_) if is_percent(unit) => "%".to_string(),
         Some(u) => format!(" {u}"),
         None => String::new(),
     };
-    let (a, b) = match (before, after) {
+    let (a, b) = match (before.filter(|v| v.is_finite()), after.filter(|v| v.is_finite())) {
         (Some(a), Some(b)) => (a, b),
         (None, Some(b)) => return format!("no value before, {}{tail} after", figure(b, unit)),
         (Some(a), None) => return format!("{}{tail} before, no value after", figure(a, unit)),
         (None, None) => return "no value".into(),
     };
-    let d = b - a;
-    let mut precision = significant_places(d).max(if is_percent(unit) { 1 } else { 2 });
-    // Keep the raw delta, increasing precision when independently rounded endpoints do not add up.
-    while precision < 12 && rounded_units(b, precision) - rounded_units(a, precision) != rounded_units(d, precision) {
-        precision += 1;
+    let shown = scenario_numbers(a, b, delta_pct, unit);
+    if shown.movement == "no change" {
+        return format!("{}{tail}, no change", shown.before);
     }
-    let (a, b, amount) = (fixed(a, precision), fixed(b, precision), fixed(d.abs(), precision));
-    if d == 0.0 {
-        return format!("{a}{tail}, no change");
-    }
-    let way = if d > 0.0 { "up" } else { "down" };
-    if is_percent(unit) {
-        let noun = if amount.parse::<f64>().ok() == Some(1.0) { "point" } else { "points" };
-        return format!("{a}% \u{2192} {b}%, {way} {amount} {noun}");
-    }
-    let pct = delta_pct.map(|p| format!(" ({}%)", places(p.abs(), 1))).unwrap_or_default();
-    format!("{a} \u{2192} {b}{tail}, {way} {amount}{tail}{pct}")
+    let percent = if is_percent(unit) { "%" } else { "" };
+    format!("{}{percent} \u{2192} {}{tail}, {}", shown.before, shown.after, shown.movement)
 }
 
 fn shown_value(v: &serde_json::Value, unit: Option<&str>) -> String {
@@ -602,6 +624,44 @@ mod tests {
             assert_eq!(number(value, Some("AUD")), expected);
         }
         assert_ne!(number(0.004, Some("AUD")), "0.00 AUD");
+    }
+
+    fn fixture_value(v: &serde_json::Value) -> Option<f64> {
+        v.as_str().map(|s| s.parse().unwrap())
+    }
+
+    #[test]
+    fn shared_decimal_money_vectors() {
+        let vectors: serde_json::Value = serde_json::from_str(include_str!("../../../fixtures/number-format.json")).unwrap();
+        for row in vectors["numbers"].as_array().unwrap() {
+            let shown = fixture_value(&row["value"]).map(|v| figure(v, row["unit"].as_str())).unwrap_or_else(|| "none".into());
+            assert_eq!(shown, row["shown"].as_str().unwrap(), "{row}");
+        }
+    }
+
+    #[test]
+    fn shared_decimal_scenario_vectors() {
+        let vectors: serde_json::Value = serde_json::from_str(include_str!("../../../fixtures/number-format.json")).unwrap();
+        for row in vectors["scenarios"].as_array().unwrap() {
+            let (a, b) = (fixture_value(&row["before"]), fixture_value(&row["after"]));
+            if let (Some(a), Some(b)) = (a.filter(|v| v.is_finite()), b.filter(|v| v.is_finite())) {
+                let shown = scenario_numbers(a, b, None, row["unit"].as_str());
+                assert_eq!(shown.before, row["start"].as_str().unwrap(), "{row}");
+                assert_eq!(shown.after, row["end"].as_str().unwrap(), "{row}");
+                assert_eq!(shown.movement, row["movement"].as_str().unwrap(), "{row}");
+                assert_eq!(shown.exact_delta, row["exact"].as_str().unwrap(), "{row}");
+                if row["addsUp"] == true {
+                    let integer = |s: &str| s.replace('.', "").parse::<i128>().unwrap();
+                    let amount = shown.movement.split_whitespace().nth(1).unwrap_or("0");
+                    let scale = shown.before.split_once('.').map_or(0, |(_, f)| f.len());
+                    let change = if shown.movement == "no change" { 0 } else { integer(amount) };
+                    let sign = if shown.movement.starts_with("down") { -1 } else { 1 };
+                    assert_eq!(integer(&shown.after) - integer(&shown.before), sign * change, "scale {scale}: {row}");
+                }
+            } else {
+                assert!(movement(a, b, None, row["unit"].as_str()).starts_with(row["movement"].as_str().unwrap()), "{row}");
+            }
+        }
     }
 
     #[test]

@@ -1,0 +1,37 @@
+{
+  "numbers": [
+    {"value": "10000000000000.004", "unit": "AUD", "shown": "10000000000000.00"},
+    {"value": "1000000000000000.125", "unit": "AUD", "shown": "1000000000000000.10"},
+    {"value": "-1000000000000000.125", "unit": "AUD", "shown": "-1000000000000000.10"},
+    {"value": "68606.625", "unit": "AUD", "shown": "68606.63"},
+    {"value": "-68606.625", "unit": "AUD", "shown": "-68606.63"},
+    {"value": "1.005", "unit": "AUD", "shown": "1.01"},
+    {"value": "-1.005", "unit": "AUD", "shown": "-1.01"},
+    {"value": "0.004", "unit": "AUD", "shown": "0.0040"},
+    {"value": "-0.0", "unit": "AUD", "shown": "0.00"},
+    {"value": "-0.0", "unit": null, "shown": "0"},
+    {"value": "1e21", "unit": "AUD", "shown": "1000000000000000000000.00"},
+    {"value": "1e-7", "unit": "AUD", "shown": "0.00000010"},
+    {"value": "1e40", "unit": "AUD", "shown": "10000000000000000000000000000000000000000.00"},
+    {"value": "NaN", "unit": "AUD", "shown": "none"},
+    {"value": "Infinity", "unit": null, "shown": "none"},
+    {"value": null, "unit": "AUD", "shown": "none"}
+  ],
+  "scenarios": [
+    {"before": "35.756120", "after": "35.435683", "unit": "%", "start": "35.76", "end": "35.44", "movement": "down 0.32 points", "exact": "-0.320437 points", "addsUp": true},
+    {"before": "1000000000000017.125", "after": "1000000000000024.25", "unit": "AUD", "start": "1000000000000017.10", "end": "1000000000000024.20", "movement": "up 7.10 AUD", "exact": "7.1 AUD", "addsUp": true},
+    {"before": "35.7", "after": "35.351", "unit": "%", "start": "35.70", "end": "35.35", "movement": "down 0.35 points", "exact": "-0.349 points", "addsUp": true},
+    {"before": "-1.005", "after": "-1.015", "unit": "AUD", "start": "-1.005", "end": "-1.015", "movement": "down 0.010 AUD", "exact": "-0.01 AUD", "addsUp": true},
+    {"before": "-0.0", "after": "0", "unit": null, "start": "0.00", "end": "0.00", "movement": "no change", "exact": "0", "addsUp": true},
+    {"before": "1", "after": "1.000000012", "unit": "AUD", "start": "1.000000", "end": "1.000000", "movement": "exact change: 0.000000012 AUD", "exact": "0.000000012 AUD", "addsUp": false},
+    {"before": "1e40", "after": "2e40", "unit": "AUD", "start": "10000000000000000000000000000000000000000.00", "end": "20000000000000000000000000000000000000000.00", "movement": "exact change: 10000000000000000000000000000000000000000 AUD", "exact": "10000000000000000000000000000000000000000 AUD", "addsUp": false},
+    {"before": null, "after": "1", "unit": "AUD", "start": "none", "end": "1.00", "movement": "no value before", "exact": null, "addsUp": false},
+    {"before": "NaN", "after": null, "unit": null, "start": "none", "end": "none", "movement": "no value", "exact": null, "addsUp": false},
+    {"before": "1.005", "after": "-1.005", "unit": "AUD", "start": "1.005", "end": "-1.005", "movement": "down 2.010 AUD", "exact": "-2.01 AUD", "addsUp": true},
+    {"before": "-1.015", "after": "-1.005", "unit": "AUD", "start": "-1.015", "end": "-1.005", "movement": "up 0.010 AUD", "exact": "0.01 AUD", "addsUp": true},
+    {"before": "1e-7", "after": "2e-7", "unit": null, "start": "0.000000", "end": "0.000000", "movement": "exact change: 0.0000001", "exact": "0.0000001", "addsUp": false},
+    {"before": "0", "after": "0.004", "unit": "AUD", "start": "0.0000", "end": "0.0040", "movement": "up 0.0040 AUD", "exact": "0.004 AUD", "addsUp": true},
+    {"before": "0.004", "after": "-0.0", "unit": "AUD", "start": "0.0040", "end": "0.0000", "movement": "down 0.0040 AUD", "exact": "-0.004 AUD", "addsUp": true},
+    {"before": "0", "after": "-0.004", "unit": "AUD", "start": "0.0000", "end": "-0.0040", "movement": "down 0.0040 AUD", "exact": "-0.004 AUD", "addsUp": true}
+  ]
+}

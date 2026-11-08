@@ -26,3 +26,29 @@ test("money rounds half away from zero", () => {
 test("a nonzero sub-cent value is not shown as zero", () => {
   expect(formatNumber(0.004, "AUD")).not.toBe("0.00");
 });
+
+test("shared decimal money vectors", async () => {
+  const vectors = (await import("../../fixtures/number-format.json", { with: { type: "json" } })).default;
+  for (const row of vectors.numbers) {
+    expect(formatNumber(row.value == null ? null : Number(row.value), row.unit), row.value ?? "null").toBe(row.shown);
+  }
+});
+
+test("shared decimal scenario vectors", async () => {
+  const vectors = (await import("../../fixtures/number-format.json", { with: { type: "json" } })).default;
+  for (const row of vectors.scenarios) {
+    const shown = formatScenario(row.before == null ? null : Number(row.before), row.after == null ? null : Number(row.after), null, row.unit);
+    expect(shown.before, row.before ?? "null").toBe(row.start);
+    expect(shown.after).toBe(row.end);
+    expect(shown.movement).toBe(row.movement);
+    expect(shown.exactDelta).toBe(row.exact);
+    expect(shown.addsUp).toBe(row.addsUp);
+    if (shown.addsUp) {
+      const integer = (s: string) => BigInt(s.replace(".", ""));
+      const amount = shown.movement.split(" ")[1];
+      const change = shown.movement === "no change" ? BigInt(0) : integer(amount);
+      const sign = shown.movement.startsWith("down") ? BigInt(-1) : BigInt(1);
+      expect(integer(shown.after) - integer(shown.before)).toBe(sign * change);
+    }
+  }
+});
