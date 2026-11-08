@@ -23,10 +23,16 @@ export default function ImpactView({ view }: { view: Impact }) {
           </div>
         </div>
       </header>
-      {view.affected.length === 0 && (
-        <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
-          Nothing else is affected.
+      {view.linked === false ? (
+        <p className="text-[13px]" style={{ color: "var(--ink-dim)" }} data-testid="impact-no-links">
+          {view.start.name} has no saved links yet, so there is nothing to follow. Link it to the things it touches, then ask again.
         </p>
+      ) : (
+        view.affected.length === 0 && (
+          <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+            Nothing else is affected.
+          </p>
+        )
       )}
       {steps.map((n) => (
         <div key={n} className="flex flex-col gap-2">

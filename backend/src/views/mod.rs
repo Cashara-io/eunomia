@@ -109,7 +109,9 @@ pub struct Affected {
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(tag = "view", rename_all = "snake_case")]
 pub enum View {
-    Impact { start: EntityRef, headline: String, affected: Vec<Affected> },
+    /// `linked` is false when the start has no saved relation at all: an empty `affected` then means
+    /// there was nothing to follow, not that nothing is affected.
+    Impact { start: EntityRef, headline: String, affected: Vec<Affected>, linked: bool },
     Subgraph { title: String, entities: Vec<EntityRef>, relations: Vec<Step> },
     /// `metric` is the server's own run; `entities` are its `entity_ids` with names, the receipts.
     Metric { metric: MetricEvalOut, entities: Vec<EntityRef> },
@@ -155,7 +157,8 @@ pub async fn show(db: &OrgDb, owner: &RecordId, spec: ViewSpec) -> AppResult<Sho
                     Ok(Affected { entity, path, why: clean("why", &a.why, MAX_WHY)? })
                 })
                 .collect::<AppResult<Vec<_>>>()?;
-            View::Impact { start, headline, affected }
+            let linked = !affected.is_empty() || has_relation(db, &start).await?;
+            View::Impact { start, headline, affected, linked }
         }
         ViewSpec::Subgraph { title, entity_ids, relation_ids } => {
             if entity_ids.len() > MAX_SUBGRAPH_ENTITIES || relation_ids.len() > MAX_SUBGRAPH_RELATIONS {
@@ -214,6 +217,13 @@ fn clean(field: &str, s: &str, max: usize) -> AppResult<String> {
 
 fn unknown_entity(id: &str) -> AppError {
     AppError::bad_request(format!("unknown entity {id}: use an entity id from entities_search or entities_neighbourhood"))
+}
+
+async fn has_relation(db: &OrgDb, e: &EntityRef) -> AppResult<bool> {
+    let (Ok(id), Ok(vault)) = (crate::rid::parse(&e.id), crate::rid::parse(&e.vault)) else { return Ok(false) };
+    let q = &crate::store::entities::HAS_RELATION;
+    let linked: Option<bool> = q.on(db).bind(("id", id)).bind(("vault", vault)).await?.take(q.slot)?;
+    Ok(linked.unwrap_or(false))
 }
 
 fn unknown_relation(id: &str) -> AppError {
@@ -331,9 +341,14 @@ impl View {
     /// The view as plain text, for a terminal or any client that shows only text.
     pub fn text(&self) -> String {
         match self {
-            View::Impact { start, headline, affected } => {
+            View::Impact { start, headline, affected, linked } => {
                 let mut out = format!("{headline}\nStarting from {} ({}).", start.name, words(&start.kind));
-                if affected.is_empty() {
+                if !linked {
+                    out.push_str(&format!(
+                        "\n{} has no saved links to follow, so this cannot show what it affects. Link it to the things it touches (entity_relate), then ask again.",
+                        start.name
+                    ));
+                } else if affected.is_empty() {
                     out.push_str("\nNothing else is affected.");
                 }
                 for (i, a) in affected.iter().enumerate() {
@@ -491,6 +506,7 @@ mod tests {
                 Affected { entity: shipment, path: vec![carries.clone()], why: "It is on the truck.".into() },
                 Affected { entity: order, path: vec![carries, fulfils], why: "Its shipment is late.".into() },
             ],
+            linked: true,
         };
         assert_eq!(
             view.text(),
@@ -498,6 +514,17 @@ mod tests {
              1. Shipment 88 (shipment), via Truck 7 carries Shipment 88. It is on the truck.\n\
              2. Order 12 (order), via Truck 7 carries Shipment 88, then Shipment 88 part of Order 12. Its shipment is late."
         );
+    }
+
+    #[test]
+    fn an_impact_view_with_no_saved_links_says_so_instead_of_nothing_affected() {
+        let start = e("entity:t", "Truck 4", "truck");
+        let bare = View::Impact { start: start.clone(), headline: "Truck 4 is a day late.".into(), affected: vec![], linked: false };
+        let text = bare.text();
+        assert!(text.contains("Truck 4 has no saved links to follow") && text.contains("entity_relate"), "{text}");
+        assert!(!text.contains("Nothing else is affected"), "{text}");
+        let linked = View::Impact { start, headline: "Truck 4 is a day late.".into(), affected: vec![], linked: true };
+        assert!(linked.text().ends_with("Nothing else is affected."));
     }
 
     #[test]

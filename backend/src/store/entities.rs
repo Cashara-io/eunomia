@@ -190,6 +190,14 @@ pub const EDGES_TOUCHING: Stmt = Stmt::at(
        RETURN array::concat($outs, $ins);"#,
     2, // two LETs, then the RETURN
 );
+/// Whether `$id` has any relation, either way, to an entity in its own vault `$vault`.
+pub const HAS_RELATION: Stmt = Stmt::at(
+    "entities.has_relation",
+    r#"LET $outs = (SELECT VALUE id FROM relates_to WHERE in = $id AND out.vault = $vault LIMIT 1);
+       LET $ins = (SELECT VALUE id FROM relates_to WHERE out = $id AND in.vault = $vault LIMIT 1);
+       RETURN array::len($outs) + array::len($ins) > 0;"#,
+    2, // two LETs, then the RETURN
+);
 /// Entities by id, in any vault: the caller checks each one's vault.
 pub const NODES_BY_ID: Stmt = Stmt::new("entities.nodes_by_id", "SELECT id, vault, kind, name, summary FROM $ids");
 /// Relations by id, in any vault: the caller checks both ends.
@@ -303,6 +311,7 @@ pub const ALL: &[&Stmt] = &[
     &MEMORIES_OF,
     &EDGES_AMONG,
     &EDGES_TOUCHING,
+    &HAS_RELATION,
     &NODES_BY_ID,
     &RELATIONS_BY_ID,
     &RECENT_FACTS,
