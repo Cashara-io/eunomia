@@ -3477,6 +3477,17 @@ async fn a_padded_label_is_stored_as_the_approved_label_it_was_grounded_as() {
     let rels = ok(app.tool("entities_get", json!({"id": a})).await)["relations"].clone();
     let labels: Vec<&str> = rels.as_array().unwrap().iter().filter_map(|r| r["label"].as_str()).collect();
     assert_eq!(labels, ["knows"], "one relation, stored under the approved label: {rels}");
+
+    // an edge stored padded before labels were trimmed is found again, not duplicated
+    let c = write(&app, "Cleo", "person").await["entity"]["id"].as_str().unwrap().to_string();
+    let a = a.as_str().unwrap();
+    app.db().await.test_raw().query(format!("RELATE {a}->relates_to->{c} SET label = ' knows ', owner = $u"))
+        .bind(("u", app.user.id.clone())).await.unwrap().check().unwrap();
+    ok(app.tool("code_relate", json!({"from_id": a, "to_id": c, "label": "knows"})).await);
+    ok(app.tool("entity_relate", json!({"from_id": a, "to_id": c, "label": "knows", "reason": "met at work"})).await);
+    let rels = ok(app.tool("entities_get", json!({"id": a})).await)["relations"].clone();
+    let to_cleo = rels.as_array().unwrap().iter().filter(|r| r.to_string().contains(&c)).count();
+    assert_eq!(to_cleo, 1, "the legacy padded edge is reused: {rels}");
 }
 
 #[tokio::test]

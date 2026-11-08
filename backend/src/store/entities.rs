@@ -51,7 +51,7 @@ pub const RELATE_RETURNING: Stmt = Stmt::new(
 pub const RELATE_WITH_REASON: Stmt = Stmt::at(
     "entities.relate_with_reason",
     r#"BEGIN TRANSACTION;
-        LET $existing = (SELECT * FROM relates_to WHERE in = $in AND out = $out AND label = $label LIMIT 1);
+        LET $existing = (SELECT * FROM relates_to WHERE in = $in AND out = $out AND (label = $label OR string::trim(label) = $label) LIMIT 1);
         LET $edge = IF array::len($existing) > 0 { $existing } ELSE {
             (RELATE $in->relates_to->$out SET label = $label, owner = $owner RETURN AFTER)
         };
@@ -75,7 +75,8 @@ pub const RELATE: Stmt =
 
 pub const FIND_RELATION: Stmt = Stmt::new(
     "entities.find_relation",
-    "SELECT * FROM relates_to WHERE in = $in AND out = $out AND label = $label LIMIT 1",
+    // `string::trim`: an edge stored before labels were trimmed is still the same relation
+    "SELECT * FROM relates_to WHERE in = $in AND out = $out AND (label = $label OR string::trim(label) = $label) LIMIT 1",
 );
 
 pub const DELETE_RECORD: Stmt = Stmt::new("entities.delete_record", "DELETE $id");
