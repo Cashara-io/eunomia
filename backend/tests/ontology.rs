@@ -156,6 +156,14 @@ async fn a_kind_rejected_into_another_sends_later_writes_there() {
     let batch = ok(app.tool("memory_write_batch", json!({"items": [{"subject_name": "Umbrella", "subject_kind": "client", "text": "Umbrella is a client"}]})).await);
     assert_eq!(batch["results"][0]["kind_mapped"], json!({"from": "client", "to": "customer"}), "{batch}");
 
+    // and so does the app's own create route, which says so too
+    let (status, made) = app.http("POST", "/api/entities", Some(json!({"kind": "client", "name": "Vandelay"})), true).await;
+    assert_eq!(status, 200, "{made}");
+    assert_eq!((made["kind"].as_str(), made["name"].as_str()), (Some("customer"), Some("Vandelay")), "{made}");
+    assert_eq!(made["kind_mapped"], json!({"from": "client", "to": "customer"}));
+    let (_, plain) = app.http("POST", "/api/entities", Some(json!({"kind": "customer", "name": "Kramerica"})), true).await;
+    assert!(plain.get("kind_mapped").is_none(), "{plain}");
+
     let types = ok(app.tool("entity_types", json!({})).await);
     let client = types["custom"].as_array().unwrap().iter().find(|k| k["kind"] == "client").unwrap();
     assert_eq!((client["status"].as_str(), client["merge_into"].as_str(), client["entities"].as_i64()), (Some("rejected"), Some("customer"), Some(1)));
@@ -336,6 +344,29 @@ async fn writes_still_work_on_an_org_database_before_the_migration() {
 
 
 #[tokio::test]
+async fn the_ontology_view_is_observed_only_on_an_org_database_before_the_migration() {
+    let app = TestApp::new().await;
+    let latte = write(&app, "Latte", "product").await["entity"]["id"].as_str().unwrap().to_string();
+    let cafe = write(&app, "Bean Bar", "cafe").await["entity"]["id"].as_str().unwrap().to_string();
+    ok(app.tool("code_relate", json!({"from_id": cafe, "to_id": latte, "label": "sells"})).await);
+    app.db()
+        .await
+        .test_raw()
+        .query("REMOVE TABLE ontology_kind; REMOVE TABLE ontology_link; REMOVE TABLE entity_property; REMOVE TABLE ontology_property; REMOVE TABLE ontology_metric")
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    let view = ok(app.tool("ontology_get", json!({})).await);
+    assert_eq!((kind(&view, "product")["status"].as_str(), kind(&view, "product")["entities"].as_i64()), (Some("observed"), Some(1)), "{view}");
+    assert_eq!(link(&view, "cafe", "sells", "product")["status"], "observed");
+    let (status, body) = app.http("GET", &format!("/api/vaults/{}/ontology", view["vault"].as_str().unwrap()), None, true).await;
+    assert_eq!(status, 200, "{body}");
+    let near = ok(app.tool("entities_neighbourhood", json!({"entity_id": cafe})).await);
+    assert_eq!(near["link_types"][0]["status"], "observed", "{near}");
+}
+
+#[tokio::test]
 async fn reads_and_writes_still_work_on_an_org_database_before_the_properties_migration() {
     let app = TestApp::new().await;
     let latte = write(&app, "Latte", "product").await["entity"]["id"].as_str().unwrap().to_string();
@@ -411,6 +442,53 @@ fn names(n: &Value) -> Vec<String> {
 
 async fn as_user(app: &TestApp, user: &eunomia_backend::models_user::User, tool: &str, args: Value) -> Value {
     eunomia_backend::authz::as_system(eunomia_backend::tools::registry::call(&app.state, user, tool, args)).await.unwrap()
+}
+
+/// The names of the statements run on this thread while it is held (each query's `store.query` span).
+#[derive(Clone, Default)]
+struct Ops(std::sync::Arc<std::sync::Mutex<Vec<String>>>);
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Ops {
+    fn on_new_span(&self, attrs: &tracing::span::Attributes<'_>, _: &tracing::span::Id, _: tracing_subscriber::layer::Context<'_, S>) {
+        struct Op(Option<String>);
+        impl tracing::field::Visit for Op {
+            fn record_str(&mut self, f: &tracing::field::Field, v: &str) {
+                if f.name() == "op" {
+                    self.0 = Some(v.to_string());
+                }
+            }
+            fn record_debug(&mut self, f: &tracing::field::Field, v: &dyn std::fmt::Debug) {
+                if f.name() == "op" {
+                    self.0 = Some(format!("{v:?}").trim_matches('"').to_string());
+                }
+            }
+        }
+        let mut op = Op(None);
+        attrs.record(&mut op);
+        if let Some(op) = op.0 {
+            self.0.lock().unwrap().push(op);
+        }
+    }
+}
+
+#[tokio::test]
+async fn the_neighbourhood_reads_only_the_link_types_it_found_not_the_whole_vault() {
+    use tracing_subscriber::layer::SubscriberExt;
+    let app = TestApp::new().await;
+    let ids = logistics(&app).await;
+    let vault = personal(&app).await;
+    let (status, _) = app.http_session("POST", &format!("/api/vaults/{vault}/ontology/links/decide"), Some(json!({"from_kind": "truck", "label": "carries", "to_kind": "shipment", "decision": {"action": "approve"}}))).await;
+    assert_eq!(status, 200);
+    let ops = Ops::default();
+    let n = {
+        let _held = tracing::subscriber::set_default(tracing_subscriber::registry().with(ops.clone()));
+        ok(app.tool("entities_neighbourhood", json!({"entity_id": ids["Truck 7"], "depth": 1})).await)
+    };
+    let ran = ops.0.lock().unwrap().clone();
+    assert!(ran.iter().any(|o| o == "ontology.links_labelled"), "{ran:?}");
+    assert!(!ran.iter().any(|o| o == "ontology.profile"), "the vault-wide profile is not on the chat's path: {ran:?}");
+    let types: Vec<(String, String)> = n["link_types"].as_array().unwrap().iter().map(|l| (l["label"].as_str().unwrap().to_string(), l["status"].as_str().unwrap().to_string())).collect();
+    assert_eq!(types, [("drives".to_string(), "observed".to_string()), ("carries".to_string(), "approved".to_string())], "{n}");
 }
 
 #[tokio::test]
@@ -817,6 +895,38 @@ async fn the_chat_streams_the_resolved_view_with_the_show_view_result_only() {
     let (_, history) = app.http("GET", &format!("/api/chat/threads/{thread_id}/history"), None, true).await;
     let stored: Vec<Value> = history.as_array().unwrap().iter().filter(|m| m["role"] == "tool").map(|m| serde_json::from_str(m["content"].as_str().unwrap()).unwrap()).collect();
     assert!(stored.iter().any(|r| r == shown), "{history}");
+}
+
+#[tokio::test]
+async fn the_chat_cannot_save_its_own_conclusion_but_saves_what_the_user_said() {
+    let app = TestApp::new().await;
+    let ids = logistics(&app).await;
+    let rel = edges_by_label(&app, &ids["Truck 7"]).await;
+    let view = impact(&ids["Truck 7"], json!([{"entity_id": ids["Shipment 88"], "path": [rel["carries"]], "why": "It is on the truck."}]));
+    let call = |i: usize, id: &str, name: &str, args: Value| json!({"index": i, "id": id, "function": {"name": name, "arguments": args.to_string()}});
+    let sse = |chunk: Value| format!("data: {chunk}\n\ndata: [DONE]\n\n");
+    let draw = json!({"choices": [{"delta": {"tool_calls": [call(0, "c1", "show_view", view)]}}]});
+    // then it tries to remember the headline it drew (its own conclusion) and the user's own words
+    let conclusion = json!({"subject_name": "Truck 7", "subject_kind": "truck", "text": "Truck 7 is two hours late."});
+    let fact = json!({"subject_name": "Truck 7", "subject_kind": "truck", "text": "The driver of Truck 7 called in sick today."});
+    let save = json!({"choices": [{"delta": {"tool_calls": [call(0, "c2", "memory_write", conclusion), call(1, "c3", "memory_write", fact)]}}]});
+    let reply = json!({"choices": [{"delta": {"content": "Shipment 88 will be late."}}]});
+    let mock = serve(vec![
+        route("POST", "/chat/completions", json!(null)).body("Not saved").raw(&sse(reply)).header("content-type", "text/event-stream"),
+        route("POST", "/chat/completions", json!(null)).body("\"role\":\"tool\"").raw(&sse(save)).header("content-type", "text/event-stream"),
+        route("POST", "/chat/completions", json!(null)).raw(&sse(draw)).header("content-type", "text/event-stream"),
+    ])
+    .await;
+    let (status, _) = app.http("PATCH", "/api/settings", Some(json!({"openai_base_url": mock.base})), true).await;
+    assert_eq!(status, 200);
+
+    let (thread_id, events) = chat(&app, "The driver of Truck 7 called in sick today. What does that affect?").await;
+    assert_eq!(events.iter().find(|e| e["type"] == "done").unwrap()["reply"], "Shipment 88 will be late.", "{events:?}");
+    let texts: Vec<Value> = app.db().await.test_raw().query("SELECT VALUE text FROM memory").await.unwrap().take(0).unwrap();
+    assert!(!texts.contains(&json!("Truck 7 is two hours late.")), "the drawn headline is not saved: {texts:?}");
+    assert!(texts.contains(&json!("The driver of Truck 7 called in sick today.")), "the user's own fact is: {texts:?}");
+    let (_, history) = app.http("GET", &format!("/api/chat/threads/{thread_id}/history"), None, true).await;
+    assert!(history.to_string().contains("Not saved"), "the model is told why: {history}");
 }
 
 // ------------------------------------------------------------ typed properties and grounded links
@@ -1306,6 +1416,7 @@ async fn metric_eval_reads_each_value_as_of_a_date_and_applies_filters() {
         {"name": "total_price", "expr": {"agg": "sum", "property": "price"}},
         {"name": "riverside_avg_price", "expr": {"agg": "avg", "property": "price", "filters": [{"property": "supplier", "op": "eq", "value": "Riverside Roasters"}]}},
         {"name": "launched_total", "expr": {"agg": "sum", "property": "price", "time_property": "launched_on", "grain": "month"}},
+        {"name": "sized", "expr": {"agg": "count", "property": "size"}},
     ])).await;
     let run = |name: &str, extra: Value| app.tool("metric_eval", eval_args(name, extra));
 
@@ -1328,6 +1439,14 @@ async fn metric_eval_reads_each_value_as_of_a_date_and_applies_filters() {
     assert!(words.ends_with(" where size is one of Large") && !words.contains(", and where"), "{large}");
     let cheap = ok(run("total_price", json!({"filters": [{"property": "price", "op": "lt", "value": 5}]})).await);
     assert_eq!(cheap["value"].as_f64(), Some(3.0));
+    // "is not Leaf Co" counts the Scone, which has no supplier at all
+    let not_leaf = ok(run("sized", json!({"filters": [{"property": "supplier", "op": "ne", "value": "Leaf Co"}]})).await);
+    assert_eq!((not_leaf["value"].as_f64(), not_leaf["n_entities"].as_u64()), (Some(3.0), Some(3)), "{not_leaf}");
+    let mut picked: Vec<&str> = not_leaf["entity_ids"].as_array().unwrap().iter().map(|v| v.as_str().unwrap()).collect();
+    picked.sort();
+    let mut want = vec![ids["Latte"].as_str(), ids["Mocha"].as_str(), ids["Scone"].as_str()];
+    want.sort();
+    assert_eq!(picked, want);
 
     // a series by the month each product launched, oldest first
     let series = ok(run("launched_total", json!({"group_by_grain": true})).await);
@@ -1951,6 +2070,19 @@ fn changed_ids(out: &Value) -> Vec<String> {
 }
 
 #[tokio::test]
+async fn a_what_if_takes_a_metric_by_name_and_kind_as_its_schema_says() {
+    let schema = eunomia_backend::tools::registry::find("scenario_run").unwrap().schema;
+    let forms = schema["properties"]["metrics"]["items"]["anyOf"].as_array().cloned().unwrap_or_default();
+    assert!(forms.iter().any(|f| f["type"] == "string"), "{schema}");
+    assert!(forms.iter().any(|f| f["type"] == "object" && f["required"] == json!(["metric", "kind"])), "the {{metric, kind}} form is advertised: {schema}");
+    let app = TestApp::new().await;
+    let (_, ids) = cafe_with_metrics(&app).await;
+    let args = json!({"changes": [{"remove": {"entity_id": ids["Tea"]}}], "metrics": [{"metric": "total_price", "kind": "product"}]});
+    let out = ok(app.tool("scenario_run", args).await);
+    assert_eq!(moves(&out)["total_price"], (Some(14.0), Some(11.0), Some(-3.0)), "{out}");
+}
+
+#[tokio::test]
 async fn a_what_if_moves_each_metric_by_the_amount_worked_out_by_hand() {
     let app = TestApp::new().await;
     let (_, ids) = cafe_with_metrics(&app).await;
@@ -2232,17 +2364,47 @@ async fn the_chat_runs_a_what_if_and_streams_the_scenario_view() {
     assert_eq!(done["reply"], "Total price goes from 14 to 15.10 AUD. Nothing was saved.", "{events:?}");
 }
 
+/// A price list with `n` rows, each a different item.
+fn price_rows(n: usize) -> String {
+    let mut csv = String::from("product,supplier,price AUD,unit,lead_time_days,status,warehouse\n");
+    for i in 0..n {
+        csv.push_str(&format!("Item {i},Supplier {},{}.50,kg,{},{},W{}\n", i % 40, i % 90 + 1, i % 30, if i % 7 == 0 { "Retired" } else { "Active" }, i % 5));
+    }
+    csv
+}
+
+#[tokio::test]
+async fn an_import_costs_one_rate_limit_unit_per_500_rows() {
+    use eunomia_backend::ratelimit::RateConfig;
+    let app = TestApp::new().await;
+    let big = upload_csv(&app, "big.csv", &price_rows(2600)).await;
+    let vault = approved_price_list(&app, &big).await;
+    approve_price_list(&app, &vault).await;
+    let import_on = |router: axum::Router, doc: String| {
+        let token = app.token.clone();
+        async move {
+            let args = json!({"document_id": doc, "kind": "supply_item", "name_column": "product"});
+            common::http(&router, "POST", "/api/tools/document_import_rows", Some(args), Some(&token), None).await.0
+        }
+    };
+    let limited = || eunomia_backend::app_with(app.state.clone(), RateConfig { token_per_min: 5, user_per_min: 0, ..RateConfig::default() });
+    // 2,600 rows cost 6 units, one more than a 5 a minute token has: refused before anything is written
+    let (_, out) = import_on(limited(), big.clone()).await;
+    assert_eq!(out["code"], "rate.limited", "{out}");
+    assert!(supply_items(&app).await.is_empty());
+    // 1,000 rows cost 2
+    let small = upload_csv(&app, "small.csv", &price_rows(1000)).await;
+    let (_, out) = import_on(limited(), small).await;
+    assert_eq!(ok(out)["created"], 1000);
+}
+
 /// The time a 5,000-row import takes, and that a re-run updates every row in place. Ignored by
 /// default: `cargo test --test ontology a_5000_row_import -- --ignored --nocapture` prints the times.
 #[tokio::test]
 #[ignore]
 async fn a_5000_row_import_is_timed_and_reruns_in_place() {
     let app = TestApp::new().await;
-    let mut csv = String::from("product,supplier,price AUD,unit,lead_time_days,status,warehouse\n");
-    for i in 0..5000 {
-        csv.push_str(&format!("Item {i},Supplier {},{}.50,kg,{},{},W{}\n", i % 40, i % 90 + 1, i % 30, if i % 7 == 0 { "Retired" } else { "Active" }, i % 5));
-    }
-    let doc = upload_csv(&app, "big.csv", &csv).await;
+    let doc = upload_csv(&app, "big.csv", &price_rows(5000)).await;
     let vault = approved_price_list(&app, &doc).await;
     approve_price_list(&app, &vault).await;
     let started = std::time::Instant::now();
