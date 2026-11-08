@@ -87,8 +87,11 @@ pub struct CoverageOut {
     /// What to do next, in one or two sentences.
     pub suggestion: String,
     /// `model` when the model picked the phrases and embeddings matched them, `words` when phrases are
-    /// split from the question and matched by name and synonym only.
+    /// matched by name and synonym only (split from the question when no model picked them).
     pub mode: String,
+    /// Set when embeddings failed and the phrases were matched by words instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub warning: Option<String>,
 }
 
 /// One approved term, as matching sees it.
@@ -342,13 +345,44 @@ pub async fn coverage(db: &OrgDb, settings: &Settings, owner: &RecordId, questio
         None => ("words", split_phrases(question)),
     };
 
-    let spec = if mode == "model" {
-        refresh(db, settings, owner, &vault).await?;
+    let (mode, (mut matched, mut uncovered), warning) = if mode == "model" {
+        match match_phrases(db, settings, owner, &vault, &phrases, true).await {
+            Ok(found) => ("model", found, None),
+            Err(e) => {
+                tracing::warn!(error = %e.message, "coverage: embeddings failed, matching by name and synonym");
+                let warning = "Embeddings are unavailable right now, so phrases were matched by name and synonym only.".to_string();
+                ("words", match_phrases(db, settings, owner, &vault, &phrases, false).await?, Some(warning))
+            }
+        }
+    } else {
+        ("words", match_phrases(db, settings, owner, &vault, &phrases, false).await?, None)
+    };
+    // keep the question's order
+    let order: HashMap<&String, usize> = phrases.iter().enumerate().map(|(i, p)| (p, i)).collect();
+    matched.sort_by_key(|m| order.get(&m.phrase).copied().unwrap_or(usize::MAX));
+    uncovered.sort_by_key(|p| order.get(p).copied().unwrap_or(usize::MAX));
+
+    let coverage = if phrases.is_empty() { 0.0 } else { ((matched.len() as f64 / phrases.len() as f64) * 100.0).round() / 100.0 };
+    let suggestion = suggest(&phrases, &matched, &uncovered);
+    Ok(CoverageOut { vault: vault.to_string(), coverage, matched, uncovered, suggestion, mode: mode.to_string(), warning })
+}
+
+/// Each phrase's approved term, and the phrases no term covers.
+async fn match_phrases(
+    db: &OrgDb,
+    settings: &Settings,
+    owner: &RecordId,
+    vault: &RecordId,
+    phrases: &[String],
+    with_embeddings: bool,
+) -> AppResult<(Vec<Matched>, Vec<String>)> {
+    let spec = if with_embeddings {
+        refresh(db, settings, owner, vault).await?;
         Some(embeddings::spec_for(db, settings, owner).await?.tag())
     } else {
         None
     };
-    let terms = candidates(db, &vault, None).await?;
+    let terms = candidates(db, vault, None).await?;
     let by_id: HashMap<String, &Candidate> = terms.iter().filter_map(|c| c.id.as_ref().map(|id| (id.to_string(), c))).collect();
 
     let mut matched: Vec<Matched> = Vec::new();
@@ -356,7 +390,7 @@ pub async fn coverage(db: &OrgDb, settings: &Settings, owner: &RecordId, questio
     let mut to_embed: Vec<String> = Vec::new();
     let named = |phrase: &String, c: &Candidate, distance: f64| Matched { phrase: phrase.clone(), term: c.term, name: c.name.clone(), of_kind: c.of_kind.clone(), distance };
     // a name or synonym first; then, with a model, the nearest term by meaning; a run of words last
-    for phrase in &phrases {
+    for phrase in phrases {
         match exact(phrase, &terms) {
             Some(c) => matched.push(named(phrase, c, 0.0)),
             None if spec.is_some() => to_embed.push(phrase.clone()),
@@ -371,7 +405,7 @@ pub async fn coverage(db: &OrgDb, settings: &Settings, owner: &RecordId, questio
     {
         let vectors = embeddings::embed(db, settings, &to_embed, Some(owner)).await?;
         for (phrase, v) in to_embed.iter().zip(vectors) {
-            let best = nearest(db, &vault, spec, &v)
+            let best = nearest(db, vault, spec, &v)
                 .await?
                 .into_iter()
                 .filter(|n| n.distance <= MAX_DISTANCE)
@@ -384,14 +418,7 @@ pub async fn coverage(db: &OrgDb, settings: &Settings, owner: &RecordId, questio
             }
         }
     }
-    // keep the question's order
-    let order: HashMap<&String, usize> = phrases.iter().enumerate().map(|(i, p)| (p, i)).collect();
-    matched.sort_by_key(|m| order.get(&m.phrase).copied().unwrap_or(usize::MAX));
-    uncovered.sort_by_key(|p| order.get(p).copied().unwrap_or(usize::MAX));
-
-    let coverage = if phrases.is_empty() { 0.0 } else { ((matched.len() as f64 / phrases.len() as f64) * 100.0).round() / 100.0 };
-    let suggestion = suggest(&phrases, &matched, &uncovered);
-    Ok(CoverageOut { vault: vault.to_string(), coverage, matched, uncovered, suggestion, mode: mode.to_string() })
+    Ok((matched, uncovered))
 }
 
 fn suggest(phrases: &[String], matched: &[Matched], uncovered: &[String]) -> String {

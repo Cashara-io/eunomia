@@ -2836,6 +2836,17 @@ async fn coverage_finds_a_vaults_term_when_another_vault_holds_nearer_ones() {
     assert_eq!(out["matched"][0]["name"], "supplier", "{out}");
 }
 
+#[tokio::test]
+async fn coverage_matches_by_words_when_embeddings_fail() {
+    let base = coverage_model(vec![("mean price", json!(["mean price", "products"]))], false).await;
+    let app = TestApp::with_settings(Settings { openai_base_url: base, openai_api_key: Some("sk-test".into()), openai_chat_model: "test-model".into(), ..test_settings() }).await;
+    cafe_for_coverage(&app).await;
+    let out = ok(app.tool("ontology_coverage", json!({"question": "What is the mean price of our products?"})).await);
+    assert_eq!((out["mode"].as_str(), out["coverage"].as_f64()), (Some("words"), Some(1.0)), "{out}");
+    assert_eq!(out["matched"][0]["name"], "avg_price", "{out}");
+    assert!(out["warning"].as_str().is_some_and(|w| w.contains("name and synonym")), "{out}");
+}
+
 #[test]
 fn the_ontology_tool_eval_list_names_only_registered_tools() {
     let evals: Value = serde_json::from_str(include_str!("../../docs/evals/ontology-tools.json")).unwrap();
