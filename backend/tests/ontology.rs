@@ -2231,3 +2231,29 @@ async fn the_chat_runs_a_what_if_and_streams_the_scenario_view() {
     let done = events.iter().find(|e| e["type"] == "done").unwrap();
     assert_eq!(done["reply"], "Total price goes from 14 to 15.10 AUD. Nothing was saved.", "{events:?}");
 }
+
+/// The time a 5,000-row import takes, and that a re-run updates every row in place. Ignored by
+/// default: `cargo test --test ontology a_5000_row_import -- --ignored --nocapture` prints the times.
+#[tokio::test]
+#[ignore]
+async fn a_5000_row_import_is_timed_and_reruns_in_place() {
+    let app = TestApp::new().await;
+    let mut csv = String::from("product,supplier,price AUD,unit,lead_time_days,status,warehouse\n");
+    for i in 0..5000 {
+        csv.push_str(&format!("Item {i},Supplier {},{}.50,kg,{},{},W{}\n", i % 40, i % 90 + 1, i % 30, if i % 7 == 0 { "Retired" } else { "Active" }, i % 5));
+    }
+    let doc = upload_csv(&app, "big.csv", &csv).await;
+    let vault = approved_price_list(&app, &doc).await;
+    approve_price_list(&app, &vault).await;
+    let started = std::time::Instant::now();
+    let out = ok(import(&app, &doc).await);
+    let first = started.elapsed();
+    assert_eq!((out["created"].as_i64(), out["values"].as_i64(), out["bad_count"].as_i64()), (Some(5000), Some(15000), Some(0)), "{out}");
+    let started = std::time::Instant::now();
+    let again = ok(import(&app, &doc).await);
+    let second = started.elapsed();
+    assert_eq!((again["created"].as_i64(), again["updated"].as_i64(), again["values"].as_i64()), (Some(0), Some(5000), Some(15000)), "{again}");
+    let rows: Vec<Value> = app.db().await.test_raw().query("SELECT count() AS n FROM entity_property GROUP ALL").await.unwrap().take(0).unwrap();
+    assert_eq!(rows[0]["n"], 15000);
+    eprintln!("5000-row import: first run {first:?}, re-run {second:?}");
+}
