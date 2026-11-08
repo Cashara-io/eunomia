@@ -266,7 +266,8 @@ pub async fn create(state: &OrgState, user: &RecordId, args: Value) -> AppResult
     }
 
     // SurrealDB transactions are snapshot isolated: two that each count 9 and insert a different row
-    // both commit, so the count-and-create transaction alone cannot hold the cap. One at a time per person.
+    // both commit, so the count-and-create transaction alone cannot hold the cap. One at a time per person
+    // (this holds within one backend process).
     let _one_at_a_time = crate::tx::lock(&format!("secret_request.pending:{}", user.to_string())).await;
     // a retry gets the same pending request
     let same: Vec<RequestRow> = q::REQ_PENDING_SAME
