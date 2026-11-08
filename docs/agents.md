@@ -327,6 +327,15 @@ delivered" counts one with no status), and for a series `time_property` (a date 
 `month`, `quarter` or `year`). Every property must be on the kind and every value must fit its datatype;
 anything else, including query text, is refused when proposed.
 
+Instead of a `property`, `sum`, `avg`, `min` and `max` (and a ratio's sides) take a `row`: a value worked out
+for each entity, `{"op": "mul", "left": "stock", "right": "cost"}`, where `op` is `mul`, `sub`, `add` or `div`
+and each side is a numeric property, a number or another row (at most 3 deep). Total stock value is
+`{"agg": "sum", "row": {"op": "mul", "left": "stock", "right": "cost"}}` ("Sum of stock × cost"); gross margin is
+a ratio of `{"agg": "sum", "row": {"op": "sub", "left": "price", "right": "cost"}}` over
+`{"agg": "sum", "property": "price"}`. Units are checked when proposed: money times a number is money, money
+minus money of one currency is money, money over money is a share, and money times money is refused. An entity
+whose row divides by 0 is left out and counted in `warnings`. A what-if's changed values flow through rows too.
+
 `metric_eval` also takes extra `filters` (ANDed with the metric's own), `as_of` (each entity's latest value
 by then; a bare date includes its day), `group_by_grain` (a `series` of `{period, value, n}` instead of one
 value) and `kind` (when two kinds have a metric of that name). A proposed metric is refused unless you pass

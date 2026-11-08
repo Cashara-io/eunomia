@@ -9,6 +9,8 @@ expression: stable
   "created": 2,
   "updated": 0,
   "values": 1,
+  "linked": 0,
+  "targets_created": 0,
   "columns": [
     {
       "column": "price",

@@ -157,7 +157,7 @@ pub struct SourceField {
     pub path: String,
 }
 
-fn clean_source_map(fields: &[SourceField]) -> AppResult<Vec<SourceField>> {
+pub(super) fn clean_source_map(fields: &[SourceField]) -> AppResult<Vec<SourceField>> {
     if fields.len() > MAX_SOURCE_FIELDS {
         return Err(AppError::bad_request(format!("a property is mapped from at most {MAX_SOURCE_FIELDS} fields")));
     }

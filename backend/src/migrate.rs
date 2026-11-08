@@ -48,6 +48,7 @@ pub const MIGRATIONS: &[(u32, &str, &str)] = &[
     (35, "ontology_metrics", include_str!("../migrations/tenant/0035_ontology_metrics.surql")),
     (36, "ontology_automap", include_str!("../migrations/tenant/0036_ontology_automap.surql")),
     (37, "ontology_coverage", include_str!("../migrations/tenant/0037_ontology_coverage.surql")),
+    (38, "ontology_link_source", include_str!("../migrations/tenant/0038_ontology_link_source.surql")),
 ];
 
 /// The tenant schema version this code writes. An org database is current at this version.

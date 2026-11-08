@@ -9096,6 +9096,13 @@
           "column": {
             "type": "string"
           },
+          "link": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The approved link type whose targets it names (\"supplied_by supplier\"), when no property takes it."
+          },
           "property": {
             "type": [
               "string",
@@ -9124,6 +9131,13 @@
         "properties": {
           "column": {
             "type": "string"
+          },
+          "link": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The link type whose targets it named (\"supplied_by supplier\")."
           },
           "property": {
             "type": [
@@ -10678,6 +10692,8 @@
           "created",
           "updated",
           "values",
+          "linked",
+          "targets_created",
           "columns",
           "bad",
           "bad_count"
@@ -10711,9 +10727,18 @@
           "kind": {
             "type": "string"
           },
+          "linked": {
+            "type": "integer",
+            "description": "Relations this run wrote (a re-run writes none), and the link targets it created by name.",
+            "minimum": 0
+          },
           "rows": {
             "type": "integer",
             "description": "Data rows in the file.",
+            "minimum": 0
+          },
+          "targets_created": {
+            "type": "integer",
             "minimum": 0
           },
           "updated": {
@@ -10764,7 +10789,7 @@
               "string",
               "null"
             ],
-            "description": "The column that names each row's entity: the first one no property is mapped from."
+            "description": "The column that names each row's entity: the first one no property or link is mapped from."
           },
           "ready": {
             "type": "boolean",
@@ -11421,6 +11446,13 @@
               "$ref": "#/components/schemas/LinkSample"
             }
           },
+          "source_map": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SourceField"
+            },
+            "description": "The record fields or CSV columns that name each relation's target, from auto-mapping: a CSV\nimport finds or creates the entity a cell names and writes the relation."
+          },
           "status": {
             "$ref": "#/components/schemas/ViewStatus"
           },
@@ -11951,6 +11983,17 @@
               "null"
             ],
             "description": "The measured property: needed by sum, avg, min, max and count_distinct; count counts the\nentities that have it, or every entity without it."
+          },
+          "row": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RowExpr",
+                "description": "Instead of a property: a value worked out per entity, such as stock × cost (sum, avg, min and\nmax only)."
+              }
+            ]
           },
           "time_property": {
             "type": [
@@ -13648,6 +13691,52 @@
           }
         }
       },
+      "RowExpr": {
+        "type": "object",
+        "description": "A value worked out for each entity before the metric combines them, such as stock × cost: two\nterms and an operation, nested at most [`MAX_ROW_DEPTH`] deep. Typed data, never query text.",
+        "required": [
+          "op",
+          "left",
+          "right"
+        ],
+        "properties": {
+          "left": {
+            "$ref": "#/components/schemas/RowTerm"
+          },
+          "op": {
+            "$ref": "#/components/schemas/RowOp"
+          },
+          "right": {
+            "$ref": "#/components/schemas/RowTerm"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RowOp": {
+        "type": "string",
+        "description": "How a row expression combines two values of one entity.",
+        "enum": [
+          "mul",
+          "sub",
+          "add",
+          "div"
+        ]
+      },
+      "RowTerm": {
+        "oneOf": [
+          {
+            "type": "number",
+            "format": "double"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "$ref": "#/components/schemas/RowExpr"
+          }
+        ],
+        "description": "One side of a row expression: a number, a property of the kind, or another row expression."
+      },
       "Rule": {
         "type": "object",
         "required": [
@@ -14167,6 +14256,17 @@
             "type": [
               "string",
               "null"
+            ]
+          },
+          "row": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RowExpr",
+                "description": "Instead of a property: a value worked out per entity (sum, avg, min and max only)."
+              }
             ]
           }
         },

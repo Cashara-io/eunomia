@@ -419,6 +419,31 @@ async fn a_property_row_from_before_source_maps_still_takes_proposals_after_the_
     assert_eq!(property(&o, "product", "price")["source_map"], json!([mapped]));
 }
 
+#[tokio::test]
+async fn a_link_row_from_before_link_sources_still_takes_decisions_and_columns_after_the_upgrade() {
+    let app = TestApp::new().await;
+    ok(app.tool("ontology_propose", json!({"links": [{"from_kind": "product", "label": "supplied_by", "to_kind": "organisation"}]})).await);
+    let db = app.db().await;
+    // the row as 0037 left it: no source_map field at all
+    db.test_raw()
+        .query("REMOVE FIELD source_map[*].source ON ontology_link; REMOVE FIELD source_map[*].record_type ON ontology_link; REMOVE FIELD source_map[*].path ON ontology_link; REMOVE FIELD source_map ON ontology_link; UPDATE ontology_link UNSET source_map;")
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    // an agent's proposal, with no columns, still writes before the migration (a rolling upgrade)
+    ok(app.tool("ontology_propose", json!({"links": [{"from_kind": "product", "label": "supplied_by", "to_kind": "organisation", "reason": "again"}]})).await);
+    db.test_raw().query(include_str!("../migrations/tenant/0038_ontology_link_source.surql")).await.unwrap().check().unwrap();
+    let vault = personal(&app).await;
+    let body = json!({"from_kind": "product", "label": "supplied_by", "to_kind": "organisation", "decision": {"action": "describe", "description": "Who sells it to us"}});
+    let (status, body) = app.http_session("POST", &format!("/api/vaults/{vault}/ontology/links/decide"), Some(body)).await;
+    assert_eq!(status, 200, "{body}");
+    let mapped = json!({"source": "document", "record_type": "document:abc", "path": "supplier"});
+    ok(app.tool("ontology_propose", json!({"links": [{"from_kind": "product", "label": "supplied_by", "to_kind": "organisation", "source_map": [mapped.clone()]}]})).await);
+    let o = ok(app.tool("ontology_get", json!({})).await);
+    assert_eq!(link(&o, "product", "supplied_by", "organisation")["source_map"], json!([mapped]));
+}
+
 // ------------------------------------------------------------ what a change affects: the neighbourhood
 
 /// A small logistics chain in the personal vault: Ana drives Truck 7, which carries Shipment 88, which
@@ -1821,11 +1846,22 @@ async fn automap_with_a_model_proposes_and_keeps_only_links_whose_values_match()
     // two of the three suppliers are organisations in the vault: kept, with the share as its reason
     let kept = link(o, "supply_item", "supplied_by", "organisation");
     assert_eq!((kept["status"].as_str(), kept["reason"].as_str()), (Some("proposed"), Some("67% of values match (2 of 3)")));
-    // no warehouse matches anything: dropped
-    assert!(o["links"].as_array().unwrap().iter().all(|l| l["label"] != "stored_in"), "{o}");
+    // no warehouse kind exists: it is proposed with the link, and an import creates each one named
+    assert_eq!(kind(o, "warehouse")["status"], "proposed", "{o}");
+    let stored = link(o, "supply_item", "stored_in", "warehouse");
+    assert_eq!(stored["source_map"], json!([{"source": "document", "record_type": doc, "path": "warehouse"}]));
     let checks = out["links"].as_array().unwrap();
-    let dropped = checks.iter().find(|c| c["label"] == "stored_in").unwrap();
-    assert_eq!((dropped["kept"].as_bool(), dropped["matched"].as_i64(), dropped["reason"].as_str()), (Some(false), Some(0), Some("no value matches (0 of 3)")));
+    let created = checks.iter().find(|c| c["label"] == "stored_in").unwrap();
+    assert_eq!((created["kept"].as_bool(), created["matched"].as_i64()), (Some(true), Some(0)), "{created}");
+    // a kind that has entities, none of them named in the column: dropped
+    write(&app, "Northside Depot", "depot").await;
+    let mut answer = automap_answer(&doc);
+    answer["record_types"][0]["links"] = json!([{"field": "warehouse", "label": "kept_at", "to_kind": "depot", "target": null}]);
+    mock.set_routes(vec![route("POST", "/chat/completions", json!({"choices": [{"message": {"content": answer.to_string()}}]}))]);
+    let again = ok(app.tool("ontology_automap", json!({"document_id": doc})).await);
+    let dropped = again["links"].as_array().unwrap().iter().find(|c| c["label"] == "kept_at").unwrap().clone();
+    assert_eq!((dropped["kept"].as_bool(), dropped["reason"].as_str()), (Some(false), Some("no value matches (0 of 3)")), "{again}");
+    assert!(again["ontology"]["links"].as_array().unwrap().iter().all(|l| l["label"] != "kept_at"));
     let mapped = &out["record_types"][0];
     assert_eq!((mapped["kind"].as_str(), mapped["name_field"].as_str()), (Some("supply_item"), Some("product")));
     assert_eq!(mapped["unmapped"], json!([]), "{mapped}");
@@ -3007,4 +3043,192 @@ async fn the_chat_answers_a_number_from_the_space_coverage_returned() {
     assert_eq!((results[0]["vault"].as_str(), results[0]["vault_name"].as_str()), (Some(team.as_str()), Some("Northside Bikes")), "coverage found the org space: {results:?}");
     assert!(err(&results[1]).contains("avg_price is in Northside Bikes"), "{results:?}");
     assert_eq!(results[2]["value"].as_f64(), Some(664.475), "{results:?}");
+}
+
+// ------------------------------------------------------------ the gate's bike shop: links and row maths
+
+const PARTS: &str = include_str!("fixtures/parts.csv");
+
+/// The model's map of parts.csv: kind part, its typed columns, the supplier column as a link to a
+/// supplier kind no one has proposed yet, and two metrics with per-row maths.
+fn parts_answer(doc: &str) -> Value {
+    let p = |name: &str, datatype: &str, unit: Option<&str>, col: &str| json!({"name": name, "datatype": datatype, "unit": unit, "fields": [col]});
+    json!({"record_types": [{
+        "source": "document", "record_type": doc, "kind": "part", "name_field": "part",
+        "properties": [
+            p("price", "money", Some("AUD"), "price AUD"), p("cost", "money", Some("AUD"), "cost AUD"),
+            p("stock", "integer", None, "stock"), p("reorder_level", "integer", None, "reorder_level"),
+            {"name": "status", "datatype": "enum", "enum_values": ["Active", "On order", "Discontinued"], "fields": ["status"]},
+            p("last_ordered", "date", None, "last_ordered"),
+        ],
+        "links": [{"field": "supplier", "label": "supplied_by", "to_kind": "supplier", "target": null}],
+        "metrics": [
+            {"name": "total_stock_value", "description": "What the stock on hand cost us", "expr": {"agg": "sum", "row": {"op": "mul", "left": "stock", "right": "cost"}}},
+            {"name": "gross_margin", "description": "The share of the price we keep", "expr": {"agg": "ratio",
+                "numerator": {"agg": "sum", "row": {"op": "sub", "left": "price", "right": "cost"}}, "denominator": {"agg": "sum", "property": "price"}}},
+            {"name": "bad_value", "expr": {"agg": "sum", "row": {"op": "mul", "left": "price", "right": "cost"}}},
+        ],
+    }]})
+}
+
+#[tokio::test]
+async fn automap_links_parts_to_suppliers_the_import_creates_once_and_row_maths_answer_the_gate() {
+    let mock = serve(vec![route("POST", "/chat/completions", json!({}))]).await;
+    let app = TestApp::with_settings(model_app_settings(&mock)).await;
+    let doc = upload_csv(&app, "parts.csv", PARTS).await;
+    mock.set_routes(vec![route("POST", "/chat/completions", json!({"choices": [{"message": {"content": parts_answer(&doc).to_string()}}]}))]);
+
+    // auto-map proposes the supplier kind with the link, since no supplier exists yet
+    let out = ok(app.tool("ontology_automap", json!({"document_id": doc})).await);
+    let o = &out["ontology"];
+    assert_eq!((kind(o, "supplier")["status"].as_str(), kind(o, "supplier")["origin"].as_str()), (Some("proposed"), Some("suggested")), "{o}");
+    let l = link(o, "part", "supplied_by", "supplier");
+    assert_eq!(l["source_map"], json!([{"source": "document", "record_type": doc, "path": "supplier"}]), "{l}");
+    let check = out["links"].as_array().unwrap().iter().find(|c| c["label"] == "supplied_by").unwrap();
+    assert_eq!((check["kept"].as_bool(), check["reason"].as_str()), (Some(true), Some("no supplier exists yet: an import creates the 4 named in supplier once each")), "{check}");
+    // the metrics with row maths are proposed and read naturally; money times money is not
+    let words = |name: &str| metric(o, "part", name)["expr_words"].as_str().unwrap().to_string();
+    assert_eq!(words("total_stock_value"), "Sum of stock × cost");
+    assert_eq!(words("gross_margin"), "Sum of (price − cost), divided by sum of price");
+    assert!(kind(o, "part")["metrics"].as_array().unwrap().iter().all(|m| m["name"] != "bad_value"), "{o}");
+
+    // the owner approves the map
+    let vault = personal(&app).await;
+    for k in ["part", "supplier"] {
+        assert_eq!(decide_kind(&app, &vault, k, json!({"action": "approve"})).await.0, 200);
+    }
+    for p in ["price", "cost", "stock", "reorder_level", "status", "last_ordered"] {
+        assert_eq!(decide_property(&app, &vault, "part", p, json!({"action": "approve"})).await.0, 200, "{p}");
+    }
+    for m in ["total_stock_value", "gross_margin"] {
+        assert_eq!(decide_metric(&app, &vault, "part", m, json!({"action": "approve"})).await.0, 200, "{m}");
+    }
+    assert_eq!(decide_link(&app, &vault, "part", "supplied_by", "supplier").await, 200);
+    // a later proposal cannot move the columns of a link the owner already decided
+    let moved = json!([{"source": "document", "record_type": doc, "path": "price AUD"}]);
+    ok(app.tool("ontology_propose", json!({"links": [{"from_kind": "part", "label": "supplied_by", "to_kind": "supplier", "source_map": moved}]})).await);
+    let o = ok(app.tool("ontology_get", json!({})).await);
+    assert_eq!(link(&o, "part", "supplied_by", "supplier")["source_map"], json!([{"source": "document", "record_type": doc, "path": "supplier"}]), "{o}");
+    let (_, profile) = app.http("GET", &format!("/api/documents/{doc}/profile"), None, true).await;
+    let plan = profile["import"]["columns"].as_array().unwrap().iter().find(|c| c["column"] == "supplier").unwrap().clone();
+    assert_eq!((plan["link"].as_str(), profile["import"]["name_column"].as_str()), (Some("supplied_by supplier"), Some("part")), "{profile}");
+
+    // the import creates each supplier once ("shimano oceania" is Shimano Oceania) and links every part
+    let args = json!({"document_id": doc, "kind": "part", "name_column": "part"});
+    let first = ok(app.tool("document_import_rows", args.clone()).await);
+    assert_eq!((first["created"].as_u64(), first["targets_created"].as_u64(), first["linked"].as_u64(), first["bad_count"].as_u64()), (Some(25), Some(4), Some(25), Some(0)), "{first}");
+    let supplier_col = first["columns"].as_array().unwrap().iter().find(|c| c["column"] == "supplier").unwrap().clone();
+    assert_eq!(supplier_col["link"], "supplied_by supplier", "{first}");
+    let again = ok(app.tool("document_import_rows", args).await);
+    assert_eq!((again["created"].as_u64(), again["updated"].as_u64(), again["targets_created"].as_u64(), again["linked"].as_u64()), (Some(0), Some(25), Some(0), Some(0)), "a re-run adds nothing: {again}");
+    let o = ok(app.tool("ontology_get", json!({})).await);
+    assert_eq!(kind(&o, "supplier")["entities"], 4, "{o}");
+    assert_eq!(link(&o, "part", "supplied_by", "supplier")["count"], 25);
+    let found = ok(app.tool("entities_search", json!({"query": "Shimano Oceania", "kind": "supplier"})).await);
+    let shimano = found["results"].as_array().unwrap().iter().find(|r| r["name"] == "Shimano Oceania").unwrap_or_else(|| panic!("{found}"))["id"].as_str().unwrap().to_string();
+
+    // the numbers, worked out by hand from parts.csv
+    let eval = |m: &str| app.tool("metric_eval", json!({"metric": m}));
+    let tsv = ok(eval("total_stock_value").await);
+    assert_eq!((tsv["value"].as_f64(), tsv["unit"].as_str(), tsv["n_entities"].as_u64()), (Some(14062.25), Some("AUD"), Some(25)), "{tsv}");
+    assert_eq!(ok(eval("gross_margin").await)["value"].as_f64(), Some(0.30265));
+
+    // Shimano raises cost 8%: the 7 Shimano parts, picked by the link, move both metrics
+    let changes = json!([{"scale": {"kind": "part", "property": "cost", "factor": 1.08, "related_to": {"entity_id": shimano, "label": "supplied_by"}}}]);
+    let out = ok(app.tool("scenario_run", json!({"changes": changes, "metrics": ["total_stock_value", "gross_margin"]})).await);
+    assert_eq!(out["n_changed"], 7, "{out}");
+    assert_eq!(out["changes"][0], "Part cost up 8% on 7 parts supplied by Shimano Oceania");
+    let after = |m: &str| out["scenario"].as_array().unwrap().iter().find(|s| s["metric"] == m).unwrap()["value"].as_f64();
+    assert_eq!((after("total_stock_value"), after("gross_margin")), (Some(14400.97), Some(0.288303)), "{out}");
+}
+
+#[tokio::test]
+async fn row_maths_is_typed_checked_for_units_and_skips_a_row_that_divides_by_zero() {
+    let app = TestApp::new().await;
+    let doc = upload_csv(&app, "parts.csv", PARTS).await;
+    let vault = personal(&app).await;
+    let source = |col: &str| json!([{"source": "document", "record_type": doc, "path": col}]);
+    ok(app.tool("ontology_propose", json!({"kinds": [{"kind": "part"}], "properties": [
+        {"kind": "part", "name": "price", "datatype": "money", "unit": "AUD", "source_map": source("price AUD")},
+        {"kind": "part", "name": "cost", "datatype": "money", "unit": "AUD", "source_map": source("cost AUD")},
+        {"kind": "part", "name": "stock", "datatype": "integer", "source_map": source("stock")},
+        {"kind": "part", "name": "status", "datatype": "text", "source_map": source("status")},
+    ]})).await);
+    assert_eq!(decide_kind(&app, &vault, "part", json!({"action": "approve"})).await.0, 200);
+    for p in ["price", "cost", "stock", "status"] {
+        assert_eq!(decide_property(&app, &vault, "part", p, json!({"action": "approve"})).await.0, 200);
+    }
+    ok(app.tool("document_import_rows", json!({"document_id": doc, "kind": "part", "name_column": "part"})).await);
+
+    let propose = |name: &str, expr: Value| app.tool("ontology_propose", json!({"metrics": [{"kind": "part", "name": name, "expr": expr}]}));
+    let row = |op: &str, l: Value, r: Value| json!({"op": op, "left": l, "right": r});
+    for (expr, says) in [
+        (json!({"agg": "sum", "row": row("mul", json!("price"), json!("cost"))}), "money times money"),
+        (json!({"agg": "sum", "row": row("sub", json!("price"), json!("stock"))}), "do not add or subtract"),
+        (json!({"agg": "sum", "row": row("div", json!("stock"), json!("price"))}), "dividing by money"),
+        (json!({"agg": "sum", "row": row("mul", json!("status"), json!(2))}), "is text"),
+        (json!({"agg": "sum", "row": row("mul", json!("weight"), json!(2))}), "not a property"),
+        (json!({"agg": "count", "row": row("mul", json!("stock"), json!(2))}), "takes no row"),
+        (json!({"agg": "sum", "property": "cost", "row": row("mul", json!("stock"), json!(2))}), "not both"),
+        (json!({"agg": "sum", "row": row("add", json!(1), row("add", json!(1), row("add", json!(1), row("add", json!(1), json!("stock")))))}), "at most 3 deep"),
+    ] {
+        let out = propose("refused", expr.clone()).await;
+        assert!(err(&out).contains(says), "{expr}: {out}");
+    }
+    // query text never gets in: a row is typed data, not a formula string
+    for expr in [json!({"agg": "sum", "row": "stock * cost"}), json!({"agg": "sum", "row": {"op": "mul", "left": "stock", "right": "cost", "sql": "1"}})] {
+        assert!(propose("refused", expr.clone()).await.get("error").is_some(), "{expr}");
+    }
+
+    // money times a number is money; a row that divides by 0 is left out and counted
+    ok(propose("stock_value_at_price", json!({"agg": "sum", "row": row("mul", json!("stock"), json!("price"))})).await);
+    ok(propose("cost_per_unit", json!({"agg": "avg", "row": row("div", json!("cost"), json!("stock"))})).await);
+    ok(propose("margin_at_10_off", json!({"agg": "max", "row": row("sub", row("mul", json!("price"), json!(0.9)), json!("cost"))})).await);
+    for m in ["stock_value_at_price", "cost_per_unit", "margin_at_10_off"] {
+        assert_eq!(decide_metric(&app, &vault, "part", m, json!({"action": "approve"})).await.0, 200);
+    }
+    let at_price = ok(app.tool("metric_eval", json!({"metric": "stock_value_at_price"})).await);
+    assert_eq!((at_price["value"].as_f64(), at_price["unit"].as_str()), (Some(21332.55), Some("AUD")), "{at_price}");
+    let per_unit = ok(app.tool("metric_eval", json!({"metric": "cost_per_unit"})).await);
+    assert_eq!((per_unit["value"].as_f64(), per_unit["n_entities"].as_u64()), (Some(149.413095), Some(21)), "{per_unit}");
+    assert!(per_unit["warnings"].to_string().contains("left out 4 entities whose row divides by 0"), "{per_unit}");
+    let off = ok(app.tool("metric_eval", json!({"metric": "margin_at_10_off"})).await);
+    assert_eq!((off["expr_words"].as_str(), off["unit"].as_str()), (Some("Highest of ((price × 0.9) − cost)"), Some("AUD")), "{off}");
+    assert_eq!(off["value"].as_f64(), Some(219.1), "1249 × 0.9 − 905, the groupset");
+
+    // a row too large for a number is left out and counted, never summed as infinity or null
+    ok(propose("cost_times_huge", json!({"agg": "sum", "row": row("mul", json!("cost"), json!(1e308))})).await);
+    assert_eq!(decide_metric(&app, &vault, "part", "cost_times_huge", json!({"action": "approve"})).await.0, 200);
+    let huge = ok(app.tool("metric_eval", json!({"metric": "cost_times_huge"})).await);
+    assert!(huge["warnings"].to_string().contains("left out 25 entities whose row is too large to compute"), "{huge}");
+    assert_eq!(huge["n_entities"].as_u64(), Some(0), "{huge}");
+}
+
+#[tokio::test]
+async fn a_property_named_like_the_column_wins_over_a_link_guessed_from_the_kind_name() {
+    let app = TestApp::new().await;
+    let doc = upload_csv(&app, "parts.csv", PARTS).await;
+    let vault = personal(&app).await;
+    ok(app.tool("ontology_propose", json!({
+        "kinds": [{"kind": "part"}, {"kind": "supplier"}],
+        "properties": [
+            {"kind": "part", "name": "supplier", "datatype": "text"},
+            {"kind": "part", "name": "price", "datatype": "money", "unit": "AUD", "source_map": [{"source": "document", "record_type": doc, "path": "price AUD"}]},
+        ],
+        "links": [{"from_kind": "part", "label": "supplied_by", "to_kind": "supplier"}],
+    })).await);
+    for k in ["part", "supplier"] {
+        assert_eq!(decide_kind(&app, &vault, k, json!({"action": "approve"})).await.0, 200);
+    }
+    for p in ["supplier", "price"] {
+        assert_eq!(decide_property(&app, &vault, "part", p, json!({"action": "approve"})).await.0, 200);
+    }
+    assert_eq!(decide_link(&app, &vault, "part", "supplied_by", "supplier").await, 200);
+    let (_, profile) = app.http("GET", &format!("/api/documents/{doc}/profile"), None, true).await;
+    let plan = profile["import"]["columns"].as_array().unwrap().iter().find(|c| c["column"] == "supplier").unwrap().clone();
+    assert_eq!((plan["property"].as_str(), plan["link"].as_str()), (Some("supplier"), None), "the preview says what the import does: {profile}");
+    let out = ok(app.tool("document_import_rows", json!({"document_id": doc, "kind": "part", "name_column": "part"})).await);
+    let col = out["columns"].as_array().unwrap().iter().find(|c| c["column"] == "supplier").unwrap().clone();
+    assert_eq!((col["property"].as_str(), col["link"].as_str()), (Some("supplier"), None), "{out}");
+    assert_eq!((out["targets_created"].as_u64(), out["linked"].as_u64()), (Some(0), Some(0)), "{out}");
 }

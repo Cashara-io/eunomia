@@ -1,6 +1,8 @@
 //! An uploaded CSV as a table: profiled like one record type (each column a field), auto-mapped like
 //! synced records, and, once an owner approved its kind and properties, imported row by row as
-//! entities with typed values whose source is the document.
+//! entities with typed values whose source is the document. A column an approved link type is mapped
+//! from names each row's target: the import finds or creates that entity by name and writes the
+//! relation.
 //!
 //! The document is still chunked and indexed as text (`documents`), so recall finds its rows either
 //! way. Parsing is capped in bytes, columns and rows. The import is idempotent: an entity is found or
@@ -126,6 +128,51 @@ pub struct ColumnPlan {
     /// The property it feeds, from its `source_map`.
     pub property: Option<String>,
     pub status: Option<Status>,
+    /// The approved link type whose targets it names ("supplied_by supplier"), when no property takes it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub link: Option<String>,
+}
+
+/// An approved link type from the imported kind.
+#[derive(Debug, Clone, Deserialize, SurrealValue)]
+struct LinkFrom {
+    label: String,
+    to_kind: String,
+    #[serde(default)]
+    #[surreal(default)]
+    source_map: Value,
+}
+
+impl LinkFrom {
+    fn words(&self) -> String {
+        format!("{} {}", self.label, self.to_kind)
+    }
+
+    fn fed_by(&self, document_id: &str, column: &str) -> bool {
+        serde_json::from_value::<Vec<property::SourceField>>(self.source_map.clone())
+            .unwrap_or_default()
+            .iter()
+            .any(|f| f.source == SOURCE && f.record_type == document_id && f.path == column)
+    }
+}
+
+async fn approved_links_from(db: &OrgDb, vault: &RecordId, kind: &str) -> AppResult<Vec<LinkFrom>> {
+    match q::APPROVED_LINKS_FROM.on(db).bind(("vault", vault.clone())).bind(("kind", kind.to_string())).await {
+        Err(e) if no_ontology_table(&e) => Ok(Vec::new()),
+        res => Ok(res?.take(0)?),
+    }
+}
+
+/// The approved link type `column` names targets of: the one mapped from it, else the only one whose
+/// target kind is the column's name (a `supplier` column, a `supplier` kind).
+fn link_for<'a>(links: &'a [LinkFrom], document_id: &str, column: &str) -> Option<&'a LinkFrom> {
+    links.iter().find(|l| l.fed_by(document_id, column)).or_else(|| {
+        let name = property_name_for(column);
+        match links.iter().filter(|l| l.to_kind == name).collect::<Vec<_>>().as_slice() {
+            [one] => Some(*one),
+            _ => None,
+        }
+    })
 }
 
 /// What an import of the CSV would do now.
@@ -136,7 +183,7 @@ pub struct ImportPlan {
     /// That kind's review status; none when it was never reviewed.
     pub kind_status: Option<Status>,
     pub columns: Vec<ColumnPlan>,
-    /// The column that names each row's entity: the first one no property is mapped from.
+    /// The column that names each row's entity: the first one no property or link is mapped from.
     pub name_column: Option<String>,
     /// The kind is approved and at least one mapped property is: `document_import_rows` will run.
     pub ready: bool,
@@ -186,14 +233,28 @@ async fn plan(db: &OrgDb, vault: &RecordId, document_id: &str, columns: &[String
                 ([], [one]) => Some(*one),
                 _ => None,
             };
-            ColumnPlan { column: c.clone(), property: p.map(|p| p.name.clone()), status: p.map(|p| p.status) }
+            ColumnPlan { column: c.clone(), property: p.map(|p| p.name.clone()), status: p.map(|p| p.status), link: None }
         })
         .collect();
+    let links = match &kind {
+        Some(k) => approved_links_from(db, vault, k).await?,
+        None => Vec::new(),
+    };
+    let mut plans = plans;
+    // the order document_import_rows takes: a link fed by the column, then a property named like it, then a link guessed from the kind's name
+    for c in plans.iter_mut().filter(|c| c.property.is_none()) {
+        let named = props.iter().find(|p| p.status == Status::Approved && p.name == property_name_for(&c.column));
+        match (links.iter().find(|l| l.fed_by(document_id, &c.column)), named) {
+            (Some(l), _) => c.link = Some(l.words()),
+            (None, Some(p)) => (c.property, c.status) = (Some(p.name.clone()), Some(p.status)),
+            (None, None) => c.link = link_for(&links, document_id, &c.column).map(LinkFrom::words),
+        }
+    }
     let kind_status = match &kind {
         Some(k) => kind_status(db, vault, &Kind::parse(k)?).await?,
         None => None,
     };
-    let name_column = plans.iter().find(|c| c.property.is_none()).or(plans.first()).map(|c| c.column.clone());
+    let name_column = plans.iter().find(|c| c.property.is_none() && c.link.is_none()).or(plans.first()).map(|c| c.column.clone());
     let ready = kind_status == Some(Status::Approved) && plans.iter().any(|c| c.status == Some(Status::Approved));
     Ok(ImportPlan { kind, kind_status, columns: plans, name_column, ready })
 }
@@ -233,6 +294,9 @@ pub struct ImportArgs {
 pub struct ColumnUse {
     pub column: String,
     pub property: Option<String>,
+    /// The link type whose targets it named ("supplied_by supplier").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub link: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub skipped: Option<String>,
 }
@@ -258,6 +322,9 @@ pub struct ImportOut {
     pub updated: usize,
     /// Values written (each new or updated in place).
     pub values: usize,
+    /// Relations this run wrote (a re-run writes none), and the link targets it created by name.
+    pub linked: usize,
+    pub targets_created: usize,
     pub columns: Vec<ColumnUse>,
     /// Rows and cells left out, at most 100 listed.
     pub bad: Vec<BadCell>,
@@ -295,9 +362,39 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
 
     // which property each column feeds, checked as entity_set_property checks it
     let rows: Vec<property::PropertyRow> = q::PROPERTIES_OF_KIND.on(db).bind(("vault", doc.vault.clone())).bind(("kind", kind.as_str().to_string())).await?.take(0)?;
+    let links = approved_links_from(db, &doc.vault, kind.as_str()).await?;
     let mut columns = Vec::new();
     let mut targets: Vec<(usize, property::PropertyRow, Datatype)> = Vec::new();
+    let mut link_targets: Vec<(usize, LinkTarget)> = Vec::new();
     for (i, col) in table.columns.iter().enumerate().filter(|(i, _)| *i != name_at) {
+        // a column no property takes may name the targets of an approved link type
+        let as_link = match &args.column_map {
+            Some(map) => map
+                .get(col)
+                .filter(|v| !rows.iter().any(|r| &r.name == *v))
+                .and_then(|v| links.iter().find(|l| same_label(&l.label, v) || l.words() == v.trim())),
+            None => {
+                let approved = |r: &&property::PropertyRow| r.status == Status::Approved.as_str();
+                let claimed = rows.iter().filter(approved).any(|r| r.source_map().iter().any(|f| f.source == SOURCE && f.record_type == doc_id && &f.path == col));
+                // a property named like the column wins over a link guessed from the kind's name
+                let named = rows.iter().filter(approved).any(|r| r.name == property_name_for(col));
+                match (claimed, named) {
+                    (true, _) => None,
+                    (false, true) => links.iter().find(|l| l.fed_by(&doc_id, col)),
+                    (false, false) => link_for(&links, &doc_id, col),
+                }
+            }
+        };
+        if let Some(l) = as_link {
+            match LinkTarget::check(db, &doc.vault, &kind, l).await {
+                Ok(t) => {
+                    columns.push(ColumnUse { column: col.clone(), property: None, link: Some(l.words()), skipped: None });
+                    link_targets.push((i, t));
+                }
+                Err(e) => columns.push(ColumnUse { column: col.clone(), property: None, link: Some(l.words()), skipped: Some(e.message) }),
+            }
+            continue;
+        }
         let wanted = match &args.column_map {
             Some(map) => map.get(col).cloned(),
             None => {
@@ -311,14 +408,14 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
                 // the owner's call, never a silent pick
                 if claimed.len() > 1 {
                     let skipped = format!("is mapped to {}: choose one with column_map", claimed.join(" and "));
-                    columns.push(ColumnUse { column: col.clone(), property: None, skipped: Some(skipped) });
+                    columns.push(ColumnUse { column: col.clone(), property: None, link: None, skipped: Some(skipped) });
                     continue;
                 }
                 claimed.first().map(|n| n.to_string()).or_else(|| Some(property_name_for(col)).filter(|n| rows.iter().any(|r| &r.name == n)))
             }
         };
         let Some(wanted) = wanted else {
-            columns.push(ColumnUse { column: col.clone(), property: None, skipped: Some("no property is mapped from it".into()) });
+            columns.push(ColumnUse { column: col.clone(), property: None, link: None, skipped: Some("no property or link is mapped from it".into()) });
             continue;
         };
         let resolved = match PropertyName::parse(&wanted) {
@@ -328,13 +425,13 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
         match resolved {
             Ok((row, _)) => {
                 let datatype = Datatype::parse(&row.datatype)?;
-                columns.push(ColumnUse { column: col.clone(), property: Some(row.name.clone()), skipped: None });
+                columns.push(ColumnUse { column: col.clone(), property: Some(row.name.clone()), link: None, skipped: None });
                 targets.push((i, row, datatype));
             }
-            Err(e) => columns.push(ColumnUse { column: col.clone(), property: Some(wanted), skipped: Some(e.message) }),
+            Err(e) => columns.push(ColumnUse { column: col.clone(), property: Some(wanted), link: None, skipped: Some(e.message) }),
         }
     }
-    if targets.is_empty() {
+    if targets.is_empty() && link_targets.is_empty() {
         return Err(not_ready(&kind, "has no approved property that a column of this CSV feeds"));
     }
 
@@ -347,7 +444,21 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
             super::profile::date_notation(&values).map(|f| (*i, f))
         })
         .collect();
-    let mut out = ImportOut { document_id: doc_id.clone(), kind: kind.as_str().to_string(), rows: table.rows.len(), created: 0, updated: 0, values: 0, columns, bad: Vec::new(), bad_count: 0 };
+    let mut out = ImportOut {
+        document_id: doc_id.clone(),
+        kind: kind.as_str().to_string(),
+        rows: table.rows.len(),
+        created: 0,
+        updated: 0,
+        values: 0,
+        linked: 0,
+        targets_created: 0,
+        columns,
+        bad: Vec::new(),
+        bad_count: 0,
+    };
+    // each target once per run, by its name in any case
+    let mut found: HashMap<(usize, String), RecordId> = HashMap::new();
     let mut seen: HashMap<String, ()> = HashMap::new();
     let mut names: HashMap<String, u64> = HashMap::new();
     let mut pending: Vec<ImportedValue> = Vec::new();
@@ -408,12 +519,63 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
             });
             out.values += 1;
         }
+        for (i, link) in &link_targets {
+            let cell = cells[*i].trim();
+            if cell.is_empty() {
+                continue;
+            }
+            let key = (*i, cell.to_lowercase());
+            let target = match found.get(&key) {
+                Some(t) => t.clone(),
+                None => match crate::entities::service::upsert_in_vault(db, user, &link.kind, cell, None, &doc.vault, Lookups::NameAndAlias).await {
+                    Ok((t, created)) => {
+                        out.targets_created += usize::from(created);
+                        let t: RecordId = crate::rid::parse(&t.id).map_err(|_| AppError::internal("entity id did not round-trip"))?;
+                        found.insert(key, t.clone());
+                        t
+                    }
+                    Err(e) => {
+                        bad(&mut out, *line, Some(&table.columns[*i]), format!("could not find or create the {} {cell:?}: {}", link.kind.replace('_', " "), e.message));
+                        continue;
+                    }
+                },
+            };
+            match crate::entities::service::relate_in_vault(db, user, &doc.vault, &entity, &target, &link.label).await {
+                Ok(new) => out.linked += usize::from(new),
+                Err(e) => bad(&mut out, *line, Some(&table.columns[*i]), format!("could not link to {cell:?}: {}", e.message)),
+            }
+        }
         if pending.len() >= IMPORT_BATCH {
             write_values(db, &doc.vault, &doc.id, as_of, origin, std::mem::take(&mut pending)).await?;
         }
     }
     write_values(db, &doc.vault, &doc.id, as_of, origin, pending).await?;
     Ok(out)
+}
+
+/// Relations labelled like `a` and `b` are one link type: case, spaces and `_` aside.
+fn same_label(a: &str, b: &str) -> bool {
+    let norm = |s: &str| s.trim().to_lowercase().replace('_', " ").split_whitespace().collect::<Vec<_>>().join(" ");
+    norm(a) == norm(b)
+}
+
+/// Where a link column's cells go: entities of `kind`, related by `label`.
+struct LinkTarget {
+    kind: String,
+    label: String,
+}
+
+impl LinkTarget {
+    /// The approved link type `l` from `kind`, its target kind grounded once (a rejected kind's merge
+    /// target, or refused in strict mode).
+    async fn check(db: &OrgDb, vault: &RecordId, kind: &Kind, l: &LinkFrom) -> AppResult<Self> {
+        let to = match super::ground(db, vault, &l.to_kind).await? {
+            Some(mapped) => mapped.to,
+            None => l.to_kind.clone(),
+        };
+        super::ground_link(db, vault, kind.as_str(), &l.label, &to).await?;
+        Ok(LinkTarget { kind: to, label: l.label.clone() })
+    }
 }
 
 /// Values one import statement writes.

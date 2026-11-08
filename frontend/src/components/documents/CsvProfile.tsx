@@ -38,6 +38,11 @@ function Imported({ out }: { out: ImportOut }) {
         Imported {n(out.rows, "row", "rows")} as {words(out.kind)}: {n(out.created, "new", "new")}, {n(out.updated, "updated", "updated")},{" "}
         {n(out.values, "value", "values")}.
       </p>
+      {(out.linked > 0 || out.targets_created > 0) && (
+        <p>
+          Linked {n(out.linked, "row", "rows")}, adding {n(out.targets_created, "new entity", "new entities")} they name.
+        </p>
+      )}
       {out.bad_count > 0 && (
         <>
           <p style={{ color: "var(--ink-dim)" }}>
@@ -116,7 +121,8 @@ export default function CsvProfile({ documentId }: { documentId: string }) {
           </thead>
           <tbody>
             {p.profile.fields.map((f) => {
-              const mapped = plan.columns.find((c) => c.column === f.path)?.property;
+              const col = plan.columns.find((c) => c.column === f.path);
+              const mapped = col?.property ?? (col?.link ? col.link.replace(/_/g, " ") : null);
               return (
                 <tr key={f.path}>
                   <td className="truncate" title={f.path}>

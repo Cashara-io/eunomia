@@ -927,6 +927,36 @@ pub async fn add_relation(
     }
 }
 
+/// [`add_relation`] for a caller that already checked it may write in `vault`, that both ends are in it
+/// and that the link type is allowed (a CSV import). Idempotent; true when it wrote a new relation.
+pub(crate) async fn relate_in_vault(db: &OrgDb, owner: &RecordId, vault: &RecordId, from_id: &RecordId, to_id: &RecordId, label: &str) -> AppResult<bool> {
+    if find_relation(db, from_id, to_id, label).await?.is_some() {
+        return Ok(false);
+    }
+    let res = q::RELATE_RETURNING
+        .on(db)
+        .bind(("in", from_id.clone()))
+        .bind(("out", to_id.clone()))
+        .bind(("label", label.to_string()))
+        .bind(("owner", owner.clone()))
+        .bind(("source", None::<RecordId>))
+        .await;
+    match res {
+        Ok(mut res) => match res.take::<Vec<RelationRow>>(0)?.into_iter().next() {
+            Some(row) => {
+                changes::record(db, vault, changes::CREATED, changes::RELATION, &row.id).await;
+                Ok(true)
+            }
+            None => Ok(false),
+        },
+        // a concurrent import of the same edge won the unique index
+        Err(e) => match find_relation(db, from_id, to_id, label).await? {
+            Some(_) => Ok(false),
+            None => Err(AppError::from(e)),
+        },
+    }
+}
+
 async fn find_relation(db: &OrgDb, from_id: &RecordId, to_id: &RecordId, label: &str) -> AppResult<Option<RelationRow>> {
     let mut res = q::FIND_RELATION
         .on(db)
