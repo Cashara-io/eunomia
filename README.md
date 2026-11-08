@@ -371,11 +371,11 @@ the `docs` tool. The full list is in the [docs index](docs/README.md).
 
 ## Licence and support
 
-- **Licence:** free for personal and noncommercial use under the
+- **Licence:** licensed by Cashara Pty Ltd, trading as Paperless Labs. Free for personal and noncommercial use under the
   [PolyForm Noncommercial License 1.0.0](LICENSE). Any use inside a business needs a
   paid commercial licence. Releases up to v2.0.4 remain under the MIT licence.
 - **Commercial licensing and support:**
   [developers@buildpaperless.com.au](mailto:developers@buildpaperless.com.au).
 - **Bugs and feature requests:** [GitHub issues](https://github.com/Cashara-io/eunomia/issues).
 
-Built by [Paperless](https://www.buildpaperless.com.au/eunomia). © Midhun Kumar
+Built by [Paperless Labs](https://www.buildpaperless.com.au/eunomia). © 2026 Cashara Pty Ltd, trading as Paperless Labs
