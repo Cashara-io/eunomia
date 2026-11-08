@@ -125,10 +125,12 @@ export default function CsvProfile({ documentId }: { documentId: string }) {
               const mapped = col?.property ?? (col?.link ? col.link.replace(/_/g, " ") : null);
               return (
                 <tr key={f.path}>
-                  <td className="truncate" title={f.path}>
-                    <span className="font-medium">{f.path}</span>
+                  <td>
+                    <span className="font-medium block truncate" title={f.path}>
+                      {f.path}
+                    </span>
                     {mapped && (
-                      <span className="label block">
+                      <span className="label block truncate" title={`→ ${words(mapped)}`} data-testid="csv-mapped">
                         → {words(mapped)}
                       </span>
                     )}
