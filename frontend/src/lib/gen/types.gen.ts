@@ -81,6 +81,19 @@ export type AdminChange = {
 export type Agg = 'sum' | 'count' | 'avg' | 'min' | 'max' | 'count_distinct' | 'ratio';
 
 /**
+ * A link column's value that names two or more entities in the vault: skipped, never guessed, until a
+ * person merges them (`entity_merge`) or the column is mapped another way.
+ */
+export type AmbiguousTarget = {
+    column: string;
+    /**
+     * The kind of each entity it names.
+     */
+    kinds: Array<string>;
+    name: string;
+};
+
+/**
  * Which kind of event a filter chip asks for.
  */
 export type AuditCategory = 'all' | 'changes' | 'spaces' | 'signins' | 'tokens' | 'apps' | 'admin' | 'sharing' | 'server';
@@ -1035,6 +1048,10 @@ export type ImportBody = {
 
 export type ImportOut = {
     /**
+     * Link column values that name more than one entity, skipped.
+     */
+    ambiguous: Array<AmbiguousTarget>;
+    /**
      * Rows and cells left out, at most 100 listed.
      */
     bad: Array<BadCell>;
@@ -1050,6 +1067,11 @@ export type ImportOut = {
      * Relations this run wrote (a re-run writes none), and the link targets it created by name.
      */
     linked: number;
+    /**
+     * Link targets that already existed in another kind (an organisation a supplier column names),
+     * linked to instead of a new entity.
+     */
+    reused: Array<ReusedTarget>;
     /**
      * Data rows in the file.
      */
@@ -1276,6 +1298,10 @@ export type LeftBody = {
  * A link the model proposed, after the value check.
  */
 export type LinkCheck = {
+    /**
+     * Values that name two or more entities: an import skips them until they are merged.
+     */
+    ambiguous: Array<AmbiguousTarget>;
     field: string;
     from_kind: string;
     /**
@@ -1290,6 +1316,11 @@ export type LinkCheck = {
      */
     reason: string;
     record_type: string;
+    /**
+     * Values that name an existing entity of another kind (an organisation a supplier column names):
+     * an import links to it instead of making a new one. They count as matched.
+     */
+    reused: Array<ReusedTarget>;
     source: string;
     to_kind: string;
     values: number;
@@ -2197,6 +2228,17 @@ export type RequestOut = {
     status: string;
     target_hosts: Array<string>;
     vault_id: string;
+};
+
+/**
+ * An entity that already existed under a link column's value, in another kind than the link's
+ * target: linked to as it is, never retyped and never duplicated.
+ */
+export type ReusedTarget = {
+    column: string;
+    entity_id: string;
+    kind: string;
+    name: string;
 };
 
 export type RoleRequest = {

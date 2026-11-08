@@ -311,6 +311,48 @@ pub struct BadCell {
     pub error: String,
 }
 
+/// An entity that already existed under a link column's value, in another kind than the link's
+/// target: linked to as it is, never retyped and never duplicated.
+#[derive(Debug, Clone, Serialize, PartialEq, utoipa::ToSchema)]
+pub struct ReusedTarget {
+    pub column: String,
+    pub name: String,
+    pub kind: String,
+    pub entity_id: String,
+}
+
+/// A link column's value that names two or more entities in the vault: skipped, never guessed, until a
+/// person merges them (`entity_merge`) or the column is mapped another way.
+#[derive(Debug, Clone, Serialize, PartialEq, utoipa::ToSchema)]
+pub struct AmbiguousTarget {
+    pub column: String,
+    pub name: String,
+    /// The kind of each entity it names.
+    pub kinds: Vec<String>,
+}
+
+/// An entity of any kind, found by its name key.
+#[derive(Debug, Clone, Deserialize, SurrealValue)]
+pub(super) struct Named {
+    pub id: RecordId,
+    pub name: String,
+    pub name_key: String,
+    pub kind: String,
+}
+
+/// The entities of every kind in `vault` named like each of `keys` (lowercase), by key.
+pub(super) async fn named_any_kind(db: &OrgDb, vault: &RecordId, keys: Vec<String>) -> AppResult<HashMap<String, Vec<Named>>> {
+    if keys.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let rows: Vec<Named> = q::NAMED_ANY_KIND.on(db).bind(("vault", vault.clone())).bind(("keys", keys)).await?.take(0)?;
+    let mut out: HashMap<String, Vec<Named>> = HashMap::new();
+    for r in rows {
+        out.entry(r.name_key.clone()).or_default().push(r);
+    }
+    Ok(out)
+}
+
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct ImportOut {
     pub document_id: String,
@@ -325,6 +367,11 @@ pub struct ImportOut {
     /// Relations this run wrote (a re-run writes none), and the link targets it created by name.
     pub linked: usize,
     pub targets_created: usize,
+    /// Link targets that already existed in another kind (an organisation a supplier column names),
+    /// linked to instead of a new entity.
+    pub reused: Vec<ReusedTarget>,
+    /// Link column values that name more than one entity, skipped.
+    pub ambiguous: Vec<AmbiguousTarget>,
     pub columns: Vec<ColumnUse>,
     /// Rows and cells left out, at most 100 listed.
     pub bad: Vec<BadCell>,
@@ -453,12 +500,24 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
         values: 0,
         linked: 0,
         targets_created: 0,
+        reused: Vec::new(),
+        ambiguous: Vec::new(),
         columns,
         bad: Vec::new(),
         bad_count: 0,
     };
     // each target once per run, by its name in any case
     let mut found: HashMap<(usize, String), RecordId> = HashMap::new();
+    // what the link columns' values already name, in any kind, read once: a supplier column naming an
+    // organisation that document indexing made links to it instead of making a twin supplier
+    let link_keys: HashSet<String> = link_targets
+        .iter()
+        .flat_map(|(i, _)| table.rows.iter().filter_map(move |(_, c)| c.get(*i)).map(|v| v.trim().to_lowercase()).filter(|v| !v.is_empty()))
+        .collect();
+    let named = named_any_kind(db, &doc.vault, link_keys.into_iter().collect()).await?;
+    // whether each link column may point at each other kind it meets, grounded once
+    let mut grounded: HashMap<(usize, String), Result<(), String>> = HashMap::new();
+    let mut skipped: HashSet<(usize, String)> = HashSet::new();
     let mut seen: HashMap<String, ()> = HashMap::new();
     let mut names: HashMap<String, u64> = HashMap::new();
     let mut pending: Vec<ImportedValue> = Vec::new();
@@ -525,9 +584,35 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
                 continue;
             }
             let key = (*i, cell.to_lowercase());
-            let target = match found.get(&key) {
-                Some(t) => t.clone(),
-                None => match crate::entities::service::upsert_in_vault(db, user, &link.kind, cell, None, &doc.vault, Lookups::NameAndAlias).await {
+            let existing = named.get(&key.1).map(Vec::as_slice).unwrap_or_default();
+            let target = match (found.get(&key), existing) {
+                (Some(t), _) => t.clone(),
+                (None, [_, _, ..]) => {
+                    if skipped.insert(key.clone()) {
+                        out.ambiguous.push(AmbiguousTarget { column: table.columns[*i].clone(), name: cell.to_string(), kinds: existing.iter().map(|e| e.kind.clone()).collect() });
+                    }
+                    continue;
+                }
+                (None, [one]) => {
+                    if one.kind != link.kind {
+                        let allowed = match grounded.get(&(*i, one.kind.clone())) {
+                            Some(a) => a.clone(),
+                            None => {
+                                let a = super::ground_link(db, &doc.vault, kind.as_str(), &link.label, &one.kind).await.map_err(|e| e.message);
+                                grounded.insert((*i, one.kind.clone()), a.clone());
+                                a
+                            }
+                        };
+                        if let Err(e) = allowed {
+                            bad(&mut out, *line, Some(&table.columns[*i]), format!("{cell:?} is an existing {}: {e}", one.kind.replace('_', " ")));
+                            continue;
+                        }
+                        out.reused.push(ReusedTarget { column: table.columns[*i].clone(), name: one.name.clone(), kind: one.kind.clone(), entity_id: one.id.to_string() });
+                    }
+                    found.insert(key, one.id.clone());
+                    one.id.clone()
+                }
+                (None, []) => match crate::entities::service::upsert_in_vault(db, user, &link.kind, cell, None, &doc.vault, Lookups::NameAndAlias).await {
                     Ok((t, created)) => {
                         out.targets_created += usize::from(created);
                         let t: RecordId = crate::rid::parse(&t.id).map_err(|_| AppError::internal("entity id did not round-trip"))?;

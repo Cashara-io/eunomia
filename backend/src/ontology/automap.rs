@@ -25,6 +25,7 @@ use crate::authz::Action;
 use crate::config::Settings;
 use crate::entities::service::{kind_table, CUSTOM_TABLE};
 use crate::error::{AppError, AppResult};
+use crate::rid::RecordIdExt;
 use crate::state::OrgState;
 use crate::store::ontology as q;
 
@@ -117,6 +118,11 @@ pub struct LinkCheck {
     pub values: usize,
     pub matched: usize,
     pub ratio: f64,
+    /// Values that name an existing entity of another kind (an organisation a supplier column names):
+    /// an import links to it instead of making a new one. They count as matched.
+    pub reused: Vec<tabular::ReusedTarget>,
+    /// Values that name two or more entities: an import skips them until they are merged.
+    pub ambiguous: Vec<tabular::AmbiguousTarget>,
     /// Proposed (some values match) or dropped (none do).
     pub kept: bool,
     /// The match share in words, as the link's proposal reason says it.
@@ -460,19 +466,38 @@ pub async fn automap(state: &OrgState, settings: &Settings, owner: &RecordId, ar
                     Err(_) => skipped += 1,
                 }
             }
+            let lowered: Vec<String> = values.iter().map(|v| v.to_lowercase()).collect();
+            // what the values already name in any kind, as the import finds it: one entity of another kind
+            // is reused, two or more are skipped
+            let keys: Vec<String> = lowered.iter().cloned().collect::<BTreeSet<_>>().into_iter().collect();
+            let named = tabular::named_any_kind(db, &vault, keys.clone()).await?;
+            let (mut reused, mut ambiguous) = (Vec::new(), Vec::new());
+            for key in &keys {
+                let spelled = values.iter().find(|v| &v.to_lowercase() == key).cloned().unwrap_or_default();
+                match named.get(key).map(Vec::as_slice).unwrap_or_default() {
+                    [one] if one.kind != to_kind.as_str() => {
+                        reused.push(tabular::ReusedTarget { column: ml.field.clone(), name: one.name.clone(), kind: one.kind.clone(), entity_id: one.id.to_string() })
+                    }
+                    many @ [_, _, ..] => ambiguous.push(tabular::AmbiguousTarget { column: ml.field.clone(), name: spelled, kinds: many.iter().map(|e| e.kind.clone()).collect() }),
+                    _ => {}
+                }
+            }
             let (matched, reason) = if creates {
-                let n = values.iter().map(|v| v.to_lowercase()).collect::<HashSet<_>>().len();
-                (0, format!("no {} exists yet: an import creates the {n} named in {} once each", to_kind.as_str().replace('_', " "), ml.field))
+                let n = keys.len().saturating_sub(reused.len() + ambiguous.len());
+                let created = format!("no {} exists yet: an import creates the {n} named in {} once each", to_kind.as_str().replace('_', " "), ml.field);
+                (reused.len(), created + &reuse_words(&reused, &ambiguous))
             } else {
                 let mut hits: HashSet<String> = HashSet::new();
                 if let Some(target) = &ml.target {
                     let by_type = ids_matched(state, &scope, &values).await?;
                     hits.extend(by_type.get(&(target.source.clone(), target.record_type.clone())).cloned().unwrap_or_default());
                 }
-                let lowered: Vec<String> = values.iter().map(|v| v.to_lowercase()).collect();
                 let names = names_matched(state, &vault, &to_kind, &lowered).await?;
-                hits.extend(values.iter().filter(|v| names.contains(&v.to_lowercase())).cloned());
-                (hits.len(), match_words(hits.len(), values.len()))
+                let is_reused = |v: &str| reused.iter().any(|r| r.name.to_lowercase() == v.to_lowercase());
+                hits.extend(values.iter().filter(|v| names.contains(&v.to_lowercase()) || is_reused(v)).cloned());
+                // a value naming two entities is no match: the import skips it
+                hits.retain(|h| !ambiguous.iter().any(|a| a.name.to_lowercase() == h.to_lowercase()));
+                (hits.len(), match_words(hits.len(), values.len()) + &reuse_words(&reused, &ambiguous))
             };
             let kept = creates || matched > 0;
             checks.push(LinkCheck {
@@ -485,6 +510,8 @@ pub async fn automap(state: &OrgState, settings: &Settings, owner: &RecordId, ar
                 values: values.len(),
                 matched,
                 ratio: ratio(matched, values.len()),
+                reused,
+                ambiguous,
                 kept,
                 reason: reason.clone(),
             });
@@ -526,6 +553,22 @@ pub async fn automap(state: &OrgState, settings: &Settings, owner: &RecordId, ar
     }
     let proposed = apply(db, &vault, Valid { kinds, links, properties, metrics }, Origin::Suggested).await?;
     Ok(AutomapOut::Model { proposed, record_types: mapped, links: checks, skipped, ontology: view(db, &vault).await? })
+}
+
+/// "; 2 name an existing entity (organisation Coastal Irrigation Co, ...), which an import links to
+/// instead of making new ones", and the same for values that name more than one entity.
+fn reuse_words(reused: &[tabular::ReusedTarget], ambiguous: &[tabular::AmbiguousTarget]) -> String {
+    let mut out = String::new();
+    if !reused.is_empty() {
+        let names = reused.iter().map(|r| format!("{} {}", r.kind.replace('_', " "), r.name)).collect::<Vec<_>>().join(", ");
+        out.push_str(&format!("; {} name an existing entity ({names}), which an import links to instead of making new ones", reused.len()));
+    }
+    if !ambiguous.is_empty() {
+        let kinds = |a: &tabular::AmbiguousTarget| a.kinds.iter().map(|k| k.replace('_', " ")).collect::<Vec<_>>().join(" and ");
+        let names = ambiguous.iter().map(|a| format!("{}: {}", a.name, kinds(a))).collect::<Vec<_>>().join(", ");
+        out.push_str(&format!("; {} name more than one entity ({names}), which an import skips until they are merged", ambiguous.len()));
+    }
+    out
 }
 
 /// The label of a kept link type from `from` to `to` that reads the same as `label` (ignoring case,

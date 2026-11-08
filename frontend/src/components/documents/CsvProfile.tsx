@@ -43,6 +43,18 @@ function Imported({ out }: { out: ImportOut }) {
           Linked {n(out.linked, "row", "rows")}, adding {n(out.targets_created, "new entity", "new entities")} they name.
         </p>
       )}
+      {out.reused.length > 0 && (
+        <p data-testid="import-reused">
+          Linked to {out.reused.length === 1 ? "an entity" : "entities"} you already had instead of adding new ones:{" "}
+          {out.reused.map((r) => `${r.name} (${words(r.kind)})`).join(", ")}.
+        </p>
+      )}
+      {out.ambiguous.length > 0 && (
+        <p data-testid="import-ambiguous" style={{ color: "var(--ink-dim)" }}>
+          Not linked, because each names more than one entity: {out.ambiguous.map((a) => `${a.name} (${a.kinds.map(words).join(" and ")})`).join(", ")}.
+          Merge the duplicates, then import again.
+        </p>
+      )}
       {out.bad_count > 0 && (
         <>
           <p style={{ color: "var(--ink-dim)" }}>
