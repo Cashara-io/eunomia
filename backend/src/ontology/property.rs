@@ -608,7 +608,7 @@ pub(super) fn to_json(datatype: Datatype, v: &Stored) -> Option<Value> {
 
 fn display(datatype: Datatype, v: &Stored) -> Option<String> {
     Some(match (datatype, to_json(datatype, v)?) {
-        (Datatype::Money, _) => format!("{:.2}", v.num?),
+        (Datatype::Money, _) => crate::views::money(v.num?),
         (_, Value::String(s)) => s,
         (_, other) => other.to_string(),
     })

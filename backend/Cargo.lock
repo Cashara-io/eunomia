@@ -1268,6 +1268,7 @@ dependencies = [
  "rand 0.8.8",
  "regex",
  "reqwest 0.12.28",
+ "ryu",
  "serde",
  "serde_json",
  "serde_urlencoded",

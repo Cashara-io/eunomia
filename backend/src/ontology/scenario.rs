@@ -651,7 +651,7 @@ async fn run_within_budget(db: &OrgDb, vault: &RecordId, args: &ScenarioArgs) ->
         let real = p.run(None)?;
         let what_if = p.run(Some(&overlay))?;
         for w in real.warnings.iter().chain(what_if.warnings.iter().filter(|w| !real.warnings.contains(w))) {
-            let w = format!("{}: {w}", real.metric);
+            let w = format!("{}: {w}", words(&real.metric));
             if !warnings.contains(&w) {
                 warnings.push(w);
             }

@@ -3591,7 +3591,7 @@ async fn a_ratio_uses_the_same_entities_on_both_sides_and_a_metric_narrows_to_on
     let (b, s) = (&out["baseline"][0], &out["scenario"][0]);
     assert_eq!((b["value"].as_f64(), s["value"].as_f64(), s["delta"].as_f64(), s["unit"].as_str()), (Some(38.062307), Some(33.895036), Some(-4.167271), Some("%")), "{out}");
     let view = ok(app.tool("show_view", json!({"view": "scenario", "headline": "Coastal raises costs", "scenario": args})).await);
-    assert!(view["text"].as_str().unwrap().contains("- gross margin: 38.1% \u{2192} 33.9%, down 4.2 points\n"), "{view}");
+    assert!(view["text"].as_str().unwrap().contains("- gross margin: 38.1% \u{2192} 33.9%, down 4.2 points (exact: -4.167271 points)\n"), "{view}");
 }
 
 #[tokio::test]
@@ -3879,4 +3879,99 @@ async fn preview_column_precedence_matches_import_for_competing_properties_and_l
     let out = ok(app.tool("document_import_rows", args).await);
     assert!(out["columns"][0]["property"].is_null() && out["columns"][0]["link"].is_null());
     assert!(out["columns"][0]["skipped"].as_str().unwrap().contains("column_map"));
+}
+
+#[tokio::test]
+async fn gate3_empty_phrases_choose_named_entities_then_approved_ontology() {
+    let base = coverage_model(vec![], true).await;
+    let app = TestApp::with_settings(Settings { openai_base_url: base, openai_api_key: Some("sk-test".into()), openai_chat_model: "test-model".into(), ..test_settings() }).await;
+    let team = ok(app.tool("vault_create", json!({"name": "Workshop", "kind": "org"})).await)["id"].clone();
+    for name in ["Label Printer 2", "Ute 3"] {
+        ok(app.tool("memory_write", json!({"subject_name": name, "subject_kind": "equipment", "text": "Kept in the workshop", "vault_id": team})).await);
+    }
+    for question in ["What is happening with Label Printer 2?", "Tell me about Ute 3"] {
+        let out = ok(app.tool("ontology_coverage", json!({"question": question})).await);
+        assert_eq!((out["mode"].as_str(), out["coverage"].as_f64()), (Some("model"), Some(0.0)), "{out}");
+        assert_eq!(out["chosen_by"], "entities", "{out}");
+        assert_eq!(out["vault"], team, "{out}");
+    }
+    ok(app.tool("ontology_propose", json!({"vault_id": team, "kinds": [{"kind": "equipment"}]})).await);
+    assert_eq!(decide_kind(&app, team.as_str().unwrap(), "equipment", json!({"action": "approve"})).await.0, 200);
+    let out = ok(app.tool("ontology_coverage", json!({"question": "What is happening?"})).await);
+    assert_eq!(out["chosen_by"], "ontology", "{out}");
+    assert_eq!(out["vault"], team, "{out}");
+}
+
+#[tokio::test]
+async fn gate3_empty_phrases_without_entities_or_ontology_list_readable_spaces() {
+    let base = coverage_model(vec![], true).await;
+    let app = TestApp::with_settings(Settings { openai_base_url: base, openai_api_key: Some("sk-test".into()), openai_chat_model: "test-model".into(), ..test_settings() }).await;
+    let team = ok(app.tool("vault_create", json!({"name": "Workshop", "kind": "org"})).await)["id"].clone();
+    let out = ok(app.tool("ontology_coverage", json!({"question": "What is happening?"})).await);
+    assert_eq!(out["chosen_by"], "none", "{out}");
+    let spaces: Vec<&str> = out["spaces"].as_array().unwrap().iter().map(|s| s["name"].as_str().unwrap()).collect();
+    assert_eq!(spaces, ["Personal", "Workshop"], "{out}");
+    let suggestion = out["suggestion"].as_str().unwrap();
+    assert!(suggestion.contains("Personal") && suggestion.contains("Workshop"), "{out}");
+    let explicit = ok(app.tool("ontology_coverage", json!({"question": "What is happening?", "vault_id": team})).await);
+    assert_eq!(explicit["chosen_by"], "vault_id", "{explicit}");
+    let base = coverage_model(vec![], true).await;
+    let solo = TestApp::with_settings(Settings { openai_base_url: base, openai_api_key: Some("sk-test".into()), openai_chat_model: "test-model".into(), ..test_settings() }).await;
+    let out = ok(solo.tool("ontology_coverage", json!({"question": "What is happening?"})).await);
+    assert_eq!(out["chosen_by"], "none", "{out}");
+    assert_eq!(out["spaces"][0]["name"], "Personal", "{out}");
+}
+
+#[tokio::test]
+async fn gate3_scenario_warnings_use_readable_metric_words() {
+    let app = TestApp::new().await;
+    garden(&app).await;
+    let out = ok(app.tool("show_view", json!({"view": "scenario", "headline": "Costs rise", "scenario": {
+        "changes": [{"scale": {"kind": "product", "property": "cost", "factor": 1.1}}], "metrics": ["gross_margin"]
+    }})).await);
+    let warnings = out["result"]["warnings"].as_array().unwrap();
+    assert!(warnings.iter().any(|w| w.as_str().unwrap().starts_with("gross margin:")), "{out}");
+    assert!(warnings.iter().all(|w| !w.as_str().unwrap().contains("gross_margin")), "{out}");
+    assert!(!out["text"].as_str().unwrap().contains("gross_margin"), "{out}");
+}
+
+#[tokio::test]
+async fn gate3_mcp_scenario_text_and_structured_content_keep_raw_small_moves() {
+    let app = TestApp::new().await;
+    let vault = personal(&app).await;
+    ok(app.tool("ontology_propose", json!({
+        "kinds": [{"kind": "sample"}],
+        "properties": [{"kind": "sample", "name": "score", "datatype": "percent"}],
+        "metrics": [{"kind": "sample", "name": "average_score", "unit": "percent", "expr": {"agg": "avg", "property": "score"}}]
+    })).await);
+    assert_eq!(decide_kind(&app, &vault, "sample", json!({"action": "approve"})).await.0, 200);
+    assert_eq!(decide_property(&app, &vault, "sample", "score", json!({"action": "approve"})).await.0, 200);
+    assert_eq!(decide_metric(&app, &vault, "sample", "average_score", json!({"action": "approve"})).await.0, 200);
+    let id = write(&app, "Sample", "sample").await["entity"]["id"].clone();
+    ok(app.tool("entity_set_property", json!({"entity_id": id, "property": "score", "value": 35.7})).await);
+    let args = json!({"view": "scenario", "headline": "Score changes", "scenario": {
+        "changes": [{"set": {"entity_id": id, "property": "score", "value": 35.351}}], "metrics": ["average_score"]
+    }});
+    let rpc = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "show_view", "arguments": args.clone()}});
+    let (status, out) = app.http("POST", "/mcp", Some(rpc), true).await;
+    assert_eq!(status, 200, "{out}");
+    let shown = &out["result"]["structuredContent"];
+    assert_eq!(shown["result"]["baseline"][0]["value"], 35.7, "{out}");
+    assert_eq!(shown["result"]["scenario"][0]["value"], 35.351, "{out}");
+    assert_eq!(shown["result"]["scenario"][0]["delta"], -0.349, "{out}");
+    let expected = "35.70% \u{2192} 35.35%, down 0.35 points (exact: -0.349 points)";
+    assert!(shown["text"].as_str().unwrap().contains(expected), "{out}");
+    assert!(out["result"]["content"][0]["text"].as_str().unwrap().contains(expected), "{out}");
+
+    let call = json!({"index": 0, "id": "c1", "function": {"name": "show_view", "arguments": args.to_string()}});
+    let sse = |chunk: Value| format!("data: {chunk}\n\ndata: [DONE]\n\n");
+    let reply = |text: &str| json!({"choices": [{"delta": {"content": text}}]});
+    let mock = serve(vec![
+        route("POST", "/chat/completions", json!(null)).body("(exact: -0.349 points)").raw(&sse(reply("Exact delta received."))).header("content-type", "text/event-stream"),
+        route("POST", "/chat/completions", json!(null)).body("\"role\":\"tool\"").raw(&sse(reply("Exact delta missing."))).header("content-type", "text/event-stream"),
+        route("POST", "/chat/completions", json!(null)).raw(&sse(json!({"choices": [{"delta": {"tool_calls": [call]}}]}))).header("content-type", "text/event-stream"),
+    ]).await;
+    assert_eq!(app.http("PATCH", "/api/settings", Some(json!({"openai_base_url": mock.base})), true).await.0, 200);
+    let (_, events) = chat(&app, "What if the score changes?").await;
+    assert_eq!(events.iter().find(|e| e["type"] == "done").unwrap()["reply"], "Exact delta received.", "{events:?}");
 }

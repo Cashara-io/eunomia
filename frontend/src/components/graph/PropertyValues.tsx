@@ -1,12 +1,13 @@
 // An entity's typed properties in the inspector: each approved property's current value, with its
 // unit and the date it held from. Nothing renders when the entity has none.
 import type { PropertyValue } from "@/lib/gen";
+import { formatMoney } from "@/lib/numbers";
 
 const words = (name: string) => name.replace(/_/g, " ");
 
 function shown(p: PropertyValue): string {
   const v = p.value;
-  const text = p.datatype === "money" && typeof v === "number" ? v.toFixed(2) : typeof v === "boolean" ? (v ? "yes" : "no") : String(v);
+  const text = p.datatype === "money" && typeof v === "number" ? formatMoney(v) : typeof v === "boolean" ? (v ? "yes" : "no") : String(v);
   return p.unit ? `${text} ${p.unit}` : text;
 }
 

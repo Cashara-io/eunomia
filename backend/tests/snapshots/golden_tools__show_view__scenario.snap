@@ -1,5 +1,6 @@
 ---
 source: tests/golden_tools.rs
+assertion_line: 55
 expression: stable
 ---
 {
@@ -52,5 +53,5 @@ expression: stable
     "reached_truncated": false,
     "warnings": []
   },
-  "text": "What if the databases grow by half?\nWhat if: Db size gb up 50% on 1 db.\n- total size gb: 120 → 180 GB, up 60 GB (50%)\nChanged: orders_db size gb 120 GB → 180 GB.\nNothing was saved: this is a what-if."
+  "text": "What if the databases grow by half?\nWhat if: Db size gb up 50% on 1 db.\n- total size gb: 120.00 → 180.00 GB, up 60.00 GB (50%) (exact: 60 GB)\nChanged: orders_db size gb 120 GB → 180 GB.\nNothing was saved: this is a what-if."
 }

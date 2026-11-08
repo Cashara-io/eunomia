@@ -11,6 +11,9 @@
 //! text is trimmed, capped and has secrets dropped as in a memory. The result is the resolved view, with
 //! names and kinds from the database, plus [`Shown::text`], a plain rendering for a terminal.
 
+mod decimal;
+use decimal::Decimal;
+
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 
@@ -378,24 +381,29 @@ pub fn is_percent(unit: Option<&str>) -> bool {
     unit.is_some_and(|u| matches!(u.trim().to_ascii_lowercase().as_str(), "%" | "percent" | "percentage" | "pct"))
 }
 
-/// `value` to at most `places` decimals, trailing zeros dropped.
-fn places(value: f64, places: usize) -> String {
-    if value.fract() == 0.0 && value.abs() < 1e15 {
-        return format!("{}", value as i64);
-    }
-    let s = format!("{value:.places$}");
-    let s = s.trim_end_matches('0').trim_end_matches('.');
-    if s == "-0" { "0".to_string() } else { s.to_string() }
+fn fixed(value: f64, places: usize) -> String {
+    if value.is_finite() { Decimal::new(value).fixed(places) } else { "none".into() }
 }
 
-/// A metric's number as people write it: money to the cent, a percent to one place ("44.1%"), whole
-/// numbers bare, others to two places.
+fn places(value: f64, places: usize) -> String {
+    let s = fixed(value, places);
+    if places == 0 || !s.contains('.') { s } else { s.trim_end_matches('0').trim_end_matches('.').to_string() }
+}
+
+pub fn money(value: f64) -> String {
+    if !value.is_finite() { return "none".into(); }
+    let decimal = Decimal::new(value);
+    decimal.fixed(decimal.money_places())
+}
+
+/// A metric's number as people write it, with money rounded half away from zero.
 pub fn number(value: f64, unit: Option<&str>) -> String {
+    if !value.is_finite() { return "none".into(); }
     if is_percent(unit) {
         return format!("{}%", places(value, 1));
     }
-    let money = unit.is_some_and(|u| u.len() == 3 && u.chars().all(|c| c.is_ascii_uppercase()));
-    let n = if money { format!("{value:.2}") } else { places(value, 2) };
+    let currency = unit.is_some_and(|u| u.len() == 3 && u.chars().all(|c| c.is_ascii_uppercase()));
+    let n = if currency { money(value) } else { places(value, 2) };
     match unit {
         Some(u) => format!("{n} {u}"),
         None => n,
@@ -446,38 +454,66 @@ fn figure(v: f64, unit: Option<&str>) -> String {
     }
 }
 
-/// "15.22 \u{2192} 15.67 AUD, up 0.45 AUD (2.9%)": the move in words, never by colour alone. A percent
-/// moves in points, from the figures as shown: "44.1% \u{2192} 42.4%, down 1.7 points".
-pub fn movement(before: Option<f64>, after: Option<f64>, delta_pct: Option<f64>, unit: Option<&str>) -> String {
-    if let (true, Some(a), Some(b)) = (is_percent(unit), before, after) {
-        let shown = |v: f64| (v * 10.0).round() / 10.0;
-        let d = shown(b) - shown(a);
-        if d.abs() < 1e-9 {
-            return format!("{}%, no change", figure(a, unit));
-        }
-        let way = if d > 0.0 { "up" } else { "down" };
-        let points = places((d.abs() * 10.0).round() / 10.0, 1);
-        let noun = if points == "1" { "point" } else { "points" };
-        return format!("{}% \u{2192} {}%, {way} {points} {noun}", figure(a, unit), figure(b, unit));
+struct ScenarioNumbers {
+    before: String,
+    after: String,
+    movement: String,
+    exact_delta: String,
+}
+
+fn scenario_numbers(a: f64, b: f64, delta_pct: Option<f64>, unit: Option<&str>) -> ScenarioNumbers {
+    let (a, b) = (Decimal::new(a), Decimal::new(b));
+    let d = Decimal::difference(&a, &b);
+    let delta_unit = if is_percent(unit) { Some("points") } else { unit };
+    let exact_delta = format!("{}{}", d.exact(), delta_unit.map(|u| format!(" {u}")).unwrap_or_default());
+    let adds_up = |p| match (a.scaled(p), b.scaled(p), d.scaled(p)) {
+        (Some(a), Some(b), Some(d)) => b.checked_sub(a) == Some(d),
+        _ => false,
+    };
+    let mut precision = d.significant_places().max(if is_percent(unit) { 1 } else { 2 }).min(6);
+    while precision < 6 && !adds_up(precision) && a.scaled(precision).is_some() && b.scaled(precision).is_some() {
+        precision += 1;
     }
+    let guaranteed = d.significant_places() <= 6 && adds_up(precision);
+    let amount = d.fixed(precision).trim_start_matches('-').to_string();
+    let movement = if d.is_zero() {
+        "no change".to_string()
+    } else if !guaranteed {
+        format!("exact change: {exact_delta}")
+    } else {
+        let way = if d.negative { "down" } else { "up" };
+        if is_percent(unit) {
+            let noun = if amount.trim_end_matches('0').trim_end_matches('.') == "1" { "point" } else { "points" };
+            format!("{way} {amount} {noun}")
+        } else {
+            let tail = unit.map(|u| format!(" {u}")).unwrap_or_default();
+            let pct = delta_pct.filter(|p| p.is_finite()).map(|p| format!(" ({}%)", places(p.abs(), 1))).unwrap_or_default();
+            format!("{way} {amount}{tail}{pct}")
+        }
+    };
+    ScenarioNumbers { before: a.fixed(precision), after: b.fixed(precision), movement, exact_delta }
+}
+
+/// Decimal endpoints and delta share a precision only when their displayed integers add up.
+pub fn movement(before: Option<f64>, after: Option<f64>, delta_pct: Option<f64>, unit: Option<&str>) -> String {
     let tail = match unit {
         Some(_) if is_percent(unit) => "%".to_string(),
         Some(u) => format!(" {u}"),
         None => String::new(),
     };
-    let (a, b) = match (before, after) {
+    let (a, b) = match (before.filter(|v| v.is_finite()), after.filter(|v| v.is_finite())) {
         (Some(a), Some(b)) => (a, b),
         (None, Some(b)) => return format!("no value before, {}{tail} after", figure(b, unit)),
         (Some(a), None) => return format!("{}{tail} before, no value after", figure(a, unit)),
         (None, None) => return "no value".into(),
     };
-    let d = b - a;
-    if d.abs() < 1e-9 {
-        return format!("{}{tail}, no change", figure(a, unit));
+    let shown = scenario_numbers(a, b, delta_pct, unit);
+    if shown.movement == "no change" {
+        return format!("{}{tail}, no change (exact: {})", shown.before, shown.exact_delta);
     }
-    let way = if d > 0.0 { "up" } else { "down" };
-    let pct = delta_pct.map(|p| format!(" ({}%)", number((p.abs() * 10.0).round() / 10.0, None))).unwrap_or_default();
-    format!("{} \u{2192} {}{tail}, {way} {}{tail}{pct}", figure(a, unit), figure(b, unit), figure(d.abs(), unit))
+    let percent = if is_percent(unit) { "%" } else { "" };
+    let exact = if shown.movement.starts_with("exact change:") { String::new() } else { format!(" (exact: {})", shown.exact_delta) };
+    format!("{}{percent} \u{2192} {}{tail}, {}{exact}", shown.before, shown.after, shown.movement)
 }
 
 fn shown_value(v: &serde_json::Value, unit: Option<&str>) -> String {
@@ -566,10 +602,79 @@ mod tests {
         assert_eq!(number(45.0, Some("percent")), "45%");
         assert_eq!(number(15.2, Some("AUD")), "15.20 AUD");
         assert_eq!(number(2.5, None), "2.5");
-        assert_eq!(movement(Some(44.0584), Some(42.39), Some(-3.79), Some("%")), "44.1% \u{2192} 42.4%, down 1.7 points");
-        assert_eq!(movement(Some(44.0), Some(45.0), Some(2.27), Some("%")), "44% \u{2192} 45%, up 1 point");
-        assert_eq!(movement(Some(15.22), Some(15.67), Some(2.96), Some("AUD")), "15.22 \u{2192} 15.67 AUD, up 0.45 AUD (3%)");
+        assert_eq!(movement(Some(44.0584), Some(42.39), Some(-3.79), Some("%")), "44.1% \u{2192} 42.4%, down 1.7 points (exact: -1.6684 points)");
+        assert_eq!(movement(Some(44.0), Some(45.0), Some(2.27), Some("%")), "44.0% \u{2192} 45.0%, up 1.0 point (exact: 1 points)");
+        assert_eq!(movement(Some(15.22), Some(15.67), Some(2.96), Some("AUD")), "15.22 \u{2192} 15.67 AUD, up 0.45 AUD (3%) (exact: 0.45 AUD)");
         assert!(is_percent(Some(" Percent ")) && !is_percent(Some("AUD")) && !is_percent(None));
+    }
+
+    #[test]
+    fn scenario_precision_preserves_small_raw_moves() {
+        assert_eq!(movement(Some(35.756120), Some(35.435683), None, Some("%")), "35.76% \u{2192} 35.44%, down 0.32 points (exact: -0.320437 points)");
+        assert_eq!(movement(Some(38.062307), Some(33.895036), None, Some("%")), "38.1% \u{2192} 33.9%, down 4.2 points (exact: -4.167271 points)");
+        assert_eq!(movement(Some(10.0), Some(10.004), None, Some("AUD")), "10.0000 \u{2192} 10.0040 AUD, up 0.0040 AUD (exact: 0.004 AUD)");
+        assert_eq!(movement(Some(10.0), Some(9.996), None, None), "10.0000 \u{2192} 9.9960, down 0.0040 (exact: -0.004)");
+        assert_eq!(movement(Some(1.004), Some(1.006), None, Some("AUD")), "1.0040 \u{2192} 1.0060 AUD, up 0.0020 AUD (exact: 0.002 AUD)");
+        assert_eq!(movement(Some(35.754), Some(35.435), None, Some("%")), "35.754% \u{2192} 35.435%, down 0.319 points (exact: -0.319 points)");
+    }
+
+    #[test]
+    fn money_rounds_half_away_from_zero() {
+        for (value, expected) in [(68606.625, "68606.63 AUD"), (-68606.625, "-68606.63 AUD"), (1.005, "1.01 AUD"), (-1.005, "-1.01 AUD"), (1e15, "1000000000000000.00 AUD")] {
+            assert_eq!(number(value, Some("AUD")), expected);
+        }
+        assert_ne!(number(0.004, Some("AUD")), "0.00 AUD");
+    }
+
+    fn fixture_value(v: &serde_json::Value) -> Option<f64> {
+        v.as_str().map(|s| s.parse().unwrap())
+    }
+
+    #[test]
+    fn shared_decimal_money_vectors() {
+        let vectors: serde_json::Value = serde_json::from_str(include_str!("../../../frontend/tests/fixtures/number-format.json")).unwrap();
+        for row in vectors["numbers"].as_array().unwrap() {
+            let shown = fixture_value(&row["value"]).map(|v| figure(v, row["unit"].as_str())).unwrap_or_else(|| "none".into());
+            assert_eq!(shown, row["shown"].as_str().unwrap(), "{row}");
+        }
+    }
+
+    #[test]
+    fn shared_decimal_scenario_vectors() {
+        let vectors: serde_json::Value = serde_json::from_str(include_str!("../../../frontend/tests/fixtures/number-format.json")).unwrap();
+        for row in vectors["scenarios"].as_array().unwrap() {
+            let (a, b) = (fixture_value(&row["before"]), fixture_value(&row["after"]));
+            if let (Some(a), Some(b)) = (a.filter(|v| v.is_finite()), b.filter(|v| v.is_finite())) {
+                let shown = scenario_numbers(a, b, None, row["unit"].as_str());
+                assert_eq!(shown.before, row["start"].as_str().unwrap(), "{row}");
+                assert_eq!(shown.after, row["end"].as_str().unwrap(), "{row}");
+                assert_eq!(shown.movement, row["movement"].as_str().unwrap(), "{row}");
+                assert_eq!(shown.exact_delta, row["exact"].as_str().unwrap(), "{row}");
+                if row["addsUp"] == true {
+                    let integer = |s: &str| s.replace('.', "").parse::<i128>().unwrap();
+                    let amount = shown.movement.split_whitespace().nth(1).unwrap_or("0");
+                    let scale = shown.before.split_once('.').map_or(0, |(_, f)| f.len());
+                    let change = if shown.movement == "no change" { 0 } else { integer(amount) };
+                    let sign = if shown.movement.starts_with("down") { -1 } else { 1 };
+                    assert_eq!(integer(&shown.after) - integer(&shown.before), sign * change, "scale {scale}: {row}");
+                }
+            } else {
+                assert!(movement(a, b, None, row["unit"].as_str()).starts_with(row["movement"].as_str().unwrap()), "{row}");
+            }
+        }
+    }
+
+    #[test]
+    fn shared_decimal_model_text_vectors() {
+        let vectors: serde_json::Value = serde_json::from_str(include_str!("../../../frontend/tests/fixtures/number-format.json")).unwrap();
+        for row in vectors["scenarios"].as_array().unwrap() {
+            let text = movement(fixture_value(&row["before"]), fixture_value(&row["after"]), None, row["unit"].as_str());
+            if let Some(exact) = row["exact"].as_str() {
+                assert!(text.contains(&format!("(exact: {exact})")) || text.contains(&format!("exact change: {exact}")), "{row}: {text}");
+            } else {
+                assert!(!text.contains("exact:"), "{row}: {text}");
+            }
+        }
     }
 
     #[test]
