@@ -234,6 +234,9 @@ struct LinkRow {
     #[serde(default)]
     #[surreal(default)]
     reason: Option<String>,
+    #[serde(default)]
+    #[surreal(default)]
+    source_map: serde_json::Value,
 }
 
 #[derive(Debug, Deserialize, SurrealValue)]
@@ -313,6 +316,10 @@ pub struct LinkItem {
     /// Relations of this type in the vault.
     pub count: i64,
     pub samples: Vec<LinkSample>,
+    /// The record fields or CSV columns that name each relation's target, from auto-mapping: a CSV
+    /// import finds or creates the entity a cell names and writes the relation.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub source_map: Vec<property::SourceField>,
 }
 
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
@@ -453,6 +460,7 @@ fn merge_links(counts: Vec<LinkCount>, rows: Vec<LinkRow>) -> AppResult<Vec<Link
         reason: None,
         count: 0,
         samples: Vec::new(),
+        source_map: Vec::new(),
     };
     for c in counts {
         let samples = c
@@ -471,6 +479,7 @@ fn merge_links(counts: Vec<LinkCount>, rows: Vec<LinkRow>) -> AppResult<Vec<Link
         item.description = r.description;
         item.origin = Some(Origin::parse(&r.origin)?);
         item.reason = r.reason;
+        item.source_map = serde_json::from_value(r.source_map).unwrap_or_default();
     }
     Ok(by_key.into_values().collect())
 }
@@ -505,6 +514,9 @@ pub struct LinkProposal {
     pub description: Option<String>,
     #[serde(default)]
     pub reason: Option<String>,
+    /// The fields or CSV columns that name each relation's target.
+    #[serde(default)]
+    pub source_map: Vec<property::SourceField>,
 }
 
 struct ValidKind {
@@ -519,6 +531,7 @@ struct ValidLink {
     key: LinkKey,
     description: Option<String>,
     reason: Option<String>,
+    source_map: Vec<property::SourceField>,
 }
 
 impl KindProposal {
@@ -549,6 +562,7 @@ impl LinkProposal {
             key: LinkKey::parse(&self.from_kind, &self.label, &self.to_kind)?,
             description: clean_text("description", self.description.as_deref())?,
             reason: clean_text("reason", self.reason.as_deref())?,
+            source_map: property::clean_source_map(&self.source_map)?,
         })
     }
 }
@@ -664,6 +678,7 @@ async fn apply(db: &OrgDb, vault: &RecordId, valid: Valid, origin: Origin) -> Ap
                 .bind(("description", l.description.clone()))
                 .bind(("origin", origin.as_str().to_string()))
                 .bind(("reason", l.reason.clone()))
+                .bind(("source_map", serde_json::to_value(&l.source_map).unwrap_or_default()))
                 .await?;
             let rows: Vec<LinkRow> = res.take(q::PROPOSE_LINK.slot)?;
             rows.into_iter().next().ok_or_else(|| surrealdb::Error::query("ontology link upsert returned no row".into(), None))

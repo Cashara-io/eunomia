@@ -101,22 +101,24 @@ pub const PROPOSE_KIND: Stmt = Stmt::at(
     3, // BEGIN 0, two LETs 1 and 2, RETURN 3
 );
 
+// The columns (`source_map`, migration 0038) are added in their own step, and only when given, so an
+// agent's proposal still writes on a database one migration behind during a rolling upgrade.
 pub const PROPOSE_LINK: Stmt = Stmt::at(
     "ontology.propose_link",
     r#"BEGIN TRANSACTION;
         LET $cur = (SELECT VALUE status FROM $id);
-        LET $row = IF array::len($cur) = 0 {
-            (CREATE $id SET vault = $vault, from_kind = $from_kind, label = $label, to_kind = $to_kind,
-                description = $description, origin = $origin, reason = $reason RETURN AFTER)
+        IF array::len($cur) = 0 {
+            CREATE $id SET vault = $vault, from_kind = $from_kind, label = $label, to_kind = $to_kind,
+                description = $description, origin = $origin, reason = $reason
         } ELSE IF $cur[0] = "proposed" {
-            (UPDATE $id SET description = $description ?? description, reason = $reason ?? reason,
-                updated_at = time::now() RETURN AFTER)
-        } ELSE {
-            (SELECT * FROM $id)
+            UPDATE $id SET description = $description ?? description, reason = $reason ?? reason, updated_at = time::now()
         };
-        RETURN $row;
+        IF array::len($source_map) > 0 {
+            UPDATE $id SET source_map = array::union(source_map ?? [], $source_map)
+        };
+        RETURN (SELECT * FROM $id);
         COMMIT TRANSACTION;"#,
-    3,
+    4,
 );
 
 /// The open proposals agents filed in `$vault`, of every sort.
@@ -215,6 +217,12 @@ pub const DESCRIBE_LINK: Stmt = Stmt::new(
 
 /// One link type's decision, by its derived id: the one read a relation write pays.
 pub const GROUND_LINK: Stmt = Stmt::new("ontology.ground_link", "SELECT VALUE status FROM $id");
+
+/// The approved link types from `$kind` in `$vault`: a CSV import writes those a column feeds.
+pub const APPROVED_LINKS_FROM: Stmt = Stmt::new(
+    "ontology.approved_links_from",
+    r#"SELECT * FROM ontology_link WHERE vault = $vault AND from_kind = $kind AND status = "approved" ORDER BY label, to_kind"#,
+);
 
 /// The approved labels from `$from_kind` to `$to_kind` in `$vault`, to name in the refusal of a rejected one.
 pub const APPROVED_LINKS: Stmt = Stmt::new(
@@ -521,6 +529,7 @@ pub const ALL: &[&Stmt] = &[
     &DESCRIBE_LINK,
     &GROUND_LINK,
     &APPROVED_LINKS,
+    &APPROVED_LINKS_FROM,
     &PROPERTIES,
     &RECENT_FACTS,
     &PROPERTY,

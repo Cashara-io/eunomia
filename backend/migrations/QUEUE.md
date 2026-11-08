@@ -28,5 +28,6 @@ Control set: 0007 indexes secret audit queries; 0008 adds admin and suspension t
 | tenant | 0035 | ontology_metrics | Project ontology metrics | #172 | merged |
 | tenant | 0036 | ontology_automap | Project ontology auto-mapping | #173 | merged |
 | tenant | 0037 | ontology_coverage | Project ontology coverage and strict mode | #177 | merged |
+| tenant | 0038 | ontology_link_source | Gate fixes: link targets on import | feat/gate-links-and-row-maths | locked |
 | control | 0007 | secret_audit_index | L3 Broker | #123 (#122), 2.0.9 | merged |
 | control | 0008 | user_admin_suspend | Admin (#144) | #162, 2.0.9 | merged |
