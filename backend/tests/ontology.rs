@@ -3882,6 +3882,47 @@ async fn preview_column_precedence_matches_import_for_competing_properties_and_l
 }
 
 #[tokio::test]
+async fn gate3_empty_phrases_choose_named_entities_then_approved_ontology() {
+    let base = coverage_model(vec![], true).await;
+    let app = TestApp::with_settings(Settings { openai_base_url: base, openai_api_key: Some("sk-test".into()), openai_chat_model: "test-model".into(), ..test_settings() }).await;
+    let team = ok(app.tool("vault_create", json!({"name": "Workshop", "kind": "org"})).await)["id"].clone();
+    for name in ["Label Printer 2", "Ute 3"] {
+        ok(app.tool("memory_write", json!({"subject_name": name, "subject_kind": "equipment", "text": "Kept in the workshop", "vault_id": team})).await);
+    }
+    for question in ["What is happening with Label Printer 2?", "Tell me about Ute 3"] {
+        let out = ok(app.tool("ontology_coverage", json!({"question": question})).await);
+        assert_eq!((out["mode"].as_str(), out["coverage"].as_f64()), (Some("model"), Some(0.0)), "{out}");
+        assert_eq!(out["chosen_by"], "entities", "{out}");
+        assert_eq!(out["vault"], team, "{out}");
+    }
+    ok(app.tool("ontology_propose", json!({"vault_id": team, "kinds": [{"kind": "equipment"}]})).await);
+    assert_eq!(decide_kind(&app, team.as_str().unwrap(), "equipment", json!({"action": "approve"})).await.0, 200);
+    let out = ok(app.tool("ontology_coverage", json!({"question": "What is happening?"})).await);
+    assert_eq!(out["chosen_by"], "ontology", "{out}");
+    assert_eq!(out["vault"], team, "{out}");
+}
+
+#[tokio::test]
+async fn gate3_empty_phrases_without_entities_or_ontology_list_readable_spaces() {
+    let base = coverage_model(vec![], true).await;
+    let app = TestApp::with_settings(Settings { openai_base_url: base, openai_api_key: Some("sk-test".into()), openai_chat_model: "test-model".into(), ..test_settings() }).await;
+    let team = ok(app.tool("vault_create", json!({"name": "Workshop", "kind": "org"})).await)["id"].clone();
+    let out = ok(app.tool("ontology_coverage", json!({"question": "What is happening?"})).await);
+    assert_eq!(out["chosen_by"], "none", "{out}");
+    let spaces: Vec<&str> = out["spaces"].as_array().unwrap().iter().map(|s| s["name"].as_str().unwrap()).collect();
+    assert_eq!(spaces, ["Personal", "Workshop"], "{out}");
+    let suggestion = out["suggestion"].as_str().unwrap();
+    assert!(suggestion.contains("Personal") && suggestion.contains("Workshop"), "{out}");
+    let explicit = ok(app.tool("ontology_coverage", json!({"question": "What is happening?", "vault_id": team})).await);
+    assert_eq!(explicit["chosen_by"], "vault_id", "{explicit}");
+    let base = coverage_model(vec![], true).await;
+    let solo = TestApp::with_settings(Settings { openai_base_url: base, openai_api_key: Some("sk-test".into()), openai_chat_model: "test-model".into(), ..test_settings() }).await;
+    let out = ok(solo.tool("ontology_coverage", json!({"question": "What is happening?"})).await);
+    assert_eq!(out["chosen_by"], "none", "{out}");
+    assert_eq!(out["spaces"][0]["name"], "Personal", "{out}");
+}
+
+#[tokio::test]
 async fn gate3_mcp_scenario_text_and_structured_content_keep_raw_small_moves() {
     let app = TestApp::new().await;
     let vault = personal(&app).await;
