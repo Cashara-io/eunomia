@@ -563,7 +563,8 @@ async fn resolve_vault_names(db: &OrgDb, owner: &RecordId, args: &mut Value) -> 
     Ok(())
 }
 
-/// A capsule for any failure but bad input, so `eunomia replay` can reproduce it.
+/// A capsule for any failure but bad input, so `eunomia replay` can reproduce it. A read-only tool
+/// keeps one only for a server failure.
 async fn record_failure(state: &OrgState, owner: &RecordId, name: &str, args: Value, result: &AppResult<Value>, source: Option<String>) {
     let (code, text) = match result {
         Ok(v) if v.get("error").is_some() => {
@@ -574,6 +575,11 @@ async fn record_failure(state: &OrgState, owner: &RecordId, name: &str, args: Va
         Ok(_) => return,
     };
     if matches!(code, ErrorCode::ValidationInvalid | ErrorCode::OntologyRejected) {
+        return;
+    }
+    // a read that names something missing changed nothing worth replaying, and a what-if's whole
+    // change list would be kept for it
+    if is_read_only(name) && code.default_status().is_client_error() {
         return;
     }
     let status = code.default_status().as_u16();

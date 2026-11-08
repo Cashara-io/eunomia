@@ -61,6 +61,18 @@ async fn validation_errors_leave_no_capsule() {
 }
 
 #[tokio::test]
+async fn a_read_only_call_that_names_a_missing_entity_leaves_no_capsule() {
+    let app = new_app().await;
+    let args = json!({"changes": [{"remove": {"entity_id": "entity:nobody"}}], "metrics": ["avg_price"]});
+    let out = with_trace_id(trace(9), common::sys(registry::call(&app.state, &app.user, "scenario_run", args))).await.unwrap();
+    assert_eq!(out["code"], "entity.not_found", "{out}");
+    assert!(capsules::get(&app.state.control, &trace(9)).await.unwrap().is_none(), "the change list is not stored");
+    let out = with_trace_id(trace(10), common::sys(registry::call(&app.state, &app.user, "metric_eval", json!({"metric": "avg_price", "vault_id": "vault:nowhere"})))).await.unwrap();
+    assert!(out.get("error").is_some(), "{out}");
+    assert!(capsules::get(&app.state.control, &trace(10)).await.unwrap().is_none());
+}
+
+#[tokio::test]
 async fn capsules_are_capped_at_16kb() {
     let app = new_app().await;
     let args = json!({ "entity_id": "person:nobody", "summary": "y ".repeat(40_000) });
