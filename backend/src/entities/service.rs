@@ -927,6 +927,36 @@ pub async fn add_relation(
     }
 }
 
+/// Most characters in the reason [`relate_with_reason`] saves with a link.
+pub const MAX_LINK_REASON: usize = 500;
+
+/// [`add_relation`] (every check: vaults, write access, link grounding), then `reason` as a fact on the
+/// `from` entity naming both ends, so recall and the neighbourhood show why the link exists. The fact is
+/// written only with a new relation, so a re-run adds nothing. Returns the relation and the fact.
+pub async fn relate_with_reason(
+    db: &OrgDb,
+    owner: &RecordId,
+    from_id: &RecordId,
+    to_id: &RecordId,
+    label: &str,
+    reason: Option<&str>,
+) -> AppResult<(RelationOut, Option<MemoryOut>)> {
+    let reason = reason.map(str::trim).filter(|r| !r.is_empty());
+    if reason.is_some_and(|r| r.chars().count() > MAX_LINK_REASON) {
+        return Err(AppError::bad_request(format!("reason is at most {MAX_LINK_REASON} characters")));
+    }
+    let existed = reason.is_some() && find_relation(db, from_id, to_id, label).await?.is_some();
+    let relation = add_relation(db, owner, from_id, to_id, label, None).await?;
+    let Some(reason) = reason.filter(|_| !existed) else { return Ok((relation, None)) };
+    // add_relation read and checked both ends; these reads only fetch their names for the fact
+    let (Some(from), Some(to)) = (select_entity(db, from_id).await?, select_entity(db, to_id).await?) else {
+        return Ok((relation, None));
+    };
+    let text = format!("{} {} {}: {reason}", from.name, label.replace('_', " "), to.name);
+    let memory = insert_memory(db, owner, from_id, &from.vault, &text, None, "world").await?;
+    Ok((relation, Some(memory)))
+}
+
 /// [`add_relation`] for a caller that already checked it may write in `vault`, that both ends are in it
 /// and that the link type is allowed (a CSV import). Idempotent; true when it wrote a new relation.
 pub(crate) async fn relate_in_vault(db: &OrgDb, owner: &RecordId, vault: &RecordId, from_id: &RecordId, to_id: &RecordId, label: &str) -> AppResult<bool> {

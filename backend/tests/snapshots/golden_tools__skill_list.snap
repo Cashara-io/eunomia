@@ -5,7 +5,7 @@ expression: stable
 {
   "skills": [
     {
-      "id": "skill:<id26>",
+      "id": "skill:<id28>",
       "name": "anvil-budget",
       "description": "How to read the anvil budget",
       "vault": "vault:<id2>",

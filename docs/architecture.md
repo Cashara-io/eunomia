@@ -191,7 +191,9 @@ embedding service rejects wrong-sized or non-finite vectors.
 
 Code entities are created by agent calls to `code_entity_upsert` and linked
 with `code_relate`. The code graph reflects what agents record about a
-codebase; it is not an automatic static-analysis index.
+codebase; it is not an automatic static-analysis index. Business entities
+(people, organisations, custom kinds) are linked with `entity_relate`, which
+writes the same `relates_to` relation through the same checks.
 
 Sources: [org schema](../backend/migrations/tenant/0001_baseline.surql),
 [vector and full-text indexes](../backend/migrations/tenant/0008_v3_indexes.surql),

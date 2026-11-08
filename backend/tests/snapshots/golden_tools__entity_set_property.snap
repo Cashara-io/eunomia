@@ -3,7 +3,7 @@ source: tests/golden_tools.rs
 expression: stable
 ---
 {
-  "entity_id": "entity:<id19>",
+  "entity_id": "entity:<id21>",
   "kind": "db",
   "value": {
     "property": "size_gb",

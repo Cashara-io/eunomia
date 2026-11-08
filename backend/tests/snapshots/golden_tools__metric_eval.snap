@@ -13,7 +13,7 @@ expression: stable
   "as_of": "<ts>",
   "n_entities": 1,
   "entity_ids": [
-    "entity:<id19>"
+    "entity:<id21>"
   ],
   "truncated": false,
   "status": "approved",

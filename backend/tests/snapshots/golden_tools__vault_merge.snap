@@ -3,13 +3,13 @@ source: tests/golden_tools.rs
 expression: stable
 ---
 {
-  "id": "vault:<id17>",
+  "id": "vault:<id19>",
   "name": "Merged",
   "kind": "org",
   "created_at": "<ts>",
   "entities": 0,
   "merged_from": [
-    "vault:<id14>",
-    "vault:<id16>"
+    "vault:<id16>",
+    "vault:<id18>"
   ]
 }

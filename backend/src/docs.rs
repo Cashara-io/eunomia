@@ -67,7 +67,7 @@ mod tests {
     #[test]
     fn default_skill_only_names_real_tools() {
         let tools = crate::tools::registry::all_tools();
-        for name in ["recall", "reflect", "docs", "memory_write", "memory_update", "memory_delete", "code_entity_upsert", "code_relate", "vault_list"] {
+        for name in ["recall", "reflect", "docs", "memory_write", "memory_update", "memory_delete", "code_entity_upsert", "code_relate", "entity_relate", "vault_list"] {
             assert!(DEFAULT_SKILL.contains(&format!("`{name}`")), "skill no longer mentions `{name}`; update this list");
             assert!(tools.contains_key(name), "skill mentions unknown tool `{name}`");
         }

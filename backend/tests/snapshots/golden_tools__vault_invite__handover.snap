@@ -3,7 +3,7 @@ source: tests/golden_tools.rs
 expression: stable
 ---
 {
-  "vault_id": "vault:<id28>",
+  "vault_id": "vault:<id30>",
   "user_email": "bob@example.com",
   "role": "member"
 }

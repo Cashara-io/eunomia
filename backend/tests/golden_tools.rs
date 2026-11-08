@@ -189,6 +189,8 @@ async fn goldens() {
     let file = g.snap("code_entity_upsert__file", "code_entity_upsert",
         json!({"kind":"file","name":"main.rs","parent_id": repo_id})).await;
     g.snap("code_relate", "code_relate", json!({"from_id": s(&file, "/id"), "to_id": repo_id, "label": "imports"})).await;
+    // a business link, its reason saved as a fact on Alice (Acme and the link go with entity_delete below)
+    g.snap("entity_relate", "entity_relate", json!({"from_id": alice, "label": "works_at", "to_id": acme, "reason": "Alice told us she works at Acme."})).await;
 
     // merge + deletes
     let dup = g.snap("memory_write__duplicate_entity", "memory_write",
