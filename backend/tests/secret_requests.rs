@@ -921,3 +921,20 @@ async fn connector_handles_require_explicit_permission_and_guard_every_provider_
     assert_eq!(status, 200);
     assert_eq!(out["ok"], false, "{out}");
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+async fn the_pending_cap_holds_under_concurrent_requests() {
+    let w = std::sync::Arc::new(world().await);
+    let tasks = (0..30).map(|i| {
+        let w = w.clone();
+        tokio::spawn(async move { w.agent(&w.app.token, "secret_request", json!({"name": format!("race_{i}"), "description": "d"})).await })
+    });
+    let out: Vec<Value> = futures::future::join_all(tasks).await.into_iter().map(Result::unwrap).collect();
+    let pending = out.iter().filter(|r| r["status"] == "pending").count();
+    let limited = out.iter().filter(|r| r["code"] == "rate.limited").count();
+    assert_eq!((pending, limited), (10, 20), "{out:?}");
+    let msg = out.iter().find(|r| r["code"] == "rate.limited").unwrap()["error"].as_str().unwrap().to_string();
+    assert_eq!(msg, "10 secret requests are already waiting for this person; ask them to answer those first");
+    let stored = w.raw("org", "SELECT count() AS n FROM secret_request WHERE status = 'pending' GROUP ALL").await;
+    assert_eq!(stored[0]["n"], 10, "exactly ten pending rows exist");
+}
