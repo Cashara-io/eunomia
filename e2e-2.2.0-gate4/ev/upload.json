@@ -1,0 +1,10 @@
+{
+  "branch": "pr-screenshots",
+  "directory": "e2e-2.2.0-gate4",
+  "evidence_commit": "6c5a1c1f9c9eb0927a25d7cad67b00ed0a2dac06",
+  "remote_verified": true,
+  "force": false,
+  "temporary_worktree": "/private/tmp/eunomia-gate4-publish",
+  "temporary_worktree_removed": "Recorded in local cleanup receipt after final push",
+  "screenshots": 29
+}

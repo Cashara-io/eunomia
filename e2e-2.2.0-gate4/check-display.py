@@ -35,4 +35,5 @@ for folder in ['p3','chat']:
 for name,shown in [('Block Ice 20kg','7.98'),('Insulated Seafood Carton','7.43')]:
  exact=next(r for r in rows if r['product']==name)['unit cost AUD']*D('1.1');equal('UI half-away money '+name,shown,exact.quantize(D('.01'),rounding=ROUND_HALF_UP))
 equal('UI/MCP half-away stock total','27639.88',after['total_stock_at_cost'].quantize(D('.01'),rounding=ROUND_HALF_UP));equal('UI/MCP half-away stock delta','215.38',(after['total_stock_at_cost']-before['total_stock_at_cost']).quantize(D('.01'),rounding=ROUND_HALF_UP))
+equal('Half-cent average cost app versus MCP cents text','85.335',D('85.335').quantize(D('.01'),rounding=ROUND_HALF_UP))
 (s/'ev/display-number-check.json').write_text(json.dumps(checks,indent=2));print(json.dumps({'checks':len(checks),'failures':[c for c in checks if not c['pass']]},indent=2))
