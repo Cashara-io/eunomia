@@ -3463,6 +3463,23 @@ async fn relation_boundary_refuses_overlong_labels_in_strict_mode() {
 }
 
 #[tokio::test]
+async fn a_padded_label_is_stored_as_the_approved_label_it_was_grounded_as() {
+    let app = TestApp::new().await;
+    let vault = personal(&app).await;
+    let a = write(&app, "Alice", "person").await["entity"]["id"].clone();
+    let b = write(&app, "Bob", "person").await["entity"]["id"].clone();
+    ok(app.tool("ontology_propose", json!({"links": [{"from_kind": "person", "label": "knows", "to_kind": "person"}]})).await);
+    assert_eq!(decide_link(&app, &vault, "person", "knows", "person").await, 200);
+    assert_eq!(set_strict(&app, &vault, true).await.0, 200);
+    let padded = format!("  knows{}", " ".repeat(65));
+    ok(app.tool("code_relate", json!({"from_id": a, "to_id": b, "label": padded})).await);
+    ok(app.tool("entity_relate", json!({"from_id": a, "to_id": b, "label": padded, "reason": "old friends"})).await);
+    let rels = ok(app.tool("entities_get", json!({"id": a})).await)["relations"].clone();
+    let labels: Vec<&str> = rels.as_array().unwrap().iter().filter_map(|r| r["label"].as_str()).collect();
+    assert_eq!(labels, ["knows"], "one relation, stored under the approved label: {rels}");
+}
+
+#[tokio::test]
 async fn relation_boundary_refuses_secret_labels_before_storage_or_proposals() {
     let app = TestApp::new().await;
     let a = write(&app, "Alice", "person").await["entity"]["id"].clone();

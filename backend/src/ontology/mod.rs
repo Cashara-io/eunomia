@@ -156,6 +156,10 @@ impl Label {
         }
         Ok(Label(s.to_string()))
     }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 /// One link type: entities of `from_kind` relate to entities of `to_kind` under `label`.

@@ -870,6 +870,9 @@ pub async fn add_relation(
     label: &str,
     source_record_id: Option<&str>,
 ) -> AppResult<RelationOut> {
+    // grounding, lookup and storage all use the parsed label, so a padded one cannot pass as another
+    let label = crate::ontology::Label::parse(label)?;
+    let label = label.as_str();
     let (in_row, _) = relation_endpoints(db, owner, from_id, to_id, label).await?;
 
     if let Some(existing) = find_relation(db, from_id, to_id, label).await? {
@@ -951,6 +954,8 @@ pub async fn relate_with_reason(
         return Err(AppError::bad_request(format!("reason is at most {MAX_LINK_REASON} characters")));
     }
     let Some(reason) = reason else { return add_relation(db, owner, from_id, to_id, label, None).await.map(|r| (r, None)) };
+    let label = crate::ontology::Label::parse(label)?;
+    let label = label.as_str();
     let (from, to) = relation_endpoints(db, owner, from_id, to_id, label).await?;
     let mut redacted = Vec::new();
     let text = crate::redact::redact(&format!("{} {} {}: {reason}", from.name, label.replace('_', " "), to.name), &mut redacted);
