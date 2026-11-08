@@ -164,6 +164,17 @@ impl Said {
     }
 }
 
+/// A `memory_update` that keeps the stored text (to change its type) adds no new words, even when a
+/// recall just returned them.
+async fn resends_stored_text(db: &OrgDb, owner: &RecordId, tool: &str, args: &Value) -> bool {
+    if tool != "memory_update" {
+        return false;
+    }
+    let (Some(id), Some(text)) = (args["memory_id"].as_str(), args["text"].as_str()) else { return false };
+    let Ok(id) = crate::rid::parse(id) else { return false };
+    matches!(crate::entities::service::memory_text(db, owner, &id).await, Ok(Some(stored)) if squash(&stored) == squash(text))
+}
+
 /// Some reasoning models (gpt-6-luna) reason by default but refuse function tools on
 /// `chat/completions` unless `reasoning_effort` is `none`. Other models and OpenAI-compatible servers
 /// reject that field, so it is sent only after this refusal.
@@ -707,7 +718,7 @@ async fn run_send(
             let args: Value = serde_json::from_str(&tc.arguments).unwrap_or_else(|_| json!({}));
             let result = if !chat_may_call(&name) {
                 json!({ "error": format!("`{name}` is not available in the in-app chat; the user can do this from the app itself") })
-            } else if said.restates(&name, &args) {
+            } else if said.restates(&name, &args) && !resends_stored_text(db, owner, &name, &args).await {
                 json!({ "error": "Not saved: this text repeats a tool result or your own answer. Save only a new fact the user told you.", "code": ErrorCode::ValidationInvalid.as_str() })
             } else {
                 match crate::usage::with_context(crate::usage::Channel::Chat, thread_id.to_string(), registry::call(&state.app, user, &name, args)).await {

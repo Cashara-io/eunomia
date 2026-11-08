@@ -1034,6 +1034,14 @@ pub async fn update_memory(
     Ok(Some(MemoryOut { redacted, ..memory_out(&updated, None) }))
 }
 
+/// A memory's stored text, if `owner` may write it.
+pub async fn memory_text(db: &OrgDb, owner: &RecordId, memory_id: &RecordId) -> AppResult<Option<String>> {
+    require_memory_id(memory_id)?;
+    let row: Option<MemoryRow> = store::get(db, memory_id).await?;
+    let Some(row) = row else { return Ok(None) };
+    Ok(accessible(db, owner, &row.vault, Action::WriteMemories).await?.then_some(row.text))
+}
+
 /// Edit an entity's own fields -- name/aliases/summary -- vault-scoped, same
 /// not-found-is-None convention as `get_entity`. Only the fields passed
 /// (`Some`) are updated.

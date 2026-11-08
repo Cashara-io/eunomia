@@ -965,6 +965,24 @@ async fn the_chat_saves_what_the_user_said_while_its_reply_says_it_is_saving_it(
     assert!(texts.contains(&json!(text)), "the reply's own words are not a reason to refuse: {texts:?} {history}");
 }
 
+#[tokio::test]
+async fn the_chat_may_change_a_memory_type_and_resend_its_unchanged_text() {
+    let app = TestApp::new().await;
+    let text = "Jo moved to the Brisbane office last spring";
+    let written = ok(app.tool("memory_write", json!({"subject_name": "Jo", "subject_kind": "person", "text": text, "type": "world"})).await);
+    let (entity, memory) = (written["entity"]["id"].as_str().unwrap(), written["memory"]["id"].as_str().unwrap());
+    // the model reads Jo (so the text is in a tool result), then fixes the type and re-sends the same text
+    let read = json!([{"choices": [{"delta": {"tool_calls": [tool_call(0, "c1", "entities_get", json!({"id": entity}))]}}]}]);
+    let fix = json!([{"choices": [{"delta": {"tool_calls": [tool_call(0, "c2", "memory_update", json!({"memory_id": memory, "text": text, "type": "experience"}))]}}]}]);
+    let done = json!([{"choices": [{"delta": {"content": "Done."}}]}]);
+    let _mock = chat_turns(&app, vec![("", read), ("\"tool_call_id\":\"c1\"", fix), ("\"tool_call_id\":\"c2\"", done)]).await;
+
+    let (thread_id, _) = chat(&app, "That Brisbane move happened, it is not a standing fact.").await;
+    let (_, history) = app.http("GET", &format!("/api/chat/threads/{thread_id}/history"), None, true).await;
+    let types: Vec<Value> = app.db().await.test_raw().query(format!("SELECT VALUE type FROM memory WHERE text = '{text}'")).await.unwrap().take(0).unwrap();
+    assert_eq!(types, vec![json!("experience")], "{history}");
+}
+
 // ------------------------------------------------------------ typed properties and grounded links
 
 /// A property decision as the owner's browser session sends it.
