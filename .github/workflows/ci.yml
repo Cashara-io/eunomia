@@ -205,6 +205,8 @@ jobs:
       - run: bash scripts/ci/check-surreal-pins.sh
       # Migration numbers contiguous and unique, every file registered, queued numbers landed only when locked (backend/migrations/QUEUE.md).
       - run: bash scripts/ci/check-migrations.sh
+      # The update test starts from the newest published release (a new tag fails every PR until it has a row).
+      - run: bash scripts/ci/check-update-path-rows.sh
       # Every script test that needs no Docker, by glob so a new one cannot be forgotten.
       # SKIP lists the ones that need real containers (upgrade-surreal-v3 and update-path have their own jobs below).
       - run: |
@@ -271,6 +273,8 @@ jobs:
         include:
           - from: v2.0.7                        # published releases, pulled from ghcr
           - from: v2.0.8
+          - from: v2.0.9
+          - from: v2.1.0
     steps:
       - uses: actions/checkout@v4
         with:

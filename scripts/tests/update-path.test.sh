@@ -32,6 +32,11 @@
 #  9d. secret requests (tenant 0032): the tables are new and empty, then an agent asks, the person fills
 #      it from the browser, the agent gets the eu:// handle and transforms it, with the helper off (as 9c
 #      leaves it: held secrets need no sidecar); the value is only enc:v1: and in no table or log;
+#  9e. the ontology (tenant 0033 to 0037) on the Team vault the old release seeded: its entities show as
+#      observed and no ontology row exists; an agent proposes a kind, a money (AUD) property and a metric,
+#      a value for the proposed property is refused, a token cannot approve, the person's session does;
+#      then two values, metric_eval gives the hand-computed sum, a scenario_run moves it and writes
+#      nothing, and the other org sees none of it;
 #  10. rollback: the old tag on a fresh volume, restore the pre-update backup, counts and reads again,
 #      and none of the tables the update added.
 # Own compose project ($P), ports 8251 (backend) and 3251 (frontend). Artifacts (logs, snapshots) in
@@ -478,6 +483,10 @@ wait_embeddings 600; check "every seeded memory and record embedded before the s
 embed_backlog > "$W/embed-backlog-before.txt"
 n_orgs() { [ "$(org_dbs | wc -l | tr -d ' ')" -eq "$1" ]; }
 check "two users, two org databases" n_orgs 2
+# <from-tag> already at this build's detector version (2.0.9 on) has run this backfill: it must not run again
+FROM_DETECTOR="$(sed -n 's/^pub const DETECTOR_VERSION: i64 = \([0-9]*\);$/\1/p' "$I/backend/src/redact.rs" 2>/dev/null)"
+BACKFILL_RERUNS=1; [ "${FROM_DETECTOR:-0}" -lt "$DETECTOR_VERSION" ] || BACKFILL_RERUNS=0
+log "   $FROM runs detector v${FROM_DETECTOR:-none}, this build v$DETECTOR_VERSION: the backfill $([ "$BACKFILL_RERUNS" = 1 ] && echo runs || echo does not run) on update"
 if memtext | grep -qF "$FAKE_GH"; then PLAIN_SECRET=1; log "   $FROM stored the fake token in plain text (the backfill has work)"; else log "   INFO: $FROM already redacted the fake token on write"; fi
 
 # ---- 5. snapshot -------------------------------------------------------------------------------
@@ -543,7 +552,12 @@ if [ "$PLAIN_SECRET" = 1 ]; then wait_redacted 900; check "the backfill rewrote 
 # Every org runs this build's backfill once, even with nothing to rewrite: a <from-tag> that already
 # redacted on write (2.0.8) still has orgs marked done for an older detector version. Wait for all of
 # them, so the checks below do not race it.
-wait_backfilled 900; check "the backfill finished in every org (bounded wait)" test $? -eq 0
+if [ "$BACKFILL_RERUNS" = 1 ]; then
+  wait_backfilled 900; check "the backfill finished in every org (bounded wait)" test $? -eq 0
+  BACKFILL_EVENTS="$(org_dbs | wc -l | tr -d ' ')"
+else
+  BACKFILL_EVENTS="$(backfill_events)"
+fi
 wait_jobs 120
 wait_embeddings 600; check "no embedding backlog after the update" test $? -eq 0
 counts > "$W/counts-after.txt"; ledgers > "$W/ledgers-after.txt"
@@ -568,12 +582,14 @@ leaks() { echo "SELECT count() FROM memory WHERE string::contains(text, '$FAKE_G
 check "no memory row holds the fake token" test "$(leaks)" = 0
 backfill_rows() { local d; for d in $(org_dbs); do echo "SELECT count() FROM redact_backfill:v$DETECTOR_VERSION WHERE done_at != NONE GROUP ALL;" | sql "$d" | jq -r '.[0].result[0].count // 0'; done | sort -u | tr '\n' ' '; }
 check "a finished redact_backfill:v$DETECTOR_VERSION marker in every org" test "$(backfill_rows)" = "1 "
-check "one redact.backfill audit event per org" test "$(backfill_events)" = "$(org_dbs | wc -l | tr -d ' ')"
+check "redact.backfill audit events: one per org when it runs, none new when $FROM already ran it" test "$(backfill_events)" = "$BACKFILL_EVENTS"
 logged() { echo "SELECT count() FROM change WHERE op = 'updated' AND actor = 'system' AND item = '$SECRET_FACT' GROUP ALL;" | sql "$ORG_A" | jq -r '.[0].result[0].count // 0'; }
 check "the rewrite is in the change log as an update by system" test "$(logged)" = "$PLAIN_SECRET"
 # the credential broker (tenant 0031): its tables exist in every org and are empty after the update
 broker_rows() { grep -E '^org_[^ ]*\.(credential_ref|secret_provider) ' "$W/new-after.txt" | awk '{ s += $2; n++ } END { print n + 0, s + 0 }'; }
-check "the broker tables are new and empty in every org" test "$(broker_rows)" = "$(( $(org_dbs | wc -l | tr -d ' ') * 2 )) 0"
+if grep -q '\.credential_ref ' "$W/new-expected.txt"; then
+  check "the broker tables are new and empty in every org" test "$(broker_rows)" = "$(( $(org_dbs | wc -l | tr -d ' ') * 2 )) 0"
+fi
 # secret requests (tenant 0032): new and empty in every org, where the update added them
 request_rows() { grep -E '^org_[^ ]*\.(secret_request|vault_secret) ' "$W/new-after.txt" | awk '{ s += $2; n++ } END { print n + 0, s + 0 }'; }
 if grep -q '\.vault_secret ' "$W/new-expected.txt"; then
@@ -630,7 +646,7 @@ counts > "$W/counts-again.txt"; stable "$W/counts-again.txt" > "$W/stable-again.
 check "counts unchanged after the re-run" diff "$W/stable-expected.txt" "$W/stable-again.txt"
 diff "$W/stable-expected.txt" "$W/stable-again.txt" | head -20
 check "the new tables' counts unchanged after the re-run (the backfill does not run twice)" diff "$W/new-expected.txt" <(added "$W/counts-before.txt" "$W/counts-again.txt")
-check "still one redact.backfill event per org" test "$(backfill_events)" = "$(org_dbs | wc -l | tr -d ' ')"
+check "no new redact.backfill event on the re-run" test "$(backfill_events)" = "$BACKFILL_EVENTS"
 check "the fact is still redacted" bash -c 'case "$1" in *"[redacted: github token]"*) exit 0;; esac; exit 1' _ "$(memtext)"
 
 # ---- 9b. the change log on the upgraded stack --------------------------------------------------
@@ -756,6 +772,119 @@ if grep -q '\.vault_secret ' "$W/new-expected.txt"; then
   check "the value is in no table and no backend log line" test "$(held_leaks | awk '{ s += $1 } END { print s + 0 }')" = 0
   api -H "Authorization: Bearer $TOKEN_B" "$BASE/api/secrets/requests" > "$W/requests-b.json"
   check "the other org sees no request" jq -e '. == []' "$W/requests-b.json"
+fi
+
+# ---- 9e. the ontology on the upgraded stack ----------------------------------------------------
+# Only where the update added the tables. On the Team vault seeded by the old release: the old entities
+# show as observed and nothing is reviewed; an agent proposes a kind, a money property and a metric; only
+# the person's browser session approves; then values, metric_eval and a what-if that writes nothing.
+# shellcheck disable=SC2016 # $1 and $2 in the bash -c and awk programs are theirs, not this shell's
+if grep -q '\.ontology_kind ' "$W/new-expected.txt"; then
+  log "9e. the ontology on the upgraded stack"
+  check "every org ledger has 0033_ontology" ledger_has 33 ontology
+  check "every org ledger has 0034_ontology_properties" ledger_has 34 ontology_properties
+  check "every org ledger has 0035_ontology_metrics" ledger_has 35 ontology_metrics
+  check "every org ledger has 0036_ontology_automap" ledger_has 36 ontology_automap
+  check "every org ledger has 0037_ontology_coverage" ledger_has 37 ontology_coverage
+  ONTO_TABLES="ontology_kind ontology_link ontology_property entity_property ontology_metric"
+  onto_rows() { # onto_rows : "<db>.<table> <rows>" for the ontology tables in every org database
+    local db t
+    for db in $(org_dbs); do
+      for t in $ONTO_TABLES; do
+        echo "$db.$t $(echo "SELECT count() FROM $t GROUP ALL;" | sql "$db" | jq -r '.[0].result[0].count // 0')"
+      done
+    done
+  }
+  onto_rows > "$W/onto-rows-before.txt"
+  check "no ontology row in any org before this step writes one" awk '$2 != 0 { bad = 1 } END { exit bad }' "$W/onto-rows-before.txt"
+  mcp_refusal() { # mcp_refusal TOKEN TOOL ARGS-JSON : the tool's error text; fails unless the tool refused
+    local out
+    out="$(api -H "Authorization: Bearer $1" -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+      -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"$2\",\"arguments\":$3}}" "$BASE/mcp")" || return 1
+    printf '%s' "$out" | sed -n 's/^data: //p;/^{/p' | head -1 | jq -er 'select(.result.isError == true) | .result.content[0].text | fromjson | .error'
+  }
+  decide() { # decide WHAT BODY-JSON : the HTTP status of a decide route on the Team vault, as AUTH (curl args)
+    curl -sS -o "$W/decide.json" -w '%{http_code}' --max-time 30 "${AUTH[@]}" -H 'Content-Type: application/json' -d "$2" "$BASE/api/vaults/$TEAM/ontology/$1/decide"
+  }
+  mcp "$TOKEN_A" ontology_get "{\"vault_id\":\"$TEAM\"}" > "$W/onto-old.json"
+  check "the old release's entities show as observed, nothing reviewed" jq -e '
+    ([.kinds[] | select(.kind == "person" and .entities >= 1 and (.samples | index("Grace Hopper")))] | length == 1)
+    and all(.kinds[]; .status == "observed" and .origin == null and .properties == [] and .metrics == [])
+    and all(.links[]; .status == "observed")' "$W/onto-old.json"
+  QUESTION='{"question":"What is the total price of our products?","vault_id":"'"$TEAM"'"}'
+  mcp "$TOKEN_A" ontology_coverage "$QUESTION" > "$W/coverage-before.json"
+  check "coverage before any approval: 0, the phrases uncovered, propose suggested" \
+    jq -e '.coverage == 0 and (.uncovered | length) > 0 and (.suggestion | test("ontology_propose"))' "$W/coverage-before.json"
+
+  LATTE="$(mcp "$TOKEN_A" memory_write "{\"subject_name\":\"Latte\",\"subject_kind\":\"product\",\"text\":\"A milk coffee.\",\"vault_id\":\"$TEAM\"}" | jq -r .entity.id)"
+  MOCHA="$(mcp "$TOKEN_A" memory_write "{\"subject_name\":\"Mocha\",\"subject_kind\":\"product\",\"text\":\"A chocolate coffee.\",\"vault_id\":\"$TEAM\"}" | jq -r .entity.id)"
+  check "two products in the Team vault" bash -c "[ -n '$LATTE' ] && [ '$LATTE' != null ] && [ -n '$MOCHA' ] && [ '$MOCHA' != null ]"
+  mcp "$TOKEN_A" ontology_propose "{\"vault_id\":\"$TEAM\",
+    \"kinds\":[{\"kind\":\"product\",\"description\":\"Something the cafe sells\",\"reason\":\"update-path\"}],
+    \"properties\":[{\"kind\":\"product\",\"name\":\"price\",\"datatype\":\"money\",\"unit\":\"AUD\",\"description\":\"What one costs\"}],
+    \"metrics\":[{\"kind\":\"product\",\"name\":\"total_price\",\"expr\":{\"agg\":\"sum\",\"property\":\"price\"},\"description\":\"All prices added up\"}]}" > "$W/onto-propose.json"
+  check "ontology_propose: the kind, the money property and the metric, all proposed" jq -e '
+    .kinds == [{"kind": "product", "status": "proposed", "merge_into": null}]
+    and .properties == [{"kind": "product", "name": "price", "datatype": "money", "status": "proposed", "merge_into": null}]
+    and ([.metrics[] | select(.name == "total_price" and .status == "proposed")] | length == 1)' "$W/onto-propose.json"
+  refused="$(mcp_refusal "$TOKEN_A" entity_set_property "{\"entity_id\":\"$LATTE\",\"property\":\"price\",\"value\":4.5}")"
+  check "a value for a proposed property is refused" bash -c 'case "$1" in *"proposed, not approved"*) exit 0;; esac; exit 1' _ "$refused"
+  check "the refused value wrote nothing" test "$(echo 'SELECT count() FROM entity_property GROUP ALL;' | sql "$ORG_A" | jq -r '.[0].result[0].count // 0')" = 0
+
+  AUTH=(-H "Authorization: Bearer $TOKEN_A")
+  code="$(decide kinds '{"kind":"product","decision":{"action":"approve"}}')"
+  check "an agent's token cannot approve the kind (HTTP $code)" test "$code" = 403
+  code="$(decide properties '{"kind":"product","name":"price","decision":{"action":"approve"}}')"
+  check "an agent's token cannot approve the property (HTTP $code)" test "$code" = 403
+  code="$(decide metrics '{"kind":"product","name":"total_price","decision":{"action":"approve"}}')"
+  check "an agent's token cannot approve the metric (HTTP $code)" test "$code" = 403
+  mcp "$TOKEN_A" ontology_get "{\"vault_id\":\"$TEAM\"}" > "$W/onto-proposed.json"
+  check "after the refused approvals all three are still proposed" jq -e '.kinds[] | select(.kind == "product")
+    | .status == "proposed" and .properties[0].status == "proposed" and .metrics[0].status == "proposed"' "$W/onto-proposed.json"
+  AUTH=(-b "$JAR_A")
+  code="$(decide kinds '{"kind":"product","decision":{"action":"approve"}}')"
+  check "the person approves the kind from their browser session (HTTP $code)" test "$code" = 200
+  code="$(decide properties '{"kind":"product","name":"price","decision":{"action":"approve"}}')"
+  check "the person approves the property (HTTP $code)" test "$code" = 200
+  code="$(decide metrics '{"kind":"product","name":"total_price","decision":{"action":"approve"}}')"
+  check "the person approves the metric (HTTP $code)" test "$code" = 200
+  check "the decide answer shows all three approved" jq -e '.kinds[] | select(.kind == "product")
+    | .status == "approved" and .properties[0].status == "approved" and .properties[0].unit == "AUD" and .metrics[0].status == "approved"' "$W/decide.json"
+
+  mcp "$TOKEN_A" entity_set_property "{\"entity_id\":\"$LATTE\",\"property\":\"price\",\"value\":4.5}" > "$W/set-latte.json"
+  mcp "$TOKEN_A" entity_set_property "{\"entity_id\":\"$MOCHA\",\"property\":\"price\",\"value\":6}" > "$W/set-mocha.json"
+  check "entity_set_property on both products (money, AUD)" jq -e -s 'map(.value.property == "price" and .value.unit == "AUD") == [true, true]' "$W/set-latte.json" "$W/set-mocha.json"
+  # 4.5 + 6
+  mcp "$TOKEN_A" metric_eval "{\"metric\":\"total_price\",\"vault_id\":\"$TEAM\"}" > "$W/metric-eval.json"
+  check "metric_eval total_price is 10.5 AUD over the two products" \
+    jq -e '.value == 10.5 and .unit == "AUD" and .status == "approved" and .n_entities == 2' "$W/metric-eval.json"
+  mcp "$TOKEN_A" ontology_coverage "$QUESTION" > "$W/coverage-after.json"
+  check "coverage after the approvals matches the approved kind" \
+    jq -e '.coverage > 0 and any(.matched[]; .term == "kind" and .name == "product")' "$W/coverage-after.json"
+
+  wait_jobs 120
+  counts | awk -v v=" $VOLATILE " '{ split($1, a, "."); if (index(v, " " a[2] " ") == 0) print }' > "$W/counts-whatif-before.txt"
+  # the Latte at 7 instead of 4.5: 7 + 6
+  mcp "$TOKEN_A" scenario_run "{\"vault_id\":\"$TEAM\",\"changes\":[{\"set\":{\"entity_id\":\"$LATTE\",\"property\":\"price\",\"value\":7}}],\"metrics\":[\"total_price\"]}" > "$W/scenario.json"
+  counts | awk -v v=" $VOLATILE " '{ split($1, a, "."); if (index(v, " " a[2] " ") == 0) print }' > "$W/counts-whatif-after.txt"
+  check "scenario_run: total_price 10.5 really, 13 in the what-if" \
+    jq -e '.baseline[0].metric == "total_price" and .baseline[0].value == 10.5 and .scenario[0].value == 13 and .scenario[0].delta == 2.5' "$W/scenario.json"
+  check "the what-if wrote nothing (every ontology and entity table, every org)" diff "$W/counts-whatif-before.txt" "$W/counts-whatif-after.txt"
+  diff "$W/counts-whatif-before.txt" "$W/counts-whatif-after.txt" | head -20
+  mcp "$TOKEN_A" metric_eval "{\"metric\":\"total_price\",\"vault_id\":\"$TEAM\"}" > "$W/metric-eval-2.json"
+  check "metric_eval still answers the real 10.5 after the what-if" jq -e '.value == 10.5' "$W/metric-eval-2.json"
+
+  onto_rows > "$W/onto-rows-after.txt"
+  check "$ORG_A holds the one property, the one metric and the two values" bash -c "grep -qx '$ORG_A.ontology_property 1' '$W/onto-rows-after.txt' && grep -qx '$ORG_A.ontology_metric 1' '$W/onto-rows-after.txt' && grep -qx '$ORG_A.entity_property 2' '$W/onto-rows-after.txt'"
+  check "the other org's ontology tables are still empty" awk -v org="$ORG_A" '{ split($1, a, "."); if (a[1] != org && $2 != 0) bad = 1 } END { exit bad }' "$W/onto-rows-after.txt"
+  check "the other org cannot read the Team vault's ontology over MCP" test -n "$(mcp_refusal "$TOKEN_B" ontology_get "{\"vault_id\":\"$TEAM\"}")"
+  check "the other org cannot run the Team vault's metric" test -n "$(mcp_refusal "$TOKEN_B" metric_eval "{\"metric\":\"total_price\",\"vault_id\":\"$TEAM\"}")"
+  check "the other org cannot set a value on the Team vault's product" test -n "$(mcp_refusal "$TOKEN_B" entity_set_property "{\"entity_id\":\"$LATTE\",\"property\":\"price\",\"value\":1}")"
+  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 -H "Authorization: Bearer $TOKEN_B" "$BASE/api/vaults/$TEAM/ontology")"
+  check "the other org gets no 200 for the Team vault's ontology over REST (HTTP $code)" test "$code" != 200
+  mcp "$TOKEN_B" ontology_get '{}' > "$W/onto-b.json"
+  check "the other org's own ontology has no product and nothing reviewed" \
+    jq -e 'all(.kinds[]; .kind != "product" and .status == "observed" and .properties == [] and .metrics == [])' "$W/onto-b.json"
 fi
 
 # ---- 10. rollback ------------------------------------------------------------------------------
