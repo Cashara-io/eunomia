@@ -265,6 +265,9 @@ pub async fn create(state: &OrgState, user: &RecordId, args: Value) -> AppResult
         }
     }
 
+    // SurrealDB transactions are snapshot isolated: two that each count 9 and insert a different row
+    // both commit, so the count-and-create transaction alone cannot hold the cap. One at a time per person.
+    let _one_at_a_time = crate::tx::lock(&format!("secret_request.pending:{}", user.to_string())).await;
     // a retry gets the same pending request
     let same: Vec<RequestRow> = q::REQ_PENDING_SAME
         .on(&state.db)
@@ -278,38 +281,44 @@ pub async fn create(state: &OrgState, user: &RecordId, args: Value) -> AppResult
         return Ok(pending_value(state, &r));
     }
 
-    #[derive(Deserialize, SurrealValue)]
-    struct Count {
-        n: i64,
-    }
-    let pending: Vec<Count> = q::REQ_PENDING_COUNT.on(&state.db).bind(("requester", user.clone())).bind(("vaults", vaults.clone())).await?.check()?.take(0)?;
-    if pending.first().is_some_and(|c| c.n >= MAX_PENDING) {
-        return Ok(AppError::coded(ErrorCode::RateLimited, format!("{MAX_PENDING} secret requests are already waiting for this person; ask them to answer those first")).to_tool_value());
-    }
-
     let ctx = crate::usage::current_context();
     let label = redacted(a.label.as_deref().unwrap_or(&a.name), 120);
-    let rows: Vec<RequestRow> = q::REQ_CREATE
-        .on(&state.db)
-        .bind(("vault", vault.clone()))
-        .bind(("name", a.name.clone()))
-        .bind(("label", if label.is_empty() { a.name.clone() } else { label }))
-        .bind(("description", redacted(a.description.as_deref().unwrap_or_default(), 1000)))
-        .bind(("hosts", hosts.clone()))
-        .bind(("placements", placements))
-        .bind(("connector", connector))
-        .bind(("requester", user.clone()))
-        .bind(("actor_kind", who.actor.kind.to_string()))
-        .bind(("actor_id", who.actor.id.clone()))
-        .bind(("client_name", client_name(state, user, &who).await))
-        .bind(("channel", ctx.channel.as_str().to_string()))
-        .bind(("mcp_session", ctx.session.clone()))
-        .bind(("replace", a.replace))
-        .bind(("ttl_days", a.secret_expires_in_days))
-        .bind(("expires_at", Datetime::from(chrono::Utc::now() + chrono::TimeDelta::minutes(ttl))))
-        .await?
-        .check()?
-        .take(0)?;
+    let label = if label.is_empty() { a.name.clone() } else { label };
+    let description = redacted(a.description.as_deref().unwrap_or_default(), 1000);
+    let client = client_name(state, user, &who).await;
+    let expires_at = Datetime::from(chrono::Utc::now() + chrono::TimeDelta::minutes(ttl));
+    let created = crate::tx::with_retry(|| async {
+        q::REQ_CREATE
+            .on(&state.db)
+            .bind(("vault", vault.clone()))
+            .bind(("vaults", vaults.clone()))
+            .bind(("max", MAX_PENDING))
+            .bind(("name", a.name.clone()))
+            .bind(("label", label.clone()))
+            .bind(("description", description.clone()))
+            .bind(("hosts", hosts.clone()))
+            .bind(("placements", placements.clone()))
+            .bind(("connector", connector.clone()))
+            .bind(("requester", user.clone()))
+            .bind(("actor_kind", who.actor.kind.to_string()))
+            .bind(("actor_id", who.actor.id.clone()))
+            .bind(("client_name", client.clone()))
+            .bind(("channel", ctx.channel.as_str().to_string()))
+            .bind(("mcp_session", ctx.session.clone()))
+            .bind(("replace", a.replace))
+            .bind(("ttl_days", a.secret_expires_in_days))
+            .bind(("expires_at", expires_at))
+            .await?
+            .check()?
+            .take::<Vec<RequestRow>>(q::REQ_CREATE.slot)
+    })
+    .await;
+    let rows = match created {
+        Err(e) if e.to_string().contains("pending_cap") => {
+            return Ok(AppError::coded(ErrorCode::RateLimited, format!("{MAX_PENDING} secret requests are already waiting for this person; ask them to answer those first")).to_tool_value());
+        }
+        r => r?,
+    };
     let r = rows.into_iter().next().ok_or_else(|| AppError::internal("secret_request create returned no row"))?;
     let (_, insecure) = fill_url(&state.settings, &r.id);
     if insecure {

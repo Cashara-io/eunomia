@@ -11,7 +11,6 @@ use super::{ControlStmt, Stmt};
 pub const ALL: &[&Stmt] = &[
     &REQ_CREATE,
     &REQ_PENDING_SAME,
-    &REQ_PENDING_COUNT,
     &REQ_GET,
     &REQ_LIST,
     &REQ_EXPIRE,
@@ -33,12 +32,21 @@ pub const CONTROL_ALL: &[&ControlStmt] = &[&ACTIVITY, &TOKEN_NAME, &CLIENT_NAME]
 
 // ---------------------------------------------------------------- requests
 
-pub const REQ_CREATE: Stmt = Stmt::new(
+/// A new pending request, refused with `pending_cap` when the requester already has `$max` pending in
+/// `$vaults`: the count and the create are one transaction, so concurrent calls cannot both pass.
+pub const REQ_CREATE: Stmt = Stmt::at(
     "secret_requests.create",
-    "CREATE secret_request SET vault = $vault, name = $name, label = $label, description = $description, \
-     target_hosts = $hosts, placements = $placements, connector = $connector, requested_by = $requester, \
-     actor_kind = $actor_kind, actor_id = $actor_id, client_name = $client_name, channel = $channel, \
-     session = $mcp_session, replace = $replace, secret_ttl_days = $ttl_days, expires_at = $expires_at RETURN AFTER",
+    "BEGIN TRANSACTION; \
+     LET $n = (SELECT count() AS n FROM secret_request WHERE requested_by = $requester AND status = 'pending' \
+        AND expires_at > time::now() AND vault IN $vaults GROUP ALL)[0].n ?? 0; \
+     IF $n >= $max { THROW 'pending_cap' }; \
+     LET $row = (CREATE secret_request SET vault = $vault, name = $name, label = $label, description = $description, \
+        target_hosts = $hosts, placements = $placements, connector = $connector, requested_by = $requester, \
+        actor_kind = $actor_kind, actor_id = $actor_id, client_name = $client_name, channel = $channel, \
+        session = $mcp_session, replace = $replace, secret_ttl_days = $ttl_days, expires_at = $expires_at RETURN AFTER); \
+     RETURN $row; \
+     COMMIT TRANSACTION;",
+    4, // BEGIN 0, LET 1, IF 2, LET 3, RETURN 4
 );
 
 /// The same caller's pending request for the same slot (a retried call gets it back).
@@ -46,12 +54,6 @@ pub const REQ_PENDING_SAME: Stmt = Stmt::new(
     "secret_requests.pending_same",
     "SELECT * FROM secret_request WHERE vault = $vault AND name = $name AND actor_id = $actor_id AND status = 'pending' \
      AND expires_at > time::now() ORDER BY created_at DESC LIMIT 1",
-);
-
-pub const REQ_PENDING_COUNT: Stmt = Stmt::new(
-    "secret_requests.pending_count",
-    "SELECT count() AS n FROM secret_request WHERE requested_by = $requester AND status = 'pending' AND expires_at > time::now() \
-     AND vault IN $vaults GROUP ALL",
 );
 
 pub const REQ_GET: Stmt = Stmt::new("secret_requests.get", "SELECT * FROM secret_request WHERE id = $id AND vault IN $vaults");
