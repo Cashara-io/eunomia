@@ -84,6 +84,11 @@ fn properties_used(e: &MetricExpr) -> BTreeSet<&str> {
     out
 }
 
+/// `units_on_open_orders` reads as "units on open orders".
+fn words(name: &str) -> String {
+    name.replace('_', " ")
+}
+
 pub(super) fn assess(o: &OntologyOut) -> ReadinessOut {
     let (mut kinds, mut properties, mut metrics, mut links) = (StatusCounts::default(), StatusCounts::default(), StatusCounts::default(), StatusCounts::default());
     let mut metric_blockers = Vec::new();
@@ -100,11 +105,12 @@ pub(super) fn assess(o: &OntologyOut) -> ReadinessOut {
                 continue;
             }
             for p in properties_used(&m.expr) {
+                let (metric, kind, prop) = (words(&m.name), words(&k.kind), words(p));
                 let why = match by_name.get(p) {
-                    None => format!("metric {} on {} uses {p}, which is not a property of {}", m.name, k.kind, k.kind),
-                    Some(i) if i.status == Status::Rejected => format!("metric {} on {} uses a rejected property, {p}", m.name, k.kind),
-                    Some(i) if i.status == Status::Proposed => format!("metric {} on {} uses {p}, which is proposed, not approved", m.name, k.kind),
-                    Some(i) if i.values == 0 => format!("metric {} on {} uses {p}, which has no values yet: import them or set them", m.name, k.kind),
+                    None => format!("metric {metric} on {kind} uses {prop}, which is not a property of {kind}"),
+                    Some(i) if i.status == Status::Rejected => format!("metric {metric} on {kind} uses a rejected property, {prop}"),
+                    Some(i) if i.status == Status::Proposed => format!("metric {metric} on {kind} uses {prop}, which is proposed, not approved"),
+                    Some(i) if i.values == 0 => format!("metric {metric} on {kind} uses {prop}, which has no values yet: import them or set them"),
                     Some(_) => continue,
                 };
                 metric_blockers.push(why);
