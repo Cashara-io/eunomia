@@ -19,9 +19,11 @@
 //!   (`tools/registry/ontology.rs`).
 
 pub mod automap;
+pub mod coverage;
 pub mod metric;
 pub mod profile;
 pub mod property;
+pub mod readiness;
 pub mod scenario;
 pub mod suggest;
 pub mod tabular;
@@ -315,6 +317,9 @@ pub struct LinkItem {
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct OntologyOut {
     pub vault: String,
+    /// "Only approved kinds and links": a write under a custom kind or a relation under a link type
+    /// that is not approved is refused and filed as a proposal.
+    pub strict: bool,
     /// The built-in kinds first, then the others by name.
     pub kinds: Vec<KindItem>,
     pub links: Vec<LinkItem>,
@@ -350,7 +355,8 @@ pub(crate) async fn view(db: &OrgDb, vault: &RecordId) -> AppResult<OntologyOut>
     };
     let properties = property::properties_by_kind(db, vault).await?;
     let metrics = metric::metrics_by_kind(db, vault).await?;
-    Ok(OntologyOut { vault: vault.to_string(), kinds: merge_kinds(counts, kind_rows, properties, metrics)?, links: merge_links(link_counts, link_rows)? })
+    let strict = strict(db, vault).await?;
+    Ok(OntologyOut { vault: vault.to_string(), strict, kinds: merge_kinds(counts, kind_rows, properties, metrics)?, links: merge_links(link_counts, link_rows)? })
 }
 
 /// The link types among `present` (from kind, label, to kind) in `vault`, each with its decision or
@@ -812,9 +818,11 @@ pub async fn ground(db: &OrgDb, vault: &RecordId, kind: &str) -> AppResult<Optio
         Err(e) if no_ontology_table(&e) => return Ok(None),
         res => res?.take(0)?,
     };
-    let Some(row) = rows.into_iter().next() else { return Ok(None) };
-    if Status::parse(&row.status)? != Status::Rejected {
-        return Ok(None);
+    let Some(row) = rows.into_iter().next() else { return strict_kind(db, vault, &kind).await.map(|_| None) };
+    match Status::parse(&row.status)? {
+        Status::Approved => return Ok(None),
+        Status::Proposed => return strict_kind(db, vault, &kind).await.map(|_| None),
+        Status::Rejected => {}
     }
     match row.merge_into {
         Some(to) => Ok(Some(KindMapped { from: kind.0, to })),
@@ -840,8 +848,10 @@ pub async fn ground_link(db: &OrgDb, vault: &RecordId, from_kind: &str, label: &
         Err(e) if no_ontology_table(&e) => return Ok(()),
         res => res?.take(0)?,
     };
-    if status.first().map(String::as_str) != Some(Status::Rejected.as_str()) {
-        return Ok(());
+    match status.first().map(String::as_str) {
+        Some(s) if s == Status::Approved.as_str() => return Ok(()),
+        Some(s) if s == Status::Rejected.as_str() => {}
+        _ => return strict_link(db, vault, &key).await,
     }
     let approved: Vec<String> = q::APPROVED_LINKS
         .on(db)
@@ -857,6 +867,88 @@ pub async fn ground_link(db: &OrgDb, vault: &RecordId, from_kind: &str, label: &
         format!("use an approved one: {}", approved.iter().map(|l| format!("{from} {l} {to}")).collect::<Vec<_>>().join(", "))
     };
     Err(AppError::coded(ErrorCode::OntologyRejected, format!("the link type {from} {} {to} was rejected for this vault; {alternatives}", key.label.0)))
+}
+
+/// Whether `vault` takes only approved kinds and links. Off for every vault until an owner turns it on.
+pub async fn strict(db: &OrgDb, vault: &RecordId) -> AppResult<bool> {
+    let on: Vec<Option<bool>> = q::STRICT.on(db).bind(("vault", vault.clone())).await?.take(0)?;
+    Ok(on.into_iter().flatten().next().unwrap_or(false))
+}
+
+const STRICT_REASON: &str = "An agent wrote under it while this vault takes only approved kinds and links.";
+
+/// In a strict vault, a write under custom kind `kind` (proposed, or never reviewed) is refused naming
+/// the approved kinds, and the kind is filed as a proposal so an owner sees what was wanted.
+async fn strict_kind(db: &OrgDb, vault: &RecordId, kind: &Kind) -> AppResult<()> {
+    if !strict(db, vault).await? {
+        return Ok(());
+    }
+    q::PROPOSE_KIND
+        .on(db)
+        .bind(("id", kind_rid(vault, kind)))
+        .bind(("vault", vault.clone()))
+        .bind(("kind", kind.0.clone()))
+        .bind(("description", None::<String>))
+        .bind(("merge_into", None::<String>))
+        .bind(("synonyms", Vec::<String>::new()))
+        .bind(("origin", Origin::Agent.as_str().to_string()))
+        .bind(("reason", Some(STRICT_REASON.to_string())))
+        .await?;
+    let approved: Vec<String> = q::APPROVED_KINDS.on(db).bind(("vault", vault.clone())).await?.take(0)?;
+    let custom = if approved.is_empty() { String::new() } else { format!(" or an approved kind ({})", approved.join(", ")) };
+    Err(AppError::coded(
+        ErrorCode::OntologyRejected,
+        format!(
+            "this vault takes only approved kinds and links, and the kind {:?} is not approved: write under a built-in kind ({}){custom}. It was filed as a proposal for a vault owner to review.",
+            kind.0,
+            KINDS.join(", ")
+        ),
+    ))
+}
+
+/// [`strict_kind`] for a relation's link type.
+async fn strict_link(db: &OrgDb, vault: &RecordId, key: &LinkKey) -> AppResult<()> {
+    if !strict(db, vault).await? {
+        return Ok(());
+    }
+    q::PROPOSE_LINK
+        .on(db)
+        .bind(("id", link_rid(vault, key)))
+        .bind(("vault", vault.clone()))
+        .bind(("from_kind", key.from_kind.0.clone()))
+        .bind(("label", key.label.0.clone()))
+        .bind(("to_kind", key.to_kind.0.clone()))
+        .bind(("description", None::<String>))
+        .bind(("origin", Origin::Agent.as_str().to_string()))
+        .bind(("reason", Some(STRICT_REASON.to_string())))
+        .await?;
+    let approved: Vec<String> = q::APPROVED_LINKS
+        .on(db)
+        .bind(("vault", vault.clone()))
+        .bind(("from_kind", key.from_kind.0.clone()))
+        .bind(("to_kind", key.to_kind.0.clone()))
+        .await?
+        .take(0)?;
+    let (from, to) = (&key.from_kind.0, &key.to_kind.0);
+    let alternatives = if approved.is_empty() {
+        format!("no link type from {from} to {to} is approved yet")
+    } else {
+        format!("use an approved one: {}", approved.iter().map(|l| format!("{from} {l} {to}")).collect::<Vec<_>>().join(", "))
+    };
+    Err(AppError::coded(
+        ErrorCode::OntologyRejected,
+        format!(
+            "this vault takes only approved kinds and links, and the link type {from} {} {to} is not approved; {alternatives}. It was filed as a proposal for a vault owner to review.",
+            key.label.0
+        ),
+    ))
+}
+
+/// Turns "Only approved kinds and links" on or off for `vault` (an owner in the browser only).
+pub async fn set_strict(db: &OrgDb, user: &RecordId, vault: &RecordId, on: bool) -> AppResult<OntologyOut> {
+    decider(db, user, vault).await?;
+    q::SET_STRICT.on(db).bind(("vault", vault.clone())).bind(("on", on)).await?;
+    view(db, vault).await
 }
 
 /// A reviewed kind in one of the vaults `entity_types` reads.
