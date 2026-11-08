@@ -37,7 +37,7 @@ expression: stable
     ],
     "changed": [
       {
-        "entity_id": "entity:<id19>",
+        "entity_id": "entity:<id21>",
         "name": "orders_db",
         "kind": "db",
         "property": "size_gb",

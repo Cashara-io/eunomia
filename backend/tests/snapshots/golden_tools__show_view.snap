@@ -21,7 +21,7 @@ expression: stable
       },
       "path": [
         {
-          "id": "relates_to:<id30>",
+          "id": "relates_to:<id32>",
           "from": {
             "id": "file:<id10>",
             "name": "main.rs",
@@ -40,5 +40,6 @@ expression: stable
       "why": "It is part of the repository."
     }
   ],
+  "linked": true,
   "text": "The repository moves to a new host.\nStarting from eunomia (repository).\n1. main.rs (file), via main.rs part of eunomia. It is part of the repository."
 }

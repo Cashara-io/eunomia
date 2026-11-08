@@ -101,7 +101,7 @@ fn propose_schema() -> serde_json::Value {
                     "type": "object",
                     "properties": {
                         "from_kind": kind_schema(),
-                        "label": {"type": "string", "description": "the relation label, as `code_relate` writes it, e.g. works_at or calls"},
+                        "label": {"type": "string", "description": "the relation label, as `entity_relate` or `code_relate` writes it, e.g. works_at or calls"},
                         "to_kind": kind_schema(),
                         "description": {"type": "string"},
                         "reason": {"type": "string"},

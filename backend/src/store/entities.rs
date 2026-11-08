@@ -48,12 +48,35 @@ pub const RELATE_RETURNING: Stmt = Stmt::new(
     "RELATE $in->relates_to->$out SET label = $label, owner = $owner, source = $source RETURN AFTER",
 );
 
+pub const RELATE_WITH_REASON: Stmt = Stmt::at(
+    "entities.relate_with_reason",
+    r#"BEGIN TRANSACTION;
+        LET $existing = (SELECT * FROM relates_to WHERE in = $in AND out = $out AND (label = $label OR string::trim(label) = $label) LIMIT 1);
+        LET $edge = IF array::len($existing) > 0 { $existing } ELSE {
+            (RELATE $in->relates_to->$out SET label = $label, owner = $owner RETURN AFTER)
+        };
+        LET $memory = IF array::len((SELECT VALUE id FROM $reason_id)) > 0 { [] } ELSE {
+            (CREATE $reason_id SET owner = $owner, vault = $vault, subject = $in, text = $text, type = "world" RETURN AFTER)
+        };
+        IF array::len($memory) > 0 {
+            IF array::len((SELECT VALUE id FROM $obs_id)) > 0 {
+                UPDATE $obs_id SET status = "stale" WHERE status != "stale"
+            } ELSE {
+                UPDATE memory SET status = "stale" WHERE subject = $in AND type = "observation" AND status != "stale"
+            }
+        };
+        RETURN { relation: $edge[0], memory: $memory[0] ?? NONE, created: array::len($existing) = 0 };
+        COMMIT TRANSACTION;"#,
+    5,
+);
+
 pub const RELATE: Stmt =
     Stmt::new("entities.relate", "RELATE $in->relates_to->$out SET label = $label, owner = $owner, source = $source");
 
 pub const FIND_RELATION: Stmt = Stmt::new(
     "entities.find_relation",
-    "SELECT * FROM relates_to WHERE in = $in AND out = $out AND label = $label LIMIT 1",
+    // `string::trim`: an edge stored before labels were trimmed is still the same relation
+    "SELECT * FROM relates_to WHERE in = $in AND out = $out AND (label = $label OR string::trim(label) = $label) LIMIT 1",
 );
 
 pub const DELETE_RECORD: Stmt = Stmt::new("entities.delete_record", "DELETE $id");
@@ -190,6 +213,14 @@ pub const EDGES_TOUCHING: Stmt = Stmt::at(
        RETURN array::concat($outs, $ins);"#,
     2, // two LETs, then the RETURN
 );
+/// Whether `$id` has any relation, either way, to an entity in its own vault `$vault`.
+pub const HAS_RELATION: Stmt = Stmt::at(
+    "entities.has_relation",
+    r#"LET $outs = (SELECT VALUE id FROM relates_to WHERE in = $id AND out.vault = $vault LIMIT 1);
+       LET $ins = (SELECT VALUE id FROM relates_to WHERE out = $id AND in.vault = $vault LIMIT 1);
+       RETURN array::len($outs) + array::len($ins) > 0;"#,
+    2, // two LETs, then the RETURN
+);
 /// Entities by id, in any vault: the caller checks each one's vault.
 pub const NODES_BY_ID: Stmt = Stmt::new("entities.nodes_by_id", "SELECT id, vault, kind, name, summary FROM $ids");
 /// Relations by id, in any vault: the caller checks both ends.
@@ -289,6 +320,7 @@ pub const ALL: &[&Stmt] = &[
     &WRITE_OBSERVATION,
     &WRITE_FACT,
     &RELATE_RETURNING,
+    &RELATE_WITH_REASON,
     &RELATE,
     &FIND_RELATION,
     &DELETE_RECORD,
@@ -303,6 +335,7 @@ pub const ALL: &[&Stmt] = &[
     &MEMORIES_OF,
     &EDGES_AMONG,
     &EDGES_TOUCHING,
+    &HAS_RELATION,
     &NODES_BY_ID,
     &RELATIONS_BY_ID,
     &RECENT_FACTS,

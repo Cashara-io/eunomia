@@ -4,7 +4,7 @@ expression: stable
 ---
 {
   "document": {
-    "id": "document:<id18>",
+    "id": "document:<id20>",
     "vault": "vault:<id2>",
     "filename": "anvil-budget.md",
     "media_type": "text/markdown",
@@ -16,13 +16,13 @@ expression: stable
     "created_at": "<ts>",
     "updated_at": "<ts>",
     "indexed_at": "<ts>",
-    "download_url": "/api/documents/document:<id18>/download"
+    "download_url": "/api/documents/document:<id20>/download"
   },
   "text": "# Anvil budget\n\nThe anvil budget doubles in March.",
   "text_truncated": false,
   "chunks": [
     {
-      "chunk_id": "documents:document.chunk:<id18>:1:0",
+      "chunk_id": "documents:document.chunk:<id20>:1:0",
       "part": 0,
       "char_start": 0,
       "char_end": 50,

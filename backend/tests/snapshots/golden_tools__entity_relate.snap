@@ -1,0 +1,16 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "id": "relates_to:<id12>",
+  "in": "person:<id1>",
+  "out": "organisation:<id6>",
+  "label": "works_at",
+  "source": null,
+  "owner": "user:<id4>",
+  "created_at": "<ts>",
+  "direction": null,
+  "owner_email": null,
+  "reason_memory_id": "memory:<id13>"
+}

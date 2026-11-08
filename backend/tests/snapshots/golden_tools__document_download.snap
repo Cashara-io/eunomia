@@ -3,15 +3,15 @@ source: tests/golden_tools.rs
 expression: stable
 ---
 {
-  "document_id": "document:<id18>",
+  "document_id": "document:<id20>",
   "filename": "anvil-budget.md",
   "media_type": "text/markdown",
   "size_bytes": 50,
   "sha256": "<hash>",
   "download": {
     "method": "GET",
-    "path": "/api/documents/document:<id18>/download",
-    "url": "http://localhost:8001/api/documents/document:<id18>/download"
+    "path": "/api/documents/document:<id20>/download",
+    "url": "http://localhost:8001/api/documents/document:<id20>/download"
   },
   "auth": "send the same Authorization: Bearer token you use for MCP"
 }

@@ -160,6 +160,17 @@ async fn tool_scopes_hold_over_rest_and_mcp() {
     assert!((is_error, v["code"].as_str()) == (true, Some("auth.scope")), "{v}");
     let (is_error, v) = mcp_call(&app, &read, "entities_search", json!({"query": "Ann"})).await;
     assert!(!is_error, "{v}");
+
+    // linking two business entities is a write: memory:read alone is refused on REST and MCP
+    let ann = app.tool("memory_write", json!({"subject_name": "Ann", "subject_kind": "person", "text": "likes tea"})).await["entity"]["id"].clone();
+    let acme = app.tool("memory_write", json!({"subject_name": "Acme", "subject_kind": "organisation", "text": "sells anvils"})).await["entity"]["id"].clone();
+    let link = json!({"from_id": ann, "label": "works_at", "to_id": acme, "reason": "Ann said so."});
+    let (status, _, body) = send(&app.router, "POST", "/api/tools/entity_relate", Some(link.clone()), &bearer(&read)).await;
+    assert_eq!((status, body["code"].as_str()), (StatusCode::FORBIDDEN, Some("auth.scope")), "{body}");
+    let (is_error, v) = mcp_call(&app, &read, "entity_relate", link.clone()).await;
+    assert!((is_error, v["code"].as_str()) == (true, Some("auth.scope")), "{v}");
+    let (status, _, body) = send(&app.router, "POST", "/api/tools/entity_relate", Some(link), &bearer(&write)).await;
+    assert_eq!((status, body["label"].as_str()), (StatusCode::OK, Some("works_at")), "{body}");
 }
 
 #[tokio::test]

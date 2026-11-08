@@ -111,7 +111,7 @@ save only a new fact the user tells you, such as the delay itself when it is not
 /// (deletes, merges, `entity_update`, every `vault_*` write,
 /// `consolidate_observations`, ontology proposals and the code-graph tools)
 /// stays with the user: the app's own pages, or their agent over REST/MCP.
-const CHAT_WRITE_TOOLS: &[&str] = &["memory_write", "memory_update", "entity_set_property"];
+const CHAT_WRITE_TOOLS: &[&str] = &["memory_write", "memory_update", "entity_set_property", "entity_relate"];
 
 /// Whether the built-in chat's model may call `name`: checked both when
 /// advertising tools and again when executing the model's calls. This is on
@@ -156,14 +156,16 @@ impl Said {
         }
     }
 
-    /// Whether a `memory_write` or `memory_update` text repeats a tool result or an earlier reply word
+    /// Whether a `memory_write` or `memory_update` text, or an `entity_relate` reason, repeats a tool result or an earlier reply word
     /// for word (an impact, a number, a summary): the model saving what it worked out. Text the user
     /// wrote is never refused.
     fn restates(&self, tool: &str, args: &Value) -> bool {
-        if !matches!(tool, "memory_write" | "memory_update") {
-            return false;
-        }
-        let Some(text) = args["text"].as_str().map(squash).filter(|t| t.chars().count() >= MIN_RESTATED) else { return false };
+        let field = match tool {
+            "memory_write" | "memory_update" => "text",
+            "entity_relate" => "reason",
+            _ => return false,
+        };
+        let Some(text) = args[field].as_str().map(squash).filter(|t| t.chars().count() >= MIN_RESTATED) else { return false };
         if self.user.iter().any(|u| u.contains(&text)) {
             return false;
         }
@@ -840,7 +842,7 @@ mod tests {
         ] {
             assert!(!chat_may_call(name), "{name}");
         }
-        for name in ["recall", "search", "entities_get", "reflect", "memory_write", "memory_update", "entities_neighbourhood", "show_view", "ontology_get", "entity_set_property", "metric_eval", "scenario_run"] {
+        for name in ["recall", "search", "entities_get", "reflect", "memory_write", "memory_update", "entities_neighbourhood", "show_view", "ontology_get", "entity_set_property", "entity_relate", "metric_eval", "scenario_run"] {
             assert!(chat_may_call(name), "{name}");
         }
     }

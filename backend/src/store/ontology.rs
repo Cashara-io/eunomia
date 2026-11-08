@@ -473,6 +473,21 @@ pub const MATCH_EXTERNAL_IDS: Stmt = Stmt::new(
 
 /// Which of `$values` (lowercased) are the name or an alias of an entity of one kind in `$vault`
 /// (`$table` picks the kind's table, `$kind` the custom kind): a link's value check.
+/// The entities of every kind in `$vault` whose name key (the lowercase name) is one of `$keys`, with
+/// their kind: what a link column's values already name, whatever kind made them.
+pub const NAMED_ANY_KIND: Stmt = Stmt::new(
+    "ontology.named_any_kind",
+    r#"RETURN array::flatten([
+        (SELECT id, name, name_key, "person" AS kind FROM person WHERE vault = $vault AND name_key IN $keys),
+        (SELECT id, name, name_key, "organisation" AS kind FROM organisation WHERE vault = $vault AND name_key IN $keys),
+        (SELECT id, name, name_key, "location" AS kind FROM location WHERE vault = $vault AND name_key IN $keys),
+        (SELECT id, name, name_key, "repository" AS kind FROM repository WHERE vault = $vault AND name_key IN $keys),
+        (SELECT id, name, name_key, "file" AS kind FROM file WHERE vault = $vault AND name_key IN $keys),
+        (SELECT id, name, name_key, "symbol" AS kind FROM symbol WHERE vault = $vault AND name_key IN $keys),
+        (SELECT id, name, name_key, kind FROM entity WHERE vault = $vault AND name_key IN $keys)
+    ]);"#,
+);
+
 pub const MATCH_NAMES: Stmt = Stmt::new(
     "ontology.match_names",
     r#"LET $rows = IF $table = "person" { (SELECT name, aliases FROM person WHERE vault = $vault) }
@@ -558,6 +573,7 @@ pub const ALL: &[&Stmt] = &[
     &RECORD_SAMPLE,
     &MATCH_EXTERNAL_IDS,
     &MATCH_NAMES,
+    &NAMED_ANY_KIND,
     &EXTRACTION_KINDS,
     &KIND,
     &UPSERT_IMPORTED_VALUES,

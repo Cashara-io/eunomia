@@ -4,7 +4,7 @@ expression: stable
 ---
 {
   "entity": {
-    "id": "person:<id12>",
+    "id": "person:<id14>",
     "kind": "person",
     "name": "Alicia",
     "aliases": [],
@@ -12,10 +12,10 @@ expression: stable
     "vault": "vault:<id2>"
   },
   "memory": {
-    "id": "memory:<id13>",
+    "id": "memory:<id15>",
     "owner": "user:<id4>",
     "vault": "vault:<id2>",
-    "subject": "person:<id12>",
+    "subject": "person:<id14>",
     "text": "Alicia is the same person",
     "source": null,
     "created_at": "<ts>",

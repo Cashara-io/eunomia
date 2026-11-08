@@ -214,6 +214,8 @@ async fn outsider_cannot_edit(w: &World) {
     w.denied(m, "entity_merge", json!({"winner_id": mine, "loser_id": w.alice_zed})).await;
     w.denied(m, "entity_merge", json!({"winner_id": w.alice_zed, "loser_id": mine})).await;
     w.denied(m, "code_relate", json!({"from_id": mine, "to_id": w.alice_zed, "label": "knows"})).await;
+    w.denied(m, "entity_relate", json!({"from_id": mine, "label": "knows", "to_id": w.alice_zed, "reason": "pwned"})).await;
+    w.denied(m, "entity_relate", json!({"from_id": w.alice_zed, "label": "knows", "to_id": mine, "reason": "pwned"})).await;
     assert_eq!(w.send(m, "PATCH", &format!("/api/entities/memory/{}", urlenc(&w.alice_zed_memory)), json!({"text": "pwned"})).await, 404);
     assert_eq!(w.send(m, "POST", &format!("/api/entities/{}/memory", urlenc(&w.alice_zed)), json!({"text": "pwned"})).await, 404);
     assert_eq!(w.send(m, "POST", &format!("/api/entities/{}/relations", urlenc(&mine)), json!({"to_id": w.alice_zed, "label": "x"})).await, 404);
@@ -368,15 +370,19 @@ async fn writes_never_land_in_the_wrong_vault_and_relations_and_merges_cannot_br
 
     // bob belongs to both vaults, which used to be enough
     w.denied(&w.bob, "code_relate", json!({"from_id": shared_zed, "to_id": w.bob_zed, "label": "same_as"})).await;
+    // a business link across two vaults is refused even for a member of both, and saves no reason fact
+    w.denied(&w.bob, "entity_relate", json!({"from_id": shared_zed, "label": "same_as", "to_id": w.bob_zed, "reason": "leaked"})).await;
     w.denied(&w.bob, "entity_merge", json!({"winner_id": shared_zed, "loser_id": w.bob_zed})).await;
     let repo = w.ok(&w.bob, "code_entity_upsert", json!({"kind": "repository", "name": "private-repo"})).await;
     w.denied(&w.bob, "code_entity_upsert", json!({"kind": "file", "name": "leak.rs", "parent_id": repo["id"], "vault_id": w.shared})).await;
     assert!(w.send(&w.bob, "POST", &format!("/api/entities/{}/relations", urlenc(&shared_zed)), json!({"to_id": w.bob_zed, "label": "x"})).await >= 400);
     assert!(w.send(&w.bob, "POST", &format!("/api/entities/{}/merge", urlenc(&shared_zed)), json!({"loser_id": w.bob_zed})).await >= 400);
     w.denied(&w.alice, "code_relate", json!({"from_id": w.quinn, "to_id": w.alice_zed, "label": "knows"})).await;
+    w.denied(&w.alice, "entity_relate", json!({"from_id": w.quinn, "label": "knows", "to_id": w.alice_zed})).await;
 
     let seen = w.ok(&w.alice, "entities_get", json!({"id": shared_zed})).await;
     assert_eq!(seen["relations"], json!([]));
+    assert_eq!(seen["memory"].as_array().unwrap().len(), 1, "a refused link saves no reason fact: {seen}");
     assert!(!s(&seen).contains(&w.bob_zed));
     let bz = w.ok(&w.bob, "entities_get", json!({"id": w.bob_zed})).await;
     assert_eq!(bz["memory"].as_array().unwrap().len(), 1);
