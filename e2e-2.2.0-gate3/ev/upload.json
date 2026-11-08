@@ -1,0 +1,11 @@
+{
+  "evidence_commit": "ea1bbf583c766155182992167f5a06762eb8bd45",
+  "remote_head_verified": "ea1bbf583c766155182992167f5a06762eb8bd45",
+  "branch": "pr-screenshots",
+  "directory": "e2e-2.2.0-gate3",
+  "url": "https://github.com/Cashara-io/eunomia/tree/pr-screenshots/e2e-2.2.0-gate3",
+  "push": "git push origin HEAD:pr-screenshots",
+  "force": false,
+  "screenshots": 29,
+  "credential_scan_passed": true
+}

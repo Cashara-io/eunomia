@@ -48,7 +48,7 @@
 | Five random/required import rows, plus all 30 rows | PASS | Zero mismatches. Includes $4,890.00, 07/11/2026, both blanks and zero stock; `ev/import-verify.json` |
 | Duplicate and space-isolation checks | PASS | No repeated supplier/customer names across built-in and custom kinds. Personal empty, Footy only its three topics; `ev/import-verify.json` |
 | Transcript images and screenshots | PASS | All eight headless transcripts have JSONL, text, expandable review HTML and a PNG. Full chat captures expand only scroll containers; `ev/screenshot-capture-note.txt` |
-| Upload and teardown | See cleanup receipt | `ev/cleanup.json`, `ev/upload.json` |
+| Upload and server teardown | PASS | `ev/cleanup.json`, `ev/upload.json` |
 
 ## Gate 2 defects
 
@@ -125,3 +125,5 @@ The owner UI was not modified. Full chat evidence expands only internal scroll c
 ## Publication and cleanup
 
 The final receipts are `ev/upload.json` and `ev/cleanup.json`. They name the uploaded commit, target branch, published directory, removed temporary detached worktree, stopped processes, removed test container, freed ports and deleted backend/target. Secrets are retained only in protected local scratch files and are excluded from the branch.
+
+Published evidence commit: `ea1bbf583c766155182992167f5a06762eb8bd45`, verified against the remote `pr-screenshots` head. The publication worktree is removed after the final receipt push, with that removal recorded in the local cleanup receipt.
