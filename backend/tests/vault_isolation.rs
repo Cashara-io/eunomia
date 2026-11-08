@@ -167,6 +167,98 @@ async fn a_member_of_other_peoples_personal_vaults_still_defaults_to_their_own()
     assert!(!s(&narrowed).contains("SHAREDFACT"), "{narrowed}");
 }
 
+async fn join_bobs_personal(w: &World) {
+    w.ok(&w.bob, "vault_invite", json!({"vault_id": w.bob_personal, "email": w.alice.user.email, "role": "owner"})).await;
+    accept(w, &w.alice, &w.bob_personal).await;
+}
+
+async fn delete_alices_personal(w: &World) {
+    assert_eq!(w.send(&w.alice, "DELETE", &format!("/api/vaults/{}", urlenc(&w.alice_personal)), json!(null)).await, 200);
+}
+
+#[tokio::test]
+async fn deleting_own_personal_vault_leaves_no_default() {
+    let w = world().await;
+    join_bobs_personal(&w).await;
+    delete_alices_personal(&w).await;
+    let (status, list) = w.get(&w.alice, "/api/vaults").await;
+    assert_eq!(status, 200, "{list}");
+    let rows = list["results"].as_array().unwrap();
+    assert!(rows.iter().any(|v| v["id"] == w.bob_personal), "{list}");
+    assert!(rows.iter().all(|v| v["is_default"] == false), "{list}");
+    let db = w.app.db().await;
+    common::sys(async {
+        assert!(vaults::personal_vault_id(&db, &w.alice.user.id).await.is_err());
+        let scope = vaults::read_scope(&db, &w.alice.user.id, &[]).await.unwrap();
+        assert_eq!(scope.vaults, vec![rid::parse(&w.shared).unwrap()]);
+    }).await;
+    for name in ["recall", "reflect", "entities_search"] {
+        let found = w.ok(&w.alice, name, json!({"query": "Zed Secretperson papaya"})).await;
+        assert!(!s(&found).contains("BOBSECRET") && !s(&found).contains(&w.bob_zed), "{name}: {found}");
+    }
+    let explicit = w.ok(&w.alice, "entities_search", json!({"query": "Zed", "vault_id": w.bob_personal})).await;
+    assert!(s(&explicit).contains(&w.bob_zed), "{explicit}");
+}
+
+#[tokio::test]
+async fn unnamed_writes_require_a_vault_after_personal_deletion() {
+    let w = world().await;
+    join_bobs_personal(&w).await;
+    delete_alices_personal(&w).await;
+    let args = json!({"subject_name": "Unrouted Probe", "subject_kind": "person", "text": "keep private"});
+    let out = w.call(&w.alice, "memory_write", args).await;
+    assert!(out["error"].as_str().is_some_and(|e| e.contains("vault_id")), "{out}");
+    let ((status, out), _) = http(&w.app.router, "POST", "/api/entities", Some(json!({
+        "kind": "person", "name": "Unrouted REST Probe"
+    })), Some(&w.alice.token), None).await;
+    assert_eq!(status.as_u16(), 400, "{out}");
+    assert!(s(&out).contains("vault_id"), "{out}");
+    let found = w.ok(&w.bob, "entities_search", json!({"query": "Unrouted"})).await;
+    assert_eq!(found["results"], json!([]), "{found}");
+    let explicit = w.ok(&w.alice, "memory_write", json!({
+        "subject_name": "Explicit Probe", "subject_kind": "person", "text": "shared deliberately", "vault_id": w.bob_personal
+    })).await;
+    assert_eq!(explicit["memory"]["vault"], w.bob_personal);
+    w.ok(&w.alice, "vault_leave", json!({"vault_id": w.bob_personal})).await;
+    join_bobs_personal(&w).await;
+}
+
+#[tokio::test]
+async fn own_personal_vault_requires_active_membership() {
+    let w = world().await;
+    join_bobs_personal(&w).await;
+    w.ok(&w.alice, "vault_transfer_ownership", json!({"vault_id": w.alice_personal, "email": w.bob.user.email})).await;
+    w.ok(&w.alice, "vault_leave", json!({"vault_id": w.alice_personal})).await;
+    let db = w.app.db().await;
+    common::sys(async {
+        assert!(vaults::personal_vault_id(&db, &w.alice.user.id).await.is_err());
+        let scope = vaults::read_scope(&db, &w.alice.user.id, &[]).await.unwrap();
+        assert_eq!(scope.vaults, vec![rid::parse(&w.shared).unwrap()]);
+    }).await;
+    let out = w.call(&w.alice, "memory_write", json!({"subject_name": "Inactive Probe", "subject_kind": "person", "text": "private"})).await;
+    assert!(out["error"].as_str().is_some_and(|e| e.contains("vault_id")), "{out}");
+}
+
+#[tokio::test]
+async fn readding_personal_membership_does_not_change_the_default() {
+    let w = world().await;
+    join_bobs_personal(&w).await;
+    w.ok(&w.alice, "vault_transfer_ownership", json!({"vault_id": w.alice_personal, "email": w.bob.user.email})).await;
+    w.ok(&w.alice, "vault_leave", json!({"vault_id": w.alice_personal})).await;
+    w.ok(&w.bob, "vault_invite", json!({"vault_id": w.alice_personal, "email": w.alice.user.email})).await;
+    accept(&w, &w.alice, &w.alice_personal).await;
+    let (status, list) = w.get(&w.alice, "/api/vaults").await;
+    assert_eq!(status, 200, "{list}");
+    let defaults: Vec<_> = list["results"].as_array().unwrap().iter().filter(|v| v["is_default"] == true).collect();
+    assert_eq!(defaults.len(), 1, "{list}");
+    assert_eq!(defaults[0]["id"], w.alice_personal, "membership age and role do not define Personal");
+    assert_eq!(defaults[0]["role"], "member");
+    let out = w.ok(&w.alice, "memory_write", json!({"subject_name": "Rejoined Probe", "subject_kind": "person", "text": "private"})).await;
+    assert_eq!(out["memory"]["vault"], w.alice_personal);
+    let found = w.ok(&w.alice, "entities_search", json!({"query": "Zed"})).await;
+    assert!(s(&found).contains(&w.alice_zed) && !s(&found).contains(&w.bob_zed), "{found}");
+}
+
 #[tokio::test]
 async fn shared_vault_reads_never_return_personal_data() {
     let w = world().await;

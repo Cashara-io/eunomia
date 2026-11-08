@@ -76,7 +76,7 @@ pub const ACCESSIBLE_IDS: Stmt =
 
 pub const DEFAULT_ID: Stmt = Stmt::new(
     "vaults.default_id",
-    r#"SELECT vault, created_at FROM vault_member WHERE user = $user AND status = "active" AND vault.kind = "personal" ORDER BY created_at ASC LIMIT 1"#,
+    r#"SELECT vault FROM vault_member WHERE vault = $vault AND user = $user AND status = "active" AND vault.kind = "personal" LIMIT 1"#,
 );
 
 /// Every vault a user is an active member of, with its kind and name, oldest membership first

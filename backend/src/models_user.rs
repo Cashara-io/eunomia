@@ -12,7 +12,6 @@ use crate::pool::{ControlDb, OrgId};
 use crate::state::AppState;
 use crate::store;
 use crate::error::{AppError, AppResult, ErrorCode};
-use crate::rid::RecordIdExt;
 use crate::scopes;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -292,7 +291,7 @@ async fn create_account(state: &AppState, email: &str, password: Option<&str>, i
             if let Some(org) = joined
                 && let Ok(orgdb) = state.pool.for_org(&org).await
             {
-                let vault = RecordId::from_table_key("vault", crate::tx::stable_key('p', &row.id.to_string()));
+                let vault = crate::vaults::service::personal_vault_record_id(&row.id);
                 let _ = store::vaults::DELETE_VAULT.on(&orgdb).bind(("vault", vault)).await;
             }
             let _ = store::control::IDENTITY_DELETE_USER.on(db).bind(("user", row.id.clone())).await;
