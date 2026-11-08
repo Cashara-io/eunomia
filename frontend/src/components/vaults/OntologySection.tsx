@@ -334,7 +334,7 @@ function KindRow({
       />
       {(detail || (item.status === "proposed" && item.reason)) && (
         <p className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
-          {[detail, item.reason].filter(Boolean).join(" ")}
+          {[detail, item.reason?.replaceAll(item.kind, words(item.kind))].filter(Boolean).join(" ")}
         </p>
       )}
       {isOwner && !editing && (

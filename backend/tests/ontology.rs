@@ -3923,6 +3923,19 @@ async fn gate3_empty_phrases_without_entities_or_ontology_list_readable_spaces()
 }
 
 #[tokio::test]
+async fn gate3_scenario_warnings_use_readable_metric_words() {
+    let app = TestApp::new().await;
+    garden(&app).await;
+    let out = ok(app.tool("show_view", json!({"view": "scenario", "headline": "Costs rise", "scenario": {
+        "changes": [{"scale": {"kind": "product", "property": "cost", "factor": 1.1}}], "metrics": ["gross_margin"]
+    }})).await);
+    let warnings = out["result"]["warnings"].as_array().unwrap();
+    assert!(warnings.iter().any(|w| w.as_str().unwrap().starts_with("gross margin:")), "{out}");
+    assert!(warnings.iter().all(|w| !w.as_str().unwrap().contains("gross_margin")), "{out}");
+    assert!(!out["text"].as_str().unwrap().contains("gross_margin"), "{out}");
+}
+
+#[tokio::test]
 async fn gate3_mcp_scenario_text_and_structured_content_keep_raw_small_moves() {
     let app = TestApp::new().await;
     let vault = personal(&app).await;
