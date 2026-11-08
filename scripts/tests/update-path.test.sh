@@ -230,6 +230,13 @@ ledger_has() { # ledger_has VERSION NAME : every org ledger has that migration
     [ "$(echo "SELECT VALUE name FROM _migration WHERE version = $1;" | sql "$db" | jq -r '.[0].result[0] // empty')" = "$2" ] || { log "   $db: no $1_$2 in the ledger"; return 1; }
   done
 }
+entity_name_index() {
+  local db
+  ledger_has 39 entity_name_lookup || return 1
+  for db in $(org_dbs); do
+    echo 'INFO FOR TABLE entity;' | sql "$db" | jq -e '.[0].result.indexes.entity_vault_name_key_idx // "" | test("FIELDS vault, name_key")' >/dev/null || return 1
+  done
+}
 vector_indexes() { # vector_indexes : every org database defines the HNSW indexes (INFO FOR TABLE)
   local db ti
   for db in $(org_dbs); do
@@ -542,6 +549,7 @@ for s in backend frontend backup; do
 done
 check "/readyz answers 200" curl -fsS -o /dev/null --max-time 10 "http://127.0.0.1:$BPORT/readyz"
 wait_tenants 300; check "every ledger at the latest migration (tenant $LATEST_TENANT, control $LATEST_CONTROL)" test $? -eq 0
+check "0039 cross-kind entity name index exists in every tenant" entity_name_index
 wait_jobs 180
 # the redaction backfill (tenant 0024) runs as a job after the migrations; wait for its rewrite (it
 # re-embeds what it rewrites, so before the embedding wait) and then the job queue, so the counts and

@@ -12,6 +12,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use hmac::{Hmac, Mac};
 use serde::Deserialize;
@@ -143,6 +144,8 @@ pub struct ControlDb {
 pub struct OrgDb {
     raw: Arc<Sessions>,
     org: OrgId,
+    schema_version: i64,
+    opened_at: Instant,
 }
 
 impl ControlDb {
@@ -160,6 +163,10 @@ impl ControlDb {
 impl OrgDb {
     pub(crate) fn raw(&self, _: crate::store::RawKey) -> &Db {
         self.raw.pick()
+    }
+
+    pub fn schema_version(&self) -> i64 {
+        self.schema_version
     }
 
     pub fn org(&self) -> OrgId {
@@ -200,6 +207,7 @@ pub(crate) struct Route {
     pub db: String,
     pub user: String,
     pub pass: String,
+    pub schema_version: i64,
 }
 
 /// Signs a fresh session in to one database as a database-level user. Fails if the credentials are
@@ -220,7 +228,7 @@ async fn sessions_for(templates: &[Db], ns: &str, route: &Route) -> surrealdb::R
 }
 
 pub(crate) async fn connect_control(templates: &[Db], settings: &Settings) -> surrealdb::Result<ControlDb> {
-    let route = Route { db: CONTROL_DB.into(), user: DB_USER.into(), pass: control_password(settings) };
+    let route = Route { db: CONTROL_DB.into(), user: DB_USER.into(), pass: control_password(settings), schema_version: 0 };
     Ok(ControlDb { raw: Arc::new(sessions_for(templates, &settings.surreal_ns, &route).await?) })
 }
 
@@ -299,7 +307,7 @@ impl Pool {
             let route = self.route(org).await?;
             self.0.signins.fetch_add(1, Ordering::Relaxed);
             let sessions = sessions_for(&self.0.templates, &self.0.ns, &route).await?;
-            let db = OrgDb { raw: Arc::new(sessions), org: *org };
+            let db = OrgDb { raw: Arc::new(sessions), org: *org, schema_version: route.schema_version, opened_at: Instant::now() };
             self.insert(db.clone());
             Ok(db)
         }
@@ -321,7 +329,10 @@ impl Pool {
         let mut c = self.0.cache.lock().unwrap();
         c.tick += 1;
         let tick = c.tick;
-        c.map.get_mut(org).map(|(db, used)| {
+        // Recheck lagging routes so a migration on another replica becomes visible.
+        c.map.get_mut(org).filter(|(db, _)| {
+            db.schema_version >= crate::migrate::LATEST_TENANT as i64 || db.opened_at.elapsed() < Duration::from_secs(60)
+        }).map(|(db, used)| {
             *used = tick;
             db.clone()
         })
@@ -370,20 +381,20 @@ impl Pool {
             ));
         }
         let pass = crate::connectors::crypto::decrypt(&self.0.key, &row.db_pass_enc)?;
-        Ok(Route { db: row.db, user: row.db_user, pass })
+        Ok(Route { db: row.db, user: row.db_user, pass, schema_version: row.schema_version })
     }
 
     /// Isolation suite: point every org at one database.
     #[cfg(feature = "test-support")]
     pub fn set_shared_database(&self, db: &str, user: &str, pass: &str) {
-        *self.0.shared.lock().unwrap() = Some(Route { db: db.into(), user: user.into(), pass: pass.into() });
+        *self.0.shared.lock().unwrap() = Some(Route { db: db.into(), user: user.into(), pass: pass.into(), schema_version: crate::migrate::LATEST_TENANT as i64 });
         self.0.cache.lock().unwrap().map.clear();
     }
 
     /// Isolation suite: a handle signed in with arbitrary credentials (the credential-wall test).
     #[cfg(feature = "test-support")]
     pub async fn test_session(&self, org: OrgId, db: &str, user: &str, pass: &str) -> AppResult<OrgDb> {
-        let route = Route { db: db.into(), user: user.into(), pass: pass.into() };
-        Ok(OrgDb { raw: Arc::new(sessions_for(&self.0.templates[..1], &self.0.ns, &route).await?), org })
+        let route = Route { db: db.into(), user: user.into(), pass: pass.into(), schema_version: crate::migrate::LATEST_TENANT as i64 };
+        Ok(OrgDb { raw: Arc::new(sessions_for(&self.0.templates[..1], &self.0.ns, &route).await?), org, schema_version: route.schema_version, opened_at: Instant::now() })
     }
 }

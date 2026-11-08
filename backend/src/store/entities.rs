@@ -466,6 +466,8 @@ fn name_lookup_select(table: &str, prefix: bool) -> String {
 /// out another space. Scalar vault equality lets the compound name_key index use its trailing range.
 pub fn names_by_prefix<'a>(db: &'a OrgDb) -> Q<'a> {
     let selects: Vec<String> = crate::entities::service::ENTITY_TABLES.iter()
+        // Custom entities only gain a cross-kind name index in migration 0039.
+        .filter(|table| **table != "entity" || db.schema_version() >= 39)
         .flat_map(|table| [false, true].map(|prefix| format!("({})", name_lookup_select(table, prefix))))
         .collect();
     dynamic(db, "entities.names_by_prefix", format!(
