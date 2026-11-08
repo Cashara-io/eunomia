@@ -4,6 +4,7 @@ expression: stable
 ---
 {
   "vault": "vault:<id2>",
+  "vault_name": "Personal",
   "coverage": 0.0,
   "matched": [],
   "uncovered": [

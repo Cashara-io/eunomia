@@ -214,7 +214,7 @@ impl PropInfo {
     }
 }
 
-type Props = HashMap<String, PropInfo>;
+pub(super) type Props = HashMap<String, PropInfo>;
 
 /// A filter value given as listed nowhere: the enum's values nearest it, so the caller can fix the
 /// spelling rather than read nothing as 0.
@@ -568,7 +568,8 @@ pub(super) struct ValidMetric {
 }
 
 /// The property rows of `kind` in `vault`, by name. None on a database before migration 0034.
-async fn props_of(db: &OrgDb, vault: &RecordId, kind: &Kind) -> AppResult<Props> {
+/// `kind`'s properties in `vault`, whatever their status, by name.
+pub(super) async fn props_of(db: &OrgDb, vault: &RecordId, kind: &Kind) -> AppResult<Props> {
     let rows: Vec<PropertyRow> = match q::PROPERTIES_OF_KIND.on(db).bind(("vault", vault.clone())).bind(("kind", kind.as_str().to_string())).await {
         Err(e) if no_ontology_table(&e) => return Ok(Props::new()),
         res => res?.take(0)?,
@@ -1129,7 +1130,26 @@ fn anchor_warnings(conds: &[&Cond], entities: &[&String], values: &Values) -> Ve
 pub async fn eval(db: &OrgDb, owner: &RecordId, args: &EvalArgs) -> AppResult<MetricEvalOut> {
     let vault_id = args.vault_id.as_deref().map(str::trim).filter(|v| !v.is_empty()).map(|v| crate::rid::parse(v).map_err(|_| AppError::coded(ErrorCode::VaultNotFound, "Vault not found."))).transpose()?;
     let vault = resolve(db, owner, vault_id.as_ref(), Action::ReadMemories).await?;
-    prepare(db, &vault, args).await?.run(None)
+    match prepare(db, &vault, args).await {
+        Err(e) if vault_id.is_none() && e.code == ErrorCode::ResourceNotFound => {
+            let homes = super::scope::elsewhere(db, owner, &vault, |v| exists(db, v, &args.metric, args.kind.as_deref())).await?;
+            Err(super::scope::found_in(e, args.metric.trim(), &homes))
+        }
+        prepared => prepared?.run(None),
+    }
+}
+
+/// Whether `vault` has a metric named `name` (of `kind` when given), whatever its status.
+pub(super) async fn exists(db: &OrgDb, vault: RecordId, name: &str, kind: Option<&str>) -> AppResult<bool> {
+    let name = metric_name(name)?;
+    if let Some(k) = kind.map(str::trim).filter(|k| !k.is_empty()) {
+        return Ok(load(db, &metric_rid(&vault, &Kind::parse(k)?, &name)).await?.is_some());
+    }
+    let rows: Vec<MetricRow> = match q::METRICS_NAMED.on(db).bind(("vault", vault)).bind(("name", name.as_str().to_string())).await {
+        Err(e) if no_ontology_table(&e) => Vec::new(),
+        res => res?.take(0)?,
+    };
+    Ok(!rows.is_empty())
 }
 
 /// Each entity of `kind` in `vault`, sorted, and its latest value of each of `names` as of `as_of`.

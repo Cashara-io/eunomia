@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use surrealdb::types::{RecordId, SurrealValue};
 
+use super::scope::{self, Readable};
 use super::{no_ontology_table, resolve};
 use crate::entities::service::KINDS;
 use crate::authz::Action;
@@ -76,14 +77,34 @@ pub struct Matched {
     pub distance: f64,
 }
 
+/// Another vault that was checked and covers some of the question.
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+pub struct VaultCoverage {
+    pub vault: String,
+    pub name: String,
+    pub coverage: f64,
+}
+
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct CoverageOut {
+    /// The vault the answer is from: the one named, or else the readable vault that covers the
+    /// question best (the default vault on a tie). Pass it as `vault_id` to the calls that follow.
     pub vault: String,
+    pub vault_name: String,
     /// The share of the question's phrases that name an approved term, 0 to 1.
     pub coverage: f64,
     pub matched: Vec<Matched>,
     /// Phrases no approved term covers: what the vault would need before it can answer.
     pub uncovered: Vec<String>,
+    /// Uncovered phrases that ask for a number (a total, an average, a margin, a value) and name only
+    /// a kind, property or link: each with the term it named. Only an approved metric computes one,
+    /// unless a property's own name or synonym is the whole phrase.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub needs_metric: Vec<Matched>,
+    /// The other readable vaults checked that cover part of the question, best first (only when no
+    /// vault was named).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub also: Vec<VaultCoverage>,
     /// What to do next, in one or two sentences.
     pub suggestion: String,
     /// `model` when the model picked the phrases and embeddings matched them, `words` when phrases are
@@ -272,18 +293,32 @@ fn split_phrases(question: &str) -> Vec<String> {
     out
 }
 
-/// The term whose name or a synonym is the phrase, word for word.
-fn exact<'a>(phrase: &str, candidates: &'a [Candidate]) -> Option<&'a Candidate> {
+/// Words that make a phrase ask for a number computed over entities rather than name a term.
+const MEASURE_WORDS: &[&str] = &[
+    "total", "sum", "average", "avg", "mean", "median", "count", "max", "maximum", "min", "minimum", "highest", "lowest", "ratio", "share",
+    "rate", "margin", "percentage", "proportion", "value",
+];
+
+/// Whether `phrase` asks for a number: "total stock value", "average price", "gross margin", "number
+/// of orders".
+fn asks_for_number(phrase: &str) -> bool {
+    let w = words(phrase);
+    w.iter().any(|w| MEASURE_WORDS.contains(&w.as_str())) || w.windows(2).any(|p| p[0] == "number" && p[1] == "of")
+}
+
+/// The term whose name or a synonym is the phrase, word for word, among those `fits` lets through.
+fn exact<'a>(phrase: &str, candidates: &'a [Candidate], fits: impl Fn(&Candidate) -> bool) -> Option<&'a Candidate> {
     let p = words(phrase);
-    candidates.iter().filter(|c| c.keys.contains(&p)).min_by_key(|c| c.term == Term::Kind)
+    candidates.iter().filter(|c| fits(c) && c.keys.contains(&p)).min_by_key(|c| (c.term == Term::Kind, c.term != Term::Metric))
 }
 
 /// The term whose name or a synonym is a run of words inside the phrase ("oat milk price" names
-/// price), the longest run first.
-fn partial<'a>(phrase: &str, candidates: &'a [Candidate]) -> Option<&'a Candidate> {
+/// price), the longest run first, among those `fits` lets through.
+fn partial<'a>(phrase: &str, candidates: &'a [Candidate], fits: impl Fn(&Candidate) -> bool) -> Option<&'a Candidate> {
     let p = words(phrase);
     candidates
         .iter()
+        .filter(|c| fits(c))
         .filter_map(|c| {
             let best = c.keys.iter().filter(|k| !k.is_empty() && p.windows(k.len()).any(|w| w == k.as_slice())).map(Vec::len).max()?;
             Some((best, c))
@@ -328,14 +363,21 @@ async fn nearest(db: &OrgDb, vault: &RecordId, spec: &str, vector: &[f32]) -> Ap
     Ok(found)
 }
 
-/// The coverage of `question` by the approved ontology of its vault (the caller's personal vault
-/// when omitted).
+/// The coverage of `question` by the approved ontology of `vault_id`, or without it of the readable
+/// vault that covers it best.
 pub async fn coverage(db: &OrgDb, settings: &Settings, owner: &RecordId, question: &str, vault_id: Option<&RecordId>) -> AppResult<CoverageOut> {
     let question = question.trim();
     if question.is_empty() || question.chars().count() > MAX_QUESTION_CHARS {
         return Err(AppError::bad_request(format!("question: 1 to {MAX_QUESTION_CHARS} characters")));
     }
-    let vault = resolve(db, owner, vault_id, Action::ReadMemories).await?;
+    let vaults = match vault_id {
+        Some(_) => {
+            let id = resolve(db, owner, vault_id, Action::ReadMemories).await?;
+            let name = scope::readable(db, owner).await?.into_iter().find(|r| r.id == id).map(|r| r.name).unwrap_or_default();
+            vec![Readable { id, name }]
+        }
+        None => scope::readable(db, owner).await?,
+    };
 
     let p = provider::resolve(db, settings, owner).await?;
     let with_model = settings.embeddings_backend == "openai" && p.configured();
@@ -345,95 +387,154 @@ pub async fn coverage(db: &OrgDb, settings: &Settings, owner: &RecordId, questio
         None => ("words", split_phrases(question)),
     };
 
-    let (mode, (mut matched, mut uncovered), warning) = if mode == "model" {
-        match match_phrases(db, settings, owner, &vault, &phrases, true).await {
+    let (mode, found, warning) = if mode == "model" {
+        match check_vaults(db, settings, owner, &vaults, &phrases, true).await {
             Ok(found) => ("model", found, None),
             Err(e) => {
                 tracing::warn!(error = %e.message, "coverage: embeddings failed, matching by name and synonym");
                 let warning = "Embeddings are unavailable right now, so phrases were matched by name and synonym only.".to_string();
-                ("words", match_phrases(db, settings, owner, &vault, &phrases, false).await?, Some(warning))
+                ("words", check_vaults(db, settings, owner, &vaults, &phrases, false).await?, Some(warning))
             }
         }
     } else {
-        ("words", match_phrases(db, settings, owner, &vault, &phrases, false).await?, None)
+        ("words", check_vaults(db, settings, owner, &vaults, &phrases, false).await?, None)
     };
+    let share = |f: &Found| if phrases.is_empty() { 0.0 } else { ((f.matched.len() as f64 / phrases.len() as f64) * 100.0).round() / 100.0 };
+    // most phrases matched, then nearest; the default vault comes first, so it wins a tie
+    let score = |f: &Found| (f.matched.len(), std::cmp::Reverse((f.matched.iter().map(|m| m.distance).sum::<f64>() * 1000.0).round() as i64));
+    let mut best = 0;
+    for (i, f) in found.iter().enumerate() {
+        if score(f) > score(&found[best]) {
+            best = i;
+        }
+    }
+    let mut also: Vec<VaultCoverage> = vaults
+        .iter()
+        .zip(&found)
+        .enumerate()
+        .filter(|(i, (_, f))| *i != best && !f.matched.is_empty())
+        .map(|(_, (v, f))| VaultCoverage { vault: v.id.to_string(), name: v.name.clone(), coverage: share(f) })
+        .collect();
+    also.sort_by(|a, b| b.coverage.total_cmp(&a.coverage));
+    let coverage = share(&found[best]);
+    let vault = vaults[best].clone();
+    let Found { mut matched, mut uncovered, mut needs_metric } = found.into_iter().nth(best).expect("one vault at least");
     // keep the question's order
     let order: HashMap<&String, usize> = phrases.iter().enumerate().map(|(i, p)| (p, i)).collect();
     matched.sort_by_key(|m| order.get(&m.phrase).copied().unwrap_or(usize::MAX));
     uncovered.sort_by_key(|p| order.get(p).copied().unwrap_or(usize::MAX));
+    needs_metric.sort_by_key(|m| order.get(&m.phrase).copied().unwrap_or(usize::MAX));
 
-    let coverage = if phrases.is_empty() { 0.0 } else { ((matched.len() as f64 / phrases.len() as f64) * 100.0).round() / 100.0 };
-    let suggestion = suggest(&phrases, &matched, &uncovered);
-    Ok(CoverageOut { vault: vault.to_string(), coverage, matched, uncovered, suggestion, mode: mode.to_string(), warning })
+    let suggestion = suggest(&phrases, &matched, &uncovered, &needs_metric);
+    Ok(CoverageOut {
+        vault: vault.id.to_string(),
+        vault_name: vault.name,
+        coverage,
+        matched,
+        uncovered,
+        needs_metric,
+        also,
+        suggestion,
+        mode: mode.to_string(),
+        warning,
+    })
 }
 
-/// Each phrase's approved term, and the phrases no term covers.
-async fn match_phrases(
-    db: &OrgDb,
-    settings: &Settings,
-    owner: &RecordId,
-    vault: &RecordId,
-    phrases: &[String],
-    with_embeddings: bool,
-) -> AppResult<(Vec<Matched>, Vec<String>)> {
-    let spec = if with_embeddings {
-        refresh(db, settings, owner, vault).await?;
-        Some(embeddings::spec_for(db, settings, owner).await?.tag())
+/// One vault's answer for the question's phrases.
+struct Found {
+    matched: Vec<Matched>,
+    uncovered: Vec<String>,
+    needs_metric: Vec<Matched>,
+}
+
+/// Each vault's matches for `phrases`, in the order of `vaults`. With embeddings the phrases are
+/// embedded once and each vault's terms are brought up to date first.
+async fn check_vaults(db: &OrgDb, settings: &Settings, owner: &RecordId, vaults: &[Readable], phrases: &[String], with_embeddings: bool) -> AppResult<Vec<Found>> {
+    let embedded = if with_embeddings && !phrases.is_empty() {
+        let spec = embeddings::spec_for(db, settings, owner).await?.tag();
+        let vectors = embeddings::embed(db, settings, phrases, Some(owner)).await?;
+        Some((spec, phrases.iter().cloned().zip(vectors).collect::<HashMap<String, Vec<f32>>>()))
     } else {
         None
     };
-    let terms = candidates(db, vault, None).await?;
-    let by_id: HashMap<String, &Candidate> = terms.iter().filter_map(|c| c.id.as_ref().map(|id| (id.to_string(), c))).collect();
+    let mut out = Vec::with_capacity(vaults.len());
+    for v in vaults {
+        if embedded.is_some() {
+            refresh(db, settings, owner, &v.id).await?;
+        }
+        let terms = candidates(db, &v.id, None).await?;
+        let near = match &embedded {
+            Some((spec, vectors)) => near_terms(db, &v.id, phrases, spec, vectors).await?,
+            None => HashMap::new(),
+        };
+        out.push(match_phrases(phrases, &terms, &near));
+    }
+    Ok(out)
+}
 
-    let mut matched: Vec<Matched> = Vec::new();
-    let mut uncovered: Vec<String> = Vec::new();
-    let mut to_embed: Vec<String> = Vec::new();
+/// Each phrase's nearest approved terms in `vault` by meaning, within [`MAX_DISTANCE`], nearest
+/// first, by term id.
+async fn near_terms(db: &OrgDb, vault: &RecordId, phrases: &[String], spec: &str, vectors: &HashMap<String, Vec<f32>>) -> AppResult<HashMap<String, Vec<(f64, String)>>> {
+    let mut out = HashMap::new();
+    for phrase in phrases {
+        let Some(v) = vectors.get(phrase) else { continue };
+        let mut near: Vec<(f64, String)> =
+            nearest(db, vault, spec, v).await?.into_iter().filter(|n| n.distance <= MAX_DISTANCE).map(|n| ((n.distance * 1000.0).round() / 1000.0, n.id.to_string())).collect();
+        near.sort_by(|a, b| a.0.total_cmp(&b.0));
+        out.insert(phrase.clone(), near);
+    }
+    Ok(out)
+}
+
+/// Each phrase's approved term among `terms`, and the phrases no term covers. A phrase that asks for
+/// a number matches only a metric, or a property whose own name or synonym it is.
+fn match_phrases(phrases: &[String], terms: &[Candidate], near: &HashMap<String, Vec<(f64, String)>>) -> Found {
+    let by_id: HashMap<String, &Candidate> = terms.iter().filter_map(|c| c.id.as_ref().map(|id| (id.to_string(), c))).collect();
+    let mut found = Found { matched: Vec::new(), uncovered: Vec::new(), needs_metric: Vec::new() };
     let named = |phrase: &String, c: &Candidate, distance: f64| Matched { phrase: phrase.clone(), term: c.term, name: c.name.clone(), of_kind: c.of_kind.clone(), distance };
+    let any = |_: &Candidate| true;
     // a name or synonym first; then, with a model, the nearest term by meaning; a run of words last
     for phrase in phrases {
-        match exact(phrase, &terms) {
-            Some(c) => matched.push(named(phrase, c, 0.0)),
-            None if spec.is_some() => to_embed.push(phrase.clone()),
-            None => match partial(phrase, &terms) {
-                Some(c) => matched.push(named(phrase, c, 0.0)),
-                None => uncovered.push(phrase.clone()),
-            },
+        let number = asks_for_number(phrase);
+        if let Some(c) = exact(phrase, terms, |c| !number || matches!(c.term, Term::Metric | Term::Property)) {
+            found.matched.push(named(phrase, c, 0.0));
+            continue;
         }
-    }
-    if let Some(spec) = &spec
-        && !to_embed.is_empty()
-    {
-        let vectors = embeddings::embed(db, settings, &to_embed, Some(owner)).await?;
-        for (phrase, v) in to_embed.iter().zip(vectors) {
-            let best = nearest(db, vault, spec, &v)
-                .await?
-                .into_iter()
-                .filter(|n| n.distance <= MAX_DISTANCE)
-                .filter_map(|n| by_id.get(&n.id.to_string()).map(|c| (n.distance, *c)))
-                .min_by(|a, b| a.0.total_cmp(&b.0));
-            match (best, partial(phrase, &terms)) {
-                (Some((d, c)), _) => matched.push(named(phrase, c, (d * 1000.0).round() / 1000.0)),
-                (None, Some(c)) => matched.push(named(phrase, c, 0.0)),
-                (None, None) => uncovered.push(phrase.clone()),
+        let near: Vec<(f64, &Candidate)> = near.get(phrase).into_iter().flatten().filter_map(|(d, id)| by_id.get(id).map(|c| (*d, *c))).collect();
+        let fits = |c: &Candidate| !number || c.term == Term::Metric;
+        match (near.iter().find(|(_, c)| fits(c)), partial(phrase, terms, fits)) {
+            (Some((d, c)), _) => found.matched.push(named(phrase, c, *d)),
+            (None, Some(c)) => found.matched.push(named(phrase, c, 0.0)),
+            (None, None) => {
+                found.uncovered.push(phrase.clone());
+                let named_only = exact(phrase, terms, any).map(|c| (0.0, c)).or_else(|| near.first().copied()).or_else(|| partial(phrase, terms, any).map(|c| (0.0, c)));
+                if let Some((d, c)) = named_only.filter(|_| number) {
+                    found.needs_metric.push(named(phrase, c, d));
+                }
             }
         }
     }
-    Ok((matched, uncovered))
+    found
 }
 
-fn suggest(phrases: &[String], matched: &[Matched], uncovered: &[String]) -> String {
+fn suggest(phrases: &[String], matched: &[Matched], uncovered: &[String], needs_metric: &[Matched]) -> String {
     if phrases.is_empty() {
         return "No data terms found in the question: there is nothing to check against the ontology.".to_string();
     }
     if uncovered.is_empty() {
-        return "Every term maps to the vault's approved ontology: answer a number with metric_eval and a what-if with scenario_run.".to_string();
+        return "Every term maps to the vault's approved ontology: answer a number with metric_eval and a what-if with scenario_run, passing this vault as vault_id.".to_string();
     }
-    let kinds: HashSet<&str> = matched.iter().filter_map(|m| if m.term == Term::Kind { Some(m.name.as_str()) } else { m.of_kind.as_deref() }).collect();
+    let kinds: HashSet<&str> =
+        matched.iter().chain(needs_metric).filter_map(|m| if m.term == Term::Kind { Some(m.name.as_str()) } else { m.of_kind.as_deref() }).collect();
     let mut kinds: Vec<&str> = kinds.into_iter().filter(|k| !k.contains(" to ")).collect();
     kinds.sort();
     let on = if kinds.is_empty() { "the kind it belongs to".to_string() } else { kinds.join(" or ") };
+    let numbers: String = needs_metric
+        .iter()
+        .map(|m| format!(" \"{}\" asks for a number, and no approved metric computes it: it only names the {} {}.", m.phrase, m.term.word(), m.name))
+        .collect();
     format!(
-        "Not covered by an approved kind, property, metric or link: {}. Say so instead of guessing a number. To make it answerable, propose what is missing with ontology_propose (a property and a metric on {on}); a vault owner approves it in Kinds and links.",
+        "Not covered by an approved kind, property, metric or link: {}.{numbers} Say so instead of guessing a number. To make it answerable, propose what is missing with ontology_propose (a property and a metric on {on}); a vault owner approves it in Kinds and links.",
         uncovered.iter().map(|u| format!("\"{u}\"")).collect::<Vec<_>>().join(", ")
     )
 }
@@ -456,12 +557,53 @@ mod tests {
     #[test]
     fn a_name_or_synonym_matches_as_whole_singular_words() {
         let terms = [cand(Term::Kind, "product", &[]), cand(Term::Metric, "avg_price", &["average price"]), cand(Term::Property, "price", &[])];
-        assert_eq!(exact("products", &terms).unwrap().name, "product");
-        assert_eq!(exact("average price", &terms).unwrap().name, "avg_price");
-        assert!(exact("oat milk price", &terms).is_none());
-        assert_eq!(partial("oat milk price", &terms).unwrap().name, "price");
-        assert_eq!(partial("the average price today", &terms).unwrap().name, "avg_price", "the longer synonym wins over price");
-        assert!(partial("gross margin", &terms).is_none());
-        assert!(partial("priceless", &terms).is_none());
+        let any = |_: &Candidate| true;
+        assert_eq!(exact("products", &terms, any).unwrap().name, "product");
+        assert_eq!(exact("average price", &terms, any).unwrap().name, "avg_price");
+        assert!(exact("oat milk price", &terms, any).is_none());
+        assert_eq!(partial("oat milk price", &terms, any).unwrap().name, "price");
+        assert_eq!(partial("the average price today", &terms, any).unwrap().name, "avg_price", "the longer synonym wins over price");
+        assert!(partial("gross margin", &terms, any).is_none());
+        assert!(partial("priceless", &terms, any).is_none());
+    }
+
+    #[test]
+    fn a_phrase_that_asks_for_a_number_is_told_from_a_term() {
+        for p in ["total stock value", "average price", "gross margin", "number of orders", "stock values"] {
+            assert!(asks_for_number(p), "{p}");
+        }
+        for p in ["stock", "price", "phone number", "supplier", "oat milk price"] {
+            assert!(!asks_for_number(p), "{p}");
+        }
+    }
+
+    #[test]
+    fn a_number_phrase_needs_a_metric_or_a_property_that_is_the_whole_phrase() {
+        let stock = Candidate { of_kind: Some("product".into()), ..cand(Term::Property, "stock", &[]) };
+        let stock_value = Candidate { of_kind: Some("product".into()), ..cand(Term::Property, "stock_value", &[]) };
+        let ask = |p: &str| vec![p.to_string()];
+        let none = HashMap::new();
+
+        let found = match_phrases(&ask("total stock"), std::slice::from_ref(&stock), &none);
+        assert!(found.matched.is_empty(), "a property is not a total of it");
+        assert_eq!((found.uncovered.as_slice(), found.needs_metric[0].name.as_str()), (["total stock".to_string()].as_slice(), "stock"));
+
+        let found = match_phrases(&ask("stock value"), &[stock.clone(), stock_value], &none);
+        assert_eq!(found.matched[0].name, "stock_value", "a property named for the whole phrase answers it");
+
+        let metric = cand(Term::Metric, "total_stock_value", &[]);
+        let found = match_phrases(&ask("total stock value"), &[stock.clone(), metric], &none);
+        assert_eq!((found.matched[0].term, found.matched[0].name.as_str()), (Term::Metric, "total_stock_value"));
+
+        let found = match_phrases(&ask("stock"), std::slice::from_ref(&stock), &none);
+        assert_eq!(found.matched[0].name, "stock", "a plain term still matches a property");
+
+        // the gate's case: by meaning "total stock value" was 0.53 from the property stock
+        let stock = Candidate { id: Some(RecordId::new("ontology_property", "stock")), ..stock };
+        let near = HashMap::from([("total stock value".to_string(), vec![(0.53, "ontology_property:stock".to_string())])]);
+        let found = match_phrases(&ask("total stock value"), std::slice::from_ref(&stock), &near);
+        assert_eq!((found.matched.len(), found.needs_metric[0].distance), (0, 0.53));
+        let near = HashMap::from([("stock level".to_string(), vec![(0.41, "ontology_property:stock".to_string())])]);
+        assert_eq!(match_phrases(&ask("stock level"), &[stock], &near).matched[0].distance, 0.41);
     }
 }
