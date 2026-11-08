@@ -458,7 +458,6 @@ struct ScenarioNumbers {
     before: String,
     after: String,
     movement: String,
-    #[allow(dead_code)]
     exact_delta: String,
 }
 
@@ -510,10 +509,11 @@ pub fn movement(before: Option<f64>, after: Option<f64>, delta_pct: Option<f64>,
     };
     let shown = scenario_numbers(a, b, delta_pct, unit);
     if shown.movement == "no change" {
-        return format!("{}{tail}, no change", shown.before);
+        return format!("{}{tail}, no change (exact: {})", shown.before, shown.exact_delta);
     }
     let percent = if is_percent(unit) { "%" } else { "" };
-    format!("{}{percent} \u{2192} {}{tail}, {}", shown.before, shown.after, shown.movement)
+    let exact = if shown.movement.starts_with("exact change:") { String::new() } else { format!(" (exact: {})", shown.exact_delta) };
+    format!("{}{percent} \u{2192} {}{tail}, {}{exact}", shown.before, shown.after, shown.movement)
 }
 
 fn shown_value(v: &serde_json::Value, unit: Option<&str>) -> String {
@@ -602,20 +602,20 @@ mod tests {
         assert_eq!(number(45.0, Some("percent")), "45%");
         assert_eq!(number(15.2, Some("AUD")), "15.20 AUD");
         assert_eq!(number(2.5, None), "2.5");
-        assert_eq!(movement(Some(44.0584), Some(42.39), Some(-3.79), Some("%")), "44.1% \u{2192} 42.4%, down 1.7 points");
-        assert_eq!(movement(Some(44.0), Some(45.0), Some(2.27), Some("%")), "44.0% \u{2192} 45.0%, up 1.0 point");
-        assert_eq!(movement(Some(15.22), Some(15.67), Some(2.96), Some("AUD")), "15.22 \u{2192} 15.67 AUD, up 0.45 AUD (3%)");
+        assert_eq!(movement(Some(44.0584), Some(42.39), Some(-3.79), Some("%")), "44.1% \u{2192} 42.4%, down 1.7 points (exact: -1.6684 points)");
+        assert_eq!(movement(Some(44.0), Some(45.0), Some(2.27), Some("%")), "44.0% \u{2192} 45.0%, up 1.0 point (exact: 1 points)");
+        assert_eq!(movement(Some(15.22), Some(15.67), Some(2.96), Some("AUD")), "15.22 \u{2192} 15.67 AUD, up 0.45 AUD (3%) (exact: 0.45 AUD)");
         assert!(is_percent(Some(" Percent ")) && !is_percent(Some("AUD")) && !is_percent(None));
     }
 
     #[test]
     fn scenario_precision_preserves_small_raw_moves() {
-        assert_eq!(movement(Some(35.756120), Some(35.435683), None, Some("%")), "35.76% \u{2192} 35.44%, down 0.32 points");
-        assert_eq!(movement(Some(38.062307), Some(33.895036), None, Some("%")), "38.1% \u{2192} 33.9%, down 4.2 points");
-        assert_eq!(movement(Some(10.0), Some(10.004), None, Some("AUD")), "10.0000 \u{2192} 10.0040 AUD, up 0.0040 AUD");
-        assert_eq!(movement(Some(10.0), Some(9.996), None, None), "10.0000 \u{2192} 9.9960, down 0.0040");
-        assert_eq!(movement(Some(1.004), Some(1.006), None, Some("AUD")), "1.0040 \u{2192} 1.0060 AUD, up 0.0020 AUD");
-        assert_eq!(movement(Some(35.754), Some(35.435), None, Some("%")), "35.754% \u{2192} 35.435%, down 0.319 points");
+        assert_eq!(movement(Some(35.756120), Some(35.435683), None, Some("%")), "35.76% \u{2192} 35.44%, down 0.32 points (exact: -0.320437 points)");
+        assert_eq!(movement(Some(38.062307), Some(33.895036), None, Some("%")), "38.1% \u{2192} 33.9%, down 4.2 points (exact: -4.167271 points)");
+        assert_eq!(movement(Some(10.0), Some(10.004), None, Some("AUD")), "10.0000 \u{2192} 10.0040 AUD, up 0.0040 AUD (exact: 0.004 AUD)");
+        assert_eq!(movement(Some(10.0), Some(9.996), None, None), "10.0000 \u{2192} 9.9960, down 0.0040 (exact: -0.004)");
+        assert_eq!(movement(Some(1.004), Some(1.006), None, Some("AUD")), "1.0040 \u{2192} 1.0060 AUD, up 0.0020 AUD (exact: 0.002 AUD)");
+        assert_eq!(movement(Some(35.754), Some(35.435), None, Some("%")), "35.754% \u{2192} 35.435%, down 0.319 points (exact: -0.319 points)");
     }
 
     #[test]
@@ -660,6 +660,19 @@ mod tests {
                 }
             } else {
                 assert!(movement(a, b, None, row["unit"].as_str()).starts_with(row["movement"].as_str().unwrap()), "{row}");
+            }
+        }
+    }
+
+    #[test]
+    fn shared_decimal_model_text_vectors() {
+        let vectors: serde_json::Value = serde_json::from_str(include_str!("../../../fixtures/number-format.json")).unwrap();
+        for row in vectors["scenarios"].as_array().unwrap() {
+            let text = movement(fixture_value(&row["before"]), fixture_value(&row["after"]), None, row["unit"].as_str());
+            if let Some(exact) = row["exact"].as_str() {
+                assert!(text.contains(&format!("(exact: {exact})")) || text.contains(&format!("exact change: {exact}")), "{row}: {text}");
+            } else {
+                assert!(!text.contains("exact:"), "{row}: {text}");
             }
         }
     }

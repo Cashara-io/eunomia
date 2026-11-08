@@ -40,7 +40,7 @@ function MetricRow({ run, i }: { run: ScenarioRun; i: number }) {
         )}
       </p>
       <p className="text-[13px]">
-        <span className="font-medium">{shown.movement}</span>
+        <span className="font-medium" title={shown.exactDelta == null ? undefined : `Exact change: ${shown.exactDelta}`}>{shown.movement}</span>
         <span style={{ color: "var(--ink-dim)" }}>
           {" "}
           · {before.expr_words}, from <span style={big}>{after.n_entities}</span> {words(before.kind)}
