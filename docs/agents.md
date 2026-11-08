@@ -320,7 +320,8 @@ An expression is `agg` (`sum`, `avg`, `min` and `max` over a number, integer, mo
 `count` of entities, or of those with a `property`; `count_distinct` of a property's values; `ratio` of a
 `numerator` over a `denominator`, each with its own agg, property and filters), `filters`
 (`[{"property": "supplier", "op": "eq", "value": "Riverside Roasters"}]`, ops `eq`, `ne`, `gt`, `gte`, `lt`,
-`lte` and `in`, at most 10), and for a series `time_property` (a date property) and `grain` (`day`, `week`,
+`lte` and `in`, at most 10; `ne` also picks an entity with no value for the property, so "status is not
+delivered" counts one with no status), and for a series `time_property` (a date property) and `grain` (`day`, `week`,
 `month`, `quarter` or `year`). Every property must be on the kind and every value must fit its datatype;
 anything else, including query text, is refused when proposed.
 

@@ -995,8 +995,10 @@ pub(super) fn parse_as_of(s: Option<&str>) -> AppResult<chrono::DateTime<chrono:
     Ok(if s.contains('T') { at } else { at + chrono::Duration::days(1) - chrono::Duration::milliseconds(1) })
 }
 
+/// Whether a value passes a filter. An entity with no value "is not" anything, so it passes `ne` and
+/// no other op.
 fn matches(c: &Cond, held: Option<&Held>) -> bool {
-    let Some(v) = held.map(|h| &h.stored) else { return false };
+    let Some(v) = held.map(|h| &h.stored) else { return c.filter.op == Op::Ne };
     let cmp = |want: &Stored| -> Option<std::cmp::Ordering> {
         match c.datatype {
             d if d.numeric() => v.num?.partial_cmp(&want.num?),
@@ -1008,7 +1010,7 @@ fn matches(c: &Cond, held: Option<&Held>) -> bool {
     use std::cmp::Ordering::*;
     match c.filter.op {
         Op::Eq => cmp(&c.values[0]) == Some(Equal),
-        Op::Ne => cmp(&c.values[0]).is_some_and(|o| o != Equal),
+        Op::Ne => cmp(&c.values[0]) != Some(Equal),
         Op::Gt => cmp(&c.values[0]) == Some(Greater),
         Op::Gte => matches!(cmp(&c.values[0]), Some(Greater | Equal)),
         Op::Lt => cmp(&c.values[0]) == Some(Less),

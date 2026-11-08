@@ -121,7 +121,7 @@ fn filters_schema(what: &str, max: usize) -> serde_json::Value {
             "type": "object",
             "properties": {
                 "property": {"type": "string", "description": "a property of the metric's kind"},
-                "op": {"type": "string", "enum": ["eq", "ne", "gt", "gte", "lt", "lte", "in"], "description": "gt, gte, lt and lte for numbers and dates only"},
+                "op": {"type": "string", "enum": ["eq", "ne", "gt", "gte", "lt", "lte", "in"], "description": "gt, gte, lt and lte for numbers and dates only; ne also picks an entity with no value for the property"},
                 "value": {"description": "in the property's datatype (an enum value as listed, a date as YYYY-MM-DD); a list for in"},
             },
             "required": ["property", "op", "value"],
