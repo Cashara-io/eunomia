@@ -224,7 +224,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                 "from_id": {"type": "string", "description": "the entity the link starts from, e.g. the truck"},
                 "label": {"type": "string", "description": "lowercase words joined by _, read from_id label to_id, e.g. carries, supplied_by, ordered_by"},
                 "to_id": {"type": "string", "description": "the entity it points to, e.g. the order"},
-                "reason": {"type": "string", "description": "why they are linked, in one sentence; saved as a fact on from_id with a new link"},
+                "reason": {"type": "string", "description": "why they are linked, in one sentence; saved once as a fact on from_id; retries restore a missing reason"},
             },
             "required": ["from_id", "label", "to_id"],
         }),

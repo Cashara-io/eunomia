@@ -276,8 +276,10 @@ when an agent learns how two things connect it calls `entity_relate`:
 - Both entities must be in one vault the caller can write to. A rejected link type is refused, naming the
   approved ones; a vault that takes only approved kinds and links refuses an unreviewed one and files it as
   a proposal.
-- `reason` is saved as a fact on `from_id` ("Truck 4 carries GGS-5012: ...") only when the link is new,
-  with secrets redacted as in any memory. The same link twice is one relation.
+- A label is at most 64 characters and must not contain a secret. Invalid labels are refused.
+- `reason` is saved once as a fact on `from_id` ("Truck 4 carries GGS-5012: ..."),
+  with secrets redacted as in any memory. The relation and reason commit together. Concurrent retries
+  leave one relation and one reason; a retry restores a missing reason.
 - The built-in chat may call it too. `code_relate` stays for repositories, files and symbols.
 
 An impact view whose start has no saved links says so ("has no saved links to follow") rather than

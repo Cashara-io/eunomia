@@ -48,6 +48,28 @@ pub const RELATE_RETURNING: Stmt = Stmt::new(
     "RELATE $in->relates_to->$out SET label = $label, owner = $owner, source = $source RETURN AFTER",
 );
 
+pub const RELATE_WITH_REASON: Stmt = Stmt::at(
+    "entities.relate_with_reason",
+    r#"BEGIN TRANSACTION;
+        LET $existing = (SELECT * FROM relates_to WHERE in = $in AND out = $out AND label = $label LIMIT 1);
+        LET $edge = IF array::len($existing) > 0 { $existing } ELSE {
+            (RELATE $in->relates_to->$out SET label = $label, owner = $owner RETURN AFTER)
+        };
+        LET $memory = IF array::len((SELECT VALUE id FROM $reason_id)) > 0 { [] } ELSE {
+            (CREATE $reason_id SET owner = $owner, vault = $vault, subject = $in, text = $text, type = "world" RETURN AFTER)
+        };
+        IF array::len($memory) > 0 {
+            IF array::len((SELECT VALUE id FROM $obs_id)) > 0 {
+                UPDATE $obs_id SET status = "stale" WHERE status != "stale"
+            } ELSE {
+                UPDATE memory SET status = "stale" WHERE subject = $in AND type = "observation" AND status != "stale"
+            }
+        };
+        RETURN { relation: $edge[0], memory: $memory[0] ?? NONE, created: array::len($existing) = 0 };
+        COMMIT TRANSACTION;"#,
+    5,
+);
+
 pub const RELATE: Stmt =
     Stmt::new("entities.relate", "RELATE $in->relates_to->$out SET label = $label, owner = $owner, source = $source");
 
@@ -297,6 +319,7 @@ pub const ALL: &[&Stmt] = &[
     &WRITE_OBSERVATION,
     &WRITE_FACT,
     &RELATE_RETURNING,
+    &RELATE_WITH_REASON,
     &RELATE,
     &FIND_RELATION,
     &DELETE_RECORD,

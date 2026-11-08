@@ -3475,3 +3475,37 @@ async fn relation_boundary_refuses_secret_labels_before_storage_or_proposals() {
     assert_eq!(ok(app.tool("entities_get", json!({"id": a})).await)["relations"], json!([]));
     assert!(!ok(app.tool("ontology_get", json!({})).await).to_string().contains(&fake_token));
 }
+
+#[tokio::test]
+async fn relation_reason_concurrent_retries_and_a_missing_reason_converge() {
+    let app = TestApp::new().await;
+    let a = write(&app, "Alice", "person").await["entity"]["id"].clone();
+    let b = write(&app, "Bob", "person").await["entity"]["id"].clone();
+    let args = json!({"from_id": a, "to_id": b, "label": "knows", "reason": "They met at work."});
+    let (one, two) = tokio::join!(app.tool("entity_relate", args.clone()), app.tool("entity_relate", args.clone()));
+    assert_eq!(ok(one)["id"], ok(two)["id"]);
+    let got = ok(app.tool("entities_get", json!({"id": a})).await);
+    assert_eq!(got["relations"].as_array().unwrap().len(), 1);
+    assert_eq!(got["memory"].as_array().unwrap().len(), 2);
+    // Simulate an old partial write, or deletion of the reason, then retry.
+    app.db().await.test_raw().query("DELETE memory WHERE text = 'Alice knows Bob: They met at work.'").await.unwrap().check().unwrap();
+    ok(app.tool("entity_relate", args).await);
+    assert_eq!(ok(app.tool("entities_get", json!({"id": a})).await)["memory"].as_array().unwrap().len(), 2, "retry restores exactly one reason");
+}
+
+#[tokio::test]
+async fn relation_reason_failure_rolls_back_the_relation_and_retry_succeeds() {
+    let app = TestApp::new().await;
+    let a = write(&app, "Alice", "person").await["entity"]["id"].clone();
+    let b = write(&app, "Bob", "person").await["entity"]["id"].clone();
+    let db = app.db().await;
+    db.test_raw().query("DEFINE EVENT refuse_reason ON memory WHEN $event = 'CREATE' THEN { THROW 'forced reason failure'; }").await.unwrap().check().unwrap();
+    let args = json!({"from_id": a, "to_id": b, "label": "knows", "reason": "They met at work."});
+    assert!(app.tool("entity_relate", args.clone()).await.get("error").is_some());
+    assert_eq!(ok(app.tool("entities_get", json!({"id": a})).await)["relations"], json!([]), "a failed reason must roll back its relation");
+    db.test_raw().query("REMOVE EVENT refuse_reason ON memory").await.unwrap().check().unwrap();
+    ok(app.tool("entity_relate", args).await);
+    let got = ok(app.tool("entities_get", json!({"id": a})).await);
+    assert_eq!(got["relations"].as_array().unwrap().len(), 1);
+    assert_eq!(got["memory"].as_array().unwrap().len(), 2);
+}

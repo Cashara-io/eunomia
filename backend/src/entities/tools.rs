@@ -83,7 +83,7 @@ pub async fn code_relate(
     service::add_relation(db, owner, from_id, to_id, label, source_record_id).await
 }
 
-/// `entity_relate`'s result: the relation, and the fact that saved its reason (only with a new link).
+/// `entity_relate`'s result: the relation, and the fact saved for its reason, when this call first wrote or restored it.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct EntityRelateOut {
     #[serde(flatten)]
