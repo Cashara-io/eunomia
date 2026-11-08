@@ -2473,3 +2473,399 @@ async fn a_5000_row_import_is_timed_and_reruns_in_place() {
     assert_eq!(rows[0]["n"], 15000);
     eprintln!("5000-row import: first run {first:?}, re-run {second:?}");
 }
+
+// ------------------------------------------------------------ coverage, readiness and strict mode
+
+/// The cafe range with `product` approved and, on it: `avg_price` approved (also called "mean price",
+/// "Average selling price of a product"), `gross_margin` proposed, `shelf_life_days` a rejected property
+/// and `cheapest` a rejected metric. Returns the vault.
+async fn cafe_for_coverage(app: &TestApp) -> String {
+    let (vault, _) = cafe_range(app).await;
+    assert_eq!(decide_kind(app, &vault, "product", json!({"action": "approve"})).await.0, 200);
+    ok(app.tool("ontology_propose", json!({
+        "properties": [{"kind": "product", "name": "shelf_life_days", "datatype": "integer", "description": "How many days a product keeps"}],
+        "metrics": [
+            {"kind": "product", "name": "avg_price", "expr": {"agg": "avg", "property": "price"}, "description": "Average selling price of a product", "synonyms": ["mean price"]},
+            {"kind": "product", "name": "gross_margin", "expr": {"agg": "sum", "property": "price"}, "description": "Gross margin on what we sell"},
+            {"kind": "product", "name": "cheapest", "expr": {"agg": "min", "property": "price"}, "description": "Lowest unit spend of a product"},
+        ],
+    })).await);
+    assert_eq!(decide_metric(app, &vault, "product", "avg_price", json!({"action": "approve"})).await.0, 200);
+    assert_eq!(decide_metric(app, &vault, "product", "cheapest", json!({"action": "reject"})).await.0, 200);
+    assert_eq!(decide_property(app, &vault, "product", "shelf_life_days", json!({"action": "reject"})).await.0, 200);
+    vault
+}
+
+fn matched_names(out: &Value) -> Vec<(String, String, String)> {
+    out["matched"].as_array().unwrap().iter().map(|m| (m["phrase"].as_str().unwrap().into(), m["term"].as_str().unwrap().into(), m["name"].as_str().unwrap().into())).collect()
+}
+
+#[tokio::test]
+async fn coverage_without_a_model_matches_names_and_synonyms_of_approved_terms_only() {
+    let app = TestApp::new().await;
+    cafe_for_coverage(&app).await;
+    let out = ok(app.tool("ontology_coverage", json!({"question": "What is the mean price of our products?"})).await);
+    assert_eq!(out["mode"], "words");
+    assert_eq!(out["coverage"].as_f64(), Some(1.0), "{out}");
+    let s = |a: &str, b: &str, c: &str| (a.to_string(), b.to_string(), c.to_string());
+    assert_eq!(matched_names(&out), [s("mean price", "metric", "avg_price"), s("products", "kind", "product")], "a synonym and an approved kind");
+    assert!(out["matched"][0]["distance"].as_f64() == Some(0.0));
+
+    // a proposed metric and a rejected property never count
+    let out = ok(app.tool("ontology_coverage", json!({"question": "What is our gross margin on oat milk?"})).await);
+    assert_eq!((out["coverage"].as_f64(), out["uncovered"].clone()), (Some(0.0), json!(["gross margin", "oat milk"])), "{out}");
+    assert!(out["suggestion"].as_str().unwrap().contains("ontology_propose"), "{out}");
+    let out = ok(app.tool("ontology_coverage", json!({"question": "What is the shelf life of a product?"})).await);
+    assert_eq!((out["coverage"].as_f64(), out["uncovered"].clone()), (Some(0.5), json!(["shelf life"])), "{out}");
+    assert!(out["suggestion"].as_str().unwrap().contains("on product"), "names the kind to propose on: {out}");
+}
+
+/// A stand-in model: the chat picks phrases by a fixed table, and embeddings are word counts hashed
+/// into the vector, so texts that share words are near and others far.
+async fn coverage_model(phrases: Vec<(&'static str, Value)>, embeddings_work: bool) -> String {
+    use axum::{routing::post, Json, Router};
+    use std::hash::{Hash, Hasher};
+    fn vector(text: &str) -> Vec<f32> {
+        let mut v = vec![0f32; 1536];
+        for w in text.to_lowercase().split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()) {
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            w.hash(&mut h);
+            v[(h.finish() % 1536) as usize] += 1.0;
+        }
+        let n = v.iter().map(|x| x * x).sum::<f32>().sqrt().max(1e-6);
+        v.into_iter().map(|x| x / n).collect()
+    }
+    let phrases = std::sync::Arc::new(phrases);
+    let chat = {
+        let phrases = phrases.clone();
+        move |body: String| {
+            let phrases = phrases.clone();
+            async move {
+                let list = phrases.iter().find(|(needle, _)| body.contains(needle)).map(|(_, p)| p.clone()).unwrap_or(json!([]));
+                Json(json!({"choices": [{"message": {"content": json!({"phrases": list}).to_string()}}]}))
+            }
+        }
+    };
+    let embed = move |Json(body): Json<Value>| async move {
+        if !embeddings_work {
+            return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": {"message": "down"}})));
+        }
+        let data: Vec<Value> = body["input"].as_array().unwrap().iter().enumerate().map(|(i, t)| json!({"index": i, "embedding": vector(t.as_str().unwrap())})).collect();
+        (axum::http::StatusCode::OK, Json(json!({"data": data})))
+    };
+    let router = Router::new().route("/v1/chat/completions", post(chat)).route("/v1/embeddings", post(embed));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    format!("http://{addr}/v1")
+}
+
+#[tokio::test]
+async fn coverage_with_a_model_matches_by_meaning_and_never_by_a_proposed_or_rejected_term() {
+    let base = coverage_model(vec![
+        ("selling price", json!(["average selling price", "products"])),
+        ("unit spend", json!(["lowest unit spend"])),
+        ("our gross margin", json!(["gross margin"])),
+    ], true)
+    .await;
+    let app = TestApp::with_settings(Settings { openai_base_url: base, openai_api_key: Some("sk-test".into()), openai_chat_model: "test-model".into(), ..test_settings() }).await;
+    cafe_for_coverage(&app).await;
+
+    let out = ok(app.tool("ontology_coverage", json!({"question": "What's the average selling price of our products?"})).await);
+    assert_eq!((out["mode"].as_str(), out["coverage"].as_f64()), (Some("model"), Some(1.0)), "{out}");
+    let by_meaning = &out["matched"][0];
+    assert_eq!((by_meaning["term"].as_str(), by_meaning["name"].as_str()), (Some("metric"), Some("avg_price")), "{out}");
+    let d = by_meaning["distance"].as_f64().unwrap();
+    assert!(d > 0.0 && d <= 0.6, "matched by embedding distance: {out}");
+    assert_eq!(out["matched"][1]["name"], "product");
+    // the approved terms keep their vectors
+    let rows: Vec<Value> = app.db().await.test_raw().query("SELECT VALUE name FROM ontology_metric WHERE embedding_spec != NONE").await.unwrap().take(0).unwrap();
+    assert_eq!(rows, [json!("avg_price")], "only approved terms are embedded");
+
+    // the proposed gross_margin and the rejected cheapest ("Lowest unit spend") are as near as can be, and never match
+    let out = ok(app.tool("ontology_coverage", json!({"question": "What is our gross margin?"})).await);
+    assert_eq!((out["coverage"].as_f64(), out["uncovered"].clone()), (Some(0.0), json!(["gross margin"])), "{out}");
+    let out = ok(app.tool("ontology_coverage", json!({"question": "What is our lowest unit spend?"})).await);
+    assert_eq!(out["uncovered"], json!(["lowest unit spend"]), "{out}");
+}
+
+#[tokio::test]
+async fn readiness_counts_each_sort_by_status_and_names_the_blockers() {
+    let app = TestApp::new().await;
+    let vault = cafe_for_coverage(&app).await;
+    write(&app, "Order 1", "order").await;
+    ok(app.tool("ontology_propose", json!({"kinds": [{"kind": "order"}], "properties": [
+        {"kind": "product", "name": "weight", "datatype": "number"},
+        {"kind": "product", "name": "colour", "datatype": "text"},
+    ]})).await);
+    assert_eq!(decide_kind(&app, &vault, "order", json!({"action": "approve"})).await.0, 200);
+    // a proposed metric over weight, which an owner then rejects
+    ok(app.tool("ontology_propose", json!({"metrics": [{"kind": "product", "name": "avg_weight", "expr": {"agg": "avg", "property": "weight"}}]})).await);
+    assert_eq!(decide_property(&app, &vault, "product", "weight", json!({"action": "reject"})).await.0, 200);
+
+    let out = ok(app.tool("ontology_readiness", json!({})).await);
+    assert_eq!(out["kinds"], json!({"approved": 2, "proposed": 0, "rejected": 0, "observed": 0}), "{out}");
+    assert_eq!(out["properties"], json!({"approved": 4, "proposed": 1, "rejected": 2, "observed": 0}), "{out}");
+    assert_eq!(out["metrics"], json!({"approved": 1, "proposed": 2, "rejected": 1, "observed": 0}), "{out}");
+    assert_eq!(out["ready"], false);
+    assert_eq!(
+        out["blockers"],
+        json!([
+            "1 property is proposed and needs an owner",
+            "2 metrics are proposed and need an owner",
+            "metric avg_weight on product uses a rejected property, weight",
+            "no approved property or metric on kind order",
+        ]),
+        "{out}"
+    );
+    let (status, rest) = app.http("GET", &format!("/api/vaults/{vault}/ontology/readiness"), None, true).await;
+    assert_eq!((status.as_u16(), &rest["blockers"]), (200, &out["blockers"]));
+}
+
+async fn set_strict(app: &TestApp, vault: &str, on: bool) -> (u16, Value) {
+    let (status, body) = app.http_session("POST", &format!("/api/vaults/{vault}/ontology/strict"), Some(json!({"on": on}))).await;
+    (status.as_u16(), body)
+}
+
+#[tokio::test]
+async fn strict_mode_is_an_owners_switch_in_the_browser_only() {
+    let app = TestApp::new().await;
+    let vault = personal(&app).await;
+    let (status, _) = app.http("POST", &format!("/api/vaults/{vault}/ontology/strict"), Some(json!({"on": true})), true).await;
+    assert_eq!(status, 403, "an agent's token cannot turn it on");
+    assert_eq!(ok(app.tool("ontology_get", json!({})).await)["strict"], false, "off by default");
+    let (status, o) = set_strict(&app, &vault, true).await;
+    assert_eq!((status, o["strict"].as_bool()), (200, Some(true)), "{o}");
+    let bob = common::register(&app.state, "bob@example.com").await;
+    let team_id = ok(app.tool("vault_create", json!({"name": "Team", "kind": "org"})).await)["id"].as_str().unwrap().to_string();
+    common::sys(async {
+        let db = app.db().await;
+        let v = rid::parse(&team_id).unwrap();
+        vaults::invite_member(&db, app.control(), &app.user.id, &v, &bob.email, "member").await.unwrap();
+        vaults::accept_invitation(&db, app.control(), &bob.id, &v).await.unwrap();
+    })
+    .await;
+    let login = json!({"email": bob.email, "password": PASSWORD});
+    let (_, cookie) = common::http(&app.router, "POST", "/api/auth/login", Some(login), None, None).await;
+    let cookie = cookie.expect("login sets a cookie").split(';').next().unwrap().to_string();
+    let ((status, _), _) = common::http(&app.router, "POST", &format!("/api/vaults/{team_id}/ontology/strict"), Some(json!({"on": true})), None, Some(&cookie)).await;
+    assert_eq!(status, 403, "a member who does not own the vault cannot");
+    let ((status, _), _) = common::http(&app.router, "GET", &format!("/api/vaults/{team_id}/ontology/readiness"), None, None, Some(&cookie)).await;
+    assert_eq!(status, 200, "a member may read readiness");
+    assert_eq!(set_strict(&app, &team_id, true).await.0, 200, "the owner in the browser can");
+    assert_eq!(ok(app.tool("ontology_get", json!({})).await)["strict"], true, "the personal vault stays as it was set");
+}
+
+#[tokio::test]
+async fn strict_mode_refuses_unknown_kinds_and_links_files_proposals_and_lets_built_ins_through() {
+    let app = TestApp::new().await;
+    let vault = personal(&app).await;
+    // off: nothing changes
+    let widget = write(&app, "Widget 1", "widget").await["entity"]["id"].as_str().unwrap().to_string();
+    let ana = write(&app, "Ana", "person").await["entity"]["id"].as_str().unwrap().to_string();
+    ok(app.tool("code_relate", json!({"from_id": ana, "to_id": widget, "label": "designed"})).await);
+    ok(app.tool("ontology_propose", json!({"kinds": [{"kind": "gadget"}]})).await);
+    assert_eq!(write(&app, "Gadget 1", "gadget").await["entity"]["kind"], "gadget", "a proposed kind still takes writes while off");
+    assert_eq!(decide_kind(&app, &vault, "widget", json!({"action": "approve"})).await.0, 200);
+    assert_eq!(decide_link(&app, &vault, "person", "designed", "widget").await, 200);
+
+    assert_eq!(set_strict(&app, &vault, true).await.0, 200);
+    // an unknown kind and a proposed one are refused, naming the approved ones
+    for kind in ["sprocket", "gadget"] {
+        let out = app.tool("memory_write", json!({"subject_name": "Thing", "subject_kind": kind, "text": "A thing"})).await;
+        assert_eq!(out["code"], "ontology.rejected", "{out}");
+        let msg = err(&out);
+        assert!(msg.contains("only approved kinds") && msg.contains("person") && msg.contains("widget"), "{msg}");
+    }
+    let o = ok(app.tool("ontology_get", json!({})).await);
+    let sprocket = kind(&o, "sprocket");
+    assert_eq!((sprocket["status"].as_str(), sprocket["origin"].as_str(), sprocket["entities"].as_i64()), (Some("proposed"), Some("agent"), Some(0)), "filed for the owner: {o}");
+    // an approved kind and a built-in pass
+    assert_eq!(write(&app, "Widget 2", "widget").await["entity"]["kind"], "widget");
+    let bob = write(&app, "Bob", "person").await["entity"]["id"].as_str().unwrap().to_string();
+    // an unknown link type is refused and filed; an approved one passes
+    let out = app.tool("code_relate", json!({"from_id": bob, "to_id": widget, "label": "broke"})).await;
+    assert_eq!(out["code"], "ontology.rejected", "{out}");
+    assert!(err(&out).contains("person designed widget"), "names the approved link: {out}");
+    let o = ok(app.tool("ontology_get", json!({})).await);
+    assert_eq!((link(&o, "person", "broke", "widget")["status"].as_str(), link(&o, "person", "broke", "widget")["count"].as_i64()), (Some("proposed"), Some(0)));
+    ok(app.tool("code_relate", json!({"from_id": bob, "to_id": widget, "label": "designed"})).await);
+
+    // off again: the unknown kind is written
+    assert_eq!(set_strict(&app, &vault, false).await.0, 200);
+    assert_eq!(write(&app, "Sprocket 1", "sprocket").await["entity"]["kind"], "sprocket");
+}
+
+async fn decide_link(app: &TestApp, vault: &str, from: &str, label: &str, to: &str) -> u16 {
+    let (status, _) = app.http_session("POST", &format!("/api/vaults/{vault}/ontology/links/decide"), Some(json!({"from_kind": from, "label": label, "to_kind": to, "decision": {"action": "approve"}}))).await;
+    status.as_u16()
+}
+
+#[tokio::test]
+async fn extraction_in_a_strict_vault_skips_links_that_are_not_approved_and_files_them() {
+    let answer = json!({
+        "people": [{"name": "Ana Lee", "facts": ["Ana Lee buys from Bean Co."]}],
+        "organisations": [{"name": "Bean Co", "facts": ["Bean Co roasts coffee."]}],
+        "other": [{"kind": "supply_item", "name": "Arabica beans 1kg", "facts": ["Arabica beans 1kg come from Bean Co."]}],
+        "relations": [
+            {"from": "Bean Co", "from_kind": "organisation", "label": "supplies", "to": "Arabica beans 1kg", "to_kind": "supply_item"},
+            {"from": "Ana Lee", "from_kind": "person", "label": "buys_from", "to": "Bean Co", "to_kind": "organisation"},
+        ],
+    });
+    let mock = serve(vec![route("POST", "/chat/completions", json!({"choices": [{"message": {"content": answer.to_string()}}]}))]).await;
+    let app = TestApp::with_settings(model_app_settings(&mock)).await;
+    let vault = personal(&app).await;
+    ok(app.tool("ontology_propose", json!({"kinds": [{"kind": "supply_item"}]})).await);
+    assert_eq!(decide_kind(&app, &vault, "supply_item", json!({"action": "approve"})).await.0, 200);
+    assert_eq!(decide_link(&app, &vault, "organisation", "supplies", "supply_item").await, 200);
+    assert_eq!(set_strict(&app, &vault, true).await.0, 200);
+
+    let db = app.db().await;
+    let record = eunomia_backend::entities::extract::ExtractRecord {
+        id: "notes:note:2".into(),
+        title: "Supplier notes".into(),
+        body_text: "Ana Lee buys Arabica beans 1kg from Bean Co.".into(),
+        occurred_at: None,
+        vault: None,
+        source: "notes".into(),
+        payload: Value::Null,
+        owner_name: None,
+    };
+    eunomia_backend::authz::as_system(eunomia_backend::entities::extract::extract_entities(&db, &app.state.settings, &app.user.id, &record)).await.unwrap();
+    let labels: Vec<Value> = db.test_raw().query("SELECT VALUE label FROM relates_to").await.unwrap().take(0).unwrap();
+    assert_eq!(labels, [json!("supplies")], "the approved link is written, the other left out");
+    let o = ok(app.tool("ontology_get", json!({})).await);
+    assert_eq!(kind(&o, "supply_item")["entities"], 1, "the rest of the record is kept");
+    assert_eq!(link(&o, "person", "buys_from", "organisation")["status"], "proposed", "and the refused link is filed: {o}");
+}
+
+#[tokio::test]
+async fn strict_mode_lets_the_code_map_link_its_own_kinds_and_files_nothing_for_them() {
+    let app = TestApp::new().await;
+    let vault = personal(&app).await;
+    let widget = write(&app, "Widget 1", "widget").await["entity"]["id"].as_str().unwrap().to_string();
+    assert_eq!(decide_kind(&app, &vault, "widget", json!({"action": "approve"})).await.0, 200);
+    assert_eq!(set_strict(&app, &vault, true).await.0, 200);
+
+    let id = |v: Value| ok(v)["id"].as_str().unwrap().to_string();
+    let repo = id(app.tool("code_entity_upsert", json!({"kind": "repository", "name": "eunomia"})).await);
+    let file = id(app.tool("code_entity_upsert", json!({"kind": "file", "name": "main.rs", "parent_id": repo})).await);
+    let main = id(app.tool("code_entity_upsert", json!({"kind": "symbol", "name": "main", "parent_id": file})).await);
+    let run = id(app.tool("code_entity_upsert", json!({"kind": "symbol", "name": "run", "parent_id": file})).await);
+    ok(app.tool("code_relate", json!({"from_id": main, "to_id": run, "label": "calls"})).await);
+    ok(app.tool("code_relate", json!({"from_id": file, "to_id": repo, "label": "imports"})).await);
+
+    let db = app.db().await;
+    let mut labels: Vec<String> = db.test_raw().query("SELECT VALUE label FROM relates_to").await.unwrap().take(0).unwrap();
+    labels.sort();
+    assert_eq!(labels, ["calls", "defined_in", "defined_in", "imports", "part_of"]);
+    let filed: Vec<String> = db.test_raw().query("SELECT VALUE label FROM ontology_link").await.unwrap().take(0).unwrap();
+    assert!(filed.is_empty(), "nothing is filed for the code map: {filed:?}");
+
+    // a link to a custom kind still needs an approved link type
+    let out = app.tool("code_relate", json!({"from_id": main, "to_id": widget, "label": "renders"})).await;
+    assert_eq!(out["code"], "ontology.rejected", "{out}");
+
+    // and a label that is not the code map's is reviewed even between code kinds: people written as
+    // files cannot be related as reports_to without the owner seeing it
+    let alice = id(app.tool("code_entity_upsert", json!({"kind": "file", "name": "Alice"})).await);
+    let bob = id(app.tool("code_entity_upsert", json!({"kind": "file", "name": "Bob"})).await);
+    let out = app.tool("code_relate", json!({"from_id": alice, "to_id": bob, "label": "reports_to"})).await;
+    assert_eq!(out["code"], "ontology.rejected", "{out}");
+    let mut filed: Vec<String> = db.test_raw().query("SELECT VALUE label FROM ontology_link").await.unwrap().take(0).unwrap();
+    filed.sort();
+    assert_eq!(filed, ["renders", "reports_to"], "both refusals are filed for the owner to review");
+}
+
+#[tokio::test]
+async fn a_strict_refusal_keeps_the_reason_on_an_existing_proposal() {
+    let app = TestApp::new().await;
+    let vault = personal(&app).await;
+    ok(app.tool("ontology_propose", json!({
+        "kinds": [{"kind": "gadget", "reason": "Sam wants gadgets tracked"}],
+        "links": [{"from_kind": "person", "label": "owns", "to_kind": "organisation", "reason": "Sam wants owners tracked"}],
+    })).await);
+    let ana = write(&app, "Ana", "person").await["entity"]["id"].as_str().unwrap().to_string();
+    let acme = write(&app, "Acme", "organisation").await["entity"]["id"].as_str().unwrap().to_string();
+    assert_eq!(set_strict(&app, &vault, true).await.0, 200);
+
+    let out = app.tool("memory_write", json!({"subject_name": "Gadget 1", "subject_kind": "gadget", "text": "A gadget"})).await;
+    assert_eq!(out["code"], "ontology.rejected", "{out}");
+    let out = app.tool("code_relate", json!({"from_id": ana, "to_id": acme, "label": "owns"})).await;
+    assert_eq!(out["code"], "ontology.rejected", "{out}");
+    let db = app.db().await;
+    let reasons: Vec<String> = db.test_raw().query("SELECT VALUE reason FROM ontology_kind WHERE kind = 'gadget'").await.unwrap().take(0).unwrap();
+    assert_eq!(reasons, ["Sam wants gadgets tracked"]);
+    let reasons: Vec<String> = db.test_raw().query("SELECT VALUE reason FROM ontology_link WHERE label = 'owns'").await.unwrap().take(0).unwrap();
+    assert_eq!(reasons, ["Sam wants owners tracked"]);
+}
+
+#[tokio::test]
+async fn strict_mode_stops_filing_proposals_once_the_owner_has_a_backlog() {
+    let app = TestApp::new().await;
+    let vault = personal(&app).await;
+    let names: Vec<String> = (0..50u8).map(|i| format!("waiting_{}{}", (b'a' + i / 26) as char, (b'a' + i % 26) as char)).collect();
+    ok(app.tool("ontology_propose", json!({"kinds": names.iter().map(|k| json!({"kind": k})).collect::<Vec<_>>()})).await);
+    assert_eq!(set_strict(&app, &vault, true).await.0, 200);
+    let sprocket = || app.tool("memory_write", json!({"subject_name": "Thing", "subject_kind": "sprocket", "text": "A thing"}));
+    let filed = || async { app.db().await.test_raw().query("SELECT VALUE kind FROM ontology_kind WHERE kind = 'sprocket'").await.unwrap().take::<Vec<String>>(0).unwrap() };
+
+    let out = sprocket().await;
+    assert_eq!(out["code"], "ontology.rejected", "{out}");
+    assert!(err(&out).contains("backlog of 50"), "{out}");
+    assert!(filed().await.is_empty(), "not filed while 50 wait");
+
+    // one decided: the next refusal files again
+    assert_eq!(decide_kind(&app, &vault, &names[0], json!({"action": "approve"})).await.0, 200);
+    let out = sprocket().await;
+    assert!(err(&out).contains("It was filed"), "{out}");
+    assert_eq!(filed().await, ["sprocket"]);
+}
+
+#[tokio::test]
+async fn coverage_finds_a_vaults_term_when_another_vault_holds_nearer_ones() {
+    let base = coverage_model(vec![("roasts beans", json!(["company that roasts beans"]))], true).await;
+    let app = TestApp::with_settings(Settings { openai_base_url: base, openai_api_key: Some("sk-test".into()), openai_chat_model: "test-model".into(), ..test_settings() }).await;
+    let vault = cafe_for_coverage(&app).await;
+    ok(app.tool("ontology_propose", json!({"kinds": [{"kind": "supplier", "description": "company that roasts beans"}]})).await);
+    assert_eq!(decide_kind(&app, &vault, "supplier", json!({"action": "approve"})).await.0, 200);
+    // another vault in the org holds more kinds than one kNN read takes, each nearer the phrase
+    let team = ok(app.tool("vault_create", json!({"name": "Team", "kind": "org"})).await)["id"].as_str().unwrap().to_string();
+    let near = ["alpha", "bravo", "charlie", "delta", "echo"];
+    let kinds: Vec<Value> = near.iter().map(|k| json!({"kind": k, "description": "company that roasts beans, company that roasts beans"})).collect();
+    ok(app.tool("ontology_propose", json!({"vault_id": team, "kinds": kinds})).await);
+    for k in near {
+        assert_eq!(decide_kind(&app, &team, k, json!({"action": "approve"})).await.0, 200);
+    }
+    let question = "Which company that roasts beans do we use?";
+    let out = ok(app.tool("ontology_coverage", json!({"vault_id": team, "question": question})).await);
+    assert_eq!(out["matched"][0]["term"], "kind", "the team's terms have vectors: {out}");
+
+    let out = ok(app.tool("ontology_coverage", json!({"question": question})).await);
+    assert_eq!((out["mode"].as_str(), out["coverage"].as_f64()), (Some("model"), Some(1.0)), "{out}");
+    assert_eq!(out["matched"][0]["name"], "supplier", "{out}");
+}
+
+#[tokio::test]
+async fn coverage_matches_by_words_when_embeddings_fail() {
+    let base = coverage_model(vec![("mean price", json!(["mean price", "products"]))], false).await;
+    let app = TestApp::with_settings(Settings { openai_base_url: base, openai_api_key: Some("sk-test".into()), openai_chat_model: "test-model".into(), ..test_settings() }).await;
+    cafe_for_coverage(&app).await;
+    let out = ok(app.tool("ontology_coverage", json!({"question": "What is the mean price of our products?"})).await);
+    assert_eq!((out["mode"].as_str(), out["coverage"].as_f64()), (Some("words"), Some(1.0)), "{out}");
+    assert_eq!(out["matched"][0]["name"], "avg_price", "{out}");
+    assert!(out["warning"].as_str().is_some_and(|w| w.contains("name and synonym")), "{out}");
+}
+
+#[test]
+fn the_ontology_tool_eval_list_names_only_registered_tools() {
+    let evals: Value = serde_json::from_str(include_str!("../../docs/evals/ontology-tools.json")).unwrap();
+    let cases = evals["cases"].as_array().unwrap();
+    assert!(cases.iter().any(|c| c["order"][0] == "ontology_coverage" && c["order"].as_array().unwrap().contains(&json!("metric_eval"))));
+    for c in cases {
+        for tool in c["order"].as_array().unwrap().iter().chain(c["never"].as_array().unwrap()) {
+            let name = tool.as_str().unwrap();
+            assert!(eunomia_backend::tools::registry::find(name).is_some(), "{}: no tool {name}", c["id"]);
+        }
+    }
+}

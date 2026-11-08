@@ -749,6 +749,14 @@ expression: info(&db).await
       "indexes": [
         {
           "cols": [
+            "embedding"
+          ],
+          "index": "HNSW DIMENSION 1536 DIST COSINE TYPE F32 EFC 150 M 12 M0 24 LM 0.40242960438184466f",
+          "name": "ontology_kind_embedding_idx",
+          "table": "ontology_kind"
+        },
+        {
+          "cols": [
             "vault",
             "kind"
           ],
@@ -772,6 +780,14 @@ expression: info(&db).await
         "update": false
       },
       "indexes": [
+        {
+          "cols": [
+            "embedding"
+          ],
+          "index": "HNSW DIMENSION 1536 DIST COSINE TYPE F32 EFC 150 M 12 M0 24 LM 0.40242960438184466f",
+          "name": "ontology_link_embedding_idx",
+          "table": "ontology_link"
+        },
         {
           "cols": [
             "vault",
@@ -801,6 +817,14 @@ expression: info(&db).await
       "indexes": [
         {
           "cols": [
+            "embedding"
+          ],
+          "index": "HNSW DIMENSION 1536 DIST COSINE TYPE F32 EFC 150 M 12 M0 24 LM 0.40242960438184466f",
+          "name": "ontology_metric_embedding_idx",
+          "table": "ontology_metric"
+        },
+        {
+          "cols": [
             "vault",
             "kind",
             "name"
@@ -825,6 +849,14 @@ expression: info(&db).await
         "update": false
       },
       "indexes": [
+        {
+          "cols": [
+            "embedding"
+          ],
+          "index": "HNSW DIMENSION 1536 DIST COSINE TYPE F32 EFC 150 M 12 M0 24 LM 0.40242960438184466f",
+          "name": "ontology_property_embedding_idx",
+          "table": "ontology_property"
+        },
         {
           "cols": [
             "vault",

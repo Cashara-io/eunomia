@@ -385,7 +385,8 @@ async fn apply_extraction(
         // the kind may have been rejected since the prompt was built: that item is left out, the rest kept
         let (entry_id, _) = match ensure(db, owner, vault, &mut entity_ids, name, kind, Some(item.entity.aliases.clone())).await {
             Ok(e) => e,
-            Err(e) if e.code == crate::error::ErrorCode::ValidationInvalid => continue,
+            // or the vault takes only approved kinds and it is not one (filed as a proposal instead)
+            Err(e) if matches!(e.code, crate::error::ErrorCode::ValidationInvalid | crate::error::ErrorCode::OntologyRejected) => continue,
             Err(e) => return Err(e),
         };
         for fact in item.entity.facts.iter().filter(|f| !f.is_empty()) {

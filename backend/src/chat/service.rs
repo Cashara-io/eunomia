@@ -50,7 +50,8 @@ use crate::tools::registry;
 /// truncating silently. A "what does this affect" answer takes five rounds
 /// when the model calls one tool at a time (search, ontology, neighbourhood,
 /// view, reply), six when it fixes an id `show_view` refused; a number takes
-/// four (ontology, metric_eval, view, reply); a what-if five (search, ontology, scenario_run, view, reply).
+/// five (coverage, ontology, metric_eval, view, reply); a what-if six (coverage, search, ontology,
+/// scenario_run, view, reply).
 const MAX_TOOL_ITERATIONS: usize = 10;
 
 pub const DEFAULT_THREAD_TITLE: &str = "New chat";
@@ -75,6 +76,9 @@ and decide from the link labels, the link descriptions and the facts which way t
 reaches. Then call `show_view` with `view` \"impact\", `start_id`, `headline` and `affected` (each affected entity \
 with the relation ids from the start to it and a one-sentence why) and reply with a short summary; the app draws the view above your reply. If \
 `show_view` names a bad id, fix it and call it again. \
+Before answering a number or a what-if, call `ontology_coverage` with the user's question (and the vault it is about). \
+If it lists `uncovered` phrases, do not compute or guess: tell the user which part of the question the vault cannot answer \
+yet, and suggest what to propose (a property or metric on the kind it names) for an owner to approve. \
 When the user asks for a number (a total, an average, how many, a share, a trend): read `ontology_get` for the vault \
 the question is about (it reads your personal vault unless you pass `vault_id`; `vault_list` names the others, and a \
 business or team name in the question is usually one of them), \

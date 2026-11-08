@@ -193,6 +193,8 @@ No. The connected agent is the model.
 | `entity_types` | The built-in entity kinds and the custom kinds agents created (any new lowercase `subject_kind` creates one), each with its review status |
 | `ontology_get` | One vault's kinds and link types, with counts, samples, descriptions, synonyms and review status, and each kind's typed properties and metrics |
 | `ontology_suggest` / `ontology_propose` | Propose kinds, merges, link types, typed properties, metrics and synonyms for a vault owner to approve in the app; without a server model `ontology_suggest` returns the profile for you to review |
+| `ontology_coverage` | Whether a question can be answered from the vault's approved ontology: its key phrases, each matched to an approved kind, property, metric or link type (or not), a `coverage` share and a suggestion. Call it before a number or a what-if ([coverage](#coverage-and-readiness)) |
+| `ontology_readiness` | The vault's kinds, properties, metrics and link types by status, whether it takes only approved kinds and links, and what still blocks answering numbers, in plain words ([readiness](#coverage-and-readiness)) |
 | `metric_eval` | Run an approved metric by name (`avg_price`): the number, its unit, as of when, and the entity ids it came from; optional extra filters, `as_of` and a series by period ([certified metrics](#certified-metrics)) |
 | `scenario_run` | A what-if: hypothetical changes (`set`, `scale`, `shift`, `remove`) put over the real values in memory, the chosen approved metrics before and after, the values changed and the entities the changes reach. Nothing is saved ([what if](#what-if)) |
 | `ontology_automap` | Profile the fields of synced records (all, one `source` or one `record_type`) or an uploaded CSV (`document_id`), and with a server model propose a kind per record type, a typed property per field and links whose values were checked; without a model, the profiles and matching key fields for you to propose ([auto-mapping](#auto-mapping)) |
@@ -394,6 +396,44 @@ plain data, as `entities_neighbourhood` is: you decide what the change affects a
 88, the orders it holds and the customers who placed them. Whether a late-shipments count moves depends on
 what the metric reads: removing the truck changes no shipment's status, so say that rather than invent a
 number, and add a `set` of the shipment's `status` to `late` if that is the question.
+
+### Coverage and readiness
+
+Before answering a number or a what-if, call `ontology_coverage` with the user's question as asked (and
+`vault_id` for the vault it is about). It picks the question's key phrases (what is measured, the kinds of
+things involved, how they relate; never particular names, dates or numbers) and matches each to an approved
+kind, property, metric or link type:
+
+1. by name or synonym, word for word (`distance` 0);
+2. with a model, by meaning: the nearest approved term by embedding, within cosine distance 0.6;
+3. by a name or synonym inside a longer phrase ("oat milk price" names `price`).
+
+Proposed and rejected terms never count. Without a model, the phrases are the runs of words between the
+question words, matched by name and synonym only (`mode: "words"`).
+
+```json
+{"coverage": 0.5, "matched": [{"phrase": "selling price", "term": "property", "name": "price", "of_kind": "product", "distance": 0.407}],
+ "uncovered": ["gross margin"], "suggestion": "Not covered by an approved kind, property, metric or link: \"gross margin\". ...", "mode": "model"}
+```
+
+When `uncovered` is not empty, the vault cannot answer that part yet: say so, do not compute or guess, and
+suggest what to propose (`ontology_propose` a property and a metric on the kind it names) for an owner to
+approve. The in-app Chat does this by itself.
+
+`ontology_readiness` is the vault-level view of the same thing: counts of kinds, properties, metrics and
+link types by status, `strict`, and `blockers` such as "3 properties are proposed and need an owner",
+"metric avg_price on product uses a rejected property, price" or "no approved metric on kind order". The
+same summary sits at the top of Kinds and links in the app (`GET /api/vaults/<id>/ontology/readiness`).
+
+`docs/evals/ontology-tools.json` lists questions with the tool order an agent should follow (coverage
+before `metric_eval`, `scenario_run` for a what-if); a test checks every tool it names is registered.
+
+**Only approved kinds and links.** An owner can turn this on for a vault in Kinds and links (browser
+session only; `POST /api/vaults/<id>/ontology/strict` `{"on": true}`). Then a write under a custom kind that
+is not approved, or a relation under a link type that is not approved, is refused with `ontology.rejected`,
+naming the approved kinds or links to use instead, and the kind or link type is filed as a proposal so the
+owner sees what was wanted. Built-in kinds always pass. Extraction leaves refused items out, as it does for
+rejected ones. It is off by default, so nothing changes for a vault until its owner turns it on.
 
 ### What a change affects
 

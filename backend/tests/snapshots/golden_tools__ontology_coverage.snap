@@ -1,0 +1,15 @@
+---
+source: tests/golden_tools.rs
+expression: stable
+---
+{
+  "vault": "vault:<id2>",
+  "coverage": 0.0,
+  "matched": [],
+  "uncovered": [
+    "total size",
+    "databases"
+  ],
+  "suggestion": "Not covered by an approved kind, property, metric or link: \"total size\", \"databases\". Say so instead of guessing a number. To make it answerable, propose what is missing with ontology_propose (a property and a metric on the kind it belongs to); a vault owner approves it in Kinds and links.",
+  "mode": "words"
+}

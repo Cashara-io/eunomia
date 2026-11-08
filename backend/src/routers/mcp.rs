@@ -46,7 +46,7 @@ returns the recalled memories for you to answer from (cite them by index) instea
 Writes go to the user's personal vault unless a `vault_id` is given; `recall`, `reflect` and `entities_search` \
 cover the personal vault and every org vault the user belongs to unless one is. To work out what a change, \
 delay or problem affects, read `ontology_get` and `entities_neighbourhood`, decide which way the effect travels, \
-and show the answer with `show_view`. For a number about the vault's entities, run an approved metric from `ontology_get` \
+and show the answer with `show_view`. Before answering a number or a what-if, call `ontology_coverage` with the question: when it lists `uncovered` phrases, tell the user what the vault is missing and what to propose instead of guessing. For a number about the vault's entities, run an approved metric from `ontology_get` \
 with `metric_eval` and cite the `entity_ids` it returns; never add up values yourself. For a what-if (\"what if we raise \
 the latte price by 30 cents?\", \"what if Truck 7 never arrives?\"), build the changes from the approved properties and \
 run `scenario_run` with the approved metrics: the server computes them before and after and saves nothing; show it with \

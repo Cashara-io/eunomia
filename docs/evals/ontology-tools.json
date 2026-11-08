@@ -1,0 +1,43 @@
+{
+  "about": "Questions an agent answers from a vault's ontology, with the tools it should call in order. `order` lists tools that must appear in that order (others may come between); `never` lists tools it must not call. Checked for tool names by backend/tests/ontology.rs; run against a model by hand or in an agent eval harness.",
+  "cases": [
+    {
+      "id": "number-covered",
+      "question": "What is the average price of our products?",
+      "order": ["ontology_coverage", "ontology_get", "metric_eval", "show_view"],
+      "never": ["memory_write"]
+    },
+    {
+      "id": "number-not-covered",
+      "question": "What is our gross margin on oat milk?",
+      "order": ["ontology_coverage"],
+      "never": ["metric_eval", "scenario_run", "memory_write"],
+      "expect": "Says the vault has no approved gross margin and suggests proposing one, without a number."
+    },
+    {
+      "id": "what-if",
+      "question": "What if oat milk costs 10% more?",
+      "order": ["ontology_coverage", "entities_search", "scenario_run", "show_view"],
+      "never": ["entity_set_property", "memory_write"]
+    },
+    {
+      "id": "what-if-not-covered",
+      "question": "What if our rent goes up by 5%?",
+      "order": ["ontology_coverage"],
+      "never": ["scenario_run", "entity_set_property"],
+      "expect": "Says rent is not in the vault's approved ontology and suggests what to propose."
+    },
+    {
+      "id": "impact",
+      "question": "Truck 7 is late. What does that affect?",
+      "order": ["entities_search", "entities_neighbourhood", "show_view"],
+      "never": ["memory_write"]
+    },
+    {
+      "id": "readiness",
+      "question": "Is this space ready to answer questions about numbers?",
+      "order": ["ontology_readiness"],
+      "never": ["metric_eval"]
+    }
+  ]
+}

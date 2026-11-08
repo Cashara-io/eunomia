@@ -58,6 +58,11 @@ pub const REGISTRY: Stmt = Stmt::new(
 pub const LINKS_LABELLED: Stmt =
     Stmt::new("ontology.links_labelled", "SELECT * FROM ontology_link WHERE vault = $vault AND label IN $labels");
 
+/// Whether `$vault` takes only approved kinds and links (NONE before migration 0037, or never set).
+pub const STRICT: Stmt = Stmt::new("ontology.strict", "SELECT VALUE ontology_strict FROM $vault");
+
+pub const SET_STRICT: Stmt = Stmt::new("ontology.set_strict", "UPDATE $vault SET ontology_strict = $on RETURN NONE");
+
 /// The kind rows of every vault in `$vaults`, for `entity_types`.
 pub const KINDS_IN: Stmt =
     Stmt::new("ontology.kinds_in", "SELECT vault, kind, description, status, merge_into FROM ontology_kind WHERE vault IN $vaults ORDER BY kind");
@@ -112,6 +117,54 @@ pub const PROPOSE_LINK: Stmt = Stmt::at(
         RETURN $row;
         COMMIT TRANSACTION;"#,
     3,
+);
+
+/// The open proposals agents filed in `$vault`, of every sort.
+macro_rules! open_agent_proposals {
+    () => {
+        r#"(array::len(SELECT VALUE id FROM ontology_kind WHERE vault = $vault AND status = "proposed" AND origin = "agent")
+            + array::len(SELECT VALUE id FROM ontology_link WHERE vault = $vault AND status = "proposed" AND origin = "agent")
+            + array::len(SELECT VALUE id FROM ontology_property WHERE vault = $vault AND status = "proposed" AND origin = "agent")
+            + array::len(SELECT VALUE id FROM ontology_metric WHERE vault = $vault AND status = "proposed" AND origin = "agent"))"#
+    };
+}
+
+/// A strict-mode refusal's kind, filed as an agent's proposal unless the vault already has `$cap` open
+/// agent proposals. Only creates the row, so an existing proposal keeps its reason. Returns whether the
+/// kind is on file.
+pub const FILE_KIND: Stmt = Stmt::at(
+    "ontology.file_kind",
+    concat!(
+        r#"BEGIN TRANSACTION;
+        LET $new = array::len(SELECT VALUE id FROM $id) = 0;
+        LET $file = $new AND "#,
+        open_agent_proposals!(),
+        r#" < $cap;
+        IF $file {
+            CREATE $id SET vault = $vault, kind = $kind, origin = "agent", reason = $reason RETURN NONE
+        };
+        RETURN !$new OR $file;
+        COMMIT TRANSACTION;"#
+    ),
+    4, // BEGIN 0, two LETs 1 and 2, IF 3, RETURN 4
+);
+
+/// [`FILE_KIND`] for a link type.
+pub const FILE_LINK: Stmt = Stmt::at(
+    "ontology.file_link",
+    concat!(
+        r#"BEGIN TRANSACTION;
+        LET $new = array::len(SELECT VALUE id FROM $id) = 0;
+        LET $file = $new AND "#,
+        open_agent_proposals!(),
+        r#" < $cap;
+        IF $file {
+            CREATE $id SET vault = $vault, from_kind = $from_kind, label = $label, to_kind = $to_kind, origin = "agent", reason = $reason RETURN NONE
+        };
+        RETURN !$new OR $file;
+        COMMIT TRANSACTION;"#
+    ),
+    4,
 );
 
 /// A person's approval or rejection of a kind (a row is made for a kind only observed so far). Kinds
@@ -335,6 +388,53 @@ pub const METRIC_INPUTS: Stmt = Stmt::new(
      )))));"#,
 );
 
+/// The approved terms of `$vault` that a question's phrases are matched against, each with the spec and
+/// text of its stored vector: kinds (slot 0), properties (slot 1), metrics (slot 2), link types (slot 3).
+pub const COVERAGE_TERMS: Stmt = Stmt::new(
+    "ontology.coverage_terms",
+    r#"SELECT id, kind AS name, NONE AS of_kind, description, synonyms, embedding_spec, embedding_text FROM ontology_kind
+        WHERE vault = $vault AND status = "approved";
+     SELECT id, name, kind AS of_kind, description, synonyms, embedding_spec, embedding_text FROM ontology_property
+        WHERE vault = $vault AND status = "approved";
+     SELECT id, name, kind AS of_kind, description, synonyms, embedding_spec, embedding_text FROM ontology_metric
+        WHERE vault = $vault AND status = "approved";
+     SELECT id, label AS name, string::concat(from_kind, " to ", to_kind) AS of_kind, description, [] AS synonyms,
+        embedding_spec, embedding_text FROM ontology_link WHERE vault = $vault AND status = "approved";"#,
+);
+
+/// A term's vector, the provider and model it was made with, and the text it was made from.
+pub const SET_TERM_EMBEDDING: Stmt =
+    Stmt::new("ontology.set_term_embedding", "UPDATE $id SET embedding = $embedding, embedding_spec = $spec, embedding_text = $text RETURN NONE");
+
+/// The approved terms of `$vault` nearest `$vector` (same `$spec`), by the HNSW indexes, with their
+/// cosine distance. K is 20, not 3, so terms of the org's other vaults cannot crowd this vault's out
+/// even if the vault condition is applied after the search rather than inside it.
+pub const COVERAGE_NEAREST: Stmt = Stmt::new(
+    "ontology.coverage_nearest",
+    r#"SELECT id, vector::distance::knn() AS distance FROM ontology_kind
+        WHERE embedding <|20,40|> $vector AND vault = $vault AND status = "approved" AND embedding_spec = $spec ORDER BY distance;
+     SELECT id, vector::distance::knn() AS distance FROM ontology_property
+        WHERE embedding <|20,40|> $vector AND vault = $vault AND status = "approved" AND embedding_spec = $spec ORDER BY distance;
+     SELECT id, vector::distance::knn() AS distance FROM ontology_metric
+        WHERE embedding <|20,40|> $vector AND vault = $vault AND status = "approved" AND embedding_spec = $spec ORDER BY distance;
+     SELECT id, vector::distance::knn() AS distance FROM ontology_link
+        WHERE embedding <|20,40|> $vector AND vault = $vault AND status = "approved" AND embedding_spec = $spec ORDER BY distance;"#,
+);
+
+/// [`COVERAGE_NEAREST`] by an exact scan of the vault's approved terms, for while an index is still
+/// building (a kNN query then finds nothing).
+pub const COVERAGE_NEAREST_EXACT: Stmt = Stmt::new(
+    "ontology.coverage_nearest_exact",
+    r#"SELECT id, 1 - vector::similarity::cosine(embedding, $vector) AS distance FROM ontology_kind
+        WHERE vault = $vault AND status = "approved" AND embedding_spec = $spec ORDER BY distance LIMIT 3;
+     SELECT id, 1 - vector::similarity::cosine(embedding, $vector) AS distance FROM ontology_property
+        WHERE vault = $vault AND status = "approved" AND embedding_spec = $spec ORDER BY distance LIMIT 3;
+     SELECT id, 1 - vector::similarity::cosine(embedding, $vector) AS distance FROM ontology_metric
+        WHERE vault = $vault AND status = "approved" AND embedding_spec = $spec ORDER BY distance LIMIT 3;
+     SELECT id, 1 - vector::similarity::cosine(embedding, $vector) AS distance FROM ontology_link
+        WHERE vault = $vault AND status = "approved" AND embedding_spec = $spec ORDER BY distance LIMIT 3;"#,
+);
+
 /// Every record type of `$vault` with its record count (personal vault: also the owner's records filed
 /// in none), uploaded document chunks left out. Auto-mapping profiles each.
 pub const RECORD_TYPES: Stmt = Stmt::new(
@@ -407,6 +507,8 @@ pub const ALL: &[&Stmt] = &[
     &PROFILE,
     &REGISTRY,
     &LINKS_LABELLED,
+    &STRICT,
+    &SET_STRICT,
     &KINDS_IN,
     &GROUND,
     &APPROVED_KINDS,
@@ -439,6 +541,10 @@ pub const ALL: &[&Stmt] = &[
     &DECIDE_METRIC,
     &DESCRIBE_METRIC,
     &METRIC_INPUTS,
+    &COVERAGE_TERMS,
+    &SET_TERM_EMBEDDING,
+    &COVERAGE_NEAREST,
+    &COVERAGE_NEAREST_EXACT,
     &RECORD_TYPES,
     &RECORD_SAMPLE,
     &MATCH_EXTERNAL_IDS,

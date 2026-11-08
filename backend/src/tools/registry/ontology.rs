@@ -10,6 +10,7 @@ use serde_json::json;
 
 use super::{bad_args, kind_schema, parse_opt_rid, parse_rid, register, to_tool_value, ToolSpec};
 use crate::ontology::automap::{self, AutomapArgs};
+use crate::ontology::coverage::{self, CoverageArgs};
 use crate::ontology::metric::{self, EvalArgs};
 use crate::ontology::scenario::{self, ScenarioArgs};
 use crate::ontology::tabular::{self, ImportArgs};
@@ -173,6 +174,51 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
         #[serde(default)]
         vault_id: Option<String>,
     }
+
+    register(
+        registry,
+        "ontology_coverage",
+        json!({
+            "type": "object",
+            "properties": {
+                "question": {"type": "string", "description": "the user's question, as asked"},
+                "vault_id": {"type": "string", "description": "the vault the question is about (a vault id or its name); omit for your personal vault"},
+            },
+            "required": ["question"],
+        }),
+        Arc::new(|state, owner, args| {
+            Box::pin(async move {
+                let a: CoverageArgs = match serde_json::from_value(args) {
+                    Ok(a) => a,
+                    Err(e) => return Ok(bad_args(e)),
+                };
+                let vault = match parse_opt_rid("vault_id", &a.vault_id) {
+                    Ok(v) => v,
+                    Err(e) => return Ok(e),
+                };
+                Ok(to_tool_value(coverage::coverage(&state.db, &state.settings, owner, &a.question, vault.as_ref()).await))
+            })
+        }),
+    );
+
+    register(
+        registry,
+        "ontology_readiness",
+        vault_only_schema("the vault to check"),
+        Arc::new(|state, owner, args| {
+            Box::pin(async move {
+                let a: VaultArgs = match serde_json::from_value(args) {
+                    Ok(a) => a,
+                    Err(e) => return Ok(bad_args(e)),
+                };
+                let vault = match parse_opt_rid("vault_id", &a.vault_id) {
+                    Ok(v) => v,
+                    Err(e) => return Ok(e),
+                };
+                Ok(to_tool_value(ontology::readiness::readiness(&state.db, owner, vault.as_ref()).await))
+            })
+        }),
+    );
 
     register(
         registry,

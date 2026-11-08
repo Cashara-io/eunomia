@@ -188,8 +188,31 @@ locations, extraction from a synced record or document may write entities
 of the vault's approved kinds (at most eight per prompt, never a proposed
 or rejected one).
 
-Typed properties, certified metrics, the literal check on metric filters
-and record auto-mapping follow ideas from NVIDIA Auto Ontology (Apache 2.0).
+Before a number or a what-if, agents and the Chat check the question's
+coverage (`ontology_coverage`): its key phrases are matched to the approved
+kinds, properties, metrics and link types, by name and synonym and else by
+meaning, and a phrase nothing approved covers ("gross margin", when the
+vault has no such metric) is reported instead of guessed at, with a
+suggestion of what to propose. Matching by meaning compares embeddings, kept
+on each approved term, under a cosine distance of 0.6. On the Harbour Coffee
+demo, phrases for terms the vault has measured 0.41 to 0.60 from them, and
+phrases for terms it lacks 0.64 to 0.83, so 0.6 sits in the gap (NVIDIA's
+0.75 would count a missing gross margin or rent as covered). Without a
+model, phrases are split from the question and matched by name and synonym.
+Readiness (`ontology_readiness`, and the summary at the top of Kinds and
+links) counts what is approved, proposed and rejected, and lists what still
+blocks answering numbers in plain words.
+
+An owner can switch a vault to **Only approved kinds and links**. Then a
+write under a custom kind that is not approved, or a relation under a link
+type that is not approved, is refused with the approved ones to use instead,
+and the unapproved one is filed as a proposal for the owner. Built-in kinds
+always pass, extraction leaves refused items out, and the switch is off
+until an owner turns it on.
+
+Typed properties, certified metrics, the literal check on metric filters,
+record auto-mapping, the coverage check and the readiness summary follow
+ideas from NVIDIA Auto Ontology (Apache 2.0).
 See `THIRD_PARTY_NOTICES.md`.
 
 The ontology is also how agents and the in-app Chat reason about knock-on

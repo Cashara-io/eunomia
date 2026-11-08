@@ -8,6 +8,8 @@ import {
   decideVaultOntologyMetric,
   decideVaultOntologyProperty,
   getVaultOntology,
+  getVaultOntologyReadiness,
+  setVaultOntologyStrict,
   suggestVaultOntology,
   type KindDecision,
   type LinkDecision,
@@ -20,12 +22,20 @@ import { call } from "./client";
 import { entityKeys } from "./entities";
 import { invoke } from "./tools";
 
-export type { AutomapOut, KindItem, LinkCheck, LinkItem, MetricItem, OntologyOut, PropertyItem, SuggestOut, ViewStatus } from "@/lib/gen";
+export type { AutomapOut, KindItem, LinkCheck, LinkItem, MetricItem, OntologyOut, PropertyItem, ReadinessOut, SuggestOut, ViewStatus } from "@/lib/gen";
 
 export const ontologyKeys = {
   all: ["ontology"] as const,
   vault: (id: string) => [...ontologyKeys.all, id] as const,
+  readiness: (id: string) => [...ontologyKeys.all, id, "readiness"] as const,
 };
+
+/** Counts by status and what still blocks answering numbers. */
+export const useReadiness = (vaultId: string) =>
+  useQuery({
+    queryKey: ontologyKeys.readiness(vaultId),
+    queryFn: () => call(getVaultOntologyReadiness({ path: { vault_id: vaultId } })),
+  });
 
 export const useOntology = (vaultId: string, enabled = true) =>
   useQuery({
@@ -42,10 +52,13 @@ const useDecision = <V>(vaultId: string, fn: (v: V) => Promise<OntologyOut>) => 
     onSuccess: (o) => {
       qc.setQueryData(ontologyKeys.vault(vaultId), o);
       // entity_types and the kind filters show the review too
-      return qc.invalidateQueries({ queryKey: entityKeys.all });
+      return Promise.all([qc.invalidateQueries({ queryKey: entityKeys.all }), qc.invalidateQueries({ queryKey: ontologyKeys.readiness(vaultId) })]);
     },
   });
 };
+
+/** "Only approved kinds and links", on or off (an owner, in the browser). */
+export const useSetStrict = (vaultId: string) => useDecision(vaultId, (on: boolean) => call(setVaultOntologyStrict({ path: { vault_id: vaultId }, body: { on } })));
 
 export const useDecideKind = (vaultId: string) =>
   useDecision(vaultId, ({ kind, decision }: { kind: string; decision: KindDecision }) =>

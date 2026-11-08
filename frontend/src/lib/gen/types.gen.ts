@@ -1585,6 +1585,11 @@ export type OntologyOut = {
      */
     kinds: Array<KindItem>;
     links: Array<LinkItem>;
+    /**
+     * "Only approved kinds and links": a write under a custom kind or a relation under a link type
+     * that is not approved is refused and filed as a proposal.
+     */
+    strict: boolean;
     vault: string;
 };
 
@@ -1937,6 +1942,26 @@ export type ProviderOut = {
      * `user:...`
      */
     updated_by: string;
+};
+
+export type ReadinessOut = {
+    /**
+     * What stops the vault answering numbers, each in one sentence, for the owner.
+     */
+    blockers: Array<string>;
+    kinds: StatusCounts;
+    links: StatusCounts;
+    metrics: StatusCounts;
+    properties: StatusCounts;
+    /**
+     * No blockers.
+     */
+    ready: boolean;
+    /**
+     * Whether the vault takes only approved kinds and links.
+     */
+    strict: boolean;
+    vault: string;
 };
 
 export type RecentRecording = {
@@ -2384,6 +2409,26 @@ export type Stability = 'stable' | 'preview';
  * What a person decided about a kind or link, as stored.
  */
 export type Status = 'proposed' | 'approved' | 'rejected';
+
+/**
+ * Rows of one sort, by status.
+ */
+export type StatusCounts = {
+    approved: number;
+    /**
+     * In use but never reviewed (kinds and link types only).
+     */
+    observed: number;
+    proposed: number;
+    rejected: number;
+};
+
+export type StrictBody = {
+    /**
+     * Only approved kinds and links.
+     */
+    on: boolean;
+};
 
 /**
  * One side of a ratio.
@@ -6568,6 +6613,54 @@ export type DecideVaultOntologyPropertyResponses = {
 };
 
 export type DecideVaultOntologyPropertyResponse = DecideVaultOntologyPropertyResponses[keyof DecideVaultOntologyPropertyResponses];
+
+export type GetVaultOntologyReadinessData = {
+    body?: never;
+    path: {
+        vault_id: string;
+    };
+    query?: never;
+    url: '/api/vaults/{vault_id}/ontology/readiness';
+};
+
+export type GetVaultOntologyReadinessErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetVaultOntologyReadinessError = GetVaultOntologyReadinessErrors[keyof GetVaultOntologyReadinessErrors];
+
+export type GetVaultOntologyReadinessResponses = {
+    200: ReadinessOut;
+};
+
+export type GetVaultOntologyReadinessResponse = GetVaultOntologyReadinessResponses[keyof GetVaultOntologyReadinessResponses];
+
+export type SetVaultOntologyStrictData = {
+    body: StrictBody;
+    path: {
+        vault_id: string;
+    };
+    query?: never;
+    url: '/api/vaults/{vault_id}/ontology/strict';
+};
+
+export type SetVaultOntologyStrictErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type SetVaultOntologyStrictError = SetVaultOntologyStrictErrors[keyof SetVaultOntologyStrictErrors];
+
+export type SetVaultOntologyStrictResponses = {
+    200: OntologyOut;
+};
+
+export type SetVaultOntologyStrictResponse = SetVaultOntologyStrictResponses[keyof SetVaultOntologyStrictResponses];
 
 export type SuggestVaultOntologyData = {
     body?: never;

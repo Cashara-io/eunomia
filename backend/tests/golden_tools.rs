@@ -255,6 +255,9 @@ async fn goldens() {
     Box::pin(g.snap("scenario_run", "scenario_run", what_if.clone())).await;
     Box::pin(g.snap("show_view__scenario", "show_view", json!({"view": "scenario", "headline": "What if the databases grow by half?", "scenario": what_if}))).await;
     Box::pin(g.snap("scenario_run__unknown_property", "scenario_run", json!({"changes": [{"scale": {"kind": "person", "property": "name", "factor": 2}}]}))).await;
+    // coverage without a model (phrases split from the question) and readiness, over the proposed db kind
+    Box::pin(g.snap("ontology_coverage", "ontology_coverage", json!({"question": "What is the total size of our databases?"}))).await;
+    Box::pin(g.snap("ontology_readiness", "ontology_readiness", json!({}))).await;
     // -- auto-mapping: a CSV profiled without a model, its rows refused until an owner approved the mapping, then imported --
     let csv = g.snap("document_upload__csv", "document_upload", json!({"filename": "menu.csv", "text": "product,price\nLatte,4.50\nMocha,oops\n"})).await;
     let csv_id = s(&csv, "/id");
