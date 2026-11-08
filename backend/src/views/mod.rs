@@ -378,24 +378,40 @@ pub fn is_percent(unit: Option<&str>) -> bool {
     unit.is_some_and(|u| matches!(u.trim().to_ascii_lowercase().as_str(), "%" | "percent" | "percentage" | "pct"))
 }
 
-/// `value` to at most `places` decimals, trailing zeros dropped.
-fn places(value: f64, places: usize) -> String {
-    if value.fract() == 0.0 && value.abs() < 1e15 {
-        return format!("{}", value as i64);
-    }
-    let s = format!("{value:.places$}");
-    let s = s.trim_end_matches('0').trim_end_matches('.');
-    if s == "-0" { "0".to_string() } else { s.to_string() }
+fn rounded_units(value: f64, places: usize) -> f64 {
+    let scaled = value.abs() * 10_f64.powi(places as i32);
+    // Absorb the multiplication's binary error at a decimal half, such as 1.005 * 100.
+    (scaled + f64::EPSILON * scaled).round().copysign(value)
 }
 
-/// A metric's number as people write it: money to the cent, a percent to one place ("44.1%"), whole
-/// numbers bare, others to two places.
+fn fixed(value: f64, places: usize) -> String {
+    let rounded = rounded_units(value, places) / 10_f64.powi(places as i32);
+    let rounded = if rounded.is_finite() { rounded } else { value };
+    let rounded = if rounded == 0.0 { 0.0 } else { rounded };
+    format!("{rounded:.places$}")
+}
+
+fn significant_places(value: f64) -> usize {
+    if value == 0.0 { 0 } else { (1.0 - value.abs().log10().floor()).max(0.0) as usize }
+}
+
+fn places(value: f64, places: usize) -> String {
+    let s = fixed(value, places);
+    if places == 0 { s } else { s.trim_end_matches('0').trim_end_matches('.').to_string() }
+}
+
+pub fn money(value: f64) -> String {
+    let places = if value != 0.0 && value.abs() < 0.01 { significant_places(value) } else { 2 };
+    fixed(value, places)
+}
+
+/// A metric's number as people write it, with money rounded half away from zero.
 pub fn number(value: f64, unit: Option<&str>) -> String {
     if is_percent(unit) {
         return format!("{}%", places(value, 1));
     }
-    let money = unit.is_some_and(|u| u.len() == 3 && u.chars().all(|c| c.is_ascii_uppercase()));
-    let n = if money { format!("{value:.2}") } else { places(value, 2) };
+    let currency = unit.is_some_and(|u| u.len() == 3 && u.chars().all(|c| c.is_ascii_uppercase()));
+    let n = if currency { money(value) } else { places(value, 2) };
     match unit {
         Some(u) => format!("{n} {u}"),
         None => n,
@@ -446,20 +462,8 @@ fn figure(v: f64, unit: Option<&str>) -> String {
     }
 }
 
-/// "15.22 \u{2192} 15.67 AUD, up 0.45 AUD (2.9%)": the move in words, never by colour alone. A percent
-/// moves in points, from the figures as shown: "44.1% \u{2192} 42.4%, down 1.7 points".
+/// The raw move, with enough shared precision for two significant figures and endpoints that add up.
 pub fn movement(before: Option<f64>, after: Option<f64>, delta_pct: Option<f64>, unit: Option<&str>) -> String {
-    if let (true, Some(a), Some(b)) = (is_percent(unit), before, after) {
-        let shown = |v: f64| (v * 10.0).round() / 10.0;
-        let d = shown(b) - shown(a);
-        if d.abs() < 1e-9 {
-            return format!("{}%, no change", figure(a, unit));
-        }
-        let way = if d > 0.0 { "up" } else { "down" };
-        let points = places((d.abs() * 10.0).round() / 10.0, 1);
-        let noun = if points == "1" { "point" } else { "points" };
-        return format!("{}% \u{2192} {}%, {way} {points} {noun}", figure(a, unit), figure(b, unit));
-    }
     let tail = match unit {
         Some(_) if is_percent(unit) => "%".to_string(),
         Some(u) => format!(" {u}"),
@@ -472,12 +476,22 @@ pub fn movement(before: Option<f64>, after: Option<f64>, delta_pct: Option<f64>,
         (None, None) => return "no value".into(),
     };
     let d = b - a;
-    if d.abs() < 1e-9 {
-        return format!("{}{tail}, no change", figure(a, unit));
+    let mut precision = significant_places(d).max(if is_percent(unit) { 1 } else { 2 });
+    // Keep the raw delta, increasing precision when independently rounded endpoints do not add up.
+    while precision < 12 && rounded_units(b, precision) - rounded_units(a, precision) != rounded_units(d, precision) {
+        precision += 1;
+    }
+    let (a, b, amount) = (fixed(a, precision), fixed(b, precision), fixed(d.abs(), precision));
+    if d == 0.0 {
+        return format!("{a}{tail}, no change");
     }
     let way = if d > 0.0 { "up" } else { "down" };
-    let pct = delta_pct.map(|p| format!(" ({}%)", number((p.abs() * 10.0).round() / 10.0, None))).unwrap_or_default();
-    format!("{} \u{2192} {}{tail}, {way} {}{tail}{pct}", figure(a, unit), figure(b, unit), figure(d.abs(), unit))
+    if is_percent(unit) {
+        let noun = if amount.parse::<f64>().ok() == Some(1.0) { "point" } else { "points" };
+        return format!("{a}% \u{2192} {b}%, {way} {amount} {noun}");
+    }
+    let pct = delta_pct.map(|p| format!(" ({}%)", places(p.abs(), 1))).unwrap_or_default();
+    format!("{a} \u{2192} {b}{tail}, {way} {amount}{tail}{pct}")
 }
 
 fn shown_value(v: &serde_json::Value, unit: Option<&str>) -> String {
@@ -567,9 +581,27 @@ mod tests {
         assert_eq!(number(15.2, Some("AUD")), "15.20 AUD");
         assert_eq!(number(2.5, None), "2.5");
         assert_eq!(movement(Some(44.0584), Some(42.39), Some(-3.79), Some("%")), "44.1% \u{2192} 42.4%, down 1.7 points");
-        assert_eq!(movement(Some(44.0), Some(45.0), Some(2.27), Some("%")), "44% \u{2192} 45%, up 1 point");
+        assert_eq!(movement(Some(44.0), Some(45.0), Some(2.27), Some("%")), "44.0% \u{2192} 45.0%, up 1.0 point");
         assert_eq!(movement(Some(15.22), Some(15.67), Some(2.96), Some("AUD")), "15.22 \u{2192} 15.67 AUD, up 0.45 AUD (3%)");
         assert!(is_percent(Some(" Percent ")) && !is_percent(Some("AUD")) && !is_percent(None));
+    }
+
+    #[test]
+    fn scenario_precision_preserves_small_raw_moves() {
+        assert_eq!(movement(Some(35.756120), Some(35.435683), None, Some("%")), "35.76% \u{2192} 35.44%, down 0.32 points");
+        assert_eq!(movement(Some(38.062307), Some(33.895036), None, Some("%")), "38.1% \u{2192} 33.9%, down 4.2 points");
+        assert_eq!(movement(Some(10.0), Some(10.004), None, Some("AUD")), "10.0000 \u{2192} 10.0040 AUD, up 0.0040 AUD");
+        assert_eq!(movement(Some(10.0), Some(9.996), None, None), "10.0000 \u{2192} 9.9960, down 0.0040");
+        assert_eq!(movement(Some(1.004), Some(1.006), None, Some("AUD")), "1.0040 \u{2192} 1.0060 AUD, up 0.0020 AUD");
+        assert_eq!(movement(Some(35.754), Some(35.435), None, Some("%")), "35.754% \u{2192} 35.435%, down 0.319 points");
+    }
+
+    #[test]
+    fn money_rounds_half_away_from_zero() {
+        for (value, expected) in [(68606.625, "68606.63 AUD"), (-68606.625, "-68606.63 AUD"), (1.005, "1.01 AUD"), (-1.005, "-1.01 AUD")] {
+            assert_eq!(number(value, Some("AUD")), expected);
+        }
+        assert_ne!(number(0.004, Some("AUD")), "0.00 AUD");
     }
 
     #[test]

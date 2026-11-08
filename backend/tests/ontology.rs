@@ -3880,3 +3880,32 @@ async fn preview_column_precedence_matches_import_for_competing_properties_and_l
     assert!(out["columns"][0]["property"].is_null() && out["columns"][0]["link"].is_null());
     assert!(out["columns"][0]["skipped"].as_str().unwrap().contains("column_map"));
 }
+
+#[tokio::test]
+async fn gate3_mcp_scenario_text_and_structured_content_keep_raw_small_moves() {
+    let app = TestApp::new().await;
+    let vault = personal(&app).await;
+    ok(app.tool("ontology_propose", json!({
+        "kinds": [{"kind": "sample"}],
+        "properties": [{"kind": "sample", "name": "score", "datatype": "percent"}],
+        "metrics": [{"kind": "sample", "name": "average_score", "unit": "percent", "expr": {"agg": "avg", "property": "score"}}]
+    })).await);
+    assert_eq!(decide_kind(&app, &vault, "sample", json!({"action": "approve"})).await.0, 200);
+    assert_eq!(decide_property(&app, &vault, "sample", "score", json!({"action": "approve"})).await.0, 200);
+    assert_eq!(decide_metric(&app, &vault, "sample", "average_score", json!({"action": "approve"})).await.0, 200);
+    let id = write(&app, "Sample", "sample").await["entity"]["id"].clone();
+    ok(app.tool("entity_set_property", json!({"entity_id": id, "property": "score", "value": 35.756120})).await);
+    let args = json!({"view": "scenario", "headline": "Score changes", "scenario": {
+        "changes": [{"set": {"entity_id": id, "property": "score", "value": 35.435683}}], "metrics": ["average_score"]
+    }});
+    let rpc = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "show_view", "arguments": args}});
+    let (status, out) = app.http("POST", "/mcp", Some(rpc), true).await;
+    assert_eq!(status, 200, "{out}");
+    let shown = &out["result"]["structuredContent"];
+    assert_eq!(shown["result"]["baseline"][0]["value"], 35.756120, "{out}");
+    assert_eq!(shown["result"]["scenario"][0]["value"], 35.435683, "{out}");
+    assert_eq!(shown["result"]["scenario"][0]["delta"], -0.320437, "{out}");
+    let expected = "35.76% \u{2192} 35.44%, down 0.32 points";
+    assert!(shown["text"].as_str().unwrap().contains(expected), "{out}");
+    assert!(out["result"]["content"][0]["text"].as_str().unwrap().contains(expected), "{out}");
+}

@@ -1,8 +1,9 @@
 import Link from "next/link";
+import { formatScenario } from "@/lib/numbers";
 import { ArrowsLeftRightIcon } from "@phosphor-icons/react/ssr";
 import Duo from "@/components/ui/Duo";
 import StatusLabel from "@/components/ui/StatusLabel";
-import { formatNumber, isPercent, withUnit, words } from "./bits";
+import { withUnit, words } from "./bits";
 import { asOfDate, MetricWarnings } from "./MetricView";
 import type { ScenarioRun, ScenarioView as Scenario } from "./types";
 
@@ -16,25 +17,10 @@ function linkedWithin(reached: ScenarioRun["reached"]): string {
   return `Linked within ${steps} ${steps === 1 ? "step" : "steps"} (not all are affected)`;
 }
 
-/** "up 0.30 AUD (2.1%)": the move in words, so it never rests on colour. A percent moves in points
- * ("down 1.7 points"), as the server's text says it. */
-function move(before: number | null, after: number | null, pct: number | null, unit: string | null): string {
-  if (before == null || after == null) return after == null ? "no value in the what-if" : "no value before";
-  // from the figures as shown, so the move always matches what the reader can subtract (15.67 - 15.22 = 0.45)
-  const asShown = (n: number) => Number(formatNumber(n, unit));
-  const d = asShown(after) - asShown(before);
-  if (Math.abs(d) < 1e-9) return "no change";
-  if (isPercent(unit)) {
-    const points = formatNumber(Math.abs(d), unit);
-    return `${d > 0 ? "up" : "down"} ${points} ${points === "1" ? "point" : "points"}`;
-  }
-  const share = pct == null ? "" : ` (${Number(Math.abs(pct).toFixed(1))}%)`;
-  return `${d > 0 ? "up" : "down"} ${withUnit(Math.abs(d), unit)}${share}`;
-}
-
 function MetricRow({ run, i }: { run: ScenarioRun; i: number }) {
   const before = run.baseline[i];
   const after = run.scenario[i];
+  const shown = formatScenario(before.value, after.value, after.delta_pct, after.unit);
   const big = { fontVariantNumeric: "tabular-nums", letterSpacing: "-0.015em" } as const;
   return (
     <li className="soft-panel px-3 py-2.5 flex flex-col gap-1 min-w-0">
@@ -44,9 +30,9 @@ function MetricRow({ run, i }: { run: ScenarioRun; i: number }) {
       </div>
       {/* Geist, not Mono, for the numbers: see MetricView */}
       <p className="flex flex-wrap items-baseline gap-x-2 text-[22px] font-medium leading-tight" style={big}>
-        <span style={{ color: "var(--ink-dim)" }}>{before.value == null ? "none" : formatNumber(before.value, before.unit)}</span>
+        <span style={{ color: "var(--ink-dim)" }}>{shown.before}</span>
         <span aria-label="becomes">{"→"}</span>
-        <span>{after.value == null ? "none" : formatNumber(after.value, after.unit)}</span>
+        <span>{shown.after}</span>
         {after.unit && (
           <span className="font-mono text-[13px] font-normal" style={{ color: "var(--ink-dim)" }}>
             {after.unit}
@@ -54,7 +40,7 @@ function MetricRow({ run, i }: { run: ScenarioRun; i: number }) {
         )}
       </p>
       <p className="text-[13px]">
-        <span className="font-medium">{move(before.value, after.value, after.delta_pct, after.unit)}</span>
+        <span className="font-medium">{shown.movement}</span>
         <span style={{ color: "var(--ink-dim)" }}>
           {" "}
           · {before.expr_words}, from <span style={big}>{after.n_entities}</span> {words(before.kind)}

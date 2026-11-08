@@ -17,6 +17,7 @@ import StatusLabel, { toneFromVar } from "@/components/ui/StatusLabel";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { ConnectorTile, kindForSource, relativeTime } from "@/lib/connectorMeta";
 import PocketAudioPlayer from "@/components/pocket/PocketAudioPlayer";
+import { formatMoney } from "@/lib/numbers";
 
 const DATE_KEY = /(_at|date|time)$/i;
 const MONEY_KEY = /(amount|balance|price|cost|total|spent|fee)/i;
@@ -40,7 +41,7 @@ function formatPrimitive(key: string, value: unknown): string {
   if (value === null || value === undefined || value === "") return "None";
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (typeof value === "number") {
-    if (MONEY_KEY.test(key)) return `$${value.toFixed(2)}`;
+    if (MONEY_KEY.test(key)) return `$${formatMoney(value)}`;
     if (DURATION_KEY.test(key)) return `${value} min`;
     return value.toLocaleString();
   }
