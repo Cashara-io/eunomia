@@ -29,7 +29,7 @@ CI (`.github/workflows/ci.yml`) runs on every push to `main` and on every pull r
 - `upgrade-surreal-v3`: `scripts/tests/upgrade-surreal-v3.test.sh` (real 2.x to 3.3 move; the large-table case `UPGRADE_TEST_LARGE=1` is not run in CI).
 - `restore-drill`: `scripts/restore-drill.sh` then `scripts/restore-drill-tenancy.sh`.
 - `secrets-helper-compose`: `scripts/tests/secrets-helper-compose.test.sh`, the backend and the real sidecar on the compose networks with the `secrets` profile on (the backend reports the helper running): Test connection through it to a mock 1Password Connect container, reachable from the backend only, no published port, nothing written to its filesystem, no token in its environment or logs.
-- `update-path`: an install on a previous release updated to this build through the real updater (below), in four rows, from the published `v2.0.7`, `v2.0.8`, `v2.0.9` and `v2.1.0` (`scripts/tests/update-path.test.sh v2.1.0`). A row for a release that is not published yet adds `from_ref` (below).
+- `update-path`: an install on a previous release updated to this build through the real updater (below), in four rows, from the published `v2.0.7`, `v2.0.8`, `v2.0.9` and `v2.1.0` (`scripts/tests/update-path.test.sh v2.1.0`). A row for a release that is not published yet adds `from_ref` (below). `scripts/ci/check-update-path-rows.sh` (the `scripts` job, and the first job of a release) fails when the newest published release has no row, so a release cannot ship untested from the one before it, and the first PR after a release must add its row.
 - Not in CI: Chaos, k6, fuzz.
 
 ## Update path
