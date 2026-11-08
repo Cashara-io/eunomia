@@ -12,7 +12,7 @@ use surrealdb::types::RecordId;
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::models_user::User;
 use crate::ontology::automap::{AutomapArgs, AutomapOut};
-use crate::ontology::{self, metric::MetricDecision, property::PropertyDecision, suggest::SuggestOut, KindDecision, LinkDecision, OntologyOut};
+use crate::ontology::{self, metric::MetricDecision, property::PropertyDecision, readiness::ReadinessOut, suggest::SuggestOut, KindDecision, LinkDecision, OntologyOut};
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -24,6 +24,13 @@ pub fn router() -> Router<AppState> {
         .route("/vaults/{vault_id}/ontology/links/decide", post(decide_link))
         .route("/vaults/{vault_id}/ontology/properties/decide", post(decide_property))
         .route("/vaults/{vault_id}/ontology/metrics/decide", post(decide_metric))
+        .route("/vaults/{vault_id}/ontology/readiness", get(get_readiness))
+        .route("/vaults/{vault_id}/ontology/strict", post(set_strict))
+}
+
+/// After an approval or a description: the terms coverage matches get their vectors in the background.
+fn decided(state: &crate::state::OrgState, user: &User, vault: &RecordId) {
+    ontology::coverage::refresh_soon(state.db.clone(), state.settings.clone(), user.id.clone(), vault.clone());
 }
 
 fn parse_vault_id(vault_id: &str) -> AppResult<RecordId> {
@@ -133,7 +140,9 @@ async fn automap_ontology(State(state): State<AppState>, user: User, Path(vault_
 async fn decide_kind(State(state): State<AppState>, user: User, Path(vault_id): Path<String>, Json(body): Json<KindDecideBody>) -> AppResult<Json<OntologyOut>> {
     let state = state.org(&user.org).await?;
     let vault = parse_vault_id(&vault_id)?;
-    Ok(Json(ontology::decide_kind(&state.db, &user.id, &vault, &body.kind, body.decision).await?))
+    let out = ontology::decide_kind(&state.db, &user.id, &vault, &body.kind, body.decision).await?;
+    decided(&state, &user, &vault);
+    Ok(Json(out))
 }
 
 #[utoipa::path(
@@ -150,7 +159,9 @@ async fn decide_kind(State(state): State<AppState>, user: User, Path(vault_id): 
 async fn decide_link(State(state): State<AppState>, user: User, Path(vault_id): Path<String>, Json(body): Json<LinkDecideBody>) -> AppResult<Json<OntologyOut>> {
     let state = state.org(&user.org).await?;
     let vault = parse_vault_id(&vault_id)?;
-    Ok(Json(ontology::decide_link(&state.db, &user.id, &vault, &body.from_kind, &body.label, &body.to_kind, body.decision).await?))
+    let out = ontology::decide_link(&state.db, &user.id, &vault, &body.from_kind, &body.label, &body.to_kind, body.decision).await?;
+    decided(&state, &user, &vault);
+    Ok(Json(out))
 }
 
 #[utoipa::path(
@@ -167,7 +178,9 @@ async fn decide_link(State(state): State<AppState>, user: User, Path(vault_id): 
 async fn decide_property(State(state): State<AppState>, user: User, Path(vault_id): Path<String>, Json(body): Json<PropertyDecideBody>) -> AppResult<Json<OntologyOut>> {
     let state = state.org(&user.org).await?;
     let vault = parse_vault_id(&vault_id)?;
-    Ok(Json(ontology::property::decide_property(&state.db, &user.id, &vault, &body.kind, &body.name, body.decision).await?))
+    let out = ontology::property::decide_property(&state.db, &user.id, &vault, &body.kind, &body.name, body.decision).await?;
+    decided(&state, &user, &vault);
+    Ok(Json(out))
 }
 
 #[utoipa::path(
@@ -184,9 +197,50 @@ async fn decide_property(State(state): State<AppState>, user: User, Path(vault_i
 async fn decide_metric(State(state): State<AppState>, user: User, Path(vault_id): Path<String>, Json(body): Json<MetricDecideBody>) -> AppResult<Json<OntologyOut>> {
     let state = state.org(&user.org).await?;
     let vault = parse_vault_id(&vault_id)?;
-    Ok(Json(ontology::metric::decide_metric(&state.db, &user.id, &vault, &body.kind, &body.name, body.decision).await?))
+    let out = ontology::metric::decide_metric(&state.db, &user.id, &vault, &body.kind, &body.name, body.decision).await?;
+    decided(&state, &user, &vault);
+    Ok(Json(out))
+}
+
+#[utoipa::path(
+    operation_id = "getVaultOntologyReadiness",
+    get,
+    path = "/api/vaults/{vault_id}/ontology/readiness",
+    tag = "vaults",
+    summary = "The vault's kinds, properties, metrics and link types by status, and what still blocks answering numbers",
+    params(("vault_id" = String, Path)),
+    responses((status = 200, body = ReadinessOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = []), ("bearer" = [])),
+)]
+async fn get_readiness(State(state): State<AppState>, user: User, Path(vault_id): Path<String>) -> AppResult<Json<ReadinessOut>> {
+    let state = state.org(&user.org).await?;
+    let vault = parse_vault_id(&vault_id)?;
+    Ok(Json(ontology::readiness::readiness(&state.db, &user.id, Some(&vault)).await?))
+}
+
+#[derive(Deserialize, utoipa::ToSchema)]
+struct StrictBody {
+    /// Only approved kinds and links.
+    on: bool,
+}
+
+#[utoipa::path(
+    operation_id = "setVaultOntologyStrict",
+    post,
+    path = "/api/vaults/{vault_id}/ontology/strict",
+    tag = "vaults",
+    summary = "Turn \"Only approved kinds and links\" on or off (owner, browser session only)",
+    params(("vault_id" = String, Path)),
+    request_body = StrictBody,
+    responses((status = 200, body = OntologyOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
+    security(("cookie" = [])),
+)]
+async fn set_strict(State(state): State<AppState>, user: User, Path(vault_id): Path<String>, Json(body): Json<StrictBody>) -> AppResult<Json<OntologyOut>> {
+    let state = state.org(&user.org).await?;
+    let vault = parse_vault_id(&vault_id)?;
+    Ok(Json(ontology::set_strict(&state.db, &user.id, &vault, body.on).await?))
 }
 
 #[derive(utoipa::OpenApi)]
-#[openapi(paths(get_ontology, suggest_ontology, automap_ontology, decide_kind, decide_link, decide_property, decide_metric))]
+#[openapi(paths(get_ontology, suggest_ontology, automap_ontology, decide_kind, decide_link, decide_property, decide_metric, get_readiness, set_strict))]
 pub struct Doc;

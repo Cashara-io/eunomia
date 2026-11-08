@@ -6,6 +6,7 @@ expression: stable
   "mode": "profile_only",
   "profile": {
     "vault": "vault:<id2>",
+    "strict": false,
     "kinds": [
       {
         "kind": "person",

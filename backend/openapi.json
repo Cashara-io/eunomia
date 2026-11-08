@@ -7774,6 +7774,111 @@
         ]
       }
     },
+    "/api/vaults/{vault_id}/ontology/readiness": {
+      "get": {
+        "tags": [
+          "vaults"
+        ],
+        "summary": "The vault's kinds, properties, metrics and link types by status, and what still blocks answering numbers",
+        "operationId": "getVaultOntologyReadiness",
+        "parameters": [
+          {
+            "name": "vault_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/vaults/{vault_id}/ontology/strict": {
+      "post": {
+        "tags": [
+          "vaults"
+        ],
+        "summary": "Turn \"Only approved kinds and links\" on or off (owner, browser session only)",
+        "operationId": "setVaultOntologyStrict",
+        "parameters": [
+          {
+            "name": "vault_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StrictBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OntologyOut"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
     "/api/vaults/{vault_id}/ontology/suggest": {
       "post": {
         "tags": [
@@ -12043,6 +12148,7 @@
         "type": "object",
         "required": [
           "vault",
+          "strict",
           "kinds",
           "links"
         ],
@@ -12059,6 +12165,10 @@
             "items": {
               "$ref": "#/components/schemas/LinkItem"
             }
+          },
+          "strict": {
+            "type": "boolean",
+            "description": "\"Only approved kinds and links\": a write under a custom kind or a relation under a link type\nthat is not approved is refused and filed as a proposal."
           },
           "vault": {
             "type": "string"
@@ -12901,6 +13011,51 @@
           "updated_by": {
             "type": "string",
             "description": "`user:...`"
+          }
+        }
+      },
+      "ReadinessOut": {
+        "type": "object",
+        "required": [
+          "vault",
+          "strict",
+          "kinds",
+          "properties",
+          "metrics",
+          "links",
+          "ready",
+          "blockers"
+        ],
+        "properties": {
+          "blockers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "What stops the vault answering numbers, each in one sentence, for the owner."
+          },
+          "kinds": {
+            "$ref": "#/components/schemas/StatusCounts"
+          },
+          "links": {
+            "$ref": "#/components/schemas/StatusCounts"
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/StatusCounts"
+          },
+          "properties": {
+            "$ref": "#/components/schemas/StatusCounts"
+          },
+          "ready": {
+            "type": "boolean",
+            "description": "No blockers."
+          },
+          "strict": {
+            "type": "boolean",
+            "description": "Whether the vault takes only approved kinds and links."
+          },
+          "vault": {
+            "type": "string"
           }
         }
       },
@@ -13936,6 +14091,47 @@
           "approved",
           "rejected"
         ]
+      },
+      "StatusCounts": {
+        "type": "object",
+        "description": "Rows of one sort, by status.",
+        "required": [
+          "approved",
+          "proposed",
+          "rejected",
+          "observed"
+        ],
+        "properties": {
+          "approved": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "observed": {
+            "type": "integer",
+            "description": "In use but never reviewed (kinds and link types only).",
+            "minimum": 0
+          },
+          "proposed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "rejected": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "StrictBody": {
+        "type": "object",
+        "required": [
+          "on"
+        ],
+        "properties": {
+          "on": {
+            "type": "boolean",
+            "description": "Only approved kinds and links."
+          }
+        }
       },
       "SubExpr": {
         "type": "object",
