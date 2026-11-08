@@ -135,7 +135,8 @@ async fn handle(State(state): State<AppState>, authn: Option<Extension<Authn>>, 
 
     // tool calls in this request are counted under the client's MCP session, when it sent one
     let session = crate::usage::session_from_header(headers.get("mcp-session-id").and_then(|v| v.to_str().ok()));
-    crate::usage::with_context(crate::usage::Channel::Mcp, session, respond(&state, &user, &message, initializing)).await
+    let meter = meter.map(|Extension(m)| m);
+    crate::usage::with_context(crate::usage::Channel::Mcp, session, crate::gate::with_meter(meter, respond(&state, &user, &message, initializing))).await
 }
 
 /// Handles the (already validated) message or batch and builds the HTTP reply; a successful

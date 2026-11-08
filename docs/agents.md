@@ -320,7 +320,8 @@ An expression is `agg` (`sum`, `avg`, `min` and `max` over a number, integer, mo
 `count` of entities, or of those with a `property`; `count_distinct` of a property's values; `ratio` of a
 `numerator` over a `denominator`, each with its own agg, property and filters), `filters`
 (`[{"property": "supplier", "op": "eq", "value": "Riverside Roasters"}]`, ops `eq`, `ne`, `gt`, `gte`, `lt`,
-`lte` and `in`, at most 10), and for a series `time_property` (a date property) and `grain` (`day`, `week`,
+`lte` and `in`, at most 10; `ne` also picks an entity with no value for the property, so "status is not
+delivered" counts one with no status), and for a series `time_property` (a date property) and `grain` (`day`, `week`,
 `month`, `quarter` or `year`). Every property must be on the kind and every value must fit its datatype;
 anything else, including query text, is refused when proposed.
 
@@ -363,6 +364,9 @@ returns
 
 4. Draw it with `show_view` `{"view": "scenario", "headline": "What if the latte costs 30 cents more?",
    "scenario": <the same arguments>}`, and say nothing was saved.
+
+Each of `metrics` is an approved metric's name, or `{"metric": "avg_price", "kind": "product"}` when two kinds
+have a metric of that name.
 
 The four changes, applied in order (at most 20):
 
@@ -554,5 +558,7 @@ the extra calls get `429 rate.limited` with `Retry-After`. Use
 `memory_write_batch` instead. It takes up to 100 facts per call, writes each
 exactly like `memory_write`, and returns one result per fact, so a bad item
 fails alone. A batch costs one request per 10 facts, so 900 facts are 9 calls
-and 90 requests, well inside a minute's limit. If a client still gets a 429,
+and 90 requests, well inside a minute's limit. A CSV import (`document_import_rows`)
+costs one request per 500 rows, counted once the file is read, so a 5,000-row
+file is 10 requests. If a client still gets a 429,
 it should wait `Retry-After` seconds and resend that batch.

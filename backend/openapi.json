@@ -2766,7 +2766,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/EntityOut"
+                  "$ref": "#/components/schemas/EntityCreated"
                 }
               }
             }
@@ -9552,6 +9552,29 @@
           }
         }
       },
+      "EntityCreated": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/EntityOut"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind_mapped": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/KindMapped"
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "description": "The entity a create found or made. `kind_mapped` is set when the vault's owners rejected the kind\nasked for and the entity went to its merge target instead."
+      },
       "EntityDetail": {
         "type": "object",
         "required": [
@@ -11068,6 +11091,22 @@
               "type": "string"
             },
             "description": "Other names written in the vault's data for this kind."
+          }
+        }
+      },
+      "KindMapped": {
+        "type": "object",
+        "description": "A write under a rejected kind that went to its merge target instead.",
+        "required": [
+          "from",
+          "to"
+        ],
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
           }
         }
       },

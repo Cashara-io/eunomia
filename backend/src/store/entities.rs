@@ -264,11 +264,14 @@ pub const CONSOLIDATE_UPDATE: Stmt = Stmt::new(
              WHERE version = $expected_version RETURN AFTER",
 );
 
-/// Whether `$kind` is already in `$vault` (slot 0), else every custom kind in it (slot 1).
+/// Whether `$kind` is already in `$vault` (slot 1), else every custom kind in it (slot 2). The kinds
+/// are read only for a new kind: that read visits every entity of the vault, and a write under a kind
+/// already there is the common case.
 pub const CUSTOM_KIND_ROOM: Stmt = Stmt::new(
     "entities.custom_kind_room",
-    "SELECT VALUE id FROM entity WHERE vault = $vault AND kind = $kind LIMIT 1; \
-     SELECT kind FROM entity WHERE vault = $vault GROUP BY kind;",
+    "LET $known = (SELECT VALUE id FROM entity WHERE vault = $vault AND kind = $kind LIMIT 1); \
+     RETURN $known; \
+     RETURN IF array::len($known) > 0 { [] } ELSE { (SELECT kind FROM entity WHERE vault = $vault GROUP BY kind) };",
 );
 
 /// Every custom kind in `$vaults`, with how many entities it has there.
@@ -353,38 +356,51 @@ pub fn update_entity<'a>(db: &'a OrgDb, set: &str) -> Q<'a> {
     dynamic(db, "entities.update_entity", format!("UPDATE $id SET {set} RETURN AFTER"))
 }
 
-/// The `table` entity in `vault` whose lowercase name or an alias is `$needle`, a name match first;
-/// both lookups are index reads. `table` is always a `kind_table()`-validated entity table.
+/// The `table` entity in `vault` whose lowercase name (slot 1) or else an alias (slot 2) is `$needle`.
+/// The name is an index read. On SurrealDB 3.3.5 the alias lookup scans the table (the planner never
+/// uses the array index, hint or not), so it runs only when the name matched nothing and the caller
+/// did not set `$no_alias` (it knows no entity has `$needle` as an alias). `table` is always a
+/// `kind_table()`-validated entity table.
 pub fn find_by_key<'a>(db: &'a OrgDb, table: &str) -> Q<'a> {
     let k = kind_clause(table);
     dynamic(
         db,
         "entities.find_by_key",
         format!(
-            "SELECT * FROM {table} WHERE vault = $vault{k} AND name_key = $needle LIMIT 1; \
-             SELECT * FROM {table} WITH INDEX {table}_alias_keys_idx WHERE alias_keys CONTAINS $needle AND vault = $vault{k} \
-             ORDER BY created_at LIMIT 1;"
+            "LET $by_name = (SELECT * FROM {table} WHERE vault = $vault{k} AND name_key = $needle LIMIT 1); \
+             RETURN $by_name; \
+             RETURN IF array::len($by_name) > 0 OR $no_alias = true {{ [] }} ELSE {{ \
+                (SELECT * FROM {table} WITH INDEX {table}_alias_keys_idx WHERE alias_keys CONTAINS $needle AND vault = $vault{k} \
+                ORDER BY created_at LIMIT 1) }};"
         ),
     )
 }
 
-/// [`find_by_key`] for `$needle` (statements 0 and 1), then the same name and alias lookups for the
-/// other lowercase keys in `$needles` (statements 2 and 3), all in one round trip. Every lookup is an
-/// index read.
+/// [`find_by_key`] for `$needle` (slots 1 and 2), then the same name and alias lookups for the other
+/// lowercase keys in `$needles` (slots 3 and 4), all in one round trip.
 pub fn find_by_key_or_variants<'a>(db: &'a OrgDb, table: &str) -> Q<'a> {
     let k = kind_clause(table);
     dynamic(
         db,
         "entities.find_by_key_or_variants",
         format!(
-            "SELECT * FROM {table} WHERE vault = $vault{k} AND name_key = $needle LIMIT 1; \
-             SELECT * FROM {table} WITH INDEX {table}_alias_keys_idx WHERE alias_keys CONTAINS $needle AND vault = $vault{k} \
-             ORDER BY created_at LIMIT 1; \
+            "LET $by_name = (SELECT * FROM {table} WHERE vault = $vault{k} AND name_key = $needle LIMIT 1); \
+             RETURN $by_name; \
+             RETURN IF array::len($by_name) > 0 OR $no_alias = true {{ [] }} ELSE {{ \
+                (SELECT * FROM {table} WITH INDEX {table}_alias_keys_idx WHERE alias_keys CONTAINS $needle AND vault = $vault{k} \
+                ORDER BY created_at LIMIT 1) }}; \
              SELECT * FROM {table} WHERE vault = $vault{k} AND name_key IN $needles ORDER BY created_at LIMIT 1; \
              SELECT * FROM {table} WITH INDEX {table}_alias_keys_idx WHERE alias_keys CONTAINSANY $needles AND vault = $vault{k} \
              ORDER BY created_at LIMIT 1;"
         ),
     )
+}
+
+/// Every alias key of the `table` entities in `$vault`: an import reads them once instead of looking
+/// each new name up as an alias (a scan, see [`find_by_key`]).
+pub fn alias_keys_of<'a>(db: &'a OrgDb, table: &str) -> Q<'a> {
+    let k = kind_clause(table);
+    dynamic(db, "entities.alias_keys_of", format!("SELECT VALUE alias_keys FROM {table} WHERE vault = $vault{k} AND array::len(alias_keys) > 0"))
 }
 
 /// Other `table` entities in `$vault` (not `$id`) whose name or an alias shares one of `$words`.

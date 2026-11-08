@@ -8,7 +8,7 @@
 //! values in place and never adds an entity or a row of history. A bad cell is reported with its line
 //! and column and never stops the rest.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -18,6 +18,7 @@ use super::profile::{self, RecordTypeProfile, Sample};
 use super::property::{self, Datatype, PropertyName};
 use super::{kind_rid, no_ontology_table, Kind, Origin, Status};
 use crate::authz::Action;
+use crate::entities::service::Lookups;
 use crate::error::{AppError, AppResult};
 use crate::pool::OrgDb;
 use crate::rid::RecordIdExt;
@@ -28,6 +29,8 @@ use crate::store::ontology as q;
 pub const MAX_TABLE_BYTES: usize = 2 * 1024 * 1024;
 pub const MAX_COLUMNS: usize = 60;
 pub const MAX_ROWS: usize = 5000;
+/// Rows an import gets for one rate-limit unit, as a batch of facts gets ten.
+pub const IMPORT_ROWS_PER_UNIT: usize = 500;
 /// Bad cells listed in an import's answer; the count covers the rest.
 const MAX_BAD_LISTED: usize = 100;
 /// The source a CSV's fields carry in a profile and a property's `source_map`.
@@ -280,6 +283,8 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
         _ => return Err(not_ready(&kind, "is not approved for this vault yet")),
     }
     let table = parse(&doc.bytes)?;
+    // the request already paid one unit; each further IMPORT_ROWS_PER_UNIT rows cost one more
+    crate::gate::charge_more(table.rows.len().div_ceil(IMPORT_ROWS_PER_UNIT).saturating_sub(1))?;
     let doc_id = doc.id.to_string();
     let name_at = table
         .columns
@@ -345,6 +350,13 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
     let mut out = ImportOut { document_id: doc_id.clone(), kind: kind.as_str().to_string(), rows: table.rows.len(), created: 0, updated: 0, values: 0, columns, bad: Vec::new(), bad_count: 0 };
     let mut seen: HashMap<String, ()> = HashMap::new();
     let mut names: HashMap<String, u64> = HashMap::new();
+    let mut pending: Vec<ImportedValue> = Vec::new();
+    // one read of the kind's aliases, so a new name is not looked up as an alias row by row (a scan)
+    let alias_keys: HashSet<String> = {
+        let table = crate::entities::service::kind_table(kind.as_str())?;
+        let lists: Vec<Vec<String>> = crate::store::entities::alias_keys_of(db, table).bind(("vault", doc.vault.clone())).bind(("kind", kind.as_str().to_string())).await?.take(0)?;
+        lists.into_iter().flatten().collect()
+    };
     for (line, cells) in &table.rows {
         if cells.len() != table.columns.len() {
             bad(&mut out, *line, None, format!("has {} cells; the header has {}", cells.len(), table.columns.len()));
@@ -361,14 +373,16 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
             continue;
         }
         names.insert(name.to_lowercase(), *line);
-        let up = crate::entities::service::upsert_grounded(db, user, kind.as_str(), name, None, Some(&doc.vault)).await?;
-        let first_time = seen.insert(up.entity.id.clone(), ()).is_none();
-        match (up.created, first_time) {
+        // load_csv checked the vault for writing and the kind is approved, so no per-row authz or grounding
+        let lookups = if alias_keys.contains(&name.to_lowercase()) { Lookups::NameAndAlias } else { Lookups::NameOnly };
+        let (entity, created) = crate::entities::service::upsert_in_vault(db, user, kind.as_str(), name, None, &doc.vault, lookups).await?;
+        let first_time = seen.insert(entity.id.clone(), ()).is_none();
+        match (created, first_time) {
             (true, _) => out.created += 1,
             (false, true) => out.updated += 1,
             _ => {}
         }
-        let entity: RecordId = crate::rid::parse(&up.entity.id).map_err(|_| AppError::internal("entity id did not round-trip"))?;
+        let entity: RecordId = crate::rid::parse(&entity.id).map_err(|_| AppError::internal("entity id did not round-trip"))?;
         for (i, row, datatype) in &targets {
             let cell = cells[*i].trim();
             if cell.is_empty() {
@@ -383,29 +397,58 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
                 }
             };
             let key = format!("{}|{}|{doc_id}", entity.to_string(), row.id.to_string());
-            let id = RecordId::from_table_key("entity_property", crate::tx::stable_key('i', &key));
-            crate::tx::with_retry_dup(|| async {
-                q::UPSERT_IMPORTED_VALUE
-                    .on(db)
-                    .bind(("id", id.clone()))
-                    .bind(("vault", doc.vault.clone()))
-                    .bind(("entity", entity.clone()))
-                    .bind(("property", row.id.clone()))
-                    .bind(("value_num", stored.num))
-                    .bind(("value_text", stored.text.clone()))
-                    .bind(("value_bool", stored.boolean))
-                    .bind(("value_date", stored.date))
-                    .bind(("as_of", as_of))
-                    .bind(("source", doc.id.clone()))
-                    .bind(("origin", origin.as_str().to_string()))
-                    .await
-            })
-            .await?
-            .check()?;
+            pending.push(ImportedValue {
+                id: RecordId::from_table_key("entity_property", crate::tx::stable_key('i', &key)),
+                entity: entity.clone(),
+                property: row.id.clone(),
+                value_num: stored.num,
+                value_text: stored.text,
+                value_bool: stored.boolean,
+                value_date: stored.date,
+            });
             out.values += 1;
         }
+        if pending.len() >= IMPORT_BATCH {
+            write_values(db, &doc.vault, &doc.id, as_of, origin, std::mem::take(&mut pending)).await?;
+        }
     }
+    write_values(db, &doc.vault, &doc.id, as_of, origin, pending).await?;
     Ok(out)
+}
+
+/// Values one import statement writes.
+const IMPORT_BATCH: usize = 500;
+
+/// One imported value, keyed by (entity, property, document) in `id`.
+#[derive(Debug, Clone, SurrealValue)]
+struct ImportedValue {
+    id: RecordId,
+    entity: RecordId,
+    property: RecordId,
+    value_num: Option<f64>,
+    value_text: Option<String>,
+    value_bool: Option<bool>,
+    value_date: Option<Datetime>,
+}
+
+/// Writes `values` in one statement, each updated in place on a re-run.
+async fn write_values(db: &OrgDb, vault: &RecordId, document: &RecordId, as_of: Datetime, origin: Origin, values: Vec<ImportedValue>) -> AppResult<()> {
+    if values.is_empty() {
+        return Ok(());
+    }
+    crate::tx::with_retry_dup(|| async {
+        q::UPSERT_IMPORTED_VALUES
+            .on(db)
+            .bind(("values", values.clone()))
+            .bind(("vault", vault.clone()))
+            .bind(("as_of", as_of))
+            .bind(("source", document.clone()))
+            .bind(("origin", origin.as_str().to_string()))
+            .await
+    })
+    .await?
+    .check()?;
+    Ok(())
 }
 
 /// A cell as a spreadsheet writes it, in the form `parse_value` takes: `$1,200.50` or `A$4` for money,

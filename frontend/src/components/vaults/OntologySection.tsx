@@ -38,7 +38,24 @@ const STATUS: Record<ViewStatus, { tone: StatusTone; label: string }> = {
 
 const words = (name: string) => name.replace(/_/g, " ");
 
+/** The ontology is read only once the section is opened: it reads every relation in the space. */
 export default function OntologySection({ vault }: { vault: Vault }) {
+  const cached = useOntology(vault.id, false).data;
+  const proposed = cached ? waiting(cached) : 0;
+  return (
+    <Disclosure
+      title="Kinds and links"
+      hint={proposed > 0 ? `${proposed} ${proposed === 1 ? "suggestion" : "suggestions"} waiting for review` : "What the memories in this space are about, and how they connect"}
+    >
+      <OntologyBody vault={vault} />
+    </Disclosure>
+  );
+}
+
+const waiting = (data: { kinds: KindItem[]; links: LinkItem[] }) =>
+  [...data.kinds, ...data.links, ...data.kinds.flatMap((k) => k.properties), ...data.kinds.flatMap((k) => k.metrics)].filter((x) => x.status === "proposed").length;
+
+function OntologyBody({ vault }: { vault: Vault }) {
   const isOwner = vault.role === "owner";
   const query = useOntology(vault.id);
   const suggest = useSuggestOntology(vault.id);
@@ -86,18 +103,8 @@ export default function OntologySection({ vault }: { vault: Vault }) {
       .filter((k) => k.kind !== self && k.status !== "rejected" && (k.built_in || k.status === "approved" || k.entities > 0))
       .map((k) => ({ value: k.kind, label: words(k.kind) }));
 
-  const proposed = [
-    ...(data?.kinds ?? []),
-    ...(data?.links ?? []),
-    ...(data?.kinds ?? []).flatMap((k) => k.properties),
-    ...(data?.kinds ?? []).flatMap((k) => k.metrics),
-  ].filter((x) => x.status === "proposed").length;
-
   return (
-    <Disclosure
-      title="Kinds and links"
-      hint={proposed > 0 ? `${proposed} ${proposed === 1 ? "suggestion" : "suggestions"} waiting for review` : "What the memories in this space are about, and how they connect"}
-    >
+    <>
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <p className="text-[13px] flex-1 min-w-[220px]" style={{ color: "var(--ink-dim)" }}>
           {isOwner
@@ -187,7 +194,7 @@ export default function OntologySection({ vault }: { vault: Vault }) {
           />
         ))}
       </ul>
-    </Disclosure>
+    </>
   );
 }
 

@@ -113,6 +113,68 @@ fn chat_may_call(name: &str) -> bool {
     (registry::is_read_only(name) || CHAT_WRITE_TOOLS.contains(&name)) && !registry::is_destructive(name)
 }
 
+/// What the thread holds so far, to tell a new fact from the model saving its own work: the user's
+/// messages, and every tool result string and assistant reply (whitespace and case squashed).
+#[derive(Default)]
+struct Said {
+    user: Vec<String>,
+    own: Vec<String>,
+}
+
+/// The shortest write text [`Said::restates`] compares, so a short name or a number is never refused.
+const MIN_RESTATED: usize = 16;
+/// The shortest tool result string that counts as quoted when it appears inside a longer write.
+const MIN_QUOTED: usize = 40;
+
+fn squash(s: &str) -> String {
+    s.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase()
+}
+
+impl Said {
+    fn tool_result(&mut self, v: &Value) {
+        match v {
+            Value::String(t) => self.own.push(squash(t)),
+            Value::Array(a) => a.iter().for_each(|x| self.tool_result(x)),
+            Value::Object(o) => o.values().for_each(|x| self.tool_result(x)),
+            _ => {}
+        }
+    }
+
+    fn row(&mut self, role: &str, content: &str) {
+        match role {
+            "user" => self.user.push(squash(content)),
+            "assistant" => self.own.push(squash(content)),
+            "tool" => self.tool_result(&serde_json::from_str(content).unwrap_or(Value::Null)),
+            _ => {}
+        }
+    }
+
+    /// Whether a `memory_write` or `memory_update` text repeats a tool result or an earlier reply word
+    /// for word (an impact, a number, a summary): the model saving what it worked out. Text the user
+    /// wrote is never refused.
+    fn restates(&self, tool: &str, args: &Value) -> bool {
+        if !matches!(tool, "memory_write" | "memory_update") {
+            return false;
+        }
+        let Some(text) = args["text"].as_str().map(squash).filter(|t| t.chars().count() >= MIN_RESTATED) else { return false };
+        if self.user.iter().any(|u| u.contains(&text)) {
+            return false;
+        }
+        self.own.iter().any(|o| o.contains(&text) || (o.chars().count() >= MIN_QUOTED && text.contains(o.as_str())))
+    }
+}
+
+/// A `memory_update` that keeps the stored text (to change its type) adds no new words, even when a
+/// recall just returned them.
+async fn resends_stored_text(db: &OrgDb, owner: &RecordId, tool: &str, args: &Value) -> bool {
+    if tool != "memory_update" {
+        return false;
+    }
+    let (Some(id), Some(text)) = (args["memory_id"].as_str(), args["text"].as_str()) else { return false };
+    let Ok(id) = crate::rid::parse(id) else { return false };
+    matches!(crate::entities::service::memory_text(db, owner, &id).await, Ok(Some(stored)) if squash(&stored) == squash(text))
+}
+
 /// Some reasoning models (gpt-6-luna) reason by default but refuse function tools on
 /// `chat/completions` unless `reasoning_effort` is `none`. Other models and OpenAI-compatible servers
 /// reject that field, so it is sent only after this refusal.
@@ -561,6 +623,11 @@ async fn run_send(
         touch_thread(db, thread_id, None).await.map_err(|e| (e.code, e.message))?;
     }
     messages.push(json!({ "role": "user", "content": user_message }));
+    let mut said = Said::default();
+    for r in &existing_rows {
+        said.row(&r.role, &r.content);
+    }
+    said.row("user", user_message);
 
     let p = provider::resolve(db, settings, owner).await.map_err(|e| (e.code, e.message))?;
     let tools = openai_tools();
@@ -651,6 +718,8 @@ async fn run_send(
             let args: Value = serde_json::from_str(&tc.arguments).unwrap_or_else(|_| json!({}));
             let result = if !chat_may_call(&name) {
                 json!({ "error": format!("`{name}` is not available in the in-app chat; the user can do this from the app itself") })
+            } else if said.restates(&name, &args) && !resends_stored_text(db, owner, &name, &args).await {
+                json!({ "error": "Not saved: this text repeats a tool result or your own answer. Save only a new fact the user told you.", "code": ErrorCode::ValidationInvalid.as_str() })
             } else {
                 match crate::usage::with_context(crate::usage::Channel::Chat, thread_id.to_string(), registry::call(&state.app, user, &name, args)).await {
                     Ok(v) => v,
@@ -659,6 +728,7 @@ async fn run_send(
             };
             tool_calls_made.push(name.clone());
 
+            said.tool_result(&result);
             let result_text = serde_json::to_string(&result).unwrap_or_else(|_| "null".to_string());
             persist(db, owner, thread_id, "tool", &result_text, None, tc.id.as_deref())
                 .await
@@ -667,6 +737,8 @@ async fn run_send(
             let view = (name == crate::views::TOOL && result.get("error").is_none()).then_some(result);
             let _ = tx.send(ChatEvent::ToolResult { id: tc.id, name, view }).await;
         }
+        // after the calls: a reply that says what it is saving ("Saved: ...") must not refuse that save
+        said.row("assistant", &content);
     }
 
     let limit_msg = format!(

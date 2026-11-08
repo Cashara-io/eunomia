@@ -200,10 +200,16 @@ struct ImportBody {
     responses((status = 200, body = ImportOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
 )]
-async fn import_document(State(state): State<AppState>, user: User, Path(document_id): Path<String>, Json(body): Json<ImportBody>) -> AppResult<Json<ImportOut>> {
+async fn import_document(
+    State(state): State<AppState>,
+    user: User,
+    meter: Option<axum::Extension<crate::gate::Meter>>,
+    Path(document_id): Path<String>,
+    Json(body): Json<ImportBody>,
+) -> AppResult<Json<ImportOut>> {
     let state = state.org(&user.org).await?;
     let args = ImportArgs { document_id: document_id.clone(), kind: body.kind, name_column: body.name_column, column_map: body.column_map, as_of: body.as_of };
-    let out = tabular::import_rows(&state, &user.id, &args, Origin::Human).await;
+    let out = crate::gate::with_meter(meter.map(|axum::Extension(m)| m), tabular::import_rows(&state, &user.id, &args, Origin::Human)).await;
     record(&state, &user, "document_import_rows", &json!({ "id": document_id, "kind": args.kind, "via": "http" }), &out).await;
     Ok(Json(out?))
 }

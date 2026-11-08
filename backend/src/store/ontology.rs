@@ -53,6 +53,11 @@ pub const REGISTRY: Stmt = Stmt::new(
      SELECT * FROM ontology_link WHERE vault = $vault ORDER BY from_kind, label, to_kind;",
 );
 
+/// The link rows of `$vault` with a label in `$labels`: the link types a neighbourhood shows, without
+/// the vault-wide [`PROFILE`].
+pub const LINKS_LABELLED: Stmt =
+    Stmt::new("ontology.links_labelled", "SELECT * FROM ontology_link WHERE vault = $vault AND label IN $labels");
+
 /// The kind rows of every vault in `$vaults`, for `entity_types`.
 pub const KINDS_IN: Stmt =
     Stmt::new("ontology.kinds_in", "SELECT vault, kind, description, status, merge_into FROM ontology_kind WHERE vault IN $vaults ORDER BY kind");
@@ -311,11 +316,9 @@ pub const DESCRIBE_METRIC: Stmt =
     Stmt::new("ontology.describe_metric", "UPDATE $id SET description = $description, updated_at = time::now()");
 
 /// What one metric evaluation reads, whatever the metric: the entities of the kind in `$vault` (slot
-/// 1; `$table` picks the kind's table, `$kind` the custom kind) and every value of the properties in
-/// `$props` there that was true by `$as_of`, newest first (slot 2), so the first row of each (entity,
-/// property) is its value as of then. Fixed text: every input is a parameter.
-// ponytail: reads every value of the metric's properties in the vault and filters in Rust; fine
-// until a vault holds hundreds of thousands of values of one property.
+/// 1; `$table` picks the kind's table, `$kind` the custom kind) and, per entity and property in
+/// `$props`, its latest value that was true by `$as_of` (slot 2): one indexed lookup each on
+/// (entity, property, as_of), so a long history is never read. Fixed text: every input is a parameter.
 pub const METRIC_INPUTS: Stmt = Stmt::new(
     "ontology.metric_inputs",
     r#"LET $ids = IF $table = "person" { (SELECT VALUE id FROM person WHERE vault = $vault) }
@@ -326,8 +329,10 @@ pub const METRIC_INPUTS: Stmt = Stmt::new(
         ELSE IF $table = "symbol" { (SELECT VALUE id FROM symbol WHERE vault = $vault) }
         ELSE { (SELECT VALUE id FROM entity WHERE vault = $vault AND kind = $kind) };
      RETURN $ids;
-     SELECT entity, property, value_num, value_text, value_bool, value_date, as_of, created_at FROM entity_property
-        WHERE property IN $props AND vault = $vault AND as_of <= $as_of ORDER BY as_of DESC, created_at DESC;"#,
+     RETURN array::flatten(array::flatten($ids.map(|$e| $props.map(|$p| (
+        SELECT entity, property, value_num, value_text, value_bool, value_date, as_of, created_at FROM entity_property
+        WHERE entity = $e AND property = $p AND vault = $vault AND as_of <= $as_of ORDER BY as_of DESC, created_at DESC LIMIT 1
+     )))));"#,
 );
 
 /// Every record type of `$vault` with its record count (personal vault: also the owner's records filed
@@ -384,12 +389,15 @@ pub const EXTRACTION_KINDS: Stmt = Stmt::new(
 /// One kind's row by its derived id: an import checks the kind is approved.
 pub const KIND: Stmt = Stmt::new("ontology.kind", "SELECT kind, status FROM $id");
 
-/// One imported value, keyed by (entity, property, document): a re-run of the import updates it in
-/// place instead of adding history.
-pub const UPSERT_IMPORTED_VALUE: Stmt = Stmt::new(
-    "ontology.upsert_imported_value",
-    "UPSERT $id SET vault = $vault, entity = $entity, property = $property, value_num = $value_num, value_text = $value_text, \
-     value_bool = $value_bool, value_date = $value_date, unit = NONE, as_of = $as_of, source = $source, origin = $origin RETURN NONE",
+/// A batch of imported values, each keyed by (entity, property, document) in `$values[*].id`: a re-run
+/// of the import updates them in place instead of adding history.
+pub const UPSERT_IMPORTED_VALUES: Stmt = Stmt::new(
+    "ontology.upsert_imported_values",
+    "FOR $v IN $values { \
+        UPSERT $v.id SET vault = $vault, entity = $v.entity, property = $v.property, value_num = $v.value_num, \
+        value_text = $v.value_text, value_bool = $v.value_bool, value_date = $v.value_date, unit = NONE, as_of = $as_of, \
+        source = $source, origin = $origin RETURN NONE; \
+     };",
 );
 
 /// The values a deleted document's import wrote go with it.
@@ -398,6 +406,7 @@ pub const DELETE_IMPORTED_VALUES: Stmt = Stmt::new("ontology.delete_imported_val
 pub const ALL: &[&Stmt] = &[
     &PROFILE,
     &REGISTRY,
+    &LINKS_LABELLED,
     &KINDS_IN,
     &GROUND,
     &APPROVED_KINDS,
@@ -436,6 +445,6 @@ pub const ALL: &[&Stmt] = &[
     &MATCH_NAMES,
     &EXTRACTION_KINDS,
     &KIND,
-    &UPSERT_IMPORTED_VALUE,
+    &UPSERT_IMPORTED_VALUES,
     &DELETE_IMPORTED_VALUES,
 ];

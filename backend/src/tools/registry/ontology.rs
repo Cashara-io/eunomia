@@ -121,7 +121,7 @@ fn filters_schema(what: &str, max: usize) -> serde_json::Value {
             "type": "object",
             "properties": {
                 "property": {"type": "string", "description": "a property of the metric's kind"},
-                "op": {"type": "string", "enum": ["eq", "ne", "gt", "gte", "lt", "lte", "in"], "description": "gt, gte, lt and lte for numbers and dates only"},
+                "op": {"type": "string", "enum": ["eq", "ne", "gt", "gte", "lt", "lte", "in"], "description": "gt, gte, lt and lte for numbers and dates only; ne also picks an entity with no value for the property"},
                 "value": {"description": "in the property's datatype (an enum value as listed, a date as YYYY-MM-DD); a list for in"},
             },
             "required": ["property", "op", "value"],
@@ -387,7 +387,15 @@ pub(super) fn scenario_schema() -> serde_json::Value {
                     },
                 },
             },
-            "metrics": {"type": "array", "maxItems": scenario::MAX_METRICS, "items": {"type": "string"}, "description": "approved metric names from ontology_get, run on the real values and on the what-if's"},
+            "metrics": {
+                "type": "array",
+                "maxItems": scenario::MAX_METRICS,
+                "items": {"anyOf": [
+                    {"type": "string", "description": "an approved metric's name"},
+                    {"type": "object", "properties": {"metric": {"type": "string"}, "kind": kind_schema()}, "required": ["metric", "kind"], "description": "a metric name two kinds share, with the kind meant"},
+                ]},
+                "description": "approved metrics from ontology_get, run on the real values and on the what-if's",
+            },
             "impact_from": {"type": "array", "maxItems": scenario::MAX_IMPACT_FROM, "items": {"type": "string"}, "description": "entity ids to also trace `reached` from, besides the changed ones"},
             "depth": {"type": "integer", "minimum": 1, "maximum": 3, "description": "how many relations `reached` follows (default 2)"},
             "allow_unapproved": {"type": "boolean", "description": "run proposed metrics too; their numbers come back marked proposed"},

@@ -333,6 +333,28 @@ impl Meter {
     }
 }
 
+tokio::task_local! {
+    static CALL_METER: Meter;
+}
+
+/// Runs `f` (one REST or MCP request's tool calls) with `meter`, so a tool whose cost is only known
+/// once it has read its input can charge the rest with [`charge_more`].
+pub async fn with_meter<F: std::future::Future>(meter: Option<Meter>, f: F) -> F::Output {
+    match meter {
+        Some(m) => CALL_METER.scope(m, f).await,
+        None => f.await,
+    }
+}
+
+/// Charges `n` more units to the current request's buckets. A call with no meter (the in-app chat,
+/// jobs, tests) is not charged. Refused with `rate.limited` when a bucket has too few left.
+pub fn charge_more(n: usize) -> Result<(), AppError> {
+    match CALL_METER.try_with(|m| m.charge(n)) {
+        Ok(Err(wait)) => Err(AppError::coded(ErrorCode::RateLimited, format!("Too many requests: this call costs {} more; retry in {wait} seconds.", n))),
+        _ => Ok(()),
+    }
+}
+
 fn meter(g: &Gate, authn: &Authn) -> Meter {
     let mut buckets = Vec::new();
     if authn.caller.actor.kind == "token" {

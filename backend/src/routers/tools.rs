@@ -64,7 +64,7 @@ async fn invoke(
     {
         return crate::gate::rate_limited(wait);
     }
-    match registry::call(&state, &user, &name, args).await {
+    match crate::gate::with_meter(meter.map(|Extension(m)| m), registry::call(&state, &user, &name, args)).await {
         Ok(result) => Json(result).into_response(),
         Err(e) => e.into_response(),
     }

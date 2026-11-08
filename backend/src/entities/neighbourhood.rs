@@ -264,11 +264,9 @@ pub async fn neighbourhood(
     edges.sort_by_key(|e| edge_key(e));
     let present: BTreeSet<(String, String, String)> =
         edges.iter().map(|e| (kinds[&e.from.to_string()].clone(), e.label.clone(), kinds[&e.to.to_string()].clone())).collect();
-    let link_types = crate::ontology::view(db, &vault)
+    let link_types = crate::ontology::link_types(db, &vault, &present)
         .await?
-        .links
         .into_iter()
-        .filter(|l| present.contains(&(l.from_kind.clone(), l.label.clone(), l.to_kind.clone())))
         .map(|l| LinkType { from_kind: l.from_kind, label: l.label, to_kind: l.to_kind, status: l.status, description: l.description })
         .collect();
 
