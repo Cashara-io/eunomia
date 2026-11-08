@@ -841,6 +841,10 @@ pub async fn ground(db: &OrgDb, vault: &RecordId, kind: &str) -> AppResult<Optio
 /// Whether a relation `from_kind -label-> to_kind` may be written in `vault`: refused when owners
 /// rejected that link type, naming the approved labels between the two kinds; anything else (approved,
 /// proposed, never reviewed) passes and shows as observed until someone reviews it. One point read.
+/// The labels the code map writes between repositories, files and symbols: its parent links and the
+/// relations `code_relate` documents. Only these skip strict mode's review.
+pub const CODE_LINK_LABELS: &[&str] = &["part_of", "defined_in", "calls", "imports"];
+
 pub async fn ground_link(db: &OrgDb, vault: &RecordId, from_kind: &str, label: &str, to_kind: &str) -> AppResult<()> {
     // a label or kind that is not a valid ontology key cannot have been rejected
     let Ok(key) = LinkKey::parse(from_kind, label, to_kind) else { return Ok(()) };
@@ -851,8 +855,13 @@ pub async fn ground_link(db: &OrgDb, vault: &RecordId, from_kind: &str, label: &
     match status.first().map(String::as_str) {
         Some(s) if s == Status::Approved.as_str() => return Ok(()),
         Some(s) if s == Status::Rejected.as_str() => {}
-        // the code map's own links (part_of, defined_in, calls, imports) need no owner's review
-        _ if [from_kind, to_kind].iter().all(|k| crate::entities::service::CODE_KINDS.contains(k)) => return Ok(()),
+        // the code map's own links need no owner's review; both the kinds and the label must be the code
+        // map's, or an agent could relate two `file` entities named after people as `reports_to`
+        _ if CODE_LINK_LABELS.contains(&key.label.0.as_str())
+            && [from_kind, to_kind].iter().all(|k| crate::entities::service::CODE_KINDS.contains(k)) =>
+        {
+            return Ok(())
+        }
         _ => return strict_link(db, vault, &key).await,
     }
     let approved: Vec<String> = q::APPROVED_LINKS

@@ -2765,6 +2765,16 @@ async fn strict_mode_lets_the_code_map_link_its_own_kinds_and_files_nothing_for_
     // a link to a custom kind still needs an approved link type
     let out = app.tool("code_relate", json!({"from_id": main, "to_id": widget, "label": "renders"})).await;
     assert_eq!(out["code"], "ontology.rejected", "{out}");
+
+    // and a label that is not the code map's is reviewed even between code kinds: people written as
+    // files cannot be related as reports_to without the owner seeing it
+    let alice = id(app.tool("code_entity_upsert", json!({"kind": "file", "name": "Alice"})).await);
+    let bob = id(app.tool("code_entity_upsert", json!({"kind": "file", "name": "Bob"})).await);
+    let out = app.tool("code_relate", json!({"from_id": alice, "to_id": bob, "label": "reports_to"})).await;
+    assert_eq!(out["code"], "ontology.rejected", "{out}");
+    let mut filed: Vec<String> = db.test_raw().query("SELECT VALUE label FROM ontology_link").await.unwrap().take(0).unwrap();
+    filed.sort();
+    assert_eq!(filed, ["renders", "reports_to"], "both refusals are filed for the owner to review");
 }
 
 #[tokio::test]

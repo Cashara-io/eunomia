@@ -406,19 +406,19 @@ pub const COVERAGE_TERMS: Stmt = Stmt::new(
 pub const SET_TERM_EMBEDDING: Stmt =
     Stmt::new("ontology.set_term_embedding", "UPDATE $id SET embedding = $embedding, embedding_spec = $spec, embedding_text = $text RETURN NONE");
 
-/// The approved terms of `$vault` nearest `$vector` (same `$spec`), by the HNSW indexes: up to three
-/// per sort, with their cosine distance. SurrealDB 3.3.5 applies the other conditions inside the kNN
-/// search, so nearer terms in another vault of the org never crowd this vault's out.
+/// The approved terms of `$vault` nearest `$vector` (same `$spec`), by the HNSW indexes, with their
+/// cosine distance. K is 20, not 3, so terms of the org's other vaults cannot crowd this vault's out
+/// even if the vault condition is applied after the search rather than inside it.
 pub const COVERAGE_NEAREST: Stmt = Stmt::new(
     "ontology.coverage_nearest",
     r#"SELECT id, vector::distance::knn() AS distance FROM ontology_kind
-        WHERE embedding <|3,40|> $vector AND vault = $vault AND status = "approved" AND embedding_spec = $spec ORDER BY distance;
+        WHERE embedding <|20,40|> $vector AND vault = $vault AND status = "approved" AND embedding_spec = $spec ORDER BY distance;
      SELECT id, vector::distance::knn() AS distance FROM ontology_property
-        WHERE embedding <|3,40|> $vector AND vault = $vault AND status = "approved" AND embedding_spec = $spec ORDER BY distance;
+        WHERE embedding <|20,40|> $vector AND vault = $vault AND status = "approved" AND embedding_spec = $spec ORDER BY distance;
      SELECT id, vector::distance::knn() AS distance FROM ontology_metric
-        WHERE embedding <|3,40|> $vector AND vault = $vault AND status = "approved" AND embedding_spec = $spec ORDER BY distance;
+        WHERE embedding <|20,40|> $vector AND vault = $vault AND status = "approved" AND embedding_spec = $spec ORDER BY distance;
      SELECT id, vector::distance::knn() AS distance FROM ontology_link
-        WHERE embedding <|3,40|> $vector AND vault = $vault AND status = "approved" AND embedding_spec = $spec ORDER BY distance;"#,
+        WHERE embedding <|20,40|> $vector AND vault = $vault AND status = "approved" AND embedding_spec = $spec ORDER BY distance;"#,
 );
 
 /// [`COVERAGE_NEAREST`] by an exact scan of the vault's approved terms, for while an index is still
