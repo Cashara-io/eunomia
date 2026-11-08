@@ -833,14 +833,20 @@ async fn over_mcp_a_view_is_its_text_plus_the_structured_view() {
 
 // ------------------------------------------------------------ what a change affects: the in-app chat
 
-/// One chat message as the browser sends it; the SSE events that came back.
+/// One chat message as the browser sends it, in a new thread; the SSE events that came back.
 async fn chat(app: &TestApp, message: &str) -> (String, Vec<Value>) {
+    let (_, thread) = app.http("POST", "/api/chat/threads", Some(json!({})), true).await;
+    let thread_id = thread["id"].as_str().unwrap().to_string();
+    let events = chat_in(app, &thread_id, message).await;
+    (thread_id, events)
+}
+
+/// One chat message in `thread_id`; the SSE events that came back.
+async fn chat_in(app: &TestApp, thread_id: &str, message: &str) -> Vec<Value> {
     use axum::body::Body;
     use axum::http::{header, Request};
     use http_body_util::BodyExt;
     use tower::ServiceExt;
-    let (_, thread) = app.http("POST", "/api/chat/threads", Some(json!({})), true).await;
-    let thread_id = thread["id"].as_str().unwrap().to_string();
     let req = Request::builder()
         .method("POST")
         .uri(format!("/api/chat/threads/{thread_id}"))
@@ -851,7 +857,29 @@ async fn chat(app: &TestApp, message: &str) -> (String, Vec<Value>) {
     let resp = app.router.clone().oneshot(req).await.unwrap();
     assert_eq!(resp.status(), 200);
     let text = String::from_utf8(resp.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
-    (thread_id, text.lines().filter_map(|l| l.strip_prefix("data:")).filter_map(|d| serde_json::from_str(d.trim()).ok()).collect())
+    text.lines().filter_map(|l| l.strip_prefix("data:")).filter_map(|d| serde_json::from_str(d.trim()).ok()).collect()
+}
+
+#[tokio::test]
+async fn a_model_that_never_answers_ends_the_turn_with_an_error_and_the_thread_stays_usable() {
+    let app = TestApp::with_settings(Settings { chat_model_timeout_secs: 1, ..test_settings() }).await;
+    let sse = |chunk: Value| format!("data: {chunk}\n\ndata: [DONE]\n\n");
+    let hello = json!({"choices": [{"delta": {"content": "Hello."}}]});
+    let mock = serve(vec![route("POST", "/chat/completions", json!(null)).raw(&sse(hello.clone())).header("content-type", "text/event-stream").delay(120_000)]).await;
+    let (status, _) = app.http("PATCH", "/api/settings", Some(json!({"openai_base_url": mock.base})), true).await;
+    assert_eq!(status, 200);
+
+    let started = std::time::Instant::now();
+    let (thread_id, events) = chat(&app, "Are you there?").await;
+    assert!(started.elapsed() < std::time::Duration::from_secs(30), "the turn ended on its own");
+    let error = events.iter().find(|e| e["type"] == "error").unwrap_or_else(|| panic!("an error event: {events:?}"));
+    assert!(error["message"].as_str().unwrap().contains("did not answer within 1 second,"), "{error}");
+    assert!(!events.iter().any(|e| e["type"] == "done"), "{events:?}");
+
+    // the next message in the same thread is answered
+    mock.set_routes(vec![route("POST", "/chat/completions", json!(null)).raw(&sse(hello)).header("content-type", "text/event-stream")]);
+    let events = chat_in(&app, &thread_id, "Are you there now?").await;
+    assert_eq!(events.iter().find(|e| e["type"] == "done").unwrap_or_else(|| panic!("{events:?}"))["reply"], "Hello.");
 }
 
 #[tokio::test]
@@ -2206,6 +2234,13 @@ async fn a_scale_changes_only_the_entities_its_filters_and_relations_pick() {
     assert_eq!(moves(&out)["total_price"].1, Some(22.0), "10 + 6 + 6");
     let out = ok(scale(json!({"related_to": {"entity_id": bean_co}})).await);
     assert_eq!(changed_ids(&out), ids_of(&["Latte", "Mocha", "Tea"], &ids), "any relation without a label");
+
+    // a supplier no product is linked to: the change says so in words, and warns
+    let leaf = write(&app, "Leaf Co", "organisation").await["entity"]["id"].as_str().unwrap().to_string();
+    let out = ok(scale(json!({"related_to": {"entity_id": leaf, "label": "supplied_by"}})).await);
+    assert!(changed_ids(&out).is_empty(), "{out}");
+    assert_eq!(out["changes"][0], "Product price up 100%: no products are linked to Leaf Co");
+    assert!(out["warnings"].to_string().contains("no products are linked to Leaf Co by supplied by links"), "{out}");
 }
 
 #[tokio::test]
@@ -2602,24 +2637,39 @@ async fn readiness_counts_each_sort_by_status_and_names_the_blockers() {
     // a proposed metric over weight, which an owner then rejects
     ok(app.tool("ontology_propose", json!({"metrics": [{"kind": "product", "name": "avg_weight", "expr": {"agg": "avg", "property": "weight"}}]})).await);
     assert_eq!(decide_property(&app, &vault, "product", "weight", json!({"action": "reject"})).await.0, 200);
+    // an approved metric over an approved property that holds no values yet
+    ok(app.tool("ontology_propose", json!({"properties": [{"kind": "product", "name": "stock", "datatype": "integer"}], "metrics": [{"kind": "product", "name": "total_stock", "expr": {"agg": "sum", "property": "stock"}}]})).await);
+    assert_eq!(decide_property(&app, &vault, "product", "stock", json!({"action": "approve"})).await.0, 200);
+    assert_eq!(decide_metric(&app, &vault, "product", "total_stock", json!({"action": "approve"})).await.0, 200);
 
     let out = ok(app.tool("ontology_readiness", json!({})).await);
     assert_eq!(out["kinds"], json!({"approved": 2, "proposed": 0, "rejected": 0, "observed": 0}), "{out}");
-    assert_eq!(out["properties"], json!({"approved": 4, "proposed": 1, "rejected": 2, "observed": 0}), "{out}");
-    assert_eq!(out["metrics"], json!({"approved": 1, "proposed": 2, "rejected": 1, "observed": 0}), "{out}");
+    assert_eq!(out["properties"], json!({"approved": 5, "proposed": 1, "rejected": 2, "observed": 0}), "{out}");
+    assert_eq!(out["metrics"], json!({"approved": 2, "proposed": 2, "rejected": 1, "observed": 0}), "{out}");
     assert_eq!(out["ready"], false);
+    // the approved kind order has no metric, and that is not a blocker
     assert_eq!(
         out["blockers"],
         json!([
             "1 property is proposed and needs an owner",
             "2 metrics are proposed and need an owner",
-            "metric avg_weight on product uses a rejected property, weight",
-            "no approved property or metric on kind order",
+            "metric total_stock on product uses stock, which has no values yet: import them or set them",
         ]),
         "{out}"
     );
     let (status, rest) = app.http("GET", &format!("/api/vaults/{vault}/ontology/readiness"), None, true).await;
     assert_eq!((status.as_u16(), &rest["blockers"]), (200, &out["blockers"]));
+
+    // once nothing waits and every approved metric has its values, the space is ready
+    assert_eq!(decide_property(&app, &vault, "product", "colour", json!({"action": "reject"})).await.0, 200);
+    for name in ["gross_margin", "avg_weight"] {
+        assert_eq!(decide_metric(&app, &vault, "product", name, json!({"action": "reject"})).await.0, 200);
+    }
+    let found = ok(app.tool("entities_search", json!({"query": "Latte"})).await);
+    let latte = found["results"].as_array().unwrap().iter().find(|r| r["name"] == "Latte").unwrap()["id"].as_str().unwrap().to_string();
+    ok(app.tool("entity_set_property", json!({"entity_id": latte, "property": "stock", "value": 4})).await);
+    let out = ok(app.tool("ontology_readiness", json!({})).await);
+    assert_eq!((out["ready"].as_bool(), out["blockers"].clone()), (Some(true), json!([])), "{out}");
 }
 
 async fn set_strict(app: &TestApp, vault: &str, on: bool) -> (u16, Value) {
@@ -2841,9 +2891,12 @@ async fn coverage_finds_a_vaults_term_when_another_vault_holds_nearer_ones() {
     let out = ok(app.tool("ontology_coverage", json!({"vault_id": team, "question": question})).await);
     assert_eq!(out["matched"][0]["term"], "kind", "the team's terms have vectors: {out}");
 
-    let out = ok(app.tool("ontology_coverage", json!({"question": question})).await);
+    let out = ok(app.tool("ontology_coverage", json!({"vault_id": vault, "question": question})).await);
     assert_eq!((out["mode"].as_str(), out["coverage"].as_f64()), (Some("model"), Some(1.0)), "{out}");
     assert_eq!(out["matched"][0]["name"], "supplier", "{out}");
+    // with no vault named both are checked; the nearer match answers, and the other is listed
+    let out = ok(app.tool("ontology_coverage", json!({"question": question})).await);
+    assert_eq!((out["vault"].as_str(), out["also"][0]["vault"].as_str()), (Some(team.as_str()), Some(vault.as_str())), "{out}");
 }
 
 #[tokio::test]
@@ -2868,4 +2921,90 @@ fn the_ontology_tool_eval_list_names_only_registered_tools() {
             assert!(eunomia_backend::tools::registry::find(name).is_some(), "{}: no tool {name}", c["id"]);
         }
     }
+}
+
+// ------------------------------------------------------------ a question that names no space
+
+/// An org space "Northside Bikes" beside the personal one: approved kind `part` with an approved
+/// money `price` (Groupset 1249, Chain 79.95) and an approved `avg_price` ("average price"). The
+/// personal space has none of it. Returns the org vault's id.
+async fn northside(app: &TestApp) -> String {
+    let team = ok(app.tool("vault_create", json!({"name": "Northside Bikes", "kind": "org"})).await)["id"].as_str().unwrap().to_string();
+    let mut ids = Vec::new();
+    for name in ["Groupset", "Chain"] {
+        let w = ok(app.tool("memory_write", json!({"subject_name": name, "subject_kind": "part", "text": format!("{name} is a part we stock"), "vault_id": "Northside Bikes"})).await);
+        ids.push(w["entity"]["id"].as_str().unwrap().to_string());
+    }
+    ok(app.tool("ontology_propose", json!({"vault_id": "Northside Bikes", "kinds": [{"kind": "part"}],
+        "properties": [{"kind": "part", "name": "price", "datatype": "money", "unit": "AUD"}],
+        "metrics": [{"kind": "part", "name": "avg_price", "expr": {"agg": "avg", "property": "price"}, "synonyms": ["average price"]}]})).await);
+    assert_eq!(decide_kind(app, &team, "part", json!({"action": "approve"})).await.0, 200);
+    assert_eq!(decide_property(app, &team, "part", "price", json!({"action": "approve"})).await.0, 200);
+    assert_eq!(decide_metric(app, &team, "part", "avg_price", json!({"action": "approve"})).await.0, 200);
+    for (id, price) in ids.iter().zip([1249.0, 79.95]) {
+        ok(app.tool("entity_set_property", json!({"entity_id": id, "property": "price", "value": price})).await);
+    }
+    team
+}
+
+#[tokio::test]
+async fn a_number_question_that_names_no_space_reaches_the_org_space_that_has_its_metric() {
+    let app = TestApp::new().await;
+    let team = northside(&app).await;
+    // someone else's space with a metric of the same name is never checked or named
+    let bob = common::register(&app.state, "bob@example.com").await;
+    ok(as_user(&app, &bob, "vault_create", json!({"name": "Secret Co", "kind": "org"})).await);
+    ok(as_user(&app, &bob, "memory_write", json!({"subject_name": "Widget", "subject_kind": "part", "text": "a part", "vault_id": "Secret Co"})).await);
+    ok(as_user(&app, &bob, "ontology_propose", json!({"vault_id": "Secret Co", "properties": [{"kind": "part", "name": "price", "datatype": "money"}],
+        "metrics": [{"kind": "part", "name": "avg_price", "expr": {"agg": "avg", "property": "price"}}]})).await);
+
+    let out = ok(app.tool("ontology_coverage", json!({"question": "What is the average price of our parts?"})).await);
+    assert_eq!((out["vault"].as_str(), out["vault_name"].as_str(), out["coverage"].as_f64()), (Some(team.as_str()), Some("Northside Bikes"), Some(1.0)), "{out}");
+    // naming the personal space still checks only it
+    let personal_vault = personal(&app).await;
+    let mine = ok(app.tool("ontology_coverage", json!({"question": "What is the average price of our parts?", "vault_id": personal_vault})).await);
+    assert_eq!((mine["vault_name"].as_str(), mine["coverage"].as_f64()), (Some("Personal"), Some(0.0)), "{mine}");
+
+    // the other tools read the default space, and name where the thing asked for is
+    let pass = "is in Northside Bikes: pass vault_id \"Northside Bikes\"";
+    let out = app.tool("metric_eval", json!({"metric": "avg_price"})).await;
+    assert!(err(&out).contains(&format!("avg_price {pass}")), "{out}");
+    let out = app.tool("ontology_get", json!({"kind": "part"})).await;
+    assert!(err(&out).contains(&format!("part {pass}")), "{out}");
+    let out = app.tool("scenario_run", json!({"changes": [{"scale": {"kind": "part", "property": "price", "factor": 1.1}}], "metrics": ["avg_price"]})).await;
+    assert!(err(&out).contains(&format!("Everything it names {pass}")), "{out}");
+    for out in [app.tool("metric_eval", json!({"metric": "avg_price"})).await, app.tool("ontology_get", json!({"kind": "part"})).await] {
+        assert!(!out.to_string().contains("Secret Co"), "a space the caller cannot read is never named: {out}");
+    }
+    // with the space coverage returned, they answer
+    let out = ok(app.tool("metric_eval", json!({"metric": "avg_price", "vault_id": team})).await);
+    assert_eq!((out["value"].as_f64(), out["n_entities"].as_u64()), (Some(664.475), Some(2)), "{out}");
+    let got = ok(app.tool("ontology_get", json!({"kind": "part", "vault_id": "Northside Bikes"})).await);
+    assert_eq!(got["kinds"].as_array().unwrap().len(), 1, "{got}");
+    // bob is never pointed at Northside Bikes
+    let out = as_user(&app, &bob, "metric_eval", json!({"metric": "avg_price"})).await;
+    assert!(!out.to_string().contains("Northside"), "{out}");
+}
+
+#[tokio::test]
+async fn the_chat_answers_a_number_from_the_space_coverage_returned() {
+    let app = TestApp::new().await;
+    let team = northside(&app).await;
+    let question = "What is the average price of our parts?";
+    let turn = |c: Value| json!([{"choices": [{"delta": {"tool_calls": [c]}}]}]);
+    let _mock = chat_turns(&app, vec![
+        ("", turn(tool_call(0, "c1", "ontology_coverage", json!({"question": question})))),
+        // the model first forgets the space, then passes the one coverage returned
+        ("\"tool_call_id\":\"c1\"", turn(tool_call(0, "c2", "metric_eval", json!({"metric": "avg_price"})))),
+        ("\"tool_call_id\":\"c2\"", turn(tool_call(0, "c3", "metric_eval", json!({"metric": "avg_price", "vault_id": team})))),
+        ("\"tool_call_id\":\"c3\"", json!([{"choices": [{"delta": {"content": "The average part price is $664.48, from 2 parts."}}]}])),
+    ])
+    .await;
+    let (thread_id, events) = chat(&app, question).await;
+    assert_eq!(events.iter().find(|e| e["type"] == "done").unwrap_or_else(|| panic!("{events:?}"))["reply"], "The average part price is $664.48, from 2 parts.");
+    let (_, history) = app.http("GET", &format!("/api/chat/threads/{thread_id}/history"), None, true).await;
+    let results: Vec<Value> = history.as_array().unwrap().iter().filter(|m| m["role"] == "tool").map(|m| serde_json::from_str(m["content"].as_str().unwrap()).unwrap()).collect();
+    assert_eq!((results[0]["vault"].as_str(), results[0]["vault_name"].as_str()), (Some(team.as_str()), Some("Northside Bikes")), "coverage found the org space: {results:?}");
+    assert!(err(&results[1]).contains("avg_price is in Northside Bikes"), "{results:?}");
+    assert_eq!(results[2]["value"].as_f64(), Some(664.475), "{results:?}");
 }

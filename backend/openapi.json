@@ -2189,6 +2189,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "all_vaults",
+            "in": "query",
+            "description": "Without `vault_id`: every vault the caller can read (their personal vault and each org vault\nthey belong to) instead of the default one.",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -9560,6 +9569,7 @@
         "description": "One document as callers see it.",
         "required": [
           "id",
+          "vault",
           "filename",
           "media_type",
           "size_bytes",
@@ -9624,6 +9634,10 @@
           },
           "updated_at": {
             "type": "string"
+          },
+          "vault": {
+            "type": "string",
+            "description": "The vault (memory space) the document is in."
           }
         }
       },
@@ -13048,7 +13062,7 @@
           },
           "ready": {
             "type": "boolean",
-            "description": "No blockers."
+            "description": "No blockers: nothing proposed is waiting, a metric is approved, and every property an approved\nmetric reads is approved and has values."
           },
           "strict": {
             "type": "boolean",

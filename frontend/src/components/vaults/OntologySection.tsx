@@ -224,6 +224,10 @@ function ReadinessPanel({ vaultId }: { vaultId: string }) {
           Approved: {approved}
         </span>
       </div>
+      <p className="text-[12.5px]" style={{ color: "var(--ink-dim)" }}>
+        Ready means nothing proposed is waiting for you, at least one metric is approved, and every property an approved metric reads is
+        approved and has values. A kind with no metric, like a person or a supplier, never holds it up.
+      </p>
       {r.blockers.length > 0 && (
         <ul className="flex flex-col gap-0.5 text-[13px] list-disc pl-5" aria-label="What is in the way">
           {r.blockers.slice(0, 5).map((b) => (

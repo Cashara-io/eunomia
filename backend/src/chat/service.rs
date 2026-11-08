@@ -76,12 +76,14 @@ and decide from the link labels, the link descriptions and the facts which way t
 reaches. Then call `show_view` with `view` \"impact\", `start_id`, `headline` and `affected` (each affected entity \
 with the relation ids from the start to it and a one-sentence why) and reply with a short summary; the app draws the view above your reply. If \
 `show_view` names a bad id, fix it and call it again. \
-Before answering a number or a what-if, call `ontology_coverage` with the user's question (and the vault it is about). \
-If it lists `uncovered` phrases, do not compute or guess: tell the user which part of the question the vault cannot answer \
-yet, and suggest what to propose (a property or metric on the kind it names) for an owner to approve. \
-When the user asks for a number (a total, an average, how many, a share, a trend): read `ontology_get` for the vault \
-the question is about (it reads your personal vault unless you pass `vault_id`; `vault_list` names the others, and a \
-business or team name in the question is usually one of them), \
+Before answering a number or a what-if, call `ontology_coverage` with the user's question. Pass no `vault_id` unless the \
+user named a space: it then checks every space the user can read and returns the one that covers the question best as \
+`vault` (with `vault_name`). Pass that `vault` as `vault_id` to every call that follows for this question: `ontology_get`, \
+`metric_eval`, `scenario_run` and `show_view`. If a tool's error says what you asked for is in another space, call it \
+again with that `vault_id`. \
+If coverage lists `uncovered` phrases, do not compute or guess: tell the user which part of the question the space cannot \
+answer yet, and suggest what to propose (a property or metric on the kind it names) for an owner to approve. \
+When the user asks for a number (a total, an average, how many, a share, a trend): read `ontology_get` for that space, \
 pick the approved metric of the right kind that computes it, run it with `metric_eval` (extra `filters` and `as_of` as the \
 question asks), and answer with its `value` and `unit`, saying how many entities it came from and citing their \
 `entity_ids`; then call `show_view` with `view` \"metric\" and the same arguments, so the app draws the number. Read its \
@@ -89,7 +91,7 @@ question asks), and answer with its `value` and `unit`, saying how many entities
 what could be proposed; never add up, average or count values yourself, and never state a number you did not get from \
 `metric_eval`. \
 When the user asks \"what if\" (a price goes up, a supplier raises prices, a truck never arrives): read `ontology_get` for the \
-vault (its approved properties and metrics), find the entities with `entities_search`, and build the `changes` yourself: \
+space coverage returned (its approved properties and metrics), find the entities with `entities_search`, and build the `changes` yourself: \
 `set` one value, `scale` or `shift` a property of every entity of a kind that `filters`, `related_to` or `entity_ids` pick \
 (for example `related_to` the supplier with the label that links products to it), `remove` an entity that drops out. Pick the \
 approved metrics the question is about and call `scenario_run`, with `impact_from` for the entity the question starts from. \
@@ -602,6 +604,73 @@ pub async fn send_stream(
 /// A failed chat turn: the stable error code and a message for the `error` event.
 type Failed = (ErrorCode, String);
 
+/// One streamed model call of the chat loop.
+struct ModelCall<'a> {
+    client: &'a reqwest::Client,
+    url: &'a str,
+    bearer: &'a str,
+    model: &'a str,
+    tools: &'a [Value],
+    messages: &'a [Value],
+}
+
+impl ModelCall<'_> {
+    /// Sends the call (once more without reasoning when the model refuses tools while reasoning) and
+    /// reads the whole stream, sending each text delta on `tx`. Returns the text and the tool calls.
+    async fn run(&self, reasoning_off: &mut bool, tx: &mpsc::Sender<ChatEvent>) -> Result<(String, BTreeMap<usize, ToolCallAcc>), Failed> {
+        let resp = loop {
+            let mut body = json!({ "model": self.model, "messages": self.messages, "tools": self.tools, "stream": true });
+            if *reasoning_off {
+                body["reasoning_effort"] = json!("none");
+            }
+            let resp = self
+                .client
+                .post(self.url)
+                .bearer_auth(self.bearer)
+                .json(&body)
+                .send()
+                .await
+                .map_err(|e| (ErrorCode::Internal, format!("OpenAI request failed: {e}")))?;
+            if resp.status().is_success() {
+                break resp;
+            }
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            if refuses_tools_while_reasoning(status, &text) && !*reasoning_off {
+                *reasoning_off = true;
+                continue;
+            }
+            return Err((ErrorCode::Internal, format!("OpenAI request failed ({status}): {text}")));
+        };
+
+        let mut byte_stream = resp.bytes_stream();
+        let mut buf = String::new();
+        let mut content = String::new();
+        let mut tool_calls_acc: BTreeMap<usize, ToolCallAcc> = BTreeMap::new();
+
+        while let Some(chunk) = byte_stream.next().await {
+            let chunk = chunk.map_err(|e| (ErrorCode::Internal, format!("OpenAI stream error: {e}")))?;
+            buf.push_str(&String::from_utf8_lossy(&chunk));
+
+            while let Some(pos) = buf.find("\n\n") {
+                let event: String = buf.drain(..pos + 2).collect();
+                for payload in parse_sse_payloads(&event) {
+                    if payload == "[DONE]" {
+                        continue;
+                    }
+                    let Ok(parsed) = serde_json::from_str::<StreamChunk>(payload) else { continue };
+                    for choice in &parsed.choices {
+                        if let Some(delta_text) = apply_delta(&mut content, &mut tool_calls_acc, &choice.delta) {
+                            let _ = tx.send(ChatEvent::Text { delta: delta_text }).await;
+                        }
+                    }
+                }
+            }
+        }
+        Ok((content, tool_calls_acc))
+    }
+}
+
 async fn run_send(
     state: &OrgState,
     user: &User,
@@ -642,55 +711,23 @@ async fn run_send(
     let model = provider::chat_model(&p).await;
 
     let mut reasoning_off = false;
+    let limit = std::time::Duration::from_secs(settings.chat_model_timeout_secs);
     for _ in 0..MAX_TOOL_ITERATIONS {
-        let resp = loop {
-            let mut body = json!({ "model": model, "messages": messages, "tools": tools, "stream": true });
-            if reasoning_off {
-                body["reasoning_effort"] = json!("none");
+        let call = ModelCall { client: &client, url: &url, bearer: p.bearer(), model: &model, tools: &tools, messages: &messages };
+        let (content, tool_calls_acc) = match tokio::time::timeout(limit, call.run(&mut reasoning_off, tx)).await {
+            Ok(done) => done?,
+            // what was stored so far ends on a user message or a tool result, so the thread takes the next message
+            Err(_) => {
+                return Err((
+                    ErrorCode::Internal,
+                    format!(
+                        "The model did not answer within {} second{}, so this reply was stopped. Send your message again to retry.",
+                        limit.as_secs(),
+                        if limit.as_secs() == 1 { "" } else { "s" }
+                    ),
+                ))
             }
-            let resp = client
-                .post(&url)
-                .bearer_auth(p.bearer())
-                .json(&body)
-                .send()
-                .await
-                .map_err(|e| (ErrorCode::Internal, format!("OpenAI request failed: {e}")))?;
-            if resp.status().is_success() {
-                break resp;
-            }
-            let status = resp.status();
-            let text = resp.text().await.unwrap_or_default();
-            if refuses_tools_while_reasoning(status, &text) && !reasoning_off {
-                reasoning_off = true;
-                continue;
-            }
-            return Err((ErrorCode::Internal, format!("OpenAI request failed ({status}): {text}")));
         };
-
-        let mut byte_stream = resp.bytes_stream();
-        let mut buf = String::new();
-        let mut content = String::new();
-        let mut tool_calls_acc: BTreeMap<usize, ToolCallAcc> = BTreeMap::new();
-
-        while let Some(chunk) = byte_stream.next().await {
-            let chunk = chunk.map_err(|e| (ErrorCode::Internal, format!("OpenAI stream error: {e}")))?;
-            buf.push_str(&String::from_utf8_lossy(&chunk));
-
-            while let Some(pos) = buf.find("\n\n") {
-                let event: String = buf.drain(..pos + 2).collect();
-                for payload in parse_sse_payloads(&event) {
-                    if payload == "[DONE]" {
-                        continue;
-                    }
-                    let Ok(parsed) = serde_json::from_str::<StreamChunk>(payload) else { continue };
-                    for choice in &parsed.choices {
-                        if let Some(delta_text) = apply_delta(&mut content, &mut tool_calls_acc, &choice.delta) {
-                            let _ = tx.send(ChatEvent::Text { delta: delta_text }).await;
-                        }
-                    }
-                }
-            }
-        }
 
         if tool_calls_acc.is_empty() {
             persist(db, owner, thread_id, "assistant", &content, None, None).await.map_err(|e| (e.code, e.message))?;

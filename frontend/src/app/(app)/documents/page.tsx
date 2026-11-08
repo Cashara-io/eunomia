@@ -10,10 +10,14 @@ import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import CopyButton from "@/components/bits/CopyButton";
 import CsvProfile from "@/components/documents/CsvProfile";
+import Select from "@/components/Select";
+import VaultChip, { vaultTone } from "@/components/VaultChip";
 import { downloadDocumentFile, uploadDocumentFile } from "@/lib/api";
 import type { DocumentOut } from "@/lib/gen";
 import { useMe } from "@/lib/queries/auth";
 import { useDeleteDocument, useDocument, useDocuments, useRefreshDocuments, useReindexDocument } from "@/lib/queries/documents";
+import { useVaults } from "@/lib/queries/vaults";
+import type { Vault } from "@/lib/types";
 
 const ICON = { size: 18, weight: "duotone" } as const;
 const ACCEPT = ".txt,.text,.md,.markdown,.json,.csv,.pdf,text/plain,text/markdown,application/json,text/csv,application/pdf";
@@ -62,7 +66,7 @@ function Status({ status }: { status: string }) {
 
 type UploadRow = { key: string; name: string; progress: number; error: Failure | null };
 
-function useUploads(maxBytes: number | null, onUploaded: (id: string) => void) {
+function useUploads(maxBytes: number | null, vaultId: string | null, onUploaded: (id: string) => void) {
   const [rows, setRows] = useState<UploadRow[]>([]);
   const refresh = useRefreshDocuments();
   const patch = (key: string, p: Partial<UploadRow>) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...p } : r)));
@@ -82,7 +86,7 @@ function useUploads(maxBytes: number | null, onUploaded: (id: string) => void) {
               : null;
       setRows((rs) => [...rs, { key, name: file.name, progress: 0, error: early }]);
       if (early) continue;
-      uploadDocumentFile(file, (f) => patch(key, { progress: f }))
+      uploadDocumentFile(file, (f) => patch(key, { progress: f }), vaultId)
         .then(async (doc) => {
           setRows((rs) => rs.filter((r) => r.key !== key));
           await refresh();
@@ -96,7 +100,7 @@ function useUploads(maxBytes: number | null, onUploaded: (id: string) => void) {
   return { rows, add, dismiss };
 }
 
-function DropZone({ maxBytes, disabled, onFiles }: { maxBytes: number | null; disabled: boolean; onFiles: (f: FileList) => void }) {
+function DropZone({ maxBytes, disabled, into, onFiles }: { maxBytes: number | null; disabled: boolean; into: Vault | null; onFiles: (f: FileList) => void }) {
   const input = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
   return (
@@ -124,7 +128,8 @@ function DropZone({ maxBytes, disabled, onFiles }: { maxBytes: number | null; di
         Drop files here, or choose files
       </p>
       <p id="upload-guidance" className="label">
-        Text, Markdown, JSON, CSV or a text-based PDF{maxBytes !== null ? `, up to ${size(maxBytes)} each` : ""}.
+        Text, Markdown, JSON, CSV or a text-based PDF{maxBytes !== null ? `, up to ${size(maxBytes)} each` : ""}. They go into{" "}
+        {into ? into.name : "your personal space"}.
       </p>
       <button type="button" disabled={disabled} onClick={() => input.current?.click()} className="btn btn-primary">
         Choose files
@@ -240,7 +245,12 @@ function DeleteDocument({ doc, onDeleted }: { doc: DocumentOut; onDeleted: () =>
   );
 }
 
-function DocumentPanel({ id, chunk, onClose }: { id: string; chunk: string | null; onClose: () => void }) {
+/** The space a document is in, as a chip. */
+function SpaceChip({ vault }: { vault: Vault | undefined }) {
+  return <VaultChip tone={vaultTone(vault?.kind)} name={vault?.name ?? "Space"} />;
+}
+
+function DocumentPanel({ id, chunk, vaults, onClose }: { id: string; chunk: string | null; vaults: Map<string, Vault>; onClose: () => void }) {
   const query = useDocument(id);
   const reindex = useReindexDocument();
   const [busy, setBusy] = useState<"download" | "export" | null>(null);
@@ -302,8 +312,11 @@ function DocumentPanel({ id, chunk, onClose }: { id: string; chunk: string | nul
           <h2 id="document-title" className="text-[20px] font-semibold tracking-[-0.015em] break-words">
             {doc.filename}
           </h2>
-          <p className="label mt-1">
-            {TYPE_LABEL[doc.media_type] ?? doc.media_type} · {size(doc.size_bytes)} · revision {doc.revision}
+          <p className="label mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+            <SpaceChip vault={vaults.get(doc.vault)} />
+            <span>
+              {TYPE_LABEL[doc.media_type] ?? doc.media_type} · {size(doc.size_bytes)} · revision {doc.revision}
+            </span>
           </p>
         </div>
         <button type="button" onClick={onClose} aria-label="Close document" className="btn btn-ghost btn-icon btn-sm">
@@ -414,14 +427,19 @@ function Documents() {
   const params = useSearchParams();
   const selected = params.get("id");
   const chunk = params.get("chunk");
-  const listQuery = useDocuments();
+  // every space the user can read, or the one picked
+  const [space, setSpace] = useState<string | null>(null);
+  const vaultList = useVaults().data;
+  const vaults = new Map((vaultList ?? []).map((v) => [v.id, v]));
+  const picked = space ? (vaults.get(space) ?? null) : null;
+  const listQuery = useDocuments(space);
   const list = listQuery.data;
   const docs = list?.results ?? (listQuery.isError ? [] : null);
   const maxBytes = list?.max_bytes ?? null;
   const storageOff = list !== undefined && !list.storage;
   const isAdmin = useMe().data?.is_admin ?? false;
   const select = (id: string | null) => router.replace(id ? `/documents?id=${encodeURIComponent(id)}` : "/documents", { scroll: false });
-  const uploads = useUploads(maxBytes, (id) => select(id));
+  const uploads = useUploads(maxBytes, space, (id) => select(id));
   const input = useRef<HTMLInputElement>(null);
 
   return (
@@ -429,7 +447,7 @@ function Documents() {
       <PageHeader
         icon={FilesIcon}
         title="Documents"
-        intro="Notes, specs and exports your AI apps can search. Only you can read them."
+        intro="Notes, specs and exports your AI apps can search, from every space you belong to. A shared space's documents are open to its members."
         actions={
           !storageOff && <button type="button" onClick={() => input.current?.click()} disabled={storageOff} className="btn btn-primary">
             <UploadSimpleIcon {...ICON} aria-hidden />
@@ -459,25 +477,37 @@ function Documents() {
       ) : (
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px] items-start">
         <div className="flex flex-col gap-6 min-w-0">
-          <DropZone maxBytes={maxBytes} disabled={list === undefined} onFiles={uploads.add} />
+          <DropZone maxBytes={maxBytes} disabled={list === undefined} into={picked} onFiles={uploads.add} />
           <UploadRows rows={uploads.rows} onDismiss={uploads.dismiss} />
 
           <section className="flex flex-col gap-2.5" aria-labelledby="documents-title">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 id="documents-title" className="section-title">
                 Your documents
               </h2>
-              {docs && (
-                <span className="label">
-                  {(list?.total ?? docs.length).toLocaleString()} {(list?.total ?? docs.length) === 1 ? "document" : "documents"} · Only you can read these
-                </span>
-              )}
+              <div className="flex flex-wrap items-center gap-3">
+                {docs && (
+                  <span className="label">
+                    {(list?.total ?? docs.length).toLocaleString()} {(list?.total ?? docs.length) === 1 ? "document" : "documents"}
+                  </span>
+                )}
+                {vaults.size > 1 && (
+                  <Select
+                    className="h-8 text-[13px] w-[200px]"
+                    aria-label="Space"
+                    value={space ?? "all"}
+                    options={[{ value: "all", label: "All spaces" }, ...(vaultList ?? []).map((v) => ({ value: v.id, label: v.name }))]}
+                    onChange={(v) => setSpace(v === "all" ? null : v)}
+                  />
+                )}
+              </div>
             </div>
             <div className="ledger overflow-x-auto">
               <table className="data-table">
                 <thead>
                   <tr>
                     <th>Name</th>
+                    <th>Space</th>
                     <th className="hidden sm:table-cell">Type</th>
                     <th className="hidden md:table-cell text-right">Size</th>
                     <th className="hidden md:table-cell">Uploaded</th>
@@ -490,6 +520,7 @@ function Documents() {
                     [0, 1].map((i) => (
                       <tr key={i} aria-hidden>
                         <td><span className="skeleton block h-4" style={{ width: "60%" }} /></td>
+                        <td><span className="skeleton block h-4 w-20" /></td>
                         <td className="hidden sm:table-cell"><span className="skeleton block h-4 w-16" /></td>
                         <td className="hidden md:table-cell"><span className="skeleton block h-4 w-12 ml-auto" /></td>
                         <td className="hidden md:table-cell"><span className="skeleton block h-4 w-16" /></td>
@@ -499,8 +530,8 @@ function Documents() {
                     ))}
                   {docs?.length === 0 && (
                     <tr>
-                      <td colSpan={6} style={{ color: "var(--ink-dim)", height: 56 }}>
-                        No documents yet. Drop a file above, or ask your AI app to save one for you.
+                      <td colSpan={7} style={{ color: "var(--ink-dim)", height: 56 }}>
+                        {picked ? `No documents in ${picked.name} yet.` : "No documents yet."} Drop a file above, or ask your AI app to save one for you.
                       </td>
                     </tr>
                   )}
@@ -518,6 +549,9 @@ function Documents() {
                             <FileTextIcon {...ICON} aria-hidden className="shrink-0" />
                             <span className="truncate">{d.filename}</span>
                           </button>
+                        </td>
+                        <td className="max-w-[160px]">
+                          <SpaceChip vault={vaults.get(d.vault)} />
                         </td>
                         <td className="hidden sm:table-cell whitespace-nowrap" style={{ color: "var(--ink-dim)" }}>
                           {TYPE_LABEL[d.media_type] ?? d.media_type}
@@ -545,7 +579,7 @@ function Documents() {
 
         <aside className="lg:sticky lg:top-8 min-w-0">
           {selected ? (
-            <DocumentPanel key={selected} id={selected} chunk={chunk} onClose={() => select(null)} />
+            <DocumentPanel key={selected} id={selected} chunk={chunk} vaults={vaults} onClose={() => select(null)} />
           ) : (
             <p className="soft-panel text-[14px] px-4 py-3" style={{ color: "var(--ink-dim)" }}>
               Choose a document to read its passages, download it, export it or delete it.

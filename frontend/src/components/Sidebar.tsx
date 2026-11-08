@@ -139,7 +139,7 @@ export default function Sidebar() {
   const settingsData = useSettings(member).data;
   const docsData = useQuery({
     queryKey: documentKeys.list(),
-    queryFn: () => call(listDocuments({ query: { limit: 200 } })),
+    queryFn: () => call(listDocuments({ query: { all_vaults: true, limit: 200 } })),
     enabled: member,
   }).data;
   const chatOff = member && settingsData?.model_configured === false;

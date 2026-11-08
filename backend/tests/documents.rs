@@ -520,3 +520,45 @@ async fn documents_live_in_their_vault_and_travel_with_it() {
     assert!(object_exists(&app, &path_a).await);
     assert_eq!(download(&app, &doc_a, &app.token).await.0, StatusCode::OK);
 }
+
+/// The Documents page lists every space the user can read at once, each row with its space, so an org
+/// space's CSV (uploaded by an agent) is reachable; a colleague's space and a vault-restricted
+/// token's other spaces stay out.
+#[tokio::test]
+async fn the_page_lists_every_readable_space_and_names_each_documents_space() {
+    let (app, _stop) = app().await;
+    let shop = app.tool("vault_create", json!({"name": "Northside Bikes", "kind": "org"})).await["id"].as_str().unwrap().to_string();
+    let csv = app.tool("document_upload", json!({"filename": "parts.csv", "text": "part,price AUD\nChain,$79.95\n", "vault_id": "Northside Bikes"})).await;
+    let csv_id = csv["id"].as_str().unwrap_or_else(|| panic!("{csv}")).to_string();
+    let (_, notes) = upload_http(&app, "notes.txt", Some("text/plain"), b"my own notes").await;
+    assert!(notes["id"].is_string(), "{notes}");
+    // a colleague's space is never listed
+    let colleague = common::register(&app.state, "colleague@example.com").await;
+    common::sys(registry::call(&app.state, &colleague, "vault_create", json!({"name": "Theirs", "kind": "org"}))).await.unwrap();
+    let theirs = common::sys(registry::call(&app.state, &colleague, "document_upload", json!({"filename": "theirs.txt", "text": "not yours", "vault_id": "Theirs"}))).await.unwrap();
+    assert!(theirs["id"].is_string(), "{theirs}");
+
+    let listed = |q: &'static str, token: String| {
+        let app = &app;
+        async move {
+            let (s, _, body) = raw(app, "GET", &format!("/api/documents{q}"), vec![], None, &token).await;
+            assert_eq!(s, StatusCode::OK, "{}", String::from_utf8_lossy(&body));
+            json_of(&body)["results"].as_array().unwrap().iter().map(|d| (d["filename"].as_str().unwrap().to_string(), d["vault"].as_str().unwrap().to_string())).collect::<Vec<_>>()
+        }
+    };
+    let personal = app.tool("vault_list", json!({})).await["results"].as_array().unwrap().iter().find(|v| v["kind"] == "personal").unwrap()["id"].as_str().unwrap().to_string();
+    let mut all = listed("?all_vaults=true", app.token.clone()).await;
+    all.sort();
+    assert_eq!(all, [("notes.txt".to_string(), personal.clone()), ("parts.csv".to_string(), shop.clone())]);
+    assert_eq!(listed("", app.token.clone()).await, [("notes.txt".to_string(), personal)], "without it, the default space as before");
+    let (_, _, body) = raw(&app, "GET", "/api/documents?all_vaults=true", vec![], None, &app.token).await;
+    assert_eq!(json_of(&body)["total"], 2);
+
+    // the org CSV opens and profiles like a personal one
+    let (s, _, body) = raw(&app, "GET", &format!("/api/documents/{csv_id}/profile"), vec![], None, &app.token).await;
+    assert_eq!(s, StatusCode::OK, "{}", String::from_utf8_lossy(&body));
+    // a token restricted to the shop lists only the shop's, even when asking for all
+    let vid = eunomia_backend::rid::parse(&shop).unwrap();
+    let restricted = models_user::create_api_token_with(&app.state.control, &app.user.id, "r", &["memory:read".to_string()], Some(&vid), None).await.unwrap().token;
+    assert_eq!(listed("?all_vaults=true", restricted).await, [("parts.csv".to_string(), shop)]);
+}

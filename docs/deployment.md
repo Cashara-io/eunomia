@@ -142,6 +142,7 @@ their local-dev defaults in production:
 | `SURREAL_PASS` | `root` | a real password |
 | `OPENAI_API_KEY` | blank (settable per-user instead) | set it server-wide, or rely on each user setting their own in Settings. It is only ever sent to `OPENAI_BASE_URL`; a user who points Settings at another endpoint uses their own key there |
 | `OPENAI_CHAT_MODEL` | blank (automatic) | the model that extracts entities and relations, synthesizes answers and powers chat. Blank picks `gpt-4o-mini` on api.openai.com, otherwise the first chat model your endpoint lists at `/models` (for example a local Ollama or vLLM model). Each user can override it in Settings |
+| `EUNOMIA_CHAT_MODEL_TIMEOUT_SECS` | `90` | How long one model call in the in-app chat may take, its streamed reply included. Past it the chat stops the turn with an error and the thread stays usable |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:3000` | only needed for browsers calling the backend port directly; the bundled frontend goes through its own `/api` proxy |
 | `FRONTEND_URL` | `http://localhost:3000` | same as above (this is what `CORS_ALLOWED_ORIGINS` defaults from in `docker-compose.yml`) |
 | `SESSION_TTL_DAYS` | `30` | Browser sessions expire this many days after last use (extended at most once an hour). The session cookie itself also carries a hard 90 day limit. |

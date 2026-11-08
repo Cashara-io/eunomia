@@ -7,7 +7,8 @@ import { toolKeys } from "./tools";
 
 export const documentKeys = {
   all: ["documents"] as const,
-  list: () => [...documentKeys.all, "list"] as const,
+  /** Every readable space's documents (`null`), or one space's. */
+  list: (vaultId: string | null = null) => [...documentKeys.all, "list", vaultId ?? "all"] as const,
   detail: (id: string) => [...documentKeys.all, "detail", id] as const,
   profile: (id: string) => [...documentKeys.all, "profile", id] as const,
   inVault: (vaultId: string) => [...documentKeys.all, "vault", vaultId] as const,
@@ -15,11 +16,11 @@ export const documentKeys = {
 
 const indexing = (list?: DocumentList) => list?.results.some((d) => d.status === "indexing") ?? false;
 
-/** The user's documents. Polls every 2s while one is still indexing, so its status and passage count arrive on their own; otherwise only while live updates are down. */
-export const useDocuments = () =>
+/** The documents of every space the user can read (or of `vaultId` only). Polls every 2s while one is still indexing, so its status and passage count arrive on their own; otherwise only while live updates are down. */
+export const useDocuments = (vaultId: string | null = null) =>
   useQuery({
-    queryKey: documentKeys.list(),
-    queryFn: () => call(listDocuments({ query: { limit: 200 } })),
+    queryKey: documentKeys.list(vaultId),
+    queryFn: () => call(listDocuments({ query: vaultId ? { vault_id: vaultId, limit: 200 } : { all_vaults: true, limit: 200 } })),
     refetchInterval: (q) => (indexing(q.state.data) ? 2000 : livePoll()),
   });
 

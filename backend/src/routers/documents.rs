@@ -50,6 +50,10 @@ struct ListQuery {
     /// The vault (`vault:...`); default: the caller's personal vault (a vault-restricted token's own).
     #[serde(default)]
     vault_id: Option<String>,
+    /// Without `vault_id`: every vault the caller can read (their personal vault and each org vault
+    /// they belong to) instead of the default one.
+    #[serde(default)]
+    all_vaults: bool,
 }
 
 #[utoipa::path(
@@ -64,7 +68,7 @@ struct ListQuery {
 )]
 async fn list_documents(State(state): State<AppState>, user: User, Query(q): Query<ListQuery>) -> AppResult<Json<DocumentList>> {
     let state = state.org(&user.org).await?;
-    Ok(Json(documents::list(&state, &user.id, q.vault_id.as_deref(), q.limit.unwrap_or(50), q.offset.unwrap_or(0)).await?))
+    Ok(Json(documents::list(&state, &user.id, q.vault_id.as_deref(), q.all_vaults, q.limit.unwrap_or(50), q.offset.unwrap_or(0)).await?))
 }
 
 #[derive(Deserialize, utoipa::IntoParams)]

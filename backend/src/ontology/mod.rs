@@ -25,6 +25,7 @@ pub mod profile;
 pub mod property;
 pub mod readiness;
 pub mod scenario;
+pub mod scope;
 pub mod suggest;
 pub mod tabular;
 
@@ -334,10 +335,34 @@ async fn resolve(db: &OrgDb, owner: &RecordId, vault_id: Option<&RecordId>, acti
     Ok(authz::authorize(db, owner, action, &vault).await?.vault().clone())
 }
 
-/// The ontology of `vault_id` (the caller's personal vault when omitted).
-pub async fn get(db: &OrgDb, owner: &RecordId, vault_id: Option<&RecordId>) -> AppResult<OntologyOut> {
+/// The ontology of `vault_id` (the caller's personal vault when omitted), or with `kind` only that
+/// kind and the link types that touch it. A kind the vault does not use or define is refused; when no
+/// vault was named, the refusal names the readable vaults that have it.
+pub async fn get(db: &OrgDb, owner: &RecordId, vault_id: Option<&RecordId>, kind: Option<&str>) -> AppResult<OntologyOut> {
     let vault = resolve(db, owner, vault_id, Action::ReadMemories).await?;
-    view(db, &vault).await
+    let out = view(db, &vault).await?;
+    let Some(kind) = kind.map(str::trim).filter(|k| !k.is_empty()) else { return Ok(out) };
+    let kind = Kind::parse(kind)?;
+    if !has_kind(&out, &kind) {
+        let missing = AppError::coded(ErrorCode::ResourceNotFound, format!("no kind {:?} in this vault", kind.as_str()));
+        if vault_id.is_some() {
+            return Err(missing);
+        }
+        let wanted = &kind;
+        let homes = scope::elsewhere(db, owner, &vault, |v| async move { Ok::<_, AppError>(has_kind(&view(db, &v).await?, wanted)) }).await?;
+        return Err(scope::found_in(missing, kind.as_str(), &homes));
+    }
+    let k = kind.as_str();
+    Ok(OntologyOut {
+        kinds: out.kinds.into_iter().filter(|i| i.kind == k).collect(),
+        links: out.links.into_iter().filter(|l| l.from_kind == k || l.to_kind == k).collect(),
+        ..out
+    })
+}
+
+/// Whether the vault uses `kind` or has reviewed it, its properties or its metrics.
+fn has_kind(o: &OntologyOut, kind: &Kind) -> bool {
+    o.kinds.iter().any(|k| k.kind == kind.as_str() && (k.entities > 0 || k.status != ViewStatus::Observed || !k.properties.is_empty() || !k.metrics.is_empty()))
 }
 
 /// What `vault` uses merged with its registry rows. The caller checked access.

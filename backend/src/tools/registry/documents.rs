@@ -96,7 +96,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     Ok(a) => a,
                     Err(e) => return Ok(bad_args(e)),
                 };
-                Ok(to_tool_value(documents::list(state, owner, a.vault_id.as_deref(), a.limit, a.offset).await))
+                Ok(to_tool_value(documents::list(state, owner, a.vault_id.as_deref(), false, a.limit, a.offset).await))
             })
         }),
     );

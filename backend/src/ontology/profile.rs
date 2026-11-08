@@ -191,7 +191,41 @@ pub(crate) fn plain_number(s: &str) -> Option<f64> {
     if ok { s.parse::<f64>().ok().filter(|n| n.is_finite()) } else { None }
 }
 
-/// An amount with a currency mark: `$4.50`, `A$4.50`, `AUD 4.50`, `4.50 AUD`.
+/// `1,200.50` as `1200.50`. A comma counts only between groups of exactly three digits after a first
+/// group of one to three digits that is not `0`, so `1,5`, `0,500` or `1.234,56` (a decimal comma) is
+/// refused rather than read as another number.
+pub(crate) fn without_thousands(s: &str) -> Option<String> {
+    if !s.contains(',') {
+        return Some(s.to_string());
+    }
+    let (sign, s) = match s.strip_prefix('-').or_else(|| s.strip_prefix('+')) {
+        Some(rest) => (&s[..1], rest),
+        None => ("", s),
+    };
+    let (int, frac) = match s.split_once('.') {
+        Some((i, f)) => (i, Some(f)),
+        None => (s, None),
+    };
+    let mut groups = int.split(',');
+    let first = groups.next()?;
+    let digits = |g: &str| !g.is_empty() && g.chars().all(|c| c.is_ascii_digit());
+    if first.len() > 3 || !digits(first) || first.starts_with('0') {
+        return None;
+    }
+    let rest: Vec<&str> = groups.collect();
+    if rest.iter().any(|g| g.len() != 3 || !digits(g)) || frac.is_some_and(|f| f.contains(',')) {
+        return None;
+    }
+    let mut out = format!("{sign}{}", int.replace(',', ""));
+    if let Some(f) = frac {
+        out.push('.');
+        out.push_str(f);
+    }
+    Some(out)
+}
+
+/// An amount with a currency mark: `$4.50`, `A$4.50`, `AUD 4.50`, `4.50 AUD`, with a comma only as a
+/// thousands separator (`$1,249.00`), as an import reads it.
 pub(crate) fn money(s: &str) -> Option<f64> {
     let t = s.trim();
     let stripped = t
@@ -206,7 +240,7 @@ pub(crate) fn money(s: &str) -> Option<f64> {
             let code = |c: &str| c.len() == 3 && c.chars().all(|ch| ch.is_ascii_uppercase());
             if code(a) { Some(b.to_string()) } else if code(b) { Some(a.to_string()) } else { None }
         })?;
-    plain_number(stripped.trim())
+    plain_number(&without_thousands(stripped.trim())?)
 }
 
 const DATE_FORMATS: &[(&str, &str)] = &[("%Y-%m-%d", "YYYY-MM-DD"), ("%d/%m/%Y", "DD/MM/YYYY"), ("%m/%d/%Y", "MM/DD/YYYY"), ("%Y/%m/%d", "YYYY/MM/DD"), ("%d-%m-%Y", "DD-MM-YYYY"), ("%d %b %Y", "D MMM YYYY")];
@@ -395,6 +429,19 @@ mod tests {
 
     fn f<'a>(p: &'a RecordTypeProfile, path: &str) -> &'a FieldProfile {
         p.fields.iter().find(|f| f.path == path).unwrap_or_else(|| panic!("no {path}"))
+    }
+
+    #[test]
+    fn money_with_thousands_separators_profiles_as_money_like_an_import_reads_it() {
+        let rows: Vec<Value> = ["$1,249.00", "$129.00", "$79.95", "$2,100"].iter().map(|p| json!({"price AUD": p, "code": "1,5"})).collect();
+        let p = profile(&sample(rows));
+        let price = f(&p, "price AUD");
+        assert_eq!((price.inferred_type, price.min, price.max), (InferredType::Money, Some(79.95), Some(2100.0)));
+        assert_eq!(money("$1,249.00"), Some(1249.0));
+        // a comma that is not a thousands separator is not money
+        for s in ["$1,5", "$1.234,56", "$0,500"] {
+            assert_eq!(money(s), None, "{s}");
+        }
     }
 
     #[test]

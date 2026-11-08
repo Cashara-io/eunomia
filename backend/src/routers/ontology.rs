@@ -78,7 +78,7 @@ struct MetricDecideBody {
 async fn get_ontology(State(state): State<AppState>, user: User, Path(vault_id): Path<String>) -> AppResult<Json<OntologyOut>> {
     let state = state.org(&user.org).await?;
     let vault = parse_vault_id(&vault_id)?;
-    Ok(Json(ontology::get(&state.db, &user.id, Some(&vault)).await?))
+    Ok(Json(ontology::get(&state.db, &user.id, Some(&vault), None).await?))
 }
 
 #[utoipa::path(

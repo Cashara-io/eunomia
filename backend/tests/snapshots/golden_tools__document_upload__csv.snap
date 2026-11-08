@@ -4,6 +4,7 @@ expression: stable
 ---
 {
   "id": "document:<id21>",
+  "vault": "vault:<id2>",
   "filename": "menu.csv",
   "media_type": "text/csv",
   "size_bytes": 36,

@@ -182,7 +182,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
             "type": "object",
             "properties": {
                 "question": {"type": "string", "description": "the user's question, as asked"},
-                "vault_id": {"type": "string", "description": "the vault the question is about (a vault id or its name); omit for your personal vault"},
+                "vault_id": {"type": "string", "description": "the vault the question is about (a vault id or its name), when the user named one; omit to check every vault you can read and get the best match"},
             },
             "required": ["question"],
         }),
@@ -220,13 +220,27 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
         }),
     );
 
+    #[derive(serde::Deserialize, Default)]
+    struct GetArgs {
+        #[serde(default)]
+        vault_id: Option<String>,
+        #[serde(default)]
+        kind: Option<String>,
+    }
+
     register(
         registry,
         "ontology_get",
-        vault_only_schema("the vault to read"),
+        json!({
+            "type": "object",
+            "properties": {
+                "vault_id": {"type": "string", "description": "the vault to read (a vault id or its name); omit for your personal vault"},
+                "kind": {"type": "string", "description": "only this kind and the link types that touch it; a kind the vault does not have is an error naming the vaults you can read that have it"},
+            },
+        }),
         Arc::new(|state, owner, args| {
             Box::pin(async move {
-                let a: VaultArgs = match serde_json::from_value(args) {
+                let a: GetArgs = match serde_json::from_value(args) {
                     Ok(a) => a,
                     Err(e) => return Ok(bad_args(e)),
                 };
@@ -234,7 +248,7 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     Ok(v) => v,
                     Err(e) => return Ok(e),
                 };
-                Ok(to_tool_value(ontology::get(&state.db, owner, vault.as_ref()).await))
+                Ok(to_tool_value(ontology::get(&state.db, owner, vault.as_ref(), a.kind.as_deref()).await))
             })
         }),
     );

@@ -247,8 +247,16 @@ struct Pick {
     selector: Selector,
     /// `entity_ids`, when given.
     only: Option<HashSet<String>>,
-    /// Ids linked to the `related_to` entity, and its words ("supplied by Riverside Roasters").
-    related: Option<(HashSet<String>, String)>,
+    /// Ids linked to the `related_to` entity, and how they are linked to it.
+    related: Option<Related>,
+}
+
+struct Related {
+    ids: HashSet<String>,
+    /// "supplied by Riverside Roasters"
+    said: String,
+    target: String,
+    label: Option<String>,
 }
 
 /// One change, checked.
@@ -263,24 +271,8 @@ struct Named(HashMap<String, NodeRow>);
 
 impl Named {
     async fn load(db: &OrgDb, vault: &RecordId, args: &ScenarioArgs) -> AppResult<Self> {
-        let given = args
-            .changes
-            .iter()
-            .filter_map(|c| match c {
-                Change::Set(s) => Some(s.entity_id.as_str()),
-                Change::Remove(r) => Some(r.entity_id.as_str()),
-                Change::Scale(_) | Change::Shift(_) => None,
-            })
-            .chain(args.changes.iter().flat_map(|c| {
-                let (only, related) = match c {
-                    Change::Scale(ScaleChange { entity_ids, related_to, .. }) | Change::Shift(ShiftChange { entity_ids, related_to, .. }) => (entity_ids.as_slice(), related_to.as_ref()),
-                    _ => (&[][..], None),
-                };
-                only.iter().map(String::as_str).chain(related.map(|r| r.entity_id.as_str()))
-            }))
-            .chain(args.impact_from.iter().map(String::as_str));
         let mut ids = Vec::new();
-        for id in given {
+        for id in named_ids(args) {
             let rid = crate::rid::parse(id).map_err(|_| unknown_entity(id))?;
             require_entity_id(&rid).map_err(|_| unknown_entity(id))?;
             ids.push(rid);
@@ -295,6 +287,53 @@ impl Named {
         let key = crate::rid::parse(id).map(|r| r.to_string()).unwrap_or_default();
         self.0.get(&key).cloned().ok_or_else(|| unknown_entity(id))
     }
+}
+
+/// Every entity id a scenario names: changed, removed, picked, related to, or traced from.
+fn named_ids(args: &ScenarioArgs) -> impl Iterator<Item = &str> {
+    args.changes
+        .iter()
+        .filter_map(|c| match c {
+            Change::Set(s) => Some(s.entity_id.as_str()),
+            Change::Remove(r) => Some(r.entity_id.as_str()),
+            Change::Scale(_) | Change::Shift(_) => None,
+        })
+        .chain(args.changes.iter().flat_map(|c| {
+            let (only, related) = match c {
+                Change::Scale(ScaleChange { entity_ids, related_to, .. }) | Change::Shift(ShiftChange { entity_ids, related_to, .. }) => (entity_ids.as_slice(), related_to.as_ref()),
+                _ => (&[][..], None),
+            };
+            only.iter().map(String::as_str).chain(related.map(|r| r.entity_id.as_str()))
+        }))
+        .chain(args.impact_from.iter().map(String::as_str))
+}
+
+/// Whether everything the scenario names is in `vault`: its entities, its metrics and the properties
+/// its bulk changes change (whatever their status). A what-if that failed in the default vault is
+/// pointed at the readable vaults this holds for.
+async fn fits(db: &OrgDb, vault: RecordId, args: &ScenarioArgs) -> AppResult<bool> {
+    let ids: Vec<RecordId> = named_ids(args).filter_map(|id| crate::rid::parse(id).ok()).collect();
+    let nodes = load_nodes(db, ids.clone()).await?;
+    if ids.iter().any(|id| nodes.get(&id.to_string()).is_none_or(|n| n.vault != vault)) {
+        return Ok(false);
+    }
+    for m in &args.metrics {
+        let (name, kind) = match m {
+            MetricRef::Name(n) => (n.as_str(), None),
+            MetricRef::Named { metric, kind } => (metric.as_str(), kind.as_deref()),
+        };
+        if !metric::exists(db, vault.clone(), name, kind).await? {
+            return Ok(false);
+        }
+    }
+    for c in &args.changes {
+        let (Change::Scale(ScaleChange { kind, property, .. }) | Change::Shift(ShiftChange { kind, property, .. })) = c else { continue };
+        let Ok(kind) = Kind::parse(kind) else { return Ok(false) };
+        if !metric::props_of(db, &vault, &kind).await?.contains_key(property.trim()) {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
 struct Wanted<'a> {
@@ -334,12 +373,12 @@ async fn pick(db: &OrgDb, vault: &RecordId, named: &Named, kind: &Kind, wanted: 
             let edges: Vec<_> = edges.into_iter().filter(|e| label.is_none_or(|l| same_label(&e.label, l))).collect();
             let ids: HashSet<String> = edges.iter().map(|e| if e.from == target.id { e.to.to_string() } else { e.from.to_string() }).collect();
             // "supplied by Riverside Roasters" when the picked entities are the relation's `from` end
-            let said = match (label, edges.iter().all(|e| e.to == target.id)) {
-                (Some(_), true) => format!("{} {}", words(&edges.first().map(|e| e.label.clone()).unwrap_or_default()), target.name),
-                (Some(l), false) => format!("linked to {} by {}", target.name, words(l)),
+            let said = match (label, edges.first().filter(|_| edges.iter().all(|e| e.to == target.id))) {
+                (Some(_), Some(e)) => format!("{} {}", words(&e.label), target.name),
+                (Some(l), None) => format!("linked to {} by {}", target.name, words(l)),
                 (None, _) => format!("linked to {}", target.name),
             };
-            Some((ids, said))
+            Some(Related { ids, said, target: target.name.clone(), label: label.map(words) })
         }
     };
     Ok(Pick { selector, only, related })
@@ -405,18 +444,36 @@ fn shown(datatype: Datatype, held: &Held, unit: Option<&str>) -> String {
     }
 }
 
-/// Runs a what-if for `owner`: nothing is written, and the call stops after its time budget.
+/// Runs a what-if for `owner`: nothing is written, and the call stops after its time budget. One
+/// that names no vault and fails in the default vault names the readable vaults that hold what it
+/// names.
 pub async fn run(db: &OrgDb, owner: &RecordId, args: &ScenarioArgs) -> AppResult<ScenarioOut> {
-    match tokio::time::timeout(BUDGET, run_within_budget(db, owner, args)).await {
+    let vault_id = args
+        .vault_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(|v| crate::rid::parse(v).map_err(|_| AppError::coded(ErrorCode::VaultNotFound, "Vault not found.")))
+        .transpose()?;
+    let vault = resolve(db, owner, vault_id.as_ref(), Action::ReadMemories).await?;
+    let out = match tokio::time::timeout(BUDGET, run_within_budget(db, &vault, args)).await {
         Ok(out) => out,
         Err(_) => Err(AppError::bad_request(format!(
             "the what-if took longer than {} seconds: change fewer entities or ask for fewer metrics",
             BUDGET.as_secs()
         ))),
+    };
+    match out {
+        Err(e) if vault_id.is_none() && !fits(db, vault.clone(), args).await? => {
+            let homes = super::scope::elsewhere(db, owner, &vault, |v| fits(db, v, args)).await?;
+            Err(super::scope::found_in(e, "Everything it names", &homes))
+        }
+        out => out,
     }
 }
 
-async fn run_within_budget(db: &OrgDb, owner: &RecordId, args: &ScenarioArgs) -> AppResult<ScenarioOut> {
+async fn run_within_budget(db: &OrgDb, vault: &RecordId, args: &ScenarioArgs) -> AppResult<ScenarioOut> {
+    let vault = vault.clone();
     if args.changes.is_empty() || args.changes.len() > MAX_CHANGES {
         return Err(AppError::bad_request(format!("a what-if makes 1 to {MAX_CHANGES} changes, got {}", args.changes.len())));
     }
@@ -426,14 +483,6 @@ async fn run_within_budget(db: &OrgDb, owner: &RecordId, args: &ScenarioArgs) ->
     if args.impact_from.len() > MAX_IMPACT_FROM {
         return Err(AppError::bad_request(format!("impact_from lists at most {MAX_IMPACT_FROM} entities")));
     }
-    let vault_id = args
-        .vault_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-        .map(|v| crate::rid::parse(v).map_err(|_| AppError::coded(ErrorCode::VaultNotFound, "Vault not found.")))
-        .transpose()?;
-    let vault = resolve(db, owner, vault_id.as_ref(), Action::ReadMemories).await?;
     let as_of = metric::parse_as_of(args.as_of.as_deref())?;
     let named = Named::load(db, &vault, args).await?;
     let mut warnings: Vec<String> = Vec::new();
@@ -499,7 +548,7 @@ async fn run_within_budget(db: &OrgDb, owner: &RecordId, args: &ScenarioArgs) ->
                 let (mut no_value, mut other_unit) = (0usize, 0usize);
                 for e in entities {
                     let outside = |set: Option<&HashSet<String>>| set.is_some_and(|ids| !ids.contains(e));
-                    if overlay.removed.contains(e) || outside(pick.only.as_ref()) || outside(pick.related.as_ref().map(|(ids, _)| ids)) {
+                    if overlay.removed.contains(e) || outside(pick.only.as_ref()) || outside(pick.related.as_ref().map(|r| &r.ids)) {
                         continue;
                     }
                     if !pick.selector.picks(|p| current(&overlay, base, e, p)) {
@@ -558,12 +607,24 @@ async fn run_within_budget(db: &OrgDb, owner: &RecordId, args: &ScenarioArgs) ->
                     (Some(_), [(e, ..)]) => named.0.get(e).map(|n| n.name.clone()),
                     _ => None,
                 };
+                // a related_to entity none of the kind is linked to: say that, not "on 0 products"
+                if let Some(r) = pick.related.as_ref().filter(|r| !entities.iter().any(|e| r.ids.contains(e))) {
+                    let kinds = plural(2, kind.as_str());
+                    let by = r.label.as_ref().map(|l| format!(" by {l} links")).unwrap_or_default();
+                    let said = format!("{} {} {amount}: no {kinds} are linked to {}", capital(&words(kind.as_str())), words(property), r.target);
+                    warnings.push(format!(
+                        "no {kinds} are linked to {}{by}, so \"{said}\" changed nothing: pick the {kinds} with filters or entity_ids instead, or link them first",
+                        r.target
+                    ));
+                    changes.push(said);
+                    continue;
+                }
                 let mut said = match one {
                     Some(name) => format!("{name} {} {amount}", words(property)),
                     None => format!("{} {} {amount} on {} {}", capital(&words(kind.as_str())), words(property), picked.len(), plural(picked.len(), kind.as_str())),
                 };
-                if let Some((_, w)) = &pick.related {
-                    said.push_str(&format!(" {w}"));
+                if let Some(r) = &pick.related {
+                    said.push_str(&format!(" {}", r.said));
                 }
                 if let Some(w) = pick.selector.words() {
                     said.push_str(&format!(" where {w}"));

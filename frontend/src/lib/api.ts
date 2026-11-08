@@ -66,12 +66,14 @@ export async function downloadDocumentFile(id: string, filename: string, kind: "
 }
 
 /**
- * Uploads one file as the raw request body (XMLHttpRequest, for upload progress). The browser's type
- * goes in the query when it has one; without it the server goes by the file extension.
+ * Uploads one file as the raw request body (XMLHttpRequest, for upload progress), into `vaultId` or
+ * else the personal space. The browser's type goes in the query when it has one; without it the
+ * server goes by the file extension.
  */
-export function uploadDocumentFile(file: File, onProgress: (fraction: number) => void): Promise<{ id: string; status: string }> {
+export function uploadDocumentFile(file: File, onProgress: (fraction: number) => void, vaultId?: string | null): Promise<{ id: string; status: string }> {
   const params = new URLSearchParams({ filename: file.name });
   if (file.type) params.set("content_type", file.type);
+  if (vaultId) params.set("vault_id", vaultId);
   const path = `/api/documents?${params}`;
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
