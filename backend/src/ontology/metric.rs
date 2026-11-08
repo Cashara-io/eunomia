@@ -1487,7 +1487,7 @@ pub async fn eval(db: &OrgDb, owner: &RecordId, args: &EvalArgs) -> AppResult<Me
                 Ok(Named::load(db, &v, [r.entity_id.as_str()]).await.is_ok_and(|n| n.get(&r.entity_id).is_ok()))
             };
             let homes = super::scope::elsewhere(db, owner, &vault, has).await?;
-            let what = if args.related_to.is_some() { "The metric and the entity it is narrowed to" } else { args.metric.trim() };
+            let what = if args.related_to.is_some() { "The metric with the entity it is narrowed to" } else { args.metric.trim() };
             Err(super::scope::found_in(e, what, &homes))
         }
         prepared => prepared?.run(None),

@@ -85,7 +85,7 @@ fn propose_schema() -> serde_json::Value {
                         "kind": kind_schema(),
                         "name": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$", "description": "the metric's name on that kind, e.g. avg_price, open_order_value"},
                         "expr": expr_schema(),
-                        "unit": {"type": "string", "description": "when it differs from the measured property's (a ratio's, say)"},
+                        "unit": {"type": "string", "description": "when it differs from the measured property's (a ratio's, say); a ratio with unit percent is a fraction the server shows times 100, so never multiply by 100 in the expression"},
                         "description": {"type": "string", "description": "what the number means, in one sentence"},
                         "synonyms": synonyms_schema(),
                         "merge_into": {"type": "string", "description": "propose folding this metric into that one of the same kind (the one to keep)"},
