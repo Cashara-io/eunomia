@@ -7,8 +7,9 @@ pub(super) struct Decimal {
 
 impl Decimal {
     pub fn new(value: f64) -> Self {
-        // Scaling a float can move a sub-half-cent amount across the rounding boundary.
-        let text = value.to_string();
+        // Display breaks shortest-decimal ties differently from JavaScript; Ryu uses its even tie rule.
+        let mut buffer = ryu::Buffer::new();
+        let text = buffer.format_finite(value);
         let text = text.trim_start_matches('-');
         let (mantissa, exponent) = text.split_once(['e', 'E']).unwrap_or((text, "0"));
         let fraction = mantissa.split_once('.').map_or(0, |(_, f)| f.len());

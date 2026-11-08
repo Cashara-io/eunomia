@@ -3,6 +3,8 @@
     {"value": "10000000000000.004", "unit": "AUD", "shown": "10000000000000.00"},
     {"value": "1000000000000000.125", "unit": "AUD", "shown": "1000000000000000.10"},
     {"value": "-1000000000000000.125", "unit": "AUD", "shown": "-1000000000000000.10"},
+    {"value": "1000000000000024.25", "unit": "AUD", "shown": "1000000000000024.20"},
+    {"value": "-1000000000000024.25", "unit": "AUD", "shown": "-1000000000000024.20"},
     {"value": "68606.625", "unit": "AUD", "shown": "68606.63"},
     {"value": "-68606.625", "unit": "AUD", "shown": "-68606.63"},
     {"value": "1.005", "unit": "AUD", "shown": "1.01"},
@@ -32,6 +34,7 @@
     {"before": "1e-7", "after": "2e-7", "unit": null, "start": "0.000000", "end": "0.000000", "movement": "exact change: 0.0000001", "exact": "0.0000001", "addsUp": false},
     {"before": "0", "after": "0.004", "unit": "AUD", "start": "0.0000", "end": "0.0040", "movement": "up 0.0040 AUD", "exact": "0.004 AUD", "addsUp": true},
     {"before": "0.004", "after": "-0.0", "unit": "AUD", "start": "0.0040", "end": "0.0000", "movement": "down 0.0040 AUD", "exact": "-0.004 AUD", "addsUp": true},
-    {"before": "0", "after": "-0.004", "unit": "AUD", "start": "0.0000", "end": "-0.0040", "movement": "down 0.0040 AUD", "exact": "-0.004 AUD", "addsUp": true}
+    {"before": "0", "after": "-0.004", "unit": "AUD", "start": "0.0000", "end": "-0.0040", "movement": "down 0.0040 AUD", "exact": "-0.004 AUD", "addsUp": true},
+    {"before": "-1000000000000017.125", "after": "-1000000000000024.25", "unit": "AUD", "start": "-1000000000000017.10", "end": "-1000000000000024.20", "movement": "down 7.10 AUD", "exact": "-7.1 AUD", "addsUp": true}
   ]
 }
