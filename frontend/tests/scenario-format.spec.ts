@@ -28,14 +28,14 @@ test("a nonzero sub-cent value is not shown as zero", () => {
 });
 
 test("shared decimal money vectors", async () => {
-  const vectors = (await import("../../fixtures/number-format.json", { with: { type: "json" } })).default;
+  const vectors = (await import("./fixtures/number-format.json", { with: { type: "json" } })).default;
   for (const row of vectors.numbers) {
     expect(formatNumber(row.value == null ? null : Number(row.value), row.unit), row.value ?? "null").toBe(row.shown);
   }
 });
 
 test("shared decimal scenario vectors", async () => {
-  const vectors = (await import("../../fixtures/number-format.json", { with: { type: "json" } })).default;
+  const vectors = (await import("./fixtures/number-format.json", { with: { type: "json" } })).default;
   for (const row of vectors.scenarios) {
     const shown = formatScenario(row.before == null ? null : Number(row.before), row.after == null ? null : Number(row.after), null, row.unit);
     expect(shown.before, row.before ?? "null").toBe(row.start);

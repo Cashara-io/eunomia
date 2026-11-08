@@ -632,7 +632,7 @@ mod tests {
 
     #[test]
     fn shared_decimal_money_vectors() {
-        let vectors: serde_json::Value = serde_json::from_str(include_str!("../../../fixtures/number-format.json")).unwrap();
+        let vectors: serde_json::Value = serde_json::from_str(include_str!("../../../frontend/tests/fixtures/number-format.json")).unwrap();
         for row in vectors["numbers"].as_array().unwrap() {
             let shown = fixture_value(&row["value"]).map(|v| figure(v, row["unit"].as_str())).unwrap_or_else(|| "none".into());
             assert_eq!(shown, row["shown"].as_str().unwrap(), "{row}");
@@ -641,7 +641,7 @@ mod tests {
 
     #[test]
     fn shared_decimal_scenario_vectors() {
-        let vectors: serde_json::Value = serde_json::from_str(include_str!("../../../fixtures/number-format.json")).unwrap();
+        let vectors: serde_json::Value = serde_json::from_str(include_str!("../../../frontend/tests/fixtures/number-format.json")).unwrap();
         for row in vectors["scenarios"].as_array().unwrap() {
             let (a, b) = (fixture_value(&row["before"]), fixture_value(&row["after"]));
             if let (Some(a), Some(b)) = (a.filter(|v| v.is_finite()), b.filter(|v| v.is_finite())) {
@@ -666,7 +666,7 @@ mod tests {
 
     #[test]
     fn shared_decimal_model_text_vectors() {
-        let vectors: serde_json::Value = serde_json::from_str(include_str!("../../../fixtures/number-format.json")).unwrap();
+        let vectors: serde_json::Value = serde_json::from_str(include_str!("../../../frontend/tests/fixtures/number-format.json")).unwrap();
         for row in vectors["scenarios"].as_array().unwrap() {
             let text = movement(fixture_value(&row["before"]), fixture_value(&row["after"]), None, row["unit"].as_str());
             if let Some(exact) = row["exact"].as_str() {
