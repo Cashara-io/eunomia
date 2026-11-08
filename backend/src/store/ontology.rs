@@ -53,6 +53,11 @@ pub const REGISTRY: Stmt = Stmt::new(
      SELECT * FROM ontology_link WHERE vault = $vault ORDER BY from_kind, label, to_kind;",
 );
 
+/// The link rows of `$vault` with a label in `$labels`: the link types a neighbourhood shows, without
+/// the vault-wide [`PROFILE`].
+pub const LINKS_LABELLED: Stmt =
+    Stmt::new("ontology.links_labelled", "SELECT * FROM ontology_link WHERE vault = $vault AND label IN $labels");
+
 /// The kind rows of every vault in `$vaults`, for `entity_types`.
 pub const KINDS_IN: Stmt =
     Stmt::new("ontology.kinds_in", "SELECT vault, kind, description, status, merge_into FROM ontology_kind WHERE vault IN $vaults ORDER BY kind");
@@ -398,6 +403,7 @@ pub const DELETE_IMPORTED_VALUES: Stmt = Stmt::new("ontology.delete_imported_val
 pub const ALL: &[&Stmt] = &[
     &PROFILE,
     &REGISTRY,
+    &LINKS_LABELLED,
     &KINDS_IN,
     &GROUND,
     &APPROVED_KINDS,

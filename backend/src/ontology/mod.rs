@@ -26,7 +26,7 @@ pub mod scenario;
 pub mod suggest;
 pub mod tabular;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 use surrealdb::types::{RecordId, SurrealValue};
@@ -351,6 +351,19 @@ pub(crate) async fn view(db: &OrgDb, vault: &RecordId) -> AppResult<OntologyOut>
     let properties = property::properties_by_kind(db, vault).await?;
     let metrics = metric::metrics_by_kind(db, vault).await?;
     Ok(OntologyOut { vault: vault.to_string(), kinds: merge_kinds(counts, kind_rows, properties, metrics)?, links: merge_links(link_counts, link_rows)? })
+}
+
+/// The link types among `present` (from kind, label, to kind) in `vault`, each with its decision or
+/// observed: one read of the link rows with those labels.
+pub(crate) async fn link_types(db: &OrgDb, vault: &RecordId, present: &BTreeSet<(String, String, String)>) -> AppResult<Vec<LinkItem>> {
+    let labels: BTreeSet<&String> = present.iter().map(|(_, l, _)| l).collect();
+    let rows: Vec<LinkRow> = match q::LINKS_LABELLED.on(db).bind(("vault", vault.clone())).bind(("labels", labels.into_iter().cloned().collect::<Vec<_>>())).await {
+        Err(e) if no_ontology_table(&e) => Vec::new(),
+        res => res?.take(0)?,
+    };
+    let rows: Vec<LinkRow> = rows.into_iter().filter(|r| present.contains(&(r.from_kind.clone(), r.label.clone(), r.to_kind.clone()))).collect();
+    let counts = present.iter().map(|(f, l, t)| LinkCount { from_kind: f.clone(), label: l.clone(), to_kind: t.clone(), count: 0, samples: Vec::new() }).collect();
+    merge_links(counts, rows)
 }
 
 fn merge_kinds(
