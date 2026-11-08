@@ -359,6 +359,10 @@ export type CloudSimilarityBody = {
 export type ColumnPlan = {
     column: string;
     /**
+     * The approved link type whose targets it names ("supplied_by supplier"), when no property takes it.
+     */
+    link?: string | null;
+    /**
      * The property it feeds, from its `source_map`.
      */
     property?: string | null;
@@ -370,6 +374,10 @@ export type ColumnPlan = {
  */
 export type ColumnUse = {
     column: string;
+    /**
+     * The link type whose targets it named ("supplied_by supplier").
+     */
+    link?: string | null;
     property?: string | null;
     skipped?: string | null;
 };
@@ -1039,9 +1047,14 @@ export type ImportOut = {
     document_id: string;
     kind: string;
     /**
+     * Relations this run wrote (a re-run writes none), and the link targets it created by name.
+     */
+    linked: number;
+    /**
      * Data rows in the file.
      */
     rows: number;
+    targets_created: number;
     updated: number;
     /**
      * Values written (each new or updated in place).
@@ -1060,7 +1073,7 @@ export type ImportPlan = {
     kind?: string | null;
     kind_status?: null | Status;
     /**
-     * The column that names each row's entity: the first one no property is mapped from.
+     * The column that names each row's entity: the first one no property or link is mapped from.
      */
     name_column?: string | null;
     /**
@@ -1312,6 +1325,11 @@ export type LinkItem = {
     origin?: null | Origin;
     reason?: string | null;
     samples: Array<LinkSample>;
+    /**
+     * The record fields or CSV columns that name each relation's target, from auto-mapping: a CSV
+     * import finds or creates the entity a cell names and writes the relation.
+     */
+    source_map?: Array<SourceField>;
     status: ViewStatus;
     to_kind: string;
 };
@@ -1485,6 +1503,7 @@ export type MetricExpr = {
      * entities that have it, or every entity without it.
      */
     property?: string | null;
+    row?: null | RowExpr;
     /**
      * A date or datetime property a series groups the entities by.
      */
@@ -2198,6 +2217,26 @@ export type Routing = {
     rules?: Array<Rule>;
 };
 
+/**
+ * A value worked out for each entity before the metric combines them, such as stock × cost: two
+ * terms and an operation, nested at most [`MAX_ROW_DEPTH`] deep. Typed data, never query text.
+ */
+export type RowExpr = {
+    left: RowTerm;
+    op: RowOp;
+    right: RowTerm;
+};
+
+/**
+ * How a row expression combines two values of one entity.
+ */
+export type RowOp = 'mul' | 'sub' | 'add' | 'div';
+
+/**
+ * One side of a row expression: a number, a property of the kind, or another row expression.
+ */
+export type RowTerm = number | string | RowExpr;
+
 export type Rule = {
     /**
      * One of the connector's `routing_fields`.
@@ -2442,6 +2481,7 @@ export type SubExpr = {
     agg: Agg;
     filters?: Array<Filter>;
     property?: string | null;
+    row?: null | RowExpr;
 };
 
 export type SuggestOut = {
