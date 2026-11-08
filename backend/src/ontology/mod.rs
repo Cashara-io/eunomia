@@ -885,17 +885,14 @@ async fn strict_kind(db: &OrgDb, vault: &RecordId, kind: &Kind) -> AppResult<()>
     if !strict(db, vault).await? {
         return Ok(());
     }
-    q::PROPOSE_KIND
+    q::FILE_KIND
         .on(db)
         .bind(("id", kind_rid(vault, kind)))
         .bind(("vault", vault.clone()))
         .bind(("kind", kind.0.clone()))
-        .bind(("description", None::<String>))
-        .bind(("merge_into", None::<String>))
-        .bind(("synonyms", Vec::<String>::new()))
-        .bind(("origin", Origin::Agent.as_str().to_string()))
-        .bind(("reason", Some(STRICT_REASON.to_string())))
-        .await?;
+        .bind(("reason", STRICT_REASON.to_string()))
+        .await?
+        .check()?;
     let approved: Vec<String> = q::APPROVED_KINDS.on(db).bind(("vault", vault.clone())).await?.take(0)?;
     let custom = if approved.is_empty() { String::new() } else { format!(" or an approved kind ({})", approved.join(", ")) };
     Err(AppError::coded(
@@ -913,17 +910,16 @@ async fn strict_link(db: &OrgDb, vault: &RecordId, key: &LinkKey) -> AppResult<(
     if !strict(db, vault).await? {
         return Ok(());
     }
-    q::PROPOSE_LINK
+    q::FILE_LINK
         .on(db)
         .bind(("id", link_rid(vault, key)))
         .bind(("vault", vault.clone()))
         .bind(("from_kind", key.from_kind.0.clone()))
         .bind(("label", key.label.0.clone()))
         .bind(("to_kind", key.to_kind.0.clone()))
-        .bind(("description", None::<String>))
-        .bind(("origin", Origin::Agent.as_str().to_string()))
-        .bind(("reason", Some(STRICT_REASON.to_string())))
-        .await?;
+        .bind(("reason", STRICT_REASON.to_string()))
+        .await?
+        .check()?;
     let approved: Vec<String> = q::APPROVED_LINKS
         .on(db)
         .bind(("vault", vault.clone()))

@@ -119,6 +119,23 @@ pub const PROPOSE_LINK: Stmt = Stmt::at(
     3,
 );
 
+/// A strict-mode refusal's kind, filed as an agent's proposal. Only creates the row, so an existing
+/// proposal keeps its reason.
+pub const FILE_KIND: Stmt = Stmt::new(
+    "ontology.file_kind",
+    r#"IF array::len(SELECT VALUE id FROM $id) = 0 {
+        CREATE $id SET vault = $vault, kind = $kind, origin = "agent", reason = $reason RETURN NONE
+    };"#,
+);
+
+/// [`FILE_KIND`] for a link type.
+pub const FILE_LINK: Stmt = Stmt::new(
+    "ontology.file_link",
+    r#"IF array::len(SELECT VALUE id FROM $id) = 0 {
+        CREATE $id SET vault = $vault, from_kind = $from_kind, label = $label, to_kind = $to_kind, origin = "agent", reason = $reason RETURN NONE
+    };"#,
+);
+
 /// A person's approval or rejection of a kind (a row is made for a kind only observed so far). Kinds
 /// rejected into this one follow it to its new target, so a merge never points at a rejected kind.
 pub const DECIDE_KIND: Stmt = Stmt::new(

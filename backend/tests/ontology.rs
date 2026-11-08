@@ -2764,6 +2764,29 @@ async fn strict_mode_lets_the_code_map_link_its_own_kinds_and_files_nothing_for_
     assert_eq!(out["code"], "ontology.rejected", "{out}");
 }
 
+#[tokio::test]
+async fn a_strict_refusal_keeps_the_reason_on_an_existing_proposal() {
+    let app = TestApp::new().await;
+    let vault = personal(&app).await;
+    ok(app.tool("ontology_propose", json!({
+        "kinds": [{"kind": "gadget", "reason": "Sam wants gadgets tracked"}],
+        "links": [{"from_kind": "person", "label": "owns", "to_kind": "organisation", "reason": "Sam wants owners tracked"}],
+    })).await);
+    let ana = write(&app, "Ana", "person").await["entity"]["id"].as_str().unwrap().to_string();
+    let acme = write(&app, "Acme", "organisation").await["entity"]["id"].as_str().unwrap().to_string();
+    assert_eq!(set_strict(&app, &vault, true).await.0, 200);
+
+    let out = app.tool("memory_write", json!({"subject_name": "Gadget 1", "subject_kind": "gadget", "text": "A gadget"})).await;
+    assert_eq!(out["code"], "ontology.rejected", "{out}");
+    let out = app.tool("code_relate", json!({"from_id": ana, "to_id": acme, "label": "owns"})).await;
+    assert_eq!(out["code"], "ontology.rejected", "{out}");
+    let db = app.db().await;
+    let reasons: Vec<String> = db.test_raw().query("SELECT VALUE reason FROM ontology_kind WHERE kind = 'gadget'").await.unwrap().take(0).unwrap();
+    assert_eq!(reasons, ["Sam wants gadgets tracked"]);
+    let reasons: Vec<String> = db.test_raw().query("SELECT VALUE reason FROM ontology_link WHERE label = 'owns'").await.unwrap().take(0).unwrap();
+    assert_eq!(reasons, ["Sam wants owners tracked"]);
+}
+
 #[test]
 fn the_ontology_tool_eval_list_names_only_registered_tools() {
     let evals: Value = serde_json::from_str(include_str!("../../docs/evals/ontology-tools.json")).unwrap();
