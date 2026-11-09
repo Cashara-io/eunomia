@@ -163,7 +163,7 @@ pub async fn resolve(db: &OrgDb, owner: &RecordId, args: &Dataset) -> AppResult<
         "status": if approved { "approved" } else { "not approved" },
         "warnings": if input_truncated { vec!["Input capped at 5000 entities. Aggregates describe only this partial input."] } else if truncated { vec!["Output rows truncated."] } else { vec![] } }))
 }
-fn compare(a: &Value, b: &Value) -> std::cmp::Ordering {
+pub(super) fn compare(a: &Value, b: &Value) -> std::cmp::Ordering {
     match (a.as_f64(), b.as_f64()) { (Some(a),Some(b)) => a.total_cmp(&b), _ => a.to_string().cmp(&b.to_string()) }
 }
 fn period(value: &Value, bucket: Bucket) -> AppResult<Value> {

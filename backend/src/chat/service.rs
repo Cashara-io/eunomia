@@ -44,19 +44,14 @@ use crate::state::OrgState;
 use crate::tools::registry;
 
 
-/// Caps the tool-call loop so a confused model can't spin forever -- if the
-/// model still hasn't produced a final reply after this many rounds,
-/// `send_stream` sends a "done" event saying so rather than looping/
-/// truncating silently. A "what does this affect" answer takes five rounds
-/// when the model calls one tool at a time (search, ontology, neighbourhood,
-/// view, reply), six when it fixes an id `show_view` refused; a number takes
-/// five (coverage, ontology, metric_eval, view, reply); a what-if six (coverage, search, ontology,
-/// scenario_run, view, reply).
+/// Caps tool executions, including parallel batches. One tool-free answer follows the budget.
 const MAX_TOOL_ITERATIONS: usize = 10;
 
 pub const DEFAULT_THREAD_TITLE: &str = "New chat";
 
-const SYSTEM_PROMPT: &str = "You are Eunomia's assistant. Use Australian English and never use em dashes. You have tools to search, recall, and write \
+const SYSTEM_PROMPT: &str = "Every numeric span in your text must match this turn's tool results or the user's message. Do not use numbered lists unless their numbers are supported. Never emit unresolved placeholders in chat text.
+For comparisons and rankings, use metric_eval group_by with an approved property or link:label, sort {property: value, descending: true}, and top_n as needed. Use one show_view with view ui and several named metric sources to display several metrics at once. A grouped metric can use view metric with the same arguments.
+You are Eunomia's assistant. Use Australian English and never use em dashes. You have tools to search, recall, and write \
 to the user's personal data layer: cached records from their connected \
 sources (`search`/`get`/`list`/`links`, `recall` for memory-ranked \
 retrieval across both), and an entity-memory graph of people, \
@@ -630,10 +625,12 @@ struct ModelCall<'a> {
 
 impl ModelCall<'_> {
     /// Sends the call (once more without reasoning when the model refuses tools while reasoning) and
-    /// reads the whole stream, sending each text delta on `tx`. Returns the text and the tool calls.
-    async fn run(&self, reasoning_off: &mut bool, tx: &mpsc::Sender<ChatEvent>) -> Result<(String, BTreeMap<usize, ToolCallAcc>), Failed> {
+    /// buffers the whole stream for prose validation. Returns text and tool calls.
+    async fn run(&self, reasoning_off: &mut bool) -> Result<(String, BTreeMap<usize, ToolCallAcc>), Failed> {
         let resp = loop {
-            let mut body = json!({ "model": self.model, "messages": self.messages, "tools": self.tools, "stream": true });
+            let mut body = json!({ "model": self.model, "messages": self.messages, "stream": true });
+            if !self.tools.is_empty() { body["tools"] = json!(self.tools); }
+            else { body["tool_choice"] = json!("none"); }
             if *reasoning_off {
                 body["reasoning_effort"] = json!("none");
             }
@@ -674,9 +671,8 @@ impl ModelCall<'_> {
                     }
                     let Ok(parsed) = serde_json::from_str::<StreamChunk>(payload) else { continue };
                     for choice in &parsed.choices {
-                        if let Some(delta_text) = apply_delta(&mut content, &mut tool_calls_acc, &choice.delta) {
-                            let _ = tx.send(ChatEvent::Text { delta: delta_text }).await;
-                        }
+                        // Buffer all text until its complete numeric spans can be checked.
+                        apply_delta(&mut content, &mut tool_calls_acc, &choice.delta);
                     }
                 }
             }
@@ -722,13 +718,20 @@ async fn run_send(
 
     let client = p.client().await.map_err(|e| (e.code, e.message))?;
     let url = p.url("chat/completions");
-    let model = provider::chat_model(&p).await;
+    let model = "gpt-6-luna";
 
+    let mut prose = crate::views::ui::prose::ChatProse::default();
+    prose.text(user_message);
     let mut reasoning_off = false;
     let limit = std::time::Duration::from_secs(settings.chat_model_timeout_secs);
-    for _ in 0..MAX_TOOL_ITERATIONS {
-        let call = ModelCall { client: &client, url: &url, bearer: p.bearer(), model: &model, tools: &tools, messages: &messages };
-        let (content, tool_calls_acc) = match tokio::time::timeout(limit, call.run(&mut reasoning_off, tx)).await {
+    for round in 0..=MAX_TOOL_ITERATIONS {
+        let final_turn = round == MAX_TOOL_ITERATIONS || tool_calls_made.len() >= MAX_TOOL_ITERATIONS;
+        if final_turn {
+            messages.push(json!({"role":"system","content":"The tool budget is exhausted. Give your final answer now using only this turn's results. State what you found and explicitly say which parts you could not finish. Do not list planned steps or request more tools."}));
+        }
+        let offered = if final_turn { &[][..] } else { tools.as_slice() };
+        let call = ModelCall { client: &client, url: &url, bearer: p.bearer(), model, tools: offered, messages: &messages };
+        let (content, tool_calls_acc) = match tokio::time::timeout(limit, call.run(&mut reasoning_off)).await {
             Ok(done) => done?,
             // what was stored so far ends on a user message or a tool result, so the thread takes the next message
             Err(_) => {
@@ -743,7 +746,10 @@ async fn run_send(
             }
         };
 
-        if tool_calls_acc.is_empty() {
+        let content = prose.safe(&content);
+        if tool_calls_acc.is_empty() || final_turn {
+            let content = if content.trim().is_empty() { "I could not complete a written answer. Please refer to the verified tool results above.".to_string() } else { content };
+            let _ = tx.send(ChatEvent::Text { delta: content.clone() }).await;
             persist(db, owner, thread_id, "assistant", &content, None, None).await.map_err(|e| (e.code, e.message))?;
             let _ = tx.send(ChatEvent::Done { reply: content, tool_calls_made }).await;
             return Ok(());
@@ -771,7 +777,10 @@ async fn run_send(
             let _ = tx.send(ChatEvent::ToolCall { id: tc.id.clone(), name: name.clone() }).await;
 
             let args: Value = serde_json::from_str(&tc.arguments).unwrap_or_else(|_| json!({}));
-            let result = if !chat_may_call(&name) {
+            let within_budget = tool_calls_made.len() < MAX_TOOL_ITERATIONS;
+            let result = if !within_budget {
+                json!({"error":"Tool budget exhausted. Answer using the available results and state what remains unfinished."})
+            } else if !chat_may_call(&name) {
                 json!({ "error": format!("`{name}` is not available in the in-app chat; the user can do this from the app itself") })
             } else if said.restates(&name, &args) && !resends_stored_text(db, owner, &name, &args).await {
                 json!({ "error": "Not saved: this text repeats a tool result or your own answer. Save only a new fact the user told you.", "code": ErrorCode::ValidationInvalid.as_str() })
@@ -781,7 +790,8 @@ async fn run_send(
                     Err(e) => e.to_tool_value(),
                 }
             };
-            tool_calls_made.push(name.clone());
+            if within_budget { tool_calls_made.push(name.clone()); }
+            prose.result(&result);
 
             said.tool_result(&result);
             let result_text = serde_json::to_string(&result).unwrap_or_else(|_| "null".to_string());
@@ -796,13 +806,7 @@ async fn run_send(
         said.row("assistant", &content);
     }
 
-    let limit_msg = format!(
-        "I wasn't able to finish after {MAX_TOOL_ITERATIONS} tool calls -- stopping here rather than looping \
-         further. Try rephrasing or breaking the request down."
-    );
-    persist(db, owner, thread_id, "assistant", &limit_msg, None, None).await.map_err(|e| (e.code, e.message))?;
-    let _ = tx.send(ChatEvent::Done { reply: limit_msg, tool_calls_made }).await;
-    Ok(())
+    unreachable!("the last iteration always returns a final answer")
 }
 
 #[cfg(test)]

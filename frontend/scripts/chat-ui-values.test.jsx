@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import MetricView from "../src/components/chat/views/MetricView";
 import UiView from "../src/components/chat/ui/UiView";
 import Chart from "../src/components/chat/ui/Charts";
 import DataBlock from "../src/components/chat/ui/Blocks";
@@ -117,4 +118,22 @@ test("UI prose never reparses Markdown entities or escapes", () => {
     expect(html).not.toContain("½");
     expect(html).not.toContain("<strong>bold</strong>");
   }
+});
+
+
+test("grouped metric view displays server groups and keeps a missing value missing", () => {
+  const html = renderToStaticMarkup(<MetricView view={{view: "metric", text: "Sales by group", entities: [], metric: {
+    metric: "sales", kind: "sale", vault: "vault:test", description: null, expr_words: "Sum of sales", value: null,
+    unit: "AUD", as_of: "2026-11-10T00:00:00Z", n_entities: 3, entity_ids: [], truncated: false, status: "approved", warnings: [],
+    groups: [
+      {group: {entity_id: "entity:store", name: "Store"}, value: 40.25, n_entities: 2, entity_ids: [], truncated: false},
+      {group: null, value: null, n_entities: 1, entity_ids: [], truncated: false},
+    ],
+  }}} />);
+  expect(html).toContain("Store");
+  expect(html).toContain("40.25");
+  expect(html).toContain("Unassigned");
+  expect(html).toContain("none");
+  expect(html).not.toContain("No value");
+  expect(html).not.toContain("0.00");
 });

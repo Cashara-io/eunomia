@@ -4,7 +4,9 @@ use serde_json::{json, Value};
 fn ok(v: Value) -> Value { assert!(v.get("error").is_none(),"{v}"); v }
 fn spec() -> Value { json!({"root":"a","elements":{"a":{"type":"Table","props":{"title":"Rows","summary":"Approved values","data":{"$state":"/sources/sample"}}}}}) }
 async fn sample() -> (TestApp, String) {
-    let app=TestApp::new().await;
+    sample_with(TestApp::new().await).await
+}
+async fn sample_with(app: TestApp) -> (TestApp, String) {
     let vault=ok(app.tool("ontology_get",json!({})).await)["vault"].as_str().unwrap().to_string();
     ok(app.tool("ontology_propose",json!({"kinds":[{"kind":"sample"}],"properties":[{"kind":"sample","name":"amount","datatype":"money","unit":"AUD"},{"kind":"sample","name":"share","datatype":"percent","unit":"%"},{"kind":"sample","name":"label","datatype":"text"}]})).await);
     for (path,body) in [("kinds",json!({"kind":"sample","decision":{"action":"approve"}})),("properties",json!({"kind":"sample","name":"amount","decision":{"action":"approve"}})),("properties",json!({"kind":"sample","name":"share","decision":{"action":"approve"}})),("properties",json!({"kind":"sample","name":"label","decision":{"action":"approve"}}))] {
@@ -405,4 +407,184 @@ async fn selectors_resolve_approved_digit_properties_and_reject_model_aliases() 
     args["spec"]["elements"]["chart"]["props"]["data"]["$state"] = json!("/sources/revenue_999/rows");
     let denied = app.tool("show_view", args).await;
     assert!(denied.to_string().contains("identifier"), "{denied}");
+}
+
+#[tokio::test]
+async fn grouped_metrics_rank_properties_and_links_and_batch_views() {
+    let (app, vault) = sample().await;
+    for (name, label, amount) in [("Three", "Alpha", 30.0), ("Four", "Beta", 12.0)] {
+        let entity = ok(app.tool("memory_write",json!({"subject_name":name,"subject_kind":"sample","text":"A sample"})).await)["entity"]["id"].clone();
+        for (property, value) in [("amount",json!(amount)),("label",json!(label))] {
+            ok(app.tool("entity_set_property",json!({"entity_id":entity,"property":property,"value":value})).await);
+        }
+    }
+    ok(app.tool("ontology_propose",json!({"metrics":[{"kind":"sample","name":"total_amount","expr":{"agg":"sum","property":"amount"}}]})).await);
+    let (s, b) = app.http_session("POST",&format!("/api/vaults/{vault}/ontology/metrics/decide"),Some(json!({"kind":"sample","name":"total_amount","decision":{"action":"approve"}}))).await;
+    assert_eq!(s,200,"{b}");
+    let args = json!({"metric":"total_amount","kind":"sample","vault_id":vault,"group_by":"label","sort":{"property":"value","descending":true},"top_n":2});
+    let ranked = ok(app.tool("metric_eval", args.clone()).await);
+    assert_eq!(ranked["unit"], "AUD");
+    let groups = ranked["groups"].as_array().unwrap();
+    assert_eq!(groups.len(),2);
+    assert_eq!((groups[0]["group"].clone(),groups[0]["value"].clone()),(json!("Alpha"),json!(40.25)));
+    assert_eq!((groups[1]["group"].clone(),groups[1]["value"].clone()),(json!("alpha"),json!(20.75)));
+    assert_eq!(groups[0]["entity_ids"].as_array().unwrap().len(),2);
+    assert_eq!(groups[1]["entity_ids"].as_array().unwrap().len(),1);
+    assert_eq!(ranked["n_entities"],4); // before top_n
+    let mut ascending = args.clone(); ascending["sort"]["descending"] = json!(false); ascending["top_n"] = json!(1);
+    let lowest = ok(app.tool("metric_eval",ascending).await);
+    assert_eq!(lowest["groups"][0]["group"],"Beta");
+    assert_eq!(lowest["groups"][0]["value"],12.0);
+    // Same schema and result over MCP, including Claude Code's text result.
+    let (_, rpc) = app.http("POST","/mcp",Some(json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"metric_eval","arguments":args}})),true).await;
+    let terminal: Value = serde_json::from_str(rpc["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(terminal["groups"],ranked["groups"]);
+    let mut view = args.clone(); view["view"] = json!("metric");
+    let shown = ok(app.tool("show_view",view).await);
+    assert!(shown["text"].as_str().unwrap().contains("40.25 AUD"));
+    let mut source = args.clone(); source["type"] = json!("metric");
+    let batch = ok(app.tool("show_view",json!({"view":"ui","spec":{"root":"root","elements":{
+        "root":{"type":"Stack","props":{},"children":["a","b"]},
+        "a":{"type":"Table","props":{"title":"Members {{sources.ranked.metric.groups[0].n_entities}}","summary":"Ranked totals","data":{"$state":"/sources/ranked/metric/groups"}}},
+        "b":{"type":"Stat","props":{"title":"All sales","summary":"All sales","data":{"$state":"/sources/total/metric/value"}}}
+    }},"sources":{"ranked":source,"total":{"type":"metric","metric":"total_amount","kind":"sample","vault_id":vault}}})).await);
+    assert_eq!(batch["spec"]["elements"]["a"]["props"]["title"],"Members 2");
+    assert_eq!(batch["data"]["sources"]["ranked"]["metric"]["groups"],ranked["groups"]);
+    assert_eq!(batch["data"]["sources"]["total"]["metric"]["value"],73.0);
+    // Ratios must be recomputed over group totals, rather than averaging row ratios.
+    for (i,id) in groups[0]["entity_ids"].as_array().unwrap().iter().enumerate() {
+        ok(app.tool("entity_set_property",json!({"entity_id":id,"property":"share","value":if i == 0 { 10 } else { 30 }})).await);
+    }
+    ok(app.tool("ontology_propose",json!({"metrics":[{"kind":"sample","name":"amount_ratio","unit":"%","expr":{"agg":"ratio","numerator":{"agg":"sum","property":"amount"},"denominator":{"agg":"sum","property":"share"}}}]})).await);
+    let ratio = ok(app.tool("metric_eval",json!({"metric":"amount_ratio","kind":"sample","vault_id":vault,"allow_unapproved":true,"group_by":"label","filters":[{"property":"label","op":"eq","value":"Alpha"}]})).await);
+    let alpha = ratio["groups"].as_array().unwrap().iter().find(|r| r["group"] == "Alpha").unwrap();
+    assert!((alpha["value"].as_f64().unwrap() - 100.625).abs() < 1e-9);
+    assert_eq!(ratio["unit"],"%");
+    let supplier = ok(app.tool("memory_write",json!({"subject_name":"Supplier","subject_kind":"organisation","text":"A supplier"})).await)["entity"]["id"].clone();
+    ok(app.tool("ontology_propose",json!({"links":[{"from_kind":"sample","label":"supplied_by","to_kind":"organisation"}]})).await);
+    let mut linked = args.clone(); linked["group_by"] = json!("link:supplied_by");
+    assert!(app.tool("metric_eval",linked.clone()).await.get("error").is_some());
+    let (s,b) = app.http_session("POST",&format!("/api/vaults/{vault}/ontology/links/decide"),Some(json!({"from_kind":"sample","label":"supplied_by","to_kind":"organisation","decision":{"action":"approve"}}))).await;
+    assert_eq!(s,200,"{b}");
+    for id in groups[0]["entity_ids"].as_array().unwrap() { ok(app.tool("entity_relate",json!({"from_id":id,"label":"supplied_by","to_id":supplier})).await); }
+    let linked = ok(app.tool("metric_eval",linked).await);
+    assert_eq!(linked["groups"][0]["group"]["entity_id"],supplier);
+    assert_eq!(linked["groups"][0]["value"],40.25);
+    assert_eq!(linked["groups"][1]["group"],Value::Null);
+    assert_eq!(linked["groups"][1]["value"],32.75);
+    assert_eq!(linked["groups"][0]["entity_ids"],groups[0]["entity_ids"]);
+    for extra in [json!({"group_by":"unknown"}), json!({"group_by":"label","group_by_grain":true}), json!({"group_by":"label","top_n":0}), json!({"group_by":"label","sort":{"property":"unknown"}})] {
+        let mut bad = args.clone(); bad.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        assert!(app.tool("metric_eval",bad).await.get("error").is_some());
+    }
+}
+
+fn model_reply(delta: Value) -> String {
+    format!("data: {}\n\ndata: [DONE]\n\n",json!({"choices":[{"delta":delta}]}))
+}
+async fn scripted_chat(mock: &eunomia_backend::sources::mock::Mock) -> (TestApp, String) {
+    let settings = eunomia_backend::config::Settings { openai_base_url:mock.base.clone(), openai_chat_model:"gpt-6-luna".into(), ..common::test_settings() };
+    sample_with(TestApp::with_settings(settings).await).await
+}
+async fn chat_events(app: &TestApp, message: &str) -> (Vec<Value>, String) {
+    use eunomia_backend::{chat::service, rid};
+    let db = app.db().await;
+    let thread = common::sys(service::create_thread(&db,&app.user.id,None)).await.unwrap();
+    let id = rid::parse(&thread.id).unwrap();
+    let (tx, mut rx) = tokio::sync::mpsc::channel(256);
+    common::sys(service::send_stream(app.state.org(&app.user.org).await.unwrap(),app.user.clone(),id.clone(),message.into(),tx)).await;
+    let mut events = Vec::new();
+    while let Some(e) = rx.recv().await { events.push(serde_json::to_value(e).unwrap()); }
+    let history = common::sys(service::history(&db,&app.user.id,&id)).await.unwrap().unwrap();
+    (events,serde_json::to_string(&history).unwrap())
+}
+#[tokio::test]
+async fn exhausted_chat_budget_runs_a_final_answer_without_tools() {
+    use eunomia_backend::sources::mock::{route,serve};
+    let tool = model_reply(json!({"tool_calls":[{"index":0,"id":"next","function":{"name":"metric_eval","arguments":json!({"metric":"total_amount","kind":"sample","allow_unapproved":true}).to_string()}}]}));
+    let answer = "The total is $31.00. I could not finish the store ranking.";
+    let mock = serve(vec![route("POST","/chat/completions",Value::Null).raw(&tool).times(10),route("POST","/chat/completions",Value::Null).raw(&model_reply(json!({"content":answer})))]).await;
+    let (app,_) = scripted_chat(&mock).await;
+    ok(app.tool("ontology_propose",json!({"metrics":[{"kind":"sample","name":"total_amount","expr":{"agg":"sum","property":"amount"}}]})).await);
+    let (events,history) = chat_events(&app,"Compare the departments and rank the stores").await;
+    assert_eq!(events.last().unwrap()["reply"],answer,"{events:?}");
+    assert!(history.contains(answer));
+    let requests: Vec<_> = mock.requests().into_iter().filter(|r| r.path == "/chat/completions").collect();
+    assert_eq!(requests.len(),11);
+    let final_request: Value = serde_json::from_str(&requests.last().unwrap().body).unwrap();
+    assert_eq!(final_request["tool_choice"],"none");
+    assert!(final_request.get("tools").is_none());
+    for request in requests { assert_eq!(serde_json::from_str::<Value>(&request.body).unwrap()["model"],"gpt-6-luna"); }
+}
+#[tokio::test]
+async fn unsupported_chat_numbers_and_placeholders_never_stream_or_persist() {
+    use eunomia_backend::sources::mock::{route,serve};
+    for bad in ["Bakery sales were $999,777.00.","Bakery sales were $0.00.","There were {{sources.sales.total_rows}} observations.","There were {{sources.sales.total_rows observations.","Sales were ９９９７７７."] {
+        let mock = serve(vec![route("POST","/chat/completions",Value::Null).raw(&model_reply(json!({"content":bad})))]).await;
+        let (app,_) = scripted_chat(&mock).await;
+        let (events,history) = chat_events(&app,"Show the bakery sales").await;
+        assert!(!history.contains(bad),"{history}");
+        for event in &events {
+            if let Some(text) = event["delta"].as_str().or(event["reply"].as_str()) {
+                assert!(!text.contains("999") && !text.contains("$0") && !text.contains("{{"),"{text}");
+            }
+        }
+        assert!(events.last().unwrap()["reply"].as_str().unwrap().contains("removed an unsupported"));
+    }
+}
+#[tokio::test]
+async fn chat_resolves_valid_histogram_placeholders_and_allows_verified_numbers() {
+    use eunomia_backend::sources::mock::{route,serve};
+    let mock = serve(vec![]).await;
+    let (app,vault) = scripted_chat(&mock).await;
+    let view = json!({"view":"ui","spec":{"root":"h","elements":{"h":{"type":"Histogram","props":{"title":"Distribution","summary":"Amounts","data":{"$state":"/sources/sales/distributions/amount/bins"}}}}},"sources":{"sales":{"type":"dataset","vault_id":vault,"kind":"sample","properties":["amount"]}}});
+    let tool = model_reply(json!({"tool_calls":[{"index":0,"id":"histogram","function":{"name":"show_view","arguments":view.to_string()}}]}));
+    mock.set_routes(vec![route("POST","/chat/completions",Value::Null).raw(&tool).times(1),route("POST","/chat/completions",Value::Null).raw(&model_reply(json!({"content":"There were {{sources.sales.total_rows}} observations. The total was $31.00."})))]);
+    let (events,history) = chat_events(&app,"Show the amount distribution").await;
+    let answer = events.last().unwrap()["reply"].as_str().unwrap();
+    assert_eq!(answer,"There were 2 observations. The total was $31.00.","{events:?}");
+    assert!(history.contains(answer));
+    assert!(!history.contains("{{sources"));
+}
+
+#[tokio::test]
+async fn chat_uses_whole_numeric_spans_and_only_current_turn_evidence() {
+    use eunomia_backend::sources::mock::{route,serve};
+    let mock = serve(vec![]).await;
+    let (app,_) = scripted_chat(&mock).await;
+    for (raw, question, expected) in [
+        ("The supplied amount was $615,548.00.","Explain the supplied 615548",true),
+        ("The supplied amount was $615,549.00.","Explain the supplied 615548",false),
+        ("The supplied count was 12.","Explain 1 and 2",false),
+        ("The supplied count was 9007199254740993.","Explain 9007199254740992",false),
+        ("The supplied amount was -12.","Explain 12",false),
+        ("The supplied count was １２.","Explain 12",true),
+        ("The count is ｛｛sources.sales.total_rows｝｝.","Explain the count",false),
+    ] {
+        mock.set_routes(vec![route("POST","/chat/completions",Value::Null).raw(&model_reply(json!({"content":raw})))]);
+        let (events,_) = chat_events(&app,question).await;
+        let answer = events.last().unwrap()["reply"].as_str().unwrap();
+        assert_eq!(!answer.contains("removed an unsupported"),expected,"{raw}: {events:?}");
+    }
+}
+
+#[tokio::test]
+async fn bakery_metric_result_does_not_authorise_a_made_up_zero() {
+    use eunomia_backend::sources::mock::{route,serve};
+    let mock = serve(vec![]).await;
+    let (app,_) = scripted_chat(&mock).await;
+    let rows = ok(app.tool("show_view",json!({"view":"ui","spec":spec(),"sources":{"sample":{"type":"dataset","vault_id":ok(app.tool("ontology_get",json!({})).await)["vault"],"kind":"sample","properties":["amount"]}}})).await);
+    for row in rows["data"]["sources"]["sample"]["rows"].as_array().unwrap() {
+        let value = if row["name"] == "One" { 615527.25 } else { 20.75 };
+        ok(app.tool("entity_set_property",json!({"entity_id":row["entity_id"],"property":"amount","value":value})).await);
+    }
+    ok(app.tool("ontology_propose",json!({"metrics":[{"kind":"sample","name":"bakery_sales","expr":{"agg":"sum","property":"amount"}}]})).await);
+    let args = json!({"metric":"bakery_sales","kind":"sample","allow_unapproved":true});
+    assert_eq!(ok(app.tool("metric_eval",args.clone()).await)["value"],615548.0);
+    let call = model_reply(json!({"tool_calls":[{"index":0,"id":"bakery","function":{"name":"metric_eval","arguments":args.to_string()}}]}));
+    mock.set_routes(vec![route("POST","/chat/completions",Value::Null).raw(&call).times(1),route("POST","/chat/completions",Value::Null).raw(&model_reply(json!({"content":"Bakery had no records and sales were $0.00."})))]);
+    let (events,history) = chat_events(&app,"Show weekly bakery sales").await;
+    assert!(events.last().unwrap()["reply"].as_str().unwrap().contains("removed an unsupported"),"{events:?}");
+    assert!(!history.contains("$0.00"));
+    assert!(!events.iter().any(|e| e["delta"].as_str().is_some_and(|s| s.contains("$0.00"))));
 }

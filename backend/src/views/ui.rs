@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashSet};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use surrealdb::types::RecordId;
-mod prose;
+pub(crate) mod prose;
 use crate::{error::{AppError, AppResult}, ontology::dataset, pool::OrgDb};
 use super::{View, ViewSpec};
 
@@ -116,7 +116,7 @@ fn trusted_number(data: &Value, path: &str) -> bool {
         };
     }
     match source["view"].as_str() {
-        Some("metric") => matches!(rest, ["metric", "value" | "n_entities"] | ["metric", "series", _, "value" | "n"]),
+        Some("metric") => matches!(rest, ["metric", "value" | "n_entities"] | ["metric", "series", _, "value" | "n"] | ["metric", "groups", _, "value" | "n_entities"]),
         Some("scenario") => matches!(rest, ["result", "baseline" | "scenario", _, "value" | "delta" | "delta_pct" | "n_entities"] | ["result", "n_changed"]),
         _ => false,
     }
@@ -254,7 +254,7 @@ pub async fn resolve(db: &OrgDb, owner: &RecordId, mut spec: Value, sources: BTr
             },
             other => {
                 let view = match other {
-                    Source::Metric { args } => ViewSpec::Metric { metric: args.metric, kind: args.kind, vault_id: args.vault_id, filters: args.filters, as_of: args.as_of, group_by_grain: args.group_by_grain, allow_unapproved: args.allow_unapproved, related_to: args.related_to },
+                    Source::Metric { args } => ViewSpec::Metric { args },
                     Source::Scenario { scenario, headline } => ViewSpec::Scenario { scenario, headline },
                     Source::Impact { start_id, headline, affected } => ViewSpec::Impact { start_id, headline, affected },
                     Source::Subgraph { title, entity_ids, relation_ids } => ViewSpec::Subgraph { title, entity_ids, relation_ids },
@@ -366,6 +366,7 @@ pub fn sources_schema() -> Value {
             "sort":{"type":"object","properties":{"property":string,"descending":{"type":"boolean"}},"required":["property"]},
             "limit":{"type":"integer","minimum":1,"maximum":500},
             "aggregates":{"type":"array","description":"Omit for detailed rows, even when a table needs totals. All datasets return totals separately.","items":{"type":"object","additionalProperties":false,"properties":{"op":{"type":"string","enum":["count","sum","avg","min","max","median","distinct"]},"property":string},"required":["op"]}},
+            "top_n":{"type":"integer","minimum":1,"maximum":500},
             "metric":string,"as_of":string,"group_by_grain":{"type":"boolean"},"allow_unapproved":{"type":"boolean"},"related_to":{"type":"object"},
             "headline":{"type":"string","description":"REQUIRED inside each scenario or impact source"},
             "scenario":{"type":"object","description":"scenario_run arguments: vault_id, changes, metrics, optional as_of, impact_from and depth"},

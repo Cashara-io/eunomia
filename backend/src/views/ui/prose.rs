@@ -33,13 +33,14 @@ fn display(text: &str) -> String {
     })
 }
 fn normalise(text: &str) -> String { display(text).to_lowercase() }
+const CURRENCY_CODE: &str = r"(?:aed|afn|all|amd|ang|aoa|ars|aud|awg|azn|bam|bbd|bdt|bgn|bhd|bif|bmd|bnd|bob|brl|bsd|btn|bwp|byn|bzd|cad|cdf|chf|clp|cny|cop|crc|cuc|cup|cve|czk|djf|dkk|dop|dzd|egp|ern|etb|eur|fjd|fkp|gbp|gel|ghs|gip|gmd|gnf|gtq|gyd|hkd|hnl|hrk|htg|huf|idr|ils|inr|iqd|irr|isk|jmd|jod|jpy|kes|kgs|khr|kmf|kpw|krw|kwd|kyd|kzt|lak|lbp|lkr|lrd|lsl|lyd|mad|mdl|mga|mkd|mmk|mnt|mop|mru|mur|mvr|mwk|mxn|myr|mzn|nad|ngn|nio|nok|npr|nzd|omr|pab|pen|pgk|php|pkr|pln|pyg|qar|ron|rsd|rub|rwf|sar|sbd|scr|sdg|sek|sgd|shp|sle|sll|sos|srd|ssp|stn|svc|syp|szl|thb|tjs|tmt|tnd|top|try|ttd|twd|tzs|uah|ugx|usd|uyu|uzs|ves|vnd|vuv|wst|xaf|xag|xau|xba|xbb|xbc|xbd|xcd|xcg|xdr|xof|xpd|xpf|xpt|xst|xsu|xts|xua|xxx|yer|zar|zmw|zwg|zwl)";
 // Byte ranges in the normalised display. Whitespace cannot detach numeric modifiers.
 // Ordinary words, including "per cent", terminate a span.
 fn spans(text: &str) -> Vec<std::ops::Range<usize>> {
     static NUMBER: OnceLock<Regex> = OnceLock::new();
     let number = NUMBER.get_or_init(|| {
         // ISO currency codes from the local ICU currency enumeration, plus fund and metal codes.
-        let code = r"(?:aed|afn|all|amd|ang|aoa|ars|aud|awg|azn|bam|bbd|bdt|bgn|bhd|bif|bmd|bnd|bob|brl|bsd|btn|bwp|byn|bzd|cad|cdf|chf|clp|cny|cop|crc|cuc|cup|cve|czk|djf|dkk|dop|dzd|egp|ern|etb|eur|fjd|fkp|gbp|gel|ghs|gip|gmd|gnf|gtq|gyd|hkd|hnl|hrk|htg|huf|idr|ils|inr|iqd|irr|isk|jmd|jod|jpy|kes|kgs|khr|kmf|kpw|krw|kwd|kyd|kzt|lak|lbp|lkr|lrd|lsl|lyd|mad|mdl|mga|mkd|mmk|mnt|mop|mru|mur|mvr|mwk|mxn|myr|mzn|nad|ngn|nio|nok|npr|nzd|omr|pab|pen|pgk|php|pkr|pln|pyg|qar|ron|rsd|rub|rwf|sar|sbd|scr|sdg|sek|sgd|shp|sle|sll|sos|srd|ssp|stn|svc|syp|szl|thb|tjs|tmt|tnd|top|try|ttd|twd|tzs|uah|ugx|usd|uyu|uzs|ves|vnd|vuv|wst|xaf|xag|xau|xba|xbb|xbc|xbd|xcd|xcg|xdr|xof|xpd|xpf|xpt|xst|xsu|xts|xua|xxx|yer|zar|zmw|zwg|zwl)";
+        let code = CURRENCY_CODE;
         let iso = r"[0-9]{4}-[0-9]{2}-[0-9]{2}(?:t[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?(?:z|[+-][0-9]{2}:[0-9]{2}))?";
         let modifier = r"[\p{Sc}+%‰-]";
         let connector = format!(r"(?:{modifier} *|[/\x{{2044}}e])");
@@ -301,7 +302,7 @@ fn bound(binding: &str, data: &Value) -> AppResult<String> {
         _ => None,
     };
     if trusted_number(data, &path) && let Some(n) = value.as_f64().filter(|n| n.is_finite()) {
-        let count = matches!(rest.as_slice(), ["total_rows"] | ["totals", _, "count" | "distinct"] | ["metric", "n_entities"] | ["metric", "series", _, "n"] | ["result", "n_changed"] | ["result", "baseline" | "scenario", _, "n_entities"] | ["distributions", _, "bins" | "density", _, "count"]);
+        let count = matches!(rest.as_slice(), ["total_rows"] | ["totals", _, "count" | "distinct"] | ["metric", "n_entities"] | ["metric", "groups", _, "n_entities"] | ["metric", "series", _, "n"] | ["result", "n_changed"] | ["result", "baseline" | "scenario", _, "n_entities"] | ["distributions", _, "bins" | "density", _, "count"]);
         let unit = if count { None } else if let Some(c) = column { c["unit"].as_str() }
             else if rest.first() == Some(&"metric") { source["metric"]["unit"].as_str() }
             else if matches!(rest.last(), Some(&"delta_pct")) { Some("%") }
@@ -313,7 +314,8 @@ fn bound(binding: &str, data: &Value) -> AppResult<String> {
     if typed_date && let Some(s) = value.as_str() && date(s).is_some() { return Ok(s.into()); }
     Err(binding_error(format!("text placeholder {{{{{binding}}}}} must bind a non-null server-typed numeric or date value"), data))
 }
-fn render(raw: &str, data: &Value, allowed: &Allowed, field: &str) -> AppResult<String> {
+type Substitutions = Vec<(std::ops::Range<usize>, String)>;
+fn interpolate(raw: &str, data: &Value, field: &str) -> AppResult<(String, Substitutions)> {
     let mut out = String::new();
     let mut rest = raw;
     let mut substitutions = Vec::new();
@@ -328,6 +330,10 @@ fn render(raw: &str, data: &Value, allowed: &Allowed, field: &str) -> AppResult<
     }
     if rest.contains("}}") { return Err(bad(format!("unexpected placeholder closing braces in {field}"))); }
     out.push_str(rest);
+    Ok((out, substitutions))
+}
+fn render(raw: &str, data: &Value, allowed: &Allowed, field: &str) -> AppResult<String> {
+    let (out, substitutions) = interpolate(raw, data, field)?;
     allowed.check(&out, &substitutions, field)?;
     Ok(display(&out))
 }
@@ -355,6 +361,74 @@ pub(super) fn resolve_allowed(value: &Value, data: &Value, allowed: &Allowed) ->
     let mut rendered = value.clone();
     walk(&mut rendered, "", data, allowed)?;
     Ok(rendered)
+}
+
+/// Current-turn evidence for assistant text. Uses the same NFKC display, whole-span
+/// scanner and placeholder resolver as UI prose. Previous assistant turns confer no trust.
+#[derive(Default)]
+pub(crate) struct ChatProse {
+    numbers: HashSet<String>,
+    sources: serde_json::Map<String, Value>,
+}
+fn numeric_key(span: &str) -> String {
+    // Compare the whole value, never digit substrings or the parts of a range.
+    // Formatting may add grouping commas, currency, or a percent sign.
+    static CODE: OnceLock<Regex> = OnceLock::new();
+    let code = CODE.get_or_init(|| Regex::new(&format!(r"^{CURRENCY_CODE} *| *{CURRENCY_CODE}$")).unwrap());
+    let plain = code.replace_all(span, "");
+    let plain = plain.trim_matches(|c: char| currency(c) || c.is_whitespace() || c == '%' || c == '‰').replace(',', "");
+    let negative = plain.starts_with('-');
+    let unsigned = plain.strip_prefix('-').or_else(|| plain.strip_prefix('+')).unwrap_or(&plain);
+    let mut parts = unsigned.split('.');
+    let whole = parts.next().unwrap_or("");
+    let fraction = parts.next().unwrap_or("");
+    if parts.next().is_some() || whole.is_empty() && fraction.is_empty()
+        || !whole.bytes().chain(fraction.bytes()).all(|c| c.is_ascii_digit()) {
+        return span.to_string();
+    }
+    let whole = whole.trim_start_matches('0');
+    let fraction = fraction.trim_end_matches('0');
+    let sign = if negative && (!whole.is_empty() || !fraction.is_empty()) { "-" } else { "" };
+    format!("{sign}{}.{}", if whole.is_empty() { "0" } else { whole }, fraction)
+}
+impl ChatProse {
+    pub(crate) fn text(&mut self, text: &str) {
+        let text = normalise(text);
+        for span in spans(&text) { self.numbers.insert(numeric_key(&text[span])); }
+    }
+    pub(crate) fn result(&mut self, value: &Value) {
+        match value {
+            Value::Number(n) => self.text(&n.to_string()),
+            Value::String(s) => {
+                self.text(s);
+                if let Some(d) = date(&normalise(s)) { self.text(d.split('T').next().unwrap_or(&d)); }
+            },
+            Value::Array(a) => for v in a { self.result(v); },
+            Value::Object(m) => for (key, v) in m {
+                // Digits inside opaque record IDs are not numeric evidence.
+                if key != "id" && key != "vault" && !key.ends_with("_id") && !key.ends_with("_ids") { self.result(v); }
+            },
+            _ => (),
+        }
+        if let Some(sources) = value.pointer("/data/sources").and_then(Value::as_object) { self.sources.extend(sources.clone()); }
+    }
+    pub(crate) fn check(&self, raw: &str) -> AppResult<String> {
+        let data = serde_json::json!({"sources":self.sources});
+        let (out, _) = interpolate(raw, &data, "assistant reply")?;
+        let out = out.lines().map(display).collect::<Vec<_>>().join("\n");
+        let normal = normalise(&out);
+        for span in spans(&normal) {
+            if !self.numbers.contains(&numeric_key(&normal[span.clone()])) {
+                return Err(bad(format!("unsupported number in assistant reply: {}", &normal[span])));
+            }
+        }
+        // Normalisation must not turn fullwidth braces into a new unresolved binding.
+        if out.contains("{{") || out.contains("}}") { return Err(bad("unresolved placeholder in assistant reply")); }
+        Ok(out)
+    }
+    pub(crate) fn safe(&self, raw: &str) -> String {
+        self.check(raw).unwrap_or_else(|_| "I removed an unsupported number or unresolved placeholder from this reply. I could not provide a reliable written summary. Any completed tool results are shown above.".into())
+    }
 }
 
 #[cfg(test)]

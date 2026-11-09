@@ -29,6 +29,7 @@ export type MetricRun = {
   status: "proposed" | "approved" | "rejected";
   warnings: string[];
   metric_mapped?: { from: string; to: string };
+  groups?: { group: string | number | boolean | null | { entity_id: string; name: string }; value: number | null; n_entities: number; entity_ids: string[]; truncated: boolean }[];
   series?: { period: string; value: number | null; n: number }[];
 };
 

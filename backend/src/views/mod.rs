@@ -25,7 +25,7 @@ use crate::authz::Action;
 use crate::entities::neighbourhood::{load_edges, load_nodes, EdgeRow, NodeRow};
 use crate::entities::service::{accessible, require_entity_id};
 use crate::error::{AppError, AppResult};
-use crate::ontology::metric::{self, EvalArgs, Filter, MetricEvalOut};
+use crate::ontology::metric::{self, EvalArgs, MetricEvalOut};
 use crate::ontology::scenario::{self, ScenarioArgs, ScenarioOut};
 use crate::pool::OrgDb;
 use crate::rid::RecordIdExt;
@@ -59,23 +59,7 @@ pub enum ViewSpec {
         relation_ids: Vec<String>,
     },
     /// The same arguments as `metric_eval`; there is no field for a value.
-    Metric {
-        metric: String,
-        #[serde(default)]
-        kind: Option<String>,
-        #[serde(default)]
-        vault_id: Option<String>,
-        #[serde(default)]
-        filters: Vec<Filter>,
-        #[serde(default)]
-        as_of: Option<String>,
-        #[serde(default)]
-        group_by_grain: bool,
-        #[serde(default)]
-        allow_unapproved: bool,
-        #[serde(default)]
-        related_to: Option<scenario::RelatedTo>,
-    },
+    Metric { #[serde(flatten)] args: EvalArgs },
     /// The same arguments as `scenario_run`, under `scenario`; there is no field for a number.
     Scenario { scenario: ScenarioArgs, headline: String },
 }
@@ -199,8 +183,7 @@ pub async fn show(db: &OrgDb, owner: &RecordId, spec: ViewSpec) -> AppResult<Sho
             }
             View::Subgraph { title: clean("title", &title, MAX_HEADLINE)?, entities, relations }
         }
-        ViewSpec::Metric { metric, kind, vault_id, filters, as_of, group_by_grain, allow_unapproved, related_to } => {
-            let args = EvalArgs { metric, kind, vault_id, filters, as_of, group_by_grain, allow_unapproved, related_to };
+        ViewSpec::Metric { args } => {
             let out = metric::eval(db, owner, &args).await?;
             let ids = out.entity_ids.iter().map(String::as_str);
             let graph = Resolved::load(db, owner, ids, std::iter::empty()).await?;
@@ -421,11 +404,11 @@ pub fn number(value: f64, unit: Option<&str>) -> String {
 }
 
 fn metric_text(m: &MetricEvalOut, entities: &[EntityRef]) -> String {
-    let value = match (&m.series, m.value) {
+    let value = if m.groups.is_some() { "by group".to_string() } else { match (&m.series, m.value) {
         (Some(_), _) => "a series".to_string(),
         (None, Some(v)) => number(v, m.unit.as_deref()),
         (None, None) => "no value".to_string(),
-    };
+    }};
     let mut out = format!("{}: {value}", m.metric);
     if m.status != crate::ontology::Status::Approved {
         out.push_str(" (not approved yet)");
@@ -438,6 +421,10 @@ fn metric_text(m: &MetricEvalOut, entities: &[EntityRef]) -> String {
     let date = m.as_of.get(..10).unwrap_or(&m.as_of);
     let noun = if m.n_entities == 1 { words(&m.kind) } else { format!("{}s", words(&m.kind)) };
     out.push_str(&format!("\nAs of {date}, from {} {noun}.", m.n_entities));
+    for g in m.groups.iter().flatten() {
+        let value = g.value.map(|v| number(v, m.unit.as_deref())).unwrap_or_else(|| "no value".into());
+        out.push_str(&format!("\n- {}: {value}", g.group));
+    }
     for p in m.series.iter().flatten() {
         let v = p.value.map(|v| number(v, m.unit.as_deref())).unwrap_or_else(|| "no value".into());
         out.push_str(&format!("\n- {}: {v} ({})", p.period, p.n));

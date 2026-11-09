@@ -7,6 +7,8 @@
 //! by name; a proposed one runs only when the caller asks for an unapproved run, and the result says so.
 //! Every number comes back with the entities it was computed from.
 
+mod grouping;
+
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use chrono::Datelike;
@@ -1129,6 +1131,10 @@ pub async fn decide_metric(db: &OrgDb, user: &RecordId, vault: &RecordId, kind: 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EvalArgs {
+    /// Approved property, or link:label for an approved outgoing link.
+    pub group_by: Option<String>,
+    pub sort: Option<super::dataset::Sort>,
+    pub top_n: Option<usize>,
     pub metric: String,
     #[serde(default)]
     pub kind: Option<String>,
@@ -1167,6 +1173,8 @@ pub struct Period {
 /// A metric's number, with the entities it came from.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct MetricEvalOut {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub groups: Option<Vec<grouping::Group>>,
     pub metric: String,
     pub kind: String,
     pub vault: String,
@@ -1596,6 +1604,7 @@ pub(super) struct Prepared {
     entities: Vec<String>,
     values: Values,
     series: bool,
+    grouping: Option<grouping::Grouping>,
     /// A filter value listed nowhere: `out` already says nothing was computed.
     nothing: bool,
 }
@@ -1614,6 +1623,12 @@ pub(super) async fn eval_object(db: &OrgDb, vault: &RecordId, args: &EvalArgs, e
 }
 
 async fn prepare_scoped(db: &OrgDb, vault: &RecordId, args: &EvalArgs, entity: Option<&RecordId>) -> AppResult<Prepared> {
+    if args.group_by.is_some() && args.group_by_grain {
+        return Err(AppError::bad_request("choose group_by or group_by_grain, not both"));
+    }
+    if args.group_by.is_none() && (args.sort.is_some() || args.top_n.is_some()) {
+        return Err(AppError::bad_request("sort and top_n need group_by"));
+    }
     let vault = vault.clone();
     let asked = metric_name(&args.metric)?;
     let row = match args.kind.as_deref().map(str::trim).filter(|k| !k.is_empty()) {
@@ -1704,6 +1719,7 @@ async fn prepare_scoped(db: &OrgDb, vault: &RecordId, args: &EvalArgs, entity: O
     let percent = crate::views::is_percent(unit.as_deref());
     let unit = if percent { Some("%".to_string()) } else { unit };
     let mut out = MetricEvalOut {
+        groups: None,
         metric: row.name.clone(),
         kind: kind.as_str().to_string(),
         vault: vault.to_string(),
@@ -1737,7 +1753,7 @@ async fn prepare_scoped(db: &OrgDb, vault: &RecordId, args: &EvalArgs, entity: O
             Some(Related::load(db, &vault, &named, r, &mut out.warnings).await?)
         }
     };
-    let mut prepared = Prepared { out, plan, props, kind, entities: Vec::new(), values: HashMap::new(), series: args.group_by_grain, nothing: false };
+    let mut prepared = Prepared { out, plan, props, kind, entities: Vec::new(), values: HashMap::new(), series: args.group_by_grain, grouping: None, nothing: false };
     if !unlisted.is_empty() {
         // a filter value listed nowhere matches nothing: say so instead of returning 0
         prepared.out.warnings.extend(unlisted.iter().map(|u| format!("{}. Nothing was computed: this is not a 0", u.sentence())));
@@ -1765,6 +1781,7 @@ async fn prepare_scoped(db: &OrgDb, vault: &RecordId, args: &EvalArgs, entity: O
             prepared.out.expr_words.push_str(&format!(", on {n} {} {}", plural(n, kind), r.said));
         }
     }
+    prepared.grouping = grouping::Grouping::load(db, &vault, &prepared, args, as_of).await?;
     Ok(prepared)
 }
 
@@ -1798,7 +1815,11 @@ impl Prepared {
         let conds: Vec<&Cond> = plan.filters.iter().chain(plan.sides.iter().flat_map(|s| &s.filters)).collect();
         out.warnings.extend(anchor_warnings(&conds, &refs, values));
 
-        let used = if let (true, Some((t, grain))) = (self.series, &plan.time) {
+        let used = if let Some(grouping) = &self.grouping {
+            let (groups, used) = grouping.run(plan, &refs, values, props, &mut out.warnings);
+            out.groups = Some(groups);
+            used
+        } else if let (true, Some((t, grain))) = (self.series, &plan.time) {
             let mut periods: BTreeMap<String, Vec<&String>> = BTreeMap::new();
             let mut undated = 0;
             for e in &refs {
