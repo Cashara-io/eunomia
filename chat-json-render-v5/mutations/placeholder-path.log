@@ -1,0 +1,22 @@
+   Compiling eunomia-backend v2.2.0 (/Users/avi/.t3/worktrees/eunomia/t3-d939985c/backend)
+    Finished `test` profile [unoptimized] target(s) in 56.75s
+     Running unittests src/lib.rs (target/debug/deps/eunomia_backend-6752a40dd26841bc)
+
+running 1 test
+test views::ui::prose::tests::placeholders_resolve_one_typed_path_with_server_currency ... FAILED
+
+failures:
+
+---- views::ui::prose::tests::placeholders_resolve_one_typed_path_with_server_currency stdout ----
+
+thread 'views::ui::prose::tests::placeholders_resolve_one_typed_path_with_server_currency' (70913664) panicked at src/views/ui/prose.rs:285:301:
+{{sources.other.rows[0].amount}}
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    views::ui::prose::tests::placeholders_resolve_one_typed_path_with_server_currency
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 522 filtered out; finished in 0.03s
+
+error: test failed, to rerun pass `--lib`

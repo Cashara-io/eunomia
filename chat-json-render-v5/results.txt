@@ -1,0 +1,17 @@
+Final runtime source: 12f0f63e. Final documentation head recorded in source-trees.json.
+Clippy all-targets -D warnings: PASS.
+Serial hardened backend: 524 lib, 11 chat UI, 110 ontology, 1 golden-tools, 2 OpenAPI, 1 round-trip: PASS. Two existing opt-in fixtures ignored.
+Frontend lint, typecheck, build and catalogue sync: PASS.
+Renderer: 12 tests, 201 assertions: PASS.
+Playwright both specs against final catalogue/runtime: 9 PASS.
+Mutations: 9 bound-prose, 2 retained backend, 2 frontend. All 13 intended regressions failed, source restored.
+Six fresh gpt-6-luna questions: Line, Donut, Histogram, Scatter, Scenario, Table. Every final view uses placeholders.
+Independent CSV audit: 436 numeric fields matched within0.01, across7 successful UI calls.
+Independent prose audit: 9 exact formatted substitutions matched, including currency and server terminal text.
+Histogram needed no user correction to its final view, but one follow-up corrected placeholder syntax in its ordinary chat reply. Both UI calls and all recovery history retained.
+Six screenshots captured and inspected, encoded as true PNG with decoded pixel equality,3024x1898. No crop/resize.
+Earlier failures and attempts retained separately. No key/cookie/launcher/runtime logs published.
+No cargo fmt. No merge. Only owned resources cleaned.
+Final source head: 27e0f195eeff9937ec1912b12176e027c5e23561
+Runtime backend/frontend trees exactly match final source head.
+Cleanup verified complete.

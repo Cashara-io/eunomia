@@ -1,0 +1,94 @@
+{
+  "question": "Monthly trend: In memory space vault:pf55df5138a9000d862a, show a Line chart of sample amount summed by month using the date property. Use show_view ui with a dataset source. Include a measured total or count in the title through a bound placeholder.",
+  "thread": {
+    "id": "chat_thread:9msyysfcv79sw6cjslfz",
+    "title": "New chat",
+    "created_at": "2026-11-09T11:53:55.281788382Z",
+    "updated_at": "2026-11-09T11:53:55.281794507Z"
+  },
+  "history": [
+    {
+      "role": "user",
+      "content": "Monthly trend: In memory space vault:pf55df5138a9000d862a, show a Line chart of sample amount summed by month using the date property. Use show_view ui with a dataset source. Include a measured total or count in the title through a bound placeholder.",
+      "tool_calls": null,
+      "thread_id": "chat_thread:9msyysfcv79sw6cjslfz",
+      "created_at": "2026-11-09T11:53:55.416225298Z"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"question\":\"Monthly trend: In memory space vault:pf55df5138a9000d862a, show a Line chart of sample amount summed by month using the date property. Use show_view ui with a dataset source. Include a measured total or count in the title through a bound placeholder.\",\"vault_id\":\"vault:pf55df5138a9000d862a\"}",
+            "name": "ontology_coverage"
+          },
+          "id": "call_oKppS1NtgQL1LSKEbQnS7inV",
+          "type": "function"
+        }
+      ],
+      "thread_id": "chat_thread:9msyysfcv79sw6cjslfz",
+      "created_at": "2026-11-09T11:53:58.218785758Z"
+    },
+    {
+      "role": "tool",
+      "content": "{\"vault\":\"vault:pf55df5138a9000d862a\",\"vault_name\":\"Personal\",\"coverage\":1.0,\"matched\":[{\"phrase\":\"sample amount\",\"term\":\"kind\",\"name\":\"sample\",\"distance\":0.296},{\"phrase\":\"date\",\"term\":\"property\",\"name\":\"date\",\"of_kind\":\"sample\",\"distance\":0.0}],\"uncovered\":[],\"chosen_by\":\"vault_id\",\"suggestion\":\"Every term maps to the vault's approved ontology: answer a number with metric_eval and a what-if with scenario_run, passing this vault as vault_id.\",\"mode\":\"model\"}",
+      "tool_calls": null,
+      "thread_id": "chat_thread:9msyysfcv79sw6cjslfz",
+      "created_at": "2026-11-09T11:54:04.604820053Z"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"vault_id\":\"vault:pf55df5138a9000d862a\",\"kind\":\"sample\"}",
+            "name": "ontology_get"
+          },
+          "id": "call_dHvRHbRMchRM0HquJ11HWU8L",
+          "type": "function"
+        }
+      ],
+      "thread_id": "chat_thread:9msyysfcv79sw6cjslfz",
+      "created_at": "2026-11-09T11:54:06.656750637Z"
+    },
+    {
+      "role": "tool",
+      "content": "{\"vault\":\"vault:pf55df5138a9000d862a\",\"strict\":false,\"kinds\":[{\"kind\":\"sample\",\"built_in\":false,\"status\":\"approved\",\"description\":null,\"merge_into\":null,\"synonyms\":[],\"origin\":\"agent\",\"reason\":null,\"entities\":12,\"samples\":[\"Entry 1\",\"Entry 10\",\"Entry 11\"],\"properties\":[{\"name\":\"amount\",\"datatype\":\"money\",\"unit\":\"AUD\",\"enum_values\":null,\"description\":null,\"synonyms\":[],\"status\":\"approved\",\"merge_into\":null,\"origin\":\"agent\",\"reason\":null,\"values\":12,\"samples\":[\"80.50 AUD\",\"95.25 AUD\",\"180.00 AUD\"],\"source_map\":[{\"source\":\"document\",\"record_type\":\"document:f33l1e1bw5v8xhc37vbi\",\"path\":\"amount\"}]},{\"name\":\"date\",\"datatype\":\"date\",\"unit\":null,\"enum_values\":null,\"description\":null,\"synonyms\":[],\"status\":\"approved\",\"merge_into\":null,\"origin\":\"agent\",\"reason\":null,\"values\":12,\"samples\":[\"2026-05-01\",\"2026-03-01\",\"2026-01-01\"],\"source_map\":[{\"source\":\"document\",\"record_type\":\"document:f33l1e1bw5v8xhc37vbi\",\"path\":\"date\"}]},{\"name\":\"quantity\",\"datatype\":\"integer\",\"unit\":null,\"enum_values\":null,\"description\":null,\"synonyms\":[],\"status\":\"approved\",\"merge_into\":null,\"origin\":\"agent\",\"reason\":null,\"values\":12,\"samples\":[\"3\",\"2\",\"5\"],\"source_map\":[{\"source\":\"document\",\"record_type\":\"document:f33l1e1bw5v8xhc37vbi\",\"path\":\"quantity\"}]},{\"name\":\"share\",\"datatype\":\"percent\",\"unit\":\"%\",\"enum_values\":null,\"description\":null,\"synonyms\":[],\"status\":\"approved\",\"merge_into\":null,\"origin\":\"agent\",\"reason\":null,\"values\":12,\"samples\":[\"35.7 %\",\"60.0 %\",\"20.0 %\"],\"source_map\":[{\"source\":\"document\",\"record_type\":\"document:f33l1e1bw5v8xhc37vbi\",\"path\":\"share\"}]},{\"name\":\"supplier\",\"datatype\":\"text\",\"unit\":null,\"enum_values\":null,\"description\":null,\"synonyms\":[],\"status\":\"approved\",\"merge_into\":null,\"origin\":\"agent\",\"reason\":null,\"values\":12,\"samples\":[\"Metro\",\"Inland\",\"Coastal\"],\"source_map\":[{\"source\":\"document\",\"record_type\":\"document:f33l1e1bw5v8xhc37vbi\",\"path\":\"supplier\"}]}],\"metrics\":[{\"name\":\"total_amount\",\"description\":null,\"synonyms\":[],\"expr\":{\"agg\":\"sum\",\"property\":\"amount\"},\"expr_words\":\"Sum of amount\",\"unit\":\"AUD\",\"status\":\"approved\",\"merge_into\":null,\"origin\":\"agent\",\"reason\":null}]}],\"links\":[]}",
+      "tool_calls": null,
+      "thread_id": "chat_thread:9msyysfcv79sw6cjslfz",
+      "created_at": "2026-11-09T11:54:06.681697845Z"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"view\":\"ui\",\"sources\":{\"samples\":{\"type\":\"dataset\",\"vault_id\":\"vault:pf55df5138a9000d862a\",\"kind\":\"sample\",\"properties\":[\"date\",\"amount\"],\"group_by\":\"date\",\"bucket\":\"month\",\"aggregates\":[{\"op\":\"sum\",\"property\":\"amount\"}]}},\"spec\":{\"root\":\"trend\",\"elements\":{\"trend\":{\"type\":\"Line\",\"props\":{\"title\":\"Monthly sample amount total {{/sources/samples/totals/sum_amount/sum}}\",\"summary\":\"Sample amount summed by month\",\"data\":{\"$state\":\"/sources/samples/rows\"},\"x\":\"date\",\"y\":\"sum_amount\",\"format\":\"money\",\"xFormat\":\"date\"},\"children\":[]}}}}",
+            "name": "show_view"
+          },
+          "id": "call_gqrpNwE4IuTB2Q2gtwe9Vk71",
+          "type": "function"
+        }
+      ],
+      "thread_id": "chat_thread:9msyysfcv79sw6cjslfz",
+      "created_at": "2026-11-09T11:54:08.634406471Z"
+    },
+    {
+      "role": "tool",
+      "content": "{\"view\":\"ui\",\"spec\":{\"root\":\"trend\",\"elements\":{\"trend\":{\"type\":\"Line\",\"props\":{\"title\":\"Monthly sample amount total 1588.00 AUD\",\"summary\":\"Sample amount summed by month\",\"data\":{\"$state\":\"/sources/samples/rows\"},\"x\":\"date\",\"y\":\"sum_amount\",\"format\":\"money\",\"xFormat\":\"date\",\"series\":[\"sum_amount\"]},\"children\":[]}}},\"data\":{\"sources\":{\"samples\":{\"kind\":\"sample\",\"applied_dates\":[],\"rows\":[{\"date\":\"2026-01\",\"sum_amount\":200.75},{\"date\":\"2026-02\",\"sum_amount\":370.75},{\"date\":\"2026-03\",\"sum_amount\":240.5},{\"date\":\"2026-04\",\"sum_amount\":225.25},{\"date\":\"2026-05\",\"sum_amount\":280.5},{\"date\":\"2026-06\",\"sum_amount\":270.25}],\"columns\":[{\"key\":\"date\",\"datatype\":\"date\",\"unit\":null},{\"key\":\"sum_amount\",\"datatype\":\"money\",\"unit\":\"AUD\"}],\"totals\":{\"date\":{\"sum\":-0.0,\"avg\":null,\"count\":6.0,\"min\":null,\"max\":null,\"median\":null,\"distinct\":6.0},\"sum_amount\":{\"sum\":1588.0,\"avg\":264.6666666666667,\"count\":6.0,\"min\":200.75,\"max\":370.75,\"median\":255.375,\"distinct\":6.0}},\"distributions\":{\"sum_amount\":{\"bins\":[{\"start\":200.75,\"end\":257.4166666666667,\"count\":3},{\"start\":257.4166666666667,\"end\":314.0833333333333,\"count\":2},{\"start\":314.0833333333333,\"end\":370.75,\"count\":1}],\"box\":[{\"min\":200.75,\"max\":370.75,\"q1\":229.0625,\"median\":255.375,\"q3\":277.9375}],\"density\":[{\"value\":229.08333333333334,\"count\":3},{\"value\":285.75,\"count\":2},{\"value\":342.41666666666663,\"count\":1}]}},\"total_rows\":6,\"truncated\":false,\"status\":\"approved\",\"warnings\":[],\"parameters\":{\"limit\":null,\"as_of\":null,\"filters\":[]},\"bucket_column\":\"date\"}}},\"text\":\"Analysis\\nMonthly sample amount total 1588.00 AUD\\nSample amount summed by month\\n\\nSource samples:\\nStatus: approved. 6 rows.\\n- date: 2026-01; sum_amount: 200.75 AUD\\n- date: 2026-02; sum_amount: 370.75 AUD\\n- date: 2026-03; sum_amount: 240.50 AUD\\n- date: 2026-04; sum_amount: 225.25 AUD\\n- date: 2026-05; sum_amount: 280.50 AUD\\n- date: 2026-06; sum_amount: 270.25 AUD\\nTotals: {\\\"date\\\":{\\\"sum\\\":-0.0,\\\"avg\\\":null,\\\"count\\\":6.0,\\\"min\\\":null,\\\"max\\\":null,\\\"median\\\":null,\\\"distinct\\\":6.0},\\\"sum_amount\\\":{\\\"sum\\\":1588.0,\\\"avg\\\":264.6666666666667,\\\"count\\\":6.0,\\\"min\\\":200.75,\\\"max\\\":370.75,\\\"median\\\":255.375,\\\"distinct\\\":6.0}}\\nDistributions: {\\\"sum_amount\\\":{\\\"bins\\\":[{\\\"start\\\":200.75,\\\"end\\\":257.4166666666667,\\\"count\\\":3},{\\\"start\\\":257.4166666666667,\\\"end\\\":314.0833333333333,\\\"count\\\":2},{\\\"start\\\":314.0833333333333,\\\"end\\\":370.75,\\\"count\\\":1}],\\\"box\\\":[{\\\"min\\\":200.75,\\\"max\\\":370.75,\\\"q1\\\":229.0625,\\\"median\\\":255.375,\\\"q3\\\":277.9375}],\\\"density\\\":[{\\\"value\\\":229.08333333333334,\\\"count\\\":3},{\\\"value\\\":285.75,\\\"count\\\":2},{\\\"value\\\":342.41666666666663,\\\"count\\\":1}]}}\\n\\n\"}",
+      "tool_calls": null,
+      "thread_id": "chat_thread:9msyysfcv79sw6cjslfz",
+      "created_at": "2026-11-09T11:54:08.655745221Z"
+    },
+    {
+      "role": "assistant",
+      "content": "The Line chart shows monthly sample amounts summed by the `date` property. The title includes the measured total, **AUD 1,588.00**.",
+      "tool_calls": null,
+      "thread_id": "chat_thread:9msyysfcv79sw6cjslfz",
+      "created_at": "2026-11-09T11:54:10.296939291Z"
+    }
+  ]
+}

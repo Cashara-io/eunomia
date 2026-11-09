@@ -1,0 +1,20 @@
+bun test v1.4.0 (34cbb9a40)
+
+scripts/chat-ui-values.test.jsx:
+(pass) UI numeric access never defaults a missing measurement to zero [0.42ms]
+(pass) every chart checks y even when series is supplied [5.54ms]
+(pass) meter requires its minimum instead of inventing zero [0.63ms]
+(pass) unsafe finite chart values fall back before scale arithmetic [0.12ms]
+(pass) explicit table columns inherit server formats for cells and totals [0.72ms]
+(pass) numeric formats treat strings as missing [0.02ms]
+(pass) server types override model formats and counts stay unitless [4.80ms]
+(pass) stat groups retain a missing typed measurement [0.78ms]
+(pass) omitted y never substitutes an available measurement [0.09ms]
+(pass) proportional charts reject subnormal and zero totals [0.55ms]
+(pass) shared proportional accessor accepts safe totals only [7.29ms]
+(pass) server substituted prose displays literally without interpreting placeholders [3.31ms]
+
+ 12 pass
+ 0 fail
+ 201 expect() calls
+Ran 12 tests across 1 file. [192.00ms]

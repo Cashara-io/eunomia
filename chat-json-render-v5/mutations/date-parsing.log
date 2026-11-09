@@ -1,0 +1,22 @@
+   Compiling eunomia-backend v2.2.0 (/Users/avi/.t3/worktrees/eunomia/t3-d939985c/backend)
+    Finished `test` profile [unoptimized] target(s) in 55.32s
+     Running unittests src/lib.rs (target/debug/deps/eunomia_backend-6752a40dd26841bc)
+
+running 1 test
+test views::ui::prose::tests::dates_are_parsed_as_whole_dates_and_ranges ... FAILED
+
+failures:
+
+---- views::ui::prose::tests::dates_are_parsed_as_whole_dates_and_ranges stdout ----
+
+thread 'views::ui::prose::tests::dates_are_parsed_as_whole_dates_and_ranges' (70921665) panicked at src/views/ui/prose.rs:265:9:
+assertion failed: title("As of 2026-01-02", &data).is_err()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    views::ui::prose::tests::dates_are_parsed_as_whole_dates_and_ranges
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 522 filtered out; finished in 0.04s
+
+error: test failed, to rerun pass `--lib`

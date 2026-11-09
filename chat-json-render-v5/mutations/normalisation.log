@@ -1,0 +1,25 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+   Compiling eunomia-backend v2.2.0 (/Users/avi/.t3/worktrees/eunomia/t3-d939985c/backend)
+    Finished `test` profile [unoptimized] target(s) in 1m 00s
+     Running unittests src/lib.rs (target/debug/deps/eunomia_backend-6752a40dd26841bc)
+
+running 1 test
+test views::ui::prose::tests::normalisation_precedes_token_matching ... FAILED
+
+failures:
+
+---- views::ui::prose::tests::normalisation_precedes_token_matching stdout ----
+
+thread 'views::ui::prose::tests::normalisation_precedes_token_matching' (70927777) panicked at src/views/ui/prose.rs:311:111:
+Scope 1​2
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    views::ui::prose::tests::normalisation_precedes_token_matching
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 522 filtered out; finished in 0.02s
+
+error: test failed, to rerun pass `--lib`

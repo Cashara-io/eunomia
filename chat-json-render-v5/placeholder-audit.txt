@@ -1,0 +1,7 @@
+answer-1.json: model used placeholders; server substituted them in spec and terminal text
+answer-2.json: model used placeholders; server substituted them in spec and terminal text
+answer-3.json: model used placeholders; server substituted them in spec and terminal text
+answer-4.json: model used placeholders; server substituted them in spec and terminal text
+answer-5.json: model used placeholders; server substituted them in spec and terminal text
+answer-6.json: model used placeholders; server substituted them in spec and terminal text
+9 placeholders substituted across all six live answers. Numeric data checked separately by verify_numbers.py.

@@ -1,0 +1,13 @@
+Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s1s1   926Gi    12Gi   6.8Gi    64%    459k   71M    1%   /
+pgrep -x cargo: none
+Waiting three minutes for Cargo and disk gate
+Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s1s1   926Gi    12Gi   6.8Gi    64%    459k   71M    1%   /
+pgrep -x cargo: none
+Waiting three minutes for Cargo and disk gate
+Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s1s1   926Gi    12Gi   7.4Gi    62%    459k   78M    1%   /
+pgrep -x cargo: none
+   Compiling eunomia-backend v2.2.0 (/Users/avi/.t3/worktrees/eunomia/t3-d939985c/backend)
+    Finished `dev` profile [unoptimized] target(s) in 27.57s

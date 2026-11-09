@@ -1,0 +1,48 @@
+{
+  "question": "Monthly trend: In memory space vault:pf55df5138a9000d862a, show a Line chart of sample amount summed by month using the date property. Use show_view ui with a dataset source. Include a measured total or count in the title through a bound placeholder.",
+  "thread": {
+    "id": "chat_thread:6yul1gagtwqf5ktrvwtu",
+    "title": "New chat",
+    "created_at": "2026-11-09T11:00:21.762514339Z",
+    "updated_at": "2026-11-09T11:00:21.762520047Z"
+  },
+  "history": [
+    {
+      "role": "user",
+      "content": "Monthly trend: In memory space vault:pf55df5138a9000d862a, show a Line chart of sample amount summed by month using the date property. Use show_view ui with a dataset source. Include a measured total or count in the title through a bound placeholder.",
+      "tool_calls": null,
+      "thread_id": "chat_thread:6yul1gagtwqf5ktrvwtu",
+      "created_at": "2026-11-09T11:00:21.768304672Z"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"question\":\"Monthly trend: In memory space vault:pf55df5138a9000d862a, show a Line chart of sample amount summed by month using the date property. Include a measured total or count in the title through a bound placeholder.\",\"vault_id\":\"vault:pf55df5138a9000d862a\"}",
+            "name": "ontology_coverage"
+          },
+          "id": "call_XPx33E30Uel7uwaApyohKYbN",
+          "type": "function"
+        }
+      ],
+      "thread_id": "chat_thread:6yul1gagtwqf5ktrvwtu",
+      "created_at": "2026-11-09T11:00:24.935395340Z"
+    },
+    {
+      "role": "tool",
+      "content": "{\"vault\":\"vault:pf55df5138a9000d862a\",\"vault_name\":\"Personal\",\"coverage\":0.67,\"matched\":[{\"phrase\":\"sample amount\",\"term\":\"kind\",\"name\":\"sample\",\"distance\":0.296},{\"phrase\":\"date property\",\"term\":\"property\",\"name\":\"date\",\"of_kind\":\"sample\",\"distance\":0.36}],\"uncovered\":[\"month\"],\"chosen_by\":\"vault_id\",\"suggestion\":\"Not covered by an approved kind, property, metric or link: \\\"month\\\". Say so instead of guessing a number. To make it answerable, propose what is missing with ontology_propose (a property and a metric on sample); a vault owner approves it in Kinds and links.\",\"mode\":\"model\"}",
+      "tool_calls": null,
+      "thread_id": "chat_thread:6yul1gagtwqf5ktrvwtu",
+      "created_at": "2026-11-09T11:00:29.370495634Z"
+    },
+    {
+      "role": "assistant",
+      "content": "This space has an approved `sample` kind and `date` property, but its ontology does not cover monthly grouping. I can\u2019t build the monthly trend yet. Ask the vault owner to approve month-based grouping for `sample` (using its `date` property), along with an `amount` property if that is not already approved, so I can sum it by month and bind a measured total or count in the chart title.",
+      "tool_calls": null,
+      "thread_id": "chat_thread:6yul1gagtwqf5ktrvwtu",
+      "created_at": "2026-11-09T11:00:31.374038343Z"
+    }
+  ]
+}

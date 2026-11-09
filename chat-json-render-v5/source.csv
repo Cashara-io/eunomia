@@ -1,0 +1,13 @@
+name,date,supplier,amount,quantity,share
+Entry 1,2026-01-01,Coastal,120.25,3,35.7
+Entry 2,2026-01-15,Inland,80.5,2,20
+Entry 3,2026-02-01,Metro,150.75,5,50
+Entry 4,2026-02-15,Coastal,220,4,60
+Entry 5,2026-03-01,Inland,60.5,2,30
+Entry 6,2026-03-15,Metro,180,6,40
+Entry 7,2026-04-01,Coastal,95.25,3,25
+Entry 8,2026-04-15,Inland,130,5,45
+Entry 9,2026-05-01,Metro,205.5,7,55
+Entry 10,2026-05-15,Coastal,75,3,15
+Entry 11,2026-06-01,Inland,160.25,5,65
+Entry 12,2026-06-15,Metro,110,4,70

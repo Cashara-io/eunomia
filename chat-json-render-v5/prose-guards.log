@@ -1,0 +1,39 @@
+Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s1s1   926Gi    12Gi   7.0Gi    63%    459k   73M    1%   /
+pgrep -x cargo: none
+placeholder-type: intended regression failed, restored
+Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s1s1   926Gi    12Gi   6.8Gi    64%    459k   72M    1%   /
+pgrep -x cargo: none
+Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s1s1   926Gi    12Gi   7.0Gi    63%    459k   74M    1%   /
+pgrep -x cargo: none
+placeholder-path: intended regression failed, restored
+Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s1s1   926Gi    12Gi   7.4Gi    62%    459k   77M    1%   /
+pgrep -x cargo: none
+raw-digit-rejection: intended regression failed, restored
+Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s1s1   926Gi    12Gi   7.4Gi    62%    459k   77M    1%   /
+pgrep -x cargo: none
+verbatim-scope: intended regression failed, restored
+Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s1s1   926Gi    12Gi   7.3Gi    62%    459k   77M    1%   /
+pgrep -x cargo: none
+verbatim-boundaries: intended regression failed, restored
+Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s1s1   926Gi    12Gi   7.3Gi    62%    459k   77M    1%   /
+pgrep -x cargo: none
+date-parsing: intended regression failed, restored
+Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s1s1   926Gi    12Gi   7.3Gi    62%    459k   77M    1%   /
+pgrep -x cargo: none
+unicode-digits: intended regression failed, restored
+Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s1s1   926Gi    12Gi   7.3Gi    62%    459k   77M    1%   /
+pgrep -x cargo: none
+unicode-compatibility: intended regression failed, restored
+Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s1s1   926Gi    12Gi   7.3Gi    62%    459k   77M    1%   /
+pgrep -x cargo: none
+normalisation: intended regression failed, restored

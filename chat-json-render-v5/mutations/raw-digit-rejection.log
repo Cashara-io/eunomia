@@ -1,0 +1,22 @@
+   Compiling eunomia-backend v2.2.0 (/Users/avi/.t3/worktrees/eunomia/t3-d939985c/backend)
+    Finished `test` profile [unoptimized] target(s) in 57.25s
+     Running unittests src/lib.rs (target/debug/deps/eunomia_backend-6752a40dd26841bc)
+
+running 1 test
+test views::ui::prose::tests::unrelated_values_and_identifier_bypasses_are_rejected ... FAILED
+
+failures:
+
+---- views::ui::prose::tests::unrelated_values_and_identifier_bypasses_are_rejected stdout ----
+
+thread 'views::ui::prose::tests::unrelated_values_and_identifier_bypasses_are_rejected' (70915199) panicked at src/views/ui/prose.rs:234:45:
+called `Result::unwrap_err()` on an `Ok` value: Object {"title": String("Sales rose 12%")}
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    views::ui::prose::tests::unrelated_values_and_identifier_bypasses_are_rejected
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 522 filtered out; finished in 0.03s
+
+error: test failed, to rerun pass `--lib`

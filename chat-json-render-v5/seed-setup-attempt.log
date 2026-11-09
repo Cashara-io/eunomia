@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "/private/tmp/chat-json-render-v5/seed.py", line 17, in <module>
+    doc=tool('document_upload',{'filename':'source.csv','text':Path('/private/tmp/chat-json-render-v5/source.csv').read_text()})['id']
+        ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/chat-json-render-v5/seed.py", line 12, in tool
+    def tool(name,args): return api('/api/tools/'+name,args)
+                                ~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/chat-json-render-v5/seed.py", line 10, in api
+    assert not (isinstance(out,dict) and out.get('error')),out
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'error': "Document storage is unavailable right now; try again, or ask the operator to check the database's file bucket (docs/documents.md).", 'code': 'document.storage_unavailable', 'trace_id': 'dd022279fae04bb889eec4760163a427'}

@@ -1,0 +1,38 @@
+Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s1s1   926Gi    12Gi   6.5Gi    65%    459k   68M    1%   /
+pgrep -x cargo: none
+Waiting three minutes for Cargo and disk gate
+Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s1s1   926Gi    12Gi   7.1Gi    63%    459k   74M    1%   /
+pgrep -x cargo: 57275
+Waiting three minutes for Cargo and disk gate
+Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s1s1   926Gi    12Gi   5.7Gi    68%    459k   60M    1%   /
+pgrep -x cargo: none
+Waiting three minutes for Cargo and disk gate
+Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s1s1   926Gi    12Gi   7.5Gi    61%    459k   79M    1%   /
+pgrep -x cargo: 63353
+Waiting three minutes for Cargo and disk gate
+Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s1s1   926Gi    12Gi   8.0Gi    60%    459k   83M    1%   /
+pgrep -x cargo: none
+   Compiling eunomia-backend v2.2.0 (/Users/avi/.t3/worktrees/eunomia/t3-d939985c/backend)
+    Finished `test` profile [unoptimized] target(s) in 1m 39s
+     Running unittests src/lib.rs (target/debug/deps/eunomia_backend-6752a40dd26841bc)
+
+running 11 tests
+test views::ui::prose::tests::all_model_prose_fields_share_the_guard_and_substitution ... ok
+test views::ui::prose::tests::dates_are_parsed_as_whole_dates_and_ranges ... ok
+test views::ui::prose::tests::normalisation_precedes_token_matching ... ok
+test views::ui::prose::tests::placeholders_resolve_one_typed_path_with_server_currency ... ok
+test views::ui::prose::tests::unrelated_values_and_identifier_bypasses_are_rejected ... ok
+test views::ui::prose::tests::verbatim_tokens_are_scoped_to_resolved_server_strings ... ok
+test views::ui::tests::numeric_bypass_matrix ... ok
+test views::ui::tests::omitted_y_resolves_only_unambiguous_metadata ... ok
+test views::ui::tests::refuses_literals_unknown_props_missing_bindings_and_cycles ... ok
+test views::ui::tests::refuses_missing_columns_bad_props_depth_and_element_caps ... ok
+test views::ui::tests::rejects_caps ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 512 filtered out; finished in 0.06s
+

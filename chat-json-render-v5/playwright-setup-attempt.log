@@ -1,0 +1,43 @@
+
+Running 9 tests using 2 workers
+
+(node:94139) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:94138) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓  2 tests/chat-json-render.spec.ts:8:5 › generated catalog copies match their definition and Docker contexts (38ms)
+  ✘  1 tests/every-tool.spec.ts:14:5 › every MCP tool works end to end (3.3s)
+  ✓  3 tests/chat-json-render.spec.ts:270:9 › catalog and chart fixtures in light at 1280px (7.6s)
+  ✓  4 tests/chat-json-render.spec.ts:270:9 › catalog and chart fixtures in light at 390px (7.2s)
+  ✓  5 tests/chat-json-render.spec.ts:270:9 › catalog and chart fixtures in dark at 1280px (7.0s)
+  ✓  6 tests/chat-json-render.spec.ts:270:9 › catalog and chart fixtures in dark at 390px (6.9s)
+  ✓  7 tests/chat-json-render.spec.ts:433:7 › dense networks and nested cards at 1280px (1.9s)
+  ✓  8 tests/chat-json-render.spec.ts:433:7 › dense networks and nested cards at 390px (1.9s)
+  ✓  9 tests/chat-json-render.spec.ts:571:5 › typed money keeps its currency and missing values are unavailable (1.8s)
+
+
+  1) tests/every-tool.spec.ts:14:5 › every MCP tool works end to end ───────────────────────────────
+
+    Error: document_upload failed: {"error":"Document storage is unavailable right now; try again, or ask the operator to check the database's file bucket (docs/documents.md).","code":"document.storage_unavailable","trace_id":"f53ddaa70f9b41398b9aa6fe6324c8d1"}
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: false
+    Received: true
+
+      32 |   const ok = async (name: string, args: object = {}, token?: string) => {
+      33 |     const r = await call(name, args, token);
+    > 34 |     expect(r.isError, `${name} failed: ${JSON.stringify(r.data)}`).toBe(false);
+         |                                                                    ^
+      35 |     return r.data;
+      36 |   };
+      37 |
+        at ok (/Users/avi/.t3/worktrees/eunomia/t3-d939985c/frontend/tests/every-tool.spec.ts:34:68)
+        at /Users/avi/.t3/worktrees/eunomia/t3-d939985c/frontend/tests/every-tool.spec.ts:127:15
+
+    Error Context: test-results/every-tool-every-MCP-tool-works-end-to-end/error-context.md
+
+  1 failed
+    tests/every-tool.spec.ts:14:5 › every MCP tool works end to end ────────────────────────────────
+  8 passed (35.9s)
