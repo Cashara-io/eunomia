@@ -1,0 +1,15 @@
+
+running 10 tests
+test aggregates_refuse_non_members_and_restricted_credentials ... ok
+test approved_enum_filter_accepts_only_allowed_options ... ok
+test built_in_kind_typed_pages_use_only_allowed_functions ... ok
+test latest_order_guard_mutation_is_detected ... ignored, deliberate latest-order guard mutation
+test latest_profile_directory_metric_parity_with_fractional_ties ... ok
+test named_link_columns_deduplicate_labels_and_honour_approved_target_kinds ... ok
+test paging_typed_sort_filters_missing_and_object_metric_scope ... ok
+test serve_banksia_sized_fixture ... ignored
+test token_scopes_and_vault_restrictions_are_enforced ... ok
+test typed_dates_and_distinct_property_states_and_record_sources ... ok
+
+test result: ok. 8 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 49.30s
+

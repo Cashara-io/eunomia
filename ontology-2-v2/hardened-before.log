@@ -1,0 +1,15 @@
+
+running 1 test
+
+thread 'named_link_columns_deduplicate_labels_and_honour_approved_target_kinds' (71361267) panicked at tests/ontology_objects.rs:294:191:
+called `Result::unwrap()` on an `Err` value: Error { code: -32000, message: "Function 'type::record' is not allowed to be executed", details: NotAllowed(Some(Function { name: "type::record" })), cause: None }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test named_link_columns_deduplicate_labels_and_honour_approved_target_kinds ... FAILED
+
+failures:
+
+failures:
+    named_link_columns_deduplicate_labels_and_honour_approved_target_kinds
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 8 filtered out; finished in 6.63s
+

@@ -1,0 +1,221 @@
+Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s1s1   926Gi    12Gi   9.1Gi    57%    459k   96M    0%   /
+
+pgrep -x cargo: none
+   Compiling eunomia-backend v2.2.0 (/Users/avi/.t3/worktrees/eunomia/t3-698ae766/backend)
+    Finished `test` profile [unoptimized] target(s) in 38.74s
+     Running tests/chat_ui.rs (target/debug/deps/chat_ui-05ae49ced47c708e)
+
+running 8 tests
+test dataset_cutoff_currency_and_mixed_units ... ok
+test dataset_denies_same_org_nonmember ... ok
+test dataset_denies_vault_restricted_token ... ok
+test dataset_filter_limit ... ok
+test dataset_hides_cross_vault_links ... ok
+test dataset_resolves_real_typed_values_and_mcp_catalog ... ok
+test dataset_scale_grouped_and_bucketed ... ignored, scale proof: 5000 entities and 50000 property history rows
+test dataset_strict_kind_guard ... ok
+
+test result: ok. 7 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 42.89s
+
+     Running tests/dynamic_queries.rs (target/debug/deps/dynamic_queries-39b4ffe8651835ee)
+
+running 1 test
+test every_dynamic_builder_runs_in_every_combination ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.89s
+
+     Running tests/migrations.rs (target/debug/deps/migrations-311c883b5e6fb8c0)
+
+running 21 tests
+test a_dead_holders_migration_lock_is_taken_after_the_stale_threshold ... ok
+test a_fresh_org_runs_0022_right_after_the_index_definitions ... ok
+test a_live_holder_keeps_the_migration_lock_past_the_stale_threshold ... ok
+test case_variants_are_merged_and_existing_rows_get_their_keys_in_0010 ... ok
+test concurrent_migrations_on_one_database_both_succeed ... ok
+test connectors_from_before_routing_migrate_through_0017 ... ok
+test control_schema_matches_snapshot_and_reapplies_cleanly ... ok
+test custom_kinds_in_0016_keep_existing_memories_and_relations ... ok
+test duplicates_are_merged_into_oldest ... ok
+test existing_connectors_become_first_connections_in_0017 ... ok
+test existing_tokens_and_sessions_survive_0003 ... ok
+test fresh_schema_matches_snapshot ... ok
+test migrations_wait_for_the_lock_and_take_over_a_stale_one ... ok
+test pocket_cursor_reset_in_0011_runs_with_cursors_present ... ok
+test rebuild_vector_indexes_in_0022_keeps_rows_and_knn_finds_the_live_ones ... ok
+test regenerate_v2_fixture ... ignored, writes tests/fixtures/v2_export_converted.surql
+test rerun_is_noop ... ok
+test schema_39_coverage_name_lookup_and_0040_paging_upgrade_are_idempotent ... ok
+test secret_audit_index_preserves_existing_events_and_reapplies ... ok
+test tampered_checksum_is_a_hard_error ... ok
+test v2_export_upgrades_to_the_fresh_schema ... ok
+
+test result: ok. 20 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 54.53s
+
+     Running tests/ontology.rs (target/debug/deps/ontology-8d3fb41f49e07e21)
+
+running 111 tests
+test a_5000_row_import_is_timed_and_reruns_in_place ... ignored
+test a_bad_cell_is_reported_on_its_line_and_the_rest_still_imports ... ok
+test a_built_in_kind_can_be_described_and_approved_but_not_rejected ... ok
+test a_column_two_properties_claim_is_skipped_until_the_owner_picks ... ok
+test a_csv_profiles_and_imports_only_after_the_owner_approves ... ok
+test a_kind_rejected_into_another_sends_later_writes_there ... ok
+test a_kind_rejected_without_a_target_refuses_writes ... ok
+test a_kind_row_from_before_synonyms_still_takes_decisions_after_the_upgrade ... ok
+test a_link_row_from_before_link_sources_still_takes_decisions_and_columns_after_the_upgrade ... ok
+test a_merge_target_must_be_a_kind_that_is_kept ... ok
+test a_metric_is_refused_unless_its_expression_fits_the_kinds_properties ... ok
+test a_metric_lists_at_most_fifty_entity_ids_and_says_when_there_were_more ... ok
+test a_metric_view_runs_the_metric_again_and_never_takes_a_number ... ok
+test a_misspelt_filter_value_warns_with_the_nearest_values_instead_of_a_zero ... ok
+test a_model_that_never_answers_ends_the_turn_with_an_error_and_the_thread_stays_usable ... ok
+test a_neighbourhood_around_a_hub_is_capped_and_says_so ... ok
+test a_new_kind_with_no_space_named_is_refused_while_an_org_space_is_strict ... ok
+test a_number_question_that_names_no_space_reaches_the_org_space_that_has_its_metric ... ok
+test a_padded_label_is_stored_as_the_approved_label_it_was_grounded_as ... ok
+test a_plain_word_of_one_approved_property_counts_as_a_match ... ok
+test a_property_named_like_the_column_wins_over_a_link_guessed_from_the_kind_name ... ok
+test a_property_row_from_before_source_maps_still_takes_proposals_after_the_upgrade ... ok
+test a_proposed_property_waits_for_the_owner_in_the_browser ... ok
+test a_question_no_space_covers_goes_to_the_space_that_holds_what_it_names ... ok
+test a_question_no_space_covers_says_so_and_lists_the_readable_spaces ... ok
+test a_ratio_uses_the_same_entities_on_both_sides_and_a_metric_narrows_to_one_suppliers_products ... ok
+test a_rejected_link_type_refuses_the_relation_and_names_the_approved_ones ... ok
+test a_rejected_property_sends_its_values_to_the_merge_target ... ok
+test a_removed_entity_leaves_the_metrics_and_is_never_reached ... ok
+test a_scale_changes_only_the_entities_its_filters_and_relations_pick ... ok
+test a_scale_past_500_entities_changes_500_and_says_so ... ok
+test a_scenario_view_is_the_servers_own_run_and_refuses_a_bad_scenario ... ok
+test a_strict_refusal_keeps_the_reason_on_an_existing_proposal ... ok
+test a_value_needs_an_approved_property_and_must_fit_its_datatype ... ok
+test a_view_cannot_name_an_entity_the_caller_cannot_read ... ok
+test a_view_cannot_show_a_relation_across_vaults_even_when_both_ends_are_readable ... ok
+test a_view_with_an_invented_id_or_a_broken_path_is_refused_naming_it ... ok
+test a_what_if_moves_each_metric_by_the_amount_worked_out_by_hand ... ok
+test a_what_if_reads_only_its_own_vault ... ok
+test a_what_if_refuses_what_a_write_would_refuse ... ok
+test a_what_if_takes_a_metric_by_name_and_kind_as_its_schema_says ... ok
+test a_what_if_writes_nothing ... ok
+test an_impact_view_comes_back_resolved_with_names_and_text ... ok
+test an_impact_view_from_an_entity_with_no_links_says_there_is_nothing_to_follow ... ok
+test an_import_costs_one_rate_limit_unit_per_500_rows ... ok
+test an_import_holds_the_row_and_column_caps ... ok
+test an_unapproved_metric_runs_in_a_what_if_only_when_asked ... ok
+test an_unapproved_property_is_not_shown_and_values_stay_in_their_vault ... ok
+test australian_money_percents_and_day_first_dates_import_and_a_repeated_name_is_reported ... ok
+test automap_and_import_link_a_supplier_column_to_the_organisation_already_there_and_skip_a_name_two_entities_share ... ok
+test automap_checks_a_record_key_against_the_target_records_ids ... ok
+test automap_links_parts_to_suppliers_the_import_creates_once_and_row_maths_answer_the_gate ... ok
+test automap_with_a_model_proposes_and_keeps_only_links_whose_values_match ... ok
+test automap_without_a_model_profiles_the_records_fields_for_the_agent ... ok
+test coverage_finds_a_vaults_term_when_another_vault_holds_nearer_ones ... ok
+test coverage_matches_by_words_when_embeddings_fail ... ok
+test coverage_with_a_model_matches_by_meaning_and_never_by_a_proposed_or_rejected_term ... ok
+test coverage_without_a_model_matches_names_and_synonyms_of_approved_terms_only ... ok
+test entity_relate_links_business_things_saves_its_reason_once_and_is_grounded ... ok
+test extraction_in_a_strict_vault_skips_links_that_are_not_approved_and_files_them ... ok
+test extraction_writes_approved_custom_kinds_and_never_rejected_or_proposed_ones ... ok
+test gate2_a_long_question_caps_name_lookups_and_never_searches_memory_text ... ok
+test gate2_name_lookup_honours_vault_restricted_tokens ... ok
+test gate2_named_space_lookup_uses_name_key_indexes ... ok
+test gate2_rest_cannot_seed_a_new_personal_kind_past_a_strict_space ... ok
+test gate2_short_names_are_not_hidden_by_personal_substring_matches ... ok
+test gate3_empty_phrases_choose_named_entities_then_approved_ontology ... ok
+test gate3_empty_phrases_without_entities_or_ontology_list_readable_spaces ... ok
+test gate3_mcp_scenario_text_and_structured_content_keep_raw_small_moves ... ok
+test gate3_scenario_warnings_use_readable_metric_words ... ok
+test metric_eval_computes_each_aggregate_from_the_latest_values ... ok
+test metric_eval_reads_each_value_as_of_a_date_and_applies_filters ... ok
+test observed_kinds_and_links_show_with_counts_and_samples ... ok
+test only_a_vault_owner_in_the_browser_decides ... ok
+test only_a_vault_owner_in_the_browser_decides_a_metric ... ok
+test only_an_approved_metric_runs_by_name ... ok
+test over_mcp_a_view_is_its_text_plus_the_structured_view ... ok
+test preview_column_precedence_matches_import_for_competing_properties_and_links ... ok
+test proposals_wait_for_a_person_and_never_undo_a_decision ... ok
+test readiness_counts_each_sort_by_status_and_names_the_blockers ... ok
+test reads_and_writes_still_work_on_an_org_database_before_the_properties_migration ... ok
+test reads_still_work_on_an_org_database_before_the_metrics_migration ... ok
+test rejected_named_targets_are_skipped_or_resolved_in_automap_preview_and_import ... ok
+test relation_boundary_refuses_overlong_labels_in_strict_mode ... ok
+test relation_boundary_refuses_secret_labels_before_storage_or_proposals ... ok
+test relation_reason_concurrent_retries_and_a_missing_reason_converge ... ok
+test relation_reason_failure_rolls_back_the_relation_and_retry_succeeds ... ok
+test row_maths_is_typed_checked_for_units_and_skips_a_row_that_divides_by_zero ... ok
+test strict_mode_is_an_owners_switch_in_the_browser_only ... ok
+test strict_mode_lets_the_code_map_link_its_own_kinds_and_files_nothing_for_them ... ok
+test strict_mode_refuses_unknown_kinds_and_links_files_proposals_and_lets_built_ins_through ... ok
+test strict_mode_stops_filing_proposals_once_the_owner_has_a_backlog ... ok
+test suggest_proposes_metrics_the_kinds_properties_can_compute ... ok
+test suggest_proposes_properties_and_only_synonyms_written_in_each_kinds_data ... ok
+test suggest_with_a_model_records_its_proposals_and_converges ... ok
+test suggest_without_a_model_returns_the_profile_for_the_agent ... ok
+test the_chat_answers_a_number_from_the_space_coverage_returned ... ok
+test the_chat_answers_a_number_with_metric_eval_and_streams_the_metric_view ... ok
+test the_chat_cannot_save_its_own_conclusion_but_saves_what_the_user_said ... ok
+test the_chat_may_change_a_memory_type_and_resend_its_unchanged_text ... ok
+test the_chat_runs_a_what_if_and_streams_the_scenario_view ... ok
+test the_chat_saves_what_the_user_said_while_its_reply_says_it_is_saving_it ... ok
+test the_chat_streams_the_resolved_view_with_the_show_view_result_only ... ok
+test the_neighbourhood_follows_relations_both_ways_up_to_the_depth ... ok
+test the_neighbourhood_never_leaves_the_vault_or_opens_one_the_caller_cannot_read ... ok
+test the_neighbourhood_reads_only_the_link_types_it_found_not_the_whole_vault ... ok
+test the_newest_value_wins_on_read_and_the_older_ones_stay ... ok
+test the_ontology_tool_eval_list_names_only_registered_tools ... ok
+test the_ontology_view_is_observed_only_on_an_org_database_before_the_migration ... ok
+test with_no_strict_org_space_a_new_kind_with_no_space_named_writes_as_before ... ok
+test writes_still_work_on_an_org_database_before_the_migration ... ok
+
+test result: ok. 110 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 587.61s
+
+     Running tests/ontology_objects.rs (target/debug/deps/ontology_objects-55bdb0ac3c233653)
+
+running 10 tests
+test aggregates_refuse_non_members_and_restricted_credentials ... ok
+test approved_enum_filter_accepts_only_allowed_options ... ok
+test built_in_kind_typed_pages_use_only_allowed_functions ... ok
+test latest_order_guard_mutation_is_detected ... ignored, deliberate latest-order guard mutation
+test latest_profile_directory_metric_parity_with_fractional_ties ... ok
+test named_link_columns_deduplicate_labels_and_honour_approved_target_kinds ... ok
+test paging_typed_sort_filters_missing_and_object_metric_scope ... ok
+test serve_banksia_sized_fixture ... ignored
+test token_scopes_and_vault_restrictions_are_enforced ... ok
+test typed_dates_and_distinct_property_states_and_record_sources ... ok
+
+test result: ok. 8 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 60.70s
+
+     Running tests/openapi.rs (target/debug/deps/openapi-03bab54703f76c0d)
+
+running 2 tests
+test committed_spec_matches_generated ... ok
+test every_registered_route_is_in_the_spec ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/openapi_responses.rs (target/debug/deps/openapi_responses-8c4c37527cceafe1)
+
+running 6 tests
+test connector_and_source_responses_match_their_schemas ... ok
+test entity_responses_match_their_schemas ... ok
+test operation_ids_are_unique_and_camel_case ... ok
+test settings_audit_update_and_tool_responses_match_their_schemas ... ok
+test the_validator_rejects_a_wrong_body ... ok
+test vault_responses_match_their_schemas ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.53s
+
+     Running tests/store.rs (target/debug/deps/store-93d3fd678f206bf3)
+
+running 8 tests
+test a_memory_edit_and_its_stale_observation_are_one_transaction ... ok
+test every_query_executes ... ok
+test gate_vocabulary_matches_the_server ... ok
+test nearest_ids_is_owner_scoped_and_falls_back_to_an_exact_scan ... ok
+test raw_database_access_stays_in_its_modules ... ok
+test real_commit_conflict_is_detected ... ok
+test statements_stay_in_their_database ... ok
+test store_names_are_unique ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.50s
+

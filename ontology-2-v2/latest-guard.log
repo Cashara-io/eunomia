@@ -1,0 +1,12 @@
+
+running 1 test
+
+thread 'latest_order_guard_mutation_is_detected' (71390904) panicked at tests/ontology_objects.rs:370:5:
+assertion `left == right` failed: native as_of, recorded_at, then record id must win
+  left: Number(10.0)
+ right: 40.0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test latest_order_guard_mutation_is_detected - should panic ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 6.50s
+

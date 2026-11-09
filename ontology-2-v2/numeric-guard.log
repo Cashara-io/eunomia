@@ -1,0 +1,44 @@
+bun test v1.4.0 (34cbb9a40)
+
+scripts/object-numbers.test.jsx:
+1 | import { expect, test } from "bun:test";
+2 | import { formatted } from "../src/components/twin/ObjectProfile";
+3 | 
+4 | test("object columns keep percent and money precision, including zero", () => {
+5 |   const percent = { datatype: "percent", unit: null };
+6 |   expect([0.585, 0.4461, 0].map(v => formatted(v, percent))).toEqual(["58.50%", "44.61%", "0.00%"]);
+                                                                 ^
+error: expect(received).toEqual(expected)
+
+  [
+-   "58.50%",
++   "58.5%",
+    "44.61%",
+-   "0.00%",
++   "0%",
+  ]
+
+- Expected  - 2
++ Received  + 2
+
+      at <anonymous> (/Users/avi/.t3/worktrees/eunomia/t3-698ae766/frontend/scripts/object-numbers.test.jsx:6:62)
+(fail) object columns keep percent and money precision, including zero [2.04ms]
+ 9 |     .toEqual(["AUD 12.50", "AUD 0.00", "AUD 0.0049", "AUD -0.0049", "AUD 0.000000010"]);
+10 |   expect(formatted(12.345, money)).toBe("AUD 12.35");
+11 | });
+12 | 
+13 | test("server datatype controls ratios, counts, units and missing values", () => {
+14 |   expect(formatted(0.585, { datatype: "number", unit: "ratio" })).toBe("0.59 ratio");
+                                                                       ^
+error: expect(received).toBe(expected)
+
+Expected: "0.59 ratio"
+Received: "ratio 0.58"
+
+      at <anonymous> (/Users/avi/.t3/worktrees/eunomia/t3-698ae766/frontend/scripts/object-numbers.test.jsx:14:67)
+(fail) server datatype controls ratios, counts, units and missing values [0.31ms]
+
+ 0 pass
+ 2 fail
+ 2 expect() calls
+Ran 2 tests across 1 file. [147.00ms]

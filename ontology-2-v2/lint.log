@@ -1,0 +1,21 @@
+$ eslint && bun test scripts/chat-ui-values.test.jsx scripts/object-numbers.test.jsx
+bun test v1.4.0 (34cbb9a40)
+
+scripts/chat-ui-values.test.jsx:
+(pass) UI numeric access never defaults a missing measurement to zero [0.37ms]
+(pass) every chart checks y even when series is supplied [5.96ms]
+(pass) meter requires its minimum instead of inventing zero [0.98ms]
+(pass) unsafe finite chart values fall back before scale arithmetic [0.15ms]
+(pass) explicit table columns inherit server formats for cells and totals [1.00ms]
+(pass) numeric formats treat strings as missing [0.02ms]
+(pass) server types override model formats and counts stay unitless [5.60ms]
+(pass) stat groups retain a missing typed measurement [0.82ms]
+
+scripts/object-numbers.test.jsx:
+(pass) object columns keep percent and money precision, including zero [0.19ms]
+(pass) server datatype controls ratios, counts, units and missing values [0.02ms]
+
+ 10 pass
+ 0 fail
+ 119 expect() calls
+Ran 10 tests across 2 files. [265.00ms]

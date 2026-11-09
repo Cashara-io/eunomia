@@ -1,0 +1,323 @@
+{
+  "name": {
+    "attributes": {
+      "projections": "id, name"
+    },
+    "children": [
+      {
+        "attributes": {
+          "access": "[vault:o01i4qiewmf1bc1f1jap, 'stock_record']",
+          "direction": "Forward",
+          "index": "entity_vault_kind_name_idx",
+          "limit": "$limit",
+          "offset": "$offset",
+          "predicate": "vault = vault:o01i4qiewmf1bc1f1jap AND kind = 'stock_record' AND true"
+        },
+        "context": "Db",
+        "metrics": {
+          "elapsed_ns": 106583,
+          "output_batches": 1,
+          "output_rows": 25,
+          "records_fetched": 0
+        },
+        "operator": "IndexScan"
+      }
+    ],
+    "context": "Db",
+    "metrics": {
+      "elapsed_ns": 4500,
+      "output_batches": 1,
+      "output_rows": 25,
+      "records_fetched": 0
+    },
+    "operator": "SelectProject",
+    "total_rows": 25
+  },
+  "sort": {
+    "attributes": {
+      "projections": "entity AS id, name, value_num"
+    },
+    "children": [
+      {
+        "attributes": {
+          "fields": "name = entity.name"
+        },
+        "children": [
+          {
+            "attributes": {
+              "limit": "$limit",
+              "offset": "$offset"
+            },
+            "children": [
+              {
+                "attributes": {
+                  "predicate": "vault = vault:o01i4qiewmf1bc1f1jap AND entity.vault = vault:o01i4qiewmf1bc1f1jap AND entity.kind = 'stock_record' AND as_of <= d'2026-11-09T14:22:27.080432Z' AND id = ([$this.entity].map(|$e: any| ([$this.property].map(|$p: any| ((SELECT id, entity, property, value_num, value_text, value_bool, value_date, unit, as_of, created_at, source FROM entity_property WHERE entity = $e AND property = $p AND vault = $vault AND as_of <= $as_of ORDER BY as_of DESC, created_at DESC, id DESC LIMIT 1)[0]))[0]))[0]).id"
+                },
+                "children": [
+                  {
+                    "attributes": {
+                      "access": "[ontology_property:p7a28459a5f3b75961ba] MoreThan NONE",
+                      "direction": "Backward",
+                      "index": "entity_property_num_page_idx"
+                    },
+                    "context": "Db",
+                    "metrics": {
+                      "elapsed_ns": 1072957,
+                      "output_batches": 4,
+                      "output_rows": 400,
+                      "records_fetched": 0
+                    },
+                    "operator": "IndexScan"
+                  }
+                ],
+                "context": "Db",
+                "expressions": [
+                  {
+                    "role": "predicate",
+                    "sql": "vault = vault:o01i4qiewmf1bc1f1jap AND entity.vault = vault:o01i4qiewmf1bc1f1jap AND entity.kind = 'stock_record' AND as_of <= d'2026-11-09T14:22:27.080432Z' AND id = ([$this.entity].map(|$e: any| ([$this.property].map(|$p: any| ((SELECT id, entity, property, value_num, value_text, value_bool, value_date, unit, as_of, created_at, source FROM entity_property WHERE entity = $e AND property = $p AND vault = $vault AND as_of <= $as_of ORDER BY as_of DESC, created_at DESC, id DESC LIMIT 1)[0]))[0]))[0]).id"
+                  }
+                ],
+                "metrics": {
+                  "elapsed_ns": 5512124,
+                  "output_batches": 1,
+                  "output_rows": 100,
+                  "records_fetched": 0
+                },
+                "operator": "Filter"
+              }
+            ],
+            "context": "Db",
+            "expressions": [
+              {
+                "role": "limit",
+                "sql": "$limit"
+              },
+              {
+                "role": "offset",
+                "sql": "$offset"
+              }
+            ],
+            "metrics": {
+              "elapsed_ns": 6208,
+              "output_batches": 1,
+              "output_rows": 25,
+              "records_fetched": 0
+            },
+            "operator": "Limit"
+          }
+        ],
+        "context": "Db",
+        "expressions": [
+          {
+            "role": "name",
+            "sql": "entity.name"
+          }
+        ],
+        "metrics": {
+          "elapsed_ns": 31667,
+          "output_batches": 1,
+          "output_rows": 25,
+          "records_fetched": 0
+        },
+        "operator": "Compute"
+      }
+    ],
+    "context": "Db",
+    "metrics": {
+      "elapsed_ns": 4792,
+      "output_batches": 1,
+      "output_rows": 25,
+      "records_fetched": 0
+    },
+    "operator": "SelectProject",
+    "total_rows": 25
+  },
+  "filter": {
+    "attributes": {
+      "projections": "entity AS id, name, value_num"
+    },
+    "children": [
+      {
+        "attributes": {
+          "fields": "name = entity.name"
+        },
+        "children": [
+          {
+            "attributes": {
+              "limit": "$limit",
+              "offset": "$offset"
+            },
+            "children": [
+              {
+                "attributes": {
+                  "predicate": "vault = vault:o01i4qiewmf1bc1f1jap AND entity.vault = vault:o01i4qiewmf1bc1f1jap AND entity.kind = 'stock_record' AND as_of <= d'2026-11-09T14:22:27.088039Z' AND id = ([$this.entity].map(|$e: any| ([$this.property].map(|$p: any| ((SELECT id, entity, property, value_num, value_text, value_bool, value_date, unit, as_of, created_at, source FROM entity_property WHERE entity = $e AND property = $p AND vault = $vault AND as_of <= $as_of ORDER BY as_of DESC, created_at DESC, id DESC LIMIT 1)[0]))[0]))[0]).id"
+                },
+                "children": [
+                  {
+                    "attributes": {
+                      "access": "[ontology_property:p7a28459a5f3b75961ba] MoreThanEqual 11900",
+                      "direction": "Backward",
+                      "index": "entity_property_num_page_idx"
+                    },
+                    "context": "Db",
+                    "metrics": {
+                      "elapsed_ns": 294417,
+                      "output_batches": 1,
+                      "output_rows": 100,
+                      "records_fetched": 0
+                    },
+                    "operator": "IndexScan"
+                  }
+                ],
+                "context": "Db",
+                "expressions": [
+                  {
+                    "role": "predicate",
+                    "sql": "vault = vault:o01i4qiewmf1bc1f1jap AND entity.vault = vault:o01i4qiewmf1bc1f1jap AND entity.kind = 'stock_record' AND as_of <= d'2026-11-09T14:22:27.088039Z' AND id = ([$this.entity].map(|$e: any| ([$this.property].map(|$p: any| ((SELECT id, entity, property, value_num, value_text, value_bool, value_date, unit, as_of, created_at, source FROM entity_property WHERE entity = $e AND property = $p AND vault = $vault AND as_of <= $as_of ORDER BY as_of DESC, created_at DESC, id DESC LIMIT 1)[0]))[0]))[0]).id"
+                  }
+                ],
+                "metrics": {
+                  "elapsed_ns": 5238710,
+                  "output_batches": 1,
+                  "output_rows": 100,
+                  "records_fetched": 0
+                },
+                "operator": "Filter"
+              }
+            ],
+            "context": "Db",
+            "expressions": [
+              {
+                "role": "limit",
+                "sql": "$limit"
+              },
+              {
+                "role": "offset",
+                "sql": "$offset"
+              }
+            ],
+            "metrics": {
+              "elapsed_ns": 4375,
+              "output_batches": 1,
+              "output_rows": 25,
+              "records_fetched": 0
+            },
+            "operator": "Limit"
+          }
+        ],
+        "context": "Db",
+        "expressions": [
+          {
+            "role": "name",
+            "sql": "entity.name"
+          }
+        ],
+        "metrics": {
+          "elapsed_ns": 20083,
+          "output_batches": 1,
+          "output_rows": 25,
+          "records_fetched": 0
+        },
+        "operator": "Compute"
+      }
+    ],
+    "context": "Db",
+    "metrics": {
+      "elapsed_ns": 4125,
+      "output_batches": 1,
+      "output_rows": 25,
+      "records_fetched": 0
+    },
+    "operator": "SelectProject",
+    "total_rows": 25
+  },
+  "latest": {
+    "attributes": {
+      "projections": "*"
+    },
+    "children": [
+      {
+        "attributes": {
+          "limit": "1"
+        },
+        "children": [
+          {
+            "attributes": {
+              "limit": "1",
+              "sort_keys": "as_of DESC, created_at DESC, id DESC"
+            },
+            "children": [
+              {
+                "attributes": {
+                  "predicate": "vault = vault:o01i4qiewmf1bc1f1jap"
+                },
+                "children": [
+                  {
+                    "attributes": {
+                      "access": "[entity:stock_record_1, ontology_property:p7a28459a5f3b75961ba] LessThanEqual d'2026-11-09T14:22:27.094515Z'",
+                      "direction": "Backward",
+                      "index": "entity_property_entity_idx"
+                    },
+                    "context": "Db",
+                    "metrics": {
+                      "elapsed_ns": 23500,
+                      "output_batches": 1,
+                      "output_rows": 1,
+                      "records_fetched": 0
+                    },
+                    "operator": "IndexScan"
+                  }
+                ],
+                "context": "Db",
+                "expressions": [
+                  {
+                    "role": "predicate",
+                    "sql": "vault = vault:o01i4qiewmf1bc1f1jap"
+                  }
+                ],
+                "metrics": {
+                  "elapsed_ns": 1417,
+                  "output_batches": 1,
+                  "output_rows": 1,
+                  "records_fetched": 0
+                },
+                "operator": "Filter"
+              }
+            ],
+            "context": "Db",
+            "metrics": {
+              "elapsed_ns": 2667,
+              "output_batches": 1,
+              "output_rows": 1,
+              "records_fetched": 0
+            },
+            "operator": "SortTopKByKey"
+          }
+        ],
+        "context": "Db",
+        "expressions": [
+          {
+            "role": "limit",
+            "sql": "1"
+          }
+        ],
+        "metrics": {
+          "elapsed_ns": 4417,
+          "output_batches": 1,
+          "output_rows": 1,
+          "records_fetched": 0
+        },
+        "operator": "Limit"
+      }
+    ],
+    "context": "Db",
+    "metrics": {
+      "elapsed_ns": 624,
+      "output_batches": 1,
+      "output_rows": 1,
+      "records_fetched": 0
+    },
+    "operator": "SelectProject",
+    "total_rows": 1
+  }
+}

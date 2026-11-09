@@ -1,0 +1,13 @@
+Source: 3630896e94ad88eec5b51450e9c7c8b8959d85c8
+Backend: 162 passed, 5 explicitly ignored across eight touched suites (ontology_objects, ontology, chat_ui, migrations, dynamic_queries, store, openapi, openapi_responses).
+Hardened: all 8 object cases passed on a real SurrealDB 3.3.5 server, including original CI failure and built-in typed pages. Two ignored cases are the deliberate guard and fixture server.
+Latest-order guard: deliberately ascending as_of selects 10 instead of 40; expected panic detected. Restored.
+Enum allowed-values guard: omission makes valid blue return 400; regression fails. Restored.
+Numeric guard: legacy variable precision/sub-cent rounding fails both new formatter tests. Restored.
+Frontend lint: 10 numeric/UI cases; next typegen before typecheck; production build passed.
+Playwright: 2 real-backend tests passed; 16 full-page PNGs captured and all inspected (light/dark,1440/390).
+Clippy: all-targets with -D warnings passed.
+Cargo guard: df -h / and pgrep -x cargo before every step; wait 180s while another Cargo exists or free space<7GiB, max 2h. CARGO_BUILD_JOBS=2 CARGO_PROFILE_DEV_DEBUG=0 CARGO_INCREMENTAL=0 RUST_MIN_STACK=8388608 nice -n 19. No cargo fmt.
+Performance: 10 cases, each 50 cold+50 warm; p50/p95 independently recomputed from raw samples. Correctness checked on every response. Cold restarts DB+backend, no OS disk-cache flush.
+Source manifest: 487 source/manifest/migration/harness files match the runtime revision.
+Protected service ports were not modified.

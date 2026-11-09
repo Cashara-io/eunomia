@@ -1,0 +1,9 @@
+
+Running 2 tests using 1 worker
+
+(node:78650) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 tests/ontology-objects.spec.ts:8:5 › typed objects, server pages, sources, scoped numbers and related objects (4.9s)
+  ✓  2 tests/ontology-objects.spec.ts:241:5 › Banksia-sized visual evidence in both themes and widths (3.2s)
+
+  2 passed (9.1s)

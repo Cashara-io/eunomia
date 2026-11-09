@@ -1,0 +1,28 @@
+Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s1s1   926Gi    12Gi   9.8Gi    55%    459k  103M    0%   /
+
+pgrep -x cargo: none
+   Compiling eunomia-backend v2.2.0 (/Users/avi/.t3/worktrees/eunomia/t3-698ae766/backend)
+    Finished `test` profile [unoptimized] target(s) in 27.81s
+     Running tests/ontology_objects.rs (target/debug/deps/ontology_objects-55bdb0ac3c233653)
+
+running 1 test
+test approved_enum_filter_accepts_only_allowed_options ... FAILED
+
+failures:
+
+---- approved_enum_filter_accepts_only_allowed_options stdout ----
+
+thread 'approved_enum_filter_accepts_only_allowed_options' (71354196) panicked at tests/ontology_objects.rs:29:5:
+assertion `left == right` failed: {"type":"about:blank","title":"Bad Request","status":400,"detail":"\"colour\" takes one of , got \"blue\"","code":"validation.invalid","trace_id":"1189dbd4ae2d4dadaf8510a0c88be36f"}
+  left: 400
+ right: 200
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    approved_enum_filter_accepts_only_allowed_options
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 8 filtered out; finished in 6.95s
+
+error: test failed, to rerun pass `--test ontology_objects`
