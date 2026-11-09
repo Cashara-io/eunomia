@@ -11,7 +11,7 @@ import Link from "next/link";
 import { ArrowCounterClockwiseIcon, ArrowElbowDownLeftIcon, ArrowUpIcon, ChatsCircleIcon, PlusIcon, SquareIcon, TrashIcon, WarningCircleIcon } from "@phosphor-icons/react/ssr";
 import PageHeader from "@/components/ui/PageHeader";
 import EmptyNote from "@/components/ui/EmptyState";
-import Markdown from "@/components/Markdown";
+import ChatText from "@/components/chat/ChatText";
 import AuthorTag from "@/components/AuthorTag";
 import SyncMark from "@/components/bits/SyncMark";
 import Tooltip, { TooltipGroup } from "@/components/bits/Tooltip";
@@ -299,7 +299,7 @@ function TurnView({ turn, me }: { turn: Turn; me: string | null }) {
       <TurnViews steps={turn.steps} />
       {turn.content && (
         <div className="text-[15px] px-0.5 break-words" style={{ color: "var(--ink)" }}>
-          <Markdown text={turn.content} />
+          <ChatText text={turn.content} />
         </div>
       )}
     </article>
@@ -689,7 +689,7 @@ export default function ChatPage() {
                   <TurnViews steps={liveSteps} />
                   {streamingText && (
                     <div className="settle text-[14px] px-0.5 break-words" style={{ color: "var(--ink)" }}>
-                      <Markdown text={streamingText} />
+                      <ChatText text={streamingText} />
                     </div>
                   )}
                 </article>

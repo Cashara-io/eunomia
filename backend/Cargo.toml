@@ -56,6 +56,9 @@ pdf-extract = "0.12"
 # secret redaction on memory writes (redact.rs)
 regex = "1"
 unicode-normalization = "0.1"
+# MIT licensed CommonMark parsing and exact decimal rounding for chat evidence.
+pulldown-cmark = "0.13"
+rust_decimal = "1"
 
 jsonschema = { version = "0.58.6", default-features = false }
 

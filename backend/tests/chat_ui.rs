@@ -426,9 +426,9 @@ async fn grouped_metrics_rank_properties_and_links_and_batch_views() {
     assert_eq!(ranked["unit"], "AUD");
     let groups = ranked["groups"].as_array().unwrap();
     assert_eq!(groups.len(),2);
-    assert_eq!((groups[0]["group"].clone(),groups[0]["value"].clone()),(json!("Alpha"),json!(40.25)));
-    assert_eq!((groups[1]["group"].clone(),groups[1]["value"].clone()),(json!("alpha"),json!(20.75)));
-    assert_eq!(groups[0]["entity_ids"].as_array().unwrap().len(),2);
+    assert_eq!((groups[0]["group"].clone(),groups[0]["value"].clone()),(json!("Alpha"),json!(61.0)));
+    assert_eq!((groups[1]["group"].clone(),groups[1]["value"].clone()),(json!("Beta"),json!(12.0)));
+    assert_eq!(groups[0]["entity_ids"].as_array().unwrap().len(),3);
     assert_eq!(groups[1]["entity_ids"].as_array().unwrap().len(),1);
     assert_eq!(ranked["n_entities"],4); // before top_n
     let mut ascending = args.clone(); ascending["sort"]["descending"] = json!(false); ascending["top_n"] = json!(1);
@@ -441,14 +441,14 @@ async fn grouped_metrics_rank_properties_and_links_and_batch_views() {
     assert_eq!(terminal["groups"],ranked["groups"]);
     let mut view = args.clone(); view["view"] = json!("metric");
     let shown = ok(app.tool("show_view",view).await);
-    assert!(shown["text"].as_str().unwrap().contains("40.25 AUD"));
+    assert!(shown["text"].as_str().unwrap().contains("61.00 AUD"));
     let mut source = args.clone(); source["type"] = json!("metric");
     let batch = ok(app.tool("show_view",json!({"view":"ui","spec":{"root":"root","elements":{
         "root":{"type":"Stack","props":{},"children":["a","b"]},
         "a":{"type":"Table","props":{"title":"Members {{sources.ranked.metric.groups[0].n_entities}}","summary":"Ranked totals","data":{"$state":"/sources/ranked/metric/groups"}}},
         "b":{"type":"Stat","props":{"title":"All sales","summary":"All sales","data":{"$state":"/sources/total/metric/value"}}}
     }},"sources":{"ranked":source,"total":{"type":"metric","metric":"total_amount","kind":"sample","vault_id":vault}}})).await);
-    assert_eq!(batch["spec"]["elements"]["a"]["props"]["title"],"Members 2");
+    assert_eq!(batch["spec"]["elements"]["a"]["props"]["title"],"Members 3");
     assert_eq!(batch["data"]["sources"]["ranked"]["metric"]["groups"],ranked["groups"]);
     assert_eq!(batch["data"]["sources"]["total"]["metric"]["value"],73.0);
     // Ratios must be recomputed over group totals, rather than averaging row ratios.
@@ -458,7 +458,7 @@ async fn grouped_metrics_rank_properties_and_links_and_batch_views() {
     ok(app.tool("ontology_propose",json!({"metrics":[{"kind":"sample","name":"amount_ratio","unit":"%","expr":{"agg":"ratio","numerator":{"agg":"sum","property":"amount"},"denominator":{"agg":"sum","property":"share"}}}]})).await);
     let ratio = ok(app.tool("metric_eval",json!({"metric":"amount_ratio","kind":"sample","vault_id":vault,"allow_unapproved":true,"group_by":"label","filters":[{"property":"label","op":"eq","value":"Alpha"}]})).await);
     let alpha = ratio["groups"].as_array().unwrap().iter().find(|r| r["group"] == "Alpha").unwrap();
-    assert!((alpha["value"].as_f64().unwrap() - 100.625).abs() < 1e-9);
+    assert!((alpha["value"].as_f64().unwrap() - 87.142857).abs() < 1e-9);
     assert_eq!(ratio["unit"],"%");
     let supplier = ok(app.tool("memory_write",json!({"subject_name":"Supplier","subject_kind":"organisation","text":"A supplier"})).await)["entity"]["id"].clone();
     ok(app.tool("ontology_propose",json!({"links":[{"from_kind":"sample","label":"supplied_by","to_kind":"organisation"}]})).await);
@@ -469,9 +469,9 @@ async fn grouped_metrics_rank_properties_and_links_and_batch_views() {
     for id in groups[0]["entity_ids"].as_array().unwrap() { ok(app.tool("entity_relate",json!({"from_id":id,"label":"supplied_by","to_id":supplier})).await); }
     let linked = ok(app.tool("metric_eval",linked).await);
     assert_eq!(linked["groups"][0]["group"]["entity_id"],supplier);
-    assert_eq!(linked["groups"][0]["value"],40.25);
+    assert_eq!(linked["groups"][0]["value"],61.0);
     assert_eq!(linked["groups"][1]["group"],Value::Null);
-    assert_eq!(linked["groups"][1]["value"],32.75);
+    assert_eq!(linked["groups"][1]["value"],12.0);
     assert_eq!(linked["groups"][0]["entity_ids"],groups[0]["entity_ids"]);
     for extra in [json!({"group_by":"unknown"}), json!({"group_by":"label","group_by_grain":true}), json!({"group_by":"label","top_n":0}), json!({"group_by":"label","sort":{"property":"unknown"}})] {
         let mut bad = args.clone(); bad.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
@@ -553,7 +553,7 @@ async fn chat_uses_whole_numeric_spans_and_only_current_turn_evidence() {
     let mock = serve(vec![]).await;
     let (app,_) = scripted_chat(&mock).await;
     for (raw, question, expected) in [
-        ("The supplied amount was $615,548.00.","Explain the supplied 615548",true),
+        ("The supplied amount was $615,548.00.","Explain the supplied $615548",true),
         ("The supplied amount was $615,549.00.","Explain the supplied 615548",false),
         ("The supplied count was 12.","Explain 1 and 2",false),
         ("The supplied count was 9007199254740993.","Explain 9007199254740992",false),
@@ -587,4 +587,103 @@ async fn bakery_metric_result_does_not_authorise_a_made_up_zero() {
     assert!(events.last().unwrap()["reply"].as_str().unwrap().contains("removed an unsupported"),"{events:?}");
     assert!(!history.contains("$0.00"));
     assert!(!events.iter().any(|e| e["delta"].as_str().is_some_and(|s| s.contains("$0.00"))));
+}
+
+#[tokio::test]
+async fn grouped_values_equal_filtered_values_for_every_aggregate() {
+    use rand::{Rng, SeedableRng};
+    let (app, vault) = sample().await;
+    let mut rng = rand::rngs::StdRng::seed_from_u64(208);
+    for i in 0..16 {
+        let name = format!("Generated {i}");
+        let id = ok(app.tool("memory_write",json!({"subject_name":name,"subject_kind":"sample","text":"Generated group parity fixture"})).await)["entity"]["id"].clone();
+        let label = ["ALPHA", "alpha", "Alpha", "Beta", "BETA"][rng.gen_range(0..5)];
+        for (property,value) in [("label",json!(label)),("amount",json!(rng.gen_range(-1000..1000) as f64 / 4.0)),("share",json!(rng.gen_range(1..100)))] {
+            ok(app.tool("entity_set_property",json!({"entity_id":id,"property":property,"value":value})).await);
+        }
+    }
+    for agg in ["count","sum","avg","min","max","median","count_distinct","ratio"] {
+        let name = format!("parity_{agg}");
+        let expr = if agg == "ratio" { json!({"agg":"ratio","numerator":{"agg":"sum","property":"amount"},"denominator":{"agg":"sum","property":"share"}}) } else { json!({"agg":agg,"property":"amount"}) };
+        ok(app.tool("ontology_propose",json!({"metrics":[{"kind":"sample","name":name,"expr":expr}]})).await);
+        let args = json!({"metric":name,"kind":"sample","vault_id":vault,"allow_unapproved":true,"group_by":"label"});
+        let grouped = ok(app.tool("metric_eval",args.clone()).await);
+        assert_eq!(grouped["groups"].as_array().unwrap().len(),2,"{agg}: {grouped}");
+        for group in grouped["groups"].as_array().unwrap() {
+            let mut filtered = args.clone(); filtered.as_object_mut().unwrap().remove("group_by");
+            filtered["filters"] = json!([{"property":"label","op":"eq","value":group["group"]}]);
+            let filtered = ok(app.tool("metric_eval",filtered).await);
+            assert_eq!(group["value"],filtered["value"],"{agg}: {group}");
+            assert_eq!(group["n_entities"],filtered["n_entities"]);
+        }
+    }
+}
+
+#[tokio::test]
+async fn overlapping_link_groups_warn_tools_and_views() {
+    use eunomia_backend::sources::mock::{route,serve};
+    let mock = serve(vec![]).await;
+    let (app,vault) = scripted_chat(&mock).await;
+    ok(app.tool("ontology_propose",json!({"metrics":[{"kind":"sample","name":"overlap_amount","expr":{"agg":"sum","property":"amount"}}],"links":[{"from_kind":"sample","label":"supplied_by","to_kind":"organisation"}]})).await);
+    let (s,b) = app.http_session("POST",&format!("/api/vaults/{vault}/ontology/links/decide"),Some(json!({"from_kind":"sample","label":"supplied_by","to_kind":"organisation","decision":{"action":"approve"}}))).await; assert_eq!(s,200,"{b}");
+    let entity = ok(app.tool("entities_search",json!({"query":"One","kind":"sample"})).await)["results"][0]["id"].clone();
+    ok(app.tool("entity_set_property",json!({"entity_id":entity,"property":"amount","value":100})).await);
+    for name in ["First supplier","Second supplier"] {
+        let supplier = ok(app.tool("memory_write",json!({"subject_name":name,"subject_kind":"organisation","text":"Supplier"})).await)["entity"]["id"].clone();
+        ok(app.tool("entity_relate",json!({"from_id":entity,"label":"supplied_by","to_id":supplier})).await);
+    }
+    let args = json!({"metric":"overlap_amount","kind":"sample","vault_id":vault,"allow_unapproved":true,"group_by":"link:supplied_by"});
+    let metric = ok(app.tool("metric_eval",args.clone()).await);
+    assert_eq!(metric["groups"].as_array().unwrap().iter().filter(|g| g["value"] == 100.0).count(),2);
+    let note = "1 entity contributes to more than one group; groups overlap and must not be summed";
+    assert!(metric["warnings"].as_array().unwrap().contains(&json!(note)),"{metric}");
+    let mut view = args.clone(); view["view"] = json!("metric");
+    assert!(ok(app.tool("show_view",view).await)["text"].as_str().unwrap().contains(note));
+    let mut source = args.clone(); source["type"] = json!("metric");
+    let mut grouped_spec = spec(); grouped_spec["elements"]["a"]["props"]["data"] = json!({"$state":"/sources/sample/metric/groups"});
+    let view = ok(app.tool("show_view",json!({"view":"ui","spec":grouped_spec,"sources":{"sample":source}})).await);
+    assert!(view["data"]["sources"]["sample"]["warnings"].as_array().unwrap().contains(&json!(note)));
+    assert!(view["text"].as_str().unwrap().contains(note));
+    let call = model_reply(json!({"tool_calls":[{"index":0,"id":"overlap","function":{"name":"metric_eval","arguments":args.to_string()}}]}));
+    mock.set_routes(vec![route("POST","/chat/completions",Value::Null).raw(&call).times(1),route("POST","/chat/completions",Value::Null).raw(&model_reply(json!({"content":"The supplier groups overlap and must not be summed."})))]);
+    let (events,_) = chat_events(&app,"Compare the supplier groups").await;
+    assert_eq!(events.last().unwrap()["type"],"done");
+    let request: Value = serde_json::from_str(&mock.requests().last().unwrap().body).unwrap();
+    assert!(request["messages"].as_array().unwrap().iter().any(|m| m["role"] == "tool" && m["content"].as_str().is_some_and(|s| s.contains(note))));
+}
+
+#[tokio::test]
+async fn configured_provider_model_is_used_including_budget_final_turn() {
+    use eunomia_backend::sources::mock::{route,serve};
+    let call = model_reply(json!({"tool_calls":[{"index":0,"id":"next","function":{"name":"ontology_get","arguments":"{}"}}]}));
+    let mock = serve(vec![route("POST","/chat/completions",Value::Null).raw(&call).times(10),route("POST","/chat/completions",Value::Null).raw(&model_reply(json!({"content":"Here are the available results."})))]).await;
+    let settings = eunomia_backend::config::Settings { openai_base_url:mock.base.clone(), openai_chat_model:"self-hosted-model".into(), ..common::test_settings() };
+    let app = TestApp::with_settings(settings).await;
+    let (events,_) = chat_events(&app,"Describe our ontology").await;
+    assert_eq!(events.last().unwrap()["reply"],"Here are the available results.");
+    assert_eq!(mock.requests().len(),11);
+    for request in mock.requests() { assert_eq!(serde_json::from_str::<Value>(&request.body).unwrap()["model"],"self-hosted-model"); }
+}
+
+#[tokio::test]
+async fn disconnect_cancels_budget_final_turn_without_persisting() {
+    use eunomia_backend::{chat::service, sources::mock::{route,serve}};
+    let call = model_reply(json!({"tool_calls":[{"index":0,"id":"next","function":{"name":"ontology_get","arguments":"{}"}}]}));
+    let mock = serve(vec![route("POST","/chat/completions",Value::Null).raw(&call).times(10),route("POST","/chat/completions",Value::Null).delay(1500).raw(&model_reply(json!({"content":"This must never be saved."})))]).await;
+    let (app,_) = scripted_chat(&mock).await;
+    let db = app.db().await;
+    let thread = common::sys(service::create_thread(&db,&app.user.id,None)).await.unwrap();
+    let id = eunomia_backend::rid::parse(&thread.id).unwrap();
+    let (tx,rx) = tokio::sync::mpsc::channel(256);
+    let state = app.state.org(&app.user.org).await.unwrap();
+    let user = app.user.clone(); let send_id = id.clone();
+    let task = tokio::spawn(common::sys(async move { service::send_stream(state,user,send_id,"Describe our ontology".into(),tx).await }));
+    tokio::time::timeout(std::time::Duration::from_secs(15),async {
+        while mock.requests().len() < 11 { tokio::time::sleep(std::time::Duration::from_millis(10)).await; }
+    }).await.unwrap();
+    let before = common::sys(service::history(&db,&app.user.id,&id)).await.unwrap().unwrap();
+    drop(rx); // Stop aborts the SSE fetch, which drops this receiver too.
+    tokio::time::timeout(std::time::Duration::from_millis(500),task).await.expect("model future must be cancelled promptly").unwrap();
+    let after = common::sys(service::history(&db,&app.user.id,&id)).await.unwrap().unwrap();
+    assert_eq!(serde_json::to_value(before).unwrap(),serde_json::to_value(after).unwrap());
 }

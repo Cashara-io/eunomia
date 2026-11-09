@@ -1323,7 +1323,7 @@ fn matches(c: &Cond, held: Option<&Held>) -> bool {
             d if d.numeric() => v.num?.partial_cmp(&want.num?),
             Datatype::Date | Datatype::Datetime => Some(v.date?.into_inner().cmp(&want.date?.into_inner())),
             Datatype::Bool => Some(v.boolean?.cmp(&want.boolean?)),
-            _ => Some(v.text.as_deref()?.to_lowercase().cmp(&want.text.as_deref()?.to_lowercase())),
+            _ => Some(grouping::text_key(v.text.as_deref()?).cmp(&grouping::text_key(want.text.as_deref()?))),
         }
     };
     use std::cmp::Ordering::*;

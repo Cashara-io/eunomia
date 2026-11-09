@@ -604,7 +604,12 @@ pub async fn send_stream(
     user_message: String,
     tx: mpsc::Sender<ChatEvent>,
 ) {
-    if let Err((code, message)) = crate::views::TURN_STARTED.scope(Datetime::default(), run_send(&state, &user, &thread_id, &user_message, &tx)).await {
+    let result = tokio::select! {
+        biased;
+        _ = tx.closed() => return,
+        result = crate::views::TURN_STARTED.scope(Datetime::default(), run_send(&state, &user, &thread_id, &user_message, &tx)) => result,
+    };
+    if let Err((code, message)) = result {
         let event = ChatEvent::Error { message, code: code.as_str().to_string(), trace_id: crate::telemetry::current_trace_id() };
         let _ = tx.send(event).await;
     }
@@ -718,7 +723,7 @@ async fn run_send(
 
     let client = p.client().await.map_err(|e| (e.code, e.message))?;
     let url = p.url("chat/completions");
-    let model = "gpt-6-luna";
+    let model = provider::chat_model(&p).await;
 
     let mut prose = crate::views::ui::prose::ChatProse::default();
     prose.text(user_message);
@@ -730,7 +735,7 @@ async fn run_send(
             messages.push(json!({"role":"system","content":"The tool budget is exhausted. Give your final answer now using only this turn's results. State what you found and explicitly say which parts you could not finish. Do not list planned steps or request more tools."}));
         }
         let offered = if final_turn { &[][..] } else { tools.as_slice() };
-        let call = ModelCall { client: &client, url: &url, bearer: p.bearer(), model, tools: offered, messages: &messages };
+        let call = ModelCall { client: &client, url: &url, bearer: p.bearer(), model: &model, tools: offered, messages: &messages };
         let (content, tool_calls_acc) = match tokio::time::timeout(limit, call.run(&mut reasoning_off)).await {
             Ok(done) => done?,
             // what was stored so far ends on a user message or a tool result, so the thread takes the next message
@@ -749,7 +754,7 @@ async fn run_send(
         let content = prose.safe(&content);
         if tool_calls_acc.is_empty() || final_turn {
             let content = if content.trim().is_empty() { "I could not complete a written answer. Please refer to the verified tool results above.".to_string() } else { content };
-            let _ = tx.send(ChatEvent::Text { delta: content.clone() }).await;
+            if tx.send(ChatEvent::Text { delta: content.clone() }).await.is_err() { return Ok(()); }
             persist(db, owner, thread_id, "assistant", &content, None, None).await.map_err(|e| (e.code, e.message))?;
             let _ = tx.send(ChatEvent::Done { reply: content, tool_calls_made }).await;
             return Ok(());

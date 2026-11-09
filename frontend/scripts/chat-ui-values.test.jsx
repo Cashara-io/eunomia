@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import ChatText from "../src/components/chat/ChatText";
 import MetricView from "../src/components/chat/views/MetricView";
 import UiView from "../src/components/chat/ui/UiView";
 import Chart from "../src/components/chat/ui/Charts";
@@ -136,4 +137,17 @@ test("grouped metric view displays server groups and keeps a missing value missi
   expect(html).toContain("none");
   expect(html).not.toContain("No value");
   expect(html).not.toContain("0.00");
+});
+
+test("chat displays checked server text without another Markdown or entity pass", () => {
+  const html = renderToStaticMarkup(<ChatText text={"Count 1**2** &amp; &#49; {{sources.sales.value}}"} />);
+  expect(html).toContain("Count 1**2** &amp;amp; &amp;#49; {{sources.sales.value}}");
+  expect(html).not.toContain("<strong>");
+});
+test("overlap notes are visible in metric and generated views", () => {
+  const note = "1 entity contributes to more than one group; groups overlap and must not be summed";
+  const metric = {as_of: "2026-01-01T00:00:00Z", expr_words: "Sum of sales", metric: "sales", kind: "sample", value: null, unit: "AUD", groups: [{group: "Supplier", value: 100, n_entities: 1, entity_ids: [], truncated: false}], warnings: [note], status: "approved", entity_ids: [], n_entities: 1, truncated: false};
+  expect(renderToStaticMarkup(<MetricView view={{type: "metric", headline: "Sales", metric, entities: []}} />)).toContain(note);
+  const view = {type: "ui", spec: {root: "h", elements: {h: {type: "Heading", props: {text: "Sales"}, children: []}}}, data: {sources: {sales: {warnings: [note]}}}, text: note};
+  expect(renderToStaticMarkup(<UiView view={view} />)).toContain(note);
 });
