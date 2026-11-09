@@ -248,6 +248,7 @@ fn consumer_oauth_apps_refresh_ingest_partial_and_disconnect() {
                 http.post(format!("{origin}/control")).json(&json!({"pause_refresh":true,"refresh_started":false})).send().await.unwrap();
                 let row = storage::load(&state.db, &app.user.id).await.unwrap();
                 let mut credentials = service::credentials_of(&state.settings.encryption_key, &row).unwrap();
+                let previous_refresh = credentials["refresh_token"].clone();
                 credentials["expires_at"] = json!(0);
                 storage::replace(&state.db, &state.settings.encryption_key, &app.user.id, &row, &credentials).await.unwrap().unwrap();
                 let refresh = account::access_token(&state, &app.user.id);
@@ -268,11 +269,16 @@ fn consumer_oauth_apps_refresh_ingest_partial_and_disconnect() {
                 let mut credentials = service::credentials_of(&state.settings.encryption_key, &current).unwrap();
                 let stats: Value = http.get(format!("{origin}/stats")).send().await.unwrap().json().await.unwrap();
                 assert_eq!(credentials["refresh_token"], stats["refresh_token"]);
+                assert_ne!(credentials["refresh_token"], previous_refresh, "the mock did not rotate the refresh token");
+                let stale = http.post(format!("{origin}/token"))
+                    .form(&[("grant_type", "refresh_token"), ("refresh_token", previous_refresh.as_str().unwrap())])
+                    .send().await.unwrap();
+                assert_eq!(stale.status(), reqwest::StatusCode::BAD_REQUEST, "the mock accepted a spent refresh token");
                 credentials["expires_at"] = json!(0);
                 storage::replace(&state.db, &state.settings.encryption_key, &app.user.id, &current, &credentials).await.unwrap().unwrap();
                 http.post(format!("{origin}/control")).json(&json!({"revoke_refresh":true})).send().await.unwrap();
                 let (_, health) = app.http("GET", "/api/connectors/composio/status", None, true).await;
-                assert!(health["health"].as_str().unwrap().contains("reconnect Composio"), "{health}");
+                assert!(health["health"].as_str().is_some_and(|status| status.contains("reconnect Composio")), "revoked refresh did not request reconnect: {health}");
                 assert!(!health.to_string().contains("canary"));
                 let current = storage::load(&state.db, &app.user.id).await.unwrap();
                 assert!(current.credentials_encrypted.starts_with("enc:v1:"));

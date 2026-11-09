@@ -64,11 +64,6 @@ test("a routing rule files tagged recordings in their own vault", async ({ page 
     expect((await page.request.post("/api/tools/vault_create", { data: { name: "Work e2e", kind: "org" } })).ok()).toBeTruthy();
 
     await page.goto("/connectors/setup/pocketai");
-    await page.getByPlaceholder("pk_…").fill("pk_e2e_routing");
-    await page.getByPlaceholder("https://public.heypocketai.com/api/v1").fill(pocket.base);
-    await page.getByRole("button", { name: "Save", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Saved" })).toBeVisible();
-
     // destination: personal (the default); one rule: tag "work" -> Work e2e
     const routing = page.getByRole("region", { name: "Where will my items go?" });
     await expect(routing.getByRole("combobox", { name: "Destination space" })).toHaveText(/Personal/);
@@ -79,16 +74,26 @@ test("a routing rule files tagged recordings in their own vault", async ({ page 
     await routing.getByRole("button", { name: "Save routing" }).click();
     await expect(routing.getByRole("button", { name: "Saved" })).toBeVisible();
 
+    // Enable the connector only after its routing is saved, so the scheduler uses these rules too.
+    await page.getByPlaceholder("pk_…").fill("pk_e2e_routing");
+    await page.getByPlaceholder("https://public.heypocketai.com/api/v1").fill(pocket.base);
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Saved" })).toBeVisible();
+
     // the saved routing comes back from the server
     const connector = await (await page.request.get("/api/connectors/pocketai")).json();
     expect(connector.routing.rules).toEqual([{ field: "tag", value: "work", vault: expect.stringMatching(/^vault:/) }]);
     expect(connector.routing.default_vault).toBeUndefined();
 
-    // The scheduler syncs a newly saved connector on its next tick, which can land before this click.
-    // Then Sync now finds both recordings unchanged, so check the total, not which sync wrote them.
-    await page.getByRole("button", { name: "Sync now" }).click();
-    const synced = page.getByRole("status").filter({ hasText: /Synced|Sync/ });
-    await expect(synced).toHaveText(/Synced: \d+ new or changed, \d+ unchanged/);
+    // A scheduled sync may still be running. Retry the manual action after that response,
+    // then check the completed report rather than assuming which run imported the recordings.
+    const syncButton = page.getByRole("button", { name: "Sync now" });
+    const synced = page.getByRole("region", { name: "3. Check and import your items" }).getByRole("status");
+    await expect(async () => {
+      await syncButton.click();
+      await expect(syncButton).toBeEnabled({ timeout: 30_000 });
+      await expect(synced).toHaveText(/Synced: \d+ new or changed, \d+ unchanged/, { timeout: 1000 });
+    }).toPass({ timeout: 30_000, intervals: [500] });
     const [written, skipped] = ((await synced.textContent()) ?? "").match(/\d+/g)!.map(Number);
     expect(written + skipped).toBe(2);
 

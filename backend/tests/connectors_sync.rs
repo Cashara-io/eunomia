@@ -1195,3 +1195,60 @@ async fn pocket_audio_over_the_cap_is_refused_and_a_signed_url_is_followed() {
     let signed = mock.requests().into_iter().find(|r| r.path == "/s3/signed.m4a").unwrap();
     assert_eq!(signed.header("authorization"), "", "our key never goes to the signed URL");
 }
+
+/// Reproduce the routing E2E's scheduler race through the actual API, then finish a manual sync.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn pocket_routing_sync_api_reports_busy_then_counts_and_keeps_vaults() {
+    Box::pin(async {
+        let (app, org) = app_with(None).await;
+        let owner = app.user.id.clone();
+        let (code, vault) = app.http("POST", "/api/tools/vault_create", Some(json!({"name":"Work API","kind":"org"})), true).await;
+        assert_eq!(code, 200, "{vault}");
+        let work = vault["id"].as_str().unwrap();
+        let recording = |id: &str, title: &str, tags: Value, summary: &str| json!({
+            "id":id, "title":title, "recording_at":chrono::Utc::now().to_rfc3339(), "duration":600,
+            "tags":tags, "summarizations":{"s":{"v2":{"summary":{"markdown":summary}}}}, "transcript":{"segments":[]}
+        });
+        let records = vec![
+            recording("rec_work", "Paperless standup", json!([{"id":"work","name":"work"}]), "Agreed the tamarind importer fix."),
+            recording("rec_home", "Dentist call", json!([]), "Booked the rambutan appointment."),
+        ];
+        let mut routes = vec![route("GET", "/public/recordings", json!({"data":records,"pagination":{"has_more":false}}))];
+        for record in &records {
+            routes.push(route("GET", &format!("/public/recordings/{}", record["id"].as_str().unwrap()), json!({"data":record})));
+        }
+        let mock = serve(routes).await;
+        let (code, saved) = app.http("PUT", "/api/connectors/pocketai", Some(json!({
+            "enabled":true, "credentials":{"api_key":"pk_e2e_routing"}, "config":{"base_url":mock.base},
+            "routing":{"rules":[{"field":"tag","value":"work","vault":work}]}
+        })), true).await;
+        assert_eq!(code, 200, "{saved}");
+        assert_eq!(saved["source_key"], "heypocket");
+        jobs::enqueue(&app.state.control, NewJob::new(kind::SYNC, owner.clone(), "routing:scheduled")
+            .in_org(org.db.org()).payload(json!({"source":"heypocket"}))).await.unwrap();
+        let (code, busy) = app.http("POST", "/api/sources/heypocket/sync", None, true).await;
+        assert_eq!(code, 200, "{busy}");
+        assert_eq!(busy["status"], "already_running", "{busy}");
+        let stop = spawn_worker(&app.state);
+        wait_for("scheduled Pocket sync", 20, || async {
+            let mut result = eunomia_backend::store::jobs::SYNC_ACTIVE.on(&app.state.control)
+                .bind(("owner", owner.clone())).bind(("source", "heypocket")).await.unwrap();
+            result.take::<Vec<RecordId>>(0).unwrap().is_empty()
+        }).await;
+        let (code, report) = app.http("POST", "/api/sources/heypocket/sync", None, true).await;
+        assert_eq!(code, 200, "{report}");
+        assert!(report["error"].is_null() && report["status"].is_null(), "{report}");
+        assert_eq!(report["failed"], 0, "{report}");
+        assert_eq!(report["written"].as_u64().unwrap() + report["skipped"].as_u64().unwrap(), 2, "{report}");
+        for (query, vault, title) in [("tamarind", "Work API", "Paperless standup"), ("rambutan", "personal", "Dentist call")] {
+            let (code, found) = app.http("POST", "/api/tools/search", Some(json!({"query":query,"vault_ids":[vault],"mode":"keyword"})), true).await;
+            assert_eq!(code, 200, "{found}");
+            assert_eq!(found["results"].as_array().unwrap().len(), 1, "{found}");
+            assert_eq!(found["results"][0]["title"], title, "{found}");
+        }
+        let (_, statuses) = app.http("GET", "/api/sources/status", None, true).await;
+        assert_eq!(statuses["heypocket"]["last_report"], report);
+        assert_eq!(statuses["heypocket"]["last_error"], "");
+        let _ = stop.send(true);
+    }).await;
+}
