@@ -41,7 +41,9 @@ licence ([below](#licence-and-support)).
 Watch the launch film (with sound) in [1080p](docs/media/eunomia-launch-film.mp4)
 (27 MB) or [720p](docs/media/eunomia-launch-film-720p.mp4) (4 MB).
 
-**New in 2.1.0:** the Memory map can show several memory spaces at once again.
+**New in 2.2.0:** a project ontology. Your AI proposes the kinds of things your business has, their typed
+properties, links and certified metrics; you approve them. Then chat, MCP and Claude Code can answer number
+questions from your data, show what a change affects, and run what-ifs that save nothing.
 Every release is described on the [releases page](https://github.com/Cashara-io/eunomia/releases).
 
 ---
