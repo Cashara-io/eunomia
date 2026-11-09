@@ -17,7 +17,7 @@ export function sourceLabel(s: SourceRow): string {
   return s.account ? `${name} (${s.account})` : name;
 }
 
-export type SourceHealth = { label: "Healthy" | "Retrying" | "Failing" | "Never synced" | "Connected"; tone: string };
+export type SourceHealth = { label: "Healthy" | "Rate limited" | "Importing" | "Retrying" | "Failing" | "Never synced" | "Connected"; tone: string };
 
 /** One source's sync health. No row means a connector with nothing to sync (tool calls only).
  * A connected source that has not synced yet reads "Connected", since there is no health to report. */
@@ -26,6 +26,9 @@ export function sourceHealth(s: SourceRow | undefined): SourceHealth {
   const { consecutive_failures: fails, last_ok } = s.sync_status;
   if (fails >= FAILURE_ALERT_THRESHOLD) return { label: "Failing", tone: "var(--critical)" };
   if (fails > 0) return { label: "Retrying", tone: "var(--warning)" };
+  if (s.sync_status.last_report?.status === "partial") {
+    return { label: s.sync_status.last_report.message?.startsWith("rate limited") ? "Rate limited" : "Importing", tone: "var(--warning)" };
+  }
   if (last_ok) return { label: "Healthy", tone: "var(--good)" };
   return { label: s.connected ? "Connected" : "Never synced", tone: "var(--ink-faint)" };
 }

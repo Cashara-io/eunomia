@@ -14,7 +14,11 @@
 //! `EUNOMIA_ALLOW_CONNECTOR_BASE_URL=1`: the hook the mock-provider tests use, and how a self-hosted
 //! provider such as GitHub Enterprise or PocketAI points elsewhere.
 
+use std::sync::Arc;
 use std::time::Duration;
+
+use rand::Rng;
+use tokio::sync::Mutex;
 
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, RETRY_AFTER, USER_AGENT};
 use axum::http::{Method, StatusCode};
@@ -65,15 +69,39 @@ fn host(url: &str) -> &str {
     url.split("://").nth(1).and_then(|rest| rest.split('/').next()).unwrap_or(url)
 }
 
+/// Google uses 403 for quota failures as well as permissions errors.
+fn rate_limited(status: StatusCode, body: &str) -> bool {
+    if status == StatusCode::TOO_MANY_REQUESTS { return true; }
+    if status != StatusCode::FORBIDDEN { return false; }
+    let Ok(value) = serde_json::from_str::<Value>(body) else { return false };
+    value.pointer("/error/errors").and_then(Value::as_array).is_some_and(|errors| {
+        errors.iter().any(|error| matches!(error["reason"].as_str(),
+            Some("rateLimitExceeded" | "userRateLimitExceeded" | "quotaExceeded")))
+    })
+}
+
+/// Shared fetch policy: only quota and transient failures may keep work pending.
+/// `connector_removed` is HTTP 404/410; `connector_auth` is non-quota 401/403.
+/// `AppError::retry_after_secs` carries the final provider delay to the scheduler.
+pub(crate) fn retryable(error: &AppError) -> bool {
+    matches!(error.reason, Some("connector_rate_limited" | "connector_transient"))
+}
+
 fn provider_error(url: &str, status: StatusCode, body: &str) -> AppError {
-    let hint = match status.as_u16() {
+    let limited = rate_limited(status, body);
+    let hint = if limited { " (rate limited -- retried on the next sync)" } else { match status.as_u16() {
         401 | 403 => " (check the token and its scopes)",
         429 => " (rate limited -- retried on the next sync)",
         500..=599 => " (provider-side error -- retried on the next sync)",
         _ => "",
-    };
+    }};
     let snippet: String = reason(body).unwrap_or_else(|| body.chars().take(200).collect());
-    AppError::new(StatusCode::BAD_GATEWAY, format!("{} returned HTTP {}{hint}: {}", host(url), status.as_u16(), snippet.trim()))
+    let error = AppError::new(StatusCode::BAD_GATEWAY, format!("{} returned HTTP {}{hint}: {}", host(url), status.as_u16(), snippet.trim()));
+    if limited { error.with_reason("connector_rate_limited") }
+    else if matches!(status.as_u16(), 401 | 403) { error.with_reason("connector_auth") }
+    else if matches!(status.as_u16(), 404 | 410) { error.with_reason("connector_removed") }
+    else if status.is_server_error() { error.with_reason("connector_transient") }
+    else { error }
 }
 
 /// The provider's own words from a JSON error body (`message`, `error.message`, `error`, `detail`, `errors[0].message`), if it has any.
@@ -88,8 +116,32 @@ fn reason(body: &str) -> Option<String> {
     Some(found.chars().take(200).collect())
 }
 
-fn retry_after(headers: &HeaderMap) -> Option<u64> {
-    headers.get(RETRY_AFTER)?.to_str().ok()?.trim().parse::<f64>().ok().map(|s| s.ceil() as u64)
+fn retry_after(headers: &HeaderMap) -> Option<Duration> {
+    let raw = headers.get(RETRY_AFTER)?.to_str().ok()?.trim();
+    if let Ok(seconds) = raw.parse::<f64>() {
+        return Duration::try_from_secs_f64(seconds).ok();
+    }
+    let date = chrono::DateTime::parse_from_rfc2822(raw).ok()?;
+    Some((date.with_timezone(&chrono::Utc) - chrono::Utc::now()).to_std().unwrap_or_default())
+}
+
+/// Shared by all requests of one Google sync, never by unrelated connections.
+struct RetryBudget {
+    remaining: Duration,
+    retries: u32,
+}
+
+impl RetryBudget {
+    fn reserve(&mut self, wait: Duration) -> bool {
+        if self.retries == 0 || wait > self.remaining { return false; }
+        self.retries -= 1;
+        self.remaining = self.remaining.saturating_sub(wait);
+        true
+    }
+}
+
+fn jitter(attempt: u32) -> Duration {
+    Duration::from_millis(rand::thread_rng().gen_range(0..=1000 * (1u64 << attempt.min(3))))
 }
 
 /// A per-user `config.base_url` would let any user of a shared server point
@@ -102,12 +154,16 @@ pub fn base_url_override_allowed() -> bool {
 }
 
 /// One provider's REST API. Every request goes through [`Api::send`], which
-/// retries a short 429 once and turns any non-2xx into an error naming the
+/// retries Google quota/transient failures within a per-sync budget, or a short
+/// 429 once for other providers, and turns any non-2xx into an error naming the
 /// host and status -- what lands in `sync_status.last_error`.
 #[derive(Clone)]
 pub struct Api {
     base: String,
     headers: HeaderMap,
+    retry_budget: Option<Arc<Mutex<RetryBudget>>>,
+    pace: Option<Arc<Mutex<tokio::time::Instant>>>,
+    spacing: Duration,
     secrets: Option<crate::secrets::connector::Context>,
 }
 
@@ -123,7 +179,26 @@ impl Api {
             .unwrap_or(default_base);
         // GitHub rejects requests without a User-Agent; harmless elsewhere.
         headers.insert(USER_AGENT, HeaderValue::from_static("eunomia"));
-        Self { base: base.trim_end_matches('/').to_string(), headers, secrets: crate::secrets::connector::current() }
+        Self { base: base.trim_end_matches('/').to_string(), headers, secrets: crate::secrets::connector::current(), retry_budget: None, pace: None, spacing: Duration::ZERO }
+    }
+
+    pub(crate) fn with_google_retries(mut self) -> Self {
+        self.retry_budget = Some(Arc::new(Mutex::new(RetryBudget { remaining: Duration::from_secs(10), retries: 4 })));
+        self
+    }
+
+    pub(crate) fn with_pacing(mut self, spacing: Duration) -> Self {
+        self.pace = Some(Arc::new(Mutex::new(tokio::time::Instant::now())));
+        self.spacing = spacing;
+        self
+    }
+
+    async fn pace(&self) {
+        if let Some(pace) = &self.pace {
+            let mut next = pace.lock().await;
+            tokio::time::sleep_until(*next).await;
+            *next = tokio::time::Instant::now() + self.spacing;
+        }
     }
 
     pub fn with_header(mut self, name: &'static str, value: &'static str) -> Self {
@@ -157,7 +232,10 @@ impl Api {
     async fn send(&self, method: Method, path: &str, query: &[(&str, String)], body: Option<&Value>) -> AppResult<(Value, HeaderMap)> {
         let url = self.url(path);
         let mut retried = false;
+        let mut attempt = 0;
         loop {
+            let started = tokio::time::Instant::now();
+            self.pace().await;
             let http = guarded(&url, self.secrets.as_ref()).await?;
             let full = if query.is_empty() { reqwest::Url::parse(&url) } else { reqwest::Url::parse_with_params(&url, query) }
                 .map_err(|e| AppError::internal(format!("invalid connector url: {e}")))?;
@@ -165,25 +243,67 @@ impl Api {
             if let Some(body) = body {
                 req = req.json(body);
             }
-            let resp = req
-                .send()
-                .await
-                .map_err(|e| {
+            if attempt > 0 && let Some(budget) = &self.retry_budget {
+                req = req.timeout(budget.lock().await.remaining.saturating_sub(started.elapsed()).max(Duration::from_millis(1)).min(TIMEOUT));
+            }
+            let response = req.send().await;
+            let response = match response {
+                Ok(resp) => Ok(resp),
+                Err(e) => {
+                    let transient = e.is_timeout() || e.is_connect() || e.is_body();
                     let message = format!("could not reach {}: {e}", host(&url));
                     let message = self.secrets.as_ref().map_or_else(|| message.clone(), |s| s.scrub(&message));
-                    AppError::new(StatusCode::BAD_GATEWAY, message)
-                })?;
-            let status = resp.status();
-            if status == StatusCode::TOO_MANY_REQUESTS
-                && !retried
-                && let Some(wait) = retry_after(resp.headers()).filter(|w| *w <= MAX_RETRY_AFTER_SECS)
-            {
-                retried = true;
-                tokio::time::sleep(Duration::from_secs(wait)).await;
-                continue;
+                    let error = AppError::new(StatusCode::BAD_GATEWAY, message);
+                    Err(if transient { error.with_reason("connector_transient") } else { error })
+                }
+            };
+            let (status, mut headers, text) = match response {
+                Ok(resp) => {
+                    let status = resp.status();
+                    let headers = resp.headers().clone();
+                    let text = resp.text().await.map_err(|_| AppError::new(StatusCode::BAD_GATEWAY,
+                        format!("could not read response from {}", host(&url))).with_reason("connector_transient"));
+                    (status, headers, text)
+                }
+                Err(error) => (StatusCode::BAD_GATEWAY, HeaderMap::new(), Err(error)),
+            };
+            if attempt > 0 && let Some(budget) = &self.retry_budget {
+                let mut budget = budget.lock().await;
+                budget.remaining = budget.remaining.saturating_sub(started.elapsed());
             }
-            let mut headers = resp.headers().clone();
-            let text = resp.text().await.unwrap_or_default();
+            // Scrub before shortening a provider message, so a secret crossing the snippet boundary stays hidden.
+            let text = text.map(|text| self.secrets.as_ref().map_or_else(|| text.clone(), |secrets| secrets.scrub(&text)));
+            let error = match &text {
+                Ok(body) if !status.is_success() => Some(provider_error(&url, status, body)),
+                Err(error) => {
+                    let mut copy = AppError::new(error.status, error.message.clone());
+                    copy.reason = error.reason;
+                    Some(copy)
+                }
+                _ => None,
+            };
+            if let Some(error) = error {
+                let wait = retry_after(&headers);
+                let retry = if let Some(budget) = &self.retry_budget {
+                    let delay = jitter(attempt).max(wait.unwrap_or_default());
+                    if method == Method::GET && retryable(&error) && budget.lock().await.reserve(delay) {
+                        Some(delay)
+                    } else { None }
+                } else if status == StatusCode::TOO_MANY_REQUESTS && !retried {
+                    wait.filter(|w| *w <= Duration::from_secs(MAX_RETRY_AFTER_SECS))
+                } else { None };
+                if let Some(delay) = retry {
+                    retried = true;
+                    attempt += 1;
+                    tokio::time::sleep(delay).await;
+                    continue;
+                }
+                let mut error = error;
+                error.retry_after_secs = wait.map(|delay| delay.as_secs().saturating_add(u64::from(delay.subsec_nanos() > 0)));
+                if let Some(secrets) = &self.secrets { error.message = secrets.scrub(&error.message); }
+                return Err(error);
+            }
+            let text = text?;
             let text = if let Some(secrets) = &self.secrets {
                 for value in headers.values_mut() {
                     if let Ok(raw) = value.to_str() {
@@ -192,9 +312,6 @@ impl Api {
                 }
                 secrets.scrub(&text)
             } else { text };
-            if !status.is_success() {
-                return Err(provider_error(&url, status, &text));
-            }
             if text.trim().is_empty() {
                 return Ok((Value::Null, headers));
             }
@@ -240,10 +357,10 @@ pub async fn download(url: &str, headers: &HeaderMap, max_bytes: usize) -> AppRe
         }
         if status == StatusCode::TOO_MANY_REQUESTS
             && !retried
-            && let Some(wait) = retry_after(resp.headers()).filter(|w| *w <= MAX_RETRY_AFTER_SECS)
+            && let Some(wait) = retry_after(resp.headers()).filter(|w| *w <= Duration::from_secs(MAX_RETRY_AFTER_SECS))
         {
             retried = true;
-            tokio::time::sleep(Duration::from_secs(wait)).await;
+            tokio::time::sleep(wait).await;
             continue;
         }
         if !status.is_success() {
@@ -662,6 +779,78 @@ mod tests {
         let err = api.get("/x", &[]).await.unwrap_err();
         assert!(err.message.contains("HTTP 429 (rate limited"), "{}", err.message);
         assert_eq!(mock.requests().len(), 2);
+    }
+
+    #[test]
+    fn google_quota_reasons_are_distinct_from_permissions() {
+        for reason in ["rateLimitExceeded", "userRateLimitExceeded", "quotaExceeded"] {
+            let body = json!({"error": {"errors": [{"reason": reason}]}}).to_string();
+            assert!(retryable(&provider_error("https://google.test", StatusCode::FORBIDDEN, &body)), "{reason}");
+        }
+        for body in [r#"{"error":{"errors":[{"reason":"insufficientPermissions"}]}}"#, "not JSON"] {
+            assert!(!retryable(&provider_error("https://google.test", StatusCode::FORBIDDEN, body)));
+        }
+        assert!(rate_limited(StatusCode::TOO_MANY_REQUESTS, "Too many concurrent requests for user"));
+        assert!(!rate_limited(StatusCode::UNAUTHORIZED, r#"{"error":{"errors":[{"reason":"userRateLimitExceeded"}]}}"#));
+    }
+
+    #[tokio::test]
+    async fn google_retries_403_and_429_with_and_without_retry_after() {
+        use crate::sources::mock::{route, serve};
+        for status in [403, 429, 503] {
+            for retry_after in [None, Some("0.01")] {
+                let mut limited = route("GET", "/x", json!({"error": {"errors": [{"reason": "userRateLimitExceeded"}]}})).status(status).times(1);
+                if let Some(value) = retry_after { limited = limited.header("retry-after", value); }
+                let mock = serve(vec![limited, route("GET", "/x", json!({"ok": true}))]).await;
+                let api = Api::new(&json!({"base_url": mock.base}), "", HeaderMap::new()).with_google_retries();
+                assert_eq!(api.get("/x", &[]).await.unwrap()["ok"], true);
+                assert_eq!(mock.requests().len(), 2);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn retry_budget_is_shared_across_requests_and_honours_long_retry_after() {
+        use crate::sources::mock::{route, serve};
+        let mock = serve(vec![
+            route("GET", "/long", json!({})).status(429).header("retry-after", "60"),
+            route("GET", "/x", json!({})).status(429),
+        ]).await;
+        let api = Api::new(&json!({"base_url": mock.base}), "", HeaderMap::new()).with_google_retries();
+        let started = tokio::time::Instant::now();
+        assert!(retryable(&api.get("/long", &[]).await.unwrap_err()));
+        assert!(started.elapsed() < Duration::from_secs(1), "do not wait less than Retry-After or exceed the budget");
+        api.retry_budget.as_ref().unwrap().lock().await.retries = 1;
+        assert!(retryable(&api.get("/x", &[]).await.unwrap_err()));
+        assert!(retryable(&api.clone().get("/x", &[]).await.unwrap_err()));
+        assert_eq!(mock.requests().len(), 4, "one long, two for first x, one for second x");
+    }
+
+    #[test]
+    fn full_jitter_is_capped_and_wait_budget_is_finite_even_with_zero_delays() {
+        for attempt in 0..12 {
+            assert!(jitter(attempt) <= Duration::from_secs(1 << attempt.min(3)));
+        }
+        let mut budget = RetryBudget { remaining: Duration::from_secs(3), retries: 4 };
+        assert!(!budget.reserve(Duration::from_secs(4)));
+        assert!(budget.reserve(Duration::from_secs(3)));
+        for _ in 0..3 { assert!(budget.reserve(Duration::ZERO)); }
+        assert!(!budget.reserve(Duration::ZERO));
+        let mut headers = HeaderMap::new();
+        headers.insert(RETRY_AFTER, HeaderValue::from_static("Wed, 01 Jan 2098 00:00:00 GMT"));
+        assert!(retry_after(&headers).unwrap() > Duration::from_secs(10));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn pacing_is_local_to_the_api_and_shared_by_clones() {
+        let api = Api::new(&json!({}), "https://example.com", HeaderMap::new()).with_pacing(Duration::from_secs(1));
+        let start = tokio::time::Instant::now();
+        api.pace().await;
+        api.clone().pace().await;
+        assert_eq!(start.elapsed(), Duration::from_secs(1));
+        let other = Api::new(&json!({}), "https://example.com", HeaderMap::new()).with_pacing(Duration::from_secs(1));
+        other.pace().await;
+        assert_eq!(start.elapsed(), Duration::from_secs(1));
     }
 
     #[test]

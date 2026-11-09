@@ -32,13 +32,20 @@ pub struct Route {
     headers: Vec<(&'static str, String)>,
     /// Answer with this text verbatim (and `content-type` from [`Route::header`]) instead of `body`.
     raw: Option<String>,
+    remaining: Option<usize>,
 }
 
 pub fn route(method: &str, path: &str, body: Value) -> Route {
-    Route { method: method.parse().unwrap(), path: path.to_string(), query: vec![], body_has: vec![], delay_ms: 0, status: 200, body, headers: vec![], raw: None }
+    Route { method: method.parse().unwrap(), path: path.to_string(), query: vec![], body_has: vec![], delay_ms: 0, status: 200, body, headers: vec![], raw: None, remaining: None }
 }
 
 impl Route {
+    /// Answer only this many matching requests, then try the next matching route.
+    pub fn times(mut self, count: usize) -> Self {
+        self.remaining = Some(count);
+        self
+    }
+
     /// Only match requests whose raw query string contains `fragment`.
     pub fn query_has(mut self, fragment: &'static str) -> Self {
         self.query.push(fragment);
@@ -133,14 +140,18 @@ async fn handle(State(st): State<MockState>, method: Method, uri: Uri, headers: 
         .routes
         .lock()
         .unwrap()
-        .iter()
+        .iter_mut()
         .find(|r| {
+            r.remaining != Some(0) &&
             r.method == method
                 && r.path == uri.path()
                 && r.query.iter().all(|q| decoded.contains(q))
                 && r.body_has.iter().all(|b| body.contains(b))
         })
-        .cloned();
+        .map(|r| {
+            if let Some(remaining) = &mut r.remaining { *remaining -= 1; }
+            r.clone()
+        });
     let Some(r) = found else {
         return (StatusCode::NOT_FOUND, format!("mock: no route for {method} {uri}")).into_response();
     };

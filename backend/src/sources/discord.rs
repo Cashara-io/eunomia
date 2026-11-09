@@ -86,7 +86,7 @@ impl Source for DiscordSource {
                 }
             }
         }
-        Ok(SyncResult { records, cursor: Some(json!(newest).to_string()) })
+        Ok(SyncResult { records, cursor: Some(json!(newest).to_string()), ..SyncResult::default() })
     }
 
     fn map(&self, raw: &Value) -> Option<Value> {

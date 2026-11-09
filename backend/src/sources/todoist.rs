@@ -65,7 +65,7 @@ impl Source for TodoistSource {
         for t in records.iter_mut() {
             t["_project_name"] = json!(projects.get(s(t, "/project_id")).cloned().unwrap_or_default());
         }
-        Ok(SyncResult { records, cursor: None })
+        Ok(SyncResult { records, cursor: None, ..SyncResult::default() })
     }
 
     fn map(&self, raw: &Value) -> Option<Value> {
