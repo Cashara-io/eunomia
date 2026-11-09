@@ -40,8 +40,8 @@ pub struct Column { pub key: String, pub datatype: String, pub unit: Option<Stri
 
 fn bad(s: impl Into<String>) -> AppError { AppError::bad_request(s) }
 pub async fn resolve(db: &OrgDb, owner: &RecordId, args: &Dataset) -> AppResult<Value> {
-    if args.properties.len() > 24 || args.aggregates.len() > 24 || args.limit.is_some_and(|n| n == 0 || n > MAX_ROWS) {
-        return Err(bad("datasets allow 24 columns and aggregates and 1 to 500 output rows"));
+    if args.properties.len() > 24 || args.aggregates.len() > 24 || args.filters.len() > metric::MAX_FILTERS || args.limit.is_some_and(|n| n == 0 || n > MAX_ROWS) {
+        return Err(bad("datasets allow 24 columns and aggregates, 10 filters and 1 to 500 output rows"));
     }
     let vault = crate::rid::parse(&args.vault_id).map_err(|_| bad("invalid dataset vault_id"))?;
     let vault = super::resolve(db, owner, Some(&vault), Action::ReadMemories).await?;
@@ -71,7 +71,7 @@ pub async fn resolve(db: &OrgDb, owner: &RecordId, args: &Dataset) -> AppResult<
     if args.bucket.is_some() && !columns.iter().any(|c| Some(&c.key) == args.group_by.as_ref() && matches!(c.datatype.as_str(), "date" | "datetime")) {
         return Err(bad("time bucket needs a date or datetime group_by property"));
     }
-    let selector = metric::Selector::new(db, &vault, &kind, &args.filters).await?;
+    let selector = metric::Selector::from_properties(&kind, &args.filters, &properties)?;
     let mut ids: Vec<RecordId> = crate::store::ontology::UI_ENTITIES.on(db)
         .bind(("vault", vault.clone())).bind(("kind", args.kind.clone()))
         .bind(("table", crate::entities::service::kind_table(&args.kind)?.to_string())).await?.take(0)?;

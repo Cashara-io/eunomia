@@ -42,25 +42,60 @@ Screenshots and receipts: [proof directory](https://github.com/Cashara-io/eunomi
 
 ## Review fixes
 
-A local implementation attempt on 9 November 2026 started from
-`8bb67ef4dea26c59c90dfcc2e7030ec390b4f4d3`. The changes are uncommitted and
-have not been pushed. This section does not replace the earlier proof with a
-claim about the review fixes.
+The 9 November review round starts from `e5b725097f2b6ef820726eda680b0ffcae3e926f` and keeps its content. The earlier sections record earlier runs. This section records the review verification. [Commands](chat-json-render-review-commands.txt) use two cargo jobs, no dev debug information, no incremental compilation, an 8 MiB stack and niceness 19. Disk was checked before builds and stayed above 8 GiB. No `cargo fmt` was run.
 
-The working tree adds typed numeric bindings, component data-shape checks,
-digit checks for model-written prose, shared metric/dataset cutoffs and indexed
-latest-value reads, shared aggregate arithmetic, currency metadata, unavailable
-chart handling, UI-font numeric values, StatGroup tiles and Sankey label placement.
-It also adds bypass, aggregate, access and rendering regression cases.
+The review fixes restrict numeric slots to server-typed numeric fields, reject model-written digits, require chart-specific shapes and show unavailable measurements without substituting zeros. Dataset and metric use the same UTC cutoff and aggregate arithmetic, including case-insensitive distinct and empty sum zero. Currency survives aggregation and rendering; mixed-unit columns are rejected. Dataset filter validation now reuses those scoped property rows rather than reloading every property of the kind. The ten-filter limit runs before metadata queries. The remaining renderer gaps were currency inference when a chart omits `y`, including a `/rows` binding, and money units leaking into scalar counts. Both now have browser assertions. Numeric values use the UI font with tabular figures. StatGroup uses responsive Stat tiles. Sankey labels stay inside the plot.
 
-Clippy with warnings denied passed. Frontend lint, type generation, typecheck and
-the production build passed. The backend library run reported 514 passed and no
-failures, including numeric bypass and shared aggregate tests. Integration tests,
-guard-removal experiments, the scale fixture and Playwright remain unverified.
-The six real chat questions, numeric audit and new screenshots were not run.
+The generated catalogues were regenerated and both remained identical to their checked-in copies. The catalogue sync test passed.
 
-Disk space fell from 8.6 GiB to 5.7 GiB during backend test linking, crossing the
-requested 6 GiB stop limit. The build was stopped. The disposable container,
-frontend process, preview tab, backend target, frontend node_modules and Next
-build directory were removed. Free space recovered to 8.3 GiB. The shared
-database was not used. No PR body or screenshot branch was changed.
+### Guard mutations
+
+Every experiment changes one guard, runs the named regression and requires a test assertion failure, then restores the file. Compilation failures do not count. The replayable script is `scripts/chat-json-render/check_guards.py`. The combined access test is now split so each refusal has its own test. The strict-kind fixture has approved properties and first succeeds before strict mode is enabled.
+
+| Test in `backend/tests/chat_ui.rs`, unless qualified | Guard disabled | Result |
+| --- | --- | --- |
+| `dataset_filter_limit` | Ten-filter limit before metadata | Test failed |
+| `dataset_denies_same_org_nonmember` | Dataset vault authorisation | Test failed |
+| `dataset_denies_vault_restricted_token` | Credential vault restriction | Test failed |
+| `dataset_hides_cross_vault_links` | Outgoing target vault filter | Test failed |
+| `dataset_strict_kind_guard` | Approved-kind requirement in strict mode | Test failed |
+| `views::ui::tests::numeric_bypass_matrix` | Typed Stat scalar | Test failed |
+| Same matrix | Typed chart and formatted table columns | Test failed |
+| Same matrix | Distribution path and shape | Test failed |
+| Same matrix | Model-written digit refusal | Test failed |
+| `dataset_cutoff_currency_and_mixed_units` | Mixed-unit refusal | Test failed |
+| Same test | Historical cutoff | Test failed |
+| `ontology::metric::tests::shared_aggregate_semantics_nulls_empty_and_case` | Case folding | Test failed |
+| Same test | Empty sum zero | Test failed |
+| `dataset_resolves_real_typed_values_and_mcp_catalog` | Numeric aggregate datatype | Test failed |
+| Playwright: `typed money keeps its currency and missing values are unavailable` | Missing-measurement drawing guard | Test failed |
+
+The cutoff regression includes Melbourne midnight on the day after a bare UTC date and excludes a later value. It compares dataset and metric counts at the same cutoff. Currency checks cover USD metadata on rows and aggregates, plus mixed AUD/USD refusal. The aggregate parity matrix compares every supported aggregate on both numeric and text inputs where permitted, including empty selections.
+
+### Scale proof
+
+A fresh namespace and throwaway vault on the isolated SurrealDB 3.3.5 server at `127.0.0.1:8590` contains 5,000 entities and 50,000 property-history rows. Two properties have five versions each. The real `show_view` dataset path took 1,164 ms for grouping and 2,152 ms for monthly bucketing. The grouping produced 5,000 groups and explicitly marked the 500 returned rows as truncated. Monthly bucketing returned all twelve groups. The independently expected sum, 12,517,500, and total count, 5,000, were also asserted. The initial run measured 1,196 ms and 2,121 ms; both logs are retained.
+
+`EXPLAIN` uses `entity_vault_kind_idx` for entity selection with a limit of 5,001. Latest values use a backward `IndexScan` on `entity_property_entity_idx`, constrained by entity, property and cutoff. Neither plan uses a table scan. The plan retains a per-pair `SortTopKByKey` for `as_of, created_at` tie-breaking. This bounds entity/property lookups and avoids unrelated vault history, but does not make cost independent of history length within one selected pair. Metadata reads avoid the old full ontology profiling path. The scale test checks row counts, both named indexes, output groups and absence of table scans.
+
+### Fresh tests and live chat
+
+- Backend integration: seven chat UI tests, 110 ontology tests, one every-tool shape test and the round-trip guard passed. The ontology suite's pre-existing expensive import test is ignored. The scale proof is separately opted in.
+- Frontend lint, typecheck and production build passed. Both Playwright files passed, nine tests, with server model access disabled, matching CI.
+- Removing the frontend guard failed at the missing-data notice. After restoration, all nine browser tests passed again. A later restart check hit `ECONNREFUSED` before the rebuilt backend was ready; the eight UI tests passed and every-tool passed again after checking `/readyz`. This startup attempt is retained in the check logs.
+- Backend library: 514 passed. Hardened integration: seven chat UI tests, 110 ontology tests, one every-tool shape test and the round-trip guard passed. Clippy on all targets with warnings denied passed.
+
+The live check used the disposable database at 8590, backend at 8591 and frontend at 3590. It never used the shared database at port 8000. A fresh disposable account uploaded the exact CSV from `6b4e265861a6a01f362cb1c9041b39b1e44e73cf`, approved the kind, properties, source maps and total metric, then imported twelve rows and sixty property values with no bad cells. All six questions used `gpt-6-luna`, without changing models.
+
+| Question | Actual block | Recomputed answer |
+| --- | --- | --- |
+| Monthly trend | Line | Jan 200.75, Feb 370.75, Mar 240.50, Apr 225.25, May 280.50, Jun 270.25 AUD |
+| Supplier breakdown | Donut | Coastal 510.50, Inland 431.25, Metro 646.25 AUD |
+| Distribution | Histogram | Four bins containing 4, 3, 3 and 2 values |
+| Relationship | Scatter | All twelve quantity/amount pairs match the CSV |
+| Ten percent what-if | Scenario | AUD 1,588.00 to 1,746.80, delta 158.80 |
+| Table with totals | Table | AUD 1,588.00 and quantity 49 |
+
+`python3 -I scripts/chat-json-render/verify_numbers.py CSV ANSWER_DIRECTORY` matched 379 numeric fields within 0.01. This covers server rows, aggregates, totals, distributions and scenario fields. All six answer screenshots were opened and inspected, including the formatted scenario changes and table totals. All four regenerated catalogue contact sheets were inspected, with full-size checks of the phone StatGroup and phone/desktop Sankey labels.
+
+[Six answer screenshots, four catalogue sheets, CSV, receipts and numeric audit](https://github.com/Cashara-io/eunomia/tree/pr-screenshots/chat-json-render-v3). Guard failures, scale plans and final check logs are published there too. No keys, launch scripts or session cookies are published. Screenshots are uploaded through a temporary detached worktree. Cleanup removes this worktree's backend target, frontend node_modules, Next output, servers and disposable container.

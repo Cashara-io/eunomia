@@ -173,12 +173,23 @@ export default function UiView({ view: raw }: { view: unknown }) {
     e.props.units = Object.fromEntries((source.data.columns || []).map(c => [c.key, c.unit ?? null]));
     if (typeof e.props.x === "string" && formats[e.props.x] === "date")
       e.props.xFormat = "date";
-    const key = typeof e.props.y === "string" ? e.props.y : segments[3] === "rows" ? segments[5] : segments[3] === "totals" ? segments[4] : undefined;
+    const inferredKey = source.data.columns?.find(c =>
+      ["money", "number", "integer", "percent"].includes(c.datatype),
+    )?.key;
+    const key = typeof e.props.y === "string"
+      ? e.props.y
+      : segments[3] === "rows" && segments[5]
+        ? segments[5]
+        : segments[3] === "totals"
+          ? segments[4]
+          : inferredKey;
     const column = source.data.columns?.find(
       (c) => c.key === (segments[3] === "distributions" ? segments[4] : key),
     );
-    const datatype = column?.datatype;
-    e.props.unit = column?.unit ?? source.data.metric?.unit ?? null;
+    const count = segments[3] === "totals" && ["count", "distinct"].includes(segments[5]);
+    const datatype = count ? "number" : column?.datatype;
+    e.props.unit = count ? null : column?.unit ?? source.data.metric?.unit ?? null;
+    if (count) e.props.format = "number";
     if (datatype === "money" || /^[A-Z]{3}$/.test(source.data.metric?.unit || ""))
       e.props.format = "money";
     else if (datatype === "percent" || source.data.metric?.unit === "%")

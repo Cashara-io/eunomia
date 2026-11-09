@@ -376,10 +376,7 @@ pub const DECIDE_METRIC: Stmt = Stmt::new(
 pub const DESCRIBE_METRIC: Stmt =
     Stmt::new("ontology.describe_metric", "UPDATE $id SET description = $description, updated_at = time::now()");
 
-/// What one metric evaluation reads, whatever the metric: the entities of the kind in `$vault` (slot
-/// 1; `$table` picks the kind's table, `$kind` the custom kind) and, per entity and property in
-/// `$props`, its latest value that was true by `$as_of` (slot 2): one indexed lookup each on
-/// (entity, property, as_of), so a long history is never read. Fixed text: every input is a parameter.
+/// All entities of a metric's kind in the authorised vault (slot 1).
 pub const METRIC_ENTITIES: Stmt = Stmt::new(
     "ontology.metric_entities",
     r#"LET $ids = IF $table = "person" { (SELECT VALUE id FROM person WHERE vault = $vault) }
@@ -391,6 +388,8 @@ pub const METRIC_ENTITIES: Stmt = Stmt::new(
         ELSE { (SELECT VALUE id FROM entity WHERE vault = $vault AND kind = $kind) };
      RETURN $ids;"#,
 );
+/// Latest value per selected entity/property pair at the cutoff. The index avoids unrelated
+/// histories; created_at breaks ties within each pair. Every input is a parameter.
 pub const LATEST_VALUES: Stmt = Stmt::new("ontology.latest_values",
     r#"RETURN array::flatten(array::flatten($ids.map(|$e| $props.map(|$p| (
         SELECT entity, property, value_num, value_text, value_bool, value_date, unit, as_of, created_at FROM entity_property

@@ -1272,6 +1272,13 @@ impl Selector {
         Ok(Selector { conds })
     }
 
+    /// Dataset metadata already contains every selected and filtered property.
+    pub(super) fn from_properties(kind: &Kind, filters: &[Filter], rows: &[PropertyRow]) -> AppResult<Self> {
+        let props = rows.iter().map(|r| Ok((r.name.clone(), PropInfo::from_row(r)?))).collect::<AppResult<Props>>()?;
+        let conds = filters.iter().map(|f| check_filter(&props, kind, f).map_err(hard)).collect::<AppResult<Vec<_>>>()?;
+        Ok(Selector { conds })
+    }
+
     pub(super) fn properties(&self) -> impl Iterator<Item = &String> {
         self.conds.iter().map(|c| &c.filter.property)
     }
