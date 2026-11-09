@@ -1,4 +1,6 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
+import { configuredMetadataBase, requestMetadataBase } from "@/lib/metadata";
 // Self-hosted (the geist package wraps next/font/local): builds and pages never reach out to Google,
 // so firewalled and air-gapped installs get the real typeface (issue #155).
 import { GeistSans } from "geist/font/sans";
@@ -10,9 +12,40 @@ import Providers from "@/components/Providers";
 const geist = GeistSans;
 const geistMono = GeistMono;
 
-export const metadata: Metadata = {
-  title: "Eunomia",
-  description: "Shared memory for the AI apps you already use",
+export async function generateMetadata(): Promise<Metadata> {
+  const configured = configuredMetadataBase();
+  const request = configured ? null : await headers();
+  return {
+    metadataBase:
+      configured ??
+      requestMetadataBase(
+        request?.get("x-forwarded-host")?.split(",")[0]?.trim() ||
+          request?.get("host") ||
+          null,
+        request?.get("x-forwarded-proto")?.split(",")[0]?.trim() ?? null,
+      ),
+    title: "Eunomia",
+    openGraph: {
+      type: "website",
+      locale: "en_AU",
+      siteName: "Eunomia",
+      title: "Eunomia",
+      description: "Shared memory for the AI apps you already use",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: "Eunomia",
+      description: "Shared memory for the AI apps you already use",
+    },
+    description: "Shared memory for the AI apps you already use",
+  };
+}
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#FAFAF7" },
+    { media: "(prefers-color-scheme: dark)", color: "#121211" },
+  ],
 };
 
 // Dark is opt-in and saved per browser; set it before first paint so the page never flashes light.
@@ -20,7 +53,11 @@ const THEME_SCRIPT = `try{if(localStorage.getItem("eunomia-theme")==="dark")docu
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${geist.variable} ${geistMono.variable} h-full antialiased`} suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`${geist.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>

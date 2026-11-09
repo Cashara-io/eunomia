@@ -1,4 +1,5 @@
 "use client";
+import LoadingSkeleton, { SkeletonTableRows } from "@/components/ui/LoadingSkeleton";
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -296,11 +297,7 @@ function DocumentPanel({ id, chunk, vaults, onClose }: { id: string; chunk: stri
   }
   if (!detail) {
     return (
-      <div className="ledger p-4 flex flex-col gap-3" aria-busy="true" aria-label="Loading document">
-        <span className="skeleton h-5 w-40" />
-        <span className="skeleton h-3 w-56" />
-        <span className="skeleton h-24 w-full" />
-      </div>
+      <LoadingSkeleton label="Loading document" layout="detail" />
     );
   }
   const doc = detail.document;
@@ -428,7 +425,12 @@ function Documents() {
   const selected = params.get("id");
   const chunk = params.get("chunk");
   // every space the user can read, or the one picked
-  const [space, setSpace] = useState<string | null>(null);
+  const space = params.get("space");
+  const setSpace = (value: string | null) => {
+    const next = new URLSearchParams(params.toString());
+    if (value) next.set("space", value); else next.delete("space");
+    router.push(`/documents?${next}`, { scroll: false });
+  };
   const vaultList = useVaults().data;
   const vaults = new Map((vaultList ?? []).map((v) => [v.id, v]));
   const picked = space ? (vaults.get(space) ?? null) : null;
@@ -438,7 +440,11 @@ function Documents() {
   const maxBytes = list?.max_bytes ?? null;
   const storageOff = list !== undefined && !list.storage;
   const isAdmin = useMe().data?.is_admin ?? false;
-  const select = (id: string | null) => router.replace(id ? `/documents?id=${encodeURIComponent(id)}` : "/documents", { scroll: false });
+  const select = (id: string | null) => {
+    const next = new URLSearchParams(params.toString());
+    if (id) next.set("id", id); else { next.delete("id"); next.delete("chunk"); }
+    router.replace(`/documents?${next}`, { scroll: false });
+  };
   const uploads = useUploads(maxBytes, space, (id) => select(id));
   const input = useRef<HTMLInputElement>(null);
 
@@ -516,18 +522,7 @@ function Documents() {
                   </tr>
                 </thead>
                 <tbody aria-busy={docs === null}>
-                  {docs === null &&
-                    [0, 1].map((i) => (
-                      <tr key={i} aria-hidden>
-                        <td><span className="skeleton block h-4" style={{ width: "60%" }} /></td>
-                        <td><span className="skeleton block h-4 w-20" /></td>
-                        <td className="hidden sm:table-cell"><span className="skeleton block h-4 w-16" /></td>
-                        <td className="hidden md:table-cell"><span className="skeleton block h-4 w-12 ml-auto" /></td>
-                        <td className="hidden md:table-cell"><span className="skeleton block h-4 w-16" /></td>
-                        <td><span className="skeleton block h-4 w-14" /></td>
-                        <td className="hidden sm:table-cell"><span className="skeleton block h-4 w-8 ml-auto" /></td>
-                      </tr>
-                    ))}
+                  {docs === null && <SkeletonTableRows cols={7} cellClasses={["", "", "hidden sm:table-cell", "hidden md:table-cell", "hidden md:table-cell", "", "hidden sm:table-cell"]} label="Loading documents" />}
                   {docs?.length === 0 && (
                     <tr>
                       <td colSpan={7} style={{ color: "var(--ink-dim)", height: 56 }}>

@@ -50,7 +50,7 @@ impl Source for SpotifySource {
         }
         let page = api(conn).await?.get("/me/player/recently-played", &query).await?;
         let next = page.pointer("/cursors/after").and_then(|v| v.as_str()).map(String::from);
-        Ok(SyncResult { records: items(&page, "/items"), cursor: next.or(cursor) })
+        Ok(SyncResult { records: items(&page, "/items"), cursor: next.or(cursor), ..SyncResult::default() })
     }
 
     fn map(&self, raw: &Value) -> Option<Value> {

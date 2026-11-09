@@ -1,4 +1,5 @@
 "use client";
+import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 
 // Everything you can do with one memory space, in plain sections: who is in it, its kinds and links
 // and sharing it with another Eunomia (both folded away), then "Hand over this space" and "Leave or delete" (copy, leave,
@@ -260,13 +261,7 @@ export default function SpaceDetail({
           aside={members && <span className="label">{members.length}</span>}
         >
           <ul className="hairline-rows" aria-label="People in this space">
-            {members === null &&
-              [0, 1].map((i) => (
-                <li key={i} className="flex items-center gap-2 h-11">
-                  <span className="skeleton h-5 w-16" />
-                  <span className="skeleton h-4 flex-1" />
-                </li>
-              ))}
+            {members === null && <li><LoadingSkeleton label="Loading members" rows={2} /></li>}
             {sortedMembers?.map((m) => {
               const isMe = sameEmail(m.email, me);
               return (

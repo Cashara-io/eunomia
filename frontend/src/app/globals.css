@@ -1128,3 +1128,18 @@ svg[viewBox="0 0 256 256"] > path[opacity="0.2"] {
     background: var(--bauhaus-app-sidebar-hover);
   }
 }
+
+.loading-skeleton { min-width: 0; --skullet-base: var(--surface-raised); --skullet-highlight: var(--surface-hover); --skullet-radius: 5px; }
+
+.loading-fallback :is(span, p, h2, th, td) { color: transparent; background: var(--surface-raised); border-radius: 5px; }
+
+.generation-box { position: relative; min-width: 0; border-radius: var(--radius-field, 10px); }
+.generation-effect { position: absolute; inset: 0; overflow: hidden; border-radius: inherit; pointer-events: none; }
+.generation-effect canvas { position: absolute; inset: 0; width: 100%; height: 100%; visibility: hidden; }
+.generation-effect[data-mode="webgl"] canvas { visibility: visible; }
+.generation-effect[data-mode="webgl"] .generation-fallback { display: none; }
+.generation-fallback { position: absolute; inset: 0; background: var(--accent-soft); }
+.generation-fallback::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, var(--surface-hover), transparent); opacity: 0.5; transform: translateX(-100%); animation: generation-shimmer 2.6s linear infinite; }
+.generation-placeholder { min-height: 240px; }
+@keyframes generation-shimmer { to { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) { .generation-fallback::after { animation: none; display: none; } }

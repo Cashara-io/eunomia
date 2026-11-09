@@ -233,15 +233,17 @@ pub struct AppError {
     /// A stable machine-readable reason under `code`, sent as `reason` when set (for example
     /// `helper_disabled` under `secret.unavailable`; the values are listed in docs/errors.md).
     pub reason: Option<&'static str>,
+    /// Provider retry delay, kept internally for partial sync scheduling.
+    pub retry_after_secs: Option<u64>,
 }
 
 impl AppError {
     pub fn coded(code: ErrorCode, message: impl Into<String>) -> Self {
-        AppError { code, status: code.default_status(), message: message.into(), source: None, reason: None }
+        AppError { code, status: code.default_status(), message: message.into(), source: None, reason: None, retry_after_secs: None }
     }
 
     pub fn new(status: StatusCode, message: impl Into<String>) -> Self {
-        AppError { code: ErrorCode::from_status(status), status, message: message.into(), source: None, reason: None }
+        AppError { code: ErrorCode::from_status(status), status, message: message.into(), source: None, reason: None, retry_after_secs: None }
     }
 
     pub fn unauthorized(message: impl Into<String>) -> Self {

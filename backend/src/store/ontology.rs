@@ -390,11 +390,14 @@ pub const METRIC_ENTITIES: Stmt = Stmt::new(
 );
 /// Latest value per selected entity/property pair at the cutoff. The index avoids unrelated
 /// histories; created_at breaks ties within each pair. Every input is a parameter.
+macro_rules! latest_point {
+    () => { r#"SELECT id, entity, property, value_num, value_text, value_bool, value_date, unit, as_of, created_at, source FROM entity_property
+        WHERE entity = $e AND property = $p AND vault = $vault AND as_of <= $as_of ORDER BY as_of DESC, created_at DESC, id DESC LIMIT 1"# };
+}
+/// One shared selection for metric, chat, profile and indexed directory probes.
+pub const LATEST_POINT: &str = latest_point!();
 pub const LATEST_VALUES: Stmt = Stmt::new("ontology.latest_values",
-    r#"RETURN array::flatten(array::flatten($ids.map(|$e| $props.map(|$p| (
-        SELECT entity, property, value_num, value_text, value_bool, value_date, unit, as_of, created_at FROM entity_property
-        WHERE entity = $e AND property = $p AND vault = $vault AND as_of <= $as_of ORDER BY as_of DESC, created_at DESC LIMIT 1
-    )))));"#);
+    concat!("RETURN array::flatten(array::flatten($ids.map(|$e| $props.map(|$p| (", latest_point!(), ")))));"));
 
 // Main metric loading deliberately omits stored unit overrides. Datasets retain them.
 pub const LATEST_METRIC_VALUES: Stmt = Stmt::new("ontology.latest_metric_values",

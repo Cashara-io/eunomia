@@ -353,6 +353,12 @@ async fn every_dynamic_builder_runs_in_every_combination() {
     unsafe { std::env::set_var("CAPSULE_ARGS", "redacted") };
     let app = TestApp::new().await;
     plant_records(&app).await;
+    let (_, vaults) = app.http("GET", "/api/vaults", None, true).await;
+    let vault = vaults["results"].as_array().unwrap()[0]["id"].as_str().unwrap();
+    for kind in KINDS {
+        let (status, body) = app.http("GET", &format!("/api/vaults/{vault}/ontology/objects?kind={kind}"), None, true).await;
+        assert_eq!(status, 200, "{body}");
+    }
     cache_searches(&app).await;
     generic_tools(&app).await;
     entities_and_vaults(&app).await;

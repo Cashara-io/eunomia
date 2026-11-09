@@ -2579,12 +2579,16 @@ export type SyncReport = {
     error?: string | null;
     errors?: Array<string> | null;
     failed?: number | null;
+    message?: string | null;
+    retry_after_secs?: number | null;
+    retry_at?: string | null;
     skipped?: number | null;
     source: string;
     /**
-     * `already_running`, `queued`, or `offline` (the connectivity check found no internet; nothing was attempted).
+     * `partial`, `already_running`, `queued`, or `offline` (the connectivity check found no internet; nothing was attempted).
      */
     status?: string | null;
+    warnings?: Array<string> | null;
     written?: number | null;
 };
 
@@ -2593,6 +2597,7 @@ export type SyncStatusOut = {
     cursor: string;
     last_error: string;
     last_ok?: string | null;
+    last_report: unknown;
     last_run?: string | null;
 };
 
@@ -6703,6 +6708,63 @@ export type DecideVaultOntologyMetricResponses = {
 };
 
 export type DecideVaultOntologyMetricResponse = DecideVaultOntologyMetricResponses[keyof DecideVaultOntologyMetricResponses];
+
+export type ListOntologyObjectsData = {
+    body?: never;
+    path: {
+        vault_id: string;
+    };
+    query?: {
+        kind?: string;
+        search?: string;
+        sort?: string;
+        descending?: boolean;
+        filter?: string;
+        op?: string;
+        value?: string;
+        offset?: number;
+        limit?: number;
+    };
+    url: '/api/vaults/{vault_id}/ontology/objects';
+};
+
+export type ListOntologyObjectsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListOntologyObjectsError = ListOntologyObjectsErrors[keyof ListOntologyObjectsErrors];
+
+export type ListOntologyObjectsResponses = {
+    200: unknown;
+};
+
+export type GetOntologyObjectData = {
+    body?: never;
+    path: {
+        vault_id: string;
+        id: string;
+    };
+    query?: {
+        offset?: number;
+    };
+    url: '/api/vaults/{vault_id}/ontology/objects/{id}';
+};
+
+export type GetOntologyObjectErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetOntologyObjectError = GetOntologyObjectErrors[keyof GetOntologyObjectErrors];
+
+export type GetOntologyObjectResponses = {
+    200: unknown;
+};
 
 export type DecideVaultOntologyPropertyData = {
     body: PropertyDecideBody;

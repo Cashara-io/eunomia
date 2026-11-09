@@ -1,4 +1,5 @@
 "use client";
+import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 
 import SyncSettings from "@/components/SyncSettings";
 import { Fragment, useState } from "react";
@@ -257,12 +258,12 @@ export default function ConnectorsPage() {
                           )}
                         </span>
                       </span>
-                      <span title={s?.sync_status.last_error || undefined}>
+                      <span title={s?.sync_status.last_error || s?.sync_status.last_report?.message || undefined}>
                         <StatusLabel tone={toneFromVar(health.tone)}>{health.label}</StatusLabel>
                       </span>
                       <span className="hidden md:block font-mono text-right">{s ? s.record_count.toLocaleString() : "n/a"}</span>
                       <span className="hidden md:block text-[13px]" style={{ color: fails ? "var(--critical)" : "var(--ink-dim)" }}>
-                        {fails ? `${fails} failed in a row` : s ? relativeTime(s.sync_status.last_ok) : "n/a"}
+                        {fails ? `${fails} failed in a row` : s?.sync_status.last_report?.message || (s ? relativeTime(s.sync_status.last_ok) : "n/a")}
                       </span>
                       <span
                         className="hidden md:block text-[13px] truncate"
@@ -397,15 +398,5 @@ function CatalogueList({ kinds }: { kinds: Connector["kind"][] }) {
 }
 
 function SkeletonRows({ count }: { count: number }) {
-  return (
-    <div className="hairline-rows" aria-hidden>
-      {Array.from({ length: count }, (_, i) => (
-        <div key={i} className="flex items-center gap-3 px-4 h-12">
-          <span className="skeleton w-7 h-7" />
-          <span className="skeleton h-3 w-32" />
-          <span className="skeleton h-3 w-20 ml-auto" />
-        </div>
-      ))}
-    </div>
-  );
+  return <LoadingSkeleton label="Loading connected sources" rows={count} />;
 }

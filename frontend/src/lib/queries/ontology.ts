@@ -22,7 +22,18 @@ import { call } from "./client";
 import { entityKeys } from "./entities";
 import { invoke } from "./tools";
 
-export type { AutomapOut, KindItem, LinkCheck, LinkItem, MetricItem, OntologyOut, PropertyItem, ReadinessOut, SuggestOut, ViewStatus } from "@/lib/gen";
+export type {
+  AutomapOut,
+  KindItem,
+  LinkCheck,
+  LinkItem,
+  MetricItem,
+  OntologyOut,
+  PropertyItem,
+  ReadinessOut,
+  SuggestOut,
+  ViewStatus,
+} from "@/lib/gen";
 
 export const ontologyKeys = {
   all: ["ontology"] as const,
@@ -31,10 +42,12 @@ export const ontologyKeys = {
 };
 
 /** Counts by status and what still blocks answering numbers. */
-export const useReadiness = (vaultId: string) =>
+export const useReadiness = (vaultId: string, enabled = true) =>
   useQuery({
     queryKey: ontologyKeys.readiness(vaultId),
-    queryFn: () => call(getVaultOntologyReadiness({ path: { vault_id: vaultId } })),
+    enabled,
+    queryFn: () =>
+      call(getVaultOntologyReadiness({ path: { vault_id: vaultId } })),
   });
 
 export const useOntology = (vaultId: string, enabled = true) =>
@@ -45,53 +58,92 @@ export const useOntology = (vaultId: string, enabled = true) =>
   });
 
 /** Every decision answers with the whole ontology, so the list updates without a second request. */
-const useDecision = <V>(vaultId: string, fn: (v: V) => Promise<OntologyOut>) => {
+const useDecision = <V>(
+  vaultId: string,
+  fn: (v: V) => Promise<OntologyOut>,
+) => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: fn,
     onSuccess: (o) => {
       qc.setQueryData(ontologyKeys.vault(vaultId), o);
       // entity_types and the kind filters show the review too
-      return Promise.all([qc.invalidateQueries({ queryKey: entityKeys.all }), qc.invalidateQueries({ queryKey: ontologyKeys.readiness(vaultId) })]);
+      return Promise.all([
+        qc.invalidateQueries({ queryKey: entityKeys.all }),
+        qc.invalidateQueries({ queryKey: ontologyKeys.readiness(vaultId) }),
+      ]);
     },
   });
 };
 
 /** "Only approved kinds and links", on or off (an owner, in the browser). */
-export const useSetStrict = (vaultId: string) => useDecision(vaultId, (on: boolean) => call(setVaultOntologyStrict({ path: { vault_id: vaultId }, body: { on } })));
+export const useSetStrict = (vaultId: string) =>
+  useDecision(vaultId, (on: boolean) =>
+    call(setVaultOntologyStrict({ path: { vault_id: vaultId }, body: { on } })),
+  );
 
 export const useDecideKind = (vaultId: string) =>
-  useDecision(vaultId, ({ kind, decision }: { kind: string; decision: KindDecision }) =>
-    call(decideVaultOntologyKind({ path: { vault_id: vaultId }, body: { kind, decision } })),
+  useDecision(
+    vaultId,
+    ({ kind, decision }: { kind: string; decision: KindDecision }) =>
+      call(
+        decideVaultOntologyKind({
+          path: { vault_id: vaultId },
+          body: { kind, decision },
+        }),
+      ),
   );
 
 export const useDecideLink = (vaultId: string) =>
-  useDecision(vaultId, (v: { from_kind: string; label: string; to_kind: string; decision: LinkDecision }) =>
-    call(decideVaultOntologyLink({ path: { vault_id: vaultId }, body: v })),
+  useDecision(
+    vaultId,
+    (v: {
+      from_kind: string;
+      label: string;
+      to_kind: string;
+      decision: LinkDecision;
+    }) =>
+      call(decideVaultOntologyLink({ path: { vault_id: vaultId }, body: v })),
   );
 
 export const useDecideProperty = (vaultId: string) =>
-  useDecision(vaultId, (v: { kind: string; name: string; decision: PropertyDecision }) =>
-    call(decideVaultOntologyProperty({ path: { vault_id: vaultId }, body: v })),
+  useDecision(
+    vaultId,
+    (v: { kind: string; name: string; decision: PropertyDecision }) =>
+      call(
+        decideVaultOntologyProperty({ path: { vault_id: vaultId }, body: v }),
+      ),
   );
 
 export const useDecideMetric = (vaultId: string) =>
-  useDecision(vaultId, (v: { kind: string; name: string; decision: MetricDecision }) =>
-    call(decideVaultOntologyMetric({ path: { vault_id: vaultId }, body: v })),
+  useDecision(
+    vaultId,
+    (v: { kind: string; name: string; decision: MetricDecision }) =>
+      call(decideVaultOntologyMetric({ path: { vault_id: vaultId }, body: v })),
   );
 
 /** Runs a metric once, approved or not, to see its number before deciding. A refusal is a value. */
 export const useTryMetric = (vaultId: string) =>
   useMutation({
     mutationFn: ({ kind, name }: { kind: string; name: string }) =>
-      invoke<MetricRun | { error: string }>("metric_eval", { metric: name, kind, vault_id: vaultId, allow_unapproved: true }),
+      invoke<MetricRun | { error: string }>("metric_eval", {
+        metric: name,
+        kind,
+        vault_id: vaultId,
+        allow_unapproved: true,
+      }),
   });
 
 export const useSuggestOntology = (vaultId: string) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => call(suggestVaultOntology({ path: { vault_id: vaultId } })),
-    onSuccess: (out) => qc.setQueryData(ontologyKeys.vault(vaultId), out.mode === "model" ? out.ontology : out.profile),
+    mutationFn: () =>
+      call(suggestVaultOntology({ path: { vault_id: vaultId } })),
+    onSuccess: (out) =>
+      qc.setQueryData(
+        ontologyKeys.vault(vaultId),
+        out.mode === "model" ? out.ontology : out.profile,
+      ),
   });
 };
 
@@ -99,9 +151,11 @@ export const useSuggestOntology = (vaultId: string) => {
 export const useAutomap = (vaultId: string) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { document_id?: string }) => call(automapVaultOntology({ path: { vault_id: vaultId }, body })),
+    mutationFn: (body: { document_id?: string }) =>
+      call(automapVaultOntology({ path: { vault_id: vaultId }, body })),
     onSuccess: (out) => {
-      if (out.mode === "model") qc.setQueryData(ontologyKeys.vault(vaultId), out.ontology);
+      if (out.mode === "model")
+        qc.setQueryData(ontologyKeys.vault(vaultId), out.ontology);
       // a CSV's import plan follows its mapping
       return qc.invalidateQueries({ queryKey: ["documents"] });
     },
