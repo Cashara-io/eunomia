@@ -24,7 +24,7 @@ Connections, selective graph expansion and the table equivalent remain for PR 4.
 
 ## Browser proof
 
-A real MCP proposal landed in an already-open Review page. The second context kept its old revision open, received a 409 after another proposal edit, displayed the changed description, preserved the person's reason, and saved the subsequent approval. The first context displayed the stored reason in Activity. Batch merge stored the same reason on both selected definitions.
+A real MCP proposal landed in an already-open Review page. The second context kept its old revision open, received a 409 after another proposal edit, displayed the changed description, preserved the person's reason, and saved the subsequent approval. The first context displayed the stored reason in Activity. Batch merge stored the same reason on both selected definitions. A stale batch result also shows the changed fields and opens a fresh review with the batch reason preserved.
 
 - [Desktop light](https://github.com/Cashara-io/eunomia/blob/pr-screenshots/ontology-3/activity-1440-light.png)
 - [Desktop dark](https://github.com/Cashara-io/eunomia/blob/pr-screenshots/ontology-3/activity-1440-dark.png)
@@ -32,10 +32,15 @@ A real MCP proposal landed in an already-open Review page. The second context ke
 - [Mobile dark](https://github.com/Cashara-io/eunomia/blob/pr-screenshots/ontology-3/activity-390-dark.png)
 - [Live proposal frame strip](https://github.com/Cashara-io/eunomia/blob/pr-screenshots/ontology-3/live-proposal-strip.png)
 - [Stale revision conflict](https://github.com/Cashara-io/eunomia/blob/pr-screenshots/ontology-3/stale-conflict.png)
+- [Batch revision conflict](https://github.com/Cashara-io/eunomia/blob/pr-screenshots/ontology-3/batch-stale-conflict.png)
 
 ## Recorded check results
 
+- On the combined branch including main's diagnostics PR: `cargo check --tests` and `cargo clippy --all-targets -- -D warnings` passed. The final library, diagnostics, dynamic-query, event, migration, activity, OpenAPI and store suites passed 600 tests with 1 existing fixture ignored, both normally and with `TEST_HARDENED=1`.
+- Expanded OAuth, auth-scope, full ontology, Objects, round-trip and golden-tool suites also passed normally and hardened before the diagnostics merge. The 110 full ontology cases include the owner-only decision boundary with the now-required revision.
+- Integrating main while the previous OpenAPI binaries were still running produced a route/spec mismatch for the newly added diagnostics route. The combined spec and client were regenerated, and both final OpenAPI tests passed normally and hardened.
 - Focused Helium Playwright against the isolated hardened SurrealDB: 10 passed, 1 existing large-fixture test skipped.
+- An earlier focused attempt stopped in cold account setup before reaching Ontology. The batch assertion also needed to await the approval response before reading Activity. Both failed attempts were retained, and the complete focused run then passed.
 - Full Helium Playwright run: 158 passed, 16 skipped, 1 signup case hit the fixture's authentication rate limit. That case passed when rerun on its own. The failed full-run result is retained in the verification record.
 - Shared preview automation snapshots timed out twice. The real Playwright browser cases and screenshots supplied the browser proof.
 - The latest-release update-path row guard passed. Migration numbering depends on #205 landing tenant 0041 before this lane's 0042. Fresh schema, 0041-to-0042 upgrade, replay, membership and stored-reason tests were exercised before the final source checks.
@@ -45,4 +50,4 @@ A real MCP proposal landed in an already-open Review page. The second context ke
 
 Lead assignment: tenant 0041 is `composio_connector` (#205), and this lane is tenant 0042. If #205 remains unmerged, the branch intentionally has no 0041 file or registration, so `check-migrations.sh` reports the expected contiguity gap. Local schema verification applies the Composio migration from `origin/feat/composio-connector` first.
 
-The combined-schema probe used Composio commit `5b23162bbbdaba949cf24dd67cd55dda75cae5ab`. At that fetch the remote file was still named `0042_composio_connector.surql`; its unchanged SQL payload (`f246029e6d937431e3bf248dc40cda2bfed085a1f5747c5bea3dd986b83cfbc6`) was applied in the lead-assigned 0041 position, before activity 0042. This verified the schema combination on isolated hardened SurrealDB 3.3.5. Composio source changes are not included in this branch.
+The combined-schema probe used Composio commit `5b23162bbbdaba949cf24dd67cd55dda75cae5ab`. At that fetch the remote file was still named `0042_composio_connector.surql`; its unchanged SQL payload (`f246029e6d937431e3bf248dc40cda2bfed085a1f5747c5bea3dd986b83cfbc6`) was applied in the lead-assigned 0041 position, before activity 0042. This verified the schema combination on isolated hardened SurrealDB 3.3.5. The numbering guard also passed in a temporary copy with that SQL and the combined 0041/0042 registry. Composio source changes are not included in this branch.

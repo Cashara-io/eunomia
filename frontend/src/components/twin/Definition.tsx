@@ -29,15 +29,17 @@ export default function Definition({
   data,
   isOwner,
   locked = false,
+  initialReason = "",
 }: {
   definition: DefinitionItem;
   data: OntologyOut;
   isOwner: boolean;
   locked?: boolean;
+  initialReason?: string;
 }) {
   const cache = useQueryClient();
   const [d, setDefinition] = useState(incoming);
-  const [reason, setReason] = useState("");
+  const [reason, setReason] = useState(initialReason);
   const [conflict, setConflict] = useState(false);
   const kind = useDecideKind(data.vault);
   const link = useDecideLink(data.vault);
@@ -76,9 +78,7 @@ export default function Definition({
       {error && <ErrorLine error={error} />}
       {conflict && <section role="alert" className="ledger p-3 flex flex-col gap-2">
         <h4 className="font-medium">This definition changed</h4>
-        <p>You reviewed: {d.item.status}, {d.item.description || "no description"}.</p>
-        <p>Latest: {incoming.item.status}, {incoming.item.description || "no description"}.</p>
-        <dl className="text-[13px] flex flex-col gap-2">{Object.entries(reviewFields(incoming)).filter(([key, value]) => reviewFields(d)[key] !== value).map(([key, value]) => <div key={key}><dt className="font-medium">{key}</dt><dd>Before: {reviewFields(d)[key] || "None"}</dd><dd>Now: {value || "None"}</dd></div>)}</dl>
+        <RevisionChanges before={d} after={incoming} />
         <p>Review the latest evidence and dependencies before deciding again.</p>
         <button className="btn btn-sm self-start" onClick={() => { setDefinition(incoming); setConflict(false); setError(null); }}>Review latest version</button>
       </section>}
@@ -272,6 +272,15 @@ export function Evidence({ definition: d }: { definition: DefinitionItem }) {
       )}
     </dl>
   );
+}
+
+export function RevisionChanges({ before, after }: { before: DefinitionItem; after: DefinitionItem }) {
+  const previous = reviewFields(before);
+  return <>
+    <p>You reviewed: {before.item.status}, {before.item.description || "no description"}.</p>
+    <p>Latest: {after.item.status}, {after.item.description || "no description"}.</p>
+    <dl className="text-[13px] flex flex-col gap-2">{Object.entries(reviewFields(after)).filter(([key, value]) => previous[key] !== value).map(([key, value]) => <div key={key}><dt className="font-medium">{key}</dt><dd>Before: {previous[key] || "None"}</dd><dd>Now: {value || "None"}</dd></div>)}</dl>
+  </>;
 }
 
 function reviewFields(d: DefinitionItem): Record<string, string> {

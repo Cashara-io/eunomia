@@ -5,6 +5,7 @@ import { haptic } from "@/lib/haptics";
 import Link from "next/link";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { ApiError } from "@/lib/api";
 import {
   decideVaultOntologyKind,
   decideVaultOntologyLink,
@@ -16,7 +17,7 @@ import { ontologyKeys, type OntologyOut } from "@/lib/queries/ontology";
 import type { Vault } from "@/lib/types";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import StatusLabel from "@/components/ui/StatusLabel";
-import Definition from "./Definition";
+import Definition, { RevisionChanges } from "./Definition";
 import { STATUS, words } from "./DefinitionRows";
 import {
   Filter,
@@ -44,7 +45,7 @@ function describe(d: DefinitionItem) {
 type Receipt = {
   reason: string;
   action: string;
-  results: { name: string; result: string }[];
+  results: { id: string; name: string; result: string }[];
 };
 export default function Review({
   vault,
@@ -61,6 +62,8 @@ export default function Review({
   const [mergeTarget, setMergeTarget] = useState("");
   const [busy, setBusy] = useState(false);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
+  const [stale, setStale] = useState<DefinitionItem[]>([]);
+  const [reviewEpoch, setReviewEpoch] = useState(0);
   const current = definitions(data);
   const [known, setKnown] = useState(() => current.map(d => d.id));
   const newItems = current.filter(d => !known.includes(d.id) && d.item.status === "proposed");
@@ -136,19 +139,23 @@ export default function Review({
     if (!confirm || busy || (confirm === "merge" && !mergeOptions.includes(mergeTarget))) return;
     setBusy(true);
     const results: Receipt["results"] = [];
+    const changed: DefinitionItem[] = [];
     const order = { kind: 0, property: 1, link: 2, metric: 3 };
     for (const d of [...batch].sort((a, b) => order[a.type] - order[b.type])) {
       try {
         qc.setQueryData(ontologyKeys.vault(vault.id), await decide(d, confirm));
         haptic("success");
         results.push({
+          id: d.id,
           name: describe(d),
           result:
             confirm === "approve" ? "Approved" : confirm === "merge" ? `Merged into ${words(mergeTarget)}` : "Rejected without merging",
         });
       } catch (e) {
         haptic("error");
+        if (e instanceof ApiError && e.code === "ontology.stale_revision") changed.push(d);
         results.push({
+          id: d.id,
           name: describe(d),
           result:
             e instanceof Error ? e.message : "Decision failed. Try again.",
@@ -156,6 +163,7 @@ export default function Review({
       }
     }
     setReceipt({ action: confirm, reason: reason.trim(), results });
+    setStale(changed);
     setChecked([]);
     setConfirm(null);
     setBusy(false);
@@ -346,11 +354,12 @@ export default function Review({
               </button>
               <h3 className="section-title mb-3">{words(selected.name)}</h3>
               <Definition
-                key={selected.id}
+                key={`${selected.id}:${reviewEpoch}`}
                 definition={selected}
                 data={data}
                 isOwner={owner}
                 locked={busy}
+                initialReason={stale.some(d => d.id === selected.id) ? receipt?.reason : undefined}
               />
             </>
           ) : (
@@ -368,11 +377,17 @@ export default function Review({
             Recorded reason: {receipt.reason}
           </p>
           <ul className="text-[13px] max-h-60 overflow-auto">
-            {receipt.results.map((r, i) => (
-              <li key={i}>
+            {receipt.results.map(r => {
+              const before = stale.find(d => d.id === r.id);
+              const after = current.find(d => d.id === r.id);
+              return <li key={r.id} className="py-2 [overflow-wrap:anywhere]">
                 {r.name}: {r.result}
-              </li>
-            ))}
+                {before && after && <div className="flex flex-col gap-2 mt-2">
+                  <RevisionChanges before={before} after={after} />
+                  <button aria-label={`Review changes for ${r.name}`} className="btn btn-sm self-start" onClick={() => { setReviewEpoch(value => value + 1); update({ selected: r.id }); }}>Review changes</button>
+                </div>}
+              </li>;
+            })}
           </ul>
           <button className="btn btn-sm self-start" onClick={download}>
             Download receipt

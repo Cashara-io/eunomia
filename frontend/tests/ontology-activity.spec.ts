@@ -19,9 +19,9 @@ test("two contexts see proposals, durable reasons and stale-review conflicts liv
   await page.goto(activityURL);
   await review.goto(reviewURL);
   await expect(review.getByText("Nothing is waiting for review.", { exact: false }).first()).toBeVisible();
-  async function propose(description: string) {
+  async function propose(description: string, kind = "delivery") {
     const response = await page.request.post("/mcp", { headers: { Authorization: `Bearer ${token}`, Accept: "application/json, text/event-stream" }, data: {
-      jsonrpc: "2.0", id: Date.now(), method: "tools/call", params: { name: "ontology_propose", arguments: { vault_id: vault.id, kinds: [{ kind: "delivery", description, reason: "Matched deliveries.csv" }] } },
+      jsonrpc: "2.0", id: Date.now(), method: "tools/call", params: { name: "ontology_propose", arguments: { vault_id: vault.id, kinds: [{ kind, description, reason: "Matched deliveries.csv" }] } },
     } });
     expect(response.ok()).toBeTruthy();
     expect((await response.json()).result.isError).toBeFalsy();
@@ -59,5 +59,26 @@ test("two contexts see proposals, durable reasons and stale-review conflicts liv
     await page.screenshot({ path: testInfo.outputPath(`activity-${width}-${theme}.png`), fullPage: true, animations: "disabled" });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
   }
+  // Batch decisions keep the selected revision and offer the changed evidence for re-review.
+  await review.goto(reviewURL);
+  await expect(review.getByText("Nothing is waiting for review.", { exact: false }).first()).toBeVisible();
+  await propose("Original batch route", "delivery_route");
+  await review.getByRole("button", { name: "1 new suggestions. Show in queue" }).click();
+  await review.getByLabel("Select delivery route", { exact: true }).check();
+  await review.getByLabel("Reason for this batch (optional)").fill("Matches route records");
+  await propose("Route description changed", "delivery_route");
+  await review.getByRole("button", { name: "Approve 1 selected", exact: true }).click();
+  await review.getByRole("button", { name: "Approve selected", exact: true }).click();
+  await expect(review.getByText("You reviewed: proposed, Original batch route.")).toBeVisible();
+  await expect(review.getByText("Latest: proposed, Route description changed.")).toBeVisible();
+  await review.screenshot({ path: testInfo.outputPath("batch-stale-conflict.png"), fullPage: true });
+  await review.getByRole("button", { name: "Review changes for Kind delivery route" }).click();
+  await expect(review.getByLabel("Reason for decision (optional)")).toHaveValue("Matches route records");
+  const retryDecision = review.waitForResponse(response => response.request().method() === "POST" && response.url().endsWith("/ontology/kinds/decide"));
+  await review.getByRole("button", { name: "Approve", exact: true }).click();
+  expect((await retryDecision).ok()).toBeTruthy();
+  const retried = await (await page.request.get(`${path}/activity?action=approved&kind=delivery_route`)).json();
+  expect(retried.events).toHaveLength(1);
+  expect(retried.events[0].reason).toBe("Matches route records");
   await reviewer.close();
 });
