@@ -586,3 +586,74 @@ async fn import_196_mcp_upload_accepts_two_mib_csv_and_reports_configured_limit(
     assert_eq!(s, 413);
     assert!(String::from_utf8_lossy(&b).contains("limit"));
 }
+
+#[tokio::test]
+async fn review209_anonymous_large_bodies_are_never_polled() {
+    use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+    let app = TestApp::with_settings(Settings { documents_max_bytes: 25 << 20, ..common::test_settings() }).await;
+    for path in ["/mcp", "/api/documents?filename=anonymous.csv"] {
+        for token in [None, Some("invalid")] {
+            for known_length in [false, true] {
+                let polls = Arc::new(AtomicUsize::new(0));
+                let count = polls.clone();
+                let body = Body::from_stream(futures::stream::once(async move {
+                    count.fetch_add(1, Ordering::SeqCst);
+                    Ok::<_, std::io::Error>(vec![b'x'; 20 << 20])
+                }));
+                let mut req = Request::builder().method("POST").uri(path).header(header::CONTENT_TYPE, "application/json");
+                if let Some(token) = token { req = req.header(header::AUTHORIZATION, format!("Bearer {token}")); }
+                if known_length { req = req.header(header::CONTENT_LENGTH, 20 << 20); }
+                let response = app.router.clone().oneshot(req.body(body).unwrap()).await.unwrap();
+                assert_eq!(response.status(), StatusCode::UNAUTHORIZED, "{path}, {token:?}");
+                assert_eq!(polls.load(Ordering::SeqCst), 0, "body was buffered: {path}, {token:?}");
+            }
+        }
+    }
+    assert_eq!(app.tool("document_list", json!({})).await["total"], 0, "no upload handler ran");
+}
+
+#[tokio::test]
+async fn review209_http_upload_accepts_two_mib() {
+    let app = TestApp::with_settings(Settings { documents_max_bytes: 2 << 20, ..common::test_settings() }).await;
+    let (status, out) = upload_http(&app, "large.csv", Some("text/csv"), &vec![b'x'; 2 << 20]).await;
+    assert_eq!(status, StatusCode::OK, "{out}");
+    assert_eq!(out["size_bytes"], 2 << 20);
+}
+
+#[tokio::test]
+async fn review209_large_non_upload_mcp_is_rejected_before_dispatch() {
+    let app = TestApp::with_settings(Settings { documents_max_bytes: 25 << 20, ..common::test_settings() }).await;
+    for rpc in [json!({"jsonrpc":"2.0","id":1,"method":"ping","padding":"x".repeat(2 << 20)}),
+        json!([{ "jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"document_upload","arguments":{"filename":"x.csv","text":"x".repeat(2 << 20)}}},
+               { "jsonrpc":"2.0","id":2,"method":"ping"}])] {
+        let (status, _, _) = raw(&app, "POST", "/mcp", serde_json::to_vec(&rpc).unwrap(), Some("application/json"), &app.token).await;
+        assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+    }
+    assert_eq!(app.tool("document_list", json!({})).await["total"], 0);
+}
+
+#[tokio::test]
+async fn review209_large_body_slot_is_shared_and_released_on_cancellation() {
+    let app = TestApp::with_settings(Settings { documents_max_bytes: 25 << 20, ..common::test_settings() }).await;
+    for first_path in ["/mcp", "/api/documents?filename=held.csv"] {
+        let (started, reading) = tokio::sync::oneshot::channel();
+        let body = Body::from_stream(futures::stream::once(async move {
+            started.send(()).unwrap();
+            std::future::pending::<Result<Vec<u8>, std::io::Error>>().await
+        }));
+        let req = Request::builder().method("POST").uri(first_path)
+            .header(header::AUTHORIZATION, format!("Bearer {}", app.token))
+            .header(header::CONTENT_TYPE, "application/json").body(body).unwrap();
+        let router = app.router.clone();
+        let held = tokio::spawn(async move { router.oneshot(req).await });
+        tokio::time::timeout(Duration::from_secs(5), reading).await.unwrap().unwrap();
+        for path in ["/mcp", "/api/documents?filename=blocked.csv"] {
+            let (status, _, _) = raw(&app, "POST", path, b"{}".to_vec(), Some("application/json"), &app.token).await;
+            assert_eq!(status, StatusCode::TOO_MANY_REQUESTS, "{first_path} should block {path}");
+        }
+        held.abort();
+        assert!(held.await.unwrap_err().is_cancelled());
+        let (status, _, _) = raw(&app, "POST", "/mcp", br#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#.to_vec(), Some("application/json"), &app.token).await;
+        assert_eq!(status, StatusCode::OK, "slot was not released after cancellation");
+    }
+}

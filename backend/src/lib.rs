@@ -134,28 +134,18 @@ pub fn app_with(state: AppState, limits: ratelimit::RateConfig) -> axum::Router 
     };
 
     let open = axum::Router::new().route("/healthz", axum::routing::get(healthz)).route("/readyz", axum::routing::get(readyz)).merge(routers::extensions::hook_router()).merge(oauth::router());
-    // One ceiling for every request body, ahead of everything else (a handler that reads the body
-    // itself, like the webhook, is bounded too); raise it with the env var. Document uploads are the
-    // exception: their router has its own ceiling, the document size limit plus room for the request.
+    // Normal routes share a small ceiling. Upload handlers authenticate first, then read with their
+    // configured ceiling and the per-user concurrency guard.
     let max_body = max_body_bytes();
-    let document_limit = state.settings.documents_max_bytes;
-    // JSON may escape each input byte as six bytes. Also leave room for the RPC envelope.
-    let max_mcp = document_limit.saturating_mul(6).saturating_add(64 * 1024).max(max_body);
-    let max_upload = state.settings.documents_max_bytes.saturating_add(64 * 1024).max(max_body);
     let limited = |routes: axum::Router<AppState>, max: usize| {
         routes.layer(axum::extract::DefaultBodyLimit::max(max)).layer(tower_http::limit::RequestBodyLimitLayer::new(max))
     };
     limited(guarded(open, open_cors.clone()).merge(guarded(axum::Router::new().nest("/api", api), cors.clone())), max_body)
-        .merge(limited(guarded(axum::Router::new().nest("/api", routers::documents::router()), cors), max_upload))
-        .merge(limited(guarded(routers::mcp::router(), open_cors), max_mcp)
-            .layer(axum::middleware::from_fn(move |request, next: axum::middleware::Next| async move {
-                let response = next.run(request).await;
-                if response.status() == axum::http::StatusCode::PAYLOAD_TOO_LARGE {
-                    use axum::response::IntoResponse;
-                    error::AppError::coded(error::ErrorCode::DocumentTooLarge,
-                        format!("MCP request exceeds the {max_mcp} byte transport limit; document limit is {document_limit} bytes")).into_response()
-                } else { response }
-            })))
+        .merge(guarded(axum::Router::new().nest("/api", routers::documents::router()), cors)
+            .layer(axum::extract::DefaultBodyLimit::max(max_body)))
+        // MCP authenticates before reading its bounded JSON-RPC envelope. Only upload-only calls
+        // may exceed the normal ceiling, and each user has one body read in flight across both routes.
+        .merge(guarded(routers::mcp::router(), open_cors))
         .with_state(state)
 }
 

@@ -1,10 +1,9 @@
 //! Document routes: thin wrappers over `documents/` (the same functions the `document_*` tools call).
 //! Upload takes the raw file as the body (no multipart), so this router gets its own body limit
-//! (`EUNOMIA_DOCUMENTS_MAX_BYTES`, see `lib.rs`). Downloads and exports are attachments and are
+//! (`EUNOMIA_DOCUMENTS_MAX_BYTES`), after authentication. Downloads and exports are attachments and are
 //! recorded in the audit log by document id, without content.
 
 use axum::{
-    body::Bytes,
     extract::{Path, Query, State},
     http::{header, HeaderMap, HeaderValue},
     response::{IntoResponse, Response},
@@ -14,6 +13,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::json;
 
+use crate::rid::RecordIdExt;
 use crate::documents::{self, DocumentDeleted, DocumentDetail, DocumentList, DocumentOut, Upload};
 use crate::error::{AppError, AppResult};
 use crate::models_user::User;
@@ -99,7 +99,13 @@ struct UploadQuery {
     responses((status = 200, body = DocumentOut), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
 )]
-async fn upload_document(State(state): State<AppState>, user: User, Query(q): Query<UploadQuery>, headers: HeaderMap, body: Bytes) -> AppResult<Json<DocumentOut>> {
+async fn upload_document(State(state): State<AppState>, user: User, Query(q): Query<UploadQuery>, headers: HeaderMap, request: axum::extract::Request) -> AppResult<Json<DocumentOut>> {
+    let Some(_body_slot) = state.large_bodies.acquire(user.id.to_string()) else {
+        return Err(AppError::new(axum::http::StatusCode::TOO_MANY_REQUESTS, "another upload is in progress"));
+    };
+    let limit = state.settings.documents_max_bytes;
+    let body = axum::body::to_bytes(request.into_body(), limit).await
+        .map_err(|_| AppError::coded(crate::error::ErrorCode::DocumentTooLarge, format!("document body exceeds the {limit} byte limit")))?;
     let state = state.org(&user.org).await?;
     let filename = q.filename.filter(|f| !f.trim().is_empty()).ok_or_else(|| AppError::bad_request("the filename query parameter is required"))?;
     let declared = q.content_type.or_else(|| headers.get(header::CONTENT_TYPE).and_then(|v| v.to_str().ok()).map(str::to_string));

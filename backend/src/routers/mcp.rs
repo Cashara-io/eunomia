@@ -70,7 +70,7 @@ async fn method_not_allowed() -> Response {
     (StatusCode::METHOD_NOT_ALLOWED, [(header::ALLOW, "POST")]).into_response()
 }
 
-async fn handle(State(state): State<AppState>, authn: Option<Extension<Authn>>, meter: Option<Extension<crate::gate::Meter>>, headers: HeaderMap, body: String) -> Response {
+async fn handle(State(state): State<AppState>, authn: Option<Extension<Authn>>, meter: Option<Extension<crate::gate::Meter>>, headers: HeaderMap, request: axum::extract::Request) -> Response {
     if !origin_allowed(&headers, &state.settings.cors_allowed_origins) {
         return AppError::coded(ErrorCode::AuthForbidden, "origin not allowed").into_response();
     }
@@ -84,9 +84,31 @@ async fn handle(State(state): State<AppState>, authn: Option<Extension<Authn>>, 
         return ([(header::WWW_AUTHENTICATE, crate::oauth::www_authenticate(&state.settings, presented))], err).into_response();
     };
 
-    let Ok(message) = serde_json::from_str::<Value>(&body) else {
+    let Some(body_slot) = state.large_bodies.acquire(user.id.to_string()) else {
+        return crate::gate::rate_limited(1);
+    };
+    let normal_limit = crate::max_body_bytes();
+    let upload_limit = state.settings.documents_max_bytes.saturating_mul(6).saturating_add(64 * 1024).max(normal_limit);
+    let body = match axum::body::to_bytes(request.into_body(), upload_limit).await {
+        Ok(body) => body,
+        Err(_) => return AppError::coded(ErrorCode::DocumentTooLarge, format!("MCP body exceeds the {upload_limit} byte transport limit")).into_response(),
+    };
+    let Ok(message) = serde_json::from_slice::<Value>(&body) else {
         return (StatusCode::BAD_REQUEST, Json(error_response(Value::Null, -32700, ErrorCode::ValidationInvalid, "Parse error"))).into_response();
     };
+
+    let upload = |m: &Value| m["method"] == "tools/call" && m["params"]["name"] == "document_upload";
+    let upload_only = match &message {
+        Value::Array(batch) => !batch.is_empty() && batch.iter().all(upload),
+        m => upload(m),
+    };
+    if body.len() > normal_limit && !upload_only {
+        return AppError::coded(ErrorCode::DocumentTooLarge, format!("non-upload MCP body exceeds the {normal_limit} byte limit")).into_response();
+    }
+
+    // Small calls release the slot before dispatch. A large upload retains it until its data is dropped.
+    let _large_body_slot = (body.len() > normal_limit).then_some(body_slot);
+    drop(body);
 
     // a session from before the tool surface changed: 404 makes the client start over (issue #90).
     // `initialize` itself is how it starts over, so it is never refused.
