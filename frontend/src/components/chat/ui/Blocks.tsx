@@ -118,7 +118,7 @@ export function Copy({
         <p>{text}</p>
       </aside>
     );
-  return <div className="whitespace-pre-wrap">{text}</div>;
+  return <p className="whitespace-pre-wrap">{text}</p>;
 }
 const scalarObject = z.record(z.string(), z.unknown());
 export default function DataBlock({

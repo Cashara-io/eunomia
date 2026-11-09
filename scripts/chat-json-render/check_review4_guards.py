@@ -14,7 +14,7 @@ PROSE = 'backend/src/views/ui/prose.rs'
 MUTATIONS = [
     ('literal-rendering', 'frontend/src/components/chat/ui/Blocks.tsx', [
         ('import Link from "next/link";', 'import Link from "next/link";\nimport ReactMarkdown from "react-markdown";'),
-        ('return <div className="whitespace-pre-wrap">{text}</div>;', 'return <ReactMarkdown>{text}</ReactMarkdown>;'),
+        ('return <p className="whitespace-pre-wrap">{text}</p>;', 'return <ReactMarkdown>{text}</ReactMarkdown>;'),
     ], 'UI prose never reparses Markdown entities or escapes'),
     ('final-substitution-boundaries', PROSE, [('overlaps.len() == 1 && overlaps[0].0 == *span && overlaps[0].1 == text[span.clone()]', 'true')], 'final_placeholder_boundaries_refuse_numeric_synthesis'),
     ('letter-bearing-phrase', PROSE, [('let mut out = Vec::new();\n    for span', 'let mut out = vec![server.clone()];\n    for span')], 'bare_numeric_server_strings_never_authorise_digits'),

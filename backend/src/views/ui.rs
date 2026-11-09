@@ -48,7 +48,15 @@ pub fn validate(spec: &Value, data: Option<&Value>) -> AppResult<()> {
     }
     let mut visited = HashSet::new(); walk(&spec.root, &spec, 1, &mut visited)?;
     if visited.len() != spec.elements.len() { return Err(bad("UI contains unreachable elements")); }
-    for e in spec.elements.values() {
+    for (id, e) in &spec.elements {
+        prose::identifier(id)?;
+        for key in ["x", "y", "group", "size", "parent"].iter().filter_map(|key| e.props[*key].as_str())
+            .chain(e.props["series"].as_array().into_iter().flatten().filter_map(Value::as_str))
+            .chain(e.props["columns"].as_array().into_iter().flatten().filter_map(|c| c["key"].as_str()))
+            .chain(e.props["formats"].as_object().into_iter().flat_map(|m| m.keys().map(String::as_str))) {
+            // Link columns use the server namespace spelling, e.g. link:supplied_by.
+            for part in key.split(':') { prose::identifier(part)?; }
+        }
         let def = catalog()["components"].get(&e.kind).ok_or_else(|| bad(format!("unknown component {}", e.kind)))?;
         let validator = jsonschema::validator_for(&def["props"]).map_err(|e| bad(format!("invalid catalog schema: {e}")))?;
         validator.validate(&e.props).map_err(|error| bad(format!("{}: {error}", e.kind)))?;
@@ -199,7 +207,8 @@ pub async fn resolve(db: &OrgDb, owner: &RecordId, mut spec: Value, sources: BTr
     let mut source_prose = BTreeMap::new();
     let mut legacy_views = BTreeMap::new();
     for (name, source) in sources {
-        if name.is_empty() || name.len() > 64 || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') { return Err(bad("source name must use letters, digits and underscores")); }
+        if name.len() > 64 { return Err(bad("source name exceeds 64 bytes")); }
+        prose::identifier(&name)?;
         let prose = match &source {
             Source::Subgraph { title, .. } => json!({"title":title}),
             Source::Scenario { headline, .. } => json!({"headline":headline}),
@@ -289,8 +298,8 @@ pub fn text(spec: &Value, data: &Value) -> String {
     }
     // Include all resolved rows, units and warnings. No model-written numeric summary is trusted.
     if let Some(sources) = data["sources"].as_object() {
-        for (name, source) in sources {
-            out.push_str(&format!("\nSource {name}:\n"));
+        for (index, source) in sources.values().enumerate() {
+            out.push_str(&format!("\nSource {}:\n", index + 1));
             if let Some(text) = source["text"].as_str() { out.push_str(text); }
             else if let Some(rows) = source["rows"].as_array() {
                 out.push_str(&format!("Status: {}. {} rows.{}\n", source["status"].as_str().unwrap_or("not approved"), rows.len(), if source["truncated"] == true { " Data truncated." } else { "" }));
@@ -337,6 +346,31 @@ pub fn sources_schema() -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn identifiers_cannot_invent_displayed_numeric_spans() {
+        for kind in ["Tabs", "Accordion", "Text"] {
+            let mut spec = json!({"root":"999999","elements":{"999999":{"type":kind,"props":{}}}});
+            if kind == "Text" { spec["elements"]["999999"]["props"] = json!({"text":"Words"}); }
+            assert!(validate(&spec, None).unwrap_err().message.contains("identifier"));
+        }
+        for (key, value) in [
+            ("x", json!("999999")), ("y", json!("999999")), ("group", json!("999999")),
+            ("size", json!("999999")), ("parent", json!("999999")), ("series", json!(["999999"])),
+            ("columns", json!([{"key":"999999","label":"Words"}])), ("formats", json!({"999999":"number"})),
+        ] {
+            let mut spec = json!({"root":"chart","elements":{"chart":{"type":"Line","props":{"title":"Values","summary":"Values","data":{"$state":"/sources/sales/rows"}}}}});
+            spec["elements"]["chart"]["props"][key] = value;
+            assert!(validate(&spec, None).unwrap_err().message.contains("identifier"), "{key}");
+        }
+        let data = json!({"sources":{"999999":{"rows":[]}}});
+        let shown = text(&json!({}), &data);
+        assert!(shown.contains("Source 1:"));
+        assert!(!shown.contains("999999"));
+        // Aggregate keys add an operation prefix to a valid property of up to 64 bytes.
+        let key = format!("sum_{}", "a".repeat(64));
+        let spec = json!({"root":"chart","elements":{"chart":{"type":"Line","props":{"title":"Values","summary":"Values","data":{"$state":"/sources/sales/rows"},"y":key}}}});
+        assert!(validate(&spec, None).is_ok());
+    }
     #[test]
     fn refuses_literals_unknown_props_missing_bindings_and_cycles() {
         let mut spec = json!({"root":"a","elements":{"a":{"type":"Stat","props":{"title":"Total","summary":"Total","data":{"$state":"/sources/a/metric/value"}}}}});

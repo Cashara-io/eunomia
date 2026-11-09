@@ -12,7 +12,7 @@ use super::{bad, trusted_number};
 pub(super) fn field(key: &str) -> bool {
     matches!(key, "title" | "summary" | "text" | "label" | "headline" | "note" | "reason" | "caption" | "legend" | "why")
 }
-fn normalise(text: &str) -> String {
+fn display(text: &str) -> String {
     static FORMAT: OnceLock<Regex> = OnceLock::new();
     static DIGIT: OnceLock<Regex> = OnceLock::new();
     let format = FORMAT.get_or_init(|| Regex::new(r"[\p{Cf}\p{Mn}\p{Me}]").unwrap());
@@ -26,26 +26,44 @@ fn normalise(text: &str) -> String {
         let mut start = c as u32;
         while start > 0 && char::from_u32(start - 1).is_some_and(|p| digit.is_match(&p.to_string())) { start -= 1; }
         char::from_digit((c as u32 - start) % 10, 10).unwrap()
-    }).collect::<String>().to_lowercase().chars().fold(String::new(), |mut out, c| {
+    }).collect::<String>().chars().fold(String::new(), |mut out, c| {
         // Match collapsed browser whitespace without trimming substitution boundaries.
         if c != ' ' || !out.ends_with(' ') { out.push(c); }
         out
     })
 }
-// Byte ranges in the normalised display. Spaces join only one pair of digit groups,
-// or a currency code and a figure. Other words terminate a span.
+fn normalise(text: &str) -> String { display(text).to_lowercase() }
+// Byte ranges in the normalised display. Whitespace cannot detach numeric modifiers.
+// Ordinary words, including "per cent", terminate a span.
 fn spans(text: &str) -> Vec<std::ops::Range<usize>> {
     static NUMBER: OnceLock<Regex> = OnceLock::new();
     let number = NUMBER.get_or_init(|| {
-        let code = r"(?:aud|usd|eur|gbp|jpy|cad|nzd|chf|cny|inr|sgd|hkd)";
+        // ISO currency codes from the local ICU currency enumeration, plus fund and metal codes.
+        let code = r"(?:aed|afn|all|amd|ang|aoa|ars|aud|awg|azn|bam|bbd|bdt|bgn|bhd|bif|bmd|bnd|bob|brl|bsd|btn|bwp|byn|bzd|cad|cdf|chf|clp|cny|cop|crc|cuc|cup|cve|czk|djf|dkk|dop|dzd|egp|ern|etb|eur|fjd|fkp|gbp|gel|ghs|gip|gmd|gnf|gtq|gyd|hkd|hnl|hrk|htg|huf|idr|ils|inr|iqd|irr|isk|jmd|jod|jpy|kes|kgs|khr|kmf|kpw|krw|kwd|kyd|kzt|lak|lbp|lkr|lrd|lsl|lyd|mad|mdl|mga|mkd|mmk|mnt|mop|mru|mur|mvr|mwk|mxn|myr|mzn|nad|ngn|nio|nok|npr|nzd|omr|pab|pen|pgk|php|pkr|pln|pyg|qar|ron|rsd|rub|rwf|sar|sbd|scr|sdg|sek|sgd|shp|sle|sll|sos|srd|ssp|stn|svc|syp|szl|thb|tjs|tmt|tnd|top|try|ttd|twd|tzs|uah|ugx|usd|uyu|uzs|ves|vnd|vuv|wst|xaf|xag|xau|xba|xbb|xbc|xbd|xcd|xcg|xdr|xof|xpd|xpf|xpt|xst|xsu|xts|xua|xxx|yer|zar|zmw|zwg|zwl)";
         let iso = r"[0-9]{4}-[0-9]{2}-[0-9]{2}(?:t[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?(?:z|[+-][0-9]{2}:[0-9]{2}))?";
-        let connector = r"[\p{Sc}+%‰/\x{2044}e-]";
-        let tail = format!(r"(?:{connector}|\p{{N}}|[.,'_]\p{{N}})*");
+        let modifier = r"[\p{Sc}+%‰-]";
+        let connector = format!(r"(?:{modifier} *|[/\x{{2044}}e])");
+        let tail = format!(r"(?: *{modifier}|[/\x{{2044}}e]|\p{{N}}|[.,'_]\p{{N}})*");
         let iso_range = format!(r"{iso}(?:(?:/|\.\.|-){iso})?");
         let part = format!(r"(?:{iso_range}|{connector}*[.,'_]?\p{{N}}{tail})");
-        Regex::new(&format!(r"(?:\b{code} ?)?(?:{part})+(?:(?: \p{{N}}{tail})|(?: ?{code}\b{tail}))*")).unwrap()
+        Regex::new(&format!(r"(?:\b{code} *)?(?:{part})+(?:(?: \p{{N}}{tail})|(?: *{code}\b{tail}))*")).unwrap()
     });
     number.find_iter(text).filter(|m| m.as_str().chars().any(char::is_numeric)).map(|m| m.range()).collect()
+}
+
+pub(super) fn identifier(raw: &str) -> AppResult<()> {
+    let valid = !raw.is_empty()
+        && raw.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+        && raw.chars().any(|c| c.is_ascii_alphabetic())
+        && !raw.trim_start_matches('_').starts_with(|c: char| c.is_ascii_digit())
+        && spans(&normalise(raw)).iter().all(|span| {
+            let start = span.start + raw[span.clone()].bytes().take_while(|c| *c == b'_').count();
+            raw[start..span.end].starts_with(|c: char| c.is_ascii_alphabetic())
+                || raw[..start].chars().next_back().is_some_and(|c| c.is_ascii_alphabetic())
+                || raw[span.end..].chars().next().is_some_and(|c| c.is_ascii_alphabetic())
+        });
+    if !valid { return Err(bad("identifier must use ASCII letters and underscores, with numeric spans attached to letters")); }
+    Ok(())
 }
 
 fn token(c: char) -> bool { currency(c) || c.is_alphanumeric() || matches!(c, '_' | '-' | '/' | '.' | '%' | '+' | '\u{2044}') }
@@ -311,7 +329,7 @@ fn render(raw: &str, data: &Value, allowed: &Allowed, field: &str) -> AppResult<
     if rest.contains("}}") { return Err(bad(format!("unexpected placeholder closing braces in {field}"))); }
     out.push_str(rest);
     allowed.check(&out, &substitutions, field)?;
-    Ok(out)
+    Ok(display(&out))
 }
 fn currency(c: char) -> bool {
     static SYMBOL: OnceLock<Regex> = OnceLock::new();
@@ -349,6 +367,50 @@ mod tests {
         "total_rows":12,"totals":{"quantity":{"sum":49},"amount":{"sum":1588.0,"count":1}},"parameters":{"as_of":"2026-01-01","limit":12},"bucket_column":"date"
     }}}) }
     fn title(s: &str, data: &Value) -> AppResult<Value> { resolve(&json!({"title":s}), data) }
+    #[test]
+    fn displayed_prose_removes_bidi_and_format_controls() {
+        let p = "{{/sources/sales/total_rows}}";
+        for control in ['\u{202a}', '\u{202b}', '\u{202c}', '\u{202d}', '\u{202e}', '\u{2066}', '\u{2067}', '\u{2068}', '\u{2069}', '\u{200e}', '\u{200f}', '\u{061c}', '\u{200b}'] {
+            let raw = format!("Count {control}{p}\u{202c}");
+            let spec = resolve(&json!({"elements":{"a":{"props":{"title":raw}}}}), &data()).unwrap();
+            assert_eq!(spec["elements"]["a"]["props"]["title"], "Count 12");
+            assert_eq!(super::super::text(&spec, &json!({})), "Analysis\n• Count 12\n");
+            assert!(title(&format!("{p}{control}3"), &data()).is_err());
+        }
+        assert_eq!(title("Ｃｏｕｎｔ {{/sources/sales/total_rows}}", &data()).unwrap()["title"], "Count 12");
+        // RTL letters remain supported. Explicit bidi marks are deliberately removed.
+        for rtl in ["إجمالي المبيعات", "סך המכירות"] {
+            assert_eq!(title(rtl, &data()).unwrap()["title"], display(rtl));
+        }
+    }
+    #[test]
+    fn spaced_modifiers_cannot_change_bound_counts() {
+        let p = "{{/sources/sales/total_rows}}";
+        for space in [" ", "   ", "\t", "\n\r\n", "\u{00a0}", "\u{2009}\u{202f}", "\u{3000}"] {
+            for modifier in ["−", "+", "%", "‰", "$", "€", "USD", "EUR", "ZAR", "BHD", "XAU"] {
+                for raw in [format!("{modifier}{space}{p}"), format!("{p}{space}{modifier}")] {
+                    assert!(title(&raw, &data()).is_err(), "{raw:?}");
+                }
+            }
+        }
+        let mut data = data();
+        data["sources"]["sales"]["columns"].as_array_mut().unwrap().push(json!({"key":"share","datatype":"percent","unit":"%"}));
+        data["sources"]["sales"]["rows"][0]["share"] = json!(12);
+        for (raw, expected) in [
+            ("Share {{/sources/sales/rows/0/share}}", "Share 12%"),
+            ("Total {{/sources/sales/rows/0/amount}}", "Total 1588.00 AUD"),
+            ("Count {{/sources/sales/total_rows}} per cent", "Count 12 per cent"),
+        ] { assert_eq!(title(raw, &data).unwrap()["title"], expected); }
+    }
+    #[test]
+    fn identifier_numeric_spans_must_attach_to_letters() {
+        for name in ["999999", "12_sales", "sales_999999", "sales_12_34", "12q", "_12sales", "sales_１２", "sales\u{202e}12", "sales-12", "sales 12"] {
+            assert!(identifier(name).is_err(), "{name:?}");
+        }
+        for name in ["sales", "sales_q3", "q12", "sales_q12x", "_sales", "amount"] {
+            assert!(identifier(name).is_ok(), "{name}");
+        }
+    }
     #[test]
     fn final_placeholder_boundaries_refuse_numeric_synthesis() {
         let p = "{{/sources/sales/total_rows}}";
@@ -391,7 +453,7 @@ mod tests {
         let text = normalise("−１２\u{034f}３ USD +٤.٥e3 12 345 A$6 ½ 7‰ 8_000");
         assert_eq!(text, "-123 usd +4.5e3 12 345 a$6 1⁄2 7‰ 8_000");
         let values: Vec<_> = spans(&text).into_iter().map(|r| &text[r]).collect();
-        assert_eq!(values, ["-123 usd", "+4.5e3 12 345", "$6 1⁄2 7‰ 8_000"]);
+        assert_eq!(values, ["-123 usd +4.5e3 12 345", "$6 1⁄2 7‰ 8_000"]);
         for sign in ['\u{2212}', '\u{2012}', '\u{2013}', '\u{2014}', '\u{2015}', '\u{fe63}', '\u{ff0d}'] {
             assert_eq!(normalise(&format!("{sign}12")), "-12");
         }

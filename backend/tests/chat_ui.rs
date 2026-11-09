@@ -326,3 +326,32 @@ async fn whole_spans_guard_ui_and_terminal_prose() {
         assert!(!rendered.contains("{{"));
     }
 }
+
+#[tokio::test]
+async fn display_normalisation_modifiers_and_source_aliases_are_guarded() {
+    let (app, vault) = sample().await;
+    let make = |text: &str| json!({"view":"ui","spec":{"root":"copy","elements":{"copy":{"type":"Text","props":{"text":text}}}},"sources":{"sales":{"type":"dataset","vault_id":vault,"kind":"sample","properties":["amount","share"]}}});
+    let raw = "Ｃｏｕｎｔ \u{202e}{{/sources/sales/total_rows}}\u{202c}";
+    let out = ok(app.tool("show_view", make(raw)).await);
+    assert_eq!(out["spec"]["elements"]["copy"]["props"]["text"], "Count 2");
+    assert!(out["text"].as_str().unwrap().contains("• Count 2\n"));
+    assert!(!out["text"].as_str().unwrap().contains(['\u{202e}', '\u{202c}']));
+    for text in ["− {{/sources/sales/total_rows}}", "{{/sources/sales/total_rows}} %", "{{/sources/sales/total_rows}}\u{00a0}€", "$  {{/sources/sales/total_rows}}"] {
+        let denied = app.tool("show_view", make(text)).await;
+        assert!(denied.get("error").is_some(), "{text}: {denied}");
+    }
+    for alias in ["999999", "12sales", "sales_999999"] {
+        let mut args = make("Sales");
+        let source = args["sources"].as_object_mut().unwrap().remove("sales").unwrap();
+        args["sources"][alias] = source;
+        let denied = app.tool("show_view", args).await;
+        assert!(denied.get("error").is_some(), "{alias}: {denied}");
+        assert!(denied.to_string().contains("identifier"), "{denied}");
+    }
+    let mut args = make("Sales");
+    let source = args["sources"].as_object_mut().unwrap().remove("sales").unwrap();
+    args["sources"]["sales_q3"] = source;
+    let out = ok(app.tool("show_view", args).await);
+    assert!(out["text"].as_str().unwrap().contains("Source 1:"));
+    assert!(!out["text"].as_str().unwrap().contains("sales_q3"));
+}
