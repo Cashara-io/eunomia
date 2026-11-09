@@ -55,6 +55,7 @@ url = "2"
 pdf-extract = "0.12"
 # secret redaction on memory writes (redact.rs)
 regex = "1"
+unicode-normalization = "0.1"
 
 jsonschema = { version = "0.58.6", default-features = false }
 

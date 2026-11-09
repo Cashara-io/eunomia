@@ -77,6 +77,8 @@ pub async fn resolve(db: &OrgDb, owner: &RecordId, args: &Dataset) -> AppResult<
     if args.bucket.is_some() && !columns.iter().any(|c| Some(&c.key) == args.group_by.as_ref() && matches!(c.datatype.as_str(), "date" | "datetime")) {
         return Err(bad("time bucket needs a date or datetime group_by property"));
     }
+    let applied_dates: Vec<Value> = args.filters.iter().filter(|f| columns.iter().any(|c| c.key == f.property && matches!(c.datatype.as_str(), "date" | "datetime")))
+        .flat_map(|f| f.value.as_array().cloned().unwrap_or_else(|| vec![f.value.clone()])).collect();
     let selector = metric::Selector::from_properties(&kind, &args.filters, &properties)?;
     let mut ids: Vec<RecordId> = crate::store::ontology::UI_ENTITIES.on(db)
         .bind(("vault", vault.clone())).bind(("kind", args.kind.clone()))
@@ -122,9 +124,13 @@ pub async fn resolve(db: &OrgDb, owner: &RecordId, args: &Dataset) -> AppResult<
         } else { rows.push(Value::Object(row)); }
         if rows.len() > MAX_INPUT { return Err(bad("expanded dataset exceeds 5000 rows")); }
     }
-    let (mut rows, columns) = transform(rows, columns, args)?;
+    let (mut rows, mut columns) = transform(rows, columns, args)?;
+    // The generated display name is selectable even for an empty detailed dataset.
+    if args.aggregates.is_empty() && !columns.iter().any(|c| c.key == "name") {
+        columns.push(Column { key: "name".into(), datatype: "text".into(), unit: None });
+    }
     if let Some(sort) = &args.sort {
-        if !columns.iter().any(|c| c.key == sort.property) && sort.property != "name" { return Err(bad("unknown sort column")); }
+        if !columns.iter().any(|c| c.key == sort.property) { return Err(bad("unknown sort column")); }
         rows.sort_by(|a,b| { let order = compare(&a[&sort.property], &b[&sort.property]); if sort.descending { order.reverse() } else { order } });
     }
     let totals: serde_json::Map<String, Value> = columns.iter().map(|c| {
@@ -153,7 +159,7 @@ pub async fn resolve(db: &OrgDb, owner: &RecordId, args: &Dataset) -> AppResult<
     let total_rows = rows.len();
     rows.truncate(args.limit.unwrap_or(MAX_ROWS));
     let truncated = input_truncated || rows.len() < total_rows;
-    Ok(json!({ "rows": rows, "columns": columns, "totals": totals, "distributions": distributions, "total_rows": total_rows, "truncated": truncated,
+    Ok(json!({ "kind": kinds.first().map(|k| k.kind.as_str()).or_else(|| kind.is_built_in().then_some(kind.as_str())), "applied_dates": applied_dates, "rows": rows, "columns": columns, "totals": totals, "distributions": distributions, "total_rows": total_rows, "truncated": truncated,
         "status": if approved { "approved" } else { "not approved" },
         "warnings": if input_truncated { vec!["Input capped at 5000 entities. Aggregates describe only this partial input."] } else if truncated { vec!["Output rows truncated."] } else { vec![] } }))
 }

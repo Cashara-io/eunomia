@@ -1,0 +1,35 @@
+# PR 203 independent P1 follow-up, 2026-11-09. Never cargo fmt.
+# Before EVERY Cargo step:
+df -h /
+pgrep -x cargo
+# Wait three minutes if another Cargo process exists or root free space is below
+# 7 GiB. Retry for up to two hours. Do not touch other worktrees' build outputs.
+export CARGO_BUILD_JOBS=2 CARGO_PROFILE_DEV_DEBUG=0 CARGO_INCREMENTAL=0 RUST_MIN_STACK=8388608 RUST_TEST_THREADS=1 TEST_HARDENED=1
+# Run each Cargo command in backend, with nice -n 19:
+cargo check --tests
+cargo test --lib views::ui
+cargo test --lib --test chat_ui --test ontology --test golden_tools --test round_trips --test openapi
+cargo build --bin eunomia-backend
+cargo clippy --all-targets -- -D warnings
+# Mutations independently repeat the same disk/process gates and Cargo flags:
+python3 scripts/chat-json-render/check_review4_guards.py
+PROSE_GUARD_LOGS=/private/tmp/chat-json-render-v6/mutations python3 scripts/chat-json-render/check_prose_guards.py
+python3 scripts/chat-json-render/check_third_review_guards.py backend --logs /private/tmp/chat-json-render-v6/mutations
+python3 scripts/chat-json-render/check_third_review_guards.py frontend --logs /private/tmp/chat-json-render-v6/mutations
+# Inside frontend:
+bun install --frozen-lockfile
+bun run lint
+bun run build
+bunx tsc --noEmit
+bun scripts/chat-catalog.ts --check
+bun test scripts/chat-ui-values.test.jsx
+# Throwaway SurrealDB 3.3.5, memory storage, experimental files on port 8593.
+# Branch backend on 8594. Copy the private launcher without printing its key,
+# override namespace, database, URL and bind address, and use gpt-6-luna.
+# Seed the same approved twelve-row CSV in a fresh org. Repeat questions 1 and 6
+# from the six-question proof: Line and Table. Request a bound count or total
+# in the title. Table binds the whole dataset to retain server totals.
+python3 -I scripts/chat-json-render/verify_numbers.py /private/tmp/chat-json-render-v6/source.csv /private/tmp/chat-json-render-v6
+python3 -I scripts/chat-json-render/verify_placeholders.py /private/tmp/chat-json-render-v6
+# Keep authentic histories, failed attempts and logs. Remove only this task's
+# target, node_modules, .next, runtime, disposable database and RAM volume.

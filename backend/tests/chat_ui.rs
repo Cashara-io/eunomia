@@ -220,3 +220,189 @@ async fn dataset_filter_limit() {
     let denied=app.tool("show_view",json!({"view":"ui","spec":spec(),"sources":{"sample":{"type":"dataset","vault_id":vault,"kind":"sample","properties":["amount"],"filters":filters}}})).await;
     assert!(denied.to_string().contains("10 filters"),"{denied}");
 }
+
+#[tokio::test]
+async fn metric_stored_unit_override_matches_main_fixture() {
+    let app = TestApp::new().await;
+    let fixture: Value = serde_json::from_str(include_str!("fixtures/pr192-main-metrics.json")).unwrap();
+    let case = fixture.as_array().unwrap().iter().find(|c| c["stored_unit"] == "USD").unwrap();
+    let vault = ok(app.tool("ontology_get", json!({})).await)["vault"].clone();
+    ok(app.tool("ontology_propose", json!({"kinds":[{"kind":"sample"}],"properties":[{"kind":"sample","name":"amount","datatype":"money","unit":case["property_unit"]}]})).await);
+    for (path, body) in [("kinds",json!({"kind":"sample","decision":{"action":"approve"}})),("properties",json!({"kind":"sample","name":"amount","decision":{"action":"approve"}}))] {
+        let (status, body) = app.http_session("POST", &format!("/api/vaults/{}/ontology/{path}/decide",vault.as_str().unwrap()), Some(body)).await;
+        assert_eq!(status,200,"{body}");
+    }
+    let entity = ok(app.tool("memory_write",json!({"subject_name":"Unit override","subject_kind":"sample","text":"Sample"})).await)["entity"]["id"].clone();
+    ok(app.tool("entity_set_property",json!({"entity_id":entity,"property":"amount","value":case["values"][0],"unit":case["stored_unit"]})).await);
+    for (agg, expected) in case["main"].as_object().unwrap() {
+        ok(app.tool("ontology_propose",json!({"metrics":[{"kind":"sample","name":format!("test_{agg}"),"expr":{"agg":agg,"property":"amount"}}]})).await);
+        let out = ok(app.tool("metric_eval",json!({"metric":format!("test_{agg}"),"kind":"sample","vault_id":vault,"allow_unapproved":true})).await);
+        assert_eq!(out["value"].as_f64().map(f64::to_bits), expected.as_f64().map(f64::to_bits),"{agg}: {out}");
+        assert_eq!(out["n_entities"],1);
+    }
+    let out = ok(app.tool("show_view",json!({"view":"ui","spec":spec(),"sources":{"sample":{"type":"dataset","vault_id":vault,"kind":"sample","properties":["amount"],"limit":5}}})).await);
+    assert_eq!(out["data"]["sources"]["sample"]["columns"][0]["unit"],"USD");
+}
+
+#[tokio::test]
+async fn show_view_resolves_chart_columns_and_bound_prose() {
+    let (app,vault) = sample().await;
+    let mut args = json!({"view":"ui","spec":{"root":"a","elements":{"a":{"type":"Line","props":{"title":"Total {{/sources/sample/totals/amount/sum}}","summary":"Amount","data":{"$state":"/sources/sample/rows"}}}}},"sources":{"sample":{"type":"dataset","vault_id":vault,"kind":"sample","properties":["amount"],"limit":5}}});
+    let out = ok(app.tool("show_view",args.clone()).await);
+    assert_eq!(out["spec"]["elements"]["a"]["props"]["title"],"Total 31.00 AUD");
+    assert!(out["text"].as_str().unwrap().contains("Total 31.00 AUD"));
+    assert_eq!(out["spec"]["elements"]["a"]["props"]["x"],"name");
+    assert_eq!(out["spec"]["elements"]["a"]["props"]["y"],"amount");
+    assert_eq!(out["spec"]["elements"]["a"]["props"]["series"],json!(["amount"]));
+    args["sources"]["sample"]["properties"] = json!(["amount","share"]);
+    assert!(app.tool("show_view",args).await.to_string().contains("name y"));
+}
+
+#[tokio::test]
+async fn prose_substitution_reaches_spec_and_terminal_summary() {
+    let (app, vault) = sample().await;
+    let mut args = json!({"view":"ui","spec":{"root":"a","elements":{"a":{"type":"Text","props":{"text":"Total {{sources.sales.totals.amount.sum}}"}}}},"sources":{"sales":{"type":"dataset","vault_id":vault,"kind":"sample","properties":["amount","share"]}}});
+    let out = ok(app.tool("show_view", args.clone()).await);
+    assert_eq!(out["spec"]["elements"]["a"]["props"]["text"], "Total 31.00 AUD");
+    assert!(out["text"].as_str().unwrap().contains("Total 31.00 AUD"));
+    assert!(!out["text"].as_str().unwrap().contains("{{"));
+    for raw in ["Sales rose 35.7%", "Value {{sources.sales.rows[0].missing}}", "Value {{sources.sales.rows[0].name}}"] {
+        args["spec"]["elements"]["a"]["props"]["text"] = json!(raw);
+        let error = app.tool("show_view", args.clone()).await;
+        assert!(error.get("error").is_some(), "{raw}: {error}");
+        assert!(error.to_string().contains("placeholder"), "{error}");
+    }
+}
+
+#[tokio::test]
+async fn invented_query_kind_is_not_a_server_text_token() {
+    let (app, vault) = sample().await;
+    let args = json!({"view":"ui","spec":{"root":"a","elements":{"a":{"type":"Text","props":{"text":"x12000"}}}},"sources":{"sales":{"type":"dataset","vault_id":vault,"kind":"x12000","properties":[]}}});
+    let error = app.tool("show_view", args).await;
+    assert!(error.get("error").is_some(), "{error}");
+    assert!(error.to_string().contains("unsupported raw digits"), "{error}");
+}
+
+#[tokio::test]
+async fn turn_snapshot_refuses_new_names_and_text_values() {
+    use eunomia_backend::views::TURN_STARTED;
+    use surrealdb::types::Datetime;
+    let (app, vault) = sample().await;
+    let before = Datetime::default();
+    let id = ok(app.tool("memory_write",json!({"subject_name":"Truck 7","subject_kind":"sample","text":"New this turn"})).await)["entity"]["id"].clone();
+    ok(app.tool("entity_set_property",json!({"entity_id":id,"property":"label","value":"ISO 27001"})).await);
+    let make = |title: &str| json!({"view":"ui","spec":{"root":"a","elements":{"a":{"type":"Text","props":{"text":title}}}},"sources":{"sample":{"type":"dataset","vault_id":vault,"kind":"sample","properties":["label"]}}});
+    for phrase in ["Truck 7 deliveries", "ISO 27001 compliance"] {
+        let args = make(phrase);
+        let denied = TURN_STARTED.scope(before, app.tool("show_view",args.clone())).await;
+        assert!(denied.get("error").is_some(), "new string authorised digits: {denied}");
+        ok(app.tool("show_view",args).await); // The same phrase is eligible next request.
+    }
+    for name in ["12%", "12"] {
+        ok(app.tool("memory_write",json!({"subject_name":name,"subject_kind":"organisation","text":"Bare numeric name"})).await);
+        let mut args = make(&format!("Revenue rose {name}"));
+        args["sources"]["sample"]["kind"] = json!("organisation");
+        args["sources"]["sample"]["properties"] = json!([]);
+        let denied = app.tool("show_view",args).await;
+        assert!(denied.get("error").is_some(), "bare digits authorised: {denied}");
+    }
+}
+
+#[tokio::test]
+async fn whole_spans_guard_ui_and_terminal_prose() {
+    let (app, vault) = sample().await;
+    for name in ["Orders 12", "345 deliveries"] {
+        ok(app.tool("memory_write", json!({"subject_name":name,"subject_kind":"sample","text":"Existing name"})).await);
+    }
+    let make = |text: &str| json!({"view":"ui","spec":{"root":"a","elements":{"a":{"type":"Text","props":{"text":text}}}},"sources":{"sales":{"type":"dataset","vault_id":vault,"kind":"sample","properties":["amount","share"]}}});
+    for raw in ["Orders 12,345 deliveries", "Orders 12 345 deliveries", "−{{/sources/sales/total_rows}}", "{{/sources/sales/total_rows}}\u{034f}%", "{{/sources/sales/total_rows}}.5"] {
+        let denied = app.tool("show_view", make(raw)).await;
+        assert!(denied.get("error").is_some(), "{raw}: {denied}");
+    }
+    for raw in ["Count {{/sources/sales/total_rows}}.", "Count {{/sources/sales/total_rows}}, then", "Total {{/sources/sales/totals/amount/sum}}", "Share {{/sources/sales/totals/share/sum}}"] {
+        let out = ok(app.tool("show_view", make(raw)).await);
+        let rendered = out["spec"]["elements"]["a"]["props"]["text"].as_str().unwrap();
+        assert!(out["text"].as_str().unwrap().contains(rendered), "{out}");
+        assert!(!rendered.contains("{{"));
+    }
+}
+
+#[tokio::test]
+async fn display_normalisation_modifiers_and_source_aliases_are_guarded() {
+    let (app, vault) = sample().await;
+    let make = |text: &str| json!({"view":"ui","spec":{"root":"copy","elements":{"copy":{"type":"Text","props":{"text":text}}}},"sources":{"sales":{"type":"dataset","vault_id":vault,"kind":"sample","properties":["amount","share"]}}});
+    let raw = "Ｃｏｕｎｔ \u{202e}{{/sources/sales/total_rows}}\u{202c}";
+    let out = ok(app.tool("show_view", make(raw)).await);
+    assert_eq!(out["spec"]["elements"]["copy"]["props"]["text"], "Count 2");
+    assert!(out["text"].as_str().unwrap().contains("• Count 2\n"));
+    assert!(!out["text"].as_str().unwrap().contains(['\u{202e}', '\u{202c}']));
+    for text in ["− {{/sources/sales/total_rows}}", "{{/sources/sales/total_rows}} %", "{{/sources/sales/total_rows}}\u{00a0}€", "$  {{/sources/sales/total_rows}}"] {
+        let denied = app.tool("show_view", make(text)).await;
+        assert!(denied.get("error").is_some(), "{text}: {denied}");
+    }
+    for alias in ["999999", "12sales", "sales_999999"] {
+        let mut args = make("Sales");
+        let source = args["sources"].as_object_mut().unwrap().remove("sales").unwrap();
+        args["sources"][alias] = source;
+        let denied = app.tool("show_view", args).await;
+        assert!(denied.get("error").is_some(), "{alias}: {denied}");
+        assert!(denied.to_string().contains("identifier"), "{denied}");
+    }
+    let mut args = make("Sales");
+    let source = args["sources"].as_object_mut().unwrap().remove("sales").unwrap();
+    args["sources"]["sales_q3"] = source;
+    let out = ok(app.tool("show_view", args).await);
+    assert!(out["text"].as_str().unwrap().contains("Source 1:"));
+    assert!(!out["text"].as_str().unwrap().contains("sales_q3"));
+}
+
+#[tokio::test]
+async fn selectors_resolve_approved_digit_properties_and_reject_model_aliases() {
+    let (app, vault) = sample().await;
+    for (name, datatype) in [("cost_2026", "number"), ("amount_2026", "number"), ("region_2026", "text")] {
+        ok(app.tool("ontology_propose", json!({"properties":[{"kind":"sample","name":name,"datatype":datatype}]})).await);
+        let (status, body) = app.http_session("POST", &format!("/api/vaults/{vault}/ontology/properties/decide"), Some(json!({"kind":"sample","name":name,"decision":{"action":"approve"}}))).await;
+        assert_eq!(status, 200, "{body}");
+    }
+    let rows = ok(app.tool("show_view", json!({"view":"ui","spec":spec(),"sources":{"sample":{"type":"dataset","vault_id":vault,"kind":"sample","properties":["amount"]}}})).await);
+    for row in rows["data"]["sources"]["sample"]["rows"].as_array().unwrap() {
+        for (property, value) in [("cost_2026", json!(12)), ("amount_2026", json!(24)), ("region_2026", json!("North"))] {
+            ok(app.tool("entity_set_property", json!({"entity_id":row["entity_id"],"property":property,"value":value})).await);
+        }
+    }
+    let make = |kind: &str, extra: Value, source: Value| {
+        let mut props = json!({"title":"Values","summary":"Values","data":{"$state":"/sources/sales/rows"}});
+        props.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        json!({"view":"ui","spec":{"root":"chart","elements":{"chart":{"type":kind,"props":props}}},"sources":{"sales":source}})
+    };
+    let source = json!({"type":"dataset","vault_id":vault,"kind":"sample","properties":["cost_2026"]});
+    for extra in [json!({"y":"cost_2026"}), json!({})] {
+        let out = ok(app.tool("show_view", make("Bar", extra, source.clone())).await);
+        assert_eq!(out["spec"]["elements"]["chart"]["props"]["y"], "cost_2026");
+        assert_eq!(out["spec"]["elements"]["chart"]["props"]["series"], json!(["cost_2026"]));
+        assert_eq!(out["data"]["sources"]["sales"]["totals"]["name"]["count"], 2.0);
+    }
+    let table_source = json!({"type":"dataset","vault_id":vault,"kind":"sample","properties":["amount_2026"],"sort":{"property":"amount_2026"}});
+    let table = ok(app.tool("show_view", make("Table", json!({"columns":[{"key":"amount_2026","label":"Model label"}]}), table_source)).await);
+    assert_eq!(table["spec"]["elements"]["chart"]["props"]["columns"][0]["label"], "amount 2026");
+    let grouped = json!({"type":"dataset","vault_id":vault,"kind":"sample","properties":["cost_2026"],"group_by":"region_2026","aggregates":[{"op":"sum","property":"cost_2026"}],"sort":{"property":"sum_cost_2026"}});
+    let out = ok(app.tool("show_view", make("Bar", json!({"x":"region_2026","group":"region_2026"}), grouped)).await);
+    assert_eq!(out["spec"]["elements"]["chart"]["props"]["x"], "region_2026");
+    assert_eq!(out["spec"]["elements"]["chart"]["props"]["y"], "sum_cost_2026");
+    assert_eq!(out["data"]["sources"]["sales"]["rows"][0]["sum_cost_2026"], 24.0);
+    let denied = app.tool("show_view", make("Bar", json!({"y":"unknown_2026"}), source.clone())).await;
+    assert!(denied.to_string().contains("unknown bound column unknown_2026"), "{denied}");
+    let mut unknown_sort = source.clone();
+    unknown_sort["sort"] = json!({"property":"unknown_2026"});
+    let denied = app.tool("show_view", make("Bar", json!({}), unknown_sort)).await;
+    assert!(denied.to_string().contains("unknown sort column"), "{denied}");
+    let absent_group_column = json!({"type":"dataset","vault_id":vault,"kind":"sample","properties":["cost_2026"],"aggregates":[{"op":"sum","property":"cost_2026"}],"sort":{"property":"name"}});
+    let denied = app.tool("show_view", make("Table", json!({}), absent_group_column)).await;
+    assert!(denied.to_string().contains("unknown sort column"), "{denied}");
+    let mut args = make("Bar", json!({"y":"cost_2026"}), source);
+    let source = args["sources"].as_object_mut().unwrap().remove("sales").unwrap();
+    args["sources"]["revenue_999"] = source;
+    args["spec"]["elements"]["chart"]["props"]["data"]["$state"] = json!("/sources/revenue_999/rows");
+    let denied = app.tool("show_view", args).await;
+    assert!(denied.to_string().contains("identifier"), "{denied}");
+}

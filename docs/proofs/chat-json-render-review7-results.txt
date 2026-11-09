@@ -1,0 +1,59 @@
+PR 203 provenance and pending-block follow-up
+Baseline: 266e9c693e768fef25409cfaebae22699f607c27
+
+Changes
+- Return NFKC-normalised prose with format, bidi and combining controls removed,
+  canonical digits, signs and whitespace, preserving capitalisation. UI prose
+  and server summary prose use the same returned string.
+- Whitespace cannot detach signs, percent, per-mille or currency symbols/codes
+  from a numeric span. Whole placeholder outputs remain required. Per cent
+  stays ordinary words.
+- Source aliases, element IDs and displayed selector/series/column/format keys
+  require numeric spans attached to letters. Namespace parts validate separately.
+  Source headings use server positions. Tab IDs/positions are renderer-generated.
+  The source-only length limit does not restrict longer derived aggregate keys.
+- Text remains literal React text in a paragraph. This restores the existing
+  pending-to-resolved DOM contract without changing the reserved-size wrapper.
+
+Known limitation
+Explicit RTL direction marks and nonspacing diacritics are removed. Arabic and
+Hebrew titles without digits pass the documented regressions. Number words and
+surrounding claims remain unchecked by design.
+
+Verification
+- Full serial hardened backend run: 690 passed, two existing opt-in tests ignored.
+  Library 562; chat_ui 14; golden_tools 1; ontology 110; openapi 2; round_trips 1.
+- Final affected-test replay after the identifier boundary and column-length
+  adjustments: 24 UI unit tests, 14 chat_ui integration tests and the 78-result
+  metric fixture pass. The existing chat_ui scale fixture remains ignored.
+- The contextual 25-title matrix has zero false rejections. Earlier bypass
+  regressions pass. The captured metric fixture contains 78 main results and
+  its pinned main-source oracle comparison passes.
+- cargo check --tests and clippy --all-targets -- -D warnings pass.
+- Seven provenance guard mutations fail their intended assertions and restore
+  exact source bytes. Restoring Markdown parsing also fails the literal-prose
+  regression after updating its mutation anchor to the paragraph tag.
+- Renderer: 13 passed, 216 assertions. Production frontend build passes.
+- Both full Playwright specs pass: brand-and-motion and chat-json-render,
+  37 tests including 390px/1280px charts in both themes and the unchanged
+  pending-block reserved-height and WebGL-lifecycle assertions.
+- No prompts changed. No live chat rerun. No cargo fmt or merge.
+
+Machine and evidence
+Every Cargo step checks df -h / and pgrep -x cargo. A blocked gate waits three
+minutes between checks for at most two hours. Every Cargo process uses:
+CARGO_BUILD_JOBS=2 CARGO_PROFILE_DEV_DEBUG=0 CARGO_INCREMENTAL=0
+RUST_MIN_STACK=8388608 RUST_TEST_THREADS=1 TEST_HARDENED=1 nice -n 19
+Build output uses an owned disposable RAM volume. Cleanup removes this worktree's
+backend/target, node_modules and .next, its services and the RAM volume.
+Logs, source hashes, mutation assertions and chart receipts are retained in
+/private/tmp/eunomia-pr203-r7-fix/.
+
+Retained attempts
+The first UI test run exposed an underscore-boundary mistake in the identifier
+check and the expected wider span for a spaced plus sign. Both were corrected.
+Turbopack could not resolve PostCSS through the temporary output layout; the
+Webpack production build passes. An initial Next launch used the repository root
+and was corrected to frontend. The unchanged pending-block spec reproduced the
+reported missing .generative-ui p at line 811 before the paragraph fix; the full
+spec passes afterward. Cargo competition waits are retained in the gate logs.

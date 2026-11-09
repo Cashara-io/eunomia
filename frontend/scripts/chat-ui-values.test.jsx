@@ -6,7 +6,7 @@ import UiView from "../src/components/chat/ui/UiView";
 import Chart from "../src/components/chat/ui/Charts";
 import DataBlock from "../src/components/chat/ui/Blocks";
 import { chartNames } from "../src/components/chat/ui/catalog";
-import { formatted, number, requiredNumber } from "../src/components/chat/ui/data";
+import { drawable, proportionalTotal, formatted, number, requiredNumber } from "../src/components/chat/ui/data";
 
 const ui = new URL("../src/components/chat/ui", import.meta.url).pathname;
 test("UI numeric access never defaults a missing measurement to zero", () => {
@@ -35,7 +35,7 @@ test("meter requires its minimum instead of inventing zero", () => {
   expect(html).not.toContain("<meter");
 });
 test("unsafe finite chart values fall back before scale arithmetic", () => {
-  const html = renderToStaticMarkup(<Chart kind="Line" raw={{title: "Values", summary: "Values", x: "name", y: "value", data: [{name: "Low", value: -1e308}, {name: "High", value: 1e308}]}} />);
+  const html = renderToStaticMarkup(<Chart kind="Line" raw={{title: "Values", summary: "Values", x: "name", y: "value", series: ["value"], data: [{name: "Low", value: -1e308}, {name: "High", value: 1e308}]}} />);
   expect(html).toContain("This display could not be drawn.");
   expect(html).not.toContain("<svg");
   expect(html).not.toMatch(/NaN|Infinity/);
@@ -67,5 +67,54 @@ test("stat groups retain a missing typed measurement", () => {
     expect(html).toContain("ui-stat-tile");
     expect(html).toContain("none");
     expect(html).not.toContain("A$0");
+  }
+});
+
+test("omitted y never substitutes an available measurement", () => {
+  const raw = {title: "Amount", summary: "Amount", x: "name", data: [{name: "Supplier", amount: null, quantity: 12}]};
+  const unresolved = renderToStaticMarkup(<Chart kind="Line" raw={raw} />);
+  expect(unresolved).toContain("This display could not be drawn.");
+  expect(unresolved).not.toContain("<svg");
+  const resolved = renderToStaticMarkup(<Chart kind="Line" raw={{...raw, y: "amount", series: ["amount"]}} />);
+  expect(resolved).toContain("No numeric values to show.");
+  expect(resolved).not.toContain("<svg");
+});
+test("proportional charts reject subnormal and zero totals", () => {
+  for (const kind of ["Pie", "Donut", "Treemap", "Partition", "Funnel", "StackedBar", "StackedArea"]) {
+    for (const value of [1e-320, 5e-324, 0]) {
+      const html = renderToStaticMarkup(<Chart kind={kind} raw={{title: "Values", summary: "Values", x: "name", y: "value", series: ["value"], parent: "parent", data: [{name: "Supplier", value, parent: null}]}} />);
+      expect(html).toContain("This display could not be drawn.");
+      expect(html).not.toContain("<svg");
+      expect(html).not.toMatch(/NaN|Infinity/);
+    }
+  }
+});
+
+test("shared proportional accessor accepts safe totals only", () => {
+  for (const values of [[0], [1e-320], [5e-324], [null], [Infinity]]) expect(proportionalTotal(values)).toBeNull();
+  expect(drawable(1e-320)).toBe(false);
+  expect(proportionalTotal([10, 20])).toBe(30);
+  for (const kind of ["Pie", "Donut", "Treemap", "Partition", "Funnel", "StackedBar", "StackedArea"]) {
+    const html = renderToStaticMarkup(<Chart kind={kind} raw={{title: "Values", summary: "Values", x: "name", y: "value", series: ["value"], parent: "parent", data: [{name: "Supplier", value: 12, parent: null}]}} />);
+    expect(html).toContain("<svg");
+    expect(html).not.toMatch(/NaN|Infinity/);
+  }
+});
+
+ test("server substituted prose displays literally without interpreting placeholders", () => {
+  const view = {view: "ui", text: "Total 1588.00 AUD", data: {sources: {}}, spec: {root: "copy", elements: {copy: {type: "Text", props: {text: "Total 1588.00 AUD <script> {{sources.sales.amount}}"}}}}};
+  const html = renderToStaticMarkup(<UiView view={view} />);
+  expect(html).toContain("Total 1588.00 AUD &lt;script&gt; {{sources.sales.amount}}");
+  expect(html).not.toContain("<script>");
+});
+
+test("UI prose never reparses Markdown entities or escapes", () => {
+  for (const type of ["Text", "Heading", "Caption", "Badge", "Callout"]) {
+    const text = 'Revenue rose &half;% Count &#49; **bold** \\u0031 \\*one*';
+    const view = {view: "ui", text, data: {sources: {}}, spec: {root: "a", elements: {a: {type, props: {text}}}}};
+    const html = renderToStaticMarkup(<UiView view={view} />);
+    expect(html).toContain('Revenue rose &amp;half;% Count &amp;#49; **bold** \\u0031 \\*one*');
+    expect(html).not.toContain("½");
+    expect(html).not.toContain("<strong>bold</strong>");
   }
 });

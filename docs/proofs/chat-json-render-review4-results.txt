@@ -1,0 +1,67 @@
+Independent P1 review follow-up, 2026-11-09 UTC
+
+Design:
+- UI prose is literal React text, including Text bodies. No Markdown/entity reparse.
+- Final substituted values have numeric-neighbour checks, including adjacent bindings.
+- Raw digits require a single pre-turn persisted string and an adjacent letter-bearing word.
+- Created/updated timestamps and a fixed chat turn cutoff limit eligible strings.
+- Bare numeric names never authorise prose. ISO dates still need applied/bucket matches.
+- Earlier-turn planted names remain user-visible data, not independent numeric evidence.
+
+Fresh verification:
+- cargo check --tests: passed after the final source changes and guard restoration.
+- cargo clippy --all-targets -- -D warnings: passed.
+- Hardened serial backend: 527 library, 12 chat_ui, 110 ontology, 1 golden_tools,
+  2 openapi and 1 round_trips test passed. Two existing opt-in fixtures ignored.
+- UI unit suite: 15 passed, including the earlier bypass suite and the 25-title matrix.
+- Contextual 25-title false-positive matrix: 0/25 false rejections. This is not a
+  measured production false-positive rate.
+- Frontend lint, typecheck, production build, frozen install and catalogue sync passed.
+- Renderer: 13 tests, 216 assertions passed.
+- All 18 mutation experiments failed the intended assertions and restored source bytes.
+  Compilation errors were not accepted as mutation proof.
+
+Fresh gpt-6-luna chat API proof:
+- Line: one invalid time-bucket query repaired automatically, then a successful view.
+  Bound title count: 6 returned month groups.
+- Table: one call, successful view. Bound title total: 1588.00 AUD.
+- Independent CSV audit: 185 numeric fields within 0.01.
+- Exact prose audit: 2 substitutions in UI props and terminal/server summaries.
+- Raw persisted chat histories: /private/tmp/chat-json-render-v6/answer-1.json
+  and answer-6.json. CSV, audits, failures and check logs retained in that directory.
+- These are chat API and React renderer checks; no new browser screenshots were requested.
+
+Attempts retained:
+- Initial progress CI failed E0405, missing SurrealValue trait import; fixed and checked.
+- Initial target symlink had no destination directory; created before compilation.
+- Frontend RAM symlinks were rejected by Turbopack; ordinary directories and a fresh
+  cache produced a passing build.
+- Initial disposable SurrealDB argument order was wrong; endpoint-first launch fixed it.
+
+Machine and cleanup:
+- Every Cargo step checked df -h / and pgrep -x cargo. Blocked gates waited 180 seconds,
+  up to two hours. All used two jobs, dev debug zero, no incremental compilation,
+  RUST_MIN_STACK=8388608, serial tests and nice -n 19. Never cargo fmt.
+- Disposable SurrealDB: 8593. Backend: 8594. Shared 8000/3600/8600/3700 untouched.
+- Owned target, node_modules, .next, backend process, container, RAM volume and copied
+  private launcher were removed during final cleanup. Original key launcher is untouched.
+
+Mutation logs, all intended assertion failures:
+- date-parsing.log
+- final-substitution-boundaries.log
+- letter-bearing-phrase.log
+- literal-rendering.log
+- metric-unit-parity.log
+- normalisation.log
+- placeholder-path.log
+- placeholder-type.log
+- pre-turn-snapshot.log
+- proportional-range.log
+- raw-digit-rejection.log
+- renderer-column-resolution.log
+- server-column-resolution.log
+- turn-cutoff-propagation.log
+- unicode-compatibility.log
+- unicode-digits.log
+- verbatim-boundaries.log
+- verbatim-scope.log

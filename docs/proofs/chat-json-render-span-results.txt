@@ -1,0 +1,72 @@
+Whole-span provenance and tooltip follow-up, 2026-11-10 Australia/Melbourne
+
+Rule built:
+- Normalise the complete substituted display first: NFKC, remove Cf/Mn/Me,
+  map decimal digits to ASCII, specified minus/dash forms to hyphen and spaces
+  to plain spaces, collapsing runs to match browser display while preserving
+  separator offsets. Preserve literal display text and the pre-turn eligibility cutoff.
+- Extract maximal numeric spans. Decimal/thousands separators (. , ' _ and one
+  space) join only when a digit follows directly; sentence punctuation stays outside.
+- Require exact range and complete formatted value from one placeholder, or one
+  complete server span in one eligible letter-bearing phrase, or applied/bucket
+  ISO dates/ranges. No union of numeric fragments from multiple sources.
+- Apply to model prose shared by UI and server summaries. Separate summary fields
+  with bullet items so separate figures cannot form a space-joined numeric span.
+
+Results:
+- Both review attacks and all requested sign/percent/decimal/exponent/currency,
+  adjacent-placeholder, split-name and combining-mark regressions are rejected.
+  Double-space and double-newline gluing also fail after browser display normalisation.
+- Earlier bypass suite passes. The unchanged 25-title matrix has 0/25 false
+  rejections; this is a contextual test matrix, not a production false-positive rate.
+- Correct currency, percent, ISO 27001, Scope 3, Q3 2026 bucket phrases, ISO dates,
+  sentence full stops/commas and exact Unicode case matching pass.
+- Exact source probe: 14 passed. Full backend UI unit subset: 20 passed.
+- Hardened serial full backend: 532 library, 13 chat_ui, 110 ontology,
+  1 golden_tools, 2 openapi and 1 round_trips passed, total 659; 2 existing ignores.
+- All-target clippy with warnings denied and final cargo check --tests passed.
+- All 24 mutation experiments failed intended assertions and restored source bytes:
+  6 new span guards, 9 prior prose guards, 5 review4 guards, 2 retained backend
+  guards and 2 retained frontend guards. Compilation errors do not count as proof.
+- Frontend frozen install, lint, typecheck, production build and catalogue sync pass.
+  Renderer: 13 passed, 216 assertions.
+
+Tooltip root cause and browser proof:
+- Independent chart state let focus in one chart and pointer movement in another
+  leave two tooltips. A real two-chart Chrome harness at 390px reproduced exactly
+  2 nodes before the fix. Shared active ownership now gives 1, then 0 on leave.
+- Pointer leave/cancellation, blur and unmount dismiss only the owning chart.
+  A late blur from a previous owner cannot dismiss the current tooltip.
+- Existing strict tooltip assertions are retained. Added focus/hover handoff and
+  late-blur assertions; no test was loosened.
+- Production Playwright tests/chat-json-render.spec.ts --grep 'at 390px': 3 passed,
+  including light and dark catalogue fixtures and dense network/nested-card layout.
+
+Fresh live gpt-6-luna Table:
+- One question, one successful UI call. Title binds a server total of 1588.00 AUD.
+- Independent CSV audit matches 142 numeric fields within 0.01. One exact formatted
+  placeholder appears in resolved UI props and server text.
+- Real 390px Chrome render shows the substituted title, no placeholder syntax,
+  and the visible A$1588.00 footer with quantity total 49. Both PNGs inspected.
+- Receipt, CSV, audits, browser screenshots and logs: /private/tmp/eunomia-span-proof/.
+
+Attempts retained:
+- Chrome exposed a further double-space gluing case, since normal CSS collapses
+  whitespace. A failing source regression was added before collapsing validation
+  whitespace and separating terminal prose with bullet items. Checks were rerun.
+- A new integration test initially bound a null first-row percentage after adding
+  names; corrected to the populated server total, then all six suites rerun.
+- Standalone typecheck needed generated Next route types; passed after the build.
+- Initial private backend launch exited with its parent. Managed exec launch worked.
+- Document storage was initially disabled; configured memory storage and reseeded.
+- The first browser footer assertion assumed grouping commas; corrected to the
+  existing exact formatter output A$1588.00. No product formatting changed.
+
+Machine and cleanup:
+- Every Cargo step checked df -h / and pgrep -x cargo; blocked gates waited 180
+  seconds up to two hours. Two jobs, dev debug zero, no incremental compilation,
+  8 MiB Rust stack, serial hardened tests, nice -n 19. Never cargo fmt.
+- Throwaway SurrealDB 18593, backend 18594, frontend 18595. Avoided all named ports.
+- Owned services, copied private launcher, backend/target, node_modules, .next and
+  disposable RAM build volume removed. Other worktrees and original key untouched.
+- No merge. Push only to fix/chat-ui-review-3 after the final Cargo check.

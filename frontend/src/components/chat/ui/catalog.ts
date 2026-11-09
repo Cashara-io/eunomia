@@ -14,14 +14,14 @@ const column = z.strictObject({
 const container = {
   props: z.strictObject({ title: words.optional() }),
   slots: ["default"],
-  description: "Groups its children. Titles are words, never data.",
+  description: "Groups its children. Put numbers in titles through bound placeholders, for example {{/sources/sales/total_rows}}.",
 };
 const copy = {
   props: z.strictObject({
     text: words,
     tone: z.enum(["info", "warning", "success"]).optional(),
   }),
-  description: "Words supplied by the model. Do not put measured numbers here.",
+  description: "Literal plain text, with no Markdown or entity decoding. Separate placeholders from numeric tokens. Use {{/sources/sales/total_rows}} for numbers. The server substitutes one exact typed numeric or date binding. Raw digits need a verbatim phrase with an adjacent letter-bearing word in a server string predating the turn or matching applied ISO dates or bucket labels. Number words are unchecked.",
 };
 const dataProps = z.strictObject({
   title: words,

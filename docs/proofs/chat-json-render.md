@@ -150,3 +150,130 @@ The first browser attempt began before the isolated backend was ready. Every-too
 The runtime used a disposable SurrealDB 3.3.5 on `8590`, this branch's backend on `8591`, and a production frontend on `3590`. Server model API settings were removed from the runtime environment. Every-tool completed without model access. No shared database or owner stack was used.
 
 Machine free space started at about 14 GiB and stayed above the 6 GiB stop threshold. Every Cargo process used two jobs, no development debug information, no incremental compilation, an 8 MiB Rust stack and niceness 19. Only one Cargo process ran at a time. No `cargo fmt` was run. Teardown removed this checkout's backend target, node_modules and Next output, plus only this run's processes and disposable database.
+
+## Third review fixes
+
+The final branch is rebased onto main `42a45fc4d14931bd9c558f250d3ba443c29b653c`, after PR 192 and the documentation/CI-only PR 199. The last rebase left the backend, frontend and chat verification script trees byte-for-byte identical to the tested version; `source-trees.json` records their Git tree hashes. The newly introduced compliance catalogue check also passed in an isolated Python environment.
+
+This follow-up replaces the prose number-word blocklist. Words such as "twice", "score", "First Nations" and "IV" are ordinary language and are not checked. Unicode compatibility forms, including superscript and circled digits, are normalised first, then decimal digits in every script are converted to ASCII. Digits in alphanumeric identifiers such as Q3 and COVID-19 are allowed. Other digit quantities must match resolved view values or applied server parameters, with thousands separators, currencies, percentages and displayed precision normalised. Errors identify the field. Applied dataset limits, cutoff dates and filters are included in resolved parameters so the check can accept them after resolution.
+
+Metric loading once again omits stored unit overrides, as main did. Dataset loading alone retains units. The main compatibility fixture now includes an AUD property with a permitted stored USD value of 13. The API regression evaluates all six existing aggregates against its captured main results. The oracle comparison covers 78 results bitwise, including the earlier input-order and datetime-precision cases. The pinned main source comparison still passes.
+
+The server returns explicit x, y and series for every chart. Omitted y is accepted only with one unambiguous numeric metadata column. The decision does not depend on whether a row has a measurement. The renderer refuses an unresolved column specification and never substitutes quantity for a missing amount. Shared numeric access rejects unsafe tiny values, and proportional totals reject zero before Pie, Donut, Treemap, Partition, Funnel and stacked charts draw.
+
+### Third review guard mutations
+
+`scripts/chat-json-render/check_third_review_guards.py backend|frontend` disables one fix, requires an assertion failure rather than a compilation failure, and restores the file in `finally`.
+
+| Fix disabled | Regression | Result |
+| --- | --- | --- |
+| Prose digit matching | `model_digits_match_resolved_values` | Failed as expected, restored |
+| Main metric projection without units | `metric_stored_unit_override_matches_main_fixture` | Failed as expected, restored |
+| Unambiguous server y selection | `omitted_y_resolves_only_unambiguous_metadata` | Failed as expected, restored |
+| Renderer requires resolved columns | `omitted y never substitutes an available measurement` | Failed as expected, restored |
+| Shared tiny-value and positive-total guards | `proportional charts reject subnormal and zero totals` | Failed as expected, restored |
+
+### Third review verification and live proof
+
+- Final serial hardened backend run on the rebased implementation: 518 library tests, nine chat UI tests, 110 ontology tests, one golden-tools test, one round-trip test and two OpenAPI tests passed. The existing scale fixture and expensive ontology import fixture remain ignored, two in total.
+- Final Clippy on all targets with warnings denied passed.
+- Frontend lint, typecheck, production build, API regeneration and catalogue sync passed. The final renderer suite passed eleven tests and 199 assertions. Both requested Playwright files passed all nine tests with server model access disabled.
+- All five guard mutations failed their intended assertions and were restored. The main oracle source check and all 78 bitwise compatibility comparisons passed.
+- OpenAPI regeneration was run. Its generic UI envelope did not require a generated shape change; the final no-update drift test passed.
+
+[Replay commands](chat-json-render-third-review-commands.txt). Detailed logs and earlier failed or interrupted attempts are included with the screenshots.
+
+The throwaway SurrealDB 3.3.5 database used port 8595, the backend 8596 and frontend 3595. The shared database at 8000 and occupied ports 3600, 8600 and 3700 were not used. File buckets were enabled on the disposable database, with memory-backed document storage and stub embeddings. The CSV import created twelve entities and sixty values with no bad cells. The supplied launcher was copied privately for the real gpt-6-luna key; neither its contents nor session cookies are published.
+
+| Question | Live result | Independently expected values |
+| --- | --- | --- |
+| Monthly trend | Line | Jan 200.75, Feb 370.75, Mar 240.50, Apr 225.25, May 280.50, Jun 270.25 AUD |
+| Supplier breakdown | Donut | Coastal 510.50, Inland 431.25, Metro 646.25 AUD |
+| Distribution | Histogram | Four bins with 4, 3, 3 and 2 values |
+| Relationship | Scatter | All twelve quantity/amount pairs match |
+| Ten percent what-if | Scenario | AUD 1588.00 to 1746.80, delta 158.80 |
+| Table with totals | Table | AUD 1588.00 and quantity 49 |
+
+All six final questions ran through the real chat service with gpt-6-luna after rebasing onto main. No chart resolver, metric projection or renderer changes followed this live rerun; the subsequent Unicode/date-label edge cases are covered by the final backend suite. They were submitted through the normal thread/message API, and their persisted histories were opened and captured in Helium. Each final question resolved one UI. The table question explicitly named the whole-dataset pointer, and its first result showed the correct footer.
+
+The earlier browser-submitted six-question run is retained under `attempts/browser-pass/`. That run's scenario corrected an invalid source argument, and the table needed two follow-up prompts to replace its `/rows` binding. Those unsuccessful table displays are retained too. Final screenshots use the second fresh run. T3 preview could read the final answers but repeatedly timed out capturing snapshots, so native Helium captured the PNGs instead. Only proof tabs and windows were opened and closed.
+
+`python3 -I scripts/chat-json-render/verify_numbers.py CSV ANSWER_DIRECTORY` passes 389 numeric and nullable field checks within 0.01. This audits all six final tool results and the applied dataset parameters. The earlier run also passed 673 checks, including its repeated table resolutions. All six final PNGs were opened and inspected. The final scenario image includes every changed row, and the table image includes its footer.
+
+[Six screenshots, authentic receipts, CSV, numeric audit and verification logs](https://github.com/Cashara-io/eunomia/tree/pr-screenshots/chat-json-render-v4).
+
+The first backend build needed test error-message and source-prose serialization corrections. A later run was stopped by the disk monitor when unrelated disk use took free space below 6 GiB. Its library, chat UI and golden-tools portions had passed; its interrupted ontology run is not counted as complete. The owned Rust target was removed. Free space subsequently recovered, and verification restarted. The owner then changed the pre-Cargo gate to wait below 7 GiB or while another Cargo runs, rechecking every three minutes for up to sixty minutes. Only this task's artefacts were removed. Earlier frontend typecheck and document-bucket setup failures are retained separately from the final checks. One restored parallel backend run failed the existing `gate2_a_long_question_caps_name_lookups_and_never_searches_memory_text` tracing assertion with zero spans. The earlier full run passed it; the final run uses one Rust test thread to avoid concurrent tracing collectors. No `cargo fmt` was run. All Cargo processes used two build jobs, no dev debug information, no incremental compilation, an 8 MiB Rust stack and niceness 19. Final cleanup removes this worktree's target, node_modules, .next, runtime processes and disposable container.
+
+
+## Bound prose placeholder redesign
+
+The fourth review replaces pooled value matching with exact bound placeholders. See the [updated contract](../architecture/chat-generative-ui.md#model-prose-and-resolved-chart-columns) and [commands](chat-json-render-bound-prose-commands.txt). Model prose binds one server-typed numeric or date path. The server formats and substitutes it in the returned spec and terminal summary. Raw digits require whole normalised server text tokens or matching parsed applied dates and bucket labels. Number words remain unchecked. Query values and invented kinds cannot authorise digits.
+
+The regression matrix covers unrelated quantities, zero-width and thin-space splits, vulgar fractions, shorthand and identifier forms, exponent percentages, fullwidth and Arabic-Indic digits. It also covers matching ISO dates, scoped ISO and Scope labels, Q3 category/bucket tokens, exact currency formatting, missing/non-numeric paths and every nested prose field. Error messages include exact valid typed numeric paths from the resolved view. The chat prompt distinguishes supported bucket/rendering instructions from missing domain terms and documents detailed versus aggregated total paths.
+
+### Live questions and numeric proof
+
+The isolated SurrealDB 3.3.5 server uses 8597, backend 8598 and frontend 3597. It does not use the shared database or ports 3600, 8600 or 3700. A fresh account imports the same twelve-row CSV, sixty typed property values and the approved total_amount metric. Real chat uses gpt-6-luna. Each original question additionally requests a measured total or count in its title through a bound placeholder. The Table retains the prior proof's explicit whole-dataset pointer hint.
+
+| Question | Final block | Checked result |
+| --- | --- | --- |
+| Monthly trend | Line | Monthly AUD totals 200.75, 370.75, 240.50, 225.25, 280.50, 270.25 |
+| Supplier breakdown | Donut | Coastal 510.50, Inland 431.25, Metro 646.25 AUD |
+| Distribution | Histogram | Bin counts 4, 3, 3, 2; twelve-row title |
+| Relationship | Scatter | All twelve quantity/amount pairs; twelve-row title |
+| Ten percent what-if | Scenario | 1588.00 to 1746.80 AUD, change 158.80 AUD |
+| Detail table | Table | Overall amount 1588.00 AUD and quantity 49 |
+
+All six answers use placeholders. `verify_numbers.py` independently matches 436 numeric fields within 0.01. `verify_placeholders.py` independently checks nine exact formatted substitutions, including currency, and confirms the same prose appears in terminal text. Monthly, supplier and Scatter titles bind the overall 1588.00 AUD. Table and Histogram titles bind twelve rows or samples; Scenario binds its entity count. This verifies the bound path and value, not the correctness of every surrounding model claim.
+
+Earlier live attempts are retained separately. They exposed confusing aggregate total paths, a false month coverage gap and stale catalogue instructions that still advertised numeric equality and identifier exemptions. The final catalogue copies were regenerated with the placeholder rule, and a backend prompt regression prevents those old instructions returning.
+
+All six final questions produce the requested views without a user correction to the view. Histogram automatically repairs its calls and returns an initial plain view followed by a view with a bound count. The numeric audit covers both. The placeholder audit checks every substitution and requires the final view for each question to use a placeholder. Histogram's ordinary chat reply prints unresolved placeholder syntax despite its correct substituted view and server text. One follow-up corrects that ordinary reply. Its history retains the original sentence and correction. Scenario repairs schema, raw-headline and binding errors using the concrete paths returned by the server. These are recovery observations, not a claim that every tool call succeeds first time.
+
+All six screenshots were captured and inspected in native Helium after repeated T3 snapshot timeouts. They show substituted values, currency, chart counts, scenario totals and the table footer. The table footer covers both pages. [Screenshots, authentic histories, CSV and audits](https://github.com/Cashara-io/eunomia/tree/pr-screenshots/chat-json-render-v5).
+
+### Verification
+
+Clippy on all targets with warnings denied passes. The requested serial hardened run passes 524 library tests, eleven chat UI tests, 110 ontology tests, one golden-tools test, two OpenAPI checks and the round-trip guard. The existing scale and expensive-import fixtures remain ignored. The backend prompt regression checks the complete generated tool description for obsolete numeric equality and identifier exemptions.
+
+Frontend lint, typecheck, production build, catalogue sync and twelve renderer tests with 201 assertions pass. Both Playwright specs pass, nine tests, against the final catalogue and runtime with model access disabled. The literal-text regression confirms the renderer escapes HTML and does not interpret placeholder-looking strings.
+
+All thirteen guard experiments fail their intended assertions and restore the exact source. Nine cover placeholder typing and exact paths, raw-digit refusal, server-token scoping and boundaries, date parsing, decimal-digit mapping, compatibility forms and format-character removal. Two retain metric compatibility and chart-column resolution checks. Two retain the frontend resolved-column and proportional-range checks. Compilation failures do not count as mutation proof.
+
+The earlier date-range fixture failure, missing file-bucket setup flag and stub-provider chat refusal are retained separately from the corrected results. Each Cargo step checks root free space and competing Cargo processes, waiting three minutes between checks for up to two hours while blocked. All use two jobs, dev debug zero, no incremental compilation, an 8 MiB Rust stack, serial tests and niceness 19. The owned target and Next output use a disposable RAM disk after disk waits; completed test executables are removed only after all six suites pass, before clippy. No other worktree's artefacts are removed. Final cleanup removes the owned target, node_modules, .next, services, database container and RAM disk. No cargo fmt or merge is run.
+
+
+## Independent P1 review fixes
+
+This round starts at `27e0f195eeff9937ec1912b12176e027c5e23561` and addresses the three independent P1 findings. Earlier sections retain their original verification results.
+
+UI prose now renders literally, including Text bodies. React escapes HTML syntax and preserves entity and backslash spellings. The client does not parse Markdown or decode entities after the server guard. JSON Unicode escapes decode before server validation.
+
+The server records each substitution's output range and checks its neighbours in the final substituted string. Digits, decimal separators, percent and currency signs, signs, fractions and exponent markers cannot touch a placeholder. This also refuses adjacent placeholders, including through zero-width or compatibility characters. The terminal summary uses the same substituted strings.
+
+A fixed timestamp covers the complete chat turn and reaches view resolution. Resolved raw-digit strings are intersected with persisted strings in readable vaults whose creation and last update precede that cutoff. A digit run requires an adjacent letter-bearing word or an alphanumeric word, copied from a single eligible string after normalisation. Bare numeric names never authorise digits. ISO dates still require a matching applied date or bucket label, even when a name contains the date. Names planted in earlier turns remain user-visible data and may qualify. Matching a stored spelling does not establish the truth of the model's surrounding claim.
+
+The placeholder audit now reports the actual receipt count and keeps its substitution counter separate from the count-path flag. Re-auditing the saved v5 histories finds six exact UI prop substitutions. The earlier reported count of nine was a counter bug; the exact-string checks themselves still pass.
+
+[Commands](chat-json-render-review4-commands.txt) and [results](chat-json-render-review4-results.txt) record the fresh verification.
+
+- `cargo check --tests` and clippy on all targets with warnings denied passed on the restored final source.
+- The six requested hardened serial backend suites passed 653 tests. Two existing opt-in fixtures were ignored.
+- All 15 UI unit tests passed. The earlier bypass suite remains rejected. The exact contextual 25-title matrix has zero false rejections, not a production false-positive rate.
+- Five new guard mutations, nine earlier prose mutations, two retained backend mutations and two earlier frontend mutations all failed their intended assertions, then restored exact source bytes. Compilation errors do not count as mutation proof.
+- Frontend frozen install, lint, typecheck, production build and catalogue sync passed. Renderer tests passed 13 cases and 216 assertions.
+- Fresh `gpt-6-luna` Line and Table chat API questions produced bound titles in the resolved UI and server summary. CSV recomputation matched 185 numeric fields within 0.01. A separate audit verified two exact formatted substitutions. Line repaired one invalid bucket query automatically; Table succeeded on its first call. The title count is six month groups, and the Table title total is AUD 1588.00. Raw histories and failed attempts are retained in `/private/tmp/chat-json-render-v6/`.
+
+The initial progress push's missing trait import, the empty target symlink destination, the failed frontend symlink/cache builds and the disposable database's argument-order failure are retained as attempts. The corrected final checks above passed. No new browser proof is claimed. The local proof uses the real chat API and React renderer tests.
+
+The machine gate waits three minutes between checks for competing Cargo processes or root free space below 7 GiB, for up to two hours. Every Cargo step uses the requested two-job, debug-zero, no-incremental, 8 MiB stack and niceness settings. No cargo fmt is run. The disposable database uses port 8593 and the backend uses 8594. Shared services and ports 8000, 3600, 8600 and 3700 are untouched.
+
+## Whole numeric spans and exclusive chart tooltips
+
+The final prose follow-up validates the complete substituted display with one greedy numeric-span rule. Every span must match one complete placeholder output at the recorded offsets, one complete span in an eligible pre-turn letter-bearing server phrase, or an applied/bucket ISO date or range. Unicode normalisation precedes extraction, including whitespace collapse to match browser display. Terminal summary values use bullet separators. Decimal and thousands separators join only when a digit follows directly, so sentence punctuation remains valid for both placeholders and server phrases. UI prose and terminal summaries use the same checked values.
+
+Both reported gluing attacks and the requested connector/Unicode regressions are rejected. The unchanged contextual title matrix has zero false rejections out of 25. All 659 backend tests pass across the six requested suites, with two existing ignores. Clippy with warnings denied, final `cargo check --tests`, all 24 guard mutations and renderer checks pass.
+
+The tooltip follow-up fixes independent per-chart tooltip ownership. A real 390px two-chart reproduction showed two tooltips before the fix. Charts now share one active tooltip, dismiss only their own tooltip on blur/leave/cancellation/unmount, and render one tooltip node each. Strict assertions were preserved and cross-chart handoff assertions added. All three 390px production Playwright cases pass, including the previously failing light catalogue case.
+
+A fresh gpt-6-luna Table question returns one successful UI with a bound 1588.00 AUD title. Independent CSV recomputation matches 142 numeric fields, and the placeholder audit verifies identical substitution in UI props and server text. The real app renders the title and A$1588.00 footer at 390px; both screenshots were inspected. [Detailed results and retained attempts](chat-json-render-span-results.txt). Authentic local receipts and logs remain in `/private/tmp/eunomia-span-proof/`.

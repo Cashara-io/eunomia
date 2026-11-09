@@ -55,6 +55,10 @@ def bucket(value, grain):
 
 
 def dataset(query, actual):
+    if "parameters" in actual:
+        parameters = {"limit": query.get("limit"), "as_of": query.get("as_of"), "filters": query.get("filters", [])}
+        assert actual["parameters"] == parameters, ("parameters", actual["parameters"], parameters)
+        numeric_tree(actual["parameters"], parameters, "parameters")
     selected = records
     for f in query.get("filters", []):
         def pick(row):

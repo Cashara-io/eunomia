@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, HashSet};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use surrealdb::types::RecordId;
+mod prose;
 use crate::{error::{AppError, AppResult}, ontology::dataset, pool::OrgDb};
 use super::{View, ViewSpec};
 
@@ -25,7 +26,7 @@ pub fn catalog() -> &'static Value {
 }
 pub fn description() -> &'static str {
     static DESCRIPTION: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-    DESCRIPTION.get_or_init(|| format!("Show an answer with server-resolved data. Keep the four legacy views, or use view ui with spec and named sources. Sources: dataset (vault_id, kind, properties, filters, group_by, bucket day/week/month/quarter/year, aggregates [{{op count/sum/avg/min/max/median/distinct,property?}}], sort {{property,descending}}, limit at most 500. To show detailed rows and totals, omit aggregates; totals are always computed separately. Aggregate column keys are generated as op_property, or count without a property. Model aliases are refused); metric (metric_eval arguments); scenario (each named source is {{type: scenario, headline: words, scenario: {{vault_id, changes, metrics}}}}; headline belongs INSIDE that source, not at the top level); impact and subgraph (existing view arguments). A dataset returns rows, columns, status, truncated and warnings. Bind data with {{\"$state\":\"/sources/sales/rows\"}}. Stat binds a scalar pointer. Legacy blocks bind the whole source. Never send literal numbers, numeric strings or inline data. x, y and series name columns. All displayed numbers come from sources. No actions, repeats or visibility expressions. At most 100 elements, depth 12 and 64 KiB. The server returns useful text for terminal clients.\n{}", catalog()["prompt"].as_str().unwrap_or("")))
+    DESCRIPTION.get_or_init(|| format!("Show an answer with server-resolved data. Keep the four legacy views, or use view ui with spec and named sources. Sources: dataset (vault_id, kind, properties, filters, group_by, bucket day/week/month/quarter/year, aggregates [{{op count/sum/avg/min/max/median/distinct,property?}}], sort {{property,descending}}, limit at most 500. To show detailed rows and totals, omit aggregates; totals are always computed separately. Aggregate column keys are generated as op_property, or count without a property. Model aliases are refused); metric (metric_eval arguments); scenario (each named source is {{type: scenario, headline: words, scenario: {{vault_id, changes, metrics}}}}; headline belongs INSIDE that source, not at the top level); impact and subgraph (existing view arguments). A dataset returns rows, columns, totals, distributions, total_rows, status, truncated and warnings. Totals are nested by returned column key then operation: /totals/amount/sum without aggregates; /totals/sum_amount/sum after sum of amount. total_rows counts output rows or groups before the limit. Omit aggregates for Histogram, Scatter and detail tables: totals and distributions are already supplied from the detailed rows. Bind data with {{\"$state\":\"/sources/sales/rows\"}}. Stat binds a scalar pointer. Legacy blocks bind the whole source. Never send literal numeric props or inline data; bind measured values to sources. x, y and series name columns. In all written text, use bound placeholders for numbers: title \"Rows {{{{/sources/sales/total_rows}}}}\". Dotted paths such as {{{{sources.sales.rows[0].amount}}}} also work. The server resolves one exact typed numeric or date path and formats it with server units and currency. UI prose is literal plain text without Markdown or entity decoding. Separate placeholders from numeric tokens. Raw digits are allowed only in verbatim phrases with adjacent letter-bearing words in server strings predating the turn, or matching applied ISO dates or bucket labels. No identifier exemption. Number words remain unchecked. The server resolves chart columns and refuses ambiguous y choices. No actions, repeats or visibility expressions. At most 100 elements, depth 12 and 64 KiB. The server returns useful text for terminal clients.\n{}", catalog()["prompt"].as_str().unwrap_or("")))
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -36,6 +37,7 @@ struct Element { #[serde(rename="type")] kind: String, props: Value, #[serde(def
 
 pub fn validate(spec: &Value, data: Option<&Value>) -> AppResult<()> {
     if serde_json::to_vec(spec).map_err(|_| bad("invalid UI spec"))?.len() > MAX_BYTES { return Err(bad("UI spec exceeds 64 KiB")); }
+    if let Some(data) = data { prose::resolve(spec, data)?; }
     let spec: Spec = serde_json::from_value(spec.clone()).map_err(|e| bad(format!("invalid UI spec: {e}")))?;
     if spec.elements.is_empty() || spec.elements.len() > MAX_ELEMENTS { return Err(bad("UI needs 1 to 100 elements")); }
     fn walk(id: &str, spec: &Spec, depth: usize, visited: &mut HashSet<String>) -> AppResult<()> {
@@ -46,11 +48,11 @@ pub fn validate(spec: &Value, data: Option<&Value>) -> AppResult<()> {
     }
     let mut visited = HashSet::new(); walk(&spec.root, &spec, 1, &mut visited)?;
     if visited.len() != spec.elements.len() { return Err(bad("UI contains unreachable elements")); }
-    for e in spec.elements.values() {
+    for (id, e) in &spec.elements {
+        prose::identifier(id)?;
         let def = catalog()["components"].get(&e.kind).ok_or_else(|| bad(format!("unknown component {}", e.kind)))?;
         let validator = jsonschema::validator_for(&def["props"]).map_err(|e| bad(format!("invalid catalog schema: {e}")))?;
         validator.validate(&e.props).map_err(|error| bad(format!("{}: {error}", e.kind)))?;
-        words(&e.props)?;
         // Every data-bearing component has exactly one data prop, which must be a source pointer.
         if let Some(binding) = e.props.get("data") {
             let path = binding["$state"].as_str().ok_or_else(|| bad("data must be a source binding"))?;
@@ -65,33 +67,32 @@ pub fn validate(spec: &Value, data: Option<&Value>) -> AppResult<()> {
     }
     Ok(())
 }
-// Model prose uses an English words grammar. Identifiers are checked against server columns.
-// Numerals are a lexical class, including inflections and fractions, not just digit characters.
-pub(crate) fn validate_words(text: &str) -> AppResult<()> {
-    const NUMERALS: &str = "zero oh nil null nought naught one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty thirty forty fifty sixty seventy eighty ninety hundred thousand million billion trillion quadrillion quintillion sextillion septillion octillion nonillion decillion dozen score half halve quarter third first second fourth fifth sixth seventh eighth ninth tenth eleventh twelfth thirteenth fourteenth fifteenth sixteenth seventeenth eighteenth nineteenth twentieth thirtieth fortieth fiftieth sixtieth seventieth eightieth ninetieth single double triple quadruple quintuple sextuple septuple octuple nonuple decuple twice thrice pair couple hundredth thousandth millionth billionth trillionth";
-    if !text.chars().all(|c| c.is_ascii_alphabetic() || c.is_ascii_whitespace() || "_-'\".,:;!?()/&".contains(c)) {
-        return Err(bad("model prose must use words; bind typed data for quantities"));
-    }
-    for token in text.split(|c: char| !c.is_ascii_alphabetic()).filter(|s| !s.is_empty()) {
-        let token = token.to_ascii_lowercase();
-        let singular = token.strip_suffix('s').unwrap_or(&token);
-        if NUMERALS.split_whitespace().any(|n| n == token || n == singular) || token == "halves" {
-            return Err(bad("model prose must not contain number words; bind typed data instead"));
+// Resolve columns using metadata, never the availability of individual row measurements.
+fn resolve_columns(spec: &mut Value, data: &Value) -> AppResult<()> {
+    for e in spec["elements"].as_object_mut().ok_or_else(|| bad("invalid elements"))?.values_mut() {
+        let kind = e["type"].as_str().unwrap_or("").to_string();
+        if !matches!(kind.as_str(), "Line" | "Area" | "StackedArea" | "Bar" | "GroupedBar" | "StackedBar" | "Histogram" | "Scatter" | "Bubble" | "Pie" | "Donut" | "BoxPlot" | "Violin" | "CalendarHeatmap" | "Heatmap" | "Treemap" | "Partition" | "Radar" | "Funnel" | "Waterfall" | "Sparkline" | "Gauge" | "Bullet" | "Network" | "Tree" | "Combo" | "SmallMultiples" | "Sankey") { continue; }
+        let path = e["props"]["data"]["$state"].as_str().unwrap_or("");
+        let source = &data["sources"][path.split('/').nth(2).unwrap_or("")];
+        let columns: Vec<&str> = source["columns"].as_array().into_iter().flatten().filter_map(|c| c["key"].as_str()).collect();
+        let numerics: Vec<&str> = columns.iter().copied().filter(|k| numeric_column(source, k)).collect();
+        let props = &mut e["props"];
+        let distribution = match kind.as_str() { "Histogram" => Some(("start", "count")), "BoxPlot" => Some(("min", "median")), "Violin" => Some(("value", "count")), _ => None };
+        if props["y"].is_null() {
+            let y = if let Some((_, y)) = distribution { y } else if numerics.len() == 1 { numerics[0] } else {
+                return Err(bad(format!("{kind} has ambiguous numeric columns; name y explicitly")));
+            };
+            props["y"] = json!(y);
         }
-    }
-    Ok(())
-}
-fn words(value: &Value) -> AppResult<()> {
-    match value {
-        Value::Object(map) => for (key, value) in map {
-            if matches!(key.as_str(), "title" | "summary" | "text" | "label" | "headline" | "note" | "reason")
-                && let Some(text) = value.as_str() {
-                validate_words(text)?;
-            }
-            words(value)?;
-        },
-        Value::Array(values) => for v in values { words(v)?; },
-        _ => (),
+        if props["x"].is_null() {
+            let y = props["y"].as_str().unwrap_or("");
+            let candidates: Vec<_> = columns.iter().copied().filter(|k| *k != y && *k != "name" && !numeric_column(source, k)).collect();
+            let x = if let Some((x, _)) = distribution { x } else if matches!(kind.as_str(), "Scatter" | "Bubble") {
+                return Err(bad(format!("{kind} requires an explicit numeric x column")));
+            } else if candidates.len() == 1 { candidates[0] } else { "name" };
+            props["x"] = json!(x);
+        }
+        if props["series"].is_null() { props["series"] = json!([props["y"]]); }
     }
     Ok(())
 }
@@ -100,7 +101,8 @@ fn numeric_column(source: &Value, key: &str) -> bool {
         matches!(c["datatype"].as_str(), Some("money" | "number" | "integer" | "percent")))
 }
 fn trusted_number(data: &Value, path: &str) -> bool {
-    let parts: Vec<_> = path.trim_start_matches('/').split('/').collect();
+    let decoded: Vec<_> = path.trim_start_matches('/').split('/').map(|s| s.replace("~1", "/").replace("~0", "~")).collect();
+    let parts: Vec<_> = decoded.iter().map(String::as_str).collect();
     let ["sources", name, rest @ ..] = parts.as_slice() else { return false };
     let source = &data["sources"][*name];
     if !data.pointer(path).is_some_and(|v| v.is_number() || v.is_null()) { return false; }
@@ -119,8 +121,48 @@ fn trusted_number(data: &Value, path: &str) -> bool {
         _ => false,
     }
 }
+fn selectors(props: &Value) -> Vec<&str> {
+    let mut keys: Vec<_> = ["x", "y", "group", "size", "parent", "value"].iter().filter_map(|key| props[*key].as_str()).collect();
+    keys.extend(props["series"].as_array().into_iter().flatten().filter_map(Value::as_str));
+    keys.extend(props["columns"].as_array().into_iter().flatten().filter_map(|c| c["key"].as_str()));
+    keys.extend(props["formats"].as_object().into_iter().flat_map(|m| m.keys().map(String::as_str)));
+    keys.extend(props["sort"].as_str().or_else(|| props["sort"]["key"].as_str()).or_else(|| props["sort"]["property"].as_str()));
+    keys
+}
+fn validate_selectors(props: &Value, path: &str, source: &Value) -> AppResult<()> {
+    let parts: Vec<_> = path.split('/').collect();
+    let distribution: &[&str] = match parts.as_slice() {
+        ["", "sources", _, "distributions", key, shape] if numeric_column(source, key) => match *shape {
+            "bins" => &["start", "end", "count"],
+            "box" => &["min", "q1", "median", "q3", "max"],
+            "density" => &["value", "count"],
+            _ => &[],
+        },
+        _ => &[],
+    };
+    for key in selectors(props) {
+        let known = if distribution.is_empty() {
+            source["columns"].as_array().into_iter().flatten().any(|c| c["key"] == key)
+        } else { distribution.contains(&key) };
+        if !known { return Err(bad(format!("unknown bound column {key}"))); }
+    }
+    Ok(())
+}
+fn resolve_column_labels(spec: &mut Value, data: &Value) {
+    for e in spec["elements"].as_object_mut().into_iter().flat_map(|m| m.values_mut()) {
+        let path = e["props"]["data"]["$state"].as_str().unwrap_or("");
+        let source = &data["sources"][path.split('/').nth(2).unwrap_or("")];
+        let Some(columns) = e["props"].get_mut("columns").and_then(Value::as_array_mut) else { continue; };
+        for c in columns {
+            let column = source["columns"].as_array().into_iter().flatten().find(|column| column["key"] == c["key"]);
+            c["label"] = json!(column.and_then(|column| column["label"].as_str()).map(str::to_string)
+                .unwrap_or_else(|| c["key"].as_str().unwrap_or("").replace('_', " ")));
+        }
+    }
+}
 fn validate_binding(kind: &str, props: &Value, path: &str, value: &Value, data: &Value) -> AppResult<()> {
     let source = path.split('/').nth(2).map(|name| &data["sources"][name]).unwrap_or(&Value::Null);
+    validate_selectors(props, path, source)?;
     let numeric = |key: &str, rows: &[Value]| -> AppResult<()> {
         if !numeric_column(source, key) || rows.iter().any(|r| !r[key].is_number() && !r[key].is_null()) {
             return Err(bad(format!("{kind} requires a trusted numeric column: {key}")));
@@ -150,10 +192,7 @@ fn validate_binding(kind: &str, props: &Value, path: &str, value: &Value, data: 
         }
         return Ok(());
     }
-    let mut keys: Vec<&str> = ["x", "y", "group", "size", "parent"].iter().filter_map(|field| props[*field].as_str()).collect();
-    keys.extend(props["series"].as_array().into_iter().flatten().filter_map(Value::as_str));
-    keys.extend(props["columns"].as_array().into_iter().flatten().filter_map(|c| c["key"].as_str()));
-    for key in keys {
+    for key in selectors(props) {
         if rows.iter().any(|r| !r.is_object() || r.get(key).is_none()) { return Err(bad(format!("unknown bound column {key}"))); }
     }
     for c in props["columns"].as_array().into_iter().flatten() {
@@ -166,7 +205,7 @@ fn validate_binding(kind: &str, props: &Value, path: &str, value: &Value, data: 
         if !source["columns"].is_array() || !source["columns"].as_array().into_iter().flatten().any(|c| numeric_column(source, c["key"].as_str().unwrap_or(""))) { return Err(bad("StatGroup requires typed numeric columns")); }
         return Ok(());
     }
-    let y = props["y"].as_str().or_else(|| source["columns"].as_array().and_then(|cs| cs.iter().find(|c| numeric_column(source, c["key"].as_str().unwrap_or("")))).and_then(|c| c["key"].as_str())).ok_or_else(|| bad("chart requires a numeric y column"))?;
+    let y = props["y"].as_str().ok_or_else(|| bad("chart requires an explicit numeric y column; name y"))?;
     numeric(y, rows)?;
     for key in props["series"].as_array().into_iter().flatten().filter_map(Value::as_str).chain(props["size"].as_str()) { numeric(key, rows)?; }
     if matches!(kind, "Scatter" | "Bubble") { numeric(props["x"].as_str().unwrap_or(""), rows)?; }
@@ -191,20 +230,28 @@ fn validate_binding(kind: &str, props: &Value, path: &str, value: &Value, data: 
     }
     Ok(())
 }
-pub async fn resolve(db: &OrgDb, owner: &RecordId, spec: Value, sources: BTreeMap<String, Source>) -> AppResult<View> {
+pub async fn resolve(db: &OrgDb, owner: &RecordId, mut spec: Value, sources: BTreeMap<String, Source>, before: surrealdb::types::Datetime) -> AppResult<View> {
     validate(&spec, None)?;
     if sources.is_empty() || sources.len() > 8 { return Err(bad("UI needs 1 to 8 named sources")); }
     let mut resolved = serde_json::Map::new();
+    let mut source_prose = BTreeMap::new();
+    let mut legacy_views = BTreeMap::new();
     for (name, source) in sources {
-        if name.is_empty() || name.len() > 64 || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') { return Err(bad("source name must use letters, digits and underscores")); }
-        match &source {
-            Source::Subgraph { title, .. } => words(&json!({"title":title}))?,
-            Source::Scenario { headline, .. } => words(&json!({"headline":headline}))?,
-            Source::Impact { headline, affected, .. } => { words(&json!({"headline":headline}))?; for a in affected { words(&json!({"text":a.why}))?; } },
-            _ => (),
-        }
+        if name.len() > 64 { return Err(bad("source name exceeds 64 bytes")); }
+        prose::identifier(&name)?;
+        let prose = match &source {
+            Source::Subgraph { title, .. } => json!({"title":title}),
+            Source::Scenario { headline, .. } => json!({"headline":headline}),
+            Source::Impact { headline, affected, .. } => json!({"headline":headline,"affected":affected.iter().map(|a| json!({"why":a.why})).collect::<Vec<_>>()}),
+            _ => Value::Null,
+        };
         let value = match source {
-            Source::Dataset { query } => dataset::resolve(db, owner, &query).await?,
+            Source::Dataset { query } => {
+                let mut value = dataset::resolve(db, owner, &query).await?;
+                value["parameters"] = json!({"limit":query.limit,"as_of":query.as_of,"filters":query.filters});
+                value["bucket_column"] = json!(query.bucket.and(query.group_by));
+                value
+            },
             other => {
                 let view = match other {
                     Source::Metric { args } => ViewSpec::Metric { metric: args.metric, kind: args.kind, vault_id: args.vault_id, filters: args.filters, as_of: args.as_of, group_by_grain: args.group_by_grain, allow_unapproved: args.allow_unapproved, related_to: args.related_to },
@@ -213,7 +260,9 @@ pub async fn resolve(db: &OrgDb, owner: &RecordId, spec: Value, sources: BTreeMa
                     Source::Subgraph { title, entity_ids, relation_ids } => ViewSpec::Subgraph { title, entity_ids, relation_ids },
                     Source::Dataset { .. } => unreachable!(),
                 };
-                serde_json::to_value(Box::pin(super::show(db, owner, view)).await?).map_err(|_| bad("source did not serialise"))?
+                let shown = Box::pin(super::show(db, owner, view)).await?;
+                legacy_views.insert(name.clone(), shown.view.clone());
+                serde_json::to_value(shown).map_err(|_| bad("source did not serialise"))?
             }
         };
         let mut value = value;
@@ -223,23 +272,65 @@ pub async fn resolve(db: &OrgDb, owner: &RecordId, spec: Value, sources: BTreeMa
         } else if value["view"] == "scenario" {
             value["warnings"] = value["result"]["warnings"].clone();
         }
+        source_prose.insert(name.clone(), prose);
         resolved.insert(name, value);
     }
-    let data = json!({"sources": resolved});
+    let mut data = json!({"sources": resolved});
+    // Collect permissions before substituting any model text into resolved sources.
+    let trusted = data.clone();
+    let allowed = prose::eligible(db, owner, &trusted, before).await?;
+    for (name, raw) in source_prose {
+        let rendered = prose::resolve_allowed(&raw, &trusted, &allowed)?;
+        let source = &mut data["sources"][&name];
+        if let Some(fields) = rendered.as_object() {
+            for (key, value) in fields {
+                if key == "affected" {
+                    for (i, affected) in value.as_array().into_iter().flatten().enumerate() {
+                        source["affected"][i]["why"] = affected["why"].clone();
+                    }
+                } else { source[key] = value.clone(); }
+            }
+        }
+        if let Some(view) = legacy_views.get_mut(&name) {
+            match view {
+                View::Subgraph { title, .. } => *title = source["title"].as_str().unwrap_or("").into(),
+                View::Scenario { headline, .. } => *headline = source["headline"].as_str().unwrap_or("").into(),
+                View::Impact { headline, affected, .. } => {
+                    *headline = source["headline"].as_str().unwrap_or("").into();
+                    for (i, a) in affected.iter_mut().enumerate() { a.why = source["affected"][i]["why"].as_str().unwrap_or("").into(); }
+                },
+                _ => (),
+            }
+            source["text"] = json!(view.text());
+        }
+    }
+    resolve_columns(&mut spec, &data)?;
     validate(&spec, Some(&data))?;
+    spec = prose::resolve_allowed(&spec, &trusted, &allowed)?;
+    resolve_column_labels(&mut spec, &data);
+    validate(&spec, None)?; // Expanded text must still fit the renderer schema and size limits.
     if serde_json::to_vec(&data).map_err(|_| bad("invalid data"))?.len() > 2 * 1024 * 1024 { return Err(bad("resolved UI data exceeds 2 MiB")); }
     Ok(View::Ui { spec, data })
 }
 pub fn text(spec: &Value, data: &Value) -> String {
-    if words(spec).is_err() { return "Invalid model-written quantities".into(); }
     let mut out = String::from("Analysis\n");
     if let Some(elements) = spec["elements"].as_object() {
-        for e in elements.values() { if let Some(title) = e["props"]["title"].as_str() { out.push_str(title); out.push('\n'); } }
+        fn append(value: &Value, out: &mut String) {
+            match value {
+                Value::Object(fields) => for (key, value) in fields {
+                    if prose::field(key) && let Some(s) = value.as_str() { out.push_str("• "); out.push_str(s); out.push('\n'); }
+                    else { append(value, out); }
+                },
+                Value::Array(values) => for value in values { append(value, out); },
+                _ => (),
+            }
+        }
+        for e in elements.values() { append(&e["props"], &mut out); }
     }
     // Include all resolved rows, units and warnings. No model-written numeric summary is trusted.
     if let Some(sources) = data["sources"].as_object() {
-        for (name, source) in sources {
-            out.push_str(&format!("\nSource {name}:\n"));
+        for (index, source) in sources.values().enumerate() {
+            out.push_str(&format!("\nSource {}:\n", index + 1));
             if let Some(text) = source["text"].as_str() { out.push_str(text); }
             else if let Some(rows) = source["rows"].as_array() {
                 out.push_str(&format!("Status: {}. {} rows.{}\n", source["status"].as_str().unwrap_or("not approved"), rows.len(), if source["truncated"] == true { " Data truncated." } else { "" }));
@@ -287,6 +378,88 @@ pub fn sources_schema() -> Value {
 mod tests {
     use super::*;
     #[test]
+    fn identifiers_cannot_invent_displayed_numeric_spans() {
+        for kind in ["Tabs", "Accordion", "Text"] {
+            let mut spec = json!({"root":"999999","elements":{"999999":{"type":kind,"props":{}}}});
+            if kind == "Text" { spec["elements"]["999999"]["props"] = json!({"text":"Words"}); }
+            assert!(validate(&spec, None).unwrap_err().message.contains("identifier"));
+        }
+        for (key, value) in [
+            ("x", json!("999999")), ("y", json!("999999")), ("group", json!("999999")),
+            ("size", json!("999999")), ("parent", json!("999999")), ("series", json!(["999999"])),
+            ("columns", json!([{"key":"999999","label":"Words"}])), ("formats", json!({"999999":"number"})),
+        ] {
+            let mut spec = json!({"root":"chart","elements":{"chart":{"type":"Line","props":{"title":"Values","summary":"Values","data":{"$state":"/sources/sales/rows"}}}}});
+            spec["elements"]["chart"]["props"][key] = value;
+            assert!(validate(&spec, Some(&json!({"sources":{"sales":{"rows":[],"columns":[]}}}))).unwrap_err().message.contains("unknown bound column"), "{key}");
+        }
+        let data = json!({"sources":{"999999":{"rows":[]}}});
+        let shown = text(&json!({}), &data);
+        assert!(shown.contains("Source 1:"));
+        assert!(!shown.contains("999999"));
+        // Aggregate keys add an operation prefix to a valid property of up to 64 bytes.
+        let key = format!("sum_{}", "a".repeat(64));
+        let spec = json!({"root":"chart","elements":{"chart":{"type":"Line","props":{"title":"Values","summary":"Values","data":{"$state":"/sources/sales/rows"},"y":key}}}});
+        assert!(validate(&spec, None).is_ok());
+    }
+    fn digit_columns() -> Value {
+        json!({"sources":{"sales":{"rows":[{"name":"One","cost_2026":12,"amount_2026":24,"region_2026":"North","sum_cost_2026":12}],"columns":[
+            {"key":"name","datatype":"text"}, {"key":"cost_2026","datatype":"number"},
+            {"key":"amount_2026","datatype":"number"}, {"key":"region_2026","datatype":"text"},
+            {"key":"sum_cost_2026","datatype":"number"}
+        ]}}})
+    }
+    fn digit_spec(kind: &str, extra: Value) -> Value {
+        let mut props = json!({"title":"Values","summary":"Values","data":{"$state":"/sources/sales/rows"}});
+        props.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        json!({"root":"chart","elements":{"chart":{"type":kind,"props":props}}})
+    }
+    #[test]
+    fn selectors_trust_explicit_digit_columns() {
+        let spec = digit_spec("Bar", json!({"x":"name","y":"cost_2026","series":["cost_2026"],"formats":{"cost_2026":"number"}}));
+        validate(&spec, Some(&digit_columns())).unwrap();
+    }
+    #[test]
+    fn selectors_trust_inferred_digit_columns() {
+        let mut data = digit_columns();
+        data["sources"]["sales"]["columns"] = json!([{"key":"name","datatype":"text"},{"key":"cost_2026","datatype":"number"}]);
+        let mut spec = digit_spec("Bar", json!({}));
+        resolve_columns(&mut spec, &data).unwrap();
+        validate(&spec, Some(&data)).unwrap();
+        assert_eq!(spec["elements"]["chart"]["props"]["y"], "cost_2026");
+    }
+    #[test]
+    fn selectors_trust_table_digit_columns_and_server_labels() {
+        let data = digit_columns();
+        let mut spec = digit_spec("Table", json!({"columns":[{"key":"amount_2026","label":"Model label"}]}));
+        validate(&spec, Some(&data)).unwrap();
+        resolve_column_labels(&mut spec, &data);
+        assert_eq!(spec["elements"]["chart"]["props"]["columns"][0]["label"], "amount 2026");
+        // Omitted optional columns must stay absent, including on text-only blocks.
+        for mut implicit in [digit_spec("Table", json!({})), json!({"root":"copy","elements":{"copy":{"type":"Text","props":{"text":"Words"}}}})] {
+            resolve_column_labels(&mut implicit, &data);
+            validate(&implicit, None).unwrap();
+        }
+    }
+    #[test]
+    fn selectors_trust_group_and_aggregate_digit_columns() {
+        let spec = digit_spec("Bar", json!({"x":"region_2026","group":"region_2026","y":"sum_cost_2026","series":["sum_cost_2026"]}));
+        validate(&spec, Some(&digit_columns())).unwrap();
+    }
+    #[test]
+    fn selectors_reject_unknown_metadata_even_with_empty_or_matching_rows() {
+        for rows in [json!([]), json!([{"unknown_2026":12}])] {
+            let mut data = digit_columns();
+            data["sources"]["sales"]["rows"] = rows;
+            for extra in [json!({"x":"unknown_2026"}), json!({"y":"unknown_2026"}), json!({"group":"unknown_2026"}),
+                json!({"size":"unknown_2026"}), json!({"parent":"unknown_2026"}), json!({"series":["unknown_2026"]}),
+                json!({"columns":[{"key":"unknown_2026","label":"Words"}]}), json!({"formats":{"unknown_2026":"number"}})] {
+                let spec = digit_spec("Table", extra);
+                assert!(validate(&spec, Some(&data)).unwrap_err().message.contains("unknown bound column unknown_2026"));
+            }
+        }
+    }
+    #[test]
     fn refuses_literals_unknown_props_missing_bindings_and_cycles() {
         let mut spec = json!({"root":"a","elements":{"a":{"type":"Stat","props":{"title":"Total","summary":"Total","data":{"$state":"/sources/a/metric/value"}}}}});
         assert!(validate(&spec, Some(&json!({"sources":{"a":{"view":"metric","metric":{"value":12}}}}))).is_ok());
@@ -333,31 +506,34 @@ mod tests {
         }
         assert!(validate(&make("BoxPlot","/sources/s/distributions/amount/box",json!({})),Some(&data)).is_ok());
         for field in ["title","summary"] {
-            let mut spec = make("Stat","/sources/s/rows/0/amount",json!({})); spec["elements"]["a"]["props"][field] = json!("Total 999");
+            let mut spec = make("Stat","/sources/s/rows/0/amount",json!({})); spec["elements"]["a"]["props"][field] = json!("Total 998");
             assert!(validate(&spec,Some(&data)).is_err());
-            assert!(!text(&spec,&data).contains("999"));
         }
         for kind in ["Text","Caption","Badge","Callout","Heading"] {
-            assert!(validate(&json!({"root":"a","elements":{"a":{"type":kind,"props":{"text":"999"}}}}),None).is_err());
+            assert!(validate(&json!({"root":"a","elements":{"a":{"type":kind,"props":{"text":"999"}}}}),Some(&json!({}))).is_err());
         }
     }
     #[test]
-    fn model_words_grammar_covers_all_prose() {
-        for prose in ["nine hundred and ninety nine dollars", "revenue_999", "revenue_٩", "revenue_９", "revenue_Ⅸ", "two", "millions", "dozens", "half", "halves", "a quarter", "twenty-first", "DOUBLE", "Total ²"] {
-            for field in ["title", "summary", "text", "label", "headline", "note", "reason"] {
-                assert!(words(&json!({field: prose})).is_err(), "{field}: {prose}");
-            }
-        }
-        for prose in ["Revenue by supplier", "Monthly amount", "sum_amount", "Approved values"] {
-            assert!(validate_words(prose).is_ok(), "{prose}");
-        }
-        for kind in ["Heading", "Caption", "Text", "Callout", "Badge", "Tabs", "Section", "Card", "Accordion"] {
-            let field = if matches!(kind, "Heading" | "Caption" | "Text" | "Callout" | "Badge") { "text" } else { "title" };
-            let spec = json!({"root":"a", "elements":{"a":{"type":kind,"props":{field:"Nine hundred dollars"}}}});
-            assert!(validate(&spec, None).is_err(), "{kind}");
-        }
-        let spec = json!({"root":"a", "elements":{"a":{"type":"Table","props":{"title":"Rows","summary":"Values","data":{"$state":"/sources/s"},"columns":[{"key":"amount","label":"A million"}]}}}});
-        assert!(validate(&spec, None).is_err());
+    fn omitted_y_resolves_only_unambiguous_metadata() {
+        let mut spec = json!({"root":"a","elements":{"a":{"type":"Line","props":{"title":"Amount","summary":"Amount","data":{"$state":"/sources/s/rows"},"x":"name"}}}});
+        let mut data = json!({"sources":{"s":{"rows":[{"name":"Supplier","amount":null,"quantity":12}],"columns":[{"key":"amount","datatype":"money"},{"key":"quantity","datatype":"number"}]}}});
+        assert!(resolve_columns(&mut spec, &data).unwrap_err().message.contains("name y"));
+        data["sources"]["s"]["columns"] = json!([{"key":"amount","datatype":"money"},{"key":"name","datatype":"text"}]);
+        resolve_columns(&mut spec, &data).unwrap();
+        assert_eq!(spec["elements"]["a"]["props"]["y"], "amount");
+        assert_eq!(spec["elements"]["a"]["props"]["series"], json!(["amount"]));
+        assert!(validate(&spec,Some(&data)).is_ok());
+    }
+    #[test]
+    fn prose_prompt_contract_has_no_value_matching_exemption() {
+        let prompt = description();
+        assert!(prompt.contains("{{/sources/sales/total_rows}}"));
+        assert!(prompt.contains("Raw digits"));
+        assert!(prompt.contains("literal plain text"));
+        assert!(prompt.contains("predating the turn"));
+        assert!(!prompt.contains("digits must match"));
+        assert!(!prompt.contains("digit quantities must match"));
+        assert!(!prompt.contains("Alphanumeric identifiers such as Q3 are allowed"));
     }
     #[test]
     fn rejects_caps() {

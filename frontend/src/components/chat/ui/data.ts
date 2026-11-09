@@ -20,7 +20,13 @@ export function requiredNumber(value: unknown): number {
 }
 export function drawable(value: unknown): boolean {
   const n = number(value);
-  return n != null && Math.abs(n) <= MAX_DRAWABLE;
+  return n != null && Math.abs(n) <= MAX_DRAWABLE && (n === 0 || Math.abs(n) >= 1e-100);
+}
+// Keep reciprocal and percentage arithmetic within the shared drawable range.
+export function proportionalTotal(values: unknown[]): number | null {
+  if (values.some(value => !drawable(value))) return null;
+  const total = values.reduce<number>((sum, value) => sum + Math.max(0, requiredNumber(value)), 0);
+  return total > 0 && drawable(total) && Number.isFinite(1 / total) ? total : null;
 }
 export function label(value: unknown): string {
   if (
