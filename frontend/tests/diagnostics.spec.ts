@@ -24,9 +24,11 @@ test("admin can inspect inclusions, see progress and download", async ({ page })
   });
   await page.getByText("What's included", { exact: true }).click();
   await expect(page.getByText(/No memory, document or chat text/)).toBeVisible();
+  await expect(page.getByText(/fixed templates for recognised events/)).toBeVisible();
   await page.getByRole("button", { name: "Download diagnostics", exact: true }).click();
   await expect(page.getByRole("button", { name: "Collecting diagnostics" })).toBeDisabled();
   await expect(page.getByRole("status")).toContainText("waiting for container logs");
+  await expect(page.getByRole("status")).toContainText("in addition to system checks");
   const download = page.waitForEvent("download");
   finish();
   expect((await download).suggestedFilename()).toBe("eunomia-diagnostics.zip");

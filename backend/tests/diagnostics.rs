@@ -11,7 +11,7 @@ async fn bundle(app: &TestApp, cookie: &str) -> axum::response::Response {
 }
 
 #[tokio::test]
-async fn admin_zip_is_content_free_and_member_is_forbidden() {
+async fn diagnostics_admin_zip_is_content_free_and_member_is_forbidden() {
     let status_dir = tempfile::tempdir().unwrap();
     let mut settings = common::test_settings();
     settings.update_status_dir = status_dir.path().join("status").to_string_lossy().into_owned();
@@ -52,8 +52,9 @@ async fn admin_zip_is_content_free_and_member_is_forbidden() {
         std::fs::create_dir(&out).unwrap();
         std::fs::write(out.join("compose-ps.json"), r#"[{"service":"backend","state":"running","image":"ghcr.io/cashara-io/eunomia-backend:v2.2.0"}]"#).unwrap();
         std::fs::write(out.join("collection.json"), r#"{"data_volume_free_bytes":1048576}"#).unwrap();
-        for service in ["backend", "frontend", "surrealdb", "updater", "backup", "caddy", "secrets-helper", "surreal-upgrade"] {
-            std::fs::write(out.join(format!("{service}.log")), "{\"level\":\"WARN\",\"line\":123}\n").unwrap();
+        assert!(std::process::Command::new("mkfifo").arg(out.join("frontend.log")).status().unwrap().success());
+        for service in ["backend", "surrealdb", "updater", "backup", "caddy", "secrets-helper", "surreal-upgrade"] {
+            std::fs::write(out.join(format!("{service}.log")), "provider error: {\"count\":314159265358979323846}\n{\"level\":\"WARN\",\"fields\":{\"count\":8675309,\"status\":61412345678,\"duration_ms\":4111111111111111}}\n").unwrap();
         }
         std::fs::write(out.join("ready"), nonce).unwrap();
     });
@@ -70,6 +71,7 @@ async fn admin_zip_is_content_free_and_member_is_forbidden() {
         names.push(entry.name().to_string());
         let mut text = String::new();
         entry.read_to_string(&mut text).unwrap();
+        for secret in ["314159265358979323846", "8675309", "61412345678", "4111111111111111"] { assert!(!text.contains(secret), "numeric secret leaked in {}", entry.name()); }
         assert!(!text.contains("CANARY"), "customer data leaked in {}", entry.name());
         if entry.name() == "connectors.json" {
             let value: serde_json::Value = serde_json::from_str(&text).unwrap();
@@ -91,10 +93,18 @@ async fn admin_zip_is_content_free_and_member_is_forbidden() {
     let rows: Vec<serde_json::Value> = audit.take(0).unwrap();
     assert_eq!(rows.len(), 1);
     if let Ok(path) = std::env::var("DIAGNOSTICS_SAMPLE_ZIP") { std::fs::write(path, &bytes).unwrap(); }
+    assert!(!names.iter().any(|n| n == "containers/frontend.log"), "FIFO entered bundle");
+    let mut note = String::new();
+    zip.by_name("containers/README.txt").unwrap().read_to_string(&mut note).unwrap();
+    assert!(note.contains("frontend.log") && note.contains("omitted"));
+    std::fs::remove_dir_all(status_dir.path().join("status")).unwrap();
+    let second = bundle(&app, &cookie).await;
+    assert_eq!(second.status(), StatusCode::OK, "second request must not see a leaked bundle lock");
+    second.into_body().collect().await.unwrap();
 }
 
 #[tokio::test]
-async fn old_updater_times_out_ignores_stale_results_and_leaves_note() {
+async fn diagnostics_old_updater_times_out_ignores_stale_results_and_leaves_note() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::create_dir(dir.path().join("diagnostics")).unwrap();
     std::fs::write(dir.path().join("diagnostics/ready"), "old-request").unwrap();
@@ -103,11 +113,15 @@ async fn old_updater_times_out_ignores_stale_results_and_leaves_note() {
     assert_eq!(files.len(), 1);
     assert!(files[0].1.contains("2.2.0 or earlier"));
     assert!(!files[0].1.contains("CANARY"));
+    for _ in 0..100 {
+        if !dir.path().join("diagnostics-requested").exists() { break; }
+        tokio::time::sleep(Duration::from_millis(1)).await;
+    }
     assert!(!dir.path().join("diagnostics-requested").exists());
 }
 
 #[tokio::test]
-async fn matching_updater_result_is_collected() {
+async fn diagnostics_matching_updater_result_is_collected() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().to_path_buf();
     let writer = tokio::spawn(async move {
@@ -124,7 +138,7 @@ async fn matching_updater_result_is_collected() {
 }
 
 #[test]
-fn archive_size_cap_is_enforced_and_explained() {
+fn diagnostics_archive_size_cap_is_enforced_and_explained() {
     let (file, capped) = eunomia_backend::diagnostics::test_archive(vec![("summary.json".into(), "{}".into()), ("backend.log".into(), "large".repeat(10000))], 4096).unwrap();
     assert!(capped);
     assert!(file.as_file().metadata().unwrap().len() <= 4096);

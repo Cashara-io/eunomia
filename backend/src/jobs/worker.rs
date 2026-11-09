@@ -44,7 +44,7 @@ pub async fn run(state: AppState, registry: Registry, cfg: WorkerConfig, mut shu
     let _live = AbortOnDrop(tokio::spawn(crate::store::jobs::live_wake(state.control.clone(), wake.clone(), shutdown.clone())));
     let slots = Arc::new(Semaphore::new(cfg.concurrency));
     let mut running = JoinSet::new();
-    tracing::info!(worker = %cfg.id, concurrency = cfg.concurrency, "job worker started");
+    tracing::info!(name: "diagnostics.worker_started", worker = %cfg.id, concurrency = cfg.concurrency, "job worker started");
 
     while !*shutdown.borrow() {
         while running.try_join_next().is_some() {}
@@ -78,7 +78,7 @@ pub async fn run(state: AppState, registry: Registry, cfg: WorkerConfig, mut shu
         while running.join_next().await.is_some() {}
     }
     match super::release_worker(&state.control, &cfg.id).await {
-        Ok(n) => tracing::info!(worker = %cfg.id, released = n, "job worker stopped"),
+        Ok(n) => tracing::info!(name: "diagnostics.worker_stopped", worker = %cfg.id, released = n, "job worker stopped"),
         Err(e) => tracing::warn!(worker = %cfg.id, error = %e.message, "releasing leases failed; they will expire"),
     }
 }
@@ -142,7 +142,7 @@ async fn keep_lease(state: &AppState, cfg: &WorkerConfig, job: &Job) {
 async fn finish(state: &AppState, cfg: &WorkerConfig, job: &Job, result: Result<(), JobError>) {
     match result {
         Ok(()) => match super::complete(&state.control, job, &cfg.id).await {
-            Ok(true) => tracing::info!("job done"),
+            Ok(true) => tracing::info!(name: "diagnostics.job_done", "job done"),
             Ok(false) => tracing::warn!("job finished after losing its lease"),
             Err(e) => tracing::warn!(error = %e.message, "recording job completion failed; the lease will expire and it will rerun"),
         },

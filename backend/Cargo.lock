@@ -1281,6 +1281,7 @@ dependencies = [
  "insta",
  "jsonschema",
  "jsonwebtoken 9.3.1",
+ "libc",
  "opentelemetry",
  "opentelemetry-otlp",
  "opentelemetry_sdk",

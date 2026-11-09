@@ -14,7 +14,7 @@ use crate::{error::{AppError, AppResult}, models_user::User, state::AppState};
 
 pub static START: LazyLock<Instant> = LazyLock::new(Instant::now);
 static BUNDLE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-const README: &str = "Eunomia support diagnostics\n\nReview every file before sending this zip to support.\n\nsummary.json and summary.md: versions, migration ledgers, opaque IDs, feature flags, redacted settings and endpoint host only. Unknown metadata is null.\nconnectors.json: status, checkpoint times, cursor character counts, result counts and recent process-local sync history.\nbackend.log: recent operational metadata, up to 5000 lines or 5 MiB.\ncontainers/: compose service status and up to 300 metadata-only log lines per service, when the installed updater supports diagnostics.\nhealth.json: /healthz, readiness, last 50 job failures by code and embedding backlog counts.\n\nIntentionally excluded: credentials, tokens, emails, account and organisation names, connection labels, cursor values, requests, memory, document and chat text, provider response bodies and free-text errors. Error categories replace provider messages. Logs retain code locations, levels and numeric measurements only.\n\nThe archive is streamed from a private temporary file and capped at 25 MiB, including ZIP overhead. LIMITS.txt lists any files omitted by the cap. Collection lists are also bounded; summary notes explain those limits.\nNo data is sent to support automatically.\n";
+const README: &str = "Eunomia support diagnostics\n\nReview every file before sending this zip to support.\n\nsummary.json and summary.md: versions, migration ledgers, opaque IDs, feature flags, redacted settings and endpoint host only. Unknown metadata is null.\nconnectors.json: status, checkpoint times, cursor character counts, result counts and recent process-local sync history.\nbackend.log: recent operational metadata, up to 5000 lines or 5 MiB. Events can be dropped under contention; drop counts are included.\ncontainers/: compose service status and up to 300 privacy-filtered log lines per service, when the installed updater supports diagnostics.\nhealth.json: /healthz, readiness, last 50 job failures by code and embedding backlog counts.\n\nIntentionally excluded: credentials, tokens, emails, account and organisation names, connection labels, cursor values, requests, memory, document and chat text, provider response bodies and free-text errors. Error categories replace provider messages. Logs retain timestamps, levels, allowlisted event targets, fixed message templates and event-specific bounded integer fields only. Other messages are redacted.\n\nThe archive is streamed from a private temporary file and capped at 25 MiB, including ZIP overhead. LIMITS.txt lists any files omitted by the cap. Collection lists are also bounded; summary notes explain those limits.\nNo data is sent to support automatically.\n";
 
 pub fn opaque(value: &str) -> String { hex::encode(&Sha256::digest(value.as_bytes())[..12]) }
 pub fn host(value: &str) -> Option<String> { url::Url::parse(value).ok()?.host_str().map(str::to_string) }
@@ -53,7 +53,7 @@ pub(crate) async fn download(State(state): State<AppState>, user: User) -> AppRe
     files[0] = json_file("summary.json", summary.clone());
     files[1] = ("summary.md".into(), format!("# Eunomia diagnostics\n\n```json\n{}\n```\n", json_text(summary)));
     files.push(("README.txt".into(), README.into()));
-    files.push(("backend.log".into(), logs::LOGS.lock().map(|l| l.snapshot()).unwrap_or_default()));
+    files.push(("backend.log".into(), logs::LOGS.snapshot()));
     files.extend(containers);
     let (file, capped) = tokio::task::spawn_blocking(move || archive::build(files, archive::SIZE_CAP)).await
         .map_err(|_| AppError::internal("Diagnostics archive task failed."))??;
@@ -73,46 +73,78 @@ pub(crate) async fn download(State(state): State<AppState>, user: User) -> AppRe
         .body(Body::from_stream(stream)).map_err(|_| AppError::internal("Could not stream diagnostics."))
 }
 
+const FILE_LIMIT: u64 = 1024 * 1024;
+
+// These files are writable by another container. Never follow a final symlink or block on
+// a pipe/device, and recheck the opened descriptor rather than trusting path metadata.
+fn read_regular(path: &Path) -> std::io::Result<String> {
+    use std::io::Read;
+    use std::os::unix::fs::OpenOptionsExt;
+    let file = std::fs::OpenOptions::new().read(true)
+        .custom_flags(libc::O_NONBLOCK | libc::O_NOFOLLOW).open(path)?;
+    let metadata = file.metadata()?;
+    if !metadata.is_file() || metadata.len() > FILE_LIMIT {
+        return Err(std::io::Error::other("not a bounded regular file"));
+    }
+    let mut text = String::new();
+    file.take(FILE_LIMIT + 1).read_to_string(&mut text)?;
+    if text.len() as u64 > FILE_LIMIT { return Err(std::io::Error::other("file grew beyond limit")); }
+    Ok(privacy::scrub(&text))
+}
+
+async fn read_before(path: &Path, deadline: tokio::time::Instant, read: fn(&Path) -> std::io::Result<String>) -> Option<String> {
+    let path = path.to_path_buf();
+    tokio::time::timeout_at(deadline, tokio::task::spawn_blocking(move || read(&path))).await.ok()?.ok()?.ok()
+}
+async fn read_bounded(path: &Path, deadline: tokio::time::Instant) -> Option<String> {
+    read_before(path, deadline, read_regular).await
+}
+
 struct RequestMarker { path: std::path::PathBuf, nonce: String }
 impl Drop for RequestMarker {
     fn drop(&mut self) {
-        if std::fs::read_to_string(&self.path).ok().as_deref() == Some(&self.nonce) { let _ = std::fs::remove_file(&self.path); }
+        // Drop must never perform IO on an async worker or hold up release of BUNDLE.
+        let path = self.path.clone();
+        let nonce = self.nonce.clone();
+        tokio::task::spawn_blocking(move || {
+            if read_regular(&path).ok().as_deref() == Some(&nonce) { let _ = std::fs::remove_file(path); }
+        });
     }
-}
-async fn read_bounded(path: &Path) -> Option<String> {
-    if tokio::fs::symlink_metadata(path).await.ok()?.file_type().is_symlink() { return None; }
-    let file = tokio::fs::File::open(path).await.ok()?;
-    let mut text = String::new();
-    file.take(1024 * 1024).read_to_string(&mut text).await.ok()?;
-    Some(privacy::scrub(&text))
 }
 
 pub async fn container_files(dir: &Path, wait: Duration) -> Vec<(String, String)> {
-    let note = |message: &str| vec![("containers/README.txt".into(), message.into())];
-    if !dir.is_dir() { return note("Container logs unavailable: the updater status directory is not mounted. The rest of this bundle is complete."); }
+    let deadline = tokio::time::Instant::now() + wait;
+    match tokio::time::timeout_at(deadline, collect_containers(dir, deadline)).await {
+        Ok(files) => files,
+        Err(_) => container_note("Container logs unavailable or incomplete: collection reached its deadline. The updater may be stopped, busy, or from 2.2.0 or earlier. The rest of this bundle is complete."),
+    }
+}
+fn container_note(message: &str) -> Vec<(String, String)> { vec![("containers/README.txt".into(), message.into())] }
+
+async fn collect_containers(dir: &Path, deadline: tokio::time::Instant) -> Vec<(String, String)> {
+    if !tokio::fs::metadata(dir).await.is_ok_and(|m| m.is_dir()) { return container_note("Container logs unavailable: the updater status directory is not mounted. The rest of this bundle is complete."); }
     let nonce = uuid::Uuid::new_v4().simple().to_string();
     let path = dir.join("diagnostics-requested");
-    // Never follow a pre-existing marker symlink. Atomic replacement also avoids partial requests.
+    let _marker = RequestMarker { path: path.clone(), nonce: nonce.clone() };
     let temp = dir.join(format!(".diagnostics-{nonce}"));
     if tokio::fs::write(&temp, &nonce).await.is_err() || tokio::fs::rename(&temp, &path).await.is_err() {
         let _ = tokio::fs::remove_file(&temp).await;
-        return note("Container logs unavailable: could not write the updater request. Check directory permissions.");
+        return container_note("Container logs unavailable: could not write the updater request. Check directory permissions.");
     }
-    let _marker = RequestMarker { path, nonce: nonce.clone() };
-    let deadline = tokio::time::Instant::now() + wait;
-    while tokio::time::Instant::now() < deadline {
-        let output = dir.join("diagnostics");
-        if read_bounded(&output.join("ready")).await.as_deref() == Some(&nonce) {
+    let output = dir.join("diagnostics");
+    loop {
+        if read_bounded(&output.join("ready"), deadline).await.as_deref() == Some(&nonce) {
             let mut files = Vec::new();
+            let mut omitted = Vec::new();
             for name in ["compose-ps.json", "collection.json", "backend.log", "frontend.log", "surrealdb.log", "updater.log", "backup.log", "caddy.log", "secrets-helper.log", "surreal-upgrade.log"] {
-                if let Some(text) = read_bounded(&output.join(name)).await { files.push((format!("containers/{name}"), text)); }
+                if let Some(text) = read_bounded(&output.join(name), deadline).await { files.push((format!("containers/{name}"), if name.ends_with(".log") { logs::filter_container(&text) } else { text })); }
+                else { omitted.push(name); }
             }
-            files.extend(note("Container logs contain metadata only. Free text is omitted for privacy. Empty logs can mean an unavailable service. Collected by the installed release's updater."));
+            files.extend(container_note(&format!("Container logs keep only allowlisted event templates and bounded integer fields. Other messages are redacted. Collected by the installed release's updater. Files omitted because they were unavailable, unsafe, oversized or exceeded the collection deadline: {}.", omitted.join(", "))));
             return files;
         }
-        tokio::time::sleep(Duration::from_millis(250).min(wait)).await;
+        tokio::time::sleep_until((tokio::time::Instant::now() + Duration::from_millis(25)).min(deadline)).await;
     }
-    note("Container logs unavailable: the updater did not answer within 60 seconds. It may be stopped, busy, or from 2.2.0 or earlier. Update to a release containing diagnostics collection. The rest of this bundle is complete.")
 }
 
 #[derive(utoipa::OpenApi)]
@@ -121,3 +153,77 @@ pub struct Doc;
 
 #[cfg(feature = "test-support")]
 pub use archive::build as test_archive;
+
+#[cfg(test)]
+mod io_tests {
+    use super::*;
+    use std::os::unix::fs::symlink;
+    static IO_TESTS: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+    #[tokio::test]
+    async fn unsafe_files_are_omitted_with_deadline_and_next_bundle_succeeds() {
+        let _test = IO_TESTS.lock().await;
+        for kind in ["fifo", "symlink", "directory", "huge"] {
+            for name in ["ready", "backend.log"] {
+                let dir = tempfile::tempdir().unwrap();
+                let out = dir.path().join("diagnostics");
+                std::fs::create_dir(&out).unwrap();
+                let bad = out.join(name);
+                match kind {
+                    "fifo" => { assert!(std::process::Command::new("mkfifo").arg(&bad).status().unwrap().success()); }
+                    "symlink" => symlink("/dev/zero", &bad).unwrap(),
+                    "directory" => std::fs::create_dir(&bad).unwrap(),
+                    "huge" => std::fs::File::create(&bad).unwrap().set_len(FILE_LIMIT + 1).unwrap(),
+                    _ => unreachable!(),
+                }
+                assert!(read_bounded(&bad, tokio::time::Instant::now() + Duration::from_millis(200)).await.is_none(), "accepted {kind}");
+                let root = dir.path().to_path_buf();
+                let writer = tokio::spawn(async move {
+                    if name == "backend.log" {
+                        let request = root.join("diagnostics-requested");
+                        while !request.exists() { tokio::task::yield_now().await; }
+                        let nonce = tokio::fs::read_to_string(request).await.unwrap();
+                        tokio::fs::write(root.join("diagnostics/ready"), nonce).await.unwrap();
+                    }
+                });
+                let start = Instant::now();
+                let guard = BUNDLE.lock().await;
+                let files = container_files(dir.path(), Duration::from_millis(100)).await;
+                drop(guard);
+                writer.await.unwrap();
+                assert!(start.elapsed() < Duration::from_secs(1), "{kind} blocked collection");
+                assert!(files.iter().any(|(n,t)| n == "containers/README.txt" && (t.contains("omitted") || t.contains("deadline"))));
+                let (_archive, _) = archive::build(files, archive::SIZE_CAP).unwrap();
+                // Same process-wide lock as download, and a second collection produces a bundle.
+                let second = BUNDLE.try_lock().expect("bundle lock leaked");
+                let files = container_files(&dir.path().join("missing"), Duration::from_millis(100)).await;
+                archive::build(files, archive::SIZE_CAP).unwrap();
+                drop(second);
+            }
+        }
+    }
+
+    fn slow_read(_: &Path) -> std::io::Result<String> {
+        std::thread::sleep(Duration::from_millis(250));
+        Ok("late".into())
+    }
+    fn panic_read(_: &Path) -> std::io::Result<String> { panic!("simulated filesystem failure") }
+
+    #[tokio::test]
+    async fn slow_or_panicking_reads_release_bundle_lock() {
+        let _test = IO_TESTS.lock().await;
+        for read in [slow_read as fn(&Path) -> std::io::Result<String>, panic_read] {
+            let guard = BUNDLE.lock().await;
+            let start = Instant::now();
+            let text = read_before(Path::new("unused"), tokio::time::Instant::now() + Duration::from_millis(20), read).await;
+            let files = text.map(|t| vec![("containers/backend.log".into(), t)]).unwrap_or_else(|| container_note("Container log omitted: read failed or reached the deadline."));
+            drop(guard);
+            assert!(start.elapsed() < Duration::from_millis(200), "blocking read bypassed deadline");
+            assert!(files[0].1.contains("omitted"));
+            archive::build(files, archive::SIZE_CAP).unwrap();
+            let second = BUNDLE.try_lock().expect("bundle lock leaked after read failure");
+            archive::build(container_note("second bundle"), archive::SIZE_CAP).unwrap();
+            drop(second);
+        }
+    }
+}

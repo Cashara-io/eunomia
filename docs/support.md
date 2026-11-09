@@ -5,7 +5,7 @@ Only instance admins can download the bundle. Members can ask their instance
 admin to do this. Sign in with a browser session, API tokens cannot download it.
 The app currently has no step-up authentication flow.
 
-The download can take about a minute while Eunomia waits for container logs.
+System checks have a 30-second timeout. Container collection then has a 60-second deadline, including file reads. Archive creation and audit recording follow.
 Review the zip before sending it to support. Eunomia never sends it automatically.
 
 ## Inside the zip
@@ -32,10 +32,18 @@ Credentials, emails, organisation and connection names, cursor values, memory,
 document and chat text are excluded. Settings values are redacted, except safe
 boolean flags. Model endpoints contain only the host, with no credentials, path
 or query. Errors are reduced to categories because a provider can quote customer
-content in an error. Logs keep timestamps, severity, code locations and numeric
-measurements. Formatted messages and string/span fields are deliberately omitted
-from backend stdout as well as the diagnostics ring. Plain container log text is
-replaced with a privacy notice. Existing OpenTelemetry export is independent of
+content in an error. Logs keep timestamps and severity. Only event names and targets listed in
+`backend/src/diagnostics/events.json` retain fixed message templates and their
+named, bounded integer fields. Other messages are replaced with `<redacted>`.
+Arbitrary numeric fields, formatted messages and string/span values are omitted.
+The same allowlist applies to backend stdout, the ring and container logs.
+The current allowlist contains worker-started events with concurrency from 1 to
+1,024, worker-stopped events with released counts from 0 to 100,000, and job-done
+events with no fields. Values must be integers, not booleans, floats or strings.
+Container records must be whole JSON lines; embedded JSON in prose is never parsed.
+The ring uses `try_lock`, drops events under contention and includes drop counts.
+Snapshots clone `Arc` references under the lock and copy bytes after releasing it.
+Stdout uses a bounded queue and a separate writer thread; full queues drop events. Existing OpenTelemetry export is independent of
 this download and retains its current configuration.
 
 The archive uses stored ZIP entries and streams from a private temporary file,
@@ -50,7 +58,12 @@ The backend has no Docker socket. It writes a random request ID into
 `update-status/diagnostics-requested`. The updater checks this before its release
 check throttle on each 20-second cycle. It writes only privacy-filtered files to
 `update-status/diagnostics/`, then atomically publishes the matching ID in `ready`.
-The backend ignores results from earlier requests and waits at most 60 seconds.
+The backend ignores results from earlier requests. It opens results with
+`O_NOFOLLOW | O_NONBLOCK`, checks the opened descriptor is a regular file, and
+omits files larger than 1 MiB. Blocking reads run off the async workers, with
+the entire container collection bounded by its 60-second deadline. Missing,
+unsafe, oversized and timed-out files receive an omission note. The request
+lock is released on success, errors, cancellation and task panic.
 One bundle may be generated at a time per backend process.
 
 If the updater is stopped, busy, inaccessible, or from 2.2.0 or earlier, the zip

@@ -10,7 +10,7 @@ cat > "$TMP/bin/docker" <<'MOCK'
 case "$*" in
   'compose ps --all --format json') printf '%s\n' '{"Service":"backend","State":"running","Image":"ghcr.io/cashara-io/eunomia-backend:v2.2.1","Name":"private@example.com"}' ;;
   'compose exec -T surrealdb df -Pk /data') printf 'Filesystem 1024-blocks Used Available Capacity Mounted\nvolume 10000 100 9900 1%% /data\n' ;;
-  *) printf '%s\n' '{"timestamp":"2026-11-09T01:00:00Z","level":"WARN","target":"eunomia_backend::sources","line":123,"fields":{"count":5,"error":"password=CANARY_SECRET private@example.com MEMORY_CANARY DOCUMENT_CANARY CHAT_CANARY"}}' 'Bearer CANARY_TOKEN eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJjYW5hcnkifQ.signaturecanary' '-----BEGIN PRIVATE KEY-----' 'CANARY_PEM_BODY' ;;
+  *) printf '%s\n' '{"timestamp":"2026-11-09T01:00:00Z","level":"WARN","name":"diagnostics.worker_started","target":"eunomia_backend::jobs::worker","fields":{"concurrency":5,"error":"password=CANARY_SECRET private@example.com MEMORY_CANARY DOCUMENT_CANARY CHAT_CANARY"}}' 'Bearer CANARY_TOKEN eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJjYW5hcnkifQ.signaturecanary' '-----BEGIN PRIVATE KEY-----' 'CANARY_PEM_BODY' ;;
 esac
 MOCK
 chmod +x "$TMP/bin/docker"
@@ -23,7 +23,7 @@ assert not (root / 'diagnostics-requested').exists()
 assert (root / 'diagnostics/ready').read_text() == '0123456789abcdef0123456789abcdef'
 text = '\n'.join(p.read_text() for p in (root / 'diagnostics').iterdir())
 assert all(x not in text for x in ['CANARY', 'private@example.com', 'Bearer', 'PRIVATE KEY', 'eyJhbG'])
-assert 'WARN' in text and 'count' in text
+assert 'WARN' in text and 'concurrency' in text
 ps = json.loads((root / 'diagnostics/compose-ps.json').read_text())
 assert ps[0]['service'] == 'backend' and ps[0]['state'] == 'running'
 assert json.loads((root / 'diagnostics/collection.json').read_text())['data_volume_free_bytes'] == 9900 * 1024
@@ -64,4 +64,5 @@ spec.loader.exec_module(m)
 for text in ['[]', 'null', '{"fields":null}', '{"fields":[],"level":[]}', '{"fields":{"count":"MEMORY_CANARY"}}']:
     assert 'CANARY' not in m.safe_logs(text)
 PYTEST
+python3 "$HERE/diagnostics-privacy.py"
 printf 'PASS: diagnostics marker, privacy canaries, metadata, disk count and throttle ordering\n'

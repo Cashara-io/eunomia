@@ -12,6 +12,7 @@ provisioning = []
 test-support = []
 
 [dependencies]
+libc = "0.2"
 axum = { version = "0.8", features = ["macros", "ws"] }
 tokio = { version = "1", features = ["full"] }
 tower = { version = "0.5", features = ["util"] }

@@ -43,33 +43,43 @@ def command(args):
     return output.decode("utf-8", errors="replace")
 
 
+# Shared with the backend at compile time. Only these event/target pairs have fields.
+EVENTS = json.loads((Path(__file__).resolve().parents[1] / "backend/src/diagnostics/events.json").read_text())
+
+
 def safe_logs(text):
-    # Free text can contain arbitrary customer content, even after secret patterns are removed.
-    # Keep event metadata and numeric measurements only. Older/plain logs keep their line count.
     result = []
     for line in text.splitlines()[-300:]:
+        # A whole structured record is required. Never search prose for embedded JSON.
         try:
-            event = json.loads(line[line.index("{"):])
+            event = json.loads(line)
         except (ValueError, TypeError):
-            result.append({"message": "Unstructured log text omitted for privacy"})
-            continue
+            event = {}
         if not isinstance(event, dict):
-            result.append({"message": "Unstructured log text omitted for privacy"})
-            continue
-        safe = {"level": event.get("level") if event.get("level") in ("TRACE", "DEBUG", "INFO", "WARN", "ERROR") else "unknown"}
-        fields = event.get("fields", {})
-        if not isinstance(fields, dict):
-            fields = {}
-        stamp = event.get("timestamp", "")
-        if isinstance(stamp, str) and re.fullmatch(r"[0-9T:.+Z-]{10,40}", stamp):
-            safe["timestamp"] = stamp
-        for key in ("line", "status", "latency_ms", "duration_ms", "count", "attempts", "written", "failed", "skipped"):
-            value = event.get(key, fields.get(key))
-            if isinstance(value, (int, float, bool)):
-                safe[key] = value
+            event = {}
+        safe = {"message": "<redacted>", "level": "unknown", "target": "<redacted>", "fields": {}}
+        if event.get("level") in ("TRACE", "DEBUG", "INFO", "WARN", "ERROR"):
+            safe["level"] = event["level"]
+        stamp = event.get("timestamp")
+        if isinstance(stamp, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})", stamp):
+            try:
+                parsed = datetime.datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+                if 2000 <= parsed.year <= 2100:
+                    safe["timestamp"] = parsed.isoformat()
+            except ValueError:
+                pass
+        name = event.get("name")
+        spec = EVENTS.get(name) if isinstance(name, str) else None
+        if spec and event.get("target") == spec["target"]:
+            safe.update(name=name, target=spec["target"], message=spec["message"])
+            fields = event.get("fields")
+            if isinstance(fields, dict):
+                for key, (low, high) in spec["fields"].items():
+                    value = fields.get(key)
+                    if type(value) is int and low <= value <= high:
+                        safe["fields"][key] = value
         result.append(safe)
     return "\n".join(json.dumps(row) for row in result) + "\n"
-
 
 
 def read_nonce(path):
@@ -130,7 +140,7 @@ def collect(directory):
     except (ValueError, IndexError):
         free = None
     files["collection.json"] = json.dumps({"collected_at": datetime.datetime.now(datetime.timezone.utc).isoformat(), "data_volume_free_bytes": free,
-        "note": "Last 300 lines per service, limited to 1 MiB input each. Free text omitted for privacy. Empty logs can mean an unavailable service or Docker command."})
+        "note": "Last 300 lines per service, limited to 1 MiB input each. Only allowlisted event templates and bounded integer fields are retained. Other messages are redacted. Empty logs can mean an unavailable service or Docker command."})
     # Hold an O_NOFOLLOW directory descriptor while publishing. A backend-writable parent
     # must not let a symlink or directory rename redirect this privileged writer.
     import uuid
