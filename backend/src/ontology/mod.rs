@@ -19,6 +19,7 @@
 //!   (`tools/registry/ontology.rs`).
 
 pub mod automap;
+pub mod activity;
 pub mod coverage;
 pub mod dataset;
 pub mod objects;
@@ -213,6 +214,9 @@ fn no_ontology_table(e: &surrealdb::Error) -> bool {
 
 #[derive(Debug, Deserialize, SurrealValue)]
 struct KindRow {
+    #[serde(default)]
+    #[surreal(default)]
+    revision: i64,
     kind: String,
     #[serde(default)]
     #[surreal(default)]
@@ -232,6 +236,9 @@ struct KindRow {
 
 #[derive(Debug, Deserialize, SurrealValue)]
 struct LinkRow {
+    #[serde(default)]
+    #[surreal(default)]
+    revision: i64,
     from_kind: String,
     label: String,
     to_kind: String,
@@ -285,6 +292,7 @@ struct LinkCount {
 /// One entity kind of the vault.
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct KindItem {
+    pub revision: i64,
     pub kind: String,
     pub built_in: bool,
     pub status: ViewStatus,
@@ -315,6 +323,7 @@ pub struct LinkSample {
 /// One link type of the vault: relations labelled `label` from a `from_kind` entity to a `to_kind` one.
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct LinkItem {
+    pub revision: i64,
     pub from_kind: String,
     pub label: String,
     pub to_kind: String,
@@ -421,6 +430,7 @@ fn merge_kinds(
 ) -> AppResult<Vec<KindItem>> {
     let mut by_kind: BTreeMap<String, KindItem> = BTreeMap::new();
     let blank = |kind: &str| KindItem {
+        revision: 0,
         kind: kind.to_string(),
         built_in: KINDS.contains(&kind),
         status: ViewStatus::Observed,
@@ -440,6 +450,7 @@ fn merge_kinds(
     for r in rows {
         let item = by_kind.entry(r.kind.clone()).or_insert_with(|| blank(&r.kind));
         item.status = Status::parse(&r.status)?.into();
+        item.revision = r.revision;
         item.description = r.description;
         item.merge_into = r.merge_into;
         item.synonyms = r.synonyms;
@@ -460,6 +471,7 @@ fn merge_kinds(
 fn merge_links(counts: Vec<LinkCount>, rows: Vec<LinkRow>) -> AppResult<Vec<LinkItem>> {
     let mut by_key: BTreeMap<(String, String, String), LinkItem> = BTreeMap::new();
     let blank = |from_kind: &str, label: &str, to_kind: &str| LinkItem {
+        revision: 0,
         from_kind: from_kind.to_string(),
         label: label.to_string(),
         to_kind: to_kind.to_string(),
@@ -485,6 +497,7 @@ fn merge_links(counts: Vec<LinkCount>, rows: Vec<LinkRow>) -> AppResult<Vec<Link
         let key = (r.from_kind.clone(), r.label.clone(), r.to_kind.clone());
         let item = by_key.entry(key).or_insert_with(|| blank(&r.from_kind, &r.label, &r.to_kind));
         item.status = Status::parse(&r.status)?.into();
+        item.revision = r.revision;
         item.description = r.description;
         item.origin = Some(Origin::parse(&r.origin)?);
         item.reason = r.reason;
@@ -1019,7 +1032,7 @@ async fn strict_link(db: &OrgDb, vault: &RecordId, key: &LinkKey) -> AppResult<(
 /// Turns "Only approved kinds and links" on or off for `vault` (an owner in the browser only).
 pub async fn set_strict(db: &OrgDb, user: &RecordId, vault: &RecordId, on: bool) -> AppResult<OntologyOut> {
     decider(db, user, vault).await?;
-    q::SET_STRICT.on(db).bind(("vault", vault.clone())).bind(("on", on)).await?;
+    with_retry_dup(|| async { q::SET_STRICT.on(db).bind(("vault", vault.clone())).bind(("on", on)).await }).await?;
     view(db, vault).await
 }
 
@@ -1060,7 +1073,7 @@ mod tests {
     }
 
     fn row(kind: &str, status: &str) -> KindRow {
-        KindRow { kind: kind.into(), description: None, status: status.into(), merge_into: None, synonyms: vec![], origin: "agent".into(), reason: None }
+        KindRow { revision: 1, kind: kind.into(), description: None, status: status.into(), merge_into: None, synonyms: vec![], origin: "agent".into(), reason: None }
     }
 
     #[test]

@@ -964,6 +964,9 @@ pub(super) async fn apply_metrics(db: &OrgDb, vault: &RecordId, metrics: Vec<Val
 
 #[derive(Debug, Clone, Deserialize, SurrealValue)]
 struct MetricRow {
+    #[serde(default)]
+    #[surreal(default)]
+    revision: i64,
     kind: String,
     name: String,
     #[serde(default)]
@@ -997,6 +1000,7 @@ impl MetricRow {
 /// One metric of a kind, as the ontology view shows it. Its value is never here: `metric_eval` runs it.
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct MetricItem {
+    pub revision: i64,
     pub name: String,
     pub description: Option<String>,
     pub synonyms: Vec<String>,
@@ -1021,6 +1025,7 @@ pub(super) async fn metrics_by_kind(db: &OrgDb, vault: &RecordId) -> AppResult<B
     for r in rows {
         let expr = r.expr()?;
         out.entry(r.kind.clone()).or_default().push(MetricItem {
+            revision: r.revision,
             expr_words: expr_words(&r.kind, &expr),
             expr,
             status: Status::parse(&r.status)?,

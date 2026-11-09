@@ -57,6 +57,7 @@ pub enum ErrorCode {
     SecretOutboundFailed,
     ValidationInvalid,
     OntologyRejected,
+    OntologyStaleRevision,
     DbConflict,
     DbDuplicate,
     JobNoHandler,
@@ -107,6 +108,7 @@ impl ErrorCode {
         ErrorCode::SecretOutboundFailed,
         ErrorCode::ValidationInvalid,
         ErrorCode::OntologyRejected,
+        ErrorCode::OntologyStaleRevision,
         ErrorCode::DbConflict,
         ErrorCode::DbDuplicate,
         ErrorCode::JobNoHandler,
@@ -157,6 +159,7 @@ impl ErrorCode {
             ErrorCode::SecretOutboundFailed => "secret.outbound_failed",
             ErrorCode::ValidationInvalid => "validation.invalid",
             ErrorCode::OntologyRejected => "ontology.rejected",
+            ErrorCode::OntologyStaleRevision => "ontology.stale_revision",
             ErrorCode::DbConflict => "db.conflict",
             ErrorCode::DbDuplicate => "db.duplicate",
             ErrorCode::JobNoHandler => "job.no_handler",
@@ -180,7 +183,7 @@ impl ErrorCode {
             ErrorCode::DocumentUnsupportedType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             ErrorCode::ChangesResync => StatusCode::GONE,
             ErrorCode::TenantProvisioningDisabled => StatusCode::NOT_IMPLEMENTED,
-            ErrorCode::AuthEmailTaken | ErrorCode::VaultNameTaken | ErrorCode::DbConflict | ErrorCode::DbDuplicate => StatusCode::CONFLICT,
+            ErrorCode::AuthEmailTaken | ErrorCode::VaultNameTaken | ErrorCode::DbConflict | ErrorCode::DbDuplicate | ErrorCode::OntologyStaleRevision => StatusCode::CONFLICT,
             ErrorCode::AuthNotFound
             | ErrorCode::VaultNotFound
             | ErrorCode::EntityNotFound
@@ -332,6 +335,8 @@ impl From<surrealdb::Error> for AppError {
         let raw = err.to_string();
         let lower = raw.to_lowercase();
         let (code, message) = match &err {
+            _ if raw.contains("ontology schema upgrade pending") => (ErrorCode::TenantSchemaBehind, "This space is upgrading. Try again shortly."),
+            _ if raw.contains("ontology.stale_revision") => (ErrorCode::OntologyStaleRevision, "This definition changed since you reviewed it. Review the latest version before deciding."),
             _ if crate::tx::is_conflict(&err) => (ErrorCode::DbConflict, "The write conflicted with another; retry it."),
             _ if lower.contains(crate::store::CROSSING_MARK) => (ErrorCode::TenantDenied, "Internal server error."),
             _ if err.is_not_allowed() => (ErrorCode::TenantDenied, "Internal server error."),
@@ -376,7 +381,7 @@ mod tests {
                 | ErrorCode::ConnectorNotConnected | ErrorCode::SourceNotFound | ErrorCode::ExtensionNotFound | ErrorCode::ExtensionDisabled | ErrorCode::ExtensionBufferFull | ErrorCode::ToolNotFound
                 | ErrorCode::ResourceNotFound | ErrorCode::DocumentNotFound | ErrorCode::DocumentTooLarge
                 | ErrorCode::DocumentUnsupportedType | ErrorCode::DocumentStorageUnavailable | ErrorCode::SecretUnavailable | ErrorCode::SecretRequestClosed | ErrorCode::SecretHostDenied
-                | ErrorCode::SecretOutboundBlocked | ErrorCode::SecretOutboundFailed | ErrorCode::ChangesResync | ErrorCode::ValidationInvalid | ErrorCode::OntologyRejected | ErrorCode::DbConflict
+                | ErrorCode::SecretOutboundBlocked | ErrorCode::SecretOutboundFailed | ErrorCode::ChangesResync | ErrorCode::ValidationInvalid | ErrorCode::OntologyRejected | ErrorCode::OntologyStaleRevision | ErrorCode::DbConflict
                 | ErrorCode::DbDuplicate | ErrorCode::JobNoHandler | ErrorCode::JobLeaseExpired | ErrorCode::JobPanicked
                 | ErrorCode::Internal => {}
             }

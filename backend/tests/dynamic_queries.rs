@@ -359,6 +359,17 @@ async fn every_dynamic_builder_runs_in_every_combination() {
         let (status, body) = app.http("GET", &format!("/api/vaults/{vault}/ontology/objects?kind={kind}"), None, true).await;
         assert_eq!(status, 200, "{body}");
     }
+    for newest in [false, true] {
+        for mask in 0..64 {
+            let mut params = url::form_urlencoded::Serializer::new(String::new());
+            params.append_pair("newest", if newest { "true" } else { "false" });
+            for (bit, key, value) in [(0,"actor_type","user"),(1,"action","approved"),(2,"definition_type","kind"),(3,"kind","shop"),(4,"before","100"),(5,"name","shop")] {
+                if mask & (1 << bit) != 0 { params.append_pair(key, value); }
+            }
+            let (status, body) = app.http("GET", &format!("/api/vaults/{vault}/ontology/activity?{}", params.finish()), None, true).await;
+            assert_eq!(status, 200, "activity filter combination {mask}: {body}");
+        }
+    }
     cache_searches(&app).await;
     generic_tools(&app).await;
     entities_and_vaults(&app).await;

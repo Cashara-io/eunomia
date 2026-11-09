@@ -90,7 +90,7 @@ test("every MCP tool works end to end", async ({ request, baseURL }) => {
   expect((await call("entity_set_property", { entity_id: orders, property: "size_gb", value: 120 })).isError).toBe(true);
   const vaultOf = (await ok("ontology_get")).vault as string;
   const decided = await request.post(`/api/vaults/${vaultOf}/ontology/properties/decide`, {
-    data: { kind: "db", name: "size_gb", decision: { action: "approve" } },
+    data: { kind: "db", name: "size_gb", revision: 1, decision: { action: "approve" } },
   });
   expect(decided.ok()).toBeTruthy();
   expect((await ok("entity_set_property", { entity_id: orders, property: "size_gb", value: 120 })).value.value).toBe(120);
@@ -99,7 +99,7 @@ test("every MCP tool works end to end", async ({ request, baseURL }) => {
   await ok("ontology_propose", { metrics: [{ kind: "db", name: "total_size_gb", expr: { agg: "sum", property: "size_gb" } }] });
   expect((await call("metric_eval", { metric: "total_size_gb" })).isError).toBe(true);
   const approvedMetric = await request.post(`/api/vaults/${vaultOf}/ontology/metrics/decide`, {
-    data: { kind: "db", name: "total_size_gb", decision: { action: "approve" } },
+    data: { kind: "db", name: "total_size_gb", revision: 1, decision: { action: "approve" } },
   });
   expect(approvedMetric.ok()).toBeTruthy();
   const total = await ok("metric_eval", { metric: "total_size_gb" });
@@ -137,7 +137,7 @@ test("every MCP tool works end to end", async ({ request, baseURL }) => {
     ["kinds", { kind: "menu_item", decision: { action: "approve" } }],
     ["properties", { kind: "menu_item", name: "price", decision: { action: "approve" } }],
   ] as const) {
-    expect((await request.post(`/api/vaults/${vaultOf}/ontology/${path}/decide`, { data })).ok()).toBeTruthy();
+    expect((await request.post(`/api/vaults/${vaultOf}/ontology/${path}/decide`, { data: { ...data, revision: 1 } })).ok()).toBeTruthy();
   }
   const imported = await ok("document_import_rows", importArgs);
   expect([imported.created, imported.values, imported.bad_count]).toEqual([2, 2, 0]);

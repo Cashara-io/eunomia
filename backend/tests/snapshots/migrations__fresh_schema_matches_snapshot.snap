@@ -1,6 +1,5 @@
 ---
 source: tests/migrations.rs
-assertion_line: 47
 expression: info(&db).await
 ---
 {
@@ -780,6 +779,31 @@ expression: info(&db).await
           "index": "",
           "name": "memory_vault_idx",
           "table": "memory"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
+      "name": "ontology_event",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "vault",
+            "seq"
+          ],
+          "index": "UNIQUE",
+          "name": "ontology_event_cursor",
+          "table": "ontology_event"
         }
       ]
     },

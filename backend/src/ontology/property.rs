@@ -302,6 +302,9 @@ pub(super) async fn apply_properties(db: &OrgDb, vault: &RecordId, props: Vec<Va
 
 #[derive(Debug, Clone, Deserialize, SurrealValue)]
 pub(super) struct PropertyRow {
+    #[serde(default)]
+    #[surreal(default)]
+    revision: i64,
     pub(super) id: RecordId,
     pub(super) kind: String,
     pub(super) name: String,
@@ -370,6 +373,7 @@ struct ValueStats {
 /// One property of a kind, as the ontology view shows it.
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct PropertyItem {
+    pub revision: i64,
     pub name: String,
     pub datatype: Datatype,
     pub unit: Option<String>,
@@ -418,6 +422,7 @@ pub(super) async fn properties_by_kind(db: &OrgDb, vault: &RecordId) -> AppResul
         };
         let source_map = r.source_map();
         out.entry(r.kind.clone()).or_default().push(PropertyItem {
+            revision: r.revision,
             source_map,
             datatype,
             status: Status::parse(&r.status)?,
@@ -767,21 +772,22 @@ pub async fn set_property(db: &OrgDb, owner: &RecordId, input: SetProperty<'_>) 
     let Checked { row, mapped, datatype, stored, unit } = check_value(db, &vault, &kind, input.property, input.value, input.unit).await?;
     let as_of = parse_as_of(input.as_of)?;
     let source = input.source_record_id.map(|r| cache_record_rid(owner, r));
-    let written: Vec<ValueRow> = q::SET_VALUE
+    let written: Vec<ValueRow> = with_retry_dup(|| async { q::SET_VALUE
         .on(db)
         .bind(("vault", vault.clone()))
         .bind(("entity", entity.id.clone()))
         .bind(("property", row.id.clone()))
+        .bind(("kind", kind.0.clone())).bind(("name", row.name.clone())).bind(("revision", row.revision))
         .bind(("value_num", stored.num))
         .bind(("value_text", stored.text.clone()))
         .bind(("value_bool", stored.boolean))
         .bind(("value_date", stored.date))
-        .bind(("unit", unit))
+        .bind(("unit", unit.clone()))
         .bind(("as_of", Datetime::from(as_of)))
-        .bind(("source", source))
+        .bind(("source", source.clone()))
         .bind(("origin", Origin::Agent.as_str().to_string()))
-        .await?
-        .take(0)?;
+        .await }).await?
+        .take(q::SET_VALUE.slot)?;
     let written = written.into_iter().next().ok_or_else(|| AppError::internal("property value write returned no row"))?;
     let approved = ApprovedProperty { name: row.name, datatype, unit: row.unit };
     let value = written.out(&approved).ok_or_else(|| AppError::internal("property value did not round-trip"))?;

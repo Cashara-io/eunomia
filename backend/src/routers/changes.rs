@@ -247,17 +247,24 @@ const EVENTS_TICK: Duration = Duration::from_secs(10);
     path = "/api/events/ws",
     tag = "vaults",
     summary = "Follow everything that changes in the caller's vaults over one WebSocket",
+    params(OntologyResume),
     description = "Upgrades to a WebSocket that sends JSON text messages with a `type`: `hello` (each vault's last change seq, first and on every reconnect), `change` (a change-log row of any vault the caller can read), `seq` (a vault's log moved on; refetch it), `vault` (a vault was created, renamed, deleted, cloned, merged, or its members changed), `vaults` (the caller's vault set changed), `resync` (refetch everything) and `heartbeat`. No content: fetch what changed. A browser authenticates with its session cookie from an allowed origin; other clients send a Bearer token.",
     responses((status = 101, description = "Switching to the WebSocket protocol"), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(("cookie" = []), ("bearer" = [])),
 )]
-async fn follow_events(State(app): State<AppState>, user: User, headers: HeaderMap, ws: WebSocketUpgrade) -> AppResult<Response> {
+async fn follow_events(State(app): State<AppState>, user: User, Query(args): Query<OntologyResume>, headers: HeaderMap, ws: WebSocketUpgrade) -> AppResult<Response> {
     if !super::mcp::origin_allowed(&headers, &app.settings.cors_allowed_origins) {
         return Err(AppError::coded(ErrorCode::AuthScope, "this origin may not follow changes with a session cookie"));
     }
     authz::require_scope(Action::ReadMemories.scope())?;
     let state = app.org(&user.org).await?;
-    Ok(ws.on_upgrade(move |socket| follow_user(socket, state, headers, user.id)))
+    let resume: std::collections::HashMap<String, i64> = match args.ontology_after {
+        Some(raw) if raw.len() <= 32000 => serde_json::from_str(&raw).map_err(|_| AppError::bad_request("invalid ontology cursor"))?,
+        None => Default::default(),
+        _ => return Err(AppError::bad_request("ontology cursor too large")),
+    };
+    if resume.len() > 500 || resume.values().any(|n| *n < 0) { return Err(AppError::bad_request("invalid ontology cursor")); }
+    Ok(ws.on_upgrade(move |socket| follow_user(socket, state, headers, user.id, resume)))
 }
 
 /// The vaults the credential in `headers` may read now, as a sorted list of ids; `Denied` once it no
@@ -309,7 +316,7 @@ async fn send_json(socket: &mut WebSocket, value: serde_json::Value) -> Result<(
     socket.send(Message::Text(value.to_string().into())).await.map_err(|_| Stop::Gone)
 }
 
-async fn follow_user(mut socket: WebSocket, state: OrgState, headers: HeaderMap, user: RecordId) {
+async fn follow_user(mut socket: WebSocket, state: OrgState, headers: HeaderMap, user: RecordId, mut ontology_last: std::collections::HashMap<String, i64>) {
     use serde_json::json;
     // subscribe before reading anything, so an event committed in between is not missed
     let mut rx = changes::subscribe();
@@ -317,10 +324,21 @@ async fn follow_user(mut socket: WebSocket, state: OrgState, headers: HeaderMap,
     let mut checked = Instant::now();
     let mut tick = tokio::time::interval_at(tokio::time::Instant::now() + EVENTS_TICK, EVENTS_TICK);
 
+    let mut ontology_tick = tokio::time::interval(Duration::from_secs(1));
     let start = async {
         let vaults = readable_vaults(&state, &headers).await?;
         let last = counters(&state, &vaults).await?;
-        send_json(&mut socket, json!({"type": "hello", "vaults": last})).await?;
+        let mut ontology_heads = std::collections::HashMap::new();
+        if state.db.schema_version() >= 41 {
+            for vault in &vaults {
+                let head = crate::ontology::activity::head(&state.db, vault).await.map_err(|_| Stop::Gone)?;
+                let cursor = ontology_last.entry(vault.to_string()).or_insert(head);
+                if *cursor > head { *cursor = 0; }
+                ontology_heads.insert(vault.to_string(), *cursor);
+            }
+        }
+        ontology_last.retain(|v, _| vaults.iter().any(|id| id.to_string() == *v));
+        send_json(&mut socket, json!({"type": "hello", "vaults": last, "ontology": ontology_heads})).await?;
         Ok::<_, Stop>((vaults, last))
     }
     .await;
@@ -335,6 +353,26 @@ async fn follow_user(mut socket: WebSocket, state: OrgState, headers: HeaderMap,
                 Some(Ok(Message::Close(_))) | Some(Err(_)) | None => Err(Stop::Gone),
                 _ => Ok(()),
             },
+            _ = ontology_tick.tick(), if state.db.schema_version() >= 41 => async {
+                let allowed = readable_vaults(&state, &headers).await?;
+                ontology_last.retain(|v, _| allowed.iter().any(|id| id.to_string() == *v));
+                for vault in &allowed {
+                    let cursor = ontology_last.entry(vault.to_string()).or_insert(0);
+                    loop {
+                        let args = crate::ontology::activity::ActivityQuery { after: *cursor, limit: Some(200), ..Default::default() };
+                        let page = crate::ontology::activity::page(&state.db, vault, &args).await.map_err(|_| Stop::Gone)?;
+                        for event in page.events {
+                            // Authorise each delivery, including replay. A revoked or vault-restricted
+                            // credential never receives even a queued event for this vault.
+                            recheck(&state, &headers, vault).await?;
+                            send_json(&mut socket, json!({"type": "ontology", "vault": vault.to_string(), "event": event})).await?;
+                            *cursor = event.seq;
+                        }
+                        if !page.more { break; }
+                    }
+                }
+                Ok::<(), Stop>(())
+            }.await,
             _ = tick.tick() => async {
                 if checked.elapsed() >= recheck_every() {
                     checked = Instant::now();
@@ -359,6 +397,7 @@ async fn follow_user(mut socket: WebSocket, state: OrgState, headers: HeaderMap,
             ev = rx.recv() => match ev {
                 Ok(ev) if ev.org != state.db.org() || !vaults.contains(&ev.vault) => Ok(()),
                 Ok(ev) => async {
+                    recheck(&state, &headers, &ev.vault).await?;
                     let vault = ev.vault.to_string();
                     let known = last.entry(vault.clone()).or_insert(0);
                     if ev.change.seq > *known {
@@ -406,3 +445,7 @@ async fn close(mut socket: WebSocket, stop: Stop) {
 #[derive(utoipa::OpenApi)]
 #[openapi(paths(list_changes, follow_changes, follow_events))]
 pub struct Doc;
+
+#[derive(Default, Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
+struct OntologyResume { ontology_after: Option<String> }

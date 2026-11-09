@@ -86,6 +86,7 @@ pub async fn start_session(
 pub struct Authn {
     pub user: User,
     pub caller: Caller,
+    pub actor_name: String,
 }
 
 /// How long a verified credential is trusted without asking the database again.
@@ -208,7 +209,7 @@ async fn session_authn(state: &AppState, token: &str) -> AppResult<Option<Authn>
 
     let user = models_user::load_user(db, rid, claims.email).await?;
     let caller = Caller::session(&user.id);
-    let authn = Authn { user, caller };
+    let authn = Authn { actor_name: user.email.clone(), user, caller };
     // the earlier of the row's expiry (as read, before any slide) and the JWT's own
     let jwt_exp = claims.exp.and_then(|e| chrono::DateTime::from_timestamp(e, 0));
     let expires_at = row.expires_at.map(chrono::DateTime::from).into_iter().chain(jwt_exp).min();
@@ -231,14 +232,15 @@ pub async fn bearer_authn(state: &AppState, token: &str, allow_oauth: bool) -> A
     if oauth {
         let Some(v) = crate::oauth::verify_access_token(state, token).await else { return Ok(None) };
         let caller = Caller { actor: Actor { kind: "oauth", id: v.client_id }, scopes: v.scopes, vault: None, expires_at: None };
-        let authn = Authn { user: v.user, caller };
+        let actor_name = crate::oauth::server::resolve_client(state, &caller.actor.id).await.map(|c| c.name).unwrap_or_else(|_| "App".into());
+        let authn = Authn { actor_name, user: v.user, caller };
         state.credentials.put(key, v.grant.to_string(), &authn, v.expires_at);
         return Ok(Some(authn));
     }
     match models_user::check_api_token(&state.control, token).await? {
         TokenCheck::Valid(v) => {
             let actor = Actor { kind: "token", id: v.token_id.to_string() };
-            let authn = Authn { user: v.user, caller: Caller { actor, scopes: v.scopes, vault: v.vault, expires_at: v.expires_at } };
+            let authn = Authn { actor_name: v.name, user: v.user, caller: Caller { actor, scopes: v.scopes, vault: v.vault, expires_at: v.expires_at } };
             state.credentials.put(key, v.token_id.to_string(), &authn, v.expires_at);
             Ok(Some(authn))
         }

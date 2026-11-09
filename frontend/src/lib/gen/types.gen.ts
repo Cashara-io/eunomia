@@ -63,6 +63,23 @@ export type ActivityEntry = {
     vault_id: string;
 };
 
+export type ActivityEvent = {
+    action: string;
+    actor: string;
+    actor_name: string;
+    actor_type: string;
+    after?: unknown;
+    at: string;
+    before?: unknown;
+    definition_type: string;
+    kind: string;
+    name: string;
+    reason?: string | null;
+    revision: number;
+    seq: number;
+    target: string;
+};
+
 export type ActivityPage = {
     entries: Array<ActivityEntry>;
     next_before?: string | null;
@@ -1241,6 +1258,8 @@ export type Kind = {
 export type KindDecideBody = {
     decision: KindDecision;
     kind: string;
+    reason?: string | null;
+    revision: number;
 };
 
 export type KindDecision = {
@@ -1278,6 +1297,7 @@ export type KindItem = {
      */
     properties: Array<PropertyItem>;
     reason?: string | null;
+    revision: number;
     /**
      * A few of their names.
      */
@@ -1341,6 +1361,8 @@ export type LinkDecideBody = {
     decision: LinkDecision;
     from_kind: string;
     label: string;
+    reason?: string | null;
+    revision: number;
     to_kind: string;
 };
 
@@ -1366,6 +1388,7 @@ export type LinkItem = {
     label: string;
     origin?: null | Origin;
     reason?: string | null;
+    revision: number;
     samples: Array<LinkSample>;
     /**
      * The record fields or CSV columns that name each relation's target, from auto-mapping: a CSV
@@ -1515,6 +1538,8 @@ export type MetricDecideBody = {
     decision: MetricDecision;
     kind: string;
     name: string;
+    reason?: string | null;
+    revision: number;
 };
 
 export type MetricDecision = {
@@ -1569,6 +1594,7 @@ export type MetricItem = {
     name: string;
     origin: Origin;
     reason?: string | null;
+    revision: number;
     status: Status;
     synonyms: Array<string>;
     unit?: string | null;
@@ -1850,6 +1876,8 @@ export type PropertyDecideBody = {
     decision: PropertyDecision;
     kind: string;
     name: string;
+    reason?: string | null;
+    revision: number;
 };
 
 export type PropertyDecision = {
@@ -1876,6 +1904,7 @@ export type PropertyItem = {
     name: string;
     origin: Origin;
     reason?: string | null;
+    revision: number;
     /**
      * A few of them, as text with their unit.
      */
@@ -4596,7 +4625,9 @@ export type AddRelationResponse = AddRelationResponses[keyof AddRelationResponse
 export type FollowEventsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        ontology_after?: string;
+    };
     url: '/api/events/ws';
 };
 
@@ -6612,6 +6643,42 @@ export type GetVaultOntologyResponses = {
 };
 
 export type GetVaultOntologyResponse = GetVaultOntologyResponses[keyof GetVaultOntologyResponses];
+
+export type GetOntologyActivityData = {
+    body?: never;
+    path: {
+        vault_id: string;
+    };
+    query?: {
+        after?: number;
+        newest?: boolean;
+        before?: number;
+        actor?: string;
+        actor_type?: string;
+        action?: string;
+        definition_type?: string;
+        kind?: string;
+        target?: string;
+        name?: string;
+        limit?: number;
+    };
+    url: '/api/vaults/{vault_id}/ontology/activity';
+};
+
+export type GetOntologyActivityErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetOntologyActivityError = GetOntologyActivityErrors[keyof GetOntologyActivityErrors];
+
+export type GetOntologyActivityResponses = {
+    200: ActivityPage;
+};
+
+export type GetOntologyActivityResponse = GetOntologyActivityResponses[keyof GetOntologyActivityResponses];
 
 export type AutomapVaultOntologyData = {
     body: AutomapBody;

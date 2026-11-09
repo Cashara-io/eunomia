@@ -15,6 +15,7 @@ import VaultChip, { vaultTone } from "@/components/VaultChip";
 import Select from "@/components/Select";
 import AutomapBar from "@/components/vaults/AutomapBar";
 import { definitions, twinHref } from "./model";
+import Activity from "./Activity";
 import Overview from "./Overview";
 import Structure from "./Structure";
 import KindDetail from "./KindDetail";
@@ -27,13 +28,14 @@ const views = [
   { path: "/ontology/schema", label: "Structure" },
   { path: "/ontology/objects", label: "Objects" },
   { path: "/ontology/review", label: "Review" },
+  { path: "/ontology/activity", label: "Activity" },
 ];
 
 export default function TwinArea({
   view,
   kind,
 }: {
-  view: "overview" | "structure" | "review" | "kind" | "objects" | "object";
+  view: "overview" | "structure" | "review" | "kind" | "objects" | "object" | "activity";
   kind?: string;
 }) {
   const query = useVaults();
@@ -70,7 +72,7 @@ export default function TwinArea({
               <Link
                 key={v.id}
                 href={twinHref(
-                  view === "review"
+                  view === "activity" ? "/ontology/activity" : view === "review"
                     ? "/ontology/review"
                     : view === "objects" || view === "object"
                       ? "/ontology/objects"
@@ -105,7 +107,7 @@ function SelectedSpace({
   kind,
 }: {
   vault: Vault;
-  view: "overview" | "structure" | "review" | "kind" | "objects" | "object";
+  view: "overview" | "structure" | "review" | "kind" | "objects" | "object" | "activity";
   kind?: string;
 }) {
   const objectView = view === "objects" || view === "object";
@@ -207,7 +209,7 @@ function SelectedSpace({
           </Link>
         </section>
       )}
-      {view === "objects" ? (
+      {view === "activity" ? <Activity space={vault.id} /> : view === "objects" ? (
         <Objects space={vault.id} />
       ) : view === "object" ? (
         <ObjectProfile key={kind} space={vault.id} id={kind ?? ""} />
@@ -228,6 +230,7 @@ function SelectedSpace({
             <KindDetail vault={vault} data={data} kind={kind ?? ""} />
           )}
           {view === "review" && <Review vault={vault} data={data} />}
+          {(view === "review" || view === "overview") && <Activity space={vault.id} compact />}
         </>
       )}
     </>

@@ -287,9 +287,10 @@ pub async fn gate(State(g): State<Gate>, mut req: Request, next: Next) -> Respon
     }
 
     let caller = authn.caller.clone();
+    let actor_name = authn.actor_name.clone();
     req.extensions_mut().insert(meter(&g, &authn));
     req.extensions_mut().insert(authn);
-    authz::with_caller(caller, next.run(req)).await
+    crate::ontology::activity::ACTOR_NAME.scope(actor_name, authz::with_caller(caller, next.run(req))).await
 }
 
 /// One `auth.failed` row per presented credential per minute: a client replaying a bad token

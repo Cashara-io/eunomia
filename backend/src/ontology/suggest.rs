@@ -284,6 +284,7 @@ mod tests {
     #[test]
     fn a_name_in_the_profile_cannot_close_the_block() {
         let kind = KindItem {
+            revision: 0,
             kind: "db".into(),
             built_in: false,
             status: ViewStatus::Observed,

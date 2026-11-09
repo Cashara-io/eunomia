@@ -107,3 +107,64 @@ async fn an_invitee_hears_the_invitation_and_a_removed_member_hears_the_removal(
     let ev = next(&mut ws).await;
     assert_eq!((ev["type"].clone(), ev["op"].clone()), (json!("vault"), json!("member_removed")), "{ev}");
 }
+
+async fn ontology_next(ws: &mut Ws) -> Value {
+    loop { let event = next(ws).await; if event["type"] == "ontology" { return event; } }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn ontology_resume_replays_exactly_the_missed_events_and_honours_vault_scope() {
+    let app = TestApp::new().await;
+    let base = serve(&app).await;
+    let vault = app.tool("ontology_get", json!({})).await["vault"].as_str().unwrap().to_string();
+    let other = app.tool("vault_create", json!({"name":"Other"})).await["id"].as_str().unwrap().to_string();
+    let restricted = models_user::create_api_token_with(app.control(), &app.user.id, "Other vault only", &["memory:read".into()], Some(&eunomia_backend::rid::parse(&other).unwrap()), None).await.unwrap().token;
+    let mut scoped = connect(&base, &restricted).await;
+    let hello = next(&mut scoped).await;
+    assert!(hello["ontology"].get(&vault).is_none(), "{hello}");
+    let mut ws = connect(&base, &app.token).await;
+    assert_eq!(next(&mut ws).await["type"], "hello");
+    for name in ["shop", "supplier"] {
+        let out = app.tool("ontology_propose", json!({"vault_id":vault,"kinds":[{"kind":name}]})).await;
+        assert!(out.get("error").is_none(), "{out}");
+    }
+    assert_eq!(ontology_next(&mut ws).await["event"]["seq"], 1);
+    assert_eq!(ontology_next(&mut ws).await["event"]["seq"], 2);
+    ws.close(None).await.unwrap();
+    for name in ["order", "shipment"] {
+        app.tool("ontology_propose", json!({"vault_id":vault,"kinds":[{"kind":name}]})).await;
+    }
+    let resume = url::form_urlencoded::Serializer::new(String::new()).append_pair("ontology_after", &json!({&vault:2}).to_string()).finish();
+    let mut req = format!("{base}/api/events/ws?{resume}").into_client_request().unwrap();
+    req.headers_mut().insert("authorization", format!("Bearer {}", app.token).parse().unwrap());
+    let mut resumed = tokio_tungstenite::connect_async(req).await.unwrap().0;
+    assert_eq!(next(&mut resumed).await["type"], "hello");
+    assert_eq!(ontology_next(&mut resumed).await["event"]["seq"], 3);
+    assert_eq!(ontology_next(&mut resumed).await["event"]["seq"], 4);
+    assert!(tokio::time::timeout(std::time::Duration::from_millis(1200), ontology_next(&mut resumed)).await.is_err(), "no duplicate replay");
+    assert!(tokio::time::timeout(std::time::Duration::from_millis(1200), ontology_next(&mut scoped)).await.is_err(), "no other-vault event");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn ontology_membership_is_checked_on_subscribe_and_again_before_delivery() {
+    let app = TestApp::new().await;
+    let base = serve(&app).await;
+    let vault = app.tool("ontology_get", json!({})).await["vault"].as_str().unwrap().to_string();
+    let bob = common::register(&app.state, "activity-outsider@example.com").await;
+    let token = models_user::create_api_token(app.control(), &bob.id, "Outsider").await.unwrap().token;
+    let mut ws = connect(&base, &token).await;
+    assert!(next(&mut ws).await["ontology"].get(&vault).is_none());
+    app.tool("ontology_propose", json!({"vault_id":vault,"kinds":[{"kind":"shop"}]})).await;
+    assert!(tokio::time::timeout(std::time::Duration::from_millis(1200), ontology_next(&mut ws)).await.is_err());
+    // Simulate a membership update on another replica, with no local announcement.
+    let db = app.db().await;
+    db.test_raw().query("CREATE vault_member SET vault = $vault, user = $user, role = 'member'")
+        .bind(("vault", eunomia_backend::rid::parse(&vault).unwrap())).bind(("user", bob.id.clone()))
+        .await.unwrap().check().unwrap();
+    assert_eq!(ontology_next(&mut ws).await["event"]["seq"], 1);
+    db.test_raw().query("DELETE vault_member WHERE vault = $vault AND user = $user")
+        .bind(("vault", eunomia_backend::rid::parse(&vault).unwrap())).bind(("user", bob.id))
+        .await.unwrap().check().unwrap();
+    app.tool("ontology_propose", json!({"vault_id":vault,"kinds":[{"kind":"supplier"}]})).await;
+    assert!(tokio::time::timeout(std::time::Duration::from_millis(1500), ontology_next(&mut ws)).await.is_err(), "revoked member gets no event");
+}

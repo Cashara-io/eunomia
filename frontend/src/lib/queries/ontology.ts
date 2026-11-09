@@ -70,6 +70,7 @@ const useDecision = <V>(
       // entity_types and the kind filters show the review too
       return Promise.all([
         qc.invalidateQueries({ queryKey: entityKeys.all }),
+        qc.invalidateQueries({ queryKey: ["ontology-activity", vaultId] }),
         qc.invalidateQueries({ queryKey: ontologyKeys.readiness(vaultId) }),
       ]);
     },
@@ -85,11 +86,11 @@ export const useSetStrict = (vaultId: string) =>
 export const useDecideKind = (vaultId: string) =>
   useDecision(
     vaultId,
-    ({ kind, decision }: { kind: string; decision: KindDecision }) =>
+    ({ kind, decision, revision, reason }: { kind: string; decision: KindDecision; revision: number; reason?: string }) =>
       call(
         decideVaultOntologyKind({
           path: { vault_id: vaultId },
-          body: { kind, decision },
+          body: { kind, decision, revision, reason },
         }),
       ),
   );
@@ -102,6 +103,8 @@ export const useDecideLink = (vaultId: string) =>
       label: string;
       to_kind: string;
       decision: LinkDecision;
+      revision: number;
+      reason?: string;
     }) =>
       call(decideVaultOntologyLink({ path: { vault_id: vaultId }, body: v })),
   );
@@ -109,7 +112,7 @@ export const useDecideLink = (vaultId: string) =>
 export const useDecideProperty = (vaultId: string) =>
   useDecision(
     vaultId,
-    (v: { kind: string; name: string; decision: PropertyDecision }) =>
+    (v: { kind: string; name: string; decision: PropertyDecision; revision: number; reason?: string }) =>
       call(
         decideVaultOntologyProperty({ path: { vault_id: vaultId }, body: v }),
       ),
@@ -118,7 +121,7 @@ export const useDecideProperty = (vaultId: string) =>
 export const useDecideMetric = (vaultId: string) =>
   useDecision(
     vaultId,
-    (v: { kind: string; name: string; decision: MetricDecision }) =>
+    (v: { kind: string; name: string; decision: MetricDecision; revision: number; reason?: string }) =>
       call(decideVaultOntologyMetric({ path: { vault_id: vaultId }, body: v })),
   );
 

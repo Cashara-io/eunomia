@@ -460,6 +460,7 @@ pub async fn revoke_api_token(db: &ControlDb, owner: &RecordId, token_id: &Recor
 pub struct VerifiedToken {
     pub user: User,
     pub token_id: RecordId,
+    pub name: String,
     pub scopes: Vec<String>,
     pub vault: Option<RecordId>,
     pub expires_at: Option<chrono::DateTime<chrono::Utc>>,
@@ -474,6 +475,7 @@ pub enum TokenCheck {
 pub async fn check_api_token(db: &ControlDb, token: &str) -> AppResult<TokenCheck> {
     #[derive(Deserialize, SurrealValue)]
     struct TokenRow {
+        name: String,
         id: RecordId,
         owner: RecordId,
         #[serde(default = "all_scope_names")]
@@ -512,6 +514,7 @@ pub async fn check_api_token(db: &ControlDb, token: &str) -> AppResult<TokenChec
         Some(r) => TokenCheck::Valid(Box::new(VerifiedToken {
             user: load_user(db, r.id, r.email).await?,
             token_id: row.id,
+            name: row.name,
             scopes: row.scopes.into_iter().filter(|s| scopes::is_known(s)).collect(),
             vault: row.vault,
             expires_at: row.expires_at.map(chrono::DateTime::from),
