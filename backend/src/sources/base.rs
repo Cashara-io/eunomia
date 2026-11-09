@@ -29,6 +29,8 @@ pub struct SyncResult {
     pub progress: SyncProgress,
     /// Permanent record failures must be visible even when the rest of the batch succeeds.
     pub warnings: Vec<String>,
+    /// Cumulative permanent skips reported by the provider fetcher, when tracked.
+    pub provider_skipped: Option<u64>,
 }
 
 /// A partial fetch is ingestible progress, including zero records. It is not a
