@@ -72,7 +72,7 @@ impl Source for LinearSource {
             after = issues.pointer("/pageInfo/endCursor").cloned().unwrap_or(Value::Null);
         }
         let newest = records.iter().map(|r| s(r, "/updatedAt").to_string()).max();
-        Ok(SyncResult { records, cursor: newest.or(cursor) })
+        Ok(SyncResult { records, cursor: newest.or(cursor), ..SyncResult::default() })
     }
 
     fn map(&self, raw: &Value) -> Option<Value> {

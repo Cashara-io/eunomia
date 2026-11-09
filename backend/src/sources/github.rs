@@ -72,7 +72,7 @@ impl Source for GitHubSource {
             (page, headers) = api.get_with_headers(&next, &[]).await?;
         }
         let newest = records.iter().filter_map(|r| r.get("updated_at").and_then(|v| v.as_str())).max().map(String::from);
-        Ok(SyncResult { cursor: newest.or(cursor), records })
+        Ok(SyncResult { cursor: newest.or(cursor), records, ..SyncResult::default() })
     }
 
     fn map(&self, raw: &Value) -> Option<Value> {

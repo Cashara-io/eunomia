@@ -1,6 +1,7 @@
 //! Gmail source: messages from the last 30 days, then everything newer than
-//! the last one seen, via `users.messages.list` (ids only, page-token
-//! paginated) + `users.messages.get?format=full` per message for headers and
+//! a saved mailbox history ID. Bootstrap uses `users.messages.list`, then
+//! `users.history.list` discovers additions regardless of message date.
+//! `users.messages.get?format=full` reads each message for headers and
 //! the plain-text body.
 //!
 //! Google has no personal access tokens, so the user brings their own OAuth
@@ -18,7 +19,7 @@ use std::time::Duration;
 
 use crate::connectors::clients::{bearer, refresh_access_token, retryable, Api};
 use crate::error::{AppError, AppResult};
-use crate::sources::base::{envelope, from_unix, items, s, Conn, Source, SyncResult, MAX_PAGES};
+use crate::sources::base::{envelope, from_unix, items, s, Conn, Source, SyncProgress, SyncResult, MAX_PAGES};
 
 const BASE_URL: &str = "https://gmail.googleapis.com/gmail/v1";
 const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
@@ -64,14 +65,22 @@ fn sent_at(raw: &Value) -> Option<String> {
         .or_else(|| s(raw, "/internalDate").parse::<i64>().ok().and_then(|ms| from_unix(ms / 1000)))
 }
 
-/// Preserve the unread snapshot so a capped or interrupted sync need not list it again.
-/// `seen` removes the deliberate one-second overlap, including a large group of ties.
+/// Numeric 2.2.0 cursors and the earlier JSON snapshot both upgrade here.
+/// History is captured before a relist and consumed before any message reads,
+/// closing the race between listing a mailbox and backdated imports arriving.
 #[derive(Default, Serialize, Deserialize)]
+#[serde(default)]
 struct MessageCursor {
     after: Option<String>,
     pending: Vec<String>,
     seen: Vec<String>,
+    history: Option<String>,
+    failures: std::collections::BTreeMap<String, u8>,
 }
+
+const MAX_TRANSIENT_SYNCS: u8 = 3;
+const MAX_CURSOR_BYTES: usize = 1_048_576;
+const MAX_PENDING: usize = 25_000;
 
 impl MessageCursor {
     fn read(cursor: Option<String>) -> AppResult<Self> {
@@ -81,15 +90,100 @@ impl MessageCursor {
         }
     }
 
+    fn encode(&self) -> AppResult<String> {
+        let encoded = serde_json::to_string(self).map_err(|_| AppError::internal("invalid Gmail cursor"))?;
+        if self.pending.len() > MAX_PENDING || encoded.len() > MAX_CURSOR_BYTES {
+            // Failing leaves the persisted checkpoint intact. Never truncate unread IDs.
+            return Err(AppError::internal("Gmail cursor exceeded its safe size; keeping the previous checkpoint for replay"));
+        }
+        Ok(encoded)
+    }
+
     fn checkpoint(&mut self, records: &[Value]) -> AppResult<()> {
         let dates: Vec<i64> = records.iter().map(|r| s(r, "/internalDate").parse::<i64>()
             .map_err(|_| AppError::internal("Gmail message has no valid internalDate; keeping the previous cursor"))).collect::<AppResult<_>>()?;
         if let Some(newest) = dates.iter().max().map(|ms| ms / 1000) {
-            let after = (newest - 1).to_string();
-            if self.after.as_deref() != Some(&after) { self.seen.clear(); }
-            self.after = Some(after);
-            self.seen.extend(records.iter().zip(dates).filter(|(_, ms)| ms / 1000 == newest).map(|(r, _)| s(r, "/id").to_string()));
+            // Backdated history additions must never move the date checkpoint backwards.
+            let newest = self.after.as_deref().and_then(|a| a.parse::<i64>().ok()).map_or(newest, |old| newest.max(old.saturating_add(1)));
+            self.after = Some((newest - 1).to_string());
         }
+        // History replaces timestamp-boundary deduplication. Removed IDs cannot accumulate.
+        self.seen.clear();
+        Ok(())
+    }
+
+    async fn relist(&mut self, api: &Api, full_mailbox: bool) -> AppResult<()> {
+        let history = api.get("/users/me/profile", &[]).await?;
+        let history = s(&history, "/historyId");
+        if history.is_empty() { return Err(AppError::internal("Gmail profile has no historyId")); }
+        let q = if full_mailbox { String::new() } else {
+            self.after.as_deref().map(|c| format!("after:{c}")).unwrap_or_else(|| "newer_than:30d".to_string())
+        };
+        let mut page_token = String::new();
+        let mut listed = Vec::new();
+        for _ in 0..MAX_PAGES {
+            let mut query = vec![("maxResults", "500".to_string())];
+            if !q.is_empty() { query.push(("q", q.clone())); }
+            if !page_token.is_empty() { query.push(("pageToken", page_token.clone())); }
+            let page = api.get("/users/me/messages", &query).await?;
+            listed.extend(items(&page, "/messages").iter().map(|m| s(m, "/id").to_string()));
+            page_token = s(&page, "/nextPageToken").to_string();
+            if page_token.is_empty() { break; }
+        }
+        if !page_token.is_empty() {
+            return Err(AppError::internal("Gmail listing exceeded 25,000 messages; keeping the cursor so older mail is not skipped"));
+        }
+        let live: HashSet<_> = listed.iter().cloned().collect();
+        self.seen.retain(|id| live.contains(id));
+        let mut known: HashSet<_> = self.pending.iter().chain(&self.seen).cloned().collect();
+        // Keep existing pending order; newly discovered messages go behind it.
+        listed.retain(|id| !id.is_empty() && known.insert(id.clone()));
+        listed.append(&mut self.pending);
+        self.pending = listed;
+        self.history = Some(history.to_string());
+        Ok(())
+    }
+
+    async fn additions(&mut self, api: &Api) -> AppResult<()> {
+        let start = self.history.clone().ok_or_else(|| AppError::internal("missing Gmail history checkpoint"))?;
+        let mut page_token = String::new();
+        let mut added = Vec::new();
+        let mut removed = HashSet::new();
+        let mut next_history = String::new();
+        for _ in 0..MAX_PAGES {
+            let mut query = vec![("startHistoryId", start.clone()), ("maxResults", "500".to_string())];
+            if !page_token.is_empty() { query.push(("pageToken", page_token.clone())); }
+            let page = api.get("/users/me/history", &query).await?;
+            for change in items(&page, "/history") {
+                for entry in items(&change, "/messagesDeleted") {
+                    let id = s(&entry, "/message/id").to_string();
+                    removed.insert(id.clone());
+                    added.retain(|a| a != &id);
+                }
+                for entry in items(&change, "/messagesAdded") {
+                    let id = s(&entry, "/message/id").to_string();
+                    removed.remove(&id);
+                    added.push(id);
+                }
+            }
+            next_history = s(&page, "/historyId").to_string();
+            page_token = s(&page, "/nextPageToken").to_string();
+            if page_token.is_empty() { break; }
+        }
+        if !page_token.is_empty() || next_history.is_empty() {
+            return Err(AppError::internal("Gmail history listing incomplete; keeping the previous checkpoint"));
+        }
+        self.pending.retain(|id| !removed.contains(id));
+        self.failures.retain(|id, _| !removed.contains(id));
+        for id in &removed { tracing::info!(message_id = %id, "Gmail message removed"); }
+        let mut known: HashSet<_> = self.pending.iter().chain(&self.seen).cloned().collect();
+        added.retain(|id| !id.is_empty() && known.insert(id.clone()));
+        // history.list is oldest first, whereas pending is popped from the end.
+        added.reverse();
+        added.append(&mut self.pending);
+        self.pending = added;
+        self.history = Some(next_history);
+        self.seen.clear();
         Ok(())
     }
 }
@@ -116,51 +210,75 @@ impl Source for GmailSource {
 
     async fn fetch(&self, conn: &Conn, cursor: Option<String>) -> AppResult<SyncResult> {
         let api = google_api(conn, BASE_URL).await?;
-        // 60 units for format=full, 6,000 units/minute for newer Google projects.
-        // One request/second leaves headroom for listing and other clients of this account.
         let spacing = if cfg!(test) { Duration::from_millis(1) } else { Duration::from_secs(1) };
         let reader = api.clone().with_pacing(spacing);
         let mut state = MessageCursor::read(cursor)?;
-        if state.pending.is_empty() {
-            let q = state.after.as_deref().map(|c| format!("after:{c}")).unwrap_or_else(|| "newer_than:30d".to_string());
-            let seen: HashSet<_> = state.seen.iter().cloned().collect();
-            let mut page_token = String::new();
-            let mut listed = HashSet::new();
-            for _ in 0..MAX_PAGES {
-                let mut query = vec![("q", q.clone()), ("maxResults", "500".to_string())];
-                if !page_token.is_empty() { query.push(("pageToken", page_token.clone())); }
-                // A partial newest-first listing cannot establish the oldest prefix. Do not advance it.
-                let page = api.get("/users/me/messages", &query).await?;
-                for message in items(&page, "/messages") {
-                    let id = s(&message, "/id").to_string();
-                    if !seen.contains(&id) && listed.insert(id.clone()) { state.pending.push(id); }
+        let discovery = async {
+            if state.history.is_none() { state.relist(&api, false).await?; }
+            match state.additions(&api).await {
+                Err(error) if error.reason == Some("connector_removed") => {
+                    // Expired history can hide imports older than the date checkpoint.
+                    tracing::warn!("Gmail history expired; relisting the mailbox for replay");
+                    state.relist(&api, true).await?;
+                    state.additions(&api).await
                 }
-                page_token = s(&page, "/nextPageToken").to_string();
-                if page_token.is_empty() { break; }
+                result => result,
             }
-            if !page_token.is_empty() {
-                return Err(AppError::internal("Gmail listing exceeded 25,000 messages; keeping the cursor so older mail is not skipped"));
+        }.await;
+        if let Err(error) = discovery {
+            if retryable(&error) {
+                return Ok(SyncResult { cursor: Some(state.encode()?), progress: SyncProgress::interrupted(&error), ..SyncResult::default() });
             }
+            return Err(error);
         }
-
-        // Gmail lists newest first. Pop from the end and stop at the first failed read.
+        // Check the bound before spending quota or importing any records.
+        state.encode()?;
         let mut records = Vec::new();
+        let mut warnings = Vec::new();
+        let mut progress = SyncProgress::Complete;
         for _ in 0..MAX_MESSAGES_PER_SYNC {
-            let Some(id) = state.pending.last() else { break };
+            let Some(id) = state.pending.last().cloned() else { break };
             match reader.get(&format!("/users/me/messages/{id}"), &[("format", "full".to_string())]).await {
-                Ok(record) => { records.push(record); state.pending.pop(); }
-                Err(error) if retryable(&error) && !records.is_empty() => {
-                    let cause = if error.reason == Some("connector_rate_limited") {
-                        "Gmail is rate limiting this account"
-                    } else { "Gmail is temporarily unavailable" };
-                    tracing::warn!(fetched = records.len(), "{cause}; keeping fetched messages for import, will continue on the next sync");
+                Ok(record) => {
+                    records.push(record);
+                    state.pending.pop();
+                    state.failures.remove(&id);
+                }
+                Err(error) if error.reason == Some("connector_removed") => {
+                    tracing::info!(message_id = %id, "Gmail message removed");
+                    state.pending.pop();
+                    state.failures.remove(&id);
+                    state.seen.retain(|seen| seen != &id);
+                }
+                Err(error) if retryable(&error) => {
+                    if error.reason != Some("connector_rate_limited") {
+                        let failures = state.failures.entry(id.clone()).or_default();
+                        *failures = failures.saturating_add(1);
+                        if *failures >= MAX_TRANSIENT_SYNCS {
+                            let warning = format!("Gmail message {id} dropped after {MAX_TRANSIENT_SYNCS} syncs with transient errors; later mail will continue");
+                            tracing::warn!("{warning}");
+                            warnings.push(warning);
+                            state.pending.pop();
+                            state.failures.remove(&id);
+                            continue;
+                        }
+                    }
+                    progress = SyncProgress::interrupted(&error);
                     break;
                 }
-                Err(error) => return Err(error),
+                Err(error) if error.reason == Some("connector_auth") => return Err(error),
+                Err(error) => {
+                    let warning = format!("Gmail message {id} dropped after a permanent error: {}", error.message);
+                    tracing::warn!("{warning}");
+                    warnings.push(warning);
+                    state.pending.pop();
+                    state.failures.remove(&id);
+                }
             }
         }
         state.checkpoint(&records)?;
-        Ok(SyncResult { records, cursor: Some(serde_json::to_string(&state).unwrap()) })
+        if !state.pending.is_empty() && matches!(progress, SyncProgress::Complete) { progress = SyncProgress::remaining(); }
+        Ok(SyncResult { records, cursor: Some(state.encode()?), progress, warnings })
     }
 
     fn map(&self, raw: &Value) -> Option<Value> {
@@ -189,8 +307,157 @@ impl Source for GmailSource {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sources::mock::{assert_fetch_fails, envelopes, route, serve};
+    use crate::sources::mock::{assert_fetch_fails, envelopes, route, serve as serve_mock};
     use std::collections::HashSet;
+
+    fn with_history(mut routes: Vec<crate::sources::mock::Route>) -> Vec<crate::sources::mock::Route> {
+        routes.extend([
+            route("GET", "/users/me/profile", json!({"historyId": "100"})),
+            route("GET", "/users/me/history", json!({"historyId": "100"})),
+        ]);
+        routes
+    }
+
+    async fn serve(routes: Vec<crate::sources::mock::Route>) -> crate::sources::mock::Mock {
+        serve_mock(with_history(routes)).await
+    }
+
+    // Review regressions also provide history routes for the incremental implementation.
+    fn token_and_history(history: Value) -> Vec<crate::sources::mock::Route> {
+        vec![
+            route("POST", "/oauth/token", json!({"access_token": "t"})),
+            route("GET", "/users/me/profile", json!({"historyId": "100"})),
+            route("GET", "/users/me/history", history),
+        ]
+    }
+
+    #[tokio::test]
+    async fn review_deleted_pending_id_does_not_block_later_mail() {
+        for code in [404, 410] {
+            let mut routes = token_and_history(json!({"historyId": "101"}));
+            routes.extend([
+                route("GET", "/users/me/messages", json!({"messages": [{"id": "later"}]})),
+                route("GET", "/users/me/messages/gone", json!({})).status(code),
+                route("GET", "/users/me/messages/later", message("later", "1700000200000", "Later")),
+            ]);
+            let mock = serve(routes).await;
+            let old = json!({"after": "1700000000", "pending": ["later", "gone"], "seen": []}).to_string();
+            let res = GmailSource.fetch(&mock.conn(json!({"client_id": "c", "client_secret": "s", "refresh_token": "r"})), Some(old)).await.unwrap();
+            assert_eq!(res.records.iter().map(|r| s(r, "/id")).collect::<Vec<_>>(), ["later"]);
+            assert!(MessageCursor::read(res.cursor).unwrap().pending.is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn review_backdated_import_during_recovery_is_read_exactly_once() {
+        let mut routes = token_and_history(json!({"historyId": "100"}));
+        routes.extend([
+            route("GET", "/users/me/messages", json!({"messages": [{"id": "newest"}, {"id": "oldest"}]})),
+            route("GET", "/users/me/messages/oldest", message("oldest", "1700000100000", "Oldest")),
+            route("GET", "/users/me/messages/newest", json!({})).status(429).header("retry-after", "60"),
+        ]);
+        let mock = serve(routes).await;
+        let conn = mock.conn(json!({"client_id": "c", "client_secret": "s", "refresh_token": "r"}));
+        let first = GmailSource.fetch(&conn, Some("1700000000".into())).await.unwrap();
+        let mut recovered = token_and_history(json!({"historyId": "101", "history": [{"messagesAdded": [{"message": {"id": "imported"}}]}]}));
+        recovered.extend([
+            route("GET", "/users/me/messages", json!({"messages": [{"id": "newest"}, {"id": "imported"}, {"id": "oldest"}]})),
+            route("GET", "/users/me/messages/imported", message("imported", "1700000150000", "Backdated")),
+            route("GET", "/users/me/messages/newest", message("newest", "1700000300000", "Newest")),
+        ]);
+        mock.set_routes(with_history(recovered));
+        let second = GmailSource.fetch(&conn, first.cursor).await.unwrap();
+        let mut quiet = token_and_history(json!({"historyId": "101"}));
+        quiet.push(route("GET", "/users/me/messages", json!({})));
+        mock.set_routes(quiet);
+        let third = GmailSource.fetch(&conn, second.cursor).await.unwrap();
+        let ids: Vec<_> = first.records.iter().chain(&second.records).chain(&third.records).map(|r| s(r, "/id")).collect();
+        assert_eq!(ids.iter().filter(|id| **id == "imported").count(), 1, "{ids:?}");
+        assert_eq!(ids.len(), 3, "each arrival is fetched once");
+    }
+
+    #[tokio::test]
+    async fn review_cursor_stays_bounded_through_boundary_remove_readd_cycles() {
+        let mock = serve(vec![]).await;
+        let conn = mock.conn(json!({"client_id": "c", "client_secret": "s", "refresh_token": "r"}));
+        let mut cursor = Some("1700000000".to_string());
+        for i in 0..80 {
+            let id = format!("message-{i:080}");
+            let mut routes = token_and_history(json!({"historyId": format!("{}", 101 + i), "history": [{"messagesAdded": [{"message": {"id": id}}]}]}));
+            routes.extend([
+                route("GET", "/users/me/messages", json!({"messages": [{"id": id}]})),
+                route("GET", &format!("/users/me/messages/{id}"), message(&id, "1700000100000", "Tie")),
+            ]);
+            mock.set_routes(with_history(routes));
+            let result = GmailSource.fetch(&conn, cursor).await.unwrap();
+            assert_eq!(result.records.len(), 1);
+            cursor = result.cursor;
+            assert!(cursor.as_ref().unwrap().len() < 2048, "removed boundary IDs accumulated at cycle {i}");
+        }
+    }
+
+    #[tokio::test]
+    async fn review_quota_pause_is_explicit_even_with_zero_progress() {
+        let mut routes = token_and_history(json!({"historyId": "100"}));
+        routes.extend([
+            route("GET", "/users/me/messages", json!({"messages": [{"id": "limited"}]})),
+            route("GET", "/users/me/messages/limited", json!({})).status(429).header("retry-after", "120"),
+        ]);
+        let mock = serve(routes).await;
+        let res = GmailSource.fetch(&mock.conn(json!({"client_id": "c", "client_secret": "s", "refresh_token": "r"})), None).await.unwrap();
+        assert!(format!("{res:?}").contains("RateLimited"), "quota interruption must be explicit: {res:?}");
+    }
+
+    #[tokio::test]
+    async fn transient_id_is_dropped_after_three_syncs_with_visible_warning() {
+        let mut routes = token_and_history(json!({"historyId": "100"}));
+        routes.extend([
+            route("GET", "/users/me/messages", json!({"messages": [{"id": "later"}, {"id": "broken"}]})),
+            route("GET", "/users/me/messages/broken", json!({})).status(503).header("retry-after", "60"),
+            route("GET", "/users/me/messages/later", message("later", "1700000200000", "Later")),
+        ]);
+        let mock = serve(routes).await;
+        let conn = mock.conn(json!({"client_id": "c", "client_secret": "s", "refresh_token": "r"}));
+        let mut cursor = None;
+        for i in 0..3 {
+            let result = GmailSource.fetch(&conn, cursor).await.unwrap();
+            cursor = result.cursor;
+            if i < 2 {
+                assert!(result.records.is_empty());
+                assert!(matches!(result.progress, SyncProgress::Partial { .. }));
+            } else {
+                assert_eq!(result.records[0]["id"], "later");
+                assert!(result.warnings[0].contains("dropped after 3 syncs"));
+            }
+        }
+        assert!(MessageCursor::read(cursor).unwrap().pending.is_empty());
+    }
+
+    #[tokio::test]
+    async fn expired_history_relists_without_a_date_filter_and_catches_older_imports() {
+        let mut routes = token_and_history(json!({"historyId": "201"}));
+        routes.insert(0, route("GET", "/users/me/history", json!({})).query_has("startHistoryId=expired").status(404));
+        routes.extend([
+            route("GET", "/users/me/messages", json!({"messages": [{"id": "ancient"}]})),
+            route("GET", "/users/me/messages/ancient", message("ancient", "1600000000000", "Imported")),
+        ]);
+        let mock = serve(routes).await;
+        let old = json!({"after": "1700000000", "history": "expired"}).to_string();
+        let result = GmailSource.fetch(&mock.conn(json!({"client_id": "c", "client_secret": "s", "refresh_token": "r"})), Some(old)).await.unwrap();
+        assert_eq!(result.records[0]["id"], "ancient");
+        let reqs = mock.requests();
+        let list = reqs.iter().find(|r| r.path == "/users/me/messages").unwrap();
+        assert!(!list.query.contains("q="), "expired history must include backdated imports: {}", list.query);
+        assert_eq!(MessageCursor::read(result.cursor).unwrap().history.as_deref(), Some("201"));
+    }
+
+    #[test]
+    fn cursor_hard_cap_refuses_to_truncate_unread_work() {
+        let cursor = MessageCursor { pending: vec!["x".repeat(MAX_CURSOR_BYTES)], ..MessageCursor::default() };
+        assert!(cursor.encode().unwrap_err().message.contains("keeping the previous checkpoint"));
+        let cursor = MessageCursor { pending: vec!["id".into(); MAX_PENDING + 1], ..MessageCursor::default() };
+        assert!(cursor.encode().is_err());
+    }
 
     fn b64(s: &str) -> String {
         base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(s)
@@ -307,7 +574,7 @@ mod tests {
         recovered[1] = route("GET", "/users/me/messages", json!({"messages": [{"id": "m3"}, {"id": "m2"}, {"id": "m1"}]}))
             .query_has("q=after:1700000099");
         recovered[3] = route("GET", "/users/me/messages/m2", message("m2", "1700000200000", "Second"));
-        mock.set_routes(recovered);
+        mock.set_routes(with_history(recovered));
         let second = GmailSource.fetch(&conn, first.cursor).await.unwrap();
         let seen: HashSet<_> = first.records.iter().chain(&second.records).map(|r| s(r, "/id")).collect();
         assert_eq!(seen, HashSet::from(["m1", "m2", "m3"]));
@@ -355,8 +622,9 @@ mod tests {
         assert_eq!(mock.requests().iter().filter(|r| r.path == "/users/me/messages").count(), 1);
         assert!(mock.requests().iter().any(|r| r.query.contains("maxResults=500")));
         routes[1] = route("GET", "/users/me/messages", json!({"messages": [{"id": "new"}, {"id": "m249"}]}));
+        routes.push(route("GET", "/users/me/history", json!({"historyId": "101", "history": [{"messagesAdded": [{"message": {"id": "new"}}]}]})));
         routes.push(route("GET", "/users/me/messages/new", message("new", "1700000200000", "New")));
-        mock.set_routes(routes);
+        mock.set_routes(with_history(routes));
         let third = GmailSource.fetch(&conn, second.cursor).await.unwrap();
         assert_eq!(third.records.iter().map(|r| s(r, "/id")).collect::<Vec<_>>(), ["new"]);
     }
@@ -369,7 +637,7 @@ mod tests {
         ]).await;
         let error = GmailSource.fetch(&mock.conn(json!({"client_id": "c", "client_secret": "s", "refresh_token": "r"})), None).await.unwrap_err();
         assert!(error.message.contains("older mail is not skipped"));
-        assert_eq!(mock.requests().len(), MAX_PAGES + 1);
+        assert_eq!(mock.requests().len(), MAX_PAGES + 2);
         assert!(!mock.requests().iter().any(|r| r.path.ends_with("/newest")));
     }
 
@@ -396,10 +664,8 @@ mod tests {
     #[tokio::test]
     async fn fetch_errors_are_visible() {
         let creds = json!({"client_id": "cid", "client_secret": "s", "refresh_token": "rt"});
-        assert_fetch_fails(&GmailSource, 404, "/users/me/messages", creds.clone(), "HTTP 404").await;
-        assert_fetch_fails(&GmailSource, 401, "/users/me/messages", creds.clone(), "HTTP 401").await;
-        assert_fetch_fails(&GmailSource, 429, "/users/me/messages", creds.clone(), "HTTP 429").await;
-        assert_fetch_fails(&GmailSource, 500, "/users/me/messages", creds, "HTTP 500").await;
+        assert_fetch_fails(&GmailSource, 404, "/users/me/profile", creds.clone(), "HTTP 404").await;
+        assert_fetch_fails(&GmailSource, 401, "/users/me/profile", creds.clone(), "HTTP 401").await;
         assert_fetch_fails(&GmailSource, 200, "/x", json!({"client_id": "cid"}), "missing client_secret").await;
     }
 }

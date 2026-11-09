@@ -88,7 +88,7 @@ async fn connect_github(org: &OrgState, owner: &RecordId, base: &str) {
 
 async fn status(org: &OrgState, owner: &RecordId, key: &str) -> Value {
     let id = RecordId::from_table_key("sync_status", format!("{}:{key}", owner_key_str(owner)));
-    let mut res = org.db.test_raw().query("SELECT last_error, cursor, consecutive_failures FROM ONLY $id").bind(("id", id)).await.unwrap();
+    let mut res = org.db.test_raw().query("SELECT last_error, cursor, consecutive_failures, last_ok, last_report FROM ONLY $id").bind(("id", id)).await.unwrap();
     res.take::<Option<Value>>(0).unwrap().unwrap_or(Value::Null)
 }
 
@@ -141,19 +141,21 @@ async fn a_due_sync_lands_searchable_records_then_a_401_is_visible_and_keeps_the
     assert_eq!(st["cursor"], "2024-02-01T00:00:00Z", "a failed sync keeps the cursor");
 }
 
-/// Partial provider reads go through the ordinary successful checkpoint, clearing failure backoff.
+/// Partial reads persist progress and a retry time without marking the source healthy.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn gmail_partial_progress_is_persisted_resets_backoff_and_drains_without_duplicates() {
     let (app, org) = app_with(None).await;
     let owner = app.user.id.clone();
     let message = |id: &str, date: &str| json!({"id": id, "threadId": id, "internalDate": date, "snippet": id});
     let token = || route("POST", "/oauth/token", json!({"access_token": "t"}));
-    let mock = serve(vec![token(), route("GET", "/users/me/messages", json!({})).status(401)]).await;
+    let mock = serve(vec![token(), route("GET", "/users/me/profile", json!({"historyId": "100"})), route("GET", "/users/me/messages", json!({})).status(401)]).await;
     connect(&org, &owner, "gmail", &mock.base, json!({}), json!({"client_id": "c", "client_secret": "s", "refresh_token": "r"})).await;
     assert!(sync_source(&org, &owner, "gmail", None).await.get("error").is_some());
     assert_eq!(status(&org, &owner, "gmail").await["consecutive_failures"], 1);
     mock.set_routes(vec![
         token(),
+        route("GET", "/users/me/profile", json!({"historyId": "100"})),
+        route("GET", "/users/me/history", json!({"historyId": "100"})),
         route("GET", "/users/me/messages", json!({"messages": [{"id": "m3"}, {"id": "m2"}, {"id": "m1"}]})),
         route("GET", "/users/me/messages/m1", message("m1", "1700000100000")),
         route("GET", "/users/me/messages/m2", json!({"error": {"errors": [{"reason": "userRateLimitExceeded"}]}}))
@@ -162,8 +164,18 @@ async fn gmail_partial_progress_is_persisted_resets_backoff_and_drains_without_d
     let first = sync_source(&org, &owner, "gmail", None).await;
     assert_eq!(first["written"], 1, "{first}");
     let st = status(&org, &owner, "gmail").await;
-    assert_eq!(st["last_error"], "");
+    assert_eq!(first["status"], "partial", "quota pause is visible: {first}");
+    assert!(first["message"].as_str().unwrap().contains("rate limited"));
+    assert_eq!(st["last_ok"], Value::Null, "partial must not mark healthy");
     assert_eq!(st["consecutive_failures"], 0);
+    assert_eq!(st["last_report"]["status"], "partial");
+    assert_eq!(st["last_report"]["retry_after_secs"], 60);
+    assert!(due_syncs(&org).await.unwrap().is_empty(), "honour retry delay");
+    org.db.test_raw().query("UPDATE sync_status SET last_report.retry_at = '2000-01-01T00:00:00Z' WHERE owner = $owner")
+        .bind(("owner", owner.clone())).await.unwrap().check().unwrap();
+    let due = due_syncs(&org).await.unwrap();
+    assert_eq!(due.len(), 1, "continuation runs inside the normal interval");
+    assert_eq!(due[0].period, 60, "continuation gets a fresh scheduling window");
     let cursor: Value = serde_json::from_str(st["cursor"].as_str().unwrap()).unwrap();
     assert_eq!(cursor["after"], "1700000099");
     assert_eq!(cursor["pending"], json!(["m3", "m2"]));
@@ -171,6 +183,8 @@ async fn gmail_partial_progress_is_persisted_resets_backoff_and_drains_without_d
     assert!(eunomia_backend::sources::scheduler::is_due(Some(chrono::Utc::now() - chrono::Duration::seconds(301)), 0, 300, chrono::Utc::now()));
     mock.set_routes(vec![
         token(),
+        route("GET", "/users/me/profile", json!({"historyId": "100"})),
+        route("GET", "/users/me/history", json!({"historyId": "100"})),
         route("GET", "/users/me/messages/m2", message("m2", "1700000200000")),
         route("GET", "/users/me/messages/m3", message("m3", "1700000300000")),
     ]);
@@ -179,6 +193,27 @@ async fn gmail_partial_progress_is_persisted_resets_backoff_and_drains_without_d
     assert_eq!(count(&org, "SELECT count() AS count FROM cache_record WHERE owner = $owner AND source = 'gmail'", &owner).await, 3);
     assert_eq!(mock.requests().iter().filter(|r| r.path == "/users/me/messages/m1").count(), 1);
     assert_eq!(status(&org, &owner, "gmail").await["consecutive_failures"], 0);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn review_calendar_partial_status_is_persisted_without_marking_healthy() {
+    let (app, org) = app_with(None).await;
+    let owner = app.user.id.clone();
+    let mock = serve(vec![
+        route("POST", "/oauth/token", json!({"access_token": "t"})),
+        route("GET", "/calendars/primary/events", json!({})).query_has("pageToken=p2").status(429).header("retry-after", "120"),
+        route("GET", "/calendars/primary/events", json!({"items": [{"id": "e1", "summary": "Event"}], "nextPageToken": "p2"})),
+    ]).await;
+    connect(&org, &owner, "google_calendar", &mock.base, json!({}), json!({"client_id": "c", "client_secret": "s", "refresh_token": "r"})).await;
+    let result = sync_source(&org, &owner, "google_calendar", None).await;
+    assert_eq!(result["status"], "partial", "{result}");
+    assert_eq!(result["written"], 1);
+    let st = status(&org, &owner, "google_calendar").await;
+    assert_eq!(st["last_ok"], Value::Null);
+    assert_eq!(st["consecutive_failures"], 0);
+    assert_eq!(st["last_report"]["retry_after_secs"], 120);
+    assert!(st["last_report"]["message"].as_str().unwrap().contains("1 imported, more remaining"));
+    assert!(due_syncs(&org).await.unwrap().is_empty(), "Calendar honours Retry-After");
 }
 
 /// Disabling stops syncs without a restart; two overlapping runs make one provider sync; a sync job
@@ -782,6 +817,8 @@ fn per_connector() -> Vec<(&'static str, &'static str, Value, Value, Vec<Route>)
             "gmail", "gmail", json!({}), google.clone(),
             vec![
                 oauth(),
+                route("GET", "/users/me/profile", json!({"historyId": "100"})),
+                route("GET", "/users/me/history", json!({"historyId": "100"})),
                 route("GET", "/users/me/messages", json!({"messages": [{"id": "m1", "threadId": "t1"}]})),
                 route("GET", "/users/me/messages/m1", json!({"id": "m1", "threadId": "t1", "labelIds": ["INBOX"], "snippet": "s", "internalDate": "1700000100000",
                     "payload": {"mimeType": "text/plain", "headers": [{"name": "Subject", "value": "Lunch?"}, {"name": "From", "value": "Ada <a@e.com>"}],

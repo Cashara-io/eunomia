@@ -80,6 +80,9 @@ fn rate_limited(status: StatusCode, body: &str) -> bool {
     })
 }
 
+/// Shared fetch policy: only quota and transient failures may keep work pending.
+/// `connector_removed` is HTTP 404/410; `connector_auth` is non-quota 401/403.
+/// `AppError::retry_after_secs` carries the final provider delay to the scheduler.
 pub(crate) fn retryable(error: &AppError) -> bool {
     matches!(error.reason, Some("connector_rate_limited" | "connector_transient"))
 }
@@ -95,6 +98,8 @@ fn provider_error(url: &str, status: StatusCode, body: &str) -> AppError {
     let snippet: String = reason(body).unwrap_or_else(|| body.chars().take(200).collect());
     let error = AppError::new(StatusCode::BAD_GATEWAY, format!("{} returned HTTP {}{hint}: {}", host(url), status.as_u16(), snippet.trim()));
     if limited { error.with_reason("connector_rate_limited") }
+    else if matches!(status.as_u16(), 401 | 403) { error.with_reason("connector_auth") }
+    else if matches!(status.as_u16(), 404 | 410) { error.with_reason("connector_removed") }
     else if status.is_server_error() { error.with_reason("connector_transient") }
     else { error }
 }
@@ -294,6 +299,7 @@ impl Api {
                     continue;
                 }
                 let mut error = error;
+                error.retry_after_secs = wait.map(|delay| delay.as_secs().saturating_add(u64::from(delay.subsec_nanos() > 0)));
                 if let Some(secrets) = &self.secrets { error.message = secrets.scrub(&error.message); }
                 return Err(error);
             }

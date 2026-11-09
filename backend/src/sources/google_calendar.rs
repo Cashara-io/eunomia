@@ -15,7 +15,7 @@ use serde_json::{json, Value};
 use crate::connectors::clients::retryable;
 
 use crate::error::AppResult;
-use crate::sources::base::{envelope, items, rfc3339, s, Conn, Source, SyncResult, MAX_PAGES};
+use crate::sources::base::{envelope, items, rfc3339, s, Conn, Source, SyncProgress, SyncResult, MAX_PAGES};
 use crate::sources::gmail::google_api;
 
 const BASE_URL: &str = "https://www.googleapis.com/calendar/v3";
@@ -87,20 +87,20 @@ impl Source for GoogleCalendarSource {
             }
             let page = match api.get("/calendars/primary/events", &query).await {
                 Ok(page) => page,
-                Err(error) if retryable(&error) && !records.is_empty() => {
+                Err(error) if retryable(&error) => {
                     tracing::warn!(fetched = records.len(), rate_limited = error.reason == Some("connector_rate_limited"),
                         "Google Calendar paused fetching; keeping fetched events for import, will continue on the next sync");
-                    return Ok(SyncResult { records, cursor: Some(serde_json::to_string(&resume).unwrap()) });
+                    return Ok(SyncResult { records, cursor: Some(serde_json::to_string(&resume).unwrap()), progress: SyncProgress::interrupted(&error), ..SyncResult::default() });
                 }
                 Err(error) => return Err(error),
             };
             records.extend(items(&page, "/items"));
             resume.page_token = s(&page, "/nextPageToken").to_string();
             if resume.page_token.is_empty() {
-                return Ok(SyncResult { records, cursor: Some(resume.started) });
+                return Ok(SyncResult { records, cursor: Some(resume.started), ..SyncResult::default() });
             }
         }
-        Ok(SyncResult { records, cursor: Some(serde_json::to_string(&resume).unwrap()) })
+        Ok(SyncResult { records, cursor: Some(serde_json::to_string(&resume).unwrap()), progress: SyncProgress::remaining(), ..SyncResult::default() })
     }
 
     fn map(&self, raw: &Value) -> Option<Value> {
@@ -139,6 +139,18 @@ impl Source for GoogleCalendarSource {
 mod tests {
     use super::*;
     use crate::sources::mock::{assert_fetch_fails, envelopes, route, serve};
+
+    #[tokio::test]
+    async fn review_calendar_quota_pause_is_explicit() {
+        let mock = serve(vec![
+            route("POST", "/oauth/token", json!({"access_token": "t"})),
+            route("GET", "/calendars/primary/events", json!({})).query_has("pageToken=p2").status(429).header("retry-after", "120"),
+            route("GET", "/calendars/primary/events", json!({"items": [{"id": "e1"}], "nextPageToken": "p2"})),
+        ]).await;
+        let res = GoogleCalendarSource.fetch(&mock.conn(json!({"client_id": "c", "client_secret": "s", "refresh_token": "r"})), None).await.unwrap();
+        assert_eq!(res.records.len(), 1);
+        assert!(format!("{res:?}").contains("RateLimited"), "quota interruption must be explicit: {res:?}");
+    }
 
     #[tokio::test]
     async fn quota_failure_saves_pages_and_resumes_the_exact_query() {
@@ -216,7 +228,5 @@ mod tests {
     async fn fetch_errors_are_visible() {
         let creds = json!({"client_id": "cid", "client_secret": "s", "refresh_token": "rt"});
         assert_fetch_fails(&GoogleCalendarSource, 403, "/calendars/primary/events", creds.clone(), "HTTP 403").await;
-        assert_fetch_fails(&GoogleCalendarSource, 429, "/calendars/primary/events", creds.clone(), "HTTP 429").await;
-        assert_fetch_fails(&GoogleCalendarSource, 500, "/calendars/primary/events", creds, "HTTP 500").await;
     }
 }
