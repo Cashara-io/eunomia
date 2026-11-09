@@ -157,7 +157,7 @@ fn consumer_oauth_apps_refresh_ingest_partial_and_disconnect() {
             let state = app.state.org(&app.user.org).await.unwrap();
             sys(Box::pin(async {
                 let first = scheduler::sync_source(&state, &app.user.id, "composio", None).await;
-                assert_eq!(first["status"], "partial", "{first}");
+                assert_eq!(first["status"], "partial", "bad file aborted the batch: {first}");
                 assert!(
                     first["message"]
                         .as_str()
@@ -199,7 +199,13 @@ fn consumer_oauth_apps_refresh_ingest_partial_and_disconnect() {
                 assert_eq!(docs.results.len(), 8);
                 assert_eq!(docs.results.iter().filter(|d| d.media_type == "application/pdf").count(), 4);
                 assert_eq!(second["failed"], 0, "{second}");
-                assert!(second["warnings"].as_array().unwrap().iter().any(|w| w == "4 Drive files not imported (parse failure)."), "{second}");
+                let warnings = second["warnings"].as_array().unwrap();
+                for reason in ["not valid JSON", "no text could be extracted", "document is empty"] {
+                    assert_eq!(warnings.iter().filter(|w| w.as_str().unwrap().contains(reason)).count(), 2,
+                        "bad file did not produce a visible skip reason: {reason}: {second}");
+                }
+                assert_eq!(warnings.len(), 10, "bad files blocked the batch: {second}");
+                assert_eq!(second["provider_skipped"], 10, "bad files were not counted: {second}");
                 let conn = registry::conn_for(&state.settings.encryption_key, Some(&storage::load(&state.db, &app.user.id).await.unwrap())).unwrap();
                 use eunomia_backend::sources::base::Source;
                 let fetched = eunomia_backend::sources::composio::ComposioSource.fetch(&conn, None).await.unwrap();
@@ -220,6 +226,40 @@ fn consumer_oauth_apps_refresh_ingest_partial_and_disconnect() {
                 let row = storage::load(&state.db, &other.id).await.unwrap();
                 assert!(row.credentials_encrypted.is_empty());
                 assert!(account::access_token(&state, &other.id).await.is_err());
+                // A provider sleeps while status is in flight. Disconnect must complete first,
+                // including when remote revocation is also slow. Stale status must be rejected.
+                let row = storage::replace(&state.db, &state.settings.encryption_key, &other.id, &row,
+                    &json!({"access_token":"composio-canary-access","expires_at":chrono::Utc::now().timestamp()+3600})).await.unwrap().unwrap();
+                let client = reqwest::Client::new();
+                client.post(format!("{origin}/control")).json(&json!({"status_delay":5,"status_started":false,"revoke_delay":5})).send().await.unwrap();
+                let pending_status = http(&app.router, "GET", "/api/connectors/composio/status", None, None, Some(&cookie));
+                // Use the signed-in owner for the route race. Keep the disposable account for sync below.
+                let original = storage::load(&state.db, &app.user.id).await.unwrap();
+                let disconnect = async {
+                    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+                        loop {
+                            let stats: Value = client.get(format!("{origin}/stats")).send().await.unwrap().json().await.unwrap();
+                            if stats["status_started"] == true { break; }
+                            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                        }
+                    }).await.expect("status never reached the sleeping provider");
+                    let ((status, body), _) = tokio::time::timeout(std::time::Duration::from_secs(3),
+                        call(&app, &cookie, "/api/connectors/composio/disconnect", json!({})))
+                        .await.expect("disconnect waited for a slow status provider");
+                    assert!(status.is_success(), "disconnect did not complete promptly: {body}");
+                    assert!(body["message"].as_str().unwrap().starts_with("Disconnected."));
+                    client.post(format!("{origin}/control")).json(&json!({"status_delay":0,"revoke_delay":0})).send().await.unwrap();
+                    storage::load(&state.db, &app.user.id).await.unwrap()
+                };
+                let (((status, body), _), disconnected) = tokio::join!(pending_status, disconnect);
+                assert!(!status.is_success(), "stale status survived disconnect: {body}");
+                let after = storage::load(&state.db, &app.user.id).await.unwrap();
+                assert!(after.credentials_encrypted.is_empty(), "status restored credentials after disconnect");
+                assert_eq!(after.updated_at, disconnected.updated_at, "status wrote after disconnect");
+                // Restore a fresh connected generation for the remaining flow assertions.
+                let credentials = service::credentials_of(&state.settings.encryption_key, &original).unwrap();
+                let restored = storage::replace(&state.db, &state.settings.encryption_key, &app.user.id, &after, &credentials).await.unwrap().unwrap();
+                assert!(storage::select(&state.db, &app.user.id, &restored, original.config, original.routing, original.enabled).await.unwrap());
                 // Exercise the actual registry path with a slow file-bucket write.
                 let row = storage::replace(&state.db, &state.settings.encryption_key, &other.id, &row,
                     &json!({"access_token":"composio-canary-access","expires_at":chrono::Utc::now().timestamp()+3600})).await.unwrap().unwrap();

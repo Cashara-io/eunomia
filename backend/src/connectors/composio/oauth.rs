@@ -96,7 +96,7 @@ impl OAuthClient {
         if !url.username().is_empty()
             || url.password().is_some()
             || url.fragment().is_some()
-            || url.query().is_some()
+            || Url::query(&url).is_some()
         {
             return Err(failure());
         }
@@ -228,7 +228,7 @@ impl OAuthClient {
         if !redirect.username().is_empty()
             || redirect.password().is_some()
             || redirect.fragment().is_some()
-            || redirect.query().is_some()
+            || Url::query(&redirect).is_some()
             || !(redirect.scheme() == "https"
                 || (redirect.scheme() == "http"
                     && matches!(redirect.host_str(), Some("localhost" | "127.0.0.1"))))
@@ -518,6 +518,7 @@ mod tests {
             "https://user:secret@login.composio.dev/token",
             "https://login.composio.dev:444/token",
             "https://login.composio.dev/token?key=secret",
+            "https://login.composio.dev/token?",
         ] {
             assert!(client.endpoint(endpoint).is_err());
         }
@@ -537,6 +538,10 @@ mod tests {
         )])
         .await;
         let client = OAuthClient::new(&mock.base, &format!("{}/mcp", mock.base), true).unwrap();
+        for redirect in ["http://localhost:3000/callback?key=value", "http://localhost:3000/callback?"] {
+            assert!(client.begin(redirect).await.is_err());
+        }
+        assert!(mock.requests().is_empty(), "callback query reached provider discovery");
         assert!(
             client
                 .begin("http://localhost:3000/callback")

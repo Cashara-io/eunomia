@@ -61,20 +61,20 @@ pub async fn select(
     Ok(!res.take::<Vec<Connector>>(0)?.is_empty())
 }
 
-/// Each connection serialises publishing and disconnect completion within this app.
+/// Each connection fences local commits. Provider calls must run outside the gate.
 /// Weak entries are pruned so disconnected users do not accumulate locks.
 #[derive(Default)]
 pub struct Publishing(std::sync::Mutex<ConnectionLocks>);
 
-type ConnectionLocks = std::collections::HashMap<(crate::pool::OrgId, RecordId), std::sync::Weak<tokio::sync::Mutex<()>>>;
+type ConnectionLocks = std::collections::HashMap<(crate::pool::OrgId, RecordId), std::sync::Weak<Connection>>;
 
 impl Publishing {
-    pub fn connection(&self, db: &OrgDb, owner: &RecordId) -> std::sync::Arc<tokio::sync::Mutex<()>> {
+    pub fn connection(&self, db: &OrgDb, owner: &RecordId) -> std::sync::Arc<Connection> {
         let mut locks = self.0.lock().unwrap();
         locks.retain(|_, lock| lock.strong_count() > 0);
         let key = (db.org(), owner.clone());
         if let Some(lock) = locks.get(&key).and_then(std::sync::Weak::upgrade) { return lock; }
-        let lock = std::sync::Arc::new(tokio::sync::Mutex::new(()));
+        let lock = std::sync::Arc::new(Connection::default());
         locks.insert(key, std::sync::Arc::downgrade(&lock));
         lock
     }
@@ -88,4 +88,31 @@ pub async fn ensure_active(db: &OrgDb, owner: &RecordId, row: &Connector) -> App
         return Err(AppError::bad_request("Composio disconnected or changed during sync. Reconnect Composio or retry."));
     }
     Ok(())
+}
+
+#[derive(Default)]
+pub struct Connection {
+    gate: tokio::sync::Mutex<()>,
+    generation: std::sync::atomic::AtomicU64,
+}
+
+impl Connection {
+    pub async fn lock(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        self.gate.lock().await
+    }
+
+    pub fn generation(&self) -> u64 {
+        self.generation.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    pub fn invalidate(&self) {
+        self.generation.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub fn check(&self, generation: u64) -> AppResult<()> {
+        if self.generation() != generation {
+            return Err(AppError::bad_request("Composio disconnected during this request. Please retry."));
+        }
+        Ok(())
+    }
 }

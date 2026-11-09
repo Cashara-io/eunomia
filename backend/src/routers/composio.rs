@@ -77,7 +77,8 @@ async fn callback(
 async fn status(State(app): State<AppState>, user: User) -> AppResult<Json<Value>> {
     let state = app.org(&user.org).await?;
     let publishing = state.composio_publishing.connection(&state.db, &user.id);
-    let _settled = publishing.lock().await;
+    let settled = publishing.lock().await;
+    let generation = publishing.generation();
     let row = storage::load(&state.db, &user.id).await?;
     let credentials = crate::sources::base::Conn {
         credentials: service::credentials_of(&state.settings.encryption_key, &row)?,
@@ -86,6 +87,7 @@ async fn status(State(app): State<AppState>, user: User) -> AppResult<Json<Value
     let connected = credentials.credentials["access_token"]
         .as_str()
         .is_some_and(|v| !v.is_empty());
+    drop(settled);
     let mut accounts = Vec::new();
     let mut health = None;
     if connected {
@@ -93,6 +95,7 @@ async fn status(State(app): State<AppState>, user: User) -> AppResult<Json<Value
             Ok(token) => match ReadClient::new(&token).await {
                 Ok(mut client) => {
                     for toolkit in tools::TOOLKITS {
+                        publishing.check(generation)?;
                         match client.accounts(toolkit).await {
                             Ok(data) => collect_accounts(&data, toolkit, &mut accounts),
                             Err(e) => {
@@ -106,6 +109,12 @@ async fn status(State(app): State<AppState>, user: User) -> AppResult<Json<Value
             },
             Err(e) => health = Some(e.message),
         }
+    }
+    let _settled = publishing.lock().await;
+    publishing.check(generation)?;
+    let current = storage::load(&state.db, &user.id).await?;
+    if current.credentials_encrypted.is_empty() != row.credentials_encrypted.is_empty() {
+        return Err(AppError::bad_request("Composio sign-in changed. Please try again."));
     }
     Ok(Json(
         json!({"connected":connected,"account":credentials.credentials["account"].as_str().unwrap_or("Your Composio account"),"accounts":accounts,"apps":row.config.get("apps").cloned().unwrap_or(json!([])),"vault":row.routing["default_vault"],"enabled":row.enabled,"health":health}),
@@ -273,7 +282,7 @@ async fn selection(
     security(("cookie" = []), ("bearer" = [])))]
 async fn disconnect(State(app): State<AppState>, user: User) -> AppResult<Json<Value>> {
     let state = app.org(&user.org).await?;
-    let revoked = account::disconnect(&state, &user.id).await.unwrap_or(false);
+    let revoked = account::disconnect(&state, &user.id).await?;
     // A provider failure must not turn local deletion into a false success.
     let row = storage::load(&state.db, &user.id).await?;
     if !row.credentials_encrypted.is_empty() {

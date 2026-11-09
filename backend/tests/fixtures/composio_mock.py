@@ -4,6 +4,7 @@ import base64
 import json
 import hashlib
 import threading
+import time
 from pathlib import Path
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -11,7 +12,7 @@ from urllib.parse import urlparse, parse_qs, urlencode
 
 TOKEN = 'composio-canary-access'
 REFRESH = 'composio-canary-refresh'
-state = {'limited': False, 'refreshes': 0, 'revokes': 0, 'executions': [], 'registered': [], 'schema_requests': [], 'challenge': '', 'refresh_token': REFRESH, 'revoke_refresh': False, 'pause_refresh': False, 'refresh_started': False}
+state = {'limited': False, 'refreshes': 0, 'revokes': 0, 'executions': [], 'registered': [], 'schema_requests': [], 'challenge': '', 'refresh_token': REFRESH, 'revoke_refresh': False, 'pause_refresh': False, 'refresh_started': False, 'status_delay': 0, 'status_started': False, 'revoke_delay': 0}
 refresh_resume = threading.Event()
 APPS = ['googledrive', 'gmail', 'googlecalendar', 'timelinesai', 'whatsapp', 'github']
 class Handler(BaseHTTPRequestHandler):
@@ -45,6 +46,9 @@ class Handler(BaseHTTPRequestHandler):
             if path in ['/file/pdf', '/file/sniff']: content = Path(__file__).with_name('notes.pdf').read_bytes()
             if path == '/file/corrupt': content = b'%PDF-invalid'
             if path == '/file/invalid': content = b'\xff\xfe'
+            if path == '/file/json': content = b'{invalid JSON'
+            if path == '/file/blank': content = b' \n\t'
+            if path == '/file/zero': content = b''
             self.send_response(200);self.send_header('Content-Type','text/plain');self.send_header('Content-Length',str(len(content)));self.end_headers();self.wfile.write(content);return
         if path == '/stats': return self.send(state)
         self.send({'error':'missing'},404)
@@ -75,7 +79,10 @@ class Handler(BaseHTTPRequestHandler):
                 state['refreshes'] += 1
                 state['refresh_token'] = REFRESH + '-' + str(state['refreshes'])
             return self.send({'access_token':TOKEN,'refresh_token':state['refresh_token'],'expires_in':1 if form['grant_type']==['authorization_code'] else 3600,'token_type':'Bearer'})
-        if self.path == '/revoke': state['revokes']+=1; return self.send({})
+        if self.path == '/revoke':
+            state['revokes']+=1
+            time.sleep(state['revoke_delay'])
+            return self.send({})
         if self.path != '/mcp': return self.send({},404)
         assert self.headers.get('Authorization') == 'Bearer '+TOKEN
         request = json.loads(body); method=request['method']; rid=request.get('id')
@@ -95,6 +102,8 @@ class Handler(BaseHTTPRequestHandler):
         if name == 'COMPOSIO_MANAGE_CONNECTIONS':
             app=args['toolkits'][0]['name']
             if args['toolkits'][0]['action']=='add': return tool({'successful':True,'data':{'redirect_url':self.origin+'/authorise-app'}})
+            state['status_started'] = True
+            time.sleep(state['status_delay'])
             accounts=[{'id':app+'-mine','alias':'Fixture '+app,'status':'ACTIVE'}]
             if app=='googledrive': accounts.append({'id':'googledrive-second','alias':'Second Drive','status':'ACTIVE'})
             return tool({'successful':True,'data':{'accounts':accounts}})
@@ -113,7 +122,7 @@ class Handler(BaseHTTPRequestHandler):
             return output({'messageId':a['message_id'],'threadId':'t1','messageTimestamp':'2026-11-09T00:00:00Z','subject':'Fixture email '+a['message_id'],'sender':'friend@example.test','to':'mock@example.test','messageText':'Searchable email content '+TOKEN})
         if slug=='GOOGLEDRIVE_FIND_FILE':
             files = [{'id':'doc1','name':'Drive fixture','mimeType':'application/vnd.google-apps.document'}]
-            for fid, filename in [('pdf','fallback.pdf'), ('sniff','sniff.txt'), ('corrupt','corrupt.pdf'), ('invalid','invalid.txt'), ('tail','tail.txt')]:
+            for fid, filename in [('pdf','fallback.pdf'), ('sniff','sniff.txt'), ('corrupt','corrupt.pdf'), ('invalid','invalid.txt'), ('json','malformed.json'), ('blank','blank.txt'), ('zero','zero.txt'), ('tail','tail.txt')]:
                 files.append({'id':fid,'name':filename,'mimeType':'application/octet-stream'})
             for file in files: file.update({'modifiedTime':'2026-11-08T00:00:00Z','webViewLink':'https://drive.google.com/file/d/'+file['id']})
             return output({'files':files,'nextPageToken':'','incompleteSearch':False})

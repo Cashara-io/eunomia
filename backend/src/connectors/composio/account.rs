@@ -23,6 +23,8 @@ pub async fn begin(
     redirect: &str,
     binding: &str,
 ) -> AppResult<String> {
+    let publishing = state.composio_publishing.connection(&state.db, owner);
+    let generation = publishing.generation();
     let row = storage::load(&state.db, owner).await?;
     let (pending, link) = OAuthClient::consumer()?.begin(redirect).await?;
     let mut credentials = crate::sources::base::Conn {
@@ -31,6 +33,8 @@ pub async fn begin(
     };
     credentials.credentials["pending"] = serde_json::to_value(&pending).map_err(|_| retry())?;
     credentials.credentials["binding"] = json!(binding);
+    let _commit = publishing.lock().await;
+    publishing.check(generation)?;
     storage::replace(
         &state.db,
         &state.settings.encryption_key,
@@ -198,30 +202,38 @@ pub async fn access_token(state: &OrgState, owner: &RecordId) -> AppResult<Zeroi
 }
 
 pub async fn disconnect(state: &OrgState, owner: &RecordId) -> AppResult<bool> {
-    let row = storage::load(&state.db, owner).await?;
-    let credentials = crate::sources::base::Conn {
-        credentials: service::credentials_of(&state.settings.encryption_key, &row)?,
-        config: json!({}),
-    };
-    // Delete locally even when the provider is unavailable. A leased refresh cannot restore this state.
     let publishing = state.composio_publishing.connection(&state.db, owner);
-    storage::delete_tokens(&state.db, owner, &row.id).await?;
-    // Invalidate first, then drain any upload or ingest that already passed a check.
-    // Keep the gate until the response can truthfully report Disconnected.
-    let _drained = publishing.lock().await;
+    publishing.invalidate();
+    let row = storage::load(&state.db, owner).await?;
+    // Delete locally even when the provider is unavailable. A leased refresh cannot restore this state.
+    tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        storage::delete_tokens(&state.db, owner, &row.id),
+    ).await.map_err(|_| AppError::internal("Composio disconnect timed out. Please retry."))??;
+    // Only local commits can hold this gate. Never wait for provider or object-storage I/O.
+    let drained = tokio::time::timeout(std::time::Duration::from_secs(1), publishing.lock())
+        .await.map_err(|_| AppError::internal("Composio commits are stopping. Please retry disconnect."))?;
+    drop(drained);
+    let Ok(credentials) = service::credentials_of(&state.settings.encryption_key, &row) else {
+        return Ok(false);
+    };
+    let credentials = crate::sources::base::Conn { credentials, config: json!({}) };
     let Some(raw) = credentials.credentials.get("metadata") else {
         return Ok(false);
     };
-    let metadata: Metadata = serde_json::from_value(raw.clone()).map_err(|_| retry())?;
+    let Ok(metadata) = serde_json::from_value::<Metadata>(raw.clone()) else {
+        return Ok(false);
+    };
     let token = credentials.credentials["refresh_token"]
         .as_str()
         .or_else(|| credentials.credentials["access_token"].as_str())
         .unwrap_or("");
-    OAuthClient::consumer()?
-        .revoke(
-            &metadata,
-            credentials.credentials["client_id"].as_str().unwrap_or(""),
-            token,
-        )
-        .await
+    let Ok(client) = OAuthClient::consumer() else {
+        return Ok(false);
+    };
+    Ok(tokio::time::timeout(std::time::Duration::from_secs(1), client.revoke(
+        &metadata,
+        credentials.credentials["client_id"].as_str().unwrap_or(""),
+        token,
+    )).await.ok().and_then(Result::ok).unwrap_or(false))
 }

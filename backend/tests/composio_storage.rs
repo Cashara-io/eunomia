@@ -95,7 +95,6 @@ async fn disconnect_during_slow_document_upload_leaves_no_documents_or_records()
         let staged = Arc::new(Notify::new());
         let resume = Arc::new(Notify::new());
         let publish = async {
-            let _publishing = publishing.lock().await;
             let result = documents::upload_checked(&state, owner, documents::Upload {
                 filename: "slow.txt".into(), media_type: Some("text/plain".into()),
                 bytes: b"slow upload".to_vec(), replace: None, vault: None,
@@ -103,7 +102,9 @@ async fn disconnect_during_slow_document_upload_leaves_no_documents_or_records()
                 // The object is staged. Hold the upload before its document commit.
                 staged.notify_one();
                 resume.notified().await;
-                storage::ensure_active(&state.db, owner, &row).await
+                let guard = publishing.lock().await;
+                storage::ensure_active(&state.db, owner, &row).await?;
+                Ok(guard)
             }).await;
             assert!(result.is_err(), "upload published after disconnect");
             // This is the same pre-ingest fence as run_sync uses.
@@ -111,18 +112,9 @@ async fn disconnect_during_slow_document_upload_leaves_no_documents_or_records()
         };
         let disconnect = async {
             staged.notified().await;
-            let disconnect = account::disconnect(&state, owner);
-            tokio::pin!(disconnect);
-            // Poll disconnect until it has invalidated the token and is waiting for the upload.
-            loop {
-                tokio::select! {
-                    result = &mut disconnect => panic!("disconnect returned before draining upload: {result:?}"),
-                    _ = tokio::time::sleep(std::time::Duration::from_millis(10)) => {}
-                }
-                if storage::load(&state.db, owner).await.unwrap().credentials_encrypted.is_empty() { break; }
-            }
+            tokio::time::timeout(std::time::Duration::from_secs(2), account::disconnect(&state, owner))
+                .await.expect("disconnect waited for object storage").unwrap();
             resume.notify_one();
-            disconnect.await.unwrap();
         };
         tokio::time::timeout(std::time::Duration::from_secs(10), async { tokio::join!(publish, disconnect); }).await.unwrap();
         for table in ["document", "composio_file", "cache_record"] {

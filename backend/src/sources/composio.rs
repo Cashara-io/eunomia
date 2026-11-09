@@ -94,6 +94,9 @@ impl Source for ComposioSource {
             };
             match batch {
                 Ok(batch) => {
+                    if let Some(skipped) = batch.provider_skipped {
+                        result.provider_skipped = Some(result.provider_skipped.unwrap_or(0) + skipped);
+                    }
                     result.records.extend(batch.records);
                     result.warnings.extend(batch.warnings);
                     if !matches!(batch.progress, SyncProgress::Complete)
@@ -124,11 +127,6 @@ impl Source for ComposioSource {
             ));
         }
         result.cursor = Some(cursor);
-        let skipped = result.warnings.iter().filter(|w| w.as_str() == "1 Drive file not imported (parse failure).").count();
-        if skipped > 0 {
-            result.warnings.retain(|w| w != "1 Drive file not imported (parse failure).");
-            result.warnings.push(format!("{skipped} Drive files not imported (parse failure)."));
-        }
         Ok(result)
     }
     fn map(&self, raw: &Value) -> Option<Value> {
@@ -274,11 +272,20 @@ async fn fetch_page(
                 } else {
                     normalised.ok_or_else(protocol)?
                 };
-                let text = match crate::documents::extract_text(media, bytes.clone()).await {
-                    Ok(text) => text,
-                    Err(_) => {
+                let text = match crate::documents::validate_content(media, &bytes) {
+                    Ok(()) => crate::documents::extract_text(media, bytes.clone()).await,
+                    Err(reason) => Err(reason),
+                };
+                let text = match text {
+                    Ok(text) if !text.trim().is_empty() => text,
+                    other => {
+                        let reason = match other {
+                            Ok(_) => "no text could be extracted".to_string(),
+                            Err(reason) => reason,
+                        };
                         cp.pending.pop();
-                        batch.warnings.push("1 Drive file not imported (parse failure).".into());
+                        batch.provider_skipped = Some(batch.provider_skipped.unwrap_or(0) + 1);
+                        batch.warnings.push(format!("1 Drive file not imported (parse failure: {reason})."));
                         continue;
                     }
                 };
@@ -720,9 +727,14 @@ pub async fn store_documents(
     state: &crate::state::OrgState,
     owner: &surrealdb::types::RecordId,
     row: &crate::connectors::service::Connector,
-    records: &mut [Value],
-) -> AppResult<()> {
-    for raw in records {
+    records: &mut Vec<Value>,
+    warnings: &mut Vec<String>,
+    publishing: &crate::connectors::composio::storage::Connection,
+    generation: u64,
+) -> AppResult<u64> {
+    let mut skipped = 0;
+    for raw in records.iter_mut() {
+        publishing.check(generation)?;
         crate::connectors::composio::storage::ensure_active(&state.db, owner, row).await?;
         let Some(document) = raw.get("document").cloned() else {
             continue;
@@ -741,7 +753,20 @@ pub async fn store_documents(
             .and_then(|v| v.get("document_id"))
             .and_then(Value::as_str)
             .map(str::to_string);
-        let bytes = crate::documents::tool_bytes(None, Some(s(&document, "/base64").into()))?;
+        let validated = crate::documents::tool_bytes(None, Some(s(&document, "/base64").into()))
+            .and_then(|bytes| {
+                crate::documents::validate(&state.settings, s(&document, "/filename"), Some(s(&document, "/media_type")), &bytes)?;
+                Ok(bytes)
+            });
+        let bytes = match validated {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                warnings.push(format!("1 Drive file not imported ({}).", error.message));
+                *raw = Value::Null;
+                skipped += 1;
+                continue;
+            }
+        };
         let old = match &previous {
             Some(id) => crate::documents::summary(&state.db, id).await?,
             None => None,
@@ -761,17 +786,25 @@ pub async fn store_documents(
                     replace: previous,
                     vault: row.routing["default_vault"].as_str().map(str::to_string),
                 },
-                || crate::connectors::composio::storage::ensure_active(&state.db, owner, row),
+                || async {
+                    let guard = publishing.lock().await;
+                    publishing.check(generation)?;
+                    crate::connectors::composio::storage::ensure_active(&state.db, owner, row).await?;
+                    Ok(guard)
+                },
             )
             .await?
         };
+        let _commit = publishing.lock().await;
+        publishing.check(generation)?;
         crate::connectors::composio::storage::ensure_active(&state.db, owner, row).await?;
         crate::store::dynamic(&state.db,"app.composio_file_link","UPSERT $id SET owner = $owner, connector = $connector, external_id = $external, document_id = $document")
             .bind(("id",identity)).bind(("owner",owner.clone())).bind(("connector",row.id.clone())).bind(("external",external.to_string())).bind(("document",doc.id.clone())).await?.check()?;
         raw["document_id"] = json!(doc.id);
         raw.as_object_mut().ok_or_else(protocol)?.remove("document");
     }
-    Ok(())
+    records.retain(|raw| !raw.is_null());
+    Ok(skipped)
 }
 
 #[cfg(test)]
