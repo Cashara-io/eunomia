@@ -65,13 +65,28 @@ pub fn validate(spec: &Value, data: Option<&Value>) -> AppResult<()> {
     }
     Ok(())
 }
-// Only descriptive props are model-written prose. Column keys and pointers are identifiers.
+// Model prose uses an English words grammar. Identifiers are checked against server columns.
+// Numerals are a lexical class, including inflections and fractions, not just digit characters.
+pub(crate) fn validate_words(text: &str) -> AppResult<()> {
+    const NUMERALS: &str = "zero oh nil null nought naught one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty thirty forty fifty sixty seventy eighty ninety hundred thousand million billion trillion quadrillion quintillion sextillion septillion octillion nonillion decillion dozen score half halve quarter third first second fourth fifth sixth seventh eighth ninth tenth eleventh twelfth thirteenth fourteenth fifteenth sixteenth seventeenth eighteenth nineteenth twentieth thirtieth fortieth fiftieth sixtieth seventieth eightieth ninetieth single double triple quadruple quintuple sextuple septuple octuple nonuple decuple twice thrice pair couple hundredth thousandth millionth billionth trillionth";
+    if !text.chars().all(|c| c.is_ascii_alphabetic() || c.is_ascii_whitespace() || "_-'\".,:;!?()/&".contains(c)) {
+        return Err(bad("model prose must use words; bind typed data for quantities"));
+    }
+    for token in text.split(|c: char| !c.is_ascii_alphabetic()).filter(|s| !s.is_empty()) {
+        let token = token.to_ascii_lowercase();
+        let singular = token.strip_suffix('s').unwrap_or(&token);
+        if NUMERALS.split_whitespace().any(|n| n == token || n == singular) || token == "halves" {
+            return Err(bad("model prose must not contain number words; bind typed data instead"));
+        }
+    }
+    Ok(())
+}
 fn words(value: &Value) -> AppResult<()> {
     match value {
         Value::Object(map) => for (key, value) in map {
             if matches!(key.as_str(), "title" | "summary" | "text" | "label" | "headline" | "note" | "reason")
-                && value.as_str().is_some_and(|s| s.chars().any(char::is_numeric)) {
-                return Err(bad("model-written words must not contain quantities or digits; bind typed data instead"));
+                && let Some(text) = value.as_str() {
+                validate_words(text)?;
             }
             words(value)?;
         },
@@ -325,6 +340,24 @@ mod tests {
         for kind in ["Text","Caption","Badge","Callout","Heading"] {
             assert!(validate(&json!({"root":"a","elements":{"a":{"type":kind,"props":{"text":"999"}}}}),None).is_err());
         }
+    }
+    #[test]
+    fn model_words_grammar_covers_all_prose() {
+        for prose in ["nine hundred and ninety nine dollars", "revenue_999", "revenue_٩", "revenue_９", "revenue_Ⅸ", "two", "millions", "dozens", "half", "halves", "a quarter", "twenty-first", "DOUBLE", "Total ²"] {
+            for field in ["title", "summary", "text", "label", "headline", "note", "reason"] {
+                assert!(words(&json!({field: prose})).is_err(), "{field}: {prose}");
+            }
+        }
+        for prose in ["Revenue by supplier", "Monthly amount", "sum_amount", "Approved values"] {
+            assert!(validate_words(prose).is_ok(), "{prose}");
+        }
+        for kind in ["Heading", "Caption", "Text", "Callout", "Badge", "Tabs", "Section", "Card", "Accordion"] {
+            let field = if matches!(kind, "Heading" | "Caption" | "Text" | "Callout" | "Badge") { "text" } else { "title" };
+            let spec = json!({"root":"a", "elements":{"a":{"type":kind,"props":{field:"Nine hundred dollars"}}}});
+            assert!(validate(&spec, None).is_err(), "{kind}");
+        }
+        let spec = json!({"root":"a", "elements":{"a":{"type":"Table","props":{"title":"Rows","summary":"Values","data":{"$state":"/sources/s"},"columns":[{"key":"amount","label":"A million"}]}}}});
+        assert!(validate(&spec, None).is_err());
     }
     #[test]
     fn rejects_caps() {

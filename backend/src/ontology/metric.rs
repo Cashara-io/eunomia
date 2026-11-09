@@ -1394,7 +1394,9 @@ fn compute(side: &Side, filters: &[Cond], entities: &[&String], values: &Values,
             nums.push(n);
         } else if side.agg == Agg::CountDistinct {
             let s = &h.stored;
-            distinct.push(to_json(props[p].datatype, s).unwrap_or(Value::Null));
+            // Preserve the stored representation, including datetime nanoseconds, exactly as
+            // metrics did before datasets shared the numeric arithmetic.
+            distinct.push(Value::String(format!("{:?}|{:?}|{:?}|{:?}", s.num, s.text.as_deref().map(str::to_lowercase), s.boolean, s.date)));
         }
         used.push((*e).clone());
     }
@@ -1406,7 +1408,6 @@ fn compute(side: &Side, filters: &[Cond], entities: &[&String], values: &Values,
 /// Shared metric and dataset arithmetic. Nulls do not count as property values.
 pub(super) fn aggregate(agg: Agg, values: &[Value], count: usize) -> Option<f64> {
     let mut nums: Vec<f64> = values.iter().filter_map(Value::as_f64).collect();
-    nums.sort_by(f64::total_cmp);
     let n = nums.len();
     match agg {
         Agg::Count => Some(count as f64),
@@ -1416,9 +1417,12 @@ pub(super) fn aggregate(agg: Agg, values: &[Value], count: usize) -> Option<f64>
         }).collect::<HashSet<_>>().len() as f64),
         Agg::Sum => Some(nums.iter().sum()),
         Agg::Avg if n > 0 => Some(nums.iter().sum::<f64>() / n as f64),
-        Agg::Min => nums.first().copied(),
-        Agg::Max => nums.last().copied(),
-        Agg::Median if n > 0 => Some(if n.is_multiple_of(2) { nums[n/2-1]/2.0 + nums[n/2]/2.0 } else { nums[n/2] }),
+        Agg::Min => nums.iter().copied().reduce(f64::min),
+        Agg::Max => nums.iter().copied().reduce(f64::max),
+        Agg::Median if n > 0 => {
+            nums.sort_by(f64::total_cmp);
+            Some(if n.is_multiple_of(2) { nums[n/2-1]/2.0 + nums[n/2]/2.0 } else { nums[n/2] })
+        },
         _ => None,
     }
 }
@@ -1806,6 +1810,39 @@ impl Prepared {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    include!("metric_main_fixture.rs");
+
+    #[test]
+    fn main_metric_fixture_preserves_existing_results() {
+        let fixture: Value = serde_json::from_str(include_str!("../../tests/fixtures/pr192-main-metrics.json")).unwrap();
+        for case in fixture.as_array().unwrap() {
+            let dt: Datatype = serde_json::from_value(case["datatype"].clone()).unwrap();
+            let props = HashMap::from([("p".into(), PropInfo { datatype: dt, unit: None, enum_values: None, status: Status::Approved, merge_into: None })]);
+            let mut values = Values::new();
+            let mut ids = Vec::new();
+            for (i, value) in case["values"].as_array().unwrap().iter().enumerate() {
+                let id = format!("entity:{i}");
+                ids.push(id.clone());
+                if !value.is_null() {
+                    values.insert(id, HashMap::from([("p".into(), Held { stored: parse_value(dt, "p", None, value).unwrap(), unit: None })]));
+                }
+            }
+            let entities: Vec<_> = ids.iter().collect();
+            for (name, expected) in case["main"].as_object().unwrap() {
+                let agg: Agg = serde_json::from_value(json!(name)).unwrap();
+                let side = Side { agg, property: Some("p".into()), row: None, filters: vec![] };
+                let main = compute_main(&side, &[], &entities, &values, &props).value;
+                let actual = compute(&side, &[], &entities, &values, &props).value;
+                assert_eq!(main, expected.as_f64(), "captured main: {} {name}", case["datatype"]);
+                assert_eq!(actual, main, "main parity: {} {name}", case["datatype"]);
+            }
+            if let Some(expected) = case.get("median") {
+                let side = Side { agg: Agg::Median, property: Some("p".into()), row: None, filters: vec![] };
+                assert_eq!(compute(&side, &[], &entities, &values, &props).value, expected.as_f64());
+            }
+        }
+    }
 
     fn props() -> Props {
         let p = |datatype: Datatype, enum_values: Option<Vec<&str>>| PropInfo {

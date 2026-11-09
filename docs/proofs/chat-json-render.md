@@ -99,3 +99,22 @@ The live check used the disposable database at 8590, backend at 8591 and fronten
 `python3 -I scripts/chat-json-render/verify_numbers.py CSV ANSWER_DIRECTORY` matched 379 numeric fields within 0.01. This covers server rows, aggregates, totals, distributions and scenario fields. All six answer screenshots were opened and inspected, including the formatted scenario changes and table totals. All four regenerated catalogue contact sheets were inspected, with full-size checks of the phone StatGroup and phone/desktop Sankey labels.
 
 [Six answer screenshots, four catalogue sheets, CSV, receipts and numeric audit](https://github.com/Cashara-io/eunomia/tree/pr-screenshots/chat-json-render-v3). Guard failures, scale plans and final check logs are published there too. No keys, launch scripts or session cookies are published. Screenshots are uploaded through a temporary detached worktree. Cleanup removes this worktree's backend target, frontend node_modules, Next output, servers and disposable container.
+
+## Second review fixes
+
+Implementation is pending verification in the implementation checkout. Nothing from this second review has been pushed yet.
+
+Draft changes apply a words grammar to model prose and aggregate aliases, remove zero-default numeric coercions, preserve metadata formatting on explicit tables, keep total_rows unitless, restore full stored datetime distinct keys and input-order sums, and reject unsafe finite chart values. A fixture includes the aggregate implementation captured from origin/main at 6116a00ff86fed992a917863e9a3515f70373b84. Main has no median operation, so the draft tests median separately.
+
+Verification stopped at the requested disk gate: free space fell from 18 GiB before compilation to 6.3 GiB during compilation, below the required 8 GiB. Both builds were interrupted. After cleanup, free space was 3.1 GiB. This checkout's backend/target, frontend/node_modules and frontend/.next were removed.
+
+Frontend lint passed before the last small changes. The latest six focused renderer tests passed, with 94 assertions. The production frontend compiled, but its TypeScript phase was interrupted. The initial typecheck found errors; edits address those, but the final typecheck has not run. Backend tests, Clippy, all guard mutations and both Playwright files remain unverified. The resolution output shape has not changed, so no live chat rerun is needed.
+
+| Guard mutations | Result |
+| --- | --- |
+| Prose grammar and aggregate alias boundary | Not run, disk gate |
+| Missing-y, Meter minimum, shared numeric access and zero-default recurrence | Not run, disk gate |
+| Explicit table metadata and unitless total_rows | Not run, disk gate |
+| Full datetime distinct precision | Not run, disk gate |
+| Input-order sums and main fixture | Not run, disk gate |
+| Safe drawing range | Not run, disk gate |

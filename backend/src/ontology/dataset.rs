@@ -179,6 +179,7 @@ fn transform(rows: Vec<Value>, columns: Vec<Column>, args: &Dataset) -> AppResul
     let mut out_columns: Vec<Column> = columns.iter().filter(|c| Some(&c.key) == args.group_by.as_ref()).cloned().collect();
     for a in &args.aggregates {
         property::PropertyName::parse(&a.name)?;
+        crate::views::ui::validate_words(&a.name)?;
         if out_columns.iter().any(|c| c.key == a.name) { return Err(bad("duplicate aggregate name")); }
         let source = a.property.as_ref().and_then(|p| columns.iter().find(|c| &c.key == p));
         if matches!(a.op, Agg::Ratio) { return Err(bad("ratio is not a dataset aggregate")); }
@@ -216,6 +217,14 @@ mod tests {
         assert_eq!(rows[0],json!({"supplier":"A","sum":31.0,"avg":15.5,"min":10.25,"max":20.75,"median":15.5,"distinct":2,"count":3}));
         assert_eq!(cols[1].unit.as_deref(),Some("AUD"));
         assert_eq!(cols[6].unit,None);
+    }
+    #[test]
+    fn aggregate_aliases_are_model_words() {
+        for name in ["revenue_999", "revenue_nine", "half", "million", "dozens"] {
+            let args: Dataset = serde_json::from_value(json!({"vault_id":"vault:test","kind":"sample","properties":["amount"],"aggregates":[{"name":name,"op":"sum","property":"amount"}]})).unwrap();
+            let columns = vec![Column { key:"amount".into(), datatype:"number".into(), unit:None }];
+            assert!(transform(vec![json!({"amount":10})], columns, &args).is_err(), "{name}");
+        }
     }
     #[test]
     fn every_time_bucket_and_null() {

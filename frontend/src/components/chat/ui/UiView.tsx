@@ -186,7 +186,7 @@ export default function UiView({ view: raw }: { view: unknown }) {
     const column = source.data.columns?.find(
       (c) => c.key === (segments[3] === "distributions" ? segments[4] : key),
     );
-    const count = segments[3] === "totals" && ["count", "distinct"].includes(segments[5]);
+    const count = segments[3] === "total_rows" || (segments[3] === "totals" && ["count", "distinct"].includes(segments[5]));
     const datatype = count ? "number" : column?.datatype;
     e.props.unit = count ? null : column?.unit ?? source.data.metric?.unit ?? null;
     if (count) e.props.format = "number";

@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint && bun test scripts/chat-ui-values.test.jsx",
     "gen:api": "openapi-ts",
     "test": "playwright test"
   },

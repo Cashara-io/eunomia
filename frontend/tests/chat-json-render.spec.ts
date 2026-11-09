@@ -578,6 +578,17 @@ test("typed money keeps its currency and missing values are unavailable", async 
   const count = structuredClone(usdView);
   count.spec.elements.a.props.data = { $state: "/sources/sample/totals/value/count" };
   const countView = { ...count, data: { sources: { sample: { ...usdView.data.sources.sample, totals: { value: { count: 1 } } } } } };
+  const totalRows = structuredClone(countView);
+  totalRows.spec.elements.a.props.data = { $state: "/sources/sample/total_rows" };
+  const totalRowsView = { ...totalRows, data: { sources: { sample: { ...usdView.data.sources.sample, total_rows: 1 } } } };
+  const table = fixture("Table");
+  table.spec.elements.a.props.columns = [{key: "value", label: "Amount", total: "sum"}];
+  const tableView = { ...table, data: { sources: { sample: { ...usdView.data.sources.sample, totals: {value: {sum: 120.25}} } } } };
+  const gauge = fixture("Gauge");
+  gauge.spec.elements.a.props.series = ["other"];
+  const gaugeView = { ...gauge, data: { sources: { sample: [{name: "Supplier", value: null, other: 12, min: 0, max: 10}] } } };
+  const meter = fixture("Meter");
+  const meterView = { ...meter, data: { sources: { sample: {value: 5, min: null, max: 10} } } };
   const chart = fixture("Bar");
   delete chart.spec.elements.a.props.y;
   chart.spec.elements.a.props.data = { $state: "/sources/sample/rows" };
@@ -585,7 +596,7 @@ test("typed money keeps its currency and missing values are unavailable", async 
   const group = fixture("StatGroup");
   const groupView = { ...group, data: { sources: { sample: { rows, columns: [{ key: "value", datatype: "money", unit: "USD" }] } } } };
   await page.route("**/api/chat/threads", route => route.fulfill({ json: [{ id: "chat_thread:typed", title: "Typed values", created_at: new Date().toISOString(), updated_at: new Date().toISOString() }] }));
-  await page.route("**/api/chat/threads/*/history", route => route.fulfill({ json: history([bad, usdView, groupView, countView, chartView]) }));
+  await page.route("**/api/chat/threads/*/history", route => route.fulfill({ json: history([bad, usdView, groupView, countView, chartView, totalRowsView, tableView, gaugeView, meterView]) }));
   await page.goto("/chat");
   await expect(page.locator('[data-ui-component="Bar"]').first()).toContainText("No numeric values to show.");
   await expect(page.locator('[data-ui-component="Bar"]').first().locator("svg")).toHaveCount(0);
@@ -594,5 +605,10 @@ test("typed money keeps its currency and missing values are unavailable", async 
   await expect(page.locator('[data-ui-component="Stat"]').last()).not.toContainText("USD");
   await expect(page.locator('[data-ui-component="Bar"]').last()).toContainText("USD");
   await expect(page.locator(".ui-stat-tile")).toHaveCount(3);
+  await expect(page.locator('[data-ui-component="Table"] tbody')).toContainText("USD 120.25");
+  await expect(page.locator('[data-ui-component="Table"] tfoot')).toContainText("USD 120.25");
+  await expect(page.locator('[data-ui-component="Gauge"]')).toContainText("No numeric values to show.");
+  await expect(page.locator('[data-ui-component="Gauge"] svg')).toHaveCount(0);
+  await expect(page.locator('[data-ui-component="Meter"]')).toContainText("No range available.");
   expect(await page.locator('[data-ui-component="Stat"] .text-3xl').first().evaluate(el => getComputedStyle(el).fontVariantNumeric)).toBe("tabular-nums");
 });

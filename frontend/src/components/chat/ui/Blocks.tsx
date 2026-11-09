@@ -194,7 +194,7 @@ function Block({
                   : "number",
       }))
     : undefined;
-  const columns =
+  const selectedColumns =
     props.columns ||
     inferred ||
     Object.keys(rows[0] || value)
@@ -209,6 +209,11 @@ function Block({
             ? format
             : "text"),
       }));
+  const columns = selectedColumns.map(c => ({
+    ...c,
+    total: "total" in c ? c.total : undefined,
+    format: props.formats?.[c.key] ?? inferred?.find(source => source.key === c.key)?.format ?? c.format,
+  }));
   const totals = scalarObject.safeParse(value.totals);
   const sorted = [...rows].sort((a, b) => {
     if (!sort) return 0;
@@ -239,7 +244,7 @@ function Block({
       <div className="text-3xl ui-numeric tabular-nums">
         {typeof value.unit === "string"
           ? withUnit(number(value.value), value.unit)
-          : formatted(object.success ? value.value : data, format, props.unit)}
+          : formatted(number(object.success ? value.value : data), format, props.unit)}
         {number(value.delta) != null && (
           <small className="block text-sm">
             Change {formatted(value.delta, format)}
@@ -271,9 +276,9 @@ function Block({
   else if (kind === "Meter") {
     const n = number(value.value),
       max = number(value.max),
-      min = number(value.min) ?? 0;
+      min = number(value.min);
     content =
-      n != null && max != null && max > min ? (
+      n != null && min != null && max != null && max > min ? (
         <>
           <meter
             className="w-full"
@@ -294,11 +299,11 @@ function Block({
       <dl className="grid grid-cols-2 gap-4">
         <div>
           <dt>Before</dt>
-          <dd className="ui-numeric">{formatted(value.before, format)}</dd>
+          <dd className="ui-numeric">{formatted(number(value.before), format, props.unit)}</dd>
         </div>
         <div>
           <dt>After</dt>
-          <dd className="ui-numeric">{formatted(value.after, format)}</dd>
+          <dd className="ui-numeric">{formatted(number(value.after), format, props.unit)}</dd>
         </div>
       </dl>
     );
@@ -359,7 +364,7 @@ function Block({
             {props.columns?.some((c) => c.total) && (
               <tfoot>
                 <tr>
-                  {props.columns.map((c, index) => {
+                  {columns.map((c, index) => {
                     const total = totals.success
                       ? scalarObject.safeParse(totals.data[c.key])
                       : null;

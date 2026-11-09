@@ -20,7 +20,7 @@ import { BoxPlot, ViolinPlot } from "@visx/stats";
 import { useTooltip, TooltipWithBounds } from "@visx/tooltip";
 import { z } from "zod";
 import { resolvedDataProps } from "./catalog";
-import { formatted, label, number, rowsOf, type Row } from "./data";
+import { drawable, formatted, label, number, requiredNumber, rowsOf, type Row } from "./data";
 import { Notice } from "./Blocks";
 
 const palette = [
@@ -56,13 +56,15 @@ export default function Chart({
   const fields = kind === "Histogram" ? ["start", "end", "count"]
     : kind === "BoxPlot" ? ["min", "q1", "median", "q3", "max"]
     : kind === "Violin" ? ["value", "count"]
-    : [...(p.series?.length ? p.series : [y]), ...(["Scatter", "Bubble"].includes(kind) ? [x] : []), ...(p.size ? [p.size] : []), ...(["Gauge", "Bullet"].includes(kind) ? ["min", "max"] : [])];
+    : [...new Set([y, ...(p.series || [])]), ...(["Scatter", "Bubble"].includes(kind) ? [x] : []), ...(p.size ? [p.size] : []), ...(["Gauge", "Bullet"].includes(kind) ? ["min", "max"] : [])];
   // Invalid or missing measurements must never enter a zero-default drawing accessor.
   if (rows.some(r => fields.some(key => number(r[key]) == null)))
     return <figure className="ui-section" data-ui-component={kind}><figcaption>{p.title}</figcaption><p>No numeric values to show.</p><p>{p.summary}</p></figure>;
-  const sharedValues = rows.flatMap((r) =>
-    (p.series || [y]).map((key) => number(r[key]) || 0),
-  );
+  if (rows.some(r => Object.values(r).some(v => typeof v === "number" && !drawable(v))))
+    return <Notice />;
+  const sharedValues = kind === "SmallMultiples" ? rows.flatMap((r) =>
+    (p.series || [y]).map((key) => requiredNumber(r[key])),
+  ) : [];
   if (kind === "SmallMultiples")
     return (
       <section className="ui-section ui-multiples" data-ui-component={kind}>
@@ -233,12 +235,12 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
   const max = Math.max(0, ...numbers),
     min = Math.min(0, ...numbers);
   const stacked = kind === "StackedBar" || kind === "StackedArea";
-  const maxStack = Math.max(
+  const maxStack = stacked ? Math.max(
     0,
     ...rows.map((r) =>
-      series.reduce((a, k) => a + Math.max(0, number(r[k]) || 0), 0),
+      series.reduce((a, k) => a + Math.max(0, requiredNumber(r[k])), 0),
     ),
-  );
+  ) : max;
   const scaleY = scaleLinear({
     domain:
       domain ||
@@ -260,7 +262,7 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
     !["Bar", "GroupedBar", "StackedBar", "Waterfall", "StackedArea"].includes(
       kind,
     );
-  const valuesX = rows.map((r) => number(r[xKey]) || 0);
+  const valuesX = xNumeric ? rows.map((r) => requiredNumber(r[xKey])) : [];
   const scaleX = scaleLinear({
     domain: [Math.min(...valuesX), Math.max(...valuesX) || 1],
     range: [0, w],
@@ -268,13 +270,13 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
   });
   const x = (r: Row, i: number) =>
     continuousX
-      ? scaleX(number(r[xKey]) || 0)
-      : (band(categories[i]) || 0) + band.bandwidth() / 2;
-  const y = (r: Row, k = yKey) => scaleY(number(r[k]) || 0);
+      ? scaleX(requiredNumber(r[xKey]))
+      : (requiredNumber(band(categories[i]))) + band.bandwidth() / 2;
+  const y = (r: Row, k = yKey) => scaleY(requiredNumber(r[k]));
   const fmt = (v: unknown) => formatted(v, p.formats?.[yKey] || p.format);
-  const shares = rows.filter((r) => (number(r[yKey]) || 0) > 0);
-  const total = rows.reduce(
-    (sum, r) => sum + Math.max(0, number(r[yKey]) || 0),
+  const shares = rows.filter((r) => number(r[yKey]) != null && requiredNumber(r[yKey]) > 0);
+  const total = shares.reduce(
+    (sum, r) => sum + requiredNumber(r[yKey]),
     0,
   );
   const percent = (v: number, base: number) =>
@@ -313,8 +315,8 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
           const rect = e.currentTarget.ownerSVGElement?.getBoundingClientRect();
           showTooltip({
             tooltipData: tip(r),
-            tooltipLeft: e.clientX - (rect?.left || 0),
-            tooltipTop: e.clientY - (rect?.top || 0),
+            tooltipLeft: e.clientX - (requiredNumber(rect?.left)),
+            tooltipTop: e.clientY - (requiredNumber(rect?.top)),
           });
         }}
         onMouseLeave={hideTooltip}
@@ -384,11 +386,11 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
       domain: [
         Math.min(
           0,
-          ...rows.map((r) => number(r[p.size || series[1] || yKey]) || 0),
+          ...rows.map((r) => requiredNumber(r[p.size || series[1] || yKey])),
         ),
         Math.max(
           1,
-          ...rows.map((r) => number(r[p.size || series[1] || yKey]) || 0),
+          ...rows.map((r) => requiredNumber(r[p.size || series[1] || yKey])),
         ),
       ],
       range: [h, 0],
@@ -402,7 +404,7 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
               rows.map((r, i) =>
                 mark(
                   <Bar
-                    x={band(categories[i]) || 0}
+                    x={requiredNumber(band(categories[i]))}
                     y={y(r, key)}
                     width={band.bandwidth()}
                     height={Math.max(0, h - y(r, key))}
@@ -431,7 +433,7 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
                   x={x}
                   y={(r) =>
                     kind === "Combo" && s === 1
-                      ? right(number(r[key]) || 0)
+                      ? right(requiredNumber(r[key]))
                       : y(r, key)
                   }
                   stroke={colour(s)}
@@ -447,7 +449,7 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
                           cx={x(r, i)}
                           cy={
                             kind === "Combo" && s === 1
-                              ? right(number(r[key]) || 0)
+                              ? right(requiredNumber(r[key]))
                               : y(r, key)
                           }
                           r={10}
@@ -457,7 +459,7 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
                           cx={x(r, i)}
                           cy={
                             kind === "Combo" && s === 1
-                              ? right(number(r[key]) || 0)
+                              ? right(requiredNumber(r[key]))
                               : y(r, key)
                           }
                           r={sparkline ? (i === rows.length - 1 ? 3 : 0) : 3}
@@ -517,7 +519,7 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
     const numericRows = rows.map((r, i) =>
       Object.fromEntries([
         [xKey, categories[i]],
-        ...series.map((k) => [k, number(r[k]) || 0]),
+        ...series.map((k) => [k, requiredNumber(r[k])]),
       ]),
     );
     const colours = scaleOrdinal({
@@ -578,10 +580,10 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
           {rows.map((r, i) =>
             mark(
               <Bar
-                x={Math.min(horizontal(0), horizontal(number(r[yKey]) || 0))}
-                y={vertical(categories[i]) || 0}
+                x={Math.min(horizontal(0), horizontal(requiredNumber(r[yKey])))}
+                y={requiredNumber(vertical(categories[i]))}
                 width={Math.abs(
-                  horizontal(number(r[yKey]) || 0) - horizontal(0),
+                  horizontal(requiredNumber(r[yKey])) - horizontal(0),
                 )}
                 height={vertical.bandwidth()}
                 fill={colour(0)}
@@ -594,9 +596,9 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
       );
     } else if (kind === "Histogram") {
       const bins = rows.map((r) => ({
-        start: number(r.start) ?? 0,
-        end: number(r.end) ?? 0,
-        count: number(r.count) ?? 0,
+        start: requiredNumber(r.start),
+        end: requiredNumber(r.end),
+        count: requiredNumber(r.count),
       }));
       const lo = Math.min(...bins.map((b) => b.start)),
         hi = Math.max(...bins.map((b) => b.end));
@@ -644,8 +646,8 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
     } else {
       const waterfalls = rows.reduce<{ start: number; end: number }[]>(
         (out, r) => {
-          const start = out.at(-1)?.end || 0;
-          return [...out, { start, end: start + (number(r[yKey]) || 0) }];
+          const start = out.length ? requiredNumber(out.at(-1)?.end) : 0;
+          return [...out, { start, end: start + (requiredNumber(r[yKey])) }];
         },
         [],
       );
@@ -670,7 +672,7 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
               return mark(
                 <Bar
                   x={
-                    (band(categories[i]) || 0) +
+                    (requiredNumber(band(categories[i]))) +
                     (s * band.bandwidth()) / series.length
                   }
                   y={Math.min(sy(start), sy(end))}
@@ -713,12 +715,12 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
                     3,
                     24 *
                       Math.sqrt(
-                        Math.abs(number(r[p.size || series[1] || yKey]) || 0) /
+                        Math.abs(requiredNumber(r[p.size || series[1] || yKey])) /
                           Math.max(
                             1,
                             ...rows.map((row) =>
                               Math.abs(
-                                number(row[p.size || series[1] || yKey]) || 0,
+                                requiredNumber(row[p.size || series[1] || yKey]),
                               ),
                             ),
                           ),
@@ -755,7 +757,7 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
         )}
         <Pie
           data={shares}
-          pieValue={(r) => number(r[yKey]) || 0}
+          pieValue={(r) => requiredNumber(r[yKey])}
           outerRadius={radius}
           innerRadius={kind === "Donut" ? radius * 0.6 : 0}
           padAngle={0.02}
@@ -781,7 +783,7 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
                       dy="0.35em"
                       className="ui-on-fill"
                     >
-                      {percent(number(arc.data[yKey]) || 0, total)}
+                      {percent(requiredNumber(arc.data[yKey]), total)}
                     </text>
                   )}
                 </>,
@@ -798,9 +800,9 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
     const stats = scaleLinear({
       domain: [
         number(box.min) ??
-          Math.min(0, ...rows.map((r) => number(r.value) ?? 0)),
+          Math.min(0, ...rows.map((r) => requiredNumber(r.value))),
         number(box.max) ??
-          Math.max(1, ...rows.map((r) => number(r.value) ?? 0)),
+          Math.max(1, ...rows.map((r) => requiredNumber(r.value))),
       ],
       range: [h, 0],
       nice: true,
@@ -818,11 +820,11 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
         {kind === "BoxPlot"
           ? mark(
               <BoxPlot
-                min={number(box.min) ?? 0}
-                max={number(box.max) ?? 0}
-                firstQuartile={number(box.q1) ?? 0}
-                thirdQuartile={number(box.q3) ?? 0}
-                median={number(box.median) ?? 0}
+                min={requiredNumber(box.min)}
+                max={requiredNumber(box.max)}
+                firstQuartile={requiredNumber(box.q1)}
+                thirdQuartile={requiredNumber(box.q3)}
+                median={requiredNumber(box.median)}
                 valueScale={stats}
                 left={w / 2 - 25}
                 boxWidth={50}
@@ -835,8 +837,8 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
           : mark(
               <ViolinPlot
                 data={rows}
-                value={(r) => number(r.value) ?? 0}
-                count={(r) => number(r.count) ?? 0}
+                value={(r) => requiredNumber(r.value)}
+                count={(r) => requiredNumber(r.count)}
                 valueScale={stats}
                 left={w / 2 - 40}
                 width={80}
@@ -846,7 +848,7 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
               {
                 min: Math.min(...numericValues),
                 max: Math.max(...numericValues),
-                count: rows.reduce((sum, r) => sum + (number(r.count) || 0), 0),
+                count: rows.reduce((sum, r) => sum + (requiredNumber(r.count)), 0),
               },
               "violin",
             )}
@@ -924,8 +926,8 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
             ys.map((day) => (
               <Bar
                 key={`${week}-${day}`}
-                x={xb(week) || 0}
-                y={yb(day) || 0}
+                x={requiredNumber(xb(week))}
+                y={requiredNumber(yb(day))}
                 width={xb.bandwidth()}
                 height={yb.bandwidth()}
                 fill="var(--surface-raised)"
@@ -945,8 +947,8 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
           return mark(
             <>
               <Bar
-                x={xb(cell.x) || 0}
-                y={yb(cell.y) || 0}
+                x={requiredNumber(xb(cell.x))}
+                y={requiredNumber(yb(cell.y))}
                 width={xb.bandwidth()}
                 height={yb.bandwidth()}
                 fill={colour(0)}
@@ -955,8 +957,8 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
               {xb.bandwidth() > fmt(value).length * 6 + 8 &&
                 yb.bandwidth() > 24 && (
                   <text
-                    x={(xb(cell.x) || 0) + xb.bandwidth() / 2}
-                    y={(yb(cell.y) || 0) + yb.bandwidth() / 2}
+                    x={(requiredNumber(xb(cell.x))) + xb.bandwidth() / 2}
+                    y={(requiredNumber(yb(cell.y))) + yb.bandwidth() / 2}
                     textAnchor="middle"
                     dy="0.35em"
                     className="ui-cell-label ui-label-halo"
@@ -998,7 +1000,7 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
           {
             name: categories[i],
             row: r,
-            value: nested.length ? 0 : Math.max(0, number(r[yKey]) || 0),
+            value: nested.length ? 0 : Math.max(0, requiredNumber(r[yKey])),
             ...(nested.length ? { children: nested } : {}),
           },
         ];
@@ -1110,11 +1112,11 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
     showAxes = false;
     const targetKey = p.group || "target";
     const flows = rows
-      .filter((r) => number(r[yKey]) != null && (number(r[yKey]) || 0) > 0)
+      .filter((r) => number(r[yKey]) != null && (requiredNumber(r[yKey])) > 0)
       .map((r) => ({
         source: label(r[xKey]),
         target: label(r[targetKey]),
-        value: number(r[yKey]) || 0,
+        value: requiredNumber(r[yKey]),
       }));
     const names = [...new Set(flows.flatMap((r) => [r.source, r.target]))];
     const labelRoom = Math.min(
@@ -1152,7 +1154,7 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
                       d={createPath(link) || ""}
                       fill="none"
                       stroke={colour(names.indexOf(label(link.source)))}
-                      strokeWidth={Math.max(1, link.width || 0)}
+                      strokeWidth={Math.max(1, requiredNumber(link.width))}
                       strokeOpacity={0.4}
                     />,
                     {
@@ -1167,21 +1169,21 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
                   mark(
                     <>
                       <Bar
-                        x={node.x0 || 0}
-                        y={node.y0 || 0}
-                        width={(node.x1 || 0) - (node.x0 || 0)}
-                        height={(node.y1 || 0) - (node.y0 || 0)}
+                        x={requiredNumber(node.x0)}
+                        y={requiredNumber(node.y0)}
+                        width={(requiredNumber(node.x1)) - (requiredNumber(node.x0))}
+                        height={(requiredNumber(node.y1)) - (requiredNumber(node.y0))}
                         fill={colour(i)}
                       />
                       <text
                         x={
-                          (node.x0 || 0) > w / 2
-                            ? (node.x0 || 0) - 8
-                            : (node.x1 || 0) + 8
+                          (requiredNumber(node.x0)) > w / 2
+                            ? (requiredNumber(node.x0)) - 8
+                            : (requiredNumber(node.x1)) + 8
                         }
-                        y={((node.y0 || 0) + (node.y1 || 0)) / 2}
+                        y={((requiredNumber(node.y0)) + (requiredNumber(node.y1))) / 2}
                         dy="0.35em"
-                        textAnchor={(node.x0 || 0) > w / 2 ? "end" : "start"}
+                        textAnchor={(requiredNumber(node.x0)) > w / 2 ? "end" : "start"}
                         className="ui-label-halo"
                       >
                         {node.name.slice(0, Math.floor((labelRoom - 8) / 6))}
@@ -1314,7 +1316,7 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
             <LineRadial
               data={rows}
               angle={(_, i) => (i / rows.length) * Math.PI * 2}
-              radius={(r) => radial(number(r[key]) || 0)}
+              radius={(r) => radial(requiredNumber(r[key]))}
               curve={curveLinearClosed}
               stroke={colour(s)}
               fill={colour(s)}
@@ -1325,11 +1327,11 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
                 <circle
                   cx={
                     Math.sin((i / rows.length) * Math.PI * 2) *
-                    radial(number(r[key]) || 0)
+                    radial(requiredNumber(r[key]))
                   }
                   cy={
                     -Math.cos((i / rows.length) * Math.PI * 2) *
-                    radial(number(r[key]) || 0)
+                    radial(requiredNumber(r[key]))
                   }
                   r={5}
                   fill={colour(s)}
@@ -1346,10 +1348,10 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
     showAxes = false;
     const step = h / rows.length;
     drawing = rows.map((r, i) => {
-      const value = Math.max(0, number(r[yKey]) || 0);
+      const value = Math.max(0, requiredNumber(r[yKey]));
       const barWidth = (value / (max || 1)) * w;
-      const previous = number(rows[i - 1]?.[yKey]) || 0;
-      const first = number(rows[0]?.[yKey]) || 0;
+      const previous = i === 0 ? requiredNumber(r[yKey]) : requiredNumber(rows[i - 1][yKey]);
+      const first = requiredNumber(rows[0]?.[yKey]);
       return mark(
         <>
           <text x={0} y={i * step + 12}>
@@ -1379,8 +1381,8 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
   } else if (kind === "Gauge" || kind === "Bullet") {
     showAxes = false;
     const r = rows[0],
-      n = number(r[yKey]) || 0,
-      lo = number(r.min) ?? 0,
+      n = requiredNumber(r[yKey]),
+      lo = requiredNumber(r.min),
       hi = number(r.max);
     if (hi == null || hi <= lo)
       drawing = (
@@ -1454,14 +1456,14 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
                   w *
                   Math.max(
                     0,
-                    Math.min(1, ((number(r.target) || 0) - lo) / (hi - lo)),
+                    Math.min(1, ((requiredNumber(r.target)) - lo) / (hi - lo)),
                   )
                 }
                 x2={
                   w *
                   Math.max(
                     0,
-                    Math.min(1, ((number(r.target) || 0) - lo) / (hi - lo)),
+                    Math.min(1, ((requiredNumber(r.target)) - lo) / (hi - lo)),
                   )
                 }
                 y1={h / 2 - 20}
@@ -1544,7 +1546,7 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
                 <span className="ui-legend-value">
                   {fmt(shares[i][yKey])}{" "}
                   <span className="text-[var(--ink-dim)]">
-                    ({percent(number(shares[i][yKey]) || 0, total)})
+                    ({percent(requiredNumber(shares[i][yKey]), total)})
                   </span>
                 </span>
               )}
