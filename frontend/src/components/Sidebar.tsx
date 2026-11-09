@@ -1,5 +1,6 @@
 "use client";
 
+import { TreeStructureIcon } from "@phosphor-icons/react/ssr";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
@@ -41,6 +42,7 @@ export const MAIN_NAV = [
   { href: "/", label: "Home", icon: House },
   { href: "/chat", label: "Chat", icon: MessagesSquare },
   { href: "/entities", label: "People & topics", icon: Users },
+  { href: "/twin", label: "Business twin", icon: TreeStructureIcon },
   { href: "/vaults", label: "Memory spaces", icon: Layers },
   { href: "/documents", label: "Documents", icon: Files },
   { href: "/connectors", label: "Connected sources", icon: Plug },
@@ -183,7 +185,7 @@ export default function Sidebar() {
       <div className="px-4 flex flex-col gap-1">
         {MAIN_NAV.filter(({ href }) => !(href === "/chat" && chatOff) && !(href === "/documents" && docsOff)).map(({ href, label, icon: Icon }) => (
           <NavLink key={href} href={href} active={isActive(pathname, href)}>
-            <Icon size={18} strokeWidth={1.75} className="nav-icon shrink-0" aria-hidden />
+            {href === "/twin" ? <TreeStructureIcon size={18} weight="duotone" className="nav-icon shrink-0" aria-hidden /> : <Icon size={18} strokeWidth={1.75} className="nav-icon shrink-0" aria-hidden />}
             <span className="flex-1">{label}</span>
             {href === "/vaults" && invites > 0 && (
               <span className="nav-badge" aria-label={`${invites} invitation${invites === 1 ? "" : "s"}`}>

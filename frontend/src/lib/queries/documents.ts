@@ -50,7 +50,7 @@ export const useRefreshDocuments = () => {
   return () => Promise.all([qc.invalidateQueries({ queryKey: documentKeys.all }), qc.invalidateQueries({ queryKey: toolKeys.all })]);
 };
 
-/** One memory space's documents (Kinds and links offers its CSVs to auto-map). */
+/** One memory space's documents (Business twin offers its CSVs to auto-map). */
 export const useVaultDocuments = (vaultId: string, enabled = true) =>
   useQuery({
     queryKey: documentKeys.inVault(vaultId),
