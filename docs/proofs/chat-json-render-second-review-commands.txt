@@ -1,0 +1,30 @@
+# Second review verification, 2026-11-09
+# From the repository root unless the command changes directory.
+# One cargo process at a time. Before every build: df -h /
+# All cargo commands use the following environment, plus nice -n 19:
+export CARGO_BUILD_JOBS=2 CARGO_PROFILE_DEV_DEBUG=0 CARGO_INCREMENTAL=0 RUST_MIN_STACK=8388608
+# A disk monitor terminates builds below 6 GiB. No cargo fmt was run.
+
+python3 scripts/chat-json-render/check_main_source.py
+CAPTURE_MAIN_METRICS=1 TEST_HARDENED=1 nice -n 19 cargo test --manifest-path backend/Cargo.toml --lib --test chat_ui --test ontology --test golden_tools --test round_trips
+python3 scripts/chat-json-render/check_second_review_guards.py frontend
+python3 scripts/chat-json-render/check_second_review_guards.py backend
+UPDATE_OPENAPI=1 nice -n 19 cargo test --manifest-path backend/Cargo.toml --test openapi
+nice -n 19 cargo clippy --manifest-path backend/Cargo.toml --all-targets -- -D warnings
+CAPTURE_MAIN_METRICS=1 TEST_HARDENED=1 nice -n 19 cargo test --manifest-path backend/Cargo.toml --lib --test chat_ui --test ontology --test golden_tools --test round_trips --test openapi
+
+cd frontend
+bun install --frozen-lockfile
+bun run gen:api
+bun run lint
+bunx tsc --noEmit
+BACKEND_INTERNAL_URL=http://127.0.0.1:8591 bun run build
+bun test scripts/chat-ui-values.test.jsx
+# Wait for /readyz through the frontend before running Playwright.
+E2E_BASE_URL=http://localhost:3590 bunx playwright test tests/chat-json-render.spec.ts tests/every-tool.spec.ts
+
+# Separate runtime, model access disabled: disposable SurrealDB 3.3.5 on 8590,
+# this branch backend on 8591, production frontend on 3590.
+# Real model API settings were removed; no shared database or owner stack was used.
+# Teardown stops those processes, removes only pr192-second-review-db,
+# and removes backend/target, frontend/node_modules and frontend/.next.

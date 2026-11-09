@@ -12,6 +12,7 @@
 //! names and kinds from the database, plus [`Shown::text`], a plain rendering for a terminal.
 
 mod decimal;
+pub mod ui;
 use decimal::Decimal;
 
 use std::collections::hash_map::Entry;
@@ -44,6 +45,7 @@ const MAX_WHY: usize = 300;
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "view", rename_all = "snake_case")]
 pub enum ViewSpec {
+    Ui { spec: serde_json::Value, sources: std::collections::BTreeMap<String, ui::Source> },
     Impact {
         start_id: String,
         headline: String,
@@ -114,6 +116,7 @@ pub struct Affected {
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(tag = "view", rename_all = "snake_case")]
 pub enum View {
+    Ui { spec: serde_json::Value, data: serde_json::Value },
     /// `linked` is false when the start has no saved relation at all: an empty `affected` then means
     /// there was nothing to follow, not that nothing is affected.
     Impact { start: EntityRef, headline: String, affected: Vec<Affected>, linked: bool },
@@ -135,6 +138,7 @@ pub struct Shown {
 /// Resolves and checks `spec` for `owner`.
 pub async fn show(db: &OrgDb, owner: &RecordId, spec: ViewSpec) -> AppResult<Shown> {
     let view = match spec {
+        ViewSpec::Ui { spec, sources } => ui::resolve(db, owner, spec, sources).await?,
         ViewSpec::Impact { start_id, headline, affected } => {
             if affected.len() > MAX_AFFECTED {
                 return Err(AppError::bad_request(format!("an impact view lists at most {MAX_AFFECTED} affected entities")));
@@ -346,6 +350,7 @@ impl View {
     /// The view as plain text, for a terminal or any client that shows only text.
     pub fn text(&self) -> String {
         match self {
+            View::Ui { spec, data } => ui::text(spec, data),
             View::Impact { start, headline, affected, linked } => {
                 let mut out = format!("{headline}\nStarting from {} ({}).", start.name, words(&start.kind));
                 if !linked {
