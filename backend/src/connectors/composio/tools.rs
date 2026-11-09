@@ -194,7 +194,8 @@ impl ReadClient {
         if !allowed(slug) {
             return Err(failure(Failure::Protocol));
         }
-        if !self.prepared.contains(slug) {
+        let prepared = json!([slug, selection.toolkit, selection.account]).to_string();
+        if !self.prepared.contains(&prepared) {
             let search = data(self.mcp.call("COMPOSIO_SEARCH_TOOLS", json!({"queries":[{"use_case":format!("Read {} using {slug}", selection.toolkit)}],"session":{"generate_id":true}})).await.map_err(failure)?)?;
             if !contains_string(&search, slug) {
                 return Err(failure(Failure::Protocol));
@@ -222,7 +223,7 @@ impl ReadClient {
                     "The selected Composio app account is no longer active. Reconnect it.",
                 ));
             }
-            self.prepared.insert(slug.into());
+            self.prepared.insert(prepared);
         }
         let result = data(self.mcp.call("COMPOSIO_MULTI_EXECUTE_TOOL", json!({"tools":[{"tool_slug":slug,"account":selection.account,"arguments":args}],"session_id":self.session,"sync_response_to_workbench":false})).await.map_err(failure)?)?;
         let first = result

@@ -229,6 +229,16 @@ fn consumer_oauth_apps_refresh_ingest_partial_and_disconnect() {
                 .json()
                 .await
                 .unwrap();
+            assert!(
+                stats["schema_requests"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter(|s| *s == "GOOGLEDRIVE_FIND_FILE")
+                    .count()
+                    >= 4,
+                "tool preparation was reused across different accounts"
+            );
             assert!(stats["refreshes"].as_u64().unwrap() >= 1);
             assert!(stats["revokes"].as_u64().unwrap() >= 1);
             let (_, export) = app.http("GET", "/api/export", None, true).await;

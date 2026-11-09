@@ -8,7 +8,7 @@ from urllib.parse import urlparse, parse_qs, urlencode
 
 TOKEN = 'composio-canary-access'
 REFRESH = 'composio-canary-refresh'
-state = {'limited': False, 'refreshes': 0, 'revokes': 0, 'executions': [], 'registered': []}
+state = {'limited': False, 'refreshes': 0, 'revokes': 0, 'executions': [], 'registered': [], 'schema_requests': []}
 APPS = ['googledrive', 'gmail', 'googlecalendar', 'timelinesai', 'whatsapp', 'github']
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args): pass
@@ -66,7 +66,9 @@ class Handler(BaseHTTPRequestHandler):
         if name == 'COMPOSIO_SEARCH_TOOLS':
             use = args['queries'][0]['use_case']; slugs = [word for word in use.split() if word.startswith(('GOOGLE','GMAIL_','TIMELINESAI_','WHATSAPP_','GITHUB_'))]
             return tool({'successful':True,'data':{'session':{'id':'mock-search'},'tool_slugs':slugs}})
-        if name == 'COMPOSIO_GET_TOOL_SCHEMAS': return tool({'successful':True,'data':{'tool_schemas':{slug:{'input_schema':{'type':'object'}} for slug in args['tool_slugs']}}})
+        if name == 'COMPOSIO_GET_TOOL_SCHEMAS':
+            state['schema_requests'].extend(args['tool_slugs'])
+            return tool({'successful':True,'data':{'tool_schemas':{slug:{'input_schema':{'type':'object'}} for slug in args['tool_slugs']}}})
         if name == 'COMPOSIO_MANAGE_CONNECTIONS':
             app=args['toolkits'][0]['name']
             if args['toolkits'][0]['action']=='add': return tool({'successful':True,'data':{'redirect_url':self.origin+'/authorise-app'}})
