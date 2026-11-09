@@ -292,3 +292,7 @@ See [INSTALLATION.md](../INSTALLATION.md#backups): the nightly encrypted export,
 
 See [Getting help](support.md) to download a diagnostics zip from Settings, or
 collect logs from the command line when the web app is down.
+
+## Readiness evidence for self-hosters
+
+Read the [readiness catalogue](compliance/README.md), [shared responsibilities](compliance/responsibilities.md) and [applicability notes](compliance/applicability.md) before planning an assessment. Done, Partial and Missing describe source implementation, not your installation's operation. Record host settings, access reviews, restore drills and unknowns separately. The customer-selected model data path is excluded and assumed encrypted; Eunomia's own storage, ordinary transport and maker AI governance remain in scope. Policy placeholders belong to the separate organisational track.

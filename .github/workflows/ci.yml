@@ -209,6 +209,10 @@ jobs:
       - run: bash scripts/ci/check-migrations.sh
       # The update test starts from the newest published release (a new tag fails every PR until it has a row).
       - run: bash scripts/ci/check-update-path-rows.sh
+      - name: Readiness catalogue and evidence contract
+        run: |
+          python3 -m pip install -r scripts/ci/requirements-compliance.txt
+          bash scripts/ci/check-compliance.sh
       # Every script test that needs no Docker, by glob so a new one cannot be forgotten.
       # SKIP lists the ones that need real containers (upgrade-surreal-v3 and update-path have their own jobs below).
       - run: |
