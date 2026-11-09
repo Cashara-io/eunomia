@@ -1,0 +1,15 @@
+
+Running 7 tests using 1 worker
+
+(node:92995) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓  1 tests/chat-json-render.spec.ts:8:5 › generated catalog copies match their definition and Docker contexts (32ms)
+  ✓  2 tests/chat-json-render.spec.ts:270:9 › catalog and chart fixtures in light at 1280px (10.8s)
+  ✓  3 tests/chat-json-render.spec.ts:270:9 › catalog and chart fixtures in light at 390px (10.7s)
+  ✓  4 tests/chat-json-render.spec.ts:270:9 › catalog and chart fixtures in dark at 1280px (10.8s)
+  ✓  5 tests/chat-json-render.spec.ts:270:9 › catalog and chart fixtures in dark at 390px (10.7s)
+  ✓  6 tests/chat-json-render.spec.ts:433:7 › dense networks and nested cards at 1280px (1.9s)
+  ✓  7 tests/chat-json-render.spec.ts:433:7 › dense networks and nested cards at 390px (2.0s)
+
+  7 passed (47.7s)
