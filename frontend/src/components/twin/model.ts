@@ -58,8 +58,8 @@ export const twinHref = (
   space: string,
   params: Record<string, string> = {},
 ) => `${path}?${new URLSearchParams({ space, ...params })}`;
-export const kindHref = (space: string, kind: string) =>
-  twinHref(`/twin/kinds/${encodeURIComponent(kind)}`, space);
+export const kindHref = (space: string, kind: string, back = "") =>
+  twinHref(`/twin/kinds/${encodeURIComponent(kind)}`, space, back ? { back } : {});
 export const PAGE_SIZE = 10;
 export function pageNumber(value: string | null, total: number) {
   return Math.min(

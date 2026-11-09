@@ -176,7 +176,7 @@ test("owner batch decisions, receipts, explicit merge and strict policy", async 
   await page
     .getByRole("button", { name: "Approve selected", exact: true })
     .click();
-  await expect(page.getByRole("status")).toContainText("store: Approved");
+  await expect(page.getByRole("status")).toContainText("Kind store: Approved");
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download receipt" }).click();
   expect((await download).suggestedFilename()).toBe(
@@ -341,13 +341,13 @@ test("a batch approves dependencies in order and reports each saved result", asy
   await page
     .getByRole("button", { name: "Approve selected", exact: true })
     .click();
-  await expect(page.getByRole("status")).toContainText("store: Approved");
-  await expect(page.getByRole("status")).toContainText("revenue: Approved");
+  await expect(page.getByRole("status")).toContainText("Kind store: Approved");
+  await expect(page.getByRole("status")).toContainText("Property revenue on store");
   await expect(page.getByRole("status")).toContainText(
-    "total revenue: Approved",
+    "Metric total revenue on store",
   );
   await expect(page.getByRole("status")).toContainText(
-    "store supplies store: Approved",
+    "Link type store supplies store: Approved",
   );
   const current = await (
     await page.request.get(`/api/vaults/${vault.id}/ontology`)
@@ -366,4 +366,43 @@ test("a batch approves dependencies in order and reports each saved result", asy
   await expect(
     page.getByRole("combobox", { name: /Merge person/ }),
   ).toHaveCount(0);
+});
+
+test("one suggestion approves on its own, and closing it keeps the queue page", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const { vault } = await seed(page);
+  const space = encodeURIComponent(vault.id);
+  await page.goto(`/twin/review?space=${space}&page=2`);
+  await page.getByRole("link").filter({ hasText: /fixture/ }).first().click();
+  await expect(page).toHaveURL(/selected=/);
+  await page.getByRole("button", { name: "Back to queue" }).click();
+  await expect(page).toHaveURL(/page=2/);
+  await expect(page).not.toHaveURL(/selected=/);
+
+  await page.goto(`/twin/review?space=${space}&type=kind&q=fixture_1`);
+  await page.getByRole("link", { name: "fixture 1", exact: true }).click();
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  await expect
+    .poll(async () => {
+      const current = await (
+        await page.request.get(`/api/vaults/${vault.id}/ontology`)
+      ).json();
+      return current.kinds.find((k: { kind: string }) => k.kind === "fixture_1")
+        ?.status;
+    })
+    .toBe("approved");
+});
+
+test("a kind page opened from Structure returns to the same Structure page", async ({
+  page,
+}) => {
+  const { vault } = await seed(page);
+  const space = encodeURIComponent(vault.id);
+  await page.goto(`/twin/schema?space=${space}&page=2&status=all`);
+  await page.getByRole("table").getByRole("link").first().click();
+  await expect(page).toHaveURL(/\/twin\/kinds\//);
+  await page.getByRole("link", { name: "Back to Structure" }).click();
+  await expect(page).toHaveURL(/\/twin\/schema\?.*page=2/);
 });

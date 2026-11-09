@@ -57,7 +57,11 @@ export default function KindDetail({
     <>
       <Link
         className="link self-start text-[13px]"
-        href={twinHref("/twin/schema", vault.id)}
+        href={
+          params.get("back")
+            ? `/twin/schema?${new URLSearchParams(params.get("back") ?? "")}`
+            : twinHref("/twin/schema", vault.id)
+        }
       >
         Back to Structure
       </Link>

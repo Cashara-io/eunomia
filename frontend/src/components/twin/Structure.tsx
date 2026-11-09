@@ -132,7 +132,7 @@ export default function Structure({
                       className="link"
                       href={
                         r.type === "kind"
-                          ? kindHref(vault.id, r.kind)
+                          ? kindHref(vault.id, r.kind, params.toString())
                           : twinHref("/twin/review", vault.id, {
                               selected: r.id,
                               status: "all",

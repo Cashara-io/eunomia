@@ -33,6 +33,13 @@ import {
   type Definition as DefinitionItem,
 } from "./model";
 
+function describe(d: DefinitionItem) {
+  if (d.type === "kind") return `Kind ${words(d.name)}`;
+  if (d.type === "link") return `Link type ${words(d.name)}`;
+  const what = d.type === "property" ? "Property" : "Metric";
+  return `${what} ${words(d.name)} on ${words(d.kind)} (${d.id})`;
+}
+
 type Receipt = {
   reason: string;
   action: string;
@@ -131,7 +138,7 @@ export default function Review({
           JSON.stringify(current.item) !== JSON.stringify(d.item)
         ) {
           results.push({
-            name: words(d.name),
+            name: describe(d),
             result:
               "Skipped: the definition changed. Refresh and review it again.",
           });
@@ -139,13 +146,13 @@ export default function Review({
         }
         qc.setQueryData(ontologyKeys.vault(vault.id), await decide(d, confirm));
         results.push({
-          name: words(d.name),
+          name: describe(d),
           result:
             confirm === "approve" ? "Approved" : "Rejected without merging",
         });
       } catch (e) {
         results.push({
-          name: words(d.name),
+          name: describe(d),
           result:
             e instanceof Error ? e.message : "Decision failed. Try again.",
         });

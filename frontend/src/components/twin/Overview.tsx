@@ -42,7 +42,7 @@ export default function Overview({
             <tr>
               <th>Definition</th>
               {Object.entries(STATUS).map(([key, s]) => (
-                <th key={key}>{s.label}</th>
+                <th key={key}>{key === "observed" ? "Used, not reviewed" : s.label}</th>
               ))}
             </tr>
           </thead>
