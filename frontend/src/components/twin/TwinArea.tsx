@@ -4,6 +4,7 @@ import { MorphCount } from "@/components/ui/MorphText";
 
 import Link from "next/link";
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useVaults } from "@/lib/queries/vaults";
 import { useOntology, useReadiness } from "@/lib/queries/ontology";
@@ -18,10 +19,13 @@ import Overview from "./Overview";
 import Structure from "./Structure";
 import KindDetail from "./KindDetail";
 import Review from "./Review";
+import Objects from "./Objects";
+import ObjectProfile from "./ObjectProfile";
 
 const views = [
   { path: "/ontology", label: "Overview" },
   { path: "/ontology/schema", label: "Structure" },
+  { path: "/ontology/objects", label: "Objects" },
   { path: "/ontology/review", label: "Review" },
 ];
 
@@ -29,7 +33,7 @@ export default function TwinArea({
   view,
   kind,
 }: {
-  view: "overview" | "structure" | "review" | "kind";
+  view: "overview" | "structure" | "review" | "kind" | "objects" | "object";
   kind?: string;
 }) {
   const query = useVaults();
@@ -68,9 +72,11 @@ export default function TwinArea({
                 href={twinHref(
                   view === "review"
                     ? "/ontology/review"
-                    : view === "structure"
-                      ? "/ontology/schema"
-                      : "/ontology",
+                    : view === "objects" || view === "object"
+                      ? "/ontology/objects"
+                      : view === "structure"
+                        ? "/ontology/schema"
+                        : "/ontology",
                   v.id,
                 )}
                 className="flex items-center justify-between gap-3 p-4 hover:bg-[var(--surface-raised)]"
@@ -99,11 +105,13 @@ function SelectedSpace({
   kind,
 }: {
   vault: Vault;
-  view: "overview" | "structure" | "review" | "kind";
+  view: "overview" | "structure" | "review" | "kind" | "objects" | "object";
   kind?: string;
 }) {
-  const query = useOntology(vault.id);
-  const readiness = useReadiness(vault.id);
+  const objectView = view === "objects" || view === "object";
+  const query = useOntology(vault.id, !objectView);
+  const cache = useQueryClient();
+  const readiness = useReadiness(vault.id, !objectView);
   const [adding, setAdding] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
@@ -111,7 +119,12 @@ function SelectedSpace({
   const waiting = data
     ? definitions(data).filter((d) => d.item.status === "proposed").length
     : null;
-  const current = view === "kind" ? "/ontology/schema" : pathname;
+  const current =
+    view === "kind"
+      ? "/ontology/schema"
+      : view === "object"
+        ? "/ontology/objects"
+        : pathname;
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -126,8 +139,17 @@ function SelectedSpace({
             className="btn btn-sm"
             disabled={query.isFetching}
             onClick={() => {
-              void query.refetch();
-              void readiness.refetch();
+              if (!objectView) {
+                void query.refetch();
+                void readiness.refetch();
+              }
+              void cache.invalidateQueries({
+                queryKey: ["object-kinds", vault.id],
+              });
+              void cache.invalidateQueries({ queryKey: ["objects", vault.id] });
+              void cache.invalidateQueries({
+                queryKey: ["object-profile", vault.id],
+              });
             }}
           >
             {query.isFetching ? "Refreshing…" : "Refresh"}
@@ -185,7 +207,11 @@ function SelectedSpace({
           </Link>
         </section>
       )}
-      {query.isError ? (
+      {view === "objects" ? (
+        <Objects space={vault.id} />
+      ) : view === "object" ? (
+        <ObjectProfile key={kind} space={vault.id} id={kind ?? ""} />
+      ) : query.isError ? (
         <ErrorLine
           error={failure(
             query.error,
