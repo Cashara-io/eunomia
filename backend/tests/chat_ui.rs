@@ -693,6 +693,7 @@ async fn cancelled_ordinary_tool_batch_then_send_has_valid_history() {
     use eunomia_backend::{chat::service, sources::mock::{route,serve}};
     let mock = serve(vec![]).await;
     let (app,_) = scripted_chat(&mock).await;
+    let embeddings_before = mock.requests().iter().filter(|r| r.path == "/embeddings").count();
     let call = model_reply(json!({"tool_calls":[
         {"index":0,"id":"completed","function":{"name":"ontology_get","arguments":"{}"}},
         {"index":1,"id":"pending","function":{"name":"recall","arguments":json!({"query":"cancel probe"}).to_string()}}
@@ -710,7 +711,7 @@ async fn cancelled_ordinary_tool_batch_then_send_has_valid_history() {
             let event = serde_json::to_value(rx.recv().await.unwrap()).unwrap();
             if event["type"] == "tool_result" && event["id"] == "completed" { break; }
         }
-        while !mock.requests().iter().any(|r| r.path == "/embeddings") { tokio::time::sleep(std::time::Duration::from_millis(5)).await; }
+        while mock.requests().iter().filter(|r| r.path == "/embeddings").count() <= embeddings_before { tokio::time::sleep(std::time::Duration::from_millis(5)).await; }
     }).await.unwrap();
     drop(rx);
     tokio::time::timeout(std::time::Duration::from_millis(500),task).await.unwrap().unwrap();

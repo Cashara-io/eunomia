@@ -416,7 +416,7 @@ fn unit_form(unit: &str) -> &str {
 }
 fn chat_spans(text: &str) -> Vec<std::ops::Range<usize>> {
     static SUFFIX: OnceLock<Regex> = OnceLock::new();
-    let suffix = SUFFIX.get_or_init(|| Regex::new(&format!(r"^ *(?:thousand|million|billion|k|m|b)\b(?: *(?:{CURRENCY_CODE}\b|[%‰]))?|^ *(?:per cent|percent)\b")).unwrap());
+    let suffix = SUFFIX.get_or_init(|| Regex::new(&format!(r"^ *(?:thousand|million|billion|k|m|b)\b(?: *(?:{CURRENCY_CODE}\b|[%‰]))?|^ *(?:per cent|percent|percentage)\b")).unwrap());
     let mut out = Vec::new();
     for mut span in spans(text) {
         if out.last().is_some_and(|r: &std::ops::Range<usize>| span.start < r.end) { continue; }
@@ -428,7 +428,7 @@ fn chat_spans(text: &str) -> Vec<std::ops::Range<usize>> {
 impl ChatNumber {
     fn parse(raw: &str, context: &ChatUnit) -> Option<Self> {
         static NUMBER: OnceLock<Regex> = OnceLock::new();
-        let number = NUMBER.get_or_init(|| Regex::new(&format!(r"^(?P<sign>[+-]?) *(?P<prefix>\p{{Sc}}|{CURRENCY_CODE})? *(?P<inner>[+-]?)(?P<value>(?:[0-9][0-9,]*)(?:\.[0-9]+)?|\.[0-9]+) *(?P<scale>thousand|million|billion|k|m|b)? *(?P<suffix>%|‰|per cent|percent|\p{{Sc}}|{CURRENCY_CODE})?$" )).unwrap());
+        let number = NUMBER.get_or_init(|| Regex::new(&format!(r"^(?P<sign>[+-]?) *(?P<prefix>\p{{Sc}}|{CURRENCY_CODE})? *(?P<inner>[+-]?)(?P<value>(?:[0-9][0-9,]*)(?:\.[0-9]+)?|\.[0-9]+) *(?P<scale>thousand|million|billion|k|m|b)? *(?P<suffix>%|‰|per cent|percent|percentage|\p{{Sc}}|{CURRENCY_CODE})?$" )).unwrap());
         let c = number.captures(raw.trim())?;
         let digits = c.name("value")?.as_str().replace(',', "");
         let sign = c.name("sign").map(|s| s.as_str()).unwrap_or("");
@@ -585,8 +585,12 @@ impl ChatProse {
             // plural/abbreviation) after the number, with a word boundary.
             let mut matched = None;
             for evidence in &self.numbers {
-                let ChatUnit::Other(unit) = &evidence.unit else { continue; };
-                let mut forms = vec![unit.clone(), unit_form(unit).into(), format!("{}s", unit_form(unit))];
+                let unit = match &evidence.unit {
+                    ChatUnit::Other(unit) => unit.as_str(),
+                    ChatUnit::Ratio => "ratio",
+                    _ => continue,
+                };
+                let mut forms = vec![unit.to_string(), unit_form(unit).into(), format!("{}s", unit_form(unit))];
                 for alias in ["kg", "kilogram", "kilograms", "g", "gram", "grams", "l", "litre", "litres", "liter", "liters", "m", "metre", "metres", "meter", "meters"] {
                     if unit_form(alias) == unit_form(unit) { forms.push(alias.into()); }
                 }
@@ -597,7 +601,7 @@ impl ChatProse {
                     if rest[gap..].starts_with(&form) {
                         let end = base_end + gap + form.len();
                         if text[end..].chars().next().is_some_and(|c| c.is_alphanumeric()) { continue; }
-                        if ChatNumber::parse(&text[span.start..base_end], &ChatUnit::Other(unit.clone())).is_some_and(|shown| evidence.supports(&shown))
+                        if ChatNumber::parse(&text[span.start..base_end], &evidence.unit).is_some_and(|shown| evidence.supports(&shown))
                             && matched.is_none_or(|old| end > old) { matched = Some(end); }
                     }
                 }
@@ -715,12 +719,12 @@ mod tests {
     fn chat_preserves_numeric_units_and_scaled_values() {
         let mut prose = ChatProse::default(); prose.result(&json!(12));
         assert!(prose.check("12 records").is_ok());
-        for raw in ["$12", "$12k", "12%", "12 thousand", "12M", "12 billion"] {
+        for raw in ["$12", "$12k", "12%", "12 percentage", "12 thousand", "12M", "12 billion"] {
             assert!(prose.check(raw).is_err(), "{raw}");
         }
         for evidence in [json!({"value":12,"unit":"%"}), json!({"value":0.12,"unit":"ratio"})] {
             let mut prose = ChatProse::default(); prose.result(&evidence);
-            assert!(prose.check("12%").is_ok(), "{evidence}");
+            for shown in ["12%", "12 percent", "12 percentage"] { assert!(prose.check(shown).is_ok(), "{evidence}: {shown}"); }
             assert!(prose.check("$12").is_err());
         }
         let mut prose = ChatProse::default(); prose.result(&json!({"value":12000,"unit":"AUD"}));
@@ -750,7 +754,7 @@ mod tests {
     }
     #[test]
     fn chat_matches_arbitrary_evidence_units_and_common_forms() {
-        for (unit, shown) in [("kg", "12 kg"), ("kg", "12 kilograms"), ("kg", "12kg"), ("metre", "12 m"), ("µm", "12 µm"), ("m²", "12 m²"), ("widget", "12 widgets"), ("WIDGETS", "12 widget"), ("litre", "12 L"), ("boxes shipped", "12 boxes shipped")] {
+        for (unit, shown) in [("kg", "12 kg"), ("kg", "12 kilograms"), ("kg", "12kg"), ("metre", "12 m"), ("µm", "12 µm"), ("m²", "12 m²"), ("ratio", "12 ratio"), ("ratio", "12 ratios"), ("widget", "12 widgets"), ("WIDGETS", "12 widget"), ("litre", "12 L"), ("boxes shipped", "12 boxes shipped")] {
             let mut prose = ChatProse::default(); prose.result(&json!({"value":12,"unit":unit}));
             assert!(prose.check(shown).is_ok(), "{unit}: {shown}");
             assert!(prose.check("12%").is_err());
