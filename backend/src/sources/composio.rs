@@ -1,5 +1,5 @@
 //! One consumer account, several explicitly selected app accounts, independent checkpoints.
-use super::base::{Conn, Source, SyncProgress, SyncResult, envelope, s};
+use super::base::{envelope, s, Conn, Source, SyncProgress, SyncResult};
 use crate::rid::RecordIdExt;
 use crate::{
     connectors::composio::{
@@ -11,7 +11,7 @@ use crate::{
 use async_trait::async_trait;
 use base64::Engine;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use tokio::sync::Mutex;
 
 pub struct ComposioSource;
@@ -602,21 +602,58 @@ impl super::gmail::GmailReader for GmailBridge<'_> {
     }
 }
 
+fn note_link_path(sel: &Selection, origin: &str, target: &str) -> String {
+    let root = if sel.toolkit == "github" {
+        sel.folder.trim_matches('/')
+    } else {
+        ""
+    };
+    let parent = origin.rsplit_once('/').map(|(p, _)| p).unwrap_or("");
+    let absolute = target.starts_with('/');
+    let target = target.trim_start_matches('/');
+    let relative = target.starts_with("./") || target.starts_with("../");
+    let base = if relative || (!absolute && !target.contains('/')) {
+        parent
+    } else {
+        root
+    };
+    let joined = if base.is_empty() || (!root.is_empty() && target.starts_with(&format!("{root}/")))
+    {
+        target.to_string()
+    } else {
+        format!("{base}/{target}")
+    };
+    let mut parts = Vec::new();
+    for part in joined.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                parts.pop();
+            }
+            _ => parts.push(part),
+        }
+    }
+    let path = parts.join("/");
+    if path.ends_with(".md") {
+        path
+    } else {
+        format!("{path}.md")
+    }
+}
+
 fn note_relations(sel: &Selection, raw: &mut Value, text: &str, path: &str) {
     let front = text
         .strip_prefix("---\n")
         .and_then(|s| s.split_once("\n---"))
         .map(|(f, _)| f)
         .unwrap_or("");
-    // Keep arbitrary front matter intact; only explicit wikilinks become relations.
+    // Keep arbitrary front matter intact; selected scalar/list fields also become relations.
     raw["frontmatter"] = json!(front);
     let re =
         regex::Regex::new(r"\[\[([^\]|#]+)(?:[^\]]*)\]\]").expect("static wikilink expression");
     let mut links:Vec<_>=re.captures_iter(text).map(|c|{
         let target=c[1].trim();
-        let parent=path.rsplit_once('/').map(|(p,_)|format!("{p}/")).unwrap_or_default();
-        let target=if target.contains('/') {target.to_string()}else{format!("{parent}{target}")};
-        let target=if target.ends_with(".md"){target}else{format!("{target}.md")};
+        let target=note_link_path(sel,path,target);
         let id=if sel.toolkit=="github"{format!("{}:{target}",sel.repo)}else{target};
         json!({"target":format!("composio:composio.note:{}:{}:{id}",sel.toolkit,sel.account),"rel":"wikilink"})
     }).collect();
@@ -643,11 +680,7 @@ fn note_relations(sel: &Selection, raw: &mut Value, text: &str, path: &str) {
             let id = if field == "tags" {
                 format!("tag:{target}")
             } else {
-                let path = if target.ends_with(".md") {
-                    target.to_string()
-                } else {
-                    format!("{target}.md")
-                };
+                let path = note_link_path(sel, path, target);
                 if sel.toolkit == "github" {
                     format!("{}:{path}", sel.repo)
                 } else {
@@ -716,4 +749,33 @@ pub async fn store_documents(
         raw.as_object_mut().ok_or_else(protocol)?.remove("document");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn note_relations_respect_the_vault_root_and_relative_note_paths() {
+        let selection: Selection = serde_json::from_value(
+            json!({"toolkit":"github","account":"mine","repo":"owner/repo","folder":"vault"}),
+        )
+        .unwrap();
+        let mut raw = json!({});
+        note_relations(
+            &selection,
+            &mut raw,
+            "---\nrelated: projects/Target\n---\n[[projects/Target]] [[Sibling]] [[../Other]]",
+            "vault/notes/Origin.md",
+        );
+        let links = raw["links"].as_array().unwrap();
+        assert_eq!(links.len(), 4);
+        for (path, rel) in [
+            ("vault/projects/Target.md", "wikilink"),
+            ("vault/projects/Target.md", "frontmatter:related"),
+            ("vault/notes/Sibling.md", "wikilink"),
+            ("vault/Other.md", "wikilink"),
+        ] {
+            assert!(links.contains(&json!({"target":format!("composio:composio.note:github:mine:owner/repo:{path}"),"rel":rel})),"missing {path} ({rel})");
+        }
+    }
 }
