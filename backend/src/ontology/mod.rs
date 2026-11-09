@@ -750,6 +750,7 @@ pub async fn decide_kind(db: &OrgDb, user: &RecordId, vault: &RecordId, kind: &s
     decider(db, user, vault).await?;
     let kind = Kind::parse(kind)?;
     let id = kind_rid(vault, &kind);
+    activity::verify_seen(db, &id).await?;
     let (status, merge_into) = match decision {
         KindDecision::Describe { description } => {
             let description = clean_text("description", Some(&description))?;
@@ -832,6 +833,7 @@ pub async fn decide_link(
     decider(db, user, vault).await?;
     let key = LinkKey::parse(from_kind, label, to_kind)?;
     let id = link_rid(vault, &key);
+    activity::verify_seen(db, &id).await?;
     let on = |stmt: &crate::store::Stmt| {
         stmt.on(db)
             .bind(("id", id.clone()))

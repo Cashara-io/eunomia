@@ -1,7 +1,7 @@
 //! Durable, transactionally appended ontology activity and review preconditions.
 use crate::{
     authz::{self, Action},
-    error::{AppError, AppResult},
+    error::{AppError, AppResult, ErrorCode},
     pool::OrgDb,
     store::ontology_activity as q,
 };
@@ -23,6 +23,34 @@ pub fn actor_name() -> String {
 pub fn decision_context() -> Option<DecisionContext> {
     DECISION.try_with(Clone::clone).ok()
 }
+pub fn require_ready(db: &OrgDb) -> AppResult<()> {
+    if db.schema_version() < 41 {
+        return Err(AppError::coded(
+            ErrorCode::TenantSchemaBehind,
+            "This space is upgrading. Try again shortly.",
+        ));
+    }
+    Ok(())
+}
+
+pub fn check_seen(revision: i64) -> AppResult<()> {
+    if decision_context().is_some_and(|seen| seen.revision != revision) {
+        return Err(AppError::coded(
+            ErrorCode::OntologyStaleRevision,
+            "This definition changed since you reviewed it. Review the latest version before deciding.",
+        ));
+    }
+    Ok(())
+}
+
+pub async fn verify_seen(db: &OrgDb, id: &RecordId) -> AppResult<()> {
+    if decision_context().is_none() {
+        return Ok(());
+    }
+    let rows: Vec<Option<i64>> = q::REVISION.on(db).bind(("id", id.clone())).await?.take(0)?;
+    check_seen(rows.into_iter().flatten().next().unwrap_or(0))
+}
+
 pub async fn reviewing<T>(
     revision: i64,
     reason: Option<String>,

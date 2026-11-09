@@ -473,9 +473,8 @@ pub async fn decide_property(db: &OrgDb, user: &RecordId, vault: &RecordId, kind
     let kind = Kind::parse(kind)?;
     let name = PropertyName::parse(name)?;
     let id = property_rid(vault, &kind, &name);
-    if load(db, &id).await?.is_none() {
-        return Err(no_property(&kind, &name));
-    }
+    let Some(row) = load(db, &id).await? else { return Err(no_property(&kind, &name)) };
+    super::activity::check_seen(row.revision)?;
     let (status, merge_into) = match decision {
         PropertyDecision::Describe { description } => {
             let description = clean_text("description", Some(&description))?;

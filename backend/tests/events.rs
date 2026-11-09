@@ -168,3 +168,28 @@ async fn ontology_membership_is_checked_on_subscribe_and_again_before_delivery()
     app.tool("ontology_propose", json!({"vault_id":vault,"kinds":[{"kind":"supplier"}]})).await;
     assert!(tokio::time::timeout(std::time::Duration::from_millis(1500), ontology_next(&mut ws)).await.is_err(), "revoked member gets no event");
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_socket_opened_during_the_schema_upgrade_reconnects_for_ontology_events() {
+    use futures::SinkExt;
+    let app = TestApp::new().await;
+    app.control().test_raw().query("UPDATE $tenant SET schema_version = 40")
+        .bind(("tenant", app.user.org.tenant_record())).await.unwrap().check().unwrap();
+    app.state.pool.evict(&app.user.org);
+    let base = serve(&app).await;
+    let mut ws = connect(&base, &app.token).await;
+    assert_eq!(next(&mut ws).await["ontology"], json!({}));
+    app.control().test_raw().query("UPDATE $tenant SET schema_version = 41")
+        .bind(("tenant", app.user.org.tenant_record())).await.unwrap().check().unwrap();
+    app.state.pool.evict(&app.user.org);
+    ws.send(Message::Ping(Default::default())).await.unwrap();
+    let closed = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while let Some(Ok(message)) = ws.next().await {
+            if let Message::Close(Some(close)) = message { return u16::from(close.code); }
+        }
+        0
+    }).await.unwrap();
+    assert_eq!(closed, 4410);
+    let mut resumed = connect(&base, &app.token).await;
+    assert!(!next(&mut resumed).await["ontology"].as_object().unwrap().is_empty());
+}

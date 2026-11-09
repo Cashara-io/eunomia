@@ -201,3 +201,102 @@ async fn typed_values_and_import_batches_record_only_committed_writes() {
     let imported = events.iter().find(|e| e["action"] == "imported").unwrap();
     assert_eq!(imported["after"]["values"], 2);
 }
+
+#[tokio::test]
+async fn a_stale_metric_gets_a_conflict_before_dependency_validation() {
+    let app = TestApp::new().await;
+    let vault = setup(&app).await;
+    let args = json!({"vault_id":vault,"kinds":[{"kind":"shop"}],"properties":[{"kind":"shop","name":"price","datatype":"number"}],"metrics":[{"kind":"shop","name":"total","expr":{"agg":"sum","property":"price"}}]});
+    let out = app.tool("ontology_propose", args).await;
+    assert!(out.get("error").is_none(), "{out}");
+    let out = app.tool("ontology_propose", json!({"vault_id":vault,"metrics":[{"kind":"shop","name":"total","description":"Changed while open","expr":{"agg":"sum","property":"price"}}]})).await;
+    assert!(out.get("error").is_none(), "{out}");
+    let (status, out) = app
+        .http_session(
+            "POST",
+            &format!("/api/vaults/{vault}/ontology/metrics/decide"),
+            Some(
+                json!({"kind":"shop","name":"total","revision":1,"decision":{"action":"approve"}}),
+            ),
+        )
+        .await;
+    assert_eq!(status, 409, "{out}");
+    assert_eq!(out["code"], "ontology.stale_revision");
+}
+
+#[tokio::test]
+async fn a_failed_event_append_rolls_back_the_definition_and_cursor() {
+    let app = TestApp::new().await;
+    let vault = setup(&app).await;
+    let db = app.db().await;
+    db.test_raw().query("DEFINE FIELD OVERWRITE reason ON ontology_event TYPE option<string> ASSERT $value != 'force event failure'")
+        .await.unwrap().check().unwrap();
+    let out = app
+        .tool(
+            "ontology_propose",
+            json!({"vault_id":vault,"kinds":[{"kind":"shop","reason":"force event failure"}]}),
+        )
+        .await;
+    assert!(out.get("error").is_some(), "{out}");
+    let ontology = app.tool("ontology_get", json!({"vault_id":vault})).await;
+    assert!(
+        !ontology["kinds"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|k| k["kind"] == "shop")
+    );
+    assert!(activity(&app, &vault).await.is_empty());
+    assert_eq!(
+        eunomia_backend::ontology::activity::head(
+            &db,
+            &eunomia_backend::rid::parse(&vault).unwrap()
+        )
+        .await
+        .unwrap(),
+        0
+    );
+}
+
+#[tokio::test]
+async fn an_n_minus_one_import_refuses_before_creating_any_objects() {
+    let app = TestApp::new().await;
+    let doc = app
+        .tool(
+            "document_upload",
+            json!({"filename":"shops.csv","text":"name,price\nNorth,20\n"}),
+        )
+        .await;
+    assert!(doc.get("error").is_none(), "{doc}");
+    app.control()
+        .test_raw()
+        .query("UPDATE $tenant SET schema_version = 40")
+        .bind(("tenant", app.user.org.tenant_record()))
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    app.state.pool.evict(&app.user.org);
+    let out = app
+        .tool(
+            "document_import_rows",
+            json!({"document_id":doc["id"],"kind":"shop","name_column":"name"}),
+        )
+        .await;
+    assert!(
+        out["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("upgrading"),
+        "{out}"
+    );
+    let db = app.db().await;
+    let objects: Vec<serde_json::Value> = db
+        .test_raw()
+        .query("SELECT * FROM entity")
+        .await
+        .unwrap()
+        .take(0)
+        .unwrap();
+    assert!(objects.is_empty());
+}

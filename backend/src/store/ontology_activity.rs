@@ -16,4 +16,8 @@ pub const HEAD: Stmt = Stmt::new(
     "ontology_activity.head",
     "SELECT VALUE ontology_seq FROM $vault",
 );
-pub const ALL: &[&Stmt] = &[&PAGE, &NEWEST, &HEAD];
+pub const REVISION: Stmt = Stmt::new(
+    "ontology_activity.revision",
+    "SELECT VALUE revision FROM $id",
+);
+pub const ALL: &[&Stmt] = &[&PAGE, &NEWEST, &HEAD, &REVISION];

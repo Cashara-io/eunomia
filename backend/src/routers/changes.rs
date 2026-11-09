@@ -348,6 +348,15 @@ async fn follow_user(mut socket: WebSocket, state: OrgState, headers: HeaderMap,
     };
 
     let result: Result<(), Stop> = loop {
+        // A socket opened during the N-1 window holds its original OrgDb handle.
+        // Reconnect once the pool sees 0041, so ontology delivery cannot stay off
+        // forever behind an otherwise healthy heartbeat connection.
+        if state.db.schema_version() < 41
+            && let Ok(db) = state.app.pool.for_org(&state.db.org()).await
+            && db.schema_version() >= 41
+        {
+            break Err(Stop::Resync);
+        }
         let step = tokio::select! {
             msg = socket.recv() => match msg {
                 Some(Ok(Message::Close(_))) | Some(Err(_)) | None => Err(Stop::Gone),

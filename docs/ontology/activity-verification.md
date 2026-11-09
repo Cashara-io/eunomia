@@ -32,3 +32,11 @@ A real MCP proposal landed in an already-open Review page. The second context ke
 - [Mobile dark](https://github.com/Cashara-io/eunomia/blob/pr-screenshots/ontology-3/activity-390-dark.png)
 - [Live proposal frame strip](https://github.com/Cashara-io/eunomia/blob/pr-screenshots/ontology-3/live-proposal-strip.png)
 - [Stale revision conflict](https://github.com/Cashara-io/eunomia/blob/pr-screenshots/ontology-3/stale-conflict.png)
+
+## Recorded check results
+
+- Focused Helium Playwright against the isolated hardened SurrealDB: 10 passed, 1 existing large-fixture test skipped.
+- Full Helium Playwright run: 158 passed, 16 skipped, 1 signup case hit the fixture's authentication rate limit. That case passed when rerun on its own. The failed full-run result is retained in the verification record.
+- Shared preview automation snapshots timed out twice. The real Playwright browser cases and screenshots supplied the browser proof.
+- Migration numbering and latest-release update-path row guards passed. Fresh schema, 0040-to-0041 upgrade, replay, membership and stored-reason tests were exercised before the final source checks.
+- Local multi-release Compose update runs were not attempted while this shared Mac was close to its disk threshold. The existing six CI update-path rows include the new table, migration and stored-reason assertions.

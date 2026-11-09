@@ -55,7 +55,8 @@ test("two contexts see proposals, durable reasons and stale-review conflicts liv
   for (const width of [1440, 390]) for (const theme of ["light", "dark"]) {
     await page.setViewportSize({ width, height: 1000 });
     await page.evaluate(value => { localStorage.setItem("eunomia-theme", value); document.documentElement.dataset.theme = value; }, theme);
-    await page.screenshot({ path: testInfo.outputPath(`activity-${width}-${theme}.png`), fullPage: true });
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    await page.screenshot({ path: testInfo.outputPath(`activity-${width}-${theme}.png`), fullPage: true, animations: "disabled" });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
   }
   await reviewer.close();

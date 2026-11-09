@@ -474,6 +474,7 @@ fn not_ready(kind: &Kind, why: &str) -> AppError {
 pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, origin: Origin) -> AppResult<ImportOut> {
     let db = &state.db;
     let doc = crate::documents::load_csv(state, user, &args.document_id, Action::WriteMemories).await?;
+    super::activity::require_ready(&state.db)?;
     let kind = Kind::parse(&args.kind)?;
     match kind_status(db, &doc.vault, &kind).await? {
         Some(Status::Approved) => {}

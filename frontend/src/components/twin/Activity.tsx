@@ -75,7 +75,7 @@ export default function Activity({ space, compact = false, definition }: {
     <div className="max-h-96 overflow-auto" onScroll={e => { if (!paused && e.currentTarget.scrollTop > 16) pause(); }}>
       <ol className="hairline-rows text-[13px]">
         {shown.map(event => <li key={event.seq} className="py-3 [overflow-wrap:anywhere]">
-          <p><span className="font-medium">{event.actor_name}</span> {words(event.action).toLowerCase()} {words(event.name)} <span className="label">{words(event.definition_type)}</span></p>
+          <p><span className="font-medium">{event.actor_name}</span> {words(event.action).toLowerCase()} {words(event.name)} <span className="label">{words(event.definition_type)}{event.kind && event.definition_type !== "kind" && event.definition_type !== "link" ? ` · ${words(event.kind)}` : ""}</span></p>
           <time dateTime={event.at} className="text-[12px]" style={{ color: "var(--ink-dim)" }}>{new Date(event.at).toLocaleString("en-AU")}</time>
           {event.reason && <p className="mt-1">{event.reason}</p>}
         </li>)}

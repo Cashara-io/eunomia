@@ -63,8 +63,8 @@ export default function Review({
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const current = definitions(data);
   const [known, setKnown] = useState(() => current.map(d => d.id));
-  const newItems = current.filter(d => !known.includes(d.id));
-  const all = current.filter(d => known.includes(d.id));
+  const newItems = current.filter(d => !known.includes(d.id) && d.item.status === "proposed");
+  const all = current.filter(d => known.includes(d.id) || d.item.status !== "proposed");
   const status = params.get("status") ?? "proposed";
   const q = (params.get("q") ?? "").toLowerCase();
   const rows = all.filter(
@@ -322,7 +322,9 @@ export default function Review({
             ))}
             {shown.length === 0 && (
               <li className="p-4 text-[13px]">
-                {waiting === 0 && status === "proposed"
+                {newItems.length > 0 && status === "proposed"
+                  ? "New suggestions are ready. Use the notice above to show them."
+                  : waiting === 0 && status === "proposed"
                   ? "Nothing is waiting for review. Use All statuses to inspect earlier decisions."
                   : "No definitions match. Change the search or filters."}
               </li>

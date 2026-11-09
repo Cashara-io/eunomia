@@ -60,8 +60,13 @@ export default function Definition({
       haptic("success");
       return true;
     } catch (e) {
-      if (e instanceof ApiError && e.status === 409) { await cache.invalidateQueries({ queryKey: ["ontology", data.vault] }); setConflict(true); }
-      setError(failure(e, fallback));
+      if (e instanceof ApiError && e.status === 409) {
+        await cache.invalidateQueries({ queryKey: ["ontology", data.vault] });
+        setConflict(true);
+        setError(null);
+      } else {
+        setError(failure(e, fallback));
+      }
       return false;
     }
   }
@@ -162,7 +167,7 @@ export default function Definition({
         )}
       </ul>
       <Evidence definition={d} />
-      <Activity space={data.vault} compact definition={{ type: d.type, kind: d.kind, name: d.type === "link" ? d.item.label : d.name }} />
+      <Activity space={data.vault} compact definition={{ type: d.type, kind: d.kind, name: d.name }} />
     </div>
   );
 }

@@ -689,7 +689,7 @@ async fn schema_39_coverage_name_lookup_and_0040_paging_upgrade_are_idempotent()
         assert!(out.get("error").is_none(), "{out}");
     }
     let old = app.db().await;
-    old.test_raw().query("REMOVE INDEX entity_vault_kind_name_idx ON entity; REMOVE INDEX entity_property_num_page_idx ON entity_property; REMOVE INDEX entity_property_text_page_idx ON entity_property; REMOVE INDEX entity_property_bool_page_idx ON entity_property; DELETE _migration WHERE version = 40").await.unwrap().check().unwrap();
+    old.test_raw().query("REMOVE INDEX entity_vault_kind_name_idx ON entity; REMOVE INDEX entity_property_num_page_idx ON entity_property; REMOVE INDEX entity_property_text_page_idx ON entity_property; REMOVE INDEX entity_property_bool_page_idx ON entity_property; DELETE _migration WHERE version >= 40").await.unwrap().check().unwrap();
     app.control().test_raw().query("UPDATE $t SET schema_version = 39").bind(("t", app.user.org.tenant_record())).await.unwrap().check().unwrap();
     app.state.pool.evict(&app.user.org);
     // 0039 is now N-2 and is refused before the tenant update. The updater still

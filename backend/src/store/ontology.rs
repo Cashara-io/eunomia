@@ -107,20 +107,25 @@ pub const PROPOSE_LINK: Stmt = Stmt::at(
     "ontology.propose_link",
     r#"BEGIN TRANSACTION;
         LET $cur = (SELECT VALUE status FROM $id);
-        LET $row = IF array::len($cur) = 0 {
-            (CREATE $id SET revision = 1, activity_actor_name = $activity_actor_name, activity_actor = $activity_actor,
+        IF array::len($cur) = 0 {
+            CREATE $id SET revision = 0, activity_actor_name = $activity_actor_name, activity_actor = $activity_actor,
                 activity_actor_type = $activity_actor_type, activity_action = "proposed", activity_reason = $reason,
                 vault = $vault, from_kind = $from_kind, label = $label, to_kind = $to_kind,
-                description = $description, origin = $origin, reason = $reason, source_map = $source_map RETURN AFTER)
+                description = $description, origin = $origin, reason = $reason
         } ELSE IF $cur[0] = "proposed" {
-            (UPDATE $id SET revision = (revision ?? 0) + 1, activity_actor_name = $activity_actor_name, activity_actor = $activity_actor,
+            UPDATE $id SET activity_actor_name = $activity_actor_name, activity_actor = $activity_actor,
                 activity_actor_type = $activity_actor_type, activity_action = "proposed", activity_reason = $reason,
-                description = $description ?? description, reason = $reason ?? reason,
-                source_map = array::union(source_map ?? [], $source_map), updated_at = time::now() RETURN AFTER)
-        } ELSE { (SELECT * FROM $id) };
-        RETURN $row;
+                description = $description ?? description, reason = $reason ?? reason, updated_at = time::now()
+        };
+        IF array::len($source_map) > 0 AND (array::len($cur) = 0 OR $cur[0] = "proposed") {
+            UPDATE $id SET source_map = array::union(source_map ?? [], $source_map)
+        };
+        IF array::len($cur) = 0 OR $cur[0] = "proposed" {
+            UPDATE $id SET revision = (revision ?? 0) + 1
+        };
+        RETURN (SELECT * FROM $id);
         COMMIT TRANSACTION;"#,
-    3,
+    5,
 );
 
 /// The open proposals agents filed in `$vault`, of every sort.

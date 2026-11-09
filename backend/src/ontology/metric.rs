@@ -1078,6 +1078,7 @@ pub async fn decide_metric(db: &OrgDb, user: &RecordId, vault: &RecordId, kind: 
     let name = metric_name(name)?;
     let id = metric_rid(vault, &kind, &name);
     let Some(row) = load(db, &id).await? else { return Err(no_metric(&kind, &name)) };
+    super::activity::check_seen(row.revision)?;
     let (status, merge_into) = match decision {
         MetricDecision::Describe { description } => {
             let description = clean_text("description", Some(&description))?;
