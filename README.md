@@ -36,6 +36,7 @@ curl -fsSL https://www.buildpaperless.com.au/eunomia/install.sh | bash
 <div align="center">
 
 It installs Docker if it's missing, starts Eunomia and creates your account.
+[Read the installer script](https://www.buildpaperless.com.au/eunomia/install.sh) ·
 [What it does and its options](#install).
 
 **[I already have an account](#connect-your-ai-app)** ·
