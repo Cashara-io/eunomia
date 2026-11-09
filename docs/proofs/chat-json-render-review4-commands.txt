@@ -6,6 +6,7 @@ pgrep -x cargo
 # 7 GiB. Retry for up to two hours. Do not touch other worktrees' build outputs.
 export CARGO_BUILD_JOBS=2 CARGO_PROFILE_DEV_DEBUG=0 CARGO_INCREMENTAL=0 RUST_MIN_STACK=8388608 RUST_TEST_THREADS=1 TEST_HARDENED=1
 # Run each Cargo command in backend, with nice -n 19:
+cargo check --tests
 cargo test --lib views::ui
 cargo test --lib --test chat_ui --test ontology --test golden_tools --test round_trips --test openapi
 cargo build --bin eunomia-backend

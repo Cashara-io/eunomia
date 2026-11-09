@@ -299,8 +299,11 @@ async fn turn_snapshot_refuses_new_names_and_text_values() {
         ok(app.tool("show_view",args).await); // The same phrase is eligible next request.
     }
     for name in ["12%", "12"] {
-        ok(app.tool("memory_write",json!({"subject_name":name,"subject_kind":"sample","text":"Bare numeric name"})).await);
-        let denied = app.tool("show_view",make(&format!("Revenue rose {name}"))).await;
+        ok(app.tool("memory_write",json!({"subject_name":name,"subject_kind":"organisation","text":"Bare numeric name"})).await);
+        let mut args = make(&format!("Revenue rose {name}"));
+        args["sources"]["sample"]["kind"] = json!("organisation");
+        args["sources"]["sample"]["properties"] = json!([]);
+        let denied = app.tool("show_view",args).await;
         assert!(denied.get("error").is_some(), "bare digits authorised: {denied}");
     }
 }

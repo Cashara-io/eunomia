@@ -4,6 +4,7 @@ use std::sync::OnceLock;
 use chrono::{DateTime, NaiveDate};
 use regex::Regex;
 use serde_json::Value;
+use surrealdb::types::SurrealValue;
 use unicode_normalization::UnicodeNormalization;
 use crate::error::AppResult;
 use super::{bad, trusted_number};

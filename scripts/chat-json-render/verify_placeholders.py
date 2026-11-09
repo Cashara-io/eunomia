@@ -23,7 +23,8 @@ def at(value, path):
     return value
 
 total = 0
-for file in sorted(Path(sys.argv[1]).glob('answer-*.json')):
+receipts = sorted(Path(sys.argv[1]).glob('answer-*.json'))
+for file in receipts:
     receipt = json.loads(file.read_text())
     pending = None
     success = 0
@@ -53,9 +54,9 @@ for file in sorted(Path(sys.argv[1]).glob('answer-*.json')):
                 source = result['data']['sources'][parts[1]]
                 rest = parts[2:]
                 column = next((c for c in source.get('columns', []) if len(rest) > 2 and c['key'] == (rest[2] if rest[0] == 'rows' else rest[1])), {})
-                count = rest == ['total_rows'] or rest[-1] in ('count', 'distinct', 'n', 'n_entities', 'n_changed')
-                unit = None if count else column.get('unit') or source.get('metric', {}).get('unit')
-                if not count and rest[0] == 'result' and rest[1] in ('baseline', 'scenario'):
+                is_count = rest == ['total_rows'] or rest[-1] in ('count', 'distinct', 'n', 'n_entities', 'n_changed')
+                unit = None if is_count else column.get('unit') or source.get('metric', {}).get('unit')
+                if not is_count and rest[0] == 'result' and rest[1] in ('baseline', 'scenario'):
                     unit = '%' if rest[-1] == 'delta_pct' else source['result'][rest[1]][int(rest[2])].get('unit')
                 if isinstance(value, str): shown = value
                 else:
@@ -75,4 +76,4 @@ for file in sorted(Path(sys.argv[1]).glob('answer-*.json')):
         pending = None
     assert success and final_count, (file.name, 'final successful UI has no model text placeholders')
     print(f'{file.name}: model used placeholders; server substituted them in spec and terminal text')
-print(f'{total} placeholders substituted across all six live answers. Numeric data checked separately by verify_numbers.py.')
+print(f'{total} placeholders substituted across {len(receipts)} live answers. Numeric data checked separately by verify_numbers.py.')
