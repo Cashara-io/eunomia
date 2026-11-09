@@ -171,7 +171,11 @@ mod io_tests {
                 let bad = out.join(name);
                 match kind {
                     "fifo" => { assert!(std::process::Command::new("mkfifo").arg(&bad).status().unwrap().success()); }
-                    "symlink" => symlink("/dev/zero", &bad).unwrap(),
+                    "symlink" => {
+                        let target = dir.path().join("private-fixture");
+                        std::fs::write(&target, "SYMLINK_CANARY").unwrap();
+                        symlink(target, &bad).unwrap();
+                    }
                     "directory" => std::fs::create_dir(&bad).unwrap(),
                     "huge" => std::fs::File::create(&bad).unwrap().set_len(FILE_LIMIT + 1).unwrap(),
                     _ => unreachable!(),

@@ -21,6 +21,8 @@ cases.extend([
      'if true', ["--lib", "diagnostics::logs::tests::content_and_numeric_secrets_never_enter_ring_or_zip"]),
     ("regular-files", "backend/src/diagnostics/mod.rs", 'if !metadata.is_file() || metadata.len() > FILE_LIMIT',
      'if metadata.len() > FILE_LIMIT', ["--lib", "diagnostics::io_tests::unsafe_files_are_omitted_with_deadline_and_next_bundle_succeeds"]),
+    ("nofollow", "backend/src/diagnostics/mod.rs", 'libc::O_NONBLOCK | libc::O_NOFOLLOW',
+     'libc::O_NONBLOCK', ["--lib", "diagnostics::io_tests::unsafe_files_are_omitted_with_deadline_and_next_bundle_succeeds"]),
     ("read-deadline", "backend/src/diagnostics/mod.rs",
      'tokio::time::timeout_at(deadline, tokio::task::spawn_blocking(move || read(&path))).await.ok()?.ok()?.ok()',
      'let _ = deadline; tokio::task::spawn_blocking(move || read(&path)).await.ok()?.ok()',
