@@ -1,4 +1,5 @@
 "use client";
+import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 
 import ComposioCard from "@/components/ComposioCard";
 
@@ -401,15 +402,5 @@ function CatalogueList({ kinds }: { kinds: Connector["kind"][] }) {
 }
 
 function SkeletonRows({ count }: { count: number }) {
-  return (
-    <div className="hairline-rows" aria-hidden>
-      {Array.from({ length: count }, (_, i) => (
-        <div key={i} className="flex items-center gap-3 px-4 h-12">
-          <span className="skeleton w-7 h-7" />
-          <span className="skeleton h-3 w-32" />
-          <span className="skeleton h-3 w-20 ml-auto" />
-        </div>
-      ))}
-    </div>
-  );
+  return <LoadingSkeleton label="Loading connected sources" rows={count} />;
 }

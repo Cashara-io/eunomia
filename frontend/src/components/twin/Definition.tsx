@@ -1,4 +1,5 @@
 "use client";
+import { haptic } from "@/lib/haptics";
 
 import { useState } from "react";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
@@ -46,6 +47,7 @@ export default function Definition({
     setError(null);
     try {
       await fn();
+      haptic("success");
       return true;
     } catch (e) {
       setError(failure(e, fallback));

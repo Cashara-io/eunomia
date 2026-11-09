@@ -2,6 +2,7 @@
 // Usage: <CopyButton value={token} /> (icon only, name "Copy") or <CopyButton value={() => cmd} label="Copy command" size="sm" className="btn-primary" />.
 // Names flip to "Copied" for 1.5s after a successful write; size="icon" puts the name in aria-label, size="sm" shows it as text.
 "use client";
+import { haptic } from "@/lib/haptics";
 
 import { CopyIcon } from "@phosphor-icons/react/ssr";
 
@@ -27,8 +28,10 @@ export default function CopyButton({ value, label = "Copy", size = "icon", class
     try {
       await navigator.clipboard.writeText(typeof value === "function" ? value() : value);
     } catch {
+      haptic("error");
       return;
     }
+    haptic("success");
     setDrawn(pointer);
     setCopied(true);
     clearTimeout(timer.current);

@@ -1,5 +1,6 @@
 "use client";
 import dynamic from "next/dynamic";
+import { GeneratingPlaceholder } from "../GenerationBox";
 import { Component, type ReactNode } from "react";
 import {
   JSONUIProvider,
@@ -14,7 +15,7 @@ import "./ui.css";
 
 const Chart = dynamic(() => import("./Charts"), {
   ssr: false,
-  loading: () => <p>Loading chart...</p>,
+  loading: () => <GeneratingPlaceholder />,
 });
 const copyProps = z.object({ text: z.string(), tone: z.string().optional() });
 const layoutProps = z.object({

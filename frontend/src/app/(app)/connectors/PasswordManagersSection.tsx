@@ -1,4 +1,5 @@
 "use client";
+import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 
 import { useState } from "react";
 import { KeyIcon, PencilSimpleIcon, PlugsConnectedIcon, PlusIcon, PowerIcon, TrashIcon, XIcon } from "@phosphor-icons/react/ssr";
@@ -115,10 +116,7 @@ export default function PasswordManagersSection() {
           <ResolutionLog />
         </>
       ) : (
-        <div className="ledger p-5 flex flex-col gap-3" aria-hidden>
-          <span className="skeleton h-4 w-48" />
-          <span className="skeleton h-4 w-64" />
-        </div>
+        <LoadingSkeleton label="Loading password managers" rows={2} />
       )}
     </section>
   );

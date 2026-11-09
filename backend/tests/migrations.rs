@@ -680,7 +680,7 @@ async fn secret_audit_index_preserves_existing_events_and_reapplies() {
 }
 
 #[tokio::test]
-async fn schema_38_coverage_skips_custom_name_lookup_until_0039_is_applied() {
+async fn oldest_supported_schema_coverage_and_0040_paging_repair_are_idempotent() {
     use serde_json::json;
     let app = common::TestApp::new().await;
     let team = app.tool("vault_create", json!({"name": "Team", "kind": "org"})).await["id"].as_str().unwrap().to_string();
@@ -689,35 +689,31 @@ async fn schema_38_coverage_skips_custom_name_lookup_until_0039_is_applied() {
         assert!(out.get("error").is_none(), "{out}");
     }
     let old = app.db().await;
-    old.test_raw().query("REMOVE INDEX entity_vault_name_key_idx ON entity; DELETE _migration WHERE version = 39").await.unwrap().check().unwrap();
-    app.control().test_raw().query("UPDATE $t SET schema_version = 38").bind(("t", app.user.org.tenant_record())).await.unwrap().check().unwrap();
+    old.test_raw().query("REMOVE INDEX entity_vault_kind_name_idx ON entity; REMOVE INDEX entity_property_num_page_idx ON entity_property; REMOVE INDEX entity_property_text_page_idx ON entity_property; REMOVE INDEX entity_property_bool_page_idx ON entity_property; DELETE _migration WHERE version = 40").await.unwrap().check().unwrap();
+    // Exercise the missing-index fallback on the oldest schema this binary still serves.
+    app.control().test_raw().query("UPDATE $t SET schema_version = $version")
+        .bind(("t", app.user.org.tenant_record())).bind(("version", migrate::MIN_SUPPORTED_TENANT))
+        .await.unwrap().check().unwrap();
     app.state.pool.evict(&app.user.org);
     let db = app.db().await;
-    assert_eq!(db.schema_version(), 38);
-    let signins = app.state.pool.signins();
+    assert_eq!(db.schema_version(), migrate::MIN_SUPPORTED_TENANT);
     let question = json!({"question": "Where is Coastal Irrigation?"});
-    for _ in 0..2 {
-        let out = app.tool("ontology_coverage", question.clone()).await;
-        assert_eq!(out["chosen_by"], "none", "unindexed custom names fall through to the next rule: {out}");
-    }
-    assert_eq!(app.state.pool.signins(), signins, "the schema gate uses the cached tenant handle");
-    let builtin = app.tool("ontology_coverage", json!({"question": "Where is BP Supply?"})).await;
-    assert_eq!(builtin["chosen_by"], "entities", "built-in prefix indexes already exist at schema 38: {builtin}");
-    assert_eq!(builtin["vault"], team);
+    let out = app.tool("ontology_coverage", question.clone()).await;
+    assert_eq!(out["chosen_by"], "entities", "{out}");
 
     let before: Vec<Value> = db.test_raw().query("SELECT * FROM entity").await.unwrap().take(0).unwrap();
     app.state.provisioner.as_ref().unwrap().migrate_org(app.control(), &app.user.org).await.unwrap();
-    let sql = migrate::MIGRATIONS.iter().find(|m| m.0 == 39).unwrap().2;
+    let sql = migrate::MIGRATIONS.iter().find(|m| m.0 == 40).unwrap().2;
     let schema = info(db.test_raw()).await;
     for _ in 0..2 {
         db.test_raw().query(sql).await.unwrap().check().unwrap();
-        assert_eq!(schema, info(db.test_raw()).await, "0039 is idempotent");
+        assert_eq!(schema, info(db.test_raw()).await, "0040 is idempotent");
         let after: Vec<Value> = db.test_raw().query("SELECT * FROM entity").await.unwrap().take(0).unwrap();
-        assert_eq!(before, after, "0039 preserves existing custom entities");
+        assert_eq!(before, after, "0040 preserves existing custom entities");
     }
     app.state.pool.evict(&app.user.org);
     let db = app.db().await;
-    assert_eq!(db.schema_version(), 39);
+    assert_eq!(db.schema_version(), migrate::LATEST_TENANT);
     let out = app.tool("ontology_coverage", question).await;
     assert_eq!(out["chosen_by"], "entities", "{out}");
     assert_eq!(out["vault"], team);

@@ -21,6 +21,7 @@
 pub mod automap;
 pub mod coverage;
 pub mod dataset;
+pub mod objects;
 pub mod metric;
 pub mod profile;
 pub mod property;
