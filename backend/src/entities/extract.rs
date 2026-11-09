@@ -337,10 +337,9 @@ async fn apply_extraction(
     data: &ExtractionData,
     kinds: &[ExtraKind],
 ) -> AppResult<HashSet<String>> {
-    let mut entity_ids: HashMap<String, (RecordId, String)> = HashMap::new();
+    let mut entity_ids: HashMap<(String, String), (RecordId, String)> = HashMap::new();
     let mut touched: HashSet<String> = HashSet::new();
-    // Resolve against all approved custom kinds before processing any built-in section. The model
-    // can call a store an organisation, but an existing owner-approved entity remains canonical.
+    // Match approved custom entities only within the extracted kind. Names alone do not establish identity.
     let target_vault = match vault {
         Some(v) => v.clone(),
         None => crate::vaults::service::personal_vault_id(db, owner).await?,
@@ -357,6 +356,7 @@ async fn apply_extraction(
     for entity in existing {
         for key in std::iter::once(entity.name_key).chain(entity.aliases.into_iter().map(|a| a.to_lowercase())) {
             if !keys.contains(&key) { continue; }
+            let key = (key, entity.kind.clone());
             let entry = (entity.id.clone(), entity.kind.clone());
             if entity_ids.get(&key).is_some_and(|old| old.0 != entry.0) { ambiguous.insert(key.clone()); }
             entity_ids.insert(key, entry);
@@ -370,18 +370,30 @@ async fn apply_extraction(
         db: &OrgDb,
         owner: &RecordId,
         vault: Option<&RecordId>,
-        entity_ids: &mut HashMap<String, (RecordId, String)>,
+        entity_ids: &mut HashMap<(String, String), (RecordId, String)>,
+        ambiguous: &HashSet<(String, String)>,
         name: &str,
         kind: &str,
         aliases: Option<Vec<String>>,
     ) -> AppResult<(RecordId, String)> {
-        let key = name.to_lowercase();
+        let target_vault = match vault {
+            Some(v) => v.clone(),
+            None => crate::vaults::service::personal_vault_id(db, owner).await?,
+        };
+        let mapped = if service::KINDS.contains(&kind) { None } else { crate::ontology::ground(db, &target_vault, kind).await? };
+        let kind = mapped.as_ref().map_or(kind, |m| m.to.as_str());
+        let key = (name.to_lowercase(), kind.to_string());
         if let Some(entry) = entity_ids.get(&key) {
             return Ok(entry.clone());
         }
-        let entity = service::upsert_entity(db, owner, kind, name, aliases, vault).await?;
+        let entity = if ambiguous.contains(&key) {
+            crate::authz::authorize(db, owner, crate::authz::Action::WriteMemories, &target_vault).await?;
+            service::upsert_in_vault(db, owner, kind, name, aliases, &target_vault, service::Lookups::NameOnly).await?.0
+        } else {
+            service::upsert_entity(db, owner, kind, name, aliases, vault).await?
+        };
         let rid: RecordId = crate::rid::parse(&entity.id).map_err(|_| AppError::internal("entity id did not round-trip"))?;
-        let entry = (rid, kind.to_string());
+        let entry = (rid, entity.kind);
         entity_ids.insert(key, entry.clone());
         Ok(entry)
     }
@@ -392,8 +404,7 @@ async fn apply_extraction(
         let kind = KIND_MAP.iter().find(|(s, _)| *s == section).map(|(_, k)| *k).unwrap();
         for item in items {
             let Some(name) = item.name.as_deref().map(str::trim).filter(|n| !n.is_empty() && !is_placeholder(n)) else { continue };
-            if ambiguous.contains(&name.to_lowercase()) { continue; }
-            let (entry_id, _) = ensure(db, owner, vault, &mut entity_ids, name, kind, Some(item.aliases.clone())).await?;
+            let (entry_id, _) = ensure(db, owner, vault, &mut entity_ids, &ambiguous, name, kind, Some(item.aliases.clone())).await?;
             for fact in &item.facts {
                 if fact.is_empty() {
                     continue;
@@ -408,9 +419,8 @@ async fn apply_extraction(
     for item in &data.other {
         let Some(kind) = item.kind.as_deref().map(str::trim).filter(|k| allowed.contains(k)) else { continue };
         let Some(name) = item.entity.name.as_deref().map(str::trim).filter(|n| !n.is_empty() && !is_placeholder(n)) else { continue };
-        if ambiguous.contains(&name.to_lowercase()) { continue; }
         // the kind may have been rejected since the prompt was built: that item is left out, the rest kept
-        let (entry_id, _) = match ensure(db, owner, vault, &mut entity_ids, name, kind, Some(item.entity.aliases.clone())).await {
+        let (entry_id, _) = match ensure(db, owner, vault, &mut entity_ids, &ambiguous, name, kind, Some(item.entity.aliases.clone())).await {
             Ok(e) => e,
             // or the vault takes only approved kinds and it is not one (filed as a proposal instead)
             Err(e) if matches!(e.code, crate::error::ErrorCode::ValidationInvalid | crate::error::ErrorCode::OntologyRejected) => continue,
@@ -433,9 +443,8 @@ async fn apply_extraction(
         if !valid(from_kind) || !valid(to_kind) {
             continue;
         }
-        if ambiguous.contains(&from_name.to_lowercase()) || ambiguous.contains(&to_name.to_lowercase()) { continue; }
-        let (from_id, _) = ensure(db, owner, vault, &mut entity_ids, from_name, from_kind, None).await?;
-        let (to_id, _) = ensure(db, owner, vault, &mut entity_ids, to_name, to_kind, None).await?;
+        let (from_id, _) = ensure(db, owner, vault, &mut entity_ids, &ambiguous, from_name, from_kind, None).await?;
+        let (to_id, _) = ensure(db, owner, vault, &mut entity_ids, &ambiguous, to_name, to_kind, None).await?;
         match service::add_relation(db, owner, &from_id, &to_id, rel.label.as_deref().unwrap_or(""), Some(source_record_id)).await {
             // a link type the vault's owners rejected: the relation is left out, the rest of the record kept
             Err(e) if e.code == crate::error::ErrorCode::OntologyRejected => continue,

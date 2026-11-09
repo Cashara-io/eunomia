@@ -4083,7 +4083,7 @@ async fn import_196_extraction_reuses_approved_custom_entity() { extraction_and_
 async fn import_196_builtin_to_custom_merge_preserves_facts_and_links() { extraction_and_merge(true).await; }
 
 async fn extraction_and_merge(merge: bool) {
-    let answer = json!({"organisations":[{"name":"North","facts":["North opens daily"]}], "locations":[{"name":"N","facts":["N has parking"]}], "relations":[{"from":"North","from_kind":"organisation","to":"N","to_kind":"location","label":"near"}]});
+    let answer = json!({"other":[{"kind":"store","name":"North","facts":["North opens daily"]}, {"kind":"store","name":"N","facts":["N has parking"]}], "relations":[{"from":"North","from_kind":"store","to":"N","to_kind":"store","label":"near"}]});
     let mock = serve(vec![route("POST", "/chat/completions", json!({"choices":[{"message":{"content":answer.to_string()}}]}))]).await;
     let app = TestApp::with_settings(model_app_settings(&mock)).await;
     let doc = upload_csv(&app, "routes.csv", "route,store,distance\nRound,North,5\n").await;
@@ -4128,4 +4128,47 @@ async fn import_196_second_csv_part_reuses_equivalent_metric_in_proposed_and_app
             assert_eq!(decide_metric(&app, &vault, "supply_item", "total_price", json!({"action":"approve"})).await.0, 200);
         }
     }
+}
+
+#[tokio::test]
+async fn review209_extraction_keeps_person_and_store_jordan_separate() {
+    let answer = json!({"people":[{"name":"Jordan","facts":["Jordan enjoys cycling"]}],"other":[{"kind":"store","name":"Jordan","facts":["Jordan sells groceries"]}]});
+    let mock = serve(vec![route("POST", "/chat/completions", json!({"choices":[{"message":{"content":answer.to_string()}}]}))]).await;
+    let app = TestApp::with_settings(model_app_settings(&mock)).await;
+    let vault = personal(&app).await;
+    ok(app.tool("ontology_propose", json!({"kinds":[{"kind":"store"}]})).await);
+    assert_eq!(decide_kind(&app, &vault, "store", json!({"action":"approve"})).await.0, 200);
+    let store = write(&app, "Jordan", "store").await["entity"]["id"].clone();
+    let person = write(&app, "Jordan", "person").await["entity"]["id"].clone();
+    let record = eunomia_backend::entities::extract::ExtractRecord { id:"notes:jordan".into(),title:"Jordan".into(),body_text:"Jordan enjoys cycling. The Jordan store sells groceries every day.".into(),occurred_at:None,vault:None,source:"notes".into(),payload:Value::Null,owner_name:None };
+    common::sys(eunomia_backend::entities::extract::extract_entities(&app.db().await, &app.state.settings, &app.user.id, &record)).await.unwrap();
+    let got = ok(app.tool("entities_get", json!({"id":store})).await);
+    assert!(!got.to_string().contains("Jordan enjoys cycling"), "{got}");
+    assert!(got.to_string().contains("Jordan sells groceries"), "{got}");
+    let got = ok(app.tool("entities_get", json!({"id":person})).await);
+    assert!(got.to_string().contains("Jordan enjoys cycling"), "{got}");
+}
+
+#[tokio::test]
+async fn review209_ambiguous_custom_alias_creates_an_entity_for_review() {
+    let answer = json!({"other":[{"kind":"store","name":"Jordan","facts":["Jordan sells groceries"]}]});
+    let mock = serve(vec![route("POST", "/chat/completions", json!({"choices":[{"message":{"content":answer.to_string()}}]}))]).await;
+    let app = TestApp::with_settings(model_app_settings(&mock)).await;
+    let vault = personal(&app).await;
+    ok(app.tool("ontology_propose", json!({"kinds":[{"kind":"store"}]})).await);
+    assert_eq!(decide_kind(&app, &vault, "store", json!({"action":"approve"})).await.0, 200);
+    let mut ids = Vec::new();
+    for name in ["North", "South"] {
+        let id = write(&app, name, "store").await["entity"]["id"].clone();
+        ok(app.tool("entity_update", json!({"entity_id":id,"aliases":["Jordan"]})).await);
+        ids.push(id);
+    }
+    let record = eunomia_backend::entities::extract::ExtractRecord { id:"notes:ambiguous".into(),title:"Jordan".into(),body_text:"Jordan sells groceries every day and is open until late.".into(),occurred_at:None,vault:None,source:"notes".into(),payload:Value::Null,owner_name:None };
+    common::sys(eunomia_backend::entities::extract::extract_entities(&app.db().await, &app.state.settings, &app.user.id, &record)).await.unwrap();
+    for id in ids {
+        let got = ok(app.tool("entities_get", json!({"id":id})).await);
+        assert!(!got.to_string().contains("Jordan sells groceries"), "{got}");
+    }
+    let out = ok(app.tool("ontology_get", json!({})).await);
+    assert_eq!(kind(&out, "store")["entities"], 3, "{out}");
 }
