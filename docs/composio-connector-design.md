@@ -29,7 +29,7 @@ Records use the existing vault router. Selections are validated against vault me
 
 `frontend/tests/composio.spec.ts` runs against the real backend with the fixture configured by the operator. Set `E2E_COMPOSIO_MOCK=1` and `E2E_BASE_URL` to that isolated frontend. `E2E_COMPOSIO_SCREENSHOTS` saves light/dark evidence. The operator-only loopback mock endpoint requires `EUNOMIA_ALLOW_CONNECTOR_BASE_URL=1` and `EUNOMIA_COMPOSIO_TEST_ORIGIN`. Neither is user-configurable or needed for owner verification.
 
-Tenant migration 0042 expands the kind constraint and adds a credential-free file identity table. Update-path row checks continue to include v2.2.0. See the PR for actual test results. Live account reads require the owner to sign in themselves.
+Tenant migration 0041 expands the kind constraint and adds a credential-free file identity table. Update-path row checks continue to include v2.2.0. See the PR for actual test results. Live account reads require the owner to sign in themselves.
 
 ## Primary references
 
