@@ -48,6 +48,10 @@ where
     let Some(row) = row else {
         return run(Conn::default()).await;
     };
+    if row.kind == "composio" {
+        let token = crate::connectors::composio::account::access_token(state, owner).await?;
+        return run(Conn { credentials: json!({"access_token":token.as_str()}), config: row.config.clone() }).await;
+    }
     let mut credentials = service::credentials_of(&state.settings.encryption_key, row)?;
     let mut args = json!({"headers": {}, "json": {}});
     let mut fields = Vec::new();

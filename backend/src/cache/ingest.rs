@@ -80,7 +80,9 @@ pub async fn ingest(
 ) -> AppResult<IngestReport> {
     let (db, settings) = (&state.db, &state.settings);
     let mut report = IngestReport::new(source_key);
-    let can_embed = crate::embeddings::service::available(db, settings, owner).await;
+    // Composio holds a local commit gate here. Its missing vectors are filled by the
+    // existing embed reconciler, so a provider call cannot delay disconnect.
+    let can_embed = source_key != "composio" && crate::embeddings::service::available(db, settings, owner).await;
 
     for raw in raw_records {
         let envs = match map_fn(raw) {

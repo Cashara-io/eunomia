@@ -323,6 +323,7 @@ pub async fn capture(State(state): State<AppState>, req: Request, next: Next) ->
     let resp = next.run(Request::from_parts(parts, body)).await;
 
     if resp.status().is_server_error() && route != "/readyz" {
+        let saved = if path == "/api/connectors/composio/callback" { None } else { saved };
         let body = saved.map_or(Value::Null, |b| serde_json::from_slice(&b).unwrap_or_else(|_| Value::String(String::from_utf8_lossy(&b).into_owned())));
         // a tool failure that became this 5xx was recorded already, with its arguments
         if get(&state.control, &crate::telemetry::current_trace_id()).await.ok().flatten().is_some() {

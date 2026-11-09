@@ -1,6 +1,5 @@
 ---
 source: tests/migrations.rs
-assertion_line: 47
 expression: info(&db).await
 ---
 {
@@ -245,6 +244,32 @@ expression: info(&db).await
           "index": "",
           "name": "chat_thread_owner_idx",
           "table": "chat_thread"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
+      "name": "composio_file",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "owner",
+            "connector",
+            "external_id"
+          ],
+          "index": "UNIQUE",
+          "name": "composio_file_identity",
+          "table": "composio_file"
         }
       ]
     },

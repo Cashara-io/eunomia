@@ -24,4 +24,5 @@ pub mod oauth;
 pub mod oidc;
 pub mod ontology;
 
+pub mod composio;
 pub mod diagnostics;

@@ -197,6 +197,11 @@ export type BootstrapOut = {
     oidc_provider?: string | null;
 };
 
+export type Callback = {
+    code: string;
+    state: string;
+};
+
 export type Capsule = {
     /**
      * Tool arguments, or `{method, uri, body}` for a route. Secrets are masked.
@@ -282,6 +287,11 @@ export type CheckOut = {
     error?: string | null;
     message?: string | null;
     ok: boolean;
+};
+
+export type Choices = {
+    apps: Array<Selection>;
+    vault?: string | null;
 };
 
 /**
@@ -1430,6 +1440,10 @@ export type LogPage = {
     next_before?: string | null;
 };
 
+export type Manage = {
+    toolkit: string;
+};
+
 /**
  * What became of one record type.
  */
@@ -2303,6 +2317,15 @@ export type Rule = {
      * The vault a matching record goes to (`vault:...`).
      */
     vault: string;
+};
+
+export type Selection = {
+    account: string;
+    folder?: string;
+    phone_number_id?: string;
+    reference?: string;
+    repo?: string;
+    toolkit: string;
 };
 
 export type SessionOut = {
@@ -3629,6 +3652,150 @@ export type CreateConnectorResponses = {
 };
 
 export type CreateConnectorResponse = CreateConnectorResponses[keyof CreateConnectorResponses];
+
+export type ComposioBeginData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/connectors/composio/begin';
+};
+
+export type ComposioBeginErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ComposioBeginError = ComposioBeginErrors[keyof ComposioBeginErrors];
+
+export type ComposioBeginResponses = {
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ComposioBeginResponse = ComposioBeginResponses[keyof ComposioBeginResponses];
+
+export type ComposioCallbackData = {
+    body: Callback;
+    path?: never;
+    query?: never;
+    url: '/api/connectors/composio/callback';
+};
+
+export type ComposioCallbackErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ComposioCallbackError = ComposioCallbackErrors[keyof ComposioCallbackErrors];
+
+export type ComposioCallbackResponses = {
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ComposioCallbackResponse = ComposioCallbackResponses[keyof ComposioCallbackResponses];
+
+export type ComposioDisconnectData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/connectors/composio/disconnect';
+};
+
+export type ComposioDisconnectErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ComposioDisconnectError = ComposioDisconnectErrors[keyof ComposioDisconnectErrors];
+
+export type ComposioDisconnectResponses = {
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ComposioDisconnectResponse = ComposioDisconnectResponses[keyof ComposioDisconnectResponses];
+
+export type ComposioManageData = {
+    body: Manage;
+    path?: never;
+    query?: never;
+    url: '/api/connectors/composio/manage';
+};
+
+export type ComposioManageErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ComposioManageError = ComposioManageErrors[keyof ComposioManageErrors];
+
+export type ComposioManageResponses = {
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ComposioManageResponse = ComposioManageResponses[keyof ComposioManageResponses];
+
+export type ComposioSelectionData = {
+    body: Choices;
+    path?: never;
+    query?: never;
+    url: '/api/connectors/composio/selection';
+};
+
+export type ComposioSelectionErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ComposioSelectionError = ComposioSelectionErrors[keyof ComposioSelectionErrors];
+
+export type ComposioSelectionResponses = {
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ComposioSelectionResponse = ComposioSelectionResponses[keyof ComposioSelectionResponses];
+
+export type ComposioStatusData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/connectors/composio/status';
+};
+
+export type ComposioStatusErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ComposioStatusError = ComposioStatusErrors[keyof ComposioStatusErrors];
+
+export type ComposioStatusResponses = {
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ComposioStatusResponse = ComposioStatusResponses[keyof ComposioStatusResponses];
 
 export type GetPocketaiAllData = {
     body?: never;
