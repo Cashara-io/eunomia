@@ -89,6 +89,26 @@ fn consumer_oauth_apps_refresh_ingest_partial_and_disconnect() {
             )
             .await;
             assert!(!status.is_success());
+            let ((_, _), second_cookie) = http(
+                &app.router,
+                "POST",
+                "/api/auth/login",
+                Some(json!({"email":app.user.email,"password":PASSWORD})),
+                None,
+                None,
+            )
+            .await;
+            let ((status, _), _) = call(
+                &app,
+                second_cookie.as_deref().unwrap(),
+                "/api/connectors/composio/callback",
+                json!({"state":state,"code":"one-use-mock-code"}),
+            )
+            .await;
+            assert!(
+                !status.is_success(),
+                "a different browser session consumed pending OAuth state"
+            );
             let ((status, _), _) = call(
                 &app,
                 &cookie,

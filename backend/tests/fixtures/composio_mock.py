@@ -47,7 +47,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.send({'client_id':'mock-public-client'})
         if self.path == '/token':
             form = parse_qs(body.decode())
-            if form['grant_type']==['authorization_code']: assert form['code']==['one-use-mock-code'] and len(form['code_verifier'][0])>=43
+            if form['grant_type']==['authorization_code']:
+                assert form['code']==['one-use-mock-code'] and len(form['code_verifier'][0])>=43
+                state['limited']=False
             else: assert form['refresh_token']==[REFRESH]; state['refreshes']+=1
             return self.send({'access_token':TOKEN,'refresh_token':REFRESH,'expires_in':1 if form['grant_type']==['authorization_code'] else 3600,'token_type':'Bearer'})
         if self.path == '/revoke': state['revokes']+=1; return self.send({})

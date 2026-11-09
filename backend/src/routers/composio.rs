@@ -212,6 +212,17 @@ async fn selection(
     }
     let state = app.org(&user.org).await?;
     let token = account::access_token(&state, &user.id).await?;
+    let connected = storage::load(&state.db, &user.id).await?;
+    let current = service::credentials_of(&state.settings.encryption_key, &connected)?;
+    let current = crate::sources::base::Conn {
+        credentials: current,
+        config: json!({}),
+    };
+    if current.credentials["access_token"].as_str() != Some(token.as_str()) {
+        return Err(AppError::bad_request(
+            "Composio changed. Refresh the app list and try again.",
+        ));
+    }
     let mut client = ReadClient::new(&token).await?;
     let mut seen = std::collections::HashSet::new();
     for choice in &body.apps {
@@ -238,18 +249,21 @@ async fn selection(
         },
     )
     .await?;
-    let row = storage::load(&state.db, &user.id).await?;
-    let row = service::update_connector(
+    if !storage::select(
         &state.db,
-        &state.settings.encryption_key,
-        row,
-        Some(!body.apps.is_empty()),
-        Some(json!({"apps":body.apps})),
-        None,
-        None,
+        &user.id,
+        &connected,
+        json!({"apps":body.apps}),
+        serde_json::to_value(&routing)
+            .map_err(|_| AppError::internal("Could not save Composio choices."))?,
+        !body.apps.is_empty(),
     )
-    .await?;
-    crate::sources::routing::set(&state.db, &row.id, &routing).await?;
+    .await?
+    {
+        return Err(AppError::bad_request(
+            "Composio changed. Refresh the app list and try again.",
+        ));
+    }
     Ok(Json(json!({"ok":true})))
 }
 #[utoipa::path(operation_id = "composioDisconnect", post, path = "/api/connectors/composio/disconnect", tag = "connectors",

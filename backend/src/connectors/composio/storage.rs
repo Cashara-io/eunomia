@@ -41,3 +41,22 @@ pub async fn delete_tokens(db: &OrgDb, owner: &RecordId, id: &RecordId) -> AppRe
         .bind(("id",id.clone())).bind(("owner",owner.clone())).await?.check()?;
     Ok(())
 }
+
+/// App choices and vault routing change together, only for the still-connected generation.
+pub async fn select(
+    db: &OrgDb,
+    owner: &RecordId,
+    row: &Connector,
+    config: Value,
+    routing: Value,
+    enabled: bool,
+) -> AppResult<bool> {
+    if row.credentials_encrypted.is_empty() {
+        return Ok(false);
+    }
+    let mut res=store::dynamic(db,"app.composio_selection",
+        "UPDATE $id SET config = $config, routing = $routing, enabled = $enabled, updated_at = time::now() WHERE owner = $owner AND kind = 'composio' AND credentials_encrypted = $previous AND updated_at = $updated RETURN AFTER")
+        .bind(("id",row.id.clone())).bind(("owner",owner.clone())).bind(("previous",row.credentials_encrypted.clone())).bind(("updated",row.updated_at))
+        .bind(("config",config)).bind(("routing",routing)).bind(("enabled",enabled)).await?.check()?;
+    Ok(!res.take::<Vec<Connector>>(0)?.is_empty())
+}

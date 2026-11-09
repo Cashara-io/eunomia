@@ -20,7 +20,13 @@ cargo_step test --lib composio
 cargo_step test --test composio_flow --test composio_storage
 for mutation in owner disconnect; do
   export COMPOSIO_GUARD_MUTATION="$mutation"
-  if cargo_step test --test composio_storage; then echo "Guard survived: $mutation"; exit 1; fi
+  log="$(mktemp)"
+  if cargo_step test --test composio_storage > "$log" 2>&1; then cat "$log"; rm "$log"; echo "Guard survived: $mutation"; exit 1; else result=$?; fi
+  cat "$log"
+  expected="another user changed the credentials"
+  [ "$mutation" = owner ] || expected="disconnect retained credentials"
+  if [ "$result" -ne 101 ] || ! grep -q "$expected" "$log"; then rm "$log"; echo "Guard did not reach its expected assertion: $mutation"; exit 1; fi
+  rm "$log"
   unset COMPOSIO_GUARD_MUTATION
   echo "Guard killed: $mutation"
 done

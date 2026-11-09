@@ -3,6 +3,7 @@ import fs from "node:fs";
 import { registerAndOnboard, uniqueEmail } from "./helpers";
 
 test("Composio consumer sign-in, selected accounts, partial sync and disconnect", async ({ page }) => {
+  test.setTimeout(90000);
   test.skip(process.env.E2E_COMPOSIO_MOCK !== "1", "Requires the isolated consumer MCP mock stack.");
   await registerAndOnboard(page, uniqueEmail("composio"));
   await page.goto("/connectors");
@@ -19,9 +20,14 @@ test("Composio consumer sign-in, selected accounts, partial sync and disconnect"
   const evidence = process.env.E2E_COMPOSIO_SCREENSHOTS;
   if (evidence) {
     fs.mkdirSync(evidence, { recursive: true });
-    await page.screenshot({ path: `${evidence}/partial-light.png`, fullPage: true });
+    await card.screenshot({ path: `${evidence}/partial-light.png`, animations: "disabled" });
     await page.evaluate(() => { document.documentElement.dataset.theme = "dark"; });
-    await page.screenshot({ path: `${evidence}/partial-dark.png`, fullPage: true });
+    await card.screenshot({ path: `${evidence}/partial-dark.png`, animations: "disabled" });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({ path: `${evidence}/partial-mobile-dark.png`, fullPage: false, animations: "disabled" });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.setViewportSize({ width: 1280, height: 720 });
   }
   await card.getByRole("button", { name: "Sync now", exact: true }).click();
   await expect(card.getByText(/Healthy\. Last completed sync:/)).toBeVisible({ timeout: 45000 });

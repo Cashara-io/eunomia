@@ -112,10 +112,9 @@ fn execution_error(value: &Value) -> AppError {
                     .get(key)
                     .and_then(Value::as_u64)
                     .and_then(|n| u16::try_from(n).ok())
+                    && (100..600).contains(&n)
                 {
-                    if (100..600).contains(&n) {
-                        return Some(n);
-                    }
+                    return Some(n);
                 }
             }
             for v in o.values() {
@@ -126,12 +125,31 @@ fn execution_error(value: &Value) -> AppError {
         }
         None
     }
-    let code = status(value).unwrap_or(502);
+    let body = value.to_string();
+    let code = status(value)
+        .or_else(|| {
+            let re = regex::Regex::new(
+                r"(?i)(?:http|status(?: code)?)[^0-9]{0,8}(401|403|404|410|429|5[0-9]{2})",
+            )
+            .expect("static HTTP status expression");
+            re.captures(&body).and_then(|m| m[1].parse::<u16>().ok())
+        })
+        .unwrap_or(502);
+    let quota = [
+        "rateLimitExceeded",
+        "userRateLimitExceeded",
+        "quotaExceeded",
+    ]
+    .iter()
+    .find(|reason| body.contains(**reason));
+    let classified_body = quota
+        .map(|reason| json!({"error":{"errors":[{"reason":reason}]}}).to_string())
+        .unwrap_or(body);
     let status = reqwest::StatusCode::from_u16(code).unwrap_or(reqwest::StatusCode::BAD_GATEWAY);
     let mut e = crate::connectors::clients::provider_error(
         "https://connect.composio.dev",
         status,
-        &value.to_string(),
+        &classified_body,
     );
     e.message = if e.reason == Some("connector_rate_limited") {
         Failure::RateLimited(60).message()
@@ -287,5 +305,8 @@ mod tests {
         assert_eq!(e.reason, Some("connector_rate_limited"));
         let e=data(json!({"successful":false,"error":{"status_code":403,"errors":[{"reason":"insufficientPermissions"}]}})).unwrap_err();
         assert_eq!(e.reason, Some("connector_auth"));
+        let e=data(json!({"successful":false,"error":"HTTP request failed with status code 429: canary-token"})).unwrap_err();
+        assert_eq!(e.reason, Some("connector_rate_limited"));
+        assert!(!e.message.contains("canary"));
     }
 }

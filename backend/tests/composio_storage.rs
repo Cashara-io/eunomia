@@ -42,6 +42,7 @@ async fn composio_credentials_are_owner_isolated_encrypted_and_deleted_on_discon
         let disconnected = storage::load(&db, &app.user.id).await.unwrap();
         assert!(disconnected.credentials_encrypted.is_empty(), "disconnect retained credentials");
         assert!(!disconnected.enabled);
+        assert!(!storage::select(&db,&app.user.id,&saved,json!({"apps":[]}),json!({}),true).await.unwrap(),"a stale selection re-enabled a disconnect");
         assert_eq!(service::credentials_of(key, &disconnected).unwrap(),json!({}));
     }).await;
     if !mutation.is_empty() {
