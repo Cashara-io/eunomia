@@ -362,7 +362,7 @@ mod tests {
         let mut recovered = token_and_history(json!({"historyId": "101", "history": [{"messagesAdded": [{"message": {"id": "imported"}}]}]}));
         recovered.extend([
             route("GET", "/users/me/messages", json!({"messages": [{"id": "newest"}, {"id": "imported"}, {"id": "oldest"}]})),
-            route("GET", "/users/me/messages/imported", message("imported", "1700000150000", "Backdated")),
+            route("GET", "/users/me/messages/imported", message("imported", "1600000000000", "Backdated")),
             route("GET", "/users/me/messages/newest", message("newest", "1700000300000", "Newest")),
         ]);
         mock.set_routes(with_history(recovered));
@@ -374,6 +374,7 @@ mod tests {
         let ids: Vec<_> = first.records.iter().chain(&second.records).chain(&third.records).map(|r| s(r, "/id")).collect();
         assert_eq!(ids.iter().filter(|id| **id == "imported").count(), 1, "{ids:?}");
         assert_eq!(ids.len(), 3, "each arrival is fetched once");
+        assert_eq!(MessageCursor::read(third.cursor).unwrap().after.as_deref(), Some("1700000299"), "backdated arrivals cannot rewind the checkpoint");
     }
 
     #[tokio::test]

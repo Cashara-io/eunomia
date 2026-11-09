@@ -216,6 +216,49 @@ async fn review_calendar_partial_status_is_persisted_without_marking_healthy() {
     assert!(due_syncs(&org).await.unwrap().is_empty(), "Calendar honours Retry-After");
 }
 
+/// A paused poll does not erase a previous healthy timestamp; an ingest failure must replay it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn gmail_partial_ingest_failure_keeps_the_previous_checkpoint_and_last_ok() {
+    let (app, org) = app_with(None).await;
+    let owner = app.user.id.clone();
+    let mock = serve(vec![
+        route("POST", "/oauth/token", json!({"access_token": "t"})),
+        route("GET", "/users/me/profile", json!({"historyId": "100"})),
+        route("GET", "/users/me/history", json!({"historyId": "100"})),
+        route("GET", "/users/me/messages", json!({})),
+    ]).await;
+    connect(&org, &owner, "gmail", &mock.base, json!({}), json!({"client_id": "c", "client_secret": "s", "refresh_token": "r"})).await;
+    assert_eq!(sync_source(&org, &owner, "gmail", None).await["written"], 0);
+    let healthy = status(&org, &owner, "gmail").await;
+    assert!(!healthy["last_ok"].is_null());
+    org.db.test_raw().query("DEFINE FIELD OVERWRITE title ON cache_record TYPE string ASSERT $value != 'POISON'")
+        .await.unwrap().check().unwrap();
+    mock.set_routes(vec![
+        route("POST", "/oauth/token", json!({"access_token": "t"})),
+        route("GET", "/users/me/history", json!({"historyId": "101", "history": [{"messagesAdded": [
+            {"message": {"id": "bad"}}, {"message": {"id": "limited"}}
+        ]}]})),
+        route("GET", "/users/me/messages/bad", json!({"id": "bad", "internalDate": "1700000100000",
+            "payload": {"headers": [{"name": "Subject", "value": "POISON"}]}})),
+        route("GET", "/users/me/messages/limited", json!({})).status(429).header("retry-after", "120"),
+    ]);
+    let failed = sync_source(&org, &owner, "gmail", None).await;
+    assert!(failed["error"].as_str().unwrap().contains("failed to save"), "{failed}");
+    let st = status(&org, &owner, "gmail").await;
+    assert_eq!(st["cursor"], healthy["cursor"], "do not acknowledge history or pending work on failed ingestion");
+    assert_eq!(st["last_ok"], healthy["last_ok"]);
+    assert_eq!(st["consecutive_failures"], 1);
+    org.db.test_raw().query("DEFINE FIELD OVERWRITE title ON cache_record TYPE string").await.unwrap().check().unwrap();
+    let partial = sync_source(&org, &owner, "gmail", None).await;
+    assert_eq!(partial["status"], "partial", "{partial}");
+    assert_eq!(partial["written"], 1);
+    let st = status(&org, &owner, "gmail").await;
+    assert_eq!(st["last_ok"], healthy["last_ok"], "a partial poll preserves the previous healthy timestamp");
+    assert_eq!(st["consecutive_failures"], 0);
+    assert_ne!(st["cursor"], healthy["cursor"]);
+    assert_eq!(st["last_report"]["retry_after_secs"], 120);
+}
+
 /// Disabling stops syncs without a restart; two overlapping runs make one provider sync; a sync job
 /// holding a live lease (another replica) makes this run stand down until the lease expires.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
