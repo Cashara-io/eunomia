@@ -54,7 +54,6 @@ pub struct Tokens {
 }
 
 pub struct OAuthClient {
-    http: reqwest::Client,
     issuer: Url,
     resource: String,
     test_origin: bool,
@@ -86,11 +85,6 @@ impl OAuthClient {
 
     fn new(issuer: &str, resource: &str, test_origin: bool) -> AppResult<Self> {
         Ok(Self {
-            http: reqwest::Client::builder()
-                .redirect(reqwest::redirect::Policy::none())
-                .timeout(std::time::Duration::from_secs(30))
-                .build()
-                .map_err(|_| failure())?,
             issuer: Url::parse(issuer).map_err(|_| failure())?,
             resource: resource.to_string(),
             test_origin,
@@ -120,6 +114,12 @@ impl OAuthClient {
             return Err(failure());
         }
         Ok(url)
+    }
+
+    async fn request(&self, method: reqwest::Method, endpoint: Url) -> AppResult<reqwest::RequestBuilder> {
+        let secrets = crate::secrets::connector::current();
+        let http = crate::connectors::clients::guarded(endpoint.as_str(), secrets.as_ref()).await.map_err(|_| failure())?;
+        Ok(http.request(method, endpoint).timeout(std::time::Duration::from_secs(30)))
     }
 
     async fn json<T: serde::de::DeserializeOwned>(
@@ -152,14 +152,13 @@ impl OAuthClient {
         };
         let metadata: serde_json::Value = self
             .json(
-                self.http
-                    .get(format!("{base}/.well-known/openid-configuration")),
+                self.request(reqwest::Method::GET, self.endpoint(&format!("{base}/.well-known/openid-configuration"))?).await?,
             )
             .await?;
         let endpoint =
             self.endpoint(metadata["userinfo_endpoint"].as_str().ok_or_else(failure)?)?;
         let info: serde_json::Value = self
-            .json(self.http.get(endpoint).bearer_auth(token))
+            .json(self.request(reqwest::Method::GET, endpoint).await?.bearer_auth(token))
             .await?;
         let mut info = info;
         crate::redact::scrub_exact_value(&mut info, &[Zeroizing::new(token.to_string())]);
@@ -174,11 +173,11 @@ impl OAuthClient {
     pub async fn discover(&self) -> AppResult<Metadata> {
         let resource: ResourceMetadata = self
             .json(
-                self.http.get(
+                self.request(reqwest::Method::GET,
                     self.issuer
                         .join("/.well-known/oauth-protected-resource/mcp")
                         .map_err(|_| failure())?,
-                ),
+                ).await?,
             )
             .await?;
         if resource.resource != self.resource
@@ -190,11 +189,11 @@ impl OAuthClient {
         }
         let metadata: Metadata = self
             .json(
-                self.http.get(
+                self.request(reqwest::Method::GET,
                     self.issuer
                         .join("/.well-known/oauth-authorization-server")
                         .map_err(|_| failure())?,
-                ),
+                ).await?,
             )
             .await?;
         self.validate_metadata(&metadata)?;
@@ -243,8 +242,7 @@ impl OAuthClient {
         }
         let registration: Registration = self
             .json(
-                self.http
-                    .post(self.endpoint(&metadata.registration_endpoint)?)
+                self.request(reqwest::Method::POST, self.endpoint(&metadata.registration_endpoint)?).await?
                     .json(&json!({
                         "client_name": "Eunomia",
                         "redirect_uris": [redirect_uri],
@@ -325,8 +323,7 @@ impl OAuthClient {
     async fn tokens(&self, metadata: &Metadata, form: &[(&str, &str)]) -> AppResult<Tokens> {
         let tokens: Tokens = self
             .json(
-                self.http
-                    .post(self.endpoint(&metadata.token_endpoint)?)
+                self.request(reqwest::Method::POST, self.endpoint(&metadata.token_endpoint)?).await?
                     .form(form),
             )
             .await?;
@@ -351,8 +348,7 @@ impl OAuthClient {
             return Ok(false);
         };
         let response = self
-            .http
-            .post(self.endpoint(endpoint)?)
+            .request(reqwest::Method::POST, self.endpoint(endpoint)?).await?
             .form(&[("token", token), ("client_id", client_id)])
             .send()
             .await

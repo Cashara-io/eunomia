@@ -103,13 +103,14 @@ pub async fn check_base_url(raw: &str, allow_private: bool) -> AppResult<()> {
     Ok(())
 }
 
-struct GuardedResolver;
+struct GuardedResolver { public_only: bool }
 
 impl reqwest::dns::Resolve for GuardedResolver {
     fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        let public_only = self.public_only;
         Box::pin(async move {
             let ips = lookup(name.as_str(), 0).await?;
-            let allow_private = allow_private_llm_url();
+            let allow_private = !public_only && allow_private_llm_url();
             for ip in &ips {
                 ip_verdict(*ip, allow_private).await.map_err(Box::<dyn std::error::Error + Send + Sync>::from)?;
             }
@@ -121,6 +122,15 @@ impl reqwest::dns::Resolve for GuardedResolver {
 /// The HTTP client for a model call to `base_url`: refuses blocked hosts and IP literals now, hostnames
 /// when they are resolved, and does not follow redirects.
 pub async fn client(base_url: &str) -> AppResult<reqwest::Client> {
+    guarded_client(base_url, false).await
+}
+
+/// Signed provider downloads must stay public even when local model servers are allowed.
+pub async fn public_client(base_url: &str) -> AppResult<reqwest::Client> {
+    guarded_client(base_url, true).await
+}
+
+async fn guarded_client(base_url: &str, public_only: bool) -> AppResult<reqwest::Client> {
     let (url, _) = parse(base_url).map_err(|m| AppError::internal(format!("the model base URL is not allowed: {m}")))?;
     let literal = match url.host() {
         Some(url::Host::Ipv4(ip)) => Some(IpAddr::V4(ip)),
@@ -128,11 +138,21 @@ pub async fn client(base_url: &str) -> AppResult<reqwest::Client> {
         _ => None,
     };
     if let Some(ip) = literal {
-        ip_verdict(ip, allow_private_llm_url()).await.map_err(|m| AppError::internal(format!("the model base URL is not allowed: {m}")))?;
+        ip_verdict(ip, !public_only && allow_private_llm_url()).await.map_err(|m| AppError::internal(format!("the model base URL is not allowed: {m}")))?;
     }
     reqwest::Client::builder()
-        .dns_resolver(std::sync::Arc::new(GuardedResolver))
+        .dns_resolver(std::sync::Arc::new(GuardedResolver { public_only }))
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| AppError::internal(e.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    #[tokio::test]
+    async fn signed_download_clients_refuse_private_and_metadata_literals() {
+        for url in ["http://127.0.0.1/file", "http://[::1]/file", "http://169.254.169.254/file", "http://0.0.0.0/file"] {
+            assert!(super::public_client(url).await.is_err(), "signed download accepted {url}");
+        }
+    }
 }

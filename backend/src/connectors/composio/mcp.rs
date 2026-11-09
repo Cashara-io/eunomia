@@ -44,12 +44,9 @@ impl Client {
     }
 
     pub(crate) async fn connect(endpoint: &str, token: &str) -> Result<Self, Failure> {
+        let secrets = crate::secrets::connector::current();
         let mut client = Self {
-            http: reqwest::Client::builder()
-                .redirect(reqwest::redirect::Policy::none())
-                .timeout(std::time::Duration::from_secs(90))
-                .build()
-                .map_err(|_| Failure::Upstream)?,
+            http: crate::connectors::clients::guarded(endpoint, secrets.as_ref()).await.map_err(|_| Failure::Upstream)?,
             endpoint: endpoint.into(),
             token: Zeroizing::new(token.to_string()),
             session: None,
@@ -82,6 +79,7 @@ impl Client {
         let mut request = self
             .http
             .post(&self.endpoint)
+            .timeout(std::time::Duration::from_secs(90))
             .bearer_auth(self.token.as_str())
             .header("Accept", "application/json, text/event-stream")
             .header("MCP-Protocol-Version", VERSION)

@@ -503,30 +503,14 @@ async fn download(raw: &str) -> AppResult<Vec<u8>> {
     if !url.username().is_empty() || url.password().is_some() {
         return Err(protocol());
     }
-    let mut builder = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .timeout(std::time::Duration::from_secs(60));
-    if !mock {
-        let addresses: Vec<_> = tokio::time::timeout(
-            std::time::Duration::from_secs(5),
-            tokio::net::lookup_host((host, url.port_or_known_default().unwrap_or(443))),
-        )
-        .await
-        .map_err(|_| protocol())?
-        .map_err(|_| protocol())?
-        .collect();
-        if addresses.is_empty()
-            || addresses
-                .iter()
-                .any(|a| crate::oauth::cimd::ip_blocked(a.ip()))
-        {
-            return Err(protocol());
-        }
-        builder = builder.resolve_to_addrs(host, &addresses);
-    }
-    let http = builder.build().map_err(|_| protocol())?;
+    let http = if mock {
+        crate::llm_net::client(raw).await
+    } else {
+        crate::llm_net::public_client(raw).await
+    }.map_err(|_| protocol())?;
     let mut response = http
         .get(url)
+        .timeout(std::time::Duration::from_secs(60))
         .send()
         .await
         .map_err(|_| tools::failure(Failure::Upstream))?;

@@ -60,7 +60,7 @@ pub fn bearer(token: &str) -> HeaderMap {
 }
 
 /// The guarded client for one request (see the module docs). Its error already says why a URL is refused.
-async fn guarded(url: &str, secrets: Option<&crate::secrets::connector::Context>) -> AppResult<reqwest::Client> {
+pub(crate) async fn guarded(url: &str, secrets: Option<&crate::secrets::connector::Context>) -> AppResult<reqwest::Client> {
     if let Some(secrets) = secrets { return secrets.client(url).await; }
     crate::llm_net::client(url).await.map_err(|e| AppError::new(StatusCode::BAD_GATEWAY, format!("{} is not allowed: {}", host(url), e.message)))
 }
