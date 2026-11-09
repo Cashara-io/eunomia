@@ -16,10 +16,13 @@ import Overview from "./Overview";
 import Structure from "./Structure";
 import KindDetail from "./KindDetail";
 import Review from "./Review";
+import Objects from "./Objects";
+import ObjectProfile from "./ObjectProfile";
 
 const views = [
   { path: "/ontology", label: "Overview" },
   { path: "/ontology/schema", label: "Structure" },
+  { path: "/ontology/objects", label: "Objects" },
   { path: "/ontology/review", label: "Review" },
 ];
 
@@ -27,7 +30,7 @@ export default function TwinArea({
   view,
   kind,
 }: {
-  view: "overview" | "structure" | "review" | "kind";
+  view: "overview" | "structure" | "review" | "kind" | "objects" | "object";
   kind?: string;
 }) {
   const query = useVaults();
@@ -66,7 +69,9 @@ export default function TwinArea({
                 href={twinHref(
                   view === "review"
                     ? "/ontology/review"
-                    : view === "structure"
+                    : view === "objects" || view === "object"
+                      ? "/ontology/objects"
+                      : view === "structure"
                       ? "/ontology/schema"
                       : "/ontology",
                   v.id,
@@ -97,7 +102,7 @@ function SelectedSpace({
   kind,
 }: {
   vault: Vault;
-  view: "overview" | "structure" | "review" | "kind";
+  view: "overview" | "structure" | "review" | "kind" | "objects" | "object";
   kind?: string;
 }) {
   const query = useOntology(vault.id);
@@ -109,7 +114,7 @@ function SelectedSpace({
   const waiting = data
     ? definitions(data).filter((d) => d.item.status === "proposed").length
     : null;
-  const current = view === "kind" ? "/ontology/schema" : pathname;
+  const current = view === "kind" ? "/ontology/schema" : view === "object" ? "/ontology/objects" : pathname;
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -194,6 +199,8 @@ function SelectedSpace({
         <p role="status">Loading the ontology…</p>
       ) : (
         <>
+          {view === "objects" && <Objects space={vault.id} ontology={data} />}
+          {view === "object" && <ObjectProfile key={kind} space={vault.id} id={kind ?? ""} />}
           {view === "overview" && <Overview vault={vault} data={data} />}
           {view === "structure" && <Structure vault={vault} data={data} />}
           {view === "kind" && (

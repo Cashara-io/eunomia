@@ -809,6 +809,7 @@ export default function EntityGraph({
           </button>
         </div>
       )}
+      <div className="px-5 pt-4"><Link className="link text-[13px]" href={`/ontology/objects/${encodeURIComponent(selected.id)}?space=${encodeURIComponent(vaultId || myVaults.find(v => v.is_default)?.id || "")}`}>Open in Ontology</Link></div>
       <div className="flex items-start justify-between gap-2 p-5 pb-3">
         <div className="flex items-center gap-3 min-w-0">
           {selected.kind === "person" && <Monogram name={selected.name || selected.id} size={36} color={colorOf("person")} />}

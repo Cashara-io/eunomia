@@ -1583,6 +1583,14 @@ pub(super) struct Prepared {
 
 /// Finds and loads the metric `args` names in `vault` (the caller checked access).
 pub(super) async fn prepare(db: &OrgDb, vault: &RecordId, args: &EvalArgs) -> AppResult<Prepared> {
+    prepare_scoped(db, vault, args, None).await
+}
+
+pub(super) async fn eval_object(db: &OrgDb, vault: &RecordId, args: &EvalArgs, entity: &RecordId) -> AppResult<MetricEvalOut> {
+    prepare_scoped(db, vault, args, Some(entity)).await?.run(None)
+}
+
+async fn prepare_scoped(db: &OrgDb, vault: &RecordId, args: &EvalArgs, entity: Option<&RecordId>) -> AppResult<Prepared> {
     let vault = vault.clone();
     let asked = metric_name(&args.metric)?;
     let row = match args.kind.as_deref().map(str::trim).filter(|k| !k.is_empty()) {
@@ -1716,7 +1724,10 @@ pub(super) async fn prepare(db: &OrgDb, vault: &RecordId, args: &EvalArgs) -> Ap
         prepared.nothing = true;
         return Ok(prepared);
     }
-    (prepared.entities, prepared.values) = load_values(db, &vault, &prepared.kind, &names, as_of).await?;
+    (prepared.entities, prepared.values) = if let Some(id) = entity {
+        prepared.out.expr_words.push_str(", for this object only");
+        (vec![id.to_string()], latest_values(db, &vault, &prepared.kind, &names, std::slice::from_ref(id), as_of).await?)
+    } else { load_values(db, &vault, &prepared.kind, &names, as_of).await? };
     if let Some(r) = related {
         let kind = prepared.kind.as_str();
         prepared.entities.retain(|e| r.ids.contains(e));

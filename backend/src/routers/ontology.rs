@@ -2,7 +2,7 @@
 //! decide routes are the only way to approve or reject, and they take a browser session only.
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     routing::{get, post},
     Json, Router,
 };
@@ -18,6 +18,8 @@ use crate::state::AppState;
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/vaults/{vault_id}/ontology", get(get_ontology))
+        .route("/vaults/{vault_id}/ontology/objects", get(list_objects))
+        .route("/vaults/{vault_id}/ontology/objects/{id}", get(object_profile))
         .route("/vaults/{vault_id}/ontology/suggest", post(suggest_ontology))
         .route("/vaults/{vault_id}/ontology/automap", post(automap_ontology))
         .route("/vaults/{vault_id}/ontology/kinds/decide", post(decide_kind))
@@ -26,6 +28,28 @@ pub fn router() -> Router<AppState> {
         .route("/vaults/{vault_id}/ontology/metrics/decide", post(decide_metric))
         .route("/vaults/{vault_id}/ontology/readiness", get(get_readiness))
         .route("/vaults/{vault_id}/ontology/strict", post(set_strict))
+}
+
+#[utoipa::path(operation_id = "listOntologyObjects", get, path = "/api/vaults/{vault_id}/ontology/objects", tag = "vaults",
+    params(("vault_id" = String, Path), ontology::objects::ListArgs),
+    responses((status = 200, body = serde_json::Value)), security(("cookie" = []), ("bearer" = [])))]
+async fn list_objects(State(state): State<AppState>, user: User, Path(vault): Path<String>, Query(args): Query<ontology::objects::ListArgs>) -> AppResult<Json<serde_json::Value>> {
+    let state = state.org(&user.org).await?;
+    Ok(Json(ontology::objects::list(&state.db, &user.id, &parse_vault_id(&vault)?, &args).await?))
+}
+
+#[derive(Default, Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
+struct ProfileQuery { #[serde(default)] offset: usize }
+
+#[utoipa::path(operation_id = "getOntologyObject", get, path = "/api/vaults/{vault_id}/ontology/objects/{id}", tag = "vaults",
+    params(("vault_id" = String, Path), ("id" = String, Path), ProfileQuery),
+    responses((status = 200, body = serde_json::Value)), security(("cookie" = []), ("bearer" = [])))]
+async fn object_profile(State(state): State<AppState>, user: User, Path((vault,id)): Path<(String,String)>, Query(args): Query<ProfileQuery>) -> AppResult<Json<serde_json::Value>> {
+    if args.offset > 1_000_000 { return Err(AppError::bad_request("offset too large")); }
+    let state = state.org(&user.org).await?;
+    let id = crate::rid::parse(&id).map_err(|_| AppError::not_found("object unavailable"))?;
+    Ok(Json(ontology::objects::profile(&state, &user.id, &parse_vault_id(&vault)?, &id, args.offset).await?))
 }
 
 /// After an approval or a description: the terms coverage matches get their vectors in the background.
@@ -242,5 +266,6 @@ async fn set_strict(State(state): State<AppState>, user: User, Path(vault_id): P
 }
 
 #[derive(utoipa::OpenApi)]
-#[openapi(paths(get_ontology, suggest_ontology, automap_ontology, decide_kind, decide_link, decide_property, decide_metric, get_readiness, set_strict))]
+#[openapi(paths(
+    list_objects, object_profile,get_ontology, suggest_ontology, automap_ontology, decide_kind, decide_link, decide_property, decide_metric, get_readiness, set_strict))]
 pub struct Doc;

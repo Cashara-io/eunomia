@@ -1,0 +1,328 @@
+"use client";
+import { useState } from "react";
+import Link from "next/link";
+import Select from "@/components/Select";
+import ErrorLine, { failure } from "@/components/ErrorLine";
+import { useObjects } from "@/lib/queries/objects";
+import type { OntologyOut } from "@/lib/queries/ontology";
+import { useTwinParams } from "./controls";
+import ObjectProfile, { formatted, objectHref } from "./ObjectProfile";
+import { words } from "./DefinitionRows";
+
+export default function Objects({
+  space,
+  ontology,
+}: {
+  space: string;
+  ontology: OntologyOut;
+}) {
+  const { params, update } = useTwinParams();
+  const kind =
+    params.get("kind") ||
+    ontology.kinds.find((k) => k.entities > 0)?.kind ||
+    ontology.kinds[0]?.kind ||
+    "";
+  const query = useObjects(space, params, kind);
+  const [hidden, setHidden] = useState<string[]>([]);
+  const [columnsOpen, setColumnsOpen] = useState(false);
+  const data = query.data;
+  const page = Math.max(1, Number(params.get("page")) || 1);
+  const selected = params.get("selected");
+  const columns = data?.columns.filter((c) => !hidden.includes(c.name)) ?? [];
+  return (
+    <div className="flex flex-col gap-4 min-w-0 text-[13px]">
+      <div>
+        <h2 className="text-[22px] font-medium">Objects</h2>
+        <p className="text-[var(--ink-dim)] mt-2">
+          Real objects and their latest approved properties. Missing values stay
+          missing.
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-3 items-end">
+        <div>
+          <span className="label">Kind</span>
+          <Select
+            aria-label="Object kind"
+            value={kind}
+            options={ontology.kinds.map((k) => ({
+              value: k.kind,
+              label: words(k.kind),
+            }))}
+            onChange={(k) => {
+              setHidden([]);
+              update({
+                kind: k,
+                selected: "",
+                sort: "",
+                filter: "",
+                op: "",
+                value: "",
+              });
+            }}
+          />
+        </div>
+        <label className="flex-1 min-w-40">
+          <span className="label">Search objects</span>
+          <input
+            className="field w-full px-3"
+            type="search"
+            value={params.get("search") ?? ""}
+            onChange={(e) =>
+              update({ search: e.target.value, selected: "" }, true)
+            }
+          />
+        </label>
+        <button
+          className="btn"
+          aria-expanded={columnsOpen}
+          onClick={() => setColumnsOpen(!columnsOpen)}
+        >
+          Columns
+        </button>
+      </div>
+      {columnsOpen && (
+        <fieldset className="ledger p-4 flex flex-wrap gap-4">
+          <legend className="px-2">Visible columns</legend>
+          {data?.columns.map((c) => (
+            <label key={c.name} className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={!hidden.includes(c.name)}
+                onChange={(e) =>
+                  setHidden(
+                    e.target.checked
+                      ? hidden.filter((n) => n !== c.name)
+                      : [...hidden, c.name],
+                  )
+                }
+              />
+              {words(c.name)}
+            </label>
+          ))}
+        </fieldset>
+      )}
+      <details className="ledger p-3">
+        <summary className="cursor-pointer">
+          Filters {params.get("op") ? "(1 active)" : ""}
+        </summary>
+        <div className="flex flex-wrap items-end gap-3 mt-3">
+          <div>
+            <span className="label">Property</span>
+            <Select
+              aria-label="Filter property"
+              value={params.get("filter") ?? ""}
+              options={[
+                { value: "", label: "Choose property" },
+                ...(data?.columns.map((c) => ({
+                  value: c.name,
+                  label: words(c.name),
+                })) ?? []),
+              ]}
+              onChange={(v) => update({ filter: v, op: "", value: "" })}
+            />
+          </div>
+          <div>
+            <span className="label">Condition</span>
+            <Select
+              aria-label="Filter condition"
+              value={params.get("op") ?? ""}
+              options={[
+                { value: "", label: "No filter" },
+                { value: "eq", label: "Equals" },
+                { value: "gte", label: "At least" },
+                { value: "lte", label: "At most" },
+                { value: "missing", label: "Missing" },
+              ]}
+              onChange={(v) => update({ op: v })}
+              disabled={!params.get("filter")}
+            />
+          </div>
+          <label>
+            <span className="label">Value</span>
+            <input
+              className="field px-3 w-full"
+              value={params.get("value") ?? ""}
+              onChange={(e) => update({ value: e.target.value }, true)}
+              disabled={params.get("op") === "missing"}
+            />
+          </label>
+          <button
+            className="btn btn-sm"
+            onClick={() => update({ filter: "", op: "", value: "" })}
+          >
+            Clear filters
+          </button>
+        </div>
+      </details>
+      {query.isError ? (
+        <ErrorLine
+          error={failure(
+            query.error,
+            "Could not load objects. Check filters and try again.",
+          )}
+        />
+      ) : !data ? (
+        <p role="status">Loading objects…</p>
+      ) : (
+        <div className="flex gap-5 items-start min-w-0">
+          <div className="min-w-0 flex-1">
+            <div
+              className="ledger overflow-x-auto max-w-full"
+              role="region"
+              aria-label="Objects table"
+              tabIndex={0}
+            >
+              <table
+                className="data-table w-full whitespace-nowrap"
+                aria-label={`${words(kind)} objects`}
+              >
+                <thead>
+                  <tr>
+                    {[
+                      { name: "name", datatype: "text", unit: null },
+                      ...columns,
+                    ].map((c) => (
+                      <th
+                        key={c.name}
+                        scope="col"
+                        className="px-4"
+                        aria-sort={
+                          (params.get("sort") ?? "name") === c.name
+                            ? params.get("descending") === "true"
+                              ? "descending"
+                              : "ascending"
+                            : "none"
+                        }
+                      >
+                        <button
+                          className="py-3"
+                          onClick={() =>
+                            update({
+                              sort: c.name,
+                              descending: String(
+                                (params.get("sort") ?? "name") === c.name &&
+                                  params.get("descending") !== "true",
+                              ),
+                              selected: "",
+                            })
+                          }
+                        >
+                          {words(c.name)}
+                        </button>
+                      </th>
+                    ))}
+                    <th scope="col" className="px-4">
+                      Sources
+                    </th>
+                    <th scope="col" className="hidden xl:table-cell px-3">
+                      <span className="sr-only">Inspect</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.rows.map((row) => (
+                    <tr
+                      key={row.id}
+                      className={
+                        selected === row.id ? "bg-[var(--accent-soft)]" : ""
+                      }
+                    >
+                      <th scope="row" className="px-4 text-left font-normal">
+                        <Link className="link" href={objectHref(row.id, space)}>
+                          {row.name}
+                        </Link>
+                      </th>
+                      {columns.map((c) => (
+                        <td
+                          key={c.name}
+                          className={`px-4 ${row.values[c.name]?.value === null ? "text-[var(--ink-faint)]" : "font-mono"}`}
+                        >
+                          {formatted(row.values[c.name]?.value, {
+                            ...c,
+                            unit: row.values[c.name]?.unit ?? c.unit,
+                          })}
+                        </td>
+                      ))}
+                      <td className="px-4 font-mono">
+                        <Link
+                          className="link"
+                          href={`${objectHref(row.id, space)}&section=Sources`}
+                        >
+                          {row.source_count}
+                        </Link>
+                      </td>
+                      <td className="hidden xl:table-cell px-3">
+                        <button
+                          className="btn btn-sm btn-ghost"
+                          onClick={() => update({ selected: row.id })}
+                        >
+                          Inspect<span className="sr-only"> {row.name}</span>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {data.rows.length === 0 && (
+                    <tr>
+                      <td colSpan={columns.length + 3} className="p-4">
+                        No objects match these filters.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <nav
+              aria-label="Object pages"
+              className="flex flex-wrap justify-between items-center gap-3 mt-4"
+            >
+              <span className="font-mono">
+                {data.total === 0 ? 0 : data.offset + 1} to{" "}
+                {Math.min(data.offset + data.limit, data.total)} of{" "}
+                {data.total.toLocaleString("en-AU")}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  className="btn btn-sm"
+                  disabled={page === 1}
+                  onClick={() =>
+                    update({ page: String(page - 1), selected: "" })
+                  }
+                >
+                  Previous
+                </button>
+                <button
+                  className="btn btn-sm"
+                  disabled={data.offset + data.limit >= data.total}
+                  onClick={() =>
+                    update({ page: String(page + 1), selected: "" })
+                  }
+                >
+                  Next
+                </button>
+              </div>
+            </nav>
+          </div>
+          {selected && (
+            <aside
+              className="hidden xl:block w-72 shrink-0 ledger p-4"
+              aria-label="Object inspector"
+            >
+              <button
+                className="btn btn-ghost btn-sm mb-3"
+                onClick={() => update({ selected: "" })}
+              >
+                Close inspector
+              </button>
+              <ObjectProfile
+                key={selected}
+                space={space}
+                id={selected}
+                compact
+              />
+            </aside>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
