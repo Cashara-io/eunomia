@@ -1,7 +1,11 @@
 import { test, expect } from "@playwright/test";
 import { registerAndOnboard, uniqueEmail } from "./helpers";
 
-import fixture from "../../backend/tests/fixtures/chat_markdown.json";
+import { readFileSync } from "node:fs";
+
+type CheckedCase = { name: string; visible_text: string; tree: unknown };
+// Read at run time: the frontend Docker build type-checks tests/ without the backend folder.
+const fixture: { cases: CheckedCase[] } = JSON.parse(readFileSync("../backend/tests/fixtures/chat_markdown.json", "utf8"));
 
 const sample = fixture.cases.find(c => c.name === "e2e");
 if (!sample) throw new Error("Missing checked chat e2e fixture");
