@@ -120,9 +120,11 @@ save only a new fact the user tells you, such as the delay itself when it is not
 /// property an owner approved), but can't remove data, merge or rename
 /// entities, or create/share/copy vaults. Everything else that writes
 /// (deletes, merges, `entity_update`, every `vault_*` write,
-/// `consolidate_observations`, ontology proposals and the code-graph tools)
+/// `consolidate_observations` and the code-graph tools)
 /// stays with the user: the app's own pages, or their agent over REST/MCP.
-const CHAT_WRITE_TOOLS: &[&str] = &["memory_write", "memory_update", "entity_set_property", "entity_relate"];
+/// CSV uploads, mapping proposals and imports use the shared services. Only an owner can approve
+/// proposals, and imports require those approvals.
+const CHAT_WRITE_TOOLS: &[&str] = &["memory_write", "memory_update", "entity_set_property", "entity_relate", "document_upload", "ontology_automap", "ontology_propose", "document_import_rows"];
 
 /// Whether the built-in chat's model may call `name`: checked both when
 /// advertising tools and again when executing the model's calls. This is on
@@ -853,7 +855,7 @@ mod tests {
         ] {
             assert!(!chat_may_call(name), "{name}");
         }
-        for name in ["recall", "search", "entities_get", "reflect", "memory_write", "memory_update", "entities_neighbourhood", "show_view", "ontology_get", "entity_set_property", "entity_relate", "metric_eval", "scenario_run"] {
+        for name in ["recall", "search", "entities_get", "reflect", "memory_write", "memory_update", "entities_neighbourhood", "show_view", "ontology_get", "entity_set_property", "entity_relate", "metric_eval", "scenario_run", "document_upload", "ontology_automap", "ontology_propose", "document_import_rows"] {
             assert!(chat_may_call(name), "{name}");
         }
     }

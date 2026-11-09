@@ -562,3 +562,27 @@ async fn the_page_lists_every_readable_space_and_names_each_documents_space() {
     let restricted = models_user::create_api_token_with(&app.state.control, &app.user.id, "r", &["memory:read".to_string()], Some(&vid), None).await.unwrap().token;
     assert_eq!(listed("?all_vaults=true", restricted).await, [("parts.csv".to_string(), shop)]);
 }
+
+#[tokio::test]
+async fn import_196_mcp_upload_accepts_two_mib_csv_and_reports_configured_limit() {
+    use base64::Engine;
+    let app = TestApp::with_settings(Settings { documents_max_bytes: 2 << 20, ..common::test_settings() }).await;
+    let csv = format!("name,value\n{}", "item,1\n".repeat((2 << 20) / 7 - 2));
+    for args in [json!({"text": csv}), json!({"content_base64": base64::engine::general_purpose::STANDARD.encode(&csv)})] {
+        let mut args = args;
+        args["filename"] = json!("large.csv");
+        let rpc = json!({"jsonrpc":"2.0", "id":1, "method":"tools/call", "params":{"name":"document_upload","arguments":args}});
+        let (s, _, b) = raw(&app, "POST", "/mcp", serde_json::to_vec(&rpc).unwrap(), Some("application/json"), &app.token).await;
+        assert_eq!(s, 200, "{}", String::from_utf8_lossy(&b));
+        let answer = json_of(&b);
+        assert_ne!(answer["result"]["isError"], true, "{answer}");
+        assert!(answer.to_string().contains("size_bytes"), "{answer}");
+    }
+    let rpc = json!({"jsonrpc":"2.0", "id":2, "method":"tools/call", "params":{"name":"document_upload","arguments":{"filename":"over.csv","text":"x".repeat((2 << 20) + 1)}}});
+    let (s, _, b) = raw(&app, "POST", "/mcp", serde_json::to_vec(&rpc).unwrap(), Some("application/json"), &app.token).await;
+    assert_eq!(s, 200);
+    assert!(String::from_utf8_lossy(&b).contains("limit is 2097152 bytes"));
+    let (s, _, b) = raw(&app, "POST", "/mcp", vec![b'x'; 14 << 20], Some("application/json"), &app.token).await;
+    assert_eq!(s, 413);
+    assert!(String::from_utf8_lossy(&b).contains("limit"));
+}

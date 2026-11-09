@@ -5,7 +5,8 @@
 //! relation.
 //!
 //! The document is still chunked and indexed as text (`documents`), so recall finds its rows either
-//! way. Parsing is capped in bytes, columns and rows. The import is idempotent: an entity is found or
+//! way. Parsing is capped in bytes and columns. Only a sample and one import chunk are retained.
+//! The import is idempotent: an entity is found or
 //! created by its name, and each value is keyed by (entity, property, document), so a re-run updates
 //! values in place and never adds an entity or a row of history. A bad cell is reported with its line
 //! and column and never stops the rest.
@@ -28,9 +29,8 @@ use crate::state::OrgState;
 use crate::store::ontology as q;
 
 /// Largest CSV parsed as a table.
-pub const MAX_TABLE_BYTES: usize = 2 * 1024 * 1024;
+pub const MAX_TABLE_BYTES: usize = 25 * 1024 * 1024;
 pub const MAX_COLUMNS: usize = 60;
-pub const MAX_ROWS: usize = 5000;
 /// Rows an import gets for one rate-limit unit, as a batch of facts gets ten.
 pub const IMPORT_ROWS_PER_UNIT: usize = 500;
 /// Bad cells listed in an import's answer; the count covers the rest.
@@ -43,13 +43,18 @@ pub const SOURCE: &str = "document";
 pub struct Table {
     pub columns: Vec<String>,
     pub rows: Vec<(u64, Vec<String>)>,
+    pub total_rows: usize,
 }
 
 /// Parses `bytes` as a CSV with a header row, within the caps. Blank header cells become `column_N`
 /// and a repeated header gets `_2`, `_3`, so every column has one name. Blank rows are skipped.
 pub fn parse(bytes: &[u8]) -> AppResult<Table> {
-    if bytes.len() > MAX_TABLE_BYTES {
-        return Err(AppError::bad_request(format!("the CSV is {} bytes; a table is read up to {MAX_TABLE_BYTES} bytes: split the file", bytes.len())));
+    parse_with_limit(bytes, MAX_TABLE_BYTES)
+}
+
+pub(super) fn parse_with_limit(bytes: &[u8], max_bytes: usize) -> AppResult<Table> {
+    if bytes.len() > max_bytes {
+        return Err(AppError::bad_request(format!("the CSV is {} bytes; the configured table limit is {max_bytes} bytes", bytes.len())));
     }
     let bytes = bytes.strip_prefix("\u{feff}".as_bytes()).unwrap_or(bytes);
     let mut reader = csv::ReaderBuilder::new().flexible(true).trim(csv::Trim::All).from_reader(bytes);
@@ -72,18 +77,19 @@ pub fn parse(bytes: &[u8]) -> AppResult<Table> {
         return Err(AppError::bad_request("the CSV has no header row"));
     }
     let mut rows = Vec::new();
+    let mut total_rows = 0;
     for record in reader.records() {
         let record = record.map_err(|e| AppError::bad_request(format!("the CSV could not be read: {e}")))?;
         if record.iter().all(str::is_empty) {
             continue;
         }
-        if rows.len() == MAX_ROWS {
-            return Err(AppError::bad_request(format!("the CSV has more than {MAX_ROWS} rows: split it into smaller files")));
+        total_rows += 1;
+        if rows.len() < profile::SAMPLE_SIZE {
+            let line = record.position().map_or(0, |p| p.line());
+            rows.push((line, record.iter().map(str::to_string).collect()));
         }
-        let line = record.position().map_or(0, |p| p.line());
-        rows.push((line, record.iter().map(str::to_string).collect()));
     }
-    Ok(Table { columns, rows })
+    Ok(Table { columns, rows, total_rows })
 }
 
 /// The table as a profiling sample: its first [`profile::SAMPLE_SIZE`] rows, one object each, a blank
@@ -128,7 +134,7 @@ pub struct ColumnPlan {
     /// The property it feeds, from its `source_map`.
     pub property: Option<String>,
     pub status: Option<Status>,
-    /// The approved link type whose targets it names ("supplied_by supplier"), when no property takes it.
+    /// The approved link type whose targets it names ("supplied_by supplier"), alongside any property.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub link: Option<String>,
 }
@@ -203,7 +209,7 @@ pub struct TableProfile {
     pub import: ImportPlan,
 }
 
-async fn kind_status(db: &OrgDb, vault: &RecordId, kind: &Kind) -> AppResult<Option<Status>> {
+pub(super) async fn kind_status(db: &OrgDb, vault: &RecordId, kind: &Kind) -> AppResult<Option<Status>> {
     #[derive(Deserialize, SurrealValue)]
     struct Row {
         status: String,
@@ -236,22 +242,15 @@ async fn plan(db: &OrgDb, vault: &RecordId, document_id: &str, table: &Table) ->
         let fed: Vec<_> = props.iter().filter(|p| fed_by(p, c)).collect();
         let approved: Vec<_> = fed.iter().filter(|p| p.status == Status::Approved).collect();
         let mut col = ColumnPlan { column: c.clone(), property: None, status: None, link: None };
-        if approved.len() > 1 {
-            plans.push(col);
-            continue;
-        }
         let named = props.iter().find(|p| p.status == Status::Approved && p.name == property_name_for(c));
-        let link = if approved.is_empty() {
-            links.iter().find(|l| l.fed_by(document_id, c)).or_else(|| if named.is_none() { link_for(&links, document_id, c) } else { None })
-        } else {
-            None
-        };
+        let link = links.iter().find(|l| l.fed_by(document_id, c))
+            .or_else(|| if approved.is_empty() && named.is_none() { link_for(&links, document_id, c) } else { None });
         if let Some(l) = link {
             col.link = Some(l.words());
             let keys: Vec<String> = table.rows.iter().filter(|(_, cells)| cells.len() == columns.len())
                 .filter_map(|(_, cells)| cells.get(i)).map(|v| v.trim().to_lowercase()).filter(|v| !v.is_empty())
                 .collect::<std::collections::BTreeSet<_>>().into_iter().collect();
-            let matches = resolved_names(db, vault, keys.clone()).await?;
+            let matches = resolved_names(db, vault, keys.clone(), Some(&l.to_kind)).await?;
             for key in keys {
                 let spelled = table.rows.iter().filter_map(|(_, cells)| cells.get(i)).find(|v| v.trim().to_lowercase() == key).map(|v| v.trim()).unwrap_or_default();
                 match matches.get(&key) {
@@ -261,10 +260,13 @@ async fn plan(db: &OrgDb, vault: &RecordId, document_id: &str, table: &Table) ->
                     _ => {}
                 }
             }
-        } else {
-            let p = approved.first().map(|p| **p).or(named).or(match fed.as_slice() { [one] => Some(*one), _ => None });
-            col.property = p.map(|p| p.name.clone());
-            col.status = p.map(|p| p.status);
+        }
+        {
+            let p = approved.first().map(|p| **p).or(named).or_else(|| if link.is_none() { match fed.as_slice() { [one] => Some(*one), _ => None } } else { None });
+            if approved.len() <= 1 {
+                col.property = p.map(|p| p.name.clone());
+                col.status = p.map(|p| p.status);
+            }
         }
         plans.push(col);
     }
@@ -280,11 +282,11 @@ async fn plan(db: &OrgDb, vault: &RecordId, document_id: &str, table: &Table) ->
 /// The profile of an uploaded CSV the caller may read, and what an import would do now.
 pub async fn document_profile(state: &OrgState, user: &RecordId, id: &str) -> AppResult<TableProfile> {
     let doc = crate::documents::load_csv(state, user, id, Action::ReadMemories).await?;
-    let table = parse(&doc.bytes)?;
+    let table = parse_with_limit(&doc.bytes, state.settings.documents_max_bytes)?;
     let doc_id = doc.id.to_string();
     let profile = profile::profile(&sample(&doc_id, &table));
     let import = plan(&state.db, &doc.vault, &doc_id, &table).await?;
-    Ok(TableProfile { document_id: doc_id, filename: doc.filename, rows: table.rows.len(), columns: table.columns, profile, import })
+    Ok(TableProfile { document_id: doc_id, filename: doc.filename, rows: table.total_rows, columns: table.columns, profile, import })
 }
 
 // ---------------------------------------------------------------------------
@@ -388,7 +390,7 @@ pub(super) async fn named_any_kind(db: &OrgDb, vault: &RecordId, keys: Vec<Strin
 
 /// Resolve rejected kinds before counting matches, so a merged kind and its replacement are one
 /// candidate. Never create a replacement while resolving a name that already exists.
-pub(super) async fn resolved_names(db: &OrgDb, vault: &RecordId, keys: Vec<String>) -> AppResult<HashMap<String, NamedMatch>> {
+pub(super) async fn resolved_names(db: &OrgDb, vault: &RecordId, keys: Vec<String>, preferred_kind: Option<&str>) -> AppResult<HashMap<String, NamedMatch>> {
     let named = named_any_kind(db, vault, keys).await?;
     let mut decisions: HashMap<String, Result<Option<String>, String>> = HashMap::new();
     let mut out = HashMap::new();
@@ -410,18 +412,20 @@ pub(super) async fn resolved_names(db: &OrgDb, vault: &RecordId, keys: Vec<Strin
                     Some(replacement) if super::KINDS.contains(&kind.as_str()) || kind_status(db, vault, &Kind::parse(kind)?).await? == Some(Status::Approved) => replacement,
                     _ => {
                         refusal = Some((candidate.kind.clone(), format!("the kind {} was rejected: no approved {kind} with this name exists", candidate.kind)));
-                        break;
+                        continue;
                     }
                 },
                 Err(reason) => {
                     refusal = Some((candidate.kind.clone(), reason.clone()));
-                    break;
+                    continue;
                 }
             };
             if !resolved.iter().any(|c: &&Named| c.id == target.id) {
                 resolved.push(target);
             }
         }
+        let preferred: Vec<_> = resolved.iter().copied().filter(|c| Some(c.kind.as_str()) == preferred_kind).collect();
+        if !preferred.is_empty() { resolved = preferred; refusal = None; }
         let matched = if let Some((kind, reason)) = refusal {
             NamedMatch::Skipped { kind, reason }
         } else if resolved.len() == 1 {
@@ -481,9 +485,9 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
         Some(Status::Rejected) => return Err(not_ready(&kind, "was rejected for this vault")),
         _ => return Err(not_ready(&kind, "is not approved for this vault yet")),
     }
-    let table = parse(&doc.bytes)?;
+    let table = parse_with_limit(&doc.bytes, state.settings.documents_max_bytes)?;
     // the request already paid one unit; each further IMPORT_ROWS_PER_UNIT rows cost one more
-    crate::gate::charge_more(table.rows.len().div_ceil(IMPORT_ROWS_PER_UNIT).saturating_sub(1))?;
+    crate::gate::charge_more(table.total_rows.div_ceil(IMPORT_ROWS_PER_UNIT).saturating_sub(1))?;
     let doc_id = doc.id.to_string();
     let name_at = table
         .columns
@@ -500,7 +504,7 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
     let mut link_targets: Vec<(usize, LinkTarget)> = Vec::new();
     for (i, col) in table.columns.iter().enumerate().filter(|(i, _)| *i != name_at) {
         // a column no property takes may name the targets of an approved link type
-        let as_link = match &args.column_map {
+        let as_link = links.iter().find(|l| l.fed_by(&doc_id, col)).or_else(|| match &args.column_map {
             Some(map) => map
                 .get(col)
                 .filter(|v| !rows.iter().any(|r| &r.name == *v))
@@ -510,13 +514,10 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
                 let claimed = rows.iter().filter(approved).any(|r| r.source_map().iter().any(|f| f.source == SOURCE && f.record_type == doc_id && &f.path == col));
                 // a property named like the column wins over a link guessed from the kind's name
                 let named = rows.iter().filter(approved).any(|r| r.name == property_name_for(col));
-                match (claimed, named) {
-                    (true, _) => None,
-                    (false, true) => links.iter().find(|l| l.fed_by(&doc_id, col)),
-                    (false, false) => link_for(&links, &doc_id, col),
-                }
+                links.iter().find(|l| l.fed_by(&doc_id, col))
+                    .or_else(|| if !claimed && !named { link_for(&links, &doc_id, col) } else { None })
             }
-        };
+        });
         if let Some(l) = as_link {
             match LinkTarget::check(db, &doc.vault, &kind, l).await {
                 Ok(t) => {
@@ -525,10 +526,10 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
                 }
                 Err(e) => columns.push(ColumnUse { column: col.clone(), property: None, link: Some(l.words()), skipped: Some(e.message) }),
             }
-            continue;
         }
+        let mapped_link = as_link.map(LinkFrom::words);
         let wanted = match &args.column_map {
-            Some(map) => map.get(col).cloned(),
+            Some(map) => map.get(col).filter(|v| rows.iter().any(|r| &r.name == *v)).cloned(),
             None => {
                 let claimed: Vec<&str> = rows
                     .iter()
@@ -540,13 +541,18 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
                 // the owner's call, never a silent pick
                 if claimed.len() > 1 {
                     let skipped = format!("is mapped to {}: choose one with column_map", claimed.join(" and "));
-                    columns.push(ColumnUse { column: col.clone(), property: None, link: None, skipped: Some(skipped) });
+                    if as_link.is_some() {
+                        if let Some(column) = columns.last_mut() { column.skipped = Some(skipped); }
+                    } else {
+                        columns.push(ColumnUse { column: col.clone(), property: None, link: None, skipped: Some(skipped) });
+                    }
                     continue;
                 }
                 claimed.first().map(|n| n.to_string()).or_else(|| Some(property_name_for(col)).filter(|n| rows.iter().any(|r| &r.name == n)))
             }
         };
         let Some(wanted) = wanted else {
+            if mapped_link.is_some() { continue; }
             columns.push(ColumnUse { column: col.clone(), property: None, link: None, skipped: Some("no property or link is mapped from it".into()) });
             continue;
         };
@@ -557,10 +563,17 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
         match resolved {
             Ok((row, _)) => {
                 let datatype = Datatype::parse(&row.datatype)?;
-                columns.push(ColumnUse { column: col.clone(), property: Some(row.name.clone()), link: None, skipped: None });
+                if mapped_link.is_some() { columns.pop(); }
+                columns.push(ColumnUse { column: col.clone(), property: Some(row.name.clone()), link: mapped_link.clone(), skipped: None });
                 targets.push((i, row, datatype));
             }
-            Err(e) => columns.push(ColumnUse { column: col.clone(), property: Some(wanted), link: None, skipped: Some(e.message) }),
+            Err(e) => {
+                if mapped_link.is_some() {
+                    if let Some(column) = columns.last_mut() { column.property = Some(wanted); column.skipped = Some(e.message); }
+                } else {
+                    columns.push(ColumnUse { column: col.clone(), property: Some(wanted), link: None, skipped: Some(e.message) });
+                }
+            },
         }
     }
     if targets.is_empty() && link_targets.is_empty() {
@@ -579,7 +592,7 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
     let mut out = ImportOut {
         document_id: doc_id.clone(),
         kind: kind.as_str().to_string(),
-        rows: table.rows.len(),
+        rows: table.total_rows,
         created: 0,
         updated: 0,
         values: 0,
@@ -594,13 +607,6 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
     };
     // each target once per run, by its name in any case
     let mut found: HashMap<(usize, String), RecordId> = HashMap::new();
-    // what the link columns' values already name, in any kind, read once: a supplier column naming an
-    // organisation that document indexing made links to it instead of making a twin supplier
-    let link_keys: HashSet<String> = link_targets
-        .iter()
-        .flat_map(|(i, _)| table.rows.iter().filter_map(move |(_, c)| c.get(*i)).map(|v| v.trim().to_lowercase()).filter(|v| !v.is_empty()))
-        .collect();
-    let named = resolved_names(db, &doc.vault, link_keys.into_iter().collect()).await?;
     // whether each link column may point at each other kind it meets, grounded once
     let mut grounded: HashMap<(usize, String), Result<(), String>> = HashMap::new();
     let mut skipped: HashSet<(usize, String)> = HashSet::new();
@@ -613,118 +619,140 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
         let lists: Vec<Vec<String>> = crate::store::entities::alias_keys_of(db, table).bind(("vault", doc.vault.clone())).bind(("kind", kind.as_str().to_string())).await?.take(0)?;
         lists.into_iter().flatten().collect()
     };
-    for (line, cells) in &table.rows {
-        if cells.len() != table.columns.len() {
-            bad(&mut out, *line, None, format!("has {} cells; the header has {}", cells.len(), table.columns.len()));
-            continue;
-        }
-        let name = cells[name_at].trim();
-        if name.is_empty() {
-            bad(&mut out, *line, Some(&table.columns[name_at]), "no name: the row was left out".into());
-            continue;
-        }
-        // two rows with one name would land on one entity, the later silently overwriting the earlier
-        if let Some(first) = names.get(&name.to_lowercase()) {
-            bad(&mut out, *line, Some(&table.columns[name_at]), format!("repeats the name {name:?} from line {first}: the row was left out"));
-            continue;
-        }
-        names.insert(name.to_lowercase(), *line);
-        // load_csv checked the vault for writing and the kind is approved, so no per-row authz or grounding
-        let lookups = if alias_keys.contains(&name.to_lowercase()) { Lookups::NameAndAlias } else { Lookups::NameOnly };
-        let (entity, created) = crate::entities::service::upsert_in_vault(db, user, kind.as_str(), name, None, &doc.vault, lookups).await?;
-        let first_time = seen.insert(entity.id.clone(), ()).is_none();
-        match (created, first_time) {
-            (true, _) => out.created += 1,
-            (false, true) => out.updated += 1,
-            _ => {}
-        }
-        let entity: RecordId = crate::rid::parse(&entity.id).map_err(|_| AppError::internal("entity id did not round-trip"))?;
-        for (i, row, datatype) in &targets {
-            let cell = cells[*i].trim();
-            if cell.is_empty() {
-                continue;
-            }
-            let cell = local_cell(*datatype, cell, row.unit.as_deref(), notations.get(i).copied());
-            let stored = match property::parse_value(*datatype, &row.name, row.enum_values.as_deref(), &json!(cell)) {
-                Ok(s) => s,
-                Err(e) => {
-                    bad(&mut out, *line, Some(&table.columns[*i]), e.message);
-                    continue;
-                }
-            };
-            let key = format!("{}|{}|{doc_id}", entity.to_string(), row.id.to_string());
-            pending.push(ImportedValue {
-                id: RecordId::from_table_key("entity_property", crate::tx::stable_key('i', &key)),
-                entity: entity.clone(),
-                property: row.id.clone(),
-                value_num: stored.num,
-                value_text: stored.text,
-                value_bool: stored.boolean,
-                value_date: stored.date,
-            });
-            out.values += 1;
-        }
+    let bytes = doc.bytes.strip_prefix("\u{feff}".as_bytes()).unwrap_or(&doc.bytes);
+    let mut reader = csv::ReaderBuilder::new().flexible(true).trim(csv::Trim::All).from_reader(bytes);
+    let mut records = reader.records();
+    let mut processed = 0;
+    loop {
+        let batch = records.by_ref().filter(|r| r.as_ref().map_or(true, |r| !r.iter().all(str::is_empty)))
+            .take(IMPORT_BATCH).collect::<Result<Vec<_>, _>>()
+            .map_err(|e| AppError::bad_request(format!("the CSV could not be read: {e}")))?;
+        if batch.is_empty() { break; }
+        let mut named = HashMap::new();
         for (i, link) in &link_targets {
-            let cell = cells[*i].trim();
-            if cell.is_empty() {
+            let keys = batch.iter().filter_map(|r| r.get(*i)).map(|v| v.trim().to_lowercase()).filter(|v| !v.is_empty())
+                .collect::<HashSet<_>>().into_iter().collect();
+            named.insert(*i, resolved_names(db, &doc.vault, keys, Some(&link.kind)).await?);
+        }
+        for record in &batch {
+            let line = record.position().map_or(0, |p| p.line());
+            let cells: Vec<&str> = record.iter().collect();
+
+            if cells.len() != table.columns.len() {
+                bad(&mut out, line, None, format!("has {} cells; the header has {}", cells.len(), table.columns.len()));
                 continue;
             }
-            let key = (*i, cell.to_lowercase());
-            let existing = named.get(&key.1);
-            let target = match (found.get(&key), existing) {
-                (Some(t), _) => t.clone(),
-                (None, Some(NamedMatch::Skipped { kind, reason })) => {
-                    if skipped.insert(key.clone()) {
-                        out.skipped.push(SkippedTarget { column: table.columns[*i].clone(), name: cell.to_string(), kind: kind.clone(), reason: reason.clone() });
-                    }
+            let name = cells[name_at].trim();
+            if name.is_empty() {
+                bad(&mut out, line, Some(&table.columns[name_at]), "no name: the row was left out".into());
+                continue;
+            }
+            // two rows with one name would land on one entity, the later silently overwriting the earlier
+            if let Some(first) = names.get(&name.to_lowercase()) {
+                bad(&mut out, line, Some(&table.columns[name_at]), format!("repeats the name {name:?} from line {first}: the row was left out"));
+                continue;
+            }
+            names.insert(name.to_lowercase(), line);
+            // load_csv checked the vault for writing and the kind is approved, so no per-row authz or grounding
+            let lookups = if alias_keys.contains(&name.to_lowercase()) { Lookups::NameAndAlias } else { Lookups::NameOnly };
+            let (entity, created) = crate::entities::service::upsert_in_vault(db, user, kind.as_str(), name, None, &doc.vault, lookups).await?;
+            let first_time = seen.insert(entity.id.clone(), ()).is_none();
+            match (created, first_time) {
+                (true, _) => out.created += 1,
+                (false, true) => out.updated += 1,
+                _ => {}
+            }
+            let entity: RecordId = crate::rid::parse(&entity.id).map_err(|_| AppError::internal("entity id did not round-trip"))?;
+            for (i, row, datatype) in &targets {
+                let cell = cells[*i].trim();
+                if cell.is_empty() {
                     continue;
                 }
-                (None, Some(NamedMatch::Ambiguous(kinds))) => {
-                    if skipped.insert(key.clone()) {
-                        out.ambiguous.push(AmbiguousTarget { column: table.columns[*i].clone(), name: cell.to_string(), kinds: kinds.clone() });
-                    }
-                    continue;
-                }
-                (None, Some(NamedMatch::One(one))) => {
-                    if one.kind != link.kind {
-                        let allowed = match grounded.get(&(*i, one.kind.clone())) {
-                            Some(a) => a.clone(),
-                            None => {
-                                let a = super::ground_link(db, &doc.vault, kind.as_str(), &link.label, &one.kind).await.map_err(|e| e.message);
-                                grounded.insert((*i, one.kind.clone()), a.clone());
-                                a
-                            }
-                        };
-                        if let Err(e) = allowed {
-                            bad(&mut out, *line, Some(&table.columns[*i]), format!("{cell:?} is an existing {}: {e}", one.kind.replace('_', " ")));
-                            continue;
-                        }
-                        out.reused.push(ReusedTarget { column: table.columns[*i].clone(), name: one.name.clone(), kind: one.kind.clone(), entity_id: one.id.to_string() });
-                    }
-                    found.insert(key, one.id.clone());
-                    one.id.clone()
-                }
-                (None, None) => match crate::entities::service::upsert_in_vault(db, user, &link.kind, cell, None, &doc.vault, Lookups::NameAndAlias).await {
-                    Ok((t, created)) => {
-                        out.targets_created += usize::from(created);
-                        let t: RecordId = crate::rid::parse(&t.id).map_err(|_| AppError::internal("entity id did not round-trip"))?;
-                        found.insert(key, t.clone());
-                        t
-                    }
+                let cell = local_cell(*datatype, cell, row.unit.as_deref(), notations.get(i).copied());
+                let stored = match property::parse_value(*datatype, &row.name, row.enum_values.as_deref(), &json!(cell)) {
+                    Ok(s) => s,
                     Err(e) => {
-                        bad(&mut out, *line, Some(&table.columns[*i]), format!("could not find or create the {} {cell:?}: {}", link.kind.replace('_', " "), e.message));
+                        bad(&mut out, line, Some(&table.columns[*i]), e.message);
                         continue;
                     }
-                },
-            };
-            match crate::entities::service::relate_in_vault(db, user, &doc.vault, &entity, &target, &link.label).await {
-                Ok(new) => out.linked += usize::from(new),
-                Err(e) => bad(&mut out, *line, Some(&table.columns[*i]), format!("could not link to {cell:?}: {}", e.message)),
+                };
+                let key = format!("{}|{}|{doc_id}", entity.to_string(), row.id.to_string());
+                pending.push(ImportedValue {
+                    id: RecordId::from_table_key("entity_property", crate::tx::stable_key('i', &key)),
+                    entity: entity.clone(),
+                    property: row.id.clone(),
+                    value_num: stored.num,
+                    value_text: stored.text,
+                    value_bool: stored.boolean,
+                    value_date: stored.date,
+                });
+                out.values += 1;
+            }
+            for (i, link) in &link_targets {
+                let cell = cells[*i].trim();
+                if cell.is_empty() {
+                    continue;
+                }
+                let key = (*i, cell.to_lowercase());
+                let existing = named.get(i).and_then(|names| names.get(&key.1));
+                let target = match (found.get(&key), existing) {
+                    (Some(t), _) => t.clone(),
+                    (None, Some(NamedMatch::Skipped { kind, reason })) => {
+                        if skipped.insert(key.clone()) {
+                            out.skipped.push(SkippedTarget { column: table.columns[*i].clone(), name: cell.to_string(), kind: kind.clone(), reason: reason.clone() });
+                        }
+                        continue;
+                    }
+                    (None, Some(NamedMatch::Ambiguous(kinds))) => {
+                        if skipped.insert(key.clone()) {
+                            out.ambiguous.push(AmbiguousTarget { column: table.columns[*i].clone(), name: cell.to_string(), kinds: kinds.clone() });
+                        }
+                        continue;
+                    }
+                    (None, Some(NamedMatch::One(one))) => {
+                        if one.kind != link.kind {
+                            let allowed = match grounded.get(&(*i, one.kind.clone())) {
+                                Some(a) => a.clone(),
+                                None => {
+                                    let a = super::ground_link(db, &doc.vault, kind.as_str(), &link.label, &one.kind).await.map_err(|e| e.message);
+                                    grounded.insert((*i, one.kind.clone()), a.clone());
+                                    a
+                                }
+                            };
+                            if let Err(e) = allowed {
+                                bad(&mut out, line, Some(&table.columns[*i]), format!("{cell:?} is an existing {}: {e}", one.kind.replace('_', " ")));
+                                continue;
+                            }
+                            out.reused.push(ReusedTarget { column: table.columns[*i].clone(), name: one.name.clone(), kind: one.kind.clone(), entity_id: one.id.to_string() });
+                        }
+                        found.insert(key, one.id.clone());
+                        one.id.clone()
+                    }
+                    (None, None) => match crate::entities::service::upsert_in_vault(db, user, &link.kind, cell, None, &doc.vault, Lookups::NameAndAlias).await {
+                        Ok((t, created)) => {
+                            out.targets_created += usize::from(created);
+                            let t: RecordId = crate::rid::parse(&t.id).map_err(|_| AppError::internal("entity id did not round-trip"))?;
+                            found.insert(key, t.clone());
+                            t
+                        }
+                        Err(e) => {
+                            bad(&mut out, line, Some(&table.columns[*i]), format!("could not find or create the {} {cell:?}: {}", link.kind.replace('_', " "), e.message));
+                            continue;
+                        }
+                    },
+                };
+                match crate::entities::service::relate_in_vault(db, user, &doc.vault, &entity, &target, &link.label).await {
+                    Ok(new) => out.linked += usize::from(new),
+                    Err(e) => bad(&mut out, line, Some(&table.columns[*i]), format!("could not link to {cell:?}: {}", e.message)),
+                }
+            }
+            if pending.len() >= IMPORT_BATCH {
+                write_values(db, &doc.vault, &doc.id, as_of, origin, std::mem::take(&mut pending)).await?;
             }
         }
-        if pending.len() >= IMPORT_BATCH {
-            write_values(db, &doc.vault, &doc.id, as_of, origin, std::mem::take(&mut pending)).await?;
-        }
+        write_values(db, &doc.vault, &doc.id, as_of, origin, std::mem::take(&mut pending)).await?;
+        processed += batch.len();
+        import_progress(db, &doc.vault, &doc.id, &kind, &out, processed, table.total_rows).await?;
     }
     write_values(db, &doc.vault, &doc.id, as_of, origin, pending).await?;
     crate::tx::with_retry_dup(|| async {
@@ -739,6 +767,16 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
     }).await?.check()?;
     crate::changes::ontology_committed(db, &doc.vault);
     Ok(out)
+}
+
+async fn import_progress(db: &OrgDb, vault: &RecordId, source: &RecordId, kind: &Kind, out: &ImportOut, processed: usize, total: usize) -> AppResult<()> {
+    crate::tx::with_retry_dup(|| async {
+        q::IMPORT_PROGRESS.on(db).bind(("vault", vault.clone())).bind(("source", source.clone()))
+            .bind(("kind", kind.0.clone())).bind(("processed", processed as i64)).bind(("total", total as i64))
+            .bind(("values", out.values as i64)).bind(("links", out.linked as i64)).await
+    }).await?.check()?;
+    crate::changes::ontology_committed(db, vault);
+    Ok(())
 }
 
 /// Relations labelled like `a` and `b` are one link type: case, spaces and `_` aside.
@@ -904,15 +942,15 @@ mod tests {
     }
 
     #[test]
-    fn the_byte_column_and_row_caps_hold() {
+    fn byte_and_column_caps_hold_while_large_files_keep_only_a_sample() {
         let big = vec![b'a'; MAX_TABLE_BYTES + 1];
         assert!(parse(&big).unwrap_err().message.contains("bytes"));
         let wide = (0..=MAX_COLUMNS).map(|i| format!("c{i}")).collect::<Vec<_>>().join(",");
         assert!(parse(wide.as_bytes()).unwrap_err().message.contains("columns"));
-        let at_cap = format!("n\n{}", "x\n".repeat(MAX_ROWS));
-        assert_eq!(parse(at_cap.as_bytes()).unwrap().rows.len(), MAX_ROWS);
-        let over = format!("n\n{}", "x\n".repeat(MAX_ROWS + 1));
-        assert!(parse(over.as_bytes()).unwrap_err().message.contains("rows"));
+        let large = format!("n\n{}", "x\n".repeat(12000));
+        let table = parse(large.as_bytes()).unwrap();
+        assert_eq!(table.rows.len(), profile::SAMPLE_SIZE);
+        assert_eq!(table.total_rows, 12000);
     }
 
     #[test]

@@ -32,6 +32,10 @@ pub mod scope;
 pub mod suggest;
 pub mod tabular;
 
+pub(crate) async fn is_approved_kind(db: &crate::pool::OrgDb, vault: &RecordId, kind: &str) -> AppResult<bool> {
+    Ok(tabular::kind_status(db, vault, &Kind::parse(kind)?).await? == Some(Status::Approved))
+}
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};

@@ -576,6 +576,13 @@ pub const MATCH_NAMES: Stmt = Stmt::new(
         .filter(|$n| $n IN $values);"#,
 );
 
+/// Existing approved custom entities matching extracted names or aliases, irrespective of the
+/// prompt's kind count cap. Names are data, never query text.
+pub const EXTRACTION_MATCHES: Stmt = Stmt::new("ontology.extraction_matches",
+    r#"SELECT id, name, name_key, aliases, kind FROM entity WHERE vault = $vault
+        AND kind IN (SELECT VALUE kind FROM ontology_kind WHERE vault = $vault AND status = "approved")
+        AND (name_key IN $keys OR array::len(array::intersect(alias_keys ?? [], $keys)) > 0)"#);
+
 /// The approved custom kinds of `$vault`, newest decision first, at most `$limit`: what extraction
 /// may write besides people, organisations and locations.
 pub const EXTRACTION_KINDS: Stmt = Stmt::new(
@@ -607,6 +614,15 @@ pub const IMPORT_SUMMARY: Stmt = Stmt::new("ontology.import_summary",
     CREATE ontology_event SET vault = $vault, seq = $v.ontology_seq, actor_name = $activity_actor_name, actor = $activity_actor, actor_type = $activity_actor_type,
         action = "imported", definition_type = "import", kind = $kind, name = "CSV import",
         target = <string> $source, revision = 0, after = { entities: $entities, values: $values, links: $links };
+    COMMIT TRANSACTION;"#);
+
+/// A committed chunk checkpoint, replayed through the existing ontology activity stream.
+pub const IMPORT_PROGRESS: Stmt = Stmt::new("ontology.import_progress",
+    r#"BEGIN TRANSACTION;
+    LET $v = (UPDATE $vault SET ontology_seq = (ontology_seq ?? 0) + 1 RETURN AFTER)[0];
+    CREATE ontology_event SET vault = $vault, seq = $v.ontology_seq, actor_name = $activity_actor_name, actor = $activity_actor, actor_type = $activity_actor_type,
+        action = "import_progress", definition_type = "import", kind = $kind, name = "CSV import",
+        target = <string> $source, revision = 0, after = { processed: $processed, total: $total, values: $values, links: $links };
     COMMIT TRANSACTION;"#);
 
 /// The values a deleted document's import wrote go with it.
@@ -701,9 +717,11 @@ pub const ALL: &[&Stmt] = &[
     &MATCH_EXTERNAL_IDS,
     &MATCH_NAMES,
     &NAMED_ANY_KIND,
+    &EXTRACTION_MATCHES,
     &EXTRACTION_KINDS,
     &KIND,
     &UPSERT_IMPORTED_VALUES,
     &IMPORT_SUMMARY,
+    &IMPORT_PROGRESS,
     &DELETE_IMPORTED_VALUES,
 ];

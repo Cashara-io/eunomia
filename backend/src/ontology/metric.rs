@@ -876,6 +876,18 @@ pub(super) async fn props_of(db: &OrgDb, vault: &RecordId, kind: &Kind) -> AppRe
     rows.iter().map(|r| Ok((r.name.clone(), PropInfo::from_row(r)?))).collect()
 }
 
+impl ValidMetric {
+    pub(super) fn equivalent(&self, item: &MetricItem) -> bool {
+        item.status != Status::Rejected && item.merge_into.is_none()
+            && serde_json::to_value(&self.expr).ok() == serde_json::to_value(&item.expr).ok()
+            && (self.unit.is_none() || item.unit.is_none() || self.unit == item.unit)
+    }
+    pub(super) fn same_calculation(&self, other: &Self) -> bool {
+        self.kind == other.kind && (self.unit.is_none() || other.unit.is_none() || self.unit == other.unit)
+            && serde_json::to_value(&self.expr).ok() == serde_json::to_value(&other.expr).ok()
+    }
+}
+
 impl MetricProposal {
     /// Checked against `props`, the kind's properties (stored, plus any proposed in the same call).
     pub(super) fn validate(&self, props: &Props) -> AppResult<ValidMetric> {

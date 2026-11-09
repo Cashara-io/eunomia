@@ -1313,13 +1313,6 @@ pub async fn merge_entities(
     if winner_id == loser_id {
         return Err(AppError::bad_request("winner_id and loser_id must refer to different entities"));
     }
-    if winner_id.table() != loser_id.table() {
-        return Err(AppError::bad_request(format!(
-            "cannot merge entities of different kinds: {:?} vs {:?}",
-            winner_id.table(),
-            loser_id.table()
-        )));
-    }
 
     let winner = select_entity(db, winner_id)
         .await?
@@ -1335,7 +1328,10 @@ pub async fn merge_entities(
     }
     same_vault(&winner, &loser)?;
     if winner.kind() != loser.kind() {
-        return Err(AppError::bad_request(format!("cannot merge entities of different kinds: {:?} vs {:?}", winner.kind(), loser.kind())));
+        let cross_kind = winner_id.table() == CUSTOM_TABLE && KINDS.contains(&loser.kind().as_str())
+            && crate::authz::role_of(db, owner, &winner.vault).await? == Some(crate::authz::Role::Owner)
+            && crate::ontology::is_approved_kind(db, &winner.vault, &winner.kind()).await?;
+        if !cross_kind { return Err(AppError::bad_request(format!("cannot merge entities of different kinds: {:?} vs {:?}", winner.kind(), loser.kind()))); }
     }
 
     merge_rows(db, winner_id, loser_id, loser_names(&loser)).await?;

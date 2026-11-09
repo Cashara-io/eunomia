@@ -339,6 +339,31 @@ async fn apply_extraction(
 ) -> AppResult<HashSet<String>> {
     let mut entity_ids: HashMap<String, (RecordId, String)> = HashMap::new();
     let mut touched: HashSet<String> = HashSet::new();
+    // Resolve against all approved custom kinds before processing any built-in section. The model
+    // can call a store an organisation, but an existing owner-approved entity remains canonical.
+    let target_vault = match vault {
+        Some(v) => v.clone(),
+        None => crate::vaults::service::personal_vault_id(db, owner).await?,
+    };
+    let keys: HashSet<String> = data.people.iter().chain(&data.organisations).chain(&data.locations)
+        .filter_map(|e| e.name.as_ref()).chain(data.other.iter().filter_map(|e| e.entity.name.as_ref()))
+        .chain(data.relations.iter().flat_map(|r| [r.from.as_ref(), r.to.as_ref()]).flatten())
+        .map(|n| n.trim().to_lowercase()).collect();
+    #[derive(Deserialize, SurrealValue)]
+    struct Existing { id: RecordId, name_key: String, aliases: Vec<String>, kind: String }
+    let existing: Vec<Existing> = store::ontology::EXTRACTION_MATCHES.on(db)
+        .bind(("vault", target_vault)).bind(("keys", keys.iter().cloned().collect::<Vec<_>>())).await?.take(0)?;
+    let mut ambiguous = HashSet::new();
+    for entity in existing {
+        for key in std::iter::once(entity.name_key).chain(entity.aliases.into_iter().map(|a| a.to_lowercase())) {
+            if !keys.contains(&key) { continue; }
+            let entry = (entity.id.clone(), entity.kind.clone());
+            if entity_ids.get(&key).is_some_and(|old| old.0 != entry.0) { ambiguous.insert(key.clone()); }
+            entity_ids.insert(key, entry);
+        }
+    }
+    for key in &ambiguous { entity_ids.remove(key); }
+
 
     #[allow(clippy::too_many_arguments)]
     async fn ensure(
@@ -367,6 +392,7 @@ async fn apply_extraction(
         let kind = KIND_MAP.iter().find(|(s, _)| *s == section).map(|(_, k)| *k).unwrap();
         for item in items {
             let Some(name) = item.name.as_deref().map(str::trim).filter(|n| !n.is_empty() && !is_placeholder(n)) else { continue };
+            if ambiguous.contains(&name.to_lowercase()) { continue; }
             let (entry_id, _) = ensure(db, owner, vault, &mut entity_ids, name, kind, Some(item.aliases.clone())).await?;
             for fact in &item.facts {
                 if fact.is_empty() {
@@ -382,6 +408,7 @@ async fn apply_extraction(
     for item in &data.other {
         let Some(kind) = item.kind.as_deref().map(str::trim).filter(|k| allowed.contains(k)) else { continue };
         let Some(name) = item.entity.name.as_deref().map(str::trim).filter(|n| !n.is_empty() && !is_placeholder(n)) else { continue };
+        if ambiguous.contains(&name.to_lowercase()) { continue; }
         // the kind may have been rejected since the prompt was built: that item is left out, the rest kept
         let (entry_id, _) = match ensure(db, owner, vault, &mut entity_ids, name, kind, Some(item.entity.aliases.clone())).await {
             Ok(e) => e,
@@ -406,6 +433,7 @@ async fn apply_extraction(
         if !valid(from_kind) || !valid(to_kind) {
             continue;
         }
+        if ambiguous.contains(&from_name.to_lowercase()) || ambiguous.contains(&to_name.to_lowercase()) { continue; }
         let (from_id, _) = ensure(db, owner, vault, &mut entity_ids, from_name, from_kind, None).await?;
         let (to_id, _) = ensure(db, owner, vault, &mut entity_ids, to_name, to_kind, None).await?;
         match service::add_relation(db, owner, &from_id, &to_id, rel.label.as_deref().unwrap_or(""), Some(source_record_id)).await {

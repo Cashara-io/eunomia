@@ -2,9 +2,16 @@ import type { NextConfig } from "next";
 
 const backend = process.env.BACKEND_INTERNAL_URL || "http://localhost:8001";
 
+const configuredLimit = Number(process.env.EUNOMIA_DOCUMENTS_MAX_BYTES);
+const documentLimit = Number.isSafeInteger(configuredLimit) && configuredLimit > 0 ? configuredLimit : 25 * 1024 * 1024;
+
 const nextConfig: NextConfig = {
   // Diagnostics can spend a minute waiting for the updater before streaming the ZIP.
-  experimental: { proxyTimeout: 120_000 },
+  experimental: {
+    proxyTimeout: 120_000,
+    // Match the backend MCP ceiling, including worst-case JSON escaping and the envelope.
+    proxyClientMaxBodySize: 6 * documentLimit + 64 * 1024,
+  },
   async headers() {
     return [
       {

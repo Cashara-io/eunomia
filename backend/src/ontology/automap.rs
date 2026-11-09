@@ -334,7 +334,7 @@ pub async fn automap(state: &OrgState, settings: &Settings, owner: &RecordId, ar
                     return Err(AppError::bad_request("that document is in another vault: omit vault_id, or give the document's vault"));
                 }
             }
-            let table = tabular::parse(&doc.bytes)?;
+            let table = tabular::parse_with_limit(&doc.bytes, state.settings.documents_max_bytes)?;
             let doc_id = crate::rid::RecordIdExt::to_string(&doc.id);
             filename = Some((doc_id.clone(), doc.filename.clone()));
             (doc.vault.clone(), vec![tabular::sample(&doc_id, &table)])
@@ -482,7 +482,7 @@ pub async fn automap(state: &OrgState, settings: &Settings, owner: &RecordId, ar
             // what the values already name in any kind, as the import finds it: one entity of another kind
             // is reused, two or more are skipped
             let keys: Vec<String> = lowered.iter().cloned().collect::<BTreeSet<_>>().into_iter().collect();
-            let named = tabular::resolved_names(db, &vault, keys.clone()).await?;
+            let named = tabular::resolved_names(db, &vault, keys.clone(), Some(to_kind.as_str())).await?;
             let (mut reused, mut ambiguous, mut refused) = (Vec::new(), Vec::new(), Vec::new());
             for key in &keys {
                 let spelled = values.iter().find(|v| &v.to_lowercase() == key).cloned().unwrap_or_default();
@@ -563,14 +563,26 @@ pub async fn automap(state: &OrgState, settings: &Settings, owner: &RecordId, ar
         mapped.push(MappedType { source: sample.source.clone(), record_type: sample.record_type.clone(), kind: kind.as_str().into(), name_field, unmapped });
     }
     // each metric is checked alone against the stored properties and the ones proposed here
-    let mut metrics = Vec::new();
+    let mut metrics: Vec<super::metric::ValidMetric> = Vec::new();
+    let mut reused_metrics: Vec<super::metric::ProposedMetric> = Vec::new();
     for m in pending_metrics.into_iter().take(super::MAX_PROPOSED_METRICS) {
         match super::metric::validate_all(db, &vault, std::slice::from_ref(&m), &properties).await {
-            Ok(mut valid) => metrics.append(&mut valid),
+            Ok(valid) => for metric in valid {
+                let stored = ontology.kinds.iter().find(|k| k.kind == metric.kind.as_str())
+                    .and_then(|k| k.metrics.iter().find(|m| metric.equivalent(m)));
+                if let Some(existing) = stored {
+                    if !reused_metrics.iter().any(|m| m.kind == metric.kind.as_str() && m.name == existing.name) {
+                        reused_metrics.push(super::metric::ProposedMetric { revision: existing.revision,
+                            kind: metric.kind.as_str().into(), name: existing.name.clone(), status: existing.status,
+                            merge_into: existing.merge_into.clone() });
+                    }
+                } else if !metrics.iter().any(|m| metric.same_calculation(m)) { metrics.push(metric); }
+            },
             Err(_) => skipped += 1,
         }
     }
-    let proposed = apply(db, &vault, Valid { kinds, links, properties, metrics }.at_snapshot(&ontology), Origin::Suggested).await?;
+    let mut proposed = apply(db, &vault, Valid { kinds, links, properties, metrics }.at_snapshot(&ontology), Origin::Suggested).await?;
+    proposed.metrics.extend(reused_metrics);
     Ok(AutomapOut::Model { proposed, record_types: mapped, links: checks, skipped, ontology: view(db, &vault).await? })
 }
 
