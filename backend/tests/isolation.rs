@@ -309,13 +309,15 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
     let (_, body) = raw(router, "POST", "/api/chat/threads", Some(json!({"title": format!("{canary} thread")})), Some(&token), None).await;
     ids.thread = serde_json::from_str::<Value>(&body).unwrap()["id"].as_str().unwrap_or_else(|| panic!("{body}")).to_string();
     let enc = crypto::encrypt(&state.settings.encryption_key, &json!({"token": canary}).to_string());
-    // The change log holds ids, never content (tests/changes.rs), so its canary row is planted: the
+    // The change log and the ontology activity log hold no definition content (tests/changes.rs,
+    // tests/events.rs), so their canary rows are planted: the
     // canary as the item and the actor, at a seq far above the real rows, so a route or tool that
     // leaks another org's log shows it. Its counter table has no free text: the canary is the key.
     let sql = "
         CREATE chat_message SET owner = $u, thread_id = $thread, role = 'user', content = $c;
         UPSERT $settings SET owner = $u, observations_mission = $c, memory_skill = $c;
-        CREATE connector SET owner = $u, kind = 'github', enabled = true, config = {note: $c}, credentials_encrypted = $enc;
+        LET $conn = (CREATE ONLY connector SET owner = $u, kind = 'github', enabled = true, config = {note: $c}, credentials_encrypted = $enc).id;
+        CREATE composio_file SET owner = $u, connector = $conn, external_id = $c, document_id = $c;
         UPSERT $sync SET owner = $u, cursor = $c, last_error = $c;
         CREATE embed_cache SET text_hmac = $c, vector = [0.5, 0.25];
         CREATE pocket_recording SET owner = $u, recording_id = 'rec', title = $c, transcript = $c, raw = {note: $c};
@@ -325,6 +327,7 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
         DELETE vault_member WHERE vault = $v;
         CREATE $vm SET vault = $v, user = $u, role = 'owner';
         CREATE change SET vault = $v, seq = 1000000, op = 'created', kind = 'memory', item = $c, actor = $c;
+        CREATE ontology_event SET vault = $v, seq = 1000000, actor = $c, actor_type = 'user', actor_name = $c, action = 'rejected', definition_type = 'kind', kind = 'db', name = 'db', target = 'db', revision = 1, reason = $c;
         CREATE $cs SET n = 0;
         CREATE $rb SET stage = 'done', done_at = time::now();
         CREATE credential_ref SET reference = 'op://Ops/Item/field', provider = 'onepassword_connect', vault = $v, label = $c, created_by = $u;

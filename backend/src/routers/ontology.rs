@@ -18,6 +18,7 @@ use crate::state::AppState;
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/vaults/{vault_id}/ontology", get(get_ontology))
+        .route("/vaults/{vault_id}/ontology/activity", get(get_activity))
         .route("/vaults/{vault_id}/ontology/objects", get(list_objects))
         .route("/vaults/{vault_id}/ontology/objects/{id}", get(object_profile))
         .route("/vaults/{vault_id}/ontology/suggest", post(suggest_ontology))
@@ -63,12 +64,16 @@ fn parse_vault_id(vault_id: &str) -> AppResult<RecordId> {
 
 #[derive(Deserialize, utoipa::ToSchema)]
 struct KindDecideBody {
+    revision: i64,
+    reason: Option<String>,
     kind: String,
     decision: KindDecision,
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]
 struct LinkDecideBody {
+    revision: i64,
+    reason: Option<String>,
     from_kind: String,
     label: String,
     to_kind: String,
@@ -77,6 +82,8 @@ struct LinkDecideBody {
 
 #[derive(Deserialize, utoipa::ToSchema)]
 struct PropertyDecideBody {
+    revision: i64,
+    reason: Option<String>,
     kind: String,
     name: String,
     decision: PropertyDecision,
@@ -84,6 +91,8 @@ struct PropertyDecideBody {
 
 #[derive(Deserialize, utoipa::ToSchema)]
 struct MetricDecideBody {
+    revision: i64,
+    reason: Option<String>,
     kind: String,
     name: String,
     decision: MetricDecision,
@@ -164,7 +173,7 @@ async fn automap_ontology(State(state): State<AppState>, user: User, Path(vault_
 async fn decide_kind(State(state): State<AppState>, user: User, Path(vault_id): Path<String>, Json(body): Json<KindDecideBody>) -> AppResult<Json<OntologyOut>> {
     let state = state.org(&user.org).await?;
     let vault = parse_vault_id(&vault_id)?;
-    let out = ontology::decide_kind(&state.db, &user.id, &vault, &body.kind, body.decision).await?;
+    let out = ontology::activity::reviewing(body.revision, body.reason, ontology::decide_kind(&state.db, &user.id, &vault, &body.kind, body.decision)).await?;
     decided(&state, &user, &vault);
     Ok(Json(out))
 }
@@ -183,7 +192,7 @@ async fn decide_kind(State(state): State<AppState>, user: User, Path(vault_id): 
 async fn decide_link(State(state): State<AppState>, user: User, Path(vault_id): Path<String>, Json(body): Json<LinkDecideBody>) -> AppResult<Json<OntologyOut>> {
     let state = state.org(&user.org).await?;
     let vault = parse_vault_id(&vault_id)?;
-    let out = ontology::decide_link(&state.db, &user.id, &vault, &body.from_kind, &body.label, &body.to_kind, body.decision).await?;
+    let out = ontology::activity::reviewing(body.revision, body.reason, ontology::decide_link(&state.db, &user.id, &vault, &body.from_kind, &body.label, &body.to_kind, body.decision)).await?;
     decided(&state, &user, &vault);
     Ok(Json(out))
 }
@@ -202,7 +211,7 @@ async fn decide_link(State(state): State<AppState>, user: User, Path(vault_id): 
 async fn decide_property(State(state): State<AppState>, user: User, Path(vault_id): Path<String>, Json(body): Json<PropertyDecideBody>) -> AppResult<Json<OntologyOut>> {
     let state = state.org(&user.org).await?;
     let vault = parse_vault_id(&vault_id)?;
-    let out = ontology::property::decide_property(&state.db, &user.id, &vault, &body.kind, &body.name, body.decision).await?;
+    let out = ontology::activity::reviewing(body.revision, body.reason, ontology::property::decide_property(&state.db, &user.id, &vault, &body.kind, &body.name, body.decision)).await?;
     decided(&state, &user, &vault);
     Ok(Json(out))
 }
@@ -221,7 +230,7 @@ async fn decide_property(State(state): State<AppState>, user: User, Path(vault_i
 async fn decide_metric(State(state): State<AppState>, user: User, Path(vault_id): Path<String>, Json(body): Json<MetricDecideBody>) -> AppResult<Json<OntologyOut>> {
     let state = state.org(&user.org).await?;
     let vault = parse_vault_id(&vault_id)?;
-    let out = ontology::metric::decide_metric(&state.db, &user.id, &vault, &body.kind, &body.name, body.decision).await?;
+    let out = ontology::activity::reviewing(body.revision, body.reason, ontology::metric::decide_metric(&state.db, &user.id, &vault, &body.kind, &body.name, body.decision)).await?;
     decided(&state, &user, &vault);
     Ok(Json(out))
 }
@@ -267,5 +276,13 @@ async fn set_strict(State(state): State<AppState>, user: User, Path(vault_id): P
 
 #[derive(utoipa::OpenApi)]
 #[openapi(paths(
-    list_objects, object_profile,get_ontology, suggest_ontology, automap_ontology, decide_kind, decide_link, decide_property, decide_metric, get_readiness, set_strict))]
+    get_activity, list_objects, object_profile,get_ontology, suggest_ontology, automap_ontology, decide_kind, decide_link, decide_property, decide_metric, get_readiness, set_strict))]
 pub struct Doc;
+
+#[utoipa::path(operation_id = "getOntologyActivity", get, path = "/api/vaults/{vault_id}/ontology/activity", tag = "vaults",
+    params(("vault_id" = String, Path), ontology::activity::ActivityQuery),
+    responses((status = 200, body = ontology::activity::ActivityPage), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")), security(("cookie" = []), ("bearer" = [])))]
+async fn get_activity(State(state): State<AppState>, user: User, Path(vault): Path<String>, Query(args): Query<ontology::activity::ActivityQuery>) -> AppResult<Json<ontology::activity::ActivityPage>> {
+    let state = state.org(&user.org).await?;
+    Ok(Json(ontology::activity::get(&state.db, &user.id, &parse_vault_id(&vault)?, &args).await?))
+}

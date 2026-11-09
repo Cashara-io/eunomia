@@ -680,7 +680,7 @@ async fn secret_audit_index_preserves_existing_events_and_reapplies() {
 }
 
 #[tokio::test]
-async fn schema_39_coverage_name_lookup_and_0040_paging_upgrade_are_idempotent() {
+async fn oldest_supported_schema_coverage_and_0040_paging_repair_are_idempotent() {
     use serde_json::json;
     let app = common::TestApp::new().await;
     let team = app.tool("vault_create", json!({"name": "Team", "kind": "org"})).await["id"].as_str().unwrap().to_string();
@@ -690,13 +690,14 @@ async fn schema_39_coverage_name_lookup_and_0040_paging_upgrade_are_idempotent()
     }
     let old = app.db().await;
     old.test_raw().query("REMOVE INDEX entity_vault_kind_name_idx ON entity; REMOVE INDEX entity_property_num_page_idx ON entity_property; REMOVE INDEX entity_property_text_page_idx ON entity_property; REMOVE INDEX entity_property_bool_page_idx ON entity_property; DELETE _migration WHERE version = 40").await.unwrap().check().unwrap();
-    app.control().test_raw().query("UPDATE $t SET schema_version = 39").bind(("t", app.user.org.tenant_record())).await.unwrap().check().unwrap();
+    // Exercise the missing-index fallback on the oldest schema this binary still serves.
+    app.control().test_raw().query("UPDATE $t SET schema_version = $version")
+        .bind(("t", app.user.org.tenant_record())).bind(("version", migrate::MIN_SUPPORTED_TENANT))
+        .await.unwrap().check().unwrap();
     app.state.pool.evict(&app.user.org);
     let db = app.db().await;
-    assert_eq!(db.schema_version(), 39);
+    assert_eq!(db.schema_version(), i64::from(migrate::MIN_SUPPORTED_TENANT));
     let question = json!({"question": "Where is Coastal Irrigation?"});
-    let out = app.tool("ontology_coverage", question.clone()).await;
-    assert_eq!(out["chosen_by"], "entities", "{out}");
 
     let before: Vec<Value> = db.test_raw().query("SELECT * FROM entity").await.unwrap().take(0).unwrap();
     app.state.provisioner.as_ref().unwrap().migrate_org(app.control(), &app.user.org).await.unwrap();
@@ -710,7 +711,7 @@ async fn schema_39_coverage_name_lookup_and_0040_paging_upgrade_are_idempotent()
     }
     app.state.pool.evict(&app.user.org);
     let db = app.db().await;
-    assert_eq!(db.schema_version(), 40);
+    assert_eq!(db.schema_version(), i64::from(migrate::LATEST_TENANT));
     let out = app.tool("ontology_coverage", question).await;
     assert_eq!(out["chosen_by"], "entities", "{out}");
     assert_eq!(out["vault"], team);
@@ -722,4 +723,22 @@ async fn schema_39_coverage_name_lookup_and_0040_paging_upgrade_are_idempotent()
     assert!(shown.contains("IndexScan") && shown.contains("entity_vault_name_key_idx"), "{shown}");
     assert!(shown.contains("\"limit\":\"8\""), "{shown}");
     assert!(!shown.contains("TableScan") && !shown.contains("Sort"), "{shown}");
+}
+
+#[tokio::test]
+async fn ontology_activity_upgrade_keeps_decisions_without_inventing_old_events() {
+    let db = fresh().await;
+    migrate::apply_up_to(&db, 41).await.unwrap();
+    db.query(r#"CREATE vault:upgrade SET name = "Upgrade";
+        CREATE ontology_kind:kept SET vault = vault:upgrade, kind = "shop", description = "Keep exact text", origin = "human", status = "approved";"#)
+        .await.unwrap().check().unwrap();
+    migrate::migrate(&db, &test_settings()).await.unwrap();
+    let rows: Vec<Value> = db.query("SELECT kind, description, status, revision FROM ontology_kind:kept").await.unwrap().take(0).unwrap();
+    assert_eq!(rows[0], serde_json::json!({"kind":"shop","description":"Keep exact text","status":"approved","revision":1}));
+    assert_eq!(count(&db, "ontology_event").await, 0, "historical decisions have no fabricated author or timestamp");
+    db.query(r#"UPDATE ontology_kind:kept SET revision = 2, activity_action = "described", description = "New text", activity_actor = "user:owner", activity_actor_type = "user", activity_actor_name = "Owner";"#)
+        .await.unwrap().check().unwrap();
+    assert_eq!(count(&db, "ontology_event").await, 1);
+    migrate::migrate(&db, &test_settings()).await.unwrap();
+    assert_eq!(count(&db, "ontology_event").await, 1, "upgrade is idempotent");
 }

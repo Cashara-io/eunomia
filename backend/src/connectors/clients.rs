@@ -60,7 +60,7 @@ pub fn bearer(token: &str) -> HeaderMap {
 }
 
 /// The guarded client for one request (see the module docs). Its error already says why a URL is refused.
-async fn guarded(url: &str, secrets: Option<&crate::secrets::connector::Context>) -> AppResult<reqwest::Client> {
+pub(crate) async fn guarded(url: &str, secrets: Option<&crate::secrets::connector::Context>) -> AppResult<reqwest::Client> {
     if let Some(secrets) = secrets { return secrets.client(url).await; }
     crate::llm_net::client(url).await.map_err(|e| AppError::new(StatusCode::BAD_GATEWAY, format!("{} is not allowed: {}", host(url), e.message)))
 }
@@ -87,7 +87,7 @@ pub(crate) fn retryable(error: &AppError) -> bool {
     matches!(error.reason, Some("connector_rate_limited" | "connector_transient" | "connector_server_error" | "connector_response_error"))
 }
 
-fn provider_error(url: &str, status: StatusCode, body: &str) -> AppError {
+pub(crate) fn provider_error(url: &str, status: StatusCode, body: &str) -> AppError {
     let limited = rate_limited(status, body);
     let hint = if limited { " (rate limited -- retried on the next sync)" } else { match status.as_u16() {
         401 | 403 => " (check the token and its scopes)",

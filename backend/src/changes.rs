@@ -394,3 +394,11 @@ pub async fn announce(db: &OrgDb, vault: &RecordId, op: &'static str, also: &[Re
     // no receivers is fine
     let _ = vault_bus().send(VaultEvent { org: db.org(), vault: vault.clone(), op, users, actor });
 }
+
+/// Internal wake-up on the existing event bus. The durable ontology rows carry
+/// identity and content; followers authorise and replay those rows before sending.
+pub const ONTOLOGY_COMMITTED: &str = "ontology_committed";
+pub fn ontology_committed(db: &OrgDb, vault: &RecordId) {
+    let actor = authz::current().map_or_else(|| "system".to_string(), |c| c.actor.id);
+    let _ = vault_bus().send(VaultEvent { org: db.org(), vault: vault.clone(), op: ONTOLOGY_COMMITTED, users: Vec::new(), actor });
+}

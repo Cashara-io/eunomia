@@ -53,9 +53,7 @@ export default function Overview({
                 <th scope="row">{g.label}</th>
                 {Object.keys(STATUS).map((s) => (
                   <td key={s} className="font-mono">
-                    {g.items
-                      .filter((i) => i.status === s)
-                      .length.toLocaleString("en-AU")}
+                    <MorphCount value={g.items.filter((i) => i.status === s).length} />
                   </td>
                 ))}
               </tr>
@@ -71,7 +69,7 @@ export default function Overview({
         <section className="flex flex-col gap-3">
           <h2 className="section-title">Suggestions to review</h2>
           <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
-            Current suggestions. Proposal dates are not recorded.
+            Suggestions arrive here as AI apps propose definitions.
           </p>
           <ul className="ledger hairline-rows">
             {pending.slice(0, 5).map((d) => (
@@ -100,8 +98,7 @@ export default function Overview({
         <section className="flex flex-col gap-3">
           <h2 className="section-title">Decisions</h2>
           <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
-            Approved and rejected definitions are available in Structure. The
-            current API does not provide dated decisions or a review history.
+            Decisions and their reasons are saved in Activity. Open a definition to read its review history.
           </p>
           <Link
             className="link self-start"

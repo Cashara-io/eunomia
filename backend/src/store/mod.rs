@@ -31,6 +31,7 @@ pub mod extensions;
 pub mod integrity;
 pub mod jobs;
 pub mod ontology;
+pub mod ontology_activity;
 pub mod objects;
 pub mod peers;
 pub mod redact;
@@ -75,7 +76,17 @@ impl<S> Stmt<S> {
 
 impl Stmt<Tenant> {
     pub fn on<'a>(&self, db: &'a OrgDb) -> Q<'a> {
-        Q::new(db.raw(RawKey(())), Scope::Org(db.org()), self.name, self.sql)
+        let actor = crate::authz::current().map(|c| c.actor).unwrap_or_else(|| crate::authz::Caller::system().actor);
+        let decision = crate::ontology::activity::decision_context();
+        let mut query = Q::new(db.raw(RawKey(())), Scope::Org(db.org()), self.name, self.sql);
+        if db.schema_version() < crate::ontology::activity::SCHEMA_VERSION && (self.sql.contains("$activity_actor") || self.sql.contains("$expected_revision")) {
+            query.denied = Some("ontology schema upgrade pending".into());
+        }
+        query.bind(("activity_actor_name", crate::ontology::activity::actor_name()))
+            .bind(("activity_actor", actor.id))
+            .bind(("activity_actor_type", actor.kind.to_string()))
+            .bind(("expected_revision", decision.as_ref().map(|d| d.revision)))
+            .bind(("decision_reason", decision.and_then(|d| d.reason)))
     }
 }
 
@@ -247,11 +258,11 @@ pub const CONTROL_TABLES: &[&str] = &[
 
 /// Tables that live in an org database.
 pub const TENANT_TABLES: &[&str] = &[
-    "app_settings", "vault", "vault_member", "connector", "sync_status", "cache_record", "linked_to", "person", "organisation", "location", "repository", "entity",
+    "app_settings", "vault", "vault_member", "connector", "composio_file", "sync_status", "cache_record", "linked_to", "person", "organisation", "location", "repository", "entity",
     "file", "symbol", "memory", "relates_to", "chat_thread", "chat_message", "audit_log", "embed_cache", "pocket_recording",
     "document", "extension", "extension_event", "skill", "change", "change_seq", "redact_backfill", "peer_instance", "peer_share", "peer_link", "peer_item",
     "credential_ref", "secret_provider", "secret_request", "vault_secret", "ontology_kind", "ontology_link", "ontology_property",
-    "entity_property", "ontology_metric",
+    "entity_property", "ontology_metric", "ontology_event",
 ];
 
 /// The first table `sql` names that lives in the other database. A table is recognised where
@@ -321,7 +332,7 @@ pub fn crossing_table(sql: &str, in_org: bool) -> Option<String> {
 
 /// Every static tenant statement, for the `every_query_executes` test.
 pub fn all() -> Vec<&'static Stmt> {
-    [diagnostics::ALL, app::ALL, cache::ALL, changes::ALL, documents::ALL, entities::ALL, extensions::ALL, integrity::ALL, jobs::ALL, ontology::ALL, objects::ALL, peers::ALL, redact::ALL, routing::ALL, secret_requests::ALL, secrets::ALL, skills::ALL, vaults::ALL].concat()
+    [diagnostics::ALL, app::ALL, cache::ALL, changes::ALL, documents::ALL, entities::ALL, extensions::ALL, integrity::ALL, jobs::ALL, ontology::ALL, ontology_activity::ALL, objects::ALL, peers::ALL, redact::ALL, routing::ALL, secret_requests::ALL, secrets::ALL, skills::ALL, vaults::ALL].concat()
 }
 
 /// Every static control statement.

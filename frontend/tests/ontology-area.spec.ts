@@ -167,9 +167,9 @@ test("owner batch decisions, receipts, explicit merge and strict policy", async 
     .check();
   await expect(
     page.getByRole("button", { name: "Approve 1 selected" }),
-  ).toBeDisabled();
+  ).toBeEnabled();
   await page
-    .getByRole("textbox", { name: "Reason for this batch (required)" })
+    .getByRole("textbox", { name: "Reason for this batch (optional)" })
     .fill("Matches fixture source records");
   await page.getByRole("button", { name: "Approve 1 selected" }).click();
   await expect(page.getByRole("dialog")).toContainText("store");
@@ -189,7 +189,7 @@ test("owner batch decisions, receipts, explicit merge and strict policy", async 
     .getByRole("checkbox", { name: "Select fixture 0", exact: true })
     .check();
   await page
-    .getByRole("textbox", { name: "Reason for this batch (required)" })
+    .getByRole("textbox", { name: "Reason for this batch (optional)" })
     .fill("Not part of this business");
   await page.getByRole("button", { name: "Reject 1 selected" }).click();
   await page
@@ -215,7 +215,7 @@ test("owner batch decisions, receipts, explicit merge and strict policy", async 
     .toBe(true);
   const refused = await page.request.post(`${path}/kinds/decide`, {
     headers: { Authorization: `Bearer ${token}` },
-    data: { kind: "fixture_1", decision: { action: "approve" } },
+    data: { kind: "fixture_1", revision: 1, decision: { action: "approve" } },
   });
   expect(refused.status()).toBe(403);
 });
@@ -304,7 +304,7 @@ test("members inspect evidence but cannot decide, and no-model replies stay hone
   await expect(member.getByRole("checkbox")).toHaveCount(0);
   const refused = await member.request.post(
     `/api/vaults/${vault.id}/ontology/kinds/decide`,
-    { data: { kind: "store", decision: { action: "approve" } } },
+    { data: { kind: "store", revision: 1, decision: { action: "approve" } } },
   );
   expect(refused.status()).toBe(403);
   await member.goto(`/ontology/schema?space=${encodeURIComponent(vault.id)}`);
@@ -335,7 +335,7 @@ test("a batch approves dependencies in order and reports each saved result", asy
     .getByRole("checkbox", { name: "Select suggestions on this page" })
     .check();
   await page
-    .getByRole("textbox", { name: "Reason for this batch (required)" })
+    .getByRole("textbox", { name: "Reason for this batch (optional)" })
     .fill("Matches the source columns and store codes");
   await page.getByRole("button", { name: "Approve 4 selected" }).click();
   await page
@@ -405,4 +405,23 @@ test("a kind page opened from Structure returns to the same Structure page", asy
   await expect(page).toHaveURL(/\/ontology\/kinds\//);
   await page.getByRole("link", { name: "Back to Structure" }).click();
   await expect(page).toHaveURL(/\/ontology\/schema\?.*page=2/);
+});
+
+test("batch merge stores its reason for each selected definition", async ({ page }) => {
+  test.setTimeout(60000);
+  const { vault } = await seed(page);
+  const path = `/api/vaults/${vault.id}/ontology`;
+  const approved = await page.request.post(`${path}/kinds/decide`, { data: { kind: "store", revision: 1, decision: { action: "approve" } } });
+  expect(approved.ok()).toBeTruthy();
+  await page.goto(`/ontology/review?space=${encodeURIComponent(vault.id)}&type=kind&q=fixture`);
+  await page.getByRole("checkbox", { name: "Select fixture 0", exact: true }).check();
+  await page.getByRole("checkbox", { name: "Select fixture 1", exact: true }).check();
+  await page.getByRole("textbox", { name: "Reason for this batch (optional)" }).fill("Duplicate names for a store");
+  await page.getByLabel("Merge selected into").selectOption("store");
+  await page.getByRole("button", { name: "Reject and merge 2 selected", exact: true }).click();
+  await page.getByRole("button", { name: "Reject and merge selected", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("Merged into store");
+  const events = await (await page.request.get(`${path}/activity?action=merged`)).json();
+  expect(events.events).toHaveLength(2);
+  expect(events.events.every((event: { reason: string }) => event.reason === "Duplicate names for a store")).toBeTruthy();
 });

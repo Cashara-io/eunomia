@@ -474,6 +474,7 @@ fn not_ready(kind: &Kind, why: &str) -> AppError {
 pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, origin: Origin) -> AppResult<ImportOut> {
     let db = &state.db;
     let doc = crate::documents::load_csv(state, user, &args.document_id, Action::WriteMemories).await?;
+    super::activity::require_ready(&state.db)?;
     let kind = Kind::parse(&args.kind)?;
     match kind_status(db, &doc.vault, &kind).await? {
         Some(Status::Approved) => {}
@@ -726,6 +727,17 @@ pub async fn import_rows(state: &OrgState, user: &RecordId, args: &ImportArgs, o
         }
     }
     write_values(db, &doc.vault, &doc.id, as_of, origin, pending).await?;
+    crate::tx::with_retry_dup(|| async {
+        q::IMPORT_SUMMARY.on(db)
+            .bind(("vault", doc.vault.clone()))
+            .bind(("source", doc.id.clone()))
+            .bind(("kind", kind.0.clone()))
+            .bind(("entities", (out.created + out.updated + out.targets_created) as i64))
+            .bind(("values", out.values as i64))
+            .bind(("links", out.linked as i64))
+            .await
+    }).await?.check()?;
+    crate::changes::ontology_committed(db, &doc.vault);
     Ok(out)
 }
 

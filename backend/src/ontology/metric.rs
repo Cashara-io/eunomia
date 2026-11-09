@@ -837,6 +837,9 @@ pub fn expr_words(kind: &str, e: &MetricExpr) -> String {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MetricProposal {
+    /// Revision observed in ontology_get. Zero or omitted allows creation or an identical retry.
+    #[serde(default)]
+    pub revision: i64,
     pub kind: String,
     pub name: String,
     pub expr: MetricExpr,
@@ -854,8 +857,9 @@ pub struct MetricProposal {
 }
 
 pub(super) struct ValidMetric {
-    kind: Kind,
-    name: PropertyName,
+    pub(super) revision: i64,
+    pub(super) kind: Kind,
+    pub(super) name: PropertyName,
     expr: MetricExpr,
     unit: Option<String>,
     description: Option<String>,
@@ -885,6 +889,7 @@ impl MetricProposal {
             return Err(AppError::bad_request(format!("{:?} cannot merge into itself", name.as_str())));
         }
         Ok(ValidMetric {
+            revision: super::activity::proposal_revision(self.revision)?,
             synonyms: clean_synonyms(name.as_str(), &self.synonyms)?,
             expr: plan.expr(),
             kind,
@@ -925,6 +930,7 @@ pub(super) async fn validate_all(db: &OrgDb, vault: &RecordId, metrics: &[Metric
 /// A proposed metric after the call, with the row's status (a decided one keeps its decision).
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct ProposedMetric {
+    pub revision: i64,
     pub kind: String,
     pub name: String,
     pub status: Status,
@@ -939,6 +945,7 @@ pub(super) async fn apply_metrics(db: &OrgDb, vault: &RecordId, metrics: Vec<Val
         let row: MetricRow = with_retry_dup(|| async {
             let mut res = q::PROPOSE_METRIC
                 .on(db)
+                .bind(("proposal_revision", m.revision))
                 .bind(("id", id.clone()))
                 .bind(("vault", vault.clone()))
                 .bind(("kind", m.kind.as_str().to_string()))
@@ -955,7 +962,8 @@ pub(super) async fn apply_metrics(db: &OrgDb, vault: &RecordId, metrics: Vec<Val
             rows.into_iter().next().ok_or_else(|| surrealdb::Error::query("ontology metric upsert returned no row".into(), None))
         })
         .await?;
-        out.push(ProposedMetric { kind: row.kind, name: row.name, status: Status::parse(&row.status)?, merge_into: row.merge_into });
+        crate::changes::ontology_committed(db, vault);
+        out.push(ProposedMetric { revision: row.revision, kind: row.kind, name: row.name, status: Status::parse(&row.status)?, merge_into: row.merge_into });
     }
     Ok(out)
 }
@@ -966,6 +974,9 @@ pub(super) async fn apply_metrics(db: &OrgDb, vault: &RecordId, metrics: Vec<Val
 
 #[derive(Debug, Clone, Deserialize, SurrealValue)]
 struct MetricRow {
+    #[serde(default)]
+    #[surreal(default)]
+    revision: i64,
     kind: String,
     name: String,
     #[serde(default)]
@@ -999,6 +1010,7 @@ impl MetricRow {
 /// One metric of a kind, as the ontology view shows it. Its value is never here: `metric_eval` runs it.
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct MetricItem {
+    pub revision: i64,
     pub name: String,
     pub description: Option<String>,
     pub synonyms: Vec<String>,
@@ -1023,6 +1035,7 @@ pub(super) async fn metrics_by_kind(db: &OrgDb, vault: &RecordId) -> AppResult<B
     for r in rows {
         let expr = r.expr()?;
         out.entry(r.kind.clone()).or_default().push(MetricItem {
+            revision: r.revision,
             expr_words: expr_words(&r.kind, &expr),
             expr,
             status: Status::parse(&r.status)?,
@@ -1075,10 +1088,12 @@ pub async fn decide_metric(db: &OrgDb, user: &RecordId, vault: &RecordId, kind: 
     let name = metric_name(name)?;
     let id = metric_rid(vault, &kind, &name);
     let Some(row) = load(db, &id).await? else { return Err(no_metric(&kind, &name)) };
+    super::activity::check_seen(row.revision)?;
     let (status, merge_into) = match decision {
         MetricDecision::Describe { description } => {
             let description = clean_text("description", Some(&description))?;
-            with_retry_dup(|| async { q::DESCRIBE_METRIC.on(db).bind(("id", id.clone())).bind(("description", description.clone())).await }).await?;
+            with_retry_dup(|| async { q::DESCRIBE_METRIC.on(db).bind(("expected_revision", row.revision)).bind(("id", id.clone())).bind(("description", description.clone())).await }).await?;
+            crate::changes::ontology_committed(db, vault);
             return view(db, vault).await;
         }
         MetricDecision::Approve => {
@@ -1110,6 +1125,7 @@ pub async fn decide_metric(db: &OrgDb, user: &RecordId, vault: &RecordId, kind: 
     with_retry_dup(|| async {
         q::DECIDE_METRIC
             .on(db)
+            .bind(("expected_revision", row.revision))
             .bind(("id", id.clone()))
             .bind(("vault", vault.clone()))
             .bind(("kind", kind.as_str().to_string()))
@@ -1120,6 +1136,7 @@ pub async fn decide_metric(db: &OrgDb, user: &RecordId, vault: &RecordId, kind: 
             .await
     })
     .await?;
+    crate::changes::ontology_committed(db, vault);
     view(db, vault).await
 }
 

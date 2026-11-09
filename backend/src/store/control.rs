@@ -248,7 +248,7 @@ pub const OAUTH_TOKEN_CREATE: ControlStmt = ControlStmt::new(
 pub const OAUTH_TOKEN_BY_HASH: ControlStmt = ControlStmt::new(
     "app.oauth_token_by_hash",
     "SELECT id, kind, family, expires_at, expires_at < time::now() AS expired, used_at, family.owner AS owner, \
-     family.client_id AS client_id, (scope ?? family.scope) AS scope, family.resource AS resource \
+     family.client_id AS client_id, family.client_name AS client_name, (scope ?? family.scope) AS scope, family.resource AS resource \
      FROM oauth_token WHERE token_hash = $token_hash LIMIT 1",
 );
 

@@ -63,6 +63,23 @@ export type ActivityEntry = {
     vault_id: string;
 };
 
+export type ActivityEvent = {
+    action: string;
+    actor: string;
+    actor_name: string;
+    actor_type: string;
+    after?: unknown;
+    at: string;
+    before?: unknown;
+    definition_type: string;
+    kind: string;
+    name: string;
+    reason?: string | null;
+    revision: number;
+    seq: number;
+    target: string;
+};
+
 export type ActivityPage = {
     entries: Array<ActivityEntry>;
     next_before?: string | null;
@@ -195,6 +212,11 @@ export type BootstrapOut = {
      * The button label ("Continue with {oidc_provider}") when an OpenID Connect provider is configured.
      */
     oidc_provider?: string | null;
+};
+
+export type Callback = {
+    code: string;
+    state: string;
 };
 
 export type Capsule = {
@@ -335,6 +357,11 @@ export type CheckOut = {
     error?: string | null;
     message?: string | null;
     ok: boolean;
+};
+
+export type Choices = {
+    apps: Array<Selection>;
+    vault?: string | null;
 };
 
 /**
@@ -1294,6 +1321,8 @@ export type Kind = {
 export type KindDecideBody = {
     decision: KindDecision;
     kind: string;
+    reason?: string | null;
+    revision: number;
 };
 
 export type KindDecision = {
@@ -1331,6 +1360,7 @@ export type KindItem = {
      */
     properties: Array<PropertyItem>;
     reason?: string | null;
+    revision: number;
     /**
      * A few of their names.
      */
@@ -1394,6 +1424,8 @@ export type LinkDecideBody = {
     decision: LinkDecision;
     from_kind: string;
     label: string;
+    reason?: string | null;
+    revision: number;
     to_kind: string;
 };
 
@@ -1419,6 +1451,7 @@ export type LinkItem = {
     label: string;
     origin?: null | Origin;
     reason?: string | null;
+    revision: number;
     samples: Array<LinkSample>;
     /**
      * The record fields or CSV columns that name each relation's target, from auto-mapping: a CSV
@@ -1481,6 +1514,10 @@ export type LogPage = {
      * Pass as `before` for the next (older) page; absent on the last page.
      */
     next_before?: string | null;
+};
+
+export type Manage = {
+    toolkit: string;
 };
 
 /**
@@ -1569,6 +1606,8 @@ export type MetricDecideBody = {
     decision: MetricDecision;
     kind: string;
     name: string;
+    reason?: string | null;
+    revision: number;
 };
 
 export type MetricDecision = {
@@ -1623,6 +1662,7 @@ export type MetricItem = {
     name: string;
     origin: Origin;
     reason?: string | null;
+    revision: number;
     status: Status;
     synonyms: Array<string>;
     unit?: string | null;
@@ -1904,6 +1944,8 @@ export type PropertyDecideBody = {
     decision: PropertyDecision;
     kind: string;
     name: string;
+    reason?: string | null;
+    revision: number;
 };
 
 export type PropertyDecision = {
@@ -1930,6 +1972,7 @@ export type PropertyItem = {
     name: string;
     origin: Origin;
     reason?: string | null;
+    revision: number;
     /**
      * A few of them, as text with their unit.
      */
@@ -1985,12 +2028,14 @@ export type ProposeOut = {
 export type ProposedKind = {
     kind: string;
     merge_into?: string | null;
+    revision: number;
     status: Status;
 };
 
 export type ProposedLink = {
     from_kind: string;
     label: string;
+    revision: number;
     status: Status;
     to_kind: string;
 };
@@ -2002,6 +2047,7 @@ export type ProposedMetric = {
     kind: string;
     merge_into?: string | null;
     name: string;
+    revision: number;
     status: Status;
 };
 
@@ -2013,6 +2059,7 @@ export type ProposedProperty = {
     kind: string;
     merge_into?: string | null;
     name: string;
+    revision: number;
     status: Status;
 };
 
@@ -2357,6 +2404,15 @@ export type Rule = {
      * The vault a matching record goes to (`vault:...`).
      */
     vault: string;
+};
+
+export type Selection = {
+    account: string;
+    folder?: string;
+    phone_number_id?: string;
+    reference?: string;
+    repo?: string;
+    toolkit: string;
 };
 
 export type SessionOut = {
@@ -3684,6 +3740,150 @@ export type CreateConnectorResponses = {
 
 export type CreateConnectorResponse = CreateConnectorResponses[keyof CreateConnectorResponses];
 
+export type ComposioBeginData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/connectors/composio/begin';
+};
+
+export type ComposioBeginErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ComposioBeginError = ComposioBeginErrors[keyof ComposioBeginErrors];
+
+export type ComposioBeginResponses = {
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ComposioBeginResponse = ComposioBeginResponses[keyof ComposioBeginResponses];
+
+export type ComposioCallbackData = {
+    body: Callback;
+    path?: never;
+    query?: never;
+    url: '/api/connectors/composio/callback';
+};
+
+export type ComposioCallbackErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ComposioCallbackError = ComposioCallbackErrors[keyof ComposioCallbackErrors];
+
+export type ComposioCallbackResponses = {
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ComposioCallbackResponse = ComposioCallbackResponses[keyof ComposioCallbackResponses];
+
+export type ComposioDisconnectData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/connectors/composio/disconnect';
+};
+
+export type ComposioDisconnectErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ComposioDisconnectError = ComposioDisconnectErrors[keyof ComposioDisconnectErrors];
+
+export type ComposioDisconnectResponses = {
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ComposioDisconnectResponse = ComposioDisconnectResponses[keyof ComposioDisconnectResponses];
+
+export type ComposioManageData = {
+    body: Manage;
+    path?: never;
+    query?: never;
+    url: '/api/connectors/composio/manage';
+};
+
+export type ComposioManageErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ComposioManageError = ComposioManageErrors[keyof ComposioManageErrors];
+
+export type ComposioManageResponses = {
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ComposioManageResponse = ComposioManageResponses[keyof ComposioManageResponses];
+
+export type ComposioSelectionData = {
+    body: Choices;
+    path?: never;
+    query?: never;
+    url: '/api/connectors/composio/selection';
+};
+
+export type ComposioSelectionErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ComposioSelectionError = ComposioSelectionErrors[keyof ComposioSelectionErrors];
+
+export type ComposioSelectionResponses = {
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ComposioSelectionResponse = ComposioSelectionResponses[keyof ComposioSelectionResponses];
+
+export type ComposioStatusData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/connectors/composio/status';
+};
+
+export type ComposioStatusErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ComposioStatusError = ComposioStatusErrors[keyof ComposioStatusErrors];
+
+export type ComposioStatusResponses = {
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ComposioStatusResponse = ComposioStatusResponses[keyof ComposioStatusResponses];
+
 export type GetPocketaiAllData = {
     body?: never;
     path?: never;
@@ -4673,7 +4873,9 @@ export type AddRelationResponse = AddRelationResponses[keyof AddRelationResponse
 export type FollowEventsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        ontology_after?: string;
+    };
     url: '/api/events/ws';
 };
 
@@ -6689,6 +6891,43 @@ export type GetVaultOntologyResponses = {
 };
 
 export type GetVaultOntologyResponse = GetVaultOntologyResponses[keyof GetVaultOntologyResponses];
+
+export type GetOntologyActivityData = {
+    body?: never;
+    path: {
+        vault_id: string;
+    };
+    query?: {
+        after?: number;
+        newest?: boolean;
+        review_only?: boolean;
+        before?: number;
+        actor?: string;
+        actor_type?: string;
+        action?: string;
+        definition_type?: string;
+        kind?: string;
+        target?: string;
+        name?: string;
+        limit?: number;
+    };
+    url: '/api/vaults/{vault_id}/ontology/activity';
+};
+
+export type GetOntologyActivityErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetOntologyActivityError = GetOntologyActivityErrors[keyof GetOntologyActivityErrors];
+
+export type GetOntologyActivityResponses = {
+    200: ActivityPage;
+};
+
+export type GetOntologyActivityResponse = GetOntologyActivityResponses[keyof GetOntologyActivityResponses];
 
 export type AutomapVaultOntologyData = {
     body: AutomapBody;

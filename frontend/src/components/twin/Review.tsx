@@ -5,19 +5,19 @@ import { haptic } from "@/lib/haptics";
 import Link from "next/link";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { ApiError } from "@/lib/api";
 import {
   decideVaultOntologyKind,
   decideVaultOntologyLink,
   decideVaultOntologyMetric,
   decideVaultOntologyProperty,
-  getVaultOntology,
 } from "@/lib/gen";
 import { call } from "@/lib/queries/client";
 import { ontologyKeys, type OntologyOut } from "@/lib/queries/ontology";
 import type { Vault } from "@/lib/types";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import StatusLabel from "@/components/ui/StatusLabel";
-import Definition from "./Definition";
+import Definition, { RevisionChanges } from "./Definition";
 import { STATUS, words } from "./DefinitionRows";
 import {
   Filter,
@@ -39,13 +39,13 @@ function describe(d: DefinitionItem) {
   if (d.type === "kind") return `Kind ${words(d.name)}`;
   if (d.type === "link") return `Link type ${words(d.name)}`;
   const what = d.type === "property" ? "Property" : "Metric";
-  return `${what} ${words(d.name)} on ${words(d.kind)} (${d.id})`;
+  return `${what} ${words(d.name)} on ${words(d.kind)}`;
 }
 
 type Receipt = {
   reason: string;
   action: string;
-  results: { name: string; result: string }[];
+  results: { id: string; name: string; result: string }[];
 };
 export default function Review({
   vault,
@@ -56,12 +56,18 @@ export default function Review({
 }) {
   const { params, update } = useTwinParams();
   const qc = useQueryClient();
-  const [checked, setChecked] = useState<string[]>([]);
+  const [checked, setChecked] = useState<DefinitionItem[]>([]);
   const [reason, setReason] = useState("");
-  const [confirm, setConfirm] = useState<"approve" | "reject" | null>(null);
+  const [confirm, setConfirm] = useState<"approve" | "reject" | "merge" | null>(null);
+  const [mergeTarget, setMergeTarget] = useState("");
   const [busy, setBusy] = useState(false);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
-  const all = definitions(data);
+  const [stale, setStale] = useState<DefinitionItem[]>([]);
+  const [reviewEpoch, setReviewEpoch] = useState(0);
+  const current = definitions(data);
+  const [known, setKnown] = useState(() => current.map(d => d.id));
+  const newItems = current.filter(d => !known.includes(d.id) && d.item.status === "proposed");
+  const all = current.filter(d => known.includes(d.id) || d.item.status !== "proposed");
   const status = params.get("status") ?? "proposed";
   const q = (params.get("q") ?? "").toLowerCase();
   const rows = all.filter(
@@ -81,32 +87,37 @@ export default function Review({
   const page = pageNumber(params.get("page"), rows.length);
   const shown = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const selected = all.find((d) => d.id === params.get("selected"));
-  const batch = shown.filter(
-    (d) => checked.includes(d.id) && d.item.status === "proposed",
-  );
+  const batch = checked.filter(d => shown.some(row => row.id === d.id));
   const owner = vault.role === "owner";
-  const waiting = all.filter((d) => d.item.status === "proposed").length;
+  const waiting = current.filter((d) => d.item.status === "proposed").length;
 
-  async function decide(d: DefinitionItem, action: "approve" | "reject") {
+  const mergeOptions = batch.length === 0 ? [] : batch.every(d => d.type === "kind")
+    ? data.kinds.filter(k => !batch.some(d => d.name === k.kind) && k.status !== "rejected" && (k.built_in || k.status === "approved" || k.entities > 0)).map(k => k.kind)
+    : batch.every(d => d.type === "property" && d.kind === batch[0].kind)
+      ? (data.kinds.find(k => k.kind === batch[0].kind)?.properties ?? []).filter(p => p.status === "approved" && !batch.some(d => d.name === p.name)).map(p => p.name)
+      : batch.every(d => d.type === "metric" && d.kind === batch[0].kind)
+        ? (data.kinds.find(k => k.kind === batch[0].kind)?.metrics ?? []).filter(m => m.status === "approved" && !batch.some(d => d.name === m.name)).map(m => m.name)
+        : [];
+  async function decide(d: DefinitionItem, action: "approve" | "reject" | "merge") {
     const path = { vault_id: vault.id };
-    const decision = { action };
+    const decision: { action: "approve" | "reject"; merge_into?: string } = action === "merge" ? { action: "reject", merge_into: mergeTarget } : { action };
     switch (d.type) {
       case "kind":
         return call(
-          decideVaultOntologyKind({ path, body: { kind: d.kind, decision } }),
+          decideVaultOntologyKind({ path, body: { kind: d.kind, decision, revision: d.item.revision, reason } }),
         );
       case "property":
         return call(
           decideVaultOntologyProperty({
             path,
-            body: { kind: d.kind, name: d.name, decision },
+            body: { kind: d.kind, name: d.name, decision, revision: d.item.revision, reason },
           }),
         );
       case "metric":
         return call(
           decideVaultOntologyMetric({
             path,
-            body: { kind: d.kind, name: d.name, decision },
+            body: { kind: d.kind, name: d.name, decision, revision: d.item.revision, reason },
           }),
         );
       case "link":
@@ -118,44 +129,33 @@ export default function Review({
               label: d.item.label,
               to_kind: d.item.to_kind,
               decision,
+              revision: d.item.revision, reason,
             },
           }),
         );
     }
   }
   async function runBatch() {
-    if (!confirm || !reason.trim() || busy) return;
+    if (!confirm || busy || (confirm === "merge" && !mergeOptions.includes(mergeTarget))) return;
     setBusy(true);
     const results: Receipt["results"] = [];
+    const changed: DefinitionItem[] = [];
     const order = { kind: 0, property: 1, link: 2, metric: 3 };
     for (const d of [...batch].sort((a, b) => order[a.type] - order[b.type])) {
       try {
-        // Recheck before each decision. The current API has no atomic revision precondition.
-        const fresh = await call(
-          getVaultOntology({ path: { vault_id: vault.id } }),
-        );
-        const current = definitions(fresh).find((x) => x.id === d.id);
-        if (
-          !current ||
-          JSON.stringify(current.item) !== JSON.stringify(d.item)
-        ) {
-          results.push({
-            name: describe(d),
-            result:
-              "Skipped: the definition changed. Refresh and review it again.",
-          });
-          continue;
-        }
         qc.setQueryData(ontologyKeys.vault(vault.id), await decide(d, confirm));
         haptic("success");
         results.push({
+          id: d.id,
           name: describe(d),
           result:
-            confirm === "approve" ? "Approved" : "Rejected without merging",
+            confirm === "approve" ? "Approved" : confirm === "merge" ? `Merged into ${words(mergeTarget)}` : "Rejected without merging",
         });
       } catch (e) {
         haptic("error");
+        if (e instanceof ApiError && e.code === "ontology.stale_revision") changed.push(d);
         results.push({
+          id: d.id,
           name: describe(d),
           result:
             e instanceof Error ? e.message : "Decision failed. Try again.",
@@ -163,6 +163,7 @@ export default function Review({
       }
     }
     setReceipt({ action: confirm, reason: reason.trim(), results });
+    setStale(changed);
     setChecked([]);
     setConfirm(null);
     setBusy(false);
@@ -183,6 +184,9 @@ export default function Review({
   }
   return (
     <>
+      <div className="min-h-11" aria-live="polite">
+        {newItems.length > 0 && <button className="btn btn-sm" onClick={() => setKnown(current.map(d => d.id))}>{newItems.length} new suggestions. Show in queue</button>}
+      </div>
       <div className="flex flex-wrap justify-between gap-3">
         <h2 className="section-title">Review</h2>
         <span className="text-[13px]"><MorphCount value={waiting} /> waiting</span>
@@ -223,13 +227,13 @@ export default function Review({
                   disabled={busy}
                   checked={shown
                     .filter((d) => d.item.status === "proposed")
-                    .every((d) => checked.includes(d.id))}
+                    .every((d) => checked.some(row => row.id === d.id))}
                   onChange={(e) =>
                     setChecked(
                       e.target.checked
                         ? shown
                             .filter((d) => d.item.status === "proposed")
-                            .map((d) => d.id)
+
                         : [],
                     )
                   }
@@ -240,7 +244,7 @@ export default function Review({
                 <>
                   <label className="flex flex-col gap-1">
                     <span className="label">
-                      Reason for this batch (required)
+                      Reason for this batch (optional)
                     </span>
                     <input
                       className="field px-3 min-h-11 sm:min-h-9"
@@ -254,26 +258,28 @@ export default function Review({
                     className="text-[12px]"
                     style={{ color: "var(--ink-dim)" }}
                   >
-                    The server saves decisions, but cannot store human reasons
-                    yet. Your reason appears only in a downloadable receipt.
-                    Download it before leaving this page.
+                    Your reason is saved with each successful decision. You can also download a receipt.
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <button
                       className="btn btn-primary btn-sm"
-                      disabled={!reason.trim() || busy}
+                      disabled={busy}
                       onClick={() => setConfirm("approve")}
                     >
                       Approve {batch.length} selected
                     </button>
                     <button
                       className="btn btn-sm"
-                      disabled={!reason.trim() || busy}
+                      disabled={busy}
                       onClick={() => setConfirm("reject")}
                     >
                       Reject {batch.length} selected
                     </button>
                   </div>
+                  {mergeOptions.length > 0 && <div className="flex flex-wrap gap-2 items-center">
+                    <label className="text-[13px]">Merge selected into <select className="field p-2" value={mergeTarget} disabled={busy} onChange={e => setMergeTarget(e.target.value)}><option value="">Choose a target</option>{mergeOptions.map(target => <option key={target} value={target}>{words(target)}</option>)}</select></label>
+                    <button className="btn btn-sm" disabled={!mergeOptions.includes(mergeTarget) || busy} onClick={() => setConfirm("merge")}>Reject and merge {batch.length} selected</button>
+                  </div>}
                 </>
               )}
             </div>
@@ -293,12 +299,12 @@ export default function Review({
                     type="checkbox"
                     aria-label={`Select ${words(d.name)}`}
                     disabled={busy}
-                    checked={checked.includes(d.id)}
+                    checked={checked.some(row => row.id === d.id)}
                     onChange={(e) =>
                       setChecked(
                         e.target.checked
-                          ? [...checked, d.id]
-                          : checked.filter((id) => id !== d.id),
+                          ? [...checked, d]
+                          : checked.filter((row) => row.id !== d.id),
                       )
                     }
                   />
@@ -324,7 +330,9 @@ export default function Review({
             ))}
             {shown.length === 0 && (
               <li className="p-4 text-[13px]">
-                {waiting === 0 && status === "proposed"
+                {newItems.length > 0 && status === "proposed"
+                  ? "New suggestions are ready. Use the notice above to show them."
+                  : waiting === 0 && status === "proposed"
                   ? "Nothing is waiting for review. Use All statuses to inspect earlier decisions."
                   : "No definitions match. Change the search or filters."}
               </li>
@@ -346,11 +354,12 @@ export default function Review({
               </button>
               <h3 className="section-title mb-3">{words(selected.name)}</h3>
               <Definition
-                key={selected.id}
+                key={`${selected.id}:${reviewEpoch}`}
                 definition={selected}
                 data={data}
                 isOwner={owner}
                 locked={busy}
+                initialReason={stale.some(d => d.id === selected.id) ? receipt?.reason : undefined}
               />
             </>
           ) : (
@@ -365,14 +374,20 @@ export default function Review({
         <section role="status" className="ledger p-4 flex flex-col gap-3">
           <h3 className="section-title">Batch results</h3>
           <p className="text-[13px]">
-            Reason for your receipt: {receipt.reason}
+            Recorded reason: {receipt.reason}
           </p>
           <ul className="text-[13px] max-h-60 overflow-auto">
-            {receipt.results.map((r, i) => (
-              <li key={i}>
+            {receipt.results.map(r => {
+              const before = stale.find(d => d.id === r.id);
+              const after = current.find(d => d.id === r.id);
+              return <li key={r.id} className="py-2 [overflow-wrap:anywhere]">
                 {r.name}: {r.result}
-              </li>
-            ))}
+                {before && after && <div className="flex flex-col gap-2 mt-2">
+                  <RevisionChanges before={before} after={after} />
+                  <button aria-label={`Review changes for ${r.name}`} className="btn btn-sm self-start" onClick={() => { setReviewEpoch(value => value + 1); update({ selected: r.id }); }}>Review changes</button>
+                </div>}
+              </li>;
+            })}
           </ul>
           <button className="btn btn-sm self-start" onClick={download}>
             Download receipt
@@ -381,13 +396,13 @@ export default function Review({
       )}
       <ConfirmDialog
         open={confirm !== null}
-        title={`${confirm === "approve" ? "Approve" : "Reject"} ${batch.length} selected definitions?`}
+        title={`${confirm === "approve" ? "Approve" : confirm === "merge" ? "Reject and merge" : "Reject"} ${batch.length} selected definitions?`}
         confirmLabel={
           busy
             ? "Saving decisions…"
             : confirm === "approve"
               ? "Approve selected"
-              : "Reject selected"
+              : confirm === "merge" ? "Reject and merge selected" : "Reject selected"
         }
         busy={busy}
         onCancel={() => setConfirm(null)}
@@ -396,7 +411,7 @@ export default function Review({
         <p>
           {confirm === "approve"
             ? "AI apps will be able to use the approved definitions. Required kinds are decided first. Dependencies can still refuse individual decisions."
-            : "New writes under rejected definitions may be refused. No selected definition will be merged."}
+            : confirm === "merge" ? `New writes under each selected definition will use ${words(mergeTarget)}. Existing objects stay where they are.` : "New writes under rejected definitions may be refused. No selected definition will be merged."}
         </p>
         <ul className="max-h-40 overflow-auto list-disc pl-5">
           {batch.map((d) => (
@@ -405,11 +420,10 @@ export default function Review({
             </li>
           ))}
         </ul>
-        <p>Reason for your receipt: {reason}</p>
+        <p>Recorded reason: {reason}</p>
         <p>
           Decisions run one at a time. Some may succeed while others fail.
-          Changed definitions are skipped; simultaneous owner decisions cannot
-          be locked by this API.
+          The server refuses changed definitions. Review those again before retrying.
         </p>
       </ConfirmDialog>
     </>

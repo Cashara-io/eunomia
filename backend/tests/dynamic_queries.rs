@@ -302,6 +302,72 @@ async fn settings_and_connectors(app: &TestApp) {
     }
 }
 
+/// These builders have fixed SQL, with no optional clauses. Exercise both active states,
+/// empty/populated selections and routing, and successful/stale/foreign credential generations.
+fn composio_queries(app: &TestApp) -> impl std::future::Future<Output = ()> + '_ {
+    Box::pin(async move {
+        use eunomia_backend::connectors::composio::storage;
+        let db = app.db().await;
+        let owner = &app.user.id;
+        let key = &app.state.settings.encryption_key;
+        let original = storage::load(&db, owner).await.unwrap();
+        assert!(!storage::select(&db, owner, &original, json!({}), json!({}), true).await.unwrap());
+        let signed = storage::replace(&db, key, owner, &original, &json!({"access_token":"fixture-token"})).await.unwrap().unwrap();
+        assert!(storage::ensure_active(&db, owner, &signed).await.is_err(), "sign-in alone does not enable sync");
+        for enabled in [false, true] {
+            for config in [json!({}), json!({"apps":[{"toolkit":"googledrive","account":"fixture"}]})] {
+                for routing in [json!({}), json!({"default_vault":"vault:fixture"})] {
+                    let row = storage::load(&db, owner).await.unwrap();
+                    assert!(storage::select(&db, owner, &row, config.clone(), routing, enabled).await.unwrap());
+                    let row = storage::load(&db, owner).await.unwrap();
+                    assert_eq!(storage::ensure_active(&db, owner, &row).await.is_ok(), enabled);
+                }
+            }
+        }
+        let previous = storage::load(&db, owner).await.unwrap();
+        let rotated = storage::replace(&db, key, owner, &previous, &json!({"access_token":"rotated-fixture-token"})).await.unwrap().unwrap();
+        assert!(storage::replace(&db, key, owner, &previous, &json!({"access_token":"stale"})).await.unwrap().is_none());
+        assert!(storage::ensure_active(&db, owner, &previous).await.is_err());
+        storage::ensure_active(&db, owner, &rotated).await.unwrap();
+        assert!(!storage::select(&db, owner, &previous, json!({}), json!({}), true).await.unwrap());
+        let other = surrealdb::types::RecordId::new("user", "foreign-composio-owner");
+        assert!(storage::replace(&db, key, &other, &rotated, &json!({"access_token":"foreign"})).await.unwrap().is_none());
+        assert!(storage::ensure_active(&db, &other, &rotated).await.is_err());
+        assert!(!storage::select(&db, &other, &rotated, json!({}), json!({}), true).await.unwrap());
+        storage::delete_tokens(&db, &other, &rotated.id).await.unwrap();
+        storage::ensure_active(&db, owner, &rotated).await.unwrap();
+        storage::delete_tokens(&db, owner, &rotated.id).await.unwrap();
+        assert!(storage::ensure_active(&db, owner, &rotated).await.is_err());
+        let disconnected = storage::load(&db, owner).await.unwrap();
+        assert!(disconnected.credentials_encrypted.is_empty());
+        assert!(!storage::select(&db, owner, &disconnected, json!({}), json!({}), true).await.unwrap());
+        assert!(storage::replace(&db, key, owner, &rotated, &json!({"access_token":"stale"})).await.unwrap().is_none());
+    })
+}
+
+fn sync_relation_queries(app: &TestApp) -> impl std::future::Future<Output = ()> + '_ {
+    Box::pin(async move {
+        let db = app.db().await;
+        // Empty input skips the insert, one edge reaches it, and 205 distinct edges span three batches.
+        // Each destination is repeated to exercise the deduplication path too.
+        for size in [0, 1, 205] {
+            let links: Vec<_> = (0..size).flat_map(|i| {
+                let link = json!({"target":format!("fixture:note:{i}"),"rel":"wikilink"});
+                [link.clone(), link]
+            }).collect();
+            let env: cs::Envelope = serde_json::from_value(json!({
+                "id":"fixture:note:origin", "source":"fixture", "type":"note", "external_id":"origin",
+                "title":"Relation fixture", "body_text":"links", "links":links,
+            })).unwrap();
+            let (record, _) = Box::pin(cs::upsert(&db, &app.user.id, &env)).await.unwrap();
+            let mut result = db.test_raw().query("SELECT count() AS count FROM linked_to WHERE in = $id GROUP ALL")
+                .bind(("id", record.rid.unwrap())).await.unwrap().check().unwrap();
+            let row: Option<Value> = result.take(0).unwrap();
+            assert_eq!(row.and_then(|v| v["count"].as_u64()).unwrap_or(0), size);
+        }
+    })
+}
+
 async fn export_and_replay(app: &TestApp) {
     let (status, out) = app.http("GET", "/api/export", None, true).await;
     assert_eq!(status, 200, "{out}");
@@ -349,29 +415,45 @@ fn dynamic_names_in_source() -> BTreeSet<String> {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn every_dynamic_builder_runs_in_every_combination() {
-    // the replay step needs stored arguments (the default keeps only a hash and shape)
-    unsafe { std::env::set_var("CAPSULE_ARGS", "redacted") };
-    let app = TestApp::new().await;
-    plant_records(&app).await;
-    let (_, vaults) = app.http("GET", "/api/vaults", None, true).await;
-    let vault = vaults["results"].as_array().unwrap()[0]["id"].as_str().unwrap();
-    for kind in KINDS {
-        let (status, body) = app.http("GET", &format!("/api/vaults/{vault}/ontology/objects?kind={kind}"), None, true).await;
-        assert_eq!(status, 200, "{body}");
-    }
-    cache_searches(&app).await;
-    generic_tools(&app).await;
-    entities_and_vaults(&app).await;
-    settings_and_connectors(&app).await;
-    export_and_replay(&app).await;
+    // The combined builder scenario contains large query futures. Keep its state off the test-thread stack.
+    Box::pin(async {
+        // the replay step needs stored arguments (the default keeps only a hash and shape)
+        unsafe { std::env::set_var("CAPSULE_ARGS", "redacted") };
+        let app = TestApp::new().await;
+        plant_records(&app).await;
+        let (_, vaults) = app.http("GET", "/api/vaults", None, true).await;
+        let vault = vaults["results"].as_array().unwrap()[0]["id"].as_str().unwrap();
+        for kind in KINDS {
+            let (status, body) = app.http("GET", &format!("/api/vaults/{vault}/ontology/objects?kind={kind}"), None, true).await;
+            assert_eq!(status, 200, "{body}");
+        }
+        for newest in [false, true] {
+            for mask in 0..64 {
+                let mut params = url::form_urlencoded::Serializer::new(String::new());
+                params.append_pair("newest", if newest { "true" } else { "false" });
+                for (bit, key, value) in [(0,"actor_type","user"),(1,"action","approved"),(2,"definition_type","kind"),(3,"kind","shop"),(4,"before","100"),(5,"name","shop")] {
+                    if mask & (1 << bit) != 0 { params.append_pair(key, value); }
+                }
+                let (status, body) = app.http("GET", &format!("/api/vaults/{vault}/ontology/activity?{}", params.finish()), None, true).await;
+                assert_eq!(status, 200, "activity filter combination {mask}: {body}");
+            }
+        }
+        cache_searches(&app).await;
+        generic_tools(&app).await;
+        entities_and_vaults(&app).await;
+        settings_and_connectors(&app).await;
+        composio_queries(&app).await;
+        sync_relation_queries(&app).await;
+        export_and_replay(&app).await;
 
-    // the control-database dynamic statement (the legacy move) runs on every boot
-    eunomia_backend::provisioning::legacy::move_if_needed(app.state.provisioner.as_ref().unwrap(), &app.state.control, &app.state.settings).await.unwrap();
+        // the control-database dynamic statement (the legacy move) runs on every boot
+        eunomia_backend::provisioning::legacy::move_if_needed(app.state.provisioner.as_ref().unwrap(), &app.state.control, &app.state.settings).await.unwrap();
 
-    let seen: BTreeSet<String> = eunomia_backend::store::DYNAMIC_SEEN.lock().unwrap().iter().map(|s| s.to_string()).collect();
-    let in_source = dynamic_names_in_source();
-    assert!(in_source.len() >= 20, "source scan found only {in_source:?}");
-    let untested: Vec<_> = in_source.difference(&seen).collect();
-    assert!(untested.is_empty(), "dynamic builders no case here reached: {untested:?}");
-    assert_eq!(eunomia_backend::pool::NO_ORG_CONTEXT.load(std::sync::atomic::Ordering::Relaxed), 0);
+        let seen: BTreeSet<String> = eunomia_backend::store::DYNAMIC_SEEN.lock().unwrap().iter().map(|s| s.to_string()).collect();
+        let in_source = dynamic_names_in_source();
+        assert!(in_source.len() >= 20, "source scan found only {in_source:?}");
+        let untested: Vec<_> = in_source.difference(&seen).collect();
+        assert!(untested.is_empty(), "dynamic builders no case here reached: {untested:?}");
+        assert_eq!(eunomia_backend::pool::NO_ORG_CONTEXT.load(std::sync::atomic::Ordering::Relaxed), 0);
+    }).await;
 }

@@ -33,6 +33,7 @@ const ontology = (): OntologyOut => ({
   strict: false,
   links: [],
   kinds: Array.from({ length: 19 }, (_, i) => ({
+    revision: 1,
     kind: `studio_${i}`,
     status: "proposed",
     description: "A proposed business kind",
