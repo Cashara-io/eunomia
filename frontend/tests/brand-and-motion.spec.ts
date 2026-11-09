@@ -316,11 +316,7 @@ for (const reduced of [false, true])
       "data-text-morph",
       reduced ? "off" : "on",
     );
-    // Torph loads asynchronously. Wait for its real DOM before changing the value.
-    if (!reduced)
-      await expect(
-        review.locator('[aria-hidden="true"] span').first(),
-      ).toBeAttached();
+    await expect(review.locator("[data-text-morph]")).toHaveText("19");
     await screenshot(page, reduced ? "review-reduced" : "count-before");
     const bounds = await page
       .getByRole("navigation", { name: "Ontology views" })
@@ -504,7 +500,7 @@ for (const mode of ["enabled", "disabled", "reduced", "desktop"])
       await page.getByRole("button", { name: "Approve", exact: true }).click();
       await expect(
         page
-          .locator("[data-text-morph] > .sr-only")
+          .locator("[data-text-morph]")
           .filter({ hasText: /^18$/ })
           .last(),
       ).toBeAttached();

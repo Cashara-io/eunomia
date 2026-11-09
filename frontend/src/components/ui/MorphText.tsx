@@ -1,11 +1,9 @@
 "use client";
 
-import { lazy, Suspense, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import { formatNumber } from "@/lib/numbers";
+import styles from "./MorphText.module.css";
 
-const TextMorph = lazy(() =>
-  import("torph/react").then((m) => ({ default: m.TextMorph })),
-);
 const subscribe = (notify: () => void) => {
   const query = window.matchMedia("(prefers-reduced-motion: reduce)");
   query.addEventListener("change", notify);
@@ -24,19 +22,12 @@ export default function MorphText({
   const motionReduced = useSyncExternalStore(subscribe, reduced, () => true);
   const still = motionReduced || children.length > 48;
   return (
-    <span className={className} data-text-morph={still ? "off" : "on"}>
-      <span className="sr-only">{children}</span>
-      <span aria-hidden="true">
-        {still ? (
-          children
-        ) : (
-          <Suspense fallback={children}>
-            <TextMorph duration={220} respectReducedMotion>
-              {children}
-            </TextMorph>
-          </Suspense>
-        )}
-      </span>
+    <span
+      key={children}
+      className={`${className ?? ""} ${still ? "" : styles.enter}`}
+      data-text-morph={still ? "off" : "on"}
+    >
+      {children}
     </span>
   );
 }
