@@ -1,0 +1,13 @@
+   Compiling eunomia-backend v2.2.0 (/Users/avi/.t3/worktrees/eunomia/t3-abcc007f/backend)
+    Finished `test` profile [unoptimized] target(s) in 2.44s
+     Running tests/chat_ui.rs (backend/target/debug/deps/chat_ui-05ae49ced47c708e)
+
+running 1 test
+PLAN 0: Object(Object({"attributes": Object(Object({"expr": String("id")})), "children": Array(Array([Object(Object({"attributes": Object(Object({"access": String("[vault:p5010280ee775609f274, 'sample']"), "direction": String("Forward"), "index": String("entity_vault_kind_idx"), "limit": String("5001"), "predicate": String("vault = vault:p5010280ee775609f274 AND kind = 'sample'")})), "context": String("Db"), "operator": String("IndexScan")}))])), "context": String("Db"), "expressions": Array(Array([Object(Object({"role": String("expr"), "sql": String("id")}))])), "operator": String("ProjectValue")}))
+PLAN 1: Object(Object({"attributes": Object(Object({"projections": String("entity, property, value_num")})), "children": Array(Array([Object(Object({"attributes": Object(Object({"limit": String("1")})), "children": Array(Array([Object(Object({"attributes": Object(Object({"limit": String("1"), "sort_keys": String("as_of DESC, created_at DESC")})), "children": Array(Array([Object(Object({"attributes": Object(Object({"predicate": String("vault = vault:p5010280ee775609f274")})), "children": Array(Array([Object(Object({"attributes": Object(Object({"access": String("[entity:scale_0, ontology_property:p28dbae2f8819c240e30] LessThanEqual d'2026-12-31T00:00:00Z'"), "direction": String("Backward"), "index": String("entity_property_entity_idx")})), "context": String("Db"), "operator": String("IndexScan")}))])), "context": String("Db"), "expressions": Array(Array([Object(Object({"role": String("predicate"), "sql": String("vault = vault:p5010280ee775609f274")}))])), "operator": String("Filter")}))])), "context": String("Db"), "operator": String("SortTopKByKey")}))])), "context": String("Db"), "expressions": Array(Array([Object(Object({"role": String("limit"), "sql": String("1")}))])), "operator": String("Limit")}))])), "context": String("Db"), "operator": String("SelectProject")}))
+SCALE bucket=false elapsed_ms=1196 groups=5000 truncated=true
+SCALE bucket=true elapsed_ms=2121 groups=12 truncated=false
+test dataset_scale_grouped_and_bucketed ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 12.68s
+

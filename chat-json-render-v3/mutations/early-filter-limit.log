@@ -1,0 +1,19 @@
+   Compiling eunomia-backend v2.2.0 (/Users/avi/.t3/worktrees/eunomia/t3-abcc007f/backend)
+    Finished `test` profile [unoptimized] target(s) in 31.72s
+     Running tests/chat_ui.rs (backend/target/debug/deps/chat_ui-05ae49ced47c708e)
+
+running 1 test
+
+thread 'dataset_filter_limit' (69116113) panicked at tests/chat_ui.rs:221:5:
+{"view":"ui","spec":{"root":"a","elements":{"a":{"type":"Table","props":{"title":"Rows","summary":"Approved values","data":{"$state":"/sources/sample"}}}}},"data":{"sources":{"sample":{"rows":[{"entity_id":"entity:gsc0dgbjpsnpyqh9wtey","name":"Two","amount":20.75},{"entity_id":"entity:kk1e5g741qrogr9jsncz","name":"One","amount":10.25}],"columns":[{"key":"amount","datatype":"money","unit":"AUD"}],"totals":{"amount":{"sum":31.0,"avg":15.5,"count":2.0,"min":10.25,"max":20.75,"median":15.5,"distinct":2.0}},"distributions":{"amount":{"bins":[{"start":10.25,"end":15.5,"count":1},{"start":15.5,"end":20.75,"count":1}],"box":[{"min":10.25,"max":20.75,"q1":12.875,"median":15.5,"q3":18.125}],"density":[{"value":12.875,"count":1},{"value":18.125,"count":1}]}},"total_rows":2,"truncated":false,"status":"approved","warnings":[]}}},"text":"Analysis\nRows\n\nSource sample:\nStatus: approved. 2 rows.\n- name: Two; amount: 20.75 AUD\n- name: One; amount: 10.25 AUD\nTotals: {\"amount\":{\"sum\":31.0,\"avg\":15.5,\"count\":2.0,\"min\":10.25,\"max\":20.75,\"median\":15.5,\"distinct\":2.0}}\nDistributions: {\"amount\":{\"bins\":[{\"start\":10.25,\"end\":15.5,\"count\":1},{\"start\":15.5,\"end\":20.75,\"count\":1}],\"box\":[{\"min\":10.25,\"max\":20.75,\"q1\":12.875,\"median\":15.5,\"q3\":18.125}],\"density\":[{\"value\":12.875,\"count\":1},{\"value\":18.125,\"count\":1}]}}\n\n"}
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test dataset_filter_limit ... FAILED
+
+failures:
+
+failures:
+    dataset_filter_limit
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 7 filtered out; finished in 5.76s
+
+error: test failed, to rerun pass `--test chat_ui`

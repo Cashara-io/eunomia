@@ -1,0 +1,19 @@
+   Compiling eunomia-backend v2.2.0 (/Users/avi/.t3/worktrees/eunomia/t3-abcc007f/backend)
+    Finished `test` profile [unoptimized] target(s) in 30.43s
+     Running tests/chat_ui.rs (backend/target/debug/deps/chat_ui-05ae49ced47c708e)
+
+running 1 test
+
+thread 'dataset_denies_vault_restricted_token' (69085063) panicked at tests/chat_ui.rs:97:5:
+200 OK: {"view":"ui","spec":{"root":"a","elements":{"a":{"type":"Table","props":{"title":"Rows","summary":"Approved values","data":{"$state":"/sources/sample"}}}}},"data":{"sources":{"sample":{"rows":[{"entity_id":"entity:nb5ux8w74spwthkyucgt","name":"One","amount":10.25,"share":35.7},{"entity_id":"entity:pe2qhe5x52qt2g1a7k77","name":"Two","amount":20.75,"share":35.7}],"columns":[{"key":"amount","datatype":"money","unit":"AUD"},{"key":"share","datatype":"percent","unit":"%"}],"totals":{"amount":{"sum":31.0,"avg":15.5,"count":2.0,"min":10.25,"max":20.75,"median":15.5,"distinct":2.0},"share":{"sum":71.4,"avg":35.7,"count":2.0,"min":35.7,"max":35.7,"median":35.7,"distinct":1.0}},"distributions":{"amount":{"bins":[{"start":10.25,"end":15.5,"count":1},{"start":15.5,"end":20.75,"count":1}],"box":[{"min":10.25,"max":20.75,"q1":12.875,"median":15.5,"q3":18.125}],"density":[{"value":12.875,"count":1},{"value":18.125,"count":1}]},"share":{"bins":[{"start":35.7,"end":36.2,"count":2},{"start":36.2,"end":36.7,"count":0}],"box":[{"min":35.7,"max":35.7,"q1":35.7,"median":35.7,"q3":35.7}],"density":[{"value":35.95,"count":2},{"value":36.45,"count":0}]}},"total_rows":2,"truncated":false,"status":"approved","warnings":[]}}},"text":"Analysis\nRows\n\nSource sample:\nStatus: approved. 2 rows.\n- name: One; amount: 10.25 AUD; share: 35.7%\n- name: Two; amount: 20.75 AUD; share: 35.7%\nTotals: {\"amount\":{\"sum\":31.0,\"avg\":15.5,\"count\":2.0,\"min\":10.25,\"max\":20.75,\"median\":15.5,\"distinct\":2.0},\"share\":{\"sum\":71.4,\"avg\":35.7,\"count\":2.0,\"min\":35.7,\"max\":35.7,\"median\":35.7,\"distinct\":1.0}}\nDistributions: {\"amount\":{\"bins\":[{\"start\":10.25,\"end\":15.5,\"count\":1},{\"start\":15.5,\"end\":20.75,\"count\":1}],\"box\":[{\"min\":10.25,\"max\":20.75,\"q1\":12.875,\"median\":15.5,\"q3\":18.125}],\"density\":[{\"value\":12.875,\"count\":1},{\"value\":18.125,\"count\":1}]},\"share\":{\"bins\":[{\"start\":35.7,\"end\":36.2,\"count\":2},{\"start\":36.2,\"end\":36.7,\"count\":0}],\"box\":[{\"min\":35.7,\"max\":35.7,\"q1\":35.7,\"median\":35.7,\"q3\":35.7}],\"density\":[{\"value\":35.95,\"count\":2},{\"value\":36.45,\"count\":0}]}}\n\n"}
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test dataset_denies_vault_restricted_token ... FAILED
+
+failures:
+
+failures:
+    dataset_denies_vault_restricted_token
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 6 filtered out; finished in 5.63s
+
+error: test failed, to rerun pass `--test chat_ui`

@@ -1,0 +1,72 @@
+[
+  {
+    "guard": "same-org nonmember",
+    "test": "--test chat_ui dataset_denies_same_org_nonmember",
+    "mutation_detected": true
+  },
+  {
+    "guard": "restricted token",
+    "test": "--test chat_ui dataset_denies_vault_restricted_token",
+    "mutation_detected": true
+  },
+  {
+    "guard": "cross-vault link",
+    "test": "--test chat_ui dataset_hides_cross_vault_links",
+    "mutation_detected": true
+  },
+  {
+    "guard": "strict kind",
+    "test": "--test chat_ui dataset_strict_kind_guard",
+    "mutation_detected": true
+  },
+  {
+    "guard": "typed Stat scalar",
+    "test": "--lib views::ui::tests::numeric_bypass_matrix",
+    "mutation_detected": true
+  },
+  {
+    "guard": "typed chart/table columns",
+    "test": "--lib views::ui::tests::numeric_bypass_matrix",
+    "mutation_detected": true
+  },
+  {
+    "guard": "distribution shape",
+    "test": "--lib views::ui::tests::numeric_bypass_matrix",
+    "mutation_detected": true
+  },
+  {
+    "guard": "model-written digits",
+    "test": "--lib views::ui::tests::numeric_bypass_matrix",
+    "mutation_detected": true
+  },
+  {
+    "guard": "mixed units",
+    "test": "--test chat_ui dataset_cutoff_currency_and_mixed_units",
+    "mutation_detected": true
+  },
+  {
+    "guard": "historical cutoff",
+    "test": "--test chat_ui dataset_cutoff_currency_and_mixed_units",
+    "mutation_detected": true
+  },
+  {
+    "guard": "case-insensitive distinct",
+    "test": "--lib ontology::metric::tests::shared_aggregate_semantics_nulls_empty_and_case",
+    "mutation_detected": true
+  },
+  {
+    "guard": "empty sum parity",
+    "test": "--lib ontology::metric::tests::shared_aggregate_semantics_nulls_empty_and_case",
+    "mutation_detected": true
+  },
+  {
+    "guard": "numeric aggregate datatype",
+    "test": "--test chat_ui dataset_resolves_real_typed_values_and_mcp_catalog",
+    "mutation_detected": true
+  },
+  {
+    "guard": "early filter limit",
+    "test": "--test chat_ui dataset_filter_limit",
+    "mutation_detected": true
+  }
+]

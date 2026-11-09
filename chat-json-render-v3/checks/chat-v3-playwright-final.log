@@ -1,0 +1,19 @@
+
+Running 9 tests using 2 workers
+
+(node:42934) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:42935) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓  2 tests/chat-json-render.spec.ts:8:5 › generated catalog copies match their definition and Docker contexts (37ms)
+  ✓  1 tests/every-tool.spec.ts:14:5 › every MCP tool works end to end (3.0s)
+  ✓  3 tests/chat-json-render.spec.ts:270:9 › catalog and chart fixtures in light at 1280px (10.7s)
+  ✓  4 tests/chat-json-render.spec.ts:270:9 › catalog and chart fixtures in light at 390px (10.6s)
+  ✓  5 tests/chat-json-render.spec.ts:270:9 › catalog and chart fixtures in dark at 1280px (10.6s)
+  ✓  6 tests/chat-json-render.spec.ts:270:9 › catalog and chart fixtures in dark at 390px (10.4s)
+  ✓  7 tests/chat-json-render.spec.ts:433:7 › dense networks and nested cards at 1280px (2.1s)
+  ✓  8 tests/chat-json-render.spec.ts:433:7 › dense networks and nested cards at 390px (2.1s)
+  ✓  9 tests/chat-json-render.spec.ts:571:5 › typed money keeps its currency and missing values are unavailable (1.8s)
+
+  9 passed (49.1s)

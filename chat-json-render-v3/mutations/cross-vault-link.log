@@ -1,0 +1,19 @@
+   Compiling eunomia-backend v2.2.0 (/Users/avi/.t3/worktrees/eunomia/t3-abcc007f/backend)
+    Finished `test` profile [unoptimized] target(s) in 30.13s
+     Running tests/chat_ui.rs (backend/target/debug/deps/chat_ui-05ae49ced47c708e)
+
+running 1 test
+
+thread 'dataset_hides_cross_vault_links' (69086330) panicked at tests/chat_ui.rs:117:5:
+assertion failed: !cross.to_string().contains("Foreign supplier")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test dataset_hides_cross_vault_links ... FAILED
+
+failures:
+
+failures:
+    dataset_hides_cross_vault_links
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 6 filtered out; finished in 6.44s
+
+error: test failed, to rerun pass `--test chat_ui`

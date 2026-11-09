@@ -1,0 +1,20 @@
+   Compiling eunomia-backend v2.2.0 (/Users/avi/.t3/worktrees/eunomia/t3-abcc007f/backend)
+    Finished `test` profile [unoptimized] target(s) in 31.69s
+     Running tests/chat_ui.rs (backend/target/debug/deps/chat_ui-05ae49ced47c708e)
+
+running 1 test
+
+thread 'dataset_resolves_real_typed_values_and_mcp_catalog' (69112780) panicked at tests/chat_ui.rs:74:5:
+assertion failed: app.tool("show_view",
+                text_sum).await.to_string().contains("numeric aggregate needs numeric property")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test dataset_resolves_real_typed_values_and_mcp_catalog ... FAILED
+
+failures:
+
+failures:
+    dataset_resolves_real_typed_values_and_mcp_catalog
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 6 filtered out; finished in 6.75s
+
+error: test failed, to rerun pass `--test chat_ui`

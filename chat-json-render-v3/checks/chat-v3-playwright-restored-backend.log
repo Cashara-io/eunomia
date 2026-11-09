@@ -1,0 +1,40 @@
+
+Running 9 tests using 2 workers
+
+(node:51221) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:51220) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 tests/every-tool.spec.ts:14:5 › every MCP tool works end to end (33ms)
+
+  ✓  2 tests/chat-json-render.spec.ts:8:5 › generated catalog copies match their definition and Docker contexts (36ms)
+  ✓  3 tests/chat-json-render.spec.ts:270:9 › catalog and chart fixtures in light at 1280px (8.3s)
+  ✓  4 tests/chat-json-render.spec.ts:270:9 › catalog and chart fixtures in light at 390px (7.4s)
+  ✓  5 tests/chat-json-render.spec.ts:270:9 › catalog and chart fixtures in dark at 1280px (8.0s)
+  ✓  6 tests/chat-json-render.spec.ts:270:9 › catalog and chart fixtures in dark at 390px (7.9s)
+  ✓  7 tests/chat-json-render.spec.ts:433:7 › dense networks and nested cards at 1280px (2.1s)
+  ✓  8 tests/chat-json-render.spec.ts:433:7 › dense networks and nested cards at 390px (2.1s)
+  ✓  9 tests/chat-json-render.spec.ts:571:5 › typed money keeps its currency and missing values are unavailable (1.9s)
+
+
+  1) tests/every-tool.spec.ts:14:5 › every MCP tool works end to end ───────────────────────────────
+
+    Error: expect(received).toBeTruthy()
+
+    Received: false
+
+       7 | async function account(request: APIRequestContext, prefix: string) {
+       8 |   const email = uniqueEmail(prefix);
+    >  9 |   expect((await request.post("/api/auth/register", { data: { email, password: "correct-horse-battery-staple" } })).ok()).toBeTruthy();
+         |                                                                                                                          ^
+      10 |   const token = (await (await request.post("/api/auth/tokens", { data: { name: prefix } })).json()).token as string;
+      11 |   return { email, token };
+      12 | }
+        at account (/Users/avi/.t3/worktrees/eunomia/t3-abcc007f/frontend/tests/every-tool.spec.ts:9:122)
+        at /Users/avi/.t3/worktrees/eunomia/t3-abcc007f/frontend/tests/every-tool.spec.ts:16:14
+
+    Error Context: test-results/every-tool-every-MCP-tool-works-end-to-end/error-context.md
+
+  1 failed
+    tests/every-tool.spec.ts:14:5 › every MCP tool works end to end ────────────────────────────────
+  8 passed (39.0s)

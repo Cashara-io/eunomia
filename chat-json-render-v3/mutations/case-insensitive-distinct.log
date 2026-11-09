@@ -1,0 +1,21 @@
+   Compiling eunomia-backend v2.2.0 (/Users/avi/.t3/worktrees/eunomia/t3-abcc007f/backend)
+    Finished `test` profile [unoptimized] target(s) in 1m 01s
+     Running unittests src/lib.rs (backend/target/debug/deps/eunomia_backend-a756209a4274e453)
+
+running 1 test
+
+thread 'ontology::metric::tests::shared_aggregate_semantics_nulls_empty_and_case' (69108830) panicked at src/ontology/metric.rs:1881:9:
+assertion `left == right` failed
+  left: Some(2.0)
+ right: Some(1.0)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test ontology::metric::tests::shared_aggregate_semantics_nulls_empty_and_case ... FAILED
+
+failures:
+
+failures:
+    ontology::metric::tests::shared_aggregate_semantics_nulls_empty_and_case
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 513 filtered out; finished in 0.02s
+
+error: test failed, to rerun pass `--lib`

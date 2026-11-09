@@ -1,0 +1,19 @@
+   Compiling eunomia-backend v2.2.0 (/Users/avi/.t3/worktrees/eunomia/t3-abcc007f/backend)
+    Finished `test` profile [unoptimized] target(s) in 1m 00s
+     Running unittests src/lib.rs (backend/target/debug/deps/eunomia_backend-a756209a4274e453)
+
+running 1 test
+
+thread 'views::ui::tests::numeric_bypass_matrix' (69093102) panicked at src/views/ui.rs:311:13:
+Line
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test views::ui::tests::numeric_bypass_matrix ... FAILED
+
+failures:
+
+failures:
+    views::ui::tests::numeric_bypass_matrix
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 513 filtered out; finished in 0.03s
+
+error: test failed, to rerun pass `--lib`

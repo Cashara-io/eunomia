@@ -1,0 +1,44 @@
+[
+  {
+    "answer": 1,
+    "question": "In memory space vault:p8329f790f7666a97ffc, show a Line chart of sample amount summed by month using the date property. Use show_view ui with a dataset source.",
+    "components": [
+      "Line"
+    ]
+  },
+  {
+    "answer": 2,
+    "question": "In memory space vault:p8329f790f7666a97ffc, show a Donut breakdown of sample amount summed by supplier. Use show_view ui with a dataset source.",
+    "components": [
+      "Donut"
+    ]
+  },
+  {
+    "answer": 3,
+    "question": "In memory space vault:p8329f790f7666a97ffc, show a Histogram distribution of the sample amount property. Use show_view ui with a dataset source and its server distributions.",
+    "components": [
+      "Histogram"
+    ]
+  },
+  {
+    "answer": 4,
+    "question": "In memory space vault:p8329f790f7666a97ffc, show a Scatter chart of sample quantity against amount. Use show_view ui with a dataset source.",
+    "components": [
+      "Scatter"
+    ]
+  },
+  {
+    "answer": 5,
+    "question": "In memory space vault:p8329f790f7666a97ffc, what if every sample amount increased by 10 percent? Use the approved total_amount metric and show the what-if with a Scenario block inside show_view ui.",
+    "components": [
+      "Scenario"
+    ]
+  },
+  {
+    "answer": 6,
+    "question": "In memory space vault:p8329f790f7666a97ffc, show a Table of sample supplier, amount, quantity and share with a totals row for amount and quantity. Bind the whole dataset so the totals come from the server. Use show_view ui.",
+    "components": [
+      "Table"
+    ]
+  }
+]

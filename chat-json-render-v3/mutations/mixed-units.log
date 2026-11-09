@@ -1,0 +1,19 @@
+   Compiling eunomia-backend v2.2.0 (/Users/avi/.t3/worktrees/eunomia/t3-abcc007f/backend)
+    Finished `test` profile [unoptimized] target(s) in 32.74s
+     Running tests/chat_ui.rs (backend/target/debug/deps/chat_ui-05ae49ced47c708e)
+
+running 1 test
+
+thread 'dataset_cutoff_currency_and_mixed_units' (69102670) panicked at tests/chat_ui.rs:160:5:
+{"view":"ui","spec":{"root":"a","elements":{"a":{"type":"Table","props":{"title":"Rows","summary":"Approved values","data":{"$state":"/sources/sample"}}}}},"data":{"sources":{"sample":{"rows":[{"entity_id":"entity:115dtjnelhleel4omtak","name":"One","amount":13.0},{"entity_id":"entity:21b1q238w24fuutlxl8t","name":"Two","amount":3.0}],"columns":[{"key":"amount","datatype":"money","unit":"AUD"}],"totals":{"amount":{"sum":16.0,"avg":8.0,"count":2.0,"min":3.0,"max":13.0,"median":8.0,"distinct":2.0}},"distributions":{"amount":{"bins":[{"start":3.0,"end":8.0,"count":1},{"start":8.0,"end":13.0,"count":1}],"box":[{"min":3.0,"max":13.0,"q1":5.5,"median":8.0,"q3":10.5}],"density":[{"value":5.5,"count":1},{"value":10.5,"count":1}]}},"total_rows":2,"truncated":false,"status":"approved","warnings":[]}}},"text":"Analysis\nRows\n\nSource sample:\nStatus: approved. 2 rows.\n- name: One; amount: 13.00 AUD\n- name: Two; amount: 3.00 AUD\nTotals: {\"amount\":{\"sum\":16.0,\"avg\":8.0,\"count\":2.0,\"min\":3.0,\"max\":13.0,\"median\":8.0,\"distinct\":2.0}}\nDistributions: {\"amount\":{\"bins\":[{\"start\":3.0,\"end\":8.0,\"count\":1},{\"start\":8.0,\"end\":13.0,\"count\":1}],\"box\":[{\"min\":3.0,\"max\":13.0,\"q1\":5.5,\"median\":8.0,\"q3\":10.5}],\"density\":[{\"value\":5.5,\"count\":1},{\"value\":10.5,\"count\":1}]}}\n\n"}
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test dataset_cutoff_currency_and_mixed_units ... FAILED
+
+failures:
+
+failures:
+    dataset_cutoff_currency_and_mixed_units
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 6 filtered out; finished in 5.85s
+
+error: test failed, to rerun pass `--test chat_ui`

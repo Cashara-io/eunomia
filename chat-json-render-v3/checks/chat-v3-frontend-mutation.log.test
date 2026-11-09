@@ -1,0 +1,37 @@
+
+Running 1 test using 1 worker
+
+(node:41737) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 tests/chat-json-render.spec.ts:571:5 › typed money keeps its currency and missing values are unavailable (6.0s)
+
+
+  1) tests/chat-json-render.spec.ts:571:5 › typed money keeps its currency and missing values are unavailable 
+
+    Error: expect(locator).toContainText(expected) failed
+
+    Locator: locator('[data-ui-component="Bar"]').first()
+    Expected substring: "No numeric values to show."
+    Received string:    "BarBarFixture data for component coverageA$0.00A$0.20A$0.40A$0.60A$0.80A$1.00AlphaBetaGammanameFixture data for component coverage"
+    Timeout: 5000ms
+
+    Call log:
+      - Expect "toContainText" with timeout 5000ms
+      - waiting for locator('[data-ui-component="Bar"]').first()
+        9 × locator resolved to <figure aria-label="Bar" data-ui-component="Bar" class="ui-section ui-chart ">…</figure>
+          - unexpected value "BarBarFixture data for component coverageA$0.00A$0.20A$0.40A$0.60A$0.80A$1.00AlphaBetaGammanameFixture data for component coverage"
+
+
+      588 |   await page.route("**/api/chat/threads/*/history", route => route.fulfill({ json: history([bad, usdView, groupView, countView, chartView]) }));
+      589 |   await page.goto("/chat");
+    > 590 |   await expect(page.locator('[data-ui-component="Bar"]').first()).toContainText("No numeric values to show.");
+          |                                                                   ^
+      591 |   await expect(page.locator('[data-ui-component="Bar"]').first().locator("svg")).toHaveCount(0);
+      592 |   await expect(page.locator('[data-ui-component="Stat"]').first()).toContainText("USD 120.25");
+      593 |   await expect(page.locator('[data-ui-component="Stat"]').last()).toContainText("1");
+        at /Users/avi/.t3/worktrees/eunomia/t3-abcc007f/frontend/tests/chat-json-render.spec.ts:590:67
+
+    Error Context: test-results/chat-json-render-typed-mon-ea93a-sing-values-are-unavailable/error-context.md
+
+  1 failed
+    tests/chat-json-render.spec.ts:571:5 › typed money keeps its currency and missing values are unavailable 

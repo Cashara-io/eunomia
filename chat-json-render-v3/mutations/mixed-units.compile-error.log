@@ -1,0 +1,44 @@
+   Compiling eunomia-backend v2.2.0 (/Users/avi/.t3/worktrees/eunomia/t3-abcc007f/backend)
+error[E0277]: the trait bound `{integer}: QueryResult<i64>` is not satisfied
+   --> tests/chat_ui.rs:191:35
+    |
+191 |     let entities: i64=counts.take(0).unwrap();
+    |                              ---- ^ the trait `QueryResult<i64>` is not implemented for `{integer}`
+    |                              |
+    |                              required by a bound introduced by this call
+    |
+    = help: the following other types implement trait `QueryResult<Response>`:
+              `usize` implements `QueryResult<HashSet<T>>`
+              `usize` implements `QueryResult<LinkedList<T>>`
+              `usize` implements `QueryResult<Option<T>>`
+              `usize` implements `QueryResult<Vec<T>>`
+              `usize` implements `QueryResult<surrealdb::surrealdb_types::Value>`
+note: required by a bound in `IndexedResults::take`
+   --> /Users/avi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/surrealdb-3.3.5/src/method/query.rs:633:40
+    |
+633 |     pub fn take<R>(&mut self, index: impl opt::QueryResult<R>) -> Result<R>
+    |                                           ^^^^^^^^^^^^^^^^^^^ required by this bound in `IndexedResults::take`
+
+error[E0277]: the trait bound `{integer}: QueryResult<i64>` is not satisfied
+   --> tests/chat_ui.rs:192:36
+    |
+192 |     let histories: i64=counts.take(1).unwrap();
+    |                               ---- ^ the trait `QueryResult<i64>` is not implemented for `{integer}`
+    |                               |
+    |                               required by a bound introduced by this call
+    |
+    = help: the following other types implement trait `QueryResult<Response>`:
+              `usize` implements `QueryResult<HashSet<T>>`
+              `usize` implements `QueryResult<LinkedList<T>>`
+              `usize` implements `QueryResult<Option<T>>`
+              `usize` implements `QueryResult<Vec<T>>`
+              `usize` implements `QueryResult<surrealdb::surrealdb_types::Value>`
+note: required by a bound in `IndexedResults::take`
+   --> /Users/avi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/surrealdb-3.3.5/src/method/query.rs:633:40
+    |
+633 |     pub fn take<R>(&mut self, index: impl opt::QueryResult<R>) -> Result<R>
+    |                                           ^^^^^^^^^^^^^^^^^^^ required by this bound in `IndexedResults::take`
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `eunomia-backend` (test "chat_ui") due to 2 previous errors
+warning: build failed, waiting for other jobs to finish...
