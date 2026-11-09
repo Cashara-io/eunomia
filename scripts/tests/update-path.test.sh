@@ -73,7 +73,7 @@ VOLATILE="${UPDATE_PATH_VOLATILE:-job job_leader audit_event audit_log tool_usag
 # and link types a vault's owners reviewed; 0034_ontology_properties: typed properties and their values; 0035_ontology_metrics: certified metrics). Where <from-tag> lacks one, the update must add it to
 # every org database, holding only what the backfill writes (new_rows below). Their counts are checked
 # on their own, so they are left out of the before/after diff.
-NEW_TABLES="${UPDATE_PATH_NEW_TABLES:-change change_seq redact_backfill peer_instance peer_share peer_link peer_item credential_ref secret_provider secret_request vault_secret ontology_kind ontology_link ontology_property entity_property ontology_metric composio_file}"
+NEW_TABLES="${UPDATE_PATH_NEW_TABLES:-change change_seq redact_backfill peer_instance peer_share peer_link peer_item credential_ref secret_provider secret_request vault_secret ontology_kind ontology_link ontology_property entity_property ontology_metric ontology_event composio_file}"
 BUILT_FROM=0
 # A fake GitHub token shape (built here, never a real one) in one fact: the backfill must redact it.
 FAKE_GH="ghp_$(printf 'Ab1Cd2Ef3G%.0s' 1 2 3 4)"
@@ -625,6 +625,7 @@ diff "$W/reads-before.txt" "$W/reads-after.txt" | head -20
 # exact-scan fallback would hide a broken index, so this queries the index itself). Row counts: above.
 check "every org ledger has 0022_rebuild_vector_indexes" ledger_has 22 rebuild_vector_indexes
 check "every org ledger has 0037_ontology_coverage" ledger_has 37 ontology_coverage
+check "every org ledger has 0042_ontology_activity" ledger_has 42 ontology_activity
 check "every org defines the HNSW indexes" vector_indexes
 wait_vector_builds 300; check "the rebuilt vector indexes finished building" test $? -eq 0
 knn_live > "$W/knn-after.txt" 2>&1; rc=$?
@@ -832,32 +833,36 @@ if grep -q '\.ontology_kind ' "$W/new-expected.txt"; then
     \"properties\":[{\"kind\":\"product\",\"name\":\"price\",\"datatype\":\"money\",\"unit\":\"AUD\",\"description\":\"What one costs\"}],
     \"metrics\":[{\"kind\":\"product\",\"name\":\"total_price\",\"expr\":{\"agg\":\"sum\",\"property\":\"price\"},\"description\":\"All prices added up\"}]}" > "$W/onto-propose.json"
   check "ontology_propose: the kind, the money property and the metric, all proposed" jq -e '
-    .kinds == [{"kind": "product", "status": "proposed", "merge_into": null}]
-    and .properties == [{"kind": "product", "name": "price", "datatype": "money", "status": "proposed", "merge_into": null}]
+    ([.kinds[], .properties[], .metrics[]] | all(.revision | type == "number"))
+    and ([.kinds[] | del(.revision)] == [{"kind": "product", "status": "proposed", "merge_into": null}])
+    and ([.properties[] | del(.revision)] == [{"kind": "product", "name": "price", "datatype": "money", "status": "proposed", "merge_into": null}])
     and ([.metrics[] | select(.name == "total_price" and .status == "proposed")] | length == 1)' "$W/onto-propose.json"
   refused="$(mcp_refusal "$TOKEN_A" entity_set_property "{\"entity_id\":\"$LATTE\",\"property\":\"price\",\"value\":4.5}")"
   check "a value for a proposed property is refused" bash -c 'case "$1" in *"proposed, not approved"*) exit 0;; esac; exit 1' _ "$refused"
   check "the refused value wrote nothing" test "$(echo 'SELECT count() FROM entity_property GROUP ALL;' | sql "$ORG_A" | jq -r '.[0].result[0].count // 0')" = 0
 
   AUTH=(-H "Authorization: Bearer $TOKEN_A")
-  code="$(decide kinds '{"kind":"product","decision":{"action":"approve"}}')"
+  code="$(decide kinds '{"kind":"product","revision":1,"reason":"Checked after upgrade","decision":{"action":"approve"}}')"
   check "an agent's token cannot approve the kind (HTTP $code)" test "$code" = 403
-  code="$(decide properties '{"kind":"product","name":"price","decision":{"action":"approve"}}')"
+  code="$(decide properties '{"kind":"product","name":"price","revision":1,"reason":"Checked after upgrade","decision":{"action":"approve"}}')"
   check "an agent's token cannot approve the property (HTTP $code)" test "$code" = 403
-  code="$(decide metrics '{"kind":"product","name":"total_price","decision":{"action":"approve"}}')"
+  code="$(decide metrics '{"kind":"product","name":"total_price","revision":1,"reason":"Checked after upgrade","decision":{"action":"approve"}}')"
   check "an agent's token cannot approve the metric (HTTP $code)" test "$code" = 403
   mcp "$TOKEN_A" ontology_get "{\"vault_id\":\"$TEAM\"}" > "$W/onto-proposed.json"
   check "after the refused approvals all three are still proposed" jq -e '.kinds[] | select(.kind == "product")
     | .status == "proposed" and .properties[0].status == "proposed" and .metrics[0].status == "proposed"' "$W/onto-proposed.json"
   AUTH=(-b "$JAR_A")
-  code="$(decide kinds '{"kind":"product","decision":{"action":"approve"}}')"
+  code="$(decide kinds '{"kind":"product","revision":1,"reason":"Checked after upgrade","decision":{"action":"approve"}}')"
   check "the person approves the kind from their browser session (HTTP $code)" test "$code" = 200
-  code="$(decide properties '{"kind":"product","name":"price","decision":{"action":"approve"}}')"
+  code="$(decide properties '{"kind":"product","name":"price","revision":1,"reason":"Checked after upgrade","decision":{"action":"approve"}}')"
   check "the person approves the property (HTTP $code)" test "$code" = 200
-  code="$(decide metrics '{"kind":"product","name":"total_price","decision":{"action":"approve"}}')"
+  code="$(decide metrics '{"kind":"product","name":"total_price","revision":1,"reason":"Checked after upgrade","decision":{"action":"approve"}}')"
   check "the person approves the metric (HTTP $code)" test "$code" = 200
   check "the decide answer shows all three approved" jq -e '.kinds[] | select(.kind == "product")
     | .status == "approved" and .properties[0].status == "approved" and .properties[0].unit == "AUD" and .metrics[0].status == "approved"' "$W/decide.json"
+  curl -fsS -b "$JAR_A" "$BASE/api/vaults/$TEAM/ontology/activity?action=approved" > "$W/ontology-activity.json"
+  check "upgraded ontology decisions store reasons and revisions" jq -e '.events | length == 3 and all(.[]; .reason == "Checked after upgrade" and .revision == 2)' "$W/ontology-activity.json"
+
 
   mcp "$TOKEN_A" entity_set_property "{\"entity_id\":\"$LATTE\",\"property\":\"price\",\"value\":4.5}" > "$W/set-latte.json"
   mcp "$TOKEN_A" entity_set_property "{\"entity_id\":\"$MOCHA\",\"property\":\"price\",\"value\":6}" > "$W/set-mocha.json"

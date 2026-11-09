@@ -91,7 +91,7 @@ async fn proposals_wait_for_a_person_and_never_undo_a_decision() {
             }),
         )
         .await);
-    assert_eq!(out["kinds"], json!([{"kind": "customer", "status": "proposed", "merge_into": null}]));
+    assert_eq!(out["kinds"], json!([{"revision": 1, "kind": "customer", "status": "proposed", "merge_into": null}]));
     assert_eq!(out["links"][0]["status"], "proposed");
     let o = ok(app.tool("ontology_get", json!({})).await);
     let customer = kind(&o, "customer");
@@ -248,7 +248,7 @@ async fn only_a_vault_owner_in_the_browser_decides() {
     .await;
     ok(app.tool("memory_write", json!({"subject_name": "orders_db", "subject_kind": "db", "text": "orders_db is in Team", "vault_id": "Team"})).await);
     let path = format!("/api/vaults/{team_id}/ontology/kinds/decide");
-    let body = json!({"kind": "db", "decision": {"action": "approve"}});
+    let body = json!({"kind": "db", "revision": 0, "decision": {"action": "approve"}});
 
     // a member, in the browser
     let login = json!({"email": bob.email, "password": PASSWORD});
@@ -413,7 +413,7 @@ async fn a_property_row_from_before_source_maps_still_takes_proposals_after_the_
     let (status, body) = decide_property(&app, &vault, "product", "price", json!({"action": "describe", "description": "What one costs"})).await;
     assert_eq!(status, 200, "{body}");
     let mapped = json!({"source": "document", "record_type": "document:abc", "path": "price AUD"});
-    let again = ok(app.tool("ontology_propose", json!({"properties": [{"kind": "product", "name": "price", "datatype": "money", "source_map": [mapped.clone()]}]})).await);
+    let again = ok(app.tool("ontology_propose", json!({"properties": [{"kind": "product", "name": "price", "revision": 2, "datatype": "money", "source_map": [mapped.clone()]}]})).await);
     assert_eq!(again["properties"][0]["status"], "proposed");
     let o = ok(app.tool("ontology_get", json!({})).await);
     assert_eq!(property(&o, "product", "price")["source_map"], json!([mapped]));
@@ -432,14 +432,14 @@ async fn a_link_row_from_before_link_sources_still_takes_decisions_and_columns_a
         .check()
         .unwrap();
     // an agent's proposal, with no columns, still writes before the migration (a rolling upgrade)
-    ok(app.tool("ontology_propose", json!({"links": [{"from_kind": "product", "label": "supplied_by", "to_kind": "organisation", "reason": "again"}]})).await);
+    ok(app.tool("ontology_propose", json!({"links": [{"from_kind": "product", "label": "supplied_by", "to_kind": "organisation", "revision": 1, "reason": "again"}]})).await);
     db.test_raw().query(include_str!("../migrations/tenant/0038_ontology_link_source.surql")).await.unwrap().check().unwrap();
     let vault = personal(&app).await;
     let body = json!({"from_kind": "product", "label": "supplied_by", "to_kind": "organisation", "decision": {"action": "describe", "description": "Who sells it to us"}});
     let (status, body) = app.http_session("POST", &format!("/api/vaults/{vault}/ontology/links/decide"), Some(body)).await;
     assert_eq!(status, 200, "{body}");
     let mapped = json!({"source": "document", "record_type": "document:abc", "path": "supplier"});
-    ok(app.tool("ontology_propose", json!({"links": [{"from_kind": "product", "label": "supplied_by", "to_kind": "organisation", "source_map": [mapped.clone()]}]})).await);
+    ok(app.tool("ontology_propose", json!({"links": [{"from_kind": "product", "label": "supplied_by", "to_kind": "organisation", "revision": 3, "source_map": [mapped.clone()]}]})).await);
     let o = ok(app.tool("ontology_get", json!({})).await);
     assert_eq!(link(&o, "product", "supplied_by", "organisation")["source_map"], json!([mapped]));
 }
@@ -1078,7 +1078,7 @@ async fn a_proposed_property_waits_for_the_owner_in_the_browser() {
     let vault = personal(&app).await;
 
     let out = ok(app.tool("ontology_propose", json!({"properties": [price("money")]})).await);
-    assert_eq!(out["properties"], json!([{"kind": "product", "name": "price", "datatype": "money", "status": "proposed", "merge_into": null}]));
+    assert_eq!(out["properties"], json!([{"revision": 1, "kind": "product", "name": "price", "datatype": "money", "status": "proposed", "merge_into": null}]));
     let p = property(&ok(app.tool("ontology_get", json!({})).await), "product", "price").clone();
     assert_eq!((p["status"].as_str(), p["origin"].as_str(), p["unit"].as_str(), p["values"].as_i64()), (Some("proposed"), Some("agent"), Some("AUD"), Some(0)));
     assert_eq!(p["synonyms"], json!(["cost"]));
@@ -1100,7 +1100,9 @@ async fn a_proposed_property_waits_for_the_owner_in_the_browser() {
     let (status, o) = app.http_session("POST", &path, Some(body)).await;
     assert_eq!(status, 200, "{o}");
     assert_eq!(property(&o, "product", "price")["status"], "approved");
-    let again = ok(app.tool("ontology_propose", json!({"properties": [price("text")]})).await);
+    let mut refresh = price("text");
+    refresh["revision"] = json!(2);
+    let again = ok(app.tool("ontology_propose", json!({"properties": [refresh]})).await);
     assert_eq!((again["properties"][0]["status"].as_str(), again["properties"][0]["datatype"].as_str()), (Some("approved"), Some("money")));
 
     // describing keeps the status; deciding a property nobody proposed is not found
@@ -1438,7 +1440,7 @@ async fn a_metric_is_refused_unless_its_expression_fits_the_kinds_properties() {
         "properties": [{"kind": "product", "name": "weight_g", "datatype": "integer"}],
         "metrics": [{"kind": "product", "name": "avg_weight", "expr": {"agg": "avg", "property": "weight_g"}, "description": "Average weight"}],
     })).await);
-    assert_eq!(out["metrics"], json!([{"kind": "product", "name": "avg_weight", "status": "proposed", "merge_into": null}]));
+    assert_eq!(out["metrics"], json!([{"revision": 1, "kind": "product", "name": "avg_weight", "status": "proposed", "merge_into": null}]));
 }
 
 #[tokio::test]
@@ -1820,6 +1822,42 @@ fn automap_answer(doc: &str) -> Value {
             {"field": "warehouse", "label": "stored_in", "to_kind": "warehouse", "target": null},
         ],
     }, {"source": "nowhere", "record_type": "x", "kind": "x"}]})
+}
+
+#[tokio::test]
+async fn automap_rerunning_the_same_csv_is_read_only_over_mcp_and_http() {
+    let mock = serve(vec![route("POST", "/chat/completions", json!({}))]).await;
+    let app = TestApp::with_settings(model_app_settings(&mock)).await;
+    let doc = upload_csv(&app, "price-list.csv", PRICE_LIST).await;
+    let mut answer = automap_answer(&doc);
+    answer["record_types"][0]["metrics"] = json!([{"name":"total_price","expr":{"agg":"sum","property":"price"}}]);
+    mock.set_routes(vec![route("POST", "/chat/completions", json!({"choices":[{"message":{"content":answer.to_string()}}]}))]);
+    write(&app, "Bean Co", "organisation").await;
+    write(&app, "Pack Pty", "organisation").await;
+    let args = json!({"document_id":doc});
+    let out = ok(app.tool("ontology_automap", args.clone()).await);
+    assert_eq!(out["mode"], "model", "{out}");
+    for list in ["kinds", "links", "properties", "metrics"] {
+        assert!(!out["proposed"][list].as_array().unwrap().is_empty(), "{list}: {out}");
+    }
+    let db = app.db().await;
+    let storage = "RETURN [{kinds:(SELECT * FROM ontology_kind ORDER BY id), links:(SELECT * FROM ontology_link ORDER BY id), properties:(SELECT * FROM ontology_property ORDER BY id), metrics:(SELECT * FROM ontology_metric ORDER BY id), events:(SELECT * FROM ontology_event ORDER BY seq), cursors:(SELECT id, ontology_seq FROM vault ORDER BY id)}]";
+    let before: Vec<Value> = db.test_raw().query(storage).await.unwrap().take(0).unwrap();
+    let rerun = ok(app.tool("ontology_automap", args.clone()).await);
+    assert_eq!(rerun["mode"], "model", "{rerun}");
+    assert_eq!(rerun["ontology"], out["ontology"]);
+    for list in ["kinds", "links", "properties", "metrics"] {
+        assert_eq!(rerun["proposed"][list][0]["revision"], 1, "{rerun}");
+    }
+    let (status, rerun) = app.http_session("POST", &format!("/api/vaults/{}/ontology/automap", out["ontology"]["vault"].as_str().unwrap()), Some(args)).await;
+    assert_eq!(status, 200, "{rerun}");
+    assert_eq!(rerun["mode"], "model", "{rerun}");
+    assert_eq!(rerun["ontology"], out["ontology"]);
+    for list in ["kinds", "links", "properties", "metrics"] {
+        assert_eq!(rerun["proposed"][list][0]["revision"], 1, "{rerun}");
+    }
+    let after: Vec<Value> = db.test_raw().query(storage).await.unwrap().take(0).unwrap();
+    assert_eq!(after, before, "automap retries must not write definitions, timestamps, revisions, activity or cursors");
 }
 
 #[tokio::test]

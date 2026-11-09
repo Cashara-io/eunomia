@@ -3,9 +3,9 @@
 //! Nothing here touches the network.
 #![allow(dead_code)]
 
-use axum::body::Body;
-use axum::http::{header, Request, StatusCode};
 use axum::Router;
+use axum::body::Body;
+use axum::http::{Request, StatusCode, header};
 use eunomia_backend::config::Settings;
 use eunomia_backend::models_user::{self, User};
 use eunomia_backend::pool::{ControlDb, OrgDb};
@@ -36,7 +36,11 @@ pub struct TestApp {
 pub fn test_settings() -> Settings {
     let url = std::env::var("TEST_SURREAL_URL").unwrap_or_else(|_| "mem://".into());
     // a real server is shared between tests: every call gets its own namespace, so its own control database
-    let ns = if url == "mem://" { "test".to_string() } else { format!("t{}", uuid::Uuid::new_v4().simple()) };
+    let ns = if url == "mem://" {
+        "test".to_string()
+    } else {
+        format!("t{}", uuid::Uuid::new_v4().simple())
+    };
     Settings {
         jwt_secret: "test-jwt-secret".into(),
         surreal_url: url,
@@ -73,11 +77,20 @@ pub fn test_settings() -> Settings {
 pub fn engine_config() -> surrealdb::opt::Config {
     use surrealdb::opt::capabilities::{Capabilities, ExperimentalFeature};
     // file buckets (documents) are experimental: the server runs with --allow-experimental=files
-    let mut config = surrealdb::opt::Config::new().capabilities(Capabilities::new().with_experimental_feature_allowed(ExperimentalFeature::Files));
+    let mut config = surrealdb::opt::Config::new().capabilities(
+        Capabilities::new().with_experimental_feature_allowed(ExperimentalFeature::Files),
+    );
     if std::env::var("TEST_HARDENED").is_ok() {
         let compose = include_str!("../../../docker-compose.yml");
-        let list = compose.split("--allow-funcs=").nth(1).expect("--allow-funcs in docker-compose.yml").split_whitespace().next().unwrap();
-        let mut caps = Capabilities::none().with_experimental_feature_allowed(ExperimentalFeature::Files);
+        let list = compose
+            .split("--allow-funcs=")
+            .nth(1)
+            .expect("--allow-funcs in docker-compose.yml")
+            .split_whitespace()
+            .next()
+            .unwrap();
+        let mut caps =
+            Capabilities::none().with_experimental_feature_allowed(ExperimentalFeature::Files);
         for f in list.trim_end_matches(['"', '\'']).split(',') {
             caps = caps.with_function_allowed(f).expect("function target");
         }
@@ -88,12 +101,16 @@ pub fn engine_config() -> surrealdb::opt::Config {
 
 /// Fresh databases (control, no orgs yet) + app state, no users yet.
 pub async fn bare_state() -> AppState {
-    AppState::build(&test_settings(), engine_config()).await.expect("state")
+    AppState::build(&test_settings(), engine_config())
+        .await
+        .expect("state")
 }
 
 /// Register a user the way signup does (and, for the first, create the install's org).
 pub async fn register(state: &AppState, email: &str) -> User {
-    models_user::register_user(state, email, PASSWORD).await.expect("register")
+    models_user::register_user(state, email, PASSWORD)
+        .await
+        .expect("register")
 }
 
 /// The user's org database.
@@ -110,11 +127,21 @@ impl TestApp {
 
     /// Like [`TestApp::new`] with other settings (for example a real `update_status_dir`).
     pub async fn with_settings(settings: Settings) -> Self {
-        let state = AppState::build(&settings, engine_config()).await.expect("state");
+        let state = AppState::build(&settings, engine_config())
+            .await
+            .expect("state");
         let user = register(&state, "tester@example.com").await;
-        let token = models_user::create_api_token(&state.control, &user.id, "test").await.expect("token").token;
+        let token = models_user::create_api_token(&state.control, &user.id, "test")
+            .await
+            .expect("token")
+            .token;
         let router = eunomia_backend::app(state.clone());
-        TestApp { state, user, token, router }
+        TestApp {
+            state,
+            user,
+            token,
+            router,
+        }
     }
 
     /// The test user's org database.
@@ -128,25 +155,119 @@ impl TestApp {
 
     /// Call a registry tool as the test user (the same choke point REST and MCP use).
     pub async fn tool(&self, name: &str, args: Value) -> Value {
-        eunomia_backend::authz::as_system(registry::call(&self.state, &self.user, name, args)).await.expect("tool call")
+        eunomia_backend::authz::as_system(registry::call(&self.state, &self.user, name, args))
+            .await
+            .expect("tool call")
     }
 
     /// Log in as the test user the way the browser does; the `name=value` cookie pair.
     pub async fn session_cookie(&self) -> String {
         let body = serde_json::json!({ "email": self.user.email, "password": PASSWORD });
-        let (_, set_cookie) = http(&self.router, "POST", "/api/auth/login", Some(body), None, None).await;
-        set_cookie.expect("login sets a cookie").split(';').next().unwrap().to_string()
+        let (_, set_cookie) = http(
+            &self.router,
+            "POST",
+            "/api/auth/login",
+            Some(body),
+            None,
+            None,
+        )
+        .await;
+        set_cookie
+            .expect("login sets a cookie")
+            .split(';')
+            .next()
+            .unwrap()
+            .to_string()
     }
 
     /// One HTTP request as the logged-in browser session (not a token).
-    pub async fn http_session(&self, method: &str, path: &str, body: Option<Value>) -> (StatusCode, Value) {
+    pub async fn http_session(
+        &self,
+        method: &str,
+        path: &str,
+        body: Option<Value>,
+    ) -> (StatusCode, Value) {
         let cookie = self.session_cookie().await;
-        http(&self.router, method, path, body, None, Some(&cookie)).await.0
+        let body = self.reviewed_body(path, body, Some(&cookie), None).await;
+        http(&self.router, method, path, body, None, Some(&cookie))
+            .await
+            .0
+    }
+
+    async fn reviewed_body(
+        &self,
+        path: &str,
+        mut body: Option<Value>,
+        cookie: Option<&str>,
+        token: Option<&str>,
+    ) -> Option<Value> {
+        if !path.ends_with("/decide") || !path.contains("/ontology/") {
+            return body;
+        }
+        let Some(b) = body.as_mut().and_then(Value::as_object_mut) else {
+            return body;
+        };
+        if b.contains_key("revision") {
+            return body;
+        }
+        let base = path.split("/ontology/").next().unwrap();
+        let ((_, ontology), _) = http(
+            &self.router,
+            "GET",
+            &format!("{base}/ontology"),
+            None,
+            token,
+            cookie,
+        )
+        .await;
+        let kinds = ontology["kinds"].as_array();
+        let parent = kinds.and_then(|ks| {
+            ks.iter()
+                .find(|k| b.get("kind").is_some_and(|kind| k["kind"] == *kind))
+        });
+        let item = if path.ends_with("/kinds/decide") {
+            parent
+        } else if path.ends_with("/links/decide") {
+            ontology["links"].as_array().and_then(|ls| {
+                ls.iter().find(|l| {
+                    b.get("from_kind")
+                        .is_some_and(|value| l["from_kind"] == *value)
+                        && b.get("to_kind").is_some_and(|value| l["to_kind"] == *value)
+                        && b.get("label").is_some_and(|value| l["label"] == *value)
+                })
+            })
+        } else {
+            let key = if path.ends_with("/properties/decide") {
+                "properties"
+            } else {
+                "metrics"
+            };
+            parent.and_then(|p| p[key].as_array()).and_then(|items| {
+                items
+                    .iter()
+                    .find(|i| b.get("name").is_some_and(|name| i["name"] == *name))
+            })
+        };
+        b.insert(
+            "revision".into(),
+            item.and_then(|i| i.get("revision"))
+                .cloned()
+                .unwrap_or(serde_json::json!(0)),
+        );
+        body
     }
 
     /// One HTTP request against the real router. `auth` adds the Bearer token.
-    pub async fn http(&self, method: &str, path: &str, body: Option<Value>, auth: bool) -> (StatusCode, Value) {
-        http(&self.router, method, path, body, auth.then_some(self.token.as_str()), None).await.0
+    pub async fn http(
+        &self,
+        method: &str,
+        path: &str,
+        body: Option<Value>,
+        auth: bool,
+    ) -> (StatusCode, Value) {
+        let token = auth.then_some(self.token.as_str());
+        let body = self.reviewed_body(path, body, None, token).await;
+        http(&self.router, method, path, body, token, None).await.0
     }
 }
 
@@ -167,13 +288,19 @@ pub async fn http(
         req = req.header(header::COOKIE, c);
     }
     let req = match body {
-        Some(b) => req.header(header::CONTENT_TYPE, "application/json").body(Body::from(b.to_string())),
+        Some(b) => req
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(b.to_string())),
         None => req.body(Body::empty()),
     }
     .unwrap();
     let resp = router.clone().oneshot(req).await.expect("router");
     let status = resp.status();
-    let set_cookie = resp.headers().get(header::SET_COOKIE).and_then(|v| v.to_str().ok()).map(str::to_string);
+    let set_cookie = resp
+        .headers()
+        .get(header::SET_COOKIE)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string);
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
     let json = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
     ((status, json), set_cookie)
@@ -190,7 +317,8 @@ pub struct Normalizer {
 impl Normalizer {
     pub fn apply(&mut self, v: &Value) -> Value {
         use regex::Regex;
-        let ts = Regex::new(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?").unwrap();
+        let ts =
+            Regex::new(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?").unwrap();
         let hash = Regex::new(r"\b[0-9a-f]{64}\b").unwrap();
         // surreal random ids are 20 lowercase alphanumerics, e.g. entity:abc...
         let rid = Regex::new(r"\b[0-9a-z]{20}\b").unwrap();
@@ -198,11 +326,18 @@ impl Normalizer {
         s = ts.replace_all(&s, "<ts>").into_owned();
         s = hash.replace_all(&s, "<hash>").into_owned();
         // trace ids are random per request
-        s = Regex::new(r"\b[0-9a-f]{32}\b").unwrap().replace_all(&s, "<trace>").into_owned();
+        s = Regex::new(r"\b[0-9a-f]{32}\b")
+            .unwrap()
+            .replace_all(&s, "<trace>")
+            .into_owned();
         let found: Vec<String> = rid.find_iter(&s).map(|m| m.as_str().to_string()).collect();
         for id in found {
             let n = self.ids.len() + 1;
-            let ph = self.ids.entry(id.clone()).or_insert_with(|| format!("<id{n}>")).clone();
+            let ph = self
+                .ids
+                .entry(id.clone())
+                .or_insert_with(|| format!("<id{n}>"))
+                .clone();
             s = s.replace(&id, &ph);
         }
         serde_json::from_str(&s).unwrap()
@@ -211,5 +346,7 @@ impl Normalizer {
 
 /// Register a user in an org of their own (signup with `EUNOMIA_SIGNUP_ORG=personal`).
 pub async fn register_personal(state: &AppState, email: &str) -> User {
-    models_user::register_user_with(state, email, PASSWORD, true).await.expect("register")
+    models_user::register_user_with(state, email, PASSWORD, true)
+        .await
+        .expect("register")
 }

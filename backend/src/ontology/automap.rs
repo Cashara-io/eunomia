@@ -409,7 +409,7 @@ pub async fn automap(state: &OrgState, settings: &Settings, owner: &RecordId, ar
         };
         let fields: Vec<&str> = profiles[i].fields.iter().map(|f| f.path.as_str()).collect();
         let reason = format!("one kind for the {} records", records(&t.record_type));
-        match (KindProposal { kind: kind.as_str().into(), description: t.description.clone(), merge_into: None, synonyms: vec![], reason: Some(reason) }).validate() {
+        match (KindProposal { revision: 0, kind: kind.as_str().into(), description: t.description.clone(), merge_into: None, synonyms: vec![], reason: Some(reason) }).validate() {
             Ok(k) => kinds.push(k),
             Err(_) => skipped += 1,
         }
@@ -428,6 +428,7 @@ pub async fn automap(state: &OrgState, settings: &Settings, owner: &RecordId, ar
             }
             let source_map = own.iter().map(|f| SourceField { source: sample.source.clone(), record_type: sample.record_type.clone(), path: f.clone() }).collect();
             let proposal = PropertyProposal {
+                revision: 0,
                 kind: kind.as_str().into(),
                 name: mp.name,
                 datatype: mp.datatype,
@@ -472,7 +473,7 @@ pub async fn automap(state: &OrgState, settings: &Settings, owner: &RecordId, ar
             if !exists(to_kind.as_str()) && !run_kinds.contains(to_kind.as_str()) && new_targets.insert(to_kind.as_str().to_string()) {
                 let reason = format!("the {} column of the {} records names one", ml.field, records(&t.record_type));
                 let description = Some(format!("what the {} column names", ml.field));
-                match (KindProposal { kind: to_kind.as_str().into(), description, merge_into: None, synonyms: vec![], reason: Some(reason) }).validate() {
+                match (KindProposal { revision: 0, kind: to_kind.as_str().into(), description, merge_into: None, synonyms: vec![], reason: Some(reason) }).validate() {
                     Ok(k) => kinds.push(k),
                     Err(_) => skipped += 1,
                 }
@@ -534,7 +535,7 @@ pub async fn automap(state: &OrgState, settings: &Settings, owner: &RecordId, ar
             });
             if kept {
                 let source_map = vec![SourceField { source: sample.source.clone(), record_type: sample.record_type.clone(), path: ml.field.clone() }];
-                let proposal = LinkProposal { from_kind: kind.as_str().into(), label, to_kind: to_kind.as_str().into(), description: ml.description, reason: Some(reason), source_map };
+                let proposal = LinkProposal { revision: 0, from_kind: kind.as_str().into(), label, to_kind: to_kind.as_str().into(), description: ml.description, reason: Some(reason), source_map };
                 match proposal.validate() {
                     Ok(l) => links.push(l),
                     Err(_) => skipped += 1,
@@ -545,6 +546,7 @@ pub async fn automap(state: &OrgState, settings: &Settings, owner: &RecordId, ar
         for v in t.metrics {
             match serde_json::from_value::<ModelMetric>(v) {
                 Ok(m) => pending_metrics.push(super::metric::MetricProposal {
+                    revision: 0,
                     kind: kind.as_str().into(),
                     name: m.name,
                     expr: m.expr,
@@ -568,7 +570,7 @@ pub async fn automap(state: &OrgState, settings: &Settings, owner: &RecordId, ar
             Err(_) => skipped += 1,
         }
     }
-    let proposed = apply(db, &vault, Valid { kinds, links, properties, metrics }, Origin::Suggested).await?;
+    let proposed = apply(db, &vault, Valid { kinds, links, properties, metrics }.at_snapshot(&ontology), Origin::Suggested).await?;
     Ok(AutomapOut::Model { proposed, record_types: mapped, links: checks, skipped, ontology: view(db, &vault).await? })
 }
 

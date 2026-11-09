@@ -19,6 +19,7 @@
 //!   (`tools/registry/ontology.rs`).
 
 pub mod automap;
+pub mod activity;
 pub mod coverage;
 pub mod dataset;
 pub mod objects;
@@ -213,6 +214,9 @@ fn no_ontology_table(e: &surrealdb::Error) -> bool {
 
 #[derive(Debug, Deserialize, SurrealValue)]
 struct KindRow {
+    #[serde(default)]
+    #[surreal(default)]
+    revision: i64,
     kind: String,
     #[serde(default)]
     #[surreal(default)]
@@ -232,6 +236,9 @@ struct KindRow {
 
 #[derive(Debug, Deserialize, SurrealValue)]
 struct LinkRow {
+    #[serde(default)]
+    #[surreal(default)]
+    revision: i64,
     from_kind: String,
     label: String,
     to_kind: String,
@@ -285,6 +292,7 @@ struct LinkCount {
 /// One entity kind of the vault.
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct KindItem {
+    pub revision: i64,
     pub kind: String,
     pub built_in: bool,
     pub status: ViewStatus,
@@ -315,6 +323,7 @@ pub struct LinkSample {
 /// One link type of the vault: relations labelled `label` from a `from_kind` entity to a `to_kind` one.
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct LinkItem {
+    pub revision: i64,
     pub from_kind: String,
     pub label: String,
     pub to_kind: String,
@@ -421,6 +430,7 @@ fn merge_kinds(
 ) -> AppResult<Vec<KindItem>> {
     let mut by_kind: BTreeMap<String, KindItem> = BTreeMap::new();
     let blank = |kind: &str| KindItem {
+        revision: 0,
         kind: kind.to_string(),
         built_in: KINDS.contains(&kind),
         status: ViewStatus::Observed,
@@ -440,6 +450,7 @@ fn merge_kinds(
     for r in rows {
         let item = by_kind.entry(r.kind.clone()).or_insert_with(|| blank(&r.kind));
         item.status = Status::parse(&r.status)?.into();
+        item.revision = r.revision;
         item.description = r.description;
         item.merge_into = r.merge_into;
         item.synonyms = r.synonyms;
@@ -460,6 +471,7 @@ fn merge_kinds(
 fn merge_links(counts: Vec<LinkCount>, rows: Vec<LinkRow>) -> AppResult<Vec<LinkItem>> {
     let mut by_key: BTreeMap<(String, String, String), LinkItem> = BTreeMap::new();
     let blank = |from_kind: &str, label: &str, to_kind: &str| LinkItem {
+        revision: 0,
         from_kind: from_kind.to_string(),
         label: label.to_string(),
         to_kind: to_kind.to_string(),
@@ -485,6 +497,7 @@ fn merge_links(counts: Vec<LinkCount>, rows: Vec<LinkRow>) -> AppResult<Vec<Link
         let key = (r.from_kind.clone(), r.label.clone(), r.to_kind.clone());
         let item = by_key.entry(key).or_insert_with(|| blank(&r.from_kind, &r.label, &r.to_kind));
         item.status = Status::parse(&r.status)?.into();
+        item.revision = r.revision;
         item.description = r.description;
         item.origin = Some(Origin::parse(&r.origin)?);
         item.reason = r.reason;
@@ -500,6 +513,9 @@ fn merge_links(counts: Vec<LinkCount>, rows: Vec<LinkRow>) -> AppResult<Vec<Link
 /// A proposed kind, as an agent or the model sends it.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct KindProposal {
+    /// Revision observed in ontology_get. Zero or omitted allows creation or an identical retry.
+    #[serde(default)]
+    pub revision: i64,
     pub kind: String,
     #[serde(default)]
     pub description: Option<String>,
@@ -516,6 +532,9 @@ pub struct KindProposal {
 /// A proposed link type.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct LinkProposal {
+    /// Revision observed in ontology_get. Zero or omitted allows creation or an identical retry.
+    #[serde(default)]
+    pub revision: i64,
     pub from_kind: String,
     pub label: String,
     pub to_kind: String,
@@ -529,6 +548,7 @@ pub struct LinkProposal {
 }
 
 struct ValidKind {
+    revision: i64,
     kind: Kind,
     description: Option<String>,
     merge_into: Option<Kind>,
@@ -537,6 +557,7 @@ struct ValidKind {
 }
 
 struct ValidLink {
+    revision: i64,
     key: LinkKey,
     description: Option<String>,
     reason: Option<String>,
@@ -556,6 +577,7 @@ impl KindProposal {
             }
         }
         Ok(ValidKind {
+            revision: activity::proposal_revision(self.revision)?,
             synonyms: property::clean_synonyms(&kind.0, &self.synonyms)?,
             kind,
             description: clean_text("description", self.description.as_deref())?,
@@ -568,6 +590,7 @@ impl KindProposal {
 impl LinkProposal {
     fn validate(&self) -> AppResult<ValidLink> {
         Ok(ValidLink {
+            revision: activity::proposal_revision(self.revision)?,
             key: LinkKey::parse(&self.from_kind, &self.label, &self.to_kind)?,
             description: clean_text("description", self.description.as_deref())?,
             reason: clean_text("reason", self.reason.as_deref())?,
@@ -586,6 +609,7 @@ pub const MAX_PROPOSED_METRICS: usize = 50;
 /// that decision (the proposal did not change it).
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct ProposedKind {
+    pub revision: i64,
     pub kind: String,
     pub status: Status,
     pub merge_into: Option<String>,
@@ -593,6 +617,7 @@ pub struct ProposedKind {
 
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct ProposedLink {
+    pub revision: i64,
     pub from_kind: String,
     pub label: String,
     pub to_kind: String,
@@ -651,6 +676,25 @@ struct Valid {
     metrics: Vec<metric::ValidMetric>,
 }
 
+impl Valid {
+    /// Model-generated changes compare against the profile the model actually saw.
+    fn at_snapshot(mut self, snapshot: &OntologyOut) -> Self {
+        for k in &mut self.kinds {
+            k.revision = snapshot.kinds.iter().find(|old| old.kind == k.kind.0).map_or(0, |old| old.revision);
+        }
+        for l in &mut self.links {
+            l.revision = snapshot.links.iter().find(|old| old.from_kind == l.key.from_kind.0 && old.label == l.key.label.0 && old.to_kind == l.key.to_kind.0).map_or(0, |old| old.revision);
+        }
+        for p in &mut self.properties {
+            p.revision = snapshot.kinds.iter().find(|old| old.kind == p.kind.0).and_then(|old| old.properties.iter().find(|old| old.name == p.name.as_str())).map_or(0, |old| old.revision);
+        }
+        for m in &mut self.metrics {
+            m.revision = snapshot.kinds.iter().find(|old| old.kind == m.kind.0).and_then(|old| old.metrics.iter().find(|old| old.name == m.name.as_str())).map_or(0, |old| old.revision);
+        }
+        self
+    }
+}
+
 async fn apply(db: &OrgDb, vault: &RecordId, valid: Valid, origin: Origin) -> AppResult<ProposeOut> {
     let Valid { kinds, links, properties, metrics } = valid;
     let mut out = ProposeOut::default();
@@ -659,6 +703,7 @@ async fn apply(db: &OrgDb, vault: &RecordId, valid: Valid, origin: Origin) -> Ap
         let row: KindRow = with_retry_dup(|| async {
             let mut res = q::PROPOSE_KIND
                 .on(db)
+                .bind(("proposal_revision", k.revision))
                 .bind(("id", id.clone()))
                 .bind(("vault", vault.clone()))
                 .bind(("kind", k.kind.0.clone()))
@@ -672,13 +717,15 @@ async fn apply(db: &OrgDb, vault: &RecordId, valid: Valid, origin: Origin) -> Ap
             rows.into_iter().next().ok_or_else(|| surrealdb::Error::query("ontology kind upsert returned no row".into(), None))
         })
         .await?;
-        out.kinds.push(ProposedKind { kind: row.kind, status: Status::parse(&row.status)?, merge_into: row.merge_into });
+        crate::changes::ontology_committed(db, vault);
+        out.kinds.push(ProposedKind { revision: row.revision, kind: row.kind, status: Status::parse(&row.status)?, merge_into: row.merge_into });
     }
     for l in links {
         let id = link_rid(vault, &l.key);
         let row: LinkRow = with_retry_dup(|| async {
             let mut res = q::PROPOSE_LINK
                 .on(db)
+                .bind(("proposal_revision", l.revision))
                 .bind(("id", id.clone()))
                 .bind(("vault", vault.clone()))
                 .bind(("from_kind", l.key.from_kind.0.clone()))
@@ -693,7 +740,8 @@ async fn apply(db: &OrgDb, vault: &RecordId, valid: Valid, origin: Origin) -> Ap
             rows.into_iter().next().ok_or_else(|| surrealdb::Error::query("ontology link upsert returned no row".into(), None))
         })
         .await?;
-        out.links.push(ProposedLink { from_kind: row.from_kind, label: row.label, to_kind: row.to_kind, status: Status::parse(&row.status)? });
+        crate::changes::ontology_committed(db, vault);
+        out.links.push(ProposedLink { revision: row.revision, from_kind: row.from_kind, label: row.label, to_kind: row.to_kind, status: Status::parse(&row.status)? });
     }
     out.properties = property::apply_properties(db, vault, properties, origin).await?;
     out.metrics = metric::apply_metrics(db, vault, metrics, origin).await?;
@@ -737,12 +785,14 @@ pub async fn decide_kind(db: &OrgDb, user: &RecordId, vault: &RecordId, kind: &s
     decider(db, user, vault).await?;
     let kind = Kind::parse(kind)?;
     let id = kind_rid(vault, &kind);
+    let expected_revision = activity::verify_seen(db, &id).await?;
     let (status, merge_into) = match decision {
         KindDecision::Describe { description } => {
             let description = clean_text("description", Some(&description))?;
             with_retry_dup(|| async {
                 q::DESCRIBE_KIND
                     .on(db)
+                    .bind(("expected_revision", expected_revision))
                     .bind(("id", id.clone()))
                     .bind(("vault", vault.clone()))
                     .bind(("kind", kind.0.clone()))
@@ -750,6 +800,7 @@ pub async fn decide_kind(db: &OrgDb, user: &RecordId, vault: &RecordId, kind: &s
                     .await
             })
             .await?;
+            crate::changes::ontology_committed(db, vault);
             return view(db, vault).await;
         }
         KindDecision::Approve => (Status::Approved, None),
@@ -767,6 +818,7 @@ pub async fn decide_kind(db: &OrgDb, user: &RecordId, vault: &RecordId, kind: &s
     with_retry_dup(|| async {
         q::DECIDE_KIND
             .on(db)
+            .bind(("expected_revision", expected_revision))
             .bind(("id", id.clone()))
             .bind(("vault", vault.clone()))
             .bind(("kind", kind.0.clone()))
@@ -776,6 +828,7 @@ pub async fn decide_kind(db: &OrgDb, user: &RecordId, vault: &RecordId, kind: &s
             .await
     })
     .await?;
+    crate::changes::ontology_committed(db, vault);
     view(db, vault).await
 }
 
@@ -819,8 +872,10 @@ pub async fn decide_link(
     decider(db, user, vault).await?;
     let key = LinkKey::parse(from_kind, label, to_kind)?;
     let id = link_rid(vault, &key);
+    let expected_revision = activity::verify_seen(db, &id).await?;
     let on = |stmt: &crate::store::Stmt| {
         stmt.on(db)
+            .bind(("expected_revision", expected_revision))
             .bind(("id", id.clone()))
             .bind(("vault", vault.clone()))
             .bind(("from_kind", key.from_kind.0.clone()))
@@ -837,6 +892,7 @@ pub async fn decide_link(
             with_retry_dup(|| async { on(&q::DECIDE_LINK).bind(("status", status.as_str().to_string())).bind(("user", user.clone())).await }).await?;
         }
     }
+    crate::changes::ontology_committed(db, vault);
     view(db, vault).await
 }
 
@@ -963,6 +1019,7 @@ async fn strict_kind(db: &OrgDb, vault: &RecordId, kind: &Kind) -> AppResult<()>
         .await?
         .check()?
         .take(q::FILE_KIND.slot)?;
+    crate::changes::ontology_committed(db, vault);
     let approved: Vec<String> = q::APPROVED_KINDS.on(db).bind(("vault", vault.clone())).await?.take(0)?;
     let custom = if approved.is_empty() { String::new() } else { format!(" or an approved kind ({})", approved.join(", ")) };
     Err(AppError::coded(
@@ -993,6 +1050,7 @@ async fn strict_link(db: &OrgDb, vault: &RecordId, key: &LinkKey) -> AppResult<(
         .await?
         .check()?
         .take(q::FILE_LINK.slot)?;
+    crate::changes::ontology_committed(db, vault);
     let approved: Vec<String> = q::APPROVED_LINKS
         .on(db)
         .bind(("vault", vault.clone()))
@@ -1019,7 +1077,8 @@ async fn strict_link(db: &OrgDb, vault: &RecordId, key: &LinkKey) -> AppResult<(
 /// Turns "Only approved kinds and links" on or off for `vault` (an owner in the browser only).
 pub async fn set_strict(db: &OrgDb, user: &RecordId, vault: &RecordId, on: bool) -> AppResult<OntologyOut> {
     decider(db, user, vault).await?;
-    q::SET_STRICT.on(db).bind(("vault", vault.clone())).bind(("on", on)).await?;
+    with_retry_dup(|| async { q::SET_STRICT.on(db).bind(("vault", vault.clone())).bind(("on", on)).await }).await?;
+    crate::changes::ontology_committed(db, vault);
     view(db, vault).await
 }
 
@@ -1060,7 +1119,7 @@ mod tests {
     }
 
     fn row(kind: &str, status: &str) -> KindRow {
-        KindRow { kind: kind.into(), description: None, status: status.into(), merge_into: None, synonyms: vec![], origin: "agent".into(), reason: None }
+        KindRow { revision: 1, kind: kind.into(), description: None, status: status.into(), merge_into: None, synonyms: vec![], origin: "agent".into(), reason: None }
     }
 
     #[test]
@@ -1082,7 +1141,7 @@ mod tests {
 
     #[test]
     fn a_proposal_cannot_merge_a_kind_into_itself_or_a_built_in_away() {
-        let p = |kind: &str, into: &str| KindProposal { kind: kind.into(), description: None, merge_into: Some(into.into()), synonyms: vec![], reason: None };
+        let p = |kind: &str, into: &str| KindProposal { revision: 0, kind: kind.into(), description: None, merge_into: Some(into.into()), synonyms: vec![], reason: None };
         assert!(p("client", "client").validate().is_err());
         assert!(p("person", "customer").validate().is_err());
         assert!(p("Bad Kind", "customer").validate().is_err());

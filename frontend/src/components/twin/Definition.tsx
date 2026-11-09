@@ -1,6 +1,9 @@
 "use client";
 import { haptic } from "@/lib/haptics";
 
+import { useQueryClient } from "@tanstack/react-query";
+import { ApiError } from "@/lib/api";
+import Activity from "./Activity";
 import { useState } from "react";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import {
@@ -18,19 +21,26 @@ import {
   PropertyRow,
   words,
 } from "./DefinitionRows";
+import { definitions } from "./model";
 import type { Definition as DefinitionItem } from "./model";
 
 export default function Definition({
-  definition: d,
+  definition: incoming,
   data,
   isOwner,
   locked = false,
+  initialReason = "",
 }: {
   definition: DefinitionItem;
   data: OntologyOut;
   isOwner: boolean;
   locked?: boolean;
+  initialReason?: string;
 }) {
+  const cache = useQueryClient();
+  const [d, setDefinition] = useState(incoming);
+  const [reason, setReason] = useState(initialReason);
+  const [conflict, setConflict] = useState(false);
   const kind = useDecideKind(data.vault);
   const link = useDecideLink(data.vault);
   const property = useDecideProperty(data.vault);
@@ -38,19 +48,27 @@ export default function Definition({
   const preview = useTryMetric(data.vault);
   const [error, setError] = useState<Failure | null>(null);
   const busy =
-    locked ||
+    conflict || locked ||
     kind.isPending ||
     link.isPending ||
     property.isPending ||
     metric.isPending;
-  async function run(fn: () => Promise<unknown>, fallback: string) {
+  async function run(fn: () => Promise<OntologyOut>, fallback: string) {
     setError(null);
     try {
-      await fn();
+      const saved = await fn();
+      const updated = definitions(saved).find(item => item.id === d.id);
+      if (updated) setDefinition(updated);
       haptic("success");
       return true;
     } catch (e) {
-      setError(failure(e, fallback));
+      if (e instanceof ApiError && e.code === "ontology.stale_revision") {
+        await cache.invalidateQueries({ queryKey: ["ontology", data.vault] });
+        setConflict(true);
+        setError(null);
+      } else {
+        setError(failure(e, fallback));
+      }
       return false;
     }
   }
@@ -58,6 +76,16 @@ export default function Definition({
   return (
     <div className="flex flex-col gap-3 min-w-0 [overflow-wrap:anywhere]">
       {error && <ErrorLine error={error} />}
+      {conflict && <section role="alert" className="ledger p-3 flex flex-col gap-2">
+        <h4 className="font-medium">This definition changed</h4>
+        <RevisionChanges before={d} after={incoming} />
+        <p>Review the latest evidence and dependencies before deciding again.</p>
+        <button className="btn btn-sm self-start" onClick={() => { setDefinition(incoming); setConflict(false); setError(null); }}>Review latest version</button>
+      </section>}
+      {isOwner && <label className="flex flex-col gap-1 text-[13px]">
+        Reason for decision (optional)
+        <textarea className="field p-2" maxLength={500} value={reason} onChange={e => setReason(e.target.value)} disabled={busy} />
+      </label>}
       <ul aria-label="Definition details">
         {d.type === "kind" && (
           <KindRow
@@ -73,7 +101,7 @@ export default function Definition({
               )
               .map((k) => ({ value: k.kind, label: words(k.kind) }))}
             onDecide={(decision, fallback) =>
-              run(() => kind.mutateAsync({ kind: d.kind, decision }), fallback)
+              run(() => kind.mutateAsync({ kind: d.kind, decision, revision: d.item.revision, reason }), fallback)
             }
           />
         )}
@@ -92,6 +120,7 @@ export default function Definition({
                     kind: d.kind,
                     name: d.name,
                     decision,
+                    revision: d.item.revision, reason,
                   }),
                 fallback,
               )
@@ -109,7 +138,7 @@ export default function Definition({
             onDecide={(decision, fallback) =>
               run(
                 () =>
-                  metric.mutateAsync({ kind: d.kind, name: d.name, decision }),
+                  metric.mutateAsync({ kind: d.kind, name: d.name, decision, revision: d.item.revision, reason }),
                 fallback,
               )
             }
@@ -129,6 +158,7 @@ export default function Definition({
                     label: d.item.label,
                     to_kind: d.item.to_kind,
                     decision,
+                    revision: d.item.revision, reason,
                   }),
                 fallback,
               )
@@ -137,6 +167,7 @@ export default function Definition({
         )}
       </ul>
       <Evidence definition={d} />
+      <Activity space={data.vault} compact definition={{ type: d.type, kind: d.kind, name: d.name }} />
     </div>
   );
 }
@@ -241,4 +272,26 @@ export function Evidence({ definition: d }: { definition: DefinitionItem }) {
       )}
     </dl>
   );
+}
+
+export function RevisionChanges({ before, after }: { before: DefinitionItem; after: DefinitionItem }) {
+  const previous = reviewFields(before);
+  return <>
+    <p>You reviewed: {before.item.status}, {before.item.description || "no description"}.</p>
+    <p>Latest: {after.item.status}, {after.item.description || "no description"}.</p>
+    <dl className="text-[13px] flex flex-col gap-2">{Object.entries(reviewFields(after)).filter(([key, value]) => previous[key] !== value).map(([key, value]) => <div key={key}><dt className="font-medium">{key}</dt><dd>Before: {previous[key] || "None"}</dd><dd>Now: {value || "None"}</dd></div>)}</dl>
+  </>;
+}
+
+function reviewFields(d: DefinitionItem): Record<string, string> {
+  const item = d.item;
+  return {
+    Status: item.status,
+    Description: item.description ?? "",
+    "Suggested reason": item.reason ?? "",
+    ...(d.type !== "link" ? { "Merge target": d.item.merge_into ?? "", Aliases: d.item.synonyms.join(", ") } : {}),
+    ...(d.type === "metric" ? { Calculation: d.item.expr_words, Unit: d.item.unit ?? "" } : {}),
+    ...(d.type === "property" ? { "Data type": d.item.datatype, Unit: d.item.unit ?? "", Choices: d.item.enum_values?.join(", ") ?? "" } : {}),
+    ...(d.type === "property" || d.type === "link" ? { "Source mapping": d.item.source_map?.map(s => `${s.source}: ${s.record_type}, ${s.path}`).join("; ") ?? "" } : {}),
+  };
 }

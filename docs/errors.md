@@ -60,3 +60,5 @@ The `ErrorCode` enum is in `backend/src/error.rs`. A unit test fails if a code i
 | `job.lease_expired` | n/a | A job was claimed `max_attempts` times and each lease expired (worker crash loop). Dead-lettered. Stored in `job.last_error_code`. | `jobs/leader.rs` |
 | `job.panicked` | n/a | A job handler panicked. Retried with backoff, dead after `max_attempts`. Stored in `job.last_error_code`. | `jobs/worker.rs` |
 | `internal` | 500 | Anything else. The detail is always the generic "Internal server error."; use the `trace_id` to find the cause. The one exception is `GET /readyz`, which answers 503 with this code and a plain detail ("The control database did not answer.", or the migration versions that differ), because a probe has no trace to follow. | everywhere via `AppError::internal` and unmapped DB errors; `lib.rs` (`readyz`) |
+
+`ontology.stale_revision` (409): the definition changed since review. Fetch it and review the changes before deciding again.

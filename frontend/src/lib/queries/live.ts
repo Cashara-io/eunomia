@@ -2,6 +2,7 @@
 // memory spaces -- by an agent over MCP, by chat, in another tab, or by another member -- and turns
 // each message into React Query invalidations of only the affected keys. While it is down, the views
 // fall back to polling (`livePoll`). Message types are documented in backend/src/routers/changes.rs.
+import { z } from "zod";
 import { useEffect, useSyncExternalStore } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { apiOrigin } from "@/lib/api";
@@ -12,12 +13,16 @@ import { entityKeys } from "./entities";
 import { getLiveStatus, setLiveStatus, subscribeLiveStatus, type LiveStatus } from "./liveStatus";
 import { vaultKeys } from "./vaults";
 
-type Message =
-  | { type: "hello"; vaults: Record<string, number> }
-  | { type: "change"; vault: string; seq: number; kind: string }
-  | { type: "seq"; vault: string; seq: number }
-  | { type: "vault"; vault: string; op: string }
-  | { type: "vaults" | "resync" | "heartbeat" };
+const messageSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("hello"), vaults: z.record(z.string(), z.number()), ontology: z.record(z.string(), z.number()).optional() }),
+  z.object({ type: z.literal("change"), vault: z.string(), seq: z.number(), kind: z.string() }),
+  z.object({ type: z.literal("ontology"), vault: z.string(), event: z.object({ seq: z.number().int().nonnegative() }) }),
+  z.object({ type: z.literal("ontology_resync"), vault: z.string(), seq: z.number().int().nonnegative() }),
+  z.object({ type: z.literal("seq"), vault: z.string(), seq: z.number() }),
+  z.object({ type: z.literal("vault"), vault: z.string(), op: z.string() }),
+  z.object({ type: z.enum(["vaults", "resync", "heartbeat"]) }),
+]);
+type Message = z.infer<typeof messageSchema>;
 
 /** Vault ops that change what the graph, memory map and documents can show, not just the vault list. */
 const SCOPE_OPS = new Set(["created", "cloned", "merged", "deleted", "invitation_accepted", "left", "member_removed"]);
@@ -27,8 +32,8 @@ const FLUSH_MS = 400;
 const STALE_MS = 35_000;
 const MAX_BACKOFF_MS = 30_000;
 
-type Pending = { all: boolean; vaults: boolean; entities: boolean; documents: boolean; members: Set<string>; lost: Set<string> };
-const fresh = (): Pending => ({ all: false, vaults: false, entities: false, documents: false, members: new Set(), lost: new Set() });
+type Pending = { all: boolean; vaults: boolean; entities: boolean; documents: boolean; members: Set<string>; lost: Set<string>; ontology: Set<string> };
+const fresh = (): Pending => ({ all: false, vaults: false, entities: false, documents: false, members: new Set(), lost: new Set(), ontology: new Set() });
 
 /** Applies a batch of invalidations: vault list first, so members are refetched only for vaults the user still has. */
 async function flush(qc: QueryClient, p: Pending) {
@@ -51,8 +56,18 @@ async function flush(qc: QueryClient, p: Pending) {
       else qc.removeQueries({ queryKey: vaultKeys.members(id) });
     }
   }
+  for (const vault of p.ontology) {
+    // A first fetch may have read just before hello or the event. Cancel it so
+    // its late response cannot hide a proposal whose cursor we already saw.
+    const keys = [ontologyKeys.vault(vault), ["ontology-activity", vault], ["objects", vault], ["object-kinds", vault], ["object-profile", vault]];
+    await Promise.all(keys.map(queryKey => qc.cancelQueries({ queryKey })));
+    await Promise.all(keys.map(queryKey => qc.invalidateQueries({ queryKey })));
+  }
   if (p.all || p.entities || p.documents || p.vaults) void qc.invalidateQueries({ queryKey: ontologyKeys.all });
-  if (p.all || p.entities) void qc.invalidateQueries({ queryKey: entityKeys.all });
+  if (p.all || p.entities) {
+    void qc.invalidateQueries({ queryKey: entityKeys.all });
+    for (const key of ["objects", "object-kinds", "object-profile"]) void qc.invalidateQueries({ queryKey: [key] });
+  }
   if (p.all || p.documents) void qc.invalidateQueries({ queryKey: documentKeys.all });
 }
 
@@ -69,6 +84,7 @@ export function useLiveUpdates() {
     let flushTimer: ReturnType<typeof setTimeout> | undefined;
     // the last seq seen per vault, so a reconnect can tell which vaults changed while it was away
     const cursors = new Map<string, number>();
+    const ontologyCursors = new Map<string, number>();
     let pending = fresh();
 
     const schedule = () => {
@@ -94,11 +110,26 @@ export function useLiveUpdates() {
               if (known === undefined || seq > known) pending.entities = pending.documents = true;
             }
           }
+          const available = new Set(Object.keys(m.vaults));
+          for (const vault of ontologyCursors.keys()) if (!available.has(vault)) ontologyCursors.delete(vault);
+          for (const [vault, seq] of Object.entries(m.ontology ?? {})) {
+            ontologyCursors.set(vault, seq);
+            pending.ontology.add(vault);
+          }
           everConnected = true;
           cursors.clear();
           for (const [vault, seq] of Object.entries(m.vaults)) cursors.set(vault, seq);
           break;
         }
+        case "ontology":
+          if (m.event.seq <= (ontologyCursors.get(m.vault) ?? 0)) return;
+          ontologyCursors.set(m.vault, m.event.seq);
+          pending.ontology.add(m.vault);
+          break;
+        case "ontology_resync":
+          ontologyCursors.set(m.vault, m.seq);
+          pending.ontology.add(m.vault);
+          break;
         case "change":
           cursors.set(m.vault, Math.max(cursors.get(m.vault) ?? 0, m.seq));
           if (m.kind === "document") pending.documents = true;
@@ -132,7 +163,8 @@ export function useLiveUpdates() {
       if (getLiveStatus() !== "live") setLiveStatus("connecting");
       let socket: WebSocket;
       try {
-        socket = new WebSocket(`${apiOrigin().replace(/^http/, "ws")}/api/events/ws`);
+        const resume = new URLSearchParams({ ontology_after: JSON.stringify(Object.fromEntries(ontologyCursors)) });
+        socket = new WebSocket(`${apiOrigin().replace(/^http/, "ws")}/api/events/ws?${resume}`);
       } catch {
         return retry(false);
       }
@@ -141,7 +173,8 @@ export function useLiveUpdates() {
       socket.onmessage = (e) => {
         lastSeen = Date.now();
         try {
-          onMessage(JSON.parse(String(e.data)) as Message);
+          const parsed = messageSchema.safeParse(JSON.parse(String(e.data)));
+          if (parsed.success) onMessage(parsed.data);
         } catch {
           // not ours to understand; ignore
         }

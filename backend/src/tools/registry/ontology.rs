@@ -34,6 +34,7 @@ fn propose_schema() -> serde_json::Value {
                 "items": {
                     "type": "object",
                     "properties": {
+                        "revision": {"type":"integer", "minimum":0, "description":"current revision from ontology_get; omit or 0 for a new definition or an identical retry. On ontology.stale_revision, fetch again and review changes before retrying"},
                         "kind": kind_schema(),
                         "description": {"type": "string", "description": "what this kind is, in one sentence (at most 500 characters)"},
                         "merge_into": {"type": "string", "description": "propose folding this kind into that one (the kind to keep)"},
@@ -49,6 +50,7 @@ fn propose_schema() -> serde_json::Value {
                 "items": {
                     "type": "object",
                     "properties": {
+                        "revision": {"type":"integer", "minimum":0, "description":"current revision from ontology_get; omit or 0 for a new definition or an identical retry. On ontology.stale_revision, fetch again and review changes before retrying"},
                         "kind": kind_schema(),
                         "name": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$", "description": "the property's name on that kind, e.g. price, size, start_date"},
                         "datatype": {"type": "string", "enum": Datatype::ALL.map(Datatype::as_str)},
@@ -82,6 +84,7 @@ fn propose_schema() -> serde_json::Value {
                 "items": {
                     "type": "object",
                     "properties": {
+                        "revision": {"type":"integer", "minimum":0, "description":"current revision from ontology_get; omit or 0 for a new definition or an identical retry. On ontology.stale_revision, fetch again and review changes before retrying"},
                         "kind": kind_schema(),
                         "name": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$", "description": "the metric's name on that kind, e.g. avg_price, open_order_value"},
                         "expr": expr_schema(),
@@ -100,6 +103,7 @@ fn propose_schema() -> serde_json::Value {
                 "items": {
                     "type": "object",
                     "properties": {
+                        "revision": {"type":"integer", "minimum":0, "description":"current revision from ontology_get; omit or 0 for a new definition or an identical retry. On ontology.stale_revision, fetch again and review changes before retrying"},
                         "from_kind": kind_schema(),
                         "label": {"type": "string", "description": "the relation label, as `entity_relate` or `code_relate` writes it, e.g. works_at or calls"},
                         "to_kind": kind_schema(),

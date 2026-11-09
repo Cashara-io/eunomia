@@ -61,7 +61,7 @@ test("typed objects, server pages, sources, scoped numbers and related objects",
       (
         await page.request.post(
           `/api/vaults/${vault.id}/ontology/${route}/decide`,
-          { data: { ...body, decision: { action: "approve" } } },
+          { data: { ...body, revision: 1, decision: { action: "approve" } } },
         )
       ).ok(),
     ).toBeTruthy();

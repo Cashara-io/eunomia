@@ -196,7 +196,7 @@ pub async fn suggest(db: &OrgDb, settings: &Settings, owner: &RecordId, vault_id
         }
     }
     let skipped = total - kinds.len() - links.len() - properties.len() - metrics.len();
-    let proposed = apply(db, &vault, Valid { kinds, links, properties, metrics }, Origin::Suggested).await?;
+    let proposed = apply(db, &vault, Valid { kinds, links, properties, metrics }.at_snapshot(&profile), Origin::Suggested).await?;
     Ok(SuggestOut::Model { proposed, skipped, ontology: view(db, &vault).await? })
 }
 
@@ -284,6 +284,7 @@ mod tests {
     #[test]
     fn a_name_in_the_profile_cannot_close_the_block() {
         let kind = KindItem {
+            revision: 0,
             kind: "db".into(),
             built_in: false,
             status: ViewStatus::Observed,

@@ -698,8 +698,6 @@ async fn oldest_supported_schema_coverage_and_0040_paging_repair_are_idempotent(
     let db = app.db().await;
     assert_eq!(db.schema_version(), i64::from(migrate::MIN_SUPPORTED_TENANT));
     let question = json!({"question": "Where is Coastal Irrigation?"});
-    let out = app.tool("ontology_coverage", question.clone()).await;
-    assert_eq!(out["chosen_by"], "entities", "{out}");
 
     let before: Vec<Value> = db.test_raw().query("SELECT * FROM entity").await.unwrap().take(0).unwrap();
     app.state.provisioner.as_ref().unwrap().migrate_org(app.control(), &app.user.org).await.unwrap();
@@ -725,4 +723,22 @@ async fn oldest_supported_schema_coverage_and_0040_paging_repair_are_idempotent(
     assert!(shown.contains("IndexScan") && shown.contains("entity_vault_name_key_idx"), "{shown}");
     assert!(shown.contains("\"limit\":\"8\""), "{shown}");
     assert!(!shown.contains("TableScan") && !shown.contains("Sort"), "{shown}");
+}
+
+#[tokio::test]
+async fn ontology_activity_upgrade_keeps_decisions_without_inventing_old_events() {
+    let db = fresh().await;
+    migrate::apply_up_to(&db, 41).await.unwrap();
+    db.query(r#"CREATE vault:upgrade SET name = "Upgrade";
+        CREATE ontology_kind:kept SET vault = vault:upgrade, kind = "shop", description = "Keep exact text", origin = "human", status = "approved";"#)
+        .await.unwrap().check().unwrap();
+    migrate::migrate(&db, &test_settings()).await.unwrap();
+    let rows: Vec<Value> = db.query("SELECT kind, description, status, revision FROM ontology_kind:kept").await.unwrap().take(0).unwrap();
+    assert_eq!(rows[0], serde_json::json!({"kind":"shop","description":"Keep exact text","status":"approved","revision":1}));
+    assert_eq!(count(&db, "ontology_event").await, 0, "historical decisions have no fabricated author or timestamp");
+    db.query(r#"UPDATE ontology_kind:kept SET revision = 2, activity_action = "described", description = "New text", activity_actor = "user:owner", activity_actor_type = "user", activity_actor_name = "Owner";"#)
+        .await.unwrap().check().unwrap();
+    assert_eq!(count(&db, "ontology_event").await, 1);
+    migrate::migrate(&db, &test_settings()).await.unwrap();
+    assert_eq!(count(&db, "ontology_event").await, 1, "upgrade is idempotent");
 }

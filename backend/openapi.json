@@ -3699,6 +3699,16 @@
         "summary": "Follow everything that changes in the caller's vaults over one WebSocket",
         "description": "Upgrades to a WebSocket that sends JSON text messages with a `type`: `hello` (each vault's last change seq, first and on every reconnect), `change` (a change-log row of any vault the caller can read), `seq` (a vault's log moved on; refetch it), `vault` (a vault was created, renamed, deleted, cloned, merged, or its members changed), `vaults` (the caller's vault set changed), `resync` (refetch everything) and `heartbeat`. No content: fetch what changed. A browser authenticates with its session cookie from an allowed origin; other clients send a Bearer token.",
         "operationId": "followEvents",
+        "parameters": [
+          {
+            "name": "ontology_after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "101": {
             "description": "Switching to the WebSocket protocol"
@@ -7794,6 +7804,153 @@
         ]
       }
     },
+    "/api/vaults/{vault_id}/ontology/activity": {
+      "get": {
+        "tags": [
+          "vaults"
+        ],
+        "operationId": "getOntologyActivity",
+        "parameters": [
+          {
+            "name": "vault_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "newest",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "review_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "actor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "actor_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "definition_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "target",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityPage"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/vaults/{vault_id}/ontology/automap": {
       "post": {
         "tags": [
@@ -8842,6 +8999,67 @@
             "type": "string"
           },
           "vault_id": {
+            "type": "string"
+          }
+        }
+      },
+      "ActivityEvent": {
+        "type": "object",
+        "required": [
+          "seq",
+          "at",
+          "actor",
+          "actor_type",
+          "actor_name",
+          "action",
+          "definition_type",
+          "kind",
+          "name",
+          "target",
+          "revision"
+        ],
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "actor_name": {
+            "type": "string"
+          },
+          "actor_type": {
+            "type": "string"
+          },
+          "after": {},
+          "at": {
+            "type": "string"
+          },
+          "before": {},
+          "definition_type": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "target": {
             "type": "string"
           }
         }
@@ -11660,6 +11878,7 @@
       "KindDecideBody": {
         "type": "object",
         "required": [
+          "revision",
           "kind",
           "decision"
         ],
@@ -11669,6 +11888,16 @@
           },
           "kind": {
             "type": "string"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -11734,6 +11963,7 @@
         "type": "object",
         "description": "One entity kind of the vault.",
         "required": [
+          "revision",
           "kind",
           "built_in",
           "status",
@@ -11798,6 +12028,10 @@
               "string",
               "null"
             ]
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
           },
           "samples": {
             "type": "array",
@@ -11928,6 +12162,7 @@
       "LinkDecideBody": {
         "type": "object",
         "required": [
+          "revision",
           "from_kind",
           "label",
           "to_kind",
@@ -11942,6 +12177,16 @@
           },
           "label": {
             "type": "string"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
           },
           "to_kind": {
             "type": "string"
@@ -12002,6 +12247,7 @@
         "type": "object",
         "description": "One link type of the vault: relations labelled `label` from a `from_kind` entity to a `to_kind` one.",
         "required": [
+          "revision",
           "from_kind",
           "label",
           "to_kind",
@@ -12042,6 +12288,10 @@
               "string",
               "null"
             ]
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
           },
           "samples": {
             "type": "array",
@@ -12468,6 +12718,7 @@
       "MetricDecideBody": {
         "type": "object",
         "required": [
+          "revision",
           "kind",
           "name",
           "decision"
@@ -12481,6 +12732,16 @@
           },
           "name": {
             "type": "string"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -12623,6 +12884,7 @@
         "type": "object",
         "description": "One metric of a kind, as the ontology view shows it. Its value is never here: `metric_eval` runs it.",
         "required": [
+          "revision",
           "name",
           "synonyms",
           "expr",
@@ -12662,6 +12924,10 @@
               "string",
               "null"
             ]
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
           },
           "status": {
             "$ref": "#/components/schemas/Status"
@@ -13281,6 +13547,7 @@
       "PropertyDecideBody": {
         "type": "object",
         "required": [
+          "revision",
           "kind",
           "name",
           "decision"
@@ -13294,6 +13561,16 @@
           },
           "name": {
             "type": "string"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -13359,6 +13636,7 @@
         "type": "object",
         "description": "One property of a kind, as the ontology view shows it.",
         "required": [
+          "revision",
           "name",
           "datatype",
           "synonyms",
@@ -13405,6 +13683,10 @@
               "string",
               "null"
             ]
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
           },
           "samples": {
             "type": "array",
@@ -13520,6 +13802,7 @@
         "type": "object",
         "description": "A proposed kind after the call: `status` is the row's, so a kind a person already decided shows\nthat decision (the proposal did not change it).",
         "required": [
+          "revision",
           "kind",
           "status"
         ],
@@ -13533,6 +13816,10 @@
               "null"
             ]
           },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
           "status": {
             "$ref": "#/components/schemas/Status"
           }
@@ -13541,6 +13828,7 @@
       "ProposedLink": {
         "type": "object",
         "required": [
+          "revision",
           "from_kind",
           "label",
           "to_kind",
@@ -13552,6 +13840,10 @@
           },
           "label": {
             "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
           },
           "status": {
             "$ref": "#/components/schemas/Status"
@@ -13565,6 +13857,7 @@
         "type": "object",
         "description": "A proposed metric after the call, with the row's status (a decided one keeps its decision).",
         "required": [
+          "revision",
           "kind",
           "name",
           "status"
@@ -13582,6 +13875,10 @@
           "name": {
             "type": "string"
           },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
           "status": {
             "$ref": "#/components/schemas/Status"
           }
@@ -13591,6 +13888,7 @@
         "type": "object",
         "description": "A proposed property after the call, with the row's status (a decided one keeps its decision).",
         "required": [
+          "revision",
           "kind",
           "name",
           "datatype",
@@ -13611,6 +13909,10 @@
           },
           "name": {
             "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
           },
           "status": {
             "$ref": "#/components/schemas/Status"
