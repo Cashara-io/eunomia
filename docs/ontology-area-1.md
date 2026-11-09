@@ -1,8 +1,8 @@
-# Business twin: first release
+# Ontology: first release
 
-Business twin lives under `/twin`, scoped by the `space` URL parameter. Only Overview, Structure and Review are exposed. Kind details have their own routes. Search, filters, paging, kind section and review selection are URL state, so browser Back restores them.
+Ontology lives under `/ontology`, scoped by the `space` URL parameter. Only Overview, Structure and Review are exposed. Kind details have their own routes. Search, filters, paging, kind section and review selection are URL state, so browser Back restores them.
 
-The former Kinds and links controls now live in Business twin. Memory spaces retains a compact read-only summary. The old ontology, kinds-and-links, kinds and links anchors redirect to Structure for the open space. CSV guidance now names Business twin. Add data reuses Auto-map and links to Documents with the same space selected. Import remains an explicit action in the existing CSV preview.
+The former Kinds and links controls now live in Ontology. Memory spaces retains a compact read-only summary. The old ontology, kinds-and-links, kinds and links anchors redirect to Structure for the open space. CSV guidance now names Ontology. Add data reuses Auto-map and links to Documents with the same space selected. Import remains an explicit action in the existing CSV preview.
 
 Structure and Review page complete API results in groups of ten. Kind properties, numbers and incoming/outgoing links have separate sections with bounded, expandable details. No canvas or object directory is included in this release.
 

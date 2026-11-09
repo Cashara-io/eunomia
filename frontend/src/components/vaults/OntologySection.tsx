@@ -18,7 +18,7 @@ export default function OntologySection({ vault }: { vault: Vault }) {
           window.location.hash,
         )
       ) {
-        router.replace(twinHref("/twin/schema", vault.id));
+        router.replace(twinHref("/ontology/schema", vault.id));
       }
     };
     redirect();
@@ -30,16 +30,16 @@ export default function OntologySection({ vault }: { vault: Vault }) {
     ? definitions(data).filter((d) => d.item.status === "proposed").length
     : null;
   return (
-    <section className="flex flex-col gap-2" aria-label="Business twin">
-      <h3 className="section-title">Business twin</h3>
+    <section className="flex flex-col gap-2" aria-label="Ontology">
+      <h3 className="section-title">Ontology</h3>
       <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
         {data
           ? `${data.kinds.filter((k) => !k.built_in || k.entities > 0).length} kinds, ${waiting} suggestions to review.`
           : query.isError
             ? "The summary could not be loaded."
             : "Loading summary…"}{" "}
-        <Link className="link" href={twinHref("/twin", vault.id)}>
-          Open Business twin
+        <Link className="link" href={twinHref("/ontology", vault.id)}>
+          Open Ontology
         </Link>
       </p>
     </section>

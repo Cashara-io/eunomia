@@ -18,9 +18,9 @@ import KindDetail from "./KindDetail";
 import Review from "./Review";
 
 const views = [
-  { path: "/twin", label: "Overview" },
-  { path: "/twin/schema", label: "Structure" },
-  { path: "/twin/review", label: "Review" },
+  { path: "/ontology", label: "Overview" },
+  { path: "/ontology/schema", label: "Structure" },
+  { path: "/ontology/review", label: "Review" },
 ];
 
 export default function TwinArea({
@@ -37,7 +37,7 @@ export default function TwinArea({
   return (
     <div className="max-w-6xl flex flex-col gap-6">
       <PageHeader
-        title="Business twin"
+        title="Ontology"
         intro="The people, work and numbers your business runs on."
       />
       {query.isError ? (
@@ -65,10 +65,10 @@ export default function TwinArea({
                 key={v.id}
                 href={twinHref(
                   view === "review"
-                    ? "/twin/review"
+                    ? "/ontology/review"
                     : view === "structure"
-                      ? "/twin/schema"
-                      : "/twin",
+                      ? "/ontology/schema"
+                      : "/ontology",
                   v.id,
                 )}
                 className="flex items-center justify-between gap-3 p-4 hover:bg-[var(--surface-raised)]"
@@ -109,13 +109,13 @@ function SelectedSpace({
   const waiting = data
     ? definitions(data).filter((d) => d.item.status === "proposed").length
     : null;
-  const current = view === "kind" ? "/twin/schema" : pathname;
+  const current = view === "kind" ? "/ontology/schema" : pathname;
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3 min-w-0">
           <VaultChip tone={vaultTone(vault.kind)} name={vault.name} />
-          <Link className="link text-[13px]" href="/twin">
+          <Link className="link text-[13px]" href="/ontology">
             Change space
           </Link>
         </div>
@@ -141,7 +141,7 @@ function SelectedSpace({
           )}
         </div>
       </div>
-      <nav aria-label="Business twin views" className="hidden sm:flex gap-2">
+      <nav aria-label="Ontology views" className="hidden sm:flex gap-2">
         {views.map((v) => (
           <Link
             key={v.path}
@@ -187,11 +187,11 @@ function SelectedSpace({
         <ErrorLine
           error={failure(
             query.error,
-            "Could not load the business twin. Use Refresh to try again.",
+            "Could not load the ontology. Use Refresh to try again.",
           )}
         />
       ) : !data ? (
-        <p role="status">Loading the business twin…</p>
+        <p role="status">Loading the ontology…</p>
       ) : (
         <>
           {view === "overview" && <Overview vault={vault} data={data} />}

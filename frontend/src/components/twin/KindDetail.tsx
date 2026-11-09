@@ -45,7 +45,7 @@ export default function KindDetail({
     return (
       <>
         <h2 className="section-title">Kind unavailable</h2>
-        <Link className="link" href={twinHref("/twin/schema", vault.id)}>
+        <Link className="link" href={twinHref("/ontology/schema", vault.id)}>
           Back to Structure
         </Link>
       </>
@@ -59,8 +59,8 @@ export default function KindDetail({
         className="link self-start text-[13px]"
         href={
           params.get("back")
-            ? `/twin/schema?${new URLSearchParams(params.get("back") ?? "")}`
-            : twinHref("/twin/schema", vault.id)
+            ? `/ontology/schema?${new URLSearchParams(params.get("back") ?? "")}`
+            : twinHref("/ontology/schema", vault.id)
         }
       >
         Back to Structure
@@ -87,7 +87,7 @@ export default function KindDetail({
         {pending > 0 && (
           <Link
             className="link"
-            href={twinHref("/twin/review", vault.id, { kind })}
+            href={twinHref("/ontology/review", vault.id, { kind })}
           >
             {pending} suggestions to review
           </Link>
@@ -102,7 +102,7 @@ export default function KindDetail({
           </p>
           <Link
             className="link self-start"
-            href={twinHref("/twin/review", vault.id, { kind, status: "all" })}
+            href={twinHref("/ontology/review", vault.id, { kind, status: "all" })}
           >
             See current decisions for this kind
           </Link>

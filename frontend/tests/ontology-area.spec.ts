@@ -96,7 +96,7 @@ test("dedicated area, URL filters, kind details, Add data and old links", async 
 }) => {
   test.setTimeout(90_000);
   const { vault } = await seed(page);
-  await page.goto("/twin");
+  await page.goto("/ontology");
   await expect(
     page.getByRole("heading", { name: "Choose a memory space" }),
   ).toBeVisible();
@@ -112,7 +112,7 @@ test("dedicated area, URL filters, kind details, Add data and old links", async 
   await expect(
     page.getByRole("combobox", { name: "Space", exact: true }),
   ).toContainText(vault.name);
-  await page.goto(`/twin/schema?space=${encodeURIComponent(vault.id)}`);
+  await page.goto(`/ontology/schema?space=${encodeURIComponent(vault.id)}`);
   await expect(
     page
       .getByRole("table", { name: "Kinds and link types" })
@@ -131,7 +131,7 @@ test("dedicated area, URL filters, kind details, Add data and old links", async 
   await page.getByRole("button", { name: "Refresh", exact: true }).click();
   await expect(page.getByRole("table").locator("tbody tr")).toHaveCount(2);
   await page.getByRole("link", { name: "store", exact: true }).click();
-  await expect(page).toHaveURL(/\/twin\/kinds\/store/);
+  await expect(page).toHaveURL(/\/ontology\/kinds\/store/);
   await expect(page.getByText("shop", { exact: true })).toBeVisible();
   await choose(page, "Kind section", "Properties");
   await page.getByText("revenue (money, AUD)", { exact: true }).click();
@@ -150,7 +150,7 @@ test("dedicated area, URL filters, kind details, Add data and old links", async 
   await choose(page, "Kind section", "Review record");
   await expect(page.getByText(/does not provide who decided/)).toBeVisible();
   await page.goto("/vaults#kinds-and-links");
-  await expect(page).toHaveURL(/\/twin\/schema\?space=/);
+  await expect(page).toHaveURL(/\/ontology\/schema\?space=/);
 });
 
 test("owner batch decisions, receipts, explicit merge and strict policy", async ({
@@ -160,7 +160,7 @@ test("owner batch decisions, receipts, explicit merge and strict policy", async 
   const { vault, token } = await seed(page);
   const path = `/api/vaults/${vault.id}/ontology`;
   await page.goto(
-    `/twin/review?space=${encodeURIComponent(vault.id)}&type=kind&q=store`,
+    `/ontology/review?space=${encodeURIComponent(vault.id)}&type=kind&q=store`,
   );
   await page
     .getByRole("checkbox", { name: "Select store", exact: true })
@@ -183,7 +183,7 @@ test("owner batch decisions, receipts, explicit merge and strict policy", async 
     "business-twin-review-receipt.json",
   );
   await page.goto(
-    `/twin/review?space=${encodeURIComponent(vault.id)}&type=kind&q=fixture_0`,
+    `/ontology/review?space=${encodeURIComponent(vault.id)}&type=kind&q=fixture_0`,
   );
   await page
     .getByRole("checkbox", { name: "Select fixture 0", exact: true })
@@ -198,7 +198,7 @@ test("owner batch decisions, receipts, explicit merge and strict policy", async 
   await expect(page.getByRole("status")).toContainText(
     "Rejected without merging",
   );
-  await page.goto(`/twin/review?space=${encodeURIComponent(vault.id)}&q=shop`);
+  await page.goto(`/ontology/review?space=${encodeURIComponent(vault.id)}&q=shop`);
   await page.getByRole("link", { name: /shop.*kind/ }).click();
   await page
     .getByRole("button", { name: "Reject and merge into store", exact: true })
@@ -206,7 +206,7 @@ test("owner batch decisions, receipts, explicit merge and strict policy", async 
   await expect(
     page.getByRole("region", { name: "Selected suggestion" }),
   ).toContainText("New memories go to store.");
-  await page.goto(`/twin/schema?space=${encodeURIComponent(vault.id)}`);
+  await page.goto(`/ontology/schema?space=${encodeURIComponent(vault.id)}`);
   await page
     .getByRole("switch", { name: /Only approved kinds and links/ })
     .click();
@@ -227,9 +227,9 @@ test("mobile navigation, keyboard filters and honest load failure", async ({
   const { vault } = await seed(page);
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });
-    await page.goto(`/twin/schema?space=${encodeURIComponent(vault.id)}`);
+    await page.goto(`/ontology/schema?space=${encodeURIComponent(vault.id)}`);
     await choose(page, "View", "Review");
-    await expect(page).toHaveURL(/\/twin\/review/);
+    await expect(page).toHaveURL(/\/ontology\/review/);
     await page.getByRole("searchbox").fill("store");
     await page.getByRole("combobox", { name: "Type", exact: true }).focus();
     await page.keyboard.press("Enter");
@@ -289,7 +289,7 @@ test("members inspect evidence but cannot decide, and no-model replies stay hone
     ).ok(),
   ).toBeTruthy();
   await member.goto(
-    `/twin/review?space=${encodeURIComponent(vault.id)}&q=store&type=kind`,
+    `/ontology/review?space=${encodeURIComponent(vault.id)}&q=store&type=kind`,
   );
   await expect(
     member.getByText(/Only an owner of this space can decide/),
@@ -307,7 +307,7 @@ test("members inspect evidence but cannot decide, and no-model replies stay hone
     { data: { kind: "store", decision: { action: "approve" } } },
   );
   expect(refused.status()).toBe(403);
-  await member.goto(`/twin/schema?space=${encodeURIComponent(vault.id)}`);
+  await member.goto(`/ontology/schema?space=${encodeURIComponent(vault.id)}`);
   await expect(member.getByRole("switch")).toBeDisabled();
   await context.close();
   const profile = await (
@@ -316,7 +316,7 @@ test("members inspect evidence but cannot decide, and no-model replies stay hone
   await page.route(/\/api\/vaults\/[^/]+\/ontology\/suggest$/, (route) =>
     route.fulfill({ json: { mode: "profile_only", profile, note: null } }),
   );
-  await page.goto(`/twin/schema?space=${encodeURIComponent(vault.id)}`);
+  await page.goto(`/ontology/schema?space=${encodeURIComponent(vault.id)}`);
   await page.getByRole("button", { name: "Suggest kinds" }).click();
   await expect(page.getByRole("status")).toContainText(
     "No model is set up on this server",
@@ -329,7 +329,7 @@ test("a batch approves dependencies in order and reports each saved result", asy
   test.setTimeout(60_000);
   const { vault } = await seed(page);
   await page.goto(
-    `/twin/review?space=${encodeURIComponent(vault.id)}&kind=store`,
+    `/ontology/review?space=${encodeURIComponent(vault.id)}&kind=store`,
   );
   await page
     .getByRole("checkbox", { name: "Select suggestions on this page" })
@@ -359,7 +359,7 @@ test("a batch approves dependencies in order and reports each saved result", asy
     store.metrics[0].status,
     current.links[0].status,
   ]).toEqual(["approved", "approved", "approved", "approved"]);
-  await page.goto(`/twin/kinds/person?space=${encodeURIComponent(vault.id)}`);
+  await page.goto(`/ontology/kinds/person?space=${encodeURIComponent(vault.id)}`);
   await expect(
     page.getByRole("button", { name: "Reject", exact: true }),
   ).toHaveCount(0);
@@ -374,14 +374,14 @@ test("one suggestion approves on its own, and closing it keeps the queue page", 
   test.setTimeout(60_000);
   const { vault } = await seed(page);
   const space = encodeURIComponent(vault.id);
-  await page.goto(`/twin/review?space=${space}&page=2`);
+  await page.goto(`/ontology/review?space=${space}&page=2`);
   await page.getByRole("link").filter({ hasText: /fixture/ }).first().click();
   await expect(page).toHaveURL(/selected=/);
   await page.getByRole("button", { name: "Back to queue" }).click();
   await expect(page).toHaveURL(/page=2/);
   await expect(page).not.toHaveURL(/selected=/);
 
-  await page.goto(`/twin/review?space=${space}&type=kind&q=fixture_1`);
+  await page.goto(`/ontology/review?space=${space}&type=kind&q=fixture_1`);
   await page.getByRole("link", { name: "fixture 1", exact: true }).click();
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   await expect
@@ -400,9 +400,9 @@ test("a kind page opened from Structure returns to the same Structure page", asy
 }) => {
   const { vault } = await seed(page);
   const space = encodeURIComponent(vault.id);
-  await page.goto(`/twin/schema?space=${space}&page=2&status=all`);
+  await page.goto(`/ontology/schema?space=${space}&page=2&status=all`);
   await page.getByRole("table").getByRole("link").first().click();
-  await expect(page).toHaveURL(/\/twin\/kinds\//);
+  await expect(page).toHaveURL(/\/ontology\/kinds\//);
   await page.getByRole("link", { name: "Back to Structure" }).click();
-  await expect(page).toHaveURL(/\/twin\/schema\?.*page=2/);
+  await expect(page).toHaveURL(/\/ontology\/schema\?.*page=2/);
 });

@@ -75,13 +75,13 @@ test.describe("Vault invitations", () => {
   });
 });
 
-test.describe("Business twin summary", () => {
+test.describe("Ontology summary", () => {
   test("a space links to its dedicated twin area", async ({ browser }) => {
     const { page } = await newUser(browser, "kinds");
     await page.goto("/vaults");
-    await expect(page.getByRole("link", { name: "Open Business twin" })).toBeVisible();
-    await page.getByRole("link", { name: "Open Business twin" }).click();
-    await expect(page).toHaveURL(/\/twin\?space=/);
+    await expect(page.getByRole("link", { name: "Open Ontology" })).toBeVisible();
+    await page.getByRole("link", { name: "Open Ontology" }).click();
+    await expect(page).toHaveURL(/\/ontology\?space=/);
     await expect(page.getByRole("heading", { name: /Overview/ })).toBeVisible();
   });
 });

@@ -301,7 +301,7 @@ export default function Review({
                 )}
                 <Link
                   className="min-w-0 flex-1 flex flex-col gap-1"
-                  href={twinHref("/twin/review", vault.id, {
+                  href={twinHref("/ontology/review", vault.id, {
                     ...Object.fromEntries(params.entries()),
                     selected: d.id,
                   })}

@@ -3,8 +3,8 @@ import TwinArea from "@/components/twin/TwinArea";
 
 export default function Page() {
   return (
-    <Suspense fallback={<p>Loading Business twin…</p>}>
-      <TwinArea view="overview" />
+    <Suspense fallback={<p>Loading Ontology…</p>}>
+      <TwinArea view="structure" />
     </Suspense>
   );
 }

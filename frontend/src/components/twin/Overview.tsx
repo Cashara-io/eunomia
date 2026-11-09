@@ -27,7 +27,7 @@ export default function Overview({
         <h2 className="section-title">{vault.name}: Overview</h2>
         <Link
           className="btn btn-primary"
-          href={twinHref("/twin/review", vault.id)}
+          href={twinHref("/ontology/review", vault.id)}
         >
           {pending.length} to review
         </Link>
@@ -77,7 +77,7 @@ export default function Overview({
               <li key={d.id} className="px-4 py-3">
                 <Link
                   className="link"
-                  href={twinHref("/twin/review", vault.id, { selected: d.id })}
+                  href={twinHref("/ontology/review", vault.id, { selected: d.id })}
                 >
                   {words(d.name)}
                 </Link>
@@ -91,7 +91,7 @@ export default function Overview({
             )}
           </ul>
           {pending.length > 5 && (
-            <Link className="link" href={twinHref("/twin/review", vault.id)}>
+            <Link className="link" href={twinHref("/ontology/review", vault.id)}>
               See all {pending.length} suggestions
             </Link>
           )}
@@ -104,7 +104,7 @@ export default function Overview({
           </p>
           <Link
             className="link self-start"
-            href={twinHref("/twin/schema", vault.id)}
+            href={twinHref("/ontology/schema", vault.id)}
           >
             Browse the structure
           </Link>
