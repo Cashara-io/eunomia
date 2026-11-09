@@ -19,8 +19,10 @@ export async function generateMetadata(): Promise<Metadata> {
     metadataBase:
       configured ??
       requestMetadataBase(
-        request?.get("host") ?? null,
-        request?.get("x-forwarded-proto") ?? null,
+        request?.get("x-forwarded-host")?.split(",")[0]?.trim() ||
+          request?.get("host") ||
+          null,
+        request?.get("x-forwarded-proto")?.split(",")[0]?.trim() ?? null,
       ),
     title: "Eunomia",
     openGraph: {

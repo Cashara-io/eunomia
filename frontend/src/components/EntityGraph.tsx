@@ -199,6 +199,8 @@ export default function EntityGraph({
   const addRelationMutation = useAddRelation();
   const [selected, setSelected] = useState<EntityDetail | null>(null);
   const [loadingEntity, setLoadingEntity] = useState(false);
+  // Bumped on every open and on cancel, so a slow detail request that lands late is ignored.
+  const entityLoad = useRef(0);
   // hidden rather than visible, so a custom kind that shows up later is on by default
   const [hiddenKinds, setHiddenKinds] = useState<Set<EntityKind>>(() => new Set(kinds ? [] : CODE_KINDS));
   const [showCreate, setShowCreate] = useState(false);
@@ -288,17 +290,24 @@ export default function EntityGraph({
   }
 
   useEffect(() => {
-    if (!selected && !showCreate) return;
+    if (!selected && !showCreate && !loadingEntity) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       if (showCreate) setShowCreate(false);
+      else if (loadingEntity) cancelEntityLoad();
       else if (!editing) setSelected(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selected, showCreate, editing]);
+  }, [selected, showCreate, editing, loadingEntity]);
+
+  function cancelEntityLoad() {
+    entityLoad.current += 1;
+    setLoadingEntity(false);
+  }
 
   async function selectNode(id: string) {
+    const load = ++entityLoad.current;
     setLoadingEntity(true);
     setEditing(false);
     setMemoryText("");
@@ -307,12 +316,13 @@ export default function EntityGraph({
     setActionError(null);
     try {
       const detail = await queryClient.fetchQuery(entityDetailQuery(id));
+      if (load !== entityLoad.current) return;
       setSelected(detail);
       return detail;
     } catch {
-      setSelected(null);
+      if (load === entityLoad.current) setSelected(null);
     } finally {
-      setLoadingEntity(false);
+      if (load === entityLoad.current) setLoadingEntity(false);
     }
   }
 
@@ -770,6 +780,12 @@ export default function EntityGraph({
 
   const inspector = loadingEntity ? (
     <aside aria-label="Loading person or topic" className={isPhone ? "panel fixed inset-0 z-50 p-4" : "panel absolute z-20 right-6 top-6 w-[22rem] max-h-[calc(100%-5rem)] p-4"} style={isPhone ? { borderRadius: 0, border: 0 } : undefined}>
+      {isPhone && (
+        <button type="button" className="btn btn-ghost btn-sm mb-2" onClick={cancelEntityLoad}>
+          <ArrowLeftIcon weight="duotone" size={16} aria-hidden />
+          Back
+        </button>
+      )}
       <LoadingSkeleton label="Loading person or topic" layout="detail" />
     </aside>
   ) : selected && (
