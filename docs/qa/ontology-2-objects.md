@@ -1,5 +1,7 @@
 # Ontology objects and profiles, PR 2
 
+The original results below describe head 6232c41c. The [review fixes and replacement evidence](ontology-2-review-fixes.md) supersede its paging, formatting, latest-value and timing details.
+
 ## What was exercised
 
 The production Next.js build talks to this branch's real Axum router and an isolated embedded SurrealDB fixture on ports 13760 and 18760. The original Banksia services on 3600, 8600 and database port 8000 were not modified. No real login or production data was used.

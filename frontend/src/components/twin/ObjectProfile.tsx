@@ -8,6 +8,7 @@ import {
   type ObjectColumn,
   type ObjectProfile as Profile,
 } from "@/lib/queries/objects";
+import { formatPropertyNumber } from "@/lib/numbers";
 import { twinHref } from "./model";
 import { useTwinParams } from "./controls";
 import { words as plainWords } from "./DefinitionRows";
@@ -24,13 +25,8 @@ export function formatted(
 ): string {
   if (value === null || value === undefined) return "Missing";
   if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (typeof value === "number") {
-    if (column.datatype === "money")
-      return `${column.unit || "Currency not recorded"} ${value.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    if (column.datatype === "percent")
-      return `${(value * 100).toLocaleString("en-AU", { maximumFractionDigits: 2 })}%`;
-    return `${value.toLocaleString("en-AU", { maximumFractionDigits: 6 })}${column.unit ? ` ${column.unit}` : ""}`;
-  }
+  if (typeof value === "number")
+    return formatPropertyNumber(value, column.datatype, column.unit);
   if (column.datatype === "date")
     return Number.isNaN(Date.parse(value))
       ? "Unavailable"

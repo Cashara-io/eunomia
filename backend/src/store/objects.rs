@@ -7,23 +7,76 @@ SELECT status FROM ontology_kind WHERE vault = $vault AND kind = $kind;
 SELECT label, to_kind FROM ontology_link WHERE vault = $vault AND from_kind = $kind AND status = 'approved';
 "#);
 
-// Candidate identities only. Rust applies typed comparisons before slicing the output page.
-pub const PAGE: Stmt = Stmt::new("objects.page", r#"
-RETURN IF $table = 'entity' { (SELECT id, name FROM entity WHERE vault = $vault AND kind = $kind) }
-    ELSE IF $table = 'person' { (SELECT id, name FROM person WHERE vault = $vault) }
-    ELSE IF $table = 'organisation' { (SELECT id, name FROM organisation WHERE vault = $vault) }
-    ELSE IF $table = 'location' { (SELECT id, name FROM location WHERE vault = $vault) }
-    ELSE IF $table = 'repository' { (SELECT id, name FROM repository WHERE vault = $vault) }
-    ELSE IF $table = 'file' { (SELECT id, name FROM file WHERE vault = $vault) }
-    ELSE { (SELECT id, name FROM symbol WHERE vault = $vault) };
-"#);
+/// The value field is chosen from approved server metadata, never query text.
+pub fn value_field(datatype: &str) -> &'static str {
+    match datatype {
+        "number" | "integer" | "money" | "percent" => "value_num",
+        "bool" => "value_bool",
+        "date" | "datetime" => "value_date",
+        _ => "value_text",
+    }
+}
 
-// Two property histories at most, read in one batch. Avoids a DB subquery per candidate.
-pub const SORT_VALUES: Stmt = Stmt::new("objects.sort_values", r#"
-SELECT id, entity, property, value_num, value_text, value_bool, value_date, as_of, created_at
-    FROM entity_property WHERE vault = $vault AND property IN $props AND as_of <= time::now()
-    ORDER BY as_of DESC, created_at DESC, id DESC;
-"#);
+// Histories are traversed in typed index order. Only current points survive, so old
+// values cannot move an object across a page. Missing values are a separate, last phase.
+pub fn page_sql(table: &str, sort_field: Option<&str>, filter_field: Option<&str>, op: &str, descending: bool, same_property: bool, searching: bool) -> String {
+    let identity = if table == "entity" { "vault = $vault AND kind = $kind" } else { "vault = $vault" };
+    let linked_identity = if table == "entity" { "entity.vault = $vault AND entity.kind = $kind".to_string() }
+        else { format!("entity.vault = $vault AND string::split(<string>entity, ':')[0] = '{table}'") };
+    // Scalar closure variables let the planner use the compound latest-point index.
+    let current = |entity: &str, property: &str| format!("([{entity}].map(|$e| [{property}].map(|$p| ({})[0])[0])[0])", super::ontology::LATEST_POINT);
+    let latest = current("$this.entity", "$this.property");
+    let history = format!("vault = $vault AND {linked_identity} AND as_of <= $as_of AND id = {latest}.id");
+    let filter = |entity: &str| match (filter_field, op) {
+        (Some(field), "missing") => format!("{}.{field} = NONE", current(entity, "$filter_property")),
+        (Some(field), "eq" | "gte" | "lte") => {
+            let cmp = match op { "gte" => ">=", "lte" => "<=", _ => "=" };
+            format!("([{}].map(|$v| $v.{field} != NONE AND $v.{field} {cmp} $filter_value)[0])", current(entity, "$filter_property"))
+        }
+        _ => "true".to_string(),
+    };
+    let search = if searching { " AND string::contains(string::lowercase(name), $search)" } else { "" };
+    let linked_search = if searching { " AND string::contains(string::lowercase(entity.name), $search)" } else { "" };
+    let base_where = format!("{identity}{search} AND {}", filter("$this.id"));
+    let total = match (filter_field, op) {
+        (Some(field), "eq" | "gte" | "lte") => {
+            let cmp = match op { "gte" => ">=", "lte" => "<=", _ => "=" };
+            format!("(SELECT count() AS n FROM entity_property WHERE property = $filter_property AND {field} {cmp} $filter_value AND {field} != NONE AND {history}{linked_search} GROUP ALL)[0].n ?? 0")
+        }
+        _ => format!("(SELECT count() AS n FROM {table} WHERE {base_where} GROUP ALL)[0].n ?? 0"),
+    };
+    let direction = if descending { "DESC" } else { "ASC" };
+    if let Some(field) = sort_field {
+        let extra_filter = if same_property && matches!(op, "eq" | "gte" | "lte") {
+            let cmp = match op { "gte" => ">=", "lte" => "<=", _ => "=" };
+            format!("{field} {cmp} $filter_value")
+        } else { filter("$this.entity") };
+        let present = if same_property && matches!(op, "eq" | "gte") { "true".to_string() } else { format!("{field} != NONE") };
+        let sort_where = format!("property = $sort_property AND {present} AND {history}{linked_search} AND {extra_filter}");
+        format!(r#"
+            LET $page = (SELECT entity AS id, entity.name AS name, {field} FROM entity_property
+                WHERE {sort_where} ORDER BY {field} {direction}, entity {direction} LIMIT $limit START $offset);
+            LET $missing = IF array::len($page) < $limit {{
+                (SELECT id, name FROM {table} WHERE {base_where} AND {}.{field} = NONE
+                    ORDER BY id LIMIT ($limit - array::len($page)) START math::max([0, $offset - ((SELECT count() AS n FROM entity_property WHERE {sort_where} GROUP ALL)[0].n ?? 0)]));
+            }} ELSE {{ [] }};
+            RETURN {{rows:array::concat($page, $missing), total:{total}}};
+        "#, current("$this.id", "$sort_property"))
+    } else if let (Some(field), "eq" | "gte" | "lte") = (filter_field, op) {
+        let cmp = match op { "gte" => ">=", "lte" => "<=", _ => "=" };
+        format!(r#"
+            RETURN {{ rows:(SELECT entity AS id, entity.name AS name FROM entity_property
+                WHERE property = $filter_property AND {field} {cmp} $filter_value AND {field} != NONE AND {history}
+                    {linked_search}
+                ORDER BY name {direction}, entity {direction} LIMIT $limit START $offset), total:{total} }};
+        "#)
+    } else {
+        format!(r#"
+            RETURN {{ rows:(SELECT id, name FROM {table} WHERE {base_where}
+                ORDER BY name {direction}, id {direction} LIMIT $limit START $offset), total:{total} }};
+        "#)
+    }
+}
 
 pub const SOURCES: Stmt = Stmt::new("objects.sources", r#"
 SELECT entity, array::distinct(source) AS sources FROM entity_property
@@ -52,17 +105,7 @@ SELECT <string>(id) AS id, title, source, external_id, payload, <string>(updated
     FROM cache_record WHERE id IN $ids AND vault = $vault AND deleted != true;
 "#);
 
-pub const ALL: &[&Stmt] = &[&META, &PAGE, &SOURCES, &HISTORY, &SOURCE_RECORDS, &CURRENT, &SORT_VALUES, &KINDS, &PAGE_LINKS, &CONFLICTS];
-
-pub const CURRENT: Stmt = Stmt::new("objects.current", r#"
-RETURN array::flatten($props.map(|$p| (
-    SELECT <string>(id) AS id, property.name AS property, value_num, value_text, value_bool,
-        <string>(value_date) AS value_date, unit, <string>(as_of) AS as_of,
-        <string>(created_at) AS recorded_at, <string>(source) AS source
-        FROM entity_property WHERE entity = $id AND property = $p AND vault = $vault AND as_of <= time::now()
-        ORDER BY as_of DESC, recorded_at DESC, id DESC LIMIT 1
-)));
-"#);
+pub const ALL: &[&Stmt] = &[&META, &SOURCES, &HISTORY, &SOURCE_RECORDS, &KINDS, &PAGE_LINKS, &CONFLICTS];
 
 pub const KINDS: Stmt = Stmt::new("objects.kinds", r#"
 RETURN array::concat((SELECT kind, count() AS entities FROM entity WHERE vault = $vault GROUP BY kind), [

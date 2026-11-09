@@ -113,6 +113,11 @@ test("typed objects, server pages, sources, scoped numbers and related objects",
     kind: "product",
     name_column: "product",
   });
+  for (const [entity_id, property, value] of [
+    [ids[0], "margin", 0.585], [ids[1], "margin", 0.4461], [ids[2], "price", 0.0049],
+  ] satisfies [string, string, number][]) {
+    await tool("entity_set_property", { entity_id, property, value });
+  }
   const expensiveReads: string[] = [];
   page.on("request", (req) => {
     if (
@@ -126,7 +131,9 @@ test("typed objects, server pages, sources, scoped numbers and related objects",
   await page.goto(`/ontology/objects?space=${encodeURIComponent(vault.id)}`);
   await expect(page.getByRole("table").locator("tbody tr")).toHaveCount(25);
   await expect(page.getByRole("table")).toContainText("AUD 0.00");
-  await expect(page.getByRole("table")).toContainText("25%");
+  await expect(page.getByRole("table")).toContainText("58.50%");
+  await expect(page.getByRole("table")).toContainText("44.61%");
+  await expect(page.getByRole("table")).toContainText("AUD 0.0049");
   await page.getByRole("button", { name: "Columns", exact: true }).click();
   await page.getByRole("checkbox", { name: "Margin", exact: true }).uncheck();
   await expect(
@@ -246,6 +253,7 @@ test("Banksia-sized visual evidence in both themes and widths", async ({
       space: z.string(),
       object: z.string(),
       entities: z.literal(18878),
+      subcent_object: z.string(),
     })
     .parse(
       JSON.parse(
@@ -289,7 +297,7 @@ test("Banksia-sized visual evidence in both themes and widths", async ({
         ],
         [
           "profile",
-          `/ontology/objects/${encodeURIComponent(fixture.object)}?space=${encodeURIComponent(fixture.space)}&section=Properties`,
+          `/ontology/objects/${encodeURIComponent(fixture.subcent_object)}?space=${encodeURIComponent(fixture.space)}&section=Properties`,
         ],
         [
           "numbers",

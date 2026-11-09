@@ -1,5 +1,5 @@
 //! Permission-checked object directory and profile. No whole-kind values leave the list query.
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use surrealdb::types::{RecordId, SurrealValue};
@@ -21,30 +21,6 @@ pub struct ListArgs {
 }
 #[derive(Deserialize, SurrealValue)]
 struct PageRow { id: RecordId, name: String }
-#[derive(Deserialize, SurrealValue)]
-struct SortValue {
-    entity: RecordId, property: RecordId,
-    value_num: Option<f64>, value_text: Option<String>, value_bool: Option<bool>, value_date: Option<surrealdb::types::Datetime>,
-}
-impl SortValue {
-    fn value(&self, datatype:&str) -> Value {
-        match datatype {
-            "number"|"integer"|"money"|"percent"=>self.value_num.map(|n|json!(n)),
-            "bool"=>self.value_bool.map(Value::Bool),
-            "date"|"datetime"=>self.value_date.map(|d|json!(d.into_inner().to_rfc3339_opts(chrono::SecondsFormat::Nanos,true))),
-            "text"|"enum"=>self.value_text.clone().map(Value::String),
-            _=>None,
-        }.unwrap_or(Value::Null)
-    }
-}
-fn compare(a:&Value,b:&Value) -> std::cmp::Ordering {
-    match (a,b) {
-        (Value::Number(a),Value::Number(b))=>a.as_f64().unwrap_or(0.0).total_cmp(&b.as_f64().unwrap_or(0.0)),
-        (Value::String(a),Value::String(b))=>a.cmp(b),
-        (Value::Bool(a),Value::Bool(b))=>a.cmp(b),
-        _=>std::cmp::Ordering::Equal,
-    }
-}
 #[derive(Deserialize, SurrealValue)]
 struct LinkMeta { label: String, to_kind: String }
 #[derive(Deserialize, SurrealValue)]
@@ -84,7 +60,7 @@ pub async fn list(db: &OrgDb, user: &RecordId, vault: &RecordId, args: &ListArgs
     let labels:Vec<_>=link_types.iter().map(|l|l.label.clone()).collect::<BTreeSet<_>>().into_iter().collect();
     let find = |name: &str| props.iter().find(|p| p.name == name).ok_or_else(|| AppError::bad_request("choose an approved property"));
     let sort = args.sort.as_deref().unwrap_or("name");
-    let sort_property = if sort == "name" { None } else { Some(find(sort)?.id.clone()) };
+    let sort_property = if sort == "name" { None } else { Some(find(sort)?) };
     let filter = args.filter.as_deref().map(find).transpose()?;
     let op = args.op.as_deref().unwrap_or("");
     if !["", "eq", "gte", "lte", "missing"].contains(&op) || (!op.is_empty() && filter.is_none()) {
@@ -94,44 +70,35 @@ pub async fn list(db: &OrgDb, user: &RecordId, vault: &RecordId, args: &ListArgs
         let p = filter.ok_or_else(|| AppError::bad_request("filter property missing"))?;
         let text = args.value.as_deref().ok_or_else(|| AppError::bad_request("filter value missing"))?;
         let datatype = Datatype::parse(&p.datatype)?;
-        let stored = property::parse_value(datatype, &p.name, None, &json!(text))?;
+        let stored = property::parse_value(datatype, &p.name, p.enum_values.as_deref(), &json!(text))?;
         if let Some(date) = stored.date { json!(date.into_inner().to_rfc3339_opts(chrono::SecondsFormat::Nanos,true)) }
         else { property::to_json(datatype, &stored).ok_or_else(|| AppError::bad_request("invalid filter value"))? }
     };
-    let mut rows: Vec<PageRow> = q::PAGE.on(db).bind(("vault",vault.clone())).bind(("table",table.to_string()))
-        .bind(("kind",kind.as_str().to_string())).await?.take(0)?;
-    let needed: Vec<RecordId> = sort_property.iter().cloned().chain(filter.map(|p|p.id.clone())).collect();
-    let sort_values: Vec<SortValue> = if needed.is_empty() {Vec::new()} else {
-        q::SORT_VALUES.on(db).bind(("vault",vault.clone())).bind(("props",needed)).await?.take(0)?
-    };
-    let mut latest: HashMap<(String,String),Value> = HashMap::new();
-    let types:HashMap<_,_>=props.iter().map(|p|(p.id.to_string(),p.datatype.as_str())).collect();
-    for v in sort_values {
-        let property=v.property.to_string();
-        let value=v.value(types.get(&property).copied().unwrap_or(""));
-        latest.entry((v.entity.to_string(),property)).or_insert(value);
-    }
-    let get = |id:&RecordId,p:&RecordId|latest.get(&(id.to_string(),p.to_string())).cloned().unwrap_or(Value::Null);
-    let search = args.search.as_deref().unwrap_or("").to_lowercase();
-    rows.retain(|r| {
-        if !r.name.to_lowercase().contains(&search) {return false;}
-        let v=filter.map(|p|get(&r.id,&p.id)).unwrap_or(Value::Null);
-        match op { ""=>true,"missing"=>v.is_null(),"eq"=>!v.is_null()&&compare(&v,&value).is_eq(),"gte"=>!v.is_null()&&compare(&v,&value).is_ge(),"lte"=>!v.is_null()&&compare(&v,&value).is_le(),_=>false }
-    });
-    let mut keyed: Vec<_> = rows.into_iter().map(|r| {
-        let id=r.id.to_string();
-        let key=sort_property.as_ref().map(|p|get(&r.id,p)).unwrap_or_else(||json!(r.name));
-        (r,key,id)
-    }).collect();
-    keyed.sort_by(|(_,a,aid),(_,b,bid)| {
-        let order=if args.descending {compare(b,a)} else {compare(a,b)};
-        a.is_null().cmp(&b.is_null()).then(order).then_with(||aid.cmp(bid))
-    });
-    let total=keyed.len();
-    let rows: Vec<_> = keyed.into_iter().skip(args.offset).take(limit).map(|(r,_,_)|r).collect();
+    let as_of = chrono::Utc::now();
+    let sql = q::page_sql(table, sort_property.map(|p|q::value_field(&p.datatype)),
+        filter.map(|p|q::value_field(&p.datatype)), op, args.descending,
+        sort_property.zip(filter).is_some_and(|(s,f)|s.id==f.id), args.search.as_ref().is_some_and(|s|!s.is_empty()));
+    let filter_value = if let Some(p) = filter {
+        // Dates were normalised above; pass a native datetime to the typed index.
+        if matches!(p.datatype.as_str(), "date" | "datetime") && !value.is_null() {
+            surrealdb::types::Value::Datetime(chrono::DateTime::parse_from_rfc3339(value.as_str().unwrap())
+                .map_err(|_|AppError::bad_request("invalid filter date"))?.with_timezone(&chrono::Utc).into())
+        } else { value.into_value() }
+    } else { surrealdb::types::Value::None };
+    #[derive(Deserialize, SurrealValue)]
+    struct Page { rows: Vec<PageRow>, total: usize }
+    let slot = if sort_property.is_some() { 2 } else { 0 };
+    let page: Option<Page> = crate::store::dynamic(db, "objects.page", sql)
+        .bind(("vault",vault.clone())).bind(("kind",kind.as_str().to_string()))
+        .bind(("sort_property",sort_property.map(|p|p.id.clone())))
+        .bind(("filter_property",filter.map(|p|p.id.clone()))).bind(("filter_value",filter_value))
+        .bind(("search",args.search.as_deref().unwrap_or("").to_lowercase()))
+        .bind(("as_of",surrealdb::types::Datetime::from(as_of)))
+        .bind(("limit",limit)).bind(("offset",args.offset)).await?.take(slot)?;
+    let Page { rows, total } = page.ok_or_else(||AppError::internal("object page missing"))?;
     let ids: Vec<RecordId> = rows.iter().map(|r| r.id.clone()).collect();
     let names: BTreeSet<String> = props.iter().map(|p| p.name.clone()).collect();
-    let values = metric::latest_values(db, &vault, &kind, &names, &ids, chrono::Utc::now()).await?;
+    let values = metric::latest_values(db, &vault, &kind, &names, &ids, as_of).await?;
     let sources: Vec<SourceRow> = q::SOURCES.on(db).bind(("vault", vault.clone())).bind(("ids", ids)).await?.take(0)?;
     let sources: BTreeMap<String, usize> = sources.into_iter().map(|r| (r.entity.to_string(), r.sources.len())).collect();
     #[derive(Deserialize, SurrealValue)]
@@ -176,8 +143,18 @@ pub async fn profile(state: &OrgState, user: &RecordId, vault: &RecordId, id: &R
     let link_counts: Vec<Value> = res.take(4)?;
     let more = json!({"history":history.len()>100,"links":links.len()>100,"memories":memories.len()>100});
     history.truncate(100); links.truncate(100); memories.truncate(100);
-    let current: Vec<Value> = q::CURRENT.on(&state.db).bind(("vault",vault.clone())).bind(("id",id.clone()))
-        .bind(("props",props.iter().map(|p|p.id.clone()).collect::<Vec<_>>())).await?.take(0)?;
+    let as_of = chrono::Utc::now();
+    let current: Vec<Value> = metric::latest_rows(&state.db, &vault,
+        &props.iter().map(|p|p.id.clone()).collect::<Vec<_>>(), std::slice::from_ref(id), as_of).await?
+        .into_iter().filter_map(|r| {
+            let p=props.iter().find(|p|p.id == r.property)?;
+            let stored=property::Stored { num:r.value_num,text:r.value_text,boolean:r.value_bool,date:r.value_date };
+            Some(json!({
+                "property":p.name,"value":property::to_json(Datatype::parse(&p.datatype).ok()?, &stored),"unit":r.unit,
+                "as_of":r.as_of.into_inner().to_rfc3339(),"recorded_at":r.created_at.into_inner().to_rfc3339(),
+                "source":r.source.map(|s|s.to_string())
+            }))
+        }).collect();
     #[derive(SurrealValue)]
     struct ConflictPoint { name: String, property: RecordId, as_of: surrealdb::types::Datetime }
     let points: Vec<_> = current.iter().filter_map(|v| {
@@ -191,12 +168,7 @@ pub async fn profile(state: &OrgState, user: &RecordId, vault: &RecordId, id: &R
     let mut properties: Vec<Value> = props.iter().map(|p| {
         let rows: Vec<&Value> = current.iter().filter(|v|v["property"] == p.name).collect();
         let v = rows.first().copied();
-        let value = v.map(|v| match p.datatype.as_str() {
-            "number"|"integer"|"money"|"percent" => v["value_num"].clone(),
-            "bool"=>v["value_bool"].clone(),
-            "date"|"datetime"=> if v["value_date"] == "NONE" { Value::Null } else {v["value_date"].clone()},
-            _=>v["value_text"].clone(),
-        }).unwrap_or(Value::Null);
+        let value = v.map(|v|v["value"].clone()).unwrap_or(Value::Null);
         let conflicting = conflicts.iter().any(|v|v["name"] == p.name && v["conflicting"] == true);
         let source = v.and_then(|v|v["source"].as_str()).filter(|s|*s!="NONE" && !s.is_empty());
         let state = if v.is_none() {"missing"} else if conflicting {"conflicting"} else if value.is_null() {"unavailable"} else {"recorded"};
@@ -251,7 +223,7 @@ pub async fn profile(state: &OrgState, user: &RecordId, vault: &RecordId, id: &R
     let metrics = metric::metrics_by_kind(&state.db, &vault).await?.remove(kind.as_str()).unwrap_or_default();
     let mut numbers = Vec::new();
     for m in metrics.iter().filter(|m|m.status == super::Status::Approved) {
-        let args = metric::EvalArgs { metric:m.name.clone(),kind:Some(kind.as_str().into()),vault_id:Some(vault.to_string()),..Default::default() };
+        let args = metric::EvalArgs { metric:m.name.clone(),kind:Some(kind.as_str().into()),vault_id:Some(vault.to_string()),as_of:Some(as_of.to_rfc3339()),..Default::default() };
         let run = match metric::eval_object(&state.db, &vault, &args, id).await {
             Ok(mut run)=>{
                 let warnings:Vec<_> = properties.iter().filter(|p|run["input_properties"].as_array().is_some_and(|names|names.contains(&p["name"])))

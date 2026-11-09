@@ -1,6 +1,15 @@
 mod common;
 use common::TestApp;
 use serde_json::{json,Value};
+use surrealdb::types::{RecordId, SurrealValue};
+
+#[derive(SurrealValue)]
+struct FixtureEntity { id: RecordId, name: String }
+#[derive(SurrealValue)]
+struct FixturePoint { id: RecordId, entity: RecordId, value: f64 }
+#[derive(SurrealValue)]
+struct TimedPoint { id: RecordId, value: f64, as_of: surrealdb::types::Datetime, recorded: surrealdb::types::Datetime }
+
 
 async fn fixture(app:&TestApp) -> (String,Vec<String>) {
     let (status,created)=app.http("POST","/api/vaults",Some(json!({"name":"Banksia Basket Group"})),true).await;
@@ -106,6 +115,21 @@ async fn token_scopes_and_vault_restrictions_are_enforced() {
 #[tokio::test]
 #[ignore]
 async fn serve_banksia_sized_fixture() {
+    // Reopen the same disposable remote fixture after a database/backend restart.
+    // This keeps fixture writes out of cold measurements and leaves the DB caches cold.
+    if std::env::var_os("ONTOLOGY_REUSE_FIXTURE").is_some() {
+        let output=std::env::var("ONTOLOGY_FIXTURE_DIR").unwrap();
+        let info:Value=serde_json::from_str(&std::fs::read_to_string(format!("{output}/fixture.json")).unwrap()).unwrap();
+        let mut settings=common::test_settings();
+        assert!(settings.surreal_url != "mem://", "reopening requires the disposable remote database");
+        settings.surreal_ns=info["namespace"].as_str().unwrap().to_string();
+        let state=eunomia_backend::state::AppState::build(&settings,common::engine_config()).await.unwrap();
+        let port=std::env::var("ONTOLOGY_FIXTURE_PORT").unwrap_or_else(|_|"18860".into());
+        let listener=tokio::net::TcpListener::bind(format!("127.0.0.1:{port}")).await.unwrap();
+        println!("Reopened Banksia-sized fixture on {port}");
+        axum::serve(listener,eunomia_backend::app(state).into_make_service_with_connect_info::<std::net::SocketAddr>()).await.unwrap();
+        return;
+    }
     let app=TestApp::new().await;
     let (vault,ids)=fixture(&app).await;
     assert_eq!(app.http_session("POST","/api/settings/complete-onboarding",Some(json!({}))).await.0,200);
@@ -138,9 +162,9 @@ async fn serve_banksia_sized_fixture() {
         for batch in (0..count).step_by(500) {
             let rows:Vec<_>=(batch..(batch+500).min(count)).map(|i| {
                 let i=i+start;
-                json!({"id":format!("{kind}_{i}"),"name":format!("{} {i:05}",kind.replace('_'," "))})
+                FixtureEntity { id:RecordId::new("entity",format!("{kind}_{i}")),name:format!("{} {i:05}",kind.replace('_'," ")) }
             }).collect();
-            db.test_raw().query("FOR $r IN $rows { CREATE type::record('entity',$r.id) SET vault=$vault,owner=$owner,kind=$kind,name=$r.name,aliases=[],summary=''; };")
+            db.test_raw().query("INSERT INTO entity $rows.map(|$r| {id:$r.id,vault:$vault,owner:$owner,kind:$kind,name:$r.name,aliases:[],summary:''});")
                 .bind(("rows",rows)).bind(("vault",vault_id.clone())).bind(("owner",app.user.id.clone())).bind(("kind",kind.to_string())).await.unwrap().check().unwrap();
         }
     }
@@ -157,15 +181,45 @@ async fn serve_banksia_sized_fixture() {
         ] {
             assert_eq!(app.http_session("POST", &format!("/api/vaults/{vault}/ontology/{route}/decide"), Some(body)).await.0, 200);
         }
-        db.test_raw().query("LET $p=(SELECT VALUE id FROM ontology_property WHERE vault=$vault AND kind=$kind AND name='units')[0]; FOR $i IN 0..$count { CREATE type::record('entity_property',string::concat($kind,'_',$i)) SET vault=$vault,entity=type::record('entity',string::concat($kind,'_',$i)),property=$p,value_num=<float>$i,as_of=time::now(),origin='agent'; };")
-            .bind(("vault",vault_id.clone())).bind(("kind",kind.to_string())).bind(("count",count)).await.unwrap().check().unwrap();
+        let rows:Vec<_>=(0..count).map(|i|FixturePoint {
+            id:RecordId::new("entity_property",format!("{kind}_{i}")),
+            entity:RecordId::new("entity",format!("{kind}_{i}")),value:i as f64,
+        }).collect();
+        db.test_raw().query("LET $p=(SELECT VALUE id FROM ontology_property WHERE vault=$vault AND kind=$kind AND name='units')[0]; INSERT INTO entity_property $rows.map(|$r| {id:$r.id,vault:$vault,entity:$r.entity,property:$p,value_num:$r.value,as_of:time::now(),origin:'agent'});")
+            .bind(("vault",vault_id.clone())).bind(("kind",kind.to_string())).bind(("rows",rows)).await.unwrap().check().unwrap();
     }
     let second=eunomia_backend::rid::parse(&ids[1]).unwrap();
     db.test_raw().query("RELATE $from->relates_to->$to SET label='substitute_for',owner=$owner;")
         .bind(("from",eunomia_backend::rid::parse(&ids[0]).unwrap())).bind(("to",second)).bind(("owner",app.user.id.clone())).await.unwrap().check().unwrap();
-    std::fs::write("/private/tmp/eunomia-ontology2/fixture.json",json!({"space":vault,"object":ids[1],"entities":18878,"products":300,"stock_records":12000,"weekly_sales":6240}).to_string()).unwrap();
-    let listener=tokio::net::TcpListener::bind("127.0.0.1:18760").await.unwrap();
-    println!("Isolated Banksia-sized fixture ready on 18760");
+    // Include sub-cent money in the number screenshots without changing the source-row metric.
+    let out=app.tool("entity_set_property",json!({"entity_id":ids[2],"property":"price","value":0.0049})).await;
+    assert!(out.get("error").is_none(),"{out}");
+    let output=std::env::var("ONTOLOGY_FIXTURE_DIR").unwrap_or_else(|_|"/private/tmp/eunomia-ontology2".into());
+    std::fs::create_dir_all(&output).unwrap();
+    std::fs::write(format!("{output}/fixture.json"),json!({"namespace":app.state.settings.surreal_ns,"space":vault,"object":ids[1],"subcent_object":ids[2],"entities":18878,"products":300,"stock_records":12000,"weekly_sales":6240}).to_string()).unwrap();
+    if std::env::var_os("ONTOLOGY_EXPLAIN").is_some() {
+        let p:Option<surrealdb::types::RecordId>=db.test_raw().query("SELECT VALUE id FROM ontology_property WHERE vault=$vault AND kind='stock_record' AND name='units'")
+            .bind(("vault",vault_id.clone())).await.unwrap().take::<Vec<surrealdb::types::RecordId>>(0).unwrap().into_iter().next();
+        let mut plans=serde_json::Map::new();
+        for (case,sort,filter) in [("name",None,false),("sort",Some("value_num"),false),("filter",Some("value_num"),true)] {
+            let sql=eunomia_backend::store::objects::page_sql("entity",sort,if filter{Some("value_num")}else{None},if filter{"gte"}else{""},sort.is_some(),filter,false);
+            let start=sql.find("(SELECT").unwrap()+1;
+            let end=if sort.is_some(){sql.find(';').unwrap()-1}else{sql.find("), total:").unwrap()};
+            let explain=format!("{} EXPLAIN FULL;",&sql[start..end]);
+            let plan:Option<Value>=db.test_raw().query(explain).bind(("vault",vault_id.clone())).bind(("kind","stock_record"))
+                .bind(("sort_property",p.clone())).bind(("filter_property",p.clone())).bind(("filter_value",11900))
+                .bind(("as_of",surrealdb::types::Datetime::from(chrono::Utc::now()))).bind(("limit",25)).bind(("offset",0)).await.unwrap().take(0).unwrap();
+            plans.insert(case.into(),plan.unwrap());
+        }
+        let plan:Option<Value>=db.test_raw().query("SELECT * FROM entity_property WHERE entity=$e AND property=$p AND vault=$vault AND as_of<=$as_of ORDER BY as_of DESC,created_at DESC,id DESC LIMIT 1 EXPLAIN FULL;")
+            .bind(("e",surrealdb::types::RecordId::new("entity","stock_record_1"))).bind(("p",p)).bind(("vault",vault_id.clone()))
+            .bind(("as_of",surrealdb::types::Datetime::from(chrono::Utc::now()))).await.unwrap().take(0).unwrap();
+        plans.insert("latest".into(),plan.unwrap());
+        std::fs::write(format!("{output}/explain.json"),serde_json::to_string_pretty(&plans).unwrap()).unwrap();
+    }
+    let port=std::env::var("ONTOLOGY_FIXTURE_PORT").unwrap_or_else(|_|"18760".into());
+    let listener=tokio::net::TcpListener::bind(format!("127.0.0.1:{port}")).await.unwrap();
+    println!("Isolated Banksia-sized fixture ready on {port}");
     axum::serve(listener,app.router.into_make_service_with_connect_info::<std::net::SocketAddr>()).await.unwrap();
 }
 
@@ -235,6 +289,7 @@ async fn typed_dates_and_distinct_property_states_and_record_sources() {
         .bind(("vault",v)).bind(("entity",entity)).await.unwrap().check().unwrap();
     let profile=get(&app,&vault,&format!("/{}",ids[0])).await;
     assert_eq!(profile["properties"].as_array().unwrap().iter().find(|p|p["name"]=="price").unwrap()["state"],"unavailable");
+    assert_eq!(get(&app,&vault,"?kind=product&filter=price&op=lte&value=0").await["total"],0,"unavailable and missing values do not satisfy a numeric range");
 }
 
 #[tokio::test]
@@ -264,10 +319,95 @@ async fn named_link_columns_deduplicate_labels_and_honour_approved_target_kinds(
     let names=list["rows"][0]["values"]["link:supplied_by"]["value"].as_str().unwrap();
     assert!(names.contains("Fixture supplier") && names.contains("Fixture organisation"),"{names}");
     assert!(!names.contains("Unapproved target kind"));
-    db.test_raw().query("FOR $i IN 0..5002 { LET $to=type::record('entity',string::concat('hub_supplier_',<string>$i)); CREATE $to SET vault=$vault,owner=$owner,kind='supplier',name=string::concat('Hub supplier ',<string>$i),aliases=[],summary=''; RELATE $from->relates_to->$to SET label='supplied_by',owner=$owner; };")
-        .bind(("vault",eunomia_backend::rid::parse(&vault).unwrap())).bind(("owner",app.user.id.clone())).bind(("from",eunomia_backend::rid::parse(&ids[0]).unwrap())).await.unwrap().check().unwrap();
+    let targets:Vec<_>=(0..5002).map(|i|FixtureEntity { id:RecordId::new("entity",format!("hub_supplier_{i}")),name:format!("Hub supplier {i}") }).collect();
+    db.test_raw().query("FOR $r IN $targets { LET $to=$r.id; CREATE $to SET vault=$vault,owner=$owner,kind='supplier',name=$r.name,aliases=[],summary=''; RELATE $from->relates_to->$to SET label='supplied_by',owner=$owner; };")
+        .bind(("targets",targets)).bind(("vault",eunomia_backend::rid::parse(&vault).unwrap())).bind(("owner",app.user.id.clone())).bind(("from",eunomia_backend::rid::parse(&ids[0]).unwrap())).await.unwrap().check().unwrap();
     let hub=get(&app,&vault,"?kind=product&search=Product%2000").await;
     let cell=hub["rows"][0]["values"]["link:supplied_by"]["value"].as_str().unwrap();
     assert!(cell.contains("More links in profile"),"large hubs must disclose bounded names");
     assert!(cell.len()<1500,"the directory must not return every hub target");
+}
+
+#[tokio::test]
+async fn latest_profile_directory_metric_parity_with_fractional_ties() {
+    check_latest_parity().await;
+}
+
+#[tokio::test]
+#[ignore = "deliberate latest-order guard mutation"]
+#[should_panic(expected = "native as_of, recorded_at, then record id must win")]
+async fn latest_order_guard_mutation_is_detected() {
+    struct Restore;
+    impl Drop for Restore { fn drop(&mut self) { eunomia_backend::isolation::clear_mutations(); } }
+    let _restore=Restore;
+    eunomia_backend::isolation::mutate("ontology.latest_values", "ORDER BY as_of DESC", "ORDER BY as_of ASC");
+    check_latest_parity().await;
+}
+
+async fn check_latest_parity() {
+    let app=TestApp::new().await;
+    let (vault,ids)=fixture(&app).await;
+    let db=app.db().await;
+    let rows:Vec<_>=[
+        ("second",10.0,"2020-01-01T00:00:00Z","2020-01-01T00:00:00Z"),
+        ("fraction",20.0,"2020-01-01T00:00:00.125Z","2020-01-01T00:00:00Z"),
+        ("recorded_a",30.0,"2020-01-01T00:00:00.125Z","2020-01-01T00:00:00.125Z"),
+        ("recorded_b",40.0,"2020-01-01T00:00:00.125Z","2020-01-01T00:00:00.125Z"),
+        ("future",99.0,"2099-01-01T00:00:00Z","2020-01-01T00:00:00Z"),
+    ].into_iter().map(|(id,value,as_of,recorded)|TimedPoint {
+        id:RecordId::new("entity_property",id),value,
+        as_of:as_of.parse::<chrono::DateTime<chrono::Utc>>().unwrap().into(),
+        recorded:recorded.parse::<chrono::DateTime<chrono::Utc>>().unwrap().into(),
+    }).collect();
+    db.test_raw().query(r#"
+        LET $p=(SELECT VALUE id FROM ontology_property WHERE vault=$vault AND name='price')[0];
+        DELETE entity_property WHERE entity=$entity AND property=$p;
+        FOR $r IN $rows { LET $id=$r.id; CREATE $id SET entity=$entity,property=$p,vault=$vault,value_num=$r.value,as_of=$r.as_of,created_at=$r.recorded,origin='agent'; };
+    "#).bind(("rows",rows)).bind(("vault",eunomia_backend::rid::parse(&vault).unwrap()))
+        .bind(("entity",eunomia_backend::rid::parse(&ids[0]).unwrap())).await.unwrap().check().unwrap();
+    let profile=get(&app,&vault,&format!("/{}",ids[0])).await;
+    let property=profile["properties"].as_array().unwrap().iter().find(|p|p["name"]=="price").unwrap();
+    assert_eq!(property["value"],40.0,"native as_of, recorded_at, then record id must win");
+    let directory=get(&app,&vault,"?kind=product&filter=price&op=eq&value=40&sort=price").await;
+    assert_eq!(directory["total"],1);
+    assert_eq!(directory["rows"][0]["values"]["price"]["value"],property["value"]);
+    assert_eq!(directory["rows"][0]["id"],ids[0]);
+    assert_eq!(profile["numbers"][0]["result"]["run"]["value"],property["value"]);
+    assert_eq!(profile["numbers"][0]["result"]["run"]["input_properties"],json!(["price"]));
+}
+
+#[tokio::test]
+async fn approved_enum_filter_accepts_only_allowed_options() {
+    let app=TestApp::new().await;
+    let (vault,ids)=fixture(&app).await;
+    let out=app.tool("ontology_propose",json!({"vault_id":vault,"properties":[{"kind":"product","name":"colour","datatype":"enum","enum_values":["red","blue"]}]})).await;
+    assert!(out.get("error").is_none(),"{out}");
+    assert_eq!(app.http_session("POST",&format!("/api/vaults/{vault}/ontology/properties/decide"),Some(json!({"kind":"product","name":"colour","decision":{"action":"approve"}}))).await.0,200);
+    let out=app.tool("entity_set_property",json!({"entity_id":ids[0],"property":"colour","value":"blue"})).await;
+    assert!(out.get("error").is_none(),"{out}");
+    let page=get(&app,&vault,"?kind=product&filter=colour&op=eq&value=blue&sort=colour").await;
+    assert_eq!(page["total"],1);
+    assert_eq!(page["rows"][0]["id"],ids[0]);
+    let (status,_)=app.http("GET",&format!("/api/vaults/{vault}/ontology/objects?kind=product&filter=colour&op=eq&value=green"),None,true).await;
+    assert_eq!(status,400);
+}
+
+#[tokio::test]
+async fn built_in_kind_typed_pages_use_only_allowed_functions() {
+    let app=TestApp::new().await;
+    let (status,vault)=app.http("POST","/api/vaults",Some(json!({"name":"People scores"})),true).await;
+    assert_eq!(status,200,"{vault}");
+    let vault=vault["id"].as_str().unwrap();
+    let out=app.tool("ontology_propose",json!({"vault_id":vault,"kinds":[{"kind":"person"}],"properties":[{"kind":"person","name":"score","datatype":"number"}]})).await;
+    assert!(out.get("error").is_none(),"{out}");
+    for (route,body) in [("kinds",json!({"kind":"person","decision":{"action":"approve"}})),("properties",json!({"kind":"person","name":"score","decision":{"action":"approve"}}))] {
+        assert_eq!(app.http_session("POST",&format!("/api/vaults/{vault}/ontology/{route}/decide"),Some(body)).await.0,200);
+    }
+    let (status,person)=app.http("POST","/api/entities",Some(json!({"vault_id":vault,"kind":"person","name":"Mira"})),true).await;
+    assert_eq!(status,200,"{person}");
+    let out=app.tool("entity_set_property",json!({"entity_id":person["id"],"property":"score","value":5})).await;
+    assert!(out.get("error").is_none(),"{out}");
+    let page=get(&app,vault,"?kind=person&sort=score&filter=score&op=eq&value=5").await;
+    assert_eq!(page["total"],1);
+    assert_eq!(page["rows"][0]["id"],person["id"]);
 }
