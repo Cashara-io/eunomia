@@ -9,12 +9,12 @@
       null
     ],
     "main": {
-      "count": 4,
-      "sum": 2,
+      "count": 4.0,
+      "sum": 2.0,
       "avg": 0.5,
       "min": -1e+16,
       "max": 1e+16,
-      "count_distinct": 3
+      "count_distinct": 3.0
     },
     "median": 1
   },
@@ -28,12 +28,12 @@
       null
     ],
     "main": {
-      "count": 4,
-      "sum": 2,
+      "count": 4.0,
+      "sum": 2.0,
       "avg": 0.5,
       "min": -1e+16,
       "max": 1e+16,
-      "count_distinct": 3
+      "count_distinct": 3.0
     },
     "median": 1
   },
@@ -47,12 +47,12 @@
       null
     ],
     "main": {
-      "count": 4,
-      "sum": 2,
+      "count": 4.0,
+      "sum": 2.0,
       "avg": 0.5,
       "min": -1e+16,
       "max": 1e+16,
-      "count_distinct": 3
+      "count_distinct": 3.0
     },
     "median": 1
   },
@@ -65,12 +65,12 @@
       null
     ],
     "main": {
-      "count": 3,
-      "sum": 0,
+      "count": 3.0,
+      "sum": -0.0,
       "avg": null,
       "min": null,
       "max": null,
-      "count_distinct": 2
+      "count_distinct": 2.0
     }
   },
   {
@@ -78,16 +78,18 @@
     "values": [
       "2026-01-01T00:00:00.100Z",
       "2026-01-01T00:00:00.900Z",
+      "2026-01-01T00:00:00.100000001Z",
+      "2026-01-01T00:00:00.100000002Z",
       "2026-01-01T00:00:00.100Z",
       null
     ],
     "main": {
-      "count": 3,
-      "sum": 0,
+      "count": 5.0,
+      "sum": -0.0,
       "avg": null,
       "min": null,
       "max": null,
-      "count_distinct": 2
+      "count_distinct": 4.0
     }
   },
   {
@@ -99,84 +101,84 @@
       null
     ],
     "main": {
-      "count": 3,
-      "sum": 0,
+      "count": 3.0,
+      "sum": -0.0,
       "avg": null,
       "min": null,
       "max": null,
-      "count_distinct": 2
+      "count_distinct": 2.0
     }
   },
   {
     "datatype": "number",
     "values": [],
     "main": {
-      "count": 0,
-      "sum": 0,
+      "count": 0.0,
+      "sum": -0.0,
       "avg": null,
       "min": null,
       "max": null,
-      "count_distinct": 0
+      "count_distinct": 0.0
     }
   },
   {
     "datatype": "money",
     "values": [],
     "main": {
-      "count": 0,
-      "sum": 0,
+      "count": 0.0,
+      "sum": -0.0,
       "avg": null,
       "min": null,
       "max": null,
-      "count_distinct": 0
+      "count_distinct": 0.0
     }
   },
   {
     "datatype": "percent",
     "values": [],
     "main": {
-      "count": 0,
-      "sum": 0,
+      "count": 0.0,
+      "sum": -0.0,
       "avg": null,
       "min": null,
       "max": null,
-      "count_distinct": 0
+      "count_distinct": 0.0
     }
   },
   {
     "datatype": "date",
     "values": [],
     "main": {
-      "count": 0,
-      "sum": 0,
+      "count": 0.0,
+      "sum": -0.0,
       "avg": null,
       "min": null,
       "max": null,
-      "count_distinct": 0
+      "count_distinct": 0.0
     }
   },
   {
     "datatype": "datetime",
     "values": [],
     "main": {
-      "count": 0,
-      "sum": 0,
+      "count": 0.0,
+      "sum": -0.0,
       "avg": null,
       "min": null,
       "max": null,
-      "count_distinct": 0
+      "count_distinct": 0.0
     }
   },
   {
     "datatype": "text",
     "values": [],
     "main": {
-      "count": 0,
-      "sum": 0,
+      "count": 0.0,
+      "sum": -0.0,
       "avg": null,
       "min": null,
       "max": null,
-      "count_distinct": 0
+      "count_distinct": 0.0
     }
   }
 ]

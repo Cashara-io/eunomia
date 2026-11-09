@@ -33,7 +33,13 @@ pub enum Bucket { Day, Week, Month, Quarter, Year }
 pub struct Sort { pub property: String, #[serde(default)] pub descending: bool }
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Aggregate { pub name: String, pub op: Agg, pub property: Option<String> }
+pub struct Aggregate { pub op: Agg, pub property: Option<String> }
+impl Aggregate {
+    fn column_name(&self) -> String {
+        let op = match self.op { Agg::Count => "count", Agg::CountDistinct => "distinct", Agg::Sum => "sum", Agg::Avg => "avg", Agg::Min => "min", Agg::Max => "max", Agg::Median => "median", Agg::Ratio => "ratio" };
+        self.property.as_ref().map_or_else(|| op.into(), |p| format!("{op}_{p}"))
+    }
+}
 pub use super::metric::Agg;
 #[derive(Debug, Clone, Serialize)]
 pub struct Column { pub key: String, pub datatype: String, pub unit: Option<String> }
@@ -178,15 +184,14 @@ fn transform(rows: Vec<Value>, columns: Vec<Column>, args: &Dataset) -> AppResul
     if groups.is_empty() && args.group_by.is_none() { groups.insert("null".into(), (Value::Null, vec![])); }
     let mut out_columns: Vec<Column> = columns.iter().filter(|c| Some(&c.key) == args.group_by.as_ref()).cloned().collect();
     for a in &args.aggregates {
-        property::PropertyName::parse(&a.name)?;
-        crate::views::ui::validate_words(&a.name)?;
-        if out_columns.iter().any(|c| c.key == a.name) { return Err(bad("duplicate aggregate name")); }
+        let name = a.column_name();
+        if out_columns.iter().any(|c| c.key == name) { return Err(bad("duplicate aggregate name")); }
         let source = a.property.as_ref().and_then(|p| columns.iter().find(|c| &c.key == p));
         if matches!(a.op, Agg::Ratio) { return Err(bad("ratio is not a dataset aggregate")); }
         if !matches!(a.op, Agg::Count) && source.is_none() { return Err(bad("aggregate needs a property")); }
         if matches!(a.op, Agg::Sum | Agg::Avg | Agg::Min | Agg::Max | Agg::Median) && !source.is_some_and(|c| matches!(c.datatype.as_str(), "money" | "number" | "integer" | "percent")) { return Err(bad("numeric aggregate needs numeric property")); }
         let count = matches!(a.op, Agg::Count | Agg::CountDistinct);
-        out_columns.push(Column { key: a.name.clone(), datatype: if count { "number".into() } else { source.unwrap().datatype.clone() }, unit: if count { None } else { source.and_then(|c| c.unit.clone()) } });
+        out_columns.push(Column { key: name, datatype: if count { "number".into() } else { source.unwrap().datatype.clone() }, unit: if count { None } else { source.and_then(|c| c.unit.clone()) } });
     }
     let rows = groups.into_values().map(|(key, rows)| {
         let mut out = serde_json::Map::new();
@@ -196,7 +201,7 @@ fn transform(rows: Vec<Value>, columns: Vec<Column>, args: &Dataset) -> AppResul
             let values: Vec<Value> = values.into_iter().cloned().collect();
             let result = metric::aggregate(a.op, &values, if a.property.is_some() { values.len() } else { rows.len() });
             let value = if matches!(a.op, Agg::Count | Agg::CountDistinct) { json!(result.map(|n| n as u64)) } else { json!(result) };
-            out.insert(a.name.clone(), value);
+            out.insert(a.column_name(), value);
         }
         Value::Object(out)
     }).collect();
@@ -210,21 +215,21 @@ mod tests {
     fn typed_grouping_nulls_and_all_aggregates() {
         let rows = vec![json!({"supplier":"A","amount":10.25}),json!({"supplier":"A","amount":20.75}),json!({"supplier":"A","amount":null}),json!({"supplier":"B","amount":9})];
         let args: Dataset = serde_json::from_value(json!({"vault_id":"vault:test","kind":"sample","properties":["supplier","amount"],"group_by":"supplier","aggregates":[
-            {"name":"sum","op":"sum","property":"amount"},{"name":"avg","op":"avg","property":"amount"},{"name":"min","op":"min","property":"amount"},{"name":"max","op":"max","property":"amount"},{"name":"median","op":"median","property":"amount"},{"name":"distinct","op":"distinct","property":"amount"},{"name":"count","op":"count"}
+            {"op":"sum","property":"amount"},{"op":"avg","property":"amount"},{"op":"min","property":"amount"},{"op":"max","property":"amount"},{"op":"median","property":"amount"},{"op":"distinct","property":"amount"},{"op":"count"}
         ]})).unwrap();
         let columns = vec![Column{key:"supplier".into(),datatype:"text".into(),unit:None},Column{key:"amount".into(),datatype:"money".into(),unit:Some("AUD".into())}];
         let (rows, cols) = transform(rows,columns,&args).unwrap();
-        assert_eq!(rows[0],json!({"supplier":"A","sum":31.0,"avg":15.5,"min":10.25,"max":20.75,"median":15.5,"distinct":2,"count":3}));
+        assert_eq!(rows[0],json!({"supplier":"A","sum_amount":31.0,"avg_amount":15.5,"min_amount":10.25,"max_amount":20.75,"median_amount":15.5,"distinct_amount":2,"count":3}));
         assert_eq!(cols[1].unit.as_deref(),Some("AUD"));
         assert_eq!(cols[6].unit,None);
     }
     #[test]
-    fn aggregate_aliases_are_model_words() {
-        for name in ["revenue_999", "revenue_nine", "half", "million", "dozens"] {
-            let args: Dataset = serde_json::from_value(json!({"vault_id":"vault:test","kind":"sample","properties":["amount"],"aggregates":[{"name":name,"op":"sum","property":"amount"}]})).unwrap();
-            let columns = vec![Column { key:"amount".into(), datatype:"number".into(), unit:None }];
-            assert!(transform(vec![json!({"amount":10})], columns, &args).is_err(), "{name}");
+    fn aggregate_names_are_server_generated() {
+        for name in ["revenue_999", "revenue_nine", "half", "million", "dozens", "revenue"] {
+            assert!(serde_json::from_value::<Aggregate>(json!({"name":name,"op":"sum","property":"amount"})).is_err(), "{name}");
         }
+        let aggregate: Aggregate = serde_json::from_value(json!({"op":"sum","property":"amount"})).unwrap();
+        assert_eq!(aggregate.column_name(), "sum_amount");
     }
     #[test]
     fn every_time_bucket_and_null() {

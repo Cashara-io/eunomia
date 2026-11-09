@@ -102,19 +102,51 @@ The live check used the disposable database at 8590, backend at 8591 and fronten
 
 ## Second review fixes
 
-Implementation is pending verification in the implementation checkout. Nothing from this second review has been pushed yet.
+Verified on 2026-11-09. This completes verification of `e5dad770f5707957e9f174f27754e06b8d128ba7` and fixes the gaps found during that verification. [Exact commands](chat-json-render-second-review-commands.txt) and the two committed verification scripts reproduce the checks.
 
-Draft changes apply a words grammar to model prose and aggregate aliases, remove zero-default numeric coercions, preserve metadata formatting on explicit tables, keep total_rows unitless, restore full stored datetime distinct keys and input-order sums, and reject unsafe finite chart values. A fixture includes the aggregate implementation captured from origin/main at 6116a00ff86fed992a917863e9a3515f70373b84. Main has no median operation, so the draft tests median separately.
+### Gaps closed
 
-Verification stopped at the requested disk gate: free space fell from 18 GiB before compilation to 6.3 GiB during compilation, below the required 8 GiB. Both builds were interrupted. After cleanup, free space was 3.1 GiB. This checkout's backend/target, frontend/node_modules and frontend/.next were removed.
+- Aggregate aliases were still model supplied. The input now accepts only an operation and optional property. The server generates `op_property` keys, or `count` without a property, and rejects model aliases. The tool schema, prompt, architecture example, integration tests and independent numeric audit agree on this contract.
+- Model formatting could override a plain numeric column. The renderer now takes formats from server column metadata, preserves unitless counts, and uses each column's own currency in chart labels and tooltips. Explicit table cells and totals retain the server format. StatGroup retains missing typed measurements as `none` rather than silently dropping their tiles.
+- The compatibility fixture did not exercise nanosecond differences. It now includes timestamps one nanosecond apart, plus the original subsecond cases.
+- CI on `e5dad770` failed `committed_spec_matches_generated`. The OpenAPI document and generated frontend client are regenerated and the drift check is rerun without the update flag.
 
-Frontend lint passed before the last small changes. The latest six focused renderer tests passed, with 94 assertions. The production frontend compiled, but its TypeScript phase was interrupted. The initial typecheck found errors; edits address those, but the final typecheck has not run. Backend tests, Clippy, all guard mutations and both Playwright files remain unverified. The resolution output shape has not changed, so no live chat rerun is needed.
+### Main compatibility provenance
 
-| Guard mutations | Result |
-| --- | --- |
-| Prose grammar and aggregate alias boundary | Not run, disk gate |
-| Missing-y, Meter minimum, shared numeric access and zero-default recurrence | Not run, disk gate |
-| Explicit table metadata and unitless total_rows | Not run, disk gate |
-| Full datetime distinct precision | Not run, disk gate |
-| Input-order sums and main fixture | Not run, disk gate |
-| Safe drawing range | Not run, disk gate |
+`python3 scripts/chat-json-render/check_main_source.py` extracts `compute` directly from `origin/main`'s pinned commit `6116a00ff86fed992a917863e9a3515f70373b84`. It verifies the included Rust oracle against that source, ignoring whitespace. The only code changes are the function name and an unreachable arm for this branch's new median operation. Property parsing is unchanged from that main commit.
+
+`CAPTURE_MAIN_METRICS=1` reruns that actual Rust implementation and recaptures `backend/tests/fixtures/pr192-main-metrics.json`. All 72 legacy aggregate results across twelve populated and empty cases match main. Numeric results are compared by `f64::to_bits`, with exact missing-value equality. These cases cover number, money, percent, date, datetime and case-insensitive text, including order-sensitive sums and nanosecond distinct counts. Median has separate assertions because main does not implement it.
+
+### Guard removal evidence
+
+`check_second_review_guards.py` removes one guard at a time, requires the named regression test to fail, rejects compilation failures as evidence, and restores the exact original source in `finally`. There are thirteen mutations, four backend and nine frontend. All thirteen failed their intended tests, and the restored checks passed.
+
+| Item | Regression test | Guard removed | Mutation result |
+| --- | --- | --- | --- |
+| Words and aliases | `model_words_grammar_covers_all_prose`; `aggregate_names_are_server_generated` | Prose validation; rejection of model aggregate aliases | Failed as expected; restored |
+| Missing numbers | Numeric accessor, chart-y, Meter minimum, zero recurrence and StatGroup renderer tests | Null preservation; required y with series; required minimum; ban on zero coercions; retention of missing tiles | Failed as expected; restored |
+| Server formatting | Explicit table metadata and server-type renderer tests | Table format inheritance; unitless `total_rows`; server scalar format precedence | Failed as expected; restored |
+| Datetime precision | `main_metric_fixture_preserves_existing_results` | Full stored datetime distinct key replaced with display JSON | Failed as expected; restored |
+| Summation order | `main_metric_fixture_preserves_existing_results` | Sorting restored before sum and average | Failed as expected; restored |
+| Drawing range | Unsafe finite chart renderer test | Safe drawing-range check | Failed as expected; restored |
+
+The first count mutation exposed a weak assertion that checked only `A$` although the fixture used USD. The assertion now rejects USD too, and the same mutation fails. This survived-mutation attempt was not counted as a pass.
+
+### Final results
+
+- Clippy on all targets with warnings denied: passed.
+- Final hardened backend run: 517 library tests, seven chat UI tests, 110 ontology tests, one golden-tools test and one round-trip test passed. The opt-in scale fixture and expensive ontology import fixture remain ignored, two tests total.
+- OpenAPI drift and route coverage: two tests passed without `UPDATE_OPENAPI`.
+- Frontend lint, `bunx tsc --noEmit`, production build and generated catalogue sync: passed.
+- Focused renderer suite: eight tests, 111 assertions passed.
+- Both requested Playwright files: nine tests passed on the final production build, with model access disabled. Catalogue checks cover light and dark at 1280 px and 390 px; the typed-values case also checks USD and EUR in the same tooltip.
+- Main oracle recapture and exact parity: passed, including nanosecond distinct values. All thirteen guard mutations failed the intended regression and were restored before the final runs.
+- CI for `e5dad770`: twelve checks passed; `backend` and `backend-hardened` failed only the stale OpenAPI check. The missing median enum value and generated client are now corrected, and the drift check passes locally. CI for the follow-up push has not yet been verified.
+
+[Recorded result summaries and mutation failures](chat-json-render-second-review-results.txt).
+
+The first browser attempt began before the isolated backend was ready. Every-tool failed its registration request and the first catalogue case timed out. After readiness succeeded through the frontend, the complete rerun passed. The failed startup log was retained locally. No product defect is claimed for that attempt.
+
+The runtime used a disposable SurrealDB 3.3.5 on `8590`, this branch's backend on `8591`, and a production frontend on `3590`. Server model API settings were removed from the runtime environment. Every-tool completed without model access. No shared database or owner stack was used.
+
+Machine free space started at about 14 GiB and stayed above the 6 GiB stop threshold. Every Cargo process used two jobs, no development debug information, no incremental compilation, an 8 MiB Rust stack and niceness 19. Only one Cargo process ran at a time. No `cargo fmt` was run. Teardown removed this checkout's backend target, node_modules and Next output, plus only this run's processes and disposable database.

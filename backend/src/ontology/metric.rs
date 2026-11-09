@@ -1815,8 +1815,9 @@ mod tests {
 
     #[test]
     fn main_metric_fixture_preserves_existing_results() {
-        let fixture: Value = serde_json::from_str(include_str!("../../tests/fixtures/pr192-main-metrics.json")).unwrap();
-        for case in fixture.as_array().unwrap() {
+        let mut fixture: Value = serde_json::from_str(include_str!("../../tests/fixtures/pr192-main-metrics.json")).unwrap();
+        let capture = std::env::var_os("CAPTURE_MAIN_METRICS").is_some();
+        for case in fixture.as_array_mut().unwrap() {
             let dt: Datatype = serde_json::from_value(case["datatype"].clone()).unwrap();
             let props = HashMap::from([("p".into(), PropInfo { datatype: dt, unit: None, enum_values: None, status: Status::Approved, merge_into: None })]);
             let mut values = Values::new();
@@ -1829,18 +1830,22 @@ mod tests {
                 }
             }
             let entities: Vec<_> = ids.iter().collect();
-            for (name, expected) in case["main"].as_object().unwrap() {
+            for (name, expected) in case["main"].as_object().unwrap().clone() {
                 let agg: Agg = serde_json::from_value(json!(name)).unwrap();
                 let side = Side { agg, property: Some("p".into()), row: None, filters: vec![] };
                 let main = compute_main(&side, &[], &entities, &values, &props).value;
                 let actual = compute(&side, &[], &entities, &values, &props).value;
+                if capture { case["main"][&name] = json!(main); }
                 assert_eq!(main, expected.as_f64(), "captured main: {} {name}", case["datatype"]);
-                assert_eq!(actual, main, "main parity: {} {name}", case["datatype"]);
+                assert_eq!(actual.map(f64::to_bits), main.map(f64::to_bits), "main parity: {} {name}", case["datatype"]);
             }
             if let Some(expected) = case.get("median") {
                 let side = Side { agg: Agg::Median, property: Some("p".into()), row: None, filters: vec![] };
                 assert_eq!(compute(&side, &[], &entities, &values, &props).value, expected.as_f64());
             }
+        }
+        if capture {
+            std::fs::write(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/pr192-main-metrics.json"), serde_json::to_string_pretty(&fixture).unwrap() + "\n").unwrap();
         }
     }
 

@@ -173,7 +173,7 @@ type TreeDatum = {
   row?: Row;
 };
 function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
-  const formatted = (value: unknown, format?: string) => shown(value, format, p.unit);
+  const formatted = (value: unknown, format?: string, unit: string | null | undefined = p.unit) => shown(value, format, unit);
   const id = useId();
   const { tooltipData, tooltipLeft, tooltipTop, showTooltip, hideTooltip } =
     useTooltip<string>();
@@ -202,7 +202,7 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
     Math.max(
       ...rows.flatMap((r) =>
         [yKey, ...(p.series || []), "max"].map(
-          (k) => formatted(r[k], p.formats?.[k] || p.format).length,
+          (k) => formatted(r[k], p.formats?.[k] || p.format, p.units?.[k]).length,
         ),
       ),
     ) *
@@ -252,7 +252,7 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
   });
   const categories = rows.map(
     (r, i) =>
-      formatted(r[xKey], p.formats?.[xKey] || p.xFormat || "text") ||
+      formatted(r[xKey], p.formats?.[xKey] || p.xFormat || "text", p.units?.[xKey]) ||
       String(i + 1),
   );
   const band = scaleBand({ domain: categories, range: [0, w], padding: 0.18 });
@@ -273,7 +273,7 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
       ? scaleX(requiredNumber(r[xKey]))
       : (requiredNumber(band(categories[i]))) + band.bandwidth() / 2;
   const y = (r: Row, k = yKey) => scaleY(requiredNumber(r[k]));
-  const fmt = (v: unknown) => formatted(v, p.formats?.[yKey] || p.format);
+  const fmt = (v: unknown) => formatted(v, p.formats?.[yKey] || p.format, p.units?.[yKey]);
   const shares = rows.filter((r) => number(r[yKey]) != null && requiredNumber(r[yKey]) > 0);
   const total = shares.reduce(
     (sum, r) => sum + requiredNumber(r[yKey]),
@@ -299,7 +299,7 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
     return Object.entries(r)
       .map(
         ([key, v]) =>
-          `${key.replaceAll("_", " ")}: ${formatted(v, p.formats?.[key] || (key === xKey ? (xNumeric ? "number" : p.xFormat || "text") : ["Histogram", "Violin"].includes(kind) && key === "count" ? "number" : p.format))}`,
+          `${key.replaceAll("_", " ")}: ${formatted(v, p.formats?.[key] || (key === xKey ? (xNumeric ? "number" : p.xFormat || "text") : ["Histogram", "Violin"].includes(kind) && key === "count" ? "number" : p.format), p.units?.[key])}`,
       )
       .join("; ");
   }
@@ -366,7 +366,7 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
         }}
         tickFormat={(v) =>
           continuousX
-            ? formatted(v, p.formats?.[xKey] || p.xFormat || "number")
+            ? formatted(v, p.formats?.[xKey] || p.xFormat || "number", p.units?.[xKey])
             : label(v).slice(0, width < 420 ? 10 : 18)
         }
         {...axisProps}
@@ -478,7 +478,7 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
           <AxisRight
             left={w}
             scale={right}
-            tickFormat={(v) => formatted(v, p.formats?.[series[1]] || p.format)}
+            tickFormat={(v) => formatted(v, p.formats?.[series[1]] || p.format, p.units?.[series[1]])}
             numTicks={4}
             {...axisProps}
           />
@@ -1535,7 +1535,7 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
         >
           {(kind === "Pie" || kind === "Donut"
             ? shares.map((r) =>
-                formatted(r[xKey], p.formats?.[xKey] || p.xFormat || "text"),
+                formatted(r[xKey], p.formats?.[xKey] || p.xFormat || "text", p.units?.[xKey]),
               )
             : series
           ).map((name, i) => (

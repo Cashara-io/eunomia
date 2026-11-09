@@ -247,7 +247,7 @@ function Block({
           : formatted(number(object.success ? value.value : data), format, props.unit)}
         {number(value.delta) != null && (
           <small className="block text-sm">
-            Change {formatted(value.delta, format)}
+            Change {formatted(value.delta, format, props.unit)}
           </small>
         )}
         {rowsOf(value.trend || value.series).length > 0 && (
@@ -266,7 +266,7 @@ function Block({
       </div>
     );
   else if (kind === "StatGroup")
-    content = <div className="ui-stat-grid">{rows.flatMap((row, i) => columns.filter(c => number(row[c.key]) != null).map(c => <div className="ui-stat-tile" key={`${i}-${c.key}`}><p>{label(row.name) || c.label}</p><div className="text-3xl ui-numeric">{formatted(row[c.key], c.format, props.units?.[c.key])}</div>{row.name != null && <p>{c.label}</p>}</div>))}</div>;
+    content = <div className="ui-stat-grid">{rows.flatMap((row, i) => columns.filter(c => ["number", "money", "percent"].includes(c.format ?? "") || number(row[c.key]) != null).map(c => <div className="ui-stat-tile" key={`${i}-${c.key}`}><p>{label(row.name) || c.label}</p><div className="text-3xl ui-numeric">{formatted(row[c.key], c.format, props.units?.[c.key])}</div>{row.name != null && <p>{c.label}</p>}</div>))}</div>;
   else if (kind === "Entity" || kind === "EntityList")
     content = (
       <div className="flex flex-wrap gap-2">
@@ -288,7 +288,7 @@ function Block({
             aria-label={title}
           />
           <p>
-            {formatted(n, format)} of {formatted(max, format)}
+            {formatted(n, format, props.unit)} of {formatted(max, format, props.unit)}
           </p>
         </>
       ) : (
@@ -425,6 +425,7 @@ function Block({
               {formatted(
                 r[props.y || "name"],
                 props.formats?.[props.y || "name"] || format,
+                props.units?.[props.y || "name"],
               )}
             </p>
           </li>

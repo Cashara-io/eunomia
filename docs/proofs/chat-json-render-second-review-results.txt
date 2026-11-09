@@ -1,0 +1,86 @@
+Second review verification, 2026-11-09
+Main oracle source: 6116a00ff86fed992a917863e9a3515f70373b84
+Exact source verified by scripts/chat-json-render/check_main_source.py.
+
+Final backend summaries:
+test result: ok. 517 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 39.84s
+test result: ok. 7 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 11.08s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.99s
+test result: ok. 110 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 136.39s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.64s
+
+Clippy: all targets, warnings denied, passed.
+Frontend: lint, typecheck, production build, catalogue sync passed.
+Renderer: 8 passed, 111 assertions.
+Playwright: 9 passed with model access disabled.
+
+Backend mutations:
+words-grammar: expected regression failed
+aggregate-alias: expected regression failed
+datetime-precision: expected regression failed
+sum-order: expected regression failed
+All mutated source files restored.
+
+Frontend mutations:
+numeric-access: expected regression failed
+required-y: expected regression failed
+meter-minimum: expected regression failed
+zero-recurrence: expected regression failed
+table-metadata: expected regression failed
+unitless-count: expected regression failed
+server-format: expected regression failed
+missing-stat-group: expected regression failed
+drawing-range: expected regression failed
+All mutated source files restored.
+
+aggregate-alias:
+test ontology::dataset::tests::aggregate_names_are_server_generated ... FAILED
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 516 filtered out; finished in 0.02s
+
+datetime-precision:
+test ontology::metric::tests::main_metric_fixture_preserves_existing_results ... FAILED
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 516 filtered out; finished in 0.03s
+
+drawing-range:
+(fail) unsafe finite chart values fall back before scale arithmetic [4.66ms]
+
+meter-minimum:
+(fail) UI numeric access never defaults a missing measurement to zero [0.58ms]
+(fail) meter requires its minimum instead of inventing zero [0.91ms]
+
+missing-stat-group:
+(fail) stat groups retain a missing typed measurement [0.66ms]
+
+numeric-access:
+(fail) UI numeric access never defaults a missing measurement to zero [0.84ms]
+(fail) every chart checks y even when series is supplied [14.53ms]
+(fail) meter requires its minimum instead of inventing zero [0.82ms]
+(fail) numeric formats treat strings as missing [0.22ms]
+(fail) stat groups retain a missing typed measurement [0.72ms]
+
+required-y:
+(fail) every chart checks y even when series is supplied [7.00ms]
+
+server-format:
+(fail) server types override model formats and counts stay unitless [3.35ms]
+
+sum-order:
+test ontology::metric::tests::main_metric_fixture_preserves_existing_results ... FAILED
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 516 filtered out; finished in 0.02s
+
+table-metadata:
+(fail) explicit table columns inherit server formats for cells and totals [0.87ms]
+
+unitless-count:
+(fail) server types override model formats and counts stay unitless [4.09ms]
+
+words-grammar:
+test views::ui::tests::model_words_grammar_covers_all_prose ... FAILED
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 516 filtered out; finished in 0.02s
+
+zero-recurrence:
+(fail) UI numeric access never defaults a missing measurement to zero [0.52ms]
+
+CI at e5dad770: 12 passed, 2 failed. Both failures: committed_spec_matches_generated, stale backend/openapi.json. Local no-update drift verification passes.
+The initial browser startup failure was retained in /tmp/pr192-playwright-startup.log. The initially surviving unitless-count mutation is recorded in the verification transcript. Neither was counted as a passing verification.

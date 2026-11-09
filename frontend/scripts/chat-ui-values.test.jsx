@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import UiView from "../src/components/chat/ui/UiView";
 import Chart from "../src/components/chat/ui/Charts";
 import DataBlock from "../src/components/chat/ui/Blocks";
 import { chartNames } from "../src/components/chat/ui/catalog";
@@ -47,5 +48,24 @@ test("numeric formats treat strings as missing", () => {
   for (const format of ["number", "money", "percent"]) {
     expect(formatted("12", format)).toBe("none");
     expect(formatted("missing", format)).toBe("none");
+  }
+});
+
+test("server types override model formats and counts stay unitless", () => {
+  const source = {rows: [{quantity: 12, amount: 120.25}], columns: [{key: "amount", datatype: "money", unit: "USD"}, {key: "quantity", datatype: "number"}], total_rows: 1, totals: {amount: {count: 1}}};
+  const stat = (path, format) => renderToStaticMarkup(<UiView view={{view: "ui", text: "Values", spec: {root: "a", elements: {a: {type: "Stat", props: {title: "Value", summary: "Value", data: {$state: path}, format}}}}, data: {sources: {sample: source}}}} />);
+  expect(stat("/sources/sample/rows/0/quantity", "money")).not.toContain("A$");
+  expect(stat("/sources/sample/total_rows", "money")).not.toContain("A$");
+  expect(stat("/sources/sample/total_rows", "money")).not.toContain("USD");
+  expect(stat("/sources/sample/totals/amount/count", "money")).not.toContain("USD");
+  expect(stat("/sources/sample/rows/0/amount", "number")).toContain("USD 120.25");
+});
+
+test("stat groups retain a missing typed measurement", () => {
+  for (const value of [null, NaN, Infinity, "12"]) {
+    const html = renderToStaticMarkup(<DataBlock kind="StatGroup" raw={{title: "Values", summary: "Values", data: {rows: [{name: "Supplier", amount: value}], columns: [{key: "amount", datatype: "money", unit: "USD"}]}}} />);
+    expect(html).toContain("ui-stat-tile");
+    expect(html).toContain("none");
+    expect(html).not.toContain("A$0");
   }
 });

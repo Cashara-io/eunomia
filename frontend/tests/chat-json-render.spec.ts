@@ -593,10 +593,13 @@ test("typed money keeps its currency and missing values are unavailable", async 
   delete chart.spec.elements.a.props.y;
   chart.spec.elements.a.props.data = { $state: "/sources/sample/rows" };
   const chartView = { ...chart, data: { sources: { sample: { rows: [{ name: "Supplier", value: 120.25 }], columns: usdView.data.sources.sample.columns } } } };
+  const multi = fixture("Line");
+  multi.spec.elements.a.props.data = { $state: "/sources/sample/rows" };
+  const multiView = { ...multi, data: { sources: { sample: { rows: [{name: "Supplier", value: 120.25, other: 70}], columns: [{key: "value", datatype: "money", unit: "USD"}, {key: "other", datatype: "money", unit: "EUR"}] } } } };
   const group = fixture("StatGroup");
   const groupView = { ...group, data: { sources: { sample: { rows, columns: [{ key: "value", datatype: "money", unit: "USD" }] } } } };
   await page.route("**/api/chat/threads", route => route.fulfill({ json: [{ id: "chat_thread:typed", title: "Typed values", created_at: new Date().toISOString(), updated_at: new Date().toISOString() }] }));
-  await page.route("**/api/chat/threads/*/history", route => route.fulfill({ json: history([bad, usdView, groupView, countView, chartView, totalRowsView, tableView, gaugeView, meterView]) }));
+  await page.route("**/api/chat/threads/*/history", route => route.fulfill({ json: history([bad, usdView, groupView, countView, chartView, totalRowsView, tableView, gaugeView, meterView, multiView]) }));
   await page.goto("/chat");
   await expect(page.locator('[data-ui-component="Bar"]').first()).toContainText("No numeric values to show.");
   await expect(page.locator('[data-ui-component="Bar"]').first().locator("svg")).toHaveCount(0);
@@ -610,5 +613,9 @@ test("typed money keeps its currency and missing values are unavailable", async 
   await expect(page.locator('[data-ui-component="Gauge"]')).toContainText("No numeric values to show.");
   await expect(page.locator('[data-ui-component="Gauge"] svg')).toHaveCount(0);
   await expect(page.locator('[data-ui-component="Meter"]')).toContainText("No range available.");
+  const multiMark = page.locator('[data-ui-component="Line"] [data-chart-mark]').first();
+  await multiMark.focus();
+  await expect(page.getByRole("tooltip")).toContainText("USD 120.25");
+  await expect(page.getByRole("tooltip")).toContainText("EUR 70.00");
   expect(await page.locator('[data-ui-component="Stat"] .text-3xl').first().evaluate(el => getComputedStyle(el).fontVariantNumeric)).toBe("tabular-nums");
 });

@@ -48,7 +48,7 @@ async fn dataset_resolves_real_typed_values_and_mcp_catalog() {
     }
     let mut grouped=args.clone();
     grouped["sources"]["sample"]["group_by"]=json!("link:supplied_by");
-    grouped["sources"]["sample"]["aggregates"]=json!([{"name":"count","op":"count"}]);
+    grouped["sources"]["sample"]["aggregates"]=json!([{"op":"count"}]);
     let grouped=ok(app.tool("show_view",grouped).await);
     assert_eq!(grouped["data"]["sources"]["sample"]["rows"][0]["count"],2);
     assert_eq!(grouped["data"]["sources"]["sample"]["rows"][0]["link:supplied_by"]["name"],"Supplier");
@@ -64,13 +64,13 @@ async fn dataset_resolves_real_typed_values_and_mcp_catalog() {
                 query["sources"]["sample"]["properties"] = json!([property]);
                 query["sources"]["sample"]["filters"] = filters;
                 query["sources"]["sample"]["as_of"] = json!("2099-01-01");
-                query["sources"]["sample"]["aggregates"] = json!([{"name":"result","op":op,"property":property}]);
+                query["sources"]["sample"]["aggregates"] = json!([{"op":op,"property":property}]);
                 let dataset = ok(app.tool("show_view",query).await);
-                assert_eq!(dataset["data"]["sources"]["sample"]["rows"][0]["result"].as_f64(), evaluated["value"].as_f64(),"{op} {property}, empty={empty}");
+                assert_eq!(dataset["data"]["sources"]["sample"]["rows"][0][format!("{}_{}", if op == "count_distinct" { "distinct" } else { op }, property)].as_f64(), evaluated["value"].as_f64(),"{op} {property}, empty={empty}");
             }
         }
     }
-    let mut text_sum=args.clone(); text_sum["sources"]["sample"]["properties"]=json!(["label"]); text_sum["sources"]["sample"]["aggregates"]=json!([{"name":"total","op":"sum","property":"label"}]);
+    let mut text_sum=args.clone(); text_sum["sources"]["sample"]["properties"]=json!(["label"]); text_sum["sources"]["sample"]["aggregates"]=json!([{"op":"sum","property":"label"}]);
     assert!(app.tool("show_view",text_sum).await.to_string().contains("numeric aggregate needs numeric property"));
     let mut bad=args;bad["sources"]["sample"]["limit"]=json!(501);
     assert!(app.tool("show_view",bad).await.get("error").is_some());
@@ -151,7 +151,7 @@ async fn dataset_cutoff_currency_and_mixed_units() {
     let metric=ok(app.tool("metric_eval",json!({"vault_id":vault,"kind":"sample","metric":"cutoff_count","allow_unapproved":true,"as_of":"2026-01-01"})).await);
     assert_eq!(out["data"]["sources"]["sample"]["totals"]["amount"]["count"].as_f64(),metric["value"].as_f64());
     assert_eq!(out["data"]["sources"]["sample"]["columns"][0]["unit"],"USD");
-    let mut grouped=args.clone(); grouped["sources"]["sample"]["aggregates"]=json!([{"name":"total","op":"sum","property":"amount"}]);
+    let mut grouped=args.clone(); grouped["sources"]["sample"]["aggregates"]=json!([{"op":"sum","property":"amount"}]);
     let out=ok(app.tool("show_view",grouped).await);
     assert_eq!(out["data"]["sources"]["sample"]["columns"][0]["unit"],"USD");
     let other=current["data"]["sources"]["sample"]["rows"][1]["entity_id"].clone();
@@ -203,12 +203,12 @@ async fn dataset_scale_grouped_and_bucketed() {
         assert!(plan.contains("IndexScan") && plan.contains(index_name) && !plan.contains("TableScan"),"{plan}");
     }
     for bucket in [false,true] {
-        let source=if bucket { json!({"type":"dataset","vault_id":vault,"kind":"sample","properties":["amount","date"],"group_by":"date","bucket":"month","aggregates":[{"name":"total","op":"sum","property":"amount"}],"as_of":"2026-12-31"}) } else { json!({"type":"dataset","vault_id":vault,"kind":"sample","properties":["amount"],"group_by":"amount","aggregates":[{"name":"count","op":"count"}],"as_of":"2026-12-31"}) };
+        let source=if bucket { json!({"type":"dataset","vault_id":vault,"kind":"sample","properties":["amount","date"],"group_by":"date","bucket":"month","aggregates":[{"op":"sum","property":"amount"}],"as_of":"2026-12-31"}) } else { json!({"type":"dataset","vault_id":vault,"kind":"sample","properties":["amount"],"group_by":"amount","aggregates":[{"op":"count"}],"as_of":"2026-12-31"}) };
         let started=std::time::Instant::now();
         let out=ok(app.tool("show_view",json!({"view":"ui","spec":spec(),"sources":{"sample":source}})).await);
         println!("SCALE bucket={bucket} elapsed_ms={} groups={} truncated={}",started.elapsed().as_millis(),out["data"]["sources"]["sample"]["total_rows"],out["data"]["sources"]["sample"]["truncated"]);
         assert_eq!(out["data"]["sources"]["sample"]["total_rows"],if bucket { 12 } else { 5000 });
-        let total_key=if bucket { "total" } else { "count" };
+        let total_key=if bucket { "sum_amount" } else { "count" };
         assert_eq!(out["data"]["sources"]["sample"]["totals"][total_key]["sum"].as_f64(),Some(if bucket { 12_517_500.0 } else { 5000.0 }));
     }
 }
