@@ -1,0 +1,8 @@
+
+Running 1 test using 1 worker
+
+(node:94297) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 tests/brand-and-motion.spec.ts:113:5 › brand icon files, manifest and social metadata are served (442ms)
+
+  1 passed (1.4s)

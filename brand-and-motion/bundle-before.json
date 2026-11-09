@@ -1,0 +1,46 @@
+{
+  "/": {
+    "bytes": 747740,
+    "gzip": 219161
+  },
+  "/entities": {
+    "bytes": 829047,
+    "gzip": 245083
+  },
+  "/vaults": {
+    "bytes": 793183,
+    "gzip": 231032
+  },
+  "/documents": {
+    "bytes": 751996,
+    "gzip": 218489
+  },
+  "/connectors": {
+    "bytes": 800234,
+    "gzip": 231542
+  },
+  "/ontology": {
+    "bytes": 776245,
+    "gzip": 225707
+  },
+  "/ontology/schema": {
+    "bytes": 776245,
+    "gzip": 225707
+  },
+  "/ontology/review": {
+    "bytes": 776245,
+    "gzip": 225707
+  },
+  "/chat": {
+    "bytes": 927047,
+    "gzip": 273216
+  },
+  "/settings": {
+    "bytes": 1156385,
+    "gzip": 334139
+  },
+  "/login": {
+    "bytes": 571784,
+    "gzip": 169018
+  }
+}

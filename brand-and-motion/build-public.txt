@@ -1,0 +1,56 @@
+$ next build
+▲ Next.js 16.3.4 (Turbopack)
+✓ Running next.config.ts took 12ms
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 1211ms
+  Running TypeScript ...
+  Finished TypeScript in 2.5s ...
+  Collecting page data using 13 workers ...
+  Generating static pages using 13 workers (0/29) ...
+  Generating static pages using 13 workers (7/29) 
+  Generating static pages using 13 workers (14/29) 
+  Generating static pages using 13 workers (21/29) 
+✓ Generating static pages using 13 workers (29/29) in 221ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /apple-icon.png
+├ ○ /chat
+├ ○ /code
+├ ƒ /connect/[app]
+├ ○ /connect/help
+├ ○ /connectors
+├ ƒ /connectors/[kind]
+├ ƒ /connectors/setup/[kind]
+├ ○ /consent
+├ ○ /docs
+├ ○ /documents
+├ ○ /entities
+├ ○ /help
+├ ○ /icon.svg
+├ ○ /icon1.png
+├ ○ /icon2.png
+├ ○ /login
+├ ○ /manifest.webmanifest
+├ ○ /onboarding
+├ ○ /ontology
+├ ƒ /ontology/kinds/[kind]
+├ ○ /ontology/review
+├ ○ /ontology/schema
+├ ○ /opengraph-image.png
+├ ○ /register
+├ ƒ /secrets/requests/[id]
+├ ○ /settings
+├ ○ /skill
+├ ○ /twitter-image.png
+└ ○ /vaults
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

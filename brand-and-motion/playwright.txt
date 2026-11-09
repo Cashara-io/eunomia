@@ -1,0 +1,27 @@
+
+Running 20 tests using 1 worker
+
+(node:486) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 tests/brand-and-motion.spec.ts:117:5 › brand icon files, manifest and social metadata are served (288ms)
+  ✓   2 tests/brand-and-motion.spec.ts:232:7 › measured skeleton while / waits for its API (294ms)
+  ✓   3 tests/brand-and-motion.spec.ts:232:7 › measured skeleton while /entities waits for its API (262ms)
+  ✓   4 tests/brand-and-motion.spec.ts:232:7 › measured skeleton while /vaults waits for its API (544ms)
+  ✓   5 tests/brand-and-motion.spec.ts:232:7 › measured skeleton while /documents waits for its API (304ms)
+  ✓   6 tests/brand-and-motion.spec.ts:232:7 › measured skeleton while /connectors waits for its API (309ms)
+  ✓   7 tests/brand-and-motion.spec.ts:232:7 › measured skeleton while /ontology?space=brand-space waits for its API (291ms)
+  ✓   8 tests/brand-and-motion.spec.ts:232:7 › measured skeleton while /ontology/schema?space=brand-space waits for its API (269ms)
+  ✓   9 tests/brand-and-motion.spec.ts:232:7 › measured skeleton while /ontology/review?space=brand-space waits for its API (278ms)
+  ✓  10 tests/brand-and-motion.spec.ts:232:7 › measured skeleton while /chat waits for its API (256ms)
+  ✓  11 tests/brand-and-motion.spec.ts:232:7 › measured skeleton while /settings waits for its API (543ms)
+  ✓  12 tests/brand-and-motion.spec.ts:232:7 › measured skeleton while /settings?tab=tokens waits for its API (314ms)
+  ✓  13 tests/brand-and-motion.spec.ts:267:7 › review count updates with reduced motion false (908ms)
+  ✓  14 tests/brand-and-motion.spec.ts:267:7 › review count updates with reduced motion true (481ms)
+  ✓  15 tests/brand-and-motion.spec.ts:339:5 › haptic preference defaults on, toggles and survives reload (564ms)
+  ✓  16 tests/brand-and-motion.spec.ts:371:5 › icon proof sheet uses the served images at their native sizes (229ms)
+  ✓  17 tests/brand-and-motion.spec.ts:400:7 › haptics enabled gates a successful review action (461ms)
+  ✓  18 tests/brand-and-motion.spec.ts:400:7 › haptics disabled gates a successful review action (478ms)
+  ✓  19 tests/brand-and-motion.spec.ts:400:7 › haptics reduced gates a successful review action (421ms)
+  ✓  20 tests/brand-and-motion.spec.ts:400:7 › haptics desktop gates a successful review action (509ms)
+
+  20 passed (8.8s)
