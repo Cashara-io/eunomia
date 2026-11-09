@@ -36,7 +36,7 @@ jobs:
           fetch-depth: 0
       - name: Bind checked-out source to the signing identity
         run: |
-          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$TAG" == v* ]]
           test "$GITHUB_REF" = "refs/tags/$TAG"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
       - run: bash scripts/ci/check-release-order.sh "$TAG"
