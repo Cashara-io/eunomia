@@ -9,6 +9,7 @@ export const SETTINGS_GROUPS = [
       { id: "apps", label: "Connected apps", keywords: "oauth sign-in claude chatgpt" },
       { id: "tokens", label: "API tokens", keywords: "key token mcp" },
       { id: "sessions", label: "Sessions", keywords: "devices sign out" },
+      { id: "support", label: "Support", keywords: "diagnostics logs download help zip" },
       { id: "data", label: "Your data", keywords: "export download delete" },
     ],
   },

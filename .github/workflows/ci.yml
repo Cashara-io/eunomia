@@ -198,6 +198,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # diagnostics tests exercise the actual v2.2.0 updater
       # connect-agents.sh against a throwaway HOME and a mock API, with jq and
       # again with the python3 fallback.
       - run: CONNECT_JSON=py bash scripts/tests/connect-agents.test.sh

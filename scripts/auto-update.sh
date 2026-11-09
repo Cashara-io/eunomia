@@ -42,6 +42,12 @@ main() {
   mkdir "$status_dir/.lock" 2>/dev/null || exit 0
   trap "rmdir '$status_dir/.lock' 2>/dev/null" EXIT
 
+  # Before the network throttle: a diagnostics request never triggers an update.
+  if [ -f "$status_dir/diagnostics-requested" ]; then
+    command -v python3 >/dev/null || apk add --no-cache -q python3 >/dev/null 2>&1
+    python3 scripts/diagnostics.py "$status_dir" >/dev/null 2>&1 || true
+  fi
+
   https_apply "$status_dir"
   secrets_apply "$status_dir"
   heal_stack "$status_dir"

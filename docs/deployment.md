@@ -287,3 +287,8 @@ Changing a real key later has no such fallback: values written under the old key
 ## Backups
 
 See [INSTALLATION.md](../INSTALLATION.md#backups): the nightly encrypted export, where the key lives, and how to restore.
+
+## Support diagnostics
+
+See [Getting help](support.md) to download a diagnostics zip from Settings, or
+collect logs from the command line when the web app is down.

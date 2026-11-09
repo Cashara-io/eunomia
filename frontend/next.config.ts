@@ -3,6 +3,8 @@ import type { NextConfig } from "next";
 const backend = process.env.BACKEND_INTERNAL_URL || "http://localhost:8001";
 
 const nextConfig: NextConfig = {
+  // Diagnostics can spend a minute waiting for the updater before streaming the ZIP.
+  experimental: { proxyTimeout: 120_000 },
   async headers() {
     return [
       {

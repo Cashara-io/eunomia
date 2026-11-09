@@ -159,6 +159,7 @@ pub async fn trace_request(req: Request, next: Next) -> Response {
 /// JSON logs honouring `RUST_LOG`, else `LOG_LEVEL`. OTLP export turns on only
 /// when `OTEL_EXPORTER_OTLP_ENDPOINT` is set; keep the returned provider alive.
 pub fn init(log_level: &str) -> Option<SdkTracerProvider> {
+    std::sync::LazyLock::force(&crate::diagnostics::START);
     let filter = EnvFilter::try_from_default_env()
         .or_else(|_| EnvFilter::try_new(log_level.to_lowercase()))
         .unwrap_or_else(|_| EnvFilter::new("info"));
@@ -174,7 +175,7 @@ pub fn init(log_level: &str) -> Option<SdkTracerProvider> {
     tracing_subscriber::registry()
         .with(otel_layer)
         .with(filter)
-        .with(tracing_subscriber::fmt::layer().json().with_current_span(true).with_span_list(false))
+        .with(crate::diagnostics::logs::SafeLogs { ring: crate::diagnostics::logs::LOGS.clone(), stdout: true })
         .init();
     if let Some(e) = otel_error {
         tracing::warn!("OTLP export disabled: {e}");
