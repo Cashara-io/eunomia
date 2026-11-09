@@ -402,6 +402,15 @@ mod tests {
         assert!(validate(&spec,Some(&data)).is_ok());
     }
     #[test]
+    fn prose_prompt_contract_has_no_value_matching_exemption() {
+        let prompt = description();
+        assert!(prompt.contains("{{/sources/sales/total_rows}}"));
+        assert!(prompt.contains("Raw digits"));
+        assert!(!prompt.contains("digits must match"));
+        assert!(!prompt.contains("digit quantities must match"));
+        assert!(!prompt.contains("Alphanumeric identifiers such as Q3 are allowed"));
+    }
+    #[test]
     fn rejects_caps() {
         let spec = json!({"root":"a","elements":{"a":{"type":"Text","props":{"text":"a".repeat(MAX_BYTES)}}}});
         assert!(validate(&spec, None).is_err());
