@@ -526,7 +526,23 @@ pub const UPSERT_IMPORTED_VALUES: Stmt = Stmt::new(
 /// The values a deleted document's import wrote go with it.
 pub const DELETE_IMPORTED_VALUES: Stmt = Stmt::new("ontology.delete_imported_values", "DELETE entity_property WHERE source = $document");
 
+/// Bounded input for a generative UI dataset. Query text never comes from the model.
+pub const UI_ENTITIES: Stmt = Stmt::new("ontology.ui_entities",
+    r#"RETURN IF $table = "person" { (SELECT VALUE id FROM person WHERE vault = $vault ORDER BY id LIMIT 5001) }
+        ELSE IF $table = "organisation" { (SELECT VALUE id FROM organisation WHERE vault = $vault ORDER BY id LIMIT 5001) }
+        ELSE IF $table = "location" { (SELECT VALUE id FROM location WHERE vault = $vault ORDER BY id LIMIT 5001) }
+        ELSE IF $table = "repository" { (SELECT VALUE id FROM repository WHERE vault = $vault ORDER BY id LIMIT 5001) }
+        ELSE IF $table = "file" { (SELECT VALUE id FROM file WHERE vault = $vault ORDER BY id LIMIT 5001) }
+        ELSE IF $table = "symbol" { (SELECT VALUE id FROM symbol WHERE vault = $vault ORDER BY id LIMIT 5001) }
+        ELSE { (SELECT VALUE id FROM entity WHERE vault = $vault AND kind = $kind ORDER BY id LIMIT 5001) };"#);
+
+/// Outgoing link targets stay in the authorised vault.
+pub const UI_LINKS: Stmt = Stmt::new("ontology.ui_links",
+    "SELECT in AS entity, out AS target, label FROM relates_to WHERE in IN $ids AND in.vault = $vault AND out.vault = $vault LIMIT 5001");
+
 pub const ALL: &[&Stmt] = &[
+    &UI_LINKS,
+    &UI_ENTITIES,
     &PROFILE,
     &REGISTRY,
     &LINKS_LABELLED,

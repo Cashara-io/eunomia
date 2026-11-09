@@ -1,0 +1,22 @@
+Cargo environment for every cargo command:
+CARGO_BUILD_JOBS=2 CARGO_PROFILE_DEV_DEBUG=0 CARGO_INCREMENTAL=0 RUST_MIN_STACK=8388608 nice -n 19
+
+cargo clippy --manifest-path backend/Cargo.toml --all-targets -- -D warnings
+cargo test --manifest-path backend/Cargo.toml --lib views:: -- --test-threads=1
+cargo test --manifest-path backend/Cargo.toml --lib ontology::dataset::tests -- --test-threads=1
+TEST_HARDENED=1 cargo test --manifest-path backend/Cargo.toml --test chat_ui --test round_trips -- --test-threads=1
+cargo test --manifest-path backend/Cargo.toml --test ontology -- --test-threads=1
+cargo build --manifest-path backend/Cargo.toml
+
+From frontend:
+bun scripts/chat-catalog.ts --check
+bun run lint
+bunx tsc --noEmit
+bun run build
+E2E_BASE_URL=http://localhost:3580 bunx playwright test tests/chat-json-render.spec.ts tests/scenario-format.spec.ts tests/scenario-card-format.spec.ts --workers=1
+
+From the repo root:
+python3 -I scripts/chat-json-render/verify_numbers.py /tmp/eunomia-ui-demo.csv /tmp/eunomia-ui-proof
+
+E2E_BASE_URL=http://localhost:3580 bunx playwright test tests/every-tool.spec.ts
+E2E_CAPTURE_CATALOG=1 E2E_BASE_URL=http://localhost:3580 bunx playwright test tests/chat-json-render.spec.ts tests/scenario-format.spec.ts tests/scenario-card-format.spec.ts --workers=1

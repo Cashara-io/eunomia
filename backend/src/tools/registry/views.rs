@@ -20,7 +20,9 @@ fn schema() -> serde_json::Value {
     json!({
         "type": "object",
         "properties": {
-            "view": {"type": "string", "enum": ["impact", "subgraph", "metric", "scenario"], "description": "`impact`: what a change, delay or problem with one entity affects. `subgraph`: how some entities connect. `metric`: an approved metric's number, run again by the server. `scenario`: a what-if, its metrics before and after, run again by the server"},
+            "view": {"type": "string", "enum": ["impact", "subgraph", "metric", "scenario", "ui"], "description": "`impact`: what a change, delay or problem with one entity affects. `subgraph`: how some entities connect. `metric`: an approved metric's number, run again by the server. `scenario`: a what-if, its metrics before and after, run again by the server"},
+            "spec": views::ui::catalog()["schema"].clone(),
+            "sources": views::ui::sources_schema(),
             "start_id": {"type": "string", "description": "impact: the entity that changed"},
             "headline": {"type": "string", "description": "impact: one sentence, what happened; scenario: one sentence, what the what-if asks (at most 200 characters)"},
             "scenario": {"type": "object", "description": "scenario: the same arguments you gave scenario_run (changes, metrics, vault_id, as_of, impact_from, depth)"},
@@ -72,6 +74,13 @@ pub(super) fn register_all(registry: &mut HashMap<&'static str, ToolSpec>) {
                     && let Err(e) = super::resolve_vault_names(&state.db, owner, inner).await
                 {
                     return Ok(json!({ "error": e }));
+                }
+                if let Some(sources) = args.get_mut("sources").and_then(serde_json::Value::as_object_mut) {
+                    for source in sources.values_mut() {
+                        if let Err(e) = super::resolve_vault_names(&state.db, owner, source).await { return Ok(json!({"error":e})); }
+                        if let Some(scenario) = source.get_mut("scenario")
+                            && let Err(e) = super::resolve_vault_names(&state.db, owner, scenario).await { return Ok(json!({"error":e})); }
+                    }
                 }
                 let spec: ViewSpec = match serde_json::from_value(args) {
                     Ok(s) => s,
