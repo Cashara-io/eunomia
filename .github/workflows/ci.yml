@@ -20,20 +20,21 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       # Tests run against an in-memory SurrealDB, so no service container is
       # needed.
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable snapshot, Rust 1.99.1
         with:
+          toolchain: 1.99.1
           components: clippy
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
           workspaces: backend
           shared-key: backend-tests
 
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: nextest
 
@@ -48,13 +49,15 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable snapshot, Rust 1.99.1
+        with:
+          toolchain: 1.99.1
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
           workspaces: backend
           shared-key: backend-tests
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: nextest
       # The whole suite under the --allow-funcs list read out of docker-compose.yml.
@@ -78,9 +81,9 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: "1.3.14"
 
@@ -104,7 +107,7 @@ jobs:
     needs: [frontend]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - run: docker compose -p eunomia-ci build
 
@@ -112,15 +115,17 @@ jobs:
       # SurrealDB on 127.0.0.1:8000 so the memory-correctness spec can seed SQL fixtures.
       - name: Start stack
         run: |
-          echo "JWT_SECRET=$(openssl rand -hex 32)" >> .env
-          echo "ENCRYPTION_KEY=$(openssl rand -hex 32)" >> .env
-          echo "SECRETS_HELPER_KEY=$(openssl rand -hex 32)" >> .env
-          # the password managers spec needs the secrets helper: its compose profile, as Enable sets it
-          echo "COMPOSE_PROFILES=secrets" >> .env
-          # The connectors spec points connectors at its in-test mock provider.
-          echo "EUNOMIA_ALLOW_CONNECTOR_BASE_URL=1" >> .env
-          # the suite registers many users a minute from one address
-          printf "RATE_LIMIT_AUTH_PER_MIN=1000\nRATE_LIMIT_USER_PER_MIN=100000\nRATE_LIMIT_TOKEN_PER_MIN=100000\n" >> .env
+          {
+            echo "JWT_SECRET=$(openssl rand -hex 32)"
+            echo "ENCRYPTION_KEY=$(openssl rand -hex 32)"
+            echo "SECRETS_HELPER_KEY=$(openssl rand -hex 32)"
+            # the password managers spec needs the secrets helper: its compose profile, as Enable sets it
+            echo "COMPOSE_PROFILES=secrets"
+            # The connectors spec points connectors at its in-test mock provider.
+            echo "EUNOMIA_ALLOW_CONNECTOR_BASE_URL=1"
+            # the suite registers many users a minute from one address
+            printf "RATE_LIMIT_AUTH_PER_MIN=1000\nRATE_LIMIT_USER_PER_MIN=100000\nRATE_LIMIT_TOKEN_PER_MIN=100000\n"
+          } >> .env
           # The backend writes https.json here and the HTTPS spec plays the updater.
           mkdir -p update-status && chmod 777 update-status
           echo "E2E_UPDATE_STATUS_DIR=$PWD/update-status" >> "$GITHUB_ENV"
@@ -147,13 +152,15 @@ jobs:
         run: |
           bash scripts/ci/e2e-setup.sh > "$RUNNER_TEMP/e2e.env"
           echo "::add-mask::$(sed -n 's/^E2E_ADMIN_PASSWORD=//p' "$RUNNER_TEMP/e2e.env")"
-          cat "$RUNNER_TEMP/e2e.env" >> "$GITHUB_ENV"
-          echo "E2E_SURREAL_HTTP=http://127.0.0.1:8000" >> "$GITHUB_ENV"
-          # in-test mock servers listen on the runner; the backend container reaches them via the host gateway
-          echo "E2E_MOCK_BIND=0.0.0.0" >> "$GITHUB_ENV"
-          echo "E2E_MOCK_HOST=host.docker.internal" >> "$GITHUB_ENV"
+          {
+            cat "$RUNNER_TEMP/e2e.env"
+            echo "E2E_SURREAL_HTTP=http://127.0.0.1:8000"
+            # in-test mock servers listen on the runner; the backend container reaches them via the host gateway
+            echo "E2E_MOCK_BIND=0.0.0.0"
+            echo "E2E_MOCK_HOST=host.docker.internal"
+          } >> "$GITHUB_ENV"
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: "1.3.14"
 
@@ -169,7 +176,7 @@ jobs:
         env:
           E2E_BASE_URL: http://localhost:3000
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: recall-eval
@@ -180,7 +187,7 @@ jobs:
         if: failure()
         run: docker compose -p eunomia-ci logs --no-color > stack.log 2>&1 || true
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: failure()
         with:
           name: playwright-report
@@ -197,7 +204,7 @@ jobs:
   scripts:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       # connect-agents.sh against a throwaway HOME and a mock API, with jq and
       # again with the python3 fallback.
       - run: CONNECT_JSON=py bash scripts/tests/connect-agents.test.sh
@@ -224,13 +231,13 @@ jobs:
       - run: bash -n scripts/*.sh scripts/ci/*.sh scripts/tests/*.sh backend/scripts/backup/eunomia-backup.sh
       # create-eunomia ships a copy of connect-agents.sh, so it is tested here: build (which copies the
       # script in), then format, init and sync tests against an in-test fake server. Node 18 is its floor.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 18
       - run: npm ci && npm test
         working-directory: cli/create-eunomia
       # the credential broker's sidecar: its unit tests and the mock 1Password Connect and Bitwarden servers
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
       - run: npm ci && npm test
@@ -244,7 +251,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       - run: bash scripts/tests/secrets-helper-compose.test.sh
 
   # Real SurrealDB 2.7 -> 3.3 data move (scripts/upgrade-surreal-v3.sh), including a
@@ -254,7 +261,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0   # case B reads the released v1.2.2 compose file from its tag
       - run: bash scripts/tests/upgrade-surreal-v3.test.sh
@@ -282,20 +289,20 @@ jobs:
           - from: v2.1.1
           - from: v2.2.0
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0   # the release tags: the stand-in GitHub serves them
       - name: Fetch the from_ref branch
-        if: matrix.from_ref
+        if: fromJSON(toJSON(matrix)).from_ref
         env:
-          FROM_REF: ${{ matrix.from_ref }}
+          FROM_REF: ${{ fromJSON(toJSON(matrix)).from_ref }}
         run: git fetch --no-tags origin "+refs/heads/${FROM_REF#origin/}:refs/remotes/$FROM_REF"
       - env:
-          UPDATE_PATH_FROM_REF: ${{ matrix.from_ref }}
-          UPDATE_PATH_FROM_TAG: ${{ matrix.from_ref && matrix.from || '' }}
+          UPDATE_PATH_FROM_REF: ${{ fromJSON(toJSON(matrix)).from_ref }}
+          UPDATE_PATH_FROM_TAG: ${{ fromJSON(toJSON(matrix)).from_ref && matrix.from || '' }}
           FROM: ${{ matrix.from }}
         run: bash scripts/tests/update-path.test.sh "$FROM"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: failure()
         with:
           name: update-path-${{ matrix.from }}
@@ -308,6 +315,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       - run: bash scripts/restore-drill.sh
       - run: bash scripts/restore-drill-tenancy.sh

@@ -1,0 +1,42 @@
+{
+  "gitleaks/gitleaks": {
+    "version": "v8.30.1",
+    "archives": {
+      "gitleaks_8.30.1_darwin_arm64.tar.gz": "b40ab0ae55c505963e365f271a8d3846efbc170aa17f2607f13df610a9aeb6a5",
+      "gitleaks_8.30.1_linux_arm64.tar.gz": "e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080",
+      "gitleaks_8.30.1_linux_x64.tar.gz": "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+    }
+  },
+  "anchore/syft": {
+    "version": "v1.57.0",
+    "archives": {
+      "syft_1.57.0_darwin_arm64.tar.gz": "17012a5a110323bb1069e513a8665f1ae445905c56b4e3f9a9df4f95c5bb6161",
+      "syft_1.57.0_linux_amd64.tar.gz": "9c077a7d43029b3b13e98a8db720661e700c4d58db6352153a06395ae4a2a704",
+      "syft_1.57.0_linux_arm64.tar.gz": "410cbfa0ae0f63246bc0057843760b1de2833cd23919e025e368fd7681308cdb"
+    }
+  },
+  "anchore/grype": {
+    "version": "v0.121.2",
+    "archives": {
+      "grype_0.121.2_darwin_arm64.tar.gz": "3633c113d81ec1460b0520e23633d72a25caae62875fd48a8b0e4f22dcc7c704",
+      "grype_0.121.2_linux_amd64.tar.gz": "9c8965ced9df657e5e851c14021bae838802f711edd7a48f9bc3c923a8d28f12",
+      "grype_0.121.2_linux_arm64.tar.gz": "d7d2e160255b0f087280feabf6f213cf4c45d475690f3f1fe5dc336eb1037bf0"
+    }
+  },
+  "rhysd/actionlint": {
+    "version": "v1.7.12",
+    "archives": {
+      "actionlint_1.7.12_darwin_arm64.tar.gz": "aba9ced2dee8d27fecca3dc7feb1a7f9a52caefa1eb46f3271ea66b6e0e6953f",
+      "actionlint_1.7.12_linux_amd64.tar.gz": "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8",
+      "actionlint_1.7.12_linux_arm64.tar.gz": "325e971b6ba9bfa504672e29be93c24981eeb1c07576d730e9f7c8805afff0c6"
+    }
+  },
+  "EmbarkStudios/cargo-deny": {
+    "version": "0.20.2",
+    "archives": {
+      "cargo-deny-0.20.2-aarch64-apple-darwin.tar.gz": "fe67d82a10d8597a3549364cb733a3f9cc1bfff9031b7ae46384a9f2a72090c3",
+      "cargo-deny-0.20.2-aarch64-unknown-linux-musl.tar.gz": "995c82be0defc7a025cae49a2aa2644ce8245c9a3318fc4103907c6a285e8c7d",
+      "cargo-deny-0.20.2-x86_64-unknown-linux-musl.tar.gz": "9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f"
+    }
+  }
+}
