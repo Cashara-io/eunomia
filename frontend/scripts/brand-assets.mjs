@@ -2,10 +2,15 @@
 import sharp from "sharp";
 import { writeFile } from "node:fs/promises";
 const app = new URL("../src/app/", import.meta.url);
-const shapes =
+const rowShapes =
   '<circle cx="6" cy="6" r="6" fill="#CF412F"/><path d="M16 0h12v12H16z" fill="#E8BE39"/><path d="M38 0 44 12H32Z" fill="#3159B6"/>';
-const icon = (dark = false) =>
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="${dark ? "#121211" : "#FAFAF7"}"/><g transform="translate(5 24.6) scale(1.227)">${shapes}</g></svg>`;
+// Whole-pixel bounds at 16px. The triangle has the same visual weight as the top shapes.
+const squareShapes =
+  '<circle cx="4" cy="4" r="3" fill="#CF412F"/><path d="M9 1h6v6H9z" fill="#E8BE39"/><path d="M8 8 12 15H4Z" fill="#3159B6"/>';
+// The furthest corner is 7 * sqrt(2) from the centre. Scaling by .62
+// puts every shape inside the maskable safe circle, radius 6.4 of 16 units.
+const icon = (maskable = false) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="#FAFAF7"/><g${maskable ? ' transform="translate(8 8) scale(.62) translate(-8 -8)"' : ""}>${squareShapes}</g></svg>`;
 await writeFile(
   new URL("icon.svg", app),
   icon().replace(
@@ -13,14 +18,15 @@ await writeFile(
     "<style>@media(prefers-color-scheme:dark){rect{fill:#121211}circle{fill:#DD5743}path:first-of-type{fill:#ECC64C}path:last-of-type{fill:#5A80D8}}</style><rect ",
   ),
 );
-for (const size of [180, 192, 512]) {
-  const dest = new URL(
-    size === 180 ? "apple-icon.png" : `icon${size === 192 ? 1 : 2}.png`,
-    app,
-  );
+for (const [name, size, maskable] of [
+  ["apple-icon.png", 180, false],
+  ["icon1.png", 192, false],
+  ["icon2.png", 512, false],
+  ["../../public/maskable-icon.png", 512, true],
+]) {
   await writeFile(
-    dest,
-    await sharp(Buffer.from(icon())).resize(size, size).png().toBuffer(),
+    new URL(name, app),
+    await sharp(Buffer.from(icon(maskable))).resize(size, size).removeAlpha().png().toBuffer(),
   );
 }
 const frames = await Promise.all(
@@ -45,6 +51,7 @@ await writeFile(
   new URL("favicon.ico", app),
   Buffer.concat([header, ...frames]),
 );
+if (process.argv.includes("--icons-only")) process.exit(0);
 const fontfile = new URL(
   "../node_modules/geist/dist/fonts/geist-sans/Geist-Medium.ttf",
   import.meta.url,
@@ -65,7 +72,7 @@ const subtitle = await sharp({
 })
   .png()
   .toBuffer();
-const base = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630"><rect width="1200" height="630" fill="#FAFAF7"/><path d="M64 550H1136" stroke="#E2E2DC"/><g transform="translate(68 74) scale(3)">${shapes}</g><circle cx="1110" cy="58" r="110" fill="#CF412F"/><path d="M1040 470h190v190h-190z" fill="#E8BE39"/><path d="M1050 247 1180 472H920Z" fill="#3159B6"/></svg>`;
+const base = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630"><rect width="1200" height="630" fill="#FAFAF7"/><path d="M64 550H1136" stroke="#E2E2DC"/><g transform="translate(68 74) scale(3)">${rowShapes}</g><circle cx="1110" cy="58" r="110" fill="#CF412F"/><path d="M1040 470h190v190h-190z" fill="#E8BE39"/><path d="M1050 247 1180 472H920Z" fill="#3159B6"/></svg>`;
 const og = await sharp(Buffer.from(base))
   .composite([
     { input: title, left: 64, top: 210 },

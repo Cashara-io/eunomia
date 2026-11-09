@@ -2,6 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { gzipSync } from "node:zlib";
+import sharp from "sharp";
 import type { OntologyOut } from "../src/lib/gen";
 
 const artifactDir = process.env.BRAND_SCREENSHOTS;
@@ -129,8 +130,8 @@ test("brand icon files, manifest and social metadata are served", async ({
   const response = await request.get("/favicon.ico");
   expect(response.ok()).toBeTruthy();
   const ico = await response.body();
-  expect(createHash("sha256").update(ico).digest("hex")).not.toBe(
-    "2b8ad2d33455a8f736fc3a8ebf8f0bdea8848ad4c0db48a2833bd0f9cd775932",
+  expect(createHash("sha256").update(ico).digest("hex")).toBe(
+    "5c7acc8766b8b28f4bd2b50c026281e27b478fccbaf7989ff29c7e0692bbca7c",
   );
   expect([ico[6], ico[22], ico[38]]).toEqual([16, 32, 48]);
   expect(ico.readUInt16LE(4)).toBe(3);
@@ -139,15 +140,42 @@ test("brand icon files, manifest and social metadata are served", async ({
   expect(manifestResponse.ok()).toBeTruthy();
   const manifest = await manifestResponse.json();
   expect(manifest.name).toBe("Eunomia");
-  expect(manifest.icons.map((i: { sizes: string }) => i.sizes)).toEqual([
-    "192x192",
-    "512x512",
+  expect(manifest.icons).toEqual([
+    { src: "/icon1.png", sizes: "192x192", type: "image/png", purpose: "any" },
+    { src: "/icon2.png", sizes: "512x512", type: "image/png", purpose: "any" },
+    { src: "/maskable-icon.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
   ]);
-  for (const icon of manifest.icons)
-    expect((await request.get(icon.src)).ok()).toBeTruthy();
+  for (const [src, size, hash] of [
+    ["/apple-icon.png", 180, "49e805b7a26451abd1f7971ab47ff03d49c13ed8e8ce47595f358fbe57104890"],
+    ["/icon1.png", 192, "81fe7747f7ce0cb1f8e42c8545180c59c1293c063271d249fdf6e9f496346b7c"],
+    ["/icon2.png", 512, "717283178ecad38420fba5e235a822f114e9ce61d929d2ae44ad9e1daefa0f59"],
+    ["/maskable-icon.png", 512, "e0b863ff37cba4b644f6684d05816bc53ff54c7c5955da434d00e0768dbc6ce0"],
+  ] satisfies [string, number, string][]) {
+    const response = await request.get(src);
+    expect(response.ok()).toBeTruthy();
+    const bytes = await response.body();
+    expect(createHash("sha256").update(bytes).digest("hex")).toBe(hash);
+    expect(await sharp(bytes).metadata()).toMatchObject({
+      width: size, height: size, hasAlpha: false,
+    });
+    if (src === "/maskable-icon.png") {
+      const pixels = await sharp(bytes).raw().toBuffer();
+      let furthest = 0;
+      for (let y = 0; y < size; y++)
+        for (let x = 0; x < size; x++) {
+          const at = (y * size + x) * 3;
+          if (pixels[at] !== 250 || pixels[at + 1] !== 250 || pixels[at + 2] !== 247)
+            furthest = Math.max(furthest, Math.hypot(x + .5 - size / 2, y + .5 - size / 2));
+        }
+      expect(furthest).toBeLessThan(size * .4);
+    }
+  }
   const svg = await (await request.get("/icon.svg")).text();
+  expect(createHash("sha256").update(svg).digest("hex")).toBe(
+    "572d9ac1a4f0b1b9f562e9bedce0d50c39af1a24417639dcb144b556342ededf",
+  );
   expect(svg).toContain("prefers-color-scheme:dark");
-  for (const colour of ["#CF412F", "#E8BE39", "#3159B6"])
+  for (const colour of ["#CF412F", "#E8BE39", "#3159B6", "#DD5743", "#ECC64C", "#5A80D8"])
     expect(svg).toContain(colour);
   await page.goto("/login");
   await expect(page.locator('link[rel="manifest"]')).toHaveAttribute(
@@ -376,7 +404,7 @@ test("haptic preference defaults on, toggles and survives reload", async ({
   }
 });
 
-test("icon proof sheet uses the served images at their native sizes", async ({
+test("icon proof sheet shows native, 2x and 4x sizes in light and dark chrome", async ({
   page,
   request,
 }) => {
@@ -387,21 +415,62 @@ test("icon proof sheet uses the served images at their native sizes", async ({
       ico.readUInt32LE(at + 12),
       ico.readUInt32LE(at + 12) + ico.readUInt32LE(at + 8),
     );
-    return `<figure><img alt="Tab icon ${size}px" width="${size}" height="${size}" src="data:image/png;base64,${png.toString("base64")}"><figcaption>Tab icon ${size}px</figcaption></figure>`;
+    return { label: `ICO ${size}px`, size, src: `data:image/png;base64,${png.toString("base64")}` };
   });
-  await page.goto("/login");
-  await page.setViewportSize({ width: 1200, height: 960 });
-  await page.setContent(
-    `<html><head><base href="${page.url()}"><style>body{margin:40px;background:#FAFAF7;color:#171717;font:18px system-ui}h1{font-weight:500}section{display:flex;gap:32px;align-items:center}figure{margin:24px 0}figcaption{margin-top:16px;font-size:14px}img{display:block}</style></head><body><h1>Eunomia icons</h1><section>${frames.join("")}<figure><img alt="SVG icon" src="/icon.svg" width="64" height="64"><figcaption>Theme-aware SVG</figcaption></figure></section><section><figure><img alt="Apple icon" src="/apple-icon.png" width="180" height="180"><figcaption>Apple 180px</figcaption></figure><figure><img alt="Manifest icon 192" src="/icon1.png" width="192" height="192"><figcaption>Manifest 192px</figcaption></figure><figure><img alt="Manifest icon 512" src="/icon2.png" width="512" height="512"><figcaption>Manifest 512px</figcaption></figure></section></body></html>`,
-  );
+  const svg = await (await request.get("/icon.svg")).body();
+  frames.push({ label: "SVG 16px", size: 16, src: `data:image/svg+xml;base64,${svg.toString("base64")}` });
+  frames.push({ label: "SVG 32px", size: 32, src: `data:image/svg+xml;base64,${svg.toString("base64")}` });
+  frames.push({ label: "SVG 48px", size: 48, src: `data:image/svg+xml;base64,${svg.toString("base64")}` });
+  const tabs = ["light", "dark"].map((theme) => `
+    <section class="chrome ${theme}"><h2>${theme === "light" ? "Light" : "Dark"} browser chrome</h2>
+    ${frames.map(({ label, size, src }) => `<div class="tab-row"><h3>${label}</h3>${[1, 2, 4].map((scale) => `
+      <div><p>${scale}x, ${size * scale}px</p><div class="strip"><div class="tab">
+      <img alt="${label}, ${theme}, ${scale}x" style="color-scheme:${theme}" width="${size * scale}" height="${size * scale}" src="${src}">
+      <span>Eunomia</span><span class="close">×</span></div><span class="plus">+</span></div></div>`).join("")}</div>`).join("")}</section>`).join("");
+  const tiles = [];
+  for (const [label, path, size, kind] of [
+    ["Apple touch", "/apple-icon.png", 180, "ios"],
+    ["Manifest any", "/icon1.png", 192, "any"],
+    ["Manifest any", "/icon2.png", 512, "any"],
+    ["Manifest maskable", "/maskable-icon.png", 512, "maskable"],
+  ] satisfies [string, string, number, string][]) {
+    const bytes = await (await request.get(path)).body();
+    const src = `data:image/png;base64,${bytes.toString("base64")}`;
+    tiles.push(`<section class="tile-row"><h2>${label}, ${size}px</h2><div class="tile-scales">${[1, 2, 4].map((scale) => `
+      <div><p>${scale}x, ${size * scale}px</p><div class="wallpaper"><div class="tile ${kind}" style="width:${size * scale}px;height:${size * scale}px">
+      <img alt="${label} ${size}px, ${scale}x" width="${size * scale}" height="${size * scale}" src="${src}">
+      ${kind === "maskable" ? '<div class="safe-zone"></div>' : ""}</div>
+      ${kind === "ios" ? '<p class="app-name">Eunomia</p>' : ""}</div>
+      ${kind === "maskable" && scale === 1 ? `<p>Circle mask at native size</p><img class="circle-mask" alt="Maskable icon with circular crop" width="${size}" height="${size}" src="${src}">` : ""}
+      </div>`).join("")}</div></section>`);
+  }
+  const html = `<!doctype html><html><head><meta charset="utf-8"><style>
+    *{box-sizing:border-box}body{margin:0;padding:40px;width:4000px;background:#f0f0eb;color:#171717;font:22px system-ui}
+    h1{font-size:44px;margin:0 0 12px}h2{font-size:30px;margin:0 0 24px}h3{font-size:20px;font-weight:600}p{margin:12px 0 16px}
+    img{display:block;image-rendering:pixelated}img[src^="data:image/svg"]{image-rendering:auto}
+    .intro{margin-bottom:36px}.themes{display:grid;grid-template-columns:1fr 1fr;gap:32px}.chrome{padding:28px;border-radius:20px}
+    .light{background:#fff;color:#171717;color-scheme:light}.dark{background:#202124;color:#eee;color-scheme:dark}
+    .tab-row{display:grid;grid-template-columns:130px repeat(3,1fr);gap:24px;align-items:center;margin:12px 0 28px}
+    .strip{background:#dee1e6;display:flex;align-items:center;padding:12px 12px 0;min-height:70px}.dark .strip{background:#303134}
+    .tab{display:flex;align-items:center;gap:18px;background:#fff;border-radius:14px 14px 0 0;padding:14px;flex:1}
+    .dark .tab{background:#202124}.close{margin-left:auto}.plus{margin:0 16px}
+    .tile-row{margin-top:36px;background:#fff;padding:28px;border-radius:20px}.tile-scales{display:grid;grid-template-columns:592px 1104px 2128px;gap:20px}
+    .wallpaper{background:linear-gradient(135deg,#546b71,#242a40 75%);padding:24px;width:max-content}
+    .tile{position:relative;overflow:hidden}.ios{border-radius:22.37%;box-shadow:0 3px 10px #0004}.app-name{color:#fff;text-align:center}
+    .safe-zone{position:absolute;width:80%;height:80%;top:10%;left:10%;border:3px dashed #17171788;border-radius:50%}
+    .circle-mask{border-radius:50%}
+  </style></head><body><h1>Eunomia square icons, v2</h1><p class="intro">Native size, 2x and 4x. Raster enlargements use nearest-neighbour pixels. SVG responds to each tab strip's colour scheme. Home tiles use opaque off-white artwork. Dashed circle is the maskable 80% safe zone.</p>
+  <div class="themes">${tabs}</div>${tiles.join("")}</body></html>`;
+  await page.setViewportSize({ width: 4000, height: 1000 });
+  await page.setContent(html);
   await page.locator("img").evaluateAll(async (images) => {
-    await Promise.all(
-      images.map((img) =>
-        img instanceof HTMLImageElement ? img.decode() : Promise.resolve(),
-      ),
-    );
+    await Promise.all(images.map((img) => img instanceof HTMLImageElement ? img.decode() : Promise.resolve()));
   });
-  await screenshot(page, "icons");
+  if (artifactDir) {
+    await mkdir(artifactDir, { recursive: true });
+    await writeFile(`${artifactDir}/icons-v2.html`, html);
+  }
+  await screenshot(page, "icons-v2");
 });
 
 for (const mode of ["enabled", "disabled", "reduced", "desktop"])
