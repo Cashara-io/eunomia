@@ -1,0 +1,47 @@
+{
+  "evidence": [
+    12,
+    34,
+    {
+      "value": 664.475,
+      "unit": "AUD"
+    },
+    {
+      "value": 25,
+      "unit": "%"
+    }
+  ],
+  "reply": "# Weekly results\n\nThe **team** processed 1**2** requests. The [source report](https://example.com/report) explains the method &amp; limits.\n\n| Measure | Result |\n| --- | ---: |\n| Requests | **12** |\n| Follow-ups | `34` |\n| Revenue | $664.48 |\n| Completion | 25% |\n| Unchecked forecast | **999** |\n\n- **Requests:** 12, with a careful review.\n- Follow-ups: [34](https://example.com/details).\n  - Nested count: 12\n- [x] Confirmed count: 34\n\n## Interpretation\n\nUse the measured results to plan the next review. Keep the link and table available for context. An entity count &#49;&#50; and a code span `34` are visible text too.\n\n<span>Inline HTML is ignored.</span>\n\n<div>Hidden raw block 777</div>\n\nA footnote-like label [^12] stays ordinary CommonMark.\n\n[^12]: Reference text 34.\n\n~Single tilde~ and ~~deleted text~~ stay in the same dialect.\n\n- 12\n\n  34\n",
+  "checked": "# Weekly results\n\nThe **team** processed 1**2** requests. The [source report](https://example.com/report) explains the method &amp; limits.\n\n|Measure|Result|\n|-------|-----:|\n|Requests|**12**|\n|Follow-ups|`34`|\n|Revenue|$664.48|\n|Completion|25%|\n|Unchecked forecast|**\\[unverified number\\]**|\n\n* **Requests:** 12, with a careful review.\n* Follow-ups: [34](https://example.com/details).\n  * Nested count: 12\n* [x] Confirmed count: 34\n\n## Interpretation\n\nUse the measured results to plan the next review. Keep the link and table available for context. An entity count 12 and a code span `34` are visible text too.\n\nInline HTML is ignored.\n\nA footnote-like label \\[\\^12\\] stays ordinary CommonMark.\n\n\\[\\^12\\]: Reference text 34.\n\n~~Single tilde~~ and ~~deleted text~~ stay in the same dialect.\n\n* 12\n  \n  34\n\nSome numbers couldn't be checked against tool results.",
+  "server_html": "<h1>Weekly results</h1>\n<p>The <strong>team</strong> processed 1<strong>2</strong> requests. The <a href=\"https://example.com/report\">source report</a> explains the method &amp; limits.</p>\n<table><thead><tr><th>Measure</th><th style=\"text-align: right\">Result</th></tr></thead><tbody>\n<tr><td>Requests</td><td style=\"text-align: right\"><strong>12</strong></td></tr>\n<tr><td>Follow-ups</td><td style=\"text-align: right\"><code>34</code></td></tr>\n<tr><td>Revenue</td><td style=\"text-align: right\">$664.48</td></tr>\n<tr><td>Completion</td><td style=\"text-align: right\">25%</td></tr>\n<tr><td>Unchecked forecast</td><td style=\"text-align: right\"><strong>[unverified number]</strong></td></tr>\n</tbody></table>\n<ul>\n<li><strong>Requests:</strong> 12, with a careful review.</li>\n<li>Follow-ups: <a href=\"https://example.com/details\">34</a>.\n<ul>\n<li>Nested count: 12</li>\n</ul>\n</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nConfirmed count: 34</li>\n</ul>\n<h2>Interpretation</h2>\n<p>Use the measured results to plan the next review. Keep the link and table available for context. An entity count 12 and a code span <code>34</code> are visible text too.</p>\n<p>Inline HTML is ignored.</p>\n<p>A footnote-like label [^12] stays ordinary CommonMark.</p>\n<p>[^12]: Reference text 34.</p>\n<p><del>Single tilde</del> and <del>deleted text</del> stay in the same dialect.</p>\n<ul>\n<li>\n<p>12</p>\n<p>34</p>\n</li>\n</ul>\n<p>Some numbers couldn't be checked against tool results.</p>\n",
+  "units": [
+    "Weekly results",
+    "The team processed 12 requests. The source report explains the method & limits.",
+    "Measure",
+    "Result",
+    "Requests",
+    "12",
+    "Follow-ups",
+    "34",
+    "Revenue",
+    "$664.48",
+    "Completion",
+    "25%",
+    "Unchecked forecast",
+    "[unverified number]",
+    "Requests: 12, with a careful review.",
+    "Follow-ups: 34.",
+    "Nested count: 12",
+    "Confirmed count: 34",
+    "Interpretation",
+    "Use the measured results to plan the next review. Keep the link and table available for context. An entity count 12 and a code span 34 are visible text too.",
+    "Inline HTML is ignored.",
+    "A footnote-like label [^12] stays ordinary CommonMark.",
+    "[^12]: Reference text 34.",
+    "Single tilde and deleted text stay in the same dialect.",
+    "12",
+    "34",
+    "Some numbers couldn't be checked against tool results."
+  ],
+  "raw_server_html": "<h1>Weekly results</h1>\n<p>The <strong>team</strong> processed 1<strong>2</strong> requests. The <a href=\"https://example.com/report\">source report</a> explains the method &amp; limits.</p>\n<table><thead><tr><th>Measure</th><th style=\"text-align: right\">Result</th></tr></thead><tbody>\n<tr><td>Requests</td><td style=\"text-align: right\"><strong>12</strong></td></tr>\n<tr><td>Follow-ups</td><td style=\"text-align: right\"><code>34</code></td></tr>\n<tr><td>Revenue</td><td style=\"text-align: right\">$664.48</td></tr>\n<tr><td>Completion</td><td style=\"text-align: right\">25%</td></tr>\n<tr><td>Unchecked forecast</td><td style=\"text-align: right\"><strong>999</strong></td></tr>\n</tbody></table>\n<ul>\n<li><strong>Requests:</strong> 12, with a careful review.</li>\n<li>Follow-ups: <a href=\"https://example.com/details\">34</a>.\n<ul>\n<li>Nested count: 12</li>\n</ul>\n</li>\n<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nConfirmed count: 34</li>\n</ul>\n<h2>Interpretation</h2>\n<p>Use the measured results to plan the next review. Keep the link and table available for context. An entity count 12 and a code span <code>34</code> are visible text too.</p>\n<p>Inline HTML is ignored.</p>\n<p>A footnote-like label [^12] stays ordinary CommonMark.</p>\n<p>[^12]: Reference text 34.</p>\n<p><del>Single tilde</del> and <del>deleted text</del> stay in the same dialect.</p>\n<ul>\n<li>\n<p>12</p>\n<p>34</p>\n</li>\n</ul>\n"
+}

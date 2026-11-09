@@ -378,7 +378,7 @@ impl ChatUnit {
     fn parse(unit: &str) -> Self {
         static CODE: OnceLock<Regex> = OnceLock::new();
         let code = CODE.get_or_init(|| Regex::new(&format!("^{CURRENCY_CODE}$")).unwrap());
-        let unit = unit.trim().to_lowercase();
+        let unit = normalise(unit).trim().to_string();
         match unit.as_str() {
             "" => Self::Plain,
             "%" | "percent" | "percentage" => Self::Percent,
@@ -399,8 +399,19 @@ impl ChatUnit {
                 (a.chars().count() == 1 || b.chars().count() == 1)
                     && !symbol(a).is_empty() && symbol(a) == symbol(b)
             }
+            (Self::Other(a), Self::Other(b)) => unit_form(a) == unit_form(b),
             _ => false,
         }
+    }
+}
+fn unit_form(unit: &str) -> &str {
+    match unit {
+        "kilogram" | "kilograms" | "kgs" => "kg",
+        "gram" | "grams" => "g",
+        "litre" | "litres" | "liter" | "liters" => "l",
+        "metre" | "metres" | "meter" | "meters" => "m",
+        _ if unit.len() > 3 => unit.strip_suffix('s').unwrap_or(unit),
+        _ => unit,
     }
 }
 fn chat_spans(text: &str) -> Vec<std::ops::Range<usize>> {
@@ -423,7 +434,9 @@ impl ChatNumber {
         let sign = c.name("sign").map(|s| s.as_str()).unwrap_or("");
         let inner = c.name("inner").map(|s| s.as_str()).unwrap_or("");
         if !sign.is_empty() && !inner.is_empty() { return None; }
-        let value = format!("{sign}{inner}{digits}").parse::<rust_decimal::Decimal>().ok()?;
+        // from_str rounds excess fractional digits. Never let parsing change a claim.
+        let exact_digits = if digits.contains('.') { digits.trim_end_matches('0').trim_end_matches('.') } else { &digits };
+        let value = rust_decimal::Decimal::from_str_exact(&format!("{sign}{inner}{exact_digits}")).ok()?;
         let precision = digits.split_once('.').map(|(_,s)| s.len() as u32).unwrap_or(0);
         let scale = match c.name("scale").map(|s| s.as_str()) {
             Some("k" | "thousand") => 1000, Some("m" | "million") => 1_000_000,
@@ -446,33 +459,79 @@ impl ChatNumber {
             let Some(percent) = value.checked_mul(Decimal::from(100)) else { return false; }; value = percent;
         } else if !self.unit.compatible(&shown.unit) { return false; }
         let Some(value) = value.checked_div(shown.scale) else { return false; };
-        value.round_dp_with_strategy(shown.precision, RoundingStrategy::MidpointAwayFromZero) == shown.value
+        // Rounding may not erase every non-zero significant digit.
+        (self.value.is_zero() || !shown.value.is_zero())
+            && value.round_dp_with_strategy(shown.precision.min(28), RoundingStrategy::MidpointAwayFromZero) == shown.value
     }
 }
 
-/// Current-turn evidence only. The returned string is displayed literally by chat.
+/// Current-turn evidence only. Chat renders the checked Markdown dialect.
 #[derive(Default)]
 pub(crate) struct ChatProse {
     numbers: Vec<ChatNumber>,
     exact: HashSet<String>,
     sources: serde_json::Map<String, Value>,
 }
-/// Strip Markdown once, decoding entities as part of CommonMark parsing. Never
-/// parse the returned string again, since escaped punctuation is now literal.
-fn visible_chat(raw: &str) -> String {
-    use pulldown_cmark::{Event, Options, Parser, TagEnd};
-    let mut out = String::new();
-    for event in Parser::new_ext(raw, Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH) {
+const UNVERIFIED: &str = "[unverified number]";
+const NUMBER_NOTE: &str = "Some numbers couldn't be checked against tool results.";
+fn markdown_options() -> pulldown_cmark::Options {
+    use pulldown_cmark::Options;
+    Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS
+}
+
+/// Each unit owns text events, including inline code. Inline markup adds no
+/// separator. Cells and nested items never borrow numbers from their neighbours.
+fn chat_units(events: &[pulldown_cmark::Event<'_>]) -> Vec<Vec<usize>> {
+    use pulldown_cmark::{Event, Tag};
+    let mut units = Vec::new();
+    let mut stack = Vec::new();
+    let mut depth = 0;
+    for (i, event) in events.iter().enumerate() {
         match event {
-            Event::Text(s) | Event::Code(s) | Event::Html(s) | Event::InlineHtml(s) => out.push_str(&s),
-            Event::SoftBreak | Event::HardBreak => out.push('\n'),
-            Event::End(TagEnd::Paragraph | TagEnd::Heading(_) | TagEnd::Item | TagEnd::TableRow | TagEnd::CodeBlock) => out.push('\n'),
-            Event::End(TagEnd::TableCell) => out.push(' '),
+            Event::Start(tag) => {
+                depth += 1;
+                let starts = matches!(tag, Tag::Paragraph | Tag::Item | Tag::Heading {..} | Tag::TableCell | Tag::CodeBlock(_));
+                if starts { units.push(Vec::new()); stack.push((depth, units.len() - 1)); }
+            }
+            Event::End(_) => {
+                if stack.last().is_some_and(|(d,_)| *d == depth) { stack.pop(); }
+                depth -= 1;
+            }
+            Event::Text(_) | Event::Code(_) | Event::SoftBreak | Event::HardBreak => {
+                if let Some((_, unit)) = stack.last() { units[*unit].push(i); }
+            }
             _ => (),
         }
     }
-    out.trim_end_matches('\n').lines().map(display).collect::<Vec<_>>().join("\n")
+    units
 }
+
+fn event_text<'a>(event: &'a pulldown_cmark::Event<'_>) -> &'a str {
+    use pulldown_cmark::{Event, TagEnd};
+    match event {
+        Event::Text(s) | Event::Code(s) => s,
+        Event::SoftBreak | Event::HardBreak | Event::End(TagEnd::Paragraph) => " ",
+        _ => "",
+    }
+}
+
+// Normalisation can change byte lengths. Retain the originating character for
+// each normalised byte so a match can be replaced across inline text events.
+fn unit_text(events: &[pulldown_cmark::Event<'_>], unit: &[usize]) -> (String, Vec<(usize, std::ops::Range<usize>)>) {
+    let mut text = String::new();
+    let mut origins = Vec::new();
+    for &i in unit {
+        for (offset,c) in event_text(&events[i]).char_indices() {
+            for ch in normalise(&c.to_string()).chars() {
+                if ch == ' ' && text.ends_with(' ') { continue; }
+                text.push(ch);
+                origins.extend(std::iter::repeat_n((i, offset..offset + c.len_utf8()), ch.len_utf8()));
+            }
+        }
+    }
+    (text, origins)
+}
+
 impl ChatProse {
     fn evidence(&mut self, text: &str, unit: &ChatUnit) {
         let text = normalise(text);
@@ -514,23 +573,113 @@ impl ChatProse {
             _ => (),
         }
     }
-    pub(crate) fn check(&self, raw: &str) -> AppResult<String> {
-        let data = serde_json::json!({"sources":self.sources});
-        let (out, _) = interpolate(raw, &data, "assistant reply")?;
-        let out = visible_chat(&out);
-        let normal = normalise(&out);
-        for span in chat_spans(&normal) {
-            let raw = &normal[span];
-            let supported = ChatNumber::parse(raw,&ChatUnit::Plain).map(|shown| self.numbers.iter().any(|n| n.supports(&shown)))
-                .unwrap_or_else(|| self.exact.contains(raw));
-            if !supported { return Err(bad(format!("unsupported number in assistant reply: {raw}"))); }
+    fn supported(&self, raw: &str) -> bool {
+        ChatNumber::parse(raw, &ChatUnit::Plain).map(|shown| self.numbers.iter().any(|n| n.supports(&shown)))
+            .unwrap_or_else(|| self.exact.contains(raw))
+    }
+    fn number_spans(&self, text: &str) -> Vec<(std::ops::Range<usize>, bool)> {
+        let mut checked = Vec::new();
+        for mut span in chat_spans(text) {
+            if checked.last().is_some_and(|(r,_): &(std::ops::Range<usize>, bool)| span.start < r.end) { continue; }
+            // Evidence defines arbitrary units. Consume the same text (or a cheap
+            // plural/abbreviation) after the number, with a word boundary.
+            let mut matched = None;
+            for evidence in &self.numbers {
+                let ChatUnit::Other(unit) = &evidence.unit else { continue; };
+                let mut forms = vec![unit.clone(), unit_form(unit).into(), format!("{}s", unit_form(unit))];
+                for alias in ["kg", "kilogram", "kilograms", "g", "gram", "grams", "l", "litre", "litres", "liter", "liters", "m", "metre", "metres", "meter", "meters"] {
+                    if unit_form(alias) == unit_form(unit) { forms.push(alias.into()); }
+                }
+                let base_end = spans(&text[span.clone()]).first().map_or(span.end, |r| span.start + r.end);
+                let rest = &text[base_end..];
+                let gap = rest.len() - rest.trim_start().len();
+                for form in forms {
+                    if rest[gap..].starts_with(&form) {
+                        let end = base_end + gap + form.len();
+                        if text[end..].chars().next().is_some_and(|c| c.is_alphanumeric()) { continue; }
+                        if ChatNumber::parse(&text[span.start..base_end], &ChatUnit::Other(unit.clone())).is_some_and(|shown| evidence.supports(&shown))
+                            && matched.is_none_or(|old| end > old) { matched = Some(end); }
+                    }
+                }
+            }
+            let supported = if let Some(end) = matched { span.end = end; true } else { self.supported(&text[span.clone()]) };
+            checked.push((span, supported));
         }
-        if out.contains("{{") || out.contains("}}") { return Err(bad("unresolved placeholder in assistant reply")); }
-        Ok(out)
+        checked
     }
+    fn markdown(&self, raw: &str, mark: bool) -> AppResult<String> {
+        use pulldown_cmark::{Event, Parser};
+        static CONTROLS: OnceLock<Regex> = OnceLock::new();
+        let raw = CONTROLS.get_or_init(|| Regex::new(r"\p{Cf}").unwrap()).replace_all(raw, "");
+        let data = serde_json::json!({"sources":self.sources});
+        // Resolve independently, so a broken placeholder cannot erase useful prose.
+        static PLACEHOLDER: OnceLock<Regex> = OnceLock::new();
+        let placeholder = PLACEHOLDER.get_or_init(|| Regex::new(r"\{\{.*?(?:\}\}|$)").unwrap());
+        let mut changed = false;
+        let out = placeholder.replace_all(&raw, |c: &regex::Captures<'_>| {
+            match interpolate(&c[0], &data, "assistant reply") {
+                Ok((text,_)) => text,
+                Err(_) => { changed = true; UNVERIFIED.into() }
+            }
+        });
+        let mut events: Vec<_> = Parser::new_ext(&out, markdown_options()).collect();
+        // Both parsers discard raw HTML. Discard it here too before joining text.
+        for event in &mut events {
+            if matches!(event, Event::Html(_) | Event::InlineHtml(_)) { *event = Event::Text("".into()); }
+        }
+        let mut edits: HashMap<usize, Vec<(std::ops::Range<usize>, String)>> = HashMap::new();
+        for unit in chat_units(&events) {
+            let (text, origins) = unit_text(&events, &unit);
+            let mut rejected: Vec<_> = self.number_spans(&text).into_iter().filter_map(|(r,ok)| (!ok).then_some(r)).collect();
+            // Includes placeholders introduced by entity decoding or NFKC.
+            for token in ["{{", "}}"] {
+                rejected.extend(text.match_indices(token).map(|(start,_)| start..start + token.len()));
+            }
+            if !rejected.is_empty() && !mark { return Err(bad("unsupported number or unresolved placeholder in assistant reply")); }
+            for range in rejected {
+                changed = true;
+                let mut pieces: Vec<(usize, std::ops::Range<usize>)> = Vec::new();
+                for (i,r) in &origins[range] {
+                    if let Some((last, joined)) = pieces.last_mut() && last == i { joined.end = r.end; }
+                    else { pieces.push((*i,r.clone())); }
+                }
+                for (part,(i,r)) in pieces.into_iter().enumerate() {
+                    edits.entry(i).or_default().push((r, if part == 0 { UNVERIFIED.into() } else { String::new() }));
+                }
+            }
+        }
+        if changed && !mark { return Err(bad("unresolved placeholder in assistant reply")); }
+        if !changed { return Ok(out.into_owned()); }
+        for (i,mut replacements) in edits {
+            let mut text = event_text(&events[i]).to_string();
+            replacements.sort_by_key(|(r,_)| std::cmp::Reverse(r.start));
+            for (r,value) in replacements { text.replace_range(r, &value); }
+            events[i] = match &events[i] { Event::Code(_) => Event::Code(text.into()), _ => Event::Text(text.into()) };
+        }
+        // A number can span an entire emphasis or link child. Empty inline
+        // containers have no CommonMark spelling and must be removed before encoding.
+        let mut nonempty = Vec::new();
+        for event in events {
+            use pulldown_cmark::TagEnd;
+            match &event {
+                Event::Text(s) | Event::Code(s) if s.is_empty() => (),
+                Event::End(end) if matches!(end, TagEnd::Emphasis | TagEnd::Strong | TagEnd::Strikethrough | TagEnd::Link | TagEnd::Paragraph)
+                    && matches!(nonempty.last(), Some(Event::Start(tag)) if tag.to_end() == *end) => { nonempty.pop(); }
+                _ => nonempty.push(event),
+            }
+        }
+        let mut checked = String::new();
+        pulldown_cmark_to_cmark::cmark(nonempty.iter(), &mut checked, markdown_options())
+            .map_err(|e| bad(format!("could not serialise checked Markdown: {e}")))?;
+        checked.push_str(&format!("\n\n{NUMBER_NOTE}"));
+        Ok(checked)
+    }
+    #[cfg(test)]
+    pub(crate) fn check(&self, raw: &str) -> AppResult<String> { self.markdown(raw, false) }
     pub(crate) fn safe(&self, raw: &str) -> String {
-        self.check(raw).unwrap_or_else(|_| "I removed an unsupported number or unresolved placeholder from this reply. I could not provide a reliable written summary. Any completed tool results are shown above.".into())
+        self.markdown(raw, true).expect("balanced parser events always serialise to Markdown")
     }
+
 }
 
 #[cfg(test)]
@@ -560,7 +709,7 @@ mod tests {
             assert!(prose.check(raw).is_err(), "{raw}");
         }
         prose.result(&json!(12));
-        assert_eq!(prose.check("**Count:** 1**2** &amp; done").unwrap(), "Count: 12 & done");
+        assert_eq!(prose.check("**Count:** 1**2** &amp; done").unwrap(), "**Count:** 1**2** &amp; done");
     }
     #[test]
     fn chat_preserves_numeric_units_and_scaled_values() {
@@ -582,6 +731,77 @@ mod tests {
         assert!(prose.check("$12k AUD").is_ok());
         let mut prose = ChatProse::default(); prose.text("9007199254740992");
         assert!(prose.check("9007199254740993").is_err());
+    }
+    #[test]
+    fn chat_rounding_never_erases_all_significant_digits() {
+        for (value, good, bad) in [(0.49, "$0.49", "$0"), (0.0049, "$0.005", "$0.00"), (-0.49, "-$0.49", "$0")] {
+            let mut prose = ChatProse::default(); prose.result(&json!({"value":value,"unit":"AUD"}));
+            assert!(prose.check(good).is_ok());
+            assert!(prose.check(bad).is_err(), "{value} must not support {bad}");
+        }
+        let mut zero = ChatProse::default(); zero.result(&json!({"value":0,"unit":"AUD"}));
+        assert!(zero.check("$0.00").is_ok());
+    }
+    #[test]
+    fn chat_decimal_matching_never_silently_discards_digits() {
+        let mut prose = ChatProse::default(); prose.result(&json!(12));
+        assert!(prose.check("12.00000000000000000000000000001").is_err());
+        assert!(prose.check("12.00000000000000000000000000000").is_ok());
+    }
+    #[test]
+    fn chat_matches_arbitrary_evidence_units_and_common_forms() {
+        for (unit, shown) in [("kg", "12 kg"), ("kg", "12 kilograms"), ("kg", "12kg"), ("metre", "12 m"), ("µm", "12 µm"), ("m²", "12 m²"), ("widget", "12 widgets"), ("WIDGETS", "12 widget"), ("litre", "12 L"), ("boxes shipped", "12 boxes shipped")] {
+            let mut prose = ChatProse::default(); prose.result(&json!({"value":12,"unit":unit}));
+            assert!(prose.check(shown).is_ok(), "{unit}: {shown}");
+            assert!(prose.check("12%").is_err());
+            assert!(prose.check("$12").is_err());
+        }
+    }
+    #[test]
+    fn chat_table_cells_are_independent_visible_units() {
+        let mut prose = ChatProse::default(); prose.result(&json!([12,34]));
+        let reply = "| Left | Right |\n| --- | --- |\n| 1**2** | `34` |";
+        assert_eq!(prose.check(reply).unwrap(), reply);
+        assert!(prose.check("- 12\n\n  34").is_ok());
+        assert!(ChatProse::default().safe("Useful **advice** and 999.").contains("Useful **advice**"));
+    }
+    #[test]
+    fn chat_markdown_server_renderer_matches_shared_fixture() {
+        use pulldown_cmark::{Event, Parser, html};
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/chat_markdown.json");
+        let mut fixture: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let mut prose = ChatProse::default(); prose.result(&fixture["evidence"]);
+        let checked = prose.safe(fixture["reply"].as_str().unwrap());
+        let events: Vec<_> = Parser::new_ext(&checked, markdown_options()).collect();
+        let units: Vec<_> = chat_units(&events).iter().map(|unit| unit.iter().map(|&i| event_text(&events[i])).collect::<String>().split_whitespace().collect::<Vec<_>>().join(" ")).filter(|s| !s.is_empty()).collect();
+        let raw_events: Vec<_> = Parser::new_ext(fixture["reply"].as_str().unwrap(), markdown_options()).collect();
+        let mut raw_rendered = String::new();
+        html::push_html(&mut raw_rendered, raw_events.into_iter().filter(|e| !matches!(e, Event::Html(_) | Event::InlineHtml(_))));
+        let mut rendered = String::new();
+        html::push_html(&mut rendered, events.into_iter().filter(|e| !matches!(e, Event::Html(_) | Event::InlineHtml(_))));
+        if std::env::var_os("UPDATE_CHAT_MARKDOWN_FIXTURE").is_some() {
+            fixture["raw_server_html"] = json!(raw_rendered); fixture["checked"] = json!(checked); fixture["server_html"] = json!(rendered); fixture["units"] = json!(units);
+            std::fs::write(path, serde_json::to_string_pretty(&fixture).unwrap() + "\n").unwrap();
+        } else {
+            assert_eq!(fixture["raw_server_html"], raw_rendered);
+            assert_eq!(fixture["checked"], checked);
+            assert_eq!(fixture["server_html"], rendered);
+            assert_eq!(fixture["units"], json!(units));
+        }
+        assert_eq!(checked.matches("unverified number").count(),1);
+        assert!(rendered.contains("<strong>")); assert!(rendered.contains("<table>"));
+        assert!(rendered.contains("<li>")); assert!(rendered.contains("href="));
+        assert!(!rendered.contains("999")); assert!(!rendered.contains("<script>"));
+    }
+    #[test]
+    fn chat_marks_only_bad_spans_even_across_inline_nodes() {
+        let mut prose = ChatProse::default(); prose.result(&json!([12,34]));
+        assert_eq!(prose.safe("Count 1\u{202e}2"), "Count 12");
+        let marked = prose.safe("Keep **12**, [34](https://example.com). Wrong 9**9**9 and `888`. Also &#55;77.");
+        assert_eq!(marked.matches("unverified number").count(),3,"{marked}");
+        assert!(marked.contains("**12**")); assert!(marked.contains("[34](https://example.com)"));
+        assert!(!marked.contains("999")); assert!(!marked.contains("888")); assert!(!marked.contains("777"));
+        assert_eq!(marked.matches(NUMBER_NOTE).count(),1);
     }
     fn data() -> Value { json!({"sources":{"sales":{
         "rows":[{"amount":1588.0,"quantity":12,"other":1,"next":2,"category":"ISO 27001","name":"Scope 3","date":"2026-01-01"}],

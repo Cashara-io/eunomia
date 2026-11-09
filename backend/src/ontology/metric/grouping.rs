@@ -5,13 +5,14 @@ use serde_json::json;
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Group {
     pub group: Value,
+    pub variants: Vec<String>,
     pub value: Option<f64>,
     pub n_entities: usize,
     pub entity_ids: Vec<String>,
     pub truncated: bool,
 }
 pub(super) struct Grouping {
-    members: HashMap<String, (Value, BTreeSet<String>)>,
+    members: HashMap<String, (Value, BTreeSet<String>, BTreeSet<String>)>,
     sort: Option<super::super::dataset::Sort>,
     top_n: Option<usize>,
 }
@@ -24,16 +25,17 @@ impl Grouping {
             return Err(AppError::bad_request("grouped metrics allow top_n from 1 to 500 and sort property group or value"));
         }
         let ids: Vec<RecordId> = prepared.entities.iter().map(|id| crate::rid::parse(id).expect("loaded entity id")).collect();
-        let mut members: HashMap<String, (Value, BTreeSet<String>)> = HashMap::new();
+        let mut members: HashMap<String, (Value, BTreeSet<String>, BTreeSet<String>)> = HashMap::new();
         let mut add = |key: Value, id: &str| {
             let normal = match &key {
                 Value::String(s) => Value::String(text_key(s)).to_string(),
                 _ => key.to_string(),
             };
-            let member = members.entry(normal).or_insert_with(|| (key.clone(), BTreeSet::new()));
+            let member = members.entry(normal).or_insert_with(|| (key.clone(), BTreeSet::new(), BTreeSet::new()));
             // Stable spelling, regardless of database row order.
             if let (Value::String(candidate), Value::String(shown)) = (&key, &member.0)
-                && candidate < shown { member.0 = key; }
+                && candidate < shown { member.0 = key.clone(); }
+            if let Some(spelling) = key.as_str() { member.2.insert(spelling.into()); }
             member.1.insert(id.into());
         };
         if let Some(label) = group.strip_prefix("link:") {
@@ -71,13 +73,16 @@ impl Grouping {
         let mut groups = Vec::new();
         let by_id: HashMap<_, _> = refs.iter().map(|id| (id.as_str(), *id)).collect();
         let mut memberships: HashMap<&str, usize> = HashMap::new();
-        for (key, members) in self.members.values() {
+        for (key, members, variants) in self.members.values() {
             let refs: Vec<_> = members.iter().filter_map(|id| by_id.get(id.as_str()).copied()).collect();
             let (value, used) = value_of(plan, &refs, values, props, warnings);
             if used.is_empty() { continue; }
             for id in &used { *memberships.entry(by_id[id.as_str()].as_str()).or_default() += 1; }
             all_used.extend(used.iter().cloned());
-            groups.push(Group { group: key.clone(), value, n_entities: used.len(), truncated: used.len() > MAX_ENTITY_IDS, entity_ids: used.into_iter().take(MAX_ENTITY_IDS).collect() });
+            let mut label = match key { Value::Null => "Unassigned".into(), Value::String(s) => s.clone(), Value::Object(m) => m.get("name").and_then(Value::as_str).unwrap_or("").into(), _ => key.to_string() };
+            let others: Vec<_> = variants.iter().filter(|v| Some(v.as_str()) != key.as_str()).cloned().collect();
+            if !others.is_empty() { label.push_str(&format!(" (also: {})", others.join(", "))); }
+            groups.push(Group { group: if key.is_string() { Value::String(label) } else { key.clone() }, variants: variants.iter().cloned().collect(), value, n_entities: used.len(), truncated: used.len() > MAX_ENTITY_IDS, entity_ids: used.into_iter().take(MAX_ENTITY_IDS).collect() });
         }
         let overlapping = memberships.values().filter(|n| **n > 1).count();
         if overlapping > 0 {
@@ -111,7 +116,7 @@ mod tests {
     fn many_groups_are_ranked_globally_capped_and_reported() {
         for size in [1001, 50_000] {
         let ids: Vec<String> = (0..size).map(|i| format!("entity:{i:05}")).collect();
-        let members = ids.iter().enumerate().map(|(i,id)| (format!("{i:05}"),(json!(i),BTreeSet::from([id.clone()])))).collect();
+        let members = ids.iter().enumerate().map(|(i,id)| (format!("{i:05}"),(json!(i),BTreeSet::from([id.clone()]),BTreeSet::new()))).collect();
         let grouping = Grouping { members, sort: Some(serde_json::from_value(json!({"property":"group","descending":true})).unwrap()), top_n: None };
         let plan = check(&Props::new(), &Kind::parse("sample").unwrap(), &serde_json::from_value(json!({"agg":"count"})).unwrap()).unwrap();
         let started = std::time::Instant::now(); let mut warnings = Vec::new();

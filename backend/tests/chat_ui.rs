@@ -426,7 +426,7 @@ async fn grouped_metrics_rank_properties_and_links_and_batch_views() {
     assert_eq!(ranked["unit"], "AUD");
     let groups = ranked["groups"].as_array().unwrap();
     assert_eq!(groups.len(),2);
-    assert_eq!((groups[0]["group"].clone(),groups[0]["value"].clone()),(json!("Alpha"),json!(61.0)));
+    assert_eq!((groups[0]["group"].clone(),groups[0]["value"].clone()),(json!("Alpha (also: alpha)"),json!(61.0)));
     assert_eq!((groups[1]["group"].clone(),groups[1]["value"].clone()),(json!("Beta"),json!(12.0)));
     assert_eq!(groups[0]["entity_ids"].as_array().unwrap().len(),3);
     assert_eq!(groups[1]["entity_ids"].as_array().unwrap().len(),1);
@@ -457,7 +457,7 @@ async fn grouped_metrics_rank_properties_and_links_and_batch_views() {
     }
     ok(app.tool("ontology_propose",json!({"metrics":[{"kind":"sample","name":"amount_ratio","unit":"%","expr":{"agg":"ratio","numerator":{"agg":"sum","property":"amount"},"denominator":{"agg":"sum","property":"share"}}}]})).await);
     let ratio = ok(app.tool("metric_eval",json!({"metric":"amount_ratio","kind":"sample","vault_id":vault,"allow_unapproved":true,"group_by":"label","filters":[{"property":"label","op":"eq","value":"Alpha"}]})).await);
-    let alpha = ratio["groups"].as_array().unwrap().iter().find(|r| r["group"] == "Alpha").unwrap();
+    let alpha = ratio["groups"].as_array().unwrap().iter().find(|r| r["group"] == "Alpha (also: alpha)").unwrap();
     assert!((alpha["value"].as_f64().unwrap() - 87.142857).abs() < 1e-9);
     assert_eq!(ratio["unit"],"%");
     let supplier = ok(app.tool("memory_write",json!({"subject_name":"Supplier","subject_kind":"organisation","text":"A supplier"})).await)["entity"]["id"].clone();
@@ -529,7 +529,7 @@ async fn unsupported_chat_numbers_and_placeholders_never_stream_or_persist() {
                 assert!(!text.contains("999") && !text.contains("$0") && !text.contains("{{"),"{text}");
             }
         }
-        assert!(events.last().unwrap()["reply"].as_str().unwrap().contains("removed an unsupported"));
+        assert!(events.last().unwrap()["reply"].as_str().unwrap().contains("Some numbers couldn't be checked"));
     }
 }
 #[tokio::test]
@@ -564,7 +564,7 @@ async fn chat_uses_whole_numeric_spans_and_only_current_turn_evidence() {
         mock.set_routes(vec![route("POST","/chat/completions",Value::Null).raw(&model_reply(json!({"content":raw})))]);
         let (events,_) = chat_events(&app,question).await;
         let answer = events.last().unwrap()["reply"].as_str().unwrap();
-        assert_eq!(!answer.contains("removed an unsupported"),expected,"{raw}: {events:?}");
+        assert_eq!(!answer.contains("Some numbers couldn't be checked"),expected,"{raw}: {events:?}");
     }
 }
 
@@ -584,7 +584,7 @@ async fn bakery_metric_result_does_not_authorise_a_made_up_zero() {
     let call = model_reply(json!({"tool_calls":[{"index":0,"id":"bakery","function":{"name":"metric_eval","arguments":args.to_string()}}]}));
     mock.set_routes(vec![route("POST","/chat/completions",Value::Null).raw(&call).times(1),route("POST","/chat/completions",Value::Null).raw(&model_reply(json!({"content":"Bakery had no records and sales were $0.00."})))]);
     let (events,history) = chat_events(&app,"Show weekly bakery sales").await;
-    assert!(events.last().unwrap()["reply"].as_str().unwrap().contains("removed an unsupported"),"{events:?}");
+    assert!(events.last().unwrap()["reply"].as_str().unwrap().contains("Some numbers couldn't be checked"),"{events:?}");
     assert!(!history.contains("$0.00"));
     assert!(!events.iter().any(|e| e["delta"].as_str().is_some_and(|s| s.contains("$0.00"))));
 }
@@ -611,7 +611,7 @@ async fn grouped_values_equal_filtered_values_for_every_aggregate() {
         assert_eq!(grouped["groups"].as_array().unwrap().len(),2,"{agg}: {grouped}");
         for group in grouped["groups"].as_array().unwrap() {
             let mut filtered = args.clone(); filtered.as_object_mut().unwrap().remove("group_by");
-            filtered["filters"] = json!([{"property":"label","op":"eq","value":group["group"]}]);
+            filtered["filters"] = json!([{"property":"label","op":"eq","value":group["variants"][0].as_str().map(Value::from).unwrap_or_else(|| group["group"].clone())}]);
             let filtered = ok(app.tool("metric_eval",filtered).await);
             assert_eq!(group["value"],filtered["value"],"{agg}: {group}");
             assert_eq!(group["n_entities"],filtered["n_entities"]);
@@ -686,4 +686,59 @@ async fn disconnect_cancels_budget_final_turn_without_persisting() {
     tokio::time::timeout(std::time::Duration::from_millis(500),task).await.expect("model future must be cancelled promptly").unwrap();
     let after = common::sys(service::history(&db,&app.user.id,&id)).await.unwrap().unwrap();
     assert_eq!(serde_json::to_value(before).unwrap(),serde_json::to_value(after).unwrap());
+}
+
+#[tokio::test]
+async fn cancelled_ordinary_tool_batch_then_send_has_valid_history() {
+    use eunomia_backend::{chat::service, sources::mock::{route,serve}};
+    let mock = serve(vec![]).await;
+    let (app,_) = scripted_chat(&mock).await;
+    let call = model_reply(json!({"tool_calls":[
+        {"index":0,"id":"completed","function":{"name":"ontology_get","arguments":"{}"}},
+        {"index":1,"id":"pending","function":{"name":"recall","arguments":json!({"query":"cancel probe"}).to_string()}}
+    ]}));
+    mock.set_routes(vec![route("POST","/chat/completions",Value::Null).raw(&call), route("POST","/embeddings",json!({"data":[]})).delay(3000)]);
+    let db = app.db().await;
+    let thread = common::sys(service::create_thread(&db,&app.user.id,None)).await.unwrap();
+    let id = eunomia_backend::rid::parse(&thread.id).unwrap();
+    let (tx,mut rx) = tokio::sync::mpsc::channel(256);
+    let state = app.state.org(&app.user.org).await.unwrap();
+    let user = app.user.clone(); let send_id = id.clone();
+    let task = tokio::spawn(common::sys(async move { service::send_stream(state,user,send_id,"Find the cancel probe".into(),tx).await }));
+    tokio::time::timeout(std::time::Duration::from_secs(10),async {
+        loop {
+            let event = serde_json::to_value(rx.recv().await.unwrap()).unwrap();
+            if event["type"] == "tool_result" && event["id"] == "completed" { break; }
+        }
+        while !mock.requests().iter().any(|r| r.path == "/embeddings") { tokio::time::sleep(std::time::Duration::from_millis(5)).await; }
+    }).await.unwrap();
+    drop(rx);
+    tokio::time::timeout(std::time::Duration::from_millis(500),task).await.unwrap().unwrap();
+    let history = common::sys(service::history(&db,&app.user.id,&id)).await.unwrap().unwrap();
+    assert_eq!(history.len(),1,"An unfinished batch must never be persisted: {history:?}");
+    mock.set_routes(vec![route("POST","/chat/completions",Value::Null).raw(&model_reply(json!({"content":"Ready to continue."})))]);
+    let (tx,mut rx) = tokio::sync::mpsc::channel(256);
+    common::sys(service::send_stream(app.state.org(&app.user.org).await.unwrap(),app.user.clone(),id,"Continue".into(),tx)).await;
+    let mut done = false;
+    while let Some(event) = rx.recv().await { if serde_json::to_value(event).unwrap()["type"] == "done" { done = true; } }
+    assert!(done);
+    let replay: Value = serde_json::from_str(&mock.requests().last().unwrap().body).unwrap();
+    assert!(replay["messages"].as_array().unwrap().iter().all(|m| m.get("tool_calls").is_none() && m["role"] != "tool"),"{replay}");
+}
+
+#[tokio::test]
+async fn merged_group_spellings_are_visible_in_tool_and_views() {
+    let (app,vault) = sample().await;
+    let rows = ok(app.tool("show_view",json!({"view":"ui","spec":spec(),"sources":{"sample":{"type":"dataset","vault_id":vault,"kind":"sample","properties":["amount"]}}})).await);
+    for (i,row) in rows["data"]["sources"]["sample"]["rows"].as_array().unwrap().iter().enumerate() {
+        ok(app.tool("entity_set_property",json!({"entity_id":row["entity_id"],"property":"label","value":if i == 0 { "ABC" } else { "abc" }})).await);
+    }
+    ok(app.tool("ontology_propose",json!({"metrics":[{"kind":"sample","name":"spelling_sum","expr":{"agg":"sum","property":"amount"}}]})).await);
+    let args = json!({"metric":"spelling_sum","kind":"sample","vault_id":vault,"allow_unapproved":true,"group_by":"label"});
+    let result = ok(app.tool("metric_eval",args.clone()).await);
+    assert_eq!(result["groups"][0]["group"],"ABC (also: abc)");
+    assert_eq!(result["groups"][0]["variants"],json!(["ABC","abc"]));
+    assert_eq!(result["groups"][0]["value"],31.0);
+    let mut view = args; view["view"] = json!("metric");
+    assert!(ok(app.tool("show_view",view).await)["text"].as_str().unwrap().contains("ABC (also: abc)"));
 }

@@ -772,9 +772,9 @@ async fn run_send(
             })
             .collect();
 
-        persist(db, owner, thread_id, "assistant", &content, Some(tool_calls_dump.clone()), None)
-            .await
-            .map_err(|e| (e.code, e.message))?;
+        // Keep the entire exchange in memory until every call has a result.
+        // A disconnect can drop any await below without leaving dangling calls.
+        let mut batch = vec![json!({"role":"assistant", "content":content, "tool_calls":tool_calls_dump, "created_at":Datetime::default()})];
         messages.push(json!({ "role": "assistant", "content": content, "tool_calls": tool_calls_dump }));
 
         for tc in ordered {
@@ -800,13 +800,14 @@ async fn run_send(
 
             said.tool_result(&result);
             let result_text = serde_json::to_string(&result).unwrap_or_else(|_| "null".to_string());
-            persist(db, owner, thread_id, "tool", &result_text, None, tc.id.as_deref())
-                .await
-                .map_err(|e| (e.code, e.message))?;
+            batch.push(json!({"role":"tool", "content":result_text, "tool_call_id":tc.id, "created_at":Datetime::default()}));
             messages.push(json!({ "role": "tool", "tool_call_id": tc.id, "content": as_untrusted_data(&result_text) }));
             let view = (name == crate::views::TOOL && result.get("error").is_none()).then_some(result);
             let _ = tx.send(ChatEvent::ToolResult { id: tc.id, name, view }).await;
         }
+        store::app::CHAT_TOOL_BATCH_CREATE.on(db)
+            .bind(("owner", owner.clone())).bind(("thread_id", thread_id.clone()))
+            .bind(("messages", batch)).await.map_err(|e| { let e = AppError::from(e); (e.code, e.message) })?;
         // after the calls: a reply that says what it is saving ("Saved: ...") must not refuse that save
         said.row("assistant", &content);
     }

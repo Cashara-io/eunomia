@@ -12,6 +12,7 @@ pub const ALL: &[&Stmt] = &[
     &CHAT_MESSAGES_FOR_THREAD,
     &CHAT_MESSAGES_FOR_OWNER,
     &CHAT_MESSAGE_CREATE,
+    &CHAT_TOOL_BATCH_CREATE,
     &CHAT_MESSAGES_CLEAR,
     &CONNECTORS_OF_KIND,
     &CONNECTORS_OF_OWNER,
@@ -71,6 +72,18 @@ pub const CHAT_MESSAGE_CREATE: Stmt = Stmt::new(
     "app.chat_message_create",
     "CREATE chat_message SET owner = $owner, thread_id = $thread_id, role = $role, content = $content, \
      tool_calls = $tool_calls, tool_call_id = $tool_call_id RETURN AFTER",
+);
+
+/// A completed assistant/tool exchange is committed as one history unit.
+pub const CHAT_TOOL_BATCH_CREATE: Stmt = Stmt::new(
+    "app.chat_tool_batch_create",
+    "BEGIN TRANSACTION; \
+     FOR $message IN $messages { \
+         CREATE chat_message SET owner = $owner, thread_id = $thread_id, \
+         role = $message.role, content = $message.content, tool_calls = $message.tool_calls, \
+         tool_call_id = $message.tool_call_id, created_at = <datetime>$message.created_at; \
+     }; \
+     COMMIT TRANSACTION;",
 );
 
 pub const CHAT_MESSAGES_CLEAR: Stmt =
