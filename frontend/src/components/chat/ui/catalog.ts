@@ -14,14 +14,14 @@ const column = z.strictObject({
 const container = {
   props: z.strictObject({ title: words.optional() }),
   slots: ["default"],
-  description: "Groups its children. Titles are words, never data.",
+  description: "Groups its children. Title digits must match resolved data or applied parameters.",
 };
 const copy = {
   props: z.strictObject({
     text: words,
     tone: z.enum(["info", "warning", "success"]).optional(),
   }),
-  description: "Words supplied by the model. Do not put measured numbers here.",
+  description: "Model prose. Number words are allowed; digit quantities must match resolved data or applied parameters. Alphanumeric identifiers such as Q3 are allowed.",
 };
 const dataProps = z.strictObject({
   title: words,

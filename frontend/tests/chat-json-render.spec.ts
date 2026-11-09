@@ -180,7 +180,7 @@ function fixture(kind: string, state = "full") {
               "Area",
             ].includes(kind)
               ? { series: ["value", "other"] }
-              : {}),
+              : { series: ["value"] }),
           };
   const resolved =
     state === "empty"
@@ -590,7 +590,7 @@ test("typed money keeps its currency and missing values are unavailable", async 
   const meter = fixture("Meter");
   const meterView = { ...meter, data: { sources: { sample: {value: 5, min: null, max: 10} } } };
   const chart = fixture("Bar");
-  delete chart.spec.elements.a.props.y;
+  chart.spec.elements.a.props.y = "value";
   chart.spec.elements.a.props.data = { $state: "/sources/sample/rows" };
   const chartView = { ...chart, data: { sources: { sample: { rows: [{ name: "Supplier", value: 120.25 }], columns: usdView.data.sources.sample.columns } } } };
   const multi = fixture("Line");

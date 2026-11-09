@@ -20,7 +20,7 @@ import { BoxPlot, ViolinPlot } from "@visx/stats";
 import { useTooltip, TooltipWithBounds } from "@visx/tooltip";
 import { z } from "zod";
 import { resolvedDataProps } from "./catalog";
-import { drawable, formatted, label, number, requiredNumber, rowsOf, type Row } from "./data";
+import { drawable, proportionalTotal, formatted, label, number, requiredNumber, rowsOf, type Row } from "./data";
 import { Notice } from "./Blocks";
 
 const palette = [
@@ -47,12 +47,9 @@ export default function Chart({
   const p = parsed.data;
   const inputRows = rowsOf(p.data);
   const rows = inputRows;
-  const numeric =
-    Object.keys(rows[0] || {}).find((k) =>
-      rows.some((r) => number(r[k]) != null),
-    ) || "value";
-  const y = p.y || numeric;
-  const x = p.x || Object.keys(rows[0] || {}).find((k) => k !== y) || "name";
+  if (!p.x || !p.y || !p.series) return <Notice />;
+  const y = p.y;
+  const x = p.x;
   const fields = kind === "Histogram" ? ["start", "end", "count"]
     : kind === "BoxPlot" ? ["min", "q1", "median", "q3", "max"]
     : kind === "Violin" ? ["value", "count"]
@@ -62,6 +59,13 @@ export default function Chart({
     return <figure className="ui-section" data-ui-component={kind}><figcaption>{p.title}</figcaption><p>No numeric values to show.</p><p>{p.summary}</p></figure>;
   if (rows.some(r => Object.values(r).some(v => typeof v === "number" && !drawable(v))))
     return <Notice />;
+  if (["Pie", "Donut", "Treemap", "Partition", "Funnel", "StackedBar", "StackedArea"].includes(kind) && rows.length) {
+    const keys = p.series.length ? p.series : [y];
+    const groups = ["StackedBar", "StackedArea"].includes(kind)
+      ? rows.map(r => keys.map(key => r[key]))
+      : [rows.map(r => r[y])];
+    if (groups.some(values => proportionalTotal(values) == null)) return <Notice />;
+  }
   const sharedValues = kind === "SmallMultiples" ? rows.flatMap((r) =>
     (p.series || [y]).map((key) => requiredNumber(r[key])),
   ) : [];

@@ -396,6 +396,13 @@ pub const LATEST_VALUES: Stmt = Stmt::new("ontology.latest_values",
         WHERE entity = $e AND property = $p AND vault = $vault AND as_of <= $as_of ORDER BY as_of DESC, created_at DESC LIMIT 1
     )))));"#);
 
+// Main metric loading deliberately omits stored unit overrides. Datasets retain them.
+pub const LATEST_METRIC_VALUES: Stmt = Stmt::new("ontology.latest_metric_values",
+    r#"RETURN array::flatten(array::flatten($ids.map(|$e| $props.map(|$p| (
+        SELECT entity, property, value_num, value_text, value_bool, value_date, as_of, created_at FROM entity_property
+        WHERE entity = $e AND property = $p AND vault = $vault AND as_of <= $as_of ORDER BY as_of DESC, created_at DESC LIMIT 1
+    )))));"#);
+
 /// The approved terms of `$vault` that a question's phrases are matched against, each with the spec and
 /// text of its stored vector: kinds (slot 0), properties (slot 1), metrics (slot 2), link types (slot 3).
 pub const COVERAGE_TERMS: Stmt = Stmt::new(
@@ -588,6 +595,7 @@ pub const ALL: &[&Stmt] = &[
     &DESCRIBE_METRIC,
     &METRIC_ENTITIES,
     &LATEST_VALUES,
+    &LATEST_METRIC_VALUES,
     &UI_METADATA,
     &COVERAGE_TERMS,
     &SET_TERM_EMBEDDING,

@@ -220,3 +220,38 @@ async fn dataset_filter_limit() {
     let denied=app.tool("show_view",json!({"view":"ui","spec":spec(),"sources":{"sample":{"type":"dataset","vault_id":vault,"kind":"sample","properties":["amount"],"filters":filters}}})).await;
     assert!(denied.to_string().contains("10 filters"),"{denied}");
 }
+
+#[tokio::test]
+async fn metric_stored_unit_override_matches_main_fixture() {
+    let app = TestApp::new().await;
+    let fixture: Value = serde_json::from_str(include_str!("fixtures/pr192-main-metrics.json")).unwrap();
+    let case = fixture.as_array().unwrap().iter().find(|c| c["stored_unit"] == "USD").unwrap();
+    let vault = ok(app.tool("ontology_get", json!({})).await)["vault"].clone();
+    ok(app.tool("ontology_propose", json!({"kinds":[{"kind":"sample"}],"properties":[{"kind":"sample","name":"amount","datatype":"money","unit":case["property_unit"]}]})).await);
+    for (path, body) in [("kinds",json!({"kind":"sample","decision":{"action":"approve"}})),("properties",json!({"kind":"sample","name":"amount","decision":{"action":"approve"}}))] {
+        let (status, body) = app.http_session("POST", &format!("/api/vaults/{}/ontology/{path}/decide",vault.as_str().unwrap()), Some(body)).await;
+        assert_eq!(status,200,"{body}");
+    }
+    let entity = ok(app.tool("memory_write",json!({"subject_name":"Unit override","subject_kind":"sample","text":"Sample"})).await)["entity"]["id"].clone();
+    ok(app.tool("entity_set_property",json!({"entity_id":entity,"property":"amount","value":case["values"][0],"unit":case["stored_unit"]})).await);
+    for (agg, expected) in case["main"].as_object().unwrap() {
+        ok(app.tool("ontology_propose",json!({"metrics":[{"kind":"sample","name":format!("test_{agg}"),"expr":{"agg":agg,"property":"amount"}}]})).await);
+        let out = ok(app.tool("metric_eval",json!({"metric":format!("test_{agg}"),"kind":"sample","vault_id":vault,"allow_unapproved":true})).await);
+        assert_eq!(out["value"].as_f64().map(f64::to_bits), expected.as_f64().map(f64::to_bits),"{agg}: {out}");
+        assert_eq!(out["n_entities"],1);
+    }
+    let out = ok(app.tool("show_view",json!({"view":"ui","spec":spec(),"sources":{"sample":{"type":"dataset","vault_id":vault,"kind":"sample","properties":["amount"],"limit":5}}})).await);
+    assert_eq!(out["data"]["sources"]["sample"]["columns"][0]["unit"],"USD");
+}
+
+#[tokio::test]
+async fn show_view_resolves_chart_columns_and_applied_limit() {
+    let (app,vault) = sample().await;
+    let mut args = json!({"view":"ui","spec":{"root":"a","elements":{"a":{"type":"Line","props":{"title":"Top 5 suppliers","summary":"Amount","data":{"$state":"/sources/sample/rows"}}}}},"sources":{"sample":{"type":"dataset","vault_id":vault,"kind":"sample","properties":["amount"],"limit":5}}});
+    let out = ok(app.tool("show_view",args.clone()).await);
+    assert_eq!(out["spec"]["elements"]["a"]["props"]["x"],"name");
+    assert_eq!(out["spec"]["elements"]["a"]["props"]["y"],"amount");
+    assert_eq!(out["spec"]["elements"]["a"]["props"]["series"],json!(["amount"]));
+    args["sources"]["sample"]["properties"] = json!(["amount","share"]);
+    assert!(app.tool("show_view",args).await.to_string().contains("name y"));
+}

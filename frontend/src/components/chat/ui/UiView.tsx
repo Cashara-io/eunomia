@@ -172,16 +172,13 @@ export default function UiView({ view: raw }: { view: unknown }) {
     e.props.formats = formats;
     e.props.units = Object.fromEntries((source.data.columns || []).map(c => [c.key, c.unit ?? null]));
     if (typeof e.props.x === "string") e.props.xFormat = formats[e.props.x] ?? "text";
-    const inferredKey = source.data.columns?.find(c =>
-      ["money", "number", "integer", "percent"].includes(c.datatype),
-    )?.key;
     const key = typeof e.props.y === "string"
       ? e.props.y
       : segments[3] === "rows" && segments[5]
         ? segments[5]
         : segments[3] === "totals"
           ? segments[4]
-          : inferredKey;
+          : undefined;
     const column = source.data.columns?.find(
       (c) => c.key === (segments[3] === "distributions" ? segments[4] : key),
     );

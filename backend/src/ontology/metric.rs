@@ -1539,16 +1539,20 @@ pub(super) async fn exists(db: &OrgDb, vault: RecordId, name: &str, kind: Option
 pub(super) async fn load_values(db: &OrgDb, vault: &RecordId, kind: &Kind, names: &BTreeSet<String>, as_of: chrono::DateTime<chrono::Utc>) -> AppResult<(Vec<String>, Values)> {
     let ids: Vec<RecordId> = q::METRIC_ENTITIES.on(db).bind(("vault", vault.clone()))
         .bind(("table", kind_table(kind.as_str())?.to_string())).bind(("kind", kind.as_str().to_string())).await?.take(1)?;
-    let values = latest_values(db, vault, kind, names, &ids, as_of).await?;
+    let values = read_latest_values(db, vault, kind, names, &ids, as_of, false).await?;
     let mut entities: Vec<String> = ids.iter().map(|id| id.to_string()).collect();
     entities.sort();
     Ok((entities, values))
 }
 
 pub(super) async fn latest_values(db: &OrgDb, vault: &RecordId, kind: &Kind, names: &BTreeSet<String>, ids: &[RecordId], as_of: chrono::DateTime<chrono::Utc>) -> AppResult<Values> {
+    read_latest_values(db, vault, kind, names, ids, as_of, true).await
+}
+async fn read_latest_values(db: &OrgDb, vault: &RecordId, kind: &Kind, names: &BTreeSet<String>, ids: &[RecordId], as_of: chrono::DateTime<chrono::Utc>, dataset_units: bool) -> AppResult<Values> {
     let by_id: HashMap<String, String> = names.iter().map(|n| (property_rid(vault, kind, &PropertyName::parse(n).expect("checked")).to_string(), n.clone())).collect();
     let prop_ids: Vec<RecordId> = names.iter().map(|n| property_rid(vault, kind, &PropertyName::parse(n).expect("checked"))).collect();
-    let rows: Vec<InputRow> = q::LATEST_VALUES.on(db).bind(("vault", vault.clone())).bind(("ids", ids.to_vec()))
+    let statement = if dataset_units { q::LATEST_VALUES } else { q::LATEST_METRIC_VALUES };
+    let rows: Vec<InputRow> = statement.on(db).bind(("vault", vault.clone())).bind(("ids", ids.to_vec()))
         .bind(("props", prop_ids)).bind(("as_of", Datetime::from(as_of))).await?.take(0)?;
     let mut entities: Vec<String> = ids.iter().map(|i| i.to_string()).collect();
     entities.sort();
@@ -1819,7 +1823,7 @@ mod tests {
         let capture = std::env::var_os("CAPTURE_MAIN_METRICS").is_some();
         for case in fixture.as_array_mut().unwrap() {
             let dt: Datatype = serde_json::from_value(case["datatype"].clone()).unwrap();
-            let props = HashMap::from([("p".into(), PropInfo { datatype: dt, unit: None, enum_values: None, status: Status::Approved, merge_into: None })]);
+            let props = HashMap::from([("p".into(), PropInfo { datatype: dt, unit: case["property_unit"].as_str().map(String::from), enum_values: None, status: Status::Approved, merge_into: None })]);
             let mut values = Values::new();
             let mut ids = Vec::new();
             for (i, value) in case["values"].as_array().unwrap().iter().enumerate() {

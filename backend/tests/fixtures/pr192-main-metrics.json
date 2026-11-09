@@ -180,5 +180,22 @@
       "max": null,
       "count_distinct": 0.0
     }
+  },
+  {
+    "datatype": "money",
+    "property_unit": "AUD",
+    "stored_unit": "USD",
+    "values": [
+      13
+    ],
+    "main": {
+      "count": 1.0,
+      "sum": 13.0,
+      "avg": 13.0,
+      "min": 13.0,
+      "max": 13.0,
+      "count_distinct": 1.0
+    },
+    "median": 13
   }
 ]

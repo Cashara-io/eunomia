@@ -1,0 +1,26 @@
+# Third review, 2026-11-09. From the repository root except where cd is shown.
+# Before every Cargo step: df -h / and pgrep -x cargo. If below 7 GiB or another Cargo is running, wait and recheck every three minutes, for up to sixty minutes.
+export RUST_TEST_THREADS=1 CARGO_BUILD_JOBS=2 CARGO_PROFILE_DEV_DEBUG=0 CARGO_INCREMENTAL=0 RUST_MIN_STACK=8388608
+# Every Cargo process below also has a disk monitor. No cargo fmt.
+python3 scripts/chat-json-render/check_main_source.py
+python3 scripts/chat-json-render/check_third_review_guards.py frontend
+python3 scripts/chat-json-render/check_third_review_guards.py backend
+UPDATE_OPENAPI=1 nice -n 19 cargo test --manifest-path backend/Cargo.toml --test openapi
+nice -n 19 cargo clippy --manifest-path backend/Cargo.toml --all-targets -- -D warnings
+TEST_HARDENED=1 nice -n 19 cargo test --manifest-path backend/Cargo.toml --lib --test chat_ui --test ontology --test golden_tools --test round_trips --test openapi
+cd frontend
+bun install --frozen-lockfile
+bun run gen:api
+# Next generates LayoutProps and route declarations during the production build.
+BACKEND_INTERNAL_URL=http://127.0.0.1:8596 bun run build
+bun run lint
+bunx tsc --noEmit
+bun test scripts/chat-ui-values.test.jsx
+bun scripts/chat-catalog.ts --check
+# Start the isolated stack. Check /readyz. Remove model access for these tests.
+E2E_BASE_URL=http://localhost:3595 bunx playwright test tests/chat-json-render.spec.ts tests/every-tool.spec.ts
+# Separate real chat proof, gpt-6-luna, disposable DB 8595, backend 8596, frontend 3595.
+# Six fresh live thread/message API questions, authentic persisted histories, Helium screenshots.
+# An earlier six-question browser-submitted run is retained under attempts/browser-pass/.
+cd ..
+python3 -I scripts/chat-json-render/verify_numbers.py /private/tmp/chat-json-render-v4/source.csv /private/tmp/chat-json-render-v4
