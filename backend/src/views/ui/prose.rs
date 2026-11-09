@@ -141,9 +141,30 @@ fn pointer(binding: &str) -> AppResult<String> {
     if !path.is_match(binding) { return Err(bad("invalid text placeholder; use {{/sources/name/rows/0/amount}} or {{sources.name.rows[0].amount}}")); }
     Ok(format!("/{}", binding.replace('[', ".").replace(']', "").replace('.', "/")))
 }
+fn binding_error(message: String, data: &Value) -> crate::error::AppError {
+    fn visit(value: &Value, path: &str, data: &Value, out: &mut Vec<String>) {
+        if out.len() >= 8 { return; }
+        if value.as_f64().is_some_and(f64::is_finite) && trusted_number(data, path) {
+            out.push(format!("{{{{{path}}}}}"));
+        } else {
+            match value {
+                Value::Object(fields) => for (key, v) in fields { visit(v, &format!("{path}/{}", key.replace('~', "~0").replace('/', "~1")), data, out); },
+                Value::Array(values) => for (i, v) in values.iter().enumerate() { visit(v, &format!("{path}/{i}"), data, out); },
+                _ => (),
+            }
+        }
+    }
+    let mut valid = Vec::new();
+    for (name, source) in data["sources"].as_object().into_iter().flat_map(|m| m.iter()) {
+        for field in ["totals", "metric", "result", "total_rows", "rows"] {
+            visit(&source[field], &format!("/sources/{name}/{field}"), data, &mut valid);
+        }
+    }
+    bad(format!("{message}. Bind one exact non-null typed numeric or date path. Valid numeric placeholders for these resolved sources: {}", if valid.is_empty() { "none; select a numeric property or metric".into() } else { valid.join(", ") }))
+}
 fn bound(binding: &str, data: &Value) -> AppResult<String> {
     let path = pointer(binding)?;
-    let value = data.pointer(&path).ok_or_else(|| bad(format!("text placeholder {{{{{binding}}}}} points at nothing; bind one exact typed numeric or date source path")))?;
+    let value = data.pointer(&path).ok_or_else(|| binding_error(format!("text placeholder {{{{{binding}}}}} points at nothing"), data))?;
     let parts: Vec<_> = path.split('/').skip(1).map(|s| s.replace("~1", "/").replace("~0", "~")).collect();
     let source = &data["sources"][&parts[1]];
     let rest: Vec<_> = parts[2..].iter().map(String::as_str).collect();
@@ -162,7 +183,7 @@ fn bound(binding: &str, data: &Value) -> AppResult<String> {
     let typed_date = column.is_some_and(|c| matches!(c["datatype"].as_str(), Some("date" | "datetime"))) && matches!(rest.as_slice(), ["rows", _, _])
         || matches!(rest.as_slice(), ["metric", "as_of"] | ["parameters", "as_of"] | ["result", "as_of"]);
     if typed_date && let Some(s) = value.as_str() && date(s).is_some() { return Ok(s.into()); }
-    Err(bad(format!("text placeholder {{{{{binding}}}}} must bind a non-null server-typed numeric or date value; choose a numeric column, total or metric path")))
+    Err(binding_error(format!("text placeholder {{{{{binding}}}}} must bind a non-null server-typed numeric or date value"), data))
 }
 fn render(raw: &str, data: &Value, allowed: &Allowed, field: &str) -> AppResult<String> {
     let mut out = String::new();
@@ -262,6 +283,8 @@ mod tests {
         assert_eq!(title("Count {{/sources/sales/totals/amount/count}}", &data).unwrap()["title"], "Count 1");
         assert_eq!(title("As of {{sources.sales.rows[0].date}}", &data).unwrap()["title"], "As of 2026-01-01");
         for raw in ["{{sources.other.rows[0].amount}}", "{{/sources/sales/rows/0/category}}", "{{/sources/sales/parameters/limit}}", "{{/sources/sales/rows/0/other}}", "{{/sources/sales/rows/0/absent}}", "{{sources.sales}}", "{{/sources/sales/rows/0/amount~2}}", "{{/sources/sales/rows/0/amount}"] { assert!(title(raw, &data).is_err(), "{raw}"); }
+        let error = title("{{sources.other.rows[0].amount}}", &data).unwrap_err();
+        assert!(error.message.contains("{{/sources/sales/totals/amount/sum}}"));
         let mut missing = data.clone(); missing["sources"]["sales"]["rows"][0]["amount"] = Value::Null;
         assert!(title("{{sources.sales.rows[0].amount}}", &missing).is_err());
         let scenario = json!({"sources":{"s":{"view":"scenario","result":{"scenario":[{"value":1746.8,"delta":158.8,"delta_pct":10.0,"unit":"AUD"}]}}}});
