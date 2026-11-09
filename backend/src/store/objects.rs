@@ -52,14 +52,11 @@ SELECT <string>(id) AS id, title, source, external_id, payload, <string>(updated
     FROM cache_record WHERE id IN $ids AND vault = $vault AND deleted != true;
 "#);
 
-pub const ALL: &[&Stmt] = &[&META, &PAGE, &SOURCES, &HISTORY, &SOURCE_RECORDS, &CURRENT, &SORT_VALUES, &KINDS, &PAGE_LINKS];
+pub const ALL: &[&Stmt] = &[&META, &PAGE, &SOURCES, &HISTORY, &SOURCE_RECORDS, &CURRENT, &SORT_VALUES, &KINDS, &PAGE_LINKS, &CONFLICTS];
 
 pub const CURRENT: Stmt = Stmt::new("objects.current", r#"
 RETURN array::flatten($props.map(|$p| (
     SELECT <string>(id) AS id, property.name AS property, value_num, value_text, value_bool,
-        array::len(array::distinct((SELECT VALUE {num:value_num, text:value_text, boolean:value_bool,
-            date:value_date, unit:unit ?? property.unit} FROM entity_property
-            WHERE entity = $id AND property = $p AND vault = $vault AND as_of = <datetime>$parent.as_of))) > 1 AS conflicting,
         <string>(value_date) AS value_date, unit, <string>(as_of) AS as_of,
         <string>(created_at) AS recorded_at, <string>(source) AS source
         FROM entity_property WHERE entity = $id AND property = $p AND vault = $vault AND as_of <= time::now()
@@ -87,4 +84,15 @@ RETURN array::flatten($ids.map(|$e| array::flatten($labels.map(|$label| (
         AND string::concat(label, '|', out.kind ?? string::split(<string>out, ':')[0]) IN $allowed
     ORDER BY target LIMIT 21
 )))));
+"#);
+
+// Conflict checks bind the latest timestamp once per property. Keeping the subquery
+// out of CURRENT's row projection avoids re-evaluating it for unrelated history rows.
+pub const CONFLICTS: Stmt = Stmt::new("objects.conflicts", r#"
+RETURN $points.map(|$p| ({
+    name: $p.name,
+    conflicting: array::len(array::distinct((SELECT VALUE {
+        num:value_num, text:value_text, boolean:value_bool, date:value_date, unit:unit ?? property.unit
+    } FROM entity_property WHERE entity = $id AND property = $p.property AND vault = $vault AND as_of = $p.as_of))) > 1
+}));
 "#);

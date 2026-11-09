@@ -251,7 +251,7 @@ export default function Objects({ space }: { space: string }) {
                     >
                       <th
                         scope="row"
-                        className="px-4 text-left font-normal sticky left-0 bg-[var(--surface)]"
+                        className={`px-4 text-left font-normal sticky left-0 ${selected === row.id ? "bg-[var(--accent-soft)]" : "bg-[var(--surface)]"}`}
                       >
                         <Link
                           className="link inline-block max-w-44 truncate align-middle"

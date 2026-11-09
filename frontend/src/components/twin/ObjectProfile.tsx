@@ -217,7 +217,6 @@ export default function ObjectProfile({
                             ? "contributing object."
                             : "contributing objects."}
                         </p>
-                        <p>{n.result.run.expr_words}</p>
                         <p className="font-mono text-xs">
                           As of {date(n.result.run.as_of)}
                         </p>
@@ -470,11 +469,15 @@ function Properties({ data, space }: { data: Profile; space: string }) {
           </div>
           <dd className="text-xs text-[var(--ink-dim)]">
             <span>{words(p.state)}</span> ·{" "}
-            <span className="font-mono">{date(p.as_of)}</span>
+            <span className="font-mono">
+              {p.as_of && p.as_of !== "NONE"
+                ? `As of ${date(p.as_of)}`
+                : "Date not recorded"}
+            </span>
             {p.unit && <> · Unit: {p.unit}</>}
             {p.source ? (
               <Link
-                className="link inline-block mt-1"
+                className="link block w-fit mt-1"
                 href={`${objectHref(data.id, space)}&section=Sources`}
               >
                 {p.source_label}

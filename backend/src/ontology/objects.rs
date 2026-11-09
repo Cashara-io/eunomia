@@ -31,7 +31,7 @@ impl SortValue {
         match datatype {
             "number"|"integer"|"money"|"percent"=>self.value_num.map(|n|json!(n)),
             "bool"=>self.value_bool.map(Value::Bool),
-            "date"|"datetime"=>self.value_date.map(|d|json!(d.into_inner().to_rfc3339_opts(chrono::SecondsFormat::AutoSi,true))),
+            "date"|"datetime"=>self.value_date.map(|d|json!(d.into_inner().to_rfc3339_opts(chrono::SecondsFormat::Nanos,true))),
             "text"|"enum"=>self.value_text.clone().map(Value::String),
             _=>None,
         }.unwrap_or(Value::Null)
@@ -95,7 +95,7 @@ pub async fn list(db: &OrgDb, user: &RecordId, vault: &RecordId, args: &ListArgs
         let text = args.value.as_deref().ok_or_else(|| AppError::bad_request("filter value missing"))?;
         let datatype = Datatype::parse(&p.datatype)?;
         let stored = property::parse_value(datatype, &p.name, None, &json!(text))?;
-        if let Some(date) = stored.date { json!(date.into_inner().to_rfc3339_opts(chrono::SecondsFormat::AutoSi,true)) }
+        if let Some(date) = stored.date { json!(date.into_inner().to_rfc3339_opts(chrono::SecondsFormat::Nanos,true)) }
         else { property::to_json(datatype, &stored).ok_or_else(|| AppError::bad_request("invalid filter value"))? }
     };
     let mut rows: Vec<PageRow> = q::PAGE.on(db).bind(("vault",vault.clone())).bind(("table",table.to_string()))
@@ -178,6 +178,16 @@ pub async fn profile(state: &OrgState, user: &RecordId, vault: &RecordId, id: &R
     history.truncate(100); links.truncate(100); memories.truncate(100);
     let current: Vec<Value> = q::CURRENT.on(&state.db).bind(("vault",vault.clone())).bind(("id",id.clone()))
         .bind(("props",props.iter().map(|p|p.id.clone()).collect::<Vec<_>>())).await?.take(0)?;
+    #[derive(SurrealValue)]
+    struct ConflictPoint { name: String, property: RecordId, as_of: surrealdb::types::Datetime }
+    let points: Vec<_> = current.iter().filter_map(|v| {
+        let name = v["property"].as_str()?;
+        let property = props.iter().find(|p|p.name == name)?.id.clone();
+        let as_of = chrono::DateTime::parse_from_rfc3339(v["as_of"].as_str()?).ok()?.with_timezone(&chrono::Utc);
+        Some(ConflictPoint { name:name.to_string(), property, as_of:as_of.into() })
+    }).collect();
+    let conflicts: Vec<Value> = q::CONFLICTS.on(&state.db).bind(("vault",vault.clone())).bind(("id",id.clone()))
+        .bind(("points",points)).await?.take(0)?;
     let mut properties: Vec<Value> = props.iter().map(|p| {
         let rows: Vec<&Value> = current.iter().filter(|v|v["property"] == p.name).collect();
         let v = rows.first().copied();
@@ -187,7 +197,7 @@ pub async fn profile(state: &OrgState, user: &RecordId, vault: &RecordId, id: &R
             "date"|"datetime"=> if v["value_date"] == "NONE" { Value::Null } else {v["value_date"].clone()},
             _=>v["value_text"].clone(),
         }).unwrap_or(Value::Null);
-        let conflicting = v.is_some_and(|v|v["conflicting"] == true);
+        let conflicting = conflicts.iter().any(|v|v["name"] == p.name && v["conflicting"] == true);
         let source = v.and_then(|v|v["source"].as_str()).filter(|s|*s!="NONE" && !s.is_empty());
         let state = if v.is_none() {"missing"} else if conflicting {"conflicting"} else if value.is_null() {"unavailable"} else {"recorded"};
         json!({"name":p.name,"datatype":p.datatype,"unit":v.and_then(|v|v["unit"].as_str()).map(String::from).or_else(||p.unit.clone()),"value":value,"as_of":v.map(|v|&v["as_of"]),"recorded_at":v.map(|v|&v["recorded_at"]),"source":source,"state":state})

@@ -117,7 +117,9 @@ test("typed objects, server pages, sources, scoped numbers and related objects",
   page.on("request", (req) => {
     if (
       req.method() === "GET" &&
-      /\/ontology(?:\/readiness)?$/.test(new URL(req.url()).pathname)
+      /\/api\/vaults\/[^/]+\/ontology(?:\/readiness)?$/.test(
+        new URL(req.url()).pathname,
+      )
     )
       expensiveReads.push(req.url());
   });
@@ -125,11 +127,31 @@ test("typed objects, server pages, sources, scoped numbers and related objects",
   await expect(page.getByRole("table").locator("tbody tr")).toHaveCount(25);
   await expect(page.getByRole("table")).toContainText("AUD 0.00");
   await expect(page.getByRole("table")).toContainText("25%");
+  await page.getByRole("button", { name: "Columns", exact: true }).click();
+  await page.getByRole("checkbox", { name: "Margin", exact: true }).uncheck();
+  await expect(
+    page.getByRole("columnheader", { name: "Margin", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("checkbox", { name: "Margin", exact: true }).check();
+  await page.getByRole("button", { name: "Columns", exact: true }).click();
   await page.getByRole("button", { name: "Next", exact: true }).click();
   await expect(page.getByRole("table").locator("tbody tr")).toHaveCount(7);
   await expect(
     page.getByRole("row").filter({ hasText: "Basket 31" }),
   ).toContainText("Missing");
+  await page.locator("summary").filter({ hasText: "Filters" }).click();
+  await choose(page, "Filter property", "Price");
+  await choose(page, "Filter condition", "At least");
+  await page.getByLabel("Value", { exact: true }).fill("29");
+  await expect(page.getByRole("table").locator("tbody tr")).toHaveCount(2);
+  await expect(page.getByRole("table")).toContainText("Basket 29");
+  await page
+    .getByRole("button", { name: "Clear filters", exact: true })
+    .click();
+  await expect(page.getByRole("table").locator("tbody tr")).toHaveCount(25);
+  await page.locator("summary").filter({ hasText: "Filters" }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(page.getByRole("table").locator("tbody tr")).toHaveCount(7);
   await page.getByLabel("Search objects").fill("Basket 00");
   await expect(page.getByRole("table").locator("tbody tr")).toHaveCount(1);
   await page.getByLabel("Search objects").fill("");
@@ -201,6 +223,12 @@ test("typed objects, server pages, sources, scoped numbers and related objects",
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBeTruthy();
+  await page.setViewportSize({ width: 320, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBeTruthy();
 });
 
 test("Banksia-sized visual evidence in both themes and widths", async ({
@@ -238,7 +266,9 @@ test("Banksia-sized visual evidence in both themes and widths", async ({
       })
     ).ok(),
   ).toBeTruthy();
-  await page.goto("/ontology");
+  await page.goto(
+    `/ontology/objects?space=${encodeURIComponent(fixture.space)}&kind=product`,
+  );
   const renderTimes: {
     view: string;
     theme: string;
@@ -251,7 +281,7 @@ test("Banksia-sized visual evidence in both themes and widths", async ({
       theme,
     );
     for (const width of [1440, 390]) {
-      await page.setViewportSize({ width, height: 900 });
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
       const paths = [
         [
           "objects",

@@ -144,14 +144,22 @@ async fn serve_banksia_sized_fixture() {
                 .bind(("rows",rows)).bind(("vault",vault_id.clone())).bind(("owner",app.user.id.clone())).bind(("kind",kind.to_string())).await.unwrap().check().unwrap();
         }
     }
-    // Populate the large kind with typed values so sorting exercises real indexed reads.
-    let prop=app.tool("ontology_propose",json!({"vault_id":vault,"kinds":[{"kind":"stock_record"}],"properties":[{"kind":"stock_record","name":"units","datatype":"integer","unit":"units"}]})).await;
-    assert!(prop.get("error").is_none(),"{prop}");
-    for (route,body) in [("kinds",json!({"kind":"stock_record","decision":{"action":"approve"}})),("properties",json!({"kind":"stock_record","name":"units","decision":{"action":"approve"}}))] {
-        assert_eq!(app.http_session("POST",&format!("/api/vaults/{vault}/ontology/{route}/decide"),Some(body)).await.0,200);
+    // Both large kinds carry typed values, including zero, for realistic page work.
+    for (kind, count) in [("stock_record", 12000), ("weekly_sales", 6240)] {
+        let proposed = app.tool("ontology_propose", json!({"vault_id":vault,
+            "kinds":[{"kind":kind}],
+            "properties":[{"kind":kind,"name":"units","datatype":"integer","unit":"units"}]
+        })).await;
+        assert!(proposed.get("error").is_none(), "{proposed}");
+        for (route, body) in [
+            ("kinds", json!({"kind":kind,"decision":{"action":"approve"}})),
+            ("properties", json!({"kind":kind,"name":"units","decision":{"action":"approve"}})),
+        ] {
+            assert_eq!(app.http_session("POST", &format!("/api/vaults/{vault}/ontology/{route}/decide"), Some(body)).await.0, 200);
+        }
+        db.test_raw().query("LET $p=(SELECT VALUE id FROM ontology_property WHERE vault=$vault AND kind=$kind AND name='units')[0]; FOR $i IN 0..$count { CREATE type::record('entity_property',string::concat($kind,'_',$i)) SET vault=$vault,entity=type::record('entity',string::concat($kind,'_',$i)),property=$p,value_num=<float>$i,as_of=time::now(),origin='agent'; };")
+            .bind(("vault",vault_id.clone())).bind(("kind",kind.to_string())).bind(("count",count)).await.unwrap().check().unwrap();
     }
-    db.test_raw().query("LET $p=(SELECT VALUE id FROM ontology_property WHERE vault=$vault AND kind='stock_record' AND name='units')[0]; FOR $i IN 0..12000 { CREATE type::record('entity_property',string::concat('stock_',$i)) SET vault=$vault,entity=type::record('entity',string::concat('stock_record_',$i)),property=$p,value_num=<float>$i,as_of=time::now(),origin='agent'; };")
-        .bind(("vault",vault_id.clone())).await.unwrap().check().unwrap();
     let second=eunomia_backend::rid::parse(&ids[1]).unwrap();
     db.test_raw().query("RELATE $from->relates_to->$to SET label='substitute_for',owner=$owner;")
         .bind(("from",eunomia_backend::rid::parse(&ids[0]).unwrap())).bind(("to",second)).bind(("owner",app.user.id.clone())).await.unwrap().check().unwrap();
@@ -169,9 +177,9 @@ async fn typed_dates_and_distinct_property_states_and_record_sources() {
         let out=app.tool("entity_set_property",json!({"entity_id":ids[0],"property":property,"value":value})).await;
         assert!(out.get("error").is_none(),"{out}");
     }
-    let proposed=app.tool("ontology_propose",json!({"vault_id":vault,"properties":[{"kind":"product","name":"units","datatype":"integer"},{"kind":"product","name":"active","datatype":"bool"}]})).await;
+    let proposed=app.tool("ontology_propose",json!({"vault_id":vault,"properties":[{"kind":"product","name":"units","datatype":"integer"},{"kind":"product","name":"active","datatype":"bool"},{"kind":"product","name":"captured","datatype":"datetime"}]})).await;
     assert!(proposed.get("error").is_none(),"{proposed}");
-    for name in ["units","active"] {
+    for name in ["units","active","captured"] {
         assert_eq!(app.http_session("POST",&format!("/api/vaults/{vault}/ontology/properties/decide"),Some(json!({"kind":"product","name":name,"decision":{"action":"approve"}}))).await.0,200);
     }
     for (entity,property,value) in [(&ids[0],"units",json!(0)),(&ids[1],"units",json!(12)),(&ids[0],"active",json!(false)),(&ids[1],"active",json!(true))] {
@@ -181,6 +189,15 @@ async fn typed_dates_and_distinct_property_states_and_record_sources() {
     for query in ["?kind=product&filter=units&op=eq&value=0","?kind=product&filter=units&op=eq&value=12","?kind=product&filter=active&op=eq&value=false"] {
         assert_eq!(get(&app,&vault,query).await["total"],1,"{query}");
     }
+    // A whole second must sort before its fractional part, including across a page.
+    for (entity, value) in [(&ids[0], "2026-10-01T00:00:00Z"), (&ids[1], "2026-10-01T00:00:00.125Z")] {
+        let out = app.tool("entity_set_property", json!({"entity_id":entity,"property":"captured","value":value})).await;
+        assert!(out.get("error").is_none(), "{out}");
+    }
+    let ordered = get(&app, &vault, "?kind=product&sort=captured&limit=1&offset=1").await;
+    assert_eq!(ordered["rows"][0]["id"], ids[1]);
+    let at_second = get(&app, &vault, "?kind=product&filter=captured&op=lte&value=2026-10-01T00:00:00Z").await;
+    assert_eq!(at_second["total"], 1);
     let date=get(&app,&vault,"?kind=product&filter=release&op=eq&value=2026-10-01").await;
     assert_eq!(date["total"],1);
     assert_eq!(date["rows"][0]["values"]["release"]["value"],"2026-10-01");
