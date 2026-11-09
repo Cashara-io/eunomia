@@ -1,0 +1,46 @@
+bun test v1.4.0 (34cbb9a40)
+
+scripts/chat-ui-values.test.jsx:
+(pass) UI numeric access never defaults a missing measurement to zero [0.48ms]
+(pass) every chart checks y even when series is supplied [5.76ms]
+(pass) meter requires its minimum instead of inventing zero [0.80ms]
+(pass) unsafe finite chart values fall back before scale arithmetic [0.14ms]
+(pass) explicit table columns inherit server formats for cells and totals [0.79ms]
+(pass) numeric formats treat strings as missing [0.02ms]
+(pass) server types override model formats and counts stay unitless [5.14ms]
+(pass) stat groups retain a missing typed measurement [0.71ms]
+(pass) omitted y never substitutes an available measurement [0.10ms]
+Received NaN for the `x` attribute. If this is expected, cast the value to a string.
+Received NaN for the `y` attribute. If this is expected, cast the value to a string.
+81 | });
+82 | test("proportional charts reject subnormal and zero totals", () => {
+83 |   for (const kind of ["Pie", "Donut", "Treemap", "Partition", "Funnel", "StackedBar", "StackedArea"]) {
+84 |     for (const value of [1e-320, 5e-324, 0]) {
+85 |       const html = renderToStaticMarkup(<Chart kind={kind} raw={{title: "Values", summary: "Values", x: "name", y: "value", series: ["value"], parent: "parent", data: [{name: "Supplier", value, parent: null}]}} />);
+86 |       expect(html).toContain("This display could not be drawn.");
+                        ^
+error: expect(received).toContain(expected)
+
+Expected to contain: "This display could not be drawn."
+Received: "<figure class=\"ui-section ui-chart \" aria-label=\"Values\" data-ui-component=\"Pie\"><figcaption class=\"font-medium mb-3\">Values</figcaption><div class=\"ui-chart-body\"><div><div class=\"ui-plot\" style=\"width:100%;position:relative\"><svg width=\"180\" height=\"280\" role=\"img\" aria-labelledby=\"_R_2_-name _R_2_-summary\" data-chart=\"Pie\"><title id=\"_R_2_-name\">Values</title><desc id=\"_R_2_-summary\">Values</desc><g class=\"visx-group\" transform=\"translate(12, 24)\"><g class=\"visx-group\" transform=\"translate(78, 116)\"><g tabindex=\"0\" aria-label=\"name: Supplier; value: 0; parent: none\" data-chart-mark=\"true\"><path d=\"M0,-78A78,78,0,1,1,0,78A78,78,0,1,1,0,-78Z\" fill=\"var(--space-1)\"></path><text x=\"NaN\" y=\"NaN\" text-anchor=\"middle\" dy=\"0.35em\" class=\"ui-on-fill\">100%</text><title>name: Supplier; value: 0; parent: none</title></g></g></g></svg><ul class=\"ui-legend ui-share-legend\" aria-label=\"Legend\"><li><i style=\"background:var(--space-1)\"></i><span>Supplier</span><span class=\"ui-legend-value\">0 <span class=\"text-[var(--ink-dim)]\">(100%)</span></span></li></ul></div></div></div><p class=\"text-xs text-[var(--ink-dim)]\">Values</p></figure>"
+
+      at <anonymous> (/Users/avi/.t3/worktrees/eunomia/t3-a039f60e/frontend/scripts/chat-ui-values.test.jsx:86:20)
+(fail) proportional charts reject subnormal and zero totals [3.20ms]
+89 |     }
+90 |   }
+91 | });
+92 | 
+93 | test("shared proportional accessor accepts safe totals only", () => {
+94 |   for (const values of [[0], [1e-320], [5e-324], [null], [Infinity]]) expect(proportionalTotal(values)).toBeNull();
+                                                                                                             ^
+error: expect(received).toBeNull()
+
+Received: 0
+
+      at <anonymous> (/Users/avi/.t3/worktrees/eunomia/t3-a039f60e/frontend/scripts/chat-ui-values.test.jsx:94:105)
+(fail) shared proportional accessor accepts safe totals only [0.10ms]
+
+ 9 pass
+ 2 fail
+ 117 expect() calls
+Ran 11 tests across 1 file. [191.00ms]

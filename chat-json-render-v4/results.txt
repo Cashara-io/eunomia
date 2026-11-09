@@ -1,0 +1,32 @@
+Third review final checks, 2026-11-09
+Base main: 11bf34feaffbdd044e38a6b570f5bc7fce750821
+
+test result: ok. 518 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 90.43s
+test result: ok. 9 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 51.22s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.71s
+test result: ok. 110 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 594.98s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.12s
+
+- Clippy, all targets, warnings denied: passed.
+- Serial hardened backend: 518 library, nine chat UI, 110 ontology, one golden-tools, one round-trip and two OpenAPI tests passed. Two existing opt-in fixtures remain ignored.
+- Frontend lint, typecheck, production build, catalogue sync and API generation passed.
+- Renderer: eleven tests, 199 assertions passed. Both requested Playwright files: nine passed with model access disabled.
+- OpenAPI was regenerated and the final drift check passed without an update flag.
+- All guard mutations failed their intended assertions and were restored. Main compatibility: 78 bitwise results matched.
+
+Guard mutations:
+digits-in-prose.log
+test views::ui::tests::model_digits_match_resolved_values ... FAILED
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 517 filtered out; finished in 0.03s
+metric-unit-parity.log
+test metric_stored_unit_override_matches_main_fixture ... FAILED
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 9 filtered out; finished in 4.54s
+proportional-range.log
+(fail) proportional charts reject subnormal and zero totals [3.20ms]
+(fail) shared proportional accessor accepts safe totals only [0.10ms]
+renderer-column-resolution.log
+(fail) omitted y never substitutes an available measurement [5.07ms]
+server-column-resolution.log
+test views::ui::tests::omitted_y_resolves_only_unambiguous_metadata ... FAILED
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 517 filtered out; finished in 0.03s

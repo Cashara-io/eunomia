@@ -1,0 +1,10 @@
+{
+  "base": "42a45fc4d14931bd9c558f250d3ba443c29b653c",
+  "head": "679d69e57ac48fbadab5a41947c90be3b70a0d35",
+  "trees": {
+    "backend": "98e4eb1cf82e09cc77b9f9adf4b692e9335da43b",
+    "frontend": "482ef5d8209d217a47ab28df8db7bfa5aa6f6ff9",
+    "scripts/chat-json-render": "214954e0ac74e7ed424cba3ee9522de8a2a0e3d5"
+  },
+  "unchanged_by_final_rebase": true
+}

@@ -1,0 +1,10 @@
+   Compiling eunomia-backend v2.2.0 (/Users/avi/.t3/worktrees/eunomia/t3-a039f60e/backend)
+    Finished `test` profile [unoptimized] target(s) in 34.01s
+     Running tests/openapi.rs (target/debug/deps/openapi-03bab54703f76c0d)
+
+running 2 tests
+test committed_spec_matches_generated ... ok
+test every_registered_route_is_in_the_spec ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+

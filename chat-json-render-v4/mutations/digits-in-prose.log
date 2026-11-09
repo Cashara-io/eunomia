@@ -1,0 +1,22 @@
+   Compiling eunomia-backend v2.2.0 (/Users/avi/.t3/worktrees/eunomia/t3-a039f60e/backend)
+    Finished `test` profile [unoptimized] target(s) in 1m 01s
+     Running unittests src/lib.rs (target/debug/deps/eunomia_backend-a756209a4274e453)
+
+running 1 test
+test views::ui::tests::model_digits_match_resolved_values ... FAILED
+
+failures:
+
+---- views::ui::tests::model_digits_match_resolved_values stdout ----
+
+thread 'views::ui::tests::model_digits_match_resolved_values' (69883130) panicked at src/views/ui.rs:425:95:
+called `Result::unwrap_err()` on an `Ok` value: ()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    views::ui::tests::model_digits_match_resolved_values
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 517 filtered out; finished in 0.03s
+
+error: test failed, to rerun pass `--lib`

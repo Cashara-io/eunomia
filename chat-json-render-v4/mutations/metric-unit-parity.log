@@ -1,0 +1,24 @@
+   Compiling eunomia-backend v2.2.0 (/Users/avi/.t3/worktrees/eunomia/t3-a039f60e/backend)
+    Finished `test` profile [unoptimized] target(s) in 32.08s
+     Running tests/chat_ui.rs (target/debug/deps/chat_ui-05ae49ced47c708e)
+
+running 1 test
+test metric_stored_unit_override_matches_main_fixture ... FAILED
+
+failures:
+
+---- metric_stored_unit_override_matches_main_fixture stdout ----
+
+thread 'metric_stored_unit_override_matches_main_fixture' (69884494) panicked at tests/chat_ui.rs:240:9:
+assertion `left == right` failed: sum: {"metric":"test_sum","kind":"sample","vault":"vault:pe8c4248e2fabc0bfe82","description":null,"expr_words":"Sum of amount","value":0.0,"unit":"AUD","as_of":"2026-11-09T08:54:52Z","n_entities":0,"entity_ids":[],"truncated":false,"status":"proposed","warnings":["\"test_sum\" is proposed, not approved: no vault owner has checked this number yet","left out 1 \"amount\" value(s) in USD, not the property's unit","no sample matched as of 2026-11-09T08:54:52Z: nothing was computed from any entity"]}
+  left: Some(0)
+ right: Some(4623507967449235456)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    metric_stored_unit_override_matches_main_fixture
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 9 filtered out; finished in 4.54s
+
+error: test failed, to rerun pass `--test chat_ui`
