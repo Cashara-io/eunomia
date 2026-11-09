@@ -1,3 +1,4 @@
+import { haptic } from "@/lib/haptics";
 import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api";
 import { getBootstrap } from "@/lib/gen";
@@ -47,7 +48,7 @@ async function onSessionEnded(e: unknown) {
 export const makeQueryClient = () =>
   new QueryClient({
     queryCache: new QueryCache({ onError: onSessionEnded }),
-    mutationCache: new MutationCache({ onError: onSessionEnded }),
+    mutationCache: new MutationCache({ onError: (error) => { haptic("error"); void onSessionEnded(error); } }),
     defaultOptions: {
       queries: {
         staleTime: 30_000,

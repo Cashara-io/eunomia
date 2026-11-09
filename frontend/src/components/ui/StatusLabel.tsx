@@ -1,3 +1,4 @@
+import MorphText from "./MorphText";
 export type StatusTone = "good" | "warning" | "critical" | "info" | "neutral";
 
 /** Status always in words: a small shape supports the text, never replaces it. */
@@ -5,7 +6,7 @@ export default function StatusLabel({ tone, children, className = "" }: { tone: 
   return (
     <span className={`status-label ${className}`} data-tone={tone}>
       <span className="status-shape" aria-hidden />
-      <span>{children}</span>
+      <span>{typeof children === "string" ? <MorphText>{children}</MorphText> : children}</span>
     </span>
   );
 }

@@ -1,4 +1,6 @@
 "use client";
+import { MorphCount } from "@/components/ui/MorphText";
+import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
@@ -196,6 +198,7 @@ export default function EntityGraph({
   const deleteMemoryMutation = useDeleteMemory();
   const addRelationMutation = useAddRelation();
   const [selected, setSelected] = useState<EntityDetail | null>(null);
+  const [loadingEntity, setLoadingEntity] = useState(false);
   // hidden rather than visible, so a custom kind that shows up later is on by default
   const [hiddenKinds, setHiddenKinds] = useState<Set<EntityKind>>(() => new Set(kinds ? [] : CODE_KINDS));
   const [showCreate, setShowCreate] = useState(false);
@@ -234,7 +237,7 @@ export default function EntityGraph({
   }
 
   const [insets, setInsets] = useState<CanvasInsets>({ top: 0, right: 0, bottom: 0, left: 0 });
-  const inspectorOpen = !!selected;
+  const inspectorOpen = !!selected || loadingEntity;
   const hasGraph = !!graph && graph.nodes.length > 0;
   useEffect(() => {
     const el = chromeRef.current;
@@ -296,6 +299,7 @@ export default function EntityGraph({
   }, [selected, showCreate, editing]);
 
   async function selectNode(id: string) {
+    setLoadingEntity(true);
     setEditing(false);
     setMemoryText("");
     setRelForm({ to: "", label: "" });
@@ -307,6 +311,8 @@ export default function EntityGraph({
       return detail;
     } catch {
       setSelected(null);
+    } finally {
+      setLoadingEntity(false);
     }
   }
 
@@ -548,32 +554,8 @@ export default function EntityGraph({
 
   if (!graph) {
     return frame(
-      <div className="flex gap-2" aria-busy="true" aria-label="Loading people and topics">
-        {[64, 92, 80, 112].map((w) => (
-          <span key={w} className="skeleton h-6" style={{ width: w }} />
-        ))}
-      </div>,
-      mode === "list" ? (
-        <div className="flex flex-col gap-3 pt-2" aria-hidden>
-          {[0, 1, 2, 3, 4, 5].map((i) => (
-            <span key={i} className="skeleton h-10 w-full" />
-          ))}
-        </div>
-      ) : (
-      <div className="h-full flex items-center justify-center" aria-hidden>
-        <div className="relative w-48 h-48">
-          {[
-            [20, 30],
-            [70, 12],
-            [55, 60],
-            [15, 75],
-            [82, 70],
-          ].map(([x, y]) => (
-            <span key={`${x}${y}`} className="skeleton absolute w-3 h-3 rounded-full" style={{ left: `${x}%`, top: `${y}%`, borderRadius: 999 }} />
-          ))}
-        </div>
-      </div>
-      ),
+      null,
+      <LoadingSkeleton label="Loading people and topics" layout={mode === "list" ? "people" : "graph"} rows={6} />,
       undefined,
       undefined,
       true
@@ -786,7 +768,11 @@ export default function EntityGraph({
       : undefined;
   const topAuthor = soleAuthor ?? selected?.owner_email;
 
-  const inspector = selected && (
+  const inspector = loadingEntity ? (
+    <aside aria-label="Loading person or topic" className={isPhone ? "panel fixed inset-0 z-50 p-4" : "panel absolute z-20 right-6 top-6 w-[22rem] max-h-[calc(100%-5rem)] p-4"} style={isPhone ? { borderRadius: 0, border: 0 } : undefined}>
+      <LoadingSkeleton label="Loading person or topic" layout="detail" />
+    </aside>
+  ) : selected && (
     <aside
       aria-label={`${selected.name} details`}
       // phones: a full-screen sheet with Back; desktop: a card in the right column
@@ -926,7 +912,7 @@ export default function EntityGraph({
           <h3 className="section-title flex items-baseline gap-2">
             Memory
             <span className="font-mono text-[12px] font-normal" style={{ color: "var(--ink-faint)" }}>
-              {selected.memory.length}
+              <MorphCount value={selected.memory.length} />
             </span>
           </h3>
           {selected.memory.length === 0 ? (
@@ -1010,7 +996,7 @@ export default function EntityGraph({
           <h3 className="section-title flex items-baseline gap-2">
             Connections
             <span className="font-mono text-[12px] font-normal" style={{ color: "var(--ink-faint)" }}>
-              {selected.relations.length}
+              <MorphCount value={selected.relations.length} />
             </span>
           </h3>
           {selected.relations.length === 0 ? (

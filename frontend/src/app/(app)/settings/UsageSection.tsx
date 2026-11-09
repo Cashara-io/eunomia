@@ -1,4 +1,5 @@
 "use client";
+import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 
 import ErrorLine, { failure } from "@/components/ErrorLine";
 import { useState } from "react";
@@ -182,9 +183,9 @@ function Chart({ report, rangeLabel }: { report: ToolUsageReport | null; rangeLa
   const empty = report && report.totals.calls === 0;
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-[14px] tabular-nums" aria-live="polite" style={{ color: report ? "var(--ink)" : "var(--ink-faint)" }}>
-        {report ? summaryLine(report, rangeLabel.toLowerCase()) : "Loading tool calls…"}
-      </p>
+      <div className="text-[14px] tabular-nums" aria-live="polite" style={{ color: report ? "var(--ink)" : "var(--ink-faint)" }}>
+        {report ? summaryLine(report, rangeLabel.toLowerCase()) : <LoadingSkeleton label="Loading tool calls" rows={1} />}
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="section-title">Calls over time</h3>
         <span className="flex items-center gap-3 text-[12px]" style={{ color: "var(--ink-dim)" }}>
@@ -198,7 +199,7 @@ function Chart({ report, rangeLabel }: { report: ToolUsageReport | null; rangeLa
         aria-label={report ? `Tool calls per ${report.series_step}, ${fmt(report.totals.calls)} in total` : "Loading chart"}
       >
         {!report ? (
-          <span className="skeleton block h-full w-full" />
+          <LoadingSkeleton label="Loading tool calls" layout="graph" />
         ) : empty ? (
           <div className="h-full flex items-center justify-center text-[13px]" style={{ color: "var(--ink-dim)" }}>
             No tool calls in this range yet.

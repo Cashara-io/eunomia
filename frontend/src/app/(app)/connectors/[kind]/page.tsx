@@ -1,4 +1,5 @@
 "use client";
+import MorphText from "@/components/ui/MorphText";
 
 import { ArrowLeftIcon, ArrowRightIcon, ArrowSquareOutIcon, CaretRightIcon, GearSixIcon, MagnifyingGlassIcon, TrashIcon, XIcon } from "@phosphor-icons/react/ssr";
 import { Fragment, use, useState } from "react";
@@ -433,7 +434,7 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
               {!orphaned && (
                 <button type="button" onClick={sync} disabled={syncing} className="btn btn-primary" aria-live="polite">
                   <SyncMark status={syncStatus} size={18} />
-                  {syncing ? "Syncing…" : "Sync now"}
+                  <MorphText>{syncing ? "Syncing…" : "Sync now"}</MorphText>
                 </button>
               )}
             </>
