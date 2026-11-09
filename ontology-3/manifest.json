@@ -1,0 +1,62 @@
+{
+  "seed": "ontology-activity.spec.ts, Live proposal proof, synthetic data only",
+  "scenario": "Context A proposes over MCP; B sees the live notice, sees a stale-revision conflict, re-reviews and approves with a reason; A sees the stored reason.",
+  "frontend": "production Next.js build",
+  "database": "isolated SurrealDB 3.3.5 with hardened function flags",
+  "images": [
+    {
+      "file": "activity-1440-dark.png",
+      "width": 1440,
+      "height": 1000,
+      "sha256": "8dbb36d05337a55f715ecd6725d575b707d258693237dff85ae5a3682f7d2edd"
+    },
+    {
+      "file": "activity-1440-light.png",
+      "width": 1440,
+      "height": 1000,
+      "sha256": "68e8d2d5f02039da8639f0c4fbdadd17eebb44af7296c0cb675abd1cc4a1235e"
+    },
+    {
+      "file": "activity-390-dark.png",
+      "width": 390,
+      "height": 1000,
+      "sha256": "cfff41c30881b080094eb7d926a3c7c89620179eba8fddd2dfbf9efddcffd7bc"
+    },
+    {
+      "file": "activity-390-light.png",
+      "width": 390,
+      "height": 1000,
+      "sha256": "ae0e614207c8807a7ac8430e7ea0d97cccdb26a86b55c5447e1d94354adf46ac"
+    },
+    {
+      "file": "landing-before.png",
+      "width": 1440,
+      "height": 1000,
+      "sha256": "083c8a6264164975e3717817d07ff910bff240eb2d65c8bb99195bf7a5a34a67"
+    },
+    {
+      "file": "landing-notice.png",
+      "width": 1440,
+      "height": 1000,
+      "sha256": "df9a1fcf6161dadc85fd44121be18d712b4742e52efb65e37ce8f7d0c4704533"
+    },
+    {
+      "file": "landing-open.png",
+      "width": 1440,
+      "height": 1000,
+      "sha256": "fdde9e6ea8a6f1ec3a12ca0a00089323bf703c30652adb0227b8243a567cbe63"
+    },
+    {
+      "file": "live-proposal-strip.png",
+      "width": 1440,
+      "height": 373,
+      "sha256": "086dae1390842ca9b0b3092a00a8fb4125148773d6f1ee8c3a9e10542815d8dc"
+    },
+    {
+      "file": "stale-conflict.png",
+      "width": 1440,
+      "height": 1000,
+      "sha256": "dab65b55d50bd3996059159f40b8d1ba49f08fa328ecc14783e1f5f058e67fd7"
+    }
+  ]
+}
