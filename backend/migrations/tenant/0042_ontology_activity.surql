@@ -38,9 +38,10 @@ WHEN $event != "DELETE" AND $after.revision > 0 AND $after.revision != $before.r
         } ELSE { $after.activity_action ?? "proposed" },
         definition_type = "kind", kind = $after.kind ?? $after.from_kind,
         name = $after.name ?? $after.label ?? $after.kind, target = <string> $after.id,
-        revision = $after.revision, reason = $after.activity_reason,
-        before = { description: $before.description, status: $before.status, merge_into: $before.merge_into, revision: $before.revision, synonyms: $before.synonyms, expr: $before.expr, datatype: $before.datatype, unit: $before.unit, enum_values: $before.enum_values, source_map: $before.source_map, reason: $before.reason },
-        after = { description: $after.description, status: $after.status, merge_into: $after.merge_into, revision: $after.revision, synonyms: $after.synonyms, expr: $after.expr, datatype: $after.datatype, unit: $after.unit, enum_values: $after.enum_values, source_map: $after.source_map, reason: $after.reason };
+        revision = $after.revision,
+        reason = IF $after.activity_action IN ["decided", "described"] { $after.activity_reason } ELSE { NONE },
+        before = { revision: $before.revision },
+        after = { revision: $after.revision };
 };
 
 DEFINE FIELD IF NOT EXISTS revision ON ontology_link TYPE int DEFAULT 1;
@@ -60,9 +61,10 @@ WHEN $event != "DELETE" AND $after.revision > 0 AND $after.revision != $before.r
         } ELSE { $after.activity_action ?? "proposed" },
         definition_type = "link", kind = $after.from_kind,
         name = string::concat($after.from_kind, " ", $after.label, " ", $after.to_kind), target = <string> $after.id,
-        revision = $after.revision, reason = $after.activity_reason,
-        before = { description: $before.description, status: $before.status, merge_into: $before.merge_into, revision: $before.revision, synonyms: $before.synonyms, expr: $before.expr, datatype: $before.datatype, unit: $before.unit, enum_values: $before.enum_values, source_map: $before.source_map, reason: $before.reason },
-        after = { description: $after.description, status: $after.status, merge_into: $after.merge_into, revision: $after.revision, synonyms: $after.synonyms, expr: $after.expr, datatype: $after.datatype, unit: $after.unit, enum_values: $after.enum_values, source_map: $after.source_map, reason: $after.reason };
+        revision = $after.revision,
+        reason = IF $after.activity_action IN ["decided", "described"] { $after.activity_reason } ELSE { NONE },
+        before = { revision: $before.revision },
+        after = { revision: $after.revision };
 };
 
 DEFINE FIELD IF NOT EXISTS revision ON ontology_property TYPE int DEFAULT 1;
@@ -82,9 +84,10 @@ WHEN $event != "DELETE" AND $after.revision > 0 AND $after.revision != $before.r
         } ELSE { $after.activity_action ?? "proposed" },
         definition_type = "property", kind = $after.kind ?? $after.from_kind,
         name = $after.name ?? $after.label ?? $after.kind, target = <string> $after.id,
-        revision = $after.revision, reason = $after.activity_reason,
-        before = { description: $before.description, status: $before.status, merge_into: $before.merge_into, revision: $before.revision, synonyms: $before.synonyms, expr: $before.expr, datatype: $before.datatype, unit: $before.unit, enum_values: $before.enum_values, source_map: $before.source_map, reason: $before.reason },
-        after = { description: $after.description, status: $after.status, merge_into: $after.merge_into, revision: $after.revision, synonyms: $after.synonyms, expr: $after.expr, datatype: $after.datatype, unit: $after.unit, enum_values: $after.enum_values, source_map: $after.source_map, reason: $after.reason };
+        revision = $after.revision,
+        reason = IF $after.activity_action IN ["decided", "described"] { $after.activity_reason } ELSE { NONE },
+        before = { revision: $before.revision },
+        after = { revision: $after.revision };
 };
 
 DEFINE FIELD IF NOT EXISTS revision ON ontology_metric TYPE int DEFAULT 1;
@@ -104,9 +107,10 @@ WHEN $event != "DELETE" AND $after.revision > 0 AND $after.revision != $before.r
         } ELSE { $after.activity_action ?? "proposed" },
         definition_type = "metric", kind = $after.kind ?? $after.from_kind,
         name = $after.name ?? $after.label ?? $after.kind, target = <string> $after.id,
-        revision = $after.revision, reason = $after.activity_reason,
-        before = { description: $before.description, status: $before.status, merge_into: $before.merge_into, revision: $before.revision, synonyms: $before.synonyms, expr: $before.expr, datatype: $before.datatype, unit: $before.unit, enum_values: $before.enum_values, source_map: $before.source_map, reason: $before.reason },
-        after = { description: $after.description, status: $after.status, merge_into: $after.merge_into, revision: $after.revision, synonyms: $after.synonyms, expr: $after.expr, datatype: $after.datatype, unit: $after.unit, enum_values: $after.enum_values, source_map: $after.source_map, reason: $after.reason };
+        revision = $after.revision,
+        reason = IF $after.activity_action IN ["decided", "described"] { $after.activity_reason } ELSE { NONE },
+        before = { revision: $before.revision },
+        after = { revision: $after.revision };
 };
 
 DEFINE EVENT IF NOT EXISTS ontology_strict_activity ON vault

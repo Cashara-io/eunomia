@@ -9,7 +9,9 @@ async fn setup(app: &TestApp) -> String {
         .to_string()
 }
 async fn propose(app: &TestApp, vault: &str, description: &str) {
-    let out = app.tool("ontology_propose", json!({"vault_id":vault,"kinds":[{"kind":"shop","description":description,"reason":"From stores.csv"}]})).await;
+    let current = app.tool("ontology_get", json!({"vault_id":vault})).await;
+    let revision = current["kinds"].as_array().unwrap().iter().find(|k| k["kind"] == "shop").and_then(|k| k["revision"].as_i64()).unwrap_or(0);
+    let out = app.tool("ontology_propose", json!({"vault_id":vault,"kinds":[{"kind":"shop","revision":revision,"description":description,"reason":"From stores.csv"}]})).await;
     assert!(out.get("error").is_none(), "{out}");
 }
 async fn activity(app: &TestApp, vault: &str) -> Vec<Value> {
@@ -53,8 +55,8 @@ async fn revisions_reasons_history_and_stale_decisions_are_durable() {
     assert_eq!(events[2]["reason"], "Matches the source records");
     assert_eq!(events[2]["actor_type"], "user");
     assert_eq!(events[2]["actor_name"], app.user.email);
-    assert_eq!(events[2]["before"]["status"], "proposed");
-    assert_eq!(events[2]["after"]["status"], "approved");
+    assert_eq!(events[2]["before"]["revision"], 2);
+    assert_eq!(events[2]["after"]["revision"], 3);
     let (status, _) = decide(
         &app,
         &vault,
@@ -161,7 +163,7 @@ async fn every_definition_type_records_proposals_and_rejections() {
 }
 
 #[tokio::test]
-async fn typed_values_and_import_batches_record_only_committed_writes() {
+async fn typed_values_and_import_summaries_record_only_committed_writes() {
     let app = TestApp::new().await;
     let vault = setup(&app).await;
     let out = app.tool("ontology_propose", json!({"vault_id":vault,"kinds":[{"kind":"shop"}],"properties":[{"kind":"shop","name":"price","datatype":"number"}]})).await;
@@ -197,7 +199,7 @@ async fn typed_values_and_import_batches_record_only_committed_writes() {
         .iter()
         .find(|e| e["action"] == "value_written")
         .unwrap();
-    assert_eq!(written["after"]["value_num"], 12.5);
+    assert_eq!(written["after"], json!({"values":1}));
     let imported = events.iter().find(|e| e["action"] == "imported").unwrap();
     assert_eq!(imported["after"]["values"], 2);
 }
@@ -209,7 +211,7 @@ async fn a_stale_metric_gets_a_conflict_before_dependency_validation() {
     let args = json!({"vault_id":vault,"kinds":[{"kind":"shop"}],"properties":[{"kind":"shop","name":"price","datatype":"number"}],"metrics":[{"kind":"shop","name":"total","expr":{"agg":"sum","property":"price"}}]});
     let out = app.tool("ontology_propose", args).await;
     assert!(out.get("error").is_none(), "{out}");
-    let out = app.tool("ontology_propose", json!({"vault_id":vault,"metrics":[{"kind":"shop","name":"total","description":"Changed while open","expr":{"agg":"sum","property":"price"}}]})).await;
+    let out = app.tool("ontology_propose", json!({"vault_id":vault,"metrics":[{"kind":"shop","name":"total","revision":1,"description":"Changed while open","expr":{"agg":"sum","property":"price"}}]})).await;
     assert!(out.get("error").is_none(), "{out}");
     let (status, out) = app
         .http_session(
@@ -229,7 +231,7 @@ async fn a_failed_event_append_rolls_back_the_definition_and_cursor() {
     let app = TestApp::new().await;
     let vault = setup(&app).await;
     let db = app.db().await;
-    db.test_raw().query("DEFINE FIELD OVERWRITE reason ON ontology_event TYPE option<string> ASSERT $value != 'force event failure'")
+    db.test_raw().query("DEFINE FIELD OVERWRITE name ON ontology_event TYPE string ASSERT $value != 'shop'")
         .await.unwrap().check().unwrap();
     let out = app
         .tool(
@@ -319,4 +321,95 @@ async fn link_histories_distinguish_the_target_kind() {
     assert_eq!(status, 200, "{out}");
     assert_eq!(out["events"].as_array().unwrap().len(), 1);
     assert_eq!(out["events"][0]["name"], "shop near location");
+}
+
+#[tokio::test]
+async fn review_guard_proposal_transactions_refuse_stale_or_missing_revisions_after_person_edits() {
+    let app = TestApp::new().await;
+    let vault = setup(&app).await;
+    let items = [
+        ("kinds", json!({"kind":"shop"}), "kinds"),
+        ("links", json!({"from_kind":"shop","label":"near","to_kind":"location"}), "links"),
+        ("properties", json!({"kind":"shop","name":"note","datatype":"text"}), "properties"),
+        ("metrics", json!({"kind":"shop","name":"total","expr":{"agg":"count"}}), "metrics"),
+    ];
+    for (list, fields, route) in items {
+        let mut args = json!({"vault_id":vault});
+        args[list] = json!([fields]);
+        let out = app.tool("ontology_propose", args.clone()).await;
+        assert!(out.get("error").is_none(), "{out}");
+        let mut edit = fields.clone();
+        edit["revision"] = json!(1);
+        edit["decision"] = json!({"action":"describe","description":"Person's newer description"});
+        let (status, body) = app.http_session("POST", &format!("/api/vaults/{vault}/ontology/{route}/decide"), Some(edit)).await;
+        assert_eq!(status, 200, "{body}");
+        let before = activity(&app, &vault).await;
+        for revision in [None, Some(1)] {
+            let mut stale = fields.clone();
+            stale["description"] = json!("Agent's stale description");
+            if let Some(revision) = revision { stale["revision"] = json!(revision); }
+            args[list] = json!([stale]);
+            let out = app.tool("ontology_propose", args.clone()).await;
+            assert_eq!(out["code"], "ontology.stale_revision", "{out}");
+        }
+        // Exercise the store transactions directly as well, bypassing service preflight checks.
+        use eunomia_backend::store::ontology as q;
+        let statements = match list {
+            "kinds" => [&q::DESCRIBE_KIND, &q::DECIDE_KIND],
+            "links" => [&q::DESCRIBE_LINK, &q::DECIDE_LINK],
+            "properties" => [&q::DESCRIBE_PROPERTY, &q::DECIDE_PROPERTY],
+            _ => [&q::DESCRIBE_METRIC, &q::DECIDE_METRIC],
+        };
+        let id = eunomia_backend::rid::parse(before.last().unwrap()["target"].as_str().unwrap()).unwrap();
+        let db = app.db().await;
+        for stmt in statements {
+            for expected in [None, Some(1)] {
+                let result = stmt.on(&db).bind(("id",id.clone())).bind(("expected_revision",expected)).await;
+                let error = result.and_then(|res| res.check()).expect_err("stale or missing revision must fail inside the transaction");
+                assert!(error.to_string().contains("ontology.stale_revision"),"{error}");
+            }
+        }
+        assert_eq!(activity(&app, &vault).await, before, "CAS failure appends nothing");
+        let latest = app.tool("ontology_get", json!({"vault_id":vault})).await;
+        let entries = if list == "properties" || list == "metrics" { &latest["kinds"].as_array().unwrap().iter().find(|k| k["kind"] == "shop").unwrap()[list] } else { &latest[list] };
+        let item = entries.as_array().unwrap().iter().find(|k| if list == "kinds" { k["kind"] == "shop" } else if list == "links" { k["label"] == "near" } else { k["name"] == fields["name"] }).unwrap();
+        assert_eq!(item["description"], "Person's newer description");
+        assert_eq!(item["revision"], 2);
+        let mut fresh = fields;
+        fresh["revision"] = json!(2);
+        fresh["description"] = json!("Agent reviewed the new version");
+        args[list] = json!([fresh]);
+        let out = app.tool("ontology_propose", args).await;
+        assert!(out.get("error").is_none(), "{out}");
+    }
+}
+
+#[tokio::test]
+async fn review_guard_imports_emit_one_summary_for_links_only_and_multiple_value_chunks() {
+    let app = TestApp::new().await;
+    let vault = setup(&app).await;
+    app.tool("ontology_propose", json!({"kinds":[{"kind":"shop"}],"properties":[{"kind":"shop","name":"note","datatype":"text"}],"links":[{"from_kind":"shop","label":"near","to_kind":"location","source_map":[{"source":"document","record_type":"any","path":"location"}]}]})).await;
+    for (route, fields) in [("kinds",json!({"kind":"shop"})), ("properties",json!({"kind":"shop","name":"note"})), ("links",json!({"from_kind":"shop","label":"near","to_kind":"location"}))] {
+        let mut body = fields;
+        body["revision"] = json!(1);
+        body["decision"] = json!({"action":"approve"});
+        let (status, out) = app.http_session("POST", &format!("/api/vaults/{vault}/ontology/{route}/decide"), Some(body)).await;
+        assert_eq!(status, 200, "{out}");
+    }
+    for (filename, text, map, expected_values, expected_links) in [
+        ("links.csv", "name,location\nNorth,Melbourne\nSouth,Sydney\n".to_string(),json!({"location":"near"}),0,2),
+        ("confidential-import-canary.csv", format!("name,note\n{}", (0..501).map(|i| format!("Shop {i},confidential-import-canary\n")).collect::<String>()),json!({"note":"note"}),501,0),
+    ] {
+        let doc = app.tool("document_upload", json!({"filename":filename,"text":text})).await;
+        let out = app.tool("document_import_rows", json!({"document_id":doc["id"],"kind":"shop","name_column":"name","column_map":map})).await;
+        assert!(out.get("error").is_none(), "{out}");
+        let db = app.db().await;
+        let events: Vec<Value> = db.test_raw().query("SELECT * FROM ontology_event WHERE action = 'imported' AND target = $source")
+            .bind(("source", doc["id"].as_str().unwrap().to_string())).await.unwrap().take(0).unwrap();
+        assert_eq!(events.len(),1, "{events:?}");
+        assert_eq!(events[0]["after"]["values"],expected_values);
+        assert_eq!(events[0]["after"]["links"],expected_links);
+        assert_eq!(events[0]["after"]["entities"],out["created"].as_u64().unwrap()+out["updated"].as_u64().unwrap()+out["targets_created"].as_u64().unwrap());
+        assert!(!serde_json::to_string(&events).unwrap().contains("confidential-import-canary"));
+    }
 }

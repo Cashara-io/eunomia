@@ -196,7 +196,7 @@ pub async fn suggest(db: &OrgDb, settings: &Settings, owner: &RecordId, vault_id
         }
     }
     let skipped = total - kinds.len() - links.len() - properties.len() - metrics.len();
-    let proposed = apply(db, &vault, Valid { kinds, links, properties, metrics }, Origin::Suggested).await?;
+    let proposed = apply(db, &vault, Valid { kinds, links, properties, metrics }.at_snapshot(&profile), Origin::Suggested).await?;
     Ok(SuggestOut::Model { proposed, skipped, ontology: view(db, &vault).await? })
 }
 

@@ -134,11 +134,15 @@ async fn ontology_resume_replays_exactly_the_missed_events_and_honours_vault_sco
     for name in ["order", "shipment"] {
         app.tool("ontology_propose", json!({"vault_id":vault,"kinds":[{"kind":name}]})).await;
     }
+    app.db().await.test_raw().query("CREATE vault:a_empty_replay SET name = 'Empty replay space', kind = 'org'; CREATE vault_member SET vault = vault:a_empty_replay, user = $user, role = 'owner'")
+        .bind(("user",app.user.id.clone())).await.unwrap().check().unwrap();
     let resume = url::form_urlencoded::Serializer::new(String::new()).append_pair("ontology_after", &json!({&vault:2}).to_string()).finish();
     let mut req = format!("{base}/api/events/ws?{resume}").into_client_request().unwrap();
     req.headers_mut().insert("authorization", format!("Bearer {}", app.token).parse().unwrap());
     let mut resumed = tokio_tungstenite::connect_async(req).await.unwrap().0;
-    assert_eq!(next(&mut resumed).await["type"], "hello");
+    let hello = next(&mut resumed).await;
+    assert_eq!(hello["type"], "hello");
+    assert_eq!(hello["ontology"]["vault:a_empty_replay"], 0);
     assert_eq!(ontology_next(&mut resumed).await["event"]["seq"], 3);
     assert_eq!(ontology_next(&mut resumed).await["event"]["seq"], 4);
     assert!(tokio::time::timeout(std::time::Duration::from_millis(1200), ontology_next(&mut resumed)).await.is_err(), "no duplicate replay");
@@ -192,4 +196,108 @@ async fn a_socket_opened_during_the_schema_upgrade_reconnects_for_ontology_event
     assert_eq!(closed, 4410);
     let mut resumed = connect(&base, &app.token).await;
     assert!(!next(&mut resumed).await["ontology"].as_object().unwrap().is_empty());
+}
+
+async fn resume(base: &str, token: &str, vault: &str, seq: i64) -> Ws {
+    let query = url::form_urlencoded::Serializer::new(String::new()).append_pair("ontology_after", &json!({vault:seq}).to_string()).finish();
+    let mut req = format!("{base}/api/events/ws?{query}").into_client_request().unwrap();
+    req.headers_mut().insert("authorization", format!("Bearer {token}").parse().unwrap());
+    tokio_tungstenite::connect_async(req).await.unwrap().0
+}
+
+async fn seed_activity(app: &TestApp, vault: &str, count: i64) {
+    app.db().await.test_raw().query(r#"BEGIN TRANSACTION;
+        FOR $i IN 1..=$count {
+            CREATE ontology_event SET vault = $vault, seq = $i, actor = 'system', actor_type = 'system', actor_name = 'System',
+                action = 'proposed', definition_type = 'kind', kind = 'shop', name = 'shop', target = 'ontology_kind:shop', revision = $i;
+        };
+        UPDATE $vault SET ontology_seq = $count;
+        COMMIT TRANSACTION;"#)
+        .bind(("vault", eunomia_backend::rid::parse(vault).unwrap())).bind(("count", count))
+        .await.unwrap().check().unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn review_guard_confidential_values_never_reach_stored_activity_live_frames_or_replay() {
+    let app = TestApp::new().await;
+    let vault = app.tool("ontology_get", json!({})).await["vault"].as_str().unwrap().to_string();
+    let canary = "confidential-note-canary-207";
+    let out = app.tool("ontology_propose", json!({"kinds":[{"kind":"shop","description":canary,"reason":canary}],"properties":[{"kind":"shop","name":"note","datatype":"text","description":canary,"reason":canary,"enum_values":[]}],"links":[{"from_kind":"shop","label":"near","to_kind":"location","description":canary,"reason":canary}],"metrics":[{"kind":"shop","name":"total","expr":{"agg":"count"},"description":canary,"reason":canary}]})).await;
+    assert!(out.get("error").is_none(), "{out}");
+    let (status, body) = app.http_session("POST", &format!("/api/vaults/{vault}/ontology/properties/decide"), Some(json!({"kind":"shop","name":"note","revision":1,"decision":{"action":"approve"}}))).await;
+    assert_eq!(status,200,"{body}");
+    let entity = app.tool("memory_write",json!({"subject_name":canary,"subject_kind":"shop","text":canary})).await;
+    let base = serve(&app).await;
+    let mut ws = connect(&base, &app.token).await;
+    assert_eq!(next(&mut ws).await["type"],"hello");
+    let out = app.tool("entity_set_property",json!({"entity_id":entity["entity"]["id"],"property":"note","value":canary})).await;
+    assert!(out.get("error").is_none(),"{out}");
+    let frame = ontology_next(&mut ws).await;
+    assert!(!frame.to_string().contains(canary),"{frame}");
+    let stored: Vec<Value> = app.db().await.test_raw().query("SELECT * FROM ontology_event").await.unwrap().take(0).unwrap();
+    assert_eq!(stored.len(),6);
+    assert!(!serde_json::to_string(&stored).unwrap().contains(canary),"{stored:?}");
+    // An old row from an earlier writer must also be sanitised on replay and HTTP.
+    app.db().await.test_raw().query("UPDATE ontology_event SET after = { value_text: $canary, description: $canary, values: 1 }; UPDATE ontology_event SET definition_type = 'import', name = $canary WHERE action = 'value_written'; UPDATE ontology_event SET reason = $canary WHERE action = 'proposed'")
+        .bind(("canary",canary.to_string())).await.unwrap().check().unwrap();
+    let mut replay = resume(&base,&app.token,&vault,0).await;
+    assert_eq!(next(&mut replay).await["type"],"hello");
+    for _ in 0..6 {
+        let frame = ontology_next(&mut replay).await;
+        assert!(!frame.to_string().contains(canary),"{frame}");
+    }
+    let (_, body) = app.http_session("GET",&format!("/api/vaults/{vault}/ontology/activity"),None).await;
+    assert!(!body.to_string().contains(canary),"{body}");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn review_guard_replay_yields_between_pages_and_revocation_stops_the_next_page() {
+    use futures::SinkExt;
+    let app = TestApp::new().await;
+    let vault = app.tool("vault_create",json!({"name":"Replay"})).await["id"].as_str().unwrap().to_string();
+    let bob = common::register(&app.state,"replay-member@example.com").await;
+    let token = models_user::create_api_token_with(app.control(), &bob.id,"Member", &["memory:read".into()], Some(&eunomia_backend::rid::parse(&vault).unwrap()), None).await.unwrap().token;
+    let db = app.db().await;
+    let rid = eunomia_backend::rid::parse(&vault).unwrap();
+    db.test_raw().query("CREATE vault_member SET vault = $vault, user = $user, role = 'member'")
+        .bind(("vault",rid.clone())).bind(("user",bob.id.clone())).await.unwrap().check().unwrap();
+    seed_activity(&app,&vault,201).await;
+    let base = serve(&app).await;
+    let mut ws = resume(&base,&token,&vault,0).await;
+    assert_eq!(next(&mut ws).await["type"],"hello");
+    for seq in 1..=100 { assert_eq!(ontology_next(&mut ws).await["event"]["seq"],seq); }
+    // Control traffic must be served before the second page, without draining the backlog.
+    ws.send(Message::Ping(vec![2,0,7].into())).await.unwrap();
+    let message = tokio::time::timeout(std::time::Duration::from_secs(2),ws.next()).await.unwrap().unwrap().unwrap();
+    assert!(matches!(message, Message::Pong(_)),"{message:?}");
+    // No local bus announcement: the next replay pass must query membership again.
+    db.test_raw().query("DELETE vault_member WHERE vault = $vault AND user = $user")
+        .bind(("vault",rid)).bind(("user",bob.id)).await.unwrap().check().unwrap();
+    let leaked = tokio::time::timeout(std::time::Duration::from_secs(12),async {
+        while let Some(Ok(message)) = ws.next().await {
+            if let Message::Text(text) = message {
+                let frame: Value = serde_json::from_str(&text).unwrap();
+                if frame["type"] == "ontology" { return true; }
+            }
+        }
+        false
+    }).await.unwrap_or(false);
+    assert!(!leaked,"revoked member received another page");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn review_guard_large_replay_requests_http_resync_then_continues_live_delivery() {
+    let app = TestApp::new().await;
+    let vault = app.tool("ontology_get",json!({})).await["vault"].as_str().unwrap().to_string();
+    seed_activity(&app,&vault,1001).await;
+    let base = serve(&app).await;
+    let mut ws = resume(&base,&app.token,&vault,0).await;
+    assert_eq!(next(&mut ws).await["type"],"hello");
+    let frame = next(&mut ws).await;
+    assert_eq!(frame,json!({"type":"ontology_resync","vault":vault,"seq":1001}));
+    let (status, page) = app.http_session("GET",&format!("/api/vaults/{vault}/ontology/activity?newest=true&limit=1"),None).await;
+    assert_eq!(status,200);
+    assert_eq!(page["events"][0]["seq"],1001);
+    app.tool("ontology_propose",json!({"kinds":[{"kind":"supplier"}]})).await;
+    assert_eq!(ontology_next(&mut ws).await["event"]["seq"],1002);
 }

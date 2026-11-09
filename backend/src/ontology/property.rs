@@ -185,6 +185,9 @@ pub(super) fn clean_source_map(fields: &[SourceField]) -> AppResult<Vec<SourceFi
 /// A proposed property, as an agent or the model sends it.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct PropertyProposal {
+    /// Revision observed in ontology_get. Zero or omitted means create only.
+    #[serde(default)]
+    pub revision: i64,
     pub kind: String,
     pub name: String,
     pub datatype: String,
@@ -207,6 +210,7 @@ pub struct PropertyProposal {
 }
 
 pub(super) struct ValidProperty {
+    pub(super) revision: i64,
     pub(super) kind: Kind,
     pub(super) name: PropertyName,
     pub(super) datatype: Datatype,
@@ -242,6 +246,7 @@ impl PropertyProposal {
             return Err(AppError::bad_request(format!("{:?} cannot merge into itself", name.0)));
         }
         Ok(ValidProperty {
+            revision: super::activity::proposal_revision(self.revision)?,
             synonyms: clean_synonyms(&name.0, &self.synonyms)?,
             kind,
             name,
@@ -273,6 +278,7 @@ pub(super) async fn apply_properties(db: &OrgDb, vault: &RecordId, props: Vec<Va
         let row: PropertyRow = with_retry_dup(|| async {
             let mut res = q::PROPOSE_PROPERTY
                 .on(db)
+                .bind(("proposal_revision", p.revision))
                 .bind(("id", id.clone()))
                 .bind(("vault", vault.clone()))
                 .bind(("kind", p.kind.as_str().to_string()))
@@ -479,7 +485,7 @@ pub async fn decide_property(db: &OrgDb, user: &RecordId, vault: &RecordId, kind
     let (status, merge_into) = match decision {
         PropertyDecision::Describe { description } => {
             let description = clean_text("description", Some(&description))?;
-            with_retry_dup(|| async { q::DESCRIBE_PROPERTY.on(db).bind(("id", id.clone())).bind(("description", description.clone())).await }).await?;
+            with_retry_dup(|| async { q::DESCRIBE_PROPERTY.on(db).bind(("expected_revision", row.revision)).bind(("id", id.clone())).bind(("description", description.clone())).await }).await?;
             crate::changes::ontology_committed(db, vault);
             return view(db, vault).await;
         }
@@ -504,6 +510,7 @@ pub async fn decide_property(db: &OrgDb, user: &RecordId, vault: &RecordId, kind
     with_retry_dup(|| async {
         q::DECIDE_PROPERTY
             .on(db)
+            .bind(("expected_revision", row.revision))
             .bind(("id", id.clone()))
             .bind(("vault", vault.clone()))
             .bind(("kind", kind.as_str().to_string()))
@@ -957,6 +964,7 @@ mod tests {
         assert!(PropertyName::parse(&"p".repeat(65)).is_err());
         assert_eq!(PropertyName::parse(" unit_price ").unwrap().as_str(), "unit_price");
         let p = |datatype: &str, enum_values: Option<Vec<String>>| PropertyProposal {
+            revision: 0,
             kind: "product".into(),
             name: "size".into(),
             datatype: datatype.into(),

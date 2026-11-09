@@ -17,6 +17,7 @@ const messageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("hello"), vaults: z.record(z.string(), z.number()), ontology: z.record(z.string(), z.number()).optional() }),
   z.object({ type: z.literal("change"), vault: z.string(), seq: z.number(), kind: z.string() }),
   z.object({ type: z.literal("ontology"), vault: z.string(), event: z.object({ seq: z.number().int().nonnegative() }) }),
+  z.object({ type: z.literal("ontology_resync"), vault: z.string(), seq: z.number().int().nonnegative() }),
   z.object({ type: z.literal("seq"), vault: z.string(), seq: z.number() }),
   z.object({ type: z.literal("vault"), vault: z.string(), op: z.string() }),
   z.object({ type: z.enum(["vaults", "resync", "heartbeat"]) }),
@@ -123,6 +124,10 @@ export function useLiveUpdates() {
         case "ontology":
           if (m.event.seq <= (ontologyCursors.get(m.vault) ?? 0)) return;
           ontologyCursors.set(m.vault, m.event.seq);
+          pending.ontology.add(m.vault);
+          break;
+        case "ontology_resync":
+          ontologyCursors.set(m.vault, m.seq);
           pending.ontology.add(m.vault);
           break;
         case "change":

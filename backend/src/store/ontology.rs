@@ -87,6 +87,7 @@ pub const PROPOSE_KIND: Stmt = Stmt::at(
     "ontology.propose_kind",
     r#"BEGIN TRANSACTION;
         LET $cur = (SELECT VALUE status FROM $id);
+        IF (array::len($cur) = 0 OR $cur[0] = "proposed") AND ((SELECT VALUE revision FROM $id)[0] ?? 0) != $proposal_revision { THROW "ontology.stale_revision" };
         LET $row = IF array::len($cur) = 0 {
             (CREATE $id SET revision = (revision ?? 0) + 1, activity_actor_name = $activity_actor_name, activity_actor = $activity_actor, activity_actor_type = $activity_actor_type, activity_action = "proposed", activity_reason = $reason, vault = $vault, kind = $kind, description = $description, merge_into = $merge_into,
                 synonyms = $synonyms, origin = $origin, reason = $reason RETURN AFTER)
@@ -98,7 +99,7 @@ pub const PROPOSE_KIND: Stmt = Stmt::at(
         };
         RETURN $row;
         COMMIT TRANSACTION;"#,
-    3, // BEGIN 0, two LETs 1 and 2, RETURN 3
+    4, // BEGIN 0, LET 1, IF 2, LET 3, RETURN 4
 );
 
 // The columns (`source_map`, migration 0038) are added in their own step, and only when given, so an
@@ -107,6 +108,7 @@ pub const PROPOSE_LINK: Stmt = Stmt::at(
     "ontology.propose_link",
     r#"BEGIN TRANSACTION;
         LET $cur = (SELECT VALUE status FROM $id);
+        IF (array::len($cur) = 0 OR $cur[0] = "proposed") AND ((SELECT VALUE revision FROM $id)[0] ?? 0) != $proposal_revision { THROW "ontology.stale_revision" };
         IF array::len($cur) = 0 {
             CREATE $id SET revision = 0, activity_actor_name = $activity_actor_name, activity_actor = $activity_actor,
                 activity_actor_type = $activity_actor_type, activity_action = "proposed", activity_reason = $reason,
@@ -125,7 +127,7 @@ pub const PROPOSE_LINK: Stmt = Stmt::at(
         };
         RETURN (SELECT * FROM $id);
         COMMIT TRANSACTION;"#,
-    5,
+    6,
 );
 
 /// The open proposals agents filed in `$vault`, of every sort.
@@ -181,7 +183,7 @@ pub const FILE_LINK: Stmt = Stmt::at(
 pub const DECIDE_KIND: Stmt = Stmt::new(
     "ontology.decide_kind",
     r#"BEGIN TRANSACTION;
-        IF $expected_revision != NONE AND ((SELECT VALUE revision FROM $id)[0] ?? 0) != $expected_revision { THROW "ontology.stale_revision" };
+        IF ((SELECT VALUE revision FROM $id)[0] ?? 0) != $expected_revision { THROW "ontology.stale_revision" };
         IF array::len(SELECT VALUE id FROM $id) = 0 {
             CREATE $id SET revision = 0, vault = $vault, kind = $kind, origin = "human"
         };
@@ -196,7 +198,7 @@ pub const DECIDE_KIND: Stmt = Stmt::new(
 pub const DESCRIBE_KIND: Stmt = Stmt::new(
     "ontology.describe_kind",
     r#"BEGIN TRANSACTION;
-        IF $expected_revision != NONE AND ((SELECT VALUE revision FROM $id)[0] ?? 0) != $expected_revision { THROW "ontology.stale_revision" };
+        IF ((SELECT VALUE revision FROM $id)[0] ?? 0) != $expected_revision { THROW "ontology.stale_revision" };
         IF array::len(SELECT VALUE id FROM $id) = 0 {
             CREATE $id SET revision = 0, vault = $vault, kind = $kind, origin = "human"
         };
@@ -207,7 +209,7 @@ pub const DESCRIBE_KIND: Stmt = Stmt::new(
 pub const DECIDE_LINK: Stmt = Stmt::new(
     "ontology.decide_link",
     r#"BEGIN TRANSACTION;
-        IF $expected_revision != NONE AND ((SELECT VALUE revision FROM $id)[0] ?? 0) != $expected_revision { THROW "ontology.stale_revision" };
+        IF ((SELECT VALUE revision FROM $id)[0] ?? 0) != $expected_revision { THROW "ontology.stale_revision" };
         IF array::len(SELECT VALUE id FROM $id) = 0 {
             CREATE $id SET revision = 0, vault = $vault, from_kind = $from_kind, label = $label, to_kind = $to_kind, origin = "human"
         };
@@ -218,7 +220,7 @@ pub const DECIDE_LINK: Stmt = Stmt::new(
 pub const DESCRIBE_LINK: Stmt = Stmt::new(
     "ontology.describe_link",
     r#"BEGIN TRANSACTION;
-        IF $expected_revision != NONE AND ((SELECT VALUE revision FROM $id)[0] ?? 0) != $expected_revision { THROW "ontology.stale_revision" };
+        IF ((SELECT VALUE revision FROM $id)[0] ?? 0) != $expected_revision { THROW "ontology.stale_revision" };
         IF array::len(SELECT VALUE id FROM $id) = 0 {
             CREATE $id SET revision = 0, vault = $vault, from_kind = $from_kind, label = $label, to_kind = $to_kind, origin = "human"
         };
@@ -275,6 +277,7 @@ pub const PROPOSE_PROPERTY: Stmt = Stmt::at(
     "ontology.propose_property",
     r#"BEGIN TRANSACTION;
         LET $cur = (SELECT VALUE status FROM $id);
+        IF ((SELECT VALUE revision FROM $id)[0] ?? 0) != $proposal_revision { THROW "ontology.stale_revision" };
         LET $row = IF array::len($cur) = 0 {
             (CREATE $id SET revision = (revision ?? 0) + 1, activity_actor_name = $activity_actor_name, activity_actor = $activity_actor, activity_actor_type = $activity_actor_type, activity_action = "proposed", activity_reason = $reason, vault = $vault, kind = $kind, name = $name, datatype = $datatype, unit = $unit,
                 enum_values = $enum_values, description = $description, synonyms = $synonyms, merge_into = $merge_into,
@@ -289,7 +292,7 @@ pub const PROPOSE_PROPERTY: Stmt = Stmt::at(
         };
         RETURN $row;
         COMMIT TRANSACTION;"#,
-    3,
+    4,
 );
 
 /// A person's approval or rejection of a property. Properties rejected into this one follow it to its
@@ -297,7 +300,7 @@ pub const PROPOSE_PROPERTY: Stmt = Stmt::at(
 pub const DECIDE_PROPERTY: Stmt = Stmt::new(
     "ontology.decide_property",
     r#"BEGIN TRANSACTION;
-        IF $expected_revision != NONE AND ((SELECT VALUE revision FROM $id)[0] ?? 0) != $expected_revision { THROW "ontology.stale_revision" };
+        IF ((SELECT VALUE revision FROM $id)[0] ?? 0) != $expected_revision { THROW "ontology.stale_revision" };
         UPDATE $id SET revision = (revision ?? 0) + 1, activity_actor_name = $activity_actor_name, activity_actor = $activity_actor, activity_actor_type = $activity_actor_type, activity_action = "decided", activity_reason = $decision_reason, status = $status, merge_into = $merge_into, decided_by = $user, updated_at = time::now();
         IF $status = "rejected" {
             UPDATE ontology_property SET revision = (revision ?? 0) + 1, activity_actor_name = $activity_actor_name, activity_actor = $activity_actor, activity_actor_type = $activity_actor_type, activity_action = "decided", activity_reason = $decision_reason, merge_into = $merge_into, updated_at = time::now()
@@ -307,7 +310,7 @@ pub const DECIDE_PROPERTY: Stmt = Stmt::new(
 );
 
 pub const DESCRIBE_PROPERTY: Stmt =
-    Stmt::new("ontology.describe_property", r#"BEGIN TRANSACTION; IF $expected_revision != NONE AND ((SELECT VALUE revision FROM $id)[0] ?? 0) != $expected_revision { THROW "ontology.stale_revision" }; UPDATE $id SET revision = (revision ?? 0) + 1, activity_actor_name = $activity_actor_name, activity_actor = $activity_actor, activity_actor_type = $activity_actor_type, activity_action = "described", activity_reason = $decision_reason, description = $description, updated_at = time::now(); COMMIT TRANSACTION;"#);
+    Stmt::new("ontology.describe_property", r#"BEGIN TRANSACTION; IF ((SELECT VALUE revision FROM $id)[0] ?? 0) != $expected_revision { THROW "ontology.stale_revision" }; UPDATE $id SET revision = (revision ?? 0) + 1, activity_actor_name = $activity_actor_name, activity_actor = $activity_actor, activity_actor_type = $activity_actor_type, activity_action = "described", activity_reason = $decision_reason, description = $description, updated_at = time::now(); COMMIT TRANSACTION;"#);
 
 /// One value of one property for one entity.
 pub const SET_VALUE: Stmt = Stmt::at(
@@ -319,8 +322,7 @@ pub const SET_VALUE: Stmt = Stmt::at(
     LET $v = (UPDATE $vault SET ontology_seq = (ontology_seq ?? 0) + 1 RETURN AFTER)[0];
     CREATE ontology_event SET vault = $vault, seq = $v.ontology_seq, actor = $activity_actor, actor_type = $activity_actor_type,
         actor_name = $activity_actor_name, action = "value_written", definition_type = "property", kind = $kind, name = $name,
-        target = <string> $property, revision = $revision, after = { entity: <string> $entity, value_num: $value_num,
-            value_text: $value_text, value_bool: $value_bool, value_date: $value_date, unit: $unit };
+        target = <string> $property, revision = $revision, after = { values: 1 };
     RETURN $row;
     COMMIT TRANSACTION;"#,
     4,
@@ -366,6 +368,7 @@ pub const PROPOSE_METRIC: Stmt = Stmt::at(
     "ontology.propose_metric",
     r#"BEGIN TRANSACTION;
         LET $cur = (SELECT VALUE status FROM $id);
+        IF (array::len($cur) = 0 OR $cur[0] = "proposed") AND ((SELECT VALUE revision FROM $id)[0] ?? 0) != $proposal_revision { THROW "ontology.stale_revision" };
         LET $row = IF array::len($cur) = 0 {
             (CREATE $id SET revision = (revision ?? 0) + 1, activity_actor_name = $activity_actor_name, activity_actor = $activity_actor, activity_actor_type = $activity_actor_type, activity_action = "proposed", activity_reason = $reason, vault = $vault, kind = $kind, name = $name, description = $description, synonyms = $synonyms,
                 expr = $expr, unit = $unit, merge_into = $merge_into, origin = $origin, reason = $reason RETURN AFTER)
@@ -378,7 +381,7 @@ pub const PROPOSE_METRIC: Stmt = Stmt::at(
         };
         RETURN $row;
         COMMIT TRANSACTION;"#,
-    3,
+    4,
 );
 
 /// A person's approval or rejection of a metric. Metrics rejected into this one follow it to its new
@@ -386,7 +389,7 @@ pub const PROPOSE_METRIC: Stmt = Stmt::at(
 pub const DECIDE_METRIC: Stmt = Stmt::new(
     "ontology.decide_metric",
     r#"BEGIN TRANSACTION;
-        IF $expected_revision != NONE AND ((SELECT VALUE revision FROM $id)[0] ?? 0) != $expected_revision { THROW "ontology.stale_revision" };
+        IF ((SELECT VALUE revision FROM $id)[0] ?? 0) != $expected_revision { THROW "ontology.stale_revision" };
         UPDATE $id SET revision = (revision ?? 0) + 1, activity_actor_name = $activity_actor_name, activity_actor = $activity_actor, activity_actor_type = $activity_actor_type, activity_action = "decided", activity_reason = $decision_reason, status = $status, merge_into = $merge_into, decided_by = $user, updated_at = time::now();
         IF $status = "rejected" {
             UPDATE ontology_metric SET revision = (revision ?? 0) + 1, activity_actor_name = $activity_actor_name, activity_actor = $activity_actor, activity_actor_type = $activity_actor_type, activity_action = "decided", activity_reason = $decision_reason, merge_into = $merge_into, updated_at = time::now()
@@ -396,7 +399,7 @@ pub const DECIDE_METRIC: Stmt = Stmt::new(
 );
 
 pub const DESCRIBE_METRIC: Stmt =
-    Stmt::new("ontology.describe_metric", r#"BEGIN TRANSACTION; IF $expected_revision != NONE AND ((SELECT VALUE revision FROM $id)[0] ?? 0) != $expected_revision { THROW "ontology.stale_revision" }; UPDATE $id SET revision = (revision ?? 0) + 1, activity_actor_name = $activity_actor_name, activity_actor = $activity_actor, activity_actor_type = $activity_actor_type, activity_action = "described", activity_reason = $decision_reason, description = $description, updated_at = time::now(); COMMIT TRANSACTION;"#);
+    Stmt::new("ontology.describe_metric", r#"BEGIN TRANSACTION; IF ((SELECT VALUE revision FROM $id)[0] ?? 0) != $expected_revision { THROW "ontology.stale_revision" }; UPDATE $id SET revision = (revision ?? 0) + 1, activity_actor_name = $activity_actor_name, activity_actor = $activity_actor, activity_actor_type = $activity_actor_type, activity_action = "described", activity_reason = $decision_reason, description = $description, updated_at = time::now(); COMMIT TRANSACTION;"#);
 
 /// All entities of a metric's kind in the authorised vault (slot 1).
 pub const METRIC_ENTITIES: Stmt = Stmt::new(
@@ -547,12 +550,17 @@ pub const UPSERT_IMPORTED_VALUES: Stmt = Stmt::new(
         value_text = $v.value_text, value_bool = $v.value_bool, value_date = $v.value_date, unit = NONE, as_of = $as_of,
         source = $source, origin = $origin RETURN NONE;
     };
-    LET $v = (UPDATE $vault SET ontology_seq = (ontology_seq ?? 0) + 1 RETURN AFTER)[0];
-    CREATE ontology_event SET vault = $vault, seq = $v.ontology_seq, actor_name = $activity_actor_name, actor = $activity_actor, actor_type = $activity_actor_type,
-        action = "imported", definition_type = "import", kind = $kind, name = $name,
-        target = <string> $source, revision = 0, after = { values: array::len($values) };
     COMMIT TRANSACTION;"#,
 );
+
+/// One summary after a successful import, including imports containing only links.
+pub const IMPORT_SUMMARY: Stmt = Stmt::new("ontology.import_summary",
+    r#"BEGIN TRANSACTION;
+    LET $v = (UPDATE $vault SET ontology_seq = (ontology_seq ?? 0) + 1 RETURN AFTER)[0];
+    CREATE ontology_event SET vault = $vault, seq = $v.ontology_seq, actor_name = $activity_actor_name, actor = $activity_actor, actor_type = $activity_actor_type,
+        action = "imported", definition_type = "import", kind = $kind, name = "CSV import",
+        target = <string> $source, revision = 0, after = { entities: $entities, values: $values, links: $links };
+    COMMIT TRANSACTION;"#);
 
 /// The values a deleted document's import wrote go with it.
 pub const DELETE_IMPORTED_VALUES: Stmt = Stmt::new("ontology.delete_imported_values", "DELETE entity_property WHERE source = $document");
@@ -632,5 +640,6 @@ pub const ALL: &[&Stmt] = &[
     &EXTRACTION_KINDS,
     &KIND,
     &UPSERT_IMPORTED_VALUES,
+    &IMPORT_SUMMARY,
     &DELETE_IMPORTED_VALUES,
 ];

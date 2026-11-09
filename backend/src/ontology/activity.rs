@@ -45,12 +45,11 @@ pub fn check_seen(revision: i64) -> AppResult<()> {
     Ok(())
 }
 
-pub async fn verify_seen(db: &OrgDb, id: &RecordId) -> AppResult<()> {
-    if decision_context().is_none() {
-        return Ok(());
-    }
+pub async fn verify_seen(db: &OrgDb, id: &RecordId) -> AppResult<i64> {
     let rows: Vec<Option<i64>> = q::REVISION.on(db).bind(("id", id.clone())).await?.take(0)?;
-    check_seen(rows.into_iter().flatten().next().unwrap_or(0))
+    let revision = rows.into_iter().flatten().next().unwrap_or(0);
+    check_seen(revision)?;
+    Ok(revision)
 }
 
 pub async fn reviewing<T>(
@@ -140,6 +139,17 @@ pub async fn page(db: &OrgDb, vault: &RecordId, args: &ActivityQuery) -> AppResu
         .bind(("limit", limit + 1))
         .await?
         .take(0)?;
+    for event in &mut events {
+        if !matches!(event.action.as_str(), "approved" | "rejected" | "merged" | "described") { event.reason = None; }
+        if event.definition_type == "import" { event.name = "CSV import".into(); }
+        for fields in [&mut event.before, &mut event.after] {
+            if let Some(serde_json::Value::Object(object)) = fields {
+                object.retain(|key, value| ["revision", "values", "entities", "links"].contains(&key.as_str()) && value.is_u64());
+            } else {
+                *fields = None;
+            }
+        }
+    }
     let more = events.len() > limit as usize;
     events.truncate(limit as usize);
     let next = events.last().map_or(args.after, |e| e.seq);
@@ -161,4 +171,10 @@ pub async fn head(db: &OrgDb, vault: &RecordId) -> AppResult<i64> {
         .await?
         .take(0)?;
     Ok(rows.into_iter().flatten().next().unwrap_or(0))
+}
+
+/// Missing proposal revisions are create-only; clients must refresh before updating.
+pub fn proposal_revision(revision: i64) -> AppResult<i64> {
+    if revision < 0 { return Err(AppError::bad_request("revision must not be negative")); }
+    Ok(revision)
 }

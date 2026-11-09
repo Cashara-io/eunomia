@@ -413,7 +413,7 @@ async fn a_property_row_from_before_source_maps_still_takes_proposals_after_the_
     let (status, body) = decide_property(&app, &vault, "product", "price", json!({"action": "describe", "description": "What one costs"})).await;
     assert_eq!(status, 200, "{body}");
     let mapped = json!({"source": "document", "record_type": "document:abc", "path": "price AUD"});
-    let again = ok(app.tool("ontology_propose", json!({"properties": [{"kind": "product", "name": "price", "datatype": "money", "source_map": [mapped.clone()]}]})).await);
+    let again = ok(app.tool("ontology_propose", json!({"properties": [{"kind": "product", "name": "price", "revision": 2, "datatype": "money", "source_map": [mapped.clone()]}]})).await);
     assert_eq!(again["properties"][0]["status"], "proposed");
     let o = ok(app.tool("ontology_get", json!({})).await);
     assert_eq!(property(&o, "product", "price")["source_map"], json!([mapped]));
@@ -432,14 +432,14 @@ async fn a_link_row_from_before_link_sources_still_takes_decisions_and_columns_a
         .check()
         .unwrap();
     // an agent's proposal, with no columns, still writes before the migration (a rolling upgrade)
-    ok(app.tool("ontology_propose", json!({"links": [{"from_kind": "product", "label": "supplied_by", "to_kind": "organisation", "reason": "again"}]})).await);
+    ok(app.tool("ontology_propose", json!({"links": [{"from_kind": "product", "label": "supplied_by", "to_kind": "organisation", "revision": 1, "reason": "again"}]})).await);
     db.test_raw().query(include_str!("../migrations/tenant/0038_ontology_link_source.surql")).await.unwrap().check().unwrap();
     let vault = personal(&app).await;
     let body = json!({"from_kind": "product", "label": "supplied_by", "to_kind": "organisation", "decision": {"action": "describe", "description": "Who sells it to us"}});
     let (status, body) = app.http_session("POST", &format!("/api/vaults/{vault}/ontology/links/decide"), Some(body)).await;
     assert_eq!(status, 200, "{body}");
     let mapped = json!({"source": "document", "record_type": "document:abc", "path": "supplier"});
-    ok(app.tool("ontology_propose", json!({"links": [{"from_kind": "product", "label": "supplied_by", "to_kind": "organisation", "source_map": [mapped.clone()]}]})).await);
+    ok(app.tool("ontology_propose", json!({"links": [{"from_kind": "product", "label": "supplied_by", "to_kind": "organisation", "revision": 3, "source_map": [mapped.clone()]}]})).await);
     let o = ok(app.tool("ontology_get", json!({})).await);
     assert_eq!(link(&o, "product", "supplied_by", "organisation")["source_map"], json!([mapped]));
 }
@@ -1100,7 +1100,9 @@ async fn a_proposed_property_waits_for_the_owner_in_the_browser() {
     let (status, o) = app.http_session("POST", &path, Some(body)).await;
     assert_eq!(status, 200, "{o}");
     assert_eq!(property(&o, "product", "price")["status"], "approved");
-    let again = ok(app.tool("ontology_propose", json!({"properties": [price("text")]})).await);
+    let mut refresh = price("text");
+    refresh["revision"] = json!(2);
+    let again = ok(app.tool("ontology_propose", json!({"properties": [refresh]})).await);
     assert_eq!((again["properties"][0]["status"].as_str(), again["properties"][0]["datatype"].as_str()), (Some("approved"), Some("money")));
 
     // describing keeps the status; deciding a property nobody proposed is not found

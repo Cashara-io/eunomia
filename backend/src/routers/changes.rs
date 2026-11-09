@@ -321,6 +321,7 @@ async fn follow_user(mut socket: WebSocket, state: OrgState, headers: HeaderMap,
     // subscribe before reading anything, so an event committed in between is not missed
     let mut rx = changes::subscribe();
     let mut vrx = changes::subscribe_vaults();
+    let mut ontology_next_vault = 0;
     let mut checked = Instant::now();
     let mut tick = tokio::time::interval_at(tokio::time::Instant::now() + EVENTS_TICK, EVENTS_TICK);
 
@@ -346,7 +347,7 @@ async fn follow_user(mut socket: WebSocket, state: OrgState, headers: HeaderMap,
         Err(stop) => return close(socket, stop).await,
     };
 
-    if let Err(stop) = ontology_catch_up(&mut socket, &state, &headers, &mut ontology_last, None).await {
+    if let Err(stop) = ontology_catch_up(&mut socket, &state, &headers, &mut ontology_last, &mut ontology_next_vault, None).await {
         return close(socket, stop).await;
     }
     let result: Result<(), Stop> = loop {
@@ -383,7 +384,7 @@ async fn follow_user(mut socket: WebSocket, state: OrgState, headers: HeaderMap,
                     }
                     last.insert(vault, seq);
                 }
-                ontology_catch_up(&mut socket, &state, &headers, &mut ontology_last, None).await
+                ontology_catch_up(&mut socket, &state, &headers, &mut ontology_last, &mut ontology_next_vault, None).await
             }.await,
             ev = rx.recv() => match ev {
                 Ok(ev) if ev.org != state.db.org() || !vaults.contains(&ev.vault) => Ok(()),
@@ -404,7 +405,7 @@ async fn follow_user(mut socket: WebSocket, state: OrgState, headers: HeaderMap,
             },
             ev = vrx.recv() => match ev {
                 Ok(ev) if ev.org != state.db.org() || !(ev.users.contains(&user) || vaults.contains(&ev.vault)) => Ok(()),
-                Ok(ev) if ev.op == changes::ONTOLOGY_COMMITTED => ontology_catch_up(&mut socket, &state, &headers, &mut ontology_last, Some(&ev.vault)).await,
+                Ok(ev) if ev.op == changes::ONTOLOGY_COMMITTED => ontology_catch_up(&mut socket, &state, &headers, &mut ontology_last, &mut ontology_next_vault, Some(&ev.vault)).await,
                 Ok(ev) => async {
                     send_json(&mut socket, json!({"type": "vault", "vault": ev.vault.to_string(), "op": ev.op, "actor": ev.actor})).await?;
                     // membership may have changed: follow the vaults the user can read now
@@ -445,25 +446,44 @@ pub struct Doc;
 #[into_params(parameter_in = Query)]
 struct OntologyResume { ontology_after: Option<String> }
 
+// One page per pass, then return to select! for live traffic, membership and heartbeats.
+const ONTOLOGY_REPLAY_PAGE: i64 = 100;
+const ONTOLOGY_REPLAY_MAX: i64 = 1000;
+
 async fn ontology_catch_up(
     socket: &mut WebSocket, state: &OrgState, headers: &HeaderMap,
-    last: &mut std::collections::HashMap<String, i64>, only: Option<&RecordId>,
+    last: &mut std::collections::HashMap<String, i64>, next_vault: &mut usize, only: Option<&RecordId>,
 ) -> Result<(), Stop> {
     if state.db.schema_version() < crate::ontology::activity::SCHEMA_VERSION { return Ok(()); }
     let allowed = readable_vaults(state, headers).await?;
     last.retain(|v, _| allowed.iter().any(|id| id.to_string() == *v));
-    for vault in allowed.iter().filter(|v| only.is_none_or(|id| id == *v)) {
+    if allowed.is_empty() { return Ok(()); }
+    let start = only.and_then(|id| allowed.iter().position(|v| v == id)).unwrap_or(*next_vault % allowed.len());
+    // Empty vaults must not delay another vault's missed events by a whole heartbeat.
+    // Bound metadata scans too, and rotate the starting point for larger accounts.
+    for offset in 0..allowed.len().min(32) {
+        let index = (start + offset) % allowed.len();
+        *next_vault = (index + 1) % allowed.len();
+        let vault = &allowed[index];
         let cursor = last.entry(vault.to_string()).or_insert(0);
-        loop {
-            let args = crate::ontology::activity::ActivityQuery { after: *cursor, limit: Some(200), ..Default::default() };
-            let page = crate::ontology::activity::page(&state.db, vault, &args).await.map_err(|_| Stop::Gone)?;
-            for event in page.events {
-                recheck(state, headers, vault).await?;
-                send_json(socket, serde_json::json!({"type":"ontology","vault":vault.to_string(),"event":event})).await?;
-                *cursor = event.seq;
-            }
-            if !page.more { break; }
+        let head = crate::ontology::activity::head(&state.db, vault).await.map_err(|_| Stop::Gone)?;
+        if head <= *cursor { continue; }
+        // Re-authenticate between pages, not just when the replay began.
+        recheck(state, headers, vault).await?;
+        if head.saturating_sub(*cursor) > ONTOLOGY_REPLAY_MAX {
+            recheck(state, headers, vault).await?;
+            send_json(socket, serde_json::json!({"type":"ontology_resync","vault":vault.to_string(),"seq":head})).await?;
+            *cursor = head;
+            return Ok(());
         }
+        let args = crate::ontology::activity::ActivityQuery { after: *cursor, limit: Some(ONTOLOGY_REPLAY_PAGE), ..Default::default() };
+        let page = crate::ontology::activity::page(&state.db, vault, &args).await.map_err(|_| Stop::Gone)?;
+        for event in page.events {
+            recheck(state, headers, vault).await?;
+            send_json(socket, serde_json::json!({"type":"ontology","vault":vault.to_string(),"event":event})).await?;
+            *cursor = event.seq;
+        }
+        return Ok(());
     }
     Ok(())
 }

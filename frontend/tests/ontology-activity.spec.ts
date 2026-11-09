@@ -20,8 +20,10 @@ test("two contexts see proposals, durable reasons and stale-review conflicts liv
   await review.goto(reviewURL);
   await expect(review.getByText("Nothing is waiting for review.", { exact: false }).first()).toBeVisible();
   async function propose(description: string, kind = "delivery") {
+    const ontology = await (await page.request.get(path)).json();
+    const revision = ontology.kinds.find((item: { kind: string; revision: number }) => item.kind === kind)?.revision ?? 0;
     const response = await page.request.post("/mcp", { headers: { Authorization: `Bearer ${token}`, Accept: "application/json, text/event-stream" }, data: {
-      jsonrpc: "2.0", id: Date.now(), method: "tools/call", params: { name: "ontology_propose", arguments: { vault_id: vault.id, kinds: [{ kind, description, reason: "Matched deliveries.csv" }] } },
+      jsonrpc: "2.0", id: Date.now(), method: "tools/call", params: { name: "ontology_propose", arguments: { vault_id: vault.id, kinds: [{ kind, revision, description, reason: "Matched deliveries.csv" }] } },
     } });
     expect(response.ok()).toBeTruthy();
     expect((await response.json()).result.isError).toBeFalsy();
@@ -37,7 +39,11 @@ test("two contexts see proposals, durable reasons and stale-review conflicts liv
   await review.screenshot({ path: testInfo.outputPath("landing-open.png") });
   // A changes the definition after B has opened revision 1. The open review stays pinned.
   await propose("A delivery with a confirmed destination and date");
-  await expect(page.getByText("Matched deliveries.csv").first()).toBeVisible();
+  await expect(page.getByText(/proposed delivery/i)).toHaveCount(2);
+  const proposals = await (await page.request.get(`${path}/activity?action=proposed`)).json();
+  expect(proposals.events).toHaveLength(2);
+  expect(proposals.events[0].reason).toBeNull();
+  expect(proposals.events[1].reason).toBeNull();
   await review.getByLabel("Reason for decision (optional)").fill("Matches the source records");
   await review.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(review.getByRole("heading", { name: "This definition changed" })).toBeVisible();

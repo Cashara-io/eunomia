@@ -336,7 +336,7 @@ impl From<surrealdb::Error> for AppError {
         let lower = raw.to_lowercase();
         let (code, message) = match &err {
             _ if raw.contains("ontology schema upgrade pending") => (ErrorCode::TenantSchemaBehind, "This space is upgrading. Try again shortly."),
-            _ if raw.contains("ontology.stale_revision") => (ErrorCode::OntologyStaleRevision, "This definition changed since you reviewed it. Review the latest version before deciding."),
+            _ if raw.contains("ontology.stale_revision") => (ErrorCode::OntologyStaleRevision, "This definition changed since you read it. Fetch the latest definition, review the changes and retry with its current revision."),
             _ if crate::tx::is_conflict(&err) => (ErrorCode::DbConflict, "The write conflicted with another; retry it."),
             _ if lower.contains(crate::store::CROSSING_MARK) => (ErrorCode::TenantDenied, "Internal server error."),
             _ if err.is_not_allowed() => (ErrorCode::TenantDenied, "Internal server error."),
