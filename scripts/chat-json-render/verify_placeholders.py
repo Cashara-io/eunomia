@@ -27,6 +27,7 @@ for file in sorted(Path(sys.argv[1]).glob('answer-*.json')):
     receipt = json.loads(file.read_text())
     pending = None
     success = 0
+    final_count = 0
     for message in receipt['history']:
         for call in message.get('tool_calls') or []:
             if call['function']['name'] == 'show_view': pending = json.loads(call['function']['arguments'])
@@ -63,16 +64,15 @@ for file in sorted(Path(sys.argv[1]).glob('answer-*.json')):
                     if not (unit and re.fullmatch('[A-Z]{3}', unit)): shown = shown.rstrip('0').rstrip('.') if '.' in shown else shown
                     if unit: shown += '%' if unit in ('%', 'percent', 'percentage', 'pct') else ' '+unit
                 substitutions.append(shown)
-                expected += re.escape(raw[cursor:m.start()]) + r'(.+?)'
+                expected += raw[cursor:m.start()] + shown
                 cursor = m.end()
-            expected += re.escape(raw[cursor:])
-            matched = re.fullmatch(expected, rendered)
-            assert matched and list(matched.groups()) == substitutions, (file.name, raw, rendered, substitutions)
+            expected += raw[cursor:]
+            assert rendered == expected, (file.name, raw, rendered, substitutions)
             count += len(matches)
-        assert count, (file.name, 'successful UI has no model text placeholders')
+        final_count = count
         success += 1
         total += count
         pending = None
-    assert success, (file.name, 'no successful UI')
+    assert success and final_count, (file.name, 'final successful UI has no model text placeholders')
     print(f'{file.name}: model used placeholders; server substituted them in spec and terminal text')
 print(f'{total} placeholders substituted across all six live answers. Numeric data checked separately by verify_numbers.py.')

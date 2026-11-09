@@ -203,3 +203,35 @@ The earlier browser-submitted six-question run is retained under `attempts/brows
 [Six screenshots, authentic receipts, CSV, numeric audit and verification logs](https://github.com/Cashara-io/eunomia/tree/pr-screenshots/chat-json-render-v4).
 
 The first backend build needed test error-message and source-prose serialization corrections. A later run was stopped by the disk monitor when unrelated disk use took free space below 6 GiB. Its library, chat UI and golden-tools portions had passed; its interrupted ontology run is not counted as complete. The owned Rust target was removed. Free space subsequently recovered, and verification restarted. The owner then changed the pre-Cargo gate to wait below 7 GiB or while another Cargo runs, rechecking every three minutes for up to sixty minutes. Only this task's artefacts were removed. Earlier frontend typecheck and document-bucket setup failures are retained separately from the final checks. One restored parallel backend run failed the existing `gate2_a_long_question_caps_name_lookups_and_never_searches_memory_text` tracing assertion with zero spans. The earlier full run passed it; the final run uses one Rust test thread to avoid concurrent tracing collectors. No `cargo fmt` was run. All Cargo processes used two build jobs, no dev debug information, no incremental compilation, an 8 MiB Rust stack and niceness 19. Final cleanup removes this worktree's target, node_modules, .next, runtime processes and disposable container.
+
+
+## Bound prose placeholder redesign
+
+The fourth review replaces pooled value matching with exact bound placeholders. See the [updated contract](../architecture/chat-generative-ui.md#model-prose-and-resolved-chart-columns) and [commands](chat-json-render-bound-prose-commands.txt). Model prose binds one server-typed numeric or date path. The server formats and substitutes it in the returned spec and terminal summary. Raw digits require whole normalised server text tokens or matching parsed applied dates and bucket labels. Number words remain unchecked. Query values and invented kinds cannot authorise digits.
+
+The regression matrix covers unrelated quantities, zero-width and thin-space splits, vulgar fractions, shorthand and identifier forms, exponent percentages, fullwidth and Arabic-Indic digits. It also covers matching ISO dates, scoped ISO and Scope labels, Q3 category/bucket tokens, exact currency formatting, missing/non-numeric paths and every nested prose field. Error messages include exact valid typed numeric paths from the resolved view. The chat prompt distinguishes supported bucket/rendering instructions from missing domain terms and documents detailed versus aggregated total paths.
+
+### Live questions and numeric proof
+
+The isolated SurrealDB 3.3.5 server uses 8597, backend 8598 and frontend 3597. It does not use the shared database or ports 3600, 8600 or 3700. A fresh account imports the same twelve-row CSV, sixty typed property values and the approved total_amount metric. Real chat uses gpt-6-luna. Each original question additionally requests a measured total or count in its title through a bound placeholder. The Table retains the prior proof's explicit whole-dataset pointer hint.
+
+| Question | Final block | Checked result |
+| --- | --- | --- |
+| Monthly trend | Line | Monthly AUD totals 200.75, 370.75, 240.50, 225.25, 280.50, 270.25 |
+| Supplier breakdown | Donut | Coastal 510.50, Inland 431.25, Metro 646.25 AUD |
+| Distribution | Histogram | Bin counts 4, 3, 3, 2; twelve-row title |
+| Relationship | Scatter | All twelve quantity/amount pairs; twelve-row title |
+| Ten percent what-if | Scenario | 1588.00 to 1746.80 AUD, change 158.80 AUD |
+| Detail table | Table | Overall amount 1588.00 AUD and quantity 49 |
+
+All six answers use placeholders. `verify_numbers.py` independently matches 436 numeric fields within 0.01. `verify_placeholders.py` independently checks nine exact formatted substitutions, including currency, and confirms the same prose appears in terminal text. Monthly, supplier and Scatter titles bind the overall 1588.00 AUD. Table and Histogram titles bind twelve rows or samples; Scenario binds its entity count. This verifies the bound path and value, not the correctness of every surrounding model claim.
+
+Earlier live attempts are retained separately. They exposed confusing aggregate total paths, a false month coverage gap and stale catalogue instructions that still advertised numeric equality and identifier exemptions. The final catalogue copies were regenerated with the placeholder rule, and a backend prompt regression prevents those old instructions returning.
+
+All six final questions produce the requested views without a user correction to the view. Histogram automatically repairs its calls and returns an initial plain view followed by a view with a bound count. The numeric audit covers both. The placeholder audit checks every substitution and requires the final view for each question to use a placeholder. Histogram's ordinary chat reply prints unresolved placeholder syntax despite its correct substituted view and server text. One follow-up corrects that ordinary reply. Its history retains the original sentence and correction. Scenario repairs schema, raw-headline and binding errors using the concrete paths returned by the server. These are recovery observations, not a claim that every tool call succeeds first time.
+
+All six screenshots were captured and inspected in native Helium after repeated T3 snapshot timeouts. They show substituted values, currency, chart counts, scenario totals and the table footer. The table footer covers both pages. [Screenshots, authentic histories, CSV and audits](https://github.com/Cashara-io/eunomia/tree/pr-screenshots/chat-json-render-v5).
+
+### Verification
+
+Final backend and guard results are recorded after the required serial run. The earlier date-range fixture failure, missing file-bucket setup flag and stub-provider chat refusal are retained separately from the corrected results. Every Cargo command uses the requested flags and pre-step disk/process gate. Only this worktree's generated files are cleaned up. No cargo fmt or merge is run.
