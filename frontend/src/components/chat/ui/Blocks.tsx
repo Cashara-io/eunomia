@@ -189,7 +189,9 @@ function Block({
               ? "percent"
               : ["date", "datetime"].includes(c.datatype)
                 ? "date"
-                : format,
+                : c.datatype === "text"
+                  ? "text"
+                  : "number",
       }))
     : undefined;
   const columns =
@@ -197,7 +199,16 @@ function Block({
     inferred ||
     Object.keys(rows[0] || value)
       .filter((k) => k !== "entity_id")
-      .map((key) => ({ key, label: key.replaceAll("_", " "), format }));
+      .map((key) => ({
+        key,
+        label: key.replaceAll("_", " "),
+        format:
+          props.formats?.[key] ||
+          (number(value[key]) != null ||
+          rows.some((r) => number(r[key]) != null)
+            ? format
+            : "text"),
+      }));
   const totals = scalarObject.safeParse(value.totals);
   const sorted = [...rows].sort((a, b) => {
     if (!sort) return 0;
@@ -329,7 +340,14 @@ function Block({
               {sorted.slice(page * 10, page * 10 + 10).map((r, i) => (
                 <tr key={i}>
                   {columns.map((c) => (
-                    <td key={c.key} className="font-mono tabular-nums">
+                    <td
+                      key={c.key}
+                      className={
+                        number(r[c.key]) != null
+                          ? "font-mono tabular-nums text-right"
+                          : ""
+                      }
+                    >
                       {formatted(r[c.key], c.format)}
                     </td>
                   ))}
@@ -360,64 +378,84 @@ function Block({
             )}
           </table>
         </div>
-        <nav aria-label="Table pages" className="flex gap-3">
-          <button
-            className="pill"
-            disabled={page === 0}
-            onClick={() => setPage(page - 1)}
-          >
-            Previous
-          </button>
-          <span>
-            {page + 1} / {Math.ceil(rows.length / 10)}
-          </span>
-          <button
-            className="pill"
-            disabled={(page + 1) * 10 >= rows.length}
-            onClick={() => setPage(page + 1)}
-          >
-            Next
-          </button>
-        </nav>
+        {rows.length > 10 && (
+          <nav aria-label="Table pages" className="flex items-center gap-3">
+            <button
+              className="pill"
+              disabled={page === 0}
+              onClick={() => setPage(page - 1)}
+            >
+              Previous
+            </button>
+            <span>
+              {page + 1} / {Math.ceil(rows.length / 10)}
+            </span>
+            <button
+              className="pill"
+              disabled={(page + 1) * 10 >= rows.length}
+              onClick={() => setPage(page + 1)}
+            >
+              Next
+            </button>
+          </nav>
+        )}
       </>
     ) : (
       <p>No rows to show.</p>
     );
   else if (kind === "Timeline")
     content = (
-      <ol className="space-y-3">
+      <ol className="ui-timeline">
         {rows.map((r, i) => (
           <li key={i}>
-            <time>{formatted(r[props.x || "date"], "date")}</time>
-            <p>{label(r[props.y || "name"])}</p>
+            <time>
+              {formatted(
+                r[props.x || "date"],
+                props.xFormat || props.formats?.[props.x || "date"] || "date",
+              )}
+            </time>
+            <p>
+              {formatted(
+                r[props.y || "name"],
+                props.formats?.[props.y || "name"] || format,
+              )}
+            </p>
           </li>
         ))}
       </ol>
     );
   else
     content = (
-      <dl
-        className={kind === "StatGroup" ? "ui-grid ui-grid-two" : "space-y-2"}
+      <div
+        className={
+          kind === "StatGroup" ? "ui-grid ui-grid-two" : "ui-definition-groups"
+        }
       >
         {(rows.length ? rows : [value]).map((r, i) => (
-          <div key={i}>
+          <dl
+            key={i}
+            className="ui-definitions"
+            aria-label={
+              rows.length > 1 ? label(r.name) || `Row ${i + 1}` : title
+            }
+          >
             {columns.map((c) => (
               <div key={c.key} className="flex justify-between gap-4">
                 <dt>{c.label}</dt>
-                <dd className="font-mono tabular-nums">
+                <dd className={number(r[c.key]) != null ? "ui-numeric" : ""}>
                   {formatted(r[c.key], c.format)}
                 </dd>
               </div>
             ))}
-          </div>
+          </dl>
         ))}
-      </dl>
+      </div>
     );
   return (
     <section className="ui-section" data-ui-component={kind}>
       <h3 className="font-medium">{title}</h3>
       {content}
-      <p className="text-xs text-[var(--ink-dim)]">{summary}</p>
+      <p className="ui-summary">{summary}</p>
     </section>
   );
 }

@@ -1,5 +1,5 @@
 import type { Spec } from "@json-render/core";
-import { test, expect } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 import { registerAndOnboard, uniqueEmail } from "./helpers";
 import { catalog, chartNames } from "../src/components/chat/ui/catalog";
 import { readFileSync } from "node:fs";
@@ -240,6 +240,31 @@ function history(views: object[]) {
     },
   ]);
 }
+async function hoverMark(page: Page, mark: Locator) {
+  const shape = mark.locator("circle,rect,path,line").first();
+  await shape.scrollIntoViewIfNeeded();
+  const point = await shape.evaluate((el) => {
+    if (!(el instanceof SVGGeometryElement))
+      throw new Error("Expected a chart mark");
+    const box = el.getBBox(),
+      matrix = el.getScreenCTM(),
+      style = getComputedStyle(el);
+    for (const fy of [0.5, 0.2, 0.8, 0.1, 0.9, 0.3, 0.7, 0.4, 0.6])
+      for (const fx of [0.5, 0.2, 0.8, 0.1, 0.9, 0.3, 0.7, 0.4, 0.6]) {
+        const p = new DOMPoint(box.x + box.width * fx, box.y + box.height * fy);
+        if (
+          ((style.fill !== "none" && el.isPointInFill(p)) ||
+            (style.stroke !== "none" && el.isPointInStroke(p))) &&
+          matrix
+        ) {
+          const screen = p.matrixTransform(matrix);
+          return { x: screen.x, y: screen.y };
+        }
+      }
+    throw new Error("No hover target in chart mark");
+  });
+  await page.mouse.move(point.x, point.y);
+}
 for (const theme of ["light", "dark"])
   for (const width of [1280, 390]) {
     test(`catalog and chart fixtures in ${theme} at ${width}px`, async ({
@@ -288,11 +313,52 @@ for (const theme of ["light", "dark"])
           )
           .first();
         await expect(svg).toBeVisible();
-        expect((await svg.boundingBox())?.height).toBeGreaterThan(80);
+        expect((await svg.boundingBox())?.height).toBeGreaterThan(
+          name === "Sparkline" ? 30 : 80,
+        );
+        if (name === "Sparkline") {
+          expect((await svg.boundingBox())?.height).toBeLessThanOrEqual(48);
+          await expect(svg.locator('[class*="visx-axis"]')).toHaveCount(0);
+        }
+        const mark = svg.locator("[data-chart-mark]").first();
+        await mark.focus();
+        const accessibleValue = await mark.getAttribute("aria-label");
+        await expect(page.getByRole("tooltip")).toHaveText(
+          accessibleValue || "",
+        );
+        await mark.blur();
+        await hoverMark(page, mark);
+        await expect(page.getByRole("tooltip")).toHaveText(
+          accessibleValue || "",
+        );
+        await page.mouse.move(0, 0);
         await expect(
           svg.locator("path,rect,circle,line").first(),
         ).toBeAttached();
       }
+      for (const name of ["Line", "Bar", "Pie", "Scatter", "Heatmap"]) {
+        const mark = page
+          .locator(`svg[data-chart="${name}"] [data-chart-mark]`)
+          .first();
+        await hoverMark(page, mark);
+        await expect(page.getByRole("tooltip")).toContainText("A$120.25");
+        await page.mouse.move(0, 0);
+      }
+      await expect(
+        page.locator('[data-ui-component="Donut"] .ui-donut-total'),
+      ).toHaveText("A$351.50");
+      await expect(
+        page.locator('svg[data-chart="Network"] circle'),
+      ).toHaveCount(3);
+      await expect(
+        page.locator('[data-ui-component="Heatmap"] .ui-colour-scale'),
+      ).toContainText("A$80.50");
+      await expect(
+        page.locator('svg[data-chart="CalendarHeatmap"]'),
+      ).toContainText("Thu");
+      await expect(
+        page.locator('svg[data-chart="CalendarHeatmap"]'),
+      ).toContainText("Jan");
       const networkLabel = await page
         .locator('svg[data-chart="Network"] g[aria-label]')
         .first()
@@ -312,7 +378,11 @@ for (const theme of ["light", "dark"])
           "This display could not be drawn. The source answer is below.",
         ),
       ).toHaveCount(3);
-      await expect(page.getByText("A$351.50", { exact: true })).toBeVisible();
+      await expect(
+        page
+          .locator('[data-ui-component="Stat"]')
+          .getByText("A$351.50", { exact: true }),
+      ).toBeVisible();
       expect(errors).toEqual([]);
       expect(
         await page.evaluate(
@@ -320,7 +390,13 @@ for (const theme of ["light", "dark"])
         ),
       ).toBeTruthy();
       if (process.env.E2E_CAPTURE_CATALOG === "1")
-        for (const [i, name] of names.entries())
+        for (const [i, name] of names.entries()) {
+          const box = await page.locator(".generative-ui").nth(i).boundingBox();
+          if (box && box.height > 600)
+            await page.setViewportSize({
+              width,
+              height: Math.ceil(box.height + 500),
+            });
           await page
             .locator(".generative-ui")
             .nth(i)
@@ -329,6 +405,8 @@ for (const theme of ["light", "dark"])
               animations: "disabled",
               timeout: 10000,
             });
+          await page.setViewportSize({ width, height: 900 });
+        }
       await page.screenshot({
         path: `test-results/catalog-${theme}-${width}.png`,
         fullPage: true,
@@ -350,3 +428,142 @@ for (const theme of ["light", "dark"])
       }
     });
   }
+
+for (const width of [1280, 390])
+  test(`dense networks and nested cards at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await registerAndOnboard(page, uniqueEmail("ui-layout"));
+    const views = [10, 30].map((count) => {
+      const view = fixture("Network");
+      return {
+        ...view,
+        data: {
+          sources: {
+            sample: Array.from({ length: count }, (_, i) => ({
+              name: `Supplier ${i + 1}`,
+              target: `Supplier ${((i + 1) % count) + 1}`,
+              value: 1250.5 + i,
+            })),
+          },
+        },
+      };
+    });
+    const nested = fixture("Line");
+    nested.spec = {
+      root: "card",
+      elements: {
+        card: {
+          type: "Card",
+          props: { title: "Monthly sales" },
+          children: ["grid"],
+        },
+        grid: { type: "Grid", props: { columns: "two" }, children: ["a", "b"] },
+        a: nested.spec.elements.a,
+        b: {
+          type: "Stat",
+          props: {
+            title: "Total sales",
+            summary: "Bound total",
+            data: { $state: "/sources/total" },
+            format: "money",
+          },
+          children: [],
+        },
+      },
+    };
+    const nestedView = {
+      ...nested,
+      data: {
+        sources: {
+          sample: rows.map((r) => ({ ...r, value: r.value * 10 })),
+          total: 3515,
+        },
+      },
+    };
+    await page.route("**/api/chat/threads", (route) =>
+      route.fulfill({
+        json: [
+          {
+            id: "chat_thread:layout",
+            title: "Layout fixtures",
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        ],
+      }),
+    );
+    await page.route("**/api/chat/threads/*/history", (route) =>
+      route.fulfill({ json: history([...views, nestedView]) }),
+    );
+    await page.goto("/chat");
+    for (const [index, count] of [10, 30].entries()) {
+      const chart = page.locator('svg[data-chart="Network"]').nth(index);
+      await expect(chart.locator("circle")).toHaveCount(count);
+      await expect(chart.locator("text")).toHaveCount(count);
+      const boxes = await chart.locator("text").evaluateAll((elements) =>
+        elements.map((el) => {
+          const b = el.getBoundingClientRect();
+          return { x: b.x, y: b.y, right: b.right, bottom: b.bottom };
+        }),
+      );
+      const box = await chart.boundingBox();
+      if (!box) throw new Error("Missing network");
+      for (const [i, a] of boxes.entries()) {
+        expect(a.x).toBeGreaterThanOrEqual(box.x);
+        expect(a.right).toBeLessThanOrEqual(box.x + box.width);
+        for (const b of boxes.slice(i + 1))
+          expect(
+            a.right <= b.x ||
+              b.right <= a.x ||
+              a.bottom <= b.y ||
+              b.bottom <= a.y,
+          ).toBeTruthy();
+      }
+      await chart.locator("[data-chart-mark]").last().focus();
+      await expect(page.getByRole("tooltip")).toContainText(
+        `Supplier ${count}`,
+      );
+      await chart.locator("[data-chart-mark]").last().blur();
+      if (process.env.E2E_CAPTURE_CATALOG === "1") {
+        const component = page.locator(".generative-ui").nth(index);
+        const bounds = await component.boundingBox();
+        await page.setViewportSize({
+          width,
+          height: Math.ceil((bounds?.height || 900) + 500),
+        });
+        await component.screenshot({
+          path: `test-results/catalog/network-${count}-${width}.png`,
+        });
+        await page.setViewportSize({ width, height: 900 });
+      }
+    }
+    const card = page.locator(".generative-ui").nth(2);
+    await expect(card.locator('[data-ui-component="Line"]')).toBeVisible();
+    expect(
+      await card
+        .locator('[data-ui-component="Line"]')
+        .evaluate((el) => getComputedStyle(el).borderTopWidth),
+    ).toBe("0px");
+    const axis = card.locator(".visx-axis-left text");
+    for (const text of await axis.all()) {
+      const bounds = await text.boundingBox(),
+        parent = await card.boundingBox();
+      if (bounds && parent) expect(bounds.x).toBeGreaterThanOrEqual(parent.x);
+    }
+    if (process.env.E2E_CAPTURE_CATALOG === "1") {
+      const bounds = await card.boundingBox();
+      await page.setViewportSize({
+        width,
+        height: Math.ceil((bounds?.height || 900) + 500),
+      });
+      await card.screenshot({
+        path: `test-results/catalog/nested-${width}.png`,
+      });
+      await page.setViewportSize({ width, height: 900 });
+    }
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBeTruthy();
+  });

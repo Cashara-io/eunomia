@@ -1,6 +1,5 @@
 "use client";
-import { useId, type ReactNode } from "react";
-import { ParentSize } from "@visx/responsive";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { AxisBottom, AxisLeft, AxisRight } from "@visx/axis";
 import { scaleBand, scaleLinear, scaleOrdinal } from "@visx/scale";
 import {
@@ -15,7 +14,6 @@ import {
 } from "@visx/shape";
 import { curveLinearClosed } from "@visx/curve";
 import { Group } from "@visx/group";
-import { Graph } from "@visx/network";
 import { Sankey } from "@visx/sankey";
 import { hierarchy, Treemap, Partition, Tree } from "@visx/hierarchy";
 import { BoxPlot, ViolinPlot } from "@visx/stats";
@@ -29,12 +27,20 @@ const palette = [
   "var(--space-1)",
   "var(--space-2)",
   "var(--space-3)",
-  "var(--ink)",
+  "var(--kind-file)",
   "var(--kind-symbol)",
   "var(--kind-person)",
 ];
 const colour = (i: number) => palette[i % palette.length];
-export default function Chart({ kind, raw }: { kind: string; raw: unknown }) {
+export default function Chart({
+  kind,
+  raw,
+  domain,
+}: {
+  kind: string;
+  raw: unknown;
+  domain?: [number, number];
+}) {
   const parsed = resolvedDataProps.safeParse(raw);
   if (!parsed.success) return <Notice />;
   const p = parsed.data;
@@ -45,16 +51,23 @@ export default function Chart({ kind, raw }: { kind: string; raw: unknown }) {
     ) || "value";
   const y = p.y || numeric;
   const x = p.x || Object.keys(rows[0] || {}).find((k) => k !== y) || "name";
+  const sharedValues = rows.flatMap((r) =>
+    (p.series || [y]).map((key) => number(r[key]) || 0),
+  );
   if (kind === "SmallMultiples")
     return (
-      <section data-ui-component={kind}>
+      <section className="ui-section ui-multiples" data-ui-component={kind}>
         <h3>{p.title}</h3>
         <div className="ui-grid ui-grid-two">
           {(p.series?.length ? p.series : [y]).map((key) => (
             <Chart
               key={key}
               kind="Line"
-              raw={{ ...p, title: key, y: key, series: [key] }}
+              raw={{ ...p, title: key, y: key, series: [key], summary: "" }}
+              domain={[
+                Math.min(0, ...sharedValues),
+                Math.max(1, ...sharedValues),
+              ]}
             />
           ))}
         </div>
@@ -63,7 +76,7 @@ export default function Chart({ kind, raw }: { kind: string; raw: unknown }) {
     );
   return (
     <figure
-      className="ui-section ui-chart"
+      className={`ui-section ui-chart ${kind === "Sparkline" ? "ui-sparkline" : ""}`}
       aria-label={p.title}
       data-ui-component={kind}
     >
@@ -73,8 +86,8 @@ export default function Chart({ kind, raw }: { kind: string; raw: unknown }) {
       !["Network", "Tree"].includes(kind) ? (
         <p>No numeric values to show.</p>
       ) : rows.length ? (
-        <div style={{ height: kind === "Sparkline" ? 136 : 350 }}>
-          <ParentSize debounceTime={30}>
+        <div className="ui-chart-body">
+          <ChartWidth>
             {({ width }) => (
               <Plot
                 kind={kind}
@@ -82,10 +95,11 @@ export default function Chart({ kind, raw }: { kind: string; raw: unknown }) {
                 p={p}
                 xKey={x}
                 yKey={y}
-                width={Math.max(240, width)}
+                width={Math.max(180, width)}
+                domain={domain}
               />
             )}
-          </ParentSize>
+          </ChartWidth>
         </div>
       ) : (
         <p>No data to show.</p>
@@ -93,6 +107,24 @@ export default function Chart({ kind, raw }: { kind: string; raw: unknown }) {
       <p className="text-xs text-[var(--ink-dim)]">{p.summary}</p>
     </figure>
   );
+}
+function ChartWidth({
+  children,
+}: {
+  children: (size: { width: number }) => ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const observer = new ResizeObserver(([entry]) =>
+      setWidth(entry.contentRect.width),
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  return <div ref={ref}>{children({ width })}</div>;
 }
 function flowHasCycle(flows: { source: string; target: string }[]): boolean {
   const adjacent = new Map<string, string[]>();
@@ -121,6 +153,7 @@ type Props = {
   xKey: string;
   yKey: string;
   width: number;
+  domain?: [number, number];
 };
 type TreeDatum = {
   name: string;
@@ -128,22 +161,64 @@ type TreeDatum = {
   children?: TreeDatum[];
   row?: Row;
 };
-function Plot({ kind, rows, p, xKey, yKey, width }: Props) {
+function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
   const id = useId();
   const { tooltipData, tooltipLeft, tooltipTop, showTooltip, hideTooltip } =
     useTooltip<string>();
-  const height = kind === "Sparkline" ? 100 : 300;
+  const sparkline = kind === "Sparkline";
+  const cartesian = [
+    "Line",
+    "Area",
+    "StackedArea",
+    "Bar",
+    "GroupedBar",
+    "StackedBar",
+    "Histogram",
+    "Scatter",
+    "Bubble",
+    "BoxPlot",
+    "Violin",
+    "Waterfall",
+    "Combo",
+  ].includes(kind);
+  const height = sparkline
+    ? 44
+    : kind === "Network"
+      ? Math.max(280, Math.ceil(rows.length / 2) * 28 + 40)
+      : 280;
+  const tickWidth =
+    Math.max(
+      ...rows.flatMap((r) =>
+        [yKey, ...(p.series || []), "max"].map(
+          (k) => formatted(r[k], p.formats?.[k] || p.format).length,
+        ),
+      ),
+    ) *
+      6.2 +
+    16;
   const margin = {
-    left: 62,
-    right: kind === "Combo" ? 55 : 20,
-    top: 18,
-    bottom: 48,
+    left: sparkline
+      ? 6
+      : cartesian
+        ? Math.min(112, Math.max(58, tickWidth))
+        : 12,
+    right: sparkline
+      ? 6
+      : kind === "Combo"
+        ? Math.min(100, tickWidth)
+        : cartesian
+          ? 18
+          : 12,
+    top: sparkline ? 6 : 24,
+    bottom: sparkline ? 6 : cartesian ? 64 : 24,
   };
-  const w = Math.max(120, width - margin.left - margin.right),
+  const w = Math.max(40, width - margin.left - margin.right),
     h = height - margin.top - margin.bottom;
   const series = p.series?.length ? p.series : [yKey];
   const numbers = rows.flatMap((r) =>
-    series.map((k) => number(r[k])).filter((v): v is number => v != null),
+    (kind === "Combo" ? series.slice(0, 1) : series)
+      .map((k) => number(r[k]))
+      .filter((v): v is number => v != null),
   );
   const max = Math.max(0, ...numbers),
     min = Math.min(0, ...numbers);
@@ -155,15 +230,26 @@ function Plot({ kind, rows, p, xKey, yKey, width }: Props) {
     ),
   );
   const scaleY = scaleLinear({
-    domain: [min, (stacked ? maxStack : max) || 1],
+    domain:
+      domain ||
+      (sparkline
+        ? [Math.min(...numbers), max || 1]
+        : [min, (stacked ? maxStack : max) || 1]),
     range: [h, 0],
     nice: true,
   });
   const categories = rows.map(
-    (r, i) => formatted(r[xKey], p.xFormat || "text") || String(i + 1),
+    (r, i) =>
+      formatted(r[xKey], p.formats?.[xKey] || p.xFormat || "text") ||
+      String(i + 1),
   );
   const band = scaleBand({ domain: categories, range: [0, w], padding: 0.18 });
   const xNumeric = rows.every((r) => number(r[xKey]) != null);
+  const continuousX =
+    xNumeric &&
+    !["Bar", "GroupedBar", "StackedBar", "Waterfall", "StackedArea"].includes(
+      kind,
+    );
   const valuesX = rows.map((r) => number(r[xKey]) || 0);
   const scaleX = scaleLinear({
     domain: [Math.min(...valuesX), Math.max(...valuesX) || 1],
@@ -171,11 +257,32 @@ function Plot({ kind, rows, p, xKey, yKey, width }: Props) {
     nice: true,
   });
   const x = (r: Row, i: number) =>
-    xNumeric
+    continuousX
       ? scaleX(number(r[xKey]) || 0)
       : (band(categories[i]) || 0) + band.bandwidth() / 2;
   const y = (r: Row, k = yKey) => scaleY(number(r[k]) || 0);
   const fmt = (v: unknown) => formatted(v, p.formats?.[yKey] || p.format);
+  const shares = rows.filter((r) => (number(r[yKey]) || 0) > 0);
+  const total = rows.reduce(
+    (sum, r) => sum + Math.max(0, number(r[yKey]) || 0),
+    0,
+  );
+  const percent = (v: number, base: number) =>
+    base > 0 ? `${((100 * v) / base).toFixed(1).replace(/\.0$/, "")}%` : "none";
+  const numericValues = rows
+    .map((r) => number(r[yKey]))
+    .filter((v): v is number => v !== null);
+  const heatMin = Math.min(...numericValues, Infinity),
+    heatMax = Math.max(...numericValues, -Infinity);
+  const tickCategories = categories.filter(
+    (_, i) =>
+      i %
+        Math.max(
+          1,
+          Math.ceil(categories.length / Math.max(2, Math.floor(w / 70))),
+        ) ===
+      0,
+  );
   function tip(r: Row) {
     return Object.entries(r)
       .map(
@@ -190,6 +297,7 @@ function Plot({ kind, rows, p, xKey, yKey, width }: Props) {
         key={key}
         tabIndex={0}
         aria-label={tip(r)}
+        data-chart-mark="true"
         onMouseMove={(e) => {
           e.stopPropagation();
           const rect = e.currentTarget.ownerSVGElement?.getBoundingClientRect();
@@ -200,13 +308,14 @@ function Plot({ kind, rows, p, xKey, yKey, width }: Props) {
           });
         }}
         onMouseLeave={hideTooltip}
-        onFocus={() =>
+        onFocus={(e) => {
+          e.stopPropagation();
           showTooltip({
             tooltipData: tip(r),
             tooltipLeft: margin.left,
             tooltipTop: margin.top,
-          })
-        }
+          });
+        }}
         onBlur={hideTooltip}
       >
         {content}
@@ -217,6 +326,11 @@ function Plot({ kind, rows, p, xKey, yKey, width }: Props) {
   const axisProps = {
     stroke: "var(--border-strong)",
     tickStroke: "var(--border-strong)",
+    tickLabelProps: {
+      fill: "var(--ink-dim)",
+      fontSize: 10,
+      fontFamily: "inherit",
+    },
   };
   const axes = (
     <>
@@ -228,17 +342,28 @@ function Plot({ kind, rows, p, xKey, yKey, width }: Props) {
       />
       <AxisBottom
         top={h}
-        scale={xNumeric ? scaleX : band}
+        scale={continuousX ? scaleX : band}
         numTicks={Math.max(2, Math.floor(w / 85))}
+        tickValues={continuousX ? undefined : tickCategories}
+        label={xKey.replaceAll("_", " ")}
+        labelOffset={26}
+        labelProps={{
+          fill: "var(--ink-dim)",
+          fontSize: 11,
+          fontFamily: "inherit",
+        }}
         tickFormat={(v) =>
-          xNumeric ? formatted(v, "number") : label(v).slice(0, 18)
+          continuousX
+            ? formatted(v, p.formats?.[xKey] || p.xFormat || "number")
+            : label(v).slice(0, width < 420 ? 10 : 18)
         }
         {...axisProps}
       />
     </>
   );
   let drawing: ReactNode;
-  let showAxes = true;
+  let gridY = scaleY;
+  let showAxes = !sparkline;
   if (
     kind === "Line" ||
     kind === "Area" ||
@@ -247,8 +372,14 @@ function Plot({ kind, rows, p, xKey, yKey, width }: Props) {
   ) {
     const right = scaleLinear({
       domain: [
-        Math.min(0, ...rows.map((r) => number(r[p.size || series[1]]) || 0)),
-        Math.max(1, ...rows.map((r) => number(r[p.size || series[1]]) || 0)),
+        Math.min(
+          0,
+          ...rows.map((r) => number(r[p.size || series[1] || yKey]) || 0),
+        ),
+        Math.max(
+          1,
+          ...rows.map((r) => number(r[p.size || series[1] || yKey]) || 0),
+        ),
       ],
       range: [h, 0],
       nice: true,
@@ -301,16 +432,28 @@ function Plot({ kind, rows, p, xKey, yKey, width }: Props) {
                   (r, i) =>
                     number(r[key]) != null &&
                     mark(
-                      <circle
-                        cx={x(r, i)}
-                        cy={
-                          kind === "Combo" && s === 1
-                            ? right(number(r[key]) || 0)
-                            : y(r, key)
-                        }
-                        r={3}
-                        fill={colour(s)}
-                      />,
+                      <g>
+                        <circle
+                          cx={x(r, i)}
+                          cy={
+                            kind === "Combo" && s === 1
+                              ? right(number(r[key]) || 0)
+                              : y(r, key)
+                          }
+                          r={10}
+                          fill="transparent"
+                        />
+                        <circle
+                          cx={x(r, i)}
+                          cy={
+                            kind === "Combo" && s === 1
+                              ? right(number(r[key]) || 0)
+                              : y(r, key)
+                          }
+                          r={sparkline ? (i === rows.length - 1 ? 3 : 0) : 3}
+                          fill={colour(s)}
+                        />
+                      </g>,
                       r,
                       i,
                     ),
@@ -341,12 +484,21 @@ function Plot({ kind, rows, p, xKey, yKey, width }: Props) {
       >
         {({ stacks, path }) =>
           stacks.map((stack, i) => (
-            <path
-              key={stack.key}
-              d={path(stack) || ""}
-              fill={colour(i)}
-              fillOpacity={0.6}
-            />
+            <g key={stack.key}>
+              <path d={path(stack) || ""} fill={colour(i)} fillOpacity={0.7} />
+              {stack.map((point, j) =>
+                mark(
+                  <circle
+                    cx={x(point.data, j)}
+                    cy={scaleY(point[1])}
+                    r={6}
+                    fill={colour(i)}
+                  />,
+                  point.data,
+                  j,
+                ),
+              )}
+            </g>
           ))
         }
       </AreaStack>
@@ -447,12 +599,14 @@ function Plot({ kind, rows, p, xKey, yKey, width }: Props) {
         range: [h, 0],
         nice: true,
       });
+      gridY = by;
       showAxes = false;
       drawing = (
         <>
           <AxisLeft
             scale={by}
             numTicks={Math.min(4, Math.max(...bins.map((b) => b.count)))}
+            tickFormat={(v) => formatted(v, "number")}
             {...axisProps}
           />
           <AxisBottom
@@ -493,6 +647,7 @@ function Plot({ kind, rows, p, xKey, yKey, width }: Props) {
         range: [h, 0],
         nice: true,
       });
+      if (kind === "Waterfall") gridY = wy;
       drawing = (
         <>
           {rows.flatMap((r, i) =>
@@ -546,7 +701,18 @@ function Plot({ kind, rows, p, xKey, yKey, width }: Props) {
               kind === "Bubble"
                 ? Math.max(
                     3,
-                    Math.sqrt(Math.abs(number(r[p.size || series[1]]) || 0)),
+                    24 *
+                      Math.sqrt(
+                        Math.abs(number(r[p.size || series[1] || yKey]) || 0) /
+                          Math.max(
+                            1,
+                            ...rows.map((row) =>
+                              Math.abs(
+                                number(row[p.size || series[1] || yKey]) || 0,
+                              ),
+                            ),
+                          ),
+                      ),
                   )
                 : 4
             }
@@ -562,8 +728,23 @@ function Plot({ kind, rows, p, xKey, yKey, width }: Props) {
     const radius = Math.min(w, h) / 2;
     drawing = (
       <Group left={w / 2} top={h / 2}>
+        {kind === "Donut" && (
+          <text
+            className="ui-donut-total"
+            textAnchor="middle"
+            dy="0.35em"
+            style={{
+              fontSize: Math.min(
+                22,
+                ((radius * 0.95) / Math.max(1, fmt(total).length)) * 1.6,
+              ),
+            }}
+          >
+            {fmt(total)}
+          </text>
+        )}
         <Pie
-          data={rows.filter((r) => (number(r[yKey]) || 0) > 0)}
+          data={shares}
           pieValue={(r) => number(r[yKey]) || 0}
           outerRadius={radius}
           innerRadius={kind === "Donut" ? radius * 0.6 : 0}
@@ -572,7 +753,28 @@ function Plot({ kind, rows, p, xKey, yKey, width }: Props) {
           {(pie) =>
             pie.arcs.map((arc, i) =>
               mark(
-                <path d={pie.path(arc) || ""} fill={colour(i)} />,
+                <>
+                  <path d={pie.path(arc) || ""} fill={colour(i)} />
+                  {arc.endAngle - arc.startAngle > 0.42 && radius > 65 && (
+                    <text
+                      x={
+                        Math.sin((arc.startAngle + arc.endAngle) / 2) *
+                        radius *
+                        (kind === "Donut" ? 0.8 : 0.65)
+                      }
+                      y={
+                        -Math.cos((arc.startAngle + arc.endAngle) / 2) *
+                        radius *
+                        (kind === "Donut" ? 0.8 : 0.65)
+                      }
+                      textAnchor="middle"
+                      dy="0.35em"
+                      className="ui-on-fill"
+                    >
+                      {percent(number(arc.data[yKey]) || 0, total)}
+                    </text>
+                  )}
+                </>,
                 arc.data,
                 i,
               ),
@@ -593,39 +795,51 @@ function Plot({ kind, rows, p, xKey, yKey, width }: Props) {
       range: [h, 0],
       nice: true,
     });
+    gridY = stats;
     showAxes = false;
     drawing = (
       <>
-        <AxisLeft scale={stats} tickFormat={(v) => fmt(v)} {...axisProps} />
-        {kind === "BoxPlot" ? (
-          mark(
-            <BoxPlot
-              min={number(box.min) ?? 0}
-              max={number(box.max) ?? 0}
-              firstQuartile={number(box.q1) ?? 0}
-              thirdQuartile={number(box.q3) ?? 0}
-              median={number(box.median) ?? 0}
-              valueScale={stats}
-              left={w / 2 - 25}
-              boxWidth={50}
-              fill={colour(0)}
-              stroke="var(--ink)"
-            />,
-            box,
-            "box",
-          )
-        ) : (
-          <ViolinPlot
-            data={rows}
-            value={(r) => number(r.value) ?? 0}
-            count={(r) => number(r.count) ?? 0}
-            valueScale={stats}
-            left={w / 2 - 40}
-            width={80}
-            fill={colour(0)}
-            stroke="var(--ink)"
-          />
-        )}
+        <AxisLeft
+          scale={stats}
+          numTicks={4}
+          tickFormat={(v) => fmt(v)}
+          {...axisProps}
+        />
+        {kind === "BoxPlot"
+          ? mark(
+              <BoxPlot
+                min={number(box.min) ?? 0}
+                max={number(box.max) ?? 0}
+                firstQuartile={number(box.q1) ?? 0}
+                thirdQuartile={number(box.q3) ?? 0}
+                median={number(box.median) ?? 0}
+                valueScale={stats}
+                left={w / 2 - 25}
+                boxWidth={50}
+                fill={colour(0)}
+                stroke="var(--ink)"
+              />,
+              box,
+              "box",
+            )
+          : mark(
+              <ViolinPlot
+                data={rows}
+                value={(r) => number(r.value) ?? 0}
+                count={(r) => number(r.count) ?? 0}
+                valueScale={stats}
+                left={w / 2 - 40}
+                width={80}
+                fill={colour(0)}
+                stroke="var(--ink)"
+              />,
+              {
+                min: Math.min(...numericValues),
+                max: Math.max(...numericValues),
+                count: rows.reduce((sum, r) => sum + (number(r.count) || 0), 0),
+              },
+              "violin",
+            )}
       </>
     );
   } else if (kind === "Heatmap" || kind === "CalendarHeatmap") {
@@ -633,7 +847,11 @@ function Plot({ kind, rows, p, xKey, yKey, width }: Props) {
     const dates = rows.map((r) => new Date(label(r[xKey])));
     const calendar = kind === "CalendarHeatmap";
     const valid = dates.every((d) => Number.isFinite(d.valueOf()));
-    const origin = valid ? Math.min(...dates.map((d) => d.valueOf())) : 0;
+    const earliest = valid
+      ? new Date(Math.min(...dates.map((d) => d.valueOf())))
+      : new Date(0);
+    const origin = earliest.valueOf() - earliest.getUTCDay() * 86400000;
+    const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const cells = rows.map((r, i) => ({
       row: r,
       x:
@@ -642,47 +860,105 @@ function Plot({ kind, rows, p, xKey, yKey, width }: Props) {
           : categories[i],
       y:
         calendar && valid
-          ? ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][
-              dates[i].getUTCDay()
-            ]
+          ? weekdays[dates[i].getUTCDay()]
           : label(r[p.group || "group"]),
     }));
-    const xs = [...new Set(cells.map((c) => c.x))],
-      ys =
-        calendar && valid
-          ? ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-          : [...new Set(cells.map((c) => c.y))];
-    const xb = scaleBand({ domain: xs, range: [0, w], padding: 0.05 }),
-      yb = scaleBand({ domain: ys, range: [0, h], padding: 0.05 });
+    const xs =
+      calendar && valid
+        ? Array.from(
+            { length: Math.max(...cells.map((c) => Number(c.x))) + 1 },
+            (_, i) => String(i),
+          )
+        : [...new Set(cells.map((c) => c.x))];
+    const ys =
+      calendar && valid ? weekdays : [...new Set(cells.map((c) => c.y))];
+    const left = Math.min(70, Math.max(32, ...ys.map((v) => v.length * 6 + 8)));
+    const xb = scaleBand({ domain: xs, range: [left, w], padding: 0.06 });
+    const yb = scaleBand({ domain: ys, range: [0, h], padding: 0.06 });
+    const months = xs.filter(
+      (week, i) =>
+        i === 0 ||
+        new Date(origin + (Number(week) * 7 + 6) * 86400000).getUTCMonth() !==
+          new Date(
+            origin + ((Number(week) - 1) * 7 + 6) * 86400000,
+          ).getUTCMonth(),
+    );
     drawing = (
       <>
-        <AxisBottom
-          top={h}
-          scale={xb}
-          numTicks={Math.floor(w / 60)}
-          {...axisProps}
-        />
-        <AxisLeft scale={yb} {...axisProps} />
-        {cells.map((cell, i) =>
-          mark(
-            <Bar
-              x={xb(cell.x) || 0}
-              y={yb(cell.y) || 0}
-              width={xb.bandwidth()}
-              height={yb.bandwidth()}
-              fill={colour(0)}
-              fillOpacity={
-                number(cell.row[yKey]) == null
-                  ? 0
-                  : 0.15 +
-                    (0.85 * Math.abs(number(cell.row[yKey]) || 0)) /
-                      (Math.max(Math.abs(min), Math.abs(max)) || 1)
-              }
-            />,
+        {calendar && valid ? (
+          months.map((week) => (
+            <text key={week} x={xb(week)} y={-8}>
+              {new Date(
+                origin + (Number(week) * 7 + 6) * 86400000,
+              ).toLocaleDateString("en-AU", {
+                month: "short",
+                timeZone: "UTC",
+              })}
+            </text>
+          ))
+        ) : (
+          <AxisBottom
+            top={h}
+            scale={xb}
+            tickValues={xs.filter(
+              (_, i) =>
+                i % Math.max(1, Math.ceil(xs.length / Math.max(2, w / 70))) ===
+                0,
+            )}
+            {...axisProps}
+          />
+        )}
+        <AxisLeft left={left} scale={yb} {...axisProps} />
+        {calendar &&
+          xs.flatMap((week) =>
+            ys.map((day) => (
+              <Bar
+                key={`${week}-${day}`}
+                x={xb(week) || 0}
+                y={yb(day) || 0}
+                width={xb.bandwidth()}
+                height={yb.bandwidth()}
+                fill="var(--surface-raised)"
+              />
+            )),
+          )}
+        {cells.map((cell, i) => {
+          const value = number(cell.row[yKey]);
+          const intensity =
+            value == null
+              ? 0
+              : 0.2 +
+                0.8 *
+                  (heatMax === heatMin
+                    ? 1
+                    : (value - heatMin) / (heatMax - heatMin));
+          return mark(
+            <>
+              <Bar
+                x={xb(cell.x) || 0}
+                y={yb(cell.y) || 0}
+                width={xb.bandwidth()}
+                height={yb.bandwidth()}
+                fill={colour(0)}
+                fillOpacity={intensity}
+              />
+              {xb.bandwidth() > fmt(value).length * 6 + 8 &&
+                yb.bandwidth() > 24 && (
+                  <text
+                    x={(xb(cell.x) || 0) + xb.bandwidth() / 2}
+                    y={(yb(cell.y) || 0) + yb.bandwidth() / 2}
+                    textAnchor="middle"
+                    dy="0.35em"
+                    className="ui-cell-label ui-label-halo"
+                  >
+                    {fmt(value)}
+                  </text>
+                )}
+            </>,
             cell.row,
             i,
-          ),
-        )}
+          );
+        })}
       </>
     );
   } else if (kind === "Treemap" || kind === "Partition" || kind === "Tree") {
@@ -737,12 +1013,10 @@ function Plot({ kind, rows, p, xKey, yKey, width }: Props) {
                     height={Math.max(0, n.y1 - n.y0)}
                     fill={colour(i)}
                   />
-                  <text
-                    x={n.x0 + 4}
-                    y={n.y0 + 15}
-                    style={{ fill: "var(--surface)" }}
-                  >
-                    {n.x1 - n.x0 > 55 ? n.data.name.slice(0, 18) : ""}
+                  <text x={n.x0 + 4} y={n.y0 + 15} className="ui-on-fill">
+                    {n.x1 - n.x0 > 45 && n.y1 - n.y0 > 20
+                      ? n.data.name.slice(0, Math.floor((n.x1 - n.x0 - 8) / 6))
+                      : ""}
                   </text>
                 </>,
                 n.data.row || { name: n.data.name },
@@ -754,19 +1028,37 @@ function Plot({ kind, rows, p, xKey, yKey, width }: Props) {
       );
     else if (kind === "Partition")
       drawing = (
-        <Partition root={root} size={[w, h]}>
+        <Partition
+          root={root}
+          size={[w, (h * (root.height + 1)) / Math.max(1, root.height)]}
+        >
           {(tree) =>
             tree
               .descendants()
+              .filter((n) => n.depth > 0)
               .map((n, i) =>
                 mark(
-                  <Bar
-                    x={n.x0}
-                    y={n.y0}
-                    width={Math.max(0, n.x1 - n.x0 - 1)}
-                    height={Math.max(0, n.y1 - n.y0 - 1)}
-                    fill={colour(i)}
-                  />,
+                  <>
+                    <Bar
+                      x={n.x0}
+                      y={n.y0 - h / Math.max(1, root.height)}
+                      width={Math.max(0, n.x1 - n.x0 - 2)}
+                      height={Math.max(0, n.y1 - n.y0 - 2)}
+                      fill={colour(i)}
+                    />
+                    {n.x1 - n.x0 > 50 && n.y1 - n.y0 > 22 && (
+                      <text
+                        x={n.x0 + 6}
+                        y={n.y0 - h / Math.max(1, root.height) + 18}
+                        className="ui-on-fill"
+                      >
+                        {n.data.name.slice(
+                          0,
+                          Math.floor((n.x1 - n.x0 - 12) / 6),
+                        )}
+                      </text>
+                    )}
+                  </>,
                   n.data.row || { name: n.data.name },
                   i,
                 ),
@@ -776,7 +1068,7 @@ function Plot({ kind, rows, p, xKey, yKey, width }: Props) {
       );
     else
       drawing = (
-        <Tree root={root} size={[h, w - 50]}>
+        <Tree root={root} size={[h, Math.max(40, w - 100)]}>
           {(tree) => (
             <>
               {tree.links().map((link, i) => (
@@ -815,6 +1107,11 @@ function Plot({ kind, rows, p, xKey, yKey, width }: Props) {
         value: number(r[yKey]) || 0,
       }));
     const names = [...new Set(flows.flatMap((r) => [r.source, r.target]))];
+    const labelRoom = Math.min(
+      width < 420 ? 65 : 100,
+      Math.max(36, ...names.map((name) => name.length * 6 + 10)),
+    );
+    const flowWidth = Math.max(40, w - 2 * labelRoom);
     if (flowHasCycle(flows))
       drawing = (
         <text x={0} y={20}>
@@ -829,98 +1126,160 @@ function Plot({ kind, rows, p, xKey, yKey, width }: Props) {
       );
     else
       drawing = (
-        <Sankey
-          root={{ nodes: names.map((name) => ({ name })), links: flows }}
-          nodeId={(n) => n.name}
-          size={[w, h]}
-          nodeWidth={12}
-          nodePadding={14}
-        >
-          {({ graph, createPath }) => (
-            <>
-              {graph.links.map((link, i) =>
-                mark(
-                  <path
-                    d={createPath(link) || ""}
-                    fill="none"
-                    stroke={colour(i)}
-                    strokeWidth={Math.max(1, link.width || 0)}
-                    strokeOpacity={0.4}
-                  />,
-                  flows[i],
-                  i,
-                ),
-              )}
-              {graph.nodes.map((node, i) =>
-                mark(
-                  <>
-                    <Bar
-                      x={node.x0 || 0}
-                      y={node.y0 || 0}
-                      width={(node.x1 || 0) - (node.x0 || 0)}
-                      height={(node.y1 || 0) - (node.y0 || 0)}
-                      fill={colour(i)}
-                    />
-                    <text x={(node.x0 || 0) + 16} y={(node.y0 || 0) + 12}>
-                      {node.name}
-                    </text>
-                  </>,
-                  { name: node.name },
-                  node.name,
-                ),
-              )}
-            </>
-          )}
-        </Sankey>
+        <Group left={labelRoom}>
+          <Sankey
+            root={{ nodes: names.map((name) => ({ name })), links: flows }}
+            nodeId={(n) => n.name}
+            size={[flowWidth, h]}
+            nodeWidth={10}
+            nodePadding={24}
+          >
+            {({ graph, createPath }) => (
+              <>
+                {graph.links.map((link, i) =>
+                  mark(
+                    <path
+                      d={createPath(link) || ""}
+                      fill="none"
+                      stroke={colour(names.indexOf(label(link.source)))}
+                      strokeWidth={Math.max(1, link.width || 0)}
+                      strokeOpacity={0.4}
+                    />,
+                    {
+                      [xKey]: flows[i].source,
+                      [targetKey]: flows[i].target,
+                      [yKey]: flows[i].value,
+                    },
+                    i,
+                  ),
+                )}
+                {graph.nodes.map((node, i) =>
+                  mark(
+                    <>
+                      <Bar
+                        x={node.x0 || 0}
+                        y={node.y0 || 0}
+                        width={(node.x1 || 0) - (node.x0 || 0)}
+                        height={(node.y1 || 0) - (node.y0 || 0)}
+                        fill={colour(i)}
+                      />
+                      <text
+                        x={
+                          node.depth === 0
+                            ? (node.x0 || 0) - 6
+                            : (node.x1 || 0) + 6
+                        }
+                        y={((node.y0 || 0) + (node.y1 || 0)) / 2}
+                        dy="0.35em"
+                        textAnchor={node.depth === 0 ? "end" : "start"}
+                        className="ui-label-halo"
+                      >
+                        {node.name.slice(0, Math.floor((labelRoom - 8) / 6))}
+                      </text>
+                    </>,
+                    { name: node.name, [yKey]: node.value },
+                    node.name,
+                  ),
+                )}
+              </>
+            )}
+          </Sankey>
+        </Group>
       );
   } else if (kind === "Network") {
     showAxes = false;
-    const nodes: (Row & { x: number; y: number; datum: Row })[] = rows.map(
-      (r, i) => ({
-        ...r,
+    const targetKey = p.group || "target";
+    const data = [...rows];
+    for (const r of rows) {
+      const target = r[targetKey];
+      if (
+        target != null &&
+        !data.some((n) => [n.id, n.entity_id, n[xKey]].includes(target))
+      )
+        data.push({ [xKey]: target });
+    }
+    const labelRoom = Math.min(88, w * 0.34);
+    const perSide = Math.ceil(data.length / 2);
+    const nodes = data.map((r, i) => {
+      const right = i < perSide;
+      const index = right ? i : data.length - 1 - i;
+      const sideCount = right ? perSide : data.length - perSide;
+      const cy = ((index + 0.5) * h) / Math.max(1, sideCount);
+      const normal = (cy - h / 2) / (h / 2);
+      return {
         datum: r,
-        x: w / 2 + Math.cos((i / rows.length) * Math.PI * 2) * w * 0.36,
-        y: h / 2 + Math.sin((i / rows.length) * Math.PI * 2) * h * 0.36,
-      }),
-    );
-    const links = rows.flatMap((r, i) => {
-      const target = nodes.find(
-        (n) => n.id === r.target || n.name === r.target,
-      );
-      return target ? [{ source: nodes[i], target }] : [];
+        right,
+        x:
+          w / 2 +
+          (right ? 1 : -1) *
+            Math.sqrt(Math.max(0, 1 - normal * normal)) *
+            Math.max(12, w / 2 - labelRoom),
+        y: cy,
+      };
     });
     drawing = (
-      <Graph
-        graph={{ nodes, links }}
-        nodeComponent={({ node }) =>
+      <>
+        {nodes.map((node, i) => {
+          const target = nodes.find(
+            (n) =>
+              node.datum[targetKey] != null &&
+              [n.datum.id, n.datum.entity_id, n.datum[xKey]].includes(
+                node.datum[targetKey],
+              ),
+          );
+          return target
+            ? mark(
+                <line
+                  x1={node.x}
+                  y1={node.y}
+                  x2={target.x}
+                  y2={target.y}
+                  stroke="var(--border-strong)"
+                  strokeWidth={1.5}
+                />,
+                node.datum,
+                `link-${i}`,
+              )
+            : null;
+        })}
+        {nodes.map((node, i) =>
           mark(
             <>
-              <circle cx={node.x} cy={node.y} r={6} fill={colour(0)} />
-              <text x={node.x + 8} y={node.y}>
-                {label(node.datum[xKey]).slice(0, 12)}
+              <circle
+                cx={node.x}
+                cy={node.y}
+                r={5}
+                fill={colour(0)}
+                stroke="var(--surface)"
+                strokeWidth={2}
+              />
+              <text
+                x={node.x + (node.right ? 9 : -9)}
+                y={node.y}
+                dy="0.35em"
+                textAnchor={node.right ? "start" : "end"}
+              >
+                {label(node.datum[xKey]).slice(
+                  0,
+                  Math.floor((labelRoom - 12) / 6),
+                )}
               </text>
             </>,
             node.datum,
-            node.x,
-          )
-        }
-        linkComponent={({ link }) => (
-          <line
-            x1={link.source.x}
-            y1={link.source.y}
-            x2={link.target.x}
-            y2={link.target.y}
-            stroke="var(--border-strong)"
-          />
+            `node-${i}`,
+          ),
         )}
-      />
+      </>
     );
   } else if (kind === "Radar") {
     showAxes = false;
-    const radius = Math.min(w, h) / 2;
+    const radius = Math.max(24, Math.min(w, h) / 2 - 35);
     const radial = scaleLinear({ domain: [0, max || 1], range: [0, radius] });
     drawing = (
       <Group left={w / 2} top={h / 2}>
+        {[0.25, 0.5, 0.75, 1].map((f) => (
+          <circle key={f} r={radius * f} fill="none" stroke="var(--border)" />
+        ))}
         {categories.map((category, i) => {
           const a = (i / categories.length) * Math.PI * 2;
           return (
@@ -941,16 +1300,35 @@ function Plot({ kind, rows, p, xKey, yKey, width }: Props) {
           );
         })}
         {series.map((key, s) => (
-          <LineRadial
-            key={key}
-            data={rows}
-            angle={(_, i) => (i / rows.length) * Math.PI * 2}
-            radius={(r) => radial(number(r[key]) || 0)}
-            curve={curveLinearClosed}
-            stroke={colour(s)}
-            fill={colour(s)}
-            fillOpacity={0.12}
-          />
+          <g key={key}>
+            <LineRadial
+              data={rows}
+              angle={(_, i) => (i / rows.length) * Math.PI * 2}
+              radius={(r) => radial(number(r[key]) || 0)}
+              curve={curveLinearClosed}
+              stroke={colour(s)}
+              fill={colour(s)}
+              fillOpacity={0.12}
+            />
+            {rows.map((r, i) =>
+              mark(
+                <circle
+                  cx={
+                    Math.sin((i / rows.length) * Math.PI * 2) *
+                    radial(number(r[key]) || 0)
+                  }
+                  cy={
+                    -Math.cos((i / rows.length) * Math.PI * 2) *
+                    radial(number(r[key]) || 0)
+                  }
+                  r={5}
+                  fill={colour(s)}
+                />,
+                r,
+                i,
+              ),
+            )}
+          </g>
         ))}
       </Group>
     );
@@ -958,24 +1336,33 @@ function Plot({ kind, rows, p, xKey, yKey, width }: Props) {
     showAxes = false;
     const step = h / rows.length;
     drawing = rows.map((r, i) => {
-      const a = (Math.max(0, number(r[yKey]) || 0) / (max || 1)) * w,
-        b = (Math.max(0, number(rows[i + 1]?.[yKey]) || 0) / (max || 1)) * w;
+      const value = Math.max(0, number(r[yKey]) || 0);
+      const barWidth = (value / (max || 1)) * w;
+      const previous = number(rows[i - 1]?.[yKey]) || 0;
+      const first = number(rows[0]?.[yKey]) || 0;
       return mark(
         <>
-          <path
-            d={`M ${(w - a) / 2} ${i * step} L ${(w + a) / 2} ${i * step} L ${(w + b) / 2} ${(i + 1) * step - 3} L ${(w - b) / 2} ${(i + 1) * step - 3} Z`}
-            fill={colour(i)}
+          <text x={0} y={i * step + 12}>
+            {categories[i]} · {fmt(value)}
+          </text>
+          <Bar
+            x={(w - barWidth) / 2}
+            y={i * step + 21}
+            width={barWidth}
+            height={Math.max(3, step - 48)}
+            fill={colour(0)}
           />
-          <text
-            x={w / 2}
-            y={i * step + 15}
-            textAnchor="middle"
-            style={{ fill: "var(--surface)" }}
-          >
-            {categories[i]} {fmt(r[yKey])}
+          <text x={w / 2} y={(i + 1) * step - 7} textAnchor="middle">
+            {i === 0
+              ? "100% of first"
+              : `${percent(value, previous)} of previous · ${percent(value, first)} of first`}
           </text>
         </>,
-        r,
+        {
+          ...r,
+          from_previous: i ? percent(value, previous) : "First stage",
+          from_first: percent(value, first),
+        },
         i,
       );
     });
@@ -994,7 +1381,7 @@ function Plot({ kind, rows, p, xKey, yKey, width }: Props) {
     else {
       const fraction = Math.max(0, Math.min(1, (n - lo) / (hi - lo))),
         radius = Math.min(w / 2, h);
-      drawing =
+      drawing = mark(
         kind === "Gauge" ? (
           <Group left={w / 2} top={h}>
             <Arc
@@ -1011,7 +1398,7 @@ function Plot({ kind, rows, p, xKey, yKey, width }: Props) {
               endAngle={-Math.PI / 2 + Math.PI * fraction}
               fill={colour(0)}
             />
-            <text y={-20} textAnchor="middle">
+            <text y={-30} textAnchor="middle" className="ui-range-value">
               {fmt(n)}
             </text>
             <text x={-radius} y={18}>
@@ -1037,70 +1424,128 @@ function Plot({ kind, rows, p, xKey, yKey, width }: Props) {
               height={16}
               fill={colour(0)}
             />
-            <text x={w / 2} y={h / 2 - 22}>
+            <text
+              x={w / 2}
+              y={h / 2 - 22}
+              textAnchor="middle"
+              className="ui-range-value"
+            >
               {fmt(n)}
             </text>
+            <text x={0} y={h / 2 + 36}>
+              {fmt(lo)}
+            </text>
+            <text x={w} y={h / 2 + 36} textAnchor="end">
+              {fmt(hi)}
+            </text>
+            {number(r.target) != null && (
+              <line
+                x1={
+                  w *
+                  Math.max(
+                    0,
+                    Math.min(1, ((number(r.target) || 0) - lo) / (hi - lo)),
+                  )
+                }
+                x2={
+                  w *
+                  Math.max(
+                    0,
+                    Math.min(1, ((number(r.target) || 0) - lo) / (hi - lo)),
+                  )
+                }
+                y1={h / 2 - 20}
+                y2={h / 2 + 20}
+                stroke="var(--ink)"
+                strokeWidth={2}
+              />
+            )}
           </>
-        );
+        ),
+        r,
+        "range",
+      );
     }
   } else drawing = null;
   return (
-    <div style={{ width: "100%", height: height + 36, position: "relative" }}>
+    <div className="ui-plot" style={{ width: "100%", position: "relative" }}>
       <svg
         width={width}
         height={height}
         role="img"
-        tabIndex={0}
         onMouseLeave={hideTooltip}
-        onMouseMove={(e) => {
-          const rect = e.currentTarget.getBoundingClientRect();
-          const index = Math.max(
-            0,
-            Math.min(
-              rows.length - 1,
-              Math.round(
-                ((e.clientX - rect.left - margin.left) / w) * (rows.length - 1),
-              ),
-            ),
-          );
-          showTooltip({
-            tooltipData: tip(rows[index]),
-            tooltipLeft: e.clientX - rect.left,
-            tooltipTop: e.clientY - rect.top,
-          });
-        }}
-        onFocus={() =>
-          showTooltip({
-            tooltipData: tip(rows[0]),
-            tooltipLeft: margin.left,
-            tooltipTop: margin.top,
-          })
-        }
-        onBlur={hideTooltip}
         aria-labelledby={`${id}-name ${id}-summary`}
         data-chart={kind}
       >
         <title id={`${id}-name`}>{p.title}</title>
         <desc id={`${id}-summary`}>{p.summary}</desc>
         <Group left={margin.left} top={margin.top}>
+          {cartesian &&
+            !(kind === "Bar" && p.orientation === "horizontal") &&
+            !sparkline &&
+            gridY
+              .ticks(4)
+              .map((v) => (
+                <line
+                  key={v}
+                  x2={w}
+                  y1={gridY(v)}
+                  y2={gridY(v)}
+                  stroke="var(--border)"
+                  strokeOpacity={0.65}
+                />
+              ))}
           {showAxes && axes}
           {drawing}
         </Group>
       </svg>
-      {(series.length > 1 || kind === "Pie" || kind === "Donut") && (
-        <ul className="ui-legend" aria-label="Legend">
-          {(kind === "Pie" || kind === "Donut" ? categories : series).map(
-            (name, i) => (
-              <li key={i} style={{ color: colour(i) }}>
-                {name}
-              </li>
-            ),
-          )}
+      {(kind === "Heatmap" || kind === "CalendarHeatmap") &&
+        numericValues.length > 0 && (
+          <div
+            className="ui-colour-scale"
+            aria-label={`Colour scale: ${fmt(heatMin)} to ${fmt(heatMax)}`}
+          >
+            <span>{fmt(heatMin)}</span>
+            <span className="ui-scale-steps">
+              {[0.2, 0.4, 0.6, 0.8, 1].map((opacity) => (
+                <i key={opacity} style={{ background: colour(0), opacity }} />
+              ))}
+            </span>
+            <span>{fmt(heatMax)}</span>
+          </div>
+        )}
+      {((series.length > 1 && !sparkline) ||
+        kind === "Pie" ||
+        kind === "Donut") && (
+        <ul
+          className={`ui-legend ${kind === "Pie" || kind === "Donut" ? "ui-share-legend" : ""}`}
+          aria-label="Legend"
+        >
+          {(kind === "Pie" || kind === "Donut"
+            ? shares.map((r) =>
+                formatted(r[xKey], p.formats?.[xKey] || p.xFormat || "text"),
+              )
+            : series
+          ).map((name, i) => (
+            <li key={i}>
+              <i style={{ background: colour(i) }} />
+              <span>{name.replaceAll("_", " ")}</span>
+              {(kind === "Pie" || kind === "Donut") && (
+                <span className="ui-legend-value">
+                  {fmt(shares[i][yKey])}{" "}
+                  <span className="text-[var(--ink-dim)]">
+                    ({percent(number(shares[i][yKey]) || 0, total)})
+                  </span>
+                </span>
+              )}
+            </li>
+          ))}
         </ul>
       )}
       {tooltipData && (
         <TooltipWithBounds
           className="ui-chart-tooltip"
+          role="tooltip"
           left={tooltipLeft}
           top={tooltipTop}
         >
