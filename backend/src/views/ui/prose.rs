@@ -1,5 +1,5 @@
-//! Resolve model prose once, at the server boundary. Values are never authorised by equality.
-use std::collections::HashSet;
+//! Authorise complete numeric spans in final prose, at the server boundary.
+use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
 use chrono::{DateTime, NaiveDate};
 use regex::Regex;
@@ -15,23 +15,44 @@ pub(super) fn field(key: &str) -> bool {
 fn normalise(text: &str) -> String {
     static FORMAT: OnceLock<Regex> = OnceLock::new();
     static DIGIT: OnceLock<Regex> = OnceLock::new();
-    let format = FORMAT.get_or_init(|| Regex::new(r"\p{Cf}").unwrap());
+    let format = FORMAT.get_or_init(|| Regex::new(r"[\p{Cf}\p{Mn}\p{Me}]").unwrap());
     let digit = DIGIT.get_or_init(|| Regex::new(r"^\p{Nd}$").unwrap());
-    let stripped = format.replace_all(text, "");
-    let mapped: String = stripped.nfkc().map(|c| {
+    let compatible: String = text.nfkc().collect();
+    let stripped = format.replace_all(&compatible, "");
+    stripped.chars().map(|c| {
         if c.is_whitespace() { return ' '; }
+        if matches!(c, '\u{2212}' | '\u{2012}'..='\u{2015}' | '\u{fe63}' | '\u{ff0d}') { return '-'; }
         if c.is_ascii() || !digit.is_match(&c.to_string()) { return c; }
         let mut start = c as u32;
         while start > 0 && char::from_u32(start - 1).is_some_and(|p| digit.is_match(&p.to_string())) { start -= 1; }
         char::from_digit((c as u32 - start) % 10, 10).unwrap()
-    }).collect();
-    mapped.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase()
+    }).collect::<String>().to_lowercase().chars().fold(String::new(), |mut out, c| {
+        // Match collapsed browser whitespace without trimming substitution boundaries.
+        if c != ' ' || !out.ends_with(' ') { out.push(c); }
+        out
+    })
 }
+// Byte ranges in the normalised display. Spaces join only one pair of digit groups,
+// or a currency code and a figure. Other words terminate a span.
+fn spans(text: &str) -> Vec<std::ops::Range<usize>> {
+    static NUMBER: OnceLock<Regex> = OnceLock::new();
+    let number = NUMBER.get_or_init(|| {
+        let code = r"(?:aud|usd|eur|gbp|jpy|cad|nzd|chf|cny|inr|sgd|hkd)";
+        let iso = r"[0-9]{4}-[0-9]{2}-[0-9]{2}(?:t[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?(?:z|[+-][0-9]{2}:[0-9]{2}))?";
+        let connector = r"[\p{Sc}+%‰/\x{2044}e-]";
+        let tail = format!(r"(?:{connector}|\p{{N}}|[.,'_]\p{{N}})*");
+        let iso_range = format!(r"{iso}(?:(?:/|\.\.|-){iso})?");
+        let part = format!(r"(?:{iso_range}|{connector}*[.,'_]?\p{{N}}{tail})");
+        Regex::new(&format!(r"(?:\b{code} ?)?(?:{part})+(?:(?: \p{{N}}{tail})|(?: ?{code}\b{tail}))*")).unwrap()
+    });
+    number.find_iter(text).filter(|m| m.as_str().chars().any(char::is_numeric)).map(|m| m.range()).collect()
+}
+
 fn token(c: char) -> bool { currency(c) || c.is_alphanumeric() || matches!(c, '_' | '-' | '/' | '.' | '%' | '+' | '\u{2044}') }
 fn following_token(text: &str) -> bool {
     let mut chars = text.chars();
     match chars.next() {
-        Some('.') => chars.next().is_some_and(token),
+        Some('.') => chars.next().is_some_and(|c| c.is_ascii_digit()),
         Some(c) => token(c),
         None => false,
     }
@@ -99,32 +120,64 @@ impl Allowed {
         }
         out
     }
-    fn check(&self, raw: &str, path: &str) -> AppResult<()> {
+    fn check(&self, raw: &str, substitutions: &[(std::ops::Range<usize>, String)], path: &str) -> AppResult<()> {
         let text = normalise(raw);
-        let mut covered = vec![false; text.len()];
-        for server in &self.strings {
-            for allowed in phrases(server) {
-                for (start, _) in text.match_indices(&allowed) {
-                    let end = start + allowed.len();
-                    if text[..start].chars().next_back().is_some_and(token) || following_token(&text[end..]) { continue; }
-                    covered[start..end].fill(true);
+        let numeric = spans(&text);
+        let bindings: Vec<_> = substitutions.iter().map(|(range, value)| {
+            (normalise(&raw[..range.start]).len()..normalise(&raw[..range.end]).len(), normalise(value))
+        }).collect();
+        let mut server_ranges: HashMap<std::ops::Range<usize>, HashSet<usize>> = HashMap::new();
+        for (source, server) in self.strings.iter().enumerate() {
+            let server = normalise(server);
+            let server_spans = spans(&server);
+            for phrase in phrases(&server) {
+                for (source_start, _) in server.match_indices(&phrase) {
+                    for (start, _) in text.match_indices(&phrase) {
+                        let end = start + phrase.len();
+                        if text[..start].chars().next_back().is_some_and(token) || following_token(&text[end..]) { continue; }
+                        for span in &server_spans {
+                            if span.start >= source_start && span.end <= source_start + phrase.len() {
+                                let range = start + span.start - source_start..start + span.end - source_start;
+                                server_ranges.entry(range).or_default().insert(source);
+                            }
+                        }
+                    }
                 }
             }
         }
-        static ISO: OnceLock<Regex> = OnceLock::new();
-        let iso = ISO.get_or_init(|| Regex::new(r"\b[0-9]{4}-[0-9]{2}-[0-9]{2}(?:[tT][0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?(?:[zZ]|[+-][0-9]{2}:[0-9]{2}))?\b").unwrap());
-        for m in iso.find_iter(&text) {
-            // ISO ranges may use '/', '..' or a dash. Each endpoint must be authorised.
-            if date(m.as_str()).is_some_and(|d| self.dates.contains(&d)) {
-                covered[m.start()..m.end()].fill(true);
+        for span in &numeric {
+            let overlaps: Vec<_> = bindings.iter().filter(|(range, _)| range.start < span.end && span.start < range.end).collect();
+            let authorised = if !overlaps.is_empty() {
+                // A binding cannot borrow even one connector from prose or another binding.
+                overlaps.len() == 1 && overlaps[0].0 == *span && overlaps[0].1 == text[span.clone()]
+            } else if iso_span(&text[span.clone()]).is_some() {
+                !text[..span.start].chars().next_back().is_some_and(token)
+                    && !following_token(&text[span.end..])
+                    && iso_span(&text[span.clone()]).is_some_and(|dates| dates.iter().all(|d| self.dates.contains(d)))
             } else {
-                return Err(bad(format!("unsupported raw ISO date in {path}; use a matching applied date or bucket label")));
+                server_ranges.get(span).is_some_and(|sources| sources.len() == 1)
+            };
+            if !authorised {
+                return Err(bad(format!("unsupported raw digits or combined numeric span in {path}: {raw:?}; use one bound placeholder for the complete formatted number. Raw digits require one verbatim letter-bearing phrase in a server string predating the turn, or a matching applied ISO date or bucket label. Number words are unchecked.")));
             }
         }
-        if text.char_indices().any(|(i, c)| c.is_numeric() && !covered[i]) {
-            return Err(bad(format!("unsupported raw digits in {path}: {raw:?}; replace each number with a bound placeholder such as {{{{/sources/sales/totals/amount/sum}}}}. Raw digits require a verbatim phrase with an adjacent letter-bearing word in a server string predating the turn, or a matching applied ISO date or bucket label. Number words are unchecked.")));
-        }
         Ok(())
+    }
+
+}
+// Dates are a single span, including ranges. No endpoint can license a prefix or suffix.
+fn iso_span(text: &str) -> Option<Vec<String>> {
+    static ISO: OnceLock<Regex> = OnceLock::new();
+    let iso = ISO.get_or_init(|| Regex::new(r"[0-9]{4}-[0-9]{2}-[0-9]{2}(?:t[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?(?:z|[+-][0-9]{2}:[0-9]{2}))?").unwrap());
+    let mut rest = text;
+    let mut dates = Vec::new();
+    loop {
+        let m = iso.find(rest).filter(|m| m.start() == 0)?;
+        dates.push(date(m.as_str())?);
+        rest = &rest[m.end()..];
+        if rest.is_empty() { return Some(dates); }
+        if dates.len() == 2 { return None; }
+        rest = rest.strip_prefix("..").or_else(|| rest.strip_prefix('/')).or_else(|| rest.strip_prefix('-'))?;
     }
 }
 // A digit must travel with an adjacent letter-bearing word from one server string.
@@ -132,19 +185,28 @@ impl Allowed {
 fn phrases(server: &str) -> Vec<String> {
     static WORD: OnceLock<Regex> = OnceLock::new();
     let word = WORD.get_or_init(|| Regex::new(r"[\p{L}\p{N}_/%.+\x{2044}-]+").unwrap());
-    let server = normalise(server);
+    let server = server.to_string();
     let words: Vec<_> = word.find_iter(&server).collect();
     let mut out = Vec::new();
-    for (i, w) in words.iter().enumerate() {
-        if !w.as_str().chars().any(char::is_numeric) { continue; }
-        if w.as_str().chars().any(char::is_alphabetic) { out.push(w.as_str().into()); }
-        for j in [i.checked_sub(1), (i + 1 < words.len()).then_some(i + 1)].into_iter().flatten() {
-            let neighbour = words[j];
-            let start = w.start().min(neighbour.start());
-            let end = w.end().max(neighbour.end());
-            let gap = if j < i { &server[neighbour.end()..w.start()] } else { &server[w.end()..neighbour.start()] };
-            if neighbour.as_str().chars().any(char::is_alphabetic) && gap.chars().all(char::is_whitespace) {
-                out.push(server[start..end].into());
+    for span in spans(&server) {
+        let mut start = span.start;
+        let mut end = span.end;
+        for (i, c) in server[..start].char_indices().rev() {
+            if !token(c) { break; }
+            start = i;
+        }
+        for (i, c) in server[end..].char_indices() {
+            if !token(c) { break; }
+            end = span.end + i + c.len_utf8();
+        }
+        if server[start..end].chars().any(char::is_alphabetic) { out.push(server[start..end].into()); }
+        for w in &words {
+            if !w.as_str().chars().any(char::is_alphabetic) { continue; }
+            if w.end() <= start && server[w.end()..start].chars().all(char::is_whitespace) {
+                out.push(server[w.start()..end].into());
+            }
+            if w.start() >= end && server[end..w.start()].chars().all(char::is_whitespace) {
+                out.push(server[start..w.end()].into());
             }
         }
     }
@@ -238,39 +300,24 @@ fn render(raw: &str, data: &Value, allowed: &Allowed, field: &str) -> AppResult<
     let mut rest = raw;
     let mut substitutions = Vec::new();
     while let Some(start) = rest.find("{{") {
-        allowed.check(&rest[..start], field)?;
         out.push_str(&rest[..start]);
         let end = rest[start+2..].find("}}").ok_or_else(|| bad(format!("unclosed text placeholder in {field}; use {{{{/sources/name/rows/0/amount}}}}")))? + start + 2;
         let value = bound(&rest[start+2..end], data)?;
         let offset = out.len();
         out.push_str(&value);
-        substitutions.push((offset, out.len()));
+        substitutions.push((offset..out.len(), value));
         rest = &rest[end+2..];
     }
     if rest.contains("}}") { return Err(bad(format!("unexpected placeholder closing braces in {field}"))); }
-    allowed.check(rest, field)?;
     out.push_str(rest);
-    for (start, end) in substitutions {
-        let left = normalise_edge(&out[..start], false);
-        let right = normalise_edge(&out[end..], true);
-        if left.chars().next_back().is_some_and(numeric_neighbour) || right.chars().next().is_some_and(numeric_neighbour) {
-            return Err(bad(format!("text placeholder in {field} touches a numeric token; separate each placeholder from digits, numeric symbols and e/E")));
-        }
-    }
+    allowed.check(&out, &substitutions, field)?;
     Ok(out)
-}
-fn normalise_edge(text: &str, first: bool) -> String {
-    let normalised = normalise(&format!("a{text}a"));
-    let inside = &normalised[1..normalised.len() - 1];
-    (if first { inside.chars().next() } else { inside.chars().next_back() }).map(|c| c.to_string()).unwrap_or_default()
 }
 fn currency(c: char) -> bool {
     static SYMBOL: OnceLock<Regex> = OnceLock::new();
     SYMBOL.get_or_init(|| Regex::new(r"^\p{Sc}$").unwrap()).is_match(&c.to_string())
 }
-fn numeric_neighbour(c: char) -> bool {
-    c.is_numeric() || currency(c) || matches!(c, '.' | ',' | '%' | '+' | '-' | '/' | 'e' | 'E' | '\u{2044}')
-}
+
 pub(super) fn resolve(value: &Value, data: &Value) -> AppResult<Value> {
     resolve_allowed(value, data, &Allowed::from_data(data))
 }
@@ -305,12 +352,80 @@ mod tests {
     #[test]
     fn final_placeholder_boundaries_refuse_numeric_synthesis() {
         let p = "{{/sources/sales/total_rows}}";
-        for raw in [format!("Orders {p}{p}"), format!("{p}{{{{/sources/sales/rows/0/date}}}}"), format!("{p}%"), format!("${p}"), format!("{p}."), format!("{p}e{p}"), format!("e{p}"), format!("{p}E"), format!("{p}１"), format!("{p}\u{200b}{p}"), format!("{p}\u{200b}%"), format!("€{p}"), format!("{p}\u{200b}E")] {
+        for raw in [format!("Orders {p}{p}"), format!("{p}{{{{/sources/sales/rows/0/date}}}}"), format!("{p}%"), format!("${p}"), format!("{p}e{p}"), format!("e{p}"), format!("{p}E"), format!("{p}１"), format!("{p}\u{200b}{p}"), format!("{p}\u{200b}%"), format!("€{p}"), format!("{p}\u{200b}E")] {
             assert!(title(&raw, &data()).is_err(), "{raw}");
         }
-        for raw in [format!("Orders ({p}), then {p} records"), format!("{p} records"), format!("Count {p}"), format!("{p}\u{200b} records")] {
+        for raw in [format!("Orders ({p}), then {p} records"), format!("{p} records"), format!("Count {p}"), format!("{p}\u{200b} records"), format!("{p}."), format!("{p}, then"), format!("{p}. Next"), format!("{p}.Next")] {
             assert!(title(&raw, &data()).is_ok(), "{raw}");
         }
+    }
+    #[test]
+    fn whole_spans_refuse_gluing_across_every_source() {
+        let p = "{{/sources/sales/total_rows}}";
+        let mut data = data();
+        data["sources"]["sales"]["rows"][0]["name"] = json!("Orders 12");
+        data["sources"]["sales"]["rows"][0]["category"] = json!("345 deliveries");
+        for raw in [
+            format!("−{p}"), format!("－{p}"), format!("+{p}"), format!("{p}%"),
+            format!("{p}.5"), format!("{p},5"), format!("{p}e3"), format!("A${p}"), format!("{p} {p}"), format!("{p}  {p}"), format!("{p}\n\n{p}"),
+            format!("{p}\u{034f}%"), format!("{p}\u{034f}{p}"), format!("{p}\u{fe0f}5"), format!("{p}\u{0301}5"),
+            format!("Orders {p},345 deliveries"), format!("{p}‰"), format!("{p}'345"),
+            format!("USD{p}"), format!("{p} AUD"), format!("{p}/2"), format!("{p}½"),
+            "Orders 12,345 deliveries".into(), "Orders 12 345 deliveries".into(),
+            "Orders 1\u{034f}2,345 deliveries".into(), "Orders 12_345 deliveries".into(),
+        ] {
+            assert!(title(&raw, &data).is_err(), "{raw}");
+        }
+        for raw in [format!("{p} records and {p} deliveries"), "Orders 12 and 345 deliveries".into()] {
+            assert!(title(&raw, &data).is_ok(), "{raw}");
+        }
+        // Matching digits alone cannot borrow a server phrase over a placeholder.
+        assert!(title(&format!("Orders +{p}"), &data).is_err());
+        data["sources"]["sales"]["rows"][0]["name"] = json!("Orders 12,345");
+        assert!(title("Orders 12,345", &data).is_ok());
+        assert!(title("Orders 12", &data).is_err());
+        assert!(title("Orders +12,345", &data).is_err());
+    }
+    #[test]
+    fn greedy_span_extraction_and_normalisation() {
+        let text = normalise("−１２\u{034f}３ USD +٤.٥e3 12 345 A$6 ½ 7‰ 8_000");
+        assert_eq!(text, "-123 usd +4.5e3 12 345 a$6 1⁄2 7‰ 8_000");
+        let values: Vec<_> = spans(&text).into_iter().map(|r| &text[r]).collect();
+        assert_eq!(values, ["-123 usd", "+4.5e3 12 345", "$6 1⁄2 7‰ 8_000"]);
+        for sign in ['\u{2212}', '\u{2012}', '\u{2013}', '\u{2014}', '\u{2015}', '\u{fe63}', '\u{ff0d}'] {
+            assert_eq!(normalise(&format!("{sign}12")), "-12");
+        }
+        assert_eq!(normalise("1\u{0301}2\u{20dd}3\u{200b}4"), "1234");
+        assert_eq!(normalise("  a \t b  "), " a b ");
+    }
+    #[test]
+    fn bucket_phrases_and_complete_formatted_bindings_still_pass() {
+        let mut data = data();
+        data["sources"]["sales"]["rows"][0]["date"] = json!("Q3 2026");
+        for raw in ["ISO 27001", "Scope 3", "Q3 2026", "Total {{/sources/sales/rows/0/amount}}"] {
+            assert!(title(raw, &data).is_ok(), "{raw}");
+        }
+        assert!(title("Q3 2026,345", &data).is_err());
+        assert!(title("Scope 3.", &data).is_ok());
+        assert!(title("Scope 3.Next", &data).is_ok());
+        data["sources"]["sales"]["columns"].as_array_mut().unwrap().push(json!({"key":"share","datatype":"percent","unit":"%"}));
+        data["sources"]["sales"]["rows"][0]["share"] = json!(12.5);
+        assert_eq!(title("Share {{/sources/sales/rows/0/share}}", &data).unwrap()["title"], "Share 12.5%");
+        assert!(title("Share {{/sources/sales/rows/0/share}}%", &data).is_err());
+        for suffix in ["%", "‰", "+", "-", "e3", ".5", ",5", "/2"] {
+            assert!(title(&format!("Total {{{{/sources/sales/rows/0/amount}}}}{suffix}"), &data).is_err(), "{suffix}");
+        }
+    }
+    #[test]
+    fn terminal_summary_keeps_prose_values_in_separate_items() {
+        let spec = resolve(&json!({"elements":{
+            "a":{"props":{"text":"{{/sources/sales/total_rows}}"}},
+            "b":{"props":{"text":"{{/sources/sales/total_rows}}"}}
+        }}), &data()).unwrap();
+        let text = super::super::text(&spec, &json!({}));
+        assert_eq!(text, "Analysis\n• 12\n• 12\n");
+        let normalised = normalise(&text);
+        assert_eq!(spans(&normalised).len(), 2);
     }
     #[test]
     fn bare_numeric_server_strings_never_authorise_digits() {
@@ -367,6 +482,14 @@ mod tests {
             data["sources"]["sales"]["rows"][0]["category"] = json!(raw);
             assert!(title(raw, &data).is_ok());
         }
+    }
+    #[test]
+    fn unicode_case_matching_normalises_each_string_once() {
+        let mut data = data();
+        data["sources"]["sales"]["rows"][0]["name"] = json!("İSO 27001");
+        data["sources"]["sales"]["rows"][0]["category"] = Value::Null;
+        assert!(title("İSO 27001", &data).is_ok());
+        assert!(title("ISO 27001", &data).is_err());
     }
     #[test]
     fn dates_are_parsed_as_whole_dates_and_ranges() {

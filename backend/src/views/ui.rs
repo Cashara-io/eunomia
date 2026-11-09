@@ -278,7 +278,7 @@ pub fn text(spec: &Value, data: &Value) -> String {
         fn append(value: &Value, out: &mut String) {
             match value {
                 Value::Object(fields) => for (key, value) in fields {
-                    if prose::field(key) && let Some(s) = value.as_str() { out.push_str(s); out.push('\n'); }
+                    if prose::field(key) && let Some(s) = value.as_str() { out.push_str("• "); out.push_str(s); out.push('\n'); }
                     else { append(value, out); }
                 },
                 Value::Array(values) => for value in values { append(value, out); },

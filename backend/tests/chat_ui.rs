@@ -307,3 +307,22 @@ async fn turn_snapshot_refuses_new_names_and_text_values() {
         assert!(denied.get("error").is_some(), "bare digits authorised: {denied}");
     }
 }
+
+#[tokio::test]
+async fn whole_spans_guard_ui_and_terminal_prose() {
+    let (app, vault) = sample().await;
+    for name in ["Orders 12", "345 deliveries"] {
+        ok(app.tool("memory_write", json!({"subject_name":name,"subject_kind":"sample","text":"Existing name"})).await);
+    }
+    let make = |text: &str| json!({"view":"ui","spec":{"root":"a","elements":{"a":{"type":"Text","props":{"text":text}}}},"sources":{"sales":{"type":"dataset","vault_id":vault,"kind":"sample","properties":["amount","share"]}}});
+    for raw in ["Orders 12,345 deliveries", "Orders 12 345 deliveries", "−{{/sources/sales/total_rows}}", "{{/sources/sales/total_rows}}\u{034f}%", "{{/sources/sales/total_rows}}.5"] {
+        let denied = app.tool("show_view", make(raw)).await;
+        assert!(denied.get("error").is_some(), "{raw}: {denied}");
+    }
+    for raw in ["Count {{/sources/sales/total_rows}}.", "Count {{/sources/sales/total_rows}}, then", "Total {{/sources/sales/totals/amount/sum}}", "Share {{/sources/sales/totals/share/sum}}"] {
+        let out = ok(app.tool("show_view", make(raw)).await);
+        let rendered = out["spec"]["elements"]["a"]["props"]["text"].as_str().unwrap();
+        assert!(out["text"].as_str().unwrap().contains(rendered), "{out}");
+        assert!(!rendered.contains("{{"));
+    }
+}
