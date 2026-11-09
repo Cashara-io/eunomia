@@ -24,9 +24,9 @@ jobs:
 
       # Tests run against an in-memory SurrealDB, so no service container is
       # needed.
-      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable snapshot, Rust 1.95.0
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable snapshot, Rust 1.99.1
         with:
-          toolchain: 1.95.0
+          toolchain: 1.99.1
           components: clippy
 
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
@@ -50,9 +50,9 @@ jobs:
         working-directory: backend
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable snapshot, Rust 1.95.0
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable snapshot, Rust 1.99.1
         with:
-          toolchain: 1.95.0
+          toolchain: 1.99.1
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
           workspaces: backend
@@ -115,15 +115,17 @@ jobs:
       # SurrealDB on 127.0.0.1:8000 so the memory-correctness spec can seed SQL fixtures.
       - name: Start stack
         run: |
-          echo "JWT_SECRET=$(openssl rand -hex 32)" >> .env
-          echo "ENCRYPTION_KEY=$(openssl rand -hex 32)" >> .env
-          echo "SECRETS_HELPER_KEY=$(openssl rand -hex 32)" >> .env
-          # the password managers spec needs the secrets helper: its compose profile, as Enable sets it
-          echo "COMPOSE_PROFILES=secrets" >> .env
-          # The connectors spec points connectors at its in-test mock provider.
-          echo "EUNOMIA_ALLOW_CONNECTOR_BASE_URL=1" >> .env
-          # the suite registers many users a minute from one address
-          printf "RATE_LIMIT_AUTH_PER_MIN=1000\nRATE_LIMIT_USER_PER_MIN=100000\nRATE_LIMIT_TOKEN_PER_MIN=100000\n" >> .env
+          {
+            echo "JWT_SECRET=$(openssl rand -hex 32)"
+            echo "ENCRYPTION_KEY=$(openssl rand -hex 32)"
+            echo "SECRETS_HELPER_KEY=$(openssl rand -hex 32)"
+            # the password managers spec needs the secrets helper: its compose profile, as Enable sets it
+            echo "COMPOSE_PROFILES=secrets"
+            # The connectors spec points connectors at its in-test mock provider.
+            echo "EUNOMIA_ALLOW_CONNECTOR_BASE_URL=1"
+            # the suite registers many users a minute from one address
+            printf "RATE_LIMIT_AUTH_PER_MIN=1000\nRATE_LIMIT_USER_PER_MIN=100000\nRATE_LIMIT_TOKEN_PER_MIN=100000\n"
+          } >> .env
           # The backend writes https.json here and the HTTPS spec plays the updater.
           mkdir -p update-status && chmod 777 update-status
           echo "E2E_UPDATE_STATUS_DIR=$PWD/update-status" >> "$GITHUB_ENV"
@@ -150,11 +152,13 @@ jobs:
         run: |
           bash scripts/ci/e2e-setup.sh > "$RUNNER_TEMP/e2e.env"
           echo "::add-mask::$(sed -n 's/^E2E_ADMIN_PASSWORD=//p' "$RUNNER_TEMP/e2e.env")"
-          cat "$RUNNER_TEMP/e2e.env" >> "$GITHUB_ENV"
-          echo "E2E_SURREAL_HTTP=http://127.0.0.1:8000" >> "$GITHUB_ENV"
-          # in-test mock servers listen on the runner; the backend container reaches them via the host gateway
-          echo "E2E_MOCK_BIND=0.0.0.0" >> "$GITHUB_ENV"
-          echo "E2E_MOCK_HOST=host.docker.internal" >> "$GITHUB_ENV"
+          {
+            cat "$RUNNER_TEMP/e2e.env"
+            echo "E2E_SURREAL_HTTP=http://127.0.0.1:8000"
+            # in-test mock servers listen on the runner; the backend container reaches them via the host gateway
+            echo "E2E_MOCK_BIND=0.0.0.0"
+            echo "E2E_MOCK_HOST=host.docker.internal"
+          } >> "$GITHUB_ENV"
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:

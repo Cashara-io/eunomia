@@ -67,10 +67,15 @@ allows the evidence pipeline to land without combining runtime upgrades into it.
 It is not a claim that the advisories are harmless. Cashara maintainers own
 remediation. In particular:
 
-- Upgrade Next.js and eslint-config-next together to at least 16.3.8. The audit
-  includes a critical next/og ImageResponse RCE fixed in 16.3.6, plus later fixes.
-- Refresh brace-expansion, js-yaml, minimatch, source-map-js and zod through their
-  parent packages to versions outside the recorded vulnerable ranges.
+- PR #201 upgrades Next.js and eslint-config-next together to 16.3.8 for the
+  earlier advisories, including the next/og ImageResponse RCE fixed in 16.3.6.
+  Retain their 16 November acceptances until it merges. The newer
+  GHSA-p3m5-59mp-jv5r, GHSA-2464-fhr4-w9xw and GHSA-673q-mjm6-r5xr findings
+  require 16.4.1, so PR #201 alone does not clear every current Next.js finding.
+- The CI repair bumps brace-expansion to 1.1.21/5.0.12, sharp to 0.35.5 and
+  source-map-js to 1.2.2 in the frontend lockfile. It also applies the available
+  apt and zlib security updates in the frontend runtime base. Refresh js-yaml,
+  minimatch and zod through their parent packages separately.
 - Update ammonia, rustls, rustls-webpki, tokio and webpki roots to the versions
   named in each RustSec acceptance. Check crypto-bigint, quick-xml and rsa parent
   upgrades separately because their fixes cross compatibility ranges.
@@ -83,8 +88,27 @@ remediation. In particular:
 
 The registry contains every exact finding ID and proposed solution from the first
 scan. Existing fake credentials expire on 9 December 2026 and need periodic review.
+The first image scan in run 42589471950 also exposed findings that had no
+image-scoped acceptances. The CI repair records 235 exact advisory/package/version/
+image acceptances, expiring on 16 November, after the selected frontend patches:
+110 backend, 67 frontend, 51 backup and 7 secrets-helper. Most OS findings have
+no fixed version in the current Debian suite according to that scan. Their
+remediation needs upstream fixes or a tested base-image migration. The helper's
+findings include npm's bundled brace-expansion/undici, outside its application
+lockfile, and an Alpine zlib 1.3 to 1.4 update. The backend inventory also includes
+SurrealDB 2.7.0 from `backend/fuzz/Cargo.lock`; its runtime locks 3.3.5. Keep those
+fuzz findings visible until the fuzz target is updated and validated. Each entry
+records the scanner's advisory source and proposed follow-up. Acceptance is not
+proof of non-exploitability.
+
 New container findings must receive their own scoped acceptance and proposed fix;
 there is no blanket CVE suppression. Keep residual low-severity findings in triage.
+
+The original CI pin also changed Rust from main's tested stable 1.99.1 to 1.95.0,
+which overflowed the stack in the MCP prompts/resources test in both backend
+jobs. The CI repair pins 1.99.1 with the same action SHA and leaves the test suite
+and flags intact. Grouped shell redirects retain the same e2e environment values
+while satisfying actionlint's ShellCheck checks.
 
 ## What the release workflow adds
 

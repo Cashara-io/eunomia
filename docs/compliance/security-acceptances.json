@@ -1,33 +1,6 @@
 [
   {
     "scanner": "audit",
-    "id": "GHSA-qhr7-859c-m2p7",
-    "package": "brace-expansion",
-    "scope": "frontend",
-    "reason": "Existing locked dependency: brace-expansion: DoS via uncontrolled recursion on nested brace groups causing stack exhaustion. Upgrade brace-expansion beyond <1.1.20; track with PR02 remediation table. No claim of non-exploitability.",
-    "owner": "Cashara maintainers",
-    "expires": "2026-11-16"
-  },
-  {
-    "scanner": "audit",
-    "id": "GHSA-6j4f-fj2g-mc7p",
-    "package": "brace-expansion",
-    "scope": "frontend",
-    "reason": "Existing locked dependency: brace-expansion: DoS via uncontrolled recursion in parseCommaParts causing stack exhaustion. Upgrade brace-expansion beyond >=4.0.0 <5.0.10; track with PR02 remediation table. No claim of non-exploitability.",
-    "owner": "Cashara maintainers",
-    "expires": "2026-11-16"
-  },
-  {
-    "scanner": "audit",
-    "id": "GHSA-q2hr-2g5m-vwhr",
-    "package": "brace-expansion",
-    "scope": "frontend",
-    "reason": "Existing locked dependency: brace-expansion: Quadratic-time expansion of the `{a},b}` rewrite causes CPU denial of service. Upgrade brace-expansion beyond >=4.0.0 <5.0.12; track with PR02 remediation table. No claim of non-exploitability.",
-    "owner": "Cashara maintainers",
-    "expires": "2026-11-16"
-  },
-  {
-    "scanner": "audit",
     "id": "GHSA-52cp-r559-cp3m",
     "package": "js-yaml",
     "scope": "frontend",
@@ -158,24 +131,6 @@
     "package": "next",
     "scope": "frontend",
     "reason": "Existing locked dependency: Next.js: Unauthenticated Remote Code Execution in `use cache` functions returning typed arrays. Upgrade next beyond >=16.0.0 <=16.4.0; track with PR02 remediation table. No claim of non-exploitability.",
-    "owner": "Cashara maintainers",
-    "expires": "2026-11-16"
-  },
-  {
-    "scanner": "audit",
-    "id": "GHSA-wq5f-xc86-pv6w",
-    "package": "sharp",
-    "scope": "frontend",
-    "reason": "Existing locked dependency: sharp : Vulnerability in librsvg dependency CVE-2026-96889. Upgrade sharp beyond <0.35.5; track with PR02 remediation table. No claim of non-exploitability.",
-    "owner": "Cashara maintainers",
-    "expires": "2026-11-16"
-  },
-  {
-    "scanner": "audit",
-    "id": "GHSA-68fv-2mgg-jv7q",
-    "package": "source-map-js",
-    "scope": "frontend",
-    "reason": "Existing locked dependency: source-map-js allows event-loop denial of service through indexed source-map section offsets. Upgrade source-map-js beyond >=1.0.0 <1.2.2; track with PR02 remediation table. No claim of non-exploitability.",
     "owner": "Cashara maintainers",
     "expires": "2026-11-16"
   },
@@ -833,6 +788,2121 @@
     "package": "webpki-roots@1.0.9",
     "scope": "backend",
     "reason": "Existing locked dependency: Bundled root certificates allow trust in distrusted emSign intermediates. Solution: Upgrade to >=1.0.10 (try `cargo update -p webpki-roots`) No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53613",
+    "package": "bsdutils@1:2.38.1-5+deb12u3",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53613",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53615",
+    "package": "bsdutils@1:2.38.1-5+deb12u3",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53615",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78410",
+    "package": "bsdutils@1:2.38.1-5+deb12u3",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78410",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-10536",
+    "package": "curl@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-10536",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-107928",
+    "package": "curl@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-107928",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-11856",
+    "package": "curl@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-11856",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-12064",
+    "package": "curl@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-12064",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-13608",
+    "package": "curl@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-13608",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-18924",
+    "package": "curl@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-18924",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-19931",
+    "package": "curl@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-19931",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-6276",
+    "package": "curl@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-6276",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-80230",
+    "package": "curl@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-80230",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-82209",
+    "package": "curl@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-82209",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-8286",
+    "package": "curl@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-8286",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-86409",
+    "package": "curl@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-86409",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-86410",
+    "package": "curl@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-86410",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-86414",
+    "package": "curl@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-86414",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-87864",
+    "package": "curl@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-87864",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-87865",
+    "package": "curl@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-87865",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-8924",
+    "package": "curl@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-8924",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-8927",
+    "package": "curl@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-8927",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-8932",
+    "package": "curl@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-8932",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-92388",
+    "package": "curl@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-92388",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-92389",
+    "package": "curl@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-92389",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-92390",
+    "package": "curl@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-92390",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-92391",
+    "package": "curl@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-92391",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-94266",
+    "package": "curl@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-94266",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-102010",
+    "package": "gcc-12-base@12.2.0-14+deb12u1",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-102010",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-95619",
+    "package": "gcc-12-base@12.2.0-14+deb12u1",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-95619",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-41992",
+    "package": "gzip@1.12-1",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-41992",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-54369",
+    "package": "libacl1@2.3.1-3",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-54369",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-54370",
+    "package": "libacl1@2.3.1-3",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-54370",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53613",
+    "package": "libblkid1@2.38.1-5+deb12u3",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53613",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53615",
+    "package": "libblkid1@2.38.1-5+deb12u3",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53615",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78410",
+    "package": "libblkid1@2.38.1-5+deb12u3",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78410",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-19499",
+    "package": "libc-bin@2.36-9+deb12u14",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-19499",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-5435",
+    "package": "libc-bin@2.36-9+deb12u14",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-5435",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-5450",
+    "package": "libc-bin@2.36-9+deb12u14",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-5450",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-5928",
+    "package": "libc-bin@2.36-9+deb12u14",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-5928",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-84243",
+    "package": "libc-bin@2.36-9+deb12u14",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-84243",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-19499",
+    "package": "libc6@2.36-9+deb12u14",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-19499",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-5435",
+    "package": "libc6@2.36-9+deb12u14",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-5435",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-5450",
+    "package": "libc6@2.36-9+deb12u14",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-5450",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-5928",
+    "package": "libc6@2.36-9+deb12u14",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-5928",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-84243",
+    "package": "libc6@2.36-9+deb12u14",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-84243",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-10536",
+    "package": "libcurl4@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-10536",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-107928",
+    "package": "libcurl4@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-107928",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-11856",
+    "package": "libcurl4@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-11856",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-12064",
+    "package": "libcurl4@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-12064",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-13608",
+    "package": "libcurl4@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-13608",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-18924",
+    "package": "libcurl4@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-18924",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-19931",
+    "package": "libcurl4@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-19931",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-6276",
+    "package": "libcurl4@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-6276",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-80230",
+    "package": "libcurl4@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-80230",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-82209",
+    "package": "libcurl4@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-82209",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-8286",
+    "package": "libcurl4@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-8286",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-86409",
+    "package": "libcurl4@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-86409",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-86410",
+    "package": "libcurl4@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-86410",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-86414",
+    "package": "libcurl4@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-86414",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-87864",
+    "package": "libcurl4@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-87864",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-87865",
+    "package": "libcurl4@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-87865",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-8924",
+    "package": "libcurl4@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-8924",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-8927",
+    "package": "libcurl4@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-8927",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-8932",
+    "package": "libcurl4@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-8932",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-92388",
+    "package": "libcurl4@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-92388",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-92389",
+    "package": "libcurl4@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-92389",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-92390",
+    "package": "libcurl4@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-92390",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-92391",
+    "package": "libcurl4@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-92391",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-94266",
+    "package": "libcurl4@7.88.1-10+deb12u15",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-94266",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-102010",
+    "package": "libgcc-s1@12.2.0-14+deb12u1",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-102010",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-95619",
+    "package": "libgcc-s1@12.2.0-14+deb12u1",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-95619",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-107778",
+    "package": "libgssapi-krb5-2@1.20.1-2+deb12u5",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-107778",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-107778",
+    "package": "libk5crypto3@1.20.1-2+deb12u5",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-107778",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-107778",
+    "package": "libkrb5-3@1.20.1-2+deb12u5",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-107778",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-107778",
+    "package": "libkrb5support0@1.20.1-2+deb12u5",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-107778",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2023-2953",
+    "package": "libldap-2.5-0@2.5.13+dfsg-5",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2023-2953",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53613",
+    "package": "libmount1@2.38.1-5+deb12u3",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53613",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53615",
+    "package": "libmount1@2.38.1-5+deb12u3",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53615",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78410",
+    "package": "libmount1@2.38.1-5+deb12u3",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78410",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53613",
+    "package": "libsmartcols1@2.38.1-5+deb12u3",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53613",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53615",
+    "package": "libsmartcols1@2.38.1-5+deb12u3",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53615",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78410",
+    "package": "libsmartcols1@2.38.1-5+deb12u3",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78410",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-102010",
+    "package": "libstdc++6@12.2.0-14+deb12u1",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-102010",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-95619",
+    "package": "libstdc++6@12.2.0-14+deb12u1",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-95619",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2025-13151",
+    "package": "libtasn1-6@4.19.0-2+deb12u1",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2025-13151",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2025-69720",
+    "package": "libtinfo6@6.4-4",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2025-69720",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53613",
+    "package": "libuuid1@2.38.1-5+deb12u3",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53613",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53615",
+    "package": "libuuid1@2.38.1-5+deb12u3",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53615",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78410",
+    "package": "libuuid1@2.38.1-5+deb12u3",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78410",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53613",
+    "package": "mount@2.38.1-5+deb12u3",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53613",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53615",
+    "package": "mount@2.38.1-5+deb12u3",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53615",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78410",
+    "package": "mount@2.38.1-5+deb12u3",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78410",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2025-69720",
+    "package": "ncurses-base@6.4-4",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2025-69720",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2025-69720",
+    "package": "ncurses-bin@6.4-4",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2025-69720",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-82560",
+    "package": "perl-base@5.36.0-7+deb12u4",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-82560",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-9538",
+    "package": "perl-base@5.36.0-7+deb12u4",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-9538",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "GHSA-4vgr-h27g-cf9p",
+    "package": "surrealdb@2.7.0",
+    "scope": "backend",
+    "reason": "The conservative backend inventory also scans backend/fuzz/Cargo.lock, which still locks SurrealDB 2.7.0; the runtime locks 3.3.5. Update and validate the fuzz target to >= 3.1.0. Keep the finding visible until that separate fuzz migration; no blanket runtime exclusion. https://github.com/advisories/GHSA-4vgr-h27g-cf9p",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "GHSA-5qfp-32cf-69jh",
+    "package": "surrealdb@2.7.0",
+    "scope": "backend",
+    "reason": "The conservative backend inventory also scans backend/fuzz/Cargo.lock, which still locks SurrealDB 2.7.0; the runtime locks 3.3.5. Update and validate the fuzz target to >= 3.1.0. Keep the finding visible until that separate fuzz migration; no blanket runtime exclusion. https://github.com/advisories/GHSA-5qfp-32cf-69jh",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "GHSA-848m-r628-vrxw",
+    "package": "surrealdb@2.7.0",
+    "scope": "backend",
+    "reason": "The conservative backend inventory also scans backend/fuzz/Cargo.lock, which still locks SurrealDB 2.7.0; the runtime locks 3.3.5. Update and validate the fuzz target to >= 3.2.0. Keep the finding visible until that separate fuzz migration; no blanket runtime exclusion. https://github.com/advisories/GHSA-848m-r628-vrxw",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "GHSA-cc8f-fcx3-gpjr",
+    "package": "surrealdb@2.7.0",
+    "scope": "backend",
+    "reason": "The conservative backend inventory also scans backend/fuzz/Cargo.lock, which still locks SurrealDB 2.7.0; the runtime locks 3.3.5. Update and validate the fuzz target to >= 3.1.5. Keep the finding visible until that separate fuzz migration; no blanket runtime exclusion. https://github.com/advisories/GHSA-cc8f-fcx3-gpjr",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "GHSA-q729-696q-g9pq",
+    "package": "surrealdb@2.7.0",
+    "scope": "backend",
+    "reason": "The conservative backend inventory also scans backend/fuzz/Cargo.lock, which still locks SurrealDB 2.7.0; the runtime locks 3.3.5. Update and validate the fuzz target to >= 3.1.0. Keep the finding visible until that separate fuzz migration; no blanket runtime exclusion. https://github.com/advisories/GHSA-q729-696q-g9pq",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "GHSA-wjjj-24cx-f28g",
+    "package": "surrealdb@2.7.0",
+    "scope": "backend",
+    "reason": "The conservative backend inventory also scans backend/fuzz/Cargo.lock, which still locks SurrealDB 2.7.0; the runtime locks 3.3.5. Update and validate the fuzz target to >= 3.1.0. Keep the finding visible until that separate fuzz migration; no blanket runtime exclusion. https://github.com/advisories/GHSA-wjjj-24cx-f28g",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53613",
+    "package": "util-linux-extra@2.38.1-5+deb12u3",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53613",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53615",
+    "package": "util-linux-extra@2.38.1-5+deb12u3",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53615",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78410",
+    "package": "util-linux-extra@2.38.1-5+deb12u3",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78410",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53613",
+    "package": "util-linux@2.38.1-5+deb12u3",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53613",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53615",
+    "package": "util-linux@2.38.1-5+deb12u3",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53615",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78410",
+    "package": "util-linux@2.38.1-5+deb12u3",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78410",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-76844",
+    "package": "zlib1g@1:1.2.13.dfsg-1",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-76844",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-85091",
+    "package": "zlib1g@1:1.2.13.dfsg-1",
+    "scope": "backend",
+    "reason": "Existing backend base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-85091",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53613",
+    "package": "bsdutils@1:2.38.1-5+deb12u3",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53613",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53615",
+    "package": "bsdutils@1:2.38.1-5+deb12u3",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53615",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78410",
+    "package": "bsdutils@1:2.38.1-5+deb12u3",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78410",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-102010",
+    "package": "gcc-12-base@12.2.0-14+deb12u1",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-102010",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-95619",
+    "package": "gcc-12-base@12.2.0-14+deb12u1",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-95619",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-41992",
+    "package": "gzip@1.12-1",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-41992",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-54369",
+    "package": "libacl1@2.3.1-3",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-54369",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-54370",
+    "package": "libacl1@2.3.1-3",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-54370",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53613",
+    "package": "libblkid1@2.38.1-5+deb12u3",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53613",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53615",
+    "package": "libblkid1@2.38.1-5+deb12u3",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53615",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78410",
+    "package": "libblkid1@2.38.1-5+deb12u3",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78410",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-19499",
+    "package": "libc-bin@2.36-9+deb12u14",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-19499",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-5435",
+    "package": "libc-bin@2.36-9+deb12u14",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-5435",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-5450",
+    "package": "libc-bin@2.36-9+deb12u14",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-5450",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-5928",
+    "package": "libc-bin@2.36-9+deb12u14",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-5928",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-84243",
+    "package": "libc-bin@2.36-9+deb12u14",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-84243",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-19499",
+    "package": "libc6@2.36-9+deb12u14",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-19499",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-5435",
+    "package": "libc6@2.36-9+deb12u14",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-5435",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-5450",
+    "package": "libc6@2.36-9+deb12u14",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-5450",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-5928",
+    "package": "libc6@2.36-9+deb12u14",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-5928",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-84243",
+    "package": "libc6@2.36-9+deb12u14",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-84243",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-102010",
+    "package": "libgcc-s1@12.2.0-14+deb12u1",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-102010",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-95619",
+    "package": "libgcc-s1@12.2.0-14+deb12u1",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-95619",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53613",
+    "package": "libmount1@2.38.1-5+deb12u3",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53613",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53615",
+    "package": "libmount1@2.38.1-5+deb12u3",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53615",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78410",
+    "package": "libmount1@2.38.1-5+deb12u3",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78410",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53613",
+    "package": "libsmartcols1@2.38.1-5+deb12u3",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53613",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53615",
+    "package": "libsmartcols1@2.38.1-5+deb12u3",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53615",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78410",
+    "package": "libsmartcols1@2.38.1-5+deb12u3",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78410",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-102010",
+    "package": "libstdc++6@12.2.0-14+deb12u1",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-102010",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-95619",
+    "package": "libstdc++6@12.2.0-14+deb12u1",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-95619",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2025-13151",
+    "package": "libtasn1-6@4.19.0-2+deb12u1",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2025-13151",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2025-69720",
+    "package": "libtinfo6@6.4-4",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2025-69720",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53613",
+    "package": "libuuid1@2.38.1-5+deb12u3",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53613",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53615",
+    "package": "libuuid1@2.38.1-5+deb12u3",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53615",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78410",
+    "package": "libuuid1@2.38.1-5+deb12u3",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78410",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53613",
+    "package": "mount@2.38.1-5+deb12u3",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53613",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53615",
+    "package": "mount@2.38.1-5+deb12u3",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53615",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78410",
+    "package": "mount@2.38.1-5+deb12u3",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78410",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2025-69720",
+    "package": "ncurses-base@6.4-4",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2025-69720",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2025-69720",
+    "package": "ncurses-bin@6.4-4",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2025-69720",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-82560",
+    "package": "perl-base@5.36.0-7+deb12u4",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-82560",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-9538",
+    "package": "perl-base@5.36.0-7+deb12u4",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-9538",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53613",
+    "package": "util-linux-extra@2.38.1-5+deb12u3",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53613",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53615",
+    "package": "util-linux-extra@2.38.1-5+deb12u3",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53615",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78410",
+    "package": "util-linux-extra@2.38.1-5+deb12u3",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78410",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53613",
+    "package": "util-linux@2.38.1-5+deb12u3",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53613",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-53615",
+    "package": "util-linux@2.38.1-5+deb12u3",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-53615",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78410",
+    "package": "util-linux@2.38.1-5+deb12u3",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78410",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-76844",
+    "package": "zlib1g@1:1.2.13.dfsg-1",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-76844",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-85091",
+    "package": "zlib1g@1:1.2.13.dfsg-1",
+    "scope": "backup",
+    "reason": "Existing backup base-image package. Grype reports not-fixed with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-85091",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-76642",
+    "package": "bsdutils@1:2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-76642",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78408",
+    "package": "bsdutils@1:2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78408",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78409",
+    "package": "bsdutils@1:2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78409",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78410",
+    "package": "bsdutils@1:2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78410",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-102010",
+    "package": "gcc-14-base@14.2.0-19",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-102010",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-95619",
+    "package": "gcc-14-base@14.2.0-19",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-95619",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "GHSA-2883-xcg3-v3hh",
+    "package": "js-yaml@4.2.0",
+    "scope": "frontend",
+    "reason": "Existing locked frontend dependency. Upgrade js-yaml through its parent packages to >= 4.3.2 with lint/build/e2e validation; this is beyond the selected patch bumps in this CI fix. No claim of non-exploitability. https://github.com/advisories/GHSA-2883-xcg3-v3hh",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "GHSA-52cp-r559-cp3m",
+    "package": "js-yaml@4.2.0",
+    "scope": "frontend",
+    "reason": "Existing locked frontend dependency. Upgrade js-yaml through its parent packages to >= 4.3.0 with lint/build/e2e validation; this is beyond the selected patch bumps in this CI fix. No claim of non-exploitability. https://github.com/advisories/GHSA-52cp-r559-cp3m",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "GHSA-5p4m-2wfm-xmqj",
+    "package": "js-yaml@4.2.0",
+    "scope": "frontend",
+    "reason": "Existing locked frontend dependency. Upgrade js-yaml through its parent packages to >= 4.3.1 with lint/build/e2e validation; this is beyond the selected patch bumps in this CI fix. No claim of non-exploitability. https://github.com/advisories/GHSA-5p4m-2wfm-xmqj",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-54369",
+    "package": "libacl1@2.3.2-2+b1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-54369",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-54370",
+    "package": "libacl1@2.3.2-2+b1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-54370",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-76642",
+    "package": "libblkid1@2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-76642",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78408",
+    "package": "libblkid1@2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78408",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78409",
+    "package": "libblkid1@2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78409",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78410",
+    "package": "libblkid1@2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78410",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-19499",
+    "package": "libc-bin@2.41-12+deb13u4",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-19499",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-5435",
+    "package": "libc-bin@2.41-12+deb13u4",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-5435",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-84243",
+    "package": "libc-bin@2.41-12+deb13u4",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-84243",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-19499",
+    "package": "libc6@2.41-12+deb13u4",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-19499",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-5435",
+    "package": "libc6@2.41-12+deb13u4",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-5435",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-84243",
+    "package": "libc6@2.41-12+deb13u4",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-84243",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-102010",
+    "package": "libgcc-s1@14.2.0-19",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-102010",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-95619",
+    "package": "libgcc-s1@14.2.0-19",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-95619",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-76642",
+    "package": "liblastlog2-2@2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-76642",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78408",
+    "package": "liblastlog2-2@2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78408",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78409",
+    "package": "liblastlog2-2@2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78409",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78410",
+    "package": "liblastlog2-2@2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78410",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-76642",
+    "package": "libmount1@2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-76642",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78408",
+    "package": "libmount1@2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78408",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78409",
+    "package": "libmount1@2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78409",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78410",
+    "package": "libmount1@2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78410",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-76642",
+    "package": "libsmartcols1@2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-76642",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78408",
+    "package": "libsmartcols1@2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78408",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78409",
+    "package": "libsmartcols1@2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78409",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78410",
+    "package": "libsmartcols1@2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78410",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-119373",
+    "package": "libsqlite3-0@3.46.1-7+deb13u2",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-119373",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-119374",
+    "package": "libsqlite3-0@3.46.1-7+deb13u2",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-119374",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-119379",
+    "package": "libsqlite3-0@3.46.1-7+deb13u2",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-119379",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-102010",
+    "package": "libstdc++6@14.2.0-19",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-102010",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-95619",
+    "package": "libstdc++6@14.2.0-19",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-95619",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2025-69720",
+    "package": "libtinfo6@6.5+20250216-2",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2025-69720",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-76642",
+    "package": "libuuid1@2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-76642",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78408",
+    "package": "libuuid1@2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78408",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78409",
+    "package": "libuuid1@2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78409",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78410",
+    "package": "libuuid1@2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78410",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-76642",
+    "package": "login@1:4.16.0-2+really2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-76642",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78408",
+    "package": "login@1:4.16.0-2+really2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78408",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78409",
+    "package": "login@1:4.16.0-2+really2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78409",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78410",
+    "package": "login@1:4.16.0-2+really2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78410",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-76642",
+    "package": "mount@2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-76642",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78408",
+    "package": "mount@2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78408",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78409",
+    "package": "mount@2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78409",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78410",
+    "package": "mount@2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78410",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2025-69720",
+    "package": "ncurses-base@6.5+20250216-2",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2025-69720",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2025-69720",
+    "package": "ncurses-bin@6.5+20250216-2",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2025-69720",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "GHSA-2464-fhr4-w9xw",
+    "package": "next@16.3.4",
+    "scope": "frontend",
+    "reason": "Existing Next.js 16.3.4 finding requires >= 16.4.1. PR #201 upgrades to 16.3.8 for earlier advisories but does not resolve this newer advisory; track a further Next.js upgrade with frontend/e2e tests. No claim of non-exploitability. https://github.com/advisories/GHSA-2464-fhr4-w9xw",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "GHSA-673q-mjm6-r5xr",
+    "package": "next@16.3.4",
+    "scope": "frontend",
+    "reason": "Existing Next.js 16.3.4 finding requires >= 16.4.1. PR #201 upgrades to 16.3.8 for earlier advisories but does not resolve this newer advisory; track a further Next.js upgrade with frontend/e2e tests. No claim of non-exploitability. https://github.com/advisories/GHSA-673q-mjm6-r5xr",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "GHSA-cjq9-62q9-8jv4",
+    "package": "next@16.3.4",
+    "scope": "frontend",
+    "reason": "Existing Next.js 16.3.4 finding is resolved by PR #201's upgrade to 16.3.8. Keep this image-scoped acceptance until that PR merges and the image is rebuilt. No claim of non-exploitability. https://github.com/advisories/GHSA-cjq9-62q9-8jv4",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "GHSA-p3m5-59mp-jv5r",
+    "package": "next@16.3.4",
+    "scope": "frontend",
+    "reason": "Existing Next.js 16.3.4 finding requires >= 16.4.1. PR #201 upgrades to 16.3.8 for earlier advisories but does not resolve this newer advisory; track a further Next.js upgrade with frontend/e2e tests. No claim of non-exploitability. https://github.com/advisories/GHSA-p3m5-59mp-jv5r",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "GHSA-vcvr-r3jv-pc5j",
+    "package": "next@16.3.4",
+    "scope": "frontend",
+    "reason": "Existing Next.js 16.3.4 finding is resolved by PR #201's upgrade to 16.3.8. Keep this image-scoped acceptance until that PR merges and the image is rebuilt. No claim of non-exploitability. https://github.com/advisories/GHSA-vcvr-r3jv-pc5j",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-82560",
+    "package": "perl-base@5.40.1-6+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-82560",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-9538",
+    "package": "perl-base@5.40.1-6+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-9538",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-76642",
+    "package": "util-linux@2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-76642",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78408",
+    "package": "util-linux@2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78408",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78409",
+    "package": "util-linux@2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78409",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-78410",
+    "package": "util-linux@2.41.5-0+deb13u1",
+    "scope": "frontend",
+    "reason": "Existing frontend base-image package. Grype reports wont-fix with no fixed version in this Debian suite. Track the upstream security fix or a tested base-image migration; do not treat this as non-exploitable. https://security-tracker.debian.org/tracker/CVE-2026-78410",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "GHSA-mrhx-c7xc-m3w5",
+    "package": "zod@4.5.4",
+    "scope": "frontend",
+    "reason": "Existing locked frontend dependency. Upgrade zod through its parent packages to >= 4.6.6 with lint/build/e2e validation; this is beyond the selected patch bumps in this CI fix. No claim of non-exploitability. https://github.com/advisories/GHSA-mrhx-c7xc-m3w5",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "GHSA-6j4f-fj2g-mc7p",
+    "package": "brace-expansion@5.0.9",
+    "scope": "secrets-helper",
+    "reason": "Bundled npm dependency in the Node 24.22.2 base image, not the application lockfile. Upgrade the base image's npm bundle with brace-expansion >= 5.0.10 and rerun helper/compose tests. Temporary acceptance while selecting a tested npm/base-image update; no claim of non-exploitability. https://github.com/advisories/GHSA-6j4f-fj2g-mc7p",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "GHSA-qhr7-859c-m2p7",
+    "package": "brace-expansion@5.0.9",
+    "scope": "secrets-helper",
+    "reason": "Bundled npm dependency in the Node 24.22.2 base image, not the application lockfile. Upgrade the base image's npm bundle with brace-expansion >= 5.0.11 and rerun helper/compose tests. Temporary acceptance while selecting a tested npm/base-image update; no claim of non-exploitability. https://github.com/advisories/GHSA-qhr7-859c-m2p7",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "GHSA-2m5v-pch6-74hx",
+    "package": "undici@6.28.0",
+    "scope": "secrets-helper",
+    "reason": "Bundled npm dependency in the Node 24.22.2 base image, not the application lockfile. Upgrade the base image's npm bundle with undici >= 6.29.1 and rerun helper/compose tests. Temporary acceptance while selecting a tested npm/base-image update; no claim of non-exploitability. https://github.com/advisories/GHSA-2m5v-pch6-74hx",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "GHSA-qrxm-fqhp-jwvm",
+    "package": "undici@6.28.0",
+    "scope": "secrets-helper",
+    "reason": "Bundled npm dependency in the Node 24.22.2 base image, not the application lockfile. Upgrade the base image's npm bundle with undici >= 6.29.1 and rerun helper/compose tests. Temporary acceptance while selecting a tested npm/base-image update; no claim of non-exploitability. https://github.com/advisories/GHSA-qrxm-fqhp-jwvm",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "GHSA-rfgv-xxqx-mfg5",
+    "package": "undici@6.28.0",
+    "scope": "secrets-helper",
+    "reason": "Bundled npm dependency in the Node 24.22.2 base image, not the application lockfile. Upgrade the base image's npm bundle with undici >= 6.28.1 and rerun helper/compose tests. Temporary acceptance while selecting a tested npm/base-image update; no claim of non-exploitability. https://github.com/advisories/GHSA-rfgv-xxqx-mfg5",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "GHSA-xjj6-f33q-929c",
+    "package": "undici@6.28.0",
+    "scope": "secrets-helper",
+    "reason": "Bundled npm dependency in the Node 24.22.2 base image, not the application lockfile. Upgrade the base image's npm bundle with undici >= 6.29.1 and rerun helper/compose tests. Temporary acceptance while selecting a tested npm/base-image update; no claim of non-exploitability. https://github.com/advisories/GHSA-xjj6-f33q-929c",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "grype",
+    "id": "CVE-2026-4738",
+    "package": "zlib@1.3.2-r1",
+    "scope": "secrets-helper",
+    "reason": "Alpine base-image zlib finding. Fixed in 1.4-r0; this moves zlib from 1.3 to 1.4 and needs a tested Node/Alpine base refresh. No claim of non-exploitability. https://security.alpinelinux.org/vuln/CVE-2026-4738",
     "owner": "Cashara maintainers",
     "expires": "2026-11-16"
   }
