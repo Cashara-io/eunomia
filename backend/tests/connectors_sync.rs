@@ -141,6 +141,46 @@ async fn a_due_sync_lands_searchable_records_then_a_401_is_visible_and_keeps_the
     assert_eq!(st["cursor"], "2024-02-01T00:00:00Z", "a failed sync keeps the cursor");
 }
 
+/// Partial provider reads go through the ordinary successful checkpoint, clearing failure backoff.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn gmail_partial_progress_is_persisted_resets_backoff_and_drains_without_duplicates() {
+    let (app, org) = app_with(None).await;
+    let owner = app.user.id.clone();
+    let message = |id: &str, date: &str| json!({"id": id, "threadId": id, "internalDate": date, "snippet": id});
+    let token = || route("POST", "/oauth/token", json!({"access_token": "t"}));
+    let mock = serve(vec![token(), route("GET", "/users/me/messages", json!({})).status(401)]).await;
+    connect(&org, &owner, "gmail", &mock.base, json!({}), json!({"client_id": "c", "client_secret": "s", "refresh_token": "r"})).await;
+    assert!(sync_source(&org, &owner, "gmail", None).await.get("error").is_some());
+    assert_eq!(status(&org, &owner, "gmail").await["consecutive_failures"], 1);
+    mock.set_routes(vec![
+        token(),
+        route("GET", "/users/me/messages", json!({"messages": [{"id": "m3"}, {"id": "m2"}, {"id": "m1"}]})),
+        route("GET", "/users/me/messages/m1", message("m1", "1700000100000")),
+        route("GET", "/users/me/messages/m2", json!({"error": {"errors": [{"reason": "userRateLimitExceeded"}]}}))
+            .status(403).header("retry-after", "60"),
+    ]);
+    let first = sync_source(&org, &owner, "gmail", None).await;
+    assert_eq!(first["written"], 1, "{first}");
+    let st = status(&org, &owner, "gmail").await;
+    assert_eq!(st["last_error"], "");
+    assert_eq!(st["consecutive_failures"], 0);
+    let cursor: Value = serde_json::from_str(st["cursor"].as_str().unwrap()).unwrap();
+    assert_eq!(cursor["after"], "1700000099");
+    assert_eq!(cursor["pending"], json!(["m3", "m2"]));
+    assert!(!eunomia_backend::sources::scheduler::is_due(Some(chrono::Utc::now()), 0, 300, chrono::Utc::now()));
+    assert!(eunomia_backend::sources::scheduler::is_due(Some(chrono::Utc::now() - chrono::Duration::seconds(301)), 0, 300, chrono::Utc::now()));
+    mock.set_routes(vec![
+        token(),
+        route("GET", "/users/me/messages/m2", message("m2", "1700000200000")),
+        route("GET", "/users/me/messages/m3", message("m3", "1700000300000")),
+    ]);
+    let second = sync_source(&org, &owner, "gmail", None).await;
+    assert_eq!(second["written"], 2, "{second}");
+    assert_eq!(count(&org, "SELECT count() AS count FROM cache_record WHERE owner = $owner AND source = 'gmail'", &owner).await, 3);
+    assert_eq!(mock.requests().iter().filter(|r| r.path == "/users/me/messages/m1").count(), 1);
+    assert_eq!(status(&org, &owner, "gmail").await["consecutive_failures"], 0);
+}
+
 /// Disabling stops syncs without a restart; two overlapping runs make one provider sync; a sync job
 /// holding a live lease (another replica) makes this run stand down until the lease expires.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

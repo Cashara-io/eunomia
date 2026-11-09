@@ -10,17 +10,17 @@ Every sync is a `sync` job in the background job queue (see `docs/architecture/j
 
 | Connector | What it syncs | Credential (where to get it) | Scopes / permissions | Default interval |
 |---|---|---|---|---|
-| Up Bank | Transactions (from 30 days back, then incremental), accounts, categories; webhooks optional | Personal access token — [api.up.com.au](https://api.up.com.au/getting_started) or Up app → Profile → Data sharing | Read-only by design | 15 min |
-| PocketAI (HeyPocket) | Meeting recordings: full transcript with speakers, summary, action items, tags (30 days back, then incremental). Everything Pocket returns is stored whole (below) | API key from your Pocket account's developer settings | — | 24 h |
+| Up Bank | Transactions (from 30 days back, then incremental), accounts, categories; webhooks optional | Personal access token: [api.up.com.au](https://api.up.com.au/getting_started) or Up app → Profile → Data sharing | Read-only by design | 15 min |
+| PocketAI (HeyPocket) | Meeting recordings: full transcript with speakers, summary, action items, tags (30 days back, then incremental). Everything Pocket returns is stored whole (below) | API key from your Pocket account's developer settings |: | 24 h |
 | GitHub | Issues and pull requests you created, are assigned or mentioned in (90 days back, then incremental) | [Fine-grained token](https://github.com/settings/personal-access-tokens/new), or a classic token | Fine-grained: Issues + Pull requests (read) on chosen repos. Classic: `repo` | 15 min |
 | Slack | Messages in channels the app has joined (30 days back, then incremental; thread replies not included) | Bot token `xoxb-…` from your app at [api.slack.com/apps](https://api.slack.com/apps), then `/invite` it to channels | `channels:read`, `channels:history`, `groups:read`, `groups:history` | 15 min |
 | Notion | Pages (title + top-level text) and databases shared with the integration | Internal integration secret from [notion.so/profile/integrations](https://www.notion.so/profile/integrations); add it to pages via ••• → Connections | Read content | 15 min |
-| Linear | Issues assigned to you | Personal API key — Linear → Settings → Security & access | Read | 15 min |
+| Linear | Issues assigned to you | Personal API key: Linear → Settings → Security & access | Read | 15 min |
 | Gmail | Messages from the last 30 days onwards: subject, sender, plain-text body (200 per sync, oldest first; a larger backlog drains over the next syncs) | Your own Google OAuth client ID + secret and a refresh token (below) | `https://www.googleapis.com/auth/gmail.readonly` | 15 min |
 | Google Calendar | Primary-calendar events, 30 days back to 6 months ahead, then every change (cancellations remove the event) | Same as Gmail | `https://www.googleapis.com/auth/calendar.readonly` | 15 min |
 | Discord | Messages in the channels you list (comma-separated channel IDs) | Bot token from the [Developer Portal](https://discord.com/developers/applications) | Message Content Intent; View Channels + Read Message History | 15 min |
 | Spotify | Recently played tracks (Spotify keeps only the last 50, so history builds up from when you connect) | Your own Spotify app's client ID + secret and a refresh token (below) | `user-read-recently-played` | 15 min |
-| Todoist | Active tasks with project, due date, labels | API token — Todoist → Settings → Integrations → Developer | Full API token (Todoist has no read-only token) | 15 min |
+| Todoist | Active tasks with project, due date, labels | API token: Todoist → Settings → Integrations → Developer | Full API token (Todoist has no read-only token) | 15 min |
 | Stripe | Charges (incremental) | [Restricted key](https://dashboard.stripe.com/apikeys) `rk_…` | Charges: Read only | 15 min |
 | Ed Discussion | One record per thread, with its answers and comments in the text (30 days back, then every thread that changed; 100 threads per sync, oldest first). Active courses, or the course IDs you list; region `us` (default), `au` (edstem.org/au, served from `edstem.org/api`) or `eu`. Only the newest 5,000 threads per course are scanned; threads deeper than that are never synced | API token from [edstem.org/us/settings/api-tokens](https://edstem.org/us/settings/api-tokens) | Ed's API is unofficial and has no scopes; the token reads what you can | 30 min |
 
@@ -105,27 +105,56 @@ sync still succeeds and the server logs `pocket audio: not downloaded`.
 Google has no personal access tokens, and a self-hosted server has no public redirect URL, so you use your own OAuth client and mint a long-lived refresh token once:
 
 1. In [Google Cloud Console](https://console.cloud.google.com/apis/library), enable the Gmail API and/or Google Calendar API.
-2. Configure the OAuth consent screen (External), add yourself as a test user, then **publish** it ("In production") — refresh tokens of apps left in "Testing" expire after 7 days.
+2. Configure the OAuth consent screen (External), add yourself as a test user, then **publish** it ("In production"): refresh tokens of apps left in "Testing" expire after 7 days.
 3. Create an OAuth client ID, type **Web application**, with redirect URI `https://developers.google.com/oauthplayground`.
 4. In the [OAuth 2.0 Playground](https://developers.google.com/oauthplayground), click ⚙ → "Use your own OAuth credentials" and enter the client ID and secret. Authorize the scope(s) above (both at once if you want one token for both connectors), then "Exchange authorization code for tokens".
 5. Paste the client ID, client secret and refresh token into the connector. Eunomia exchanges the refresh token for a fresh access token on every sync.
 
+### Large Gmail imports and Google rate limits
+
+A large first Gmail import can take several syncs. Eunomia reads up to 200 messages per sync,
+oldest first, at one full-message request per second per connection. A full batch can take several
+minutes. Unread message IDs are saved
+with the checkpoint, so later syncs continue the backlog without listing it again. Lists request
+500 IDs per page. An incomplete listing never advances the checkpoint past older unread mail.
+If more than 25,000 messages match the initial query, the sync reports the listing limit and
+keeps its checkpoint rather than silently skipping older messages.
+
+Google can report rate limits as HTTP 403 as well as 429. Gmail and Calendar retry rate limits
+and temporary provider failures with exponential backoff and random delays, sharing at most four
+retries and ten seconds of retry waiting and request time per sync. A longer `Retry-After` is left
+for the next sync rather than retried early. Other clients using the same Google account can also
+consume its quota.
+
+If a limit persists after some records were fetched, Eunomia keeps that progress. The server log
+says that Gmail is rate limiting the account, how many messages were fetched for import, and that
+the next sync will continue. Calendar saves its next page and original query window. A partial
+sync that saves all fetched records clears failure backoff and continues at the configured sync
+interval. With no progress, or with a hard credentials or permissions error, the sync fails visibly
+and uses the normal 15-minute to 6-hour failure backoff. There is no fixed five-minute retry loop.
+
+The [current Gmail quota table](https://developers.google.com/workspace/gmail/api/reference/quota)
+lists 6,000 quota units per minute per user per project, 5 units for `messages.list`, and 60 for
+`messages.get` with `format=full`. Some older Google projects retain earlier quotas. Google also
+applies concurrent-request limits; its Gmail docs do not specify a separate per-user per-second
+quota-unit allowance. See [Google's error and backoff guidance](https://developers.google.com/workspace/gmail/api/guides/handle-errors).
+
 ## Spotify: getting a refresh token
 
 1. Create an app at [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) (Web API) with redirect URI `http://127.0.0.1:8888/callback`.
-2. Open `https://accounts.spotify.com/authorize?response_type=code&scope=user-read-recently-played&redirect_uri=http://127.0.0.1:8888/callback&client_id=CLIENT_ID`, approve, and copy the `code` parameter from the address bar (the page itself won't load — nothing is listening there).
+2. Open `https://accounts.spotify.com/authorize?response_type=code&scope=user-read-recently-played&redirect_uri=http://127.0.0.1:8888/callback&client_id=CLIENT_ID`, approve, and copy the `code` parameter from the address bar (the page itself won't load: nothing is listening there).
 3. Exchange it:
    `curl -u CLIENT_ID:CLIENT_SECRET -d grant_type=authorization_code -d code=CODE -d redirect_uri=http://127.0.0.1:8888/callback https://accounts.spotify.com/api/token`
 4. Paste the client ID, client secret and the response's `refresh_token` into the connector.
 
 ## Troubleshooting
 
-- **HTTP 401 / 403** — the token is wrong, revoked or missing a scope above. Fix it on the connector's page and **Test connection**.
-- **HTTP 429** — the provider rate-limited the sync; it retries automatically.
-- **`not configured: missing …`** — a required field is empty.
-- **Slack `not_in_channel` or nothing synced** — `/invite` the app to the channels.
-- **Discord messages with no text** — enable Message Content Intent for the bot.
-- **Google `invalid_grant`** — the refresh token expired or was revoked (an app still in "Testing" expires it after 7 days); mint a new one.
+- **HTTP 401 / non-quota 403**: the token is wrong, revoked or missing a scope above. Fix it on the connector's page and **Test connection**.
+- **HTTP 429 / Google quota 403**: the provider rate-limited the sync; it retries automatically and keeps any safe partial progress.
+- **`not configured: missing …`**: a required field is empty.
+- **Slack `not_in_channel` or nothing synced**: `/invite` the app to the channels.
+- **Discord messages with no text**: enable Message Content Intent for the bot.
+- **Google `invalid_grant`**: the refresh token expired or was revoked (an app still in "Testing" expires it after 7 days); mint a new one.
 
 ## Self-hosted providers (e.g. GitHub Enterprise)
 

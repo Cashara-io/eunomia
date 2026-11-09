@@ -11,10 +11,13 @@
 
 use async_trait::async_trait;
 use base64::Engine;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::HashSet;
+use std::time::Duration;
 
-use crate::connectors::clients::{bearer, refresh_access_token, Api};
-use crate::error::AppResult;
+use crate::connectors::clients::{bearer, refresh_access_token, retryable, Api};
+use crate::error::{AppError, AppResult};
 use crate::sources::base::{envelope, from_unix, items, s, Conn, Source, SyncResult, MAX_PAGES};
 
 const BASE_URL: &str = "https://gmail.googleapis.com/gmail/v1";
@@ -28,7 +31,7 @@ const MAX_BODY_CHARS: usize = 20_000;
 /// A Google API authenticated with a freshly refreshed access token.
 pub(crate) async fn google_api(conn: &Conn, base: &str) -> AppResult<Api> {
     let token = refresh_access_token(&conn.config, GOOGLE_TOKEN_URL, &conn.credentials).await?;
-    Ok(Api::new(&conn.config, base, bearer(&token)))
+    Ok(Api::new(&conn.config, base, bearer(&token)).with_google_retries())
 }
 
 fn header(raw: &Value, name: &str) -> String {
@@ -61,6 +64,36 @@ fn sent_at(raw: &Value) -> Option<String> {
         .or_else(|| s(raw, "/internalDate").parse::<i64>().ok().and_then(|ms| from_unix(ms / 1000)))
 }
 
+/// Preserve the unread snapshot so a capped or interrupted sync need not list it again.
+/// `seen` removes the deliberate one-second overlap, including a large group of ties.
+#[derive(Default, Serialize, Deserialize)]
+struct MessageCursor {
+    after: Option<String>,
+    pending: Vec<String>,
+    seen: Vec<String>,
+}
+
+impl MessageCursor {
+    fn read(cursor: Option<String>) -> AppResult<Self> {
+        match cursor {
+            Some(c) if c.starts_with('{') => serde_json::from_str(&c).map_err(|_| AppError::internal("invalid Gmail cursor")),
+            after => Ok(Self { after, ..Self::default() }),
+        }
+    }
+
+    fn checkpoint(&mut self, records: &[Value]) -> AppResult<()> {
+        let dates: Vec<i64> = records.iter().map(|r| s(r, "/internalDate").parse::<i64>()
+            .map_err(|_| AppError::internal("Gmail message has no valid internalDate; keeping the previous cursor"))).collect::<AppResult<_>>()?;
+        if let Some(newest) = dates.iter().max().map(|ms| ms / 1000) {
+            let after = (newest - 1).to_string();
+            if self.after.as_deref() != Some(&after) { self.seen.clear(); }
+            self.after = Some(after);
+            self.seen.extend(records.iter().zip(dates).filter(|(_, ms)| ms / 1000 == newest).map(|(r, _)| s(r, "/id").to_string()));
+        }
+        Ok(())
+    }
+}
+
 pub struct GmailSource;
 
 #[async_trait]
@@ -83,39 +116,51 @@ impl Source for GmailSource {
 
     async fn fetch(&self, conn: &Conn, cursor: Option<String>) -> AppResult<SyncResult> {
         let api = google_api(conn, BASE_URL).await?;
-        let q = cursor.as_deref().map(|c| format!("after:{c}")).unwrap_or_else(|| "newer_than:30d".to_string());
-
-        let mut ids = Vec::new();
-        let mut page_token = String::new();
-        for _ in 0..MAX_PAGES {
-            let mut query = vec![("q", q.clone()), ("maxResults", "100".to_string())];
+        // 60 units for format=full, 6,000 units/minute for newer Google projects.
+        // One request/second leaves headroom for listing and other clients of this account.
+        let spacing = if cfg!(test) { Duration::from_millis(1) } else { Duration::from_secs(1) };
+        let reader = api.clone().with_pacing(spacing);
+        let mut state = MessageCursor::read(cursor)?;
+        if state.pending.is_empty() {
+            let q = state.after.as_deref().map(|c| format!("after:{c}")).unwrap_or_else(|| "newer_than:30d".to_string());
+            let seen: HashSet<_> = state.seen.iter().cloned().collect();
+            let mut page_token = String::new();
+            let mut listed = HashSet::new();
+            for _ in 0..MAX_PAGES {
+                let mut query = vec![("q", q.clone()), ("maxResults", "500".to_string())];
+                if !page_token.is_empty() { query.push(("pageToken", page_token.clone())); }
+                // A partial newest-first listing cannot establish the oldest prefix. Do not advance it.
+                let page = api.get("/users/me/messages", &query).await?;
+                for message in items(&page, "/messages") {
+                    let id = s(&message, "/id").to_string();
+                    if !seen.contains(&id) && listed.insert(id.clone()) { state.pending.push(id); }
+                }
+                page_token = s(&page, "/nextPageToken").to_string();
+                if page_token.is_empty() { break; }
+            }
             if !page_token.is_empty() {
-                query.push(("pageToken", page_token.clone()));
-            }
-            let page = api.get("/users/me/messages", &query).await?;
-            ids.extend(items(&page, "/messages").iter().map(|m| s(m, "/id").to_string()));
-            page_token = s(&page, "/nextPageToken").to_string();
-            if page_token.is_empty() {
-                break;
+                return Err(AppError::internal("Gmail listing exceeded 25,000 messages; keeping the cursor so older mail is not skipped"));
             }
         }
 
-        // The list is newest first: read the oldest batch, so the cursor
-        // never skips past unread messages. A failed read fails the sync
-        // and keeps the cursor, so it is retried.
-        let batch = &ids[ids.len().saturating_sub(MAX_MESSAGES_PER_SYNC)..];
+        // Gmail lists newest first. Pop from the end and stop at the first failed read.
         let mut records = Vec::new();
-        for id in batch {
-            records.push(api.get(&format!("/users/me/messages/{id}"), &[("format", "full".to_string())]).await?);
+        for _ in 0..MAX_MESSAGES_PER_SYNC {
+            let Some(id) = state.pending.last() else { break };
+            match reader.get(&format!("/users/me/messages/{id}"), &[("format", "full".to_string())]).await {
+                Ok(record) => { records.push(record); state.pending.pop(); }
+                Err(error) if retryable(&error) && !records.is_empty() => {
+                    let cause = if error.reason == Some("connector_rate_limited") {
+                        "Gmail is rate limiting this account"
+                    } else { "Gmail is temporarily unavailable" };
+                    tracing::warn!(fetched = records.len(), "{cause}; keeping fetched messages for import, will continue on the next sync");
+                    break;
+                }
+                Err(error) => return Err(error),
+            }
         }
-        // `after:` has one-second granularity: resume a second early (the
-        // overlap is deduplicated) so a message sharing that second isn't lost.
-        let newest = records
-            .iter()
-            .filter_map(|r| s(r, "/internalDate").parse::<i64>().ok())
-            .max()
-            .map(|ms| (ms / 1000 - 1).to_string());
-        Ok(SyncResult { records, cursor: newest.or(cursor) })
+        state.checkpoint(&records)?;
+        Ok(SyncResult { records, cursor: Some(serde_json::to_string(&state).unwrap()) })
     }
 
     fn map(&self, raw: &Value) -> Option<Value> {
@@ -171,9 +216,9 @@ mod tests {
     async fn fetch_refreshes_the_token_then_lists_and_reads_messages() {
         let mock = serve(vec![
             route("POST", "/oauth/token", json!({"access_token": "ya29.fresh", "expires_in": 3599, "token_type": "Bearer"})),
-            route("GET", "/users/me/messages", json!({"messages": [{"id": "m2", "threadId": "t-m2"}], "resultSizeEstimate": 1}))
+            route("GET", "/users/me/messages", json!({"messages": [{"id": "m1", "threadId": "t-m1"}], "resultSizeEstimate": 1}))
                 .query_has("pageToken=p2"),
-            route("GET", "/users/me/messages", json!({"messages": [{"id": "m1", "threadId": "t-m1"}], "nextPageToken": "p2"}))
+            route("GET", "/users/me/messages", json!({"messages": [{"id": "m2", "threadId": "t-m2"}], "nextPageToken": "p2"}))
                 .query_has("q=after:1700000000"),
             route("GET", "/users/me/messages/m1", json!(message("m1", "1700000100000", "Lunch?"))).query_has("format=full"),
             route("GET", "/users/me/messages/m2", json!(message("m2", "1700000200000", "Re: Lunch?"))),
@@ -183,7 +228,7 @@ mod tests {
         let creds = json!({"client_id": "cid", "client_secret": "csecret", "refresh_token": "1//rt"});
         let res = GmailSource.fetch(&mock.conn(creds), Some("1700000000".into())).await.unwrap();
         assert_eq!(res.records.len(), 2);
-        assert_eq!(res.cursor.as_deref(), Some("1700000199"));
+        assert_eq!(MessageCursor::read(res.cursor).unwrap().after.as_deref(), Some("1700000199"));
 
         let reqs = mock.requests();
         let token = &reqs[0];
@@ -230,7 +275,7 @@ mod tests {
         let first = GmailSource.fetch(&conn, None).await.unwrap();
         assert_eq!(first.records.len(), 200);
         assert!(first.records.iter().all(|r| s(r, "/id")[1..].parse::<usize>().unwrap() >= 50), "oldest 200 first");
-        assert_eq!(first.cursor.as_deref(), Some("1700001999"));
+        assert_eq!(MessageCursor::read(first.cursor.clone()).unwrap().after.as_deref(), Some("1700001999"));
 
         let second = GmailSource.fetch(&conn, first.cursor).await.unwrap();
         let seen: HashSet<String> = first.records.iter().chain(&second.records).map(|r| s(r, "/id").to_string()).collect();
@@ -238,15 +283,106 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn quota_failure_keeps_a_contiguous_prefix_and_the_next_sync_drains() {
+        let routes = || vec![
+            route("POST", "/oauth/token", json!({"access_token": "t"})),
+            route("GET", "/users/me/messages", json!({"messages": [{"id": "m3"}, {"id": "m2"}, {"id": "m1"}]})),
+            route("GET", "/users/me/messages/m1", message("m1", "1700000100000", "First")),
+            route("GET", "/users/me/messages/m2", json!({"error": {"errors": [{"reason": "userRateLimitExceeded"}]}}))
+                .status(403).header("retry-after", "60"),
+            route("GET", "/users/me/messages/m3", message("m3", "1700000300000", "Third")),
+        ];
+        let mock = serve(routes()).await;
+        let conn = mock.conn(json!({"client_id": "c", "client_secret": "s", "refresh_token": "r"}));
+        // The old implementation fails both attempts, discarding the successful gets each time.
+        let attempts = [GmailSource.fetch(&conn, Some("1700000000".into())).await,
+                        GmailSource.fetch(&conn, Some("1700000000".into())).await];
+        assert!(attempts.iter().all(Result::is_ok), "both attempts must preserve progress: {attempts:?}");
+        let first = attempts.into_iter().next().unwrap().unwrap();
+        assert_eq!(first.records.iter().map(|r| s(r, "/id")).collect::<Vec<_>>(), ["m1"]);
+        assert_eq!(MessageCursor::read(first.cursor.clone()).unwrap().after.as_deref(), Some("1700000099"));
+        assert!(!mock.requests().iter().any(|r| r.path.ends_with("/m3")), "stop at the first gap");
+
+        let mut recovered = routes();
+        recovered[1] = route("GET", "/users/me/messages", json!({"messages": [{"id": "m3"}, {"id": "m2"}, {"id": "m1"}]}))
+            .query_has("q=after:1700000099");
+        recovered[3] = route("GET", "/users/me/messages/m2", message("m2", "1700000200000", "Second"));
+        mock.set_routes(recovered);
+        let second = GmailSource.fetch(&conn, first.cursor).await.unwrap();
+        let seen: HashSet<_> = first.records.iter().chain(&second.records).map(|r| s(r, "/id")).collect();
+        assert_eq!(seen, HashSet::from(["m1", "m2", "m3"]));
+        assert_eq!(first.records.len() + second.records.len(), 3, "no duplicate reads");
+        assert_eq!(MessageCursor::read(second.cursor).unwrap().after.as_deref(), Some("1700000299"));
+    }
+
+    #[tokio::test]
+    async fn an_exhausted_retry_budget_returns_partial_progress() {
+        for status in [429, 503] {
+            let mock = serve(vec![
+                route("POST", "/oauth/token", json!({"access_token": "t"})),
+                route("GET", "/users/me/messages", json!({"messages": [{"id": "m3"}, {"id": "m2"}, {"id": "m1"}]})),
+                route("GET", "/users/me/messages/m1", message("m1", "1700000100000", "First")),
+                route("GET", "/users/me/messages/m2", json!({})).status(status),
+            ]).await;
+            let started = tokio::time::Instant::now();
+            let result = GmailSource.fetch(&mock.conn(json!({"client_id": "c", "client_secret": "s", "refresh_token": "r"})), None).await.unwrap();
+            assert_eq!(result.records.len(), 1);
+            let cursor = MessageCursor::read(result.cursor).unwrap();
+            assert_eq!(cursor.after.as_deref(), Some("1700000099"));
+            assert_eq!(cursor.pending, ["m3", "m2"]);
+            let reads = mock.requests().iter().filter(|r| r.path.ends_with("/m2")).count();
+            assert!((2..=5).contains(&reads), "retry in place, then stop: {reads}");
+            assert!(started.elapsed() < Duration::from_secs(15), "bounded retry time");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_large_same_second_group_drains_without_duplicates_or_relisting() {
+        let mut routes = vec![
+            route("POST", "/oauth/token", json!({"access_token": "t"})),
+            route("GET", "/users/me/messages", json!({"messages": (0..250).rev().map(|i| json!({"id": format!("m{i}")})).collect::<Vec<_>>()})),
+        ];
+        for i in 0..250 {
+            routes.push(route("GET", &format!("/users/me/messages/m{i}"), message(&format!("m{i}"), "1700000100000", "Tie")));
+        }
+        let mock = serve(routes.clone()).await;
+        let conn = mock.conn(json!({"client_id": "c", "client_secret": "s", "refresh_token": "r"}));
+        let first = GmailSource.fetch(&conn, None).await.unwrap();
+        let second = GmailSource.fetch(&conn, first.cursor).await.unwrap();
+        assert_eq!((first.records.len(), second.records.len()), (200, 50));
+        let ids: HashSet<_> = first.records.iter().chain(&second.records).map(|r| s(r, "/id")).collect();
+        assert_eq!(ids.len(), 250);
+        assert_eq!(mock.requests().iter().filter(|r| r.path == "/users/me/messages").count(), 1);
+        assert!(mock.requests().iter().any(|r| r.query.contains("maxResults=500")));
+        routes[1] = route("GET", "/users/me/messages", json!({"messages": [{"id": "new"}, {"id": "m249"}]}));
+        routes.push(route("GET", "/users/me/messages/new", message("new", "1700000200000", "New")));
+        mock.set_routes(routes);
+        let third = GmailSource.fetch(&conn, second.cursor).await.unwrap();
+        assert_eq!(third.records.iter().map(|r| s(r, "/id")).collect::<Vec<_>>(), ["new"]);
+    }
+
+    #[tokio::test]
+    async fn an_incomplete_listing_never_skips_older_messages() {
+        let mock = serve(vec![
+            route("POST", "/oauth/token", json!({"access_token": "t"})),
+            route("GET", "/users/me/messages", json!({"messages": [{"id": "newest"}], "nextPageToken": "more"})),
+        ]).await;
+        let error = GmailSource.fetch(&mock.conn(json!({"client_id": "c", "client_secret": "s", "refresh_token": "r"})), None).await.unwrap_err();
+        assert!(error.message.contains("older mail is not skipped"));
+        assert_eq!(mock.requests().len(), MAX_PAGES + 1);
+        assert!(!mock.requests().iter().any(|r| r.path.ends_with("/newest")));
+    }
+
+    #[tokio::test]
     async fn a_failed_message_read_fails_the_sync_for_retry() {
         let mock = serve(vec![
             route("POST", "/oauth/token", json!({"access_token": "t"})),
             route("GET", "/users/me/messages", json!({"messages": [{"id": "m1"}]})),
-            route("GET", "/users/me/messages/m1", json!({"error": {"code": 500}})).status(500),
+            route("GET", "/users/me/messages/m1", json!({"error": {"code": 403, "errors": [{"reason": "insufficientPermissions"}]}})).status(403),
         ])
         .await;
         let err = GmailSource.fetch(&mock.conn(json!({"client_id": "c", "client_secret": "s", "refresh_token": "r"})), Some("1".into())).await.unwrap_err();
-        assert!(err.message.contains("HTTP 500"), "{}", err.message);
+        assert!(err.message.contains("HTTP 403"), "{}", err.message);
     }
 
     #[tokio::test]
@@ -260,6 +396,7 @@ mod tests {
     #[tokio::test]
     async fn fetch_errors_are_visible() {
         let creds = json!({"client_id": "cid", "client_secret": "s", "refresh_token": "rt"});
+        assert_fetch_fails(&GmailSource, 404, "/users/me/messages", creds.clone(), "HTTP 404").await;
         assert_fetch_fails(&GmailSource, 401, "/users/me/messages", creds.clone(), "HTTP 401").await;
         assert_fetch_fails(&GmailSource, 429, "/users/me/messages", creds.clone(), "HTTP 429").await;
         assert_fetch_fails(&GmailSource, 500, "/users/me/messages", creds, "HTTP 500").await;

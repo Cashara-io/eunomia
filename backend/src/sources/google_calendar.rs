@@ -9,7 +9,10 @@
 
 use async_trait::async_trait;
 use chrono::{Duration, Utc};
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+
+use crate::connectors::clients::retryable;
 
 use crate::error::AppResult;
 use crate::sources::base::{envelope, items, rfc3339, s, Conn, Source, SyncResult, MAX_PAGES};
@@ -25,6 +28,14 @@ fn when(v: &Value) -> Option<String> {
     }
     let d = s(v, "/date");
     (!d.is_empty()).then(|| rfc3339(&format!("{d}T00:00:00Z"))).flatten()
+}
+
+/// Page tokens must be replayed with the exact same query, including the first-sync window.
+#[derive(Serialize, Deserialize)]
+struct PageCursor {
+    query: Vec<(String, String)>,
+    page_token: String,
+    started: String,
 }
 
 pub struct GoogleCalendarSource;
@@ -62,21 +73,34 @@ impl Source for GoogleCalendarSource {
             }
         }
 
+        let mut resume = if let Some(c) = cursor.as_deref().filter(|c| c.starts_with('{')) {
+            serde_json::from_str::<PageCursor>(c).map_err(|_| crate::error::AppError::internal("invalid Calendar cursor"))?
+        } else {
+            PageCursor { query: base.into_iter().map(|(k, v)| (k.to_string(), v)).collect(),
+                page_token: String::new(), started: started.to_rfc3339() }
+        };
         let mut records = Vec::new();
-        let mut page_token = String::new();
         for _ in 0..MAX_PAGES {
-            let mut query = base.clone();
-            if !page_token.is_empty() {
-                query.push(("pageToken", page_token.clone()));
+            let mut query: Vec<(&str, String)> = resume.query.iter().map(|(k, v)| (k.as_str(), v.clone())).collect();
+            if !resume.page_token.is_empty() {
+                query.push(("pageToken", resume.page_token.clone()));
             }
-            let page = api.get("/calendars/primary/events", &query).await?;
+            let page = match api.get("/calendars/primary/events", &query).await {
+                Ok(page) => page,
+                Err(error) if retryable(&error) && !records.is_empty() => {
+                    tracing::warn!(fetched = records.len(), rate_limited = error.reason == Some("connector_rate_limited"),
+                        "Google Calendar paused fetching; keeping fetched events for import, will continue on the next sync");
+                    return Ok(SyncResult { records, cursor: Some(serde_json::to_string(&resume).unwrap()) });
+                }
+                Err(error) => return Err(error),
+            };
             records.extend(items(&page, "/items"));
-            page_token = s(&page, "/nextPageToken").to_string();
-            if page_token.is_empty() {
-                break;
+            resume.page_token = s(&page, "/nextPageToken").to_string();
+            if resume.page_token.is_empty() {
+                return Ok(SyncResult { records, cursor: Some(resume.started) });
             }
         }
-        Ok(SyncResult { records, cursor: Some(started.to_rfc3339()) })
+        Ok(SyncResult { records, cursor: Some(serde_json::to_string(&resume).unwrap()) })
     }
 
     fn map(&self, raw: &Value) -> Option<Value> {
@@ -115,6 +139,46 @@ impl Source for GoogleCalendarSource {
 mod tests {
     use super::*;
     use crate::sources::mock::{assert_fetch_fails, envelopes, route, serve};
+
+    #[tokio::test]
+    async fn quota_failure_saves_pages_and_resumes_the_exact_query() {
+        let mock = serve(vec![
+            route("POST", "/oauth/token", json!({"access_token": "t"})),
+            route("GET", "/calendars/primary/events", json!({"error": {"errors": [{"reason": "userRateLimitExceeded"}]}}))
+                .query_has("pageToken=p2").status(403).header("retry-after", "60"),
+            route("GET", "/calendars/primary/events", json!({"items": [{"id": "e1"}], "nextPageToken": "p2"})),
+        ]).await;
+        let conn = mock.conn(json!({"client_id": "c", "client_secret": "s", "refresh_token": "r"}));
+        let first = GoogleCalendarSource.fetch(&conn, None).await.unwrap();
+        assert_eq!(first.records[0]["id"], "e1");
+        let checkpoint: PageCursor = serde_json::from_str(first.cursor.as_deref().unwrap()).unwrap();
+        assert_eq!(checkpoint.page_token, "p2");
+        mock.set_routes(vec![
+            route("POST", "/oauth/token", json!({"access_token": "t"})),
+            route("GET", "/calendars/primary/events", json!({"items": [{"id": "e2"}]})).query_has("pageToken=p2"),
+        ]);
+        let second = GoogleCalendarSource.fetch(&conn, first.cursor).await.unwrap();
+        assert_eq!(second.records[0]["id"], "e2");
+        assert_eq!(second.cursor.as_deref(), Some(checkpoint.started.as_str()));
+        let requests = mock.requests();
+        let decode = |q: &str| serde_urlencoded::from_str::<Vec<(String, String)>>(q).unwrap();
+        let initial = decode(&requests[1].query);
+        let resumed = decode(&requests.last().unwrap().query);
+        for pair in initial { assert!(resumed.contains(&pair), "reuse original time bounds"); }
+    }
+
+    #[tokio::test]
+    async fn a_hard_error_on_a_later_page_still_fails() {
+        let mock = serve(vec![
+            route("POST", "/oauth/token", json!({"access_token": "t"})),
+            route("GET", "/calendars/primary/events", json!({"error": {"errors": [{"reason": "insufficientPermissions"}]}}))
+                .query_has("pageToken=p2").status(403),
+            route("GET", "/calendars/primary/events", json!({"items": [{"id": "e1"}], "nextPageToken": "p2"})),
+        ]).await;
+        let error = GoogleCalendarSource.fetch(&mock.conn(json!({"client_id": "c", "client_secret": "s", "refresh_token": "r"})), None).await.unwrap_err();
+        assert!(error.message.contains("HTTP 403"));
+        assert_eq!(mock.requests().len(), 3);
+    }
 
     #[tokio::test]
     async fn fetch_uses_updated_min_after_the_first_sync_and_follows_page_tokens() {

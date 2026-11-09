@@ -87,9 +87,9 @@ pub trait Source: Send + Sync {
     async fn check(&self, conn: &Conn) -> AppResult<()>;
 
     /// Raw records changed since `cursor` (`None` on the first sync), plus
-    /// the cursor for the next sync. Any provider error fails the whole
-    /// sync, so it surfaces in `sync_status.last_error` instead of silently
-    /// syncing nothing.
+    /// the cursor for the next sync. Hard provider errors surface in
+    /// `sync_status.last_error`. A source may return a safe partial prefix
+    /// on a temporary failure, logging the interruption and saving its resume position.
     async fn fetch(&self, conn: &Conn, cursor: Option<String>) -> AppResult<SyncResult>;
 
     /// One raw origin value -> a cache envelope, or `None` to skip.
