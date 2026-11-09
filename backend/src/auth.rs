@@ -232,8 +232,7 @@ pub async fn bearer_authn(state: &AppState, token: &str, allow_oauth: bool) -> A
     if oauth {
         let Some(v) = crate::oauth::verify_access_token(state, token).await else { return Ok(None) };
         let caller = Caller { actor: Actor { kind: "oauth", id: v.client_id }, scopes: v.scopes, vault: None, expires_at: None };
-        let actor_name = crate::oauth::server::resolve_client(state, &caller.actor.id).await.map(|c| c.name).unwrap_or_else(|_| "App".into());
-        let authn = Authn { actor_name, user: v.user, caller };
+        let authn = Authn { actor_name: v.client_name, user: v.user, caller };
         state.credentials.put(key, v.grant.to_string(), &authn, v.expires_at);
         return Ok(Some(authn));
     }

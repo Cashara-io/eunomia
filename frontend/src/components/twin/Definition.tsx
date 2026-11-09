@@ -60,7 +60,7 @@ export default function Definition({
       haptic("success");
       return true;
     } catch (e) {
-      if (e instanceof ApiError && e.status === 409) {
+      if (e instanceof ApiError && e.code === "ontology.stale_revision") {
         await cache.invalidateQueries({ queryKey: ["ontology", data.vault] });
         setConflict(true);
         setError(null);

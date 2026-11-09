@@ -953,6 +953,7 @@ pub(super) async fn apply_metrics(db: &OrgDb, vault: &RecordId, metrics: Vec<Val
             rows.into_iter().next().ok_or_else(|| surrealdb::Error::query("ontology metric upsert returned no row".into(), None))
         })
         .await?;
+        crate::changes::ontology_committed(db, vault);
         out.push(ProposedMetric { kind: row.kind, name: row.name, status: Status::parse(&row.status)?, merge_into: row.merge_into });
     }
     Ok(out)
@@ -1083,6 +1084,7 @@ pub async fn decide_metric(db: &OrgDb, user: &RecordId, vault: &RecordId, kind: 
         MetricDecision::Describe { description } => {
             let description = clean_text("description", Some(&description))?;
             with_retry_dup(|| async { q::DESCRIBE_METRIC.on(db).bind(("id", id.clone())).bind(("description", description.clone())).await }).await?;
+            crate::changes::ontology_committed(db, vault);
             return view(db, vault).await;
         }
         MetricDecision::Approve => {
@@ -1124,6 +1126,7 @@ pub async fn decide_metric(db: &OrgDb, user: &RecordId, vault: &RecordId, kind: 
             .await
     })
     .await?;
+    crate::changes::ontology_committed(db, vault);
     view(db, vault).await
 }
 

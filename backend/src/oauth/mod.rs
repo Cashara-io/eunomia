@@ -111,6 +111,7 @@ pub struct VerifiedAccess {
     pub user: User,
     pub scopes: Vec<String>,
     pub client_id: String,
+    pub client_name: String,
     pub grant: surrealdb::types::RecordId,
     pub expires_at: Option<chrono::DateTime<chrono::Utc>>,
 }
@@ -139,6 +140,7 @@ pub async fn verify_access_token(state: &AppState, token: &str) -> Option<Verifi
         user,
         scopes: row.scope.unwrap_or_default(),
         client_id: row.client_id.unwrap_or_default(),
+        client_name: row.client_name.unwrap_or_else(|| "App".into()),
         grant: row.family,
         expires_at: row.expires_at.map(chrono::DateTime::from),
     })

@@ -31,8 +31,8 @@ const FLUSH_MS = 400;
 const STALE_MS = 35_000;
 const MAX_BACKOFF_MS = 30_000;
 
-type Pending = { all: boolean; vaults: boolean; entities: boolean; documents: boolean; members: Set<string>; lost: Set<string> };
-const fresh = (): Pending => ({ all: false, vaults: false, entities: false, documents: false, members: new Set(), lost: new Set() });
+type Pending = { all: boolean; vaults: boolean; entities: boolean; documents: boolean; members: Set<string>; lost: Set<string>; ontology: Set<string> };
+const fresh = (): Pending => ({ all: false, vaults: false, entities: false, documents: false, members: new Set(), lost: new Set(), ontology: new Set() });
 
 /** Applies a batch of invalidations: vault list first, so members are refetched only for vaults the user still has. */
 async function flush(qc: QueryClient, p: Pending) {
@@ -54,6 +54,13 @@ async function flush(qc: QueryClient, p: Pending) {
       if (still.has(id)) void qc.invalidateQueries({ queryKey: vaultKeys.members(id) });
       else qc.removeQueries({ queryKey: vaultKeys.members(id) });
     }
+  }
+  for (const vault of p.ontology) {
+    // A first fetch may have read just before hello or the event. Cancel it so
+    // its late response cannot hide a proposal whose cursor we already saw.
+    const keys = [ontologyKeys.vault(vault), ["ontology-activity", vault], ["objects", vault], ["object-kinds", vault], ["object-profile", vault]];
+    await Promise.all(keys.map(queryKey => qc.cancelQueries({ queryKey })));
+    await Promise.all(keys.map(queryKey => qc.invalidateQueries({ queryKey })));
   }
   if (p.all || p.entities || p.documents || p.vaults) void qc.invalidateQueries({ queryKey: ontologyKeys.all });
   if (p.all || p.entities) {
@@ -104,7 +111,10 @@ export function useLiveUpdates() {
           }
           const available = new Set(Object.keys(m.vaults));
           for (const vault of ontologyCursors.keys()) if (!available.has(vault)) ontologyCursors.delete(vault);
-          for (const [vault, seq] of Object.entries(m.ontology ?? {})) ontologyCursors.set(vault, seq);
+          for (const [vault, seq] of Object.entries(m.ontology ?? {})) {
+            ontologyCursors.set(vault, seq);
+            pending.ontology.add(vault);
+          }
           everConnected = true;
           cursors.clear();
           for (const [vault, seq] of Object.entries(m.vaults)) cursors.set(vault, seq);
@@ -113,11 +123,7 @@ export function useLiveUpdates() {
         case "ontology":
           if (m.event.seq <= (ontologyCursors.get(m.vault) ?? 0)) return;
           ontologyCursors.set(m.vault, m.event.seq);
-          void qc.invalidateQueries({ queryKey: ontologyKeys.vault(m.vault) });
-          void qc.invalidateQueries({ queryKey: ["ontology-activity", m.vault] });
-          void qc.invalidateQueries({ queryKey: ["objects", m.vault] });
-          void qc.invalidateQueries({ queryKey: ["object-kinds", m.vault] });
-          void qc.invalidateQueries({ queryKey: ["object-profile", m.vault] });
+          pending.ontology.add(m.vault);
           break;
         case "change":
           cursors.set(m.vault, Math.max(cursors.get(m.vault) ?? 0, m.seq));

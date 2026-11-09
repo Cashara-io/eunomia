@@ -324,7 +324,6 @@ async fn follow_user(mut socket: WebSocket, state: OrgState, headers: HeaderMap,
     let mut checked = Instant::now();
     let mut tick = tokio::time::interval_at(tokio::time::Instant::now() + EVENTS_TICK, EVENTS_TICK);
 
-    let mut ontology_tick = tokio::time::interval(Duration::from_secs(1));
     let start = async {
         let vaults = readable_vaults(&state, &headers).await?;
         let last = counters(&state, &vaults).await?;
@@ -347,6 +346,9 @@ async fn follow_user(mut socket: WebSocket, state: OrgState, headers: HeaderMap,
         Err(stop) => return close(socket, stop).await,
     };
 
+    if let Err(stop) = ontology_catch_up(&mut socket, &state, &headers, &mut ontology_last, None).await {
+        return close(socket, stop).await;
+    }
     let result: Result<(), Stop> = loop {
         // A socket opened during the N-1 window holds its original OrgDb handle.
         // Reconnect once the pool sees 0041, so ontology delivery cannot stay off
@@ -362,26 +364,6 @@ async fn follow_user(mut socket: WebSocket, state: OrgState, headers: HeaderMap,
                 Some(Ok(Message::Close(_))) | Some(Err(_)) | None => Err(Stop::Gone),
                 _ => Ok(()),
             },
-            _ = ontology_tick.tick(), if state.db.schema_version() >= 41 => async {
-                let allowed = readable_vaults(&state, &headers).await?;
-                ontology_last.retain(|v, _| allowed.iter().any(|id| id.to_string() == *v));
-                for vault in &allowed {
-                    let cursor = ontology_last.entry(vault.to_string()).or_insert(0);
-                    loop {
-                        let args = crate::ontology::activity::ActivityQuery { after: *cursor, limit: Some(200), ..Default::default() };
-                        let page = crate::ontology::activity::page(&state.db, vault, &args).await.map_err(|_| Stop::Gone)?;
-                        for event in page.events {
-                            // Authorise each delivery, including replay. A revoked or vault-restricted
-                            // credential never receives even a queued event for this vault.
-                            recheck(&state, &headers, vault).await?;
-                            send_json(&mut socket, json!({"type": "ontology", "vault": vault.to_string(), "event": event})).await?;
-                            *cursor = event.seq;
-                        }
-                        if !page.more { break; }
-                    }
-                }
-                Ok::<(), Stop>(())
-            }.await,
             _ = tick.tick() => async {
                 if checked.elapsed() >= recheck_every() {
                     checked = Instant::now();
@@ -401,7 +383,7 @@ async fn follow_user(mut socket: WebSocket, state: OrgState, headers: HeaderMap,
                     }
                     last.insert(vault, seq);
                 }
-                Ok::<(), Stop>(())
+                ontology_catch_up(&mut socket, &state, &headers, &mut ontology_last, None).await
             }.await,
             ev = rx.recv() => match ev {
                 Ok(ev) if ev.org != state.db.org() || !vaults.contains(&ev.vault) => Ok(()),
@@ -422,6 +404,7 @@ async fn follow_user(mut socket: WebSocket, state: OrgState, headers: HeaderMap,
             },
             ev = vrx.recv() => match ev {
                 Ok(ev) if ev.org != state.db.org() || !(ev.users.contains(&user) || vaults.contains(&ev.vault)) => Ok(()),
+                Ok(ev) if ev.op == changes::ONTOLOGY_COMMITTED => ontology_catch_up(&mut socket, &state, &headers, &mut ontology_last, Some(&ev.vault)).await,
                 Ok(ev) => async {
                     send_json(&mut socket, json!({"type": "vault", "vault": ev.vault.to_string(), "op": ev.op, "actor": ev.actor})).await?;
                     // membership may have changed: follow the vaults the user can read now
@@ -458,3 +441,26 @@ pub struct Doc;
 #[derive(Default, Deserialize, utoipa::IntoParams)]
 #[into_params(parameter_in = Query)]
 struct OntologyResume { ontology_after: Option<String> }
+
+async fn ontology_catch_up(
+    socket: &mut WebSocket, state: &OrgState, headers: &HeaderMap,
+    last: &mut std::collections::HashMap<String, i64>, only: Option<&RecordId>,
+) -> Result<(), Stop> {
+    if state.db.schema_version() < 41 { return Ok(()); }
+    let allowed = readable_vaults(state, headers).await?;
+    last.retain(|v, _| allowed.iter().any(|id| id.to_string() == *v));
+    for vault in allowed.iter().filter(|v| only.is_none_or(|id| id == *v)) {
+        let cursor = last.entry(vault.to_string()).or_insert(0);
+        loop {
+            let args = crate::ontology::activity::ActivityQuery { after: *cursor, limit: Some(200), ..Default::default() };
+            let page = crate::ontology::activity::page(&state.db, vault, &args).await.map_err(|_| Stop::Gone)?;
+            for event in page.events {
+                recheck(state, headers, vault).await?;
+                send_json(socket, serde_json::json!({"type":"ontology","vault":vault.to_string(),"event":event})).await?;
+                *cursor = event.seq;
+            }
+            if !page.more { break; }
+        }
+    }
+    Ok(())
+}

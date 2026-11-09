@@ -310,6 +310,9 @@ pub struct TokenRow {
     pub used_at: Option<Datetime>,
     pub owner: Option<RecordId>,
     pub client_id: Option<String>,
+    #[serde(default)]
+    #[surreal(default)]
+    pub client_name: Option<String>,
     pub scope: Option<Vec<String>>,
     pub resource: Option<String>,
 }

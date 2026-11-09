@@ -789,6 +789,7 @@ async fn write_values(db: &OrgDb, vault: &RecordId, document: &RecordId, kind: &
     })
     .await?
     .check()?;
+    crate::changes::ontology_committed(db, vault);
     Ok(())
 }
 

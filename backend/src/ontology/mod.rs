@@ -685,6 +685,7 @@ async fn apply(db: &OrgDb, vault: &RecordId, valid: Valid, origin: Origin) -> Ap
             rows.into_iter().next().ok_or_else(|| surrealdb::Error::query("ontology kind upsert returned no row".into(), None))
         })
         .await?;
+        crate::changes::ontology_committed(db, vault);
         out.kinds.push(ProposedKind { kind: row.kind, status: Status::parse(&row.status)?, merge_into: row.merge_into });
     }
     for l in links {
@@ -706,6 +707,7 @@ async fn apply(db: &OrgDb, vault: &RecordId, valid: Valid, origin: Origin) -> Ap
             rows.into_iter().next().ok_or_else(|| surrealdb::Error::query("ontology link upsert returned no row".into(), None))
         })
         .await?;
+        crate::changes::ontology_committed(db, vault);
         out.links.push(ProposedLink { from_kind: row.from_kind, label: row.label, to_kind: row.to_kind, status: Status::parse(&row.status)? });
     }
     out.properties = property::apply_properties(db, vault, properties, origin).await?;
@@ -764,6 +766,7 @@ pub async fn decide_kind(db: &OrgDb, user: &RecordId, vault: &RecordId, kind: &s
                     .await
             })
             .await?;
+            crate::changes::ontology_committed(db, vault);
             return view(db, vault).await;
         }
         KindDecision::Approve => (Status::Approved, None),
@@ -790,6 +793,7 @@ pub async fn decide_kind(db: &OrgDb, user: &RecordId, vault: &RecordId, kind: &s
             .await
     })
     .await?;
+    crate::changes::ontology_committed(db, vault);
     view(db, vault).await
 }
 
@@ -852,6 +856,7 @@ pub async fn decide_link(
             with_retry_dup(|| async { on(&q::DECIDE_LINK).bind(("status", status.as_str().to_string())).bind(("user", user.clone())).await }).await?;
         }
     }
+    crate::changes::ontology_committed(db, vault);
     view(db, vault).await
 }
 
@@ -978,6 +983,7 @@ async fn strict_kind(db: &OrgDb, vault: &RecordId, kind: &Kind) -> AppResult<()>
         .await?
         .check()?
         .take(q::FILE_KIND.slot)?;
+    crate::changes::ontology_committed(db, vault);
     let approved: Vec<String> = q::APPROVED_KINDS.on(db).bind(("vault", vault.clone())).await?.take(0)?;
     let custom = if approved.is_empty() { String::new() } else { format!(" or an approved kind ({})", approved.join(", ")) };
     Err(AppError::coded(
@@ -1008,6 +1014,7 @@ async fn strict_link(db: &OrgDb, vault: &RecordId, key: &LinkKey) -> AppResult<(
         .await?
         .check()?
         .take(q::FILE_LINK.slot)?;
+    crate::changes::ontology_committed(db, vault);
     let approved: Vec<String> = q::APPROVED_LINKS
         .on(db)
         .bind(("vault", vault.clone()))
@@ -1035,6 +1042,7 @@ async fn strict_link(db: &OrgDb, vault: &RecordId, key: &LinkKey) -> AppResult<(
 pub async fn set_strict(db: &OrgDb, user: &RecordId, vault: &RecordId, on: bool) -> AppResult<OntologyOut> {
     decider(db, user, vault).await?;
     with_retry_dup(|| async { q::SET_STRICT.on(db).bind(("vault", vault.clone())).bind(("on", on)).await }).await?;
+    crate::changes::ontology_committed(db, vault);
     view(db, vault).await
 }
 

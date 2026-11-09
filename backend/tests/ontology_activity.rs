@@ -300,3 +300,23 @@ async fn an_n_minus_one_import_refuses_before_creating_any_objects() {
         .unwrap();
     assert!(objects.is_empty());
 }
+
+#[tokio::test]
+async fn link_histories_distinguish_the_target_kind() {
+    let app = TestApp::new().await;
+    let vault = setup(&app).await;
+    let out = app
+        .tool(
+            "ontology_propose",
+            json!({"vault_id":vault,"links":[
+                {"from_kind":"shop","label":"near","to_kind":"location"},
+                {"from_kind":"shop","label":"near","to_kind":"organisation"}
+            ]}),
+        )
+        .await;
+    assert!(out.get("error").is_none(), "{out}");
+    let (status, out) = app.http_session("GET", &format!("/api/vaults/{vault}/ontology/activity?definition_type=link&kind=shop&name=shop%20near%20location&review_only=true"), None).await;
+    assert_eq!(status, 200, "{out}");
+    assert_eq!(out["events"].as_array().unwrap().len(), 1);
+    assert_eq!(out["events"][0]["name"], "shop near location");
+}

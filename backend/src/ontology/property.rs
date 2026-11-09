@@ -291,6 +291,7 @@ pub(super) async fn apply_properties(db: &OrgDb, vault: &RecordId, props: Vec<Va
             rows.into_iter().next().ok_or_else(|| surrealdb::Error::query("ontology property upsert returned no row".into(), None))
         })
         .await?;
+        crate::changes::ontology_committed(db, vault);
         out.push(ProposedProperty { kind: row.kind, name: row.name, datatype: Datatype::parse(&row.datatype)?, status: Status::parse(&row.status)?, merge_into: row.merge_into });
     }
     Ok(out)
@@ -479,6 +480,7 @@ pub async fn decide_property(db: &OrgDb, user: &RecordId, vault: &RecordId, kind
         PropertyDecision::Describe { description } => {
             let description = clean_text("description", Some(&description))?;
             with_retry_dup(|| async { q::DESCRIBE_PROPERTY.on(db).bind(("id", id.clone())).bind(("description", description.clone())).await }).await?;
+            crate::changes::ontology_committed(db, vault);
             return view(db, vault).await;
         }
         PropertyDecision::Approve => (Status::Approved, None),
@@ -512,6 +514,7 @@ pub async fn decide_property(db: &OrgDb, user: &RecordId, vault: &RecordId, kind
             .await
     })
     .await?;
+    crate::changes::ontology_committed(db, vault);
     view(db, vault).await
 }
 
@@ -790,6 +793,7 @@ pub async fn set_property(db: &OrgDb, owner: &RecordId, input: SetProperty<'_>) 
     let written = written.into_iter().next().ok_or_else(|| AppError::internal("property value write returned no row"))?;
     let approved = ApprovedProperty { name: row.name, datatype, unit: row.unit };
     let value = written.out(&approved).ok_or_else(|| AppError::internal("property value did not round-trip"))?;
+    crate::changes::ontology_committed(db, &vault);
     Ok(SetPropertyOut { entity_id: entity.id.to_string(), kind: kind.as_str().to_string(), value, property_mapped: mapped })
 }
 
