@@ -833,8 +833,9 @@ if grep -q '\.ontology_kind ' "$W/new-expected.txt"; then
     \"properties\":[{\"kind\":\"product\",\"name\":\"price\",\"datatype\":\"money\",\"unit\":\"AUD\",\"description\":\"What one costs\"}],
     \"metrics\":[{\"kind\":\"product\",\"name\":\"total_price\",\"expr\":{\"agg\":\"sum\",\"property\":\"price\"},\"description\":\"All prices added up\"}]}" > "$W/onto-propose.json"
   check "ontology_propose: the kind, the money property and the metric, all proposed" jq -e '
-    .kinds == [{"kind": "product", "status": "proposed", "merge_into": null}]
-    and .properties == [{"kind": "product", "name": "price", "datatype": "money", "status": "proposed", "merge_into": null}]
+    ([.kinds[], .properties[], .metrics[]] | all(.revision | type == "number"))
+    and ([.kinds[] | del(.revision)] == [{"kind": "product", "status": "proposed", "merge_into": null}])
+    and ([.properties[] | del(.revision)] == [{"kind": "product", "name": "price", "datatype": "money", "status": "proposed", "merge_into": null}])
     and ([.metrics[] | select(.name == "total_price" and .status == "proposed")] | length == 1)' "$W/onto-propose.json"
   refused="$(mcp_refusal "$TOKEN_A" entity_set_property "{\"entity_id\":\"$LATTE\",\"property\":\"price\",\"value\":4.5}")"
   check "a value for a proposed property is refused" bash -c 'case "$1" in *"proposed, not approved"*) exit 0;; esac; exit 1' _ "$refused"
