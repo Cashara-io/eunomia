@@ -68,22 +68,3 @@ async fn a_link_only_change_is_reconciled_and_an_identical_replay_is_a_no_op() {
     assert_eq!(replayed.updated_at, before.updated_at);
     assert_eq!(extract_jobs().await, 1);
 }
-
-#[tokio::test]
-async fn relations_are_deduplicated_and_written_in_bounded_batches() {
-    let app = TestApp::new().await;
-    let org = app.state.org(&app.user.org).await.unwrap();
-    let links: Vec<_> = (0..500).flat_map(|i| {
-        let link = json!({"target":format!("demo:note:{i}"),"rel":"wikilink"});
-        [link.clone(), link]
-    }).collect();
-    let env: search::Envelope = serde_json::from_value(json!({
-        "id":"demo:note:origin","source":"demo","type":"note","external_id":"origin",
-        "title":"Origin","body_text":"links","links":links,
-    })).unwrap();
-    let before = eunomia_backend::store::SENT.load(std::sync::atomic::Ordering::Relaxed);
-    search::upsert(&org.db, &app.user.id, &env).await.unwrap();
-    assert_eq!(count(org.db.test_raw(), "SELECT count() FROM linked_to WHERE in.owner = $owner", &app.user.id).await, 500);
-    let trips = eunomia_backend::store::SENT.load(std::sync::atomic::Ordering::Relaxed) - before;
-    assert!(trips < 20, "relations were written individually: {trips} queries");
-}

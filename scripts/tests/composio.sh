@@ -18,8 +18,8 @@ cargo_step() {
 }
 cargo_step test --lib composio
 # The consumer flow must also pass on libtest's default stack, as it does in CI.
-(unset RUST_MIN_STACK; cargo_step test --test composio_flow)
-cargo_step test --test composio_storage -- --test-threads=1
+(unset RUST_MIN_STACK; cargo_step test --test composio_flow --test dynamic_queries)
+cargo_step test --test composio_storage --test sync_link_batches -- --test-threads=1
 for mutation in owner disconnect refresh publish; do
   export COMPOSIO_GUARD_MUTATION="$mutation"
   log="$(mktemp)"

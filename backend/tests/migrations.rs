@@ -696,7 +696,7 @@ async fn oldest_supported_schema_coverage_and_0040_paging_repair_are_idempotent(
         .await.unwrap().check().unwrap();
     app.state.pool.evict(&app.user.org);
     let db = app.db().await;
-    assert_eq!(db.schema_version(), migrate::MIN_SUPPORTED_TENANT);
+    assert_eq!(db.schema_version(), i64::from(migrate::MIN_SUPPORTED_TENANT));
     let question = json!({"question": "Where is Coastal Irrigation?"});
     let out = app.tool("ontology_coverage", question.clone()).await;
     assert_eq!(out["chosen_by"], "entities", "{out}");
@@ -713,7 +713,7 @@ async fn oldest_supported_schema_coverage_and_0040_paging_repair_are_idempotent(
     }
     app.state.pool.evict(&app.user.org);
     let db = app.db().await;
-    assert_eq!(db.schema_version(), migrate::LATEST_TENANT);
+    assert_eq!(db.schema_version(), i64::from(migrate::LATEST_TENANT));
     let out = app.tool("ontology_coverage", question).await;
     assert_eq!(out["chosen_by"], "entities", "{out}");
     assert_eq!(out["vault"], team);
