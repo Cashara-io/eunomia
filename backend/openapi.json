@@ -14514,6 +14514,26 @@
             ],
             "format": "int64"
           },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "retry_after_secs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "retry_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "skipped": {
             "type": [
               "integer",
@@ -14529,7 +14549,16 @@
               "string",
               "null"
             ],
-            "description": "`already_running`, `queued`, or `offline` (the connectivity check found no internet; nothing was attempted)."
+            "description": "`partial`, `already_running`, `queued`, or `offline` (the connectivity check found no internet; nothing was attempted)."
+          },
+          "warnings": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
           },
           "written": {
             "type": [
@@ -14545,7 +14574,8 @@
         "required": [
           "cursor",
           "last_error",
-          "consecutive_failures"
+          "consecutive_failures",
+          "last_report"
         ],
         "properties": {
           "consecutive_failures": {
@@ -14564,6 +14594,7 @@
               "null"
             ]
           },
+          "last_report": {},
           "last_run": {
             "type": [
               "string",

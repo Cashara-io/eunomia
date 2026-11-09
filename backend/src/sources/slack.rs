@@ -100,7 +100,7 @@ impl Source for SlackSource {
                 records.push(m);
             }
         }
-        Ok(SyncResult { records, cursor: Some(started.to_string()) })
+        Ok(SyncResult { records, cursor: Some(started.to_string()), ..SyncResult::default() })
     }
 
     fn map(&self, raw: &Value) -> Option<Value> {

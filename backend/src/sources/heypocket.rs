@@ -95,7 +95,7 @@ impl Source for HeyPocketSource {
             .or(cursor)
             .unwrap_or(start);
 
-        Ok(SyncResult { records: data, cursor: Some(newest) })
+        Ok(SyncResult { records: data, cursor: Some(newest), ..SyncResult::default() })
     }
 
     fn map(&self, raw: &Value) -> Option<Value> {

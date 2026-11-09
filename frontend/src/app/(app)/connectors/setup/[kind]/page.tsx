@@ -132,7 +132,7 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
   const updateSettings = useUpdateSettings();
   const syncSource = useSyncSource();
   const [syncing, setSyncing] = useState(false);
-  const [syncMessage, setSyncMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [syncMessage, setSyncMessage] = useState<{ state: "done" | "partial" | "failed"; text: string } | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
   const [shown, setShown] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -239,17 +239,19 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
       const r = await syncSource.mutateAsync(connector.source_key);
       setSyncMessage(
         r.error
-          ? { ok: false, text: `Sync failed: ${r.error}` }
+          ? { state: "failed", text: `Sync failed: ${r.error}` }
           : r.status === "already_running"
-            ? { ok: true, text: "An update is already running. Its items appear when it finishes" }
+            ? { state: "done", text: "An update is already running. Its items appear when it finishes" }
             : r.status === "offline"
-              ? { ok: false, text: "You're offline, so nothing was synced. Try again when you have a connection" }
+              ? { state: "failed", text: "You're offline, so nothing was synced. Try again when you have a connection" }
               : r.status === "queued"
-                ? { ok: true, text: "Update queued. It starts as soon as Eunomia is free; items appear when it finishes" }
-                : { ok: true, text: `Synced: ${r.written ?? 0} new or changed, ${r.skipped ?? 0} unchanged` },
+                ? { state: "done", text: "Update queued. It starts as soon as Eunomia is free; items appear when it finishes" }
+                : r.status === "partial"
+                  ? { state: "partial", text: `${r.message ?? "Import in progress"}. Eunomia will continue automatically` }
+                  : { state: "done", text: `Synced: ${r.written ?? 0} new or changed, ${r.skipped ?? 0} unchanged` },
       );
     } catch (e) {
-      setSyncMessage({ ok: false, text: `Sync failed: ${failure(e, "unknown error").message}` });
+      setSyncMessage({ state: "failed", text: `Sync failed: ${failure(e, "unknown error").message}` });
     } finally {
       setSyncing(false);
     }
@@ -525,7 +527,7 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
               <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-3 flex-wrap">
                   <button type="button" onClick={syncNow} disabled={syncing} className="btn btn-primary">
-                    <SyncMark status={syncing ? "running" : syncMessage ? (syncMessage.ok ? "done" : "failed") : "idle"} size={18} />
+                    <SyncMark status={syncing ? "running" : syncMessage ? (syncMessage.state === "partial" ? "idle" : syncMessage.state) : "idle"} size={18} />
                     {syncing ? "Syncing…" : "Sync now"}
                   </button>
                   {syncing && (
@@ -535,11 +537,11 @@ function ConnectorSetup({ kind }: { kind: ConnectorKind }) {
                   )}
                 </div>
                 {syncMessage && (
-                  <span role="status" className="text-[14px] break-words" style={{ color: syncMessage.ok ? "var(--good)" : "var(--critical)" }}>
+                  <span role="status" className="text-[14px] break-words" style={{ color: syncMessage.state === "partial" ? "var(--warning)" : syncMessage.state === "done" ? "var(--good)" : "var(--critical)" }}>
                     {syncMessage.text}
                   </span>
                 )}
-                {syncMessage && !syncMessage.ok && (
+                {syncMessage?.state === "failed" && (
                   <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
                     If this mentions sign-in or permission (HTTP 401 or 403), update your key in step 2. Otherwise try Sync now again; items already
                     imported are kept.

@@ -257,12 +257,12 @@ export default function ConnectorsPage() {
                           )}
                         </span>
                       </span>
-                      <span title={s?.sync_status.last_error || undefined}>
+                      <span title={s?.sync_status.last_error || s?.sync_status.last_report?.message || undefined}>
                         <StatusLabel tone={toneFromVar(health.tone)}>{health.label}</StatusLabel>
                       </span>
                       <span className="hidden md:block font-mono text-right">{s ? s.record_count.toLocaleString() : "n/a"}</span>
                       <span className="hidden md:block text-[13px]" style={{ color: fails ? "var(--critical)" : "var(--ink-dim)" }}>
-                        {fails ? `${fails} failed in a row` : s ? relativeTime(s.sync_status.last_ok) : "n/a"}
+                        {fails ? `${fails} failed in a row` : s?.sync_status.last_report?.message || (s ? relativeTime(s.sync_status.last_ok) : "n/a")}
                       </span>
                       <span
                         className="hidden md:block text-[13px] truncate"
