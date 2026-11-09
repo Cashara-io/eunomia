@@ -31,7 +31,7 @@
     "d3-force": "^3.0.0",
     "geist": "1.5.1",
     "lucide-react": "^1.39.0",
-    "next": "16.3.8",
+    "next": "16.4.5",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-markdown": "^10.1.0",
@@ -50,7 +50,7 @@
     "@types/react-dom": "^19",
     "@types/three": "^0.186.0",
     "eslint": "^9",
-    "eslint-config-next": "16.3.8",
+    "eslint-config-next": "16.4.5",
     "tailwindcss": "^4",
     "typescript": "^5"
   },
