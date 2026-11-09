@@ -78,3 +78,29 @@ with tempfile.TemporaryDirectory() as temporary:
     assert changed
     assert scanner.policy.gate(changed, accepted) == 1
 print('Changed source cannot reuse a secret acceptance at the same file and line')
+
+# cargo-deny combines check failures into a bitmask, not just exit code 1.
+original_run = scanner.run
+with tempfile.TemporaryDirectory() as temporary:
+    output = Path(temporary) / 'cargo.jsonl'
+    diagnostic = {'type': 'diagnostic', 'fields': {
+        'severity': 'error', 'code': 'vulnerability',
+        'advisory': {'id': 'RUSTSEC-TEST'},
+        'graphs': [{'Krate': {'name': 'vulnerable', 'version': '1.0.0'}}]}}
+    report = json.dumps(diagnostic) + '\n' + json.dumps({'type': 'summary', 'fields': {'advisories': {'errors': 1}}})
+    scanner.run = lambda *args, **kwargs: subprocess.CompletedProcess(args, 5, '', report)
+    try:
+        findings = scanner.scan('cargo', 'backend', output)
+        assert scanner.policy.gate(findings, []) == 1
+        accepted = [dict(f, owner='Fixture owner', reason='Temporary fixture acceptance', expires='2099-01-01') for f in findings]
+        assert scanner.policy.gate(findings, accepted) == 0
+        scanner.run = lambda *args, **kwargs: subprocess.CompletedProcess(args, 5, '', json.dumps(diagnostic))
+        try:
+            scanner.scan('cargo', 'backend', output)
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError('Incomplete scanner report accepted')
+    finally:
+        scanner.run = original_run
+print('Cargo bitmask errors are gated and incomplete reports fail closed')

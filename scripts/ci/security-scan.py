@@ -52,6 +52,7 @@ def scan(kind, scope, output):
                       '--format', 'json', 'check', 'advisories', 'licenses', 'bans', 'sources'], statuses=tuple(range(16)))
         output.write_text(result.stdout + result.stderr)
         summary = None
+        diagnostics = 0
         for line in output.read_text().splitlines():
             try:
                 item = json.loads(line)
@@ -61,6 +62,7 @@ def scan(kind, scope, output):
                 summary = item['fields']
             if item.get('type') != 'diagnostic' or item['fields']['severity'] != 'error':
                 continue
+            diagnostics += 1
             fields = item['fields']
             advisory = fields.get('advisory')
             identifier = advisory['id'] if advisory else 'cargo-' + fields['code']
@@ -72,8 +74,10 @@ def scan(kind, scope, output):
                                      package=crate['name'] + '@' + crate['version'], scope='backend'))
             if not fields.get('graphs'):
                 raise RuntimeError('Unrecognised cargo-deny diagnostic')
-        if summary is None or (result.returncode and not findings):
+        if summary is None or sum(group['errors'] for group in summary.values()) != diagnostics:
             raise RuntimeError('cargo-deny failed without a complete report')
+        if result.returncode and not findings:
+            raise RuntimeError('cargo-deny failed without recognised findings')
     elif kind == 'gitleaks':
         # Scan tracked working-tree files, including dotfiles. Exclude only the seeded fixture directory.
         with tempfile.TemporaryDirectory() as temporary:
