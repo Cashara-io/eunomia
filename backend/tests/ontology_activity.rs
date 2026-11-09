@@ -270,7 +270,7 @@ async fn an_n_minus_one_import_refuses_before_creating_any_objects() {
     assert!(doc.get("error").is_none(), "{doc}");
     app.control()
         .test_raw()
-        .query("UPDATE $tenant SET schema_version = 40")
+        .query("UPDATE $tenant SET schema_version = 41")
         .bind(("tenant", app.user.org.tenant_record()))
         .await
         .unwrap()

@@ -7,6 +7,7 @@ expression: stable
   "strict": false,
   "kinds": [
     {
+      "revision": 0,
       "kind": "person",
       "built_in": true,
       "status": "observed",
@@ -23,6 +24,7 @@ expression: stable
       "metrics": []
     },
     {
+      "revision": 0,
       "kind": "organisation",
       "built_in": true,
       "status": "observed",
@@ -37,6 +39,7 @@ expression: stable
       "metrics": []
     },
     {
+      "revision": 0,
       "kind": "location",
       "built_in": true,
       "status": "observed",
@@ -51,6 +54,7 @@ expression: stable
       "metrics": []
     },
     {
+      "revision": 0,
       "kind": "repository",
       "built_in": true,
       "status": "observed",
@@ -67,6 +71,7 @@ expression: stable
       "metrics": []
     },
     {
+      "revision": 0,
       "kind": "file",
       "built_in": true,
       "status": "observed",
@@ -83,6 +88,7 @@ expression: stable
       "metrics": []
     },
     {
+      "revision": 0,
       "kind": "symbol",
       "built_in": true,
       "status": "observed",
@@ -97,6 +103,7 @@ expression: stable
       "metrics": []
     },
     {
+      "revision": 1,
       "kind": "db",
       "built_in": false,
       "status": "proposed",
@@ -113,6 +120,7 @@ expression: stable
       ],
       "properties": [
         {
+          "revision": 1,
           "name": "size_gb",
           "datatype": "number",
           "unit": "GB",
@@ -133,6 +141,7 @@ expression: stable
   ],
   "links": [
     {
+      "revision": 0,
       "from_kind": "file",
       "label": "imports",
       "to_kind": "repository",
@@ -149,6 +158,7 @@ expression: stable
       ]
     },
     {
+      "revision": 0,
       "from_kind": "file",
       "label": "part_of",
       "to_kind": "repository",
@@ -165,6 +175,7 @@ expression: stable
       ]
     },
     {
+      "revision": 1,
       "from_kind": "person",
       "label": "owns",
       "to_kind": "db",

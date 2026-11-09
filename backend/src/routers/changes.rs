@@ -328,7 +328,7 @@ async fn follow_user(mut socket: WebSocket, state: OrgState, headers: HeaderMap,
         let vaults = readable_vaults(&state, &headers).await?;
         let last = counters(&state, &vaults).await?;
         let mut ontology_heads = std::collections::HashMap::new();
-        if state.db.schema_version() >= 41 {
+        if state.db.schema_version() >= crate::ontology::activity::SCHEMA_VERSION {
             for vault in &vaults {
                 let head = crate::ontology::activity::head(&state.db, vault).await.map_err(|_| Stop::Gone)?;
                 let cursor = ontology_last.entry(vault.to_string()).or_insert(head);
@@ -351,11 +351,11 @@ async fn follow_user(mut socket: WebSocket, state: OrgState, headers: HeaderMap,
     }
     let result: Result<(), Stop> = loop {
         // A socket opened during the N-1 window holds its original OrgDb handle.
-        // Reconnect once the pool sees 0041, so ontology delivery cannot stay off
+        // Reconnect once the pool sees 0042, so ontology delivery cannot stay off
         // forever behind an otherwise healthy heartbeat connection.
-        if state.db.schema_version() < 41
+        if state.db.schema_version() < crate::ontology::activity::SCHEMA_VERSION
             && let Ok(db) = state.app.pool.for_org(&state.db.org()).await
-            && db.schema_version() >= 41
+            && db.schema_version() >= crate::ontology::activity::SCHEMA_VERSION
         {
             break Err(Stop::Resync);
         }
@@ -429,9 +429,12 @@ async fn follow_user(mut socket: WebSocket, state: OrgState, headers: HeaderMap,
 }
 
 async fn close(mut socket: WebSocket, stop: Stop) {
-    if let Stop::Denied(reason) = stop {
-        let _ = socket.send(Message::Close(Some(CloseFrame { code: 1008, reason: reason.into() }))).await;
-    }
+    let frame = match stop {
+        Stop::Denied(reason) => Some(CloseFrame { code: 1008, reason: reason.into() }),
+        Stop::Resync => Some(CloseFrame { code: CLOSE_RESYNC, reason: ErrorCode::ChangesResync.as_str().into() }),
+        Stop::Gone => None,
+    };
+    if let Some(frame) = frame { let _ = socket.send(Message::Close(Some(frame))).await; }
 }
 
 #[derive(utoipa::OpenApi)]
@@ -446,7 +449,7 @@ async fn ontology_catch_up(
     socket: &mut WebSocket, state: &OrgState, headers: &HeaderMap,
     last: &mut std::collections::HashMap<String, i64>, only: Option<&RecordId>,
 ) -> Result<(), Stop> {
-    if state.db.schema_version() < 41 { return Ok(()); }
+    if state.db.schema_version() < crate::ontology::activity::SCHEMA_VERSION { return Ok(()); }
     let allowed = readable_vaults(state, headers).await?;
     last.retain(|v, _| allowed.iter().any(|id| id.to_string() == *v));
     for vault in allowed.iter().filter(|v| only.is_none_or(|id| id == *v)) {

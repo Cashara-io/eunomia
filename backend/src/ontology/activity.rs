@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 use std::future::Future;
 use surrealdb::types::{Datetime, RecordId, SurrealValue};
 
+pub const SCHEMA_VERSION: i64 = 42;
+
 #[derive(Clone)]
 pub struct DecisionContext {
     pub revision: i64,
@@ -24,7 +26,7 @@ pub fn decision_context() -> Option<DecisionContext> {
     DECISION.try_with(Clone::clone).ok()
 }
 pub fn require_ready(db: &OrgDb) -> AppResult<()> {
-    if db.schema_version() < 41 {
+    if db.schema_version() < SCHEMA_VERSION {
         return Err(AppError::coded(
             ErrorCode::TenantSchemaBehind,
             "This space is upgrading. Try again shortly.",
@@ -111,7 +113,7 @@ pub struct ActivityPage {
 
 /// Static optional predicates keep all filter values parameterised.
 pub async fn page(db: &OrgDb, vault: &RecordId, args: &ActivityQuery) -> AppResult<ActivityPage> {
-    if db.schema_version() < 41 {
+    if db.schema_version() < SCHEMA_VERSION {
         return Ok(ActivityPage {
             events: Vec::new(),
             next: args.after,

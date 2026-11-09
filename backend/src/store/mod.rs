@@ -78,7 +78,7 @@ impl Stmt<Tenant> {
         let actor = crate::authz::current().map(|c| c.actor).unwrap_or_else(|| crate::authz::Caller::system().actor);
         let decision = crate::ontology::activity::decision_context();
         let mut query = Q::new(db.raw(RawKey(())), Scope::Org(db.org()), self.name, self.sql);
-        if db.schema_version() < 41 && (self.sql.contains("$activity_actor") || self.sql.contains("$expected_revision")) {
+        if db.schema_version() < crate::ontology::activity::SCHEMA_VERSION && (self.sql.contains("$activity_actor") || self.sql.contains("$expected_revision")) {
             query.denied = Some("ontology schema upgrade pending".into());
         }
         query.bind(("activity_actor_name", crate::ontology::activity::actor_name()))

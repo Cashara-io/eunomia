@@ -693,7 +693,7 @@ async fn schema_39_coverage_name_lookup_and_0040_paging_upgrade_are_idempotent()
     app.control().test_raw().query("UPDATE $t SET schema_version = 39").bind(("t", app.user.org.tenant_record())).await.unwrap().check().unwrap();
     app.state.pool.evict(&app.user.org);
     // 0039 is now N-2 and is refused before the tenant update. The updater still
-    // applies 0040 and 0041 to this seeded database without changing its entities.
+    // applies the later migrations without changing this seeded database's entities.
     assert!(app.state.pool.for_org(&app.user.org).await.is_err());
     let db = old;
     let question = json!({"question": "Where is Coastal Irrigation?"});
@@ -727,7 +727,7 @@ async fn schema_39_coverage_name_lookup_and_0040_paging_upgrade_are_idempotent()
 #[tokio::test]
 async fn ontology_activity_upgrade_keeps_decisions_without_inventing_old_events() {
     let db = fresh().await;
-    migrate::apply_up_to(&db, 40).await.unwrap();
+    migrate::apply_up_to(&db, 41).await.unwrap();
     db.query(r#"CREATE vault:upgrade SET name = "Upgrade";
         CREATE ontology_kind:kept SET vault = vault:upgrade, kind = "shop", description = "Keep exact text", origin = "human", status = "approved";"#)
         .await.unwrap().check().unwrap();

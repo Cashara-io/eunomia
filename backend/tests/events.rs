@@ -173,13 +173,13 @@ async fn ontology_membership_is_checked_on_subscribe_and_again_before_delivery()
 async fn a_socket_opened_during_the_schema_upgrade_reconnects_for_ontology_events() {
     use futures::SinkExt;
     let app = TestApp::new().await;
-    app.control().test_raw().query("UPDATE $tenant SET schema_version = 40")
+    app.control().test_raw().query("UPDATE $tenant SET schema_version = 41")
         .bind(("tenant", app.user.org.tenant_record())).await.unwrap().check().unwrap();
     app.state.pool.evict(&app.user.org);
     let base = serve(&app).await;
     let mut ws = connect(&base, &app.token).await;
     assert_eq!(next(&mut ws).await["ontology"], json!({}));
-    app.control().test_raw().query("UPDATE $tenant SET schema_version = 41")
+    app.control().test_raw().query("UPDATE $tenant SET schema_version = 42")
         .bind(("tenant", app.user.org.tenant_record())).await.unwrap().check().unwrap();
     app.state.pool.evict(&app.user.org);
     ws.send(Message::Ping(Default::default())).await.unwrap();

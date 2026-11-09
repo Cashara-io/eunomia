@@ -6652,6 +6652,7 @@ export type GetOntologyActivityData = {
     query?: {
         after?: number;
         newest?: boolean;
+        review_only?: boolean;
         before?: number;
         actor?: string;
         actor_type?: string;

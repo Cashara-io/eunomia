@@ -625,7 +625,7 @@ diff "$W/reads-before.txt" "$W/reads-after.txt" | head -20
 # exact-scan fallback would hide a broken index, so this queries the index itself). Row counts: above.
 check "every org ledger has 0022_rebuild_vector_indexes" ledger_has 22 rebuild_vector_indexes
 check "every org ledger has 0037_ontology_coverage" ledger_has 37 ontology_coverage
-check "every org ledger has 0041_ontology_activity" ledger_has 41 ontology_activity
+check "every org ledger has 0042_ontology_activity" ledger_has 42 ontology_activity
 check "every org defines the HNSW indexes" vector_indexes
 wait_vector_builds 300; check "the rebuilt vector indexes finished building" test $? -eq 0
 knn_live > "$W/knn-after.txt" 2>&1; rc=$?

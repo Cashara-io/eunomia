@@ -31,9 +31,11 @@ Control set: 0007 indexes secret audit queries; 0008 adds admin and suspension t
 | tenant | 0038 | ontology_link_source | Gate fixes: link targets on import | #179 | merged |
 | tenant | 0039 | entity_name_lookup | Gate 2: space selection | #185 | merged |
 | tenant | 0040 | object_paging | Objects and profiles | #206 | merged |
-| tenant | 0041 | ontology_activity | Ontology 3 | pending | locked |
-| tenant | 0042 | composio | Composio | #205 | reserved |
+| tenant | 0041 | composio_connector | Composio | #205 | reserved |
+| tenant | 0042 | ontology_activity | Ontology 3 | pending | locked |
 | control | 0007 | secret_audit_index | L3 Broker | #123 (#122), 2.0.9 | merged |
 | control | 0008 | user_admin_suspend | Admin (#144) | #162, 2.0.9 | merged |
 
 Tenant next free: **0043**.
+
+0042 depends on #205 landing tenant 0041 first. The activity PR is not merge-ready until that dependency lands.

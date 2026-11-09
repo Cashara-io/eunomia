@@ -248,7 +248,7 @@ async fn only_a_vault_owner_in_the_browser_decides() {
     .await;
     ok(app.tool("memory_write", json!({"subject_name": "orders_db", "subject_kind": "db", "text": "orders_db is in Team", "vault_id": "Team"})).await);
     let path = format!("/api/vaults/{team_id}/ontology/kinds/decide");
-    let body = json!({"kind": "db", "decision": {"action": "approve"}});
+    let body = json!({"kind": "db", "revision": 0, "decision": {"action": "approve"}});
 
     // a member, in the browser
     let login = json!({"email": bob.email, "password": PASSWORD});
