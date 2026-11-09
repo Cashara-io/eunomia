@@ -382,7 +382,7 @@ test("one suggestion approves on its own, and closing it keeps the queue page", 
   await expect(page).not.toHaveURL(/selected=/);
 
   await page.goto(`/ontology/review?space=${space}&type=kind&q=fixture_1`);
-  await page.getByRole("link", { name: "fixture 1", exact: true }).click();
+  await page.getByRole("link", { name: /^fixture 1 kind/ }).click();
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   await expect
     .poll(async () => {
