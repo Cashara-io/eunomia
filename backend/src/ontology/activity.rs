@@ -173,7 +173,7 @@ pub async fn head(db: &OrgDb, vault: &RecordId) -> AppResult<i64> {
     Ok(rows.into_iter().flatten().next().unwrap_or(0))
 }
 
-/// Missing proposal revisions are create-only; clients must refresh before updating.
+/// Missing proposal revisions allow creation and identical retries; changes need the current revision.
 pub fn proposal_revision(revision: i64) -> AppResult<i64> {
     if revision < 0 { return Err(AppError::bad_request("revision must not be negative")); }
     Ok(revision)

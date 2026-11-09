@@ -5,6 +5,7 @@ expression: stable
 {
   "kinds": [
     {
+      "revision": 1,
       "kind": "menu_item",
       "status": "proposed",
       "merge_into": null
@@ -13,6 +14,7 @@ expression: stable
   "links": [],
   "properties": [
     {
+      "revision": 1,
       "kind": "menu_item",
       "name": "price",
       "datatype": "money",

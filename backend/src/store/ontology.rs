@@ -81,17 +81,26 @@ pub const TARGET_STATE: Stmt = Stmt::new(
     "SELECT VALUE status FROM $id; SELECT VALUE id FROM entity WHERE vault = $vault AND kind = $kind LIMIT 1;",
 );
 
-/// A proposal: creates the row, or refreshes a still-proposed one (a field left out keeps its value).
+/// Identical proposals return the stored row without writing, even without its revision.
+/// Changed proposals require the current revision before refreshing a still-proposed row.
 /// A row a person approved or rejected is returned as it is, so a proposal never undoes a decision.
 pub const PROPOSE_KIND: Stmt = Stmt::at(
     "ontology.propose_kind",
     r#"BEGIN TRANSACTION;
-        LET $cur = (SELECT VALUE status FROM $id);
-        IF (array::len($cur) = 0 OR $cur[0] = "proposed") AND ((SELECT VALUE revision FROM $id)[0] ?? 0) != $proposal_revision { THROW "ontology.stale_revision" };
-        LET $row = IF array::len($cur) = 0 {
+        LET $cur = (SELECT * FROM $id);
+        LET $same = array::len($cur) > 0
+            AND $cur[0].kind = $kind
+            AND ($cur[0].description ?? NONE) = $description
+            AND ($cur[0].merge_into ?? NONE) = $merge_into
+            AND ($cur[0].synonyms ?? []) = $synonyms
+            AND ($cur[0].reason ?? NONE) = $reason;
+        IF !$same AND (array::len($cur) = 0 OR $cur[0].status = "proposed") AND ((SELECT VALUE revision FROM $id)[0] ?? 0) != $proposal_revision { THROW "ontology.stale_revision" };
+        LET $row = IF $same {
+            $cur
+        } ELSE IF array::len($cur) = 0 {
             (CREATE $id SET revision = (revision ?? 0) + 1, activity_actor_name = $activity_actor_name, activity_actor = $activity_actor, activity_actor_type = $activity_actor_type, activity_action = "proposed", activity_reason = $reason, vault = $vault, kind = $kind, description = $description, merge_into = $merge_into,
                 synonyms = $synonyms, origin = $origin, reason = $reason RETURN AFTER)
-        } ELSE IF $cur[0] = "proposed" {
+        } ELSE IF $cur[0].status = "proposed" {
             (UPDATE $id SET revision = (revision ?? 0) + 1, activity_actor_name = $activity_actor_name, activity_actor = $activity_actor, activity_actor_type = $activity_actor_type, activity_action = "proposed", activity_reason = $reason, description = $description ?? description, merge_into = $merge_into ?? merge_into,
                 synonyms = array::union(synonyms ?? [], $synonyms), reason = $reason ?? reason, updated_at = time::now() RETURN AFTER)
         } ELSE {
@@ -99,7 +108,7 @@ pub const PROPOSE_KIND: Stmt = Stmt::at(
         };
         RETURN $row;
         COMMIT TRANSACTION;"#,
-    4, // BEGIN 0, LET 1, IF 2, LET 3, RETURN 4
+    5, // BEGIN 0, LET 1, LET 2, IF 3, LET 4, RETURN 5
 );
 
 // The columns (`source_map`, migration 0038) are added in their own step, and only when given, so an
@@ -107,27 +116,34 @@ pub const PROPOSE_KIND: Stmt = Stmt::at(
 pub const PROPOSE_LINK: Stmt = Stmt::at(
     "ontology.propose_link",
     r#"BEGIN TRANSACTION;
-        LET $cur = (SELECT VALUE status FROM $id);
-        IF (array::len($cur) = 0 OR $cur[0] = "proposed") AND ((SELECT VALUE revision FROM $id)[0] ?? 0) != $proposal_revision { THROW "ontology.stale_revision" };
+        LET $cur = (SELECT * FROM $id);
+        LET $same = array::len($cur) > 0
+            AND $cur[0].from_kind = $from_kind
+            AND $cur[0].label = $label
+            AND $cur[0].to_kind = $to_kind
+            AND ($cur[0].description ?? NONE) = $description
+            AND ($cur[0].source_map ?? []) = $source_map
+            AND ($cur[0].reason ?? NONE) = $reason;
+        IF !$same AND (array::len($cur) = 0 OR $cur[0].status = "proposed") AND ((SELECT VALUE revision FROM $id)[0] ?? 0) != $proposal_revision { THROW "ontology.stale_revision" };
         IF array::len($cur) = 0 {
             CREATE $id SET revision = 0, activity_actor_name = $activity_actor_name, activity_actor = $activity_actor,
                 activity_actor_type = $activity_actor_type, activity_action = "proposed", activity_reason = $reason,
                 vault = $vault, from_kind = $from_kind, label = $label, to_kind = $to_kind,
                 description = $description, origin = $origin, reason = $reason
-        } ELSE IF $cur[0] = "proposed" {
+        } ELSE IF !$same AND $cur[0].status = "proposed" {
             UPDATE $id SET activity_actor_name = $activity_actor_name, activity_actor = $activity_actor,
                 activity_actor_type = $activity_actor_type, activity_action = "proposed", activity_reason = $reason,
                 description = $description ?? description, reason = $reason ?? reason, updated_at = time::now()
         };
-        IF array::len($source_map) > 0 AND (array::len($cur) = 0 OR $cur[0] = "proposed") {
+        IF !$same AND array::len($source_map) > 0 AND (array::len($cur) = 0 OR $cur[0].status = "proposed") {
             UPDATE $id SET source_map = array::union(source_map ?? [], $source_map)
         };
-        IF array::len($cur) = 0 OR $cur[0] = "proposed" {
+        IF !$same AND (array::len($cur) = 0 OR $cur[0].status = "proposed") {
             UPDATE $id SET revision = (revision ?? 0) + 1
         };
         RETURN (SELECT * FROM $id);
         COMMIT TRANSACTION;"#,
-    6,
+    7,
 );
 
 /// The open proposals agents filed in `$vault`, of every sort.
@@ -276,13 +292,26 @@ pub const APPROVED_PROPERTIES: Stmt = Stmt::new(
 pub const PROPOSE_PROPERTY: Stmt = Stmt::at(
     "ontology.propose_property",
     r#"BEGIN TRANSACTION;
-        LET $cur = (SELECT VALUE status FROM $id);
-        IF ((SELECT VALUE revision FROM $id)[0] ?? 0) != $proposal_revision { THROW "ontology.stale_revision" };
-        LET $row = IF array::len($cur) = 0 {
+        LET $cur = (SELECT * FROM $id);
+        LET $same = array::len($cur) > 0
+            AND $cur[0].kind = $kind
+            AND $cur[0].name = $name
+            AND $cur[0].datatype = $datatype
+            AND ($cur[0].unit ?? NONE) = $unit
+            AND ($cur[0].enum_values ?? NONE) = $enum_values
+            AND ($cur[0].description ?? NONE) = $description
+            AND ($cur[0].synonyms ?? []) = $synonyms
+            AND ($cur[0].merge_into ?? NONE) = $merge_into
+            AND ($cur[0].source_map ?? []) = $source_map
+            AND ($cur[0].reason ?? NONE) = $reason;
+        IF !$same AND ((SELECT VALUE revision FROM $id)[0] ?? 0) != $proposal_revision { THROW "ontology.stale_revision" };
+        LET $row = IF $same {
+            $cur
+        } ELSE IF array::len($cur) = 0 {
             (CREATE $id SET revision = (revision ?? 0) + 1, activity_actor_name = $activity_actor_name, activity_actor = $activity_actor, activity_actor_type = $activity_actor_type, activity_action = "proposed", activity_reason = $reason, vault = $vault, kind = $kind, name = $name, datatype = $datatype, unit = $unit,
                 enum_values = $enum_values, description = $description, synonyms = $synonyms, merge_into = $merge_into,
                 origin = $origin, reason = $reason, source_map = $source_map RETURN AFTER)
-        } ELSE IF $cur[0] = "proposed" {
+        } ELSE IF $cur[0].status = "proposed" {
             (UPDATE $id SET revision = (revision ?? 0) + 1, activity_actor_name = $activity_actor_name, activity_actor = $activity_actor, activity_actor_type = $activity_actor_type, activity_action = "proposed", activity_reason = $reason, datatype = $datatype, unit = $unit ?? unit, enum_values = $enum_values ?? enum_values,
                 description = $description ?? description, synonyms = array::union(synonyms ?? [], $synonyms),
                 merge_into = $merge_into ?? merge_into, reason = $reason ?? reason,
@@ -292,7 +321,7 @@ pub const PROPOSE_PROPERTY: Stmt = Stmt::at(
         };
         RETURN $row;
         COMMIT TRANSACTION;"#,
-    4,
+    5,
 );
 
 /// A person's approval or rejection of a property. Properties rejected into this one follow it to its
@@ -367,12 +396,23 @@ pub const PROPERTIES_OF_KIND: Stmt =
 pub const PROPOSE_METRIC: Stmt = Stmt::at(
     "ontology.propose_metric",
     r#"BEGIN TRANSACTION;
-        LET $cur = (SELECT VALUE status FROM $id);
-        IF (array::len($cur) = 0 OR $cur[0] = "proposed") AND ((SELECT VALUE revision FROM $id)[0] ?? 0) != $proposal_revision { THROW "ontology.stale_revision" };
-        LET $row = IF array::len($cur) = 0 {
+        LET $cur = (SELECT * FROM $id);
+        LET $same = array::len($cur) > 0
+            AND $cur[0].kind = $kind
+            AND $cur[0].name = $name
+            AND $cur[0].expr = $expr
+            AND ($cur[0].unit ?? NONE) = $unit
+            AND ($cur[0].description ?? NONE) = $description
+            AND ($cur[0].synonyms ?? []) = $synonyms
+            AND ($cur[0].merge_into ?? NONE) = $merge_into
+            AND ($cur[0].reason ?? NONE) = $reason;
+        IF !$same AND (array::len($cur) = 0 OR $cur[0].status = "proposed") AND ((SELECT VALUE revision FROM $id)[0] ?? 0) != $proposal_revision { THROW "ontology.stale_revision" };
+        LET $row = IF $same {
+            $cur
+        } ELSE IF array::len($cur) = 0 {
             (CREATE $id SET revision = (revision ?? 0) + 1, activity_actor_name = $activity_actor_name, activity_actor = $activity_actor, activity_actor_type = $activity_actor_type, activity_action = "proposed", activity_reason = $reason, vault = $vault, kind = $kind, name = $name, description = $description, synonyms = $synonyms,
                 expr = $expr, unit = $unit, merge_into = $merge_into, origin = $origin, reason = $reason RETURN AFTER)
-        } ELSE IF $cur[0] = "proposed" {
+        } ELSE IF $cur[0].status = "proposed" {
             (UPDATE $id SET revision = (revision ?? 0) + 1, activity_actor_name = $activity_actor_name, activity_actor = $activity_actor, activity_actor_type = $activity_actor_type, activity_action = "proposed", activity_reason = $reason, expr = $expr, unit = $unit ?? unit, description = $description ?? description,
                 synonyms = array::union(synonyms ?? [], $synonyms), merge_into = $merge_into ?? merge_into,
                 reason = $reason ?? reason, updated_at = time::now() RETURN AFTER)
@@ -381,7 +421,7 @@ pub const PROPOSE_METRIC: Stmt = Stmt::at(
         };
         RETURN $row;
         COMMIT TRANSACTION;"#,
-    4,
+    5,
 );
 
 /// A person's approval or rejection of a metric. Metrics rejected into this one follow it to its new

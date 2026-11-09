@@ -1960,12 +1960,14 @@ export type ProposeOut = {
 export type ProposedKind = {
     kind: string;
     merge_into?: string | null;
+    revision: number;
     status: Status;
 };
 
 export type ProposedLink = {
     from_kind: string;
     label: string;
+    revision: number;
     status: Status;
     to_kind: string;
 };
@@ -1977,6 +1979,7 @@ export type ProposedMetric = {
     kind: string;
     merge_into?: string | null;
     name: string;
+    revision: number;
     status: Status;
 };
 
@@ -1988,6 +1991,7 @@ export type ProposedProperty = {
     kind: string;
     merge_into?: string | null;
     name: string;
+    revision: number;
     status: Status;
 };
 

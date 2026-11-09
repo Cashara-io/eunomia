@@ -185,7 +185,7 @@ pub(super) fn clean_source_map(fields: &[SourceField]) -> AppResult<Vec<SourceFi
 /// A proposed property, as an agent or the model sends it.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct PropertyProposal {
-    /// Revision observed in ontology_get. Zero or omitted means create only.
+    /// Revision observed in ontology_get. Zero or omitted allows creation or an identical retry.
     #[serde(default)]
     pub revision: i64,
     pub kind: String,
@@ -264,6 +264,7 @@ impl PropertyProposal {
 /// A proposed property after the call, with the row's status (a decided one keeps its decision).
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct ProposedProperty {
+    pub revision: i64,
     pub kind: String,
     pub name: String,
     pub datatype: Datatype,
@@ -298,7 +299,7 @@ pub(super) async fn apply_properties(db: &OrgDb, vault: &RecordId, props: Vec<Va
         })
         .await?;
         crate::changes::ontology_committed(db, vault);
-        out.push(ProposedProperty { kind: row.kind, name: row.name, datatype: Datatype::parse(&row.datatype)?, status: Status::parse(&row.status)?, merge_into: row.merge_into });
+        out.push(ProposedProperty { revision: row.revision, kind: row.kind, name: row.name, datatype: Datatype::parse(&row.datatype)?, status: Status::parse(&row.status)?, merge_into: row.merge_into });
     }
     Ok(out)
 }

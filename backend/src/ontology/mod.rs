@@ -513,7 +513,7 @@ fn merge_links(counts: Vec<LinkCount>, rows: Vec<LinkRow>) -> AppResult<Vec<Link
 /// A proposed kind, as an agent or the model sends it.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct KindProposal {
-    /// Revision observed in ontology_get. Zero or omitted means create only.
+    /// Revision observed in ontology_get. Zero or omitted allows creation or an identical retry.
     #[serde(default)]
     pub revision: i64,
     pub kind: String,
@@ -532,7 +532,7 @@ pub struct KindProposal {
 /// A proposed link type.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct LinkProposal {
-    /// Revision observed in ontology_get. Zero or omitted means create only.
+    /// Revision observed in ontology_get. Zero or omitted allows creation or an identical retry.
     #[serde(default)]
     pub revision: i64,
     pub from_kind: String,
@@ -609,6 +609,7 @@ pub const MAX_PROPOSED_METRICS: usize = 50;
 /// that decision (the proposal did not change it).
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct ProposedKind {
+    pub revision: i64,
     pub kind: String,
     pub status: Status,
     pub merge_into: Option<String>,
@@ -616,6 +617,7 @@ pub struct ProposedKind {
 
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct ProposedLink {
+    pub revision: i64,
     pub from_kind: String,
     pub label: String,
     pub to_kind: String,
@@ -716,7 +718,7 @@ async fn apply(db: &OrgDb, vault: &RecordId, valid: Valid, origin: Origin) -> Ap
         })
         .await?;
         crate::changes::ontology_committed(db, vault);
-        out.kinds.push(ProposedKind { kind: row.kind, status: Status::parse(&row.status)?, merge_into: row.merge_into });
+        out.kinds.push(ProposedKind { revision: row.revision, kind: row.kind, status: Status::parse(&row.status)?, merge_into: row.merge_into });
     }
     for l in links {
         let id = link_rid(vault, &l.key);
@@ -739,7 +741,7 @@ async fn apply(db: &OrgDb, vault: &RecordId, valid: Valid, origin: Origin) -> Ap
         })
         .await?;
         crate::changes::ontology_committed(db, vault);
-        out.links.push(ProposedLink { from_kind: row.from_kind, label: row.label, to_kind: row.to_kind, status: Status::parse(&row.status)? });
+        out.links.push(ProposedLink { revision: row.revision, from_kind: row.from_kind, label: row.label, to_kind: row.to_kind, status: Status::parse(&row.status)? });
     }
     out.properties = property::apply_properties(db, vault, properties, origin).await?;
     out.metrics = metric::apply_metrics(db, vault, metrics, origin).await?;

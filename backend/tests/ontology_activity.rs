@@ -413,3 +413,108 @@ async fn review_guard_imports_emit_one_summary_for_links_only_and_multiple_value
         assert!(!serde_json::to_string(&events).unwrap().contains("confidential-import-canary"));
     }
 }
+
+
+/// Includes timestamps, provenance, revisions and the durable cursor, so an UPDATE that
+/// happens to leave the definition unchanged still fails the retry check.
+async fn proposal_storage(app: &TestApp) -> Vec<Vec<Value>> {
+    let db = app.db().await;
+    let mut res = db.test_raw().query("SELECT * FROM ontology_kind ORDER BY id; SELECT * FROM ontology_link ORDER BY id; SELECT * FROM ontology_property ORDER BY id; SELECT * FROM ontology_metric ORDER BY id; SELECT * FROM ontology_event ORDER BY seq; SELECT id, ontology_seq FROM vault ORDER BY id;")
+        .await.unwrap();
+    (0..6).map(|slot| res.take(slot).unwrap()).collect()
+}
+
+#[tokio::test]
+async fn identical_proposals_are_read_only_and_changed_definitions_still_need_a_revision() {
+    let app = TestApp::new().await;
+    let vault = setup(&app).await;
+    let source = json!([{"source":"document","record_type":"shops.csv","path":"category"}]);
+    let items = [
+        ("kinds", json!({"kind":"shop","description":"A shop","synonyms":["store"],"merge_into":"organisation","reason":"Source records"}),
+            json!({"description":"Changed","synonyms":["outlet"],"merge_into":"location","reason":"New reason"})),
+        ("links", json!({"from_kind":"shop","label":"near","to_kind":"location","description":"Nearby","source_map":source,"reason":"Source records"}),
+            json!({"description":"Changed","source_map":[{"source":"document","record_type":"shops.csv","path":"address"}],"reason":"New reason"})),
+        ("properties", json!({"kind":"shop","name":"category","datatype":"enum","enum_values":["food","clothes"],"unit":"category","description":"Category","synonyms":["type"],"merge_into":"group","source_map":source,"reason":"Source records"}),
+            json!({"datatype":"text","enum_values":["food","books"],"unit":"group","description":"Changed","synonyms":["class"],"merge_into":"department","source_map":[{"source":"document","record_type":"shops.csv","path":"type"}],"reason":"New reason"})),
+        ("metrics", json!({"kind":"shop","name":"total","expr":{"agg":"count"},"unit":"shops","description":"Shop count","synonyms":["stores"],"merge_into":"count_all","reason":"Source records"}),
+            json!({"expr":{"agg":"count","property":"category"},"unit":"stores","description":"Changed","synonyms":["outlets"],"merge_into":"count_stores","reason":"New reason"})),
+    ];
+    for (list, fields, changes) in items {
+        let mut args = json!({"vault_id":vault});
+        args[list] = json!([fields]);
+        let created = app.tool("ontology_propose", args.clone()).await;
+        assert!(created.get("error").is_none(), "{created}");
+        assert_eq!(created[list][0]["revision"], 1);
+        let before = proposal_storage(&app).await;
+        for revision in [None, Some(0), Some(1), Some(999)] {
+            let mut retry = fields.clone();
+            if let Some(revision) = revision { retry["revision"] = json!(revision); }
+            args[list] = json!([retry]);
+            let out = app.tool("ontology_propose", args.clone()).await;
+            assert_eq!(out, created, "{out}");
+            let (status, out) = app.http("POST", "/api/tools/ontology_propose", Some(args.clone()), true).await;
+            assert_eq!(status, 200, "{out}");
+            assert_eq!(out, created);
+            let rpc = json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ontology_propose","arguments":args}});
+            let (status, out) = app.http("POST", "/mcp", Some(rpc), true).await;
+            assert_eq!(status, 200, "{out}");
+            let result: Value = serde_json::from_str(out["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+            assert_eq!(result, created, "{out}");
+            assert_eq!(proposal_storage(&app).await, before, "identical {list} retry must not write");
+        }
+        for (field, value) in changes.as_object().unwrap() {
+            let mut changed = fields.clone();
+            changed[field] = value.clone();
+            if field == "datatype" { changed.as_object_mut().unwrap().remove("enum_values"); }
+            for revision in [None, Some(0), Some(999)] {
+                let mut stale = changed.clone();
+                if let Some(revision) = revision { stale["revision"] = json!(revision); }
+                args[list] = json!([stale]);
+                let out = app.tool("ontology_propose", args.clone()).await;
+                assert_eq!(out["code"], "ontology.stale_revision", "{list}.{field}: {out}");
+            }
+            assert_eq!(proposal_storage(&app).await, before, "refused {list}.{field} must not write");
+        }
+        let mut fresh = fields;
+        fresh["revision"] = json!(1);
+        fresh["description"] = json!("Reviewed change");
+        args[list] = json!([fresh.clone()]);
+        let updated = app.tool("ontology_propose", args.clone()).await;
+        assert!(updated.get("error").is_none(), "{updated}");
+        assert_eq!(updated[list][0]["revision"], 2);
+        fresh.as_object_mut().unwrap().remove("revision");
+        args[list] = json!([fresh]);
+        let before = proposal_storage(&app).await;
+        assert_eq!(app.tool("ontology_propose", args).await, updated);
+        assert_eq!(proposal_storage(&app).await, before);
+    }
+}
+
+
+#[tokio::test]
+async fn identical_retries_of_decided_definitions_preserve_the_decision_and_revision() {
+    let app = TestApp::new().await;
+    let vault = setup(&app).await;
+    let args = json!({"vault_id":vault,
+        "kinds":[{"kind":"shop"}],
+        "links":[{"from_kind":"shop","label":"near","to_kind":"location"}],
+        "properties":[{"kind":"shop","name":"note","datatype":"text"}],
+        "metrics":[{"kind":"shop","name":"total","expr":{"agg":"count"}}]});
+    let out = app.tool("ontology_propose", args.clone()).await;
+    assert!(out.get("error").is_none(), "{out}");
+    for list in ["kinds", "links", "properties", "metrics"] {
+        let mut fields = args[list][0].clone();
+        fields["revision"] = json!(1);
+        fields["decision"] = json!({"action":"approve"});
+        let (status, out) = app.http_session("POST", &format!("/api/vaults/{vault}/ontology/{list}/decide"), Some(fields)).await;
+        assert_eq!(status, 200, "{out}");
+    }
+    let before = proposal_storage(&app).await;
+    let out = app.tool("ontology_propose", args).await;
+    assert!(out.get("error").is_none(), "{out}");
+    for list in ["kinds", "links", "properties", "metrics"] {
+        assert_eq!(out[list][0]["status"], "approved");
+        assert_eq!(out[list][0]["revision"], 2);
+    }
+    assert_eq!(proposal_storage(&app).await, before);
+}

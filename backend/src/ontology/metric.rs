@@ -835,7 +835,7 @@ pub fn expr_words(kind: &str, e: &MetricExpr) -> String {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MetricProposal {
-    /// Revision observed in ontology_get. Zero or omitted means create only.
+    /// Revision observed in ontology_get. Zero or omitted allows creation or an identical retry.
     #[serde(default)]
     pub revision: i64,
     pub kind: String,
@@ -928,6 +928,7 @@ pub(super) async fn validate_all(db: &OrgDb, vault: &RecordId, metrics: &[Metric
 /// A proposed metric after the call, with the row's status (a decided one keeps its decision).
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct ProposedMetric {
+    pub revision: i64,
     pub kind: String,
     pub name: String,
     pub status: Status,
@@ -960,7 +961,7 @@ pub(super) async fn apply_metrics(db: &OrgDb, vault: &RecordId, metrics: Vec<Val
         })
         .await?;
         crate::changes::ontology_committed(db, vault);
-        out.push(ProposedMetric { kind: row.kind, name: row.name, status: Status::parse(&row.status)?, merge_into: row.merge_into });
+        out.push(ProposedMetric { revision: row.revision, kind: row.kind, name: row.name, status: Status::parse(&row.status)?, merge_into: row.merge_into });
     }
     Ok(out)
 }
