@@ -4,8 +4,8 @@
     "gzip": 222820
   },
   "/entities": {
-    "bytes": 835545,
-    "gzip": 247299
+    "bytes": 835700,
+    "gzip": 247313
   },
   "/vaults": {
     "bytes": 802418,
@@ -32,8 +32,8 @@
     "gzip": 228226
   },
   "/chat": {
-    "bytes": 933804,
-    "gzip": 275457
+    "bytes": 936359,
+    "gzip": 276403
   },
   "/settings": {
     "bytes": 1166269,
