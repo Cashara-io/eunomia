@@ -293,6 +293,7 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
             Some(d) => format!("Turned on HTTPS for {d}"),
             None => "Turned off HTTPS".into(),
         },
+        "server.diagnostics" => "Downloaded support diagnostics".into(),
         "server.update" => "Started a server update".into(),
         "server.ai_provider" => match (kv(detail, "host"), detail.split_whitespace().any(|p| p == "key")) {
             (Some(h), true) => format!("Replaced the key for the AI provider at {h}"),

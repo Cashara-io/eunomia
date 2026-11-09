@@ -1,0 +1,17 @@
+{
+  "diagnostics.worker_started": {
+    "target": "eunomia_backend::jobs::worker",
+    "message": "job worker started",
+    "fields": {"concurrency": [1, 1024]}
+  },
+  "diagnostics.worker_stopped": {
+    "target": "eunomia_backend::jobs::worker",
+    "message": "job worker stopped",
+    "fields": {"released": [0, 100000]}
+  },
+  "diagnostics.job_done": {
+    "target": "eunomia_backend::jobs::worker",
+    "message": "job done",
+    "fields": {}
+  }
+}

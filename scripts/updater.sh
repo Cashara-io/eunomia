@@ -14,7 +14,7 @@
 # host path read from this container's own mount table.
 set -u
 
-apk add --no-cache -q bash git coreutils findutils curl >/dev/null 2>&1 || { echo "updater: apk add failed, retrying on restart"; exit 1; }
+apk add --no-cache -q bash git coreutils findutils curl python3 >/dev/null 2>&1 || { echo "updater: apk add failed, retrying on restart"; exit 1; }
 git config --global --add safe.directory '*'
 
 host="$(docker inspect "$HOSTNAME" --format '{{range .Mounts}}{{if eq .Destination "/eunomia"}}{{.Source}}{{end}}{{end}}' 2>/dev/null)"

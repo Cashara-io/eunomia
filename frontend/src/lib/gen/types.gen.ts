@@ -2580,6 +2580,7 @@ export type SyncReport = {
     errors?: Array<string> | null;
     failed?: number | null;
     message?: string | null;
+    provider_skipped?: number | null;
     retry_after_secs?: number | null;
     retry_at?: string | null;
     skipped?: number | null;
@@ -4016,6 +4017,28 @@ export type GetMetricsResponses = {
 };
 
 export type GetMetricsResponse = GetMetricsResponses[keyof GetMetricsResponses];
+
+export type DownloadDiagnosticsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/diagnostics';
+};
+
+export type DownloadDiagnosticsErrors = {
+    default: Problem;
+};
+
+export type DownloadDiagnosticsError = DownloadDiagnosticsErrors[keyof DownloadDiagnosticsErrors];
+
+export type DownloadDiagnosticsResponses = {
+    /**
+     * ZIP, capped at 25 MiB
+     */
+    200: Blob | File;
+};
+
+export type DownloadDiagnosticsResponse = DownloadDiagnosticsResponses[keyof DownloadDiagnosticsResponses];
 
 export type ListDocumentsData = {
     body?: never;

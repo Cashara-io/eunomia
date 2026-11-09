@@ -175,3 +175,11 @@ export const chat = {
     }
   },
 };
+
+/** Prepare a support bundle. The response waits up to 60 seconds for the updater. */
+export async function downloadDiagnostics(): Promise<boolean> {
+  const path = "/api/diagnostics";
+  const res = await fetch(`${API_URL}${path}`, { method: "POST", credentials: "include", headers: { traceparent: traceparent() } });
+  await saveResponse(res, path, "eunomia-diagnostics.zip");
+  return res.headers.get("x-diagnostics-capped") === "true";
+}

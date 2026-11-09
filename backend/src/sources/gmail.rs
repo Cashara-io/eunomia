@@ -232,7 +232,7 @@ impl Source for GmailSource {
         }.await;
         if let Err(error) = discovery {
             if retryable(&error) {
-                return Ok(SyncResult { cursor: Some(state.encode()?), progress: SyncProgress::interrupted(&error), warnings: state.warnings(), ..SyncResult::default() });
+                return Ok(SyncResult { cursor: Some(state.encode()?), progress: SyncProgress::interrupted(&error), warnings: state.warnings(), provider_skipped: Some(state.skipped), ..SyncResult::default() });
             }
             return Err(error);
         }
@@ -284,7 +284,7 @@ impl Source for GmailSource {
         }
         state.checkpoint(&records)?;
         if !state.pending.is_empty() && matches!(progress, SyncProgress::Complete) { progress = SyncProgress::remaining(); }
-        Ok(SyncResult { records, cursor: Some(state.encode()?), progress, warnings: state.warnings() })
+        Ok(SyncResult { records, cursor: Some(state.encode()?), progress, warnings: state.warnings(), provider_skipped: Some(state.skipped) })
     }
 
     fn map(&self, raw: &Value) -> Option<Value> {
