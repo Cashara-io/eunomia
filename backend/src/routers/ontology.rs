@@ -32,7 +32,7 @@ pub fn router() -> Router<AppState> {
 
 #[utoipa::path(operation_id = "listOntologyObjects", get, path = "/api/vaults/{vault_id}/ontology/objects", tag = "vaults",
     params(("vault_id" = String, Path), ontology::objects::ListArgs),
-    responses((status = 200, body = serde_json::Value)), security(("cookie" = []), ("bearer" = [])))]
+    responses((status = 200, body = serde_json::Value), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")), security(("cookie" = []), ("bearer" = [])))]
 async fn list_objects(State(state): State<AppState>, user: User, Path(vault): Path<String>, Query(args): Query<ontology::objects::ListArgs>) -> AppResult<Json<serde_json::Value>> {
     let state = state.org(&user.org).await?;
     Ok(Json(ontology::objects::list(&state.db, &user.id, &parse_vault_id(&vault)?, &args).await?))
@@ -44,7 +44,7 @@ struct ProfileQuery { #[serde(default)] offset: usize }
 
 #[utoipa::path(operation_id = "getOntologyObject", get, path = "/api/vaults/{vault_id}/ontology/objects/{id}", tag = "vaults",
     params(("vault_id" = String, Path), ("id" = String, Path), ProfileQuery),
-    responses((status = 200, body = serde_json::Value)), security(("cookie" = []), ("bearer" = [])))]
+    responses((status = 200, body = serde_json::Value), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")), security(("cookie" = []), ("bearer" = [])))]
 async fn object_profile(State(state): State<AppState>, user: User, Path((vault,id)): Path<(String,String)>, Query(args): Query<ProfileQuery>) -> AppResult<Json<serde_json::Value>> {
     if args.offset > 1_000_000 { return Err(AppError::bad_request("offset too large")); }
     let state = state.org(&user.org).await?;

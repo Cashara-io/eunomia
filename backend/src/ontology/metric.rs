@@ -1586,8 +1586,12 @@ pub(super) async fn prepare(db: &OrgDb, vault: &RecordId, args: &EvalArgs) -> Ap
     prepare_scoped(db, vault, args, None).await
 }
 
-pub(super) async fn eval_object(db: &OrgDb, vault: &RecordId, args: &EvalArgs, entity: &RecordId) -> AppResult<MetricEvalOut> {
-    prepare_scoped(db, vault, args, Some(entity)).await?.run(None)
+pub(super) async fn eval_object(db: &OrgDb, vault: &RecordId, args: &EvalArgs, entity: &RecordId) -> AppResult<Value> {
+    let prepared = prepare_scoped(db, vault, args, Some(entity)).await?;
+    let inputs = prepared.plan.properties();
+    let mut out = serde_json::to_value(prepared.run(None)?).map_err(|e|AppError::internal(e.to_string()))?;
+    out["input_properties"] = serde_json::json!(inputs);
+    Ok(out)
 }
 
 async fn prepare_scoped(db: &OrgDb, vault: &RecordId, args: &EvalArgs, entity: Option<&RecordId>) -> AppResult<Prepared> {

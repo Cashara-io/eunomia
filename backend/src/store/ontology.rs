@@ -392,8 +392,8 @@ pub const METRIC_ENTITIES: Stmt = Stmt::new(
 /// histories; created_at breaks ties within each pair. Every input is a parameter.
 pub const LATEST_VALUES: Stmt = Stmt::new("ontology.latest_values",
     r#"RETURN array::flatten(array::flatten($ids.map(|$e| $props.map(|$p| (
-        SELECT entity, property, value_num, value_text, value_bool, value_date, unit, as_of, created_at FROM entity_property
-        WHERE entity = $e AND property = $p AND vault = $vault AND as_of <= $as_of ORDER BY as_of DESC, created_at DESC LIMIT 1
+        SELECT id, entity, property, value_num, value_text, value_bool, value_date, unit, as_of, created_at FROM entity_property
+        WHERE entity = $e AND property = $p AND vault = $vault AND as_of <= $as_of ORDER BY as_of DESC, created_at DESC, id DESC LIMIT 1
     )))));"#);
 
 /// The approved terms of `$vault` that a question's phrases are matched against, each with the spec and

@@ -27,6 +27,8 @@ const propertySchema = columnSchema.extend({
   value,
   as_of: z.string().nullable(),
   source: z.string().nullable(),
+  source_label: z.string(),
+  source_state: z.string(),
   state: z.enum(["recorded", "missing", "stale", "conflicting", "unavailable"]),
 });
 const historySchema = z.object({
@@ -55,6 +57,7 @@ const runSchema = z.object({
   expr_words: z.string(),
   as_of: z.string(),
   n_entities: z.number(),
+  input_properties: z.array(z.string()),
   entity_ids: z.array(z.string()),
   warnings: z.array(z.string()),
   truncated: z.boolean(),
@@ -160,6 +163,7 @@ export function useObjects(
   const query = new URLSearchParams({ kind, limit: "25" });
   for (const key of ["search", "sort", "descending", "filter", "op", "value"])
     if (params.get(key)) query.set(key, params.get(key) ?? "");
+  if (query.get("op") !== "missing" && !query.get("value")) query.delete("op");
   const page = Math.max(1, Number(params.get("page")) || 1);
   query.set("offset", String((page - 1) * 25));
   const path = `/api/vaults/${encodeURIComponent(space)}/ontology/objects?${query}`;
@@ -179,5 +183,19 @@ export function useObjectProfile(space: string, id: string, offset = 0) {
         signal,
       ),
     enabled: !!id,
+  });
+}
+
+export function useObjectKinds(space: string) {
+  return useQuery({
+    queryKey: ["object-kinds", space],
+    queryFn: ({ signal }) =>
+      read(
+        `/api/vaults/${encodeURIComponent(space)}/ontology/objects`,
+        z.object({
+          kinds: z.array(z.object({ kind: z.string(), entities: z.number() })),
+        }),
+        signal,
+      ),
   });
 }

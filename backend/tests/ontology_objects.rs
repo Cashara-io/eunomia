@@ -3,7 +3,9 @@ use common::TestApp;
 use serde_json::{json,Value};
 
 async fn fixture(app:&TestApp) -> (String,Vec<String>) {
-    let vault = app.tool("ontology_get",json!({})).await["vault"].as_str().unwrap().to_string();
+    let (status,created)=app.http("POST","/api/vaults",Some(json!({"name":"Banksia Basket Group"})),true).await;
+    assert_eq!(status,200,"{created}");
+    let vault=created["id"].as_str().unwrap().to_string();
     let out = app.tool("ontology_propose",json!({"vault_id":vault,"kinds":[{"kind":"product"}],"properties":[{"kind":"product","name":"price","datatype":"money","unit":"AUD"},{"kind":"product","name":"margin","datatype":"percent"},{"kind":"product","name":"release","datatype":"date"}],"metrics":[{"kind":"product","name":"total_price","expr":{"agg":"sum","property":"price"}}]})).await;
     assert!(out.get("error").is_none(),"{out}");
     for (route,body) in [("kinds",json!({"kind":"product","decision":{"action":"approve"}})),("properties",json!({"kind":"product","name":"price","decision":{"action":"approve"}})),("properties",json!({"kind":"product","name":"margin","decision":{"action":"approve"}})),("properties",json!({"kind":"product","name":"release","decision":{"action":"approve"}})),("metrics",json!({"kind":"product","name":"total_price","decision":{"action":"approve"}}))] {
@@ -30,6 +32,9 @@ async fn get(app:&TestApp,vault:&str,query:&str)->Value {
 async fn paging_typed_sort_filters_missing_and_object_metric_scope() {
     let app=TestApp::new().await;
     let (vault,ids)=fixture(&app).await;
+    let kinds=get(&app,&vault,"").await;
+    assert_eq!(kinds["kinds"][0]["kind"],"product");
+    assert_eq!(kinds["kinds"][0]["entities"],32);
     let page=get(&app,&vault,"?kind=product&sort=price&descending=true&limit=5&offset=5").await;
     assert_eq!(page["total"],32);
     assert_eq!(page["rows"][0]["values"]["price"]["value"],25.0);
@@ -60,10 +65,17 @@ async fn aggregates_refuse_non_members_and_restricted_credentials() {
     let (vault,ids)=fixture(&app).await;
     let other=common::register(&app.state,"outsider@example.com").await;
     let token=eunomia_backend::models_user::create_api_token(&app.state.control,&other.id,"outsider").await.unwrap().token;
-    for suffix in ["?kind=product".to_string(),format!("/{}",ids[0])] {
+    for suffix in ["".to_string(),"?kind=product".to_string(),format!("/{}",ids[0])] {
         let (status,out)=common::http(&app.router,"GET",&format!("/api/vaults/{vault}/ontology/objects{suffix}"),None,Some(&token),None).await.0;
         assert_eq!(status,403,"{out}");
     }
+    eunomia_backend::isolation::mutate("vaults.membership_active", "user = $user", "true");
+    for suffix in ["".to_string(),"?kind=product".to_string(),format!("/{}",ids[0])] {
+        let (status,out)=common::http(&app.router,"GET",&format!("/api/vaults/{vault}/ontology/objects{suffix}"),None,Some(&token),None).await.0;
+        assert_eq!(status,200,"membership guard mutant must expose the object: {out}");
+    }
+    eunomia_backend::isolation::clear_mutations();
+
 }
 
 #[tokio::test]
@@ -72,14 +84,112 @@ async fn token_scopes_and_vault_restrictions_are_enforced() {
     let (vault,ids)=fixture(&app).await;
     let (_,other)=app.http("POST","/api/vaults",Some(json!({"name":"Other space"})),true).await;
     let other_id=eunomia_backend::rid::parse(other["id"].as_str().unwrap()).unwrap();
-    let limited=eunomia_backend::models_user::create_api_token_with(&app.state.control,&app.user.id,"wrong scope",&["settings:read".into()],None,None).await.unwrap().token;
+    let limited=eunomia_backend::models_user::create_api_token_with(&app.state.control,&app.user.id,"wrong scope",&["connectors".into()],None,None).await.unwrap().token;
     let restricted=eunomia_backend::models_user::create_api_token_with(&app.state.control,&app.user.id,"wrong vault",&["memory:read".into()],Some(&other_id),None).await.unwrap().token;
+    let mut statuses=Vec::new();
     for token in [limited,restricted] {
-        for suffix in ["?kind=product".to_string(),format!("/{}",ids[0])] {
-            let (status,out)=common::http(&app.router,"GET",&format!("/api/vaults/{vault}/ontology/objects{suffix}"),None,Some(&token),None).await.0;
-            assert_eq!(status,403,"{out}");
+        for suffix in ["".to_string(),"?kind=product".to_string(),format!("/{}",ids[0])] {
+            let (status,_)=common::http(&app.router,"GET",&format!("/api/vaults/{vault}/ontology/objects{suffix}"),None,Some(&token),None).await.0;
+            statuses.push(status.as_u16());
         }
     }
+    assert_eq!(statuses,vec![403;6],"kind selector, directory and profile must enforce both credential gates");
     let (status,_) = app.http("GET",&format!("/api/vaults/{}/ontology/objects/{}",other["id"].as_str().unwrap(),ids[0]),None,true).await;
     assert_eq!(status,404,"profile id cannot cross spaces");
+}
+
+/// An isolated, in-memory Banksia-sized fixture for screenshots and endpoint timings.
+/// Run the compiled test binary with --ignored --nocapture serve_banksia_sized_fixture.
+#[tokio::test]
+#[ignore]
+async fn serve_banksia_sized_fixture() {
+    let app=TestApp::new().await;
+    let (vault,ids)=fixture(&app).await;
+    assert_eq!(app.http_session("POST","/api/settings/complete-onboarding",Some(json!({}))).await.0,200);
+    let name = |i:usize| match i {0=>"Almond breakfast basket".to_string(),1=>"Barista coffee basket".to_string(),_=>format!("Basket range {i:03}")};
+    for (i,id) in ids.iter().enumerate() {
+        assert_eq!(app.http("PATCH",&format!("/api/entities/{id}"),Some(json!({"name":name(i)})),true).await.0,200);
+    }
+    let proposal=app.tool("ontology_propose",json!({"vault_id":vault,"properties":[
+        {"kind":"product","name":"cost","datatype":"money","unit":"AUD"},
+        {"kind":"product","name":"units","datatype":"integer"}
+    ],"metrics":[{"kind":"product","name":"gross_profit","unit":"AUD","expr":{"agg":"sum","row":{"op":"mul","left":{"op":"sub","left":"price","right":"cost"},"right":"units"}}}]})).await;
+    assert!(proposal.get("error").is_none(),"{proposal}");
+    for (route,field) in [("properties","cost"),("properties","units"),("metrics","gross_profit")] {
+        assert_eq!(app.http_session("POST",&format!("/api/vaults/{vault}/ontology/{route}/decide"),Some(json!({"kind":"product","name":field,"decision":{"action":"approve"}}))).await.0,200);
+    }
+    let mut text="Product,price,cost,units,margin,release\n".to_string();
+    for i in 0..300 {
+        let price=if i==31 {String::new()} else {format!("{:.2}",if i==0 {0.0} else {24.9+(i%17) as f64})};
+        text.push_str(&format!("{},{price},14.90,100,0.25,2026-10-01\n",name(i)));
+    }
+    let csv=app.tool("document_upload",json!({"filename":"banksia-products.csv","vault_id":vault,"text":text})).await;
+    let imported=app.tool("document_import_rows",json!({"document_id":csv["id"],"kind":"product","name_column":"Product"})).await;
+    assert!(imported.get("error").is_none(),"{imported}");
+    assert_eq!(app.http("POST",&format!("/api/entities/{}/memory",ids[1]),Some(json!({"text":"Banksia summer range. Review supplier pricing before the next order."})),true).await.0,200);
+    let db=app.db().await;
+    let vault_id=eunomia_backend::rid::parse(&vault).unwrap();
+    for (kind,count,start) in [("stock_record",12000,0),("weekly_sales",6240,0),("supplier",338,0)] {
+        for batch in (0..count).step_by(500) {
+            let rows:Vec<_>=(batch..(batch+500).min(count)).map(|i| {
+                let i=i+start;
+                json!({"id":format!("{kind}_{i}"),"name":format!("{} {i:05}",kind.replace('_'," "))})
+            }).collect();
+            db.test_raw().query("FOR $r IN $rows { CREATE type::record('entity',$r.id) SET vault=$vault,owner=$owner,kind=$kind,name=$r.name,aliases=[],summary=''; };")
+                .bind(("rows",rows)).bind(("vault",vault_id.clone())).bind(("owner",app.user.id.clone())).bind(("kind",kind.to_string())).await.unwrap().check().unwrap();
+        }
+    }
+    // Populate the large kind with typed values so sorting exercises real indexed reads.
+    let prop=app.tool("ontology_propose",json!({"vault_id":vault,"kinds":[{"kind":"stock_record"}],"properties":[{"kind":"stock_record","name":"units","datatype":"integer","unit":"units"}]})).await;
+    assert!(prop.get("error").is_none(),"{prop}");
+    for (route,body) in [("kinds",json!({"kind":"stock_record","decision":{"action":"approve"}})),("properties",json!({"kind":"stock_record","name":"units","decision":{"action":"approve"}}))] {
+        assert_eq!(app.http_session("POST",&format!("/api/vaults/{vault}/ontology/{route}/decide"),Some(body)).await.0,200);
+    }
+    db.test_raw().query("LET $p=(SELECT VALUE id FROM ontology_property WHERE vault=$vault AND kind='stock_record' AND name='units')[0]; FOR $i IN 0..12000 { CREATE type::record('entity_property',string::concat('stock_',$i)) SET vault=$vault,entity=type::record('entity',string::concat('stock_record_',$i)),property=$p,value_num=<float>$i,as_of=time::now(),origin='agent'; };")
+        .bind(("vault",vault_id.clone())).await.unwrap().check().unwrap();
+    let second=eunomia_backend::rid::parse(&ids[1]).unwrap();
+    db.test_raw().query("RELATE $from->relates_to->$to SET label='substitute_for',owner=$owner;")
+        .bind(("from",eunomia_backend::rid::parse(&ids[0]).unwrap())).bind(("to",second)).bind(("owner",app.user.id.clone())).await.unwrap().check().unwrap();
+    std::fs::write("/private/tmp/eunomia-ontology2/fixture.json",json!({"space":vault,"object":ids[1],"entities":18878,"products":300,"stock_records":12000,"weekly_sales":6240}).to_string()).unwrap();
+    let listener=tokio::net::TcpListener::bind("127.0.0.1:18760").await.unwrap();
+    println!("Isolated Banksia-sized fixture ready on 18760");
+    axum::serve(listener,app.router.into_make_service_with_connect_info::<std::net::SocketAddr>()).await.unwrap();
+}
+
+#[tokio::test]
+async fn typed_dates_and_distinct_property_states_and_record_sources() {
+    let app=TestApp::new().await;
+    let (vault,ids)=fixture(&app).await;
+    for (property,value) in [("release",json!("2026-10-01")),("margin",json!(0.25))] {
+        let out=app.tool("entity_set_property",json!({"entity_id":ids[0],"property":property,"value":value})).await;
+        assert!(out.get("error").is_none(),"{out}");
+    }
+    let date=get(&app,&vault,"?kind=product&filter=release&op=eq&value=2026-10-01").await;
+    assert_eq!(date["total"],1);
+    assert_eq!(date["rows"][0]["values"]["release"]["value"],"2026-10-01");
+    assert_eq!(date["rows"][0]["values"]["margin"]["value"],0.25);
+    let db=app.db().await;
+    let entity=eunomia_backend::rid::parse(&ids[0]).unwrap();
+    let v=eunomia_backend::rid::parse(&vault).unwrap();
+    db.test_raw().query("CREATE cache_record:proof SET vault=$vault,owner=$owner,source='fixture',type='product',external_id='product-00',title='Product source',content_hash='proof',ingested_at=time::now(),updated_at=time::now(),payload={row:2,price:99}; UPDATE entity_property SET source=cache_record:proof,as_of=d'2026-01-01T00:00:00Z' WHERE entity=$entity AND property.name='price';")
+        .bind(("vault",v.clone())).bind(("owner",app.user.id.clone())).bind(("entity",entity.clone())).await.unwrap().check().unwrap();
+    let profile=get(&app,&vault,&format!("/{}",ids[0])).await;
+    let price=profile["properties"].as_array().unwrap().iter().find(|p|p["name"]=="price").unwrap();
+    assert_eq!(price["state"],"stale");
+    assert_eq!(profile["sources"][0]["record"]["payload"]["row"],2);
+    let directory=get(&app,&vault,"?kind=product&search=Product%2000").await;
+    assert_eq!(directory["rows"][0]["source_count"],1);
+    db.test_raw().query("UPDATE cache_record:proof SET updated_at=d'2026-04-01T00:00:00Z';").await.unwrap().check().unwrap();
+    let historical=get(&app,&vault,&format!("/{}",ids[0])).await;
+    assert_eq!(historical["properties"].as_array().unwrap().iter().find(|p|p["name"]=="price").unwrap()["state"],"recorded","an old as-of time alone does not make a freshly recorded historical value stale");
+    db.test_raw().query("LET $p=(SELECT VALUE id FROM ontology_property WHERE vault=$vault AND name='price')[0]; CREATE entity_property:conflict SET vault=$vault,entity=$entity,property=$p,value_num=99,as_of=d'2026-01-01T00:00:00Z',origin='agent';")
+        .bind(("vault",v.clone())).bind(("entity",entity.clone())).await.unwrap().check().unwrap();
+    db.test_raw().query("LET $p=(SELECT VALUE id FROM ontology_property WHERE vault=$vault AND name='price')[0]; CREATE entity_property:conflict_same SET vault=$vault,entity=$entity,property=$p,value_num=99,as_of=d'2026-01-01T00:00:00Z',origin='agent';")
+        .bind(("vault",v.clone())).bind(("entity",entity.clone())).await.unwrap().check().unwrap();
+    let profile=get(&app,&vault,&format!("/{}",ids[0])).await;
+    assert_eq!(profile["properties"].as_array().unwrap().iter().find(|p|p["name"]=="price").unwrap()["state"],"conflicting");
+    db.test_raw().query("DELETE entity_property WHERE entity=$entity AND property.name='price'; LET $p=(SELECT VALUE id FROM ontology_property WHERE vault=$vault AND name='price')[0]; CREATE entity_property:unavailable SET vault=$vault,entity=$entity,property=$p,as_of=time::now(),origin='agent';")
+        .bind(("vault",v)).bind(("entity",entity)).await.unwrap().check().unwrap();
+    let profile=get(&app,&vault,&format!("/{}",ids[0])).await;
+    assert_eq!(profile["properties"].as_array().unwrap().iter().find(|p|p["name"]=="price").unwrap()["state"],"unavailable");
 }

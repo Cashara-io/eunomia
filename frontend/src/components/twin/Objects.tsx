@@ -3,24 +3,22 @@ import { useState } from "react";
 import Link from "next/link";
 import Select from "@/components/Select";
 import ErrorLine, { failure } from "@/components/ErrorLine";
-import { useObjects } from "@/lib/queries/objects";
-import type { OntologyOut } from "@/lib/queries/ontology";
+import { useObjects, useObjectKinds } from "@/lib/queries/objects";
 import { useTwinParams } from "./controls";
 import ObjectProfile, { formatted, objectHref } from "./ObjectProfile";
-import { words } from "./DefinitionRows";
+import { words as plainWords } from "./DefinitionRows";
+const words = (value: string) => {
+  const text = plainWords(value);
+  return text.charAt(0).toUpperCase() + text.slice(1);
+};
 
-export default function Objects({
-  space,
-  ontology,
-}: {
-  space: string;
-  ontology: OntologyOut;
-}) {
+export default function Objects({ space }: { space: string }) {
   const { params, update } = useTwinParams();
+  const kinds = useObjectKinds(space);
   const kind =
     params.get("kind") ||
-    ontology.kinds.find((k) => k.entities > 0)?.kind ||
-    ontology.kinds[0]?.kind ||
+    kinds.data?.kinds.find((k) => k.entities > 0)?.kind ||
+    kinds.data?.kinds[0]?.kind ||
     "";
   const query = useObjects(space, params, kind);
   const [hidden, setHidden] = useState<string[]>([]);
@@ -31,6 +29,14 @@ export default function Objects({
   const columns = data?.columns.filter((c) => !hidden.includes(c.name)) ?? [];
   return (
     <div className="flex flex-col gap-4 min-w-0 text-[13px]">
+      {kinds.isError && (
+        <ErrorLine
+          error={failure(
+            kinds.error,
+            "Could not load object kinds. Use Refresh to try again.",
+          )}
+        />
+      )}
       <div>
         <h2 className="text-[22px] font-medium">Objects</h2>
         <p className="text-[var(--ink-dim)] mt-2">
@@ -39,12 +45,12 @@ export default function Objects({
         </p>
       </div>
       <div className="flex flex-wrap gap-3 items-end">
-        <div>
+        <div className="flex flex-col gap-1">
           <span className="label">Kind</span>
           <Select
             aria-label="Object kind"
             value={kind}
-            options={ontology.kinds.map((k) => ({
+            options={(kinds.data?.kinds ?? []).map((k) => ({
               value: k.kind,
               label: words(k.kind),
             }))}
@@ -61,10 +67,10 @@ export default function Objects({
             }}
           />
         </div>
-        <label className="flex-1 min-w-40">
+        <label className="flex-1 min-w-40 flex flex-col gap-1">
           <span className="label">Search objects</span>
           <input
-            className="field w-full px-3"
+            className="field w-full px-3 min-h-10"
             type="search"
             value={params.get("search") ?? ""}
             onChange={(e) =>
@@ -96,7 +102,7 @@ export default function Objects({
                   )
                 }
               />
-              {words(c.name)}
+              {words(c.name.replace(/^link:/, ""))}
             </label>
           ))}
         </fieldset>
@@ -113,10 +119,12 @@ export default function Objects({
               value={params.get("filter") ?? ""}
               options={[
                 { value: "", label: "Choose property" },
-                ...(data?.columns.map((c) => ({
-                  value: c.name,
-                  label: words(c.name),
-                })) ?? []),
+                ...(data?.columns
+                  .filter((c) => c.datatype !== "link")
+                  .map((c) => ({
+                    value: c.name,
+                    label: words(c.name.replace(/^link:/, "")),
+                  })) ?? []),
               ]}
               onChange={(v) => update({ filter: v, op: "", value: "" })}
             />
@@ -140,7 +148,7 @@ export default function Objects({
           <label>
             <span className="label">Value</span>
             <input
-              className="field px-3 w-full"
+              className="field px-3 w-full min-h-10"
               value={params.get("value") ?? ""}
               onChange={(e) => update({ value: e.target.value }, true)}
               disabled={params.get("op") === "missing"}
@@ -162,7 +170,11 @@ export default function Objects({
           )}
         />
       ) : !data ? (
-        <p role="status">Loading objects…</p>
+        <p role="status">
+          {kinds.data?.kinds.length === 0
+            ? "No objects or kinds recorded in this space."
+            : "Loading objects…"}
+        </p>
       ) : (
         <div className="flex gap-5 items-start min-w-0">
           <div className="min-w-0 flex-1">
@@ -185,7 +197,11 @@ export default function Objects({
                       <th
                         key={c.name}
                         scope="col"
-                        className="px-4"
+                        className={
+                          c.name === "name"
+                            ? "px-4 sticky left-0 bg-[var(--surface)]"
+                            : "px-4"
+                        }
                         aria-sort={
                           (params.get("sort") ?? "name") === c.name
                             ? params.get("descending") === "true"
@@ -195,6 +211,7 @@ export default function Objects({
                         }
                       >
                         <button
+                          disabled={c.datatype === "link"}
                           className="py-3"
                           onClick={() =>
                             update({
@@ -207,7 +224,7 @@ export default function Objects({
                             })
                           }
                         >
-                          {words(c.name)}
+                          {words(c.name.replace(/^link:/, ""))}
                         </button>
                       </th>
                     ))}
@@ -227,15 +244,22 @@ export default function Objects({
                         selected === row.id ? "bg-[var(--accent-soft)]" : ""
                       }
                     >
-                      <th scope="row" className="px-4 text-left font-normal">
-                        <Link className="link" href={objectHref(row.id, space)}>
+                      <th
+                        scope="row"
+                        className="px-4 text-left font-normal sticky left-0 bg-[var(--surface)]"
+                      >
+                        <Link
+                          className="link inline-block max-w-44 truncate align-middle"
+                          title={row.name}
+                          href={objectHref(row.id, space)}
+                        >
                           {row.name}
                         </Link>
                       </th>
                       {columns.map((c) => (
                         <td
                           key={c.name}
-                          className={`px-4 ${row.values[c.name]?.value === null ? "text-[var(--ink-faint)]" : "font-mono"}`}
+                          className={`px-4 ${row.values[c.name]?.value === null ? "text-[var(--ink-faint)]" : ["number", "integer", "money", "percent", "date", "datetime"].includes(c.datatype) ? "font-mono" : ""}`}
                         >
                           {formatted(row.values[c.name]?.value, {
                             ...c,

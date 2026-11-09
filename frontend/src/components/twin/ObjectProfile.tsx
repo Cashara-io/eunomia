@@ -10,7 +10,11 @@ import {
 } from "@/lib/queries/objects";
 import { twinHref } from "./model";
 import { useTwinParams } from "./controls";
-import { words } from "./DefinitionRows";
+import { words as plainWords } from "./DefinitionRows";
+const words = (value: string) => {
+  const text = plainWords(value);
+  return text.charAt(0).toUpperCase() + text.slice(1);
+};
 
 export const objectHref = (id: string, space: string) =>
   twinHref(`/ontology/objects/${encodeURIComponent(id)}`, space);
@@ -27,7 +31,14 @@ export function formatted(
       return `${(value * 100).toLocaleString("en-AU", { maximumFractionDigits: 2 })}%`;
     return `${value.toLocaleString("en-AU", { maximumFractionDigits: 6 })}${column.unit ? ` ${column.unit}` : ""}`;
   }
-  if (["date", "datetime"].includes(column.datatype)) return date(value);
+  if (column.datatype === "date")
+    return Number.isNaN(Date.parse(value))
+      ? "Unavailable"
+      : new Date(value).toLocaleDateString("en-AU", {
+          dateStyle: "medium",
+          timeZone: "UTC",
+        });
+  if (column.datatype === "datetime") return date(value);
   return value;
 }
 function date(value: string | null | undefined) {
@@ -132,7 +143,7 @@ export default function ObjectProfile({
                 setSection(s);
                 setOffset(0);
               }}
-              className="w-full"
+              className="w-full min-h-11"
             />
           </div>
           <section className="ledger p-4 sm:p-5 min-w-0" aria-label={section}>
@@ -164,7 +175,14 @@ export default function ObjectProfile({
               </>
             )}
             {section === "Properties" && (
-              <Properties data={data} space={space} />
+              <>
+                <p className="text-[var(--ink-dim)] mb-4">
+                  Stale means the source changed after the value was recorded.
+                  Conflicting means different values share the latest as-of
+                  time.
+                </p>
+                <Properties data={data} space={space} />
+              </>
             )}
             {section === "Numbers" && (
               <div className="divide-y divide-[var(--border)]">
@@ -215,7 +233,15 @@ export default function ObjectProfile({
                             the metric filters, then evaluates its definition.
                             Missing inputs are omitted and reported in warnings.
                           </p>
-                          <Properties data={data} space={space} />
+                          <Properties
+                            data={{
+                              ...data,
+                              properties: data.properties.filter((p) =>
+                                n.result.run?.input_properties.includes(p.name),
+                              ),
+                            }}
+                            space={space}
+                          />
                         </details>
                       </>
                     ) : (
@@ -421,10 +447,23 @@ function Properties({ data, space }: { data: Profile; space: string }) {
             <dt>{words(p.name)}</dt>
             <dd
               className={
-                p.value === null ? "text-[var(--ink-faint)]" : "font-mono"
+                p.value === null
+                  ? "text-[var(--ink-faint)]"
+                  : [
+                        "number",
+                        "integer",
+                        "money",
+                        "percent",
+                        "date",
+                        "datetime",
+                      ].includes(p.datatype)
+                    ? "font-mono"
+                    : ""
               }
             >
-              {formatted(p.value, p)}
+              {p.state === "unavailable"
+                ? "Unavailable"
+                : formatted(p.value, p)}
             </dd>
           </div>
           <dd className="text-xs text-[var(--ink-dim)]">
@@ -436,7 +475,7 @@ function Properties({ data, space }: { data: Profile; space: string }) {
                 className="link inline-block mt-1"
                 href={`${objectHref(data.id, space)}&section=Sources`}
               >
-                Inspect source
+                {p.source_label}
               </Link>
             ) : (
               <p className="mt-1">Source not recorded</p>
