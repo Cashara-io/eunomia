@@ -880,10 +880,10 @@ impl ValidMetric {
     pub(super) fn equivalent(&self, item: &MetricItem) -> bool {
         item.status != Status::Rejected && item.merge_into.is_none()
             && serde_json::to_value(&self.expr).ok() == serde_json::to_value(&item.expr).ok()
-            && (self.unit.is_none() || item.unit.is_none() || self.unit == item.unit)
+            && self.unit == item.unit
     }
     pub(super) fn same_calculation(&self, other: &Self) -> bool {
-        self.kind == other.kind && (self.unit.is_none() || other.unit.is_none() || self.unit == other.unit)
+        self.kind == other.kind && self.unit == other.unit
             && serde_json::to_value(&self.expr).ok() == serde_json::to_value(&other.expr).ok()
     }
 }

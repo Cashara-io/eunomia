@@ -4116,7 +4116,7 @@ async fn import_196_second_csv_part_reuses_equivalent_metric_in_proposed_and_app
     for (i, metric_name) in ["total_price", "stock_value", "inventory_value"].iter().enumerate() {
         let doc = upload_csv(&app, "part.csv", PRICE_LIST).await;
         let mut answer = automap_answer(&doc);
-        answer["record_types"][0]["metrics"] = json!([{"name":metric_name,"expr":{"agg":"sum","property":"price"},"unit":if i == 1 { Value::Null } else { json!("AUD") }}]);
+        answer["record_types"][0]["metrics"] = json!([{"name":metric_name,"expr":{"agg":"sum","property":"price"},"unit":"AUD"}]);
         mock.set_routes(vec![route("POST", "/chat/completions", json!({"choices":[{"message":{"content":answer.to_string()}}]}))]);
         let out = ok(app.tool("ontology_automap", json!({"document_id":doc})).await);
         assert_eq!(kind(&out["ontology"], "supply_item")["metrics"].as_array().unwrap().len(), 1, "{out}");
@@ -4175,6 +4175,24 @@ async fn review209_cross_kind_merge_maps_typed_values_or_refuses_without_changes
             assert_eq!(got["value"], 1250.0, "{got}");
         }
     }
+}
+
+#[tokio::test]
+async fn review209_metric_equivalence_requires_exact_units() {
+    let mock = serve(vec![]).await;
+    let app = TestApp::with_settings(model_app_settings(&mock)).await;
+    let doc = upload_csv(&app, "part.csv", PRICE_LIST).await;
+    let mut answer = automap_answer(&doc);
+    answer["record_types"][0]["metrics"] = json!([
+        {"name":"amount","expr":{"agg":"sum","property":"price"}},
+        {"name":"amount_aud","expr":{"agg":"sum","property":"price"},"unit":"AUD"}]);
+    mock.set_routes(vec![route("POST", "/chat/completions", json!({"choices":[{"message":{"content":answer.to_string()}}]}))]);
+    let out = ok(app.tool("ontology_automap", json!({"document_id":doc})).await);
+    assert_eq!(kind(&out["ontology"], "supply_item")["metrics"].as_array().unwrap().len(), 2, "{out}");
+    answer["record_types"][0]["metrics"] = json!([{ "name":"another_amount_aud","expr":{"agg":"sum","property":"price"},"unit":"AUD"}]);
+    mock.set_routes(vec![route("POST", "/chat/completions", json!({"choices":[{"message":{"content":answer.to_string()}}]}))]);
+    let out = ok(app.tool("ontology_automap", json!({"document_id":doc})).await);
+    assert_eq!(out["proposed"]["metrics"][0]["name"], "amount_aud", "{out}");
 }
 
 #[tokio::test]
