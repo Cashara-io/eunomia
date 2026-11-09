@@ -77,8 +77,9 @@ test("a routing rule files tagged recordings in their own vault", async ({ page 
     // Enable the connector only after its routing is saved, so the scheduler uses these rules too.
     await page.getByPlaceholder("pk_…").fill("pk_e2e_routing");
     await page.getByPlaceholder("https://public.heypocketai.com/api/v1").fill(pocket.base);
-    await page.getByRole("button", { name: "Save", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Saved" })).toBeVisible();
+    const details = page.getByLabel("Paste your details and save");
+    await details.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(details.getByRole("button", { name: "Saved" })).toBeVisible();
 
     // the saved routing comes back from the server
     const connector = await (await page.request.get("/api/connectors/pocketai")).json();
