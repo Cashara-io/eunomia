@@ -1,4 +1,5 @@
 "use client";
+import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 
 // A space's kinds and links: what its memories are about (person, customer, decision, ...) and how
 // they connect (works at, owns, ...). AI apps and the server's model only suggest; an owner decides.
@@ -57,7 +58,7 @@ export function ReadinessPanel({ vaultId }: { vaultId: string }) {
         )}
       />
     );
-  if (!r) return <span className="skeleton h-12 w-full" />;
+  if (!r) return <LoadingSkeleton label="Loading readiness" rows={1} />;
   const approved = [
     counted(r.kinds.approved, "kind", "kinds"),
     counted(r.properties.approved, "property", "properties"),

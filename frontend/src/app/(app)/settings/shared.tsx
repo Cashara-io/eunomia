@@ -1,4 +1,5 @@
 "use client";
+import { SkeletonTableRows } from "@/components/ui/LoadingSkeleton";
 
 import { useState } from "react";
 import { XIcon } from "@phosphor-icons/react/ssr";
@@ -130,17 +131,5 @@ export function RevokeButton({ label, onRevoke, warn }: { label: string; onRevok
 }
 
 export function TableSkeleton({ cols }: { cols: number }) {
-  return (
-    <>
-      {[0, 1].map((i) => (
-        <tr key={i} aria-hidden>
-          {Array.from({ length: cols }, (_, c) => (
-            <td key={c}>
-              <span className="skeleton block h-4" style={{ width: c === 0 ? "60%" : "50%" }} />
-            </td>
-          ))}
-        </tr>
-      ))}
-    </>
-  );
+  return <SkeletonTableRows cols={cols} />;
 }

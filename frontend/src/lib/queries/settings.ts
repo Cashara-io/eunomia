@@ -1,3 +1,4 @@
+import { haptic } from "@/lib/haptics";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { checkForUpdate, completeOnboarding, getHttpsStatus, getSettings, getUpdateStatus, listOpenaiModels, requestHttps, requestUpdate, updateSettings } from "@/lib/gen";
 import type { SettingsUpdate } from "@/lib/gen";
@@ -22,6 +23,7 @@ export function useUpdateSettings() {
   return useMutation({
     mutationFn: (body: SettingsUpdate) => call(updateSettings({ body })) as Promise<AppSettings>,
     onSuccess: (s) => {
+      haptic("success");
       qc.setQueryData(settingsKeys.get(), s);
       // The model list depends on the saved key and base URL.
       return qc.invalidateQueries({ queryKey: [...settingsKeys.all, "openai-models"] });

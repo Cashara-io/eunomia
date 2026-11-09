@@ -1,4 +1,6 @@
 "use client";
+import { MorphCount } from "@/components/ui/MorphText";
+import { haptic } from "@/lib/haptics";
 
 import Link from "next/link";
 import { useState } from "react";
@@ -145,12 +147,14 @@ export default function Review({
           continue;
         }
         qc.setQueryData(ontologyKeys.vault(vault.id), await decide(d, confirm));
+        haptic("success");
         results.push({
           name: describe(d),
           result:
             confirm === "approve" ? "Approved" : "Rejected without merging",
         });
       } catch (e) {
+        haptic("error");
         results.push({
           name: describe(d),
           result:
@@ -181,7 +185,7 @@ export default function Review({
     <>
       <div className="flex flex-wrap justify-between gap-3">
         <h2 className="section-title">Review</h2>
-        <span className="text-[13px]">{waiting} waiting</span>
+        <span className="text-[13px]"><MorphCount value={waiting} /> waiting</span>
       </div>
       <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
         {owner

@@ -1,4 +1,5 @@
 "use client";
+import { MorphCount } from "@/components/ui/MorphText";
 
 import Link from "next/link";
 import type { OntologyOut } from "@/lib/queries/ontology";
@@ -29,7 +30,7 @@ export default function Overview({
           className="btn btn-primary"
           href={twinHref("/ontology/review", vault.id)}
         >
-          {pending.length} to review
+          <MorphCount value={pending.length} /> to review
         </Link>
       </div>
       <section

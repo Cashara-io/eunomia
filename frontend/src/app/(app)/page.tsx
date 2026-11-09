@@ -1,4 +1,6 @@
 "use client";
+import { MorphCount } from "@/components/ui/MorphText";
+import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 
 import { kindColor } from "@/lib/kindColors";
 import ErrorLine, { failure } from "@/components/ErrorLine";
@@ -145,16 +147,12 @@ async function loadOverview(vaults: Vault[]): Promise<Overview> {
 // ---- overview ----
 
 function StatLine({ spaces, overview }: { spaces: number | null; overview: Overview }) {
-  const parts = [
-    spaces !== null ? plural(spaces, "space", "spaces") : null,
-    plural(overview.entities, "person or topic", "people & topics"),
-    // Only an exact count: a partial sum would read as a guess.
-    overview.memoriesCapped ? null : plural(overview.memories, "memory", "memories"),
-    `last activity ${since(overview.lastActivity)}`,
-  ].filter(Boolean);
   return (
     <p className="text-[14px] tabular" style={{ color: "var(--ink-dim)" }} aria-label="Summary">
-      {parts.join(" · ")}
+      {spaces !== null && <><MorphCount value={spaces} /> {spaces === 1 ? "space" : "spaces"} · </>}
+      <MorphCount value={overview.entities} /> {overview.entities === 1 ? "person or topic" : "people & topics"}
+      {!overview.memoriesCapped && <> · <MorphCount value={overview.memories} /> {overview.memories === 1 ? "memory" : "memories"}</>}
+      {" · "}last activity {since(overview.lastActivity)}
     </p>
   );
 }
@@ -446,10 +444,7 @@ export default function HomePage() {
 
   const appBlock =
     connections === null ? (
-      <div className="task-panel p-8 flex flex-col gap-4" aria-busy="true" aria-label="Checking your connected apps">
-        <div className="skeleton h-7 w-72" />
-        <div className="skeleton h-4 w-full max-w-[520px]" />
-      </div>
+      <LoadingSkeleton label="Checking your connected apps" layout="overview" />
     ) : !connectedApps && hasData ? (
       // Someone already working in Eunomia gets one honest line, not the first-run card.
       <ConnectAnother none fromSources={liveSources.length > 0} />
@@ -481,10 +476,7 @@ export default function HomePage() {
       {overviewQuery.isError && <ErrorLine error={failure(overviewQuery.error, "Could not load what has been saved.")} />}
 
       {overview === null && !overviewQuery.isError ? (
-        <div className="flex flex-col gap-3" aria-busy="true" aria-label="Loading your overview">
-          <div className="skeleton h-4 w-full max-w-[440px]" />
-          <div className="skeleton h-4 w-2/3 max-w-[320px]" />
-        </div>
+        <LoadingSkeleton label="Loading your overview" layout="overview" />
       ) : (
         hasData &&
         overview && (
