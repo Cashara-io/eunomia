@@ -10,17 +10,17 @@ Every sync is a `sync` job in the background job queue (see `docs/architecture/j
 
 | Connector | What it syncs | Credential (where to get it) | Scopes / permissions | Default interval |
 |---|---|---|---|---|
-| Up Bank | Transactions (from 30 days back, then incremental), accounts, categories; webhooks optional | Personal access token — [api.up.com.au](https://api.up.com.au/getting_started) or Up app → Profile → Data sharing | Read-only by design | 15 min |
-| PocketAI (HeyPocket) | Meeting recordings: full transcript with speakers, summary, action items, tags (30 days back, then incremental). Everything Pocket returns is stored whole (below) | API key from your Pocket account's developer settings | — | 24 h |
+| Up Bank | Transactions (from 30 days back, then incremental), accounts, categories; webhooks optional | Personal access token: [api.up.com.au](https://api.up.com.au/getting_started) or Up app → Profile → Data sharing | Read-only by design | 15 min |
+| PocketAI (HeyPocket) | Meeting recordings: full transcript with speakers, summary, action items, tags (30 days back, then incremental). Everything Pocket returns is stored whole (below) | API key from your Pocket account's developer settings | Not applicable | 24 h |
 | GitHub | Issues and pull requests you created, are assigned or mentioned in (90 days back, then incremental) | [Fine-grained token](https://github.com/settings/personal-access-tokens/new), or a classic token | Fine-grained: Issues + Pull requests (read) on chosen repos. Classic: `repo` | 15 min |
 | Slack | Messages in channels the app has joined (30 days back, then incremental; thread replies not included) | Bot token `xoxb-…` from your app at [api.slack.com/apps](https://api.slack.com/apps), then `/invite` it to channels | `channels:read`, `channels:history`, `groups:read`, `groups:history` | 15 min |
 | Notion | Pages (title + top-level text) and databases shared with the integration | Internal integration secret from [notion.so/profile/integrations](https://www.notion.so/profile/integrations); add it to pages via ••• → Connections | Read content | 15 min |
-| Linear | Issues assigned to you | Personal API key — Linear → Settings → Security & access | Read | 15 min |
+| Linear | Issues assigned to you | Personal API key: Linear → Settings → Security & access | Read | 15 min |
 | Gmail | Messages from the last 30 days onwards: subject, sender, plain-text body (200 per sync, oldest first; a larger backlog drains over the next syncs) | Your own Google OAuth client ID + secret and a refresh token (below) | `https://www.googleapis.com/auth/gmail.readonly` | 15 min |
 | Google Calendar | Primary-calendar events, 30 days back to 6 months ahead, then every change (cancellations remove the event) | Same as Gmail | `https://www.googleapis.com/auth/calendar.readonly` | 15 min |
 | Discord | Messages in the channels you list (comma-separated channel IDs) | Bot token from the [Developer Portal](https://discord.com/developers/applications) | Message Content Intent; View Channels + Read Message History | 15 min |
 | Spotify | Recently played tracks (Spotify keeps only the last 50, so history builds up from when you connect) | Your own Spotify app's client ID + secret and a refresh token (below) | `user-read-recently-played` | 15 min |
-| Todoist | Active tasks with project, due date, labels | API token — Todoist → Settings → Integrations → Developer | Full API token (Todoist has no read-only token) | 15 min |
+| Todoist | Active tasks with project, due date, labels | API token: Todoist → Settings → Integrations → Developer | Full API token (Todoist has no read-only token) | 15 min |
 | Stripe | Charges (incremental) | [Restricted key](https://dashboard.stripe.com/apikeys) `rk_…` | Charges: Read only | 15 min |
 | Ed Discussion | One record per thread, with its answers and comments in the text (30 days back, then every thread that changed; 100 threads per sync, oldest first). Active courses, or the course IDs you list; region `us` (default), `au` (edstem.org/au, served from `edstem.org/api`) or `eu`. Only the newest 5,000 threads per course are scanned; threads deeper than that are never synced | API token from [edstem.org/us/settings/api-tokens](https://edstem.org/us/settings/api-tokens) | Ed's API is unofficial and has no scopes; the token reads what you can | 30 min |
 
@@ -105,27 +105,110 @@ sync still succeeds and the server logs `pocket audio: not downloaded`.
 Google has no personal access tokens, and a self-hosted server has no public redirect URL, so you use your own OAuth client and mint a long-lived refresh token once:
 
 1. In [Google Cloud Console](https://console.cloud.google.com/apis/library), enable the Gmail API and/or Google Calendar API.
-2. Configure the OAuth consent screen (External), add yourself as a test user, then **publish** it ("In production") — refresh tokens of apps left in "Testing" expire after 7 days.
+2. Configure the OAuth consent screen (External), add yourself as a test user, then **publish** it ("In production"): refresh tokens of apps left in "Testing" expire after 7 days.
 3. Create an OAuth client ID, type **Web application**, with redirect URI `https://developers.google.com/oauthplayground`.
 4. In the [OAuth 2.0 Playground](https://developers.google.com/oauthplayground), click ⚙ → "Use your own OAuth credentials" and enter the client ID and secret. Authorize the scope(s) above (both at once if you want one token for both connectors), then "Exchange authorization code for tokens".
 5. Paste the client ID, client secret and refresh token into the connector. Eunomia exchanges the refresh token for a fresh access token on every sync.
 
+### Large Gmail imports and Google rate limits
+
+A large first Gmail import can take several syncs. Eunomia reads up to 200 messages per sync,
+oldest first within the initial listing, at one full-message request per second per connection.
+Unread IDs are saved with the checkpoint. Before listing, Eunomia captures the mailbox history ID.
+Each sync follows [Gmail history](https://developers.google.com/workspace/gmail/api/guides/sync)
+and merges added messages with pending IDs, so backdated imports arriving during recovery are
+included regardless of their internal date. History advances only with the saved pending queue.
+Old 2.2.0 numeric cursors and earlier JSON cursors upgrade through a checkpoint-based relist.
+
+Expired history, reported by Google as HTTP 404, triggers a full mailbox relist. This is broader
+than a date-filtered relist because an import can predate the checkpoint. Existing cache writes
+are idempotent, so replay does not create duplicate stored records. Listings request 500 IDs per
+page and must finish within 50 pages. Pending work is capped at 25,000 IDs and the serialised
+cursor at 1 MiB. Exceeding either bound reports an error and keeps the previous checkpoint for
+safe replay. Unread IDs are never truncated to fit. History replaces the growing timestamp
+boundary ID set; old boundary IDs are pruned against the relist and then discarded.
+
+A pending message returning HTTP 404 or 410 is logged as removed and dropped immediately.
+HTTP 400 on one message is retried across three syncs before skipping it. A repeated HTTP 5xx
+counts towards that limit only when another message succeeds in the same sync. A provider-wide
+outage, network failure, unreadable successful response, quota pause, or authentication error never
+spends the allowance. Authentication and permission errors fail the sync visibly. Other unexpected
+errors also fail visibly and retain the checkpoint. Old transient-failure counters are discarded.
+Skipped-message totals stay in the cursor and sync status, including later successful syncs, as
+"N messages skipped after repeated errors".
+
+The shared HTTP client classifies an error response by its status even if its body cannot be read.
+HTTP 429 remains rate limited, and HTTP 401 remains an authentication error. HTTP 403 is a quota
+error only when its readable JSON body identifies a Google rate-limit reason. An unreadable 403
+remains an authentication or permission error.
+
+Google can report rate limits as HTTP 403 as well as 429. Gmail and Calendar retry quota and
+temporary failures with exponential backoff and jitter, sharing four retries and ten seconds of
+retry waiting and request time per sync. The shared HTTP error classification retains the
+provider's numeric or HTTP-date `Retry-After` for scheduling.
+
+An interrupted sync, including one that fetched zero records, returns explicit partial progress.
+After ingestion succeeds, the scheduler saves the cursor, imported count, pause reason and retry
+time in `last_report`. It clears failure backoff but leaves `last_ok` unchanged. Connected sources
+shows "Rate limited" or "Importing" and the count, for example "rate limited, 12 imported, more
+remaining". Continuation is due after at least 60 seconds, or the provider's longer `Retry-After`,
+using a short scheduling window rather than waiting for the normal poll interval. Calendar saves
+the failed page token and exact original query. Batch and page caps also return partial status.
+A failed ingestion keeps the previous cursor and uses normal failure backoff.
+
+The [current Gmail quota table](https://developers.google.com/workspace/gmail/api/reference/quota)
+lists 6,000 quota units per minute per user per project, 5 units for `messages.list`, and 60 for
+`messages.get` with `format=full`. Some older Google projects retain earlier quotas. Google also
+applies concurrent-request limits; its Gmail docs do not specify a separate per-user per-second
+quota-unit allowance. See [Google's error and backoff guidance](https://developers.google.com/workspace/gmail/api/guides/handle-errors).
+
+### Rollback to 2.2.0
+
+The JSON Gmail cursor introduced here cannot be read by 2.2.0. That release inserts the entire
+cursor into Gmail's `after:` query, so syncing fails after rollback. This failure does not delete
+stored mail. Gmail needs reconnecting or a cursor reset before syncing can resume.
+
+To reset the cursor while keeping imported data and credentials:
+
+1. Stop the Eunomia backend and its workers, and back up the tenant database. Keep the existing
+   Gmail cursor in the backup so its pending IDs remain available if you upgrade again.
+2. Open the affected organisation's tenant database in SurrealDB as its database administrator.
+   Run `SELECT id, owner, cursor FROM sync_status;` and find the affected Gmail connection.
+   Its record key is `<owner key>:gmail`, or `<owner key>:gmail~<instance>` for an added account.
+3. Copy that row's exact `id` into the following statement in place of the example. Reset to
+   numeric epoch seconds `0` to include mail older than 30 days, including pending backdated imports:
+
+   ```surql
+   UPDATE sync_status:⟨OWNER_KEY:gmail⟩ SET cursor = '0', consecutive_failures = 0,
+       last_error = '', last_report = {};
+   ```
+
+4. Start the 2.2.0 backend. Open **Connected sources**, select the affected Gmail account, and
+   click **Sync now**. Confirm its sync status no longer reports the invalid `after:` query.
+   Existing cache writes are idempotent. Repeat for each affected Gmail connection.
+
+Alternatively, remove the Gmail connection in Connected sources, add it again, and enter the
+OAuth client ID, client secret and refresh token using the Google setup steps above. Removing a
+connection also deletes its imported data and extracted facts, and reconnecting starts with the
+last 30 days. Use the cursor reset instead when you need to retain data or recover older pending
+mail. Rollback also restores 2.2.0's original import limits and error handling.
+
 ## Spotify: getting a refresh token
 
 1. Create an app at [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) (Web API) with redirect URI `http://127.0.0.1:8888/callback`.
-2. Open `https://accounts.spotify.com/authorize?response_type=code&scope=user-read-recently-played&redirect_uri=http://127.0.0.1:8888/callback&client_id=CLIENT_ID`, approve, and copy the `code` parameter from the address bar (the page itself won't load — nothing is listening there).
+2. Open `https://accounts.spotify.com/authorize?response_type=code&scope=user-read-recently-played&redirect_uri=http://127.0.0.1:8888/callback&client_id=CLIENT_ID`, approve, and copy the `code` parameter from the address bar (the page itself won't load: nothing is listening there).
 3. Exchange it:
    `curl -u CLIENT_ID:CLIENT_SECRET -d grant_type=authorization_code -d code=CODE -d redirect_uri=http://127.0.0.1:8888/callback https://accounts.spotify.com/api/token`
 4. Paste the client ID, client secret and the response's `refresh_token` into the connector.
 
 ## Troubleshooting
 
-- **HTTP 401 / 403** — the token is wrong, revoked or missing a scope above. Fix it on the connector's page and **Test connection**.
-- **HTTP 429** — the provider rate-limited the sync; it retries automatically.
-- **`not configured: missing …`** — a required field is empty.
-- **Slack `not_in_channel` or nothing synced** — `/invite` the app to the channels.
-- **Discord messages with no text** — enable Message Content Intent for the bot.
-- **Google `invalid_grant`** — the refresh token expired or was revoked (an app still in "Testing" expires it after 7 days); mint a new one.
+- **HTTP 401 / non-quota 403**: the token is wrong, revoked or missing a scope above. Fix it on the connector's page and **Test connection**.
+- **HTTP 429 / Google quota 403**: the provider rate-limited the sync; it retries automatically and keeps any safe partial progress.
+- **`not configured: missing …`**: a required field is empty.
+- **Slack `not_in_channel` or nothing synced**: `/invite` the app to the channels.
+- **Discord messages with no text**: enable Message Content Intent for the bot.
+- **Google `invalid_grant`**: the refresh token expired or was revoked (an app still in "Testing" expires it after 7 days); mint a new one.
 
 ## Self-hosted providers (e.g. GitHub Enterprise)
 

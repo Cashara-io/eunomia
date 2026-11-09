@@ -208,6 +208,7 @@ function Breadcrumb({ label }: { label: string }) {
 function health(row: SourceRow): { tone: string; text: string } {
   const { consecutive_failures: fails, last_ok } = row.sync_status;
   if (fails > 0) return { tone: fails > 2 ? "var(--critical)" : "var(--warning)", text: `${fails} failed update${fails === 1 ? "" : "s"} in a row` };
+  if (row.sync_status.last_report?.status === "partial") return { tone: "var(--warning)", text: row.sync_status.last_report.message ?? "Import in progress" };
   if (!last_ok) return { tone: "var(--ink-faint)", text: "Waiting for the first import" };
   return { tone: "var(--good)", text: "Healthy" };
 }
@@ -328,9 +329,11 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
     setSyncing(true);
     setSyncResult(null);
     setSyncError(null);
-    let result: "done" | "failed" = "done";
+    let result: "done" | "failed" | null = "done";
     try {
-      if ((await syncSource.mutateAsync(kind)).status === "offline") {
+      const report = await syncSource.mutateAsync(kind);
+      if (report.status === "partial") result = null;
+      if (report.status === "offline") {
         result = "failed";
         setSyncError({ message: "You're offline, so nothing was synced. Try again when you have a connection." });
       }
@@ -469,6 +472,14 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
         ))}
       </dl>
 
+      {row.sync_status.last_report?.status === "partial" && (
+        <p role="status" className="text-[14px]" style={{ color: "var(--warning)" }}>
+          {row.sync_status.last_report.message}. Eunomia will continue automatically.
+        </p>
+      )}
+      {row.sync_status.last_report?.warnings?.map((warning) => (
+        <p key={warning} role="status" className="text-[14px]" style={{ color: "var(--warning)" }}>{warning}</p>
+      ))}
       {(syncError || row.sync_status.last_error) && (
         <div className="flex flex-col gap-1.5">
           <ErrorLine error={syncError}>

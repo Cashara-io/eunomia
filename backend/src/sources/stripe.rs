@@ -55,7 +55,7 @@ impl Source for StripeSource {
             }
         }
         let newest = records.iter().filter_map(|r| r.get("created").and_then(|v| v.as_i64())).max().map(|c| c.to_string());
-        Ok(SyncResult { records, cursor: newest.or(cursor) })
+        Ok(SyncResult { records, cursor: newest.or(cursor), ..SyncResult::default() })
     }
 
     fn map(&self, raw: &Value) -> Option<Value> {
