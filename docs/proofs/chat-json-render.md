@@ -253,4 +253,17 @@ The server records each substitution's output range and checks its neighbours in
 
 A fixed timestamp covers the complete chat turn and reaches view resolution. Resolved raw-digit strings are intersected with persisted strings in readable vaults whose creation and last update precede that cutoff. A digit run requires an adjacent letter-bearing word or an alphanumeric word, copied from a single eligible string after normalisation. Bare numeric names never authorise digits. ISO dates still require a matching applied date or bucket label, even when a name contains the date. Names planted in earlier turns remain user-visible data and may qualify. Matching a stored spelling does not establish the truth of the model's surrounding claim.
 
-Verification results for this round are recorded below after the fresh checks complete. The machine gate waits three minutes between checks for competing Cargo processes or root free space below 7 GiB, for up to two hours. Every Cargo step uses the requested two-job, debug-zero, no-incremental, 8 MiB stack and niceness settings. No cargo fmt is run. The disposable database uses port 8593 and the backend uses 8594. Shared services and ports 8000, 3600, 8600 and 3700 are untouched.
+The placeholder audit now reports the actual receipt count and keeps its substitution counter separate from the count-path flag. Re-auditing the saved v5 histories finds six exact UI prop substitutions. The earlier reported count of nine was a counter bug; the exact-string checks themselves still pass.
+
+[Commands](chat-json-render-review4-commands.txt) and [results](chat-json-render-review4-results.txt) record the fresh verification.
+
+- `cargo check --tests` and clippy on all targets with warnings denied passed on the restored final source.
+- The six requested hardened serial backend suites passed 653 tests. Two existing opt-in fixtures were ignored.
+- All 15 UI unit tests passed. The earlier bypass suite remains rejected. The exact contextual 25-title matrix has zero false rejections, not a production false-positive rate.
+- Five new guard mutations, nine earlier prose mutations, two retained backend mutations and two earlier frontend mutations all failed their intended assertions, then restored exact source bytes. Compilation errors do not count as mutation proof.
+- Frontend frozen install, lint, typecheck, production build and catalogue sync passed. Renderer tests passed 13 cases and 216 assertions.
+- Fresh `gpt-6-luna` Line and Table chat API questions produced bound titles in the resolved UI and server summary. CSV recomputation matched 185 numeric fields within 0.01. A separate audit verified two exact formatted substitutions. Line repaired one invalid bucket query automatically; Table succeeded on its first call. The title count is six month groups, and the Table title total is AUD 1588.00. Raw histories and failed attempts are retained in `/private/tmp/chat-json-render-v6/`.
+
+The initial progress push's missing trait import, the empty target symlink destination, the failed frontend symlink/cache builds and the disposable database's argument-order failure are retained as attempts. The corrected final checks above passed. No new browser proof is claimed. The local proof uses the real chat API and React renderer tests.
+
+The machine gate waits three minutes between checks for competing Cargo processes or root free space below 7 GiB, for up to two hours. Every Cargo step uses the requested two-job, debug-zero, no-incremental, 8 MiB stack and niceness settings. No cargo fmt is run. The disposable database uses port 8593 and the backend uses 8594. Shared services and ports 8000, 3600, 8600 and 3700 are untouched.

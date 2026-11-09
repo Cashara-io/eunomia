@@ -18,6 +18,7 @@ MUTATIONS = [
     ], 'UI prose never reparses Markdown entities or escapes'),
     ('final-substitution-boundaries', PROSE, [('for (start, end) in substitutions {', 'for (start, end) in substitutions.into_iter().take(0) {')], 'final_placeholder_boundaries_refuse_numeric_synthesis'),
     ('letter-bearing-phrase', PROSE, [('let mut out = Vec::new();\n    for (i, w)', 'let mut out = vec![server.clone()];\n    for (i, w)')], 'bare_numeric_server_strings_never_authorise_digits'),
+    ('turn-cutoff-propagation', 'backend/src/views/mod.rs', [('TURN_STARTED.try_with(|start| *start).unwrap_or_default()', 'surrealdb::types::Datetime::default()')], 'turn_snapshot_refuses_new_names_and_text_values'),
     ('pre-turn-snapshot', 'backend/src/store/ontology.rs', [('AND created_at < $before AND (updated_at = NONE OR updated_at < $before) AND', 'AND')], 'turn_snapshot_refuses_new_names_and_text_values'),
 ]
 for name, filename, replacements, test in MUTATIONS:
