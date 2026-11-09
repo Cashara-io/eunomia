@@ -1,62 +1,69 @@
 {
   "seed": "ontology-activity.spec.ts, Live proposal proof, synthetic data only",
-  "scenario": "Context A proposes over MCP; B sees the live notice, sees a stale-revision conflict, re-reviews and approves with a reason; A sees the stored reason.",
-  "frontend": "production Next.js build",
-  "database": "isolated SurrealDB 3.3.5 with hardened function flags",
+  "scenario": "A proposes over MCP; B sees live proposals and single and batch stale conflicts, re-reviews with preserved reasons and approves; A sees the stored reason.",
+  "frontend": "production Next.js build, main diagnostics integration included",
+  "database": "isolated SurrealDB 3.3.5 with CI hardening flags",
+  "tenant_migration": 42,
   "images": [
     {
       "file": "activity-1440-dark.png",
       "width": 1440,
       "height": 1000,
-      "sha256": "8dbb36d05337a55f715ecd6725d575b707d258693237dff85ae5a3682f7d2edd"
+      "sha256": "2df56af48ccf5cd4c3e9cab3492dc1b0bbca67a90e7a648c6bf7bf9d12cdf96c"
     },
     {
       "file": "activity-1440-light.png",
       "width": 1440,
       "height": 1000,
-      "sha256": "68e8d2d5f02039da8639f0c4fbdadd17eebb44af7296c0cb675abd1cc4a1235e"
+      "sha256": "4ad3d6dceb8e87b6576145b4e2865fb4d875d821c504d88a5ba37f57e137df4b"
     },
     {
       "file": "activity-390-dark.png",
       "width": 390,
       "height": 1000,
-      "sha256": "cfff41c30881b080094eb7d926a3c7c89620179eba8fddd2dfbf9efddcffd7bc"
+      "sha256": "7794771750c29bbe46d1827eb1a0f453a49a05038e4b2e96294cd4aa628acd93"
     },
     {
       "file": "activity-390-light.png",
       "width": 390,
       "height": 1000,
-      "sha256": "ae0e614207c8807a7ac8430e7ea0d97cccdb26a86b55c5447e1d94354adf46ac"
+      "sha256": "9b66f58680c11128c5805b5c61784f63f5ad6c437dacc38a5c4dbce12dd6027b"
+    },
+    {
+      "file": "batch-stale-conflict.png",
+      "width": 1440,
+      "height": 1520,
+      "sha256": "ca189a5d1c25ab677980f071956d6f804b2169e561db5633fd5487000bbe18cd"
     },
     {
       "file": "landing-before.png",
       "width": 1440,
       "height": 1000,
-      "sha256": "083c8a6264164975e3717817d07ff910bff240eb2d65c8bb99195bf7a5a34a67"
+      "sha256": "722b27df61ed535e284c5ac8f62e4983227ba52f466d8c557ed5bd933df00232"
     },
     {
       "file": "landing-notice.png",
       "width": 1440,
       "height": 1000,
-      "sha256": "df9a1fcf6161dadc85fd44121be18d712b4742e52efb65e37ce8f7d0c4704533"
+      "sha256": "694ba288d8dd15e1c85a8f37d67cc49400f090a21535b92396117ed3a746dbe5"
     },
     {
       "file": "landing-open.png",
       "width": 1440,
       "height": 1000,
-      "sha256": "fdde9e6ea8a6f1ec3a12ca0a00089323bf703c30652adb0227b8243a567cbe63"
+      "sha256": "60154d618b7510ea59f5c4946d590e40f50ba135908d1525db6879867760df30"
     },
     {
       "file": "live-proposal-strip.png",
       "width": 1440,
       "height": 373,
-      "sha256": "086dae1390842ca9b0b3092a00a8fb4125148773d6f1ee8c3a9e10542815d8dc"
+      "sha256": "e74762bf98e2fabadc3ede1fb23f700783fda4b4dff97f946f1928934d7a77a6"
     },
     {
       "file": "stale-conflict.png",
       "width": 1440,
       "height": 1000,
-      "sha256": "dab65b55d50bd3996059159f40b8d1ba49f08fa328ecc14783e1f5f058e67fd7"
+      "sha256": "c880aebff56e4a7c0a5a0e1b1f1525cc2feae2eba9d30e48751e7e4fa2b46ef6"
     }
   ]
 }
