@@ -355,3 +355,54 @@ async fn display_normalisation_modifiers_and_source_aliases_are_guarded() {
     assert!(out["text"].as_str().unwrap().contains("Source 1:"));
     assert!(!out["text"].as_str().unwrap().contains("sales_q3"));
 }
+
+#[tokio::test]
+async fn selectors_resolve_approved_digit_properties_and_reject_model_aliases() {
+    let (app, vault) = sample().await;
+    for (name, datatype) in [("cost_2026", "number"), ("amount_2026", "number"), ("region_2026", "text")] {
+        ok(app.tool("ontology_propose", json!({"properties":[{"kind":"sample","name":name,"datatype":datatype}]})).await);
+        let (status, body) = app.http_session("POST", &format!("/api/vaults/{vault}/ontology/properties/decide"), Some(json!({"kind":"sample","name":name,"decision":{"action":"approve"}}))).await;
+        assert_eq!(status, 200, "{body}");
+    }
+    let rows = ok(app.tool("show_view", json!({"view":"ui","spec":spec(),"sources":{"sample":{"type":"dataset","vault_id":vault,"kind":"sample","properties":["amount"]}}})).await);
+    for row in rows["data"]["sources"]["sample"]["rows"].as_array().unwrap() {
+        for (property, value) in [("cost_2026", json!(12)), ("amount_2026", json!(24)), ("region_2026", json!("North"))] {
+            ok(app.tool("entity_set_property", json!({"entity_id":row["entity_id"],"property":property,"value":value})).await);
+        }
+    }
+    let make = |kind: &str, extra: Value, source: Value| {
+        let mut props = json!({"title":"Values","summary":"Values","data":{"$state":"/sources/sales/rows"}});
+        props.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        json!({"view":"ui","spec":{"root":"chart","elements":{"chart":{"type":kind,"props":props}}},"sources":{"sales":source}})
+    };
+    let source = json!({"type":"dataset","vault_id":vault,"kind":"sample","properties":["cost_2026"]});
+    for extra in [json!({"y":"cost_2026"}), json!({})] {
+        let out = ok(app.tool("show_view", make("Bar", extra, source.clone())).await);
+        assert_eq!(out["spec"]["elements"]["chart"]["props"]["y"], "cost_2026");
+        assert_eq!(out["spec"]["elements"]["chart"]["props"]["series"], json!(["cost_2026"]));
+        assert_eq!(out["data"]["sources"]["sales"]["totals"]["name"]["count"], 2.0);
+    }
+    let table_source = json!({"type":"dataset","vault_id":vault,"kind":"sample","properties":["amount_2026"],"sort":{"property":"amount_2026"}});
+    let table = ok(app.tool("show_view", make("Table", json!({"columns":[{"key":"amount_2026","label":"Model label"}]}), table_source)).await);
+    assert_eq!(table["spec"]["elements"]["chart"]["props"]["columns"][0]["label"], "amount 2026");
+    let grouped = json!({"type":"dataset","vault_id":vault,"kind":"sample","properties":["cost_2026"],"group_by":"region_2026","aggregates":[{"op":"sum","property":"cost_2026"}],"sort":{"property":"sum_cost_2026"}});
+    let out = ok(app.tool("show_view", make("Bar", json!({"x":"region_2026","group":"region_2026"}), grouped)).await);
+    assert_eq!(out["spec"]["elements"]["chart"]["props"]["x"], "region_2026");
+    assert_eq!(out["spec"]["elements"]["chart"]["props"]["y"], "sum_cost_2026");
+    assert_eq!(out["data"]["sources"]["sales"]["rows"][0]["sum_cost_2026"], 24.0);
+    let denied = app.tool("show_view", make("Bar", json!({"y":"unknown_2026"}), source.clone())).await;
+    assert!(denied.to_string().contains("unknown bound column unknown_2026"), "{denied}");
+    let mut unknown_sort = source.clone();
+    unknown_sort["sort"] = json!({"property":"unknown_2026"});
+    let denied = app.tool("show_view", make("Bar", json!({}), unknown_sort)).await;
+    assert!(denied.to_string().contains("unknown sort column"), "{denied}");
+    let absent_group_column = json!({"type":"dataset","vault_id":vault,"kind":"sample","properties":["cost_2026"],"aggregates":[{"op":"sum","property":"cost_2026"}],"sort":{"property":"name"}});
+    let denied = app.tool("show_view", make("Table", json!({}), absent_group_column)).await;
+    assert!(denied.to_string().contains("unknown sort column"), "{denied}");
+    let mut args = make("Bar", json!({"y":"cost_2026"}), source);
+    let source = args["sources"].as_object_mut().unwrap().remove("sales").unwrap();
+    args["sources"]["revenue_999"] = source;
+    args["spec"]["elements"]["chart"]["props"]["data"]["$state"] = json!("/sources/revenue_999/rows");
+    let denied = app.tool("show_view", args).await;
+    assert!(denied.to_string().contains("identifier"), "{denied}");
+}

@@ -57,9 +57,9 @@ pub(super) fn identifier(raw: &str) -> AppResult<()> {
         && raw.chars().any(|c| c.is_ascii_alphabetic())
         && !raw.trim_start_matches('_').starts_with(|c: char| c.is_ascii_digit())
         && spans(&normalise(raw)).iter().all(|span| {
-            let start = span.start + raw[span.clone()].bytes().take_while(|c| *c == b'_').count();
-            raw[start..span.end].starts_with(|c: char| c.is_ascii_alphabetic())
-                || raw[..start].chars().next_back().is_some_and(|c| c.is_ascii_alphabetic())
+            // The prose scanner may consume an earlier e as an exponent connector.
+            let start = span.start + raw[span.clone()].bytes().take_while(|c| !c.is_ascii_digit()).count();
+            raw[..start].chars().next_back().is_some_and(|c| c.is_ascii_alphabetic())
                 || raw[span.end..].chars().next().is_some_and(|c| c.is_ascii_alphabetic())
         });
     if !valid { return Err(bad("identifier must use ASCII letters and underscores, with numeric spans attached to letters")); }
@@ -404,10 +404,10 @@ mod tests {
     }
     #[test]
     fn identifier_numeric_spans_must_attach_to_letters() {
-        for name in ["999999", "12_sales", "sales_999999", "sales_12_34", "12q", "_12sales", "sales_１２", "sales\u{202e}12", "sales-12", "sales 12"] {
+        for name in ["revenue_999", "revenue_1e2", "revenue_999e", "name_999", "e_999", "999999", "12_sales", "sales_999999", "sales_12_34", "12q", "_12sales", "sales_１２", "sales\u{202e}12", "sales-12", "sales 12"] {
             assert!(identifier(name).is_err(), "{name:?}");
         }
-        for name in ["sales", "sales_q3", "q12", "sales_q12x", "_sales", "amount"] {
+        for name in ["sales", "sales_q3", "revenue_q3", "e3", "q12", "sales_q12x", "_sales", "amount"] {
             assert!(identifier(name).is_ok(), "{name}");
         }
     }

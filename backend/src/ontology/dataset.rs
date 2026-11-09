@@ -124,9 +124,13 @@ pub async fn resolve(db: &OrgDb, owner: &RecordId, args: &Dataset) -> AppResult<
         } else { rows.push(Value::Object(row)); }
         if rows.len() > MAX_INPUT { return Err(bad("expanded dataset exceeds 5000 rows")); }
     }
-    let (mut rows, columns) = transform(rows, columns, args)?;
+    let (mut rows, mut columns) = transform(rows, columns, args)?;
+    // The generated display name is selectable even for an empty detailed dataset.
+    if args.aggregates.is_empty() && !columns.iter().any(|c| c.key == "name") {
+        columns.push(Column { key: "name".into(), datatype: "text".into(), unit: None });
+    }
     if let Some(sort) = &args.sort {
-        if !columns.iter().any(|c| c.key == sort.property) && sort.property != "name" { return Err(bad("unknown sort column")); }
+        if !columns.iter().any(|c| c.key == sort.property) { return Err(bad("unknown sort column")); }
         rows.sort_by(|a,b| { let order = compare(&a[&sort.property], &b[&sort.property]); if sort.descending { order.reverse() } else { order } });
     }
     let totals: serde_json::Map<String, Value> = columns.iter().map(|c| {

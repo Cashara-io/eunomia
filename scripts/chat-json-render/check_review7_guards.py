@@ -16,7 +16,7 @@ MUTATIONS = [
     ('spaced-prefix', PROSE, r'(?:{modifier} *|', r'(?:{modifier}|', 'spaced_modifiers_cannot_change_bound_counts', '--lib'),
     ('spaced-suffix', PROSE, r'(?: *{modifier}|', r'(?:{modifier}|', 'spaced_modifiers_cannot_change_bound_counts', '--lib'),
     ('source-alias', UI, 'prose::identifier(&name)?;', 'let _ = &name;', 'display_normalisation_modifiers_and_source_aliases_are_guarded', '--test'),
-    ('displayed-identifiers', UI, 'prose::identifier(part)?;', 'let _ = part;', 'identifiers_cannot_invent_displayed_numeric_spans', '--lib'),
+    ('displayed-selectors', UI, 'if !known {', 'if false && !known {', 'identifiers_cannot_invent_displayed_numeric_spans', '--lib'),
     ('element-identifiers', UI, 'prose::identifier(id)?;', 'let _ = id;', 'identifiers_cannot_invent_displayed_numeric_spans', '--lib'),
     ('source-label', UI, 'out.push_str(&format!("\\nSource {}:\\n", index + 1));', 'out.push_str(&format!("\\nSource {}:\\n", sources.keys().nth(index).unwrap()));', 'identifiers_cannot_invent_displayed_numeric_spans', '--lib'),
 ]

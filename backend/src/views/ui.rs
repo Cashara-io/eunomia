@@ -50,13 +50,6 @@ pub fn validate(spec: &Value, data: Option<&Value>) -> AppResult<()> {
     if visited.len() != spec.elements.len() { return Err(bad("UI contains unreachable elements")); }
     for (id, e) in &spec.elements {
         prose::identifier(id)?;
-        for key in ["x", "y", "group", "size", "parent"].iter().filter_map(|key| e.props[*key].as_str())
-            .chain(e.props["series"].as_array().into_iter().flatten().filter_map(Value::as_str))
-            .chain(e.props["columns"].as_array().into_iter().flatten().filter_map(|c| c["key"].as_str()))
-            .chain(e.props["formats"].as_object().into_iter().flat_map(|m| m.keys().map(String::as_str))) {
-            // Link columns use the server namespace spelling, e.g. link:supplied_by.
-            for part in key.split(':') { prose::identifier(part)?; }
-        }
         let def = catalog()["components"].get(&e.kind).ok_or_else(|| bad(format!("unknown component {}", e.kind)))?;
         let validator = jsonschema::validator_for(&def["props"]).map_err(|e| bad(format!("invalid catalog schema: {e}")))?;
         validator.validate(&e.props).map_err(|error| bad(format!("{}: {error}", e.kind)))?;
@@ -93,7 +86,7 @@ fn resolve_columns(spec: &mut Value, data: &Value) -> AppResult<()> {
         }
         if props["x"].is_null() {
             let y = props["y"].as_str().unwrap_or("");
-            let candidates: Vec<_> = columns.iter().copied().filter(|k| *k != y && !numeric_column(source, k)).collect();
+            let candidates: Vec<_> = columns.iter().copied().filter(|k| *k != y && *k != "name" && !numeric_column(source, k)).collect();
             let x = if let Some((x, _)) = distribution { x } else if matches!(kind.as_str(), "Scatter" | "Bubble") {
                 return Err(bad(format!("{kind} requires an explicit numeric x column")));
             } else if candidates.len() == 1 { candidates[0] } else { "name" };
@@ -128,8 +121,48 @@ fn trusted_number(data: &Value, path: &str) -> bool {
         _ => false,
     }
 }
+fn selectors(props: &Value) -> Vec<&str> {
+    let mut keys: Vec<_> = ["x", "y", "group", "size", "parent", "value"].iter().filter_map(|key| props[*key].as_str()).collect();
+    keys.extend(props["series"].as_array().into_iter().flatten().filter_map(Value::as_str));
+    keys.extend(props["columns"].as_array().into_iter().flatten().filter_map(|c| c["key"].as_str()));
+    keys.extend(props["formats"].as_object().into_iter().flat_map(|m| m.keys().map(String::as_str)));
+    keys.extend(props["sort"].as_str().or_else(|| props["sort"]["key"].as_str()).or_else(|| props["sort"]["property"].as_str()));
+    keys
+}
+fn validate_selectors(props: &Value, path: &str, source: &Value) -> AppResult<()> {
+    let parts: Vec<_> = path.split('/').collect();
+    let distribution: &[&str] = match parts.as_slice() {
+        ["", "sources", _, "distributions", key, shape] if numeric_column(source, key) => match *shape {
+            "bins" => &["start", "end", "count"],
+            "box" => &["min", "q1", "median", "q3", "max"],
+            "density" => &["value", "count"],
+            _ => &[],
+        },
+        _ => &[],
+    };
+    for key in selectors(props) {
+        let known = if distribution.is_empty() {
+            source["columns"].as_array().into_iter().flatten().any(|c| c["key"] == key)
+        } else { distribution.contains(&key) };
+        if !known { return Err(bad(format!("unknown bound column {key}"))); }
+    }
+    Ok(())
+}
+fn resolve_column_labels(spec: &mut Value, data: &Value) {
+    for e in spec["elements"].as_object_mut().into_iter().flat_map(|m| m.values_mut()) {
+        let path = e["props"]["data"]["$state"].as_str().unwrap_or("");
+        let source = &data["sources"][path.split('/').nth(2).unwrap_or("")];
+        let Some(columns) = e["props"].get_mut("columns").and_then(Value::as_array_mut) else { continue; };
+        for c in columns {
+            let column = source["columns"].as_array().into_iter().flatten().find(|column| column["key"] == c["key"]);
+            c["label"] = json!(column.and_then(|column| column["label"].as_str()).map(str::to_string)
+                .unwrap_or_else(|| c["key"].as_str().unwrap_or("").replace('_', " ")));
+        }
+    }
+}
 fn validate_binding(kind: &str, props: &Value, path: &str, value: &Value, data: &Value) -> AppResult<()> {
     let source = path.split('/').nth(2).map(|name| &data["sources"][name]).unwrap_or(&Value::Null);
+    validate_selectors(props, path, source)?;
     let numeric = |key: &str, rows: &[Value]| -> AppResult<()> {
         if !numeric_column(source, key) || rows.iter().any(|r| !r[key].is_number() && !r[key].is_null()) {
             return Err(bad(format!("{kind} requires a trusted numeric column: {key}")));
@@ -159,10 +192,7 @@ fn validate_binding(kind: &str, props: &Value, path: &str, value: &Value, data: 
         }
         return Ok(());
     }
-    let mut keys: Vec<&str> = ["x", "y", "group", "size", "parent"].iter().filter_map(|field| props[*field].as_str()).collect();
-    keys.extend(props["series"].as_array().into_iter().flatten().filter_map(Value::as_str));
-    keys.extend(props["columns"].as_array().into_iter().flatten().filter_map(|c| c["key"].as_str()));
-    for key in keys {
+    for key in selectors(props) {
         if rows.iter().any(|r| !r.is_object() || r.get(key).is_none()) { return Err(bad(format!("unknown bound column {key}"))); }
     }
     for c in props["columns"].as_array().into_iter().flatten() {
@@ -277,6 +307,7 @@ pub async fn resolve(db: &OrgDb, owner: &RecordId, mut spec: Value, sources: BTr
     resolve_columns(&mut spec, &data)?;
     validate(&spec, Some(&data))?;
     spec = prose::resolve_allowed(&spec, &trusted, &allowed)?;
+    resolve_column_labels(&mut spec, &data);
     validate(&spec, None)?; // Expanded text must still fit the renderer schema and size limits.
     if serde_json::to_vec(&data).map_err(|_| bad("invalid data"))?.len() > 2 * 1024 * 1024 { return Err(bad("resolved UI data exceeds 2 MiB")); }
     Ok(View::Ui { spec, data })
@@ -360,7 +391,7 @@ mod tests {
         ] {
             let mut spec = json!({"root":"chart","elements":{"chart":{"type":"Line","props":{"title":"Values","summary":"Values","data":{"$state":"/sources/sales/rows"}}}}});
             spec["elements"]["chart"]["props"][key] = value;
-            assert!(validate(&spec, None).unwrap_err().message.contains("identifier"), "{key}");
+            assert!(validate(&spec, Some(&json!({"sources":{"sales":{"rows":[],"columns":[]}}}))).unwrap_err().message.contains("unknown bound column"), "{key}");
         }
         let data = json!({"sources":{"999999":{"rows":[]}}});
         let shown = text(&json!({}), &data);
@@ -370,6 +401,63 @@ mod tests {
         let key = format!("sum_{}", "a".repeat(64));
         let spec = json!({"root":"chart","elements":{"chart":{"type":"Line","props":{"title":"Values","summary":"Values","data":{"$state":"/sources/sales/rows"},"y":key}}}});
         assert!(validate(&spec, None).is_ok());
+    }
+    fn digit_columns() -> Value {
+        json!({"sources":{"sales":{"rows":[{"name":"One","cost_2026":12,"amount_2026":24,"region_2026":"North","sum_cost_2026":12}],"columns":[
+            {"key":"name","datatype":"text"}, {"key":"cost_2026","datatype":"number"},
+            {"key":"amount_2026","datatype":"number"}, {"key":"region_2026","datatype":"text"},
+            {"key":"sum_cost_2026","datatype":"number"}
+        ]}}})
+    }
+    fn digit_spec(kind: &str, extra: Value) -> Value {
+        let mut props = json!({"title":"Values","summary":"Values","data":{"$state":"/sources/sales/rows"}});
+        props.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        json!({"root":"chart","elements":{"chart":{"type":kind,"props":props}}})
+    }
+    #[test]
+    fn selectors_trust_explicit_digit_columns() {
+        let spec = digit_spec("Bar", json!({"x":"name","y":"cost_2026","series":["cost_2026"],"formats":{"cost_2026":"number"}}));
+        validate(&spec, Some(&digit_columns())).unwrap();
+    }
+    #[test]
+    fn selectors_trust_inferred_digit_columns() {
+        let mut data = digit_columns();
+        data["sources"]["sales"]["columns"] = json!([{"key":"name","datatype":"text"},{"key":"cost_2026","datatype":"number"}]);
+        let mut spec = digit_spec("Bar", json!({}));
+        resolve_columns(&mut spec, &data).unwrap();
+        validate(&spec, Some(&data)).unwrap();
+        assert_eq!(spec["elements"]["chart"]["props"]["y"], "cost_2026");
+    }
+    #[test]
+    fn selectors_trust_table_digit_columns_and_server_labels() {
+        let data = digit_columns();
+        let mut spec = digit_spec("Table", json!({"columns":[{"key":"amount_2026","label":"Model label"}]}));
+        validate(&spec, Some(&data)).unwrap();
+        resolve_column_labels(&mut spec, &data);
+        assert_eq!(spec["elements"]["chart"]["props"]["columns"][0]["label"], "amount 2026");
+        // Omitted optional columns must stay absent, including on text-only blocks.
+        for mut implicit in [digit_spec("Table", json!({})), json!({"root":"copy","elements":{"copy":{"type":"Text","props":{"text":"Words"}}}})] {
+            resolve_column_labels(&mut implicit, &data);
+            validate(&implicit, None).unwrap();
+        }
+    }
+    #[test]
+    fn selectors_trust_group_and_aggregate_digit_columns() {
+        let spec = digit_spec("Bar", json!({"x":"region_2026","group":"region_2026","y":"sum_cost_2026","series":["sum_cost_2026"]}));
+        validate(&spec, Some(&digit_columns())).unwrap();
+    }
+    #[test]
+    fn selectors_reject_unknown_metadata_even_with_empty_or_matching_rows() {
+        for rows in [json!([]), json!([{"unknown_2026":12}])] {
+            let mut data = digit_columns();
+            data["sources"]["sales"]["rows"] = rows;
+            for extra in [json!({"x":"unknown_2026"}), json!({"y":"unknown_2026"}), json!({"group":"unknown_2026"}),
+                json!({"size":"unknown_2026"}), json!({"parent":"unknown_2026"}), json!({"series":["unknown_2026"]}),
+                json!({"columns":[{"key":"unknown_2026","label":"Words"}]}), json!({"formats":{"unknown_2026":"number"}})] {
+                let spec = digit_spec("Table", extra);
+                assert!(validate(&spec, Some(&data)).unwrap_err().message.contains("unknown bound column unknown_2026"));
+            }
+        }
     }
     #[test]
     fn refuses_literals_unknown_props_missing_bindings_and_cycles() {
@@ -430,7 +518,7 @@ mod tests {
         let mut spec = json!({"root":"a","elements":{"a":{"type":"Line","props":{"title":"Amount","summary":"Amount","data":{"$state":"/sources/s/rows"},"x":"name"}}}});
         let mut data = json!({"sources":{"s":{"rows":[{"name":"Supplier","amount":null,"quantity":12}],"columns":[{"key":"amount","datatype":"money"},{"key":"quantity","datatype":"number"}]}}});
         assert!(resolve_columns(&mut spec, &data).unwrap_err().message.contains("name y"));
-        data["sources"]["s"]["columns"] = json!([{"key":"amount","datatype":"money"}]);
+        data["sources"]["s"]["columns"] = json!([{"key":"amount","datatype":"money"},{"key":"name","datatype":"text"}]);
         resolve_columns(&mut spec, &data).unwrap();
         assert_eq!(spec["elements"]["a"]["props"]["y"], "amount");
         assert_eq!(spec["elements"]["a"]["props"]["series"], json!(["amount"]));
