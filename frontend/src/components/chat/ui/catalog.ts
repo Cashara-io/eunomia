@@ -135,4 +135,4 @@ const safeSchema = defineSchema(() => schema.definition, {
 });
 export const catalog = defineCatalog(safeSchema, { components, actions: {} });
 export type DataProps = z.infer<typeof dataProps>;
-export const resolvedDataProps = dataProps.extend({ data: z.unknown() });
+export const resolvedDataProps = dataProps.extend({ data: z.unknown(), unit: z.string().nullable().optional(), units: z.record(z.string(), z.string().nullable()).optional() });

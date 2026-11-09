@@ -39,3 +39,28 @@ The six questions requested a monthly trend, supplier breakdown, distribution, r
 The approved total amount is AUD 1588.00 and total quantity is 49. Increasing amounts by ten percent gives AUD 1746.80, with a change of AUD 158.80. All six answers matched the CSV recompute within 0.01, covering 335 numeric fields.
 
 Screenshots and receipts: [proof directory](https://github.com/Cashara-io/eunomia/tree/pr-screenshots/chat-json-render), [numeric audit](https://github.com/Cashara-io/eunomia/blob/pr-screenshots/chat-json-render/numeric-audit.txt).
+
+## Review fixes
+
+A local implementation attempt on 9 November 2026 started from
+`8bb67ef4dea26c59c90dfcc2e7030ec390b4f4d3`. The changes are uncommitted and
+have not been pushed. This section does not replace the earlier proof with a
+claim about the review fixes.
+
+The working tree adds typed numeric bindings, component data-shape checks,
+digit checks for model-written prose, shared metric/dataset cutoffs and indexed
+latest-value reads, shared aggregate arithmetic, currency metadata, unavailable
+chart handling, UI-font numeric values, StatGroup tiles and Sankey label placement.
+It also adds bypass, aggregate, access and rendering regression cases.
+
+Clippy with warnings denied passed. Frontend lint, type generation, typecheck and
+the production build passed. The backend library run reported 514 passed and no
+failures, including numeric bypass and shared aggregate tests. Integration tests,
+guard-removal experiments, the scale fixture and Playwright remain unverified.
+The six real chat questions, numeric audit and new screenshots were not run.
+
+Disk space fell from 8.6 GiB to 5.7 GiB during backend test linking, crossing the
+requested 6 GiB stop limit. The build was stopped. The disposable container,
+frontend process, preview tab, backend target, frontend node_modules and Next
+build directory were removed. Free space recovered to 8.3 GiB. The shared
+database was not used. No PR body or screenshot branch was changed.

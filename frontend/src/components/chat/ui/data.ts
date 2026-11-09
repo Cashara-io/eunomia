@@ -27,7 +27,7 @@ export function label(value: unknown): string {
       ? String(value)
       : "";
 }
-export function formatted(value: unknown, format?: string): string {
+export function formatted(value: unknown, format?: string, unit?: string | null): string {
   if (value == null) return "none";
   if (format === "date" && typeof value === "string") {
     const date = new Date(value);
@@ -45,7 +45,7 @@ export function formatted(value: unknown, format?: string): string {
   return n == null
     ? label(value)
     : format === "money"
-      ? `A$${formatNumber(n, "AUD")}`
+      ? `${unit === "AUD" || !unit ? "A$" : unit + " "}${formatNumber(n, unit || "AUD")}`
       : format === "percent"
         ? `${formatNumber(n, "%")}%`
         : formatNumber(n, null);

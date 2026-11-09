@@ -1,12 +1,12 @@
 //! Bounded, typed datasets for generative UI. Reuses ontology access and filter checks.
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 use chrono::Datelike;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use surrealdb::types::{RecordId, SurrealValue};
 #[derive(Debug, Deserialize, SurrealValue)]
 struct LinkRow { entity: RecordId, target: RecordId, label: String }
-use super::{Kind, Status, ViewStatus, metric, property};
+use super::{Kind, Status, metric, property};
 use crate::{authz::Action, error::{AppError, AppResult}, pool::OrgDb, rid::RecordIdExt};
 
 pub const MAX_ROWS: usize = 500;
@@ -23,6 +23,7 @@ pub struct Dataset {
     #[serde(default)] pub aggregates: Vec<Aggregate>,
     pub sort: Option<Sort>,
     pub limit: Option<usize>,
+    pub as_of: Option<String>,
 }
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all="snake_case")]
@@ -33,9 +34,7 @@ pub struct Sort { pub property: String, #[serde(default)] pub descending: bool }
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Aggregate { pub name: String, pub op: Agg, pub property: Option<String> }
-#[derive(Debug, Clone, Copy, Deserialize)]
-#[serde(rename_all="snake_case")]
-pub enum Agg { Count, Sum, Avg, Min, Max, Median, Distinct }
+pub use super::metric::Agg;
 #[derive(Debug, Clone, Serialize)]
 pub struct Column { pub key: String, pub datatype: String, pub unit: Option<String> }
 
@@ -47,23 +46,27 @@ pub async fn resolve(db: &OrgDb, owner: &RecordId, args: &Dataset) -> AppResult<
     let vault = crate::rid::parse(&args.vault_id).map_err(|_| bad("invalid dataset vault_id"))?;
     let vault = super::resolve(db, owner, Some(&vault), Action::ReadMemories).await?;
     let kind = Kind::parse(&args.kind)?;
-    let ontology = super::get(db, owner, Some(&vault), Some(kind.as_str())).await?;
-    let k = ontology.kinds.iter().find(|k| k.kind == args.kind).ok_or_else(|| bad("unknown dataset kind"))?;
-    let approved = k.status == ViewStatus::Approved;
-    if ontology.strict && !approved && !k.built_in { return Err(bad("strict mode requires an approved dataset kind")); }
-    let needed = args.properties.iter().chain(args.group_by.iter()).chain(args.aggregates.iter().filter_map(|a| a.property.as_ref()));
+    let needed: BTreeSet<String> = args.properties.iter().chain(args.group_by.iter()).chain(args.aggregates.iter().filter_map(|a| a.property.as_ref())).chain(args.filters.iter().map(|f| &f.property)).cloned().collect();
+    let labels: Vec<String> = needed.iter().filter_map(|n| n.strip_prefix("link:").map(String::from)).collect();
+    let mut metadata = crate::store::ontology::UI_METADATA.on(db).bind(("vault", vault.clone())).bind(("kind", args.kind.clone()))
+        .bind(("names", needed.iter().cloned().collect::<Vec<_>>())).bind(("labels", labels.clone())).await?;
+    let kinds: Vec<super::KindRow> = metadata.take(0)?;
+    let properties: Vec<property::PropertyRow> = metadata.take(1)?;
+    let links_meta: Vec<super::LinkRow> = metadata.take(2)?;
+    let approved = kinds.iter().any(|k| k.status == "approved");
+    if super::strict(db, &vault).await? && !approved && !kind.is_built_in() { return Err(bad("strict mode requires an approved dataset kind")); }
     let mut columns = vec![];
-    for name in needed {
+    for name in &needed {
         if columns.iter().any(|c: &Column| &c.key == name) { continue; }
         if let Some(label) = name.strip_prefix("link:") {
-            let link = ontology.links.iter().find(|l| l.from_kind == args.kind && l.label == label).ok_or_else(|| bad("unknown dataset link"))?;
-            if link.status != ViewStatus::Approved { return Err(bad("dataset link is not approved")); }
+            let link = links_meta.iter().find(|l| l.label == label).ok_or_else(|| bad("unknown dataset link"))?;
+            if link.status != "approved" { return Err(bad("dataset link is not approved")); }
             columns.push(Column { key: name.clone(), datatype: "link".into(), unit: None });
             continue;
         }
-        let p = k.properties.iter().find(|p| &p.name == name).ok_or_else(|| bad(format!("unknown dataset property {name}")))?;
-        if p.status != Status::Approved { return Err(bad(format!("dataset property {name} is not approved"))); }
-        columns.push(Column { key: name.clone(), datatype: p.datatype.as_str().into(), unit: p.unit.clone() });
+        let p = properties.iter().find(|p| &p.name == name).ok_or_else(|| bad(format!("unknown dataset property {name}")))?;
+        if p.status != Status::Approved.as_str() { return Err(bad(format!("dataset property {name} is not approved"))); }
+        columns.push(Column { key: name.clone(), datatype: p.datatype.clone(), unit: p.unit.clone() });
     }
     if args.bucket.is_some() && !columns.iter().any(|c| Some(&c.key) == args.group_by.as_ref() && matches!(c.datatype.as_str(), "date" | "datetime")) {
         return Err(bad("time bucket needs a date or datetime group_by property"));
@@ -75,20 +78,25 @@ pub async fn resolve(db: &OrgDb, owner: &RecordId, args: &Dataset) -> AppResult<
     let input_truncated = ids.len() > MAX_INPUT;
     ids.truncate(MAX_INPUT);
     let links: Vec<LinkRow> = if columns.iter().any(|c| c.datatype == "link") {
-        crate::store::ontology::UI_LINKS.on(db).bind(("vault", vault.clone())).bind(("ids", ids.clone())).await?.take(0)?
+        crate::store::ontology::UI_LINKS.on(db).bind(("vault", vault.clone())).bind(("ids", ids.clone())).bind(("labels", labels)).await?.take(0)?
     } else { Vec::new() };
     if links.len() > MAX_INPUT { return Err(bad("dataset link targets exceed 5000, narrow the dataset")); }
     let target_ids: Vec<RecordId> = links.iter().map(|l| l.target.clone()).collect();
     let targets = crate::entities::neighbourhood::load_nodes(db, target_ids).await?;
-    let values = property::latest_values(db, &vault, &ids).await?;
+    let names = needed.iter().filter(|n| !n.starts_with("link:")).cloned().collect();
+    let values = metric::latest_values(db, &vault, &kind, &names, &ids, metric::parse_as_of(args.as_of.as_deref())?).await?;
+    for column in &mut columns {
+        if !matches!(column.datatype.as_str(), "money" | "number" | "integer" | "percent") { continue; }
+        let units: BTreeSet<_> = values.values().filter_map(|vs| vs.get(&column.key)).filter_map(|h| h.unit.clone().or_else(|| column.unit.clone())).collect();
+        if units.len() > 1 { return Err(bad(format!("incompatible units in dataset column {}", column.key))); }
+        column.unit = units.into_iter().next().or_else(|| column.unit.clone());
+    }
     let nodes = crate::entities::neighbourhood::load_nodes(db, ids.clone()).await?;
     let mut rows = Vec::new();
     for id in ids {
         let id = id.to_string();
-        let held = values.get(&id).into_iter().flatten().map(|p| Ok((p.property.clone(), metric::Held {
-            stored: property::parse_value(if matches!(p.datatype, property::Datatype::Enum) { property::Datatype::Text } else { p.datatype }, &p.property, None, &p.value)?, unit: p.unit.clone(),
-        }))).collect::<AppResult<HashMap<_, _>>>()?;
-        if !selector.picks(|p| held.get(p)) { continue; }
+        let held = values.get(&id);
+        if !selector.picks(|p| held.and_then(|h| h.get(p))) { continue; }
         let mut row = serde_json::Map::new();
         row.insert("entity_id".into(), json!(id));
         row.insert("name".into(), json!(nodes.get(&id).map(|n| n.name.as_str()).unwrap_or(&id)));
@@ -98,7 +106,7 @@ pub async fn resolve(db: &OrgDb, owner: &RecordId, args: &Dataset) -> AppResult<
                 row.insert(c.key.clone(), json!(refs));
                 continue;
             }
-            let v = values.get(&id).into_iter().flatten().find(|p| p.property == c.key).map(|p| p.value.clone()).unwrap_or(Value::Null);
+            let v = held.and_then(|h| h.get(&c.key)).and_then(|h| property::to_json(property::Datatype::parse(&c.datatype).ok()?, &h.stored)).unwrap_or(Value::Null);
             row.insert(c.key.clone(), v);
         }
         if let Some(group) = args.group_by.as_ref().filter(|p| p.starts_with("link:")) {
@@ -114,9 +122,10 @@ pub async fn resolve(db: &OrgDb, owner: &RecordId, args: &Dataset) -> AppResult<
         rows.sort_by(|a,b| { let order = compare(&a[&sort.property], &b[&sort.property]); if sort.descending { order.reverse() } else { order } });
     }
     let totals: serde_json::Map<String, Value> = columns.iter().map(|c| {
-        let ns: Vec<f64> = rows.iter().filter_map(|r| r[&c.key].as_f64()).collect();
-        let sum = ns.iter().sum::<f64>();
-        (c.key.clone(), json!({"sum": if ns.is_empty() { None } else { Some(sum) }, "avg": if ns.is_empty() { None } else { Some(sum / ns.len() as f64) }, "count": ns.len()}))
+        let values: Vec<Value> = rows.iter().map(|r| r[&c.key].clone()).filter(|v| !v.is_null()).collect();
+        let totals: serde_json::Map<String, Value> = [("sum", Agg::Sum), ("avg", Agg::Avg), ("count", Agg::Count), ("min", Agg::Min), ("max", Agg::Max), ("median", Agg::Median), ("distinct", Agg::CountDistinct)]
+            .into_iter().map(|(name, op)| (name.into(), json!(metric::aggregate(op, &values, values.len())))).collect();
+        (c.key.clone(), json!(totals))
     }).collect();
     let distributions: serde_json::Map<String, Value> = columns.iter().filter(|c| matches!(c.datatype.as_str(), "money" | "number" | "integer" | "percent")).map(|c| {
         let mut ns: Vec<f64> = rows.iter().filter_map(|r| r[&c.key].as_f64()).collect();
@@ -172,9 +181,10 @@ fn transform(rows: Vec<Value>, columns: Vec<Column>, args: &Dataset) -> AppResul
         property::PropertyName::parse(&a.name)?;
         if out_columns.iter().any(|c| c.key == a.name) { return Err(bad("duplicate aggregate name")); }
         let source = a.property.as_ref().and_then(|p| columns.iter().find(|c| &c.key == p));
+        if matches!(a.op, Agg::Ratio) { return Err(bad("ratio is not a dataset aggregate")); }
         if !matches!(a.op, Agg::Count) && source.is_none() { return Err(bad("aggregate needs a property")); }
         if matches!(a.op, Agg::Sum | Agg::Avg | Agg::Min | Agg::Max | Agg::Median) && !source.is_some_and(|c| matches!(c.datatype.as_str(), "money" | "number" | "integer" | "percent")) { return Err(bad("numeric aggregate needs numeric property")); }
-        let count = matches!(a.op, Agg::Count | Agg::Distinct);
+        let count = matches!(a.op, Agg::Count | Agg::CountDistinct);
         out_columns.push(Column { key: a.name.clone(), datatype: if count { "number".into() } else { source.unwrap().datatype.clone() }, unit: if count { None } else { source.and_then(|c| c.unit.clone()) } });
     }
     let rows = groups.into_values().map(|(key, rows)| {
@@ -182,16 +192,9 @@ fn transform(rows: Vec<Value>, columns: Vec<Column>, args: &Dataset) -> AppResul
         if let Some(p) = &args.group_by { out.insert(p.clone(), key); }
         for a in &args.aggregates {
             let values: Vec<&Value> = rows.iter().filter_map(|r| a.property.as_ref().map(|p| &r[p])).filter(|v| !v.is_null()).collect();
-            let mut nums: Vec<f64> = values.iter().filter_map(|v| v.as_f64()).collect(); nums.sort_by(f64::total_cmp);
-            let n = nums.len();
-            let value = match a.op {
-                Agg::Count => json!(if a.property.is_some() { values.len() } else { rows.len() }),
-                Agg::Distinct => json!(values.iter().map(|v| v.to_string()).collect::<std::collections::HashSet<_>>().len()),
-                _ if n == 0 => Value::Null,
-                Agg::Sum => json!(nums.iter().sum::<f64>()), Agg::Avg => json!(nums.iter().sum::<f64>() / n as f64),
-                Agg::Min => json!(nums[0]), Agg::Max => json!(nums[n-1]),
-                Agg::Median => json!(if n.is_multiple_of(2) { nums[n/2-1]/2.0 + nums[n/2]/2.0 } else { nums[n/2] }),
-            };
+            let values: Vec<Value> = values.into_iter().cloned().collect();
+            let result = metric::aggregate(a.op, &values, if a.property.is_some() { values.len() } else { rows.len() });
+            let value = if matches!(a.op, Agg::Count | Agg::CountDistinct) { json!(result.map(|n| n as u64)) } else { json!(result) };
             out.insert(a.name.clone(), value);
         }
         Value::Object(out)

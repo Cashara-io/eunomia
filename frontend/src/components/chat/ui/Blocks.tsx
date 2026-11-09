@@ -236,10 +236,10 @@ function Block({
   let content: ReactNode;
   if (kind === "Stat")
     content = (
-      <div className="text-3xl font-mono tabular-nums">
+      <div className="text-3xl ui-numeric tabular-nums">
         {typeof value.unit === "string"
           ? withUnit(number(value.value), value.unit)
-          : formatted(object.success ? value.value : data, format)}
+          : formatted(object.success ? value.value : data, format, props.unit)}
         {number(value.delta) != null && (
           <small className="block text-sm">
             Change {formatted(value.delta, format)}
@@ -260,6 +260,8 @@ function Block({
         )}
       </div>
     );
+  else if (kind === "StatGroup")
+    content = <div className="ui-stat-grid">{rows.flatMap((row, i) => columns.filter(c => number(row[c.key]) != null).map(c => <div className="ui-stat-tile" key={`${i}-${c.key}`}><p>{label(row.name) || c.label}</p><div className="text-3xl ui-numeric">{formatted(row[c.key], c.format, props.units?.[c.key])}</div>{row.name != null && <p>{c.label}</p>}</div>))}</div>;
   else if (kind === "Entity" || kind === "EntityList")
     content = (
       <div className="flex flex-wrap gap-2">
@@ -292,11 +294,11 @@ function Block({
       <dl className="grid grid-cols-2 gap-4">
         <div>
           <dt>Before</dt>
-          <dd className="font-mono">{formatted(value.before, format)}</dd>
+          <dd className="ui-numeric">{formatted(value.before, format)}</dd>
         </div>
         <div>
           <dt>After</dt>
-          <dd className="font-mono">{formatted(value.after, format)}</dd>
+          <dd className="ui-numeric">{formatted(value.after, format)}</dd>
         </div>
       </dl>
     );
@@ -344,11 +346,11 @@ function Block({
                       key={c.key}
                       className={
                         number(r[c.key]) != null
-                          ? "font-mono tabular-nums text-right"
+                          ? "ui-numeric tabular-nums text-right"
                           : ""
                       }
                     >
-                      {formatted(r[c.key], c.format)}
+                      {formatted(r[c.key], c.format, props.units?.[c.key])}
                     </td>
                   ))}
                 </tr>
@@ -362,9 +364,9 @@ function Block({
                       ? scalarObject.safeParse(totals.data[c.key])
                       : null;
                     return (
-                      <td key={c.key} className="font-mono">
+                      <td key={c.key} className="ui-numeric">
                         {c.total && total?.success
-                          ? formatted(total.data[c.total], c.format)
+                          ? formatted(total.data[c.total], c.total === "count" ? "number" : c.format, props.units?.[c.key])
                           : c.total
                             ? "none"
                             : index === 0
@@ -443,7 +445,7 @@ function Block({
               <div key={c.key} className="flex justify-between gap-4">
                 <dt>{c.label}</dt>
                 <dd className={number(r[c.key]) != null ? "ui-numeric" : ""}>
-                  {formatted(r[c.key], c.format)}
+                  {formatted(r[c.key], c.format, props.units?.[c.key])}
                 </dd>
               </div>
             ))}

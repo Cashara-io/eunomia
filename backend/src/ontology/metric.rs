@@ -44,7 +44,9 @@ pub enum Agg {
     Avg,
     Min,
     Max,
+    #[serde(alias = "distinct")]
     CountDistinct,
+    Median,
     /// One sub-expression divided by another.
     Ratio,
 }
@@ -58,12 +60,13 @@ impl Agg {
             Agg::Min => "min",
             Agg::Max => "max",
             Agg::CountDistinct => "count_distinct",
+            Agg::Median => "median",
             Agg::Ratio => "ratio",
         }
     }
 
     fn numeric_only(self) -> bool {
-        matches!(self, Agg::Sum | Agg::Avg | Agg::Min | Agg::Max)
+        matches!(self, Agg::Sum | Agg::Avg | Agg::Min | Agg::Max | Agg::Median)
     }
 }
 
@@ -788,6 +791,7 @@ fn side_words(kind: &str, agg: Agg, property: Option<&str>, row: Option<&RowExpr
         (Agg::Avg, _) => format!("Average{of} {p}"),
         (Agg::Min, _) => format!("Lowest{of} {p}"),
         (Agg::Max, _) => format!("Highest{of} {p}"),
+        (Agg::Median, _) => format!("Median{of} {p}"),
         (Agg::CountDistinct, _) => format!("Number of different {p} values"),
         (Agg::Count, Some(_)) => format!("Number of {} with a {p}", words(kind)),
         (Agg::Count, None) | (Agg::Ratio, _) => format!("Number of {}", words(kind)),
@@ -1332,7 +1336,7 @@ fn compute(side: &Side, filters: &[Cond], entities: &[&String], values: &Values,
     let unit = side.property.as_ref().and_then(|p| props.get(p)).and_then(|p| p.unit.clone());
     let mut used = Vec::new();
     let mut nums = Vec::new();
-    let mut distinct = HashSet::new();
+    let mut distinct = Vec::new();
     let mut other_units: BTreeMap<(String, String), usize> = BTreeMap::new();
     let mut div_zero = 0;
     let mut too_large = 0;
@@ -1383,20 +1387,33 @@ fn compute(side: &Side, filters: &[Cond], entities: &[&String], values: &Values,
             nums.push(n);
         } else if side.agg == Agg::CountDistinct {
             let s = &h.stored;
-            distinct.insert(format!("{:?}|{:?}|{:?}|{:?}", s.num, s.text.as_deref().map(str::to_lowercase), s.boolean, s.date));
+            distinct.push(to_json(props[p].datatype, s).unwrap_or(Value::Null));
         }
         used.push((*e).clone());
     }
-    let value = match side.agg {
-        Agg::Count => Some(used.len() as f64),
-        Agg::CountDistinct => Some(distinct.len() as f64),
-        Agg::Sum => Some(nums.iter().sum()),
-        Agg::Avg if !nums.is_empty() => Some(nums.iter().sum::<f64>() / nums.len() as f64),
-        Agg::Min => nums.iter().copied().reduce(f64::min),
-        Agg::Max => nums.iter().copied().reduce(f64::max),
-        Agg::Avg | Agg::Ratio => None,
-    };
+    let samples = if side.agg == Agg::CountDistinct { distinct } else { nums.into_iter().map(Value::from).collect() };
+    let value = aggregate(side.agg, &samples, used.len());
     Computed { value, used, other_units, div_zero, too_large, skipped }
+}
+
+/// Shared metric and dataset arithmetic. Nulls do not count as property values.
+pub(super) fn aggregate(agg: Agg, values: &[Value], count: usize) -> Option<f64> {
+    let mut nums: Vec<f64> = values.iter().filter_map(Value::as_f64).collect();
+    nums.sort_by(f64::total_cmp);
+    let n = nums.len();
+    match agg {
+        Agg::Count => Some(count as f64),
+        Agg::CountDistinct => Some(values.iter().filter(|v| !v.is_null()).map(|v| match v {
+            Value::String(s) => Value::String(s.to_lowercase()).to_string(),
+            _ => v.to_string(),
+        }).collect::<HashSet<_>>().len() as f64),
+        Agg::Sum => Some(nums.iter().sum()),
+        Agg::Avg if n > 0 => Some(nums.iter().sum::<f64>() / n as f64),
+        Agg::Min => nums.first().copied(),
+        Agg::Max => nums.last().copied(),
+        Agg::Median if n > 0 => Some(if n.is_multiple_of(2) { nums[n/2-1]/2.0 + nums[n/2]/2.0 } else { nums[n/2] }),
+        _ => None,
+    }
 }
 
 fn round(v: f64) -> f64 {
@@ -1509,21 +1526,19 @@ pub(super) async fn exists(db: &OrgDb, vault: RecordId, name: &str, kind: Option
 
 /// Each entity of `kind` in `vault`, sorted, and its latest value of each of `names` as of `as_of`.
 pub(super) async fn load_values(db: &OrgDb, vault: &RecordId, kind: &Kind, names: &BTreeSet<String>, as_of: chrono::DateTime<chrono::Utc>) -> AppResult<(Vec<String>, Values)> {
+    let ids: Vec<RecordId> = q::METRIC_ENTITIES.on(db).bind(("vault", vault.clone()))
+        .bind(("table", kind_table(kind.as_str())?.to_string())).bind(("kind", kind.as_str().to_string())).await?.take(1)?;
+    let values = latest_values(db, vault, kind, names, &ids, as_of).await?;
+    let mut entities: Vec<String> = ids.iter().map(|id| id.to_string()).collect();
+    entities.sort();
+    Ok((entities, values))
+}
+
+pub(super) async fn latest_values(db: &OrgDb, vault: &RecordId, kind: &Kind, names: &BTreeSet<String>, ids: &[RecordId], as_of: chrono::DateTime<chrono::Utc>) -> AppResult<Values> {
     let by_id: HashMap<String, String> = names.iter().map(|n| (property_rid(vault, kind, &PropertyName::parse(n).expect("checked")).to_string(), n.clone())).collect();
     let prop_ids: Vec<RecordId> = names.iter().map(|n| property_rid(vault, kind, &PropertyName::parse(n).expect("checked"))).collect();
-    let mut res = q::METRIC_INPUTS
-        .on(db)
-        .bind(("vault", vault.clone()))
-        .bind(("table", kind_table(kind.as_str())?.to_string()))
-        .bind(("kind", kind.as_str().to_string()))
-        .bind(("props", prop_ids))
-        .bind(("as_of", Datetime::from(as_of)))
-        .await?;
-    let ids: Vec<RecordId> = res.take(1)?;
-    let rows: Vec<InputRow> = match res.take(2) {
-        Err(e) if no_ontology_table(&e) => Vec::new(),
-        r => r?,
-    };
+    let rows: Vec<InputRow> = q::LATEST_VALUES.on(db).bind(("vault", vault.clone())).bind(("ids", ids.to_vec()))
+        .bind(("props", prop_ids)).bind(("as_of", Datetime::from(as_of))).await?.take(0)?;
     let mut entities: Vec<String> = ids.iter().map(|i| i.to_string()).collect();
     entities.sort();
     let known: HashSet<&String> = entities.iter().collect();
@@ -1538,7 +1553,7 @@ pub(super) async fn load_values(db: &OrgDb, vault: &RecordId, kind: &Kind, names
         let stored = Stored { num: r.value_num, text: r.value_text, boolean: r.value_bool, date: r.value_date };
         values.entry(entity).or_default().entry(name.clone()).or_insert(Held { stored, unit: r.unit });
     }
-    Ok((entities, values))
+    Ok(values)
 }
 
 /// A metric found, gated, checked and loaded for one run: everything but the arithmetic, which
@@ -1856,6 +1871,15 @@ mod tests {
         assert_eq!(expr_words("shipment", &back), "Sum of price where status is one of Delayed, Pending and shipped on is at least 2026-01-01, by month of shipped on");
     }
 
+    #[test]
+    fn shared_aggregate_semantics_nulls_empty_and_case() {
+        let values = vec![json!(10),json!(20),Value::Null];
+        for (op, expected, empty) in [(Agg::Count,Some(2.0),Some(0.0)),(Agg::Sum,Some(30.0),Some(0.0)),(Agg::Avg,Some(15.0),None),(Agg::Min,Some(10.0),None),(Agg::Max,Some(20.0),None),(Agg::Median,Some(15.0),None),(Agg::CountDistinct,Some(2.0),Some(0.0))] {
+            assert_eq!(aggregate(op,&values,2),expected);
+            assert_eq!(aggregate(op,&[],0),empty);
+        }
+        assert_eq!(aggregate(Agg::CountDistinct,&[json!("Alpha"),json!("alpha"),Value::Null],2),Some(1.0));
+    }
     #[test]
     fn row_units_combine_only_when_they_mean_something() {
         let aud = || Dim::Money("AUD".into());

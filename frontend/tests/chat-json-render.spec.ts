@@ -567,3 +567,22 @@ for (const width of [1280, 390])
       ),
     ).toBeTruthy();
   });
+
+test("typed money keeps its currency and missing values are unavailable", async ({ page }) => {
+  await registerAndOnboard(page, uniqueEmail("typed-values"));
+  const bad = fixture("Bar");
+  bad.spec.elements.a.props.y = "name";
+  const usd = fixture("Stat");
+  usd.spec.elements.a.props.data = { $state: "/sources/sample/rows/0/value" };
+  const usdView = { ...usd, data: { sources: { sample: { rows: [{ value: 120.25 }], columns: [{ key: "value", datatype: "money", unit: "USD" }] } } } };
+  const group = fixture("StatGroup");
+  const groupView = { ...group, data: { sources: { sample: { rows, columns: [{ key: "value", datatype: "money", unit: "USD" }] } } } };
+  await page.route("**/api/chat/threads", route => route.fulfill({ json: [{ id: "chat_thread:typed", title: "Typed values", created_at: new Date().toISOString(), updated_at: new Date().toISOString() }] }));
+  await page.route("**/api/chat/threads/*/history", route => route.fulfill({ json: history([bad, usdView, groupView]) }));
+  await page.goto("/chat");
+  await expect(page.locator('[data-ui-component="Bar"]')).toContainText("No numeric values to show.");
+  await expect(page.locator('[data-ui-component="Bar"] svg')).toHaveCount(0);
+  await expect(page.locator('[data-ui-component="Stat"]')).toContainText("USD 120.25");
+  await expect(page.locator(".ui-stat-tile")).toHaveCount(3);
+  expect(await page.locator('[data-ui-component="Stat"] .text-3xl').evaluate(el => getComputedStyle(el).fontVariantNumeric)).toBe("tabular-nums");
+});

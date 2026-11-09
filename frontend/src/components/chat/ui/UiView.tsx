@@ -149,7 +149,7 @@ export default function UiView({ view: raw }: { view: unknown }) {
     const source = z
       .object({
         columns: z
-          .array(z.object({ key: z.string(), datatype: z.string() }))
+          .array(z.object({ key: z.string(), datatype: z.string(), unit: z.string().nullable().optional() }))
           .optional(),
         metric: z.object({ unit: z.string().nullable() }).optional(),
       })
@@ -170,13 +170,16 @@ export default function UiView({ view: raw }: { view: unknown }) {
       ]),
     );
     e.props.formats = formats;
+    e.props.units = Object.fromEntries((source.data.columns || []).map(c => [c.key, c.unit ?? null]));
     if (typeof e.props.x === "string" && formats[e.props.x] === "date")
       e.props.xFormat = "date";
-    const key = typeof e.props.y === "string" ? e.props.y : undefined;
-    const datatype = source.data.columns?.find(
+    const key = typeof e.props.y === "string" ? e.props.y : segments[3] === "rows" ? segments[5] : segments[3] === "totals" ? segments[4] : undefined;
+    const column = source.data.columns?.find(
       (c) => c.key === (segments[3] === "distributions" ? segments[4] : key),
-    )?.datatype;
-    if (datatype === "money" || source.data.metric?.unit === "AUD")
+    );
+    const datatype = column?.datatype;
+    e.props.unit = column?.unit ?? source.data.metric?.unit ?? null;
+    if (datatype === "money" || /^[A-Z]{3}$/.test(source.data.metric?.unit || ""))
       e.props.format = "money";
     else if (datatype === "percent" || source.data.metric?.unit === "%")
       e.props.format = "percent";

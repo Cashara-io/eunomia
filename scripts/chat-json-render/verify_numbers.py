@@ -83,10 +83,10 @@ def dataset(query, actual):
                 op = agg["op"]
                 if op == "count":
                     value = len(values) if agg.get("property") else len(members)
-                elif op == "distinct":
-                    value = len(set(values))
+                elif op in ("distinct", "count_distinct"):
+                    value = len(set(v.lower() if isinstance(v, str) else v for v in values))
                 elif not values:
-                    value = None
+                    value = 0 if op == "sum" else None
                 else:
                     value = {"sum": lambda: sum(values), "avg": lambda: statistics.mean(values),
                              "min": lambda: min(values), "max": lambda: max(values),
@@ -104,8 +104,12 @@ def dataset(query, actual):
     for column in actual["columns"]:
         name = column["key"]
         nums = [r[name] for r in expected if isinstance(r.get(name), (D, int, float))]
-        numeric_tree(actual["totals"][name], {"sum": sum(nums) if nums else None,
-                     "avg": statistics.mean(nums) if nums else None, "count": len(nums)}, f"totals/{name}")
+        values = [r[name] for r in expected if r.get(name) is not None]
+        numeric_tree(actual["totals"][name], {"sum": sum(nums),
+                     "avg": statistics.mean(nums) if nums else None, "count": len(values),
+                     "min": min(nums) if nums else None, "max": max(nums) if nums else None,
+                     "median": statistics.median(nums) if nums else None,
+                     "distinct": len(set(v.lower() if isinstance(v, str) else v for v in values))}, f"totals/{name}")
         if name not in actual.get("distributions", {}):
             continue
         nums = sorted(float(n) for n in nums)

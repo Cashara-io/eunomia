@@ -31,6 +31,7 @@ const palette = [
   "var(--kind-symbol)",
   "var(--kind-person)",
 ];
+function shown(value: unknown, format?: string, unit?: string | null) { return formatted(value, format, unit); }
 const colour = (i: number) => palette[i % palette.length];
 export default function Chart({
   kind,
@@ -44,13 +45,21 @@ export default function Chart({
   const parsed = resolvedDataProps.safeParse(raw);
   if (!parsed.success) return <Notice />;
   const p = parsed.data;
-  const rows = rowsOf(p.data);
+  const inputRows = rowsOf(p.data);
+  const rows = inputRows;
   const numeric =
     Object.keys(rows[0] || {}).find((k) =>
       rows.some((r) => number(r[k]) != null),
     ) || "value";
   const y = p.y || numeric;
   const x = p.x || Object.keys(rows[0] || {}).find((k) => k !== y) || "name";
+  const fields = kind === "Histogram" ? ["start", "end", "count"]
+    : kind === "BoxPlot" ? ["min", "q1", "median", "q3", "max"]
+    : kind === "Violin" ? ["value", "count"]
+    : [...(p.series?.length ? p.series : [y]), ...(["Scatter", "Bubble"].includes(kind) ? [x] : []), ...(p.size ? [p.size] : []), ...(["Gauge", "Bullet"].includes(kind) ? ["min", "max"] : [])];
+  // Invalid or missing measurements must never enter a zero-default drawing accessor.
+  if (rows.some(r => fields.some(key => number(r[key]) == null)))
+    return <figure className="ui-section" data-ui-component={kind}><figcaption>{p.title}</figcaption><p>No numeric values to show.</p><p>{p.summary}</p></figure>;
   const sharedValues = rows.flatMap((r) =>
     (p.series || [y]).map((key) => number(r[key]) || 0),
   );
@@ -162,6 +171,7 @@ type TreeDatum = {
   row?: Row;
 };
 function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
+  const formatted = (value: unknown, format?: string) => shown(value, format, p.unit);
   const id = useId();
   const { tooltipData, tooltipLeft, tooltipTop, showTooltip, hideTooltip } =
     useTooltip<string>();
@@ -1165,13 +1175,13 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
                       />
                       <text
                         x={
-                          node.depth === 0
-                            ? (node.x0 || 0) - 6
-                            : (node.x1 || 0) + 6
+                          (node.x0 || 0) > w / 2
+                            ? (node.x0 || 0) - 8
+                            : (node.x1 || 0) + 8
                         }
                         y={((node.y0 || 0) + (node.y1 || 0)) / 2}
                         dy="0.35em"
-                        textAnchor={node.depth === 0 ? "end" : "start"}
+                        textAnchor={(node.x0 || 0) > w / 2 ? "end" : "start"}
                         className="ui-label-halo"
                       >
                         {node.name.slice(0, Math.floor((labelRoom - 8) / 6))}
