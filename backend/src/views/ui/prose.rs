@@ -465,7 +465,7 @@ impl ChatNumber {
     }
 }
 
-/// Current-turn evidence only. Chat renders the checked Markdown dialect.
+/// Current-turn evidence only. Chat renders this checked tree directly.
 #[derive(Default)]
 pub(crate) struct ChatProse {
     numbers: Vec<ChatNumber>,
@@ -474,54 +474,35 @@ pub(crate) struct ChatProse {
 }
 const UNVERIFIED: &str = "[unverified number]";
 const NUMBER_NOTE: &str = "Some numbers couldn't be checked against tool results.";
-fn markdown_options() -> pulldown_cmark::Options {
-    use pulldown_cmark::Options;
-    Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS
-}
-
-/// Each unit owns text events, including inline code. Inline markup adds no
-/// separator. Cells and nested items never borrow numbers from their neighbours.
-fn chat_units(events: &[pulldown_cmark::Event<'_>]) -> Vec<Vec<usize>> {
-    use pulldown_cmark::{Event, Tag};
-    let mut units = Vec::new();
-    let mut stack = Vec::new();
-    let mut depth = 0;
-    for (i, event) in events.iter().enumerate() {
-        match event {
-            Event::Start(tag) => {
-                depth += 1;
-                let starts = matches!(tag, Tag::Paragraph | Tag::Item | Tag::Heading {..} | Tag::TableCell | Tag::CodeBlock(_));
-                if starts { units.push(Vec::new()); stack.push((depth, units.len() - 1)); }
+// Text nodes are grouped by the actual tree's paragraphs, headings, cells and items.
+// An autolink is visible but exempt prose. It also breaks the checking unit so
+// adjacent digits cannot borrow its URL. Hrefs are never visited or rewritten.
+fn tree_units<'a>(nodes: &'a mut [crate::chat::tree::ChatNode], current: &mut Vec<&'a mut String>, units: &mut Vec<Vec<&'a mut String>>) {
+    use crate::chat::tree::ChatNode;
+    for node in nodes {
+        if matches!(node, ChatNode::Link { autolink: true, .. }) {
+            units.push(std::mem::take(current));
+        } else if node.is_unit() {
+            // Entering and leaving nested blocks must not join their neighbours.
+            units.push(std::mem::take(current));
+            let mut own = Vec::new();
+            tree_units(node.children_mut(), &mut own, units);
+            units.push(own);
+        } else {
+            match node {
+                ChatNode::Text { text } => current.push(text),
+                _ => tree_units(node.children_mut(), current, units),
             }
-            Event::End(_) => {
-                if stack.last().is_some_and(|(d,_)| *d == depth) { stack.pop(); }
-                depth -= 1;
-            }
-            Event::Text(_) | Event::Code(_) | Event::SoftBreak | Event::HardBreak => {
-                if let Some((_, unit)) = stack.last() { units[*unit].push(i); }
-            }
-            _ => (),
         }
     }
-    units
 }
 
-fn event_text<'a>(event: &'a pulldown_cmark::Event<'_>) -> &'a str {
-    use pulldown_cmark::{Event, TagEnd};
-    match event {
-        Event::Text(s) | Event::Code(s) => s,
-        Event::SoftBreak | Event::HardBreak | Event::End(TagEnd::Paragraph) => " ",
-        _ => "",
-    }
-}
-
-// Normalisation can change byte lengths. Retain the originating character for
-// each normalised byte so a match can be replaced across inline text events.
-fn unit_text(events: &[pulldown_cmark::Event<'_>], unit: &[usize]) -> (String, Vec<(usize, std::ops::Range<usize>)>) {
+// Normalisation can change byte lengths. Retain each originating character.
+fn unit_text(unit: &[&mut String]) -> (String, Vec<(usize, std::ops::Range<usize>)>) {
     let mut text = String::new();
     let mut origins = Vec::new();
-    for &i in unit {
-        for (offset,c) in event_text(&events[i]).char_indices() {
+    for (i, value) in unit.iter().enumerate() {
+        for (offset,c) in value.char_indices() {
             for ch in normalise(&c.to_string()).chars() {
                 if ch == ' ' && text.ends_with(' ') { continue; }
                 text.push(ch);
@@ -611,29 +592,32 @@ impl ChatProse {
         }
         checked
     }
-    fn markdown(&self, raw: &str, mark: bool) -> AppResult<String> {
-        use pulldown_cmark::{Event, Parser};
+    fn checked_tree(&self, raw: &str, mark: bool) -> AppResult<Vec<crate::chat::tree::ChatNode>> {
+        use crate::chat::tree::{self, ChatNode};
         static CONTROLS: OnceLock<Regex> = OnceLock::new();
-        let raw = CONTROLS.get_or_init(|| Regex::new(r"\p{Cf}").unwrap()).replace_all(raw, "");
+        let controls = CONTROLS.get_or_init(|| Regex::new(r"\p{Cf}").unwrap());
         let data = serde_json::json!({"sources":self.sources});
         // Resolve independently, so a broken placeholder cannot erase useful prose.
         static PLACEHOLDER: OnceLock<Regex> = OnceLock::new();
         let placeholder = PLACEHOLDER.get_or_init(|| Regex::new(r"\{\{.*?(?:\}\}|$)").unwrap());
         let mut changed = false;
-        let out = placeholder.replace_all(&raw, |c: &regex::Captures<'_>| {
-            match interpolate(&c[0], &data, "assistant reply") {
-                Ok((text,_)) => text,
-                Err(_) => { changed = true; UNVERIFIED.into() }
+        let mut tree = tree::parse(raw);
+        let mut units = Vec::new();
+        let mut current = Vec::new();
+        tree_units(&mut tree, &mut current, &mut units);
+        units.push(current);
+        for mut unit in units {
+            for text in &mut unit {
+                let clean = controls.replace_all(text, "");
+                **text = placeholder.replace_all(&clean, |c: &regex::Captures<'_>| {
+                    match interpolate(&c[0], &data, "assistant reply") {
+                        Ok((text,_)) => text,
+                        Err(_) => { changed = true; UNVERIFIED.into() }
+                    }
+                }).into_owned();
             }
-        });
-        let mut events: Vec<_> = Parser::new_ext(&out, markdown_options()).collect();
-        // Both parsers discard raw HTML. Discard it here too before joining text.
-        for event in &mut events {
-            if matches!(event, Event::Html(_) | Event::InlineHtml(_)) { *event = Event::Text("".into()); }
-        }
-        let mut edits: HashMap<usize, Vec<(std::ops::Range<usize>, String)>> = HashMap::new();
-        for unit in chat_units(&events) {
-            let (text, origins) = unit_text(&events, &unit);
+            let (text, origins) = unit_text(&unit);
+            let mut edits: HashMap<usize, Vec<(std::ops::Range<usize>, String)>> = HashMap::new();
             let mut rejected: Vec<_> = self.number_spans(&text).into_iter().filter_map(|(r,ok)| (!ok).then_some(r)).collect();
             // Includes placeholders introduced by entity decoding or NFKC.
             for token in ["{{", "}}"] {
@@ -651,38 +635,31 @@ impl ChatProse {
                     edits.entry(i).or_default().push((r, if part == 0 { UNVERIFIED.into() } else { String::new() }));
                 }
             }
-        }
-        if changed && !mark { return Err(bad("unresolved placeholder in assistant reply")); }
-        if !changed { return Ok(out.into_owned()); }
-        for (i,mut replacements) in edits {
-            let mut text = event_text(&events[i]).to_string();
-            replacements.sort_by_key(|(r,_)| std::cmp::Reverse(r.start));
-            for (r,value) in replacements { text.replace_range(r, &value); }
-            events[i] = match &events[i] { Event::Code(_) => Event::Code(text.into()), _ => Event::Text(text.into()) };
-        }
-        // A number can span an entire emphasis or link child. Empty inline
-        // containers have no CommonMark spelling and must be removed before encoding.
-        let mut nonempty = Vec::new();
-        for event in events {
-            use pulldown_cmark::TagEnd;
-            match &event {
-                Event::Text(s) | Event::Code(s) if s.is_empty() => (),
-                Event::End(end) if matches!(end, TagEnd::Emphasis | TagEnd::Strong | TagEnd::Strikethrough | TagEnd::Link | TagEnd::Paragraph)
-                    && matches!(nonempty.last(), Some(Event::Start(tag)) if tag.to_end() == *end) => { nonempty.pop(); }
-                _ => nonempty.push(event),
+            for (i,mut replacements) in edits {
+                replacements.sort_by_key(|(r,_)| std::cmp::Reverse(r.start));
+                // Placeholder delimiters can overlap a numeric span. Merge before editing.
+                let mut merged: Vec<(std::ops::Range<usize>, String)> = Vec::new();
+                for (r, value) in replacements {
+                    if let Some((last, _)) = merged.last_mut() && r.end > last.start {
+                        last.start = last.start.min(r.start);
+                    } else { merged.push((r, value)); }
+                }
+                for (r,value) in merged { unit[i].replace_range(r, &value); }
             }
         }
-        let mut checked = String::new();
-        pulldown_cmark_to_cmark::cmark(nonempty.iter(), &mut checked, markdown_options())
-            .map_err(|e| bad(format!("could not serialise checked Markdown: {e}")))?;
-        checked.push_str(&format!("\n\n{NUMBER_NOTE}"));
-        Ok(checked)
+        if changed && !mark { return Err(bad("unresolved placeholder in assistant reply")); }
+        if changed { tree.push(ChatNode::Paragraph { children: vec![ChatNode::Text { text: NUMBER_NOTE.into() }] }); }
+        Ok(tree)
     }
     #[cfg(test)]
-    pub(crate) fn check(&self, raw: &str) -> AppResult<String> { self.markdown(raw, false) }
-    pub(crate) fn safe(&self, raw: &str) -> String {
-        self.markdown(raw, true).expect("balanced parser events always serialise to Markdown")
+    pub(crate) fn check(&self, raw: &str) -> AppResult<String> {
+        self.checked_tree(raw, false).map(|_| raw.into())
     }
+    pub(crate) fn safe_tree(&self, raw: &str) -> Vec<crate::chat::tree::ChatNode> {
+        self.checked_tree(raw, true).expect("marking text nodes is infallible")
+    }
+    #[cfg(test)]
+    fn safe(&self, raw: &str) -> String { crate::chat::tree::visible_text(&self.safe_tree(raw)) }
 
 }
 
@@ -767,35 +744,45 @@ mod tests {
         let reply = "| Left | Right |\n| --- | --- |\n| 1**2** | `34` |";
         assert_eq!(prose.check(reply).unwrap(), reply);
         assert!(prose.check("- 12\n\n  34").is_ok());
-        assert!(ChatProse::default().safe("Useful **advice** and 999.").contains("Useful **advice**"));
+        assert!(ChatProse::default().safe("Useful **advice** and 999.").contains("Useful advice"));
     }
     #[test]
-    fn chat_markdown_server_renderer_matches_shared_fixture() {
-        use pulldown_cmark::{Event, Parser, html};
+    fn chat_tree_matches_shared_parity_corpus() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/chat_markdown.json");
         let mut fixture: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
-        let mut prose = ChatProse::default(); prose.result(&fixture["evidence"]);
-        let checked = prose.safe(fixture["reply"].as_str().unwrap());
-        let events: Vec<_> = Parser::new_ext(&checked, markdown_options()).collect();
-        let units: Vec<_> = chat_units(&events).iter().map(|unit| unit.iter().map(|&i| event_text(&events[i])).collect::<String>().split_whitespace().collect::<Vec<_>>().join(" ")).filter(|s| !s.is_empty()).collect();
-        let raw_events: Vec<_> = Parser::new_ext(fixture["reply"].as_str().unwrap(), markdown_options()).collect();
-        let mut raw_rendered = String::new();
-        html::push_html(&mut raw_rendered, raw_events.into_iter().filter(|e| !matches!(e, Event::Html(_) | Event::InlineHtml(_))));
-        let mut rendered = String::new();
-        html::push_html(&mut rendered, events.into_iter().filter(|e| !matches!(e, Event::Html(_) | Event::InlineHtml(_))));
-        if std::env::var_os("UPDATE_CHAT_MARKDOWN_FIXTURE").is_some() {
-            fixture["raw_server_html"] = json!(raw_rendered); fixture["checked"] = json!(checked); fixture["server_html"] = json!(rendered); fixture["units"] = json!(units);
-            std::fs::write(path, serde_json::to_string_pretty(&fixture).unwrap() + "\n").unwrap();
-        } else {
-            assert_eq!(fixture["raw_server_html"], raw_rendered);
-            assert_eq!(fixture["checked"], checked);
-            assert_eq!(fixture["server_html"], rendered);
-            assert_eq!(fixture["units"], json!(units));
+        let evidence = fixture["evidence"].clone();
+        for case in fixture["cases"].as_array_mut().unwrap() {
+            let mut prose = ChatProse::default();
+            prose.result(case.get("evidence").unwrap_or(&evidence));
+            let tree = prose.safe_tree(case["reply"].as_str().unwrap());
+            let text = crate::chat::tree::visible_text(&tree);
+            if std::env::var_os("UPDATE_CHAT_MARKDOWN_FIXTURE").is_some() {
+                case["tree"] = json!(tree); case["visible_text"] = json!(text);
+            } else {
+                assert_eq!(case["tree"], json!(tree), "{}", case["name"]);
+                assert_eq!(case["visible_text"], text, "{}", case["name"]);
+            }
         }
-        assert_eq!(checked.matches("unverified number").count(),1);
-        assert!(rendered.contains("<strong>")); assert!(rendered.contains("<table>"));
-        assert!(rendered.contains("<li>")); assert!(rendered.contains("href="));
-        assert!(!rendered.contains("999")); assert!(!rendered.contains("<script>"));
+        if std::env::var_os("UPDATE_CHAT_MARKDOWN_FIXTURE").is_some() {
+            std::fs::write(path, serde_json::to_string_pretty(&fixture).unwrap() + "\n").unwrap();
+        }
+    }
+    #[test]
+    fn image_alt_cannot_authorise_a_different_visible_number() {
+        let mut prose = ChatProse::default(); prose.result(&json!(123));
+        let tree = prose.safe_tree("Count 12![3](/icon.svg)");
+        assert_eq!(crate::chat::tree::visible_text(&tree), format!("Count {UNVERIFIED}{NUMBER_NOTE}"));
+        assert!(prose.check("Count 12![3](/icon.svg)").is_err());
+    }
+    #[test]
+    fn autolink_urls_are_not_claims_and_hrefs_are_never_rewritten() {
+        use crate::chat::tree::{ChatNode, visible_text};
+        let tree = ChatProse::default().safe_tree("<https://example.com/999>");
+        assert_eq!(visible_text(&tree), "https://example.com/999");
+        assert!(matches!(&tree[0].children()[0], ChatNode::Link { href, autolink: true, .. } if href == "https://example.com/999"));
+        let tree = ChatProse::default().safe_tree("[999](https://example.com/999)");
+        assert!(matches!(&tree[0].children()[0], ChatNode::Link { href, autolink: false, .. } if href == "https://example.com/999"));
+        assert!(visible_text(&tree).starts_with(UNVERIFIED));
     }
     #[test]
     fn chat_marks_only_bad_spans_even_across_inline_nodes() {
@@ -803,7 +790,7 @@ mod tests {
         assert_eq!(prose.safe("Count 1\u{202e}2"), "Count 12");
         let marked = prose.safe("Keep **12**, [34](https://example.com). Wrong 9**9**9 and `888`. Also &#55;77.");
         assert_eq!(marked.matches("unverified number").count(),3,"{marked}");
-        assert!(marked.contains("**12**")); assert!(marked.contains("[34](https://example.com)"));
+        assert!(marked.contains("12")); assert!(marked.contains("34"));
         assert!(!marked.contains("999")); assert!(!marked.contains("888")); assert!(!marked.contains("777"));
         assert_eq!(marked.matches(NUMBER_NOTE).count(),1);
     }

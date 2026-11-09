@@ -56,9 +56,8 @@ pdf-extract = "0.12"
 # secret redaction on memory writes (redact.rs)
 regex = "1"
 unicode-normalization = "0.1"
-# Permissively licensed CommonMark parsing, Markdown encoding and exact decimals.
+# Permissively licensed CommonMark parsing and exact decimals.
 pulldown-cmark = "0.13"
-pulldown-cmark-to-cmark = "23"
 rust_decimal = "1"
 
 jsonschema = { version = "0.58.6", default-features = false }

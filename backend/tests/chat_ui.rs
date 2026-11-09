@@ -533,6 +533,32 @@ async fn unsupported_chat_numbers_and_placeholders_never_stream_or_persist() {
     }
 }
 #[tokio::test]
+async fn checked_tree_is_identical_in_text_done_and_reopened_history() {
+    use eunomia_backend::sources::mock::{route,serve};
+    for (raw, question, expected) in [
+        ("Count 12![3](/icon.svg)", "Explain 123", "Count [unverified number]"),
+        ("<https://example.com/999>", "Give a link", "https://example.com/999"),
+    ] {
+        let mock = serve(vec![route("POST","/chat/completions",Value::Null).raw(&model_reply(json!({"content":raw})))]).await;
+        let (app,_) = scripted_chat(&mock).await;
+        let (events,history) = chat_events(&app,question).await;
+        let text_events: Vec<_> = events.iter().filter(|e| e["type"] == "text").collect();
+        assert_eq!(text_events.len(), 1, "no unchecked model deltas are forwarded");
+        let done = events.last().unwrap();
+        assert_eq!(done["type"], "done");
+        assert!(done["reply"].as_str().unwrap().starts_with(expected));
+        assert_eq!(text_events[0]["tree"], done["tree"]);
+        let history: Value = serde_json::from_str(&history).unwrap();
+        assert_eq!(history.as_array().unwrap().last().unwrap()["tree"], done["tree"]);
+        let (status, exported) = app.http_session("GET", "/api/export", None).await;
+        assert_eq!(status, axum::http::StatusCode::OK);
+        let exported = exported["chat_history"].as_array().unwrap().last().unwrap();
+        assert_eq!(exported["tree"], done["tree"]);
+        assert_eq!(exported["content"], done["reply"]);
+    }
+}
+
+#[tokio::test]
 async fn chat_resolves_valid_histogram_placeholders_and_allows_verified_numbers() {
     use eunomia_backend::sources::mock::{route,serve};
     let mock = serve(vec![]).await;

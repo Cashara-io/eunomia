@@ -269,6 +269,59 @@ export type ChangePage = {
     next: number;
 };
 
+export type ChatNode = {
+    kind: 'text';
+    text: string;
+} | {
+    children: Array<ChatNode>;
+    kind: 'paragraph';
+} | {
+    children: Array<ChatNode>;
+    kind: 'heading';
+    level: number;
+} | {
+    children: Array<ChatNode>;
+    kind: 'list';
+    start?: number | null;
+} | {
+    children: Array<ChatNode>;
+    kind: 'item';
+} | {
+    children: Array<ChatNode>;
+    kind: 'table';
+} | {
+    children: Array<ChatNode>;
+    kind: 'table_head';
+} | {
+    children: Array<ChatNode>;
+    kind: 'table_row';
+} | {
+    children: Array<ChatNode>;
+    kind: 'table_cell';
+} | {
+    children: Array<ChatNode>;
+    kind: 'strong';
+} | {
+    children: Array<ChatNode>;
+    kind: 'em';
+} | {
+    children: Array<ChatNode>;
+    kind: 'code_span';
+} | {
+    children: Array<ChatNode>;
+    kind: 'code_block';
+    language: string;
+} | {
+    autolink: boolean;
+    children: Array<ChatNode>;
+    href: string;
+    kind: 'link';
+    title: string;
+} | {
+    children: Array<ChatNode>;
+    kind: 'line_break';
+};
+
 export type ChatRequest = {
     message: string;
 };
@@ -1509,6 +1562,7 @@ export type MessageOut = {
     tool_calls?: Array<{
         [key: string]: unknown;
     }> | null;
+    tree?: Array<ChatNode> | null;
 };
 
 export type MetricDecideBody = {

@@ -17,6 +17,7 @@ import SyncMark from "@/components/bits/SyncMark";
 import Tooltip, { TooltipGroup } from "@/components/bits/Tooltip";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError, chat } from "@/lib/api";
+import type { ChatNode } from "@/lib/gen/types.gen";
 import type { ChatMessage, ChatThread } from "@/lib/types";
 import { useMe } from "@/lib/queries/auth";
 import { useSettings } from "@/lib/queries/settings";
@@ -88,7 +89,7 @@ function toolWords(name: string): string {
 // between two of them (tool calls, their results, and the reply text).
 type Turn =
   | { kind: "user"; content: string; at?: string }
-  | { kind: "assistant"; content: string; steps: ToolStep[]; at?: string };
+  | { kind: "assistant"; content: string; tree: ChatNode[]; steps: ToolStep[]; at?: string };
 
 function toTurns(messages: ChatMessage[]): Turn[] {
   const turns: Turn[] = [];
@@ -100,7 +101,7 @@ function toTurns(messages: ChatMessage[]): Turn[] {
     }
     let last = turns[turns.length - 1];
     if (!last || last.kind !== "assistant") {
-      last = { kind: "assistant", content: "", steps: [], at: m.created_at };
+      last = { kind: "assistant", content: "", tree: [], steps: [], at: m.created_at };
       turns.push(last);
     }
     if (m.role === "tool") {
@@ -115,6 +116,7 @@ function toTurns(messages: ChatMessage[]): Turn[] {
       last.steps.push(step);
       pending.push(step);
     }
+    if (m.tree) last.tree.push(...m.tree);
     if (m.content) last.content = last.content ? `${last.content}\n\n${m.content}` : m.content;
   }
   return turns;
@@ -299,7 +301,7 @@ function TurnView({ turn, me }: { turn: Turn; me: string | null }) {
       <TurnViews steps={turn.steps} />
       {turn.content && (
         <div className="text-[15px] px-0.5 break-words" style={{ color: "var(--ink)" }}>
-          <ChatText text={turn.content} />
+          <ChatText tree={turn.tree} />
         </div>
       )}
     </article>
@@ -421,6 +423,7 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [streamingText, setStreamingText] = useState("");
+  const [streamingTree, setStreamingTree] = useState<ChatNode[]>([]);
   const [liveSteps, setLiveSteps] = useState<ToolStep[]>([]);
   const [error, setError] = useState<Failure | null>(null);
   const [loadError, setLoadError] = useState<Failure | null>(null);
@@ -550,6 +553,7 @@ export default function ChatPage() {
       }
     }
     setStreamingText("");
+    setStreamingTree([]);
     setLiveSteps([]);
     const start = performance.now();
     setStartedAt(start);
@@ -558,12 +562,20 @@ export default function ChatPage() {
     const controller = new AbortController();
     abortRef.current = controller;
     let reply = "";
+    let replyTree: ChatNode[] = [];
     try {
       await chat.send(threadId, text, (event) => {
         if (event.type === "text") {
           if (!reply) setThoughtMs(performance.now() - start);
           reply += event.delta;
+          replyTree = [...replyTree, ...event.tree];
+          setStreamingTree(replyTree);
           setStreamingText(reply);
+        } else if (event.type === "done") {
+          reply = event.reply;
+          replyTree = event.tree;
+          setStreamingText(reply);
+          setStreamingTree(replyTree);
         } else if (event.type === "tool_call") {
           steps.push({ name: event.name, args: "", running: true, callId: event.id });
           setLiveSteps([...steps]);
@@ -589,13 +601,13 @@ export default function ChatPage() {
         const at = new Date().toISOString();
         // one result row per call, in order, so the turn pairs each view with its call as history does
         const results = steps.map((s) => ({ role: "tool" as const, content: s.result ?? "", created_at: at }));
-        setMessages((prev) => [...(prev ?? []), { role: "assistant", content: reply, tool_calls, created_at: at }, ...results]);
+        setMessages((prev) => [...(prev ?? []), { role: "assistant", content: reply, tree: replyTree, tool_calls, created_at: at }, ...results]);
       }
       queryClient.invalidateQueries({ queryKey: chatKeys.threads() });
     } catch (e) {
       if (controller.signal.aborted) {
         // stopped by the person: keep whatever streamed so far
-        if (reply) setMessages((prev) => [...(prev ?? []), { role: "assistant", content: reply, created_at: new Date().toISOString() }]);
+        if (reply) setMessages((prev) => [...(prev ?? []), { role: "assistant", content: reply, tree: replyTree, created_at: new Date().toISOString() }]);
         return;
       }
       const msg = e instanceof Error ? e.message : "Something went wrong.";
@@ -606,6 +618,7 @@ export default function ChatPage() {
       abortRef.current = null;
       setSending(false);
       setStreamingText("");
+      setStreamingTree([]);
       setLiveSteps([]);
     }
   }
@@ -689,7 +702,7 @@ export default function ChatPage() {
                   <TurnViews steps={liveSteps} />
                   {streamingText && (
                     <div className="settle text-[14px] px-0.5 break-words" style={{ color: "var(--ink)" }}>
-                      <ChatText text={streamingText} />
+                      <ChatText tree={streamingTree} />
                     </div>
                   )}
                 </article>

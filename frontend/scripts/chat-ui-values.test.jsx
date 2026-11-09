@@ -140,40 +140,33 @@ test("grouped metric view displays server groups and keeps a missing value missi
   expect(html).not.toContain("0.00");
 });
 
-function visibleUnits(html) {
-  const root = parseFragment(html);
-  const tags = new Set(["p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "td", "th", "pre"]);
-  const text = node => node.nodeName === "#text" ? node.value : node.tagName === "br" ? " " : (node.childNodes || []).filter(child => !["ul", "ol", "p", "pre", "h1", "h2", "h3", "h4", "h5", "h6"].includes(child.tagName)).map(text).join("");
-  const units = [];
-  function walk(node) {
-    if (tags.has(node.tagName)) {
-      const value = text(node).replace(/\s+/g, " ").trim();
-      if (value) units.push(value);
-    }
-    for (const child of node.childNodes || []) walk(child);
-  }
-  walk(root);
-  return units;
+function domText(node) {
+  return node.nodeName === "#text" ? node.value : (node.childNodes || []).map(domText).join("");
 }
-test("chat and the server render identical visible Markdown units", () => {
+test("checked tree visible text equals rendered DOM text across the server corpus", () => {
   const fixture = JSON.parse(readFileSync(new URL("../../backend/tests/fixtures/chat_markdown.json", import.meta.url), "utf8"));
-  const original = renderToStaticMarkup(<ChatText text={fixture.reply} />);
-  expect(visibleUnits(original)).toEqual(visibleUnits(fixture.raw_server_html));
-  const html = renderToStaticMarkup(<ChatText text={fixture.checked} />);
-  expect(visibleUnits(html)).toEqual(visibleUnits(fixture.server_html));
-  expect(visibleUnits(html)).toEqual(fixture.units);
-  expect(html).toContain("<strong>");
-  expect(html).toContain("<table>");
-  expect(html).toContain("<li>");
-  expect(html).toContain('href="https://example.com/report"');
-  expect(html.match(/unverified number/g)).toHaveLength(1);
-  expect(html).not.toContain("999");
+  for (const sample of fixture.cases) {
+    const html = renderToStaticMarkup(<ChatText tree={sample.tree} />);
+    expect(domText(parseFragment(html))).toBe(sample.visible_text);
+    expect(html).not.toContain("<img");
+    expect(html).not.toContain("<script");
+    expect(html).not.toContain("javascript:");
+    if (sample.name === "image regression") {
+      expect(sample.visible_text).toStartWith("Count [unverified number]");
+      expect(html).not.toContain("12");
+    }
+    if (sample.name === "autolink regression") {
+      expect(html).toContain('href="https://example.com/999"');
+      expect(sample.visible_text).toBe("https://example.com/999");
+    }
+  }
 });
-test("chat skips raw HTML and joins inline children without joining cells", () => {
-  const html = renderToStaticMarkup(<ChatText text={"Count 1**2** &amp; &#49;. <b>Visible</b>\n\n<div>hidden 999</div>\n\n| Left | Right |\n| --- | --- |\n| 12 | 34 |"} />);
-  expect(visibleUnits(html)).toEqual(["Count 12 & 1. Visible", "Left", "Right", "12", "34"]);
-  expect(html).not.toContain("<b>");
-  expect(html).not.toContain("999");
+test("chat renderer treats Markdown and HTML inside text nodes literally", () => {
+  const text = "**bold** &amp; <img src=x onerror=alert(999)>";
+  const html = renderToStaticMarkup(<ChatText tree={[{kind: "paragraph", children: [{kind: "text", text}]}]} />);
+  expect(domText(parseFragment(html))).toBe(text);
+  expect(html).not.toContain("<strong>");
+  expect(html).not.toContain("<img");
 });
 test("overlap notes are visible in metric and generated views", () => {
   const note = "1 entity contributes to more than one group; groups overlap and must not be summed";
