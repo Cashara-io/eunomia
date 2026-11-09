@@ -130,7 +130,10 @@ test("typed objects, server pages, sources, scoped numbers and related objects",
   await expect(
     page.getByRole("row").filter({ hasText: "Basket 31" }),
   ).toContainText("Missing");
-  await page.getByRole("button", { name: "Previous", exact: true }).click();
+  await page.getByLabel("Search objects").fill("Basket 00");
+  await expect(page.getByRole("table").locator("tbody tr")).toHaveCount(1);
+  await page.getByLabel("Search objects").fill("");
+  await expect(page.getByRole("table").locator("tbody tr")).toHaveCount(25);
   await page.getByRole("button", { name: "Price", exact: true }).click();
   await page.getByRole("button", { name: "Price", exact: true }).click();
   await expect(
@@ -165,6 +168,23 @@ test("typed objects, server pages, sources, scoped numbers and related objects",
   await page.getByText("Inspect inputs", { exact: true }).click();
   await expect(page.getByRole("region", { name: "Numbers" })).toContainText(
     "AUD 0.00",
+  );
+  await page
+    .getByRole("button", { name: "Related memories", exact: true })
+    .click();
+  await expect(
+    page.getByText("Review this product before the summer order.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page
+    .getByRole("link", { name: "Open in People & topics", exact: true })
+    .click();
+  await page
+    .getByRole("link", { name: "Open in Ontology", exact: true })
+    .click();
+  await expect(page).toHaveURL(
+    new RegExp(`space=${encodeURIComponent(vault.id)}`),
   );
   await page.getByRole("button", { name: "Links", exact: true }).click();
   await page.getByRole("link", { name: "Basket 01", exact: true }).click();

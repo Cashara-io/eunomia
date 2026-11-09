@@ -4,7 +4,7 @@ use super::Stmt;
 pub const META: Stmt = Stmt::new("objects.meta", r#"
 SELECT * FROM ontology_property WHERE vault = $vault AND kind = $kind AND status = 'approved' ORDER BY name;
 SELECT status FROM ontology_kind WHERE vault = $vault AND kind = $kind;
-SELECT label FROM ontology_link WHERE vault = $vault AND from_kind = $kind AND status = 'approved';
+SELECT label, to_kind FROM ontology_link WHERE vault = $vault AND from_kind = $kind AND status = 'approved';
 "#);
 
 // Candidate identities only. Rust applies typed comparisons before slicing the output page.
@@ -52,14 +52,14 @@ SELECT <string>(id) AS id, title, source, external_id, payload, <string>(updated
     FROM cache_record WHERE id IN $ids AND vault = $vault AND deleted != true;
 "#);
 
-pub const ALL: &[&Stmt] = &[&META, &PAGE, &SOURCES, &HISTORY, &SOURCE_RECORDS, &CURRENT, &SORT_VALUES, &KINDS];
+pub const ALL: &[&Stmt] = &[&META, &PAGE, &SOURCES, &HISTORY, &SOURCE_RECORDS, &CURRENT, &SORT_VALUES, &KINDS, &PAGE_LINKS];
 
 pub const CURRENT: Stmt = Stmt::new("objects.current", r#"
 RETURN array::flatten($props.map(|$p| (
     SELECT <string>(id) AS id, property.name AS property, value_num, value_text, value_bool,
-        (SELECT value_num, value_text, value_bool, value_date, unit FROM entity_property
-            WHERE entity = $parent.entity AND property = $parent.property AND vault = $vault AND as_of = $parent.as_of
-            GROUP BY value_num, value_text, value_bool, value_date, unit LIMIT 2) AS alternatives,
+        array::len(array::distinct((SELECT VALUE {num:value_num, text:value_text, boolean:value_bool,
+            date:value_date, unit:unit ?? property.unit} FROM entity_property
+            WHERE entity = $id AND property = $p AND vault = $vault AND as_of = <datetime>$parent.as_of))) > 1 AS conflicting,
         <string>(value_date) AS value_date, unit, <string>(as_of) AS as_of,
         <string>(created_at) AS recorded_at, <string>(source) AS source
         FROM entity_property WHERE entity = $id AND property = $p AND vault = $vault AND as_of <= time::now()
@@ -77,4 +77,14 @@ RETURN array::concat((SELECT kind, count() AS entities FROM entity WHERE vault =
     {kind:'symbol', entities:(SELECT count() AS n FROM symbol WHERE vault=$vault GROUP ALL)[0].n ?? 0}
 ]);
 SELECT kind, status FROM ontology_kind WHERE vault = $vault ORDER BY kind;
+"#);
+
+// At most twenty displayed names plus a sentinel per row/type, even on a large hub.
+pub const PAGE_LINKS: Stmt = Stmt::new("objects.page_links", r#"
+RETURN array::flatten($ids.map(|$e| array::flatten($labels.map(|$label| (
+    SELECT in AS entity, out AS target, label FROM relates_to
+    WHERE in = $e AND in.vault = $vault AND out.vault = $vault AND label = $label
+        AND string::concat(label, '|', out.kind ?? string::split(<string>out, ':')[0]) IN $allowed
+    ORDER BY target LIMIT 21
+)))));
 "#);

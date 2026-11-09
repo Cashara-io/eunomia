@@ -21,12 +21,15 @@ export default function Objects({ space }: { space: string }) {
     kinds.data?.kinds[0]?.kind ||
     "";
   const query = useObjects(space, params, kind);
-  const [hidden, setHidden] = useState<string[]>([]);
+  const [hidden, setHidden] = useState<string[] | null>(null);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const data = query.data;
   const page = Math.max(1, Number(params.get("page")) || 1);
   const selected = params.get("selected");
-  const columns = data?.columns.filter((c) => !hidden.includes(c.name)) ?? [];
+  const hiddenColumns =
+    hidden ?? data?.columns.slice(3).map((c) => c.name) ?? [];
+  const columns =
+    data?.columns.filter((c) => !hiddenColumns.includes(c.name)) ?? [];
   return (
     <div className="flex flex-col gap-4 min-w-0 text-[13px]">
       {kinds.isError && (
@@ -55,9 +58,10 @@ export default function Objects({ space }: { space: string }) {
               label: words(k.kind),
             }))}
             onChange={(k) => {
-              setHidden([]);
+              setHidden(null);
               update({
                 kind: k,
+                page: "1",
                 selected: "",
                 sort: "",
                 filter: "",
@@ -74,7 +78,7 @@ export default function Objects({ space }: { space: string }) {
             type="search"
             value={params.get("search") ?? ""}
             onChange={(e) =>
-              update({ search: e.target.value, selected: "" }, true)
+              update({ search: e.target.value, selected: "", page: "1" }, true)
             }
           />
         </label>
@@ -93,12 +97,12 @@ export default function Objects({ space }: { space: string }) {
             <label key={c.name} className="flex items-center gap-2">
               <input
                 type="checkbox"
-                checked={!hidden.includes(c.name)}
+                checked={!hiddenColumns.includes(c.name)}
                 onChange={(e) =>
                   setHidden(
                     e.target.checked
-                      ? hidden.filter((n) => n !== c.name)
-                      : [...hidden, c.name],
+                      ? hiddenColumns.filter((n) => n !== c.name)
+                      : [...hiddenColumns, c.name],
                   )
                 }
               />
@@ -215,6 +219,7 @@ export default function Objects({ space }: { space: string }) {
                           className="py-3"
                           onClick={() =>
                             update({
+                              page: "1",
                               sort: c.name,
                               descending: String(
                                 (params.get("sort") ?? "name") === c.name &&
@@ -288,7 +293,21 @@ export default function Objects({ space }: { space: string }) {
                   {data.rows.length === 0 && (
                     <tr>
                       <td colSpan={columns.length + 3} className="p-4">
-                        No objects match these filters.
+                        {data.total === 0 ? (
+                          "No objects match these filters."
+                        ) : (
+                          <>
+                            This page has no objects.{" "}
+                            <button
+                              className="link"
+                              onClick={() =>
+                                update({ page: "1", selected: "" })
+                              }
+                            >
+                              Return to first page
+                            </button>
+                          </>
+                        )}
                       </td>
                     </tr>
                   )}
@@ -300,9 +319,11 @@ export default function Objects({ space }: { space: string }) {
               className="flex flex-wrap justify-between items-center gap-3 mt-4"
             >
               <span className="font-mono">
-                {data.total === 0 ? 0 : data.offset + 1} to{" "}
-                {Math.min(data.offset + data.limit, data.total)} of{" "}
-                {data.total.toLocaleString("en-AU")}
+                {data.rows.length === 0 ? 0 : data.offset + 1} to{" "}
+                {data.rows.length === 0
+                  ? 0
+                  : Math.min(data.offset + data.limit, data.total)}{" "}
+                of {data.total.toLocaleString("en-AU")}
               </span>
               <div className="flex gap-2">
                 <button

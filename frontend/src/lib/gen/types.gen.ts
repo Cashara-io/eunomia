@@ -6704,6 +6704,63 @@ export type DecideVaultOntologyMetricResponses = {
 
 export type DecideVaultOntologyMetricResponse = DecideVaultOntologyMetricResponses[keyof DecideVaultOntologyMetricResponses];
 
+export type ListOntologyObjectsData = {
+    body?: never;
+    path: {
+        vault_id: string;
+    };
+    query?: {
+        kind?: string;
+        search?: string;
+        sort?: string;
+        descending?: boolean;
+        filter?: string;
+        op?: string;
+        value?: string;
+        offset?: number;
+        limit?: number;
+    };
+    url: '/api/vaults/{vault_id}/ontology/objects';
+};
+
+export type ListOntologyObjectsErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type ListOntologyObjectsError = ListOntologyObjectsErrors[keyof ListOntologyObjectsErrors];
+
+export type ListOntologyObjectsResponses = {
+    200: unknown;
+};
+
+export type GetOntologyObjectData = {
+    body?: never;
+    path: {
+        vault_id: string;
+        id: string;
+    };
+    query?: {
+        offset?: number;
+    };
+    url: '/api/vaults/{vault_id}/ontology/objects/{id}';
+};
+
+export type GetOntologyObjectErrors = {
+    /**
+     * Error
+     */
+    default: Problem;
+};
+
+export type GetOntologyObjectError = GetOntologyObjectErrors[keyof GetOntologyObjectErrors];
+
+export type GetOntologyObjectResponses = {
+    200: unknown;
+};
+
 export type DecideVaultOntologyPropertyData = {
     body: PropertyDecideBody;
     path: {

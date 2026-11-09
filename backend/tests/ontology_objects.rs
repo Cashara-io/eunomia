@@ -69,6 +69,9 @@ async fn aggregates_refuse_non_members_and_restricted_credentials() {
         let (status,out)=common::http(&app.router,"GET",&format!("/api/vaults/{vault}/ontology/objects{suffix}"),None,Some(&token),None).await.0;
         assert_eq!(status,403,"{out}");
     }
+    struct ClearMutations;
+    impl Drop for ClearMutations { fn drop(&mut self) {eunomia_backend::isolation::clear_mutations();} }
+    let _clear=ClearMutations;
     eunomia_backend::isolation::mutate("vaults.membership_active", "user = $user", "true");
     for suffix in ["".to_string(),"?kind=product".to_string(),format!("/{}",ids[0])] {
         let (status,out)=common::http(&app.router,"GET",&format!("/api/vaults/{vault}/ontology/objects{suffix}"),None,Some(&token),None).await.0;
@@ -120,8 +123,10 @@ async fn serve_banksia_sized_fixture() {
     }
     let mut text="Product,price,cost,units,margin,release\n".to_string();
     for i in 0..300 {
-        let price=if i==31 {String::new()} else {format!("{:.2}",if i==0 {0.0} else {24.9+(i%17) as f64})};
-        text.push_str(&format!("{},{price},14.90,100,0.25,2026-10-01\n",name(i)));
+        let amount=if i==0 {0.0} else {24.9+(i%17) as f64};
+        let price=if i==31 {String::new()} else {format!("{amount:.2}")};
+        let margin=if i==0 || i==31 {String::new()} else {format!("{:.8}",(amount-14.9)/amount)};
+        text.push_str(&format!("{},{price},14.90,100,{margin},2026-10-01\n",name(i)));
     }
     let csv=app.tool("document_upload",json!({"filename":"banksia-products.csv","vault_id":vault,"text":text})).await;
     let imported=app.tool("document_import_rows",json!({"document_id":csv["id"],"kind":"product","name_column":"Product"})).await;
@@ -164,6 +169,18 @@ async fn typed_dates_and_distinct_property_states_and_record_sources() {
         let out=app.tool("entity_set_property",json!({"entity_id":ids[0],"property":property,"value":value})).await;
         assert!(out.get("error").is_none(),"{out}");
     }
+    let proposed=app.tool("ontology_propose",json!({"vault_id":vault,"properties":[{"kind":"product","name":"units","datatype":"integer"},{"kind":"product","name":"active","datatype":"bool"}]})).await;
+    assert!(proposed.get("error").is_none(),"{proposed}");
+    for name in ["units","active"] {
+        assert_eq!(app.http_session("POST",&format!("/api/vaults/{vault}/ontology/properties/decide"),Some(json!({"kind":"product","name":name,"decision":{"action":"approve"}}))).await.0,200);
+    }
+    for (entity,property,value) in [(&ids[0],"units",json!(0)),(&ids[1],"units",json!(12)),(&ids[0],"active",json!(false)),(&ids[1],"active",json!(true))] {
+        let out=app.tool("entity_set_property",json!({"entity_id":entity,"property":property,"value":value})).await;
+        assert!(out.get("error").is_none(),"{out}");
+    }
+    for query in ["?kind=product&filter=units&op=eq&value=0","?kind=product&filter=units&op=eq&value=12","?kind=product&filter=active&op=eq&value=false"] {
+        assert_eq!(get(&app,&vault,query).await["total"],1,"{query}");
+    }
     let date=get(&app,&vault,"?kind=product&filter=release&op=eq&value=2026-10-01").await;
     assert_eq!(date["total"],1);
     assert_eq!(date["rows"][0]["values"]["release"]["value"],"2026-10-01");
@@ -177,11 +194,20 @@ async fn typed_dates_and_distinct_property_states_and_record_sources() {
     let price=profile["properties"].as_array().unwrap().iter().find(|p|p["name"]=="price").unwrap();
     assert_eq!(price["state"],"stale");
     assert_eq!(profile["sources"][0]["record"]["payload"]["row"],2);
+    db.test_raw().query("UPDATE cache_record:proof SET title='';").await.unwrap().check().unwrap();
+    let untitled=get(&app,&vault,&format!("/{}",ids[0])).await;
+    let source=untitled["properties"].as_array().unwrap().iter().find(|p|p["name"]=="price").unwrap();
+    assert_eq!(source["source_label"],"product-00");
+    assert_eq!(source["source_state"],"available");
     let directory=get(&app,&vault,"?kind=product&search=Product%2000").await;
     assert_eq!(directory["rows"][0]["source_count"],1);
     db.test_raw().query("UPDATE cache_record:proof SET updated_at=d'2026-04-01T00:00:00Z';").await.unwrap().check().unwrap();
     let historical=get(&app,&vault,&format!("/{}",ids[0])).await;
     assert_eq!(historical["properties"].as_array().unwrap().iter().find(|p|p["name"]=="price").unwrap()["state"],"recorded","an old as-of time alone does not make a freshly recorded historical value stale");
+    db.test_raw().query("LET $p=(SELECT VALUE id FROM ontology_property WHERE vault=$vault AND name='price')[0]; CREATE entity_property:agreement SET vault=$vault,entity=$entity,property=$p,value_num=0,as_of=d'2026-01-01T00:00:00Z',origin='agent';")
+        .bind(("vault",v.clone())).bind(("entity",entity.clone())).await.unwrap().check().unwrap();
+    let agreement=get(&app,&vault,&format!("/{}",ids[0])).await;
+    assert_eq!(agreement["properties"].as_array().unwrap().iter().find(|p|p["name"]=="price").unwrap()["state"],"recorded","an inherited AUD unit agrees with an explicit AUD unit");
     db.test_raw().query("LET $p=(SELECT VALUE id FROM ontology_property WHERE vault=$vault AND name='price')[0]; CREATE entity_property:conflict SET vault=$vault,entity=$entity,property=$p,value_num=99,as_of=d'2026-01-01T00:00:00Z',origin='agent';")
         .bind(("vault",v.clone())).bind(("entity",entity.clone())).await.unwrap().check().unwrap();
     db.test_raw().query("LET $p=(SELECT VALUE id FROM ontology_property WHERE vault=$vault AND name='price')[0]; CREATE entity_property:conflict_same SET vault=$vault,entity=$entity,property=$p,value_num=99,as_of=d'2026-01-01T00:00:00Z',origin='agent';")
@@ -192,4 +218,39 @@ async fn typed_dates_and_distinct_property_states_and_record_sources() {
         .bind(("vault",v)).bind(("entity",entity)).await.unwrap().check().unwrap();
     let profile=get(&app,&vault,&format!("/{}",ids[0])).await;
     assert_eq!(profile["properties"].as_array().unwrap().iter().find(|p|p["name"]=="price").unwrap()["state"],"unavailable");
+}
+
+#[tokio::test]
+async fn named_link_columns_deduplicate_labels_and_honour_approved_target_kinds() {
+    let app=TestApp::new().await;
+    let (vault,ids)=fixture(&app).await;
+    let out=app.tool("ontology_propose",json!({"vault_id":vault,"kinds":[{"kind":"supplier"}],"links":[
+        {"from_kind":"product","label":"supplied_by","to_kind":"supplier"},
+        {"from_kind":"product","label":"supplied_by","to_kind":"organisation"}
+    ]})).await;
+    assert!(out.get("error").is_none(),"{out}");
+    for kind in ["supplier","organisation"] {
+        assert_eq!(app.http_session("POST",&format!("/api/vaults/{vault}/ontology/kinds/decide"),Some(json!({"kind":kind,"decision":{"action":"approve"}}))).await.0,200);
+        let (status,out)=app.http_session("POST",&format!("/api/vaults/{vault}/ontology/links/decide"),Some(json!({"from_kind":"product","label":"supplied_by","to_kind":kind,"decision":{"action":"approve"}}))).await;
+        assert_eq!(status,200,"{out}");
+    }
+    let db=app.db().await;
+    for (kind,name) in [("supplier","Fixture supplier"),("organisation","Fixture organisation"),("unmodelled","Unapproved target kind")] {
+        let (status,target)=app.http("POST","/api/entities",Some(json!({"kind":kind,"name":name,"vault_id":vault})),true).await;
+        assert_eq!(status,200,"{target}");
+        db.test_raw().query("RELATE $from->relates_to->$to SET label='supplied_by',owner=$owner;")
+            .bind(("from",eunomia_backend::rid::parse(&ids[0]).unwrap())).bind(("to",eunomia_backend::rid::parse(target["id"].as_str().unwrap()).unwrap()))
+            .bind(("owner",app.user.id.clone())).await.unwrap().check().unwrap();
+    }
+    let list=get(&app,&vault,"?kind=product&search=Product%2000").await;
+    assert_eq!(list["columns"].as_array().unwrap().iter().filter(|c|c["name"]=="link:supplied_by").count(),1);
+    let names=list["rows"][0]["values"]["link:supplied_by"]["value"].as_str().unwrap();
+    assert!(names.contains("Fixture supplier") && names.contains("Fixture organisation"),"{names}");
+    assert!(!names.contains("Unapproved target kind"));
+    db.test_raw().query("FOR $i IN 0..5002 { LET $to=type::record('entity',string::concat('hub_supplier_',<string>$i)); CREATE $to SET vault=$vault,owner=$owner,kind='supplier',name=string::concat('Hub supplier ',<string>$i),aliases=[],summary=''; RELATE $from->relates_to->$to SET label='supplied_by',owner=$owner; };")
+        .bind(("vault",eunomia_backend::rid::parse(&vault).unwrap())).bind(("owner",app.user.id.clone())).bind(("from",eunomia_backend::rid::parse(&ids[0]).unwrap())).await.unwrap().check().unwrap();
+    let hub=get(&app,&vault,"?kind=product&search=Product%2000").await;
+    let cell=hub["rows"][0]["values"]["link:supplied_by"]["value"].as_str().unwrap();
+    assert!(cell.contains("More links in profile"),"large hubs must disclose bounded names");
+    assert!(cell.len()<1500,"the directory must not return every hub target");
 }

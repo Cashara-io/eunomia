@@ -213,7 +213,9 @@ export default function ObjectProfile({
                           <span className="font-mono">
                             {n.result.run.n_entities}
                           </span>{" "}
-                          contributing objects.
+                          {n.result.run.n_entities === 1
+                            ? "contributing object."
+                            : "contributing objects."}
                         </p>
                         <p>{n.result.run.expr_words}</p>
                         <p className="font-mono text-xs">

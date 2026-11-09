@@ -27,9 +27,14 @@ struct SortValue {
     value_num: Option<f64>, value_text: Option<String>, value_bool: Option<bool>, value_date: Option<surrealdb::types::Datetime>,
 }
 impl SortValue {
-    fn value(&self) -> Value {
-        self.value_num.map(|n|json!(n)).or_else(||self.value_text.clone().map(Value::String))
-            .or_else(||self.value_bool.map(Value::Bool)).or_else(||self.value_date.map(|d|json!(d.into_inner().to_rfc3339_opts(chrono::SecondsFormat::AutoSi,true)))).unwrap_or(Value::Null)
+    fn value(&self, datatype:&str) -> Value {
+        match datatype {
+            "number"|"integer"|"money"|"percent"=>self.value_num.map(|n|json!(n)),
+            "bool"=>self.value_bool.map(Value::Bool),
+            "date"|"datetime"=>self.value_date.map(|d|json!(d.into_inner().to_rfc3339_opts(chrono::SecondsFormat::AutoSi,true))),
+            "text"|"enum"=>self.value_text.clone().map(Value::String),
+            _=>None,
+        }.unwrap_or(Value::Null)
     }
 }
 fn compare(a:&Value,b:&Value) -> std::cmp::Ordering {
@@ -41,18 +46,18 @@ fn compare(a:&Value,b:&Value) -> std::cmp::Ordering {
     }
 }
 #[derive(Deserialize, SurrealValue)]
-struct LinkMeta { label: String }
+struct LinkMeta { label: String, to_kind: String }
 #[derive(Deserialize, SurrealValue)]
 struct SourceRow { entity: RecordId, sources: Vec<RecordId> }
 #[derive(Serialize)]
 pub struct Column { name: String, datatype: String, unit: Option<String> }
 
-async fn metadata(db: &OrgDb, vault: &RecordId, kind: &str) -> AppResult<(Vec<PropertyRow>, bool, Vec<String>)> {
+async fn metadata(db: &OrgDb, vault: &RecordId, kind: &str) -> AppResult<(Vec<PropertyRow>, bool, Vec<LinkMeta>)> {
     let mut res = q::META.on(db).bind(("vault", vault.clone())).bind(("kind", kind.to_string())).await?;
     let props = res.take(0)?;
     let kinds: Vec<Value> = res.take(1)?;
     let links: Vec<LinkMeta> = res.take(2)?;
-    Ok((props, kinds.iter().any(|k| k["status"] == "approved"), links.into_iter().map(|l|l.label).collect()))
+    Ok((props, kinds.iter().any(|k| k["status"] == "approved"), links))
 }
 fn column(p: &PropertyRow) -> Column { Column { name: p.name.clone(), datatype: p.datatype.clone(), unit: p.unit.clone() } }
 
@@ -72,10 +77,11 @@ pub async fn list(db: &OrgDb, user: &RecordId, vault: &RecordId, args: &ListArgs
     let kind = Kind::parse(&args.kind)?;
     let table = crate::entities::service::kind_table(kind.as_str())?;
     let limit = args.limit.unwrap_or(25);
-    if !(1..=100).contains(&limit) || args.offset > 1_000_000 || args.search.as_ref().is_some_and(|s| s.len() > 200) {
+    if !(1..=100).contains(&limit) || args.offset > 1_000_000 || args.search.as_ref().is_some_and(|s| s.chars().count() > 200) {
         return Err(AppError::bad_request("use 1 to 100 rows, an offset below 1000000 and a search below 200 characters"));
     }
-    let (props, approved, labels) = metadata(db, &vault, kind.as_str()).await?;
+    let (props, approved, link_types) = metadata(db, &vault, kind.as_str()).await?;
+    let labels:Vec<_>=link_types.iter().map(|l|l.label.clone()).collect::<BTreeSet<_>>().into_iter().collect();
     let find = |name: &str| props.iter().find(|p| p.name == name).ok_or_else(|| AppError::bad_request("choose an approved property"));
     let sort = args.sort.as_deref().unwrap_or("name");
     let sort_property = if sort == "name" { None } else { Some(find(sort)?.id.clone()) };
@@ -99,13 +105,18 @@ pub async fn list(db: &OrgDb, user: &RecordId, vault: &RecordId, args: &ListArgs
         q::SORT_VALUES.on(db).bind(("vault",vault.clone())).bind(("props",needed)).await?.take(0)?
     };
     let mut latest: HashMap<(String,String),Value> = HashMap::new();
-    for v in sort_values { latest.entry((v.entity.to_string(),v.property.to_string())).or_insert_with(||v.value()); }
+    let types:HashMap<_,_>=props.iter().map(|p|(p.id.to_string(),p.datatype.as_str())).collect();
+    for v in sort_values {
+        let property=v.property.to_string();
+        let value=v.value(types.get(&property).copied().unwrap_or(""));
+        latest.entry((v.entity.to_string(),property)).or_insert(value);
+    }
     let get = |id:&RecordId,p:&RecordId|latest.get(&(id.to_string(),p.to_string())).cloned().unwrap_or(Value::Null);
     let search = args.search.as_deref().unwrap_or("").to_lowercase();
     rows.retain(|r| {
         if !r.name.to_lowercase().contains(&search) {return false;}
         let v=filter.map(|p|get(&r.id,&p.id)).unwrap_or(Value::Null);
-        match op { ""=>true,"missing"=>v.is_null(),"eq"=>v==value,"gte"=>!v.is_null()&&compare(&v,&value).is_ge(),"lte"=>!v.is_null()&&compare(&v,&value).is_le(),_=>false }
+        match op { ""=>true,"missing"=>v.is_null(),"eq"=>!v.is_null()&&compare(&v,&value).is_eq(),"gte"=>!v.is_null()&&compare(&v,&value).is_ge(),"lte"=>!v.is_null()&&compare(&v,&value).is_le(),_=>false }
     });
     let mut keyed: Vec<_> = rows.into_iter().map(|r| {
         let id=r.id.to_string();
@@ -125,9 +136,8 @@ pub async fn list(db: &OrgDb, user: &RecordId, vault: &RecordId, args: &ListArgs
     let sources: BTreeMap<String, usize> = sources.into_iter().map(|r| (r.entity.to_string(), r.sources.len())).collect();
     #[derive(Deserialize, SurrealValue)]
     struct LinkValue { entity: RecordId, target: RecordId, label: String }
-    let links: Vec<LinkValue> = crate::store::ontology::UI_LINKS.on(db).bind(("vault",vault.clone()))
-        .bind(("ids",rows.iter().map(|r|r.id.clone()).collect::<Vec<_>>())).bind(("labels",labels.clone())).await?.take(0)?;
-    if links.len() > 5000 { return Err(AppError::bad_request("too many link values for one page; reduce the page size")); }
+    let links: Vec<LinkValue> = q::PAGE_LINKS.on(db).bind(("vault",vault.clone()))
+        .bind(("ids",rows.iter().map(|r|r.id.clone()).collect::<Vec<_>>())).bind(("labels",labels.clone())).bind(("allowed",link_types.iter().map(|t|format!("{}|{}",t.label,t.to_kind)).collect::<Vec<_>>())).await?.take(0)?;
     let targets = crate::entities::neighbourhood::load_nodes(db,links.iter().map(|l|l.target.clone()).collect()).await?;
     let mut columns: Vec<Column> = props.iter().map(column).collect();
     columns.extend(labels.iter().map(|l|Column {name:format!("link:{l}"),datatype:"link".into(),unit:None}));
@@ -140,9 +150,11 @@ pub async fn list(db: &OrgDb, user: &RecordId, vault: &RecordId, args: &ListArgs
             (p.name.clone(), json!({"value":v,"unit":h.and_then(|h|h.unit.clone()).or_else(||p.unit.clone())}))
         }).collect();
         for label in &labels {
-            let names: Vec<_> = links.iter().filter(|l|l.entity.to_string()==id && &l.label==label)
-                .filter_map(|l|targets.get(&l.target.to_string())).filter(|n|n.vault==vault).map(|n|n.name.clone()).collect();
-            cells.insert(format!("link:{label}"),json!({"value":if names.is_empty(){None}else{Some(names.join(", "))},"unit":null}));
+            let matches:Vec<_>=links.iter().filter(|l|l.entity.to_string()==id && &l.label==label).collect();
+            let names:Vec<_>=matches.iter().take(20).filter_map(|l|targets.get(&l.target.to_string()))
+                .filter(|n|n.vault==vault && link_types.iter().any(|t|t.label==*label && t.to_kind==n.kind())).map(|n|n.name.clone()).collect();
+            let text=if names.is_empty(){None}else{Some(format!("{}{}",names.join(", "),if matches.len()>20 {" · More links in profile"}else{""}))};
+            cells.insert(format!("link:{label}"),json!({"value":text,"unit":null}));
         }
         json!({"id":id,"name":r.name,"values":cells,"source_count":sources.get(&id).copied().unwrap_or(0)})
     }).collect();
@@ -175,7 +187,7 @@ pub async fn profile(state: &OrgState, user: &RecordId, vault: &RecordId, id: &R
             "date"|"datetime"=> if v["value_date"] == "NONE" { Value::Null } else {v["value_date"].clone()},
             _=>v["value_text"].clone(),
         }).unwrap_or(Value::Null);
-        let conflicting = v.and_then(|v|v["alternatives"].as_array()).is_some_and(|values|values.len()>1);
+        let conflicting = v.is_some_and(|v|v["conflicting"] == true);
         let source = v.and_then(|v|v["source"].as_str()).filter(|s|*s!="NONE" && !s.is_empty());
         let state = if v.is_none() {"missing"} else if conflicting {"conflicting"} else if value.is_null() {"unavailable"} else {"recorded"};
         json!({"name":p.name,"datatype":p.datatype,"unit":v.and_then(|v|v["unit"].as_str()).map(String::from).or_else(||p.unit.clone()),"value":value,"as_of":v.map(|v|&v["as_of"]),"recorded_at":v.map(|v|&v["recorded_at"]),"source":source,"state":state})
@@ -214,7 +226,10 @@ pub async fn profile(state: &OrgState, user: &RecordId, vault: &RecordId, id: &R
         p["source_label"] = source.map(|s| {
             if let Some(filename)=s["document"]["filename"].as_str() {
                 match s["document"]["row"]["line"].as_u64() {Some(line)=>json!(format!("{filename}, row {line}")),None=>json!(filename)}
-            } else { s["record"]["title"].as_str().filter(|s|!s.is_empty()).map(|s|json!(s)).unwrap_or(json!("Source unavailable")) }
+            } else {
+                let label=s["record"]["title"].as_str().filter(|s|!s.is_empty()).or_else(||s["record"]["external_id"].as_str().filter(|s|!s.is_empty()));
+                label.map(|s|json!(s)).unwrap_or_else(||if s["state"]=="available" {json!("Inspect source")}else{json!("Source unavailable")})
+            }
         }).unwrap_or(json!("Source not recorded"));
         if p["state"] != "recorded" { continue; }
         if let Some(record) = sources.iter().find(|s|s["id"]==p["source"]).and_then(|s|s["record"].as_object()) {
@@ -230,8 +245,11 @@ pub async fn profile(state: &OrgState, user: &RecordId, vault: &RecordId, id: &R
         let run = match metric::eval_object(&state.db, &vault, &args, id).await {
             Ok(mut run)=>{
                 let warnings:Vec<_> = properties.iter().filter(|p|run["input_properties"].as_array().is_some_and(|names|names.contains(&p["name"])))
-                    .filter(|p|p["state"]!="recorded" && p["state"]!="missing")
-                    .map(|p|json!(format!("Input {} is {}. Inspect its sources before relying on this result.",p["name"].as_str().unwrap_or("property"),p["state"].as_str().unwrap_or("unavailable")))).collect();
+                    .filter(|p|(p["state"]!="recorded" && p["state"]!="missing") || p["source_state"]=="unavailable")
+                    .map(|p| {
+                        let state=if p["source_state"]=="unavailable" {"recorded with an unavailable source"}else{p["state"].as_str().unwrap_or("unavailable")};
+                        json!(format!("Input {} is {state}. Inspect its sources before relying on this result.",p["name"].as_str().unwrap_or("property")))
+                    }).collect();
                 if let Some(out)=run["warnings"].as_array_mut(){out.extend(warnings);}
                 json!({"run":run})
             },Err(e)=>json!({"unavailable":e.message})
