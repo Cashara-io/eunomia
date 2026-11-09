@@ -31,6 +31,7 @@ pub mod extensions;
 pub mod integrity;
 pub mod jobs;
 pub mod ontology;
+pub mod objects;
 pub mod peers;
 pub mod redact;
 pub mod routing;
@@ -320,7 +321,7 @@ pub fn crossing_table(sql: &str, in_org: bool) -> Option<String> {
 
 /// Every static tenant statement, for the `every_query_executes` test.
 pub fn all() -> Vec<&'static Stmt> {
-    [diagnostics::ALL, app::ALL, cache::ALL, changes::ALL, documents::ALL, entities::ALL, extensions::ALL, integrity::ALL, jobs::ALL, ontology::ALL, peers::ALL, redact::ALL, routing::ALL, secret_requests::ALL, secrets::ALL, skills::ALL, vaults::ALL].concat()
+    [diagnostics::ALL, app::ALL, cache::ALL, changes::ALL, documents::ALL, entities::ALL, extensions::ALL, integrity::ALL, jobs::ALL, ontology::ALL, objects::ALL, peers::ALL, redact::ALL, routing::ALL, secret_requests::ALL, secrets::ALL, skills::ALL, vaults::ALL].concat()
 }
 
 /// Every static control statement.

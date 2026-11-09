@@ -32,6 +32,8 @@ class Decimal {
     return sign + (scale === 0 ? digits : `${digits.slice(0, -scale)}.${digits.slice(-scale)}`);
   }
 
+  percent(): Decimal { return Decimal.normalise(this.negative, this.digits + "0".repeat(Math.max(0, 2 - this.scale)), Math.max(0, this.scale - 2)); }
+
   exact(): string { return this.render(this.digits, this.scale); }
 
   fixed(places: number): string {
@@ -74,6 +76,23 @@ export function formatNumber(value: number | null, unit: string | null | undefin
 
 export const withUnit = (value: number | null, unit: string | null | undefined) =>
   isPercent(unit) ? `${formatNumber(value, unit)}%` : `${formatNumber(value, unit)}${unit ? ` ${unit}` : ""}`;
+
+/** Fixed column precision. Ontology percent storage is a ratio; metric % is already points. */
+export function formatPropertyNumber(value: number, datatype: string, unit: string | null): string {
+  if (!Number.isFinite(value)) return "Unavailable";
+  const decimal = Decimal.from(value);
+  if (datatype === "percent") {
+    // Shift decimal digits, rather than multiplying a binary float before rounding.
+    const points = decimal.percent();
+    return `${points.fixed(2)}%`;
+  }
+  if (datatype === "money") {
+    const places = value !== 0 && Math.abs(value) < 0.01 ? Math.max(2, decimal.significantPlaces) : 2;
+    return `${unit || "Currency not recorded"} ${decimal.fixed(places)}`;
+  }
+  const amount = datatype === "integer" ? fixed(value, 0) : decimal.fixed(2);
+  return `${amount}${unit ? ` ${unit}` : ""}`;
+}
 
 export function formatScenario(before: number | null, after: number | null, pct: number | null, unit: string | null) {
   before = before != null && Number.isFinite(before) ? before : null;

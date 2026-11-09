@@ -67,12 +67,12 @@ export default function KindDetail({
       </Link>
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <h2 className="text-[22px] font-medium">{words(kind)}</h2>
-        <span className="text-[13px]">
+        <Link className="link text-[13px]" href={twinHref("/ontology/objects", vault.id, { kind })}>
           <span className="font-mono">
             {item.entities.toLocaleString("en-AU")}
           </span>{" "}
           objects
-        </span>
+        </Link>
       </div>
       <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
         {item.description || "No definition recorded."}

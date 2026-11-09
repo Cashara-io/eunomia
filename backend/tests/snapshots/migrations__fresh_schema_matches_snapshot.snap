@@ -1,5 +1,6 @@
 ---
 source: tests/migrations.rs
+assertion_line: 47
 expression: info(&db).await
 ---
 {
@@ -397,6 +398,16 @@ expression: info(&db).await
           "cols": [
             "vault",
             "kind",
+            "name"
+          ],
+          "index": "",
+          "name": "entity_vault_kind_name_idx",
+          "table": "entity"
+        },
+        {
+          "cols": [
+            "vault",
+            "kind",
             "name_key"
           ],
           "index": "UNIQUE",
@@ -430,6 +441,16 @@ expression: info(&db).await
       "indexes": [
         {
           "cols": [
+            "property",
+            "value_bool",
+            "entity"
+          ],
+          "index": "",
+          "name": "entity_property_bool_page_idx",
+          "table": "entity_property"
+        },
+        {
+          "cols": [
             "entity",
             "property",
             "as_of"
@@ -440,10 +461,30 @@ expression: info(&db).await
         },
         {
           "cols": [
+            "property",
+            "value_num",
+            "entity"
+          ],
+          "index": "",
+          "name": "entity_property_num_page_idx",
+          "table": "entity_property"
+        },
+        {
+          "cols": [
             "property"
           ],
           "index": "",
           "name": "entity_property_property_idx",
+          "table": "entity_property"
+        },
+        {
+          "cols": [
+            "property",
+            "value_text",
+            "entity"
+          ],
+          "index": "",
+          "name": "entity_property_text_page_idx",
           "table": "entity_property"
         }
       ]
