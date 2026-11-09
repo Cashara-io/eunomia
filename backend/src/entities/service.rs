@@ -1294,16 +1294,17 @@ pub async fn delete_entity(db: &OrgDb, owner: &RecordId, entity_id: &RecordId) -
     Ok(true)
 }
 
-/// Merge `loser_id` into `winner_id` -- for two entities of the same `kind`
-/// that turned out to be duplicates. Reassigns the loser's `memory` rows and
+/// Merge duplicate entities of the same kind, or an owner-approved built-in-to-custom correction.
+/// Reassigns the loser's `memory` rows and
 /// `relates_to` edges (both directions) to the winner, adds the loser's name
 /// and aliases as aliases of the winner, then deletes the loser, all in one
 /// transaction ([`merge_rows`]). If both had an observation they become one
 /// stale observation, rebuilt on the next consolidation. Returns the winner's
 /// row after the merge.
 ///
-/// Errors (400) if the two ids are the same, of different kinds or vaults, or not
-/// found / `owner` isn't a member of either one's vault.
+/// Errors (400) if the two ids are the same, of incompatible kinds or different vaults, or not
+/// found / `owner` isn't a member of either one's vault. Cross-kind corrections require every typed
+/// value to map to an approved target property of the same name, datatype and unit.
 pub async fn merge_entities(
     db: &OrgDb,
     owner: &RecordId,
@@ -1334,7 +1335,10 @@ pub async fn merge_entities(
         if !cross_kind { return Err(AppError::bad_request(format!("cannot merge entities of different kinds: {:?} vs {:?}", winner.kind(), loser.kind()))); }
     }
 
-    merge_rows(db, winner_id, loser_id, loser_names(&loser)).await?;
+    if winner.kind() != loser.kind() {
+        crate::ontology::property::validate_merge_values(db, &winner.vault, &winner.kind(), loser_id).await?;
+    }
+    merge_rows(db, winner_id, loser_id, loser_names(&loser), (winner.kind() != loser.kind()).then(|| winner.kind())).await?;
     changes::record(db, &winner.vault, changes::MERGED, changes::ENTITY, loser_id).await;
     changes::record(db, &winner.vault, changes::UPDATED, changes::ENTITY, winner_id).await;
     let winner = select_entity(db, winner_id).await?.ok_or_else(|| AppError::internal("winner vanished during merge"))?;
@@ -1346,21 +1350,22 @@ fn loser_names(loser: &EntityRow) -> Vec<String> {
     std::iter::once(&loser.name).chain(&loser.aliases).filter(|n| !n.is_empty()).cloned().collect()
 }
 
-/// Moves everything of `loser` onto `winner` (same kind and vault, already checked) and deletes
+/// Moves everything of `loser` onto `winner` (compatible kinds and same vault, checked) and deletes
 /// `loser`, in ONE transaction (see [`q::MERGE_ENTITIES`]): any failing statement rolls all of it
 /// back, so a merge never half-happens. Retried on a commit conflict with a concurrent write.
-async fn merge_rows(db: &OrgDb, winner: &RecordId, loser: &RecordId, add_aliases: Vec<String>) -> AppResult<()> {
+async fn merge_rows(db: &OrgDb, winner: &RecordId, loser: &RecordId, add_aliases: Vec<String>, target_kind: Option<String>) -> AppResult<()> {
     with_retry(|| async {
         q::MERGE_ENTITIES
             .on(db)
             .bind(("winner", winner.clone()))
             .bind(("loser", loser.clone()))
             .bind(("aliases", add_aliases.clone()))
+            .bind(("target_kind", target_kind.clone()))
             .await?
             .check()
     })
     .await?;
-    crate::ontology::property::move_values(db, winner, loser).await
+    Ok(())
 }
 
 /// An entity's row plus its `memory` entries and `relates_to` edges in both

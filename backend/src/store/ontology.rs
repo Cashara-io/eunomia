@@ -369,8 +369,9 @@ pub const VALUES_OF: Stmt = Stmt::new(
 /// A deleted entity's values go with it.
 pub const DELETE_VALUES_OF: Stmt = Stmt::new("ontology.delete_values_of", "DELETE entity_property WHERE entity = $id");
 
-/// A merged-away entity's values move to the entity it was merged into.
-pub const MOVE_VALUES: Stmt = Stmt::new("ontology.move_values", "UPDATE entity_property SET entity = $winner WHERE entity = $loser");
+/// Every typed value of a merge loser, including properties that are no longer approved.
+pub const MERGE_VALUE_PROPERTIES: Stmt = Stmt::new("ontology.merge_value_properties",
+    "SELECT property AS id, property.name AS name, property.datatype AS datatype, property.unit AS property_unit, unit, value_text FROM entity_property WHERE entity = $loser");
 
 /// The metric rows of `$vault`, by kind and name.
 pub const METRICS: Stmt = Stmt::new("ontology.metrics", "SELECT * FROM ontology_metric WHERE vault = $vault ORDER BY kind, name");
@@ -695,7 +696,7 @@ pub const ALL: &[&Stmt] = &[
     &SET_VALUE,
     &VALUES_OF,
     &DELETE_VALUES_OF,
-    &MOVE_VALUES,
+    &MERGE_VALUE_PROPERTIES,
     &METRICS,
     &METRIC,
     &METRICS_NAMED,

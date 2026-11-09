@@ -911,15 +911,32 @@ pub async fn delete_values_of(db: &OrgDb, entity: &RecordId) -> AppResult<()> {
     }
 }
 
-/// Moves a merged-away entity's values onto the entity it was merged into.
-pub async fn move_values(db: &OrgDb, winner: &RecordId, loser: &RecordId) -> AppResult<()> {
-    match q::MOVE_VALUES.on(db).bind(("winner", winner.clone())).bind(("loser", loser.clone())).await {
-        Err(e) if no_ontology_table(&e) => Ok(()),
-        res => {
-            res?.check()?;
-            Ok(())
-        }
+/// Refuse a cross-kind merge before changing anything, listing every property that cannot move.
+/// The transaction rechecks these constraints so concurrent schema edits cannot invalidate the plan.
+pub(crate) async fn validate_merge_values(db: &OrgDb, vault: &RecordId, target_kind: &str, loser: &RecordId) -> AppResult<()> {
+    #[derive(Deserialize, SurrealValue)]
+    struct MergeValue {
+        id: RecordId,
+        name: Option<String>,
+        datatype: Option<String>,
+        property_unit: Option<String>,
+        unit: Option<String>,
+        value_text: Option<String>,
     }
+    let values: Vec<MergeValue> = q::MERGE_VALUE_PROPERTIES.on(db).bind(("loser", loser.clone())).await?.take(0)?;
+    let targets: Vec<PropertyRow> = q::PROPERTIES_OF_KIND.on(db).bind(("vault", vault.clone())).bind(("kind", target_kind.to_string())).await?.take(0)?;
+    let mut unmappable = std::collections::BTreeSet::new();
+    for v in values {
+        let compatible = targets.iter().any(|t| t.status == "approved" && Some(&t.name) == v.name.as_ref()
+            && Some(&t.datatype) == v.datatype.as_ref() && t.unit == v.property_unit
+            && v.unit.as_ref().is_none_or(|u| Some(u) == t.unit.as_ref())
+            && (t.datatype != "enum" || v.value_text.as_ref().is_some_and(|value| t.enum_values.as_ref().is_some_and(|options| options.contains(value)))));
+        if !compatible { unmappable.insert(v.name.unwrap_or_else(|| v.id.to_string())); }
+    }
+    if !unmappable.is_empty() {
+        return Err(AppError::bad_request(format!("cannot merge: unmappable properties: {}", unmappable.into_iter().collect::<Vec<_>>().join(", "))));
+    }
+    Ok(())
 }
 
 #[cfg(test)]

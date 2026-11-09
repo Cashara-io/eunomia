@@ -4150,6 +4150,34 @@ async fn review209_extraction_keeps_person_and_store_jordan_separate() {
 }
 
 #[tokio::test]
+async fn review209_cross_kind_merge_maps_typed_values_or_refuses_without_changes() {
+    for target in [Some(("money", "AUD")), None, Some(("number", "AUD")), Some(("money", "USD"))] {
+        let app = TestApp::new().await;
+        let vault = personal(&app).await;
+        let mut properties = vec![json!({"kind":"organisation","name":"turnover","datatype":"money","unit":"AUD"})];
+        if let Some((datatype, unit)) = target { properties.push(json!({"kind":"store","name":"turnover","datatype":datatype,"unit":unit})); }
+        ok(app.tool("ontology_propose", json!({"kinds":[{"kind":"store"}],"properties":properties,"metrics": if target.is_some() { json!([{ "kind":"store","name":"total_turnover","expr":{"agg":"sum","property":"turnover"},"unit":"AUD"}]) } else { json!([]) }})).await);
+        assert_eq!(decide_kind(&app, &vault, "store", json!({"action":"approve"})).await.0, 200);
+        assert_eq!(decide_property(&app, &vault, "organisation", "turnover", json!({"action":"approve"})).await.0, 200);
+        if target.is_some() { assert_eq!(decide_property(&app, &vault, "store", "turnover", json!({"action":"approve"})).await.0, 200); }
+        let store = write(&app, "Jordan", "store").await["entity"]["id"].clone();
+        let org = write(&app, "Jordan old", "organisation").await["entity"]["id"].clone();
+        ok(app.tool("entity_set_property", json!({"entity_id":org,"property":"turnover","value":1250})).await);
+        let merged = app.tool("entity_merge", json!({"winner_id":store,"loser_id":org})).await;
+        if target != Some(("money", "AUD")) {
+            assert!(merged.to_string().contains("unmappable") && merged.to_string().contains("turnover"), "{merged}");
+            let got = ok(app.tool("entities_get", json!({"id":org})).await);
+            assert_eq!(got["properties"][0]["value"], 1250.0);
+        } else {
+            ok(merged);
+            assert_eq!(decide_metric(&app, &vault, "store", "total_turnover", json!({"action":"approve"})).await.0, 200);
+            let got = ok(app.tool("metric_eval", json!({"metric":"total_turnover"})).await);
+            assert_eq!(got["value"], 1250.0, "{got}");
+        }
+    }
+}
+
+#[tokio::test]
 async fn review209_ambiguous_custom_alias_creates_an_entity_for_review() {
     let answer = json!({"other":[{"kind":"store","name":"Jordan","facts":["Jordan sells groceries"]}]});
     let mock = serve(vec![route("POST", "/chat/completions", json!({"choices":[{"message":{"content":answer.to_string()}}]}))]).await;
