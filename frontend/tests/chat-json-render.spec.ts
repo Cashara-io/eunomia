@@ -180,7 +180,7 @@ function fixture(kind: string, state = "full") {
               "Area",
             ].includes(kind)
               ? { series: ["value", "other"] }
-              : {}),
+              : { series: ["value"] }),
           };
   const resolved =
     state === "empty"
@@ -336,6 +336,18 @@ for (const theme of ["light", "dark"])
           svg.locator("path,rect,circle,line").first(),
         ).toBeAttached();
       }
+      const focusedMark = page.locator('svg[data-chart="Bar"] [data-chart-mark]').first();
+      const hoveredMark = page.locator('svg[data-chart="Line"] [data-chart-mark]').first();
+      await focusedMark.focus();
+      await expect(page.getByRole("tooltip")).toHaveCount(1);
+      await hoverMark(page, hoveredMark);
+      await expect(page.getByRole("tooltip")).toHaveCount(1);
+      await expect(page.getByRole("tooltip")).toHaveText(await hoveredMark.getAttribute("aria-label") || "");
+      // A late blur from the old owner must not close the new owner's tooltip.
+      await focusedMark.blur();
+      await expect(page.getByRole("tooltip")).toHaveCount(1);
+      await page.mouse.move(0, 0);
+      await expect(page.getByRole("tooltip")).toHaveCount(0);
       for (const name of ["Line", "Bar", "Pie", "Scatter", "Heatmap"]) {
         const mark = page
           .locator(`svg[data-chart="${name}"] [data-chart-mark]`)
@@ -590,7 +602,7 @@ test("typed money keeps its currency and missing values are unavailable", async 
   const meter = fixture("Meter");
   const meterView = { ...meter, data: { sources: { sample: {value: 5, min: null, max: 10} } } };
   const chart = fixture("Bar");
-  delete chart.spec.elements.a.props.y;
+  chart.spec.elements.a.props.y = "value";
   chart.spec.elements.a.props.data = { $state: "/sources/sample/rows" };
   const chartView = { ...chart, data: { sources: { sample: { rows: [{ name: "Supplier", value: 120.25 }], columns: usdView.data.sources.sample.columns } } } };
   const multi = fixture("Line");

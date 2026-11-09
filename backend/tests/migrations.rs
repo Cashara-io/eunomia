@@ -680,7 +680,7 @@ async fn secret_audit_index_preserves_existing_events_and_reapplies() {
 }
 
 #[tokio::test]
-async fn schema_39_coverage_name_lookup_and_0040_paging_upgrade_are_idempotent() {
+async fn oldest_supported_schema_coverage_and_0040_paging_repair_are_idempotent() {
     use serde_json::json;
     let app = common::TestApp::new().await;
     let team = app.tool("vault_create", json!({"name": "Team", "kind": "org"})).await["id"].as_str().unwrap().to_string();
@@ -689,13 +689,14 @@ async fn schema_39_coverage_name_lookup_and_0040_paging_upgrade_are_idempotent()
         assert!(out.get("error").is_none(), "{out}");
     }
     let old = app.db().await;
-    old.test_raw().query("REMOVE INDEX entity_vault_kind_name_idx ON entity; REMOVE INDEX entity_property_num_page_idx ON entity_property; REMOVE INDEX entity_property_text_page_idx ON entity_property; REMOVE INDEX entity_property_bool_page_idx ON entity_property; DELETE _migration WHERE version >= 40").await.unwrap().check().unwrap();
-    app.control().test_raw().query("UPDATE $t SET schema_version = 39").bind(("t", app.user.org.tenant_record())).await.unwrap().check().unwrap();
+    old.test_raw().query("REMOVE INDEX entity_vault_kind_name_idx ON entity; REMOVE INDEX entity_property_num_page_idx ON entity_property; REMOVE INDEX entity_property_text_page_idx ON entity_property; REMOVE INDEX entity_property_bool_page_idx ON entity_property; DELETE _migration WHERE version = 40").await.unwrap().check().unwrap();
+    // Exercise the missing-index fallback on the oldest schema this binary still serves.
+    app.control().test_raw().query("UPDATE $t SET schema_version = $version")
+        .bind(("t", app.user.org.tenant_record())).bind(("version", migrate::MIN_SUPPORTED_TENANT))
+        .await.unwrap().check().unwrap();
     app.state.pool.evict(&app.user.org);
-    // 0039 is now N-2 and is refused before the tenant update. The updater still
-    // applies the later migrations without changing this seeded database's entities.
-    assert!(app.state.pool.for_org(&app.user.org).await.is_err());
-    let db = old;
+    let db = app.db().await;
+    assert_eq!(db.schema_version(), i64::from(migrate::MIN_SUPPORTED_TENANT));
     let question = json!({"question": "Where is Coastal Irrigation?"});
 
     let before: Vec<Value> = db.test_raw().query("SELECT * FROM entity").await.unwrap().take(0).unwrap();
@@ -710,7 +711,7 @@ async fn schema_39_coverage_name_lookup_and_0040_paging_upgrade_are_idempotent()
     }
     app.state.pool.evict(&app.user.org);
     let db = app.db().await;
-    assert_eq!(db.schema_version(), migrate::LATEST_TENANT as i64);
+    assert_eq!(db.schema_version(), i64::from(migrate::LATEST_TENANT));
     let out = app.tool("ontology_coverage", question).await;
     assert_eq!(out["chosen_by"], "entities", "{out}");
     assert_eq!(out["vault"], team);

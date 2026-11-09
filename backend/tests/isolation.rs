@@ -316,7 +316,8 @@ async fn plant(state: &AppState, router: &Router, name: &'static str, user: User
     let sql = "
         CREATE chat_message SET owner = $u, thread_id = $thread, role = 'user', content = $c;
         UPSERT $settings SET owner = $u, observations_mission = $c, memory_skill = $c;
-        CREATE connector SET owner = $u, kind = 'github', enabled = true, config = {note: $c}, credentials_encrypted = $enc;
+        LET $conn = (CREATE ONLY connector SET owner = $u, kind = 'github', enabled = true, config = {note: $c}, credentials_encrypted = $enc).id;
+        CREATE composio_file SET owner = $u, connector = $conn, external_id = $c, document_id = $c;
         UPSERT $sync SET owner = $u, cursor = $c, last_error = $c;
         CREATE embed_cache SET text_hmac = $c, vector = [0.5, 0.25];
         CREATE pocket_recording SET owner = $u, recording_id = 'rec', title = $c, transcript = $c, raw = {note: $c};

@@ -1398,6 +1398,264 @@
         ]
       }
     },
+    "/api/connectors/composio/begin": {
+      "post": {
+        "tags": [
+          "connectors"
+        ],
+        "operationId": "composioBegin",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/connectors/composio/callback": {
+      "post": {
+        "tags": [
+          "connectors"
+        ],
+        "operationId": "composioCallback",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Callback"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/connectors/composio/disconnect": {
+      "post": {
+        "tags": [
+          "connectors"
+        ],
+        "operationId": "composioDisconnect",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/connectors/composio/manage": {
+      "post": {
+        "tags": [
+          "connectors"
+        ],
+        "operationId": "composioManage",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Manage"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/connectors/composio/selection": {
+      "post": {
+        "tags": [
+          "connectors"
+        ],
+        "operationId": "composioSelection",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Choices"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/connectors/composio/status": {
+      "get": {
+        "tags": [
+          "connectors"
+        ],
+        "operationId": "composioStatus",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/connectors/pocketai/all": {
       "get": {
         "tags": [
@@ -9192,6 +9450,21 @@
           }
         }
       },
+      "Callback": {
+        "type": "object",
+        "required": [
+          "state",
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        }
+      },
       "Capsule": {
         "type": "object",
         "required": [
@@ -9350,6 +9623,26 @@
           },
           "ok": {
             "type": "boolean"
+          }
+        }
+      },
+      "Choices": {
+        "type": "object",
+        "required": [
+          "apps"
+        ],
+        "properties": {
+          "apps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Selection"
+            }
+          },
+          "vault": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -12149,6 +12442,17 @@
           }
         }
       },
+      "Manage": {
+        "type": "object",
+        "required": [
+          "toolkit"
+        ],
+        "properties": {
+          "toolkit": {
+            "type": "string"
+          }
+        }
+      },
       "MappedType": {
         "type": "object",
         "description": "What became of one record type.",
@@ -14394,6 +14698,34 @@
             "description": "The vault a matching record goes to (`vault:...`)."
           }
         }
+      },
+      "Selection": {
+        "type": "object",
+        "required": [
+          "toolkit",
+          "account"
+        ],
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "folder": {
+            "type": "string"
+          },
+          "phone_number_id": {
+            "type": "string"
+          },
+          "reference": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "toolkit": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
       },
       "SessionOut": {
         "type": "object",

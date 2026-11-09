@@ -253,6 +253,32 @@ expression: info(&db).await
       "kind": {
         "kind": "NORMAL"
       },
+      "name": "composio_file",
+      "permissions": {
+        "create": false,
+        "delete": false,
+        "select": false,
+        "update": false
+      },
+      "indexes": [
+        {
+          "cols": [
+            "owner",
+            "connector",
+            "external_id"
+          ],
+          "index": "UNIQUE",
+          "name": "composio_file_identity",
+          "table": "composio_file"
+        }
+      ]
+    },
+    {
+      "drop": false,
+      "schemafull": true,
+      "kind": {
+        "kind": "NORMAL"
+      },
       "name": "connector",
       "permissions": {
         "create": false,

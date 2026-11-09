@@ -464,6 +464,13 @@ pub const LATEST_POINT: &str = latest_point!();
 pub const LATEST_VALUES: Stmt = Stmt::new("ontology.latest_values",
     concat!("RETURN array::flatten(array::flatten($ids.map(|$e| $props.map(|$p| (", latest_point!(), ")))));"));
 
+// Main metric loading deliberately omits stored unit overrides. Datasets retain them.
+pub const LATEST_METRIC_VALUES: Stmt = Stmt::new("ontology.latest_metric_values",
+    r#"RETURN array::flatten(array::flatten($ids.map(|$e| $props.map(|$p| (
+        SELECT entity, property, value_num, value_text, value_bool, value_date, as_of, created_at FROM entity_property
+        WHERE entity = $e AND property = $p AND vault = $vault AND as_of <= $as_of ORDER BY as_of DESC, created_at DESC LIMIT 1
+    )))));"#);
+
 /// The approved terms of `$vault` that a question's phrases are matched against, each with the spec and
 /// text of its stored vector: kinds (slot 0), properties (slot 1), metrics (slot 2), link types (slot 3).
 pub const COVERAGE_TERMS: Stmt = Stmt::new(
@@ -625,7 +632,23 @@ pub const UI_ENTITIES: Stmt = Stmt::new("ontology.ui_entities",
 pub const UI_LINKS: Stmt = Stmt::new("ontology.ui_links",
     "SELECT in AS entity, out AS target, label FROM relates_to WHERE in IN $ids AND in.vault = $vault AND out.vault = $vault AND label IN $labels LIMIT 5001");
 
+/// Only pre-request persisted strings can authorise raw digit phrases.
+pub const UI_PROSE_STRINGS: Stmt = Stmt::new("ontology.ui_prose_strings", r#"SELECT name FROM person WHERE vault IN $vaults AND created_at < $before AND (updated_at = NONE OR updated_at < $before) AND (name IN $strings);
+SELECT name FROM organisation WHERE vault IN $vaults AND created_at < $before AND (updated_at = NONE OR updated_at < $before) AND (name IN $strings);
+SELECT name FROM location WHERE vault IN $vaults AND created_at < $before AND (updated_at = NONE OR updated_at < $before) AND (name IN $strings);
+SELECT name FROM repository WHERE vault IN $vaults AND created_at < $before AND (updated_at = NONE OR updated_at < $before) AND (name IN $strings);
+SELECT name FROM file WHERE vault IN $vaults AND created_at < $before AND (updated_at = NONE OR updated_at < $before) AND (name IN $strings);
+SELECT name FROM symbol WHERE vault IN $vaults AND created_at < $before AND (updated_at = NONE OR updated_at < $before) AND (name IN $strings);
+SELECT name, kind FROM entity WHERE vault IN $vaults AND created_at < $before AND (updated_at = NONE OR updated_at < $before) AND (name IN $strings OR kind IN $strings);
+SELECT label FROM relates_to WHERE in.vault IN $vaults AND created_at < $before AND (updated_at = NONE OR updated_at < $before) AND (label IN $strings);
+SELECT kind FROM ontology_kind WHERE vault IN $vaults AND created_at < $before AND (updated_at = NONE OR updated_at < $before) AND (kind IN $strings);
+SELECT name FROM ontology_property WHERE vault IN $vaults AND created_at < $before AND (updated_at = NONE OR updated_at < $before) AND (name IN $strings);
+SELECT label FROM ontology_link WHERE vault IN $vaults AND created_at < $before AND (updated_at = NONE OR updated_at < $before) AND (label IN $strings);
+SELECT name FROM ontology_metric WHERE vault IN $vaults AND created_at < $before AND (updated_at = NONE OR updated_at < $before) AND (name IN $strings);
+SELECT value_text FROM entity_property WHERE vault IN $vaults AND created_at < $before AND (updated_at = NONE OR updated_at < $before) AND (value_text IN $strings);"#);
+
 pub const ALL: &[&Stmt] = &[
+    &UI_PROSE_STRINGS,
     &UI_LINKS,
     &UI_ENTITIES,
     &PROFILE,
@@ -667,6 +690,7 @@ pub const ALL: &[&Stmt] = &[
     &DESCRIBE_METRIC,
     &METRIC_ENTITIES,
     &LATEST_VALUES,
+    &LATEST_METRIC_VALUES,
     &UI_METADATA,
     &COVERAGE_TERMS,
     &SET_TERM_EMBEDDING,

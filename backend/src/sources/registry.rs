@@ -35,6 +35,7 @@ use crate::sources::up_bank::UpBankSource;
 /// Every source. Each has a connector kind in `connectors::service::CONNECTOR_KINDS`.
 pub fn all() -> Vec<Arc<dyn Source>> {
     vec![
+        Arc::new(super::composio::ComposioSource),
         Arc::new(UpBankSource) as Arc<dyn Source>,
         Arc::new(HeyPocketSource),
         Arc::new(GitHubSource),
@@ -231,9 +232,34 @@ pub async fn run_sync(
         .await?
         .ok_or_else(|| AppError::coded(ErrorCode::SourceNotFound, format!("no source {key:?}")))?;
     let row = row.as_ref();
+    let publishing = state.composio_publishing.connection(&state.db, owner);
+    let generation = publishing.generation();
     crate::secrets::connector::with_connection(state, owner, row, |conn| async move {
-        let result = src.fetch(&conn, cursor).await?;
-        let report = ingest_via(state, owner, &result.records, src.as_ref(), row).await?;
+        let mut result = src.fetch(&conn, cursor).await?;
+        let report = if src.key() == "composio" {
+            publishing.check(generation)?;
+            let current = crate::connectors::composio::storage::load(&state.db, owner).await?;
+            let credentials = conn_for(&state.settings.encryption_key, Some(&current))?;
+            if !current.enabled || credentials.credentials["access_token"] != conn.credentials["access_token"] {
+                return Err(AppError::bad_request("Composio changed during sync. Retry with the current account."));
+            }
+            let skipped = super::composio::store_documents(state, owner, &current, &mut result.records, &mut result.warnings, &publishing, generation).await?;
+            // Only local commits hold the gate. In-flight provider work checks its generation.
+            let mut report = IngestReport { source: src.key().into(), written: 0, skipped: skipped + result.provider_skipped.unwrap_or(0), failed: 0, errors: Vec::new() };
+            for raw in &result.records {
+                let _commit = publishing.lock().await;
+                publishing.check(generation)?;
+                crate::connectors::composio::storage::ensure_active(&state.db, owner, &current).await?;
+                let one = ingest_via(state, owner, std::slice::from_ref(raw), src.as_ref(), Some(&current)).await?;
+                report.written += one.written;
+                report.skipped += one.skipped;
+                report.failed += one.failed;
+                report.errors.extend(one.errors);
+            }
+            report
+        } else {
+            ingest_via(state, owner, &result.records, src.as_ref(), row).await?
+        };
         Ok((report, result))
     }).await
 }

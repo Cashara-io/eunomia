@@ -579,10 +579,8 @@ pub fn tool_bytes(text: Option<String>, content_base64: Option<String>) -> AppRe
 }
 
 /// Type, size and content checks; returns the canonical media type.
-fn validate(settings: &crate::config::Settings, filename: &str, declared: Option<&str>, bytes: &[u8]) -> AppResult<&'static str> {
-    if bytes.is_empty() {
-        return Err(AppError::bad_request("the document is empty"));
-    }
+pub(crate) fn validate(settings: &crate::config::Settings, filename: &str, declared: Option<&str>, bytes: &[u8]) -> AppResult<&'static str> {
+    clean_filename(filename)?;
     if bytes.len() > settings.documents_max_bytes {
         return Err(AppError::coded(
             ErrorCode::DocumentTooLarge,
@@ -595,17 +593,26 @@ fn validate(settings: &crate::config::Settings, filename: &str, declared: Option
             format!("unsupported document type {:?}; supported: plain text, Markdown, JSON, CSV and text-based PDF", declared.unwrap_or(filename)),
         ));
     };
+    validate_content(media, bytes).map_err(AppError::bad_request)?;
+    Ok(media)
+}
+
+/// Content checks shared by uploads and source imports before their checkpoint advances.
+pub(crate) fn validate_content(media: &str, bytes: &[u8]) -> Result<(), String> {
+    if bytes.is_empty() {
+        return Err("the document is empty".into());
+    }
     if media == "application/pdf" {
         if !bytes.starts_with(b"%PDF-") {
-            return Err(AppError::bad_request("the file is not a PDF (no %PDF- header)"));
+            return Err("the file is not a PDF (no %PDF- header)".into());
         }
     } else {
-        let text = std::str::from_utf8(bytes).map_err(|_| AppError::bad_request("the document is not valid UTF-8 text"))?;
+        let text = std::str::from_utf8(bytes).map_err(|_| "the document is not valid UTF-8 text")?;
         if media == "application/json" && serde_json::from_str::<serde::de::IgnoredAny>(text).is_err() {
-            return Err(AppError::bad_request("the document is not valid JSON"));
+            return Err("the document is not valid JSON".into());
         }
     }
-    Ok(media)
+    Ok(())
 }
 
 fn require_storage(state: &OrgState) -> AppResult<()> {
@@ -615,6 +622,14 @@ fn require_storage(state: &OrgState) -> AppResult<()> {
 /// Store the bytes and queue indexing. A `replace`d document gets a new revision; its old object is
 /// removed once the new one is in place.
 pub async fn upload(state: &OrgState, user: &RecordId, up: Upload) -> AppResult<DocumentOut> {
+    upload_checked(state, user, up, || async { Ok(()) }).await
+}
+
+/// Check a source connection after object storage, immediately before publishing its row.
+/// A failed check removes the staged object and never queues indexing.
+pub async fn upload_checked<G, F: std::future::Future<Output = AppResult<G>>>(
+    state: &OrgState, user: &RecordId, up: Upload, before_commit: impl FnOnce() -> F,
+) -> AppResult<DocumentOut> {
     let db = &state.db;
     let previous = match &up.replace {
         Some(id) => Some(load(db, user, &parse_id(id)?, false, Action::WriteMemories).await?),
@@ -637,6 +652,13 @@ pub async fn upload(state: &OrgState, user: &RecordId, up: Upload) -> AppResult<
     };
     let path = object_path(&vault, &key_of(&id), revision, &filename);
     put_object(db, &path, up.bytes).await?;
+    let commit_guard = match before_commit().await {
+        Ok(guard) => guard,
+        Err(error) => {
+            let _ = delete_object(db, &path).await;
+            return Err(error);
+        }
+    };
 
     let written: AppResult<Vec<DocRow>> = async {
         let mut res = match &previous {
@@ -657,6 +679,7 @@ pub async fn upload(state: &OrgState, user: &RecordId, up: Upload) -> AppResult<
     let row = match written.map(|rows| rows.into_iter().next()) {
         Ok(Some(row)) => row,
         other => {
+            drop(commit_guard);
             let _ = delete_object(db, &path).await;
             return Err(match other {
                 Err(e) => e,
@@ -664,14 +687,15 @@ pub async fn upload(state: &OrgState, user: &RecordId, up: Upload) -> AppResult<
             });
         }
     };
+    let op = if row.revision > 1 { crate::changes::UPDATED } else { crate::changes::CREATED };
+    crate::changes::record(db, &vault, op, crate::changes::DOCUMENT, &row.id).await;
+    enqueue_index(state, &row).await?;
+    drop(commit_guard);
     if let Some(p) = previous.filter(|p| p.object_path != path)
         && let Err(e) = delete_object(db, &p.object_path).await
     {
         tracing::warn!(document = %row.id.to_string(), error = e.source.as_deref().unwrap_or(&e.message), "the previous revision's file could not be removed");
     }
-    let op = if row.revision > 1 { crate::changes::UPDATED } else { crate::changes::CREATED };
-    crate::changes::record(db, &vault, op, crate::changes::DOCUMENT, &row.id).await;
-    enqueue_index(state, &row).await?;
     Ok(DocumentOut::from(&row))
 }
 

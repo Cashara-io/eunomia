@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { AxisBottom, AxisLeft, AxisRight } from "@visx/axis";
 import { scaleBand, scaleLinear, scaleOrdinal } from "@visx/scale";
 import {
@@ -17,10 +17,10 @@ import { Group } from "@visx/group";
 import { Sankey } from "@visx/sankey";
 import { hierarchy, Treemap, Partition, Tree } from "@visx/hierarchy";
 import { BoxPlot, ViolinPlot } from "@visx/stats";
-import { useTooltip, TooltipWithBounds } from "@visx/tooltip";
+import { TooltipWithBounds } from "@visx/tooltip";
 import { z } from "zod";
 import { resolvedDataProps } from "./catalog";
-import { drawable, formatted, label, number, requiredNumber, rowsOf, type Row } from "./data";
+import { drawable, proportionalTotal, formatted, label, number, requiredNumber, rowsOf, type Row } from "./data";
 import { Notice } from "./Blocks";
 
 const palette = [
@@ -47,12 +47,9 @@ export default function Chart({
   const p = parsed.data;
   const inputRows = rowsOf(p.data);
   const rows = inputRows;
-  const numeric =
-    Object.keys(rows[0] || {}).find((k) =>
-      rows.some((r) => number(r[k]) != null),
-    ) || "value";
-  const y = p.y || numeric;
-  const x = p.x || Object.keys(rows[0] || {}).find((k) => k !== y) || "name";
+  if (!p.x || !p.y || !p.series) return <Notice />;
+  const y = p.y;
+  const x = p.x;
   const fields = kind === "Histogram" ? ["start", "end", "count"]
     : kind === "BoxPlot" ? ["min", "q1", "median", "q3", "max"]
     : kind === "Violin" ? ["value", "count"]
@@ -62,6 +59,13 @@ export default function Chart({
     return <figure className="ui-section" data-ui-component={kind}><figcaption>{p.title}</figcaption><p>No numeric values to show.</p><p>{p.summary}</p></figure>;
   if (rows.some(r => Object.values(r).some(v => typeof v === "number" && !drawable(v))))
     return <Notice />;
+  if (["Pie", "Donut", "Treemap", "Partition", "Funnel", "StackedBar", "StackedArea"].includes(kind) && rows.length) {
+    const keys = p.series.length ? p.series : [y];
+    const groups = ["StackedBar", "StackedArea"].includes(kind)
+      ? rows.map(r => keys.map(key => r[key]))
+      : [rows.map(r => r[y])];
+    if (groups.some(values => proportionalTotal(values) == null)) return <Notice />;
+  }
   const sharedValues = kind === "SmallMultiples" ? rows.flatMap((r) =>
     (p.series || [y]).map((key) => requiredNumber(r[key])),
   ) : [];
@@ -172,11 +176,40 @@ type TreeDatum = {
   children?: TreeDatum[];
   row?: Row;
 };
+type ChartTooltip = {
+  owner: string;
+  tooltipData: string;
+  tooltipLeft: number;
+  tooltipTop: number;
+};
+let activeTooltip: ChartTooltip | null = null;
+const tooltipListeners = new Set<() => void>();
+function setTooltip(next: ChartTooltip | null) {
+  activeTooltip = next;
+  for (const listener of tooltipListeners) listener();
+}
+function subscribeTooltip(listener: () => void) {
+  tooltipListeners.add(listener);
+  return () => { tooltipListeners.delete(listener); };
+}
+const serverTooltipSnapshot = () => null;
+function useChartTooltip(owner: string) {
+  const snapshot = useCallback(() => activeTooltip?.owner === owner ? activeTooltip : null, [owner]);
+  const tooltip = useSyncExternalStore(subscribeTooltip, snapshot, serverTooltipSnapshot);
+  const hideTooltip = useCallback(() => {
+    if (activeTooltip?.owner === owner) setTooltip(null);
+  }, [owner]);
+  useEffect(() => hideTooltip, [hideTooltip]);
+  return {
+    tooltip,
+    showTooltip: (value: Omit<ChartTooltip, "owner">) => setTooltip({ ...value, owner }),
+    hideTooltip,
+  };
+}
 function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
   const formatted = (value: unknown, format?: string, unit: string | null | undefined = p.unit) => shown(value, format, unit);
   const id = useId();
-  const { tooltipData, tooltipLeft, tooltipTop, showTooltip, hideTooltip } =
-    useTooltip<string>();
+  const { tooltip, showTooltip, hideTooltip } = useChartTooltip(id);
   const sparkline = kind === "Sparkline";
   const cartesian = [
     "Line",
@@ -310,7 +343,7 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
         tabIndex={0}
         aria-label={tip(r)}
         data-chart-mark="true"
-        onMouseMove={(e) => {
+        onPointerMove={(e) => {
           e.stopPropagation();
           const rect = e.currentTarget.ownerSVGElement?.getBoundingClientRect();
           showTooltip({
@@ -319,7 +352,8 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
             tooltipTop: e.clientY - (requiredNumber(rect?.top)),
           });
         }}
-        onMouseLeave={hideTooltip}
+        onPointerLeave={hideTooltip}
+        onPointerCancel={hideTooltip}
         onFocus={(e) => {
           e.stopPropagation();
           showTooltip({
@@ -1485,7 +1519,8 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
         width={width}
         height={height}
         role="img"
-        onMouseLeave={hideTooltip}
+        onPointerLeave={hideTooltip}
+        onPointerCancel={hideTooltip}
         aria-labelledby={`${id}-name ${id}-summary`}
         data-chart={kind}
       >
@@ -1554,14 +1589,14 @@ function Plot({ kind, rows, p, xKey, yKey, width, domain }: Props) {
           ))}
         </ul>
       )}
-      {tooltipData && (
+      {tooltip && (
         <TooltipWithBounds
           className="ui-chart-tooltip"
           role="tooltip"
-          left={tooltipLeft}
-          top={tooltipTop}
+          left={tooltip.tooltipLeft}
+          top={tooltip.tooltipTop}
         >
-          {tooltipData}
+          {tooltip.tooltipData}
         </TooltipWithBounds>
       )}
     </div>

@@ -1,0 +1,47 @@
+# Bound prose redesign, 2026-11-09. No cargo fmt.
+# Before each cargo step, run df -h / and pgrep -x cargo.
+# If another Cargo runs or free space is below 7 GiB, wait three minutes and retry,
+# up to two hours. Do unrelated documentation/frontend work while waiting.
+export CARGO_BUILD_JOBS=2 CARGO_PROFILE_DEV_DEBUG=0 CARGO_INCREMENTAL=0 RUST_MIN_STACK=8388608 RUST_TEST_THREADS=1
+python3 scripts/chat-json-render/check_main_source.py
+# All cargo commands below run inside backend and use nice -n 19.
+cargo test --lib views::ui
+python3 scripts/chat-json-render/check_prose_guards.py
+python3 scripts/chat-json-render/check_third_review_guards.py backend --logs /private/tmp/chat-json-render-v5/mutations
+cargo clippy --all-targets -- -D warnings
+TEST_HARDENED=1 cargo test --lib --test chat_ui --test ontology --test golden_tools --test round_trips --test openapi
+cargo build --bin eunomia-backend
+# Frontend commands, inside frontend:
+bun install --frozen-lockfile
+bun run lint
+bun run build
+bunx tsc --noEmit
+bun test scripts/chat-ui-values.test.jsx
+bun scripts/chat-catalog.ts --check
+# From repository root:
+python3 scripts/chat-json-render/check_third_review_guards.py frontend --logs /private/tmp/chat-json-render-v5/mutations
+# Disposable SurrealDB 3.3.5: 8597, backend: 8598, frontend: 3597.
+# Start backend with model access disabled for deterministic browser checks.
+# Check /readyz, then inside frontend:
+E2E_BASE_URL=http://localhost:3597 bunx playwright test tests/chat-json-render.spec.ts tests/every-tool.spec.ts
+# Restart the same branch binary with the private key launcher and gpt-6-luna.
+# Import the twelve-row CSV into a fresh org. Run the same six questions, asking
+# each to include a measured total or count in its title through a bound placeholder.
+# Retain persisted histories and inspect the screenshots.
+python3 -I scripts/chat-json-render/verify_numbers.py /private/tmp/chat-json-render-v5/source.csv /private/tmp/chat-json-render-v5
+# Upload explicit proof allowlist to pr-screenshots/chat-json-render-v5/.
+# Remove owned target, node_modules, .next, runtime processes and disposable DB.
+# Disk note: the first owned target was transparently compressed with ditto,
+# checking SHA256 equality. Frontend dependencies/output were removed and rebuilt.
+# While waiting for the next pre-Cargo gate, the owned target was moved onto a
+# disposable 4 GiB RAM disk at /Volumes/EunomiaV5Cargo. Root free space then
+# exceeded 7 GiB. Every later Cargo step still uses the same root-space and
+# competing-process gate. The RAM disk is detached during final cleanup.
+python3 scripts/chat-json-render/verify_placeholders.py /private/tmp/chat-json-render-v5
+
+# The final generated catalogue is regenerated from catalogue.ts and checked.
+# Both catalogue descriptions and complete tool description are covered by a
+# regression forbidding the old equality/identifier exemptions.
+# Final live audit checks every substitution and requires each question's final
+# view to contain a placeholder. An intermediate plain view is permitted.
+# One follow-up repairs Histogram's ordinary chat reply, not its resolved UI.

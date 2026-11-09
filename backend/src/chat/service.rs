@@ -81,7 +81,9 @@ user named a space: it then checks every space the user can read and returns the
 `vault` (with `vault_name`). Pass that `vault` as `vault_id` to every call that follows for this question: `ontology_get`, \
 `metric_eval`, `scenario_run` and `show_view`. If a tool's error says what you asked for is in another space, call it \
 again with that `vault_id`. \
-If coverage lists `uncovered` phrases, do not compute or guess: tell the user which part of the question the space cannot \
+UI component names, supported time buckets such as month, and placeholder paths are rendering instructions, not ontology terms. \
+If coverage flags only those, read ontology_get and proceed using the approved kind and properties. \
+If coverage lists other `uncovered` phrases, do not compute or guess: tell the user which part of the question the space cannot \
 answer yet, and suggest what to propose (a property or metric on the kind it names) for an owner to approve. \
 When the user asks for a number (a total, an average, how many, a share, a trend): read `ontology_get` for that space, \
 pick the approved metric of the right kind that computes it, run it with `metric_eval` (extra `filters` and `as_of` as the \
@@ -100,7 +102,13 @@ numbers before and after, and reply with a short summary: the metrics' before an
 lists that the change affects and why, and that nothing was saved. If no approved metric fits, say which one to approve and \
 propose it with `ontology_propose`; never make a number up. \
 For analysis of typed data, call `show_view` with view ui, named sources and a json-render spec. \
+In every UI title, caption, label, note or other written text, put numbers in bound placeholders, for example \
+`Rows {{/sources/sales/total_rows}}`. The server supplies the formatted value and currency. Dotted paths \
+like `{{sources.sales.rows[0].amount}}` also work. UI prose is literal plain text, without Markdown. Separate placeholders from numeric tokens. Raw digits require verbatim phrases with adjacent letter-bearing words in server strings predating the turn, or matching \
+applied ISO dates or bucket labels. Identifiers have no blanket exemption. Number words remain unchecked. \
 Use ontology_get to discover property and metric names. A dataset source can group, filter and aggregate approved properties without a saved metric. \
+Totals use returned column keys: /totals/amount/sum for detailed rows, /totals/sum_amount/sum after sum of amount. \
+Omit aggregates for Histogram, Scatter and detailed Table: the server already supplies totals and distributions. \
 Use Line for trends, Donut or Treemap for shares, Histogram or BoxPlot for distribution, Scatter for relationships, Funnel for flow, Waterfall for change, Table for details. \
 Use Sankey for acyclic flows and Network for cycles. Bind every data prop with {$state: /sources/name/rows} or a scalar JSON pointer. Never supply values or numeric strings. \
 Use the server result text to summarise, including approval and truncation warnings. Do not calculate numbers yourself. \
@@ -601,7 +609,7 @@ pub async fn send_stream(
     user_message: String,
     tx: mpsc::Sender<ChatEvent>,
 ) {
-    if let Err((code, message)) = run_send(&state, &user, &thread_id, &user_message, &tx).await {
+    if let Err((code, message)) = crate::views::TURN_STARTED.scope(Datetime::default(), run_send(&state, &user, &thread_id, &user_message, &tx)).await {
         let event = ChatEvent::Error { message, code: code.as_str().to_string(), trace_id: crate::telemetry::current_trace_id() };
         let _ = tx.send(event).await;
     }
