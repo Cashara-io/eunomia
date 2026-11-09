@@ -13,7 +13,7 @@ test.beforeAll(async () => {
   directory = await mkdtemp(join(tmpdir(), "eunomia-morph-test-"));
   await promisify(execFile)("bun", [
     "build", "tests/fixtures/morph-text.tsx", "--target=browser",
-    `--outdir=${directory}`, '--define=process.env.NODE_ENV="production"',
+    `--outdir=${directory}`, "--production",
   ]);
   script = await readFile(join(directory, "morph-text.js"), "utf8");
   const styles = (await readdir(directory)).filter((file) => file.endsWith(".css"));
