@@ -332,13 +332,11 @@ export type ChatNode = {
 } | {
     children: Array<ChatNode>;
     kind: 'code_block';
-    language: string;
 } | {
     autolink: boolean;
     children: Array<ChatNode>;
     href: string;
     kind: 'link';
-    title: string;
 } | {
     children: Array<ChatNode>;
     kind: 'line_break';

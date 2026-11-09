@@ -9853,7 +9853,6 @@
           {
             "type": "object",
             "required": [
-              "language",
               "children",
               "kind"
             ],
@@ -9869,9 +9868,6 @@
                 "enum": [
                   "code_block"
                 ]
-              },
-              "language": {
-                "type": "string"
               }
             }
           },
@@ -9879,7 +9875,6 @@
             "type": "object",
             "required": [
               "href",
-              "title",
               "autolink",
               "children",
               "kind"
@@ -9902,9 +9897,6 @@
                 "enum": [
                   "link"
                 ]
-              },
-              "title": {
-                "type": "string"
               }
             }
           },

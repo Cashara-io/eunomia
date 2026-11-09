@@ -23,7 +23,7 @@ function renderNode(node: ChatNode): ReactNode {
         default: return <h6>{children()}</h6>;
       }
     }
-    case "list": return node.start == null ? <ul>{children()}</ul> : <ol start={node.start}>{children()}</ol>;
+    case "list": return node.start == null ? <ul>{children()}</ul> : <ol>{children()}</ol>;
     case "item": return <li>{children()}</li>;
     case "table": return <table>{node.children.filter(n => n.kind === "table_head").map((n, i) => <Fragment key={i}>{renderNode(n)}</Fragment>)}<tbody>{renderNodes(node.children.filter(n => n.kind !== "table_head"))}</tbody></table>;
     case "table_head": return <thead><tr>{node.children.map((n, i) => <th key={i}>{"children" in n ? renderNodes(n.children) : renderNode(n)}</th>)}</tr></thead>;
@@ -33,7 +33,7 @@ function renderNode(node: ChatNode): ReactNode {
     case "em": return <em>{children()}</em>;
     case "code_span": return <code>{children()}</code>;
     case "code_block": return <pre><code>{children()}</code></pre>;
-    case "link": return <a href={linkHref(node.href)} title={node.title || undefined} target="_blank" rel="noopener noreferrer">{children()}</a>;
+    case "link": return <a href={linkHref(node.href)} target="_blank" rel="noopener noreferrer">{children()}</a>;
     case "line_break": return <><br />{children()}</>;
     default: {
       const exhaustive: never = node;

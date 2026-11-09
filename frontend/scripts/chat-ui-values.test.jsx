@@ -168,6 +168,22 @@ test("chat renderer treats Markdown and HTML inside text nodes literally", () =>
   expect(html).not.toContain("<strong>");
   expect(html).not.toContain("<img");
 });
+test("chat links never render unchecked titles from older stored trees", () => {
+  const html = renderToStaticMarkup(<ChatText tree={[{kind: "link", href: "https://example.com", title: "Bakery sales $0.00", autolink: false, children: [{kind: "text", text: "Report"}]}]} />);
+  expect(html).toContain('href="https://example.com"');
+  expect(html).not.toContain("title=");
+  expect(html).not.toContain("$0.00");
+});
+test("chat ignores code info and ordered-list offsets from older stored trees", () => {
+  const html = renderToStaticMarkup(<ChatText tree={[
+    {kind: "code_block", language: "Bakery sales $0.00", children: [{kind: "text", text: "Checked code"}]},
+    {kind: "list", start: 999, children: [{kind: "item", children: [{kind: "text", text: "First item"}]}]},
+  ]} />);
+  expect(html).toContain("<ol>");
+  expect(html).not.toContain("999");
+  expect(html).not.toContain("$0.00");
+  expect(domText(parseFragment(html))).toBe("Checked codeFirst item");
+});
 test("overlap notes are visible in metric and generated views", () => {
   const note = "1 entity contributes to more than one group; groups overlap and must not be summed";
   const metric = {as_of: "2026-01-01T00:00:00Z", expr_words: "Sum of sales", metric: "sales", kind: "sample", value: null, unit: "AUD", groups: [{group: "Supplier", value: 100, n_entities: 1, entity_ids: [], truncated: false}], warnings: [note], status: "approved", entity_ids: [], n_entities: 1, truncated: false};

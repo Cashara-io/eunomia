@@ -30,6 +30,7 @@ test("assistant replies render as markdown; user text and raw HTML stay literal"
   await expect(md.locator("p code")).toHaveText("inline code");
   await expect(md.getByRole("link", { name: "the docs" })).toHaveAttribute("href", "https://example.com/docs");
   await expect(md.getByRole("link", { name: "the docs" })).toHaveAttribute("target", "_blank");
+  await expect(md.locator("[title]")).toHaveCount(0);
   await expect(md.locator("li")).toHaveCount(2);
   await expect(md.locator("pre code")).toContainText('let answer = "42";');
   await expect(md.locator("table td").first()).toHaveText("1");
@@ -55,4 +56,26 @@ test("checked corpus text matches the browser DOM without another parser", async
     expect(await replies.nth(i).textContent()).toBe(sample.visible_text);
     await expect(replies.nth(i).locator("img,script")).toHaveCount(0);
   }
+});
+
+test("tool inputs stay inside labelled collapsed details", async ({ page }) => {
+  await registerAndOnboard(page, uniqueEmail("tool-input"));
+  const query = "Bakery sales $0.00";
+  const thread = { id: "chat_thread:inputs", title: "Tool inputs", created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+  await page.route("**/api/chat/threads", route => route.fulfill({ json: [thread] }));
+  await page.route("**/api/chat/threads/*/history", route => route.fulfill({ json: [
+    { role: "assistant", content: "", tool_calls: [{ id: "recall-input", type: "function", function: { name: "recall", arguments: JSON.stringify({ query }) } }] },
+    { role: "tool", tool_call_id: "recall-input", content: "{}" },
+    { role: "assistant", content: "No checked answer available.", tree: [{ kind: "paragraph", children: [{ kind: "text", text: "No checked answer available." }] }] },
+  ] }));
+  await page.goto("/chat");
+  const step = page.locator("details.tool-row");
+  await expect(step).toHaveCount(1);
+  await expect(step).not.toHaveAttribute("open");
+  await expect(step.locator("summary")).not.toContainText(query);
+  await expect(page.getByText(query, { exact: false })).not.toBeVisible();
+  await expect(page.locator(".md")).not.toContainText(query);
+  await step.locator("summary").click();
+  await expect(step.getByText("What the assistant asked the tool", { exact: true })).toBeVisible();
+  await expect(step.locator("pre").first()).toContainText(query);
 });

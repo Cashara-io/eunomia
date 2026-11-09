@@ -538,6 +538,8 @@ async fn checked_tree_is_identical_in_text_done_and_reopened_history() {
     for (raw, question, expected) in [
         ("Count 12![3](/icon.svg)", "Explain 123", "Count [unverified number]"),
         ("<https://example.com/999>", "Give a link", "https://example.com/999"),
+        ("Bakery sales <AUD:0.00>.", "Show sales", "Bakery sales AUD:[unverified number]"),
+        ("[Report](https://example.com \"Bakery sales $0.00\")", "Show report", "Report"),
     ] {
         let mock = serve(vec![route("POST","/chat/completions",Value::Null).raw(&model_reply(json!({"content":raw})))]).await;
         let (app,_) = scripted_chat(&mock).await;
@@ -556,6 +558,54 @@ async fn checked_tree_is_identical_in_text_done_and_reopened_history() {
         assert_eq!(exported["tree"], done["tree"]);
         assert_eq!(exported["content"], done["reply"]);
     }
+}
+
+#[tokio::test]
+async fn legacy_export_and_reopened_chat_share_checked_content_and_turn_evidence() {
+    let app = common::TestApp::new().await;
+    let (_, thread) = app.http_session("POST", "/api/chat/threads", Some(json!({}))).await;
+    let thread_id = thread["id"].as_str().unwrap();
+    let rid = eunomia_backend::rid::parse(thread_id).unwrap();
+    let db = app.db().await;
+    let (_, other) = app.http_session("POST", "/api/chat/threads", Some(json!({}))).await;
+    let other = eunomia_backend::rid::parse(other["id"].as_str().unwrap()).unwrap();
+    for (role, content) in [
+        ("user", "Explain 12"),
+        ("tool", "{\"count\":34}"),
+        ("assistant", "Useful **advice**: 12 and 34. Fake 999."),
+        ("user", "A new turn"),
+        ("assistant", "Fake 12 and 34."),
+    ] {
+        common::sys(async { eunomia_backend::store::app::CHAT_MESSAGE_CREATE.on(&db)
+            .bind(("owner", app.user.id.clone())).bind(("thread_id", rid.clone()))
+            .bind(("role", role.to_string())).bind(("content", content.to_string()))
+            .bind(("tool_calls", Option::<Vec<Value>>::None)).bind(("tool_call_id", Option::<String>::None)).await })
+            .await.unwrap().check().unwrap();
+        if role == "tool" {
+            common::sys(async { eunomia_backend::store::app::CHAT_MESSAGE_CREATE.on(&db)
+                .bind(("owner", app.user.id.clone())).bind(("thread_id", other.clone()))
+                .bind(("role", "user")).bind(("content", "999"))
+                .bind(("tool_calls", Option::<Vec<Value>>::None)).bind(("tool_call_id", Option::<String>::None)).await })
+                .await.unwrap().check().unwrap();
+        }
+    }
+
+    let (status, history) = app.http_session("GET", &format!("/api/chat/threads/{thread_id}/history"), None).await;
+    assert_eq!(status, axum::http::StatusCode::OK);
+    let (status, exported) = app.http_session("GET", "/api/export", None).await;
+    assert_eq!(status, axum::http::StatusCode::OK);
+    let exported: Vec<_> = exported["chat_history"].as_array().unwrap().iter().filter(|m| m["thread_id"] == thread_id).collect();
+    assert_eq!(exported.len(), history.as_array().unwrap().len());
+    for (chat, export) in history.as_array().unwrap().iter().zip(&exported) {
+        assert_eq!(chat["content"], export["content"]);
+        assert_eq!(chat["tree"], export["tree"]);
+        assert!(export["id"].as_str().unwrap().starts_with("chat_message:"));
+    }
+    let first = exported[2]["content"].as_str().unwrap();
+    assert!(first.contains("12 and 34") && first.contains("[unverified number]"));
+    assert!(!first.contains("999"));
+    let next = exported[4]["content"].as_str().unwrap();
+    assert_eq!(next.matches("[unverified number]").count(), 2);
 }
 
 #[tokio::test]

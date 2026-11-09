@@ -1,5 +1,5 @@
 //! The only Markdown parser for assistant replies. The browser renders these nodes verbatim.
-use pulldown_cmark::{CodeBlockKind, Event, LinkType, Options, Parser, Tag};
+use pulldown_cmark::{Event, LinkType, Options, Parser, Tag};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, utoipa::ToSchema)]
@@ -17,8 +17,8 @@ pub enum ChatNode {
     Strong { #[schema(no_recursion)] children: Vec<ChatNode> },
     Em { #[schema(no_recursion)] children: Vec<ChatNode> },
     CodeSpan { #[schema(no_recursion)] children: Vec<ChatNode> },
-    CodeBlock { language: String, #[schema(no_recursion)] children: Vec<ChatNode> },
-    Link { href: String, title: String, autolink: bool, #[schema(no_recursion)] children: Vec<ChatNode> },
+    CodeBlock { #[schema(no_recursion)] children: Vec<ChatNode> },
+    Link { href: String, autolink: bool, #[schema(no_recursion)] children: Vec<ChatNode> },
     LineBreak { #[schema(no_recursion)] children: Vec<ChatNode> },
 }
 
@@ -84,7 +84,8 @@ pub(crate) fn parse(raw: &str) -> Vec<ChatNode> {
                     match tag {
                         Tag::Paragraph => ChatNode::Paragraph { children },
                         Tag::Heading { level, .. } => ChatNode::Heading { level: level as u8, children },
-                        Tag::List(start) => ChatNode::List { start, children },
+                        // List counters are structure, not model-supplied numeric claims.
+                        Tag::List(start) => ChatNode::List { start: start.map(|_| 1), children },
                         Tag::Item => ChatNode::Item { children },
                         Tag::Table(_) => ChatNode::Table { children },
                         Tag::TableHead => ChatNode::TableHead { children },
@@ -92,12 +93,16 @@ pub(crate) fn parse(raw: &str) -> Vec<ChatNode> {
                         Tag::TableCell => ChatNode::TableCell { children },
                         Tag::Strong => ChatNode::Strong { children },
                         Tag::Emphasis => ChatNode::Em { children },
-                        Tag::CodeBlock(kind) => ChatNode::CodeBlock {
-                            language: match kind { CodeBlockKind::Fenced(s) => s.into_string(), CodeBlockKind::Indented => String::new() }, children,
-                        },
-                        Tag::Link { link_type, dest_url, title, .. } => ChatNode::Link {
-                            href: dest_url.into_string(), title: title.into_string(),
-                            autolink: matches!(link_type, LinkType::Autolink | LinkType::Email), children,
+                        // Info strings and link titles have no checked display representation.
+                        Tag::CodeBlock(_) => ChatNode::CodeBlock { children },
+                        Tag::Link { link_type, dest_url, .. } => {
+                            let autolink = matches!(link_type, LinkType::Autolink | LinkType::Email);
+                            let href = if link_type == LinkType::Email { format!("mailto:{dest_url}") } else { dest_url.into_string() };
+                            if autolink && !navigation_autolink(&href) {
+                                out.extend(children);
+                                continue;
+                            }
+                            ChatNode::Link { href, autolink, children }
                         },
                         // Images, including their alt text, are absent from the visible tree.
                         Tag::Image { .. } => continue,
@@ -118,6 +123,12 @@ pub(crate) fn parse(raw: &str) -> Vec<ChatNode> {
         out
     }
     nodes(&mut Parser::new_ext(raw, Options::ENABLE_TABLES))
+}
+
+pub(crate) fn navigation_autolink(href: &str) -> bool {
+    href.split_once(':').is_some_and(|(scheme, _)| {
+        ["http", "https", "mailto"].iter().any(|allowed| scheme.eq_ignore_ascii_case(allowed))
+    })
 }
 
 // Store the checked tree in the existing string column. No schema migration is needed.

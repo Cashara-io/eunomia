@@ -62,7 +62,6 @@
             {
               "kind": "link",
               "href": "https://example.com/report",
-              "title": "",
               "autolink": false,
               "children": [
                 {
@@ -275,7 +274,6 @@
                 {
                   "kind": "link",
                   "href": "https://example.com/details",
-                  "title": "",
                   "autolink": false,
                   "children": [
                     {
@@ -528,7 +526,6 @@
             {
               "kind": "link",
               "href": "https://example.com/999",
-              "title": "",
               "autolink": true,
               "children": [
                 {
@@ -552,7 +549,6 @@
             {
               "kind": "link",
               "href": "https://example.com/999",
-              "title": "Report",
               "autolink": false,
               "children": [
                 {
@@ -907,7 +903,6 @@
             {
               "kind": "link",
               "href": "javascript:alert%28999%29",
-              "title": "",
               "autolink": false,
               "children": [
                 {
@@ -923,7 +918,6 @@
             {
               "kind": "link",
               "href": "https://example.com/999",
-              "title": "",
               "autolink": false,
               "children": [
                 {
@@ -1005,7 +999,6 @@
             {
               "kind": "link",
               "href": "https://example.com/docs",
-              "title": "",
               "autolink": false,
               "children": [
                 {
@@ -1046,7 +1039,6 @@
         },
         {
           "kind": "code_block",
-          "language": "rust",
           "children": [
             {
               "kind": "text",
@@ -1111,6 +1103,338 @@
         }
       ],
       "visible_text": "PlanUse bold, italics and inline code, see the docs.first itemsecond itemlet answer = \"42\";\nab12<script>window.__pwned = true</script>"
+    },
+    {
+      "name": "currency scheme autolink",
+      "reply": "Bakery sales <AUD:0.00>.",
+      "tree": [
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "Bakery sales "
+            },
+            {
+              "kind": "text",
+              "text": "AUD:[unverified number]"
+            },
+            {
+              "kind": "text",
+              "text": "."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "Some numbers couldn't be checked against tool results."
+            }
+          ]
+        }
+      ],
+      "visible_text": "Bakery sales AUD:[unverified number].Some numbers couldn't be checked against tool results."
+    },
+    {
+      "name": "unsupported autolink scheme",
+      "reply": "<ftp://example.com/999>",
+      "tree": [
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "ftp://example.com[unverified number]"
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "Some numbers couldn't be checked against tool results."
+            }
+          ]
+        }
+      ],
+      "visible_text": "ftp://example.com[unverified number]Some numbers couldn't be checked against tool results."
+    },
+    {
+      "name": "bare domain stays checked",
+      "reply": "www.example.com/999",
+      "tree": [
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "www.example.com[unverified number]"
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "Some numbers couldn't be checked against tool results."
+            }
+          ]
+        }
+      ],
+      "visible_text": "www.example.com[unverified number]Some numbers couldn't be checked against tool results."
+    },
+    {
+      "name": "email autolink",
+      "reply": "<person999@example.com>",
+      "tree": [
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "link",
+              "href": "mailto:person999@example.com",
+              "autolink": true,
+              "children": [
+                {
+                  "kind": "text",
+                  "text": "person999@example.com"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "visible_text": "person999@example.com"
+    },
+    {
+      "name": "link hover title omitted",
+      "reply": "[Report](https://example.com \"Bakery sales $0.00\")",
+      "tree": [
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "link",
+              "href": "https://example.com",
+              "autolink": false,
+              "children": [
+                {
+                  "kind": "text",
+                  "text": "Report"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "visible_text": "Report"
+    },
+    {
+      "name": "reference hover title omitted",
+      "reply": "[Report][ref]\n\n[ref]: https://example.com \"Bakery sales $0.00\"",
+      "tree": [
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "link",
+              "href": "https://example.com",
+              "autolink": false,
+              "children": [
+                {
+                  "kind": "text",
+                  "text": "Report"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "visible_text": "Report"
+    },
+    {
+      "name": "code info omitted",
+      "reply": "```Bakery sales $0.00\nUseful code 999\n```",
+      "tree": [
+        {
+          "kind": "code_block",
+          "children": [
+            {
+              "kind": "text",
+              "text": "Useful code [unverified number]\n"
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "Some numbers couldn't be checked against tool results."
+            }
+          ]
+        }
+      ],
+      "visible_text": "Useful code [unverified number]\nSome numbers couldn't be checked against tool results."
+    },
+    {
+      "name": "ordered list offset omitted",
+      "reply": "999. Useful item",
+      "tree": [
+        {
+          "kind": "list",
+          "start": 1,
+          "children": [
+            {
+              "kind": "item",
+              "children": [
+                {
+                  "kind": "text",
+                  "text": "Useful item"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "visible_text": "Useful item"
+    },
+    {
+      "name": "heading attributes literal",
+      "reply": "# Sales {#999}",
+      "tree": [
+        {
+          "kind": "heading",
+          "level": 1,
+          "children": [
+            {
+              "kind": "text",
+              "text": "Sales {#[unverified number]}"
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "Some numbers couldn't be checked against tool results."
+            }
+          ]
+        }
+      ],
+      "visible_text": "Sales {#[unverified number]}Some numbers couldn't be checked against tool results."
+    },
+    {
+      "name": "table header attributes literal",
+      "reply": "| Sales {#999} |\n| --- |\n| Useful |",
+      "tree": [
+        {
+          "kind": "table",
+          "children": [
+            {
+              "kind": "table_head",
+              "children": [
+                {
+                  "kind": "table_cell",
+                  "children": [
+                    {
+                      "kind": "text",
+                      "text": "Sales {#[unverified number]}"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "table_row",
+              "children": [
+                {
+                  "kind": "table_cell",
+                  "children": [
+                    {
+                      "kind": "text",
+                      "text": "Useful"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "Some numbers couldn't be checked against tool results."
+            }
+          ]
+        }
+      ],
+      "visible_text": "Sales {#[unverified number]}UsefulSome numbers couldn't be checked against tool results."
+    },
+    {
+      "name": "footnote like text",
+      "reply": "[^999]: Bakery sales $0.00\n\nFootnote [^999]",
+      "tree": [
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "["
+            },
+            {
+              "kind": "text",
+              "text": "^[unverified number]"
+            },
+            {
+              "kind": "text",
+              "text": "]"
+            },
+            {
+              "kind": "text",
+              "text": ": Bakery sales [unverified number]"
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "Footnote "
+            },
+            {
+              "kind": "text",
+              "text": "["
+            },
+            {
+              "kind": "text",
+              "text": "^[unverified number]"
+            },
+            {
+              "kind": "text",
+              "text": "]"
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "children": [
+            {
+              "kind": "text",
+              "text": "Some numbers couldn't be checked against tool results."
+            }
+          ]
+        }
+      ],
+      "visible_text": "[^[unverified number]]: Bakery sales [unverified number]Footnote [^[unverified number]]Some numbers couldn't be checked against tool results."
     }
   ]
 }

@@ -152,21 +152,6 @@ function prettyJson(text: string): string {
   }
 }
 
-function argsPreview(args: string): string {
-  try {
-    const parsed = JSON.parse(args);
-    if (parsed && typeof parsed === "object") {
-      // the words a person typed or the model chose (a query, a memory, a headline), not record ids
-      return Object.values(parsed)
-        .filter((v): v is string => typeof v === "string" && v.trim() !== "" && !/^[a-z_]+:[a-z0-9]{8,}$/i.test(v))
-        .join(" · ");
-    }
-  } catch {
-    // not JSON, show as-is
-  }
-  return args;
-}
-
 const secs = (ms: number) => `${(Math.max(0, ms) / 1000).toFixed(1)}s`;
 
 // Ticks on its own so the rest of the page does not re-render every 100ms.
@@ -205,7 +190,6 @@ function TurnHeader({ name, at, children }: { name: string; at?: string; childre
 }
 
 function ToolRow({ step, live }: { step: ToolStep; live?: boolean }) {
-  const preview = argsPreview(step.args);
   const inspectable = !step.running && !!(step.args || step.result);
   const row = (
     <>
@@ -214,11 +198,6 @@ function ToolRow({ step, live }: { step: ToolStep; live?: boolean }) {
       <span className="text-[13px] font-medium shrink-0" style={{ color: "var(--ink)" }}>
         {toolWords(step.name)}
       </span>
-      {preview && (
-        <span className="text-[13px] truncate min-w-0" style={{ color: "var(--ink-dim)" }}>
-          {preview}
-        </span>
-      )}
       <span className="ml-auto pl-2 shrink-0 flex items-center gap-1 text-[12px]" style={{ color: "var(--ink-dim)" }}>
         {/* history rows mount "done" and sit still; live rows draw the check when their tool returns */}
         <SyncMark status={step.running ? "running" : "done"} size={12} />
@@ -238,7 +217,7 @@ function ToolRow({ step, live }: { step: ToolStep; live?: boolean }) {
         </div>
         {step.args && (
           <div>
-            <div className="label mb-1">Arguments</div>
+            <div className="label mb-1">What the assistant asked the tool</div>
             <pre className="tool-pre">{prettyJson(step.args)}</pre>
           </div>
         )}

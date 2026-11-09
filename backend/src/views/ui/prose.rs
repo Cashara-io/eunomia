@@ -475,12 +475,12 @@ pub(crate) struct ChatProse {
 const UNVERIFIED: &str = "[unverified number]";
 const NUMBER_NOTE: &str = "Some numbers couldn't be checked against tool results.";
 // Text nodes are grouped by the actual tree's paragraphs, headings, cells and items.
-// An autolink is visible but exempt prose. It also breaks the checking unit so
+// A navigation autolink's URL is exempt prose. It breaks the checking unit so
 // adjacent digits cannot borrow its URL. Hrefs are never visited or rewritten.
 fn tree_units<'a>(nodes: &'a mut [crate::chat::tree::ChatNode], current: &mut Vec<&'a mut String>, units: &mut Vec<Vec<&'a mut String>>) {
     use crate::chat::tree::ChatNode;
     for node in nodes {
-        if matches!(node, ChatNode::Link { autolink: true, .. }) {
+        if matches!(node, ChatNode::Link { href, autolink: true, .. } if crate::chat::tree::navigation_autolink(href)) {
             units.push(std::mem::take(current));
         } else if node.is_unit() {
             // Entering and leaving nested blocks must not join their neighbours.
@@ -783,6 +783,40 @@ mod tests {
         let tree = ChatProse::default().safe_tree("[999](https://example.com/999)");
         assert!(matches!(&tree[0].children()[0], ChatNode::Link { href, autolink: false, .. } if href == "https://example.com/999"));
         assert!(visible_text(&tree).starts_with(UNVERIFIED));
+    }
+    #[test]
+    fn only_navigation_autolinks_exempt_their_url_digits() {
+        use crate::chat::tree::{ChatNode, visible_text};
+        let prose = ChatProse::default();
+        for raw in ["Bakery sales <AUD:0.00>.", "<ftp://example.com/999>", "<custom:999>", "www.example.com/999"] {
+            let tree = prose.safe_tree(raw);
+            assert!(visible_text(&tree).contains(UNVERIFIED), "{raw}");
+            assert!(prose.check(raw).is_err(), "{raw}");
+            assert!(!serde_json::to_string(&tree).unwrap().contains("\"kind\":\"link\""), "{raw}");
+        }
+        for raw in ["<http://example.com/999>", "<HTTPS://example.com/999>", "<mailto:person999@example.com>", "<person999@example.com>"] {
+            let tree = prose.safe_tree(raw);
+            assert!(!visible_text(&tree).contains(UNVERIFIED), "{raw}");
+            assert!(matches!(&tree[0].children()[0], ChatNode::Link { autolink: true, .. }), "{raw}");
+            assert!(prose.check(&format!("999{raw}999")).is_err(), "adjacent claims: {raw}");
+        }
+    }
+    #[test]
+    fn link_titles_and_code_info_are_absent_and_visible_attributes_are_checked() {
+        let prose = ChatProse::default();
+        for raw in ["[Report](https://example.com \"Bakery sales $0.00\")", "[Report][ref]\n\n[ref]: https://example.com \"Bakery sales $0.00\"", "```Bakery sales $0.00\nUseful code\n```"] {
+            let tree = prose.safe_tree(raw);
+            let encoded = serde_json::to_string(&tree).unwrap();
+            assert!(!encoded.contains("$0.00"), "{raw}");
+            assert!(!encoded.contains("\"title\"") && !encoded.contains("\"language\""), "{encoded}");
+        }
+        for raw in ["# Sales {#999}", "| Sales {#999} |\n| --- |\n| Useful |", "[^999]: Bakery sales $0.00\n\nFootnote [^999]"] {
+            let text = prose.safe(raw);
+            assert!(!text.contains("999") && !text.contains("0.00"), "{text}");
+            assert!(text.contains(UNVERIFIED), "{raw}");
+        }
+        let tree = prose.safe_tree("999. Useful list item");
+        assert!(matches!(tree[0], crate::chat::tree::ChatNode::List { start: Some(1), .. }));
     }
     #[test]
     fn chat_marks_only_bad_spans_even_across_inline_nodes() {

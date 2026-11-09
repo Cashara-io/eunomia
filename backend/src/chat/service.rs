@@ -368,17 +368,18 @@ async fn touch_thread(db: &OrgDb, thread_id: &RecordId, title: Option<&str>) -> 
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Deserialize, SurrealValue)]
-struct MessageRow {
-    thread_id: RecordId,
-    role: String,
-    content: String,
+pub(crate) struct MessageRow {
+    pub(crate) id: RecordId,
+    pub(crate) thread_id: RecordId,
+    pub(crate) role: String,
+    pub(crate) content: String,
     #[serde(default)]
     #[surreal(default)]
-    tool_calls: Option<Vec<Value>>,
+    pub(crate) tool_calls: Option<Vec<Value>>,
     #[serde(default)]
     #[surreal(default)]
-    tool_call_id: Option<String>,
-    created_at: Datetime,
+    pub(crate) tool_call_id: Option<String>,
+    pub(crate) created_at: Datetime,
 }
 
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
@@ -408,7 +409,7 @@ fn message_out(row: MessageRow, prose: &crate::views::ui::prose::ChatProse) -> M
 
 // Legacy Markdown rows are checked on the server with their own turn's evidence.
 // New rows already contain the checked tree and are never reparsed.
-fn messages_out(rows: Vec<MessageRow>) -> Vec<MessageOut> {
+pub(crate) fn messages_out(rows: Vec<MessageRow>) -> Vec<MessageOut> {
     let mut evidence = std::collections::HashMap::<String, crate::views::ui::prose::ChatProse>::new();
     rows.into_iter().map(|row| {
         let prose = evidence.entry(row.thread_id.to_string()).or_default();
@@ -921,6 +922,7 @@ mod tests {
 
     fn row(role: &str, content: &str, tool_calls: Option<Vec<Value>>, tool_call_id: Option<&str>) -> MessageRow {
         MessageRow {
+            id: crate::rid::parse("chat_message:abc").unwrap(),
             thread_id: crate::rid::parse("chat_thread:abc").unwrap(),
             role: role.to_string(),
             content: content.to_string(),
