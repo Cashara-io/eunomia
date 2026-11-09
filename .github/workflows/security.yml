@@ -1,0 +1,101 @@
+name: Supply chain security
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 3 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependencies-and-secrets:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: 1.95.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: '1.3.14'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24.22.2'
+      - run: python3 scripts/ci/security-tools.py cargo-deny gitleaks actionlint
+      - name: Acceptance expiry and workflow syntax
+        run: |
+          python3 scripts/ci/security-acceptances.py
+          actionlint
+      - name: Negative scanner fixtures
+        run: python3 scripts/ci/security-test.py
+      - name: Backend advisories, licences, bans and sources
+        run: bash scripts/ci/security-cargo.sh
+      - name: Frontend dependency audit
+        if: ${{ !cancelled() }}
+        run: python3 scripts/ci/security-scan.py bun frontend evidence/frontend-audit.json
+      - name: Secrets-helper dependency audit
+        if: ${{ !cancelled() }}
+        run: python3 scripts/ci/security-scan.py npm secrets-helper evidence/helper-audit.json
+      - name: Secret scan of tracked snapshot, with complete redaction
+        if: ${{ !cancelled() }}
+        run: python3 scripts/ci/security-scan.py gitleaks repo evidence/gitleaks-redacted.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: security-dependencies-${{ github.sha }}
+          path: evidence/
+          retention-days: 30
+          if-no-files-found: error
+
+  images:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [backend, frontend, backup, secrets-helper]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      - run: python3 scripts/ci/security-tools.py syft grype
+      - name: Check acceptance expiry
+        run: python3 scripts/ci/security-acceptances.py
+      - uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: ${{ matrix.image == 'backup' && './backend/scripts/backup' || format('./{0}', matrix.image) }}
+          platforms: linux/amd64
+          load: true
+          push: false
+          provenance: false
+          build-args: APP_VERSION=security-${{ github.sha }}
+          build-contexts: docs=./docs
+          tags: eunomia-security:${{ matrix.image }}
+      - name: Free build cache before downloading the CVE database
+        run: docker buildx prune --all --force
+      - name: Inventory the built image
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: python3 scripts/ci/security-sbom.py image "evidence/$IMAGE.cdx.json" "$IMAGE" "docker:eunomia-security:$IMAGE"
+      - name: Container CVEs, fail on unaccepted high and critical findings
+        env:
+          IMAGE_SCOPE: ${{ matrix.image }}
+        run: python3 scripts/ci/security-scan.py grype "evidence/$IMAGE_SCOPE.cdx.json" "evidence/$IMAGE_SCOPE.grype.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: security-image-${{ matrix.image }}-${{ github.sha }}
+          path: evidence/
+          retention-days: 30
+          if-no-files-found: error

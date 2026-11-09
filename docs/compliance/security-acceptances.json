@@ -1,0 +1,839 @@
+[
+  {
+    "scanner": "audit",
+    "id": "GHSA-qhr7-859c-m2p7",
+    "package": "brace-expansion",
+    "scope": "frontend",
+    "reason": "Existing locked dependency: brace-expansion: DoS via uncontrolled recursion on nested brace groups causing stack exhaustion. Upgrade brace-expansion beyond <1.1.20; track with PR02 remediation table. No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "audit",
+    "id": "GHSA-6j4f-fj2g-mc7p",
+    "package": "brace-expansion",
+    "scope": "frontend",
+    "reason": "Existing locked dependency: brace-expansion: DoS via uncontrolled recursion in parseCommaParts causing stack exhaustion. Upgrade brace-expansion beyond >=4.0.0 <5.0.10; track with PR02 remediation table. No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "audit",
+    "id": "GHSA-q2hr-2g5m-vwhr",
+    "package": "brace-expansion",
+    "scope": "frontend",
+    "reason": "Existing locked dependency: brace-expansion: Quadratic-time expansion of the `{a},b}` rewrite causes CPU denial of service. Upgrade brace-expansion beyond >=4.0.0 <5.0.12; track with PR02 remediation table. No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "audit",
+    "id": "GHSA-52cp-r559-cp3m",
+    "package": "js-yaml",
+    "scope": "frontend",
+    "reason": "Existing locked dependency: js-yaml: YAML merge-key chains can force quadratic CPU consumption. Upgrade js-yaml beyond >=4.0.0 <4.3.0; track with PR02 remediation table. No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "audit",
+    "id": "GHSA-5p4m-2wfm-xmqj",
+    "package": "js-yaml",
+    "scope": "frontend",
+    "reason": "Existing locked dependency: JS-YAML: Quadratic CPU consumption in !!omap resolution (3.x and 4.x) , CVE-2026-59870 fix not backported. Upgrade js-yaml beyond >=4.0.0 <4.3.1; track with PR02 remediation table. No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "audit",
+    "id": "GHSA-2883-xcg3-v3hh",
+    "package": "js-yaml",
+    "scope": "frontend",
+    "reason": "Existing locked dependency: js-yaml: maxTotalMergeKeys does not limit CPU use for empty merge sources. Upgrade js-yaml beyond >=4.0.0 <4.3.2; track with PR02 remediation table. No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "audit",
+    "id": "GHSA-g3hv-75wg-m249",
+    "package": "minimatch",
+    "scope": "frontend",
+    "reason": "Existing locked dependency: minimatch has potential denial of service via globparts amplification. Upgrade minimatch beyond >=7.0.0 <11.0.1; track with PR02 remediation table. No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "audit",
+    "id": "GHSA-cjq9-62q9-8jv4",
+    "package": "next",
+    "scope": "frontend",
+    "reason": "Existing locked dependency: Next.js has Server-Side Request Forgery in Image Optimization. Upgrade next beyond >=16.0.0 <16.3.8; track with PR02 remediation table. No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "audit",
+    "id": "GHSA-vcvr-r3jv-pc5j",
+    "package": "next",
+    "scope": "frontend",
+    "reason": "Existing locked dependency: Next.js: Remote Code Execution in next/og ImageResponse. Upgrade next beyond >=16.2.0 <16.3.6; track with PR02 remediation table. No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "audit",
+    "id": "GHSA-f87g-xv8r-7p7x",
+    "package": "next",
+    "scope": "frontend",
+    "reason": "Existing locked dependency: Next.js has information disclosure in App Router metadata image routes via dynamicParams bypass. Upgrade next beyond >=16.0.0 <16.3.8; track with PR02 remediation table. No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "audit",
+    "id": "GHSA-mcj8-r9mp-w47p",
+    "package": "next",
+    "scope": "frontend",
+    "reason": "Existing locked dependency: Next.js has cache poisoning in SSG/ISR rendering that leads to cross-user content substitution and persistent denial of service. Upgrade next beyond >=16.0.0 <16.3.8; track with PR02 remediation table. No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "audit",
+    "id": "GHSA-3w37-wq28-93x7",
+    "package": "next",
+    "scope": "frontend",
+    "reason": "Existing locked dependency: Next.js: Pending `use cache` fill can leak Draft Mode content into regular responses and persisted pages. Upgrade next beyond >=16.3.0 <16.3.8; track with PR02 remediation table. No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "audit",
+    "id": "GHSA-4jqv-mc3x-m676",
+    "package": "next",
+    "scope": "frontend",
+    "reason": "Existing locked dependency: Next.js has cache poisoning of SSG and ISR pages in self-hosted applications. Upgrade next beyond >=16.0.0 <16.3.8; track with PR02 remediation table. No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "audit",
+    "id": "GHSA-39w2-rjm5-chcv",
+    "package": "next",
+    "scope": "frontend",
+    "reason": "Existing locked dependency: Next.js has information disclosure in development server's Model Context Protocol endpoint. Upgrade next beyond >=16.0.0 <16.3.8; track with PR02 remediation table. No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "audit",
+    "id": "GHSA-h694-7cp9-m8p3",
+    "package": "next",
+    "scope": "frontend",
+    "reason": "Existing locked dependency: next.js cache leak across root param values in nested 'use cache' functions. Upgrade next beyond >=16.3.0 <16.3.8; track with PR02 remediation table. No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "audit",
+    "id": "GHSA-p3m5-59mp-jv5r",
+    "package": "next",
+    "scope": "frontend",
+    "reason": "Existing locked dependency: Next.js: Denial of Service in App Router using Server Actions. Upgrade next beyond >=16.0.0 <=16.4.0; track with PR02 remediation table. No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "audit",
+    "id": "GHSA-2464-fhr4-w9xw",
+    "package": "next",
+    "scope": "frontend",
+    "reason": "Existing locked dependency: Next.js: Unauthenticated Remote Code Execution in Image Optimization API when SVG files are used. Upgrade next beyond >=16.0.0 <=16.4.0; track with PR02 remediation table. No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "audit",
+    "id": "GHSA-673q-mjm6-r5xr",
+    "package": "next",
+    "scope": "frontend",
+    "reason": "Existing locked dependency: Next.js: Unauthenticated Remote Code Execution in `use cache` functions returning typed arrays. Upgrade next beyond >=16.0.0 <=16.4.0; track with PR02 remediation table. No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "audit",
+    "id": "GHSA-wq5f-xc86-pv6w",
+    "package": "sharp",
+    "scope": "frontend",
+    "reason": "Existing locked dependency: sharp : Vulnerability in librsvg dependency CVE-2026-96889. Upgrade sharp beyond <0.35.5; track with PR02 remediation table. No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "audit",
+    "id": "GHSA-68fv-2mgg-jv7q",
+    "package": "source-map-js",
+    "scope": "frontend",
+    "reason": "Existing locked dependency: source-map-js allows event-loop denial of service through indexed source-map section offsets. Upgrade source-map-js beyond >=1.0.0 <1.2.2; track with PR02 remediation table. No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "audit",
+    "id": "GHSA-mrhx-c7xc-m3w5",
+    "package": "zod",
+    "scope": "frontend",
+    "reason": "Existing locked dependency: Zod can exhaust memory while validating oversized constrained collections. Upgrade zod beyond <4.6.6; track with PR02 remediation table. No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "gitleaks",
+    "id": "private-key",
+    "package": "backend/tests/common/oidc_keys.rs:2",
+    "scope": "repo",
+    "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-12-09"
+  },
+  {
+    "scanner": "gitleaks",
+    "id": "private-key",
+    "package": "backend/tests/common/oidc_keys.rs:5",
+    "scope": "repo",
+    "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-12-09"
+  },
+  {
+    "scanner": "gitleaks",
+    "id": "private-key",
+    "package": "backend/tests/common/oidc_keys.rs:8",
+    "scope": "repo",
+    "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-12-09"
+  },
+  {
+    "scanner": "gitleaks",
+    "id": "private-key",
+    "package": "backend/tests/fixtures/jwt/ec_test_key.pem:1",
+    "scope": "repo",
+    "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-12-09"
+  },
+  {
+    "scanner": "gitleaks",
+    "id": "private-key",
+    "package": "backend/tests/fixtures/jwt/rsa_test_key.pem:1",
+    "scope": "repo",
+    "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-12-09"
+  },
+  {
+    "scanner": "gitleaks",
+    "id": "stripe-access-token",
+    "package": "backend/src/secrets/held.rs:495",
+    "scope": "repo",
+    "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-12-09"
+  },
+  {
+    "scanner": "gitleaks",
+    "id": "generic-api-key",
+    "package": "backend/tests/capsules.rs:30",
+    "scope": "repo",
+    "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-12-09"
+  },
+  {
+    "scanner": "gitleaks",
+    "id": "generic-api-key",
+    "package": "backend/tests/capsules.rs:31",
+    "scope": "repo",
+    "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-12-09"
+  },
+  {
+    "scanner": "gitleaks",
+    "id": "generic-api-key",
+    "package": "backend/tests/capsules.rs:48",
+    "scope": "repo",
+    "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-12-09"
+  },
+  {
+    "scanner": "gitleaks",
+    "id": "jwt",
+    "package": "backend/src/secrets/transform.rs:521",
+    "scope": "repo",
+    "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-12-09"
+  },
+  {
+    "scanner": "gitleaks",
+    "id": "jwt",
+    "package": "backend/tests/redact_backfill.rs:57",
+    "scope": "repo",
+    "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-12-09"
+  },
+  {
+    "scanner": "gitleaks",
+    "id": "jwt",
+    "package": "backend/src/redact.rs:260",
+    "scope": "repo",
+    "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-12-09"
+  },
+  {
+    "scanner": "gitleaks",
+    "id": "generic-api-key",
+    "package": "backend/src/redact.rs:224",
+    "scope": "repo",
+    "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-12-09"
+  },
+  {
+    "scanner": "gitleaks",
+    "id": "generic-api-key",
+    "package": "backend/src/redact.rs:276",
+    "scope": "repo",
+    "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-12-09"
+  },
+  {
+    "scanner": "gitleaks",
+    "id": "slack-bot-token",
+    "package": "backend/src/redact.rs:275",
+    "scope": "repo",
+    "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-12-09"
+  },
+  {
+    "scanner": "gitleaks",
+    "id": "private-key",
+    "package": "backend/src/redact.rs:258",
+    "scope": "repo",
+    "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-12-09"
+  },
+  {
+    "scanner": "gitleaks",
+    "id": "private-key",
+    "package": "backend/src/redact.rs:305",
+    "scope": "repo",
+    "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-12-09"
+  },
+  {
+    "scanner": "gitleaks",
+    "id": "private-key",
+    "package": "backend/src/redact.rs:308",
+    "scope": "repo",
+    "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-12-09"
+  },
+  {
+    "scanner": "gitleaks",
+    "id": "private-key",
+    "package": "backend/src/redact.rs:312",
+    "scope": "repo",
+    "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-12-09"
+  },
+  {
+    "scanner": "gitleaks",
+    "id": "private-key",
+    "package": "backend/src/redact.rs:314",
+    "scope": "repo",
+    "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-12-09"
+  },
+  {
+    "scanner": "gitleaks",
+    "id": "private-key",
+    "package": "backend/src/redact.rs:333",
+    "scope": "repo",
+    "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-12-09"
+  },
+  {
+    "scanner": "gitleaks",
+    "id": "curl-auth-user",
+    "package": "docs/connectors.md:118",
+    "scope": "repo",
+    "reason": "Public example credentials in the connector setup instructions; replace examples if they become misleading.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-12-09"
+  },
+  {
+    "scanner": "gitleaks",
+    "id": "curl-auth-user",
+    "package": "frontend/src/lib/connectorMeta.tsx:246",
+    "scope": "repo",
+    "reason": "Public example credentials in the connector setup instructions; replace examples if they become misleading.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-12-09"
+  },
+  {
+    "scanner": "gitleaks",
+    "id": "generic-api-key",
+    "package": "secrets-helper/test/mocks/bitwarden.ts:9",
+    "scope": "repo",
+    "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-12-09"
+  },
+  {
+    "scanner": "gitleaks",
+    "id": "generic-api-key",
+    "package": "secrets-helper/test/mocks/bitwarden.ts:13",
+    "scope": "repo",
+    "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-12-09"
+  },
+  {
+    "scanner": "gitleaks",
+    "id": "square-access-token",
+    "package": "secrets-helper/test/mocks/connect.ts:8",
+    "scope": "repo",
+    "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-12-09"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "cargo-unlicensed",
+    "package": "eunomia-backend@2.2.0",
+    "scope": "backend",
+    "reason": "Existing dependency licence metadata needs review against its published licence files. This acceptance is not a licence grant. Confirm distribution rights and correct Cargo metadata before expiry.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "cargo-unlicensed",
+    "package": "surrealdb@3.3.5",
+    "scope": "backend",
+    "reason": "Existing dependency licence metadata needs review against its published licence files. This acceptance is not a licence grant. Confirm distribution rights and correct Cargo metadata before expiry.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "cargo-unlicensed",
+    "package": "surrealdb-catalog@3.3.5",
+    "scope": "backend",
+    "reason": "Existing dependency licence metadata needs review against its published licence files. This acceptance is not a licence grant. Confirm distribution rights and correct Cargo metadata before expiry.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "cargo-unlicensed",
+    "package": "surrealdb-cnf@3.3.5",
+    "scope": "backend",
+    "reason": "Existing dependency licence metadata needs review against its published licence files. This acceptance is not a licence grant. Confirm distribution rights and correct Cargo metadata before expiry.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "cargo-unlicensed",
+    "package": "surrealdb-collections@3.3.5",
+    "scope": "backend",
+    "reason": "Existing dependency licence metadata needs review against its published licence files. This acceptance is not a licence grant. Confirm distribution rights and correct Cargo metadata before expiry.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "cargo-unlicensed",
+    "package": "surrealdb-common@3.3.5",
+    "scope": "backend",
+    "reason": "Existing dependency licence metadata needs review against its published licence files. This acceptance is not a licence grant. Confirm distribution rights and correct Cargo metadata before expiry.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "cargo-unlicensed",
+    "package": "surrealdb-core@3.3.5",
+    "scope": "backend",
+    "reason": "Existing dependency licence metadata needs review against its published licence files. This acceptance is not a licence grant. Confirm distribution rights and correct Cargo metadata before expiry.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "cargo-unlicensed",
+    "package": "surrealdb-datastore@3.3.5",
+    "scope": "backend",
+    "reason": "Existing dependency licence metadata needs review against its published licence files. This acceptance is not a licence grant. Confirm distribution rights and correct Cargo metadata before expiry.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "cargo-unlicensed",
+    "package": "surrealdb-engine-api@3.3.5",
+    "scope": "backend",
+    "reason": "Existing dependency licence metadata needs review against its published licence files. This acceptance is not a licence grant. Confirm distribution rights and correct Cargo metadata before expiry.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "cargo-unlicensed",
+    "package": "surrealdb-engine-local@3.3.5",
+    "scope": "backend",
+    "reason": "Existing dependency licence metadata needs review against its published licence files. This acceptance is not a licence grant. Confirm distribution rights and correct Cargo metadata before expiry.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "cargo-unlicensed",
+    "package": "surrealdb-expr@3.3.5",
+    "scope": "backend",
+    "reason": "Existing dependency licence metadata needs review against its published licence files. This acceptance is not a licence grant. Confirm distribution rights and correct Cargo metadata before expiry.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "cargo-unlicensed",
+    "package": "surrealdb-iam@3.3.5",
+    "scope": "backend",
+    "reason": "Existing dependency licence metadata needs review against its published licence files. This acceptance is not a licence grant. Confirm distribution rights and correct Cargo metadata before expiry.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "cargo-unlicensed",
+    "package": "surrealdb-idx@3.3.5",
+    "scope": "backend",
+    "reason": "Existing dependency licence metadata needs review against its published licence files. This acceptance is not a licence grant. Confirm distribution rights and correct Cargo metadata before expiry.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "cargo-unlicensed",
+    "package": "surrealdb-keyspace-macro@3.3.5",
+    "scope": "backend",
+    "reason": "Existing dependency licence metadata needs review against its published licence files. This acceptance is not a licence grant. Confirm distribution rights and correct Cargo metadata before expiry.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "cargo-unlicensed",
+    "package": "surrealdb-kvs@3.3.5",
+    "scope": "backend",
+    "reason": "Existing dependency licence metadata needs review against its published licence files. This acceptance is not a licence grant. Confirm distribution rights and correct Cargo metadata before expiry.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "cargo-unlicensed",
+    "package": "surrealdb-kvs-any@3.3.5",
+    "scope": "backend",
+    "reason": "Existing dependency licence metadata needs review against its published licence files. This acceptance is not a licence grant. Confirm distribution rights and correct Cargo metadata before expiry.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "cargo-unlicensed",
+    "package": "surrealdb-kvs-mem@3.3.5",
+    "scope": "backend",
+    "reason": "Existing dependency licence metadata needs review against its published licence files. This acceptance is not a licence grant. Confirm distribution rights and correct Cargo metadata before expiry.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "cargo-unlicensed",
+    "package": "surrealdb-observe@3.3.5",
+    "scope": "backend",
+    "reason": "Existing dependency licence metadata needs review against its published licence files. This acceptance is not a licence grant. Confirm distribution rights and correct Cargo metadata before expiry.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "cargo-unlicensed",
+    "package": "surrealdb-parse-common@3.3.5",
+    "scope": "backend",
+    "reason": "Existing dependency licence metadata needs review against its published licence files. This acceptance is not a licence grant. Confirm distribution rights and correct Cargo metadata before expiry.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "cargo-rejected",
+    "package": "surrealdb-protocol@0.13.1",
+    "scope": "backend",
+    "reason": "Existing dependency licence metadata needs review against its published licence files. This acceptance is not a licence grant. Confirm distribution rights and correct Cargo metadata before expiry.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "cargo-unlicensed",
+    "package": "surrealdb-rpc@3.3.5",
+    "scope": "backend",
+    "reason": "Existing dependency licence metadata needs review against its published licence files. This acceptance is not a licence grant. Confirm distribution rights and correct Cargo metadata before expiry.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "cargo-unlicensed",
+    "package": "surrealdb-runtime@3.3.5",
+    "scope": "backend",
+    "reason": "Existing dependency licence metadata needs review against its published licence files. This acceptance is not a licence grant. Confirm distribution rights and correct Cargo metadata before expiry.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "cargo-unlicensed",
+    "package": "surrealdb-sql@3.3.5",
+    "scope": "backend",
+    "reason": "Existing dependency licence metadata needs review against its published licence files. This acceptance is not a licence grant. Confirm distribution rights and correct Cargo metadata before expiry.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "cargo-unlicensed",
+    "package": "surrealdb-strand@3.3.5",
+    "scope": "backend",
+    "reason": "Existing dependency licence metadata needs review against its published licence files. This acceptance is not a licence grant. Confirm distribution rights and correct Cargo metadata before expiry.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "cargo-unlicensed",
+    "package": "surrealdb-syn@3.3.5",
+    "scope": "backend",
+    "reason": "Existing dependency licence metadata needs review against its published licence files. This acceptance is not a licence grant. Confirm distribution rights and correct Cargo metadata before expiry.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "cargo-unlicensed",
+    "package": "surrealdb-types@3.3.5",
+    "scope": "backend",
+    "reason": "Existing dependency licence metadata needs review against its published licence files. This acceptance is not a licence grant. Confirm distribution rights and correct Cargo metadata before expiry.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "cargo-unlicensed",
+    "package": "surrealdb-types-derive@3.3.5",
+    "scope": "backend",
+    "reason": "Existing dependency licence metadata needs review against its published licence files. This acceptance is not a licence grant. Confirm distribution rights and correct Cargo metadata before expiry.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "RUSTSEC-2021-0157",
+    "package": "ammonia@4.2.1",
+    "scope": "backend",
+    "reason": "Existing locked dependency: Incorrect escaping for `url(\"\")` functions in CSS style attributes. Solution: Upgrade to >=4.2.3 OR >=4.1.7, <4.2.0 (try `cargo update -p ammonia`) No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "RUSTSEC-2021-0158",
+    "package": "ammonia@4.2.1",
+    "scope": "backend",
+    "reason": "Existing locked dependency: XSS in ammonia via SVG `animateMotion`, `animateTransform`, and/or `animateColor` tags. Solution: Upgrade to >=4.2.3 OR >=4.1.7, <4.2.0 (try `cargo update -p ammonia`) No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "RUSTSEC-2026-0373",
+    "package": "ammonia@4.2.1",
+    "scope": "backend",
+    "reason": "Existing locked dependency: Missing case-insensitive matching for CSS url function. Solution: Upgrade to >=4.2.4 OR >=4.1.8, <4.2.0 (try `cargo update -p ammonia`) No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "RUSTSEC-2025-0141",
+    "package": "bincode@2.0.1",
+    "scope": "backend",
+    "reason": "Existing locked dependency: Bincode is unmaintained. Solution: No safe upgrade is available! No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "RUSTSEC-2026-0387",
+    "package": "crypto-bigint@0.5.5",
+    "scope": "backend",
+    "reason": "Existing locked dependency: Multiple timing variability issues in operations intended to be constant-time. Solution: Upgrade to >=0.7.6 (try `cargo update -p crypto-bigint`) No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "RUSTSEC-2026-0441",
+    "package": "pin-utils@0.1.1",
+    "scope": "backend",
+    "reason": "Existing locked dependency: `pin-utils` is unmaintained. Solution: No safe upgrade is available! No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "RUSTSEC-2026-0194",
+    "package": "quick-xml@0.39.4",
+    "scope": "backend",
+    "reason": "Existing locked dependency: Quadratic run time when checking a start tag for duplicate attribute names. Solution: Upgrade to >=0.41.0 (try `cargo update -p quick-xml`) No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "RUSTSEC-2026-0195",
+    "package": "quick-xml@0.39.4",
+    "scope": "backend",
+    "reason": "Existing locked dependency: Unbounded namespace-declaration allocation in `NsReader` enables memory-exhaustion denial of service. Solution: Upgrade to >=0.41.0 (try `cargo update -p quick-xml`) No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "RUSTSEC-2023-0071",
+    "package": "rsa@0.9.10",
+    "scope": "backend",
+    "reason": "Existing locked dependency: Marvin Attack: potential key recovery through timing sidechannels. Solution: Upgrade to >=0.10.0 (try `cargo update -p rsa`) No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "RUSTSEC-2026-0346",
+    "package": "rustls@0.23.45",
+    "scope": "backend",
+    "reason": "Existing locked dependency: `Debug` impls for client session values expose TLS secrets. Solution: Upgrade to >=0.23.46 (try `cargo update -p rustls`) No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "RUSTSEC-2026-0347",
+    "package": "rustls@0.23.45",
+    "scope": "backend",
+    "reason": "Existing locked dependency: Buffered application data sent to outer server after ECH rejection. Solution: Upgrade to >=0.23.46 (try `cargo update -p rustls`) No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "RUSTSEC-2026-0348",
+    "package": "rustls@0.23.45",
+    "scope": "backend",
+    "reason": "Existing locked dependency: Brotli certificate decompression can allocate up to 1 GiB before authentication. Solution: Upgrade to >=0.23.46 (try `cargo update -p rustls`) No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "RUSTSEC-2026-0349",
+    "package": "rustls@0.23.45",
+    "scope": "backend",
+    "reason": "Existing locked dependency: Unauthenticated ServerHello can downgrade later connections to classical key exchange. Solution: Upgrade to >=0.23.46 (try `cargo update -p rustls`) No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "RUSTSEC-2026-0382",
+    "package": "rustls-webpki@0.103.15",
+    "scope": "backend",
+    "reason": "Existing locked dependency: Certificate verification may accept distrusted intermediates. Solution: Upgrade to >=0.103.16, <0.104.0-alpha.1 OR >=0.104.0-alpha.8 (try `cargo update -p rustls-webpki`) No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "RUSTSEC-2026-0454",
+    "package": "surrealdb-core@3.3.5",
+    "scope": "backend",
+    "reason": "Existing locked dependency: Data race and double free via unsound `Send`/`Sync` in `reblessive`. Solution: Upgrade to >=4.0.0 (try `cargo update -p surrealdb-core`) No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "RUSTSEC-2026-0386",
+    "package": "tokio@1.53.2",
+    "scope": "backend",
+    "reason": "Existing locked dependency: `AsyncFd::new` and related constructors violate I/O safety. Solution: Upgrade to >=1.51.6, <1.52.0 OR >=1.53.3 (try `cargo update -p tokio`) No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "RUSTSEC-2026-0192",
+    "package": "ttf-parser@0.25.1",
+    "scope": "backend",
+    "reason": "Existing locked dependency: `ttf-parser` is unmaintained. Solution: No safe upgrade is available! No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "RUSTSEC-2026-0383",
+    "package": "webpki-root-certs@1.0.9",
+    "scope": "backend",
+    "reason": "Existing locked dependency: Bundled root certificates allow trust in distrusted emSign intermediates. Solution: Upgrade to >=1.0.10 (try `cargo update -p webpki-root-certs`) No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  },
+  {
+    "scanner": "cargo-deny",
+    "id": "RUSTSEC-2026-0381",
+    "package": "webpki-roots@1.0.9",
+    "scope": "backend",
+    "reason": "Existing locked dependency: Bundled root certificates allow trust in distrusted emSign intermediates. Solution: Upgrade to >=1.0.10 (try `cargo update -p webpki-roots`) No claim of non-exploitability.",
+    "owner": "Cashara maintainers",
+    "expires": "2026-11-16"
+  }
+]
