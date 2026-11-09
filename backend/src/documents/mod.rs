@@ -615,6 +615,14 @@ fn require_storage(state: &OrgState) -> AppResult<()> {
 /// Store the bytes and queue indexing. A `replace`d document gets a new revision; its old object is
 /// removed once the new one is in place.
 pub async fn upload(state: &OrgState, user: &RecordId, up: Upload) -> AppResult<DocumentOut> {
+    upload_checked(state, user, up, || async { Ok(()) }).await
+}
+
+/// Check a source connection after object storage, immediately before publishing its row.
+/// A failed check removes the staged object and never queues indexing.
+pub async fn upload_checked<F: std::future::Future<Output = AppResult<()>>>(
+    state: &OrgState, user: &RecordId, up: Upload, before_commit: impl FnOnce() -> F,
+) -> AppResult<DocumentOut> {
     let db = &state.db;
     let previous = match &up.replace {
         Some(id) => Some(load(db, user, &parse_id(id)?, false, Action::WriteMemories).await?),
@@ -637,6 +645,10 @@ pub async fn upload(state: &OrgState, user: &RecordId, up: Upload) -> AppResult<
     };
     let path = object_path(&vault, &key_of(&id), revision, &filename);
     put_object(db, &path, up.bytes).await?;
+    if let Err(error) = before_commit().await {
+        let _ = delete_object(db, &path).await;
+        return Err(error);
+    }
 
     let written: AppResult<Vec<DocRow>> = async {
         let mut res = match &previous {

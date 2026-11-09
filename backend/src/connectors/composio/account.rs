@@ -204,7 +204,11 @@ pub async fn disconnect(state: &OrgState, owner: &RecordId) -> AppResult<bool> {
         config: json!({}),
     };
     // Delete locally even when the provider is unavailable. A leased refresh cannot restore this state.
+    let publishing = state.composio_publishing.connection(&state.db, owner);
     storage::delete_tokens(&state.db, owner, &row.id).await?;
+    // Invalidate first, then drain any upload or ingest that already passed a check.
+    // Keep the gate until the response can truthfully report Disconnected.
+    let _drained = publishing.lock().await;
     let Some(raw) = credentials.credentials.get("metadata") else {
         return Ok(false);
     };

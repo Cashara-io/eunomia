@@ -298,15 +298,21 @@ fn hash_envelope(env: &Envelope) -> String {
 
 async fn reconcile_links(db: &OrgDb, owner: &RecordId, record_rid: &RecordId, links_spec: &[LinkSpec]) -> AppResult<()> {
     store::cache::DELETE_SYNC_LINKS.on(db).bind(("id", record_rid.clone())).await?;
-    for link in links_spec {
-        // (in, out, rel) has a unique index -- an error here means the edge
-        // already exists; idempotent no-op.
-        let _ = store::cache::RELATE_SYNC_LINK
-            .on(db)
-            .bind(("in", record_rid.clone()))
-            .bind(("out", rid(owner, &link.target)))
-            .bind(("rel", link.rel.clone()))
-            .await;
+    #[derive(Clone, SurrealValue)]
+    struct SyncLink {
+        #[surreal(rename = "in")]
+        from: RecordId,
+        out: RecordId,
+        rel: String,
+        origin: String,
+    }
+    let unique: std::collections::BTreeSet<_> = links_spec.iter().map(|link| (&link.target, &link.rel)).collect();
+    let links: Vec<_> = unique.into_iter().map(|(target, rel)| SyncLink {
+        from: record_rid.clone(), out: rid(owner, target), rel: rel.clone(), origin: "sync".into(),
+    }).collect();
+    for batch in links.chunks(100) {
+        store::dynamic(db, "cache.relate_sync_links", "INSERT RELATION INTO linked_to $links")
+            .bind(("links", batch.to_vec())).await?.check()?;
     }
     Ok(())
 }

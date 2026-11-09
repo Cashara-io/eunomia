@@ -17,14 +17,20 @@ cargo_step() {
   nice -n 19 cargo "$@"
 }
 cargo_step test --lib composio
-cargo_step test --test composio_flow --test composio_storage
-for mutation in owner disconnect; do
+# The consumer flow must also pass on libtest's default stack, as it does in CI.
+(unset RUST_MIN_STACK; cargo_step test --test composio_flow)
+cargo_step test --test composio_storage -- --test-threads=1
+for mutation in owner disconnect refresh publish; do
   export COMPOSIO_GUARD_MUTATION="$mutation"
   log="$(mktemp)"
-  if cargo_step test --test composio_storage > "$log" 2>&1; then cat "$log"; rm "$log"; echo "Guard survived: $mutation"; exit 1; else result=$?; fi
+  case "$mutation" in
+    owner) filter=composio_credentials; expected="another user changed the credentials" ;;
+    disconnect) filter=composio_credentials; expected="disconnect retained credentials" ;;
+    refresh) filter=selection_during_refresh; expected="selection discarded a rotated refresh token" ;;
+    publish) filter=disconnect_during_slow_document; expected="upload published after disconnect" ;;
+  esac
+  if cargo_step test --test composio_storage "$filter" -- --test-threads=1 > "$log" 2>&1; then cat "$log"; rm "$log"; echo "Guard survived: $mutation"; exit 1; else result=$?; fi
   cat "$log"
-  expected="another user changed the credentials"
-  [ "$mutation" = owner ] || expected="disconnect retained credentials"
   if [ "$result" -ne 101 ] || ! grep -q "$expected" "$log"; then rm "$log"; echo "Guard did not reach its expected assertion: $mutation"; exit 1; fi
   rm "$log"
   unset COMPOSIO_GUARD_MUTATION

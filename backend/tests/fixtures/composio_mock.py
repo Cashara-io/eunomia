@@ -2,13 +2,17 @@
 """Consumer MCP fixture. No real account, credentials, network calls or app data."""
 import base64
 import json
+import hashlib
+import threading
+from pathlib import Path
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, urlencode
 
 TOKEN = 'composio-canary-access'
 REFRESH = 'composio-canary-refresh'
-state = {'limited': False, 'refreshes': 0, 'revokes': 0, 'executions': [], 'registered': [], 'schema_requests': []}
+state = {'limited': False, 'refreshes': 0, 'revokes': 0, 'executions': [], 'registered': [], 'schema_requests': [], 'challenge': '', 'refresh_token': REFRESH, 'revoke_refresh': False, 'pause_refresh': False, 'refresh_started': False}
+refresh_resume = threading.Event()
 APPS = ['googledrive', 'gmail', 'googlecalendar', 'timelinesai', 'whatsapp', 'github']
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args): pass
@@ -32,15 +36,25 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/authorize':
             q = parse_qs(urlparse(self.path).query)
             assert q['code_challenge_method'] == ['S256'] and len(q['code_challenge'][0]) == 43
+            state['challenge'] = q['code_challenge'][0]
+            state['code_used'] = False
             self.send_response(302); self.send_header('Location',q['redirect_uri'][0]+'?'+urlencode({'code':'one-use-mock-code','state':q['state'][0]})); self.end_headers(); return
-        if path == '/file':
+        if path.startswith('/file'):
             assert not self.headers.get('Authorization') and not self.headers.get('Mcp-Session-Id')
             content = b'Drive searchable fixture content.\n'
+            if path in ['/file/pdf', '/file/sniff']: content = Path(__file__).with_name('notes.pdf').read_bytes()
+            if path == '/file/corrupt': content = b'%PDF-invalid'
+            if path == '/file/invalid': content = b'\xff\xfe'
             self.send_response(200);self.send_header('Content-Type','text/plain');self.send_header('Content-Length',str(len(content)));self.end_headers();self.wfile.write(content);return
         if path == '/stats': return self.send(state)
         self.send({'error':'missing'},404)
     def do_POST(self):
         body = self.rfile.read(int(self.headers.get('Content-Length','0')))
+        if self.path == '/control':
+            state.update(json.loads(body))
+            if not state['pause_refresh']: refresh_resume.set()
+            else: refresh_resume.clear()
+            return self.send({})
         if self.path == '/register':
             registration = json.loads(body); assert registration['token_endpoint_auth_method']=='none'
             state['registered'].append(registration)
@@ -48,10 +62,19 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == '/token':
             form = parse_qs(body.decode())
             if form['grant_type']==['authorization_code']:
-                assert form['code']==['one-use-mock-code'] and len(form['code_verifier'][0])>=43
+                assert form['code']==['one-use-mock-code']
+                challenge = base64.urlsafe_b64encode(hashlib.sha256(form['code_verifier'][0].encode()).digest()).rstrip(b'=').decode()
+                if challenge != state['challenge'] or state['code_used']: return self.send({'error':'invalid_grant'},400)
+                state['code_used'] = True
                 state['limited']=False
-            else: assert form['refresh_token']==[REFRESH]; state['refreshes']+=1
-            return self.send({'access_token':TOKEN,'refresh_token':REFRESH,'expires_in':1 if form['grant_type']==['authorization_code'] else 3600,'token_type':'Bearer'})
+            else:
+                state['refresh_started'] = True
+                if state['pause_refresh']: assert refresh_resume.wait(10), 'refresh was not released'
+                if state['revoke_refresh'] or form['refresh_token'] != [state['refresh_token']]:
+                    return self.send({'error':'invalid_grant'},400)
+                state['refreshes'] += 1
+                state['refresh_token'] = REFRESH + '-' + str(state['refreshes'])
+            return self.send({'access_token':TOKEN,'refresh_token':state['refresh_token'],'expires_in':1 if form['grant_type']==['authorization_code'] else 3600,'token_type':'Bearer'})
         if self.path == '/revoke': state['revokes']+=1; return self.send({})
         if self.path != '/mcp': return self.send({},404)
         assert self.headers.get('Authorization') == 'Bearer '+TOKEN
@@ -88,7 +111,13 @@ class Handler(BaseHTTPRequestHandler):
                 state['limited']=True
                 return tool({'successful':True,'data':{'results':[{'response':{'successful':False,'error':{'status_code':429,'message':TOKEN}}}]}})
             return output({'messageId':a['message_id'],'threadId':'t1','messageTimestamp':'2026-11-09T00:00:00Z','subject':'Fixture email '+a['message_id'],'sender':'friend@example.test','to':'mock@example.test','messageText':'Searchable email content '+TOKEN})
-        if slug=='GOOGLEDRIVE_FIND_FILE': return output({'files':[{'id':'doc1','name':'Drive fixture','mimeType':'application/vnd.google-apps.document','modifiedTime':'2026-11-08T00:00:00Z','webViewLink':'https://drive.google.com/file/d/doc1'}],'nextPageToken':'','incompleteSearch':False})
+        if slug=='GOOGLEDRIVE_FIND_FILE':
+            files = [{'id':'doc1','name':'Drive fixture','mimeType':'application/vnd.google-apps.document'}]
+            for fid, filename in [('pdf','fallback.pdf'), ('sniff','sniff.txt'), ('corrupt','corrupt.pdf'), ('invalid','invalid.txt'), ('tail','tail.txt')]:
+                files.append({'id':fid,'name':filename,'mimeType':'application/octet-stream'})
+            for file in files: file.update({'modifiedTime':'2026-11-08T00:00:00Z','webViewLink':'https://drive.google.com/file/d/'+file['id']})
+            return output({'files':files,'nextPageToken':'','incompleteSearch':False})
+        if slug=='GOOGLEDRIVE_DOWNLOAD_FILE': return output({'downloaded_file_content':{'s3url':self.origin+'/file/'+a['fileId']}})
         if slug=='GOOGLEDRIVE_EXPORT_GOOGLE_WORKSPACE_FILE': return output({'file':{'name':'fixture.txt','mimetype':'text/plain','s3url':self.origin+'/file'}})
         if slug=='GOOGLECALENDAR_EVENTS_LIST': return output({'items':[{'id':'event1','summary':'Fixture meeting','description':'Calendar searchable content','start':{'dateTime':'2026-11-09T02:00:00Z'},'end':{'dateTime':'2026-11-09T03:00:00Z'},'status':'confirmed'}],'nextSyncToken':'calendar-sync1'})
         if slug=='TIMELINESAI_GET_CHATS': return output({'results':[{'id':'chat1'}],'has_more_pages':False})

@@ -76,6 +76,8 @@ async fn callback(
     security(("cookie" = []), ("bearer" = [])))]
 async fn status(State(app): State<AppState>, user: User) -> AppResult<Json<Value>> {
     let state = app.org(&user.org).await?;
+    let publishing = state.composio_publishing.connection(&state.db, &user.id);
+    let _settled = publishing.lock().await;
     let row = storage::load(&state.db, &user.id).await?;
     let credentials = crate::sources::base::Conn {
         credentials: service::credentials_of(&state.settings.encryption_key, &row)?,

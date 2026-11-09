@@ -65,6 +65,7 @@ impl Source for ComposioSource {
         };
         let mut client = ReadClient::new(s(&conn.credentials, "/access_token")).await?;
         let mut result = SyncResult::default();
+        let mut link_budget = MAX_BATCH_LINKS;
         for selection in &selections {
             selection.validate()?;
             let cp = checkpoints.entry(selection.key()).or_default();
@@ -89,7 +90,7 @@ impl Source for ComposioSource {
                     Err(e) => Err(e),
                 }
             } else {
-                fetch_page(&mut client, selection, cp).await
+                fetch_page(&mut client, selection, cp, &mut link_budget).await
             };
             match batch {
                 Ok(batch) => {
@@ -123,6 +124,11 @@ impl Source for ComposioSource {
             ));
         }
         result.cursor = Some(cursor);
+        let skipped = result.warnings.iter().filter(|w| w.as_str() == "1 Drive file not imported (parse failure).").count();
+        if skipped > 0 {
+            result.warnings.retain(|w| w != "1 Drive file not imported (parse failure).");
+            result.warnings.push(format!("{skipped} Drive files not imported (parse failure)."));
+        }
         Ok(result)
     }
     fn map(&self, raw: &Value) -> Option<Value> {
@@ -177,6 +183,7 @@ async fn fetch_page(
     client: &mut ReadClient,
     sel: &Selection,
     cp: &mut Checkpoint,
+    link_budget: &mut usize,
 ) -> AppResult<SyncResult> {
     let mut batch = SyncResult::default();
     match sel.toolkit.as_str() {
@@ -214,8 +221,8 @@ async fn fetch_page(
                     "application/vnd.google-apps.spreadsheet" => Some("text/csv"),
                     _ => None,
                 };
-                if export.is_none()
-                    && crate::documents::media_type(s(&file, "/name"), Some(mime)).is_none()
+                let normalised = export.or_else(|| crate::documents::media_type(s(&file, "/name"), Some(mime)));
+                if normalised.is_none()
                 {
                     cp.pending.pop();
                     batch.warnings.push("Drive skipped an unsupported file type. Text, Markdown, JSON, CSV, PDF, Docs and Sheets are supported.".into());
@@ -262,10 +269,19 @@ async fn fetch_page(
                     }
                 };
                 client.mcp.scrub_file(&mut bytes);
-                let media = export.unwrap_or(mime);
-                let text = crate::documents::extract_text(media, bytes.clone())
-                    .await
-                    .map_err(|_| protocol())?;
+                let media = if bytes.starts_with(b"%PDF-") {
+                    "application/pdf"
+                } else {
+                    normalised.ok_or_else(protocol)?
+                };
+                let text = match crate::documents::extract_text(media, bytes.clone()).await {
+                    Ok(text) => text,
+                    Err(_) => {
+                        cp.pending.pop();
+                        batch.warnings.push("1 Drive file not imported (parse failure).".into());
+                        continue;
+                    }
+                };
                 let mut raw = record(
                     sel,
                     "file",
@@ -281,8 +297,8 @@ async fn fetch_page(
                     None => s(&file, "/name").into(),
                 };
                 raw["document"] = json!({"filename":name,"media_type":media,"base64":base64::engine::general_purpose::STANDARD.encode(bytes)});
-                if mime == "text/markdown" {
-                    note_relations(sel, &mut raw, &text, s(&file, "/name"));
+                if media == "text/markdown" {
+                    note_relations(sel, &mut raw, &text, s(&file, "/name"), link_budget, &mut batch.warnings);
                 }
                 batch.records.push(raw);
                 cp.pending.pop();
@@ -385,7 +401,7 @@ async fn fetch_page(
                     "",
                     s(content, "/html_url"),
                 );
-                note_relations(sel, &mut raw, &text, &path);
+                note_relations(sel, &mut raw, &text, &path, link_budget, &mut batch.warnings);
                 batch.records.push(raw);
                 cp.pending.pop();
             }
@@ -641,58 +657,78 @@ fn note_link_path(sel: &Selection, origin: &str, target: &str) -> String {
     }
 }
 
-fn note_relations(sel: &Selection, raw: &mut Value, text: &str, path: &str) {
-    let front = text
-        .strip_prefix("---\n")
-        .and_then(|s| s.split_once("\n---"))
-        .map(|(f, _)| f)
-        .unwrap_or("");
-    // Keep arbitrary front matter intact; selected scalar/list fields also become relations.
-    raw["frontmatter"] = json!(front);
-    let re =
-        regex::Regex::new(r"\[\[([^\]|#]+)(?:[^\]]*)\]\]").expect("static wikilink expression");
-    let mut links:Vec<_>=re.captures_iter(text).map(|c|{
-        let target=c[1].trim();
-        let target=note_link_path(sel,path,target);
-        let id=if sel.toolkit=="github"{format!("{}:{target}",sel.repo)}else{target};
-        json!({"target":format!("composio:composio.note:{}:{}:{id}",sel.toolkit,sel.account),"rel":"wikilink"})
-    }).collect();
-    let mut field = "";
-    for line in front.lines() {
-        let value =
-            if let Some((key, value)) = line.split_once(':').filter(|_| !line.starts_with(' ')) {
-                field = key.trim();
-                value.trim()
-            } else if line.trim_start().starts_with("- ") {
-                line.trim().trim_start_matches("- ")
-            } else {
-                continue;
-            };
-        if !matches!(field, "parent" | "related" | "links" | "tags") || value.contains("[[") {
-            continue;
+const MAX_FILE_LINKS: usize = 500;
+const MAX_BATCH_LINKS: usize = 2_000;
+const MAX_FRONT_BYTES: usize = 16 * 1024;
+const MAX_FRONT_KEYS: usize = 64;
+
+fn note_relations(
+    sel: &Selection, raw: &mut Value, text: &str, path: &str,
+    budget: &mut usize, warnings: &mut Vec<String>,
+) {
+    let limit = MAX_FILE_LINKS.min(*budget);
+    let mut links = std::collections::BTreeSet::new();
+    // Bound both the scan and the copy, including a missing closing delimiter.
+    let front = text.strip_prefix("---\n").unwrap_or("");
+    let mut end = front.len().min(MAX_FRONT_BYTES);
+    while !front.is_char_boundary(end) { end -= 1; }
+    let bounded = &front[..end];
+    let original_front_len = front.len();
+    let (front, closed) = bounded.split_once("\n---").map(|(f, _)| (f, true)).unwrap_or((bounded, false));
+    let truncated = !closed && end < original_front_len;
+    let mut keys = 0;
+    let mut kept_end = 0;
+    for line in front.split_inclusive('\n') {
+        if line.split_once(':').is_some() && !line.starts_with(' ') {
+            if keys == MAX_FRONT_KEYS { break; }
+            keys += 1;
         }
-        for target in value
-            .trim_matches(['[', ']'])
-            .split(',')
-            .map(|s| s.trim().trim_matches(['\'', '"']))
-            .filter(|s| !s.is_empty())
-        {
-            let id = if field == "tags" {
-                format!("tag:{target}")
-            } else {
+        kept_end += line.len();
+    }
+    let truncated = truncated || kept_end < front.len();
+    let front = &front[..kept_end];
+    raw["frontmatter"] = json!(front);
+    if truncated {
+        warnings.push("Obsidian front matter not fully imported (limit).".into());
+    }
+    let re = regex::Regex::new(r"\[\[([^\]|#]+)(?:[^\]]*)\]\]").expect("static wikilink expression");
+    let mut matches = re.captures_iter(text);
+    let mut parsed_end = 0;
+    while links.len() < limit {
+        let Some(c) = matches.next() else { break };
+        parsed_end = c.get(0).unwrap().end();
+        let target = note_link_path(sel, path, c[1].trim());
+        let id = if sel.toolkit == "github" { format!("{}:{target}",sel.repo) } else { target };
+        links.insert((format!("composio:composio.note:{}:{}:{id}",sel.toolkit,sel.account), "wikilink".to_string()));
+    }
+    // Count the omitted syntax without parsing or allocating targets. Duplicates in this
+    // unparsed tail count as link occurrences, not distinct destinations.
+    let omitted = if links.len() == limit {
+        text[parsed_end..].matches("[[").count()
+    } else { 0 };
+    let mut field = "";
+    'front: for line in front.lines() {
+        let value = if let Some((key, value)) = line.split_once(':').filter(|_| !line.starts_with(' ')) {
+            field = key.trim(); value.trim()
+        } else if line.trim_start().starts_with("- ") {
+            line.trim().trim_start_matches("- ")
+        } else { continue };
+        if !matches!(field, "parent" | "related" | "links" | "tags") || value.contains("[[") { continue; }
+        for target in value.trim_matches(['[', ']']).split(',').map(|s| s.trim().trim_matches(['\'', '"'])).filter(|s| !s.is_empty()) {
+            if links.len() == limit {
+                warnings.push("Obsidian front-matter links not fully imported (limit).".into());
+                break 'front;
+            }
+            let id = if field == "tags" { format!("tag:{target}") } else {
                 let path = note_link_path(sel, path, target);
-                if sel.toolkit == "github" {
-                    format!("{}:{path}", sel.repo)
-                } else {
-                    path
-                }
+                if sel.toolkit == "github" { format!("{}:{path}",sel.repo) } else { path }
             };
-            links.push(json!({"target":format!("composio:composio.note:{}:{}:{id}",sel.toolkit,sel.account),"rel":format!("frontmatter:{field}")}));
+            links.insert((format!("composio:composio.note:{}:{}:{id}",sel.toolkit,sel.account), format!("frontmatter:{field}")));
         }
     }
-    links.sort_by_key(Value::to_string);
-    links.dedup();
-    raw["links"] = json!(links);
+    if omitted > 0 { warnings.push(format!("{omitted} links not imported (limit).")); }
+    *budget -= links.len();
+    raw["links"] = json!(links.into_iter().map(|(target,rel)| json!({"target":target,"rel":rel})).collect::<Vec<_>>());
 }
 
 /// Publish Drive bytes through the existing document service. Retry by stable cache identity.
@@ -703,6 +739,7 @@ pub async fn store_documents(
     records: &mut [Value],
 ) -> AppResult<()> {
     for raw in records {
+        crate::connectors::composio::storage::ensure_active(&state.db, owner, row).await?;
         let Some(document) = raw.get("document").cloned() else {
             continue;
         };
@@ -730,7 +767,7 @@ pub async fn store_documents(
         {
             old
         } else {
-            crate::documents::upload(
+            crate::documents::upload_checked(
                 state,
                 owner,
                 crate::documents::Upload {
@@ -740,9 +777,11 @@ pub async fn store_documents(
                     replace: previous,
                     vault: row.routing["default_vault"].as_str().map(str::to_string),
                 },
+                || crate::connectors::composio::storage::ensure_active(&state.db, owner, row),
             )
             .await?
         };
+        crate::connectors::composio::storage::ensure_active(&state.db, owner, row).await?;
         crate::store::dynamic(&state.db,"app.composio_file_link","UPSERT $id SET owner = $owner, connector = $connector, external_id = $external, document_id = $document")
             .bind(("id",identity)).bind(("owner",owner.clone())).bind(("connector",row.id.clone())).bind(("external",external.to_string())).bind(("document",doc.id.clone())).await?.check()?;
         raw["document_id"] = json!(doc.id);
@@ -755,6 +794,32 @@ pub async fn store_documents(
 mod tests {
     use super::*;
     #[test]
+    fn note_relations_bound_distinct_links_frontmatter_and_the_whole_batch() {
+        let selection: Selection = serde_json::from_value(json!({"toolkit":"github","account":"mine","repo":"owner/repo"})).unwrap();
+        let text = (0..100_000).map(|i| format!("[[Target{i}]] ")).collect::<String>();
+        let mut budget = MAX_BATCH_LINKS;
+        let mut warnings = Vec::new();
+        for expected in [500,500,500,500,0] {
+            let mut raw = json!({});
+            note_relations(&selection, &mut raw, &text, "Origin.md", &mut budget, &mut warnings);
+            assert_eq!(raw["links"].as_array().unwrap().len(), expected, "unbounded links");
+        }
+        assert_eq!(budget, 0);
+        assert!(warnings.iter().any(|w| w == "99500 links not imported (limit)."));
+        let mut raw = json!({});
+        let mut budget = MAX_BATCH_LINKS;
+        note_relations(&selection, &mut raw, &"[[Same]] ".repeat(1000), "Origin.md", &mut budget, &mut warnings);
+        assert_eq!(raw["links"].as_array().unwrap().len(), 1, "duplicate wikilinks");
+        let text = format!("---\n{}---\n", (0..1000).map(|i| format!("key{i}: value\n")).collect::<String>());
+        note_relations(&selection, &mut raw, &text, "Origin.md", &mut budget, &mut warnings);
+        assert_eq!(raw["frontmatter"].as_str().unwrap().lines().count(), 64);
+        let text = format!("---\nrelated: {}", "雪".repeat(32 * 1024));
+        note_relations(&selection, &mut raw, &text, "Origin.md", &mut budget, &mut warnings);
+        assert!(raw["frontmatter"].as_str().unwrap().len() <= 16 * 1024);
+        assert!(warnings.iter().any(|w| w.contains("front matter")));
+    }
+
+    #[test]
     fn note_relations_respect_the_vault_root_and_relative_note_paths() {
         let selection: Selection = serde_json::from_value(
             json!({"toolkit":"github","account":"mine","repo":"owner/repo","folder":"vault"}),
@@ -766,6 +831,7 @@ mod tests {
             &mut raw,
             "---\nrelated: projects/Target\n---\n[[projects/Target]] [[Sibling]] [[../Other]]",
             "vault/notes/Origin.md",
+            &mut { MAX_BATCH_LINKS }, &mut Vec::new(),
         );
         let links = raw["links"].as_array().unwrap();
         assert_eq!(links.len(), 4);
