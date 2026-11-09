@@ -144,6 +144,7 @@ struct SyncReport {
     status: Option<String>,
     written: Option<i64>,
     skipped: Option<i64>,
+    provider_skipped: Option<u64>,
     failed: Option<i64>,
     errors: Option<Vec<String>>,
     error: Option<String>,

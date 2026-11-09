@@ -105,6 +105,7 @@ pub fn spec() -> utoipa::openapi::OpenApi {
         routers::sources::Doc::openapi(),
         routers::tools::Doc::openapi(),
         routers::update::Doc::openapi(),
+        crate::diagnostics::Doc::openapi(),
         routers::vaults::Doc::openapi(),
     ] {
         doc.merge(part);

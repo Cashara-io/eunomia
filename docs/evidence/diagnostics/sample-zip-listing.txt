@@ -1,0 +1,22 @@
+Archive:  /tmp/eunomia-diagnostics-sample.zip
+  Length      Date    Time    Name
+---------  ---------- -----   ----
+     3785  01-01-1980 00:00   summary.json
+     3821  01-01-1980 00:00   summary.md
+      938  01-01-1980 00:00   connectors.json
+      574  01-01-1980 00:00   health.json
+     1236  01-01-1980 00:00   README.txt
+      170  01-01-1980 00:00   backend.log
+       93  01-01-1980 00:00   containers/compose-ps.json
+       34  01-01-1980 00:00   containers/collection.json
+       28  01-01-1980 00:00   containers/backend.log
+       28  01-01-1980 00:00   containers/frontend.log
+       28  01-01-1980 00:00   containers/surrealdb.log
+       28  01-01-1980 00:00   containers/updater.log
+       28  01-01-1980 00:00   containers/backup.log
+       28  01-01-1980 00:00   containers/caddy.log
+       28  01-01-1980 00:00   containers/secrets-helper.log
+       28  01-01-1980 00:00   containers/surreal-upgrade.log
+      161  01-01-1980 00:00   containers/README.txt
+---------                     -------
+    11036                     17 files
