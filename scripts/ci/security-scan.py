@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Run scanners. Scanner errors and unknown report formats fail closed."""
+import hashlib
 import importlib.util
 import json
 import os
@@ -63,6 +64,8 @@ def scan(kind, scope, output):
             fields = item['fields']
             advisory = fields.get('advisory')
             identifier = advisory['id'] if advisory else 'cargo-' + fields['code']
+            if fields['code'] == 'rejected':
+                identifier += ':' + fields['labels'][0]['span']
             for graph in fields.get('graphs', []):
                 crate = graph['Krate']
                 findings.append(dict(scanner='cargo-deny', id=identifier,
@@ -93,7 +96,9 @@ def scan(kind, scope, output):
             report = json.loads(output.read_text())
             for item in report:
                 file = str(Path(item['File']).relative_to(target)) if Path(item['File']).is_absolute() else item['File']
-                findings.append(dict(scanner='gitleaks', id=item['RuleID'], package=f'{file}:{item["StartLine"]}', scope=scope))
+                content_hash = hashlib.sha256((target / file).read_bytes()).hexdigest()
+                findings.append(dict(scanner='gitleaks', id=item['RuleID'],
+                                     package=f'{file}:{item["StartLine"]}@sha256:{content_hash}', scope=scope))
             if result.returncode and not findings:
                 raise RuntimeError('Gitleaks failed without findings')
     elif kind == 'grype':

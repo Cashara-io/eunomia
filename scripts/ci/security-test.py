@@ -62,3 +62,19 @@ with tempfile.TemporaryDirectory() as temporary:
     assert {c['version'] for c in merged['components']} == {'1', '2'}
     assert len({c['bom-ref'] for c in merged['components']}) == 2
 print('Multi-architecture SBOM retains both inventories without colliding references')
+
+# Replacing an accepted credential at the same path and line must be rejected.
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    source = root / 'changing-secret'
+    source.mkdir()
+    fixture = source / 'fake.txt'
+    fixture.write_text(Path('scripts/ci/security/fixtures/secret/fake.txt').read_text())
+    initial = scanner.scan('gitleaks', str(source), root / 'initial.json')
+    assert initial
+    accepted = [dict(f, owner='Fixture owner', reason='Original fixture', expires='2099-01-01') for f in initial]
+    fixture.write_text(fixture.read_text().rstrip() + 'extra-content\n')
+    changed = scanner.scan('gitleaks', str(source), root / 'changed.json')
+    assert changed
+    assert scanner.policy.gate(changed, accepted) == 1
+print('Changed source cannot reuse a secret acceptance at the same file and line')

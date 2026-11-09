@@ -37,3 +37,7 @@ for repo, pin in pins.items():
         target.write_bytes(bundle.extractfile(member).read())
         target.chmod(0o755)
     print(f'Installed {name} {pin["version"]}')
+
+if os.environ.get('GITHUB_PATH'):
+    with open(os.environ['GITHUB_PATH'], 'a') as github_path:
+        github_path.write(str(destination.resolve()) + '\n')

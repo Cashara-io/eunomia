@@ -191,7 +191,7 @@
   {
     "scanner": "gitleaks",
     "id": "private-key",
-    "package": "backend/tests/common/oidc_keys.rs:2",
+    "package": "backend/tests/common/oidc_keys.rs:2@sha256:d881c6e4668466c70ec5356e720cd6d97a3c96f80bc82211596ef3932a2cc61e",
     "scope": "repo",
     "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
     "owner": "Cashara maintainers",
@@ -200,7 +200,7 @@
   {
     "scanner": "gitleaks",
     "id": "private-key",
-    "package": "backend/tests/common/oidc_keys.rs:5",
+    "package": "backend/tests/common/oidc_keys.rs:5@sha256:d881c6e4668466c70ec5356e720cd6d97a3c96f80bc82211596ef3932a2cc61e",
     "scope": "repo",
     "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
     "owner": "Cashara maintainers",
@@ -209,7 +209,7 @@
   {
     "scanner": "gitleaks",
     "id": "private-key",
-    "package": "backend/tests/common/oidc_keys.rs:8",
+    "package": "backend/tests/common/oidc_keys.rs:8@sha256:d881c6e4668466c70ec5356e720cd6d97a3c96f80bc82211596ef3932a2cc61e",
     "scope": "repo",
     "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
     "owner": "Cashara maintainers",
@@ -218,7 +218,7 @@
   {
     "scanner": "gitleaks",
     "id": "private-key",
-    "package": "backend/tests/fixtures/jwt/ec_test_key.pem:1",
+    "package": "backend/tests/fixtures/jwt/ec_test_key.pem:1@sha256:915d99e71fefdb27bf5ee4a716188e986a0eda5bb25b92a57c4e44c93ee12f19",
     "scope": "repo",
     "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
     "owner": "Cashara maintainers",
@@ -227,7 +227,7 @@
   {
     "scanner": "gitleaks",
     "id": "private-key",
-    "package": "backend/tests/fixtures/jwt/rsa_test_key.pem:1",
+    "package": "backend/tests/fixtures/jwt/rsa_test_key.pem:1@sha256:27eb298b7205fc8e29ab9ec9a27c38a26d43ab6b9471067719e30a5ff87f27a6",
     "scope": "repo",
     "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
     "owner": "Cashara maintainers",
@@ -236,7 +236,7 @@
   {
     "scanner": "gitleaks",
     "id": "stripe-access-token",
-    "package": "backend/src/secrets/held.rs:495",
+    "package": "backend/src/secrets/held.rs:495@sha256:3b742a3a2f1be11b474072edeb6d533d214844e4ac3002f9f10ce15911ad6712",
     "scope": "repo",
     "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
     "owner": "Cashara maintainers",
@@ -245,7 +245,7 @@
   {
     "scanner": "gitleaks",
     "id": "generic-api-key",
-    "package": "backend/tests/capsules.rs:30",
+    "package": "backend/tests/capsules.rs:30@sha256:a6f78857eee72dfff373600828c468b929c00cf727f89845bbfa0bf7ae877714",
     "scope": "repo",
     "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
     "owner": "Cashara maintainers",
@@ -254,7 +254,7 @@
   {
     "scanner": "gitleaks",
     "id": "generic-api-key",
-    "package": "backend/tests/capsules.rs:31",
+    "package": "backend/tests/capsules.rs:31@sha256:a6f78857eee72dfff373600828c468b929c00cf727f89845bbfa0bf7ae877714",
     "scope": "repo",
     "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
     "owner": "Cashara maintainers",
@@ -263,7 +263,7 @@
   {
     "scanner": "gitleaks",
     "id": "generic-api-key",
-    "package": "backend/tests/capsules.rs:48",
+    "package": "backend/tests/capsules.rs:48@sha256:a6f78857eee72dfff373600828c468b929c00cf727f89845bbfa0bf7ae877714",
     "scope": "repo",
     "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
     "owner": "Cashara maintainers",
@@ -272,7 +272,7 @@
   {
     "scanner": "gitleaks",
     "id": "jwt",
-    "package": "backend/src/secrets/transform.rs:521",
+    "package": "backend/src/secrets/transform.rs:521@sha256:c4fb6550b55095b20394f81e793b0551d85be869994da46440c2b596d30d8014",
     "scope": "repo",
     "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
     "owner": "Cashara maintainers",
@@ -281,7 +281,7 @@
   {
     "scanner": "gitleaks",
     "id": "jwt",
-    "package": "backend/tests/redact_backfill.rs:57",
+    "package": "backend/tests/redact_backfill.rs:57@sha256:6bc8b12cb2109a302e09e3f454474be25d0b88ed60caefd65f3ec5b3a15ea738",
     "scope": "repo",
     "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
     "owner": "Cashara maintainers",
@@ -290,7 +290,7 @@
   {
     "scanner": "gitleaks",
     "id": "jwt",
-    "package": "backend/src/redact.rs:260",
+    "package": "backend/src/redact.rs:260@sha256:f49a6c57d9a5dfe9f51297dcb9ad43e570f29b696e7608550f805fa485ac4cab",
     "scope": "repo",
     "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
     "owner": "Cashara maintainers",
@@ -299,7 +299,7 @@
   {
     "scanner": "gitleaks",
     "id": "generic-api-key",
-    "package": "backend/src/redact.rs:224",
+    "package": "backend/src/redact.rs:224@sha256:f49a6c57d9a5dfe9f51297dcb9ad43e570f29b696e7608550f805fa485ac4cab",
     "scope": "repo",
     "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
     "owner": "Cashara maintainers",
@@ -308,7 +308,7 @@
   {
     "scanner": "gitleaks",
     "id": "generic-api-key",
-    "package": "backend/src/redact.rs:276",
+    "package": "backend/src/redact.rs:276@sha256:f49a6c57d9a5dfe9f51297dcb9ad43e570f29b696e7608550f805fa485ac4cab",
     "scope": "repo",
     "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
     "owner": "Cashara maintainers",
@@ -317,7 +317,7 @@
   {
     "scanner": "gitleaks",
     "id": "slack-bot-token",
-    "package": "backend/src/redact.rs:275",
+    "package": "backend/src/redact.rs:275@sha256:f49a6c57d9a5dfe9f51297dcb9ad43e570f29b696e7608550f805fa485ac4cab",
     "scope": "repo",
     "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
     "owner": "Cashara maintainers",
@@ -326,7 +326,7 @@
   {
     "scanner": "gitleaks",
     "id": "private-key",
-    "package": "backend/src/redact.rs:258",
+    "package": "backend/src/redact.rs:258@sha256:f49a6c57d9a5dfe9f51297dcb9ad43e570f29b696e7608550f805fa485ac4cab",
     "scope": "repo",
     "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
     "owner": "Cashara maintainers",
@@ -335,7 +335,7 @@
   {
     "scanner": "gitleaks",
     "id": "private-key",
-    "package": "backend/src/redact.rs:305",
+    "package": "backend/src/redact.rs:305@sha256:f49a6c57d9a5dfe9f51297dcb9ad43e570f29b696e7608550f805fa485ac4cab",
     "scope": "repo",
     "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
     "owner": "Cashara maintainers",
@@ -344,7 +344,7 @@
   {
     "scanner": "gitleaks",
     "id": "private-key",
-    "package": "backend/src/redact.rs:308",
+    "package": "backend/src/redact.rs:308@sha256:f49a6c57d9a5dfe9f51297dcb9ad43e570f29b696e7608550f805fa485ac4cab",
     "scope": "repo",
     "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
     "owner": "Cashara maintainers",
@@ -353,7 +353,7 @@
   {
     "scanner": "gitleaks",
     "id": "private-key",
-    "package": "backend/src/redact.rs:312",
+    "package": "backend/src/redact.rs:312@sha256:f49a6c57d9a5dfe9f51297dcb9ad43e570f29b696e7608550f805fa485ac4cab",
     "scope": "repo",
     "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
     "owner": "Cashara maintainers",
@@ -362,7 +362,7 @@
   {
     "scanner": "gitleaks",
     "id": "private-key",
-    "package": "backend/src/redact.rs:314",
+    "package": "backend/src/redact.rs:314@sha256:f49a6c57d9a5dfe9f51297dcb9ad43e570f29b696e7608550f805fa485ac4cab",
     "scope": "repo",
     "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
     "owner": "Cashara maintainers",
@@ -371,7 +371,7 @@
   {
     "scanner": "gitleaks",
     "id": "private-key",
-    "package": "backend/src/redact.rs:333",
+    "package": "backend/src/redact.rs:333@sha256:f49a6c57d9a5dfe9f51297dcb9ad43e570f29b696e7608550f805fa485ac4cab",
     "scope": "repo",
     "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
     "owner": "Cashara maintainers",
@@ -380,7 +380,7 @@
   {
     "scanner": "gitleaks",
     "id": "curl-auth-user",
-    "package": "docs/connectors.md:118",
+    "package": "docs/connectors.md:118@sha256:c82c08e195385708b036b28c19223531f604ccdf7efb175df5a7f947fb27de81",
     "scope": "repo",
     "reason": "Public example credentials in the connector setup instructions; replace examples if they become misleading.",
     "owner": "Cashara maintainers",
@@ -389,7 +389,7 @@
   {
     "scanner": "gitleaks",
     "id": "curl-auth-user",
-    "package": "frontend/src/lib/connectorMeta.tsx:246",
+    "package": "frontend/src/lib/connectorMeta.tsx:246@sha256:01639c011fbab0be314f63dd74782817dbcd50d778880108dfeb3931452f306a",
     "scope": "repo",
     "reason": "Public example credentials in the connector setup instructions; replace examples if they become misleading.",
     "owner": "Cashara maintainers",
@@ -398,7 +398,7 @@
   {
     "scanner": "gitleaks",
     "id": "generic-api-key",
-    "package": "secrets-helper/test/mocks/bitwarden.ts:9",
+    "package": "secrets-helper/test/mocks/bitwarden.ts:9@sha256:3b4c42f06f36221a69013a587a7c8c4fa1433173e1f564b8860c7efdfd72a2b8",
     "scope": "repo",
     "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
     "owner": "Cashara maintainers",
@@ -407,7 +407,7 @@
   {
     "scanner": "gitleaks",
     "id": "generic-api-key",
-    "package": "secrets-helper/test/mocks/bitwarden.ts:13",
+    "package": "secrets-helper/test/mocks/bitwarden.ts:13@sha256:3b4c42f06f36221a69013a587a7c8c4fa1433173e1f564b8860c7efdfd72a2b8",
     "scope": "repo",
     "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
     "owner": "Cashara maintainers",
@@ -416,7 +416,7 @@
   {
     "scanner": "gitleaks",
     "id": "square-access-token",
-    "package": "secrets-helper/test/mocks/connect.ts:8",
+    "package": "secrets-helper/test/mocks/connect.ts:8@sha256:45f5cbcc1872b33ba5aeee622d1d0efb2cb58e05cc209bdd99e14c928504664b",
     "scope": "repo",
     "reason": "Deliberately public test credential in a test fixture or unit-test module; never used to authenticate a deployed installation.",
     "owner": "Cashara maintainers",
@@ -595,7 +595,7 @@
   },
   {
     "scanner": "cargo-deny",
-    "id": "cargo-rejected",
+    "id": "cargo-rejected:BUSL-1.1",
     "package": "surrealdb-protocol@0.13.1",
     "scope": "backend",
     "reason": "Existing dependency licence metadata needs review against its published licence files. This acceptance is not a licence grant. Confirm distribution rights and correct Cargo metadata before expiry.",

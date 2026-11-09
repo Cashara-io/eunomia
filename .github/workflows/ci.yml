@@ -275,7 +275,6 @@ jobs:
       matrix:
         include:
           - from: v2.0.7                        # published releases, pulled from ghcr
-            from_ref: ''                         # optional build-from-ref field, empty for published releases
           - from: v2.0.8
           - from: v2.0.9
           - from: v2.1.0
@@ -286,13 +285,13 @@ jobs:
         with:
           fetch-depth: 0   # the release tags: the stand-in GitHub serves them
       - name: Fetch the from_ref branch
-        if: matrix.from_ref
+        if: fromJSON(toJSON(matrix)).from_ref
         env:
-          FROM_REF: ${{ matrix.from_ref }}
+          FROM_REF: ${{ fromJSON(toJSON(matrix)).from_ref }}
         run: git fetch --no-tags origin "+refs/heads/${FROM_REF#origin/}:refs/remotes/$FROM_REF"
       - env:
-          UPDATE_PATH_FROM_REF: ${{ matrix.from_ref }}
-          UPDATE_PATH_FROM_TAG: ${{ matrix.from_ref && matrix.from || '' }}
+          UPDATE_PATH_FROM_REF: ${{ fromJSON(toJSON(matrix)).from_ref }}
+          UPDATE_PATH_FROM_TAG: ${{ fromJSON(toJSON(matrix)).from_ref && matrix.from || '' }}
           FROM: ${{ matrix.from }}
         run: bash scripts/tests/update-path.test.sh "$FROM"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

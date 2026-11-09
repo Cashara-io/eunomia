@@ -59,7 +59,8 @@ validate the whole file. An entry expires at the start of its expiry date in UTC
 including when its finding is no longer detected. Delete resolved entries.
 Acceptances match the package and scope exactly. Cargo and image entries also
 include the installed version in the package key. Secret entries bind the rule,
-file and line. Audit entries bind the advisory, package and project lockfile.
+file, line and SHA-256 of the full source file, so a changed credential cannot reuse
+an old acceptance. Audit entries bind the advisory, package and project lockfile.
 
 The initial dependency findings expire on 16 November 2026. This short acceptance
 allows the evidence pipeline to land without combining runtime upgrades into it.
