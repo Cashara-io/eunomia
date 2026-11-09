@@ -38,3 +38,10 @@ python3 -I scripts/chat-json-render/verify_numbers.py /private/tmp/chat-json-ren
 # exceeded 7 GiB. Every later Cargo step still uses the same root-space and
 # competing-process gate. The RAM disk is detached during final cleanup.
 python3 scripts/chat-json-render/verify_placeholders.py /private/tmp/chat-json-render-v5
+
+# The final generated catalogue is regenerated from catalogue.ts and checked.
+# Both catalogue descriptions and complete tool description are covered by a
+# regression forbidding the old equality/identifier exemptions.
+# Final live audit checks every substitution and requires each question's final
+# view to contain a placeholder. An intermediate plain view is permitted.
+# One follow-up repairs Histogram's ordinary chat reply, not its resolved UI.
