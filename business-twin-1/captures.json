@@ -1,0 +1,114 @@
+[
+  {
+    "view": "overview",
+    "width": 1440,
+    "theme": "light",
+    "scrollWidth": 1440,
+    "height": 900
+  },
+  {
+    "view": "structure",
+    "width": 1440,
+    "theme": "light",
+    "scrollWidth": 1440,
+    "height": 1064
+  },
+  {
+    "view": "kind",
+    "width": 1440,
+    "theme": "light",
+    "scrollWidth": 1440,
+    "height": 1010
+  },
+  {
+    "view": "review",
+    "width": 1440,
+    "theme": "light",
+    "scrollWidth": 1440,
+    "height": 1010
+  },
+  {
+    "view": "overview",
+    "width": 1440,
+    "theme": "dark",
+    "scrollWidth": 1440,
+    "height": 900
+  },
+  {
+    "view": "structure",
+    "width": 1440,
+    "theme": "dark",
+    "scrollWidth": 1440,
+    "height": 1064
+  },
+  {
+    "view": "kind",
+    "width": 1440,
+    "theme": "dark",
+    "scrollWidth": 1440,
+    "height": 1010
+  },
+  {
+    "view": "review",
+    "width": 1440,
+    "theme": "dark",
+    "scrollWidth": 1440,
+    "height": 1010
+  },
+  {
+    "view": "overview",
+    "width": 390,
+    "theme": "light",
+    "scrollWidth": 390,
+    "height": 1184
+  },
+  {
+    "view": "structure",
+    "width": 390,
+    "theme": "light",
+    "scrollWidth": 390,
+    "height": 1350
+  },
+  {
+    "view": "kind",
+    "width": 390,
+    "theme": "light",
+    "scrollWidth": 390,
+    "height": 1257
+  },
+  {
+    "view": "review",
+    "width": 390,
+    "theme": "light",
+    "scrollWidth": 390,
+    "height": 1502
+  },
+  {
+    "view": "overview",
+    "width": 390,
+    "theme": "dark",
+    "scrollWidth": 390,
+    "height": 1184
+  },
+  {
+    "view": "structure",
+    "width": 390,
+    "theme": "dark",
+    "scrollWidth": 390,
+    "height": 1350
+  },
+  {
+    "view": "kind",
+    "width": 390,
+    "theme": "dark",
+    "scrollWidth": 390,
+    "height": 1257
+  },
+  {
+    "view": "review",
+    "width": 390,
+    "theme": "dark",
+    "scrollWidth": 390,
+    "height": 1502
+  }
+]

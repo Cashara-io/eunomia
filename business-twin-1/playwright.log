@@ -1,0 +1,21 @@
+
+Running 14 tests using 1 worker
+
+(node:23058) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 tests/business-twin.spec.ts:94:5 › dedicated area, URL filters, kind details, Add data and old links (6.0s)
+  ✓   2 tests/business-twin.spec.ts:156:5 › owner batch decisions, receipts, explicit merge and strict policy (2.9s)
+  ✓   3 tests/business-twin.spec.ts:223:5 › mobile navigation, keyboard filters and honest load failure (5.6s)
+  ✓   4 tests/business-twin.spec.ts:269:5 › members inspect evidence but cannot decide, and no-model replies stay honest (2.4s)
+  ✓   5 tests/business-twin.spec.ts:326:5 › a batch approves dependencies in order and reports each saved result (2.0s)
+  ✓   6 tests/documents.spec.ts:36:7 › Documents › upload in the UI, see it indexed, download it, export it, delete it (3.2s)
+  ✓   7 tests/documents.spec.ts:91:7 › Documents › an unsupported or oversized file is refused with a reason (791ms)
+  ✓   8 tests/documents.spec.ts:99:7 › Documents › an agent uploads over MCP, recall and search find the passage, get resolves the document (1.2s)
+  ✓   9 tests/live-updates.spec.ts:12:5 › a space created, renamed and deleted by a tool call appears and disappears on an open Vaults page (3.3s)
+  ✓  10 tests/live-updates.spec.ts:29:5 › a change in one tab appears in another tab of the same account (1.7s)
+  ✓  11 tests/vaults.spec.ts:25:7 › Vault invitations › an invitee can join from the Vaults page, and only then becomes a member (2.8s)
+  ✓  12 tests/vaults.spec.ts:48:7 › Vault invitations › declining removes the invitation without joining (2.3s)
+  ✓  13 tests/vaults.spec.ts:64:7 › Vault invitations › a pending invitee can't read the vault's members (2.1s)
+  ✓  14 tests/vaults.spec.ts:79:7 › Business twin summary › a space links to its dedicated twin area (915ms)
+
+  14 passed (38.7s)
