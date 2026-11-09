@@ -305,8 +305,8 @@ mod tests {
     fn connector_kinds_excludes_demo() {
         assert!(!CONNECTOR_KINDS.contains(&"demo"));
         assert!(!CONNECTOR_KINDS.contains(&"open_connector"));
-        assert_eq!(CONNECTOR_KINDS.len(), 13);
-        for k in ["up_bank", "pocketai", "github", "slack", "notion", "linear", "gmail", "google_calendar", "discord", "spotify", "todoist", "stripe", "ed"] {
+        assert_eq!(CONNECTOR_KINDS.len(), 14);
+        for k in ["up_bank", "pocketai", "github", "slack", "notion", "linear", "gmail", "google_calendar", "discord", "spotify", "todoist", "stripe", "ed", "composio"] {
             assert!(CONNECTOR_KINDS.contains(&k), "missing {k}");
         }
     }
