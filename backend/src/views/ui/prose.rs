@@ -27,6 +27,14 @@ fn normalise(text: &str) -> String {
     mapped.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase()
 }
 fn token(c: char) -> bool { c.is_alphanumeric() || matches!(c, '_' | '-' | '/' | '.' | '%' | '+' | '\u{2044}') }
+fn following_token(text: &str) -> bool {
+    let mut chars = text.chars();
+    match chars.next() {
+        Some('.') => chars.next().is_some_and(token),
+        Some(c) => token(c),
+        None => false,
+    }
+}
 fn date(s: &str) -> Option<String> {
     // chrono accepts unpadded fields. Require the canonical ISO spelling too.
     NaiveDate::parse_from_str(s, "%Y-%m-%d").ok().filter(|d| d.to_string() == s).map(|d| d.to_string())
@@ -100,7 +108,7 @@ impl Allowed {
         for allowed in &self.strings {
             for (start, _) in text.match_indices(allowed) {
                 let end = start + allowed.len();
-                if text[..start].chars().next_back().is_some_and(token) || text[end..].chars().next().is_some_and(token) { continue; }
+                if text[..start].chars().next_back().is_some_and(token) || following_token(&text[end..]) { continue; }
                 covered[start..end].fill(true);
             }
         }
@@ -210,8 +218,8 @@ mod tests {
     #[test]
     fn verbatim_tokens_are_scoped_to_resolved_server_strings() {
         let mut data = data();
-        for raw in ["ISO 27001 compliance", "Scope 3 emissions", "iso ２７００１ compliance", "Scope\u{2009}3 emissions"] { assert!(title(raw, &data).is_ok(), "{raw}"); }
-        for raw in ["ISO 2700 compliance", "Scope 30 emissions", "Q3 revenue", "xISO 27001", "ISO 27001%", "27,001 compliance"] { assert!(title(raw, &data).is_err(), "{raw}"); }
+        for raw in ["ISO 27001 compliance", "Scope 3 emissions", "iso ２７００１ compliance", "Scope\u{2009}3 emissions", "ISO 27001.", "Scope 3."] { assert!(title(raw, &data).is_ok(), "{raw}"); }
+        for raw in ["ISO 2700 compliance", "Scope 30 emissions", "Q3 revenue", "xISO 27001", "ISO 27001%", "27,001 compliance", "ISO 27001.5"] { assert!(title(raw, &data).is_err(), "{raw}"); }
         data["sources"]["sales"]["rows"][0]["category"] = json!("Q3");
         assert!(title("Q3 revenue", &data).is_ok());
         assert!(title("ISO 27001 compliance", &data).is_err());

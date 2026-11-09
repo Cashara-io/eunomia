@@ -15,8 +15,10 @@ MUTATIONS = [
  ('placeholder-path', 'let path = pointer(binding)?;', 'let path = if binding.contains("other") { "/sources/sales/rows/0/amount".into() } else { pointer(binding)? };', 'placeholders_resolve_one_typed_path_with_server_currency'),
  ('raw-digit-rejection', 'if field(key) && let Some(s) = v.as_str()', 'if false && field(key) && let Some(s) = v.as_str()', 'unrelated_values_and_identifier_bypasses_are_rejected'),
  ('verbatim-scope', '["kind", "entities", "relations", "start", "affected", "result"]', '["kind", "entities", "relations", "start", "affected", "result", "headline", "text"]', 'verbatim_tokens_are_scoped_to_resolved_server_strings'),
- ('verbatim-boundaries', "if text[..start].chars().next_back().is_some_and(token) || text[end..].chars().next().is_some_and(token)", "if false && (text[..start].chars().next_back().is_some_and(token) || text[end..].chars().next().is_some_and(token))", 'verbatim_tokens_are_scoped_to_resolved_server_strings'),
+ ('verbatim-boundaries', "if text[..start].chars().next_back().is_some_and(token) || following_token(&text[end..])", "if false && (text[..start].chars().next_back().is_some_and(token) || following_token(&text[end..]))", 'verbatim_tokens_are_scoped_to_resolved_server_strings'),
  ('date-parsing', 'if date(m.as_str()).is_some_and(|d| self.dates.contains(&d))', 'if true', 'dates_are_parsed_as_whole_dates_and_ranges'),
+ ('unicode-digits', 'char::from_digit((c as u32 - start) % 10, 10).unwrap()', 'c', 'normalisation_precedes_token_matching'),
+ ('unicode-compatibility', 'stripped.nfkc()', 'stripped.chars()', 'normalisation_precedes_token_matching'),
  ('normalisation', 'let stripped = format.replace_all(text, "");', 'let stripped = format.replace_all(text, "$0");', 'normalisation_precedes_token_matching'),
 ]
 original = FILE.read_bytes()

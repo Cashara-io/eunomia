@@ -155,7 +155,7 @@ pub async fn resolve(db: &OrgDb, owner: &RecordId, args: &Dataset) -> AppResult<
     let total_rows = rows.len();
     rows.truncate(args.limit.unwrap_or(MAX_ROWS));
     let truncated = input_truncated || rows.len() < total_rows;
-    Ok(json!({ "kind": kinds.first().map(|k| k.kind.as_str()).or_else(|| kind.is_built_in().then(|| kind.as_str())), "applied_dates": applied_dates, "rows": rows, "columns": columns, "totals": totals, "distributions": distributions, "total_rows": total_rows, "truncated": truncated,
+    Ok(json!({ "kind": kinds.first().map(|k| k.kind.as_str()).or_else(|| kind.is_built_in().then_some(kind.as_str())), "applied_dates": applied_dates, "rows": rows, "columns": columns, "totals": totals, "distributions": distributions, "total_rows": total_rows, "truncated": truncated,
         "status": if approved { "approved" } else { "not approved" },
         "warnings": if input_truncated { vec!["Input capped at 5000 entities. Aggregates describe only this partial input."] } else if truncated { vec!["Output rows truncated."] } else { vec![] } }))
 }
