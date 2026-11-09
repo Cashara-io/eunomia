@@ -78,7 +78,7 @@ export type AdminChange = {
 /**
  * How a metric combines its entities' values.
  */
-export type Agg = 'sum' | 'count' | 'avg' | 'min' | 'max' | 'count_distinct' | 'ratio';
+export type Agg = 'sum' | 'count' | 'avg' | 'min' | 'max' | 'count_distinct' | 'median' | 'ratio';
 
 /**
  * A link column's value that names two or more entities in the vault: skipped, never guessed, until a

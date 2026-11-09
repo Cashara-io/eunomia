@@ -376,12 +376,9 @@ pub const DECIDE_METRIC: Stmt = Stmt::new(
 pub const DESCRIBE_METRIC: Stmt =
     Stmt::new("ontology.describe_metric", "UPDATE $id SET description = $description, updated_at = time::now()");
 
-/// What one metric evaluation reads, whatever the metric: the entities of the kind in `$vault` (slot
-/// 1; `$table` picks the kind's table, `$kind` the custom kind) and, per entity and property in
-/// `$props`, its latest value that was true by `$as_of` (slot 2): one indexed lookup each on
-/// (entity, property, as_of), so a long history is never read. Fixed text: every input is a parameter.
-pub const METRIC_INPUTS: Stmt = Stmt::new(
-    "ontology.metric_inputs",
+/// All entities of a metric's kind in the authorised vault (slot 1).
+pub const METRIC_ENTITIES: Stmt = Stmt::new(
+    "ontology.metric_entities",
     r#"LET $ids = IF $table = "person" { (SELECT VALUE id FROM person WHERE vault = $vault) }
         ELSE IF $table = "organisation" { (SELECT VALUE id FROM organisation WHERE vault = $vault) }
         ELSE IF $table = "location" { (SELECT VALUE id FROM location WHERE vault = $vault) }
@@ -389,12 +386,15 @@ pub const METRIC_INPUTS: Stmt = Stmt::new(
         ELSE IF $table = "file" { (SELECT VALUE id FROM file WHERE vault = $vault) }
         ELSE IF $table = "symbol" { (SELECT VALUE id FROM symbol WHERE vault = $vault) }
         ELSE { (SELECT VALUE id FROM entity WHERE vault = $vault AND kind = $kind) };
-     RETURN $ids;
-     RETURN array::flatten(array::flatten($ids.map(|$e| $props.map(|$p| (
-        SELECT entity, property, value_num, value_text, value_bool, value_date, as_of, created_at FROM entity_property
-        WHERE entity = $e AND property = $p AND vault = $vault AND as_of <= $as_of ORDER BY as_of DESC, created_at DESC LIMIT 1
-     )))));"#,
+     RETURN $ids;"#,
 );
+/// Latest value per selected entity/property pair at the cutoff. The index avoids unrelated
+/// histories; created_at breaks ties within each pair. Every input is a parameter.
+pub const LATEST_VALUES: Stmt = Stmt::new("ontology.latest_values",
+    r#"RETURN array::flatten(array::flatten($ids.map(|$e| $props.map(|$p| (
+        SELECT entity, property, value_num, value_text, value_bool, value_date, unit, as_of, created_at FROM entity_property
+        WHERE entity = $e AND property = $p AND vault = $vault AND as_of <= $as_of ORDER BY as_of DESC, created_at DESC LIMIT 1
+    )))));"#);
 
 /// The approved terms of `$vault` that a question's phrases are matched against, each with the spec and
 /// text of its stored vector: kinds (slot 0), properties (slot 1), metrics (slot 2), link types (slot 3).
@@ -526,7 +526,29 @@ pub const UPSERT_IMPORTED_VALUES: Stmt = Stmt::new(
 /// The values a deleted document's import wrote go with it.
 pub const DELETE_IMPORTED_VALUES: Stmt = Stmt::new("ontology.delete_imported_values", "DELETE entity_property WHERE source = $document");
 
+/// Dataset metadata without entity/link profiling or unrelated properties.
+pub const UI_METADATA: Stmt = Stmt::new("ontology.ui_metadata",
+    r#"SELECT * FROM ontology_kind WHERE vault = $vault AND kind = $kind;
+    SELECT * FROM ontology_property WHERE vault = $vault AND kind = $kind AND name IN $names;
+    SELECT * FROM ontology_link WHERE vault = $vault AND from_kind = $kind AND label IN $labels;"#);
+
+/// Bounded input for a generative UI dataset. Query text never comes from the model.
+pub const UI_ENTITIES: Stmt = Stmt::new("ontology.ui_entities",
+    r#"RETURN IF $table = "person" { (SELECT VALUE id FROM person WHERE vault = $vault ORDER BY id LIMIT 5001) }
+        ELSE IF $table = "organisation" { (SELECT VALUE id FROM organisation WHERE vault = $vault ORDER BY id LIMIT 5001) }
+        ELSE IF $table = "location" { (SELECT VALUE id FROM location WHERE vault = $vault ORDER BY id LIMIT 5001) }
+        ELSE IF $table = "repository" { (SELECT VALUE id FROM repository WHERE vault = $vault ORDER BY id LIMIT 5001) }
+        ELSE IF $table = "file" { (SELECT VALUE id FROM file WHERE vault = $vault ORDER BY id LIMIT 5001) }
+        ELSE IF $table = "symbol" { (SELECT VALUE id FROM symbol WHERE vault = $vault ORDER BY id LIMIT 5001) }
+        ELSE { (SELECT VALUE id FROM entity WHERE vault = $vault AND kind = $kind ORDER BY id LIMIT 5001) };"#);
+
+/// Outgoing link targets stay in the authorised vault.
+pub const UI_LINKS: Stmt = Stmt::new("ontology.ui_links",
+    "SELECT in AS entity, out AS target, label FROM relates_to WHERE in IN $ids AND in.vault = $vault AND out.vault = $vault AND label IN $labels LIMIT 5001");
+
 pub const ALL: &[&Stmt] = &[
+    &UI_LINKS,
+    &UI_ENTITIES,
     &PROFILE,
     &REGISTRY,
     &LINKS_LABELLED,
@@ -564,7 +586,9 @@ pub const ALL: &[&Stmt] = &[
     &PROPOSE_METRIC,
     &DECIDE_METRIC,
     &DESCRIBE_METRIC,
-    &METRIC_INPUTS,
+    &METRIC_ENTITIES,
+    &LATEST_VALUES,
+    &UI_METADATA,
     &COVERAGE_TERMS,
     &SET_TERM_EMBEDDING,
     &COVERAGE_NEAREST,

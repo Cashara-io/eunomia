@@ -1,0 +1,31 @@
+# Review round, 9 November 2026. Run from repository root unless shown otherwise.
+# Before every build: df -h /, stop below 8 GiB.
+# Every cargo invocation uses this environment and prefix:
+export CARGO_BUILD_JOBS=2 CARGO_PROFILE_DEV_DEBUG=0 CARGO_INCREMENTAL=0 RUST_MIN_STACK=8388608
+# nice -n 19 cargo ...
+# No cargo fmt. One cargo process at a time.
+
+nice -n 19 cargo test --manifest-path backend/Cargo.toml --test chat_ui --test ontology --test golden_tools --test round_trips -- --nocapture
+TEST_SURREAL_URL=ws://127.0.0.1:8590/rpc nice -n 19 cargo test --manifest-path backend/Cargo.toml --test chat_ui dataset_scale_grouped_and_bucketed -- --ignored --nocapture
+python3 scripts/chat-json-render/check_guards.py /private/tmp/chat-json-render-v3/mutations
+TEST_HARDENED=1 nice -n 19 cargo test --manifest-path backend/Cargo.toml --lib --test chat_ui --test ontology --test golden_tools --test round_trips -- --nocapture
+nice -n 19 cargo clippy --manifest-path backend/Cargo.toml --all-targets -- -D warnings
+
+# In frontend, with the isolated backend at 8591, no server model key:
+bun install --frozen-lockfile
+bun scripts/chat-catalog.ts
+bun scripts/chat-catalog.ts --check
+BACKEND_INTERNAL_URL=http://127.0.0.1:8591 bun run build
+bun run lint
+bunx tsc --noEmit
+E2E_BASE_URL=http://localhost:3590 E2E_CAPTURE_CATALOG=1 bunx playwright test tests/chat-json-render.spec.ts tests/every-tool.spec.ts
+# Frontend mutation: disable Charts.tsx's missing-measurement guard, rebuild,
+# restart frontend, then run the typed-money test. It must fail at the missing-data notice.
+# Restore the guard, rebuild, and rerun both files. All pass.
+
+# Real in-app chat: isolated SurrealDB 3.3.5 container at 8590 with experimental files,
+# backend at 8591, frontend at 3590. Approved CSV source maps and total_amount metric.
+# Server model gpt-6-luna throughout. Key loaded by the user's launcher in private scratch.
+# Six questions and receipts are published beside the screenshots.
+python3 -I scripts/chat-json-render/verify_numbers.py /private/tmp/chat-json-render-v3/source.csv /private/tmp/chat-json-render-v3
+# 379 numeric fields matched within 0.01.

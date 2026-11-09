@@ -109,6 +109,9 @@ test("every MCP tool works end to end", async ({ request, baseURL }) => {
   expect(covered.matched.map((m: { name: string }) => m.name)).toContain("total_size_gb");
   const uncovered = await ok("ontology_coverage", { question: "What is the gross margin?" });
   expect([uncovered.coverage, uncovered.uncovered]).toEqual([0, ["gross margin"]]);
+  const ui = await ok("show_view", { view:"ui", spec:{root:"a",elements:{a:{type:"Stat",props:{title:"Total",summary:"Server result",data:{$state:"/sources/size/metric/value"}}}}}, sources:{size:{type:"metric",metric:"total_size_gb",vault_id:vaultOf}} });
+  expect(ui.data.sources.size.metric.value).toBe(120);
+  expect(ui.text).toContain("120");
   // readiness: the db kind is still only proposed
   const ready = await ok("ontology_readiness");
   expect(ready.blockers).toContain("1 kind is proposed and needs an owner");

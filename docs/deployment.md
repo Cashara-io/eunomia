@@ -287,3 +287,7 @@ Changing a real key later has no such fallback: values written under the old key
 ## Backups
 
 See [INSTALLATION.md](../INSTALLATION.md#backups): the nightly encrypted export, where the key lives, and how to restore.
+
+## Readiness evidence for self-hosters
+
+Read the [readiness catalogue](compliance/README.md), [shared responsibilities](compliance/responsibilities.md) and [applicability notes](compliance/applicability.md) before planning an assessment. Done, Partial and Missing describe source implementation, not your installation's operation. Record host settings, access reviews, restore drills and unknowns separately. The customer-selected model data path is excluded and assumed encrypted; Eunomia's own storage, ordinary transport and maker AI governance remain in scope. Policy placeholders belong to the separate organisational track.

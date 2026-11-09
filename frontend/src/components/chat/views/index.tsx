@@ -1,3 +1,6 @@
+"use client";
+import dynamic from "next/dynamic";
+const UiView = dynamic(() => import("../ui/UiView"), { loading: () => <p>Loading analysis...</p> });
 // The chat's generative UI: `show_view` results drawn by view name. A view this app does not know yet
 // falls back to the plain text the server sends with every view.
 import type { ComponentType } from "react";
@@ -30,6 +33,7 @@ export function parseView(result: string | undefined): ShownView | null {
 }
 
 export default function ChatView({ view }: { view: ShownView }) {
+  if (view.view === "ui") return <UiView view={view} />;
   // the server checked the view against the same catalogue, so its name picks its shape
   const View = (VIEWS as Record<string, ComponentType<{ view: ShownView }> | undefined>)[view.view];
   if (View) return <View view={view} />;

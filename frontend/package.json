@@ -6,14 +6,27 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint && bun test scripts/chat-ui-values.test.jsx",
     "gen:api": "openapi-ts",
     "test": "playwright test"
   },
   "dependencies": {
     "@blobatar/react": "^2.7.0",
+    "@json-render/core": "0.22.0",
+    "@json-render/react": "0.22.0",
     "@phosphor-icons/react": "^2.1.10",
     "@tanstack/react-query": "5.104.1",
+    "@visx/axis": "4.0.0",
+    "@visx/curve": "4.0.0",
+    "@visx/group": "4.0.0",
+    "@visx/hierarchy": "4.0.0",
+    "@visx/network": "4.0.0",
+    "@visx/responsive": "4.0.0",
+    "@visx/sankey": "4.0.0",
+    "@visx/scale": "4.0.0",
+    "@visx/shape": "4.0.0",
+    "@visx/stats": "4.0.0",
+    "@visx/tooltip": "4.0.0",
     "blobatar": "^2.7.0",
     "d3-force": "^3.0.0",
     "geist": "1.5.1",
@@ -24,7 +37,8 @@
     "react-markdown": "^10.1.0",
     "recharts": "^3.10.1",
     "remark-gfm": "^4.0.1",
-    "three": "^0.186.1"
+    "three": "^0.186.1",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@hey-api/openapi-ts": "0.99.0",

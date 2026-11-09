@@ -53,9 +53,10 @@ pdf-extract = "0.12"
 # secret redaction on memory writes (redact.rs)
 regex = "1"
 
+jsonschema = { version = "0.58.6", default-features = false }
+
 [dev-dependencies]
 tokio-test = "0.4"
 insta = { version = "1", features = ["json", "redactions"] }
 tokio-tungstenite = "0.29"
-jsonschema = { version = "0.58.6", default-features = false }
 eunomia-backend = { path = ".", features = ["test-support"] }

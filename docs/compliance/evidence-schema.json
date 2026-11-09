@@ -1,0 +1,486 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Cashara-io/eunomia/blob/main/docs/compliance/evidence-schema.json",
+  "title": "Eunomia readiness evidence record",
+  "description": "Version 1.0.0. Source inspection and operating results stay separate. Default evidence excludes tenant text and secrets.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "capability_id",
+    "kind",
+    "owner",
+    "source",
+    "operation",
+    "implementation",
+    "captured_on",
+    "subject",
+    "references",
+    "limitations",
+    "summary"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^EV-C(?:0[1-9]|[12][0-9]|3[0-6])-[1-9][0-9]*$"
+    },
+    "capability_id": {
+      "type": "string",
+      "pattern": "^C(?:0[1-9]|[12][0-9]|3[0-6])$"
+    },
+    "kind": {
+      "enum": [
+        "source-inspection",
+        "measured-check",
+        "imported-signed-evidence",
+        "customer-attestation"
+      ]
+    },
+    "owner": {
+      "enum": [
+        "Eunomia",
+        "customer",
+        "shared"
+      ]
+    },
+    "source": {
+      "enum": [
+        "Eunomia",
+        "imported signed evidence",
+        "customer attestation"
+      ]
+    },
+    "operation": {
+      "enum": [
+        "passes measured check",
+        "fails measured check",
+        "unknown",
+        "stale",
+        "not applicable"
+      ]
+    },
+    "implementation": {
+      "enum": [
+        "Done",
+        "Partial",
+        "Missing"
+      ]
+    },
+    "captured_on": {
+      "type": "string",
+      "format": "date"
+    },
+    "checked_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "fresh_until": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "check_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "exclusion_reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "approved_by": {
+      "type": "string",
+      "minLength": 1
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "release_sha",
+        "scope"
+      ],
+      "properties": {
+        "repository": {
+          "const": "Cashara-io/eunomia"
+        },
+        "release_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "scope": {
+          "type": "string",
+          "minLength": 1
+        },
+        "org_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "image_digests": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        },
+        "migration_versions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "period_start": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "period_end": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "references": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "inventory_id",
+          "summary",
+          "line_start",
+          "line_end"
+        ],
+        "properties": {
+          "inventory_id": {
+            "type": "string",
+            "pattern": "^E[0-9]{2}$"
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "line_start": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "line_end": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "oneOf": [
+          {
+            "required": [
+              "path"
+            ],
+            "not": {
+              "required": [
+                "url"
+              ]
+            }
+          },
+          {
+            "required": [
+              "url"
+            ],
+            "not": {
+              "required": [
+                "path"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "not applicable"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "exclusion_reason",
+          "approved_by"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "enum": [
+              "passes measured check",
+              "fails measured check"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "checked_at",
+          "fresh_until",
+          "check_id"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "measured-check",
+              "imported-signed-evidence"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "source-inspection"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "source": {
+            "const": "Eunomia"
+          },
+          "operation": {
+            "const": "unknown"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "customer-attestation"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "source": {
+            "const": "customer attestation"
+          },
+          "operation": {
+            "enum": [
+              "unknown",
+              "stale",
+              "not applicable"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "imported-signed-evidence"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "source": {
+            "const": "imported signed evidence"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "measured-check"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "source": {
+            "const": "Eunomia"
+          }
+        }
+      }
+    }
+  ],
+  "examples": [
+    {
+      "schema_version": "1.0.0",
+      "id": "EV-C01-1",
+      "capability_id": "C01",
+      "kind": "source-inspection",
+      "owner": "Eunomia",
+      "source": "Eunomia",
+      "operation": "unknown",
+      "implementation": "Partial",
+      "captured_on": "2026-11-09",
+      "subject": {
+        "repository": "Cashara-io/eunomia",
+        "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
+        "scope": "Source inventory only; no deployed installation assessed."
+      },
+      "references": [
+        {
+          "path": "backend/src/models_user.rs",
+          "line_start": 35,
+          "line_end": 58,
+          "inventory_id": "E02",
+          "summary": "Passwords use bcrypt with bounded blocking work and an unknown-user dummy hash. Minimum 8 characters, maximum 72 bytes. No native password change, recovery, breached-password check, TOTP, passkey or SAML route was found. This means Unicode password length and the ASVS 64-character requirement need particular care."
+        },
+        {
+          "path": "backend/src/models_user.rs",
+          "line_start": 90,
+          "line_end": 99,
+          "inventory_id": "E02",
+          "summary": "Passwords use bcrypt with bounded blocking work and an unknown-user dummy hash. Minimum 8 characters, maximum 72 bytes. No native password change, recovery, breached-password check, TOTP, passkey or SAML route was found. This means Unicode password length and the ASVS 64-character requirement need particular care."
+        },
+        {
+          "path": "backend/src/routers/auth.rs",
+          "line_start": 26,
+          "line_end": 36,
+          "inventory_id": "E02",
+          "summary": "Passwords use bcrypt with bounded blocking work and an unknown-user dummy hash. Minimum 8 characters, maximum 72 bytes. No native password change, recovery, breached-password check, TOTP, passkey or SAML route was found. This means Unicode password length and the ASVS 64-character requirement need particular care."
+        },
+        {
+          "path": "backend/src/lib.rs",
+          "line_start": 77,
+          "line_end": 102,
+          "inventory_id": "E02",
+          "summary": "Passwords use bcrypt with bounded blocking work and an unknown-user dummy hash. Minimum 8 characters, maximum 72 bytes. No native password change, recovery, breached-password check, TOTP, passkey or SAML route was found. This means Unicode password length and the ASVS 64-character requirement need particular care."
+        }
+      ],
+      "limitations": [
+        "Source inspection does not establish deployed settings, runtime effectiveness or audit-period operation.",
+        "Missing means no end-to-end workflow found in the inspected routes, schema, Settings navigation and docs."
+      ],
+      "summary": "Partial. bcrypt and throttling exist; change/recovery and breached-password checks not found. E02."
+    },
+    {
+      "schema_version": "1.0.0",
+      "id": "EV-C20-2",
+      "capability_id": "C20",
+      "kind": "measured-check",
+      "owner": "Eunomia",
+      "source": "Eunomia",
+      "operation": "fails measured check",
+      "implementation": "Partial",
+      "captured_on": "2026-11-09",
+      "subject": {
+        "repository": "Cashara-io/eunomia",
+        "release_sha": "472c3bf1b26c3bbc2f7d690b6bc438acb23d1a70",
+        "scope": "Source inventory only; no deployed installation assessed."
+      },
+      "references": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "line_start": 17,
+          "line_end": 100,
+          "inventory_id": "E19",
+          "summary": "CI has strict Clippy, backend tests, hardened isolation tests, frontend lint/build/type checks, API client drift checks, Playwright, shell checks, upgrade paths and restore drills. No dependency advisory, image CVE, secret scanner, CodeQL/SAST or SBOM job was found in the workflows. Frozen lockfiles and exact SurrealDB pins help but are insufficient."
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "line_start": 102,
+          "line_end": 195,
+          "inventory_id": "E19",
+          "summary": "CI has strict Clippy, backend tests, hardened isolation tests, frontend lint/build/type checks, API client drift checks, Playwright, shell checks, upgrade paths and restore drills. No dependency advisory, image CVE, secret scanner, CodeQL/SAST or SBOM job was found in the workflows. Frozen lockfiles and exact SurrealDB pins help but are insufficient."
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "line_start": 197,
+          "line_end": 220,
+          "inventory_id": "E19",
+          "summary": "CI has strict Clippy, backend tests, hardened isolation tests, frontend lint/build/type checks, API client drift checks, Playwright, shell checks, upgrade paths and restore drills. No dependency advisory, image CVE, secret scanner, CodeQL/SAST or SBOM job was found in the workflows. Frozen lockfiles and exact SurrealDB pins help but are insufficient."
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "line_start": 246,
+          "line_end": 309,
+          "inventory_id": "E19",
+          "summary": "CI has strict Clippy, backend tests, hardened isolation tests, frontend lint/build/type checks, API client drift checks, Playwright, shell checks, upgrade paths and restore drills. No dependency advisory, image CVE, secret scanner, CodeQL/SAST or SBOM job was found in the workflows. Frozen lockfiles and exact SurrealDB pins help but are insufficient."
+        },
+        {
+          "path": ".github/workflows/release.yml",
+          "line_start": 68,
+          "line_end": 68,
+          "inventory_id": "E19",
+          "summary": "CI has strict Clippy, backend tests, hardened isolation tests, frontend lint/build/type checks, API client drift checks, Playwright, shell checks, upgrade paths and restore drills. No dependency advisory, image CVE, secret scanner, CodeQL/SAST or SBOM job was found in the workflows. Frozen lockfiles and exact SurrealDB pins help but are insufficient."
+        },
+        {
+          "path": "backend/Dockerfile",
+          "line_start": 18,
+          "line_end": 18,
+          "inventory_id": "E19",
+          "summary": "CI has strict Clippy, backend tests, hardened isolation tests, frontend lint/build/type checks, API client drift checks, Playwright, shell checks, upgrade paths and restore drills. No dependency advisory, image CVE, secret scanner, CodeQL/SAST or SBOM job was found in the workflows. Frozen lockfiles and exact SurrealDB pins help but are insufficient."
+        },
+        {
+          "path": "frontend/Dockerfile",
+          "line_start": 3,
+          "line_end": 4,
+          "inventory_id": "E19",
+          "summary": "CI has strict Clippy, backend tests, hardened isolation tests, frontend lint/build/type checks, API client drift checks, Playwright, shell checks, upgrade paths and restore drills. No dependency advisory, image CVE, secret scanner, CodeQL/SAST or SBOM job was found in the workflows. Frozen lockfiles and exact SurrealDB pins help but are insufficient."
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "line_start": 246,
+          "line_end": 299,
+          "inventory_id": "E26",
+          "summary": "Main has upgrade testing from all six releases v2.0.7 through v2.2.0, using released images, actual older updater, counts, reads, ledgers, rerun and backup-based rollback. Old SurrealDB upgrade has another job. This is stronger than fresh-install tests. It does not establish a live customer's update success."
+        },
+        {
+          "path": "scripts/tests/update-path.test.sh",
+          "line_start": 1,
+          "line_end": 1,
+          "inventory_id": "E26",
+          "summary": "Main has upgrade testing from all six releases v2.0.7 through v2.2.0, using released images, actual older updater, counts, reads, ledgers, rerun and backup-based rollback. Old SurrealDB upgrade has another job. This is stronger than fresh-install tests. It does not establish a live customer's update success."
+        },
+        {
+          "path": "scripts/ci/check-update-path-rows.sh",
+          "line_start": 1,
+          "line_end": 1,
+          "inventory_id": "E26",
+          "summary": "Main has upgrade testing from all six releases v2.0.7 through v2.2.0, using released images, actual older updater, counts, reads, ledgers, rerun and backup-based rollback. Old SurrealDB upgrade has another job. This is stronger than fresh-install tests. It does not establish a live customer's update success."
+        }
+      ],
+      "limitations": [
+        "Fictional schema example, not operating evidence."
+      ],
+      "summary": "Illustrative failure only. No security scan was run for this example.",
+      "checked_at": "2026-11-09T00:00:00Z",
+      "fresh_until": "2026-11-10T00:00:00Z",
+      "check_id": "example-only-dependency-scan"
+    }
+  ]
+}
