@@ -2412,6 +2412,42 @@
         ]
       }
     },
+    "/api/diagnostics": {
+      "post": {
+        "tags": [
+          "support"
+        ],
+        "summary": "Download a privacy-filtered support zip (instance admin, browser session)",
+        "operationId": "downloadDiagnostics",
+        "responses": {
+          "200": {
+            "description": "ZIP, capped at 25 MiB",
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ]
+      }
+    },
     "/api/documents": {
       "get": {
         "tags": [
@@ -15034,6 +15070,14 @@
               "string",
               "null"
             ]
+          },
+          "provider_skipped": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
           },
           "retry_after_secs": {
             "type": [

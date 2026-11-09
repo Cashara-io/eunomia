@@ -108,7 +108,7 @@ fn drop_marker(state: &AppState, name: &str) -> AppResult<Json<Value>> {
 
 /// The updater restarts the stack and moves data: instance admins only. `what` completes
 /// "Only an instance admin can ...". Shared with the HTTPS routes, which ask the same updater.
-pub(super) async fn require_admin(state: &AppState, user: &User, what: &str) -> AppResult<()> {
+pub(crate) async fn require_admin(state: &AppState, user: &User, what: &str) -> AppResult<()> {
     if crate::authz::is_admin(&state.control, user).await? {
         Ok(())
     } else {

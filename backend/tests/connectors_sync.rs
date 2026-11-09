@@ -170,6 +170,12 @@ async fn gmail_partial_progress_is_persisted_resets_backoff_and_drains_without_d
     assert_eq!(st["consecutive_failures"], 0);
     assert_eq!(st["last_report"]["status"], "partial");
     assert_eq!(st["last_report"]["retry_after_secs"], 60);
+    let history_key = eunomia_backend::diagnostics::opaque(&format!("{}/{}/gmail", org.db.org().key(), owner.to_string()));
+    let history = eunomia_backend::diagnostics::history::recent(&history_key);
+    assert_eq!(history[0]["partial"], true);
+    assert_eq!(history[0]["rate_limited"], true);
+    assert_eq!(history[0]["written"], 1);
+    assert_eq!(history[0]["retry_after_secs"], 60);
     assert!(due_syncs(&org).await.unwrap().is_empty(), "honour retry delay");
     org.db.test_raw().query("UPDATE sync_status SET last_report.retry_at = '2000-01-01T00:00:00Z' WHERE owner = $owner")
         .bind(("owner", owner.clone())).await.unwrap().check().unwrap();
@@ -220,6 +226,10 @@ async fn gmail_repeated_message_errors_keep_a_visible_skip_count_in_sync_status(
         } else {
             assert_eq!(cursor["pending"], json!([]));
             assert_eq!(st["last_report"]["warnings"], json!(["1 messages skipped after repeated errors"]));
+            assert_eq!(report["provider_skipped"], 1);
+            assert_eq!(st["last_report"]["provider_skipped"], 1);
+            let history_key = eunomia_backend::diagnostics::opaque(&format!("{}/{}/gmail", org.db.org().key(), owner.to_string()));
+            assert_eq!(eunomia_backend::diagnostics::history::recent(&history_key)[0]["provider_skipped"], 1);
         }
     }
     assert_eq!(count(&org, "SELECT count() AS count FROM cache_record WHERE owner = $owner AND source = 'gmail'", &owner).await, 4);
