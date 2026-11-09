@@ -7,6 +7,7 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { apiOrigin } from "@/lib/api";
 import type { Vault } from "@/lib/types";
 import { documentKeys } from "./documents";
+import { ontologyKeys } from "./ontology";
 import { entityKeys } from "./entities";
 import { getLiveStatus, setLiveStatus, subscribeLiveStatus, type LiveStatus } from "./liveStatus";
 import { vaultKeys } from "./vaults";
@@ -50,6 +51,7 @@ async function flush(qc: QueryClient, p: Pending) {
       else qc.removeQueries({ queryKey: vaultKeys.members(id) });
     }
   }
+  if (p.all || p.entities || p.documents || p.vaults) void qc.invalidateQueries({ queryKey: ontologyKeys.all });
   if (p.all || p.entities) void qc.invalidateQueries({ queryKey: entityKeys.all });
   if (p.all || p.documents) void qc.invalidateQueries({ queryKey: documentKeys.all });
 }

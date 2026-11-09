@@ -428,7 +428,12 @@ function Documents() {
   const selected = params.get("id");
   const chunk = params.get("chunk");
   // every space the user can read, or the one picked
-  const [space, setSpace] = useState<string | null>(null);
+  const space = params.get("space");
+  const setSpace = (value: string | null) => {
+    const next = new URLSearchParams(params.toString());
+    if (value) next.set("space", value); else next.delete("space");
+    router.push(`/documents?${next}`, { scroll: false });
+  };
   const vaultList = useVaults().data;
   const vaults = new Map((vaultList ?? []).map((v) => [v.id, v]));
   const picked = space ? (vaults.get(space) ?? null) : null;
@@ -438,7 +443,11 @@ function Documents() {
   const maxBytes = list?.max_bytes ?? null;
   const storageOff = list !== undefined && !list.storage;
   const isAdmin = useMe().data?.is_admin ?? false;
-  const select = (id: string | null) => router.replace(id ? `/documents?id=${encodeURIComponent(id)}` : "/documents", { scroll: false });
+  const select = (id: string | null) => {
+    const next = new URLSearchParams(params.toString());
+    if (id) next.set("id", id); else { next.delete("id"); next.delete("chunk"); }
+    router.replace(`/documents?${next}`, { scroll: false });
+  };
   const uploads = useUploads(maxBytes, space, (id) => select(id));
   const input = useRef<HTMLInputElement>(null);
 

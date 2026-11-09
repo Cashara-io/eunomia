@@ -1,7 +1,7 @@
 "use client";
 
 // An uploaded CSV on the document view: what each column holds, and once an owner approved its
-// mapping (Kinds and links, Auto-map), a button that imports its rows as entities with typed values.
+// mapping (Ontology, Auto-map), a button that imports its rows as entities with typed values.
 import { useState } from "react";
 import { RowsPlusBottomIcon } from "@phosphor-icons/react/ssr";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
@@ -174,13 +174,13 @@ export default function CsvProfile({ documentId }: { documentId: string }) {
 
       {!plan.kind && (
         <p className="text-[12.5px]" style={{ color: "var(--ink-dim)" }}>
-          To import these rows as entities, open this file&apos;s memory space, run Auto-map on it in Kinds and links, and approve what it
+          To import these rows as objects, open Ontology for this file&apos;s memory space, use Add data to run Auto-map, and approve what it
           suggests. Then come back here to import them.
         </p>
       )}
       {plan.kind && !plan.ready && (
         <p className="text-[12.5px]" style={{ color: "var(--ink-dim)" }}>
-          Mapped to {words(plan.kind)}. Import rows works once an owner approves {words(plan.kind)} and at least one of its properties in Kinds and links.
+          Mapped to {words(plan.kind)}. Import rows works once an owner approves {words(plan.kind)} and at least one of its properties in Ontology.
         </p>
       )}
       {plan.kind && plan.ready && (
