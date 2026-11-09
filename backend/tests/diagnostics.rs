@@ -20,10 +20,10 @@ async fn diagnostics_admin_zip_is_content_free_and_member_is_forbidden() {
     let app = TestApp::with_settings(settings).await;
     let cookie = app.session_cookie().await;
     let db = app.db().await;
-    db.test_raw().query("CREATE connector SET owner = $owner, kind = 'gmail', credentials_encrypted = 'SECRET_CANARY', label = 'EMAIL_CANARY@example.com', config = { private: 'MEMORY_CANARY' }; CREATE memory SET owner = $owner, subject = person:canary, vault = vault:canary, text = 'MEMORY_CANARY DOCUMENT_CANARY CHAT_CANARY', type = 'world';")
+    db.test_raw().query("CREATE connector SET enabled = true, owner = $owner, kind = 'gmail', credentials_encrypted = 'SECRET_CANARY', label = 'EMAIL_CANARY@example.com', config = { private: 'MEMORY_CANARY' }; CREATE memory SET owner = $owner, subject = person:canary, vault = vault:canary, text = 'MEMORY_CANARY DOCUMENT_CANARY CHAT_CANARY', type = 'world';")
         .bind(("owner", app.user.id.clone())).await.unwrap().check().unwrap();
     let sync_id = surrealdb::types::RecordId::new("sync_status", format!("{}:gmail", eunomia_backend::sources::base::owner_key_str(&app.user.id)));
-    db.test_raw().query("CREATE $sync SET owner = $owner, cursor = 'CURSOR_CANARY', last_run = time::now(), last_error = '429 MEMORY_CANARY password=SECRET_CANARY', last_report = {written: 3, skipped: 2, failed: 1, errors: ['DOCUMENT_CANARY']};")
+    db.test_raw().query("CREATE $sync SET owner = $owner, cursor = 'CURSOR_CANARY', last_run = time::now(), last_error = '429 MEMORY_CANARY password=SECRET_CANARY', last_report = {written: 3, skipped: 2, failed: 1, status: 'partial', provider_skipped: 5, retry_after_secs: 60, warnings: ['DOCUMENT_CANARY'], errors: ['DOCUMENT_CANARY']};")
         .bind(("sync", sync_id)).bind(("owner", app.user.id.clone())).await.unwrap().check().unwrap();
     app.control().test_raw().query("CREATE job SET org = $org, owner = $owner, kind = 'sync', payload = {source: 'gmail', private: 'CHAT_CANARY'}, idempotency_key = 'diagnostics-fixture', status = 'dead', attempts = 1, last_error_code = 'internal';")
         .bind(("org", app.user.org.key())).bind(("owner", app.user.id.clone())).await.unwrap().check().unwrap();
@@ -79,6 +79,10 @@ async fn diagnostics_admin_zip_is_content_free_and_member_is_forbidden() {
             assert_eq!(connection["source_type"], "gmail");
             assert_eq!(connection["sync"]["last_error"], "rate_limited");
             assert_eq!(connection["sync"]["written"], 3);
+            assert_eq!(connection["sync"]["skipped"], 2);
+            assert_eq!(connection["sync"]["partial"], true);
+            assert_eq!(connection["sync"]["provider_skipped"], 5);
+            assert_eq!(connection["sync"]["retry_after_secs"], 60);
             assert!(!connection["recent_jobs"].as_array().unwrap().is_empty());
         }
         if entry.name() == "summary.json" {
@@ -98,9 +102,19 @@ async fn diagnostics_admin_zip_is_content_free_and_member_is_forbidden() {
     zip.by_name("containers/README.txt").unwrap().read_to_string(&mut note).unwrap();
     assert!(note.contains("frontend.log") && note.contains("omitted"));
     std::fs::remove_dir_all(status_dir.path().join("status")).unwrap();
+    db.test_raw().query("UPDATE sync_status SET last_error = '', consecutive_failures = 0, last_report.retry_after_secs = 61412345678 WHERE owner = $owner")
+        .bind(("owner", app.user.id.clone())).await.unwrap().check().unwrap();
     let second = bundle(&app, &cookie).await;
     assert_eq!(second.status(), StatusCode::OK, "second request must not see a leaked bundle lock");
-    second.into_body().collect().await.unwrap();
+    let bytes = second.into_body().collect().await.unwrap().to_bytes();
+    let mut second_zip = zip::ZipArchive::new(std::io::Cursor::new(&bytes)).unwrap();
+    let mut connectors = String::new();
+    second_zip.by_name("connectors.json").unwrap().read_to_string(&mut connectors).unwrap();
+    assert!(!connectors.contains("61412345678"));
+    let connectors: serde_json::Value = serde_json::from_str(&connectors).unwrap();
+    assert_eq!(connectors["connections"][0]["status"], "partial");
+    assert_eq!(connectors["connections"][0]["sync"]["provider_skipped"], 5);
+    assert!(connectors["connections"][0]["sync"]["retry_after_secs"].is_null());
 }
 
 #[tokio::test]

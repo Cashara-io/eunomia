@@ -124,7 +124,7 @@ impl Source for NotionSource {
             r["_text"] = json!(blocks_text(&items(&blocks, "/results")));
         }
         let newest = changed.iter().map(|r| s(r, "/last_edited_time").to_string()).max();
-        Ok(SyncResult { records: changed, cursor: newest.or(cursor) })
+        Ok(SyncResult { records: changed, cursor: newest.or(cursor), ..SyncResult::default() })
     }
 
     fn map(&self, raw: &Value) -> Option<Value> {

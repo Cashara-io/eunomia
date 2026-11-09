@@ -40,9 +40,11 @@ pub async fn collect(state: &AppState) -> AppResult<Vec<(String, String)>> {
             let key = if conn.instance.is_empty() { source.to_string() } else { format!("{source}~{}", conn.instance) };
             let sync_id = RecordId::from_table_key("sync_status", format!("{}:{key}", crate::sources::base::owner_key_str(&conn.owner)));
             let mut sync: Value = q::SYNC.on(&db).bind(("id", sync_id)).await?.take::<Vec<Value>>(0)?.into_iter().next().unwrap_or(json!({}));
-            for field in ["consecutive_failures", "cursor_chars", "written", "skipped", "failed"] {
+            for field in ["consecutive_failures", "cursor_chars", "written", "skipped", "failed", "provider_skipped", "retry_after_secs"] {
                 sync[field] = sync[field].as_u64().map_or(Value::Null, |n| json!(n));
             }
+            sync["retry_after_secs"] = sync["retry_after_secs"].as_u64().filter(|n| *n <= 604800).map_or(Value::Null, |n| json!(n));
+            sync["partial"] = json!(sync["partial"].as_bool().unwrap_or(false));
             sync["last_error"] = super::privacy::error_summary(sync["last_error"].as_str().unwrap_or(""));
             let history_key = super::opaque(&format!("{}/{}/{}", org_id.key(), conn.owner.to_string(), key));
             let mut jobs: Vec<Value> = q::SYNC_JOBS.on(&state.control).bind(("org", org_id.key()))
@@ -55,7 +57,7 @@ pub async fn collect(state: &AppState) -> AppResult<Vec<(String, String)>> {
                 job["last_error_code"] = json!(crate::error::ErrorCode::ALL.iter().find(|c| c.as_str() == code).map(|c| c.as_str()));
             }
             connections.push(json!({"org": id, "id": super::opaque(&conn.id.to_string()), "source_type": kind,
-                "status": if !conn.enabled { "disabled" } else if !sync["last_error"].is_null() { "error" } else if sync["last_ok"].is_null() { "not_synced" } else { "ok" },
+                "status": if !conn.enabled { "disabled" } else if !sync["last_error"].is_null() { "error" } else if sync["partial"] == true { "partial" } else if sync["last_ok"].is_null() { "not_synced" } else { "ok" },
                 "sync": sync, "recent_history": super::history::recent(&history_key), "recent_jobs": jobs}));
         }
         let rows: Vec<Setting> = q::SETTINGS.on(&db).await?.take(0)?;

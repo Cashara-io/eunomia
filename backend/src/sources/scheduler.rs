@@ -32,7 +32,7 @@ use crate::pool::OrgDb;
 use crate::state::OrgState;
 use crate::store;
 use crate::error::AppResult;
-use crate::sources::base::{datetime_to_chrono, owner_key_str};
+use crate::sources::base::{datetime_to_chrono, owner_key_str, SyncProgress};
 use crate::jobs::NewJob;
 use crate::sources::{connectivity, registry};
 
@@ -69,6 +69,9 @@ struct SyncStatusRow {
     #[serde(default)]
     #[surreal(default)]
     consecutive_failures: i64,
+    #[serde(default)]
+    #[surreal(default)]
+    last_report: Value,
 }
 
 async fn get_sync_status(db: &OrgDb, owner: &RecordId, key: &str) -> AppResult<SyncStatusRow> {
@@ -82,7 +85,7 @@ async fn get_sync_status(db: &OrgDb, owner: &RecordId, key: &str) -> AppResult<S
         .bind(("owner", owner.clone()))
         .await?;
     let rows: Vec<SyncStatusRow> = res.take(0)?;
-    Ok(rows.into_iter().next().unwrap_or(SyncStatusRow { cursor: String::new(), last_run: None, consecutive_failures: 0 }))
+    Ok(rows.into_iter().next().unwrap_or(SyncStatusRow { cursor: String::new(), last_run: None, consecutive_failures: 0, last_report: Value::Null }))
 }
 
 type Claims = LazyLock<Mutex<HashSet<String>>>;
@@ -227,8 +230,9 @@ async fn sync_locked(state: &OrgState, owner: &RecordId, key: &str) -> Value {
 
     let mut partial = json!({});
     let error = match registry::run_sync(state, owner, key, cursor).await {
-        Ok((report, _)) if report.failed > 0 => {
+        Ok((report, result)) if report.failed > 0 => {
             partial = report.as_dict();
+            if let Some(count) = result.provider_skipped { partial["provider_skipped"] = json!(count); }
             format!(
                 "{} of {} records failed to save; will retry: {}",
                 report.failed,
@@ -236,13 +240,27 @@ async fn sync_locked(state: &OrgState, owner: &RecordId, key: &str) -> Value {
                 report.errors.first().map(String::as_str).unwrap_or("")
             )
         },
-        Ok((report, next_cursor)) => {
-            let report_value = report.as_dict();
-            let saved = store::app::SOURCES_SYNC_OK
+        Ok((report, result)) => {
+            let mut report_value = report.as_dict();
+            if let Some(count) = result.provider_skipped { report_value["provider_skipped"] = json!(count); }
+            if !result.warnings.is_empty() { report_value["warnings"] = json!(result.warnings); }
+            let statement = match &result.progress {
+                SyncProgress::Complete => store::app::SOURCES_SYNC_OK,
+                SyncProgress::Partial { retry_after_secs, .. } => {
+                    report_value["status"] = json!("partial");
+                    report_value["message"] = json!(result.progress.message(report.written));
+                    report_value["retry_after_secs"] = json!(retry_after_secs);
+                    let retry_at = chrono::TimeDelta::try_seconds((*retry_after_secs).min(i64::MAX as u64) as i64)
+                        .and_then(|wait| Utc::now().checked_add_signed(wait)).unwrap_or(chrono::DateTime::<Utc>::MAX_UTC);
+                    report_value["retry_at"] = json!(retry_at.to_rfc3339());
+                    store::app::SOURCES_SYNC_PARTIAL
+                }
+            };
+            let saved = statement
                 .on(db)
                 .bind(("id", sync_status_id(owner, key)))
                 .bind(("now", now))
-                .bind(("cursor", next_cursor.unwrap_or(st.cursor.clone())))
+                .bind(("cursor", result.cursor.unwrap_or(st.cursor.clone())))
                 .bind(("report", report_value.clone()))
                 .await;
             match saved {
@@ -338,6 +356,11 @@ pub fn is_due(last_run: Option<chrono::DateTime<Utc>>, failures: i64, interval: 
     (now - last_run).num_seconds() >= wait as i64
 }
 
+fn partial_retry_at(report: &Value) -> Option<chrono::DateTime<Utc>> {
+    if report["status"] != "partial" { return None; }
+    chrono::DateTime::parse_from_rfc3339(report["retry_at"].as_str()?).ok().map(|d| d.with_timezone(&Utc))
+}
+
 /// Every enabled source, for every user, whose interval and backoff window have elapsed. A user whose
 /// connectivity check is on while the machine is offline gets none: nothing is enqueued, so nothing is
 /// recorded either, and their sources are due again on the next tick.
@@ -352,9 +375,12 @@ pub async fn due_syncs(state: &OrgState) -> AppResult<Vec<DueSync>> {
             let key = registry::sync_key(src.as_ref(), &conn);
             let row: Option<SyncStatusRow> = store::get(db, &sync_status_id(&owner, &key)).await?;
             let last_run = row.as_ref().and_then(|r| r.last_run.as_ref()).and_then(datetime_to_chrono);
-            let failures = row.map_or(0, |r| r.consecutive_failures);
-            let period = interval_for(&intervals, src.key());
-            if is_due(last_run, failures, period, now) {
+            let failures = row.as_ref().map_or(0, |r| r.consecutive_failures);
+            let interval = interval_for(&intervals, src.key());
+            let retry_at = row.as_ref().filter(|r| r.consecutive_failures == 0).and_then(|r| partial_retry_at(&r.last_report));
+            // A short idempotency window allows continuation within the normal poll interval.
+            let period = if retry_at.is_some() { 60 } else { interval };
+            if retry_at.map_or_else(|| is_due(last_run, failures, interval, now), |retry| now >= retry) {
                 out.push(DueSync { owner: owner.clone(), source: key, period });
             }
         }

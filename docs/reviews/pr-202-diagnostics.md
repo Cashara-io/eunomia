@@ -23,6 +23,17 @@ Base: `db7cb98a4c80f9339bf78cf25e5843c29995624d` on `feat/diagnostics-zip`.
   Container collection has a 60-second deadline after system checks, whose
   timeout is 30 seconds. Archive creation and audit recording follow.
 
+## Merge with main
+
+The merge target is `332d96edf116da2af6d4c3a0ff9982f250d46320`, containing
+Gmail quota handling, Next.js 16.4.5 and the Ontology area. The scheduler conflict
+keeps main's partial-fetch checkpoint and retry semantics and this branch's
+failure counts and process-local history. Diagnostics distinguish partial fetches
+from healthy polls and carry retry delays. A typed optional `provider_skipped`
+count carries Gmail's cumulative permanent skips separately from unchanged-record
+ingest skips. Other fetchers leave it unknown. Diagnostics never parse cursor
+contents or warning prose to obtain this count.
+
 ## Verification
 
 Run Rust checks with `CARGO_BUILD_JOBS=2 CARGO_PROFILE_DEV_DEBUG=0
@@ -48,7 +59,36 @@ most two hours. Do not run `cargo fmt`.
 
 - `cargo clippy --locked --lib --bin eunomia-backend --test diagnostics -- -D warnings`: passed.
 - `cargo test --locked --lib diagnostics::`: 8 passed.
-- Integration diagnostics tests and Rust mutations remain pending the resource
-  gate. Completed Cargo checks followed the requested environment and priority.
+- Pre-merge `cargo test --locked --test diagnostics`: 4 passed, including a real
+  FIFO result and a successful second endpoint request.
+- Rust numeric-allowlist mutation: the ZIP test failed with the numeric canary
+  exposed. Source was restored. The remaining Rust mutations are pending.
+- Fresh Next.js 16.4.5 route generation, full typecheck, frontend lint and its
+  eight UI-value tests passed after the merge. The seven diagnostics Playwright
+  tests passed again.
+- Post-merge Rust lint/tests, API generation and remaining mutations are pending
+  the resource gate. Completed Cargo checks followed the requested environment
+  and priority.
   The task-owned target directory was removed after the unit tests to recover
   space before the next Cargo step.
+
+## Post-merge checkpoint
+
+- Clippy with warnings denied passed for the library, backend binary, diagnostics,
+  connector-sync and OpenAPI targets. A new assertion initially used Display for
+  RecordId; it was corrected to the existing RecordIdExt helper before this pass.
+- All 552 library tests and all 28 connector-sync integration tests passed. This
+  includes Gmail partial checkpoints, permanent skip counts and diagnostics history.
+- The ZIP test exposed a disabled fixture connector where the assertion expected
+  partial status. The fixture now explicitly enables that connector. Its rerun is
+  pending the shared Cargo resource gate. The other three ZIP tests passed.
+- The canonical OpenAPI document was generated from the compiled schema, then both
+  OpenAPI tests passed without update mode. Client generation and typecheck passed.
+- All 17 Playwright tests passed on a temporary local stack: diagnostics,
+  connectors-sync and ontology-area. The stack used fake credentials, stub
+  embeddings and an isolated in-memory database. It has been stopped and removed.
+- Inspected the four updated diagnostics screenshots in both themes and widths.
+- The numeric Rust mutation passed its negative assertion before the merge.
+  A regular-file mutation build was interrupted for the requested main merge;
+  its source was restored and no result was counted. Remaining Rust mutations
+  and the final restored diagnostics run are pending.

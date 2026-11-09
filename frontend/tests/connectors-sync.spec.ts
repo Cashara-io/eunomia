@@ -115,3 +115,50 @@ test("every connector offered opens a setup page with instructions", async ({ pa
     await expect(page.getByRole("button", { name: "Test connection" })).toBeVisible();
   }
 });
+
+// A real sync through the API must keep its pause visible on setup and both source views.
+test("Gmail quota pauses stay partial across setup and connected sources", async ({ page }) => {
+  test.setTimeout(60_000);
+  const server = http.createServer((req, res) => {
+    res.setHeader("content-type", "application/json");
+    const path = (req.url ?? "").split("?")[0];
+    if (path === "/oauth/token") return res.end(JSON.stringify({ access_token: "gmail-test" }));
+    if (path === "/users/me/profile") return res.end(JSON.stringify({ historyId: "100" }));
+    if (path === "/users/me/history") return res.end(JSON.stringify({ historyId: "100" }));
+    if (path === "/users/me/messages") return res.end(JSON.stringify({ messages: [{ id: "limited" }, { id: "read" }] }));
+    if (path === "/users/me/messages/read") {
+      return res.end(JSON.stringify({ id: "read", threadId: "read", internalDate: "1700000100000", snippet: "Imported before the quota pause" }));
+    }
+    res.statusCode = 429;
+    res.setHeader("retry-after", "120");
+    res.end(JSON.stringify({ error: { message: "Quota exceeded" } }));
+  });
+  await new Promise<void>((resolve) => server.listen(0, MOCK_BIND, resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("Missing Gmail mock address");
+  try {
+    await registerAndOnboard(page, uniqueEmail("gmail-partial"));
+    expect((await page.request.put("/api/connectors/gmail", { data: {
+      enabled: true,
+      config: { base_url: mockBase(address.port), token_url: `${mockBase(address.port)}/oauth/token` },
+      credentials: { client_id: "test-client", client_secret: "test-secret", refresh_token: "test-refresh" },
+    } })).ok()).toBeTruthy();
+    await page.goto("/connectors/setup/gmail");
+    await page.getByRole("button", { name: "Sync now", exact: true }).click();
+    await expect(page.getByRole("status")).toContainText(/rate limited, [01] imported, more remaining/);
+    await expect(page.getByRole("status")).not.toContainText("Synced:");
+    await page.goto("/connectors/gmail");
+    await expect(page.getByRole("status")).toContainText("Eunomia will continue automatically");
+    await expect(page.getByText("(no subject)", { exact: true })).toBeVisible();
+    await page.goto("/connectors");
+    await expect(page.getByText("Rate limited", { exact: true })).toBeVisible();
+    await expect(page.getByText(/rate limited, [01] imported, more remaining/)).toBeVisible();
+    const rows = await (await page.request.get("/api/sources")).json();
+    const gmail = rows.find((row: { key: string }) => row.key === "gmail");
+    expect(gmail.record_count).toBe(1);
+    expect(gmail.sync_status.last_ok).toBeNull();
+    expect(gmail.sync_status.last_report.retry_after_secs).toBe(120);
+  } finally {
+    server.close();
+  }
+});

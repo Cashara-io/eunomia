@@ -2579,12 +2579,17 @@ export type SyncReport = {
     error?: string | null;
     errors?: Array<string> | null;
     failed?: number | null;
+    message?: string | null;
+    provider_skipped?: number | null;
+    retry_after_secs?: number | null;
+    retry_at?: string | null;
     skipped?: number | null;
     source: string;
     /**
-     * `already_running`, `queued`, or `offline` (the connectivity check found no internet; nothing was attempted).
+     * `partial`, `already_running`, `queued`, or `offline` (the connectivity check found no internet; nothing was attempted).
      */
     status?: string | null;
+    warnings?: Array<string> | null;
     written?: number | null;
 };
 
@@ -2593,6 +2598,7 @@ export type SyncStatusOut = {
     cursor: string;
     last_error: string;
     last_ok?: string | null;
+    last_report: unknown;
     last_run?: string | null;
 };
 

@@ -16,7 +16,11 @@ Review the zip before sending it to support. Eunomia never sends it automaticall
   feature flags, setting names with values hidden, and model endpoint host only.
   Data-volume free space is included if the updater can read it. Unknowns are null.
 - `connectors.json`: source types, status, checkpoint times, error categories,
-  persisted last-success counts, cursor character counts and recent sync history.
+  persisted ingest counts, cursor character counts and recent sync history. Partial
+  fetches retain their partial status and retry delay, up to seven days. Larger
+  retry delays are exported as unknown. Gmail also exports its
+  cumulative permanent provider-skip count separately from unchanged-record skips.
+  Warning prose and cursor contents are excluded.
   The last 20 queued sync jobs are included while retained by the job queue.
   Process-local history keeps up to 20 runs per connection from the latest 2,000 runs in this
   backend process. It resets on restart. Counts, durations, partial results and

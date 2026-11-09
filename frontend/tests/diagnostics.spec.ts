@@ -2,11 +2,13 @@ import { expect, test, type Page } from "@playwright/test";
 
 // UI contract tests use explicit API fixtures. Backend integration tests cover auth, ZIP and privacy.
 async function settings(page: Page, admin = true) {
+  await page.routeWebSocket("**/api/events/ws", () => undefined);
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     const data = path === "/api/auth/me" ? { id: "user:fixture", email: "fixture@example.test", is_admin: admin, onboarded: true }
       : path === "/api/settings" ? { sync_intervals: {}, theme: {}, openai_base_url: "", onboarded: true }
       : path === "/api/update/status" ? { configured: false }
+      : path === "/api/vaults/invitations" ? { results: [] }
       : path === "/api/secret-requests/pending" ? [] : [];
     await route.fulfill({ json: data });
   });

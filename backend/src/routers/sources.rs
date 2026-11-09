@@ -61,6 +61,9 @@ struct SyncStatusRow {
     #[serde(default)]
     #[surreal(default)]
     consecutive_failures: i64,
+    #[serde(default)]
+    #[surreal(default)]
+    last_report: Value,
 }
 
 async fn sync_status_rows(state: &OrgState, owner: &RecordId) -> AppResult<std::collections::HashMap<String, SyncStatusRow>> {
@@ -109,6 +112,7 @@ struct SyncStatusOut {
     last_ok: Option<surrealdb::types::Datetime>,
     last_error: String,
     consecutive_failures: i64,
+    last_report: Value,
 }
 
 /// One connection of a source. A kind's first connection keeps the source key as its `key`; each one
@@ -136,13 +140,18 @@ struct SourceOut {
 #[allow(dead_code)]
 struct SyncReport {
     source: String,
-    /// `already_running`, `queued`, or `offline` (the connectivity check found no internet; nothing was attempted).
+    /// `partial`, `already_running`, `queued`, or `offline` (the connectivity check found no internet; nothing was attempted).
     status: Option<String>,
     written: Option<i64>,
     skipped: Option<i64>,
+    provider_skipped: Option<u64>,
     failed: Option<i64>,
     errors: Option<Vec<String>>,
     error: Option<String>,
+    message: Option<String>,
+    retry_after_secs: Option<u64>,
+    retry_at: Option<String>,
+    warnings: Option<Vec<String>>,
 }
 
 /// Body of the webhook route: `{"status": "ignored"}` or an ingest report with
@@ -160,12 +169,13 @@ struct WebhookOut {
 
 fn status_out(row: Option<&SyncStatusRow>) -> SyncStatusOut {
     match row {
-        None => SyncStatusOut { cursor: String::new(), last_run: None, last_ok: None, last_error: String::new(), consecutive_failures: 0 },
+        None => SyncStatusOut { cursor: String::new(), last_run: None, last_ok: None, last_error: String::new(), consecutive_failures: 0, last_report: json!({}) },
         Some(row) => SyncStatusOut {
             cursor: row.cursor.clone(),
             last_run: row.last_run,
             last_ok: row.last_ok,
             last_error: row.last_error.clone(),
+            last_report: row.last_report.clone(),
             consecutive_failures: row.consecutive_failures,
         },
     }

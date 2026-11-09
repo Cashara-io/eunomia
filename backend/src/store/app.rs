@@ -35,6 +35,7 @@ pub const ALL: &[&Stmt] = &[
     &SOURCES_HEYPOCKET_SEARCH,
     &SOURCES_SYNC_STATUS_UPSERT,
     &SOURCES_SYNC_OK,
+    &SOURCES_SYNC_PARTIAL,
     &SOURCES_SYNC_FAILED,
     &SOURCES_SYNC_INTERVALS,
     &SOURCES_SYNC_CHECK_CONNECTIVITY,
@@ -190,6 +191,12 @@ pub const SOURCES_SYNC_OK: Stmt = Stmt::new(
     "app.sources_sync_ok",
     "UPDATE $id SET last_run = $now, cursor = $cursor, last_ok = $now, \
      last_error = '', consecutive_failures = 0, last_report = $report",
+);
+
+pub const SOURCES_SYNC_PARTIAL: Stmt = Stmt::new(
+    "app.sources_sync_partial",
+    "UPDATE $id SET last_run = $now, cursor = $cursor, last_error = '', \
+     consecutive_failures = 0, last_report = $report",
 );
 
 pub const SOURCES_SYNC_FAILED: Stmt = Stmt::new(

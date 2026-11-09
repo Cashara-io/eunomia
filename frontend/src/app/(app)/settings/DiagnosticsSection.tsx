@@ -36,8 +36,8 @@ export function DiagnosticsSection() {
         <details className="text-[13px] text-[var(--ink-dim)]">
           <summary className="cursor-pointer text-[var(--ink)]">What&apos;s included</summary>
           <ul className="list-disc pl-5 mt-3 space-y-2">
-            <li>App and database versions, settings with values hidden, and system health.</li>
-            <li>Connected source status, sync counts, timings and error categories.</li>
+            <li>App and database versions, feature flags, settings with sensitive values hidden, and system health.</li>
+            <li>Connected source status, sync counts, partial runs, retry delays, timings and error categories, when available.</li>
             <li>Log timestamps and levels, fixed templates for recognised events, and bounded counts for those events. Other messages are redacted.</li>
           </ul>
           <p className="mt-3">No memory, document or chat text, emails, passwords or tokens. Up to 25 MiB. Review the zip before sending it. Nothing is sent automatically.</p>

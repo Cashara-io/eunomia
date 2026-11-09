@@ -88,7 +88,7 @@ async fn connect_github(org: &OrgState, owner: &RecordId, base: &str) {
 
 async fn status(org: &OrgState, owner: &RecordId, key: &str) -> Value {
     let id = RecordId::from_table_key("sync_status", format!("{}:{key}", owner_key_str(owner)));
-    let mut res = org.db.test_raw().query("SELECT last_error, cursor, consecutive_failures FROM ONLY $id").bind(("id", id)).await.unwrap();
+    let mut res = org.db.test_raw().query("SELECT last_error, cursor, consecutive_failures, last_ok, last_report FROM ONLY $id").bind(("id", id)).await.unwrap();
     res.take::<Option<Value>>(0).unwrap().unwrap_or(Value::Null)
 }
 
@@ -139,6 +139,164 @@ async fn a_due_sync_lands_searchable_records_then_a_401_is_visible_and_keeps_the
     assert!(st["last_error"].as_str().unwrap().contains("Bad credentials"));
     assert_eq!(st["consecutive_failures"], 1);
     assert_eq!(st["cursor"], "2024-02-01T00:00:00Z", "a failed sync keeps the cursor");
+}
+
+/// Partial reads persist progress and a retry time without marking the source healthy.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn gmail_partial_progress_is_persisted_resets_backoff_and_drains_without_duplicates() {
+    let (app, org) = app_with(None).await;
+    let owner = app.user.id.clone();
+    let message = |id: &str, date: &str| json!({"id": id, "threadId": id, "internalDate": date, "snippet": id});
+    let token = || route("POST", "/oauth/token", json!({"access_token": "t"}));
+    let mock = serve(vec![token(), route("GET", "/users/me/profile", json!({"historyId": "100"})), route("GET", "/users/me/messages", json!({})).status(401)]).await;
+    connect(&org, &owner, "gmail", &mock.base, json!({}), json!({"client_id": "c", "client_secret": "s", "refresh_token": "r"})).await;
+    assert!(sync_source(&org, &owner, "gmail", None).await.get("error").is_some());
+    assert_eq!(status(&org, &owner, "gmail").await["consecutive_failures"], 1);
+    mock.set_routes(vec![
+        token(),
+        route("GET", "/users/me/profile", json!({"historyId": "100"})),
+        route("GET", "/users/me/history", json!({"historyId": "100"})),
+        route("GET", "/users/me/messages", json!({"messages": [{"id": "m3"}, {"id": "m2"}, {"id": "m1"}]})),
+        route("GET", "/users/me/messages/m1", message("m1", "1700000100000")),
+        route("GET", "/users/me/messages/m2", json!({"error": {"errors": [{"reason": "userRateLimitExceeded"}]}}))
+            .status(403).header("retry-after", "60"),
+    ]);
+    let first = sync_source(&org, &owner, "gmail", None).await;
+    assert_eq!(first["written"], 1, "{first}");
+    let st = status(&org, &owner, "gmail").await;
+    assert_eq!(first["status"], "partial", "quota pause is visible: {first}");
+    assert!(first["message"].as_str().unwrap().contains("rate limited"));
+    assert_eq!(st["last_ok"], Value::Null, "partial must not mark healthy");
+    assert_eq!(st["consecutive_failures"], 0);
+    assert_eq!(st["last_report"]["status"], "partial");
+    assert_eq!(st["last_report"]["retry_after_secs"], 60);
+    let history_key = eunomia_backend::diagnostics::opaque(&format!("{}/{}/gmail", org.db.org().key(), owner.to_string()));
+    let history = eunomia_backend::diagnostics::history::recent(&history_key);
+    assert_eq!(history[0]["partial"], true);
+    assert_eq!(history[0]["rate_limited"], true);
+    assert_eq!(history[0]["written"], 1);
+    assert_eq!(history[0]["retry_after_secs"], 60);
+    assert!(due_syncs(&org).await.unwrap().is_empty(), "honour retry delay");
+    org.db.test_raw().query("UPDATE sync_status SET last_report.retry_at = '2000-01-01T00:00:00Z' WHERE owner = $owner")
+        .bind(("owner", owner.clone())).await.unwrap().check().unwrap();
+    let due = due_syncs(&org).await.unwrap();
+    assert_eq!(due.len(), 1, "continuation runs inside the normal interval");
+    assert_eq!(due[0].period, 60, "continuation gets a fresh scheduling window");
+    let cursor: Value = serde_json::from_str(st["cursor"].as_str().unwrap()).unwrap();
+    assert_eq!(cursor["after"], "1700000099");
+    assert_eq!(cursor["pending"], json!(["m3", "m2"]));
+    assert!(!eunomia_backend::sources::scheduler::is_due(Some(chrono::Utc::now()), 0, 300, chrono::Utc::now()));
+    assert!(eunomia_backend::sources::scheduler::is_due(Some(chrono::Utc::now() - chrono::Duration::seconds(301)), 0, 300, chrono::Utc::now()));
+    mock.set_routes(vec![
+        token(),
+        route("GET", "/users/me/profile", json!({"historyId": "100"})),
+        route("GET", "/users/me/history", json!({"historyId": "100"})),
+        route("GET", "/users/me/messages/m2", message("m2", "1700000200000")),
+        route("GET", "/users/me/messages/m3", message("m3", "1700000300000")),
+    ]);
+    let second = sync_source(&org, &owner, "gmail", None).await;
+    assert_eq!(second["written"], 2, "{second}");
+    assert_eq!(count(&org, "SELECT count() AS count FROM cache_record WHERE owner = $owner AND source = 'gmail'", &owner).await, 3);
+    assert_eq!(mock.requests().iter().filter(|r| r.path == "/users/me/messages/m1").count(), 1);
+    assert_eq!(status(&org, &owner, "gmail").await["consecutive_failures"], 0);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn gmail_repeated_message_errors_keep_a_visible_skip_count_in_sync_status() {
+    let (app, org) = app_with(None).await;
+    let owner = app.user.id.clone();
+    let mock = serve(vec![]).await;
+    connect(&org, &owner, "gmail", &mock.base, json!({}), json!({"client_id": "c", "client_secret": "s", "refresh_token": "r"})).await;
+    for i in 0..4 {
+        let id = format!("good-{i}");
+        mock.set_routes(vec![
+            route("POST", "/oauth/token", json!({"access_token": "t"})),
+            route("GET", "/users/me/profile", json!({"historyId": "100"})),
+            route("GET", "/users/me/messages", json!({"messages": [{"id": "broken"}]})),
+            route("GET", "/users/me/history", json!({"historyId": "100", "history": [{"messagesAdded": [{"message": {"id": id}}]}]})),
+            route("GET", "/users/me/messages/broken", json!({})).status(500).header("retry-after", "60"),
+            route("GET", &format!("/users/me/messages/{id}"), json!({"id": id, "internalDate": "1700000200000", "snippet": "Good"})),
+        ]);
+        let report = sync_source(&org, &owner, "gmail", None).await;
+        assert_eq!(report["written"], 1, "{report}");
+        let st = status(&org, &owner, "gmail").await;
+        let cursor: Value = serde_json::from_str(st["cursor"].as_str().unwrap()).unwrap();
+        if i < 2 {
+            assert_eq!(cursor["pending"], json!(["broken"]));
+        } else {
+            assert_eq!(cursor["pending"], json!([]));
+            assert_eq!(st["last_report"]["warnings"], json!(["1 messages skipped after repeated errors"]));
+            assert_eq!(report["provider_skipped"], 1);
+            assert_eq!(st["last_report"]["provider_skipped"], 1);
+            let history_key = eunomia_backend::diagnostics::opaque(&format!("{}/{}/gmail", org.db.org().key(), owner.to_string()));
+            assert_eq!(eunomia_backend::diagnostics::history::recent(&history_key)[0]["provider_skipped"], 1);
+        }
+    }
+    assert_eq!(count(&org, "SELECT count() AS count FROM cache_record WHERE owner = $owner AND source = 'gmail'", &owner).await, 4);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn review_calendar_partial_status_is_persisted_without_marking_healthy() {
+    let (app, org) = app_with(None).await;
+    let owner = app.user.id.clone();
+    let mock = serve(vec![
+        route("POST", "/oauth/token", json!({"access_token": "t"})),
+        route("GET", "/calendars/primary/events", json!({})).query_has("pageToken=p2").status(429).header("retry-after", "120"),
+        route("GET", "/calendars/primary/events", json!({"items": [{"id": "e1", "summary": "Event"}], "nextPageToken": "p2"})),
+    ]).await;
+    connect(&org, &owner, "google_calendar", &mock.base, json!({}), json!({"client_id": "c", "client_secret": "s", "refresh_token": "r"})).await;
+    let result = sync_source(&org, &owner, "google_calendar", None).await;
+    assert_eq!(result["status"], "partial", "{result}");
+    assert_eq!(result["written"], 1);
+    let st = status(&org, &owner, "google_calendar").await;
+    assert_eq!(st["last_ok"], Value::Null);
+    assert_eq!(st["consecutive_failures"], 0);
+    assert_eq!(st["last_report"]["retry_after_secs"], 120);
+    assert!(st["last_report"]["message"].as_str().unwrap().contains("1 imported, more remaining"));
+    assert!(due_syncs(&org).await.unwrap().is_empty(), "Calendar honours Retry-After");
+}
+
+/// A paused poll does not erase a previous healthy timestamp; an ingest failure must replay it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn gmail_partial_ingest_failure_keeps_the_previous_checkpoint_and_last_ok() {
+    let (app, org) = app_with(None).await;
+    let owner = app.user.id.clone();
+    let mock = serve(vec![
+        route("POST", "/oauth/token", json!({"access_token": "t"})),
+        route("GET", "/users/me/profile", json!({"historyId": "100"})),
+        route("GET", "/users/me/history", json!({"historyId": "100"})),
+        route("GET", "/users/me/messages", json!({})),
+    ]).await;
+    connect(&org, &owner, "gmail", &mock.base, json!({}), json!({"client_id": "c", "client_secret": "s", "refresh_token": "r"})).await;
+    assert_eq!(sync_source(&org, &owner, "gmail", None).await["written"], 0);
+    let healthy = status(&org, &owner, "gmail").await;
+    assert!(!healthy["last_ok"].is_null());
+    org.db.test_raw().query("DEFINE FIELD OVERWRITE title ON cache_record TYPE string ASSERT $value != 'POISON'")
+        .await.unwrap().check().unwrap();
+    mock.set_routes(vec![
+        route("POST", "/oauth/token", json!({"access_token": "t"})),
+        route("GET", "/users/me/history", json!({"historyId": "101", "history": [{"messagesAdded": [
+            {"message": {"id": "bad"}}, {"message": {"id": "limited"}}
+        ]}]})),
+        route("GET", "/users/me/messages/bad", json!({"id": "bad", "internalDate": "1700000100000",
+            "payload": {"headers": [{"name": "Subject", "value": "POISON"}]}})),
+        route("GET", "/users/me/messages/limited", json!({})).status(429).header("retry-after", "120"),
+    ]);
+    let failed = sync_source(&org, &owner, "gmail", None).await;
+    assert!(failed["error"].as_str().unwrap().contains("failed to save"), "{failed}");
+    let st = status(&org, &owner, "gmail").await;
+    assert_eq!(st["cursor"], healthy["cursor"], "do not acknowledge history or pending work on failed ingestion");
+    assert_eq!(st["last_ok"], healthy["last_ok"]);
+    assert_eq!(st["consecutive_failures"], 1);
+    org.db.test_raw().query("DEFINE FIELD OVERWRITE title ON cache_record TYPE string").await.unwrap().check().unwrap();
+    let partial = sync_source(&org, &owner, "gmail", None).await;
+    assert_eq!(partial["status"], "partial", "{partial}");
+    assert_eq!(partial["written"], 1);
+    let st = status(&org, &owner, "gmail").await;
+    assert_eq!(st["last_ok"], healthy["last_ok"], "a partial poll preserves the previous healthy timestamp");
+    assert_eq!(st["consecutive_failures"], 0);
+    assert_ne!(st["cursor"], healthy["cursor"]);
+    assert_eq!(st["last_report"]["retry_after_secs"], 120);
 }
 
 /// Disabling stops syncs without a restart; two overlapping runs make one provider sync; a sync job
@@ -742,6 +900,8 @@ fn per_connector() -> Vec<(&'static str, &'static str, Value, Value, Vec<Route>)
             "gmail", "gmail", json!({}), google.clone(),
             vec![
                 oauth(),
+                route("GET", "/users/me/profile", json!({"historyId": "100"})),
+                route("GET", "/users/me/history", json!({"historyId": "100"})),
                 route("GET", "/users/me/messages", json!({"messages": [{"id": "m1", "threadId": "t1"}]})),
                 route("GET", "/users/me/messages/m1", json!({"id": "m1", "threadId": "t1", "labelIds": ["INBOX"], "snippet": "s", "internalDate": "1700000100000",
                     "payload": {"mimeType": "text/plain", "headers": [{"name": "Subject", "value": "Lunch?"}, {"name": "From", "value": "Ada <a@e.com>"}],

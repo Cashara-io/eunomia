@@ -180,7 +180,7 @@ impl Source for EdSource {
         }
         // normalized to UTC, so the next sync compares instants and not text
         let newest = candidates.last().map(|(at, _, _)| at.to_rfc3339());
-        Ok(SyncResult { records, cursor: newest.or(cursor.map(|_| since.to_rfc3339())) })
+        Ok(SyncResult { records, cursor: newest.or(cursor.map(|_| since.to_rfc3339())), ..SyncResult::default() })
     }
 
     fn map(&self, raw: &Value) -> Option<Value> {

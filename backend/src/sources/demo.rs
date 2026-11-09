@@ -174,7 +174,7 @@ impl Source for DemoSource {
         }
         records.extend(gen_recordings(&mut rng, now));
 
-        Ok(SyncResult { records, cursor: Some("demo".to_string()) })
+        Ok(SyncResult { records, cursor: Some("demo".to_string()), ..SyncResult::default() })
     }
 
     fn map(&self, raw: &Value) -> Option<Value> {

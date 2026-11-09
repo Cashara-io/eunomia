@@ -26,6 +26,54 @@ use crate::rid::RecordIdExt;
 pub struct SyncResult {
     pub records: Vec<Value>,
     pub cursor: Option<String>,
+    pub progress: SyncProgress,
+    /// Permanent record failures must be visible even when the rest of the batch succeeds.
+    pub warnings: Vec<String>,
+    /// Cumulative permanent skips reported by the provider fetcher, when tracked.
+    pub provider_skipped: Option<u64>,
+}
+
+/// A partial fetch is ingestible progress, including zero records. It is not a
+/// completed poll or a failure. Save its cursor only after all records ingest.
+#[derive(Debug, Clone, Default)]
+pub enum SyncProgress {
+    #[default]
+    Complete,
+    Partial { reason: SyncPause, retry_after_secs: u64 },
+}
+
+#[derive(Debug, Clone)]
+pub enum SyncPause {
+    RateLimited,
+    Transient,
+    MoreRemaining,
+}
+
+impl SyncProgress {
+    pub fn interrupted(error: &crate::error::AppError) -> Self {
+        Self::Partial {
+            reason: if error.reason == Some("connector_rate_limited") { SyncPause::RateLimited } else { SyncPause::Transient },
+            retry_after_secs: error.retry_after_secs.unwrap_or(60).max(60),
+        }
+    }
+
+    pub fn remaining() -> Self {
+        Self::Partial { reason: SyncPause::MoreRemaining, retry_after_secs: 60 }
+    }
+
+    pub fn message(&self, imported: u64) -> Option<String> {
+        match self {
+            Self::Complete => None,
+            Self::Partial { reason, .. } => {
+                let cause = match reason {
+                    SyncPause::RateLimited => "rate limited",
+                    SyncPause::Transient => "provider temporarily unavailable",
+                    SyncPause::MoreRemaining => "import in progress",
+                };
+                Some(format!("{cause}, {imported} imported, more remaining"))
+            }
+        }
+    }
 }
 
 /// One connector row's decrypted credentials and plain config -- everything
@@ -87,9 +135,10 @@ pub trait Source: Send + Sync {
     async fn check(&self, conn: &Conn) -> AppResult<()>;
 
     /// Raw records changed since `cursor` (`None` on the first sync), plus
-    /// the cursor for the next sync. Any provider error fails the whole
-    /// sync, so it surfaces in `sync_status.last_error` instead of silently
-    /// syncing nothing.
+    /// the cursor for the next sync. Hard provider errors surface in
+    /// `sync_status.last_error`. A source may return a safe partial prefix
+    /// on a temporary failure, with explicit `SyncProgress::Partial`, including
+    /// zero-record pauses. The scheduler persists the reason and retry delay.
     async fn fetch(&self, conn: &Conn, cursor: Option<String>) -> AppResult<SyncResult>;
 
     /// One raw origin value -> a cache envelope, or `None` to skip.
