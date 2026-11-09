@@ -26,7 +26,7 @@ fn normalise(text: &str) -> String {
     }).collect();
     mapped.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase()
 }
-fn token(c: char) -> bool { c.is_alphanumeric() || matches!(c, '_' | '-' | '/' | '.' | '%' | '+' | '\u{2044}') }
+fn token(c: char) -> bool { currency(c) || c.is_alphanumeric() || matches!(c, '_' | '-' | '/' | '.' | '%' | '+' | '\u{2044}') }
 fn following_token(text: &str) -> bool {
     let mut chars = text.chars();
     match chars.next() {
@@ -41,16 +41,12 @@ fn date(s: &str) -> Option<String> {
         .or_else(|| DateTime::parse_from_rfc3339(s).ok().map(|d| d.with_timezone(&chrono::Utc).to_rfc3339()))
 }
 #[derive(Default)]
-struct Allowed { strings: HashSet<String>, dates: HashSet<String> }
+pub(super) struct Allowed { strings: HashSet<String>, dates: HashSet<String> }
 impl Allowed {
     fn string(&mut self, text: &str) {
-        let text = normalise(text);
-        if text.chars().any(char::is_numeric) { self.strings.insert(text.clone()); }
-        // Keep complete alphanumeric tokens, never extract digits from a date or name.
-        for part in text.split(|c| !token(c)) {
-            if part.chars().any(char::is_alphabetic) && part.chars().any(char::is_numeric) { self.strings.insert(part.into()); }
-        }
+        if text.chars().any(char::is_numeric) { self.strings.insert(text.into()); }
     }
+
     fn entities(&mut self, value: &Value) {
         match value {
             Value::Object(m) => for (k, v) in m {
@@ -105,11 +101,13 @@ impl Allowed {
     fn check(&self, raw: &str, path: &str) -> AppResult<()> {
         let text = normalise(raw);
         let mut covered = vec![false; text.len()];
-        for allowed in &self.strings {
-            for (start, _) in text.match_indices(allowed) {
-                let end = start + allowed.len();
-                if text[..start].chars().next_back().is_some_and(token) || following_token(&text[end..]) { continue; }
-                covered[start..end].fill(true);
+        for server in &self.strings {
+            for allowed in phrases(server) {
+                for (start, _) in text.match_indices(&allowed) {
+                    let end = start + allowed.len();
+                    if text[..start].chars().next_back().is_some_and(token) || following_token(&text[end..]) { continue; }
+                    covered[start..end].fill(true);
+                }
             }
         }
         static ISO: OnceLock<Regex> = OnceLock::new();
@@ -118,14 +116,63 @@ impl Allowed {
             // ISO ranges may use '/', '..' or a dash. Each endpoint must be authorised.
             if date(m.as_str()).is_some_and(|d| self.dates.contains(&d)) {
                 covered[m.start()..m.end()].fill(true);
+            } else {
+                return Err(bad(format!("unsupported raw ISO date in {path}; use a matching applied date or bucket label")));
             }
         }
         if text.char_indices().any(|(i, c)| c.is_numeric() && !covered[i]) {
-            return Err(bad(format!("unsupported raw digits in {path}: {raw:?}; replace each number with a bound placeholder such as {{{{/sources/sales/totals/amount/sum}}}}. Raw digits require a verbatim server text token or a matching applied ISO date or bucket label. Number words are unchecked.")));
+            return Err(bad(format!("unsupported raw digits in {path}: {raw:?}; replace each number with a bound placeholder such as {{{{/sources/sales/totals/amount/sum}}}}. Raw digits require a verbatim phrase with an adjacent letter-bearing word in a server string predating the turn, or a matching applied ISO date or bucket label. Number words are unchecked.")));
         }
         Ok(())
     }
 }
+// A digit must travel with an adjacent letter-bearing word from one server string.
+// Never join words from different records, or authorise a bare numeric token.
+fn phrases(server: &str) -> Vec<String> {
+    static WORD: OnceLock<Regex> = OnceLock::new();
+    let word = WORD.get_or_init(|| Regex::new(r"[\p{L}\p{N}_/%.+\x{2044}-]+").unwrap());
+    let server = normalise(server);
+    let words: Vec<_> = word.find_iter(&server).collect();
+    let mut out = Vec::new();
+    for (i, w) in words.iter().enumerate() {
+        if !w.as_str().chars().any(char::is_numeric) { continue; }
+        if w.as_str().chars().any(char::is_alphabetic) { out.push(w.as_str().into()); }
+        for j in [i.checked_sub(1), (i + 1 < words.len()).then_some(i + 1)].into_iter().flatten() {
+            let neighbour = words[j];
+            let start = w.start().min(neighbour.start());
+            let end = w.end().max(neighbour.end());
+            let gap = if j < i { &server[neighbour.end()..w.start()] } else { &server[w.end()..neighbour.start()] };
+            if neighbour.as_str().chars().any(char::is_alphabetic) && gap.chars().all(char::is_whitespace) {
+                out.push(server[start..end].into());
+            }
+        }
+    }
+    out
+}
+
+pub(super) async fn eligible(db: &crate::pool::OrgDb, owner: &surrealdb::types::RecordId, data: &Value, before: surrealdb::types::Datetime) -> AppResult<Allowed> {
+    let mut allowed = Allowed::from_data(data);
+    if allowed.strings.is_empty() { return Ok(allowed); }
+    let vaults = crate::vaults::service::accessible_vault_ids(db, owner).await?;
+    let mut result = crate::store::ontology::UI_PROSE_STRINGS.on(db)
+        .bind(("vaults", vaults)).bind(("before", before))
+        .bind(("strings", allowed.strings.iter().cloned().collect::<Vec<_>>())).await?;
+    #[derive(serde::Deserialize, surrealdb::types::SurrealValue)]
+    struct Row {
+        #[surreal(default)] name: Option<String>,
+        #[surreal(default)] kind: Option<String>,
+        #[surreal(default)] label: Option<String>,
+        #[surreal(default)] value_text: Option<String>,
+    }
+    let mut eligible = HashSet::new();
+    for slot in 0..result.num_statements() {
+        let rows: Vec<Row> = result.take(slot)?;
+        for row in rows { eligible.extend([row.name, row.kind, row.label, row.value_text].into_iter().flatten()); }
+    }
+    allowed.strings.retain(|s| eligible.contains(s));
+    Ok(allowed)
+}
+
 fn pointer(binding: &str) -> AppResult<String> {
     if binding.starts_with("/sources/") {
         if binding.split('/').any(|s| s.contains('~') && {
@@ -188,19 +235,45 @@ fn bound(binding: &str, data: &Value) -> AppResult<String> {
 fn render(raw: &str, data: &Value, allowed: &Allowed, field: &str) -> AppResult<String> {
     let mut out = String::new();
     let mut rest = raw;
+    let mut substitutions = Vec::new();
     while let Some(start) = rest.find("{{") {
         allowed.check(&rest[..start], field)?;
         out.push_str(&rest[..start]);
         let end = rest[start+2..].find("}}").ok_or_else(|| bad(format!("unclosed text placeholder in {field}; use {{{{/sources/name/rows/0/amount}}}}")))? + start + 2;
-        out.push_str(&bound(&rest[start+2..end], data)?);
+        let value = bound(&rest[start+2..end], data)?;
+        let offset = out.len();
+        out.push_str(&value);
+        substitutions.push((offset, out.len()));
         rest = &rest[end+2..];
     }
     if rest.contains("}}") { return Err(bad(format!("unexpected placeholder closing braces in {field}"))); }
     allowed.check(rest, field)?;
     out.push_str(rest);
+    for (start, end) in substitutions {
+        let left = normalise_edge(&out[..start], false);
+        let right = normalise_edge(&out[end..], true);
+        if left.chars().next_back().is_some_and(numeric_neighbour) || right.chars().next().is_some_and(numeric_neighbour) {
+            return Err(bad(format!("text placeholder in {field} touches a numeric token; separate each placeholder from digits, numeric symbols and e/E")));
+        }
+    }
     Ok(out)
 }
+fn normalise_edge(text: &str, first: bool) -> String {
+    let normalised = normalise(&format!("a{text}a"));
+    let inside = &normalised[1..normalised.len() - 1];
+    (if first { inside.chars().next() } else { inside.chars().next_back() }).map(|c| c.to_string()).unwrap_or_default()
+}
+fn currency(c: char) -> bool {
+    static SYMBOL: OnceLock<Regex> = OnceLock::new();
+    SYMBOL.get_or_init(|| Regex::new(r"^\p{Sc}$").unwrap()).is_match(&c.to_string())
+}
+fn numeric_neighbour(c: char) -> bool {
+    c.is_numeric() || currency(c) || matches!(c, '.' | ',' | '%' | '+' | '-' | '/' | 'e' | 'E' | '\u{2044}')
+}
 pub(super) fn resolve(value: &Value, data: &Value) -> AppResult<Value> {
+    resolve_allowed(value, data, &Allowed::from_data(data))
+}
+pub(super) fn resolve_allowed(value: &Value, data: &Value, allowed: &Allowed) -> AppResult<Value> {
     fn walk(value: &mut Value, path: &str, data: &Value, allowed: &Allowed) -> AppResult<()> {
         match value {
             Value::Object(map) => for (key, v) in map {
@@ -214,7 +287,7 @@ pub(super) fn resolve(value: &Value, data: &Value) -> AppResult<Value> {
         Ok(())
     }
     let mut rendered = value.clone();
-    walk(&mut rendered, "", data, &Allowed::from_data(data))?;
+    walk(&mut rendered, "", data, allowed)?;
     Ok(rendered)
 }
 
@@ -225,9 +298,45 @@ mod tests {
     fn data() -> Value { json!({"sources":{"sales":{
         "rows":[{"amount":1588.0,"quantity":12,"other":1,"next":2,"category":"ISO 27001","name":"Scope 3","date":"2026-01-01"}],
         "columns":[{"key":"amount","datatype":"money","unit":"AUD"},{"key":"quantity","datatype":"integer"},{"key":"category","datatype":"text"},{"key":"date","datatype":"date"}],
-        "totals":{"amount":{"sum":1588.0,"count":1}},"parameters":{"as_of":"2026-01-01","limit":12},"bucket_column":"date"
+        "total_rows":12,"totals":{"quantity":{"sum":49},"amount":{"sum":1588.0,"count":1}},"parameters":{"as_of":"2026-01-01","limit":12},"bucket_column":"date"
     }}}) }
     fn title(s: &str, data: &Value) -> AppResult<Value> { resolve(&json!({"title":s}), data) }
+    #[test]
+    fn final_placeholder_boundaries_refuse_numeric_synthesis() {
+        let p = "{{/sources/sales/total_rows}}";
+        for raw in [format!("Orders {p}{p}"), format!("{p}{{{{/sources/sales/rows/0/date}}}}"), format!("{p}%"), format!("${p}"), format!("{p}."), format!("{p}e{p}"), format!("e{p}"), format!("{p}E"), format!("{p}１"), format!("{p}\u{200b}{p}"), format!("{p}\u{200b}%"), format!("€{p}"), format!("{p}\u{200b}E")] {
+            assert!(title(&raw, &data()).is_err(), "{raw}");
+        }
+        for raw in [format!("Orders ({p}), then {p} records"), format!("{p} records"), format!("Count {p}"), format!("{p}\u{200b} records")] {
+            assert!(title(&raw, &data()).is_ok(), "{raw}");
+        }
+    }
+    #[test]
+    fn bare_numeric_server_strings_never_authorise_digits() {
+        let mut data = data();
+        data["sources"]["sales"]["rows"][0]["name"] = json!("12%");
+        data["sources"]["sales"]["rows"][0]["category"] = json!("12");
+        for raw in ["Revenue rose 12%", "Revenue rose 12", "12%", "12"] {
+            assert!(title(raw, &data).is_err(), "{raw}");
+        }
+        data["sources"]["sales"]["rows"][0]["name"] = json!("Truck 7");
+        assert!(title("Truck 7 deliveries", &data).is_ok());
+        assert!(title("7 deliveries", &data).is_err());
+        data["sources"]["sales"]["rows"][0]["name"] = json!("Report 2026-02-01");
+        assert!(title("Report 2026-02-01", &data).is_err());
+        // Words in separate strings cannot combine to create a permission.
+        data["sources"]["sales"]["rows"][0]["name"] = json!("Scope");
+        data["sources"]["sales"]["rows"][0]["category"] = json!("3");
+        assert!(title("Scope 3", &data).is_err());
+    }
+    #[test]
+    fn realistic_business_titles_have_zero_false_rejections() {
+        let mut data = data();
+        for name in ["Q3", "B2B", "COVID-19"] { data["sources"]["sales"]["rows"].as_array_mut().unwrap().push(json!({"category":name})); }
+        let titles = ["Monthly revenue by store", "Weekly cash flow", "Revenue versus budget", "First Nations supplier spend", "Twice-yearly stocktake costs", "Sales score by branch", "Stage IV investment pipeline", "One-off implementation costs", "Customer churn and retention", "Quarter-on-quarter gross margin", "Year-to-date operating expenses", "Accounts receivable ageing", "Top-performing products", "Cash conversion cycle", "Operating costs by department", "Sales total {{/sources/sales/totals/amount/sum}}", "Units sold {{/sources/sales/totals/quantity/sum}}", "Records reviewed {{/sources/sales/total_rows}}", "As at {{sources.sales.rows[0].date}}", "ISO 27001 audit readiness", "Scope 3 emissions by supplier", "Q3 revenue by region", "B2B pipeline coverage", "COVID-19 absence costs", "As at 2026-01-01"];
+        let rejected: Vec<_> = titles.iter().filter(|t| title(t, &data).is_err()).collect();
+        assert!(rejected.is_empty(), "false rejections out of 25: {rejected:?}");
+    }
     #[test]
     fn unrelated_values_and_identifier_bypasses_are_rejected() {
         for raw in ["Sales rose 12%", "Sales rose 1\u{200b}2%", "Sales rose 1\u{2009}2%", "Sales rose ½", "12k", "x12000", "1e6%", "１２", "١٢", "¹²", "⑫", "Top 12", "Value 1.0", "1/2", "Quarter 3", "Year 2026"] {
@@ -240,7 +349,7 @@ mod tests {
     fn verbatim_tokens_are_scoped_to_resolved_server_strings() {
         let mut data = data();
         for raw in ["ISO 27001 compliance", "Scope 3 emissions", "iso ２７００１ compliance", "Scope\u{2009}3 emissions", "ISO 27001.", "Scope 3."] { assert!(title(raw, &data).is_ok(), "{raw}"); }
-        for raw in ["ISO 2700 compliance", "Scope 30 emissions", "Q3 revenue", "xISO 27001", "ISO 27001%", "27,001 compliance", "ISO 27001.5"] { assert!(title(raw, &data).is_err(), "{raw}"); }
+        for raw in ["ISO 2700 compliance", "Scope 30 emissions", "Q3 revenue", "xISO 27001", "ISO 27001%", "ISO 27001$", "27,001 compliance", "ISO 27001.5"] { assert!(title(raw, &data).is_err(), "{raw}"); }
         data["sources"]["sales"]["rows"][0]["category"] = json!("Q3");
         assert!(title("Q3 revenue", &data).is_ok());
         assert!(title("ISO 27001 compliance", &data).is_err());

@@ -104,7 +104,7 @@ propose it with `ontology_propose`; never make a number up. \
 For analysis of typed data, call `show_view` with view ui, named sources and a json-render spec. \
 In every UI title, caption, label, note or other written text, put numbers in bound placeholders, for example \
 `Rows {{/sources/sales/total_rows}}`. The server supplies the formatted value and currency. Dotted paths \
-like `{{sources.sales.rows[0].amount}}` also work. Raw digits require verbatim server text tokens or matching \
+like `{{sources.sales.rows[0].amount}}` also work. UI prose is literal plain text, without Markdown. Separate placeholders from numeric tokens. Raw digits require verbatim phrases with adjacent letter-bearing words in server strings predating the turn, or matching \
 applied ISO dates or bucket labels. Identifiers have no blanket exemption. Number words remain unchecked. \
 Use ontology_get to discover property and metric names. A dataset source can group, filter and aggregate approved properties without a saved metric. \
 Totals use returned column keys: /totals/amount/sum for detailed rows, /totals/sum_amount/sum after sum of amount. \
@@ -609,7 +609,7 @@ pub async fn send_stream(
     user_message: String,
     tx: mpsc::Sender<ChatEvent>,
 ) {
-    if let Err((code, message)) = run_send(&state, &user, &thread_id, &user_message, &tx).await {
+    if let Err((code, message)) = crate::views::TURN_STARTED.scope(Datetime::default(), run_send(&state, &user, &thread_id, &user_message, &tx)).await {
         let event = ChatEvent::Error { message, code: code.as_str().to_string(), trace_id: crate::telemetry::current_trace_id() };
         let _ = tx.send(event).await;
     }

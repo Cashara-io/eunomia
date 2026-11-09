@@ -553,7 +553,23 @@ pub const UI_ENTITIES: Stmt = Stmt::new("ontology.ui_entities",
 pub const UI_LINKS: Stmt = Stmt::new("ontology.ui_links",
     "SELECT in AS entity, out AS target, label FROM relates_to WHERE in IN $ids AND in.vault = $vault AND out.vault = $vault AND label IN $labels LIMIT 5001");
 
+/// Only pre-request persisted strings can authorise raw digit phrases.
+pub const UI_PROSE_STRINGS: Stmt = Stmt::new("ontology.ui_prose_strings", r#"SELECT name FROM person WHERE vault IN $vaults AND created_at < $before AND (updated_at = NONE OR updated_at < $before) AND (name IN $strings);
+SELECT name FROM organisation WHERE vault IN $vaults AND created_at < $before AND (updated_at = NONE OR updated_at < $before) AND (name IN $strings);
+SELECT name FROM location WHERE vault IN $vaults AND created_at < $before AND (updated_at = NONE OR updated_at < $before) AND (name IN $strings);
+SELECT name FROM repository WHERE vault IN $vaults AND created_at < $before AND (updated_at = NONE OR updated_at < $before) AND (name IN $strings);
+SELECT name FROM file WHERE vault IN $vaults AND created_at < $before AND (updated_at = NONE OR updated_at < $before) AND (name IN $strings);
+SELECT name FROM symbol WHERE vault IN $vaults AND created_at < $before AND (updated_at = NONE OR updated_at < $before) AND (name IN $strings);
+SELECT name, kind FROM entity WHERE vault IN $vaults AND created_at < $before AND (updated_at = NONE OR updated_at < $before) AND (name IN $strings OR kind IN $strings);
+SELECT label FROM relates_to WHERE in.vault IN $vaults AND created_at < $before AND (updated_at = NONE OR updated_at < $before) AND (label IN $strings);
+SELECT kind FROM ontology_kind WHERE vault IN $vaults AND created_at < $before AND (updated_at = NONE OR updated_at < $before) AND (kind IN $strings);
+SELECT name FROM ontology_property WHERE vault IN $vaults AND created_at < $before AND (updated_at = NONE OR updated_at < $before) AND (name IN $strings);
+SELECT label FROM ontology_link WHERE vault IN $vaults AND created_at < $before AND (updated_at = NONE OR updated_at < $before) AND (label IN $strings);
+SELECT name FROM ontology_metric WHERE vault IN $vaults AND created_at < $before AND (updated_at = NONE OR updated_at < $before) AND (name IN $strings);
+SELECT value_text FROM entity_property WHERE vault IN $vaults AND created_at < $before AND (updated_at = NONE OR updated_at < $before) AND (value_text IN $strings);"#);
+
 pub const ALL: &[&Stmt] = &[
+    &UI_PROSE_STRINGS,
     &UI_LINKS,
     &UI_ENTITIES,
     &PROFILE,

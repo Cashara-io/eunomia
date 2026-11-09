@@ -21,7 +21,7 @@ const copy = {
     text: words,
     tone: z.enum(["info", "warning", "success"]).optional(),
   }),
-  description: "Model prose. Use {{/sources/sales/total_rows}} for numbers. The server substitutes one exact typed numeric or date binding. Raw digits need verbatim server text tokens or matching applied ISO dates or bucket labels. Number words are unchecked.",
+  description: "Literal plain text, with no Markdown or entity decoding. Separate placeholders from numeric tokens. Use {{/sources/sales/total_rows}} for numbers. The server substitutes one exact typed numeric or date binding. Raw digits need a verbatim phrase with an adjacent letter-bearing word in a server string predating the turn or matching applied ISO dates or bucket labels. Number words are unchecked.",
 };
 const dataProps = z.strictObject({
   title: words,

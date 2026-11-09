@@ -135,10 +135,15 @@ pub struct Shown {
     pub text: String,
 }
 
+tokio::task_local! {
+    /// Fixed before any model tools run. Direct view calls use their request start.
+    pub static TURN_STARTED: surrealdb::types::Datetime;
+}
+
 /// Resolves and checks `spec` for `owner`.
 pub async fn show(db: &OrgDb, owner: &RecordId, spec: ViewSpec) -> AppResult<Shown> {
     let view = match spec {
-        ViewSpec::Ui { spec, sources } => ui::resolve(db, owner, spec, sources).await?,
+        ViewSpec::Ui { spec, sources } => ui::resolve(db, owner, spec, sources, TURN_STARTED.try_with(|start| *start).unwrap_or_default()).await?,
         ViewSpec::Impact { start_id, headline, affected } => {
             if affected.len() > MAX_AFFECTED {
                 return Err(AppError::bad_request(format!("an impact view lists at most {MAX_AFFECTED} affected entities")));

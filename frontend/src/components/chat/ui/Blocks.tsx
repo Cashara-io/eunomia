@@ -4,7 +4,6 @@ import Link from "next/link";
 import { withUnit } from "@/lib/numbers";
 import dynamic from "next/dynamic";
 const MiniChart = dynamic(() => import("./Charts"), { ssr: false });
-import ReactMarkdown from "react-markdown";
 import { z } from "zod";
 import { rowsOf, label, formatted, number } from "./data";
 import { resolvedDataProps } from "./catalog";
@@ -119,16 +118,7 @@ export function Copy({
         <p>{text}</p>
       </aside>
     );
-  return (
-    <div className="chat-markdown">
-      <ReactMarkdown
-        allowedElements={["p", "strong", "em", "ul", "ol", "li", "code", "br"]}
-        unwrapDisallowed
-      >
-        {text}
-      </ReactMarkdown>
-    </div>
-  );
+  return <div className="whitespace-pre-wrap">{text}</div>;
 }
 const scalarObject = z.record(z.string(), z.unknown());
 export default function DataBlock({

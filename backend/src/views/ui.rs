@@ -192,7 +192,7 @@ fn validate_binding(kind: &str, props: &Value, path: &str, value: &Value, data: 
     }
     Ok(())
 }
-pub async fn resolve(db: &OrgDb, owner: &RecordId, mut spec: Value, sources: BTreeMap<String, Source>) -> AppResult<View> {
+pub async fn resolve(db: &OrgDb, owner: &RecordId, mut spec: Value, sources: BTreeMap<String, Source>, before: surrealdb::types::Datetime) -> AppResult<View> {
     validate(&spec, None)?;
     if sources.is_empty() || sources.len() > 8 { return Err(bad("UI needs 1 to 8 named sources")); }
     let mut resolved = serde_json::Map::new();
@@ -239,8 +239,9 @@ pub async fn resolve(db: &OrgDb, owner: &RecordId, mut spec: Value, sources: BTr
     let mut data = json!({"sources": resolved});
     // Collect permissions before substituting any model text into resolved sources.
     let trusted = data.clone();
+    let allowed = prose::eligible(db, owner, &trusted, before).await?;
     for (name, raw) in source_prose {
-        let rendered = prose::resolve(&raw, &trusted)?;
+        let rendered = prose::resolve_allowed(&raw, &trusted, &allowed)?;
         let source = &mut data["sources"][&name];
         if let Some(fields) = rendered.as_object() {
             for (key, value) in fields {
@@ -266,7 +267,7 @@ pub async fn resolve(db: &OrgDb, owner: &RecordId, mut spec: Value, sources: BTr
     }
     resolve_columns(&mut spec, &data)?;
     validate(&spec, Some(&data))?;
-    spec = prose::resolve(&spec, &trusted)?;
+    spec = prose::resolve_allowed(&spec, &trusted, &allowed)?;
     validate(&spec, None)?; // Expanded text must still fit the renderer schema and size limits.
     if serde_json::to_vec(&data).map_err(|_| bad("invalid data"))?.len() > 2 * 1024 * 1024 { return Err(bad("resolved UI data exceeds 2 MiB")); }
     Ok(View::Ui { spec, data })

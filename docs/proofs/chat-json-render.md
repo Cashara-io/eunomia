@@ -241,3 +241,16 @@ Frontend lint, typecheck, production build, catalogue sync and twelve renderer t
 All thirteen guard experiments fail their intended assertions and restore the exact source. Nine cover placeholder typing and exact paths, raw-digit refusal, server-token scoping and boundaries, date parsing, decimal-digit mapping, compatibility forms and format-character removal. Two retain metric compatibility and chart-column resolution checks. Two retain the frontend resolved-column and proportional-range checks. Compilation failures do not count as mutation proof.
 
 The earlier date-range fixture failure, missing file-bucket setup flag and stub-provider chat refusal are retained separately from the corrected results. Each Cargo step checks root free space and competing Cargo processes, waiting three minutes between checks for up to two hours while blocked. All use two jobs, dev debug zero, no incremental compilation, an 8 MiB Rust stack, serial tests and niceness 19. The owned target and Next output use a disposable RAM disk after disk waits; completed test executables are removed only after all six suites pass, before clippy. No other worktree's artefacts are removed. Final cleanup removes the owned target, node_modules, .next, services, database container and RAM disk. No cargo fmt or merge is run.
+
+
+## Independent P1 review fixes
+
+This round starts at `27e0f195eeff9937ec1912b12176e027c5e23561` and addresses the three independent P1 findings. Earlier sections retain their original verification results.
+
+UI prose now renders literally, including Text bodies. React escapes HTML syntax and preserves entity and backslash spellings. The client does not parse Markdown or decode entities after the server guard. JSON Unicode escapes decode before server validation.
+
+The server records each substitution's output range and checks its neighbours in the final substituted string. Digits, decimal separators, percent and currency signs, signs, fractions and exponent markers cannot touch a placeholder. This also refuses adjacent placeholders, including through zero-width or compatibility characters. The terminal summary uses the same substituted strings.
+
+A fixed timestamp covers the complete chat turn and reaches view resolution. Resolved raw-digit strings are intersected with persisted strings in readable vaults whose creation and last update precede that cutoff. A digit run requires an adjacent letter-bearing word or an alphanumeric word, copied from a single eligible string after normalisation. Bare numeric names never authorise digits. ISO dates still require a matching applied date or bucket label, even when a name contains the date. Names planted in earlier turns remain user-visible data and may qualify. Matching a stored spelling does not establish the truth of the model's surrounding claim.
+
+Verification results for this round are recorded below after the fresh checks complete. The machine gate waits three minutes between checks for competing Cargo processes or root free space below 7 GiB, for up to two hours. Every Cargo step uses the requested two-job, debug-zero, no-incremental, 8 MiB stack and niceness settings. No cargo fmt is run. The disposable database uses port 8593 and the backend uses 8594. Shared services and ports 8000, 3600, 8600 and 3700 are untouched.

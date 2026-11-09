@@ -282,3 +282,25 @@ async fn invented_query_kind_is_not_a_server_text_token() {
     assert!(error.get("error").is_some(), "{error}");
     assert!(error.to_string().contains("unsupported raw digits"), "{error}");
 }
+
+#[tokio::test]
+async fn turn_snapshot_refuses_new_names_and_text_values() {
+    use eunomia_backend::views::TURN_STARTED;
+    use surrealdb::types::Datetime;
+    let (app, vault) = sample().await;
+    let before = Datetime::default();
+    let id = ok(app.tool("memory_write",json!({"subject_name":"Truck 7","subject_kind":"sample","text":"New this turn"})).await)["entity"]["id"].clone();
+    ok(app.tool("entity_set_property",json!({"entity_id":id,"property":"label","value":"ISO 27001"})).await);
+    let make = |title: &str| json!({"view":"ui","spec":{"root":"a","elements":{"a":{"type":"Text","props":{"text":title}}}},"sources":{"sample":{"type":"dataset","vault_id":vault,"kind":"sample","properties":["label"]}}});
+    for phrase in ["Truck 7 deliveries", "ISO 27001 compliance"] {
+        let args = make(phrase);
+        let denied = TURN_STARTED.scope(before, app.tool("show_view",args.clone())).await;
+        assert!(denied.get("error").is_some(), "new string authorised digits: {denied}");
+        ok(app.tool("show_view",args).await); // The same phrase is eligible next request.
+    }
+    for name in ["12%", "12"] {
+        ok(app.tool("memory_write",json!({"subject_name":name,"subject_kind":"sample","text":"Bare numeric name"})).await);
+        let denied = app.tool("show_view",make(&format!("Revenue rose {name}"))).await;
+        assert!(denied.get("error").is_some(), "bare digits authorised: {denied}");
+    }
+}
