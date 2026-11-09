@@ -1,4 +1,8 @@
 "use client";
+import GenerationBox from "@/components/chat/GenerationBox";
+import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
+import MorphText from "@/components/ui/MorphText";
+import { haptic } from "@/lib/haptics";
 
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import Select from "@/components/Select";
@@ -216,7 +220,7 @@ function ToolRow({ step, live }: { step: ToolStep; live?: boolean }) {
       <span className="ml-auto pl-2 shrink-0 flex items-center gap-1 text-[12px]" style={{ color: "var(--ink-dim)" }}>
         {/* history rows mount "done" and sit still; live rows draw the check when their tool returns */}
         <SyncMark status={step.running ? "running" : "done"} size={12} />
-        {step.running ? "Running" : "Done"}
+        <MorphText>{step.running ? "Running" : "Done"}</MorphText>
       </span>
     </>
   );
@@ -326,7 +330,7 @@ function ThreadList({
         </Tooltip>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto p-2 flex flex-col gap-0.5">
-        {threads === null && ["80%", "65%", "50%"].map((w) => <div key={w} className="skeleton h-8" style={{ width: w }} />)}
+        {threads === null && <LoadingSkeleton label="Loading conversations" rows={3} />}
         {threads?.map((t) => {
           const active = t.id === activeId;
           return (
@@ -404,16 +408,7 @@ function NoModel({ isAdmin }: { isAdmin: boolean }) {
 }
 
 function LoadingTurns() {
-  return (
-    <div className="flex flex-col gap-7" aria-hidden>
-      {["45%", "85%", "60%"].map((w) => (
-        <div key={w} className="flex flex-col gap-2">
-          <div className="skeleton h-5 w-20" />
-          <div className="skeleton h-10" style={{ width: w }} />
-        </div>
-      ))}
-    </div>
-  );
+  return <LoadingSkeleton label="Loading conversation" layout="messages" />;
 }
 
 export default function ChatPage() {
@@ -542,6 +537,7 @@ export default function ChatPage() {
     stickRef.current = true;
     if (!retry) setMessages((prev) => [...(prev ?? []), { role: "user", content: text, created_at: new Date().toISOString() }]);
     setSending(true);
+    haptic("send");
     let threadId = activeId;
     if (!threadId) {
       try {
@@ -582,6 +578,7 @@ export default function ChatPage() {
           setLiveSteps([...steps]);
         } else if (event.type === "error") {
           // code and trace id are optional: older backends send only the message
+          haptic("error");
           setError(failure(event.code ? new ApiError(200, event.code, event.message, event.trace_id) : new Error(event.message), event.message));
           setNeedsKey(/OpenAI API key/i.test(event.message));
         }
@@ -602,6 +599,7 @@ export default function ChatPage() {
         return;
       }
       const msg = e instanceof Error ? e.message : "Something went wrong.";
+      haptic("error");
       setError(failure(e, msg));
       setNeedsKey(/OpenAI API key/i.test(msg));
     } finally {
@@ -681,7 +679,7 @@ export default function ChatPage() {
                         </span>
                       ) : (
                         <>
-                          <span className="breathe">{activeTool ? `Using ${activeTool}…` : "Thinking…"}</span>
+                          <MorphText>{activeTool ? `Using ${activeTool}…` : "Thinking…"}</MorphText>
                           {startedAt !== null && <Elapsed since={startedAt} />}
                         </>
                       )}
@@ -744,7 +742,8 @@ export default function ChatPage() {
               send();
             }}
           >
-            <div className="field max-w-[720px] mx-auto flex flex-col cursor-text" onClick={() => inputRef.current?.focus()}>
+            <GenerationBox active={sending} className="max-w-[720px] mx-auto">
+            <div className="field flex flex-col cursor-text" onClick={() => inputRef.current?.focus()}>
               <textarea
                 ref={inputRef}
                 aria-label="Message"
@@ -782,6 +781,7 @@ export default function ChatPage() {
                 </div>
               </div>
             </div>
+            </GenerationBox>
           </form>
         </section>
       </div>
@@ -817,9 +817,6 @@ export default function ChatPage() {
           .example-row:hover { background: var(--surface-raised); color: var(--ink); }
           .tool-row summary:hover { background: var(--surface-raised); }
         }
-        /* "Thinking" breathes while the assistant works; the words never change under it. */
-        .breathe { animation: chat-breathe 1.6s var(--ease-in-out) infinite; }
-        @keyframes chat-breathe { 50% { opacity: 0.6; } }
         /* live tool rows arrive; history rows render in place */
         .tool-live { transition: opacity 180ms var(--ease-out), transform 180ms var(--ease-out); }
         @starting-style { .tool-live { opacity: 0; transform: translateY(-4px); } }
@@ -835,7 +832,6 @@ export default function ChatPage() {
           mask-image: linear-gradient(to bottom, transparent, black var(--fade-top), black calc(100% - var(--fade-bottom)), transparent);
         }
         @media (prefers-reduced-motion: reduce) {
-          .breathe { animation: none; }
           .tool-live, .settle { transition: none; }
         }
       `}</style>

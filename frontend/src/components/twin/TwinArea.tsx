@@ -1,4 +1,6 @@
 "use client";
+import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
+import { MorphCount } from "@/components/ui/MorphText";
 
 import Link from "next/link";
 import { useState } from "react";
@@ -48,7 +50,7 @@ export default function TwinArea({
           )}
         />
       ) : !query.data ? (
-        <p role="status">Loading memory spaces…</p>
+        <LoadingSkeleton label="Loading memory spaces" />
       ) : vault ? (
         <SelectedSpace key={vault.id} vault={vault} view={view} kind={kind} />
       ) : (
@@ -150,7 +152,7 @@ function SelectedSpace({
             href={twinHref(v.path, vault.id)}
           >
             {v.label}
-            {v.label === "Review" && waiting !== null ? ` (${waiting})` : ""}
+            {v.label === "Review" && waiting !== null && <> (<MorphCount value={waiting} />)</>}
           </Link>
         ))}
       </nav>
@@ -191,7 +193,7 @@ function SelectedSpace({
           )}
         />
       ) : !data ? (
-        <p role="status">Loading the ontology…</p>
+        <LoadingSkeleton label="Loading the ontology" layout={view === "overview" ? "overview" : view === "review" ? "rows" : "table"} rows={5} />
       ) : (
         <>
           {view === "overview" && <Overview vault={vault} data={data} />}

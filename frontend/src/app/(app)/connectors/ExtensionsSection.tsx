@@ -1,4 +1,5 @@
 "use client";
+import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 
 import { ArrowClockwiseIcon, CaretDownIcon, PlusIcon, PowerIcon, TrashIcon, WebhooksLogoIcon, XIcon } from "@phosphor-icons/react/ssr";
 import VaultChip, { vaultTone } from "@/components/VaultChip";
@@ -158,15 +159,7 @@ export default function ExtensionsSection() {
           <span />
         </div>
         {rows === null && !query.isError && (
-          <div className="hairline-rows" aria-hidden>
-            {[0, 1].map((i) => (
-              <div key={i} className="flex items-center gap-3 px-4 h-12">
-                <span className="skeleton w-7 h-7" />
-                <span className="skeleton h-3 w-32" />
-                <span className="skeleton h-3 w-20 ml-auto" />
-              </div>
-            ))}
-          </div>
+          <LoadingSkeleton label="Loading extensions" rows={2} />
         )}
         {rows?.length === 0 && (
           <p className="px-4 py-5 text-[14px]" style={{ color: "var(--ink-dim)" }}>

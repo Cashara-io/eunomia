@@ -30,6 +30,7 @@
     "blobatar": "^2.7.0",
     "d3-force": "^3.0.0",
     "geist": "1.5.1",
+    "glimm": "0.4.1",
     "lucide-react": "^1.39.0",
     "next": "16.4.5",
     "react": "19.2.8",
@@ -37,7 +38,9 @@
     "react-markdown": "^10.1.0",
     "recharts": "^3.10.1",
     "remark-gfm": "^4.0.1",
+    "skullet": "0.0.3",
     "three": "^0.186.1",
+    "web-haptics": "0.0.6",
     "zod": "4.6.7"
   },
   "devDependencies": {

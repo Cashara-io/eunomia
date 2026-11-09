@@ -1,4 +1,6 @@
 "use client";
+import MorphText from "@/components/ui/MorphText";
+import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 
 import { APP_VERSION, UPDATER_OFF, versionLabel } from "@/lib/version";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
@@ -118,10 +120,7 @@ export function UpdateSection() {
 
   if (!status) {
     return (
-      <div className="flex flex-col gap-5" aria-hidden>
-        <PanelHead title="Updates" status={<span className="skeleton block h-4 w-24" />} />
-        <Versions running={BUILT_VERSION} />
-      </div>
+      <LoadingSkeleton label="Loading updates" layout="settings" />
     );
   }
 
@@ -162,7 +161,7 @@ export function UpdateSection() {
     <div className="flex flex-col gap-5">
       <PanelHead
         title="Updates"
-        status={<StatusLine tone={tone}>{line}</StatusLine>}
+        status={<StatusLine tone={tone}><MorphText>{line}</MorphText></StatusLine>}
         action={
           <button onClick={checkNow} disabled={checking || busy} className="btn btn-sm shrink-0" aria-label="Check for updates">
             {checking || checkResult ? <SyncMark status={checking ? "running" : checkResult!} /> : <ArrowClockwiseIcon {...ICON} />}
