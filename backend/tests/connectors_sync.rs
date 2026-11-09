@@ -196,6 +196,36 @@ async fn gmail_partial_progress_is_persisted_resets_backoff_and_drains_without_d
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn gmail_repeated_message_errors_keep_a_visible_skip_count_in_sync_status() {
+    let (app, org) = app_with(None).await;
+    let owner = app.user.id.clone();
+    let mock = serve(vec![]).await;
+    connect(&org, &owner, "gmail", &mock.base, json!({}), json!({"client_id": "c", "client_secret": "s", "refresh_token": "r"})).await;
+    for i in 0..4 {
+        let id = format!("good-{i}");
+        mock.set_routes(vec![
+            route("POST", "/oauth/token", json!({"access_token": "t"})),
+            route("GET", "/users/me/profile", json!({"historyId": "100"})),
+            route("GET", "/users/me/messages", json!({"messages": [{"id": "broken"}]})),
+            route("GET", "/users/me/history", json!({"historyId": "100", "history": [{"messagesAdded": [{"message": {"id": id}}]}]})),
+            route("GET", "/users/me/messages/broken", json!({})).status(500).header("retry-after", "60"),
+            route("GET", &format!("/users/me/messages/{id}"), json!({"id": id, "internalDate": "1700000200000", "snippet": "Good"})),
+        ]);
+        let report = sync_source(&org, &owner, "gmail", None).await;
+        assert_eq!(report["written"], 1, "{report}");
+        let st = status(&org, &owner, "gmail").await;
+        let cursor: Value = serde_json::from_str(st["cursor"].as_str().unwrap()).unwrap();
+        if i < 2 {
+            assert_eq!(cursor["pending"], json!(["broken"]));
+        } else {
+            assert_eq!(cursor["pending"], json!([]));
+            assert_eq!(st["last_report"]["warnings"], json!(["1 messages skipped after repeated errors"]));
+        }
+    }
+    assert_eq!(count(&org, "SELECT count() AS count FROM cache_record WHERE owner = $owner AND source = 'gmail'", &owner).await, 4);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn review_calendar_partial_status_is_persisted_without_marking_healthy() {
     let (app, org) = app_with(None).await;
     let owner = app.user.id.clone();

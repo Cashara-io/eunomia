@@ -30,7 +30,7 @@ export function MatchShare({ reason }: { reason: string }) {
 function LinkChecks({ checks }: { checks: LinkCheck[] }) {
   if (checks.length === 0) return null;
   return (
-    <ul className="hairline-rows" aria-label="Links checked against the values">
+    <ul className="hairline-rows max-h-72 overflow-y-auto" aria-label="Links checked against the values">
       {checks.map((c) => (
         <li key={`${c.record_type} ${c.field} ${c.label}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
           <span className="flex-1 min-w-[200px] flex flex-col">

@@ -75,24 +75,13 @@ test.describe("Vault invitations", () => {
   });
 });
 
-test.describe("Kinds and links", () => {
-  test("a space reads its kinds only once the section is opened", async ({ browser }) => {
+test.describe("Ontology summary", () => {
+  test("a space links to its dedicated twin area", async ({ browser }) => {
     const { page } = await newUser(browser, "kinds");
-    const reads: string[] = [];
-    page.on("request", (r) => {
-      if (/\/api\/vaults\/[^/]+\/ontology$/.test(new URL(r.url()).pathname)) reads.push(r.url());
-    });
-    const name = `Kinds ${Date.now()}`;
     await page.goto("/vaults");
-    await page.getByRole("button", { name: "Create space" }).click();
-    await page.getByPlaceholder(/^Space name/).fill(name);
-    await page.getByRole("button", { name: "Create", exact: true }).click();
-    await page.getByRole("button", { name: new RegExp(`^${name}`) }).click();
-    const section = page.getByRole("button", { name: /Kinds and links/ });
-    await expect(section).toBeVisible();
-    expect(reads).toHaveLength(0);
-    await section.click();
-    await expect(page.getByRole("heading", { name: "Kinds", exact: true })).toBeVisible();
-    await expect.poll(() => reads.length).toBe(1);
+    await expect(page.getByRole("link", { name: "Open Ontology" })).toBeVisible();
+    await page.getByRole("link", { name: "Open Ontology" }).click();
+    await expect(page).toHaveURL(/\/ontology\?space=/);
+    await expect(page.getByRole("heading", { name: /Overview/ })).toBeVisible();
   });
 });

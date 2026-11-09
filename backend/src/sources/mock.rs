@@ -33,13 +33,20 @@ pub struct Route {
     /// Answer with this text verbatim (and `content-type` from [`Route::header`]) instead of `body`.
     raw: Option<String>,
     remaining: Option<usize>,
+    truncated: bool,
 }
 
 pub fn route(method: &str, path: &str, body: Value) -> Route {
-    Route { method: method.parse().unwrap(), path: path.to_string(), query: vec![], body_has: vec![], delay_ms: 0, status: 200, body, headers: vec![], raw: None, remaining: None }
+    Route { method: method.parse().unwrap(), path: path.to_string(), query: vec![], body_has: vec![], delay_ms: 0, status: 200, body, headers: vec![], raw: None, remaining: None, truncated: false }
 }
 
 impl Route {
+    /// Send headers and a body prefix, then break the response stream.
+    pub fn truncated(mut self) -> Self {
+        self.truncated = true;
+        self
+    }
+
     /// Answer only this many matching requests, then try the next matching route.
     pub fn times(mut self, count: usize) -> Self {
         self.remaining = Some(count);
@@ -158,6 +165,19 @@ async fn handle(State(st): State<MockState>, method: Method, uri: Uri, headers: 
     tokio::time::sleep(std::time::Duration::from_millis(r.delay_ms)).await;
     let out = r.raw.clone().unwrap_or_else(|| r.body.to_string().replace("{base}", &st.base));
     let mut resp = (StatusCode::from_u16(r.status).unwrap(), [("content-type", "application/json")], out).into_response();
+    if r.truncated {
+        *resp.body_mut() = axum::body::Body::from_stream(futures::stream::unfold(0, |step| async move {
+            match step {
+                0 => Some((Ok(Bytes::from_static(b"{")), 1)),
+                1 => {
+                    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                    Some((Err(std::io::Error::other("truncated response")), 2))
+                }
+                _ => None,
+            }
+        }));
+        resp.headers_mut().remove("content-length");
+    }
     for (k, v) in &r.headers {
         resp.headers_mut().insert(*k, v.replace("{base}", &st.base).parse().unwrap());
     }

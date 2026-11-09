@@ -75,10 +75,11 @@ struct MessageCursor {
     pending: Vec<String>,
     seen: Vec<String>,
     history: Option<String>,
-    failures: std::collections::BTreeMap<String, u8>,
+    message_failures: std::collections::BTreeMap<String, u8>,
+    skipped: u64,
 }
 
-const MAX_TRANSIENT_SYNCS: u8 = 3;
+const MAX_MESSAGE_ERROR_SYNCS: u8 = 3;
 const MAX_CURSOR_BYTES: usize = 1_048_576;
 const MAX_PENDING: usize = 25_000;
 
@@ -88,6 +89,10 @@ impl MessageCursor {
             Some(c) if c.starts_with('{') => serde_json::from_str(&c).map_err(|_| AppError::internal("invalid Gmail cursor")),
             after => Ok(Self { after, ..Self::default() }),
         }
+    }
+
+    fn warnings(&self) -> Vec<String> {
+        if self.skipped == 0 { Vec::new() } else { vec![format!("{} messages skipped after repeated errors", self.skipped)] }
     }
 
     fn encode(&self) -> AppResult<String> {
@@ -174,7 +179,7 @@ impl MessageCursor {
             return Err(AppError::internal("Gmail history listing incomplete; keeping the previous checkpoint"));
         }
         self.pending.retain(|id| !removed.contains(id));
-        self.failures.retain(|id, _| !removed.contains(id));
+        self.message_failures.retain(|id, _| !removed.contains(id));
         for id in &removed { tracing::info!(message_id = %id, "Gmail message removed"); }
         let mut known: HashSet<_> = self.pending.iter().chain(&self.seen).cloned().collect();
         added.retain(|id| !id.is_empty() && known.insert(id.clone()));
@@ -213,14 +218,14 @@ pub(crate) async fn fetch_with(api: &dyn GmailReader, reader: &dyn GmailReader, 
         }.await;
         if let Err(error) = discovery {
             if retryable(&error) {
-                return Ok(SyncResult { cursor: Some(state.encode()?), progress: SyncProgress::interrupted(&error), ..SyncResult::default() });
+                return Ok(SyncResult { cursor: Some(state.encode()?), progress: SyncProgress::interrupted(&error), warnings: state.warnings(), ..SyncResult::default() });
             }
             return Err(error);
         }
         // Check the bound before spending quota or importing any records.
         state.encode()?;
         let mut records = Vec::new();
-        let mut warnings = Vec::new();
+        let mut message_errors = Vec::new();
         let mut progress = SyncProgress::Complete;
         for _ in 0..MAX_MESSAGES_PER_SYNC {
             let Some(id) = state.pending.last().cloned() else { break };
@@ -228,43 +233,44 @@ pub(crate) async fn fetch_with(api: &dyn GmailReader, reader: &dyn GmailReader, 
                 Ok(record) => {
                     records.push(record);
                     state.pending.pop();
-                    state.failures.remove(&id);
+                    state.message_failures.remove(&id);
                 }
                 Err(error) if error.reason == Some("connector_removed") => {
                     tracing::info!(message_id = %id, "Gmail message removed");
                     state.pending.pop();
-                    state.failures.remove(&id);
+                    state.message_failures.remove(&id);
                     state.seen.retain(|seen| seen != &id);
                 }
+                Err(error) if matches!(error.reason, Some("connector_message_error" | "connector_server_error")) => {
+                    // Try other IDs before deciding whether this is a message-specific failure.
+                    state.pending.pop();
+                    message_errors.push((id, error));
+                }
                 Err(error) if retryable(&error) => {
-                    if error.reason != Some("connector_rate_limited") {
-                        let failures = state.failures.entry(id.clone()).or_default();
-                        *failures = failures.saturating_add(1);
-                        if *failures >= MAX_TRANSIENT_SYNCS {
-                            let warning = format!("Gmail message {id} dropped after {MAX_TRANSIENT_SYNCS} syncs with transient errors; later mail will continue");
-                            tracing::warn!("{warning}");
-                            warnings.push(warning);
-                            state.pending.pop();
-                            state.failures.remove(&id);
-                            continue;
-                        }
-                    }
                     progress = SyncProgress::interrupted(&error);
                     break;
                 }
-                Err(error) if error.reason == Some("connector_auth") => return Err(error),
-                Err(error) => {
-                    let warning = format!("Gmail message {id} dropped after a permanent error: {}", error.message);
-                    tracing::warn!("{warning}");
-                    warnings.push(warning);
-                    state.pending.pop();
-                    state.failures.remove(&id);
+                Err(error) => return Err(error),
+            }
+        }
+        for (id, error) in message_errors.into_iter().rev() {
+            let per_message = error.reason == Some("connector_message_error") || !records.is_empty();
+            if per_message {
+                let message_failures = state.message_failures.entry(id.clone()).or_default();
+                *message_failures = message_failures.saturating_add(1);
+                if *message_failures >= MAX_MESSAGE_ERROR_SYNCS {
+                    tracing::warn!(message_id = %id, "Gmail message skipped after repeated HTTP errors");
+                    state.skipped = state.skipped.saturating_add(1);
+                    state.message_failures.remove(&id);
+                    continue;
                 }
             }
+            state.pending.push(id);
+            if matches!(progress, SyncProgress::Complete) { progress = SyncProgress::interrupted(&error); }
         }
         state.checkpoint(&records)?;
         if !state.pending.is_empty() && matches!(progress, SyncProgress::Complete) { progress = SyncProgress::remaining(); }
-        Ok(SyncResult { records, cursor: Some(state.encode()?), progress, warnings })
+        Ok(SyncResult { records, cursor: Some(state.encode()?), progress, warnings: state.warnings() })
 }
 
 pub struct GmailSource;
@@ -423,28 +429,150 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn transient_id_is_dropped_after_three_syncs_with_visible_warning() {
+    async fn persistent_message_http_errors_skip_after_three_syncs_with_durable_count() {
+        for status in [400, 500] {
+            let mock = serve(vec![]).await;
+            let conn = mock.conn(json!({"client_id": "c", "client_secret": "s", "refresh_token": "r"}));
+            let mut cursor = Some(json!({"history": "100", "pending": ["broken"], "failures": {"broken": 2}}).to_string());
+            for i in 0..3 {
+                let id = format!("good-{i}");
+                let mut routes = token_and_history(json!({"historyId": "100", "history": [{"messagesAdded": [{"message": {"id": id}}]}]}));
+                routes.extend([
+                    route("GET", "/users/me/messages/broken", json!({})).status(status).header("retry-after", "60"),
+                    route("GET", &format!("/users/me/messages/{id}"), message(&id, "1700000200000", "Good")),
+                ]);
+                mock.set_routes(routes);
+                let result = GmailSource.fetch(&conn, cursor).await.unwrap();
+                assert_eq!(result.records[0]["id"], id);
+                cursor = result.cursor;
+                let state = MessageCursor::read(cursor.clone()).unwrap();
+                if i < 2 {
+                    assert_eq!(state.pending, ["broken"]);
+                    assert_eq!(state.message_failures["broken"], i + 1);
+                    assert!(result.warnings.is_empty());
+                } else {
+                    assert!(state.pending.is_empty());
+                    assert!(state.message_failures.is_empty());
+                    assert_eq!(result.warnings, ["1 messages skipped after repeated errors"]);
+                }
+            }
+            mock.set_routes(token_and_history(json!({"historyId": "100"})));
+            let next = GmailSource.fetch(&conn, cursor).await.unwrap();
+            assert_eq!(next.warnings, ["1 messages skipped after repeated errors"]);
+        }
+    }
+
+    #[tokio::test]
+    async fn repeated_bad_request_is_message_specific_without_other_successes() {
         let mut routes = token_and_history(json!({"historyId": "100"}));
-        routes.extend([
-            route("GET", "/users/me/messages", json!({"messages": [{"id": "later"}, {"id": "broken"}]})),
-            route("GET", "/users/me/messages/broken", json!({})).status(503).header("retry-after", "60"),
-            route("GET", "/users/me/messages/later", message("later", "1700000200000", "Later")),
-        ]);
+        routes.push(route("GET", "/users/me/messages/bad", json!({})).status(400));
         let mock = serve(routes).await;
         let conn = mock.conn(json!({"client_id": "c", "client_secret": "s", "refresh_token": "r"}));
-        let mut cursor = None;
+        let mut cursor = Some(json!({"history": "100", "pending": ["bad"]}).to_string());
         for i in 0..3 {
             let result = GmailSource.fetch(&conn, cursor).await.unwrap();
             cursor = result.cursor;
-            if i < 2 {
+            let state = MessageCursor::read(cursor.clone()).unwrap();
+            assert_eq!(state.pending.is_empty(), i == 2);
+            assert_eq!(state.skipped, u64::from(i == 2));
+        }
+    }
+
+    #[tokio::test]
+    async fn truncated_quota_and_body_failures_never_spend_message_allowance() {
+        for status in [429, 200] {
+            let mut routes = token_and_history(json!({"historyId": "100"}));
+            routes.push(route("GET", "/users/me/messages/unread", json!({})).status(status).header("retry-after", "60").truncated());
+            let mock = serve(routes).await;
+            let conn = mock.conn(json!({"client_id": "c", "client_secret": "s", "refresh_token": "r"}));
+            let mut cursor = Some(json!({"history": "100", "pending": ["later", "unread"], "failures": {"unread": 2}}).to_string());
+            for _ in 0..10 {
+                let result = GmailSource.fetch(&conn, cursor).await.unwrap();
+                if status == 429 {
+                    assert!(matches!(result.progress, SyncProgress::Partial { reason: crate::sources::base::SyncPause::RateLimited, .. }));
+                }
                 assert!(result.records.is_empty());
-                assert!(matches!(result.progress, SyncProgress::Partial { .. }));
-            } else {
-                assert_eq!(result.records[0]["id"], "later");
-                assert!(result.warnings[0].contains("dropped after 3 syncs"));
+                assert!(result.warnings.is_empty());
+                cursor = result.cursor;
+                let state = MessageCursor::read(cursor.clone()).unwrap();
+                assert_eq!(state.pending, ["later", "unread"]);
+                assert!(state.message_failures.is_empty());
             }
         }
-        assert!(MessageCursor::read(cursor).unwrap().pending.is_empty());
+    }
+
+    #[tokio::test]
+    async fn truncated_auth_failures_always_fail_visibly() {
+        for status in [401, 403] {
+            let mut routes = token_and_history(json!({"historyId": "100"}));
+            routes.push(route("GET", "/users/me/messages/unread", json!({})).status(status).truncated());
+            let mock = serve(routes).await;
+            let conn = mock.conn(json!({"client_id": "c", "client_secret": "s", "refresh_token": "r"}));
+            let cursor = Some(json!({"history": "100", "pending": ["unread"]}).to_string());
+            for _ in 0..4 {
+                let error = GmailSource.fetch(&conn, cursor.clone()).await.unwrap_err();
+                assert_eq!(error.reason, Some("connector_auth"));
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn systemic_server_errors_never_drop_unread_messages() {
+        let mut routes = token_and_history(json!({"historyId": "100"}));
+        for id in ["a", "b"] {
+            routes.push(route("GET", &format!("/users/me/messages/{id}"), json!({})).status(500).header("retry-after", "60"));
+        }
+        let mock = serve(routes).await;
+        let conn = mock.conn(json!({"client_id": "c", "client_secret": "s", "refresh_token": "r"}));
+        let mut cursor = Some(json!({"history": "100", "pending": ["a", "b"]}).to_string());
+        for _ in 0..10 {
+            let result = GmailSource.fetch(&conn, cursor).await.unwrap();
+            assert!(result.warnings.is_empty());
+            cursor = result.cursor;
+            let state = MessageCursor::read(cursor.clone()).unwrap();
+            assert_eq!(state.pending, ["a", "b"]);
+            assert!(state.message_failures.is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn network_message_failures_keep_the_pending_cursor_across_many_syncs() {
+        let mock = serve(vec![route("POST", "/oauth/token", json!({"access_token": "t"}))]).await;
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let mut conn = mock.conn(json!({"client_id": "c", "client_secret": "s", "refresh_token": "r"}));
+        conn.config["base_url"] = json!(format!("http://{}", listener.local_addr().unwrap()));
+        let server = tokio::spawn(async move {
+            use tokio::io::{AsyncReadExt, AsyncWriteExt};
+            loop {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                tokio::spawn(async move {
+                    let mut request = vec![0; 8192];
+                    let mut read = 0;
+                    while !request[..read].windows(4).any(|w| w == b"\r\n\r\n") {
+                        let n = socket.read(&mut request[read..]).await.unwrap();
+                        if n == 0 { return; }
+                        read += n;
+                    }
+                    if request[..read].starts_with(b"GET /users/me/history?") {
+                        let body = r#"{"historyId":"100"}"#;
+                        let reply = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+                        socket.write_all(reply.as_bytes()).await.unwrap();
+                    }
+                    // Message reads close without any HTTP status or headers.
+                });
+            }
+        });
+        let mut cursor = Some(json!({"history": "100", "pending": ["unread"]}).to_string());
+        for _ in 0..10 {
+            let result = GmailSource.fetch(&conn, cursor).await.unwrap();
+            assert!(matches!(result.progress, SyncProgress::Partial { reason: crate::sources::base::SyncPause::Transient, .. }));
+            assert!(result.warnings.is_empty());
+            cursor = result.cursor;
+            let state = MessageCursor::read(cursor.clone()).unwrap();
+            assert_eq!(state.pending, ["unread"]);
+            assert!(state.message_failures.is_empty());
+        }
+        server.abort();
     }
 
     #[tokio::test]
@@ -604,13 +732,14 @@ mod tests {
                 route("GET", "/users/me/messages", json!({"messages": [{"id": "m3"}, {"id": "m2"}, {"id": "m1"}]})),
                 route("GET", "/users/me/messages/m1", message("m1", "1700000100000", "First")),
                 route("GET", "/users/me/messages/m2", json!({})).status(status),
+                route("GET", "/users/me/messages/m3", message("m3", "1700000300000", "Third")),
             ]).await;
             let started = tokio::time::Instant::now();
             let result = GmailSource.fetch(&mock.conn(json!({"client_id": "c", "client_secret": "s", "refresh_token": "r"})), None).await.unwrap();
-            assert_eq!(result.records.len(), 1);
+            assert_eq!(result.records.len(), if status == 429 { 1 } else { 2 });
             let cursor = MessageCursor::read(result.cursor).unwrap();
-            assert_eq!(cursor.after.as_deref(), Some("1700000099"));
-            assert_eq!(cursor.pending, ["m3", "m2"]);
+            assert_eq!(cursor.after.as_deref(), Some(if status == 429 { "1700000099" } else { "1700000299" }));
+            assert_eq!(cursor.pending, if status == 429 { vec!["m3", "m2"] } else { vec!["m2"] });
             let reads = mock.requests().iter().filter(|r| r.path.ends_with("/m2")).count();
             assert!((2..=5).contains(&reads), "retry in place, then stop: {reads}");
             assert!(started.elapsed() < Duration::from_secs(15), "bounded retry time");

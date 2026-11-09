@@ -80,11 +80,11 @@ fn rate_limited(status: StatusCode, body: &str) -> bool {
     })
 }
 
-/// Shared fetch policy: only quota and transient failures may keep work pending.
+/// Shared fetch policy: quota, transport, response and server failures can be retried.
 /// `connector_removed` is HTTP 404/410; `connector_auth` is non-quota 401/403.
 /// `AppError::retry_after_secs` carries the final provider delay to the scheduler.
 pub(crate) fn retryable(error: &AppError) -> bool {
-    matches!(error.reason, Some("connector_rate_limited" | "connector_transient"))
+    matches!(error.reason, Some("connector_rate_limited" | "connector_transient" | "connector_server_error" | "connector_response_error"))
 }
 
 pub(crate) fn provider_error(url: &str, status: StatusCode, body: &str) -> AppError {
@@ -100,7 +100,8 @@ pub(crate) fn provider_error(url: &str, status: StatusCode, body: &str) -> AppEr
     if limited { error.with_reason("connector_rate_limited") }
     else if matches!(status.as_u16(), 401 | 403) { error.with_reason("connector_auth") }
     else if matches!(status.as_u16(), 404 | 410) { error.with_reason("connector_removed") }
-    else if status.is_server_error() { error.with_reason("connector_transient") }
+    else if status.is_server_error() { error.with_reason("connector_server_error") }
+    else if status == StatusCode::BAD_REQUEST { error.with_reason("connector_message_error") }
     else { error }
 }
 
@@ -250,19 +251,19 @@ impl Api {
             let response = match response {
                 Ok(resp) => Ok(resp),
                 Err(e) => {
-                    let transient = e.is_timeout() || e.is_connect() || e.is_body();
                     let message = format!("could not reach {}: {e}", host(&url));
                     let message = self.secrets.as_ref().map_or_else(|| message.clone(), |s| s.scrub(&message));
                     let error = AppError::new(StatusCode::BAD_GATEWAY, message);
-                    Err(if transient { error.with_reason("connector_transient") } else { error })
+                    Err(error.with_reason("connector_transient"))
                 }
             };
+            let response_status_received = response.is_ok();
             let (status, mut headers, text) = match response {
                 Ok(resp) => {
                     let status = resp.status();
                     let headers = resp.headers().clone();
                     let text = resp.text().await.map_err(|_| AppError::new(StatusCode::BAD_GATEWAY,
-                        format!("could not read response from {}", host(&url))).with_reason("connector_transient"));
+                        format!("could not read response from {}", host(&url))).with_reason("connector_response_error"));
                     (status, headers, text)
                 }
                 Err(error) => (StatusCode::BAD_GATEWAY, HeaderMap::new(), Err(error)),
@@ -274,7 +275,7 @@ impl Api {
             // Scrub before shortening a provider message, so a secret crossing the snippet boundary stays hidden.
             let text = text.map(|text| self.secrets.as_ref().map_or_else(|| text.clone(), |secrets| secrets.scrub(&text)));
             let error = match &text {
-                Ok(body) if !status.is_success() => Some(provider_error(&url, status, body)),
+                body if !status.is_success() && response_status_received => Some(provider_error(&url, status, body.as_deref().unwrap_or("response body unreadable"))),
                 Err(error) => {
                     let mut copy = AppError::new(error.status, error.message.clone());
                     copy.reason = error.reason;
@@ -779,6 +780,31 @@ mod tests {
         let err = api.get("/x", &[]).await.unwrap_err();
         assert!(err.message.contains("HTTP 429 (rate limited"), "{}", err.message);
         assert_eq!(mock.requests().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn http_status_takes_precedence_over_a_truncated_body() {
+        use crate::sources::mock::{route, serve};
+        for (status, class) in [(429, "connector_rate_limited"), (401, "connector_auth"), (403, "connector_auth"),
+            (404, "connector_removed"), (410, "connector_removed"), (400, "connector_message_error"),
+            (500, "connector_server_error"), (200, "connector_response_error")] {
+            let mock = serve(vec![route("GET", "/x", json!({})).status(status).header("retry-after", "60").truncated()]).await;
+            let api = Api::new(&json!({"base_url": mock.base}), "", HeaderMap::new()).with_google_retries();
+            let error = api.get("/x", &[]).await.unwrap_err();
+            assert_eq!(error.reason, Some(class), "HTTP {status}: {error:?}");
+            assert_eq!(error.retry_after_secs, Some(60));
+            assert_eq!(mock.requests().len(), 1);
+            if status != 200 { assert!(error.message.contains(&format!("HTTP {status}"))); }
+        }
+    }
+
+    #[tokio::test]
+    async fn no_http_response_is_a_transient_network_error() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        drop(listener);
+        let api = Api::new(&json!({"base_url": base}), "", HeaderMap::new());
+        assert_eq!(api.get("/x", &[]).await.unwrap_err().reason, Some("connector_transient"));
     }
 
     #[test]

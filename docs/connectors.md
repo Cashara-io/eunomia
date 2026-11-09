@@ -128,10 +128,19 @@ cursor at 1 MiB. Exceeding either bound reports an error and keeps the previous 
 safe replay. Unread IDs are never truncated to fit. History replaces the growing timestamp
 boundary ID set; old boundary IDs are pruned against the relist and then discarded.
 
-A pending message returning HTTP 404 or 410 is logged as removed and dropped. Other permanent
-message errors are dropped with a warning, except authentication and permission errors, which
-fail the sync visibly. Three syncs with transient failures on the same ID also drop it with a
-warning on the connection page. Quota pauses do not spend that per-message retry allowance.
+A pending message returning HTTP 404 or 410 is logged as removed and dropped immediately.
+HTTP 400 on one message is retried across three syncs before skipping it. A repeated HTTP 5xx
+counts towards that limit only when another message succeeds in the same sync. A provider-wide
+outage, network failure, unreadable successful response, quota pause, or authentication error never
+spends the allowance. Authentication and permission errors fail the sync visibly. Other unexpected
+errors also fail visibly and retain the checkpoint. Old transient-failure counters are discarded.
+Skipped-message totals stay in the cursor and sync status, including later successful syncs, as
+"N messages skipped after repeated errors".
+
+The shared HTTP client classifies an error response by its status even if its body cannot be read.
+HTTP 429 remains rate limited, and HTTP 401 remains an authentication error. HTTP 403 is a quota
+error only when its readable JSON body identifies a Google rate-limit reason. An unreadable 403
+remains an authentication or permission error.
 
 Google can report rate limits as HTTP 403 as well as 429. Gmail and Calendar retry quota and
 temporary failures with exponential backoff and jitter, sharing four retries and ten seconds of
@@ -152,6 +161,37 @@ lists 6,000 quota units per minute per user per project, 5 units for `messages.l
 `messages.get` with `format=full`. Some older Google projects retain earlier quotas. Google also
 applies concurrent-request limits; its Gmail docs do not specify a separate per-user per-second
 quota-unit allowance. See [Google's error and backoff guidance](https://developers.google.com/workspace/gmail/api/guides/handle-errors).
+
+### Rollback to 2.2.0
+
+The JSON Gmail cursor introduced here cannot be read by 2.2.0. That release inserts the entire
+cursor into Gmail's `after:` query, so syncing fails after rollback. This failure does not delete
+stored mail. Gmail needs reconnecting or a cursor reset before syncing can resume.
+
+To reset the cursor while keeping imported data and credentials:
+
+1. Stop the Eunomia backend and its workers, and back up the tenant database. Keep the existing
+   Gmail cursor in the backup so its pending IDs remain available if you upgrade again.
+2. Open the affected organisation's tenant database in SurrealDB as its database administrator.
+   Run `SELECT id, owner, cursor FROM sync_status;` and find the affected Gmail connection.
+   Its record key is `<owner key>:gmail`, or `<owner key>:gmail~<instance>` for an added account.
+3. Copy that row's exact `id` into the following statement in place of the example. Reset to
+   numeric epoch seconds `0` to include mail older than 30 days, including pending backdated imports:
+
+   ```surql
+   UPDATE sync_status:⟨OWNER_KEY:gmail⟩ SET cursor = '0', consecutive_failures = 0,
+       last_error = '', last_report = {};
+   ```
+
+4. Start the 2.2.0 backend. Open **Connected sources**, select the affected Gmail account, and
+   click **Sync now**. Confirm its sync status no longer reports the invalid `after:` query.
+   Existing cache writes are idempotent. Repeat for each affected Gmail connection.
+
+Alternatively, remove the Gmail connection in Connected sources, add it again, and enter the
+OAuth client ID, client secret and refresh token using the Google setup steps above. Removing a
+connection also deletes its imported data and extracted facts, and reconnecting starts with the
+last 30 days. Use the cursor reset instead when you need to retain data or recover older pending
+mail. Rollback also restores 2.2.0's original import limits and error handling.
 
 ## Spotify: getting a refresh token
 
