@@ -95,3 +95,5 @@ Fuzz crashes are saved under `backend/fuzz/artifacts/<target>/`; replay with `ca
 ## Spike S1: database per org at scale
 
 `cd backend && S1_N=200 cargo test --test spike_s1 -- --ignored --nocapture` (add `--release` for numbers closer to a server). Provisions N org databases on the in-memory engine, each migrated (HNSW 1536 and two FULLTEXT indexes) and loaded with 100 records, then prints provisioning time per org, resident memory, cold `pool.for_org` and first-query latency, vector-search latency on a cold handle, and how long a one-field migration takes to fan out over every org. A script, not a gate.
+
+Composio migration 0040 adds `composio_file`, expected empty in each upgraded tenant. All update-path matrix rows include this table in the new-table comparison. The consumer OAuth and app ingest fixture runs in `composio_flow`; its mock is local and never signs in to a real account.

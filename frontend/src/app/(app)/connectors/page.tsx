@@ -1,5 +1,7 @@
 "use client";
 
+import ComposioCard from "@/components/ComposioCard";
+
 import SyncSettings from "@/components/SyncSettings";
 import { Fragment, useState } from "react";
 import Link from "next/link";
@@ -139,7 +141,7 @@ export default function ConnectorsPage() {
   }
   // Sources that hold records but belong to no connector (seeded demo data).
   for (const s of sourceRows) {
-    if (!kindForSource(s.key) && isLiveSource(s)) {
+    if (s.key !== "composio" && !kindForSource(s.key) && isLiveSource(s)) {
       connected.push({ id: s.key, kind: null, label: s.label, account: "", addAfter: false, status: "demo", source: s, href: `/connectors/${s.key}` });
     }
   }
@@ -167,6 +169,8 @@ export default function ConnectorsPage() {
         title="Connected sources"
         intro="Bring emails, meeting notes and other information into Eunomia. Sign-ins are stored encrypted."
       />
+
+      <ComposioCard />
 
       <div className="flex items-center gap-2 flex-wrap">
         <div className="field flex items-center gap-2 h-10 px-3 w-full sm:w-72">

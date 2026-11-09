@@ -112,7 +112,7 @@ impl MessageCursor {
         Ok(())
     }
 
-    async fn relist(&mut self, api: &Api, full_mailbox: bool) -> AppResult<()> {
+    async fn relist(&mut self, api: &dyn GmailReader, full_mailbox: bool) -> AppResult<()> {
         let history = api.get("/users/me/profile", &[]).await?;
         let history = s(&history, "/historyId");
         if history.is_empty() { return Err(AppError::internal("Gmail profile has no historyId")); }
@@ -144,7 +144,7 @@ impl MessageCursor {
         Ok(())
     }
 
-    async fn additions(&mut self, api: &Api) -> AppResult<()> {
+    async fn additions(&mut self, api: &dyn GmailReader) -> AppResult<()> {
         let start = self.history.clone().ok_or_else(|| AppError::internal("missing Gmail history checkpoint"))?;
         let mut page_token = String::new();
         let mut added = Vec::new();
@@ -188,39 +188,25 @@ impl MessageCursor {
     }
 }
 
-pub struct GmailSource;
-
+/// The same checkpoint algorithm serves direct Google and Composio reads.
 #[async_trait]
-impl Source for GmailSource {
-    fn key(&self) -> &'static str {
-        "gmail"
-    }
-
-    fn label(&self) -> &'static str {
-        "Gmail"
-    }
-
-    fn record_types(&self) -> &'static [&'static str] {
-        &["gmail.message"]
-    }
-
-    async fn check(&self, conn: &Conn) -> AppResult<()> {
-        google_api(conn, BASE_URL).await?.get("/users/me/profile", &[]).await.map(|_| ())
-    }
-
-    async fn fetch(&self, conn: &Conn, cursor: Option<String>) -> AppResult<SyncResult> {
-        let api = google_api(conn, BASE_URL).await?;
-        let spacing = if cfg!(test) { Duration::from_millis(1) } else { Duration::from_secs(1) };
-        let reader = api.clone().with_pacing(spacing);
+pub(crate) trait GmailReader: Send + Sync {
+    async fn get(&self, path: &str, query: &[(&str, String)]) -> AppResult<Value>;
+}
+#[async_trait]
+impl GmailReader for Api {
+    async fn get(&self, path: &str, query: &[(&str, String)]) -> AppResult<Value> { Api::get(self, path, query).await }
+}
+pub(crate) async fn fetch_with(api: &dyn GmailReader, reader: &dyn GmailReader, cursor: Option<String>) -> AppResult<SyncResult> {
         let mut state = MessageCursor::read(cursor)?;
         let discovery = async {
-            if state.history.is_none() { state.relist(&api, false).await?; }
-            match state.additions(&api).await {
+            if state.history.is_none() { state.relist(api, false).await?; }
+            match state.additions(api).await {
                 Err(error) if error.reason == Some("connector_removed") => {
                     // Expired history can hide imports older than the date checkpoint.
                     tracing::warn!("Gmail history expired; relisting the mailbox for replay");
-                    state.relist(&api, true).await?;
-                    state.additions(&api).await
+                    state.relist(api, true).await?;
+                    state.additions(api).await
                 }
                 result => result,
             }
@@ -279,6 +265,33 @@ impl Source for GmailSource {
         state.checkpoint(&records)?;
         if !state.pending.is_empty() && matches!(progress, SyncProgress::Complete) { progress = SyncProgress::remaining(); }
         Ok(SyncResult { records, cursor: Some(state.encode()?), progress, warnings })
+}
+
+pub struct GmailSource;
+
+#[async_trait]
+impl Source for GmailSource {
+    fn key(&self) -> &'static str {
+        "gmail"
+    }
+
+    fn label(&self) -> &'static str {
+        "Gmail"
+    }
+
+    fn record_types(&self) -> &'static [&'static str] {
+        &["gmail.message"]
+    }
+
+    async fn check(&self, conn: &Conn) -> AppResult<()> {
+        google_api(conn, BASE_URL).await?.get("/users/me/profile", &[]).await.map(|_| ())
+    }
+
+    async fn fetch(&self, conn: &Conn, cursor: Option<String>) -> AppResult<SyncResult> {
+        let api = google_api(conn, BASE_URL).await?;
+        let spacing = if cfg!(test) { Duration::from_millis(1) } else { Duration::from_secs(1) };
+        let reader = api.clone().with_pacing(spacing);
+        fetch_with(&api, &reader, cursor).await
     }
 
     fn map(&self, raw: &Value) -> Option<Value> {

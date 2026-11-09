@@ -87,7 +87,7 @@ pub(crate) fn retryable(error: &AppError) -> bool {
     matches!(error.reason, Some("connector_rate_limited" | "connector_transient"))
 }
 
-fn provider_error(url: &str, status: StatusCode, body: &str) -> AppError {
+pub(crate) fn provider_error(url: &str, status: StatusCode, body: &str) -> AppError {
     let limited = rate_limited(status, body);
     let hint = if limited { " (rate limited -- retried on the next sync)" } else { match status.as_u16() {
         401 | 403 => " (check the token and its scopes)",

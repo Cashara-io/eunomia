@@ -386,6 +386,7 @@ async fn get_one(State(state): State<AppState>, user: User, Path(connector): Pat
 )]
 async fn create_one(State(state): State<AppState>, user: User, Json(body): Json<ConnectorCreateBody>) -> AppResult<Json<ConnectorOut>> {
     let state = state.org(&user.org).await?;
+    if body.kind == "composio" { return Err(AppError::bad_request("Connect your Composio account through its card.")); }
     let row = service::create_connection(&state.db, &user.id, &body.kind, &body.label).await?;
     Ok(Json(connector_out(&row)))
 }
@@ -414,6 +415,7 @@ struct DeleteConnectorOut {
 async fn delete_one(State(app): State<AppState>, user: User, Path(connector): Path<String>) -> AppResult<Json<DeleteConnectorOut>> {
     let state = app.org(&user.org).await?;
     let row = service::resolve(&state.db, &user.id, &connector).await?;
+    if row.kind == "composio" { crate::connectors::composio::account::disconnect(&state, &user.id).await?; }
     let out = registry::delete_connection(&state.db, &user.id, &row).await?;
     crate::audit::record_as_caller(&app.control, &user.id, "connector.delete", &connector, "ok").await;
     Ok(Json(DeleteConnectorOut {
@@ -441,6 +443,7 @@ async fn put_one(
 ) -> AppResult<Json<ConnectorOut>> {
     let state = state.org(&user.org).await?;
     let row = service::resolve(&state.db, &user.id, &connector).await?;
+    if row.kind == "composio" { return Err(AppError::bad_request("Manage Composio through its account card.")); }
     let routing = match body.routing {
         Some(r) => Some(routing::validate(&state.db, &user.id, source_of(&row)?.key(), r).await?),
         None => None,

@@ -35,6 +35,7 @@ use crate::sources::up_bank::UpBankSource;
 /// Every source. Each has a connector kind in `connectors::service::CONNECTOR_KINDS`.
 pub fn all() -> Vec<Arc<dyn Source>> {
     vec![
+        Arc::new(super::composio::ComposioSource),
         Arc::new(UpBankSource) as Arc<dyn Source>,
         Arc::new(HeyPocketSource),
         Arc::new(GitHubSource),
@@ -232,7 +233,15 @@ pub async fn run_sync(
         .ok_or_else(|| AppError::coded(ErrorCode::SourceNotFound, format!("no source {key:?}")))?;
     let row = row.as_ref();
     crate::secrets::connector::with_connection(state, owner, row, |conn| async move {
-        let result = src.fetch(&conn, cursor).await?;
+        let mut result = src.fetch(&conn, cursor).await?;
+        if src.key() == "composio" {
+            let current = crate::connectors::composio::storage::load(&state.db, owner).await?;
+            let credentials = conn_for(&state.settings.encryption_key, Some(&current))?;
+            if !current.enabled || credentials.credentials["access_token"] != conn.credentials["access_token"] {
+                return Err(AppError::bad_request("Composio changed during sync. Retry with the current account."));
+            }
+            super::composio::store_documents(state,owner,&current,&mut result.records).await?;
+        }
         let report = ingest_via(state, owner, &result.records, src.as_ref(), row).await?;
         Ok((report, result))
     }).await

@@ -926,7 +926,9 @@ async fn every_connector_syncs_end_to_end_against_its_mock_provider() {
     let (app, org) = app_with(None).await;
     let owner = app.user.id.clone();
     let fixtures = per_connector();
-    assert_eq!(fixtures.len(), service::CONNECTOR_KINDS.len(), "a fixture per connector kind");
+    // Composio's consumer OAuth + MCP fixture is exercised by composio_flow.rs.
+    assert!(service::CONNECTOR_KINDS.contains(&"composio"));
+    assert_eq!(fixtures.len() + 1, service::CONNECTOR_KINDS.len(), "a fixture per connector kind");
     for (kind, key, config, credentials, routes) in fixtures {
         let mock = serve(routes).await;
         connect(&org, &owner, kind, &mock.base, config, credentials).await;

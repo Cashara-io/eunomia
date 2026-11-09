@@ -2,7 +2,10 @@
 mod common;
 
 use common::{TestApp, sys};
-use eunomia_backend::{connectors::{composio::storage, service}, isolation, rid};
+use eunomia_backend::{
+    connectors::{composio::storage, service},
+    isolation, rid,
+};
 use serde_json::json;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -10,8 +13,12 @@ async fn composio_credentials_are_owner_isolated_encrypted_and_deleted_on_discon
     let mutation = std::env::var("COMPOSIO_GUARD_MUTATION").unwrap_or_default();
     match mutation.as_str() {
         "owner" => isolation::mutate("app.composio_credentials_replace", "owner = $owner", "true"),
-        "disconnect" => isolation::mutate("app.composio_disconnect", "credentials_encrypted = ''", "credentials_encrypted = credentials_encrypted"),
-        "" => {},
+        "disconnect" => isolation::mutate(
+            "app.composio_disconnect",
+            "credentials_encrypted = ''",
+            "credentials_encrypted = credentials_encrypted",
+        ),
+        "" => {}
         _ => panic!("Unknown mutation"),
     }
     let app = TestApp::new().await;
@@ -37,6 +44,8 @@ async fn composio_credentials_are_owner_isolated_encrypted_and_deleted_on_discon
         assert!(!disconnected.enabled);
         assert_eq!(service::credentials_of(key, &disconnected).unwrap(),json!({}));
     }).await;
-    if !mutation.is_empty() { assert!(isolation::rewritten() > 0, "mutation did not apply"); }
+    if !mutation.is_empty() {
+        assert!(isolation::rewritten() > 0, "mutation did not apply");
+    }
     isolation::clear_mutations();
 }

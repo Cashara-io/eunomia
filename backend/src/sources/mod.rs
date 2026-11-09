@@ -23,3 +23,5 @@ pub mod spotify;
 pub mod stripe;
 pub mod todoist;
 pub mod up_bank;
+
+pub mod composio;

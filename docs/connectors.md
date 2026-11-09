@@ -179,3 +179,13 @@ config can then carry a `base_url`. It's off by default because on a shared
 server it would let any user make the backend call internal addresses.
 
 Even with the override on, connector requests go through the same outbound guard as model calls: cloud metadata and the database address are refused, redirects are not followed, and `ALLOW_PRIVATE_LLM_URL=0` also blocks private ranges.
+
+## Composio master connector
+
+Connected sources has a Composio card. Connect your own Composio account, complete its sign-in, then use **Connect another app** to open Composio's own authorisation link. Return and refresh the app list. Choose individual connected accounts and a target vault, save the choices and sync. Several Drive accounts can be selected together. No platform key or developer project is needed.
+
+The card shows connected-account status, the last completed sync and partial or rate-limited progress. Disconnect deletes Eunomia's tokens and attempts advertised remote revocation. If Composio does not support it, remove Eunomia's session in Composio too. Imported data stays in Eunomia.
+
+Drive ingests supported files and Docs/Sheets exports as searchable documents. Folder selection covers direct children. Gmail imports the last 30 days initially, then follows mailbox history, preserving partial progress on quota limits. Calendar reads the primary calendar. Personal WhatsApp needs a separate TimelinesAI service and reads text chats. The `whatsapp` toolkit is Business-only and reads delivery history, without personal inboxes or message bodies. Obsidian reads Markdown pushed to GitHub, including wikilinks and a limited front-matter relation format. A Drive folder containing exported vault files is another option. No adapter sends messages or edits upstream files.
+
+See [the connector design](composio-connector-design.md) for checkpoint, file-size, attachment, folder and revocation limits.

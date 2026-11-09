@@ -1,46 +1,40 @@
 # Composio consumer connector
 
-Implementation notes for the Composio connector lane. This document records the research and current limits. It is not a claim that the connector is available in Connected sources yet.
+Each person connects their own Composio consumer account at `https://connect.composio.dev/mcp`. Eunomia registers a public OAuth client dynamically and uses S256 PKCE. There is no platform API key, developer project or shared app identity.
 
-## Account and authentication
+## Authentication and isolation
 
-Use `https://connect.composio.dev/mcp`. Each person signs in to their own Composio account. Eunomia is an MCP client and does not create a developer project, provide an API key, or allocate a Composio entity for a person.
+Discovery, DCR, the code exchange, userinfo, refresh and advertised revocation use bounded HTTP responses, fixed public errors and documented Composio HTTPS hosts. OAuth state is encrypted, expires after ten minutes, is bound to the caller's browser session, and is consumed by compare-and-swap before exchange. The callback removes its query string before exchanging the code. Tokens use the existing `enc:v1` encryption and are held in zeroising containers. Conditional refresh leases stop an old refresh from restoring a disconnected account.
 
-Primary sources:
+Account routes use Eunomia's existing account-level connector permission gate and the authenticated user's organisation and user ID. App selections must name an active account returned by that user's consumer MCP. Every execution includes that account explicitly. The generic credential form cannot replace Composio tokens. A configured public URL determines the callback, never an untrusted request host.
 
-- [Composio Connect](https://docs.composio.dev/docs/composio-connect) documents the shared consumer MCP URL and its meta tools.
-- [Composio consumer and developer boundaries](https://docs.composio.dev/kb/guide/consumer-project-boundaries-and-auth-selection) explains that consumer connections are separate from developer projects and belong to the member who authorised them. A consumer key is a supported fallback for clients without OAuth support; a developer project key is a different credential.
-- [Composio's Claude setup](https://composio.dev/claude) uses OAuth without manually supplied authentication headers.
-- [MCP authorisation](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization) specifies protected resource metadata, authorisation server discovery, registration, PKCE and the resource parameter.
+Disconnect deletes local tokens before contacting the provider. Revocation is attempted only if advertised. Live metadata checked on 9 November 2026 advertises no revocation endpoint, so the UI tells the person to remove Eunomia's session in Composio. Local deletion is not represented as remote revocation. Imported records and documents remain available.
 
-Live anonymous metadata checked on 9 November 2026:
+## App reads and checkpoints
 
-- `https://connect.composio.dev/.well-known/oauth-protected-resource/mcp` identifies `https://connect.composio.dev/mcp` as the resource and `https://connect.composio.dev` as its authorisation server.
-- `https://connect.composio.dev/.well-known/oauth-authorization-server` advertises `https://connect.composio.dev/oauth/authorize`, public client registration at `https://login.composio.dev/oauth2/register`, tokens at `https://login.composio.dev/oauth2/token`, PKCE S256, token endpoint authentication `none`, and authorisation-code and refresh-token grants. Supported scopes include `openid profile email offline_access`.
-- Neither this metadata nor `https://login.composio.dev/.well-known/openid-configuration` advertises a revocation endpoint. Do not guess one or label local deletion as remote revocation. A completed connector must clearly explain the remote session removal step in Composio if no supported programmatic revocation mechanism can be established.
+A single Composio `Source` runs typed app selections. Each toolkit/account/scope has its own checkpoint. Search discovers a fixed, read-only tool slug, full schemas are loaded, an active account is confirmed, then `COMPOSIO_MULTI_EXECUTE_TOOL` receives the selected account. Arbitrary tools, writes, remote shells and workbenches are unavailable.
 
-The OAuth primitive constrains metadata endpoints to the documented HTTPS hosts, disables HTTP redirects and bounds response sizes. It checks the resource, issuer, PKCE method and public-client support. Provider errors return a fixed message and never include response bodies, codes or credentials. Secret-bearing pending-state and token types do not implement Debug and clear their secret fields on drop.
+- Drive supports several accounts, all accessible supported files or a folder's direct children. Docs export to text and Sheets to CSV. Text, Markdown, JSON, CSV and text-based PDF are downloaded without an OAuth header and published through the existing document service. Only HTTPS Composio and AWS download hosts are accepted, with no redirects and a 16 MiB ceiling. Unsupported files produce a visible warning. A failed file stays pending. Completed windows overlap at their boundary. There is no OCR, recursive folder walk, media ingest or deletion propagation.
+- Gmail reuses the algorithm and error classification from PR #198, brought in from `fix/gmail-rate-limit`. Bootstrap lists IDs for the last 30 days, then mailbox history finds additions, including backdated imports. Each ID gets a separate full read because `GMAIL_FETCH_EMAILS` can silently skip failed detail reads. The existing bounded pending cursor, expired-history full replay, deleted-message handling, pacing and partial contract are shared. A 429 keeps the unread ID and imports the successful prefix. Persistent non-quota failures follow #198's visible warning/drop policy.
+- Calendar reads the primary calendar, with page and sync tokens, cancellation tombstones and an expired-token replay. Other calendars and attachments are outside this adapter.
+- Personal WhatsApp uses `timelinesai`, requiring the person's separate TimelinesAI service and connection. It pages chats and text messages. Media is omitted. Offset pagination can replay records while chats change; external IDs deduplicate them.
+- WhatsApp Business uses `whatsapp` and a chosen Business phone number ID. The available message-history tool exposes delivery history and status events, not personal inboxes or message bodies. Eunomia ingests those audit records and sends nothing.
+- Obsidian reads Markdown already pushed to a selected GitHub repository/ref, optionally restricted to a folder. A pinned tree SHA keeps each pass consistent; truncated trees are refused. Wikilinks become relations. Front matter is retained verbatim; simple `parent`, `related`, `links` and `tags` scalar, inline-list and block-list values become relations. This is a limited YAML subset. Attachments, Obsidian Sync, local device access and deletion propagation are not supported. A Drive-hosted vault is an alternative for exported Markdown, with Drive's folder limits.
 
-Storage and account functions have been written for encrypted `enc:v1` state, owner-scoped conditional writes, one-use pending state, caller-supplied session binding, refresh leases and token deletion. They are not wired into HTTP routes or verified. These properties still need full integration and guard tests before they can be claimed for the connector.
+Records use the existing vault router. Selections are validated against vault membership, and document uploads recheck write access. The scheduler saves a cursor only after persistence and ingest succeed. Partial imports keep the retry reason and delay used by PR #198. Drive document identities are stored separately so an ingest retry revises the same document.
 
-The transport primitive implements MCP initialisation, session headers, JSON and bounded SSE responses. It allows only the discovery, schema, connection-management and multi-execution meta tools. Its caller must constrain execution to the approved read tools and pin the user's chosen connected account. Results are scrubbed for the bearer token and MCP session ID before they reach the source layer. Transport errors expose fixed messages and classify HTTP 401 and 429 separately.
+## Tests and local verification
 
-## Source design
+`backend/tests/fixtures/composio_mock.py` is a consumer OAuth and MCP fixture. It checks registration, PKCE, bearer/session handling and explicit app-account selection, rotates an expired token, supplies every supported source and a Gmail 429. `composio_flow.rs` launches it in a separate process and exercises the real routes and ingest. `composio_storage.rs` supports owner-isolation and disconnect-deletion guard mutations using `COMPOSIO_GUARD_MUTATION=owner` or `disconnect`; both must fail.
 
-Use the existing `Source` contract, scheduler, per-connection cursors and vault routing. Extend the connector-kind constraint with tenant migration 0040. Store Composio tokens in the existing encrypted credentials field. Keep per-app sync choices and account IDs in connector configuration. Never expose tokens through connector output, source payloads, exported records or logs.
+`frontend/tests/composio.spec.ts` runs against the real backend with the fixture configured by the operator. Set `E2E_COMPOSIO_MOCK=1` and `E2E_BASE_URL` to that isolated frontend. `E2E_COMPOSIO_SCREENSHOTS` saves light/dark evidence. The operator-only loopback mock endpoint requires `EUNOMIA_ALLOW_CONNECTOR_BASE_URL=1` and `EUNOMIA_COMPOSIO_TEST_ORIGIN`. Neither is user-configurable or needed for owner verification.
 
-Before executing a read tool, discover it with `COMPOSIO_SEARCH_TOOLS`, load its complete schema with `COMPOSIO_GET_TOOL_SCHEMAS`, confirm an active connected account, and pass that specific account to `COMPOSIO_MULTI_EXECUTE_TOOL`. Several Drive accounts must have distinct checkpoints and external record IDs. Do not expose arbitrary tool execution or write operations through sync configuration.
+Tenant migration 0040 expands the kind constraint and adds a credential-free file identity table. Update-path row checks continue to include v2.2.0. See the PR for actual test results. Live account reads require the owner to sign in themselves.
 
-Required adapters, still to be implemented and verified:
+## Primary references
 
-- Google Drive: selected files or folders, or all accessible files. Export Google Docs to text and Sheets to CSV. Download supported text files and PDFs to Eunomia documents for indexing. Retain pagination and retry incomplete file reads without advancing past them. [Drive toolkit](https://docs.composio.dev/toolkits/googledrive).
-- Gmail: incremental reads, bounded batches and checkpoints that cannot skip unread messages. On 429, ingest completed reads and retain the retry position. PR #198 was open when checked, so its rate-limit work was not on the implementation base. [Gmail toolkit](https://docs.composio.dev/toolkits/gmail).
-- Google Calendar: paginated event reads and incremental checkpoints. [Calendar toolkit](https://docs.composio.dev/toolkits/googlecalendar).
-- Personal WhatsApp: use TimelinesAI's chat and message read tools. This requires the user's separate TimelinesAI connection and service. The `whatsapp` toolkit is for WhatsApp Business accounts and cannot read a personal WhatsApp inbox. Do not offer it as personal chat sync. [TimelinesAI toolkit](https://docs.composio.dev/toolkits/timelinesai), [WhatsApp toolkit](https://docs.composio.dev/toolkits/whatsapp).
-- Obsidian: read Markdown from a user-selected GitHub repository, parse front matter and wikilinks, and retain relations. This is one-way ingestion of files already pushed to GitHub, not Obsidian Sync or live device access. A Drive-hosted vault can use the Drive Markdown path later. [GitHub toolkit](https://docs.composio.dev/toolkits/github).
-
-## Verification remaining
-
-The source adapters, persistence, UI, integration tests, isolation and disconnect guard mutations, Playwright run, screenshots and owner verification stack are not complete. The existing primitive mock tests are not substitutes for those checks. Do not describe the owner stack as waiting for sign-in until it has actually been launched and checked.
-
-Implementation stopped when the disk guard observed less than 6 GiB free. Eight primitive tests passed before storage and account additions. The storage test build was interrupted. Clippy found a style warning that was fixed, but its rerun and the remaining checks have not completed. See the local handback file in the verification scratch directory for exact status.
+- [Consumer MCP and meta tools](https://docs.composio.dev/docs/composio-connect)
+- [Consumer and developer account boundaries](https://docs.composio.dev/kb/guide/consumer-project-boundaries-and-auth-selection)
+- [MCP OAuth requirements](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization)
+- [Drive toolkit](https://docs.composio.dev/toolkits/googledrive), [Gmail](https://docs.composio.dev/toolkits/gmail), [Calendar](https://docs.composio.dev/toolkits/googlecalendar)
+- [TimelinesAI](https://docs.composio.dev/toolkits/timelinesai), [WhatsApp Business](https://docs.composio.dev/toolkits/whatsapp), [GitHub](https://docs.composio.dev/toolkits/github)

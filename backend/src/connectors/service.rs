@@ -22,6 +22,7 @@ use crate::error::{AppError, AppResult, ErrorCode};
 /// tests). "demo" and "open_connector" remain valid in the schema for old
 /// rows but are no longer offered.
 pub const CONNECTOR_KINDS: &[&str] = &[
+    "composio",
     "up_bank",
     "pocketai",
     "github",
