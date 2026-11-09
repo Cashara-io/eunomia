@@ -100,3 +100,10 @@ test("shared proportional accessor accepts safe totals only", () => {
     expect(html).not.toMatch(/NaN|Infinity/);
   }
 });
+
+ test("server substituted prose displays literally without interpreting placeholders", () => {
+  const view = {view: "ui", text: "Total 1588.00 AUD", data: {sources: {}}, spec: {root: "copy", elements: {copy: {type: "Text", props: {text: "Total 1588.00 AUD <script> {{sources.sales.amount}}"}}}}};
+  const html = renderToStaticMarkup(<UiView view={view} />);
+  expect(html).toContain("Total 1588.00 AUD &lt;script&gt; {{sources.sales.amount}}");
+  expect(html).not.toContain("<script>");
+});

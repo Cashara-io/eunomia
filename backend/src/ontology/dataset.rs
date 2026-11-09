@@ -77,6 +77,8 @@ pub async fn resolve(db: &OrgDb, owner: &RecordId, args: &Dataset) -> AppResult<
     if args.bucket.is_some() && !columns.iter().any(|c| Some(&c.key) == args.group_by.as_ref() && matches!(c.datatype.as_str(), "date" | "datetime")) {
         return Err(bad("time bucket needs a date or datetime group_by property"));
     }
+    let applied_dates: Vec<Value> = args.filters.iter().filter(|f| columns.iter().any(|c| c.key == f.property && matches!(c.datatype.as_str(), "date" | "datetime")))
+        .flat_map(|f| f.value.as_array().cloned().unwrap_or_else(|| vec![f.value.clone()])).collect();
     let selector = metric::Selector::from_properties(&kind, &args.filters, &properties)?;
     let mut ids: Vec<RecordId> = crate::store::ontology::UI_ENTITIES.on(db)
         .bind(("vault", vault.clone())).bind(("kind", args.kind.clone()))
@@ -153,7 +155,7 @@ pub async fn resolve(db: &OrgDb, owner: &RecordId, args: &Dataset) -> AppResult<
     let total_rows = rows.len();
     rows.truncate(args.limit.unwrap_or(MAX_ROWS));
     let truncated = input_truncated || rows.len() < total_rows;
-    Ok(json!({ "rows": rows, "columns": columns, "totals": totals, "distributions": distributions, "total_rows": total_rows, "truncated": truncated,
+    Ok(json!({ "kind": kinds.first().map(|k| k.kind.as_str()).or_else(|| kind.is_built_in().then(|| kind.as_str())), "applied_dates": applied_dates, "rows": rows, "columns": columns, "totals": totals, "distributions": distributions, "total_rows": total_rows, "truncated": truncated,
         "status": if approved { "approved" } else { "not approved" },
         "warnings": if input_truncated { vec!["Input capped at 5000 entities. Aggregates describe only this partial input."] } else if truncated { vec!["Output rows truncated."] } else { vec![] } }))
 }

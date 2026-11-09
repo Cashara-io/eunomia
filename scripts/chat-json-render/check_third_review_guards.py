@@ -17,7 +17,7 @@ args.logs.mkdir(parents=True, exist_ok=True)
 UI = 'frontend/src/components/chat/ui/'
 BACK = 'backend/src/'
 backend = [
-    ('digits-in-prose', BACK+'views/ui.rs', [('if !allowed.iter().any(', 'if false && !allowed.iter().any(')], ['--lib', 'model_digits_match_resolved_values'], 'model_digits_match_resolved_values'),
+    # The replacement prose rule has its own mutation suite: check_prose_guards.py.
     ('metric-unit-parity', BACK+'store/ontology.rs', [('SELECT entity, property, value_num, value_text, value_bool, value_date, as_of, created_at FROM entity_property', 'SELECT entity, property, value_num, value_text, value_bool, value_date, unit, as_of, created_at FROM entity_property')], ['--test', 'chat_ui', 'metric_stored_unit_override_matches_main_fixture'], 'metric_stored_unit_override_matches_main_fixture'),
     ('server-column-resolution', BACK+'views/ui.rs', [('else if numerics.len() == 1 { numerics[0] }', 'else if !numerics.is_empty() { numerics[0] }')], ['--lib', 'omitted_y_resolves_only_unambiguous_metadata'], 'omitted_y_resolves_only_unambiguous_metadata'),
 ]
@@ -27,13 +27,13 @@ frontend = [
 ]
 for name, filename, replacements, tests, expected in backend if args.suite == 'backend' else frontend:
     if args.suite == 'backend':
-        deadline = time.monotonic() + 3600
+        deadline = time.monotonic() + 7200
         while True:
             subprocess.run(['df', '-h', '/'], check=True)
             other = subprocess.run(['pgrep', '-x', 'cargo'], capture_output=True, text=True)
             print('pgrep -x cargo: ' + (other.stdout.strip() or 'none'), flush=True)
             if other.returncode != 0 and shutil.disk_usage('/').free >= 7*1024**3: break
-            if time.monotonic() >= deadline: raise SystemExit('Cargo or disk gate blocked after 60 minutes')
+            if time.monotonic() >= deadline: raise SystemExit('Cargo or disk gate blocked after two hours')
             print('Waiting three minutes for cargo and 7 GiB free', flush=True)
             time.sleep(180)
     path = ROOT / filename

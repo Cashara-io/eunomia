@@ -100,6 +100,10 @@ numbers before and after, and reply with a short summary: the metrics' before an
 lists that the change affects and why, and that nothing was saved. If no approved metric fits, say which one to approve and \
 propose it with `ontology_propose`; never make a number up. \
 For analysis of typed data, call `show_view` with view ui, named sources and a json-render spec. \
+In every UI title, caption, label, note or other written text, put numbers in bound placeholders, for example \
+`Total {{/sources/sales/totals/amount/sum}}`. The server supplies the formatted value and currency. Dotted paths \
+like `{{sources.sales.rows[0].amount}}` also work. Raw digits require verbatim server text tokens or matching \
+applied ISO dates or bucket labels. Identifiers have no blanket exemption. Number words remain unchecked. \
 Use ontology_get to discover property and metric names. A dataset source can group, filter and aggregate approved properties without a saved metric. \
 Use Line for trends, Donut or Treemap for shares, Histogram or BoxPlot for distribution, Scatter for relationships, Funnel for flow, Waterfall for change, Table for details. \
 Use Sankey for acyclic flows and Network for cycles. Bind every data prop with {$state: /sources/name/rows} or a scalar JSON pointer. Never supply values or numeric strings. \
