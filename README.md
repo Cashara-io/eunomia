@@ -25,6 +25,20 @@ licence ([below](#licence-and-support)).
 
 ![Scattered knowledge becoming a connected memory graph](docs/images/eunomia-cover.png)
 
+**Install on Linux, macOS or WSL with one command:**
+
+</div>
+
+```bash
+curl -fsSL https://www.buildpaperless.com.au/eunomia/install.sh | bash
+```
+
+<div align="center">
+
+It installs Docker if it's missing, starts Eunomia and creates your account.
+[Read the installer script](https://www.buildpaperless.com.au/eunomia/install.sh) ·
+[What it does and its options](#install).
+
 **[I already have an account](#connect-your-ai-app)** ·
 **[I want to install it](#install)** ·
 [Who can see what](#who-can-see-what) ·
