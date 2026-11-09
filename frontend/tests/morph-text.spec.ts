@@ -27,6 +27,11 @@ test.afterAll(async () => {
 for (const reduced of [false, true]) {
   test(`MorphText keeps one readable and selectable value, reduced motion ${reduced}`, async ({ page }) => {
     await page.emulateMedia({ reducedMotion: reduced ? "reduce" : "no-preference" });
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    page.on("console", (message) => {
+      if (message.type() === "error") errors.push(message.text());
+    });
     await page.route("http://morph.test/", (route) => route.fulfill({
       contentType: "text/html",
       body: '<html><head></head><body><div id="root"></div></body></html>',
@@ -35,6 +40,7 @@ for (const reduced of [false, true]) {
     if (css) await page.addStyleTag({ content: css });
     await page.addScriptTag({ content: script, type: "module" });
     const host = page.getByTestId("value");
+    await expect(host, `fixture did not render: ${errors.join(" | ") || "no page errors"}`).toBeVisible();
     const wrapper = host.locator("[data-text-morph]");
     const checkValue = async (value: string) => {
       await expect(page.getByText(value, { exact: true })).toHaveCount(1);
