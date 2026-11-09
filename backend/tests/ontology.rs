@@ -4196,6 +4196,18 @@ async fn review209_metric_equivalence_requires_exact_units() {
 }
 
 #[tokio::test]
+async fn review209_csv_profiles_dates_beyond_blank_head() {
+    let app = TestApp::new().await;
+    let csv = format!("item,day\n{}{}", (0..1500).map(|i| format!("Item {i},\n")).collect::<String>(), (1500..3000).map(|i| format!("Item {i},2026-11-10\n")).collect::<String>());
+    let doc = upload_csv(&app, "dates.csv", &csv).await;
+    let (status, out) = app.http("GET", &format!("/api/documents/{doc}/profile"), None, true).await;
+    assert_eq!(status, 200, "{out}");
+    let day = out["profile"]["fields"].as_array().unwrap().iter().find(|f| f["path"] == "day").unwrap();
+    assert_eq!(day["inferred_type"], "date", "{out}");
+    assert!(day["null_rate"].as_f64().unwrap() > 0.0, "profile uses the non-empty values even in a sparse column");
+}
+
+#[tokio::test]
 async fn review209_ambiguous_custom_alias_creates_an_entity_for_review() {
     let answer = json!({"other":[{"kind":"store","name":"Jordan","facts":["Jordan sells groceries"]}]});
     let mock = serve(vec![route("POST", "/chat/completions", json!({"choices":[{"message":{"content":answer.to_string()}}]}))]).await;

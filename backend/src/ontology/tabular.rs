@@ -76,23 +76,32 @@ pub(super) fn parse_with_limit(bytes: &[u8], max_bytes: usize) -> AppResult<Tabl
     if columns.is_empty() {
         return Err(AppError::bad_request("the CSV has no header row"));
     }
+    // Count first, then retain a deterministic spread including both ends. Memory stays bounded
+    // by SAMPLE_SIZE even for a large file, and late-populated columns reach the profiler.
+    let total_rows = reader.records().try_fold(0usize, |n, record| {
+        let record = record.map_err(|e| AppError::bad_request(format!("the CSV could not be read: {e}")))?;
+        Ok::<_, AppError>(n + usize::from(!record.iter().all(str::is_empty)))
+    })?;
+    let size = total_rows.min(profile::SAMPLE_SIZE);
+    let indices: HashSet<usize> = (0..size).map(|i| if size <= 1 { 0 } else { i * (total_rows - 1) / (size - 1) }).collect();
+    let mut reader = csv::ReaderBuilder::new().flexible(true).trim(csv::Trim::All).from_reader(bytes);
     let mut rows = Vec::new();
-    let mut total_rows = 0;
+    let mut row_index = 0;
     for record in reader.records() {
         let record = record.map_err(|e| AppError::bad_request(format!("the CSV could not be read: {e}")))?;
         if record.iter().all(str::is_empty) {
             continue;
         }
-        total_rows += 1;
-        if rows.len() < profile::SAMPLE_SIZE {
+        if indices.contains(&row_index) {
             let line = record.position().map_or(0, |p| p.line());
             rows.push((line, record.iter().map(str::to_string).collect()));
         }
+        row_index += 1;
     }
     Ok(Table { columns, rows, total_rows })
 }
 
-/// The table as a profiling sample: its first [`profile::SAMPLE_SIZE`] rows, one object each, a blank
+/// The table as a profiling sample: up to [`profile::SAMPLE_SIZE`] evenly spaced rows, one object each, a blank
 /// cell as null. The record type is the document id.
 pub fn sample(document_id: &str, table: &Table) -> Sample {
     let rows = table
