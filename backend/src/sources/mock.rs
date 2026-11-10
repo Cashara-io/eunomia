@@ -27,6 +27,7 @@ pub struct Route {
     query: Vec<&'static str>,
     body_has: Vec<&'static str>,
     delay_ms: u64,
+    gate: Option<(Arc<tokio::sync::Notify>, Arc<tokio::sync::Notify>)>,
     status: u16,
     body: Value,
     headers: Vec<(&'static str, String)>,
@@ -37,7 +38,7 @@ pub struct Route {
 }
 
 pub fn route(method: &str, path: &str, body: Value) -> Route {
-    Route { method: method.parse().unwrap(), path: path.to_string(), query: vec![], body_has: vec![], delay_ms: 0, status: 200, body, headers: vec![], raw: None, remaining: None, truncated: false }
+    Route { method: method.parse().unwrap(), path: path.to_string(), query: vec![], body_has: vec![], delay_ms: 0, gate: None, status: 200, body, headers: vec![], raw: None, remaining: None, truncated: false }
 }
 
 impl Route {
@@ -68,6 +69,12 @@ impl Route {
     /// Answer after `ms` milliseconds (a slow provider).
     pub fn delay(mut self, ms: u64) -> Self {
         self.delay_ms = ms;
+        self
+    }
+
+    /// Signal that the request arrived, then hold its response until released by the test.
+    pub fn gated(mut self, entered: Arc<tokio::sync::Notify>, release: Arc<tokio::sync::Notify>) -> Self {
+        self.gate = Some((entered, release));
         self
     }
 
@@ -162,6 +169,10 @@ async fn handle(State(st): State<MockState>, method: Method, uri: Uri, headers: 
     let Some(r) = found else {
         return (StatusCode::NOT_FOUND, format!("mock: no route for {method} {uri}")).into_response();
     };
+    if let Some((entered, release)) = &r.gate {
+        entered.notify_one();
+        release.notified().await;
+    }
     tokio::time::sleep(std::time::Duration::from_millis(r.delay_ms)).await;
     let out = r.raw.clone().unwrap_or_else(|| r.body.to_string().replace("{base}", &st.base));
     let mut resp = (StatusCode::from_u16(r.status).unwrap(), [("content-type", "application/json")], out).into_response();

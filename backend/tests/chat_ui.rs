@@ -744,9 +744,17 @@ async fn configured_provider_model_is_used_including_budget_final_turn() {
 #[tokio::test]
 async fn disconnect_cancels_budget_final_turn_without_persisting() {
     use eunomia_backend::{chat::service, sources::mock::{route,serve}};
+    let entered = std::sync::Arc::new(tokio::sync::Notify::new());
+    let release = std::sync::Arc::new(tokio::sync::Notify::new());
     let call = model_reply(json!({"tool_calls":[{"index":0,"id":"next","function":{"name":"ontology_get","arguments":"{}"}}]}));
-    let mock = serve(vec![route("POST","/chat/completions",Value::Null).raw(&call).times(10),route("POST","/chat/completions",Value::Null).delay(1500).raw(&model_reply(json!({"content":"This must never be saved."})))]).await;
+    let mock = serve(vec![route("POST","/chat/completions",Value::Null).raw(&call).times(10),route("POST","/chat/completions",Value::Null).gated(entered.clone(),release.clone()).raw(&model_reply(json!({"content":"This must never be saved."})))]).await;
     let (app,_) = scripted_chat(&mock).await;
+    // Fixture embeddings are not model turns. Make the old total-request threshold true
+    // before chat starts, so restoring it reliably fails the final-turn assertions below.
+    let client = reqwest::Client::new();
+    for _ in mock.requests().len()..11 {
+        client.post(format!("{}/embeddings",mock.base)).json(&json!({"input":"fixture noise"})).send().await.unwrap();
+    }
     let db = app.db().await;
     let thread = common::sys(service::create_thread(&db,&app.user.id,None)).await.unwrap();
     let id = eunomia_backend::rid::parse(&thread.id).unwrap();
@@ -754,12 +762,23 @@ async fn disconnect_cancels_budget_final_turn_without_persisting() {
     let state = app.state.org(&app.user.org).await.unwrap();
     let user = app.user.clone(); let send_id = id.clone();
     let task = tokio::spawn(common::sys(async move { service::send_stream(state,user,send_id,"Describe our ontology".into(),tx).await }));
-    tokio::time::timeout(std::time::Duration::from_secs(15),async {
-        while mock.requests().len() < 11 { tokio::time::sleep(std::time::Duration::from_millis(10)).await; }
-    }).await.unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(15),entered.notified()).await.expect("final model request must start");
+    let requests = mock.requests();
+    let completions: Vec<_> = requests.iter().filter(|r| r.path == "/chat/completions").collect();
+    assert_eq!(completions.len(),11);
+    let final_request: Value = serde_json::from_str(&completions.last().unwrap().body).unwrap();
+    assert_eq!(final_request["tool_choice"],"none");
+    assert!(final_request.get("tools").is_none());
     let before = common::sys(service::history(&db,&app.user.id,&id)).await.unwrap().unwrap();
+    assert_eq!(before.len(),21,"user message and ten complete assistant/tool pairs");
+    assert_eq!(before[0].role,"user");
+    for pair in before[1..].chunks_exact(2) {
+        assert_eq!(pair[0].role,"assistant");
+        assert_eq!(pair[1].role,"tool");
+    }
     drop(rx); // Stop aborts the SSE fetch, which drops this receiver too.
     tokio::time::timeout(std::time::Duration::from_millis(500),task).await.expect("model future must be cancelled promptly").unwrap();
+    release.notify_one();
     let after = common::sys(service::history(&db,&app.user.id,&id)).await.unwrap().unwrap();
     assert_eq!(serde_json::to_value(before).unwrap(),serde_json::to_value(after).unwrap());
 }
