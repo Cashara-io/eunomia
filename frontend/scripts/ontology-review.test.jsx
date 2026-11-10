@@ -160,3 +160,46 @@ describe("review visual data", () => {
     expect(rows.find(r => r.field === "Data type").change).toBe("Unchanged");
   });
 });
+
+const { renderToStaticMarkup } = await import("react-dom/server");
+const { createElement } = await import("react");
+const { default: ReviewComparison } = await import("../src/components/twin/ReviewComparison");
+
+test("new definitions render proposal labels without a comparison or change markers", () => {
+  const after = definitions(reviewFixture())[1];
+  const html = renderToStaticMarkup(createElement(ReviewComparison, { after }));
+  expect(html).toContain('aria-label="New definition"');
+  expect(html).toContain("There is nothing to compare against yet.");
+  expect(html).not.toContain('role="table"');
+  expect(html).not.toContain("data-change");
+});
+
+test("an approved baseline retains current and proposed values with real differences", () => {
+  const model = reviewFixture();
+  model.kinds[0].properties[0].status = "approved";
+  const before = definitions(structuredClone(model))[1];
+  model.kinds[0].properties[0].unit = null;
+  model.kinds[0].properties[0].description = "Includes freight";
+  model.kinds[0].properties[0].synonyms = ["cost"];
+  const html = renderToStaticMarkup(createElement(ReviewComparison, { before, after: definitions(model)[1] }));
+  expect(html).toContain('aria-label="Definition comparison"');
+  expect(html).toContain("Current");
+  expect(html).toContain("Proposed");
+  expect(html).toContain('data-change="Added"');
+  expect(html).toContain('data-change="Removed"');
+  expect(html).toContain('data-change="Changed"');
+  expect(html).toContain("Includes freight");
+  expect(html).toContain("<del>AUD</del>");
+});
+
+const { proposalEvent } = await import("../src/components/twin/review-activity");
+test("inbox activity matches the server link name including both endpoints and revision", () => {
+  const link = definitions(reviewFixture()).find(d => d.type === "link");
+  const event = {
+    action: "proposed", revision: 1, actor_name: "Claude Code", at: "2026-11-10T03:32:00Z", reason: null,
+    definition_type: "link", kind: link.kind, name: link.name, target: "ontology_link:fixture",
+  };
+  expect(proposalEvent([event], link)).toEqual(event);
+  expect(proposalEvent([{ ...event, name: "stock_item stored_at another_kind" }], link)).toBeUndefined();
+  expect(proposalEvent([{ ...event, revision: 2 }], link)).toBeUndefined();
+});

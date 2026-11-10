@@ -15,9 +15,9 @@ for (const theme of ["light", "dark"]) {
     await expect(context).not.toContainText("Delivery route");
     await expect(context.getByRole("button")).toHaveCount(0);
     expect(await context.locator("svg path[class*=faceTop]").first().evaluate(el => getComputedStyle(el).fill)).not.toBe("rgb(0, 0, 0)");
-    await expect(page.getByRole("table", { name: "Definition comparison" })).toContainText('<img src=x onerror="alert(1)">');
+    await expect(page.getByRole("list", { name: "New definition" })).toContainText('<img src=x onerror="alert(1)">');
     await expect(page.locator('[aria-label="Selected suggestion"] img')).toHaveCount(0);
-    await expect(page.locator('[data-change="Unavailable"]').first()).toContainText("Not comparable");
+    await expect(page.getByRole("table", { name: "Definition comparison" })).toHaveCount(0);
     expect(fixture.mutations).toHaveLength(0);
   });
 
@@ -114,4 +114,160 @@ test("inbox labels retain definition identity before type for real-backend flows
   await page.goto("/ontology/review?space=business");
   await expect(page.getByRole("link", { name: /warehouse.*kind/i }).first()).toBeVisible();
   await expect(page.getByRole("link", { name: /unit cost.*property.*stock item/i })).toBeVisible();
+});
+
+
+for (const width of [390, 1440]) for (const theme of ["light", "dark"]) test(`decision bar waits for both evidence sections and resets on identity or revision at ${width} ${theme}`, async ({ page }) => {
+  const fixture = await mockReview(page);
+  await page.setViewportSize({ width, height: 900 });
+  await page.addInitScript(theme => localStorage.setItem("eunomia-theme", theme), theme);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto(reviewUrl);
+  const bar = page.locator('[aria-label="Selected suggestion"] footer');
+  await expect(bar).not.toBeInViewport();
+  await expect(bar).toHaveCSS("position", "static");
+  if (process.env.ONTOLOGY_REVIEW_FIGURES) await page.screenshot({ path: `${process.env.ONTOLOGY_REVIEW_FIGURES}/initial-${width}-${theme}.png` });
+  await page.getByRole("region", { name: "Source evidence", exact: true }).scrollIntoViewIfNeeded();
+  await expect(bar).toHaveCSS("position", "static");
+  await page.getByRole("region", { name: "Consequence of approving", exact: true }).scrollIntoViewIfNeeded();
+  await expect(bar).toHaveCSS("position", "sticky");
+  await expect(bar.getByRole("button", { name: "Approve Unit cost", exact: true })).toBeInViewport();
+  if (process.env.ONTOLOGY_REVIEW_FIGURES) await page.screenshot({ path: `${process.env.ONTOLOGY_REVIEW_FIGURES}/sticky-${width}-${theme}.png` });
+  await bar.getByRole("link", { name: "Review evidence", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Read the source", exact: true })).toBeInViewport();
+  const comparison = page.getByRole("region", { name: "What changes", exact: true });
+  await comparison.scrollIntoViewIfNeeded();
+  const boxes = await Promise.all([comparison.boundingBox(), bar.boundingBox()]);
+  expect(boxes.every(Boolean)).toBe(true);
+  expect(boxes[0]!.y + boxes[0]!.height).toBeLessThanOrEqual(boxes[1]!.y);
+  fixture.model.kinds[0].properties[0].revision = 2;
+  fixture.notifyOntologyChange();
+  await expect(page.getByRole("region", { name: "Selected suggestion", exact: true })).toContainText("This definition changed");
+  await expect(bar).toHaveCSS("position", "static");
+  await page.getByRole("button", { name: "Review latest version", exact: true }).click();
+  await expect(bar).toHaveCSS("position", "static");
+  await page.getByRole("region", { name: "Source evidence", exact: true }).scrollIntoViewIfNeeded();
+  await page.getByRole("region", { name: "Consequence of approving", exact: true }).scrollIntoViewIfNeeded();
+  await expect(bar).toHaveCSS("position", "sticky");
+  await page.getByRole("heading", { name: "Unit cost", exact: true }).focus();
+  await page.keyboard.press("j");
+  await expect(page.getByRole("heading", { name: "Gross profit", exact: true })).toBeFocused();
+  await expect(page.locator('[aria-label="Selected suggestion"] footer')).toHaveCSS("position", "static");
+  expect(fixture.mutations).toHaveLength(0);
+});
+
+test("a detail that fits the viewport never needs a sticky bar", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 5000 });
+  await mockReview(page);
+  await page.goto(reviewUrl);
+  await expect(page.locator('[aria-label="Selected suggestion"] footer')).toHaveCSS("position", "static");
+});
+
+test("new definition is a labelled proposal without invented differences", async ({ page }) => {
+  await mockReview(page);
+  await page.goto(reviewUrl);
+  const proposal = page.getByRole("list", { name: "New definition", exact: true });
+  await expect(proposal).toContainText("Status");
+  await expect(proposal).toContainText("Description");
+  await expect(proposal).toContainText("Data type");
+  await expect(proposal).toContainText("AUD");
+  await expect(page.getByText("There is nothing to compare against yet.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("table", { name: "Definition comparison" })).toHaveCount(0);
+  await expect(page.locator('[data-change="Added"], [data-change="Changed"]')).toHaveCount(0);
+});
+
+test("navigation focus ring hugs the heading text", async ({ page }) => {
+  await mockReview(page);
+  await page.goto(reviewUrl);
+  const heading = page.getByRole("heading", { name: "Unit cost", exact: true });
+  await expect(heading).toBeFocused();
+  const widths = await heading.evaluate(el => {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    return { heading: el.getBoundingClientRect().width, text: range.getBoundingClientRect().width };
+  });
+  expect(widths.heading).toBeLessThanOrEqual(widths.text + 2);
+});
+
+test("inbox shares a page of identity-matched activity and cancels on navigation", async ({ page }) => {
+  await mockReview(page);
+  const requests: string[] = [];
+  const aborted: string[] = [];
+  page.on("requestfailed", request => { if (request.url().includes("/ontology/activity?") && new URL(request.url()).searchParams.get("limit") !== "5") aborted.push(request.url()); });
+  await page.route("**/ontology/activity?**", route => {
+    if (new URL(route.request().url()).searchParams.get("limit") === "5") return route.fallback();
+    requests.push(route.request().url());
+  });
+  await page.goto("/ontology/review?space=business");
+  await expect.poll(() => requests.length).toBeGreaterThan(0);
+  expect(requests).toHaveLength(1);
+  expect(new URL(requests[0]).searchParams.has("definition_type")).toBe(false);
+  await page.getByRole("searchbox", { name: "Search suggestions", exact: true }).fill("warehouse");
+  await expect.poll(() => aborted.length).toBeGreaterThan(0);
+  await expect.poll(() => requests.length).toBe(2);
+  await page.getByRole("link", { name: "Overview", exact: true }).click();
+  await expect.poll(() => aborted.length).toBe(2);
+});
+
+for (const width of [390, 1440]) test(`shortcut pairs and proposal stay readable at 200% text at ${width}`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  await mockReview(page);
+  await page.goto(reviewUrl);
+  await page.evaluate(() => document.documentElement.style.fontSize = "200%");
+  const bar = page.locator('[aria-label="Selected suggestion"] footer');
+  for (const text of ["Focus Approve", "Focus Reject", "Confirm"]) {
+    const pair = bar.locator("span").filter({ hasText: text }).filter({ has: page.locator("kbd") }).last();
+    const height = await pair.evaluate(el => ({ height: el.getBoundingClientRect().height, line: parseFloat(getComputedStyle(el).lineHeight) }));
+    expect(height.height).toBeLessThanOrEqual(height.line + 6);
+  }
+  const proposal = page.getByRole("list", { name: "New definition", exact: true });
+  expect(await proposal.evaluate(el => [...el.querySelectorAll("li")].every(row => row.getBoundingClientRect().width >= 200))).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole("button", { name: "Back to queue", exact: true }).click();
+  await expect(page.locator("a[data-definition]").first()).toBeVisible();
+  expect(await page.locator("a[data-definition]").evaluateAll(links => links.every(link => link.getBoundingClientRect().width >= 200))).toBe(true);
+  if (process.env.ONTOLOGY_REVIEW_FIGURES) {
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({ path: `${process.env.ONTOLOGY_REVIEW_FIGURES}/queue-200-${width}-light.png`, fullPage: true });
+  }
+});
+
+test("inbox does not attribute one definition's proposer to its neighbours", async ({ page }) => {
+  await mockReview(page);
+  await page.goto("/ontology/review?space=business");
+  await expect(page.getByRole("link", { name: /unit cost.*property/i })).toContainText("Claude Code");
+  await expect(page.getByRole("link", { name: /warehouse.*kind/i }).first()).toContainText("AI app, name unavailable");
+});
+
+test("scoped detail activity cancels when its suggestion is closed", async ({ page }) => {
+  await mockReview(page);
+  let scoped = "";
+  let aborted = false;
+  page.on("requestfailed", request => { if (request.url() === scoped) aborted = true; });
+  await page.route("**/ontology/activity?**", route => {
+    if (!new URL(route.request().url()).searchParams.has("definition_type")) return route.fallback();
+    scoped = route.request().url();
+  });
+  await page.goto(reviewUrl);
+  await expect.poll(() => scoped).not.toBe("");
+  await page.getByRole("button", { name: "Back to queue", exact: true }).click();
+  await expect.poll(() => aborted).toBe(true);
+});
+
+
+for (const width of [390, 1440]) test(`real comparison stays readable at 200% text at ${width}`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  await mockReview(page);
+  await page.goto(reviewUrl);
+  await page.evaluate(() => document.documentElement.style.fontSize = "200%");
+  await page.getByText("Merge or edit definition", { exact: true }).click();
+  await page.getByRole("combobox", { name: "Merge Unit cost into", exact: true }).selectOption({ label: "Quantity" });
+  await page.getByText("Compare destination fields", { exact: true }).click();
+  const comparison = page.getByRole("table", { name: "Definition comparison", exact: true });
+  await expect(comparison).toContainText("money");
+  await expect(comparison).toContainText("integer");
+  expect(await comparison.getByRole("cell").evaluateAll(cells => cells.every(cell => cell.getBoundingClientRect().width >= 180))).toBe(true);
+  expect(await comparison.getByRole("rowheader").locator("strong, span").evaluateAll(labels => labels.every(label => label.getBoundingClientRect().height <= parseFloat(getComputedStyle(label).lineHeight) + 1))).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  if (process.env.ONTOLOGY_REVIEW_FIGURES) await comparison.screenshot({ path: `${process.env.ONTOLOGY_REVIEW_FIGURES}/comparison-200-${width}-light.png`, style: 'nav[aria-label="Main"] { visibility: hidden !important; }' });
 });

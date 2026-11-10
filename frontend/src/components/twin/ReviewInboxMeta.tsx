@@ -1,7 +1,7 @@
 import { CubeIcon, LinkIcon, SlidersHorizontalIcon, FunctionIcon } from "@phosphor-icons/react/ssr";
 import type { Definition } from "./model";
 import { humanLabel, ReviewTime } from "./review-format";
-import { useReviewActivity, proposerFallback } from "./review-activity";
+import { proposalEvent, proposerFallback } from "./review-activity";
 import { landscapeIcons } from "./landscape-icons";
 import styles from "./review.module.css";
 
@@ -11,9 +11,7 @@ export function ReviewTypeIcon({ definition: d }: { definition: Definition }) {
   return <Icon size={18} weight="duotone" aria-hidden />;
 }
 
-export default function ReviewInboxMeta({ vault, definition: d }: { vault: string; definition: Definition }) {
-  const history = useReviewActivity(vault, d);
-  const proposer = history.data?.events.find(e => e.action === "proposed" && e.revision === d.item.revision);
+export default function ReviewInboxMeta({ proposer, definition: d }: { proposer: ReturnType<typeof proposalEvent>; definition: Definition }) {
   return <>
     <span className={styles.inboxChange}>
       {d.type === "link" ? `${humanLabel(d.item.from_kind)} → ${humanLabel(d.item.label)} → ${humanLabel(d.item.to_kind)}`

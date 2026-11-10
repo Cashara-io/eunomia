@@ -37,6 +37,7 @@ import {
   type Definition as DefinitionItem,
 } from "./model";
 
+import { proposalEvent, useReviewInboxActivity } from "./review-activity";
 import ReviewInboxMeta, { ReviewTypeIcon } from "./ReviewInboxMeta";
 import { useLandscapeTint } from "./landscape-shared";
 import { humanLabel } from "./review-format";
@@ -107,6 +108,7 @@ export default function Review({
   );
   const page = pageNumber(params.get("page"), rows.length);
   const shown = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const inboxActivity = useReviewInboxActivity(vault.id, params.toString(), shown.length > 0);
   const selected = all.find((d) => d.id === params.get("selected"));
   const batch = checked.filter((d) => shown.some((row) => row.id === d.id));
   const owner = vault.role === "owner";
@@ -435,7 +437,7 @@ export default function Review({
                     <span className={styles.inboxKind}>
                       {humanLabel(d.type)}{d.type !== "kind" && ` on ${humanLabel(d.kind)}`}
                     </span>
-                    <ReviewInboxMeta vault={vault.id} definition={d} />
+                    <ReviewInboxMeta proposer={proposalEvent(inboxActivity.data?.events ?? [], d)} definition={d} />
                     {d.item.status === "proposed" ? (
                       <span className={styles.risk}>
                         <WarningCircleIcon size={14} weight="duotone" />

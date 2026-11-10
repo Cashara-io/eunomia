@@ -10,9 +10,11 @@ import styles from "./review.module.css";
 export default function ReviewEvidence({
   definition: d,
   data,
+  evidenceId,
 }: {
   definition: DefinitionItem;
   data: OntologyOut;
+  evidenceId?: string;
 }) {
   return (
     <>
@@ -21,10 +23,9 @@ export default function ReviewEvidence({
           <ArrowsLeftRightIcon size={18} aria-hidden />What changes
         </h4>
         <p className={styles.dim}>{affected(d)}.</p>
-        {d.item.status === "proposed" && <p className={styles.baselineNotice}>Previous approved definition unavailable. Only the proposal was supplied. Added, removed and changed fields cannot be verified here.</p>}
         <ReviewComparison before={d.item.status === "proposed" ? undefined : d} after={d} />
       </section>
-      <Evidence definition={d} data={data} />
+      <Evidence definition={d} data={data} evidenceId={evidenceId} />
     </>
   );
 }
@@ -32,9 +33,11 @@ export default function ReviewEvidence({
 export function Evidence({
   definition: d,
   data,
+  evidenceId,
 }: {
   definition: DefinitionItem;
   data?: OntologyOut;
+  evidenceId?: string;
 }) {
   const samples =
     d.type === "metric"
@@ -51,7 +54,7 @@ export function Evidence({
     ) ?? [];
   return (
     <>
-      <section className={styles.section} aria-label="Source evidence">
+      <section id={evidenceId} className={styles.section} aria-label="Source evidence">
         <h4>
           <FingerprintIcon size={18} aria-hidden />Read the source
         </h4>

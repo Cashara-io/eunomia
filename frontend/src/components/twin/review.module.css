@@ -43,7 +43,7 @@
 }
 .layout {
   display: grid;
-  grid-template-columns: minmax(240px, 0.8fr) minmax(0, 2fr);
+  grid-template-columns: minmax(18rem, 0.8fr) minmax(0, 2fr);
   gap: calc(var(--spacing) * 6);
   align-items: start;
 }
@@ -401,13 +401,13 @@
 .detail { background: var(--surface); border-radius: calc(var(--spacing) * 3); overflow: visible; }
 .identity { border-top: 3px solid var(--kind-hue); margin-top: calc(var(--spacing) * 3); background: color-mix(in srgb, var(--kind-hue) 5%, var(--surface)); }
 .identity > div:first-child { justify-content: start; }
-.identity h3 { flex: 1; font-size: var(--type-display); }
+.identity h3 { flex: 0 1 auto; width: fit-content; border-radius: 4px; outline-offset: 4px; font-size: var(--type-display); }
 .identityIcon { display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid var(--border-strong); border-radius: calc(var(--spacing) * 2); color: var(--kind-hue); background: var(--surface); }
 .identityIcon svg { width: 24px; height: 24px; }
 .section h4 { font-size: var(--type-reading); }
 .section h4 svg { color: var(--ink-dim); flex-shrink: 0; }
 .baselineNotice { color: var(--ink-dim); font-size: var(--type-caption); margin-block: calc(var(--spacing) * 2) calc(var(--spacing) * 4); max-width: 75ch; }
-.comparison { margin-top: calc(var(--spacing) * 3); border: 1px solid var(--border); border-radius: calc(var(--spacing) * 2); overflow: clip; }
+.comparison { container-type: inline-size; margin-top: calc(var(--spacing) * 3); border: 1px solid var(--border); border-radius: calc(var(--spacing) * 2); overflow: clip; }
 .comparisonHead, .comparisonRow { display: grid; grid-template-columns: minmax(90px, .7fr) 1fr 1.3fr; gap: calc(var(--spacing) * 3); padding: calc(var(--spacing) * 3); }
 .comparisonHead { background: var(--surface-raised); font-size: var(--type-caption); color: var(--ink-dim); }
 .comparisonRow { border-top: 1px solid var(--border); line-height: 1.5; }
@@ -435,7 +435,7 @@
 .dependency { border: 1px solid var(--border-field); border-radius: 99px; padding: calc(var(--spacing) * 1) calc(var(--spacing) * 3); font-size: var(--type-caption); display: inline-flex; align-items: center; gap: calc(var(--spacing) * 2); }
 .dependency::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--good); }
 .dependency[data-state="required"]::before { background: var(--warning); border-radius: 0; }
-.actions { position: sticky; bottom: 0; z-index: 3; border-top: 1px solid var(--border-field); background: var(--surface); box-shadow: 0 -8px 24px color-mix(in srgb, var(--ink) 5%, transparent); border-radius: 0 0 calc(var(--spacing) * 3) calc(var(--spacing) * 3); }
+.actions { position: static; bottom: 0; z-index: 3; border-top: 1px solid var(--border-field); background: var(--surface); box-shadow: 0 -8px 24px color-mix(in srgb, var(--ink) 5%, transparent); border-radius: 0 0 calc(var(--spacing) * 3) calc(var(--spacing) * 3); }
 .armedHint { display: none; font-size: var(--type-detail); }
 .reading[data-review-armed="true"] .actions { border-top: 3px solid var(--focus); background: var(--surface-raised); }
 .reading[data-review-armed="true"] .armedHint { display: block; flex-basis: 100%; }
@@ -446,16 +446,9 @@
 .mergeComparison summary { min-height: 44px; cursor: pointer; }
 @media (max-width: 540px) {
   .contextPicture { margin-inline: calc(var(--spacing) * 4); padding: calc(var(--spacing) * 3); }
-  .comparisonHead { display: none; }
-  .comparisonRow { grid-template-columns: 1fr 1fr; }
-  .comparisonRow > div { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: calc(var(--spacing) * 2); }
-  .comparisonRow > span::before { display: block; font-size: var(--type-caption); color: var(--ink-dim); margin-bottom: calc(var(--spacing) * 2); content: "Current"; }
-  .comparisonRow > span:last-child::before { content: "Proposed"; }
   .contextKinds { display: flex; flex-wrap: wrap; }
   .contextKinds > div { flex: 1 1 100px; }
-  .actions { position: sticky; }
   .actions > .shortcuts { font-size: var(--type-caption); }
-  .identity h3 { flex-basis: 50%; }
   .receipt dl { grid-template-columns: 1fr; gap: calc(var(--spacing) * 2); }
   .receipt dd { margin-bottom: calc(var(--spacing) * 3); }
 }
@@ -472,3 +465,29 @@
 .inboxTitle { display: flex; gap: calc(var(--spacing) * 2); align-items: start; overflow-wrap: anywhere; }
 .inboxTitle svg { color: var(--kind-hue); flex-shrink: 0; margin-top: 3px; }
 .inboxKind { font-size: var(--type-caption); color: var(--ink-dim); }
+
+/* Reserve space and scroll targets for the bar without changing the reading order. */
+.reading[data-sticky-decisions="true"] { padding-bottom: var(--decision-bar-height, 0px); }
+.reading[data-sticky-decisions="true"] .actions { position: sticky; }
+.reading { scroll-margin-bottom: var(--decision-bar-height, 0px); }
+.reading section, .reading figure, .reading textarea { scroll-margin-block: 16px calc(var(--decision-bar-height, 0px) + 16px); }
+.evidenceLink { font-size: var(--type-caption); color: var(--ink-dim); text-decoration: underline; text-underline-offset: 3px; }
+.shortcuts > span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.proposalTitle { margin-top: calc(var(--spacing) * 4); font-weight: 500; }
+.proposal { display: grid; gap: calc(var(--spacing) * 3); }
+.proposal li { display: grid; grid-template-columns: minmax(6em, .4fr) 1fr; gap: calc(var(--spacing) * 3); }
+.proposal strong { font-weight: 500; color: var(--ink-dim); }
+.comparisonRow > * { min-width: 0; }
+.section .section { margin-inline: 0; }
+@media (max-width: 540px) {
+  .proposal li { grid-template-columns: 1fr; gap: calc(var(--spacing) * 1); }
+  .risk svg { flex-shrink: 0; }
+}
+
+@container (max-width: 34rem) {
+  .comparisonHead { display: none; }
+  .comparisonRow { grid-template-columns: 1fr; }
+  .comparisonRow > div { display: grid; gap: calc(var(--spacing) * 1); }
+  .comparisonRow > span::before { display: block; font-size: var(--type-caption); color: var(--ink-dim); content: "Current"; }
+  .comparisonRow > span:last-child::before { content: "Proposed"; }
+}
