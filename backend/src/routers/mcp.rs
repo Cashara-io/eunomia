@@ -105,14 +105,9 @@ async fn handle(State(state): State<AppState>, authn: Option<Extension<Authn>>, 
     if !can_upload && headers.get(header::CONTENT_LENGTH).and_then(|v| v.to_str().ok()).and_then(|v| v.parse::<usize>().ok()).is_some_and(|n| n > normal_limit) {
         return super::upload_body::scope_denied().into_response();
     }
-    // Read-only calls never acquire the shared upload slot or receive its larger ceiling.
-    let body_slot = if can_upload {
-        let Some(slot) = state.large_bodies.acquire(user.id.to_string()) else {
-            return crate::gate::rate_limited(1);
-        };
-        Some(slot)
-    } else { None };
-    let body = match super::upload_body::read(request.into_body(), limit).await {
+    // A small call never contends with an upload. The reader acquires the slot only
+    // when this scoped caller's stream actually crosses the normal body limit.
+    let (body, _large_body_slot) = match super::upload_body::read(request.into_body(), limit, &state.large_bodies, user.id.to_string()).await {
         Ok(body) => body,
         Err(error) => return error.into_response(),
     };
@@ -129,8 +124,6 @@ async fn handle(State(state): State<AppState>, authn: Option<Extension<Authn>>, 
         return AppError::coded(ErrorCode::DocumentTooLarge, format!("non-upload MCP body exceeds the {normal_limit} byte limit")).into_response();
     }
 
-    // Small calls release the slot before dispatch. A large upload retains it until its data is dropped.
-    let _large_body_slot = (body.len() > normal_limit).then_some(body_slot).flatten();
     drop(body);
 
     // a session from before the tool surface changed: 404 makes the client start over (issue #90).

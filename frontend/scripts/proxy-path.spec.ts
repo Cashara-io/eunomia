@@ -78,7 +78,7 @@ for (const path of ["/mcp", "/api/documents?filename=large.csv"]) {
     });
   }
   test(`${path}: times out a scoped sender that never sends EOF`, async () => {
-    expect(await refusedBeforeBodyCompletes({ url: `http://127.0.0.1:18190${path}`, credential: "Bearer valid", chunked: true })).toBe(408);
+    expect(await refusedBeforeBodyCompletes({ url: `http://127.0.0.1:18190${path}`, credential: "Bearer valid", chunked: true, bytes: 2 * 1024 * 1024 })).toBe(408);
   });
   test(`${path}: streams an authenticated 2 MiB body intact`, async ({ request }) => {
     const credentials: Record<string, string>[] = [{ authorization: "Bearer valid" }];

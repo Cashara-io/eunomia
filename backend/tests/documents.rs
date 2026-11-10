@@ -639,24 +639,29 @@ async fn review209_large_body_slot_is_shared_and_released_on_cancellation() {
     let app = TestApp::with_settings(Settings { documents_max_bytes: 25 << 20, ..common::test_settings() }).await;
     for first_path in ["/mcp", "/api/documents?filename=held.csv"] {
         let (started, reading) = tokio::sync::oneshot::channel();
-        let body = Body::from_stream(futures::stream::once(async move {
+        let prefix = serde_json::to_vec(&json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"document_upload","arguments":{"filename":"held.txt","text":"x".repeat(2 << 20)}}})).unwrap();
+        let body = Body::from_stream(futures::stream::once(async move { Ok::<_, std::io::Error>(prefix) }).chain(futures::stream::once(async move {
             started.send(()).unwrap();
             std::future::pending::<Result<Vec<u8>, std::io::Error>>().await
-        }));
+        })));
         let req = Request::builder().method("POST").uri(first_path)
             .header(header::AUTHORIZATION, format!("Bearer {}", app.token))
             .header(header::CONTENT_TYPE, "application/json").body(body).unwrap();
         let router = app.router.clone();
         let held = tokio::spawn(async move { router.oneshot(req).await });
         tokio::time::timeout(Duration::from_secs(5), reading).await.unwrap().unwrap();
+        let small = json!({"jsonrpc":"2.0","id":2,"method":"ping"});
+        let (status, _, _) = raw(&app, "POST", "/mcp", serde_json::to_vec(&small).unwrap(), Some("application/json"), &app.token).await;
+        assert_eq!(status, StatusCode::OK, "a held upload must not block a small call");
+        let large = json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"document_upload","arguments":{"filename":"blocked.txt","text":"x".repeat(2 << 20)}}});
         for path in ["/mcp", "/api/documents?filename=blocked.csv"] {
-            let (status, _, _) = raw(&app, "POST", path, b"{}".to_vec(), Some("application/json"), &app.token).await;
+            let (status, _, _) = raw(&app, "POST", path, serde_json::to_vec(&large).unwrap(), Some("application/json"), &app.token).await;
             assert_eq!(status, StatusCode::TOO_MANY_REQUESTS, "{first_path} should block {path}");
         }
         held.abort();
         assert!(held.await.unwrap_err().is_cancelled());
-        let (status, _, _) = raw(&app, "POST", "/mcp", br#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#.to_vec(), Some("application/json"), &app.token).await;
-        assert_eq!(status, StatusCode::OK, "slot was not released after cancellation");
+        let (status, out) = upload_http(&app, "after-cancellation.csv", Some("text/csv"), &vec![b'x'; 2 << 20]).await;
+        assert_eq!(status, StatusCode::OK, "slot was not released after cancellation: {out}");
     }
 }
 
@@ -695,10 +700,11 @@ async fn review209_stalled_upload_times_out_and_releases_shared_slot() {
     let app = TestApp::with_settings(Settings { documents_max_bytes: 25 << 20, ..common::test_settings() }).await;
     for path in ["/mcp", "/api/documents?filename=stalled.csv"] {
         let (started, reading) = tokio::sync::oneshot::channel();
-        let body = Body::from_stream(futures::stream::once(async move {
+        let prefix = serde_json::to_vec(&json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"document_upload","arguments":{"filename":"held.txt","text":"x".repeat(2 << 20)}}})).unwrap();
+        let body = Body::from_stream(futures::stream::once(async move { Ok::<_, std::io::Error>(prefix) }).chain(futures::stream::once(async move {
             started.send(()).unwrap();
             std::future::pending::<Result<Vec<u8>, std::io::Error>>().await
-        }));
+        })));
         let req = Request::builder().method("POST").uri(path)
             .header(header::AUTHORIZATION, format!("Bearer {}", app.token)).body(body).unwrap();
         let router = app.router.clone();
@@ -709,8 +715,8 @@ async fn review209_stalled_upload_times_out_and_releases_shared_slot() {
         let response = tokio::time::timeout(Duration::from_secs(1), held).await;
         tokio::time::resume();
         assert_eq!(response.expect("body deadline did not release the request").unwrap().status(), StatusCode::REQUEST_TIMEOUT, "{path}");
-        let (status, _, _) = raw(&app, "POST", "/mcp", br#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#.to_vec(), Some("application/json"), &app.token).await;
-        assert_eq!(status, StatusCode::OK, "shared slot remained held after timeout");
+        let (status, out) = upload_http(&app, "after-timeout.csv", Some("text/csv"), &vec![b'x'; 2 << 20]).await;
+        assert_eq!(status, StatusCode::OK, "shared slot remained held after timeout: {out}");
     }
 }
 
@@ -729,4 +735,26 @@ async fn review209_read_only_chunked_body_has_only_the_small_budget() {
     let response = app.router.clone().oneshot(req).await.unwrap();
     assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
     assert!(polls.load(Ordering::SeqCst) <= eunomia_backend::max_body_bytes() / (256 << 10) + 1);
+}
+
+#[tokio::test]
+async fn review209_parallel_small_mcp_calls_succeed_while_large_upload_holds_slot() {
+    let app = TestApp::with_settings(Settings { documents_max_bytes: 25 << 20, ..common::test_settings() }).await;
+    let _upload = app.state.large_bodies.acquire(app.user.id.to_string()).unwrap();
+    let calls = (0..16).map(|id| {
+        let app = &app;
+        async move {
+            let rpc = if id % 2 == 0 {
+                json!({"jsonrpc":"2.0","id":id,"method":"ping"})
+            } else {
+                json!({"jsonrpc":"2.0","id":id,"method":"tools/call","params":{"name":"document_list","arguments":{}}})
+            };
+            let (status, _, body) = raw(app, "POST", "/mcp", serde_json::to_vec(&rpc).unwrap(), Some("application/json"), &app.token).await;
+            assert_eq!(status, StatusCode::OK, "small call {id}: {}", String::from_utf8_lossy(&body));
+            let answer = json_of(&body);
+            assert!(answer.get("error").is_none(), "{answer}");
+            assert_ne!(answer["result"]["isError"], true, "{answer}");
+        }
+    });
+    futures::future::join_all(calls).await;
 }

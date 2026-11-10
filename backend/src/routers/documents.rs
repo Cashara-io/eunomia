@@ -106,11 +106,8 @@ struct UploadQuery {
 )]
 async fn upload_document(State(state): State<AppState>, user: User, Query(q): Query<UploadQuery>, headers: HeaderMap, request: axum::extract::Request) -> AppResult<Json<DocumentOut>> {
     if !super::upload_body::allowed() { return Err(super::upload_body::scope_denied()); }
-    let Some(_body_slot) = state.large_bodies.acquire(user.id.to_string()) else {
-        return Err(AppError::new(axum::http::StatusCode::TOO_MANY_REQUESTS, "another upload is in progress"));
-    };
     let limit = state.settings.documents_max_bytes;
-    let body = super::upload_body::read(request.into_body(), limit).await?;
+    let (body, _body_slot) = super::upload_body::read(request.into_body(), limit, &state.large_bodies, user.id.to_string()).await?;
     let state = state.org(&user.org).await?;
     let filename = q.filename.filter(|f| !f.trim().is_empty()).ok_or_else(|| AppError::bad_request("the filename query parameter is required"))?;
     let declared = q.content_type.or_else(|| headers.get(header::CONTENT_TYPE).and_then(|v| v.to_str().ok()).map(str::to_string));
