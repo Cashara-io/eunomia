@@ -14,12 +14,12 @@ export function overviewLayout(kinds: KindItem[], links: LinkItem[]) {
   );
   const max = Math.max(1, ...kinds.map((k) => k.entities));
   const rows = Math.max(1, Math.ceil(kinds.length / 4));
-  const height = 180 + rows * 150;
+  const height = 65 + rows * 225;
   const nodes = sorted.map((kind, i) => ({
     kind,
     x: 125 + (i % 4) * 275 + Math.floor(i / 4) * 12,
-    y: 190 + Math.floor(i / 4) * 150 - (i % 4) * 14,
-    height: kind.entities === 0 ? 4 : 10 + Math.sqrt(kind.entities / max) * 34,
+    y: 215 + Math.floor(i / 4) * 225 - (i % 4) * 14,
+    height: kind.entities === 0 ? 4 : 12 + Math.sqrt(kind.entities / max) * 116,
     linked: linked.has(kind.kind),
   }));
   const edges = links.flatMap((link, i) => {
@@ -50,66 +50,53 @@ export function routeLabels(
   visible: ReturnType<typeof overviewLayout>["edges"],
 ) {
   const occupied = layout.nodes.flatMap((n) => [
-    { x: n.x - 110, y: n.y - n.height - 96, w: 220, h: 43 },
-    { x: n.x - 24, y: n.y - n.height - 53, w: 48, h: 40 },
+    { x: n.x - 116, y: n.y - n.height - 90, w: 232, h: 82 },
     { x: n.x - 68, y: n.y - n.height - 24, w: 136, h: n.height + 52 },
   ]);
-  return visible.map((edge) => {
+  return visible.flatMap((edge) => {
     const from = layout.nodes.find((n) => n.kind.kind === edge.link.from_kind);
     const to = layout.nodes.find((n) => n.kind.kind === edge.link.to_kind);
-    const w = Math.max(100, edge.link.label.length * 7 + 32),
-      h = 26;
-    let position = { x: edge.x, y: edge.y };
-    if (from && to) {
-      const bend = 28 + (layout.edges.indexOf(edge) % 3) * 8;
-      for (const t of [0.5, 0.35, 0.65, 0.2, 0.8, 0.1, 0.9]) {
-        const u = 1 - t;
-        const x =
-          u * u * u * from.x +
-          3 * u * u * t * (from.x + bend) +
-          3 * u * t * t * (to.x - bend) +
-          t * t * t * to.x;
-        const y =
-          u * u * u * (from.y + 18) +
-          3 * u * u * t * (from.y + 65) +
-          3 * u * t * t * (to.y + 65) +
-          t * t * t * (to.y + 18);
+    if (!from || !to) return [];
+    const w = Math.max(190, edge.link.label.length * 12 + 70),
+      h = 56;
+    const bend = 28 + (layout.edges.indexOf(edge) % 3) * 8;
+    for (const t of [0.5, 0.35, 0.65, 0.2, 0.8, 0.1, 0.9]) {
+      const u = 1 - t;
+      const x =
+        u ** 3 * from.x +
+        3 * u * u * t * (from.x + bend) +
+        3 * u * t * t * (to.x - bend) +
+        t ** 3 * to.x;
+      const routeY =
+        u ** 3 * (from.y + 18) +
+        3 * u * u * t * (from.y + 65) +
+        3 * u * t * t * (to.y + 65) +
+        t ** 3 * (to.y + 18);
+      for (const offset of [-28, 28]) {
+        const y = routeY + offset;
         const box = { x: x - w / 2, y: y - h / 2, w, h };
         if (
-          !occupied.some(
+          box.x < 0 ||
+          box.x + w > 1200 ||
+          box.y < 0 ||
+          box.y + h > layout.height
+        )
+          continue;
+        if (
+          occupied.some(
             (r) =>
               box.x < r.x + r.w &&
               box.x + w > r.x &&
               box.y < r.y + r.h &&
               box.y + h > r.y,
           )
-        ) {
-          position = { x, y };
-          break;
-        }
+        )
+          continue;
+        occupied.push(box);
+        return [{ ...edge, x, y }];
       }
     }
-    const collides = (x: number, y: number) =>
-      occupied.some(
-        (r) =>
-          x - w / 2 < r.x + r.w &&
-          x + w / 2 > r.x &&
-          y - h / 2 < r.y + r.h &&
-          y + h / 2 > r.y,
-      );
-    if (collides(position.x, position.y)) {
-      const candidates = [];
-      for (let y = 36; y < layout.height - 24; y += 36)
-        for (let x = 105; x < 1110; x += 85)
-          if (!collides(x, y)) candidates.push({ x, y });
-      candidates.sort(
-        (a, b) =>
-          Math.hypot(a.x - edge.x, a.y - edge.y) -
-          Math.hypot(b.x - edge.x, b.y - edge.y),
-      );
-      position = candidates[0] ?? position;
-    }
-    occupied.push({ x: position.x - w / 2, y: position.y - h / 2, w, h });
-    return { ...edge, ...position };
+    // The linked panel retains every route when the plane has no clear label slot.
+    return [];
   });
 }

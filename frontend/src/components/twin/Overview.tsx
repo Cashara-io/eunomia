@@ -65,6 +65,7 @@ export default function Overview({
               { section: "Properties" },
             ),
             type: "stale" as const,
+            count: stale.length,
           },
         ]
       : []),

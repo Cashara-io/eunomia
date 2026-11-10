@@ -128,3 +128,15 @@ test("display formatting keeps identifiers separate, uses human plurals and rela
   expect(relativeTime("2026-11-10T03:32:00Z", now)).toBe("2 min ago");
   expect(activityDay("2026-11-09T03:32:00Z", now)).toBe("Yesterday");
 });
+
+test("height has a generous range, a fixed footprint and a visibly different rank", () => {
+  const { nodes } = overviewLayout(
+    fixture.ontology.kinds,
+    fixture.ontology.links,
+  );
+  const stock = nodes.find((n) => n.kind.kind === "stock_item");
+  const contract = nodes.find((n) => n.kind.kind === "contract");
+  expect(stock.height / contract.height).toBeGreaterThan(4);
+  expect(stock.height - contract.height).toBeGreaterThan(90);
+  expect(nodes.find((n) => n.kind.kind === "warehouse").height).toBe(4);
+});

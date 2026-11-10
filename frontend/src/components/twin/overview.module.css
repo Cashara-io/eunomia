@@ -501,13 +501,12 @@
   transition: opacity 120ms ease;
 }
 .route[data-active="true"] {
-  stroke: var(--ink);
-  stroke-dasharray: 6 4;
-  animation: travel 800ms linear infinite;
+  stroke: var(--kind-hue);
+  opacity: 1;
 }
 @keyframes travel {
   to {
-    stroke-dashoffset: -20;
+    stroke-dashoffset: -64;
   }
 }
 .form,
@@ -520,7 +519,8 @@
 }
 .landmark {
   position: absolute;
-  width: 18%;
+  width: 19%;
+  z-index: 2;
   transform: translateX(-50%);
   text-align: center;
 }
@@ -535,6 +535,10 @@
   cursor: pointer;
 }
 .kindTitle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
   font-size: 0.875rem;
   font-weight: 500;
   line-height: 1.25;
@@ -546,44 +550,40 @@
   font-variant-numeric: tabular-nums;
   color: var(--ink-dim);
 }
-.kindPin {
-  display: grid;
-  place-items: center;
-  width: 2rem;
-  height: 2rem;
-  background: var(--surface);
-  border: 1px solid var(--border-field);
-  border-radius: 50%;
-  margin-top: 0.25rem;
+.kindTitle svg {
+  color: var(--kind-hue);
+  flex-shrink: 0;
 }
-.kindPin svg :global([opacity="0.2"]) {
-  fill: var(--duotone-color);
-  opacity: 0.65;
+.landmarkButton {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 3px 8px rgb(0 0 0 / 0.08);
 }
 .landmarkButton[aria-pressed="true"] {
-  background: var(--accent-soft);
-  box-shadow: inset 0 0 0 1px var(--ink);
-}
-.landmarkButton[aria-pressed="true"] .kindPin {
-  background: var(--ink);
-  color: var(--canvas);
-  border-color: var(--ink);
+  border-color: var(--border);
 }
 .attentionPins {
-  position: absolute;
-  right: 7%;
-  bottom: 0.5rem;
   display: flex;
-  gap: 0.25rem;
+  justify-content: center;
+  gap: 0.375rem;
+  margin-top: 0.375rem;
 }
 .attentionPin {
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  width: 1.75rem;
-  height: 1.75rem;
-  color: var(--canvas);
-  background: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  border-radius: 99px;
+  padding: 0.25rem 0.5rem;
+  min-height: 1.5rem;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--kind-hue) 70%, var(--border));
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+.attentionPin svg {
+  color: var(--kind-hue);
 }
 .unlinkedLabel {
   display: block;
@@ -607,7 +607,8 @@
   border-radius: 99px;
   background: var(--surface);
   cursor: pointer;
-  max-width: 17%;
+  max-width: 19%;
+  z-index: 1;
 }
 .routeLabel[aria-pressed="true"] {
   border-color: var(--ink);
@@ -628,21 +629,68 @@
 .inspector .link {
   margin-top: 0.5rem;
 }
-.detailLinks {
+.inspectorGrid {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr 1fr;
+  gap: 1.5rem;
+  padding: 0.75rem 0;
+}
+.inspectorGrid > * {
+  min-width: 0;
+}
+.inspectorGrid h4 {
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+.inspectorGrid h4 span {
+  margin-left: 0.375rem;
+}
+.sampleChips {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem 1rem;
-  margin-top: 0.5rem;
-  color: var(--ink-dim);
+  gap: 0.375rem;
+  margin: 0.75rem 0 1rem;
+}
+.sampleChips span {
+  padding: 0.25rem 0.5rem;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+}
+.detailLinks {
+  display: grid;
+  gap: 0.625rem;
+  max-height: 13rem;
+  overflow-y: auto;
+  padding-right: 0.375rem;
+}
+.detailLinks li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.125rem 0.5rem;
+  font-size: 0.75rem;
+}
+.detailLinks b {
+  font-weight: 500;
+}
+.detailLinks svg {
+  grid-column: 1/-1;
+  width: 100%;
+  height: 3px;
+  background: var(--surface-raised);
 }
 .linkedPanels {
   display: grid;
   grid-template-columns: 1.3fr 1fr;
-  gap: 2rem;
+  gap: 1rem;
   padding: 1.25rem 0;
 }
 .chartPanel {
   min-width: 0;
+  padding: 1rem;
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
 }
 .chartPanel h3 {
   font-size: 0.9375rem;
@@ -783,7 +831,7 @@
     outline-offset: 2px;
   }
 }
-@container (max-width: 45em) {
+@container (max-width: 40em) {
   .landscape {
     aspect-ratio: auto;
     display: grid;
@@ -805,20 +853,19 @@
     padding-bottom: 0.75rem;
   }
   .landmarkButton {
+    background: none;
+    border: 0;
+    box-shadow: none;
     display: grid;
-    grid-template-columns: 2rem minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     text-align: left;
     gap: 0.25rem 0.75rem;
     padding: 0.5rem 0;
   }
-  .kindPin {
-    grid-column: 1;
-    grid-row: 1/3;
-    margin: 0;
-  }
   .kindTitle,
   .landmarkButton .nodeCount {
-    grid-column: 2;
+    grid-column: 1;
+    justify-content: flex-start;
   }
   .flatLinks {
     display: block;
@@ -838,7 +885,9 @@
   }
   .attentionPins {
     position: static;
-    padding: 0.25rem 0 0.25rem 2.75rem;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    padding: 0.25rem 0;
   }
   .attentionPin {
     border-radius: 99px;
@@ -851,6 +900,7 @@
     content: attr(aria-label);
     font-size: 0.75rem;
   }
+  .inspectorGrid,
   .linkedPanels {
     grid-template-columns: 1fr;
     gap: 1.5rem;
@@ -896,16 +946,7 @@
   padding: 0.25rem 0;
   gap: 0.125rem;
 }
-.kindPin {
-  width: 1.75rem;
-  height: 1.75rem;
-  margin-top: 0.125rem;
-}
-.kindPin svg {
-  width: 18px;
-  height: 18px;
-}
-@container (max-width: 45em) {
+@container (max-width: 40em) {
   .flatLinks button {
     padding: 0.125rem 0;
   }
@@ -935,7 +976,7 @@
   opacity: 1;
   color: var(--ink-dim);
 }
-.landmark[data-dim="true"] .kindPin,
+.landmark[data-dim="true"] .kindTitle svg,
 .barRow[data-dim="true"] svg {
   opacity: 0.35;
 }
@@ -983,7 +1024,7 @@
   transition: none;
 }
 .map .route[data-active="true"] {
-  animation: none;
+  opacity: 1;
 }
 .map .route[data-dim="true"] {
   opacity: 0.045;
@@ -992,9 +1033,93 @@
 .unlinkedLabel {
   display: none;
 }
-@container (max-width: 45em) {
+@container (max-width: 40em) {
   .unlinkedLabel {
     display: block;
     padding: 0.5rem 0;
   }
+}
+
+.heightLegend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+  margin-top: 1rem;
+  font-size: 0.75rem;
+  color: var(--ink-dim);
+}
+.heightLegend > span:first-child {
+  color: var(--kind-repository);
+  letter-spacing: 2px;
+}
+.ground {
+  color: var(--border-strong);
+}
+.route {
+  opacity: 0.26;
+}
+.routeFlow {
+  stroke: var(--kind-hue);
+  stroke-dasharray: 5 59;
+  stroke-width: 2.5;
+  animation: travel 4s linear infinite;
+  pointer-events: none;
+}
+.form {
+  --face-top: color-mix(in srgb, var(--kind-hue) 74%, var(--surface));
+  --face-left: color-mix(in srgb, var(--kind-hue) 30%, var(--surface));
+  --face-right: color-mix(in srgb, var(--kind-hue) 49%, var(--surface));
+}
+.faceTop {
+  fill: var(--face-top);
+}
+.faceLeft {
+  fill: var(--face-left);
+}
+.faceRight {
+  fill: var(--face-right);
+}
+.solid path {
+  stroke: color-mix(in srgb, var(--kind-hue) 75%, var(--ink));
+  stroke-width: 1;
+  stroke-linejoin: round;
+}
+.baseRing {
+  fill: none;
+  stroke: var(--kind-hue);
+  stroke-width: 2;
+  opacity: 0;
+}
+.form[data-selected="true"] .solid {
+  transform: translateY(-9px);
+  filter: brightness(1.17);
+}
+.form[data-selected="true"] .baseRing {
+  opacity: 1;
+}
+.judgement,
+.resume {
+  padding: 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  .routeFlow {
+    animation: none;
+    stroke-dasharray: none;
+  }
+}
+@media (max-width: 600px) {
+  .judgement,
+  .resume {
+    padding: 1rem;
+  }
+}
+
+:global(:root:not([data-theme="dark"])) .form {
+  --face-top: color-mix(in srgb, var(--kind-hue) 88%, white);
+  --face-left: color-mix(in srgb, var(--kind-hue) 65%, #20242b);
+  --face-right: color-mix(in srgb, var(--kind-hue) 84%, #20242b);
 }

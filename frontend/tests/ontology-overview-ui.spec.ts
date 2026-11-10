@@ -35,7 +35,7 @@ test("overview explains real relationships and named issues, with one list and o
   const node = page.getByRole("button", { name: /Orders.*objects/ }).first();
   await node.click();
   await expect(node).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("link", { name: "Find Orders" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open Orders" })).toBeVisible();
   await page
     .getByText("Structure counts and readiness rule", { exact: false })
     .first()
@@ -252,7 +252,7 @@ for (const width of [1440, 390])
       "true",
     );
     await expect(
-      page.getByRole("link", { name: "Find Deliveries", exact: true }),
+      page.getByRole("link", { name: "Open Deliveries", exact: true }),
     ).toHaveAttribute("href", /kind=delivery/);
     await page.keyboard.press("Escape");
     await expect(page.locator('[data-kind="delivery"]')).toHaveAttribute(
@@ -316,7 +316,7 @@ test("reduced motion stops routes, pin destinations stay scoped, and activity ke
   await expect(
     page
       .getByRole("link", {
-        name: "Inspect stale Unit cost on House blend 1kg",
+        name: /Products: 1 stale input.*Inspect stale Unit cost on House blend 1kg/,
       })
       .last(),
   ).toHaveAttribute("href", /space=business&section=Properties/);
@@ -374,7 +374,7 @@ test("landscape hover and selection captures, contrast and frame timing", async 
   await page.locator('[data-kind="order"]').click();
   await page.mouse.move(20, 20);
   await expect(
-    page.getByRole("link", { name: "Find Orders", exact: true }),
+    page.getByRole("link", { name: "Open Orders", exact: true }),
   ).toBeVisible();
   if (process.env.ONTOLOGY_SCREENSHOTS)
     await page.screenshot({
@@ -384,7 +384,8 @@ test("landscape hover and selection captures, contrast and frame timing", async 
     });
   for (const theme of ["light", "dark"]) {
     const contrast = await page.evaluate((theme) => {
-      document.documentElement.dataset.theme = theme;
+      if (theme === "dark") document.documentElement.dataset.theme = "dark";
+      else delete document.documentElement.dataset.theme;
       const read = (token: string) => {
         const el = document.createElement("span");
         el.style.color = `var(${token})`;
@@ -401,16 +402,27 @@ test("landscape hover and selection captures, contrast and frame timing", async 
         });
         return 0.2126 * r + 0.7152 * g + 0.0722 * b;
       };
-      const warning = read("--warning");
-      return ["--canvas", "--surface"].map((token) => {
-        const background = read(token);
-        return (
-          (Math.max(warning, background) + 0.05) /
-          (Math.min(warning, background) + 0.05)
-        );
-      });
+      return ["--warning", "--ink", "--ink-dim"].flatMap((foreground) =>
+        (foreground === "--warning"
+          ? ["--canvas", "--surface"]
+          : ["--canvas", "--surface", "--surface-raised"]
+        ).map((token) => {
+          const ink = read(foreground),
+            background = read(token);
+          return (
+            (Math.max(ink, background) + 0.05) /
+            (Math.min(ink, background) + 0.05)
+          );
+        }),
+      );
     }, theme);
     expect(Math.min(...contrast)).toBeGreaterThanOrEqual(4.5);
+    if (process.env.ONTOLOGY_SCREENSHOTS && theme === "light")
+      await page.screenshot({
+        path: `${process.env.ONTOLOGY_SCREENSHOTS}/overview-selected-1440-light.png`,
+        fullPage: true,
+        animations: "disabled",
+      });
     await testInfo.attach(`stale-contrast-${theme}`, {
       body: JSON.stringify(contrast),
       contentType: "application/json",
@@ -462,3 +474,82 @@ test("landscape hover and selection captures, contrast and frame timing", async 
       JSON.stringify({ idle, hover: timing }, null, 2),
     );
 });
+
+for (const width of [1440, 1280, 1024])
+  for (const theme of ["dark", "light"])
+    test(`landscape labels stay clear at ${width} in ${theme}`, async ({
+      page,
+    }) => {
+      await mockOntology(page);
+      await page.setViewportSize({ width, height: 1000 });
+      await page.addInitScript(
+        (theme) => localStorage.setItem("eunomia-theme", theme),
+        theme,
+      );
+      await page.goto("/ontology?space=business");
+      await expect(page.locator("[data-kind]")).toHaveCount(16);
+      const faces = await page
+        .locator("g[data-selected]")
+        .first()
+        .evaluate((form) => {
+          const canvas = document.createElement("canvas");
+          canvas.width = canvas.height = 1;
+          const context = canvas.getContext("2d");
+          if (!context) throw new Error("Canvas context unavailable");
+          return [...form.querySelectorAll(":scope > g > path")].map((face) => {
+            context.fillStyle = getComputedStyle(face).fill;
+            context.fillRect(0, 0, 1, 1);
+            const [r, g, b] = context.getImageData(0, 0, 1, 1).data;
+            return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+          });
+        });
+      expect(faces).toHaveLength(3);
+      expect(faces[2]).toBeGreaterThan(faces[0]);
+      expect(faces[2]).toBeGreaterThan(faces[1]);
+      const overlaps = async () =>
+        page
+          .locator('[data-testid="kind-landscape"] button, [data-pin-type]')
+          .evaluateAll((elements) => {
+            const boxes = elements
+              .filter((e) => e.getClientRects().length)
+              .map((e) => ({
+                name: e.textContent,
+                rect: e.getBoundingClientRect(),
+              }));
+            return boxes.flatMap((a, i) =>
+              boxes
+                .slice(i + 1)
+                .flatMap((b) =>
+                  a.rect.left < b.rect.right &&
+                  a.rect.right > b.rect.left &&
+                  a.rect.top < b.rect.bottom &&
+                  a.rect.bottom > b.rect.top
+                    ? [`${a.name} / ${b.name}`]
+                    : [],
+                ),
+            );
+          });
+      expect(await overlaps()).toEqual([]);
+      for (const kind of await page
+        .locator("[data-kind]")
+        .evaluateAll((nodes) =>
+          nodes.map((n) => n.getAttribute("data-kind")),
+        )) {
+        await page.locator(`[data-kind="${kind}"]`).click();
+        await page.mouse.move(0, 0);
+        expect(await overlaps()).toEqual([]);
+      }
+      const panel = page.getByRole("region", { name: "Objects per kind" });
+      await expect(panel.getByRole("button").first()).toHaveAccessibleName(
+        "Stock items: 6,000 objects",
+      );
+      await expect(
+        page
+          .locator('[data-kind="location"]')
+          .locator("..")
+          .locator("[data-pin-type]"),
+      ).toHaveCount(0);
+      await expect(
+        page.getByText("height = objects", { exact: false }),
+      ).toBeVisible();
+    });
