@@ -711,7 +711,7 @@ async fn review209_stalled_upload_times_out_and_releases_shared_slot() {
         let held = tokio::spawn(async move { router.oneshot(req).await.unwrap() });
         reading.await.unwrap();
         tokio::time::pause();
-        tokio::time::advance(Duration::from_secs(121)).await;
+        tokio::time::advance(Duration::from_secs(26)).await;
         let response = tokio::time::timeout(Duration::from_secs(1), held).await;
         tokio::time::resume();
         assert_eq!(response.expect("body deadline did not release the request").unwrap().status(), StatusCode::REQUEST_TIMEOUT, "{path}");
@@ -757,4 +757,48 @@ async fn review209_parallel_small_mcp_calls_succeed_while_large_upload_holds_slo
         }
     });
     futures::future::join_all(calls).await;
+}
+
+#[tokio::test]
+async fn review209_upload_rate_allows_honest_senders_and_cuts_off_trickles() {
+    let app = TestApp::with_settings(Settings { documents_max_bytes:25 << 20, ..common::test_settings() }).await;
+    for path in ["/mcp", "/api/documents?filename=slow.csv"] {
+        for (size, rate) in [(2 << 20, 128 * 1024), (25 << 20, 128 * 1024), (2 << 20, 8 * 1024)] {
+            let payload = if path == "/mcp" {
+                serde_json::to_vec(&json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"document_upload","arguments":{"filename":"slow.csv","text":"x".repeat(size)}}})).unwrap()
+            } else { vec![b'x'; size] };
+            let expected = payload.len();
+            let (tx, rx) = tokio::sync::mpsc::channel::<Result<Vec<u8>, std::io::Error>>(1);
+            let req = Request::builder().method("POST").uri(path).header(header::AUTHORIZATION, format!("Bearer {}", app.token)).body(Body::from_stream(tokio_stream::wrappers::ReceiverStream::new(rx))).unwrap();
+            let router = app.router.clone();
+            let held = tokio::spawn(async move { router.oneshot(req).await.unwrap() });
+            tokio::time::pause();
+            let mut sent = 0;
+            for chunk in payload.chunks(rate) {
+                if tx.send(Ok(chunk.to_vec())).await.is_err() { break; }
+                sent += chunk.len();
+                tokio::time::advance(Duration::from_secs(1)).await;
+                for _ in 0..10 { tokio::task::yield_now().await; }
+            }
+            drop(tx);
+            tokio::time::resume();
+            let response = held.await.unwrap();
+            if rate == 128 * 1024 {
+                assert_eq!(sent, expected);
+                assert_eq!(response.status(), StatusCode::OK);
+                let bytes = response.into_body().collect().await.unwrap().to_bytes();
+                let out: Value = serde_json::from_slice(&bytes).unwrap();
+                let doc = if path == "/mcp" {
+                    assert!(out.get("error").is_none(), "{out}");
+                    assert_ne!(out["result"]["isError"], true, "{out}");
+                    serde_json::from_str::<Value>(out["result"]["content"][0]["text"].as_str().unwrap()).unwrap()
+                } else { out };
+                assert_eq!(doc["size_bytes"], size, "{doc}");
+            } else {
+                assert!(sent <= rate * 26, "trickle ran past the grace period and window: {sent} bytes");
+                assert_eq!(response.status(), StatusCode::REQUEST_TIMEOUT);
+            }
+            assert!(app.state.large_bodies.acquire(app.user.id.to_string()).is_some(), "body slot leaked");
+        }
+    }
 }

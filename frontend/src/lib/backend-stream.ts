@@ -1,3 +1,11 @@
+import { Agent } from "undici";
+import { UploadBudget, uploadPolicy } from "./upload-budget";
+
+// The body budget controls uploads. Undici's default five-minute header deadline
+// would otherwise expire while a legitimate body is still being sent.
+// Bun ignores dispatcher, so disable its fetch idle deadline explicitly too.
+const dispatcher = new Agent({ headersTimeout: 0, bodyTimeout: 0, connectTimeout: 5000 });
+
 const backend = process.env.BACKEND_INTERNAL_URL || "http://localhost:8001";
 
 function upstreamHeaders(request: Request) {
@@ -52,13 +60,22 @@ export async function streamBackend(request: Request) {
         void body.cancel().catch(() => {});
         return Response.json({ detail: "Request exceeds the token's body limit" }, { status: uploadAllowed ? 413 : 403 });
       }
-      // The optional setting can shorten the deadline, never extend the two-minute ceiling.
-      const configured = Number(process.env.EUNOMIA_UPLOAD_BODY_TIMEOUT_MS);
-      const timeout = configured > 0 && Number.isFinite(configured) ? Math.min(configured, 120_000) : 120_000;
-      timer = setTimeout(() => deadline.abort(), timeout);
+      const setting = (name: string, fallback: number) => {
+        const value = Number(process.env[name]);
+        return Number.isFinite(value) && value > 0 ? Math.min(value, fallback) : fallback;
+      };
+      const policy = {
+        ...uploadPolicy,
+        graceMs: setting("EUNOMIA_UPLOAD_GRACE_MS", uploadPolicy.graceMs),
+        windowMs: setting("EUNOMIA_UPLOAD_WINDOW_MS", uploadPolicy.windowMs),
+      };
+      const budget = new UploadBudget(limit, policy);
+      timer = setInterval(() => { if (budget.expired()) deadline.abort(); }, Math.min(1000, policy.windowMs / 10));
       let bytes = 0;
       body = body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
         transform(chunk, controller) {
+          budget.record(chunk.byteLength);
+          if (budget.expired()) { deadline.abort(); throw new Error("Upload body timed out"); }
           bytes += chunk.byteLength;
           if (bytes > limit) {
             tooLarge = true;
@@ -66,10 +83,11 @@ export async function streamBackend(request: Request) {
           }
           controller.enqueue(chunk);
         },
-        flush() { clearTimeout(timer); },
+        flush() { clearInterval(timer); },
       }), { signal });
     }
     const response = await fetch(`${backend}${url.pathname}${url.search}`, {
+      ...{ dispatcher, timeout: false },
       method: request.method,
       headers,
       body: request.method === "GET" || request.method === "HEAD" ? undefined : body,
@@ -89,6 +107,6 @@ export async function streamBackend(request: Request) {
     if (deadline.signal.aborted) return Response.json({ detail: "Upload body timed out" }, { status: 408 });
     return Response.json({ detail: "Backend unavailable" }, { status: 503 });
   } finally {
-    clearTimeout(timer);
+    clearInterval(timer);
   }
 }

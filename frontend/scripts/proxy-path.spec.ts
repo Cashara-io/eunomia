@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { randomUUID } from "node:crypto";
-import { createServer, type Server } from "node:http";
+import { request as httpRequest, createServer, type Server } from "node:http";
 
 import { refusedBeforeBodyCompletes } from "./proxy-request";
 
@@ -80,6 +80,16 @@ for (const path of ["/mcp", "/api/documents?filename=large.csv"]) {
   test(`${path}: times out a scoped sender that never sends EOF`, async () => {
     expect(await refusedBeforeBodyCompletes({ url: `http://127.0.0.1:18190${path}`, credential: "Bearer valid", chunked: true, bytes: 2 * 1024 * 1024 })).toBe(408);
   });
+  test(`${path}: allows an honest 128 KiB/s upload beyond the old test deadline`, async () => {
+    const result = await timedUpload(path, 128 * 1024, 2 * 1024 * 1024);
+    expect(result.status).toBe(200);
+    expect(JSON.parse(result.body).bytes).toBe(2 * 1024 * 1024);
+  });
+  test(`${path}: cuts off a sender below the minimum rate`, async () => {
+    const result = await timedUpload(path, 8 * 1024, 2 * 1024 * 1024);
+    expect(result.status).toBe(408);
+    expect(result.sent).toBeLessThan(2 * 1024 * 1024);
+  });
   test(`${path}: streams an authenticated 2 MiB body intact`, async ({ request }) => {
     const credentials: Record<string, string>[] = [{ authorization: "Bearer valid" }];
     if (path.startsWith("/api/")) credentials.push({ cookie: "session=valid" });
@@ -93,5 +103,23 @@ for (const path of ["/mcp", "/api/documents?filename=large.csv"]) {
       expect(await res.json()).toEqual({ bytes: 2 * 1024 * 1024, forwarded: null, url: path });
       expect(confirmed).toBe(before + 1);
     }
+  });
+}
+
+function timedUpload(path: string, rate: number, size: number) {
+  return new Promise<{ status: number | undefined; body: string; sent: number }>((resolve, reject) => {
+    let sent = 0;
+    const req = httpRequest(`http://127.0.0.1:18190${path}`, { method:"POST", headers:{ authorization:"Bearer valid", "content-length":String(size) } }, (res) => {
+      let body = "";
+      res.on("data", (chunk) => { body += chunk; });
+      res.on("end", () => { clearInterval(timer); resolve({ status:res.statusCode, body, sent }); req.destroy(); });
+    });
+    const timer = setInterval(() => {
+      const length = Math.min(rate / 8, size - sent);
+      if (length > 0) { req.write(Buffer.alloc(length, 120)); sent += length; }
+      if (sent === size) { clearInterval(timer); req.end(); }
+    }, 125);
+    req.on("error", (err) => { clearInterval(timer); reject(err); });
+    req.setTimeout(25_000, () => req.destroy(new Error("upload fixture timed out")));
   });
 }
