@@ -157,7 +157,7 @@ export default function OnboardingPage() {
                 <div className="flex flex-col gap-2">
                   <h1 className="connect-title">Connect your AI app</h1>
                   <p className="text-[14px] leading-relaxed" style={{ color: "var(--ink-dim)" }}>
-                    Choose an AI app to connect to your Eunomia memory.
+                    Choose an AI app to connect to your Eunomia memory. You can also do this later from Home.
                   </p>
                 </div>
                 <AppChoices onPick={pickApp} disabled={busy} />
@@ -188,7 +188,8 @@ export default function OnboardingPage() {
                 <div className="flex flex-col gap-4">
                   <h1 className="connect-title">Add an OpenAI key</h1>
                   <p className="text-[16px] leading-[1.6]" style={{ color: "var(--ink-dim)" }}>
-                    Optionally add a key for meaning search and in-app chat.
+                    Optional. Your AI app already works without a key. A key adds search by meaning and Chat inside
+                    Eunomia. You can add it later in Settings.
                   </p>
                   <div className="flex flex-col gap-1.5">
                     <label htmlFor="base-url" className="text-[14px] font-semibold">
