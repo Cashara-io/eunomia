@@ -52,3 +52,33 @@ The final production measurement uses Chrome 156.0.8078.48 on macOS arm64. Inter
 | Closed-heap growth across three cycles | 1.16% |
 
 The frame distribution sits at the 60 Hz refresh interval. It is not evidence of every frame being strictly below 16.7 ms. Raw results are committed beside the screenshot samples as `performance.json`. Earlier measurement JSON remains in the temporary evidence folder.
+
+## Real-backend CI follow-up
+
+Job 129792206566 passed the non-answering membership check in 2.2 seconds. That test holds the members request open, advances past the access deadline, and checks that protected content stays absent while Try again becomes available. The adjacent tests exercise successful and denied retries.
+
+The group test's trace shows a mocked WebSocket `hello` with `ontology: { business: 100 }`, followed about 400 ms later by one neighbourhood read and one search read. Its counter included both tool endpoints. The initial cursor catch-up raced the expansion assertion. The action test now uses a quiet live channel, counts only neighbourhood reads, and separately checks expansion, selection and focus. Initial cursor catch-up remains enabled in the product to avoid missing changes during page load.
+
+Entity and relation events previously invalidated every space's connection queries, and memory writes also invalidated Connections. Connection invalidation now collects affected spaces in the existing 400 ms batch. Ontology and entity/relation events in the same batch refetch each neighbourhood once. Memory and document writes, heartbeats and activity in other spaces do not refetch it. Explicit resync and reconnect catch-up retain their recovery behaviour. The new regression fails against the previous production build.
+
+The performance trace records 224 completed clicks before the overall 180-second deadline. The last table click began with about 1.5 seconds remaining. The preceding clicks on that same button completed, including during CPU throttling. Ordinary functional clicks with a 150-object, 600-link scene pass at 1440, 1280 and 390 CSS px, including while the inspector is open. No table obstruction or stability bug was reproduced.
+
+Performance measurement is opt-in, excluded from the default Playwright configuration, and retained in `playwright.connections.config.ts`. It records its own CDP timeline with Playwright snapshot capture disabled. A 10-second action timeout distinguishes an unclickable control from the five-minute overall measurement budget. Run against an isolated production server, using free ports:
+
+```sh
+cd frontend
+bun install --frozen-lockfile
+BACKEND_INTERNAL_URL=http://127.0.0.1:23130 bun run build
+BACKEND_INTERNAL_URL=http://127.0.0.1:23130 bun run start --hostname 127.0.0.1 --port 23129
+```
+
+In another terminal:
+
+```sh
+cd frontend
+CONNECTIONS_PERF=1 E2E_BASE_URL=http://127.0.0.1:23129 bun x playwright test --config playwright.connections.config.ts tests/ontology-connections-performance.spec.ts
+```
+
+Stop the server with Ctrl+C afterwards. The performance spec mocks HTTP and the live channel. Its output directory contains `performance.json` and `canvas-trace.json`. Omit `CONNECTIONS_PERF` to run the functional, access and live-update checks without performance measurements.
+
+Follow-up validation passed: Bun typecheck, lint, 67 unit tests, production build, 63 mocked Connections checks, and the opt-in performance spec in 43.8 seconds. The performance spec is absent from default test discovery.

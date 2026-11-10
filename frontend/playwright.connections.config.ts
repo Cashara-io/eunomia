@@ -4,6 +4,8 @@ export default defineConfig({
   testDir: "./tests",
   testMatch: [
     "ontology-connections-ui.spec.ts",
+    "ontology-connections-review.spec.ts",
+    "ontology-connections-access.spec.ts",
     "ontology-connections-performance.spec.ts",
   ],
   workers: 1,

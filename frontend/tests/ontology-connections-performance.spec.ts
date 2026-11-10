@@ -2,12 +2,18 @@ import { test, expect } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { mockConnections, neighbourhood } from "./fixtures/connections";
 
+// Keep Playwright snapshot capture out of the timings. The spec saves its own CDP trace.
+test.use({ trace: "off" });
+test.skip(process.env.CONNECTIONS_PERF !== "1", "Set CONNECTIONS_PERF=1 for local performance measurements");
+
 // Deliberately exceeds the service contract. This measures the renderer only.
 test("synthetic scene and supported scene performance traces", async ({
   page,
   browserName,
 }) => {
-  test.setTimeout(180000);
+  test.setTimeout(300000);
+  page.setDefaultTimeout(10_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
   const dir = process.env.ONTOLOGY_SCREENSHOTS ?? test.info().outputDir;
   await mkdir(dir, { recursive: true });
   const cdp = await page.context().newCDPSession(page);
@@ -16,6 +22,9 @@ test("synthetic scene and supported scene performance traces", async ({
 
   const data = neighbourhood(999, 3000);
   await mockConnections(page, "populated", data);
+  await page.routeWebSocket("**/api/events/ws*", ws =>
+    ws.send(JSON.stringify({ type: "hello", vaults: { business: 0 } })),
+  );
   await page.goto("/ontology/connections?space=business");
   await expect(
     page.getByRole("heading", { name: "Start with something you know." }),

@@ -173,3 +173,33 @@ for (const theme of ['light','dark']) test(`all hue text has AA contrast in ${th
   expect(results.length).toBeGreaterThan(30);
   expect(results.filter(r=>r.ratio<4.5)).toEqual([]);
 });
+
+test('live neighbourhood invalidation is scoped and batches related events once', async ({page}) => {
+  const requests = await mockConnections(page, 'populated', neighbourhood());
+  let send: (value: object) => void = () => {};
+  await page.routeWebSocket('**/api/events/ws*', ws => {
+    send = value => ws.send(JSON.stringify(value));
+    send({type:'hello',vaults:{business:0,other:0}});
+  });
+  await page.goto(url);
+  await expect(page.locator('[data-object="house"]').first()).toBeVisible();
+  const count = () => requests.filter(r => 'entity_id' in r).length;
+  const before = count();
+  for (const kind of ['entity', 'relation']) send({type:'change',vault:'other',seq:1,kind});
+  send({type:'ontology',vault:'other',event:{seq:1}});
+  for (const kind of ['memory', 'document']) send({type:'change',vault:'business',seq:2,kind});
+  send({type:'heartbeat'});
+  // Observe longer than the real 400 ms batching window, including async fetches.
+  await page.waitForTimeout(650);
+  expect(count()).toBe(before);
+  await page.clock.install();
+  await page.clock.pauseAt(new Date());
+  for (const kind of ['entity', 'relation']) send({type:'change',vault:'business',seq:3,kind});
+  send({type:'ontology',vault:'business',event:{seq:3}});
+  await page.clock.runFor(399);
+  expect(count()).toBe(before);
+  await page.clock.runFor(251);
+  await expect.poll(count).toBe(before + 1);
+  await page.clock.runFor(650);
+  expect(count()).toBe(before + 1);
+});

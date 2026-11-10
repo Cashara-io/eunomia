@@ -80,29 +80,41 @@ test("group count precedes expand, no fetch, deduplicated objects and stable cam
   data.nodes.push(data.nodes[1]);
   data.edges.push(data.edges[0]);
   const requests = await mockConnections(page, "hub", data);
+  // Keep the live channel quiet so these counts measure user actions only.
+  await page.routeWebSocket("**/api/events/ws*", ws =>
+    ws.send(JSON.stringify({ type: "hello", vaults: { business: 0 } })),
+  );
   await page.goto(`${route}&focus=house&selected=house`);
   const group = page.locator("[data-group]");
   await expect(group).toContainText("24 products");
   const camera = await page
     .locator("[data-camera]")
     .getAttribute("data-camera");
-  const calls = requests.length;
+  const neighbourhoodCalls = () => requests.filter(r => "entity_id" in r).length;
+  const calls = neighbourhoodCalls();
   await group.click();
   await expect(group).toHaveAttribute("aria-expanded", "true");
   expect(await page.locator("[data-camera]").getAttribute("data-camera")).toBe(
     camera,
   );
   await expect(page).toHaveURL(/selected=house/);
-  expect(requests.length).toBe(calls);
+  await page.waitForTimeout(450);
+  expect(neighbourhoodCalls()).toBe(calls);
+  await page.locator('[data-object="n0"]').first().click();
+  await expect(page).toHaveURL(/selected=n0/);
+  await page.waitForTimeout(450);
+  expect(neighbourhoodCalls()).toBe(calls);
   await page.evaluate(() => {
     window.dispatchEvent(new Event("blur"));
     window.dispatchEvent(new Event("focus"));
+    document.dispatchEvent(new Event("visibilitychange"));
   });
+  await page.waitForTimeout(450);
   await expect(group).toHaveAttribute("aria-expanded", "true");
   expect(await page.locator("[data-camera]").getAttribute("data-camera")).toBe(
     camera,
   );
-  expect(requests.length).toBe(calls);
+  expect(neighbourhoodCalls()).toBe(calls);
   await page.getByRole("button", { name: "Show as table" }).click();
   await expect(
     page
@@ -483,3 +495,24 @@ test("shortcuts, linked highlights and recent objects are keyboard reachable", a
     "6s",
   );
 });
+
+for (const width of [1440, 1280, 390]) {
+  test(`table objects remain clickable at ${width}px with a supported-size scene`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 720 });
+    await mockConnections(page, "populated", neighbourhood(149, 600));
+    await page.routeWebSocket("**/api/events/ws*", ws =>
+      ws.send(JSON.stringify({ type: "hello", vaults: { business: 0 } })),
+    );
+    await page.goto(`${route}&focus=house`);
+    const objects = page.getByRole("table", { name: "Objects in this neighbourhood (150)" });
+    for (let i = 0; i < 3; i++) {
+      if (width > 640) await page.getByRole("button", { name: "Show as table" }).click();
+      // Ordinary clicks, including with an inspector already open. No force or DOM click.
+      const name = i === 1 ? "North Coast Beans" : "House blend 1kg";
+      await objects.getByRole("button", { name, exact: true }).click({ timeout: 5000 });
+      await expect(page.getByLabel("Selected object", { exact: true })).toContainText(name);
+      await expect(objects.getByRole("button", { name, exact: true })).toHaveAttribute("aria-pressed", "true");
+      if (width > 640) await page.getByRole("button", { name: "Show canvas" }).click();
+    }
+  });
+}
