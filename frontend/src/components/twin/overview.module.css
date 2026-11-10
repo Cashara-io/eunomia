@@ -1057,7 +1057,7 @@
   color: var(--border-strong);
 }
 .route {
-  opacity: 0.26;
+  opacity: 1;
 }
 .routeFlow {
   stroke: var(--kind-hue);
@@ -1122,4 +1122,84 @@
   --face-top: color-mix(in srgb, var(--kind-hue) 88%, white);
   --face-left: color-mix(in srgb, var(--kind-hue) 65%, #20242b);
   --face-right: color-mix(in srgb, var(--kind-hue) 84%, #20242b);
+}
+
+/* Visible routes retain the text token's contrast against the solid ground. */
+.landscape {
+  background: var(--surface);
+}
+.map .route,
+.map .routeLabel {
+  display: none;
+  opacity: 1;
+}
+.map .route[data-idle="true"],
+.map .routeLabel[data-idle="true"],
+.map[data-show-all="true"] .route,
+.map[data-show-all="true"] .routeLabel {
+  display: block;
+}
+.map:where([data-highlight]:not([data-highlight=""])) .form {
+  opacity: 0.35;
+}
+.kindTitle {
+  max-width: 100%;
+  min-width: 0;
+}
+.kindTitle > span,
+.routeLabel > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.routeLabel {
+  width: 19.33%;
+  height: 2.5rem;
+  text-align: left;
+  white-space: nowrap;
+}
+.map .routeLabel {
+  display: none;
+}
+.map .routeLabel[data-idle="true"],
+.map[data-show-all="true"] .routeLabel {
+  display: flex;
+}
+.moreKinds,
+.pinIssues {
+  margin: 0.75rem 0;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  overflow-wrap: anywhere;
+}
+.moreKinds input {
+  display: block;
+  width: 100%;
+  margin: 0.5rem 0;
+}
+.moreKinds ul,
+.pinIssues ul {
+  max-height: 15rem;
+  overflow: auto;
+}
+.moreKinds li,
+.pinIssues li {
+  padding: 0.375rem 0;
+}
+.barRow > span:first-child {
+  overflow-wrap: anywhere;
+}
+@container (max-width: 40em) {
+  .map .routeLabels {
+    display: none;
+  }
+}
+
+.map:where([data-highlight]:not([data-highlight=""])) .landmark .kindTitle svg {
+  opacity: 0.35;
+}
+.map .landmark {
+  opacity: 1;
 }

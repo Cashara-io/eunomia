@@ -1,6 +1,7 @@
 "use client";
 import {
   useEffect,
+  useCallback,
   useMemo,
   useId,
   useRef,
@@ -15,44 +16,19 @@ import {
   ArrowRightIcon,
   GraphIcon,
   TableIcon,
-  PackageIcon,
-  UsersIcon,
-  ReceiptIcon,
-  ShoppingCartIcon,
-  WarehouseIcon,
-  MapPinIcon,
-  TruckIcon,
-  CubeIcon,
   XIcon,
   WarningCircleIcon,
-  ClockCountdownIcon,
-  ChatCircleDotsIcon,
 } from "@phosphor-icons/react";
-import type { KindItem, OntologyOut } from "@/lib/queries/ontology";
+import type { OntologyOut } from "@/lib/queries/ontology";
 import { useKindColor } from "@/lib/kindColors";
 import { twinHref } from "./model";
 import { businessSummary } from "./overview-model";
-import { humanLabel, plural } from "./overview-format";
+import { humanLabel, plural, linkSentence } from "./overview-format";
 import { linkKey, overviewLayout, routeLabels } from "./overview-layout";
+import LandscapeLandmark from "./LandscapeLandmark";
+import LandscapePlane from "./LandscapePlane";
 import styles from "./overview.module.css";
 import { useSetOverviewHighlight } from "./OverviewHighlight";
-
-const icons: Record<string, typeof CubeIcon> = {
-  customer: UsersIcon,
-  employee: UsersIcon,
-  person: UsersIcon,
-  product: PackageIcon,
-  stock_item: PackageIcon,
-  order: ShoppingCartIcon,
-  purchase_order: ShoppingCartIcon,
-  invoice: ReceiptIcon,
-  payment: ReceiptIcon,
-  location: MapPinIcon,
-  warehouse: WarehouseIcon,
-  shipment: TruckIcon,
-  delivery: TruckIcon,
-  delivery_route: TruckIcon,
-};
 
 // Seven familiar palette families connect the plane, icons and linked panels.
 const families: Record<string, string> = {
@@ -79,7 +55,8 @@ export type LandscapePin = {
   type: "proposal" | "stale";
   count?: number;
 };
-type Highlight = { type: "kind"; key: string } | { type: "link"; key: string };
+export type Highlight =
+  { type: "kind"; key: string } | { type: "link"; key: string };
 
 export default function KindSummary({
   data,
@@ -107,27 +84,46 @@ export default function KindSummary({
     [data.links, kinds],
   );
   const layout = useMemo(() => overviewLayout(kinds, links), [kinds, links]);
-  const unlinkedNodes = layout.nodes.filter((n) => !n.linked);
-  const unlinkedArea = unlinkedNodes.length
-    ? {
-        left: Math.min(...unlinkedNodes.map((n) => n.x)) - 94,
-        right: Math.max(...unlinkedNodes.map((n) => n.x)) + 94,
-        top: Math.min(...unlinkedNodes.map((n) => n.y)) - 34,
-        bottom: Math.max(...unlinkedNodes.map((n) => n.y)) + 32,
-      }
-    : null;
+  const unlinkedArea = useMemo(() => {
+    const unlinkedNodes = layout.nodes.filter((n) => !n.linked);
+    return unlinkedNodes.length
+      ? {
+          left: Math.min(...unlinkedNodes.map((n) => n.x)) - 94,
+          right: Math.max(...unlinkedNodes.map((n) => n.x)) + 94,
+          top: Math.min(...unlinkedNodes.map((n) => n.y)) - 34,
+          bottom: Math.max(...unlinkedNodes.map((n) => n.y)) + 32,
+        }
+      : null;
+  }, [layout]);
+  const [showAll, setShowAll] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [pinGroup, setPinGroup] = useState<{
+    kind: string;
+    type: LandscapePin["type"];
+  } | null>(null);
   const [table, setTable] = useState(false);
   const [hovered, setHovered] = useState<Highlight | null>(null);
   const [focused, setFocused] = useState<Highlight | null>(null);
   const [selected, setSelected] = useState<Highlight | null>(null);
   const active = focused ?? hovered ?? selected;
+  const pinIssuesRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (pinGroup) pinIssuesRef.current?.focus();
+  }, [pinGroup]);
   const nodeRefs = useRef(new Map<string, HTMLButtonElement>());
   const color = useKindColor();
-  const hue = (kind: string) =>
-    families[kind] === "company"
-      ? "var(--vault-company)"
-      : color(families[kind] ?? kind);
-  const tint = (kind: string) => ({ "--kind-hue": hue(kind) }) as CSSProperties;
+  const hue = useCallback(
+    (kind: string) =>
+      families[kind] === "company"
+        ? "var(--vault-company)"
+        : color(families[kind] ?? kind),
+    [color],
+  );
+  const tint = useCallback(
+    (kind: string) => ({ "--kind-hue": hue(kind) }) as CSSProperties,
+    [hue],
+  );
   const id = useId().replaceAll(":", "");
   const focusKind =
     selected?.type === "kind"
@@ -180,51 +176,63 @@ export default function KindSummary({
     domain: [0, Math.max(1, ...links.map((l) => l.count))],
     range: [0, 100],
   });
-  function choose(item: Highlight) {
-    setSelected(
-      selected?.type === item.type && selected.key === item.key ? null : item,
+  const choose = useCallback((item: Highlight) => {
+    setSelected((previous) =>
+      previous?.type === item.type && previous.key === item.key ? null : item,
     );
     setHovered(null);
     setFocused(null);
-  }
-  function keyNode(event: KeyboardEvent<HTMLButtonElement>, kind: string) {
-    if (
-      ![
-        "ArrowRight",
-        "ArrowLeft",
-        "ArrowDown",
-        "ArrowUp",
-        "Home",
-        "End",
-      ].includes(event.key)
-    )
-      return;
-    event.preventDefault();
-    const index = layout.nodes.findIndex((n) => n.kind.kind === kind);
-    const step =
-      event.key === "ArrowDown"
-        ? 4
-        : event.key === "ArrowUp"
-          ? -4
-          : event.key === "ArrowLeft"
-            ? -1
-            : 1;
-    const next =
-      event.key === "Home"
-        ? 0
-        : event.key === "End"
-          ? layout.nodes.length - 1
-          : (((index + step) % layout.nodes.length) + layout.nodes.length) %
-            layout.nodes.length;
-    const name = layout.nodes[next]?.kind.kind;
-    if (name) nodeRefs.current.get(name)?.focus();
-  }
-  function nodeName(kind: KindItem) {
-    const related = links.filter(
-      (l) => l.from_kind === kind.kind || l.to_kind === kind.kind,
-    );
-    return `${plural(humanLabel(kind.kind))}, ${kind.entities.toLocaleString("en-AU")} ${plural("object", kind.entities)}. ${related.length ? related.map((l) => `${humanLabel(l.from_kind)} ${l.label.replaceAll("_", " ")} ${humanLabel(l.to_kind)}`).join(". ") : "Not linked yet"}`;
-  }
+  }, []);
+  const keyNode = useCallback(
+    (event: KeyboardEvent<HTMLButtonElement>, kind: string) => {
+      if (
+        ![
+          "ArrowRight",
+          "ArrowLeft",
+          "ArrowDown",
+          "ArrowUp",
+          "Home",
+          "End",
+        ].includes(event.key)
+      )
+        return;
+      event.preventDefault();
+      const index = layout.nodes.findIndex((n) => n.kind.kind === kind);
+      const step =
+        event.key === "ArrowDown"
+          ? 4
+          : event.key === "ArrowUp"
+            ? -4
+            : event.key === "ArrowLeft"
+              ? -1
+              : 1;
+      const next =
+        event.key === "Home"
+          ? 0
+          : event.key === "End"
+            ? layout.nodes.length - 1
+            : (((index + step) % layout.nodes.length) + layout.nodes.length) %
+              layout.nodes.length;
+      const name = layout.nodes[next]?.kind.kind;
+      if (name) nodeRefs.current.get(name)?.focus();
+    },
+    [layout],
+  );
+  const nodeNames = useMemo(
+    () =>
+      new Map(
+        kinds.map((kind) => {
+          const related = links.filter(
+            (l) => l.from_kind === kind.kind || l.to_kind === kind.kind,
+          );
+          return [
+            kind.kind,
+            `${plural(humanLabel(kind.kind))}, ${kind.entities.toLocaleString("en-AU")} ${plural("object", kind.entities)}. ${related.length ? related.map(linkSentence).join(". ") : "Not linked yet"}`,
+          ];
+        }),
+      ),
+    [kinds, links],
+  );
   const detailLinks = focusKind
     ? links.filter(
         (l) => l.from_kind === focusKind.kind || l.to_kind === focusKind.kind,
@@ -232,17 +240,76 @@ export default function KindSummary({
     : focusLink
       ? [focusLink]
       : [];
-  const labelledRoutes = routeLabels(
-    layout,
-    layout.edges
-      .filter(({ link, key }, i) =>
-        active ? relevantLink(key, link.from_kind, link.to_kind) : i < 3,
-      )
-      .slice(0, 3),
+  const labelledRoutes = useMemo(
+    () => routeLabels(layout, layout.edges),
+    [layout],
   );
+  const token = (item: Highlight | null) =>
+    item?.type === "kind"
+      ? `k${kinds.findIndex((k) => k.kind === item.key)}`
+      : item
+        ? (layout.edges.find((e) => e.key === item.key)?.token ?? "")
+        : "";
+  const interactionCSS = useMemo(() => {
+    const root = `[data-map-id="${id}"]`;
+    const rule = (
+      token: string,
+      related: typeof layout.edges,
+      names: string[],
+    ) => {
+      const activeRoot = `${root}[data-highlight="${token}"]`;
+      return (
+        related
+          .map(
+            (e) =>
+              `${activeRoot} [data-route="${e.token}"]{display:block}${activeRoot} [data-route-label="${e.token}"]{display:flex}`,
+          )
+          .join("\n") +
+        [...new Set(names)]
+          .map(
+            (name) =>
+              `${activeRoot} [data-form="k${kinds.findIndex((k) => k.kind === name)}"]{opacity:1}${activeRoot} [data-form="k${kinds.findIndex((k) => k.kind === name)}"] .${styles.kindTitle} svg{opacity:1}`,
+          )
+          .join("\n")
+      );
+    };
+    return (
+      kinds
+        .map((kind, i) => {
+          const related = layout.edges.filter(
+            (e) =>
+              e.link.from_kind === kind.kind || e.link.to_kind === kind.kind,
+          );
+          return rule(`k${i}`, related, [
+            kind.kind,
+            ...related.flatMap((e) => [e.link.from_kind, e.link.to_kind]),
+          ]);
+        })
+        .join("\n") +
+      layout.edges
+        .map((e) => rule(e.token, [e], [e.link.from_kind, e.link.to_kind]))
+        .join("\n") +
+      kinds
+        .map(
+          (_, i) =>
+            `${root}[data-selection="k${i}"] [data-form="k${i}"] .${styles.solid}{transform:translateY(-9px);filter:brightness(1.17)} ${root}[data-selection="k${i}"] [data-form="k${i}"] .${styles.baseRing}{opacity:1}`,
+        )
+        .join("\n")
+    );
+  }, [id, kinds, layout]);
+  const visibleRoutes = layout.edges.filter(
+    (e) =>
+      showAll ||
+      e.idle ||
+      (active && relevantLink(e.key, e.link.from_kind, e.link.to_kind)),
+  ).length;
   return (
     <section
       className={styles.map}
+      data-map-id={id}
+      data-highlight={token(active)}
+      data-selection={token(selected)}
+      data-show-all={showAll}
       aria-labelledby="kind-map-title"
       onMouseMove={() => {
         if (focused) setFocused(null);
@@ -255,6 +322,7 @@ export default function KindSummary({
         }
       }}
     >
+      <style>{interactionCSS}</style>
       <div className={styles.sectionHead}>
         <div>
           <h2 id="kind-map-title">How it fits together</h2>
@@ -276,6 +344,13 @@ export default function KindSummary({
           {table ? "Show landscape" : "Show table"}
         </button>
       </div>
+      <button
+        className="btn btn-ghost btn-sm"
+        aria-pressed={showAll}
+        onClick={() => setShowAll((value) => !value)}
+      >
+        Show all routes
+      </button>
       <div className={styles.heightLegend}>
         <span aria-hidden>▂ ▄ █</span> height = objects{" "}
         <span className={styles.caption}>
@@ -315,7 +390,7 @@ export default function KindSummary({
               </tr>
             </thead>
             <tbody>
-              {layout.nodes.map(({ kind }) => (
+              {kinds.map((kind) => (
                 <tr key={kind.kind}>
                   <th scope="row">
                     <button
@@ -357,7 +432,7 @@ export default function KindSummary({
                       className="link"
                       onClick={() => choose({ type: "link", key: linkKey(l) })}
                     >
-                      {humanLabel(l.label)}
+                      {linkSentence(l)}
                     </button>
                   </td>
                   <td>{humanLabel(l.to_kind)}</td>
@@ -378,287 +453,45 @@ export default function KindSummary({
           }
           onMouseLeave={() => setHovered(null)}
         >
-          <svg
-            className={styles.plane}
-            viewBox={`0 0 1200 ${layout.height}`}
-            preserveAspectRatio="none"
-            aria-hidden="true"
-          >
-            <defs>
-              <linearGradient id={`${id}-fade`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="white" stopOpacity=".12" />
-                <stop offset="75%" stopColor="white" stopOpacity=".8" />
-              </linearGradient>
-              <mask id={`${id}-ground`}>
-                <rect
-                  width="1200"
-                  height={layout.height}
-                  fill={`url(#${id}-fade)`}
-                />
-              </mask>
-              <mask id={`${id}-labels`}>
-                <rect width="1200" height={layout.height} fill="white" />
-                {layout.nodes.map((n) => (
-                  <rect
-                    key={n.kind.kind}
-                    x={n.x - 116}
-                    y={n.y - n.height - 90}
-                    width="232"
-                    height="78"
-                    rx="10"
-                    fill="black"
-                  />
-                ))}
-              </mask>
-              <radialGradient id={`${id}-shadow`}>
-                <stop stopColor="black" stopOpacity=".32" />
-                <stop offset="1" stopColor="black" stopOpacity="0" />
-              </radialGradient>
-              <pattern
-                id={`${id}-grid`}
-                width="42"
-                height="42"
-                patternTransform="matrix(1 -.05 .36 .62 0 0)"
-                patternUnits="userSpaceOnUse"
-              >
-                <path
-                  d="M42 0H0V42"
-                  fill="none"
-                  stroke="var(--border-strong)"
-                  strokeWidth="1"
-                />
-              </pattern>
-              <marker
-                id={`${id}-arrow`}
-                viewBox="0 0 8 8"
-                refX="7"
-                refY="4"
-                markerWidth="5"
-                markerHeight="5"
-                orient="auto-start-reverse"
-              >
-                <path
-                  d="M1 1 7 4 1 7"
-                  fill="none"
-                  stroke="context-stroke"
-                  strokeWidth="1.5"
-                />
-              </marker>
-            </defs>
-            <path
-              d={`M22 120 1110 54 1180 ${layout.height - 80} 90 ${layout.height - 14}Z`}
-              className={styles.ground}
-              fill={`url(#${id}-grid)`}
-              mask={`url(#${id}-ground)`}
-              stroke="var(--border-strong)"
-              strokeWidth="1"
+          <LandscapePlane
+            id={id}
+            layout={layout}
+            kinds={kinds}
+            unlinkedArea={unlinkedArea}
+            tint={tint}
+          />
+          {layout.nodes.map((node) => (
+            <LandscapeLandmark
+              key={node.kind.kind}
+              node={node}
+              token={`k${kinds.findIndex((k) => k.kind === node.kind.kind)}`}
+              planeHeight={layout.height}
+              firstUnlinked={layout.unlinked[0]?.kind}
+              links={links}
+              pins={pins}
+              name={nodeNames.get(node.kind.kind) ?? ""}
+              selected={
+                selected?.type === "kind" && selected.key === node.kind.kind
+              }
+              tint={tint}
+              nodeRefs={nodeRefs}
+              choose={choose}
+              keyNode={keyNode}
+              setHovered={setHovered}
+              setFocused={setFocused}
+              setPinGroup={setPinGroup}
             />
-            {unlinkedArea && (
-              <g>
-                <path
-                  d={`M${unlinkedArea.left} ${unlinkedArea.top}L${unlinkedArea.right} ${unlinkedArea.top - 18}V${unlinkedArea.bottom}L${unlinkedArea.left} ${unlinkedArea.bottom + 18}Z`}
-                  fill="none"
-                  stroke="var(--border-field)"
-                  strokeDasharray="4 5"
-                />
-                <text
-                  x={unlinkedArea.left}
-                  y={unlinkedArea.bottom + 43}
-                  fill="var(--ink-dim)"
-                  fontSize="14"
-                >
-                  Not linked yet
-                </text>
-              </g>
-            )}
-            <g mask={`url(#${id}-labels)`}>
-              {layout.edges.map(({ link, path, key }) => (
-                <path
-                  key={key}
-                  className={styles.route}
-                  data-active={
-                    !!active && relevantLink(key, link.from_kind, link.to_kind)
-                  }
-                  data-dim={
-                    !!active && !relevantLink(key, link.from_kind, link.to_kind)
-                  }
-                  d={path}
-                  fill="none"
-                  stroke="var(--ink-dim)"
-                  strokeWidth={1 + linkScale(link.count) / 110}
-                  markerEnd={`url(#${id}-arrow)`}
-                  style={tint(link.from_kind)}
-                />
-              ))}
-              {active &&
-                layout.edges
-                  .filter(({ link, key }) =>
-                    relevantLink(key, link.from_kind, link.to_kind),
-                  )
-                  .map(({ link, key, path }) => (
-                    <path
-                      key={`flow-${key}`}
-                      className={styles.routeFlow}
-                      data-active="true"
-                      d={path}
-                      fill="none"
-                      style={tint(link.from_kind)}
-                    />
-                  ))}
-            </g>
-            {layout.nodes.map(({ kind, x, y, height, linked }) => (
-              <g
-                key={kind.kind}
-                className={styles.form}
-                data-dim={!!active && !neighbours.has(kind.kind)}
-                data-unlinked={!linked}
-                data-selected={
-                  selected?.type === "kind" && selected.key === kind.kind
-                }
-                style={tint(kind.kind)}
-              >
-                <ellipse
-                  cx={x + 8}
-                  cy={y + 16}
-                  rx="91"
-                  ry="34"
-                  fill={`url(#${id}-shadow)`}
-                />
-                <path
-                  className={styles.baseRing}
-                  d={`M${x - 74} ${y - 10}l101 -17 50 30 -102 18Z`}
-                />
-                <g className={styles.solid}>
-                  <path
-                    className={styles.faceLeft}
-                    d={`M${x - 62} ${y - height - 9}l38 24v${height}l-38 -24Z`}
-                  />
-                  <path
-                    className={styles.faceRight}
-                    d={`M${x - 24} ${y - height + 15}l88 -14v${height}l-88 14Z`}
-                  />
-                  <path
-                    className={styles.faceTop}
-                    d={`M${x - 62} ${y - height - 9}l88 -14 38 24 -88 15Z`}
-                  />
-                </g>
-              </g>
-            ))}
-          </svg>
-          {layout.nodes.map(({ kind, x, y, height, linked }) => {
-            const Icon = icons[kind.kind] ?? CubeIcon;
-            const item: Highlight = { type: "kind", key: kind.kind };
-            return (
-              <div
-                key={kind.kind}
-                className={styles.landmark}
-                data-dim={!!active && !neighbours.has(kind.kind)}
-                data-linked={linked}
-                style={{
-                  ...tint(kind.kind),
-                  left: `${x / 12}%`,
-                  top: `${((y - height - 80) / layout.height) * 100}%`,
-                }}
-              >
-                {!linked && layout.unlinked[0]?.kind === kind.kind && (
-                  <span className={styles.unlinkedLabel}>Not linked yet</span>
-                )}
-                <button
-                  ref={(el) => {
-                    if (el) nodeRefs.current.set(kind.kind, el);
-                    else nodeRefs.current.delete(kind.kind);
-                  }}
-                  data-kind={kind.kind}
-                  className={styles.landmarkButton}
-                  aria-label={nodeName(kind)}
-                  aria-pressed={
-                    selected?.type === "kind" && selected.key === kind.kind
-                  }
-                  onMouseEnter={() => setHovered(item)}
-                  onFocus={() => {
-                    setHovered(null);
-                    setFocused(item);
-                  }}
-                  onBlur={() => setFocused(null)}
-                  onClick={() => choose(item)}
-                  onKeyDown={(e) => keyNode(e, kind.kind)}
-                >
-                  <span className={styles.kindTitle}>
-                    <Icon size={17} weight="duotone" aria-hidden />
-                    {plural(humanLabel(kind.kind))}
-                  </span>
-                  <span className={styles.nodeCount}>
-                    {kind.entities.toLocaleString("en-AU")}{" "}
-                    {plural("object", kind.entities)}
-                  </span>
-                </button>
-                {pins.some((p) => p.kind === kind.kind) && (
-                  <div className={styles.attentionPins}>
-                    {(["proposal", "stale"] as const).map((type) => {
-                      const group = pins.filter(
-                        (p) => p.kind === kind.kind && p.type === type,
-                      );
-                      const pin = group[0];
-                      if (!pin) return null;
-                      const count = group.reduce(
-                        (sum, p) => sum + (p.count ?? 1),
-                        0,
-                      );
-                      const name = `${plural(humanLabel(kind.kind))}: ${count} ${type === "proposal" ? plural("proposal", count) + " to review" : plural("stale input", count)}. ${pin.label}`;
-                      const PinIcon =
-                        type === "proposal"
-                          ? ChatCircleDotsIcon
-                          : ClockCountdownIcon;
-                      return (
-                        <Link
-                          key={type}
-                          href={pin.href}
-                          className={styles.attentionPin}
-                          aria-label={name}
-                          title={name}
-                          data-pin-type={type}
-                        >
-                          <PinIcon size={16} weight="bold" aria-hidden />
-                          <span>{count}</span>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                )}
-                <ul className={styles.flatLinks}>
-                  {links
-                    .filter((l) => l.from_kind === kind.kind)
-                    .map((l) => (
-                      <li key={linkKey(l)}>
-                        <button
-                          onClick={() =>
-                            choose({ type: "link", key: linkKey(l) })
-                          }
-                          onFocus={() => {
-                            setHovered(null);
-                            setFocused({ type: "link", key: linkKey(l) });
-                          }}
-                          onBlur={() => setFocused(null)}
-                        >
-                          {humanLabel(l.label)}{" "}
-                          <ArrowRightIcon size={12} aria-hidden />{" "}
-                          {plural(humanLabel(l.to_kind))}{" "}
-                          <span className={styles.nodeCount}>
-                            {l.count.toLocaleString("en-AU")}
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  {!linked && <li>No recorded links for this kind.</li>}
-                </ul>
-              </div>
-            );
-          })}
+          ))}
           <div className={styles.routeLabels}>
-            {labelledRoutes.map(({ link, key, x, y }) => (
+            {labelledRoutes.map(({ link, key, x, y, angle, token, idle }) => (
               <button
                 key={key}
                 className={styles.routeLabel}
+                data-route-label={token}
+                data-idle={idle}
+                data-arrow-angle={angle}
+                title={linkSentence(link)}
+                aria-label={linkSentence(link)}
                 style={{
                   ...tint(link.from_kind),
                   left: `${x / 12}%`,
@@ -673,20 +506,105 @@ export default function KindSummary({
                 onClick={() => choose({ type: "link", key })}
                 aria-pressed={selected?.type === "link" && selected.key === key}
               >
-                {humanLabel(link.label)}{" "}
-                <ArrowRightIcon aria-hidden size={12} />
+                <span>{linkSentence(link)}</span>
+                <ArrowRightIcon
+                  aria-hidden
+                  size={12}
+                  style={{ transform: `rotate(${angle}deg)` }}
+                />
               </button>
             ))}
           </div>
         </div>
       )}
+      {layout.overflow.length > 0 && (
+        <div className={styles.moreKinds}>
+          <button
+            className="btn btn-ghost"
+            aria-expanded={moreOpen}
+            onClick={() => setMoreOpen((value) => !value)}
+          >
+            {layout.overflow.length} more kinds
+          </button>
+          {moreOpen && (
+            <section aria-label="More kinds">
+              <label>
+                Find a kind
+                <input
+                  type="search"
+                  aria-label="Find a kind"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </label>
+              <ul>
+                {layout.overflow
+                  .filter((k) =>
+                    [k.kind, humanLabel(k.kind)].some((name) =>
+                      name
+                        .toLocaleLowerCase()
+                        .includes(search.toLocaleLowerCase()),
+                    ),
+                  )
+                  .map((k) => (
+                    <li key={k.kind}>
+                      <button
+                        className="link"
+                        onClick={() => choose({ type: "kind", key: k.kind })}
+                      >
+                        {humanLabel(k.kind)}
+                      </button>{" "}
+                      <span className={styles.nodeCount}>
+                        {k.entities.toLocaleString("en-AU")} objects
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+            </section>
+          )}
+        </div>
+      )}
+      {pinGroup && (
+        <section
+          className={styles.pinIssues}
+          ref={pinIssuesRef}
+          tabIndex={-1}
+          aria-label={`${humanLabel(pinGroup.kind)} issues`}
+        >
+          <div className={styles.sectionHead}>
+            <h3>{humanLabel(pinGroup.kind)} issues</h3>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => {
+                nodeRefs.current.get(pinGroup.kind)?.focus();
+                setPinGroup(null);
+              }}
+            >
+              Close issues
+            </button>
+          </div>
+          <ul>
+            {pins
+              .filter(
+                (p) => p.kind === pinGroup.kind && p.type === pinGroup.type,
+              )
+              .map((p) => (
+                <li key={p.href}>
+                  <Link className="link" href={p.href}>
+                    {p.label}
+                  </Link>
+                </li>
+              ))}
+          </ul>
+        </section>
+      )}
       <div className={styles.mapFoot}>
         <span>
           {kinds.length} {plural("kind", kinds.length)} · {links.length}{" "}
           recorded link types
-          {!active && links.length > 3
-            ? ` · ${labelledRoutes.length} routes labelled, all routes in the linked panel`
-            : ""}
+          {` · ${visibleRoutes} of ${links.length} routes shown`}
+          {layout.overflow.length > 0 &&
+            ` · ${layout.nodes.length} kinds on the landscape; all ${kinds.length} in the table`}
         </span>
         <Link className="link" href={twinHref("/ontology/schema", space)}>
           All structure <ArrowRightIcon size={14} aria-hidden />
@@ -761,14 +679,7 @@ export default function KindSummary({
                     <ul className={styles.detailLinks}>
                       {items.map((l) => (
                         <li key={linkKey(l)}>
-                          <span>
-                            {humanLabel(l.label)}{" "}
-                            <b>
-                              {humanLabel(
-                                direction === "in" ? l.from_kind : l.to_kind,
-                              )}
-                            </b>
-                          </span>
+                          <span>{linkSentence(l)}</span>
                           <span className={styles.nodeCount}>
                             {l.count.toLocaleString("en-AU")}
                           </span>

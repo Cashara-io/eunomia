@@ -15,7 +15,7 @@ test("overview explains real relationships and named issues, with one list and o
     page.getByRole("heading", { name: "House blend 1kg: Unit cost" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "Inspect stale input" }),
+    page.getByRole("link", { name: "Inspect stale value" }),
   ).toHaveAttribute("href", /section=Properties/);
   await expect(
     page.getByRole("link", { name: "Review 7 suggestions" }),
@@ -265,26 +265,20 @@ for (const width of [1440, 390])
         .getByRole("region", { name: "Objects per kind" })
         .getByRole("button", { name: "Customers: 2,100 objects" }),
     ).toHaveAttribute("data-dim", "false");
-    await expect(
-      page.locator('[data-kind="warehouse"]').locator(".."),
-    ).toHaveAttribute("data-dim", "true");
+    await expect(page.locator('[data-map-id]')).toHaveAttribute("data-highlight", /k\d+/);
     await page
       .getByRole("region", { name: "Objects per kind" })
       .getByRole("button", { name: "Products: 1,240 objects" })
       .focus();
-    await expect(
-      page.locator('[data-kind="product"]').locator(".."),
-    ).toHaveAttribute("data-dim", "false");
-    await expect(
-      page.locator('[data-kind="warehouse"]').locator(".."),
-    ).toHaveAttribute("data-dim", "true");
+    await expect(page.locator('[data-kind="product"] svg')).toHaveCSS("opacity", "1");
+    await expect(page.locator('[data-map-id]')).toHaveAttribute("data-highlight", /k\d+/);
     if (width === 390) {
       expect(
         await page.locator('[data-testid="kind-landscape"] > svg').isVisible(),
       ).toBe(false);
       await expect(
         page.locator('[data-kind="customer"]').locator("../ul"),
-      ).toContainText("Has invoice");
+      ).toContainText("Customer has invoice Invoice");
     }
     await page.getByRole("button", { name: "Show table", exact: true }).click();
     await expect(
@@ -316,7 +310,7 @@ test("reduced motion stops routes, pin destinations stay scoped, and activity ke
   await expect(
     page
       .getByRole("link", {
-        name: /Products: 1 stale input.*Inspect stale Unit cost on House blend 1kg/,
+        name: /Products: 1 stale value.*source changed after this value was saved/i,
       })
       .last(),
   ).toHaveAttribute("href", /space=business&section=Properties/);

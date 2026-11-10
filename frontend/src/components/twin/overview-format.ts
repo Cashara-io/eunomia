@@ -1,3 +1,5 @@
+import type { LinkItem } from "@/lib/queries/ontology";
+
 // Presentation only. Routes, query values and definition keys keep their API spelling.
 export function humanLabel(value: string, displayName?: string | null) {
   if (displayName?.trim()) return displayName.trim();
@@ -46,4 +48,8 @@ export function activityDay(at: string, now: number) {
     month: "long",
     year: "numeric",
   });
+}
+
+export function linkSentence(link: LinkItem) {
+  return `${humanLabel(link.from_kind)} ${humanLabel(link.label).toLowerCase()} ${humanLabel(link.to_kind)}`;
 }

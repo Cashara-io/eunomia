@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowRightIcon,
@@ -28,7 +28,10 @@ export default function Overview({
   data: OntologyOut;
   onAdd: () => void;
 }) {
-  const pending = definitions(data).filter((d) => d.item.status === "proposed");
+  const pending = useMemo(
+    () => definitions(data).filter((d) => d.item.status === "proposed"),
+    [data],
+  );
   const { kinds, total } = businessSummary(data);
   const [resume] = useState(() => objectReturn(vault.id));
   const resumeId = resume
@@ -46,30 +49,36 @@ export default function Overview({
   const row = list.data?.rows[0];
   const profile = useObjectProfile(vault.id, resumeId || row?.id || "");
   const object = profile.isError ? undefined : profile.data;
-  const stale = object?.properties.filter((p) => p.state === "stale") ?? [];
-  const pins: LandscapePin[] = [
-    ...pending.map((d) => ({
-      kind: d.kind,
-      label: `Review ${humanLabel(d.name)}`,
-      href: twinHref("/ontology/review", vault.id, { selected: d.id }),
-      type: "proposal" as const,
-    })),
-    ...(object && stale.length
-      ? [
-          {
-            kind: object.kind,
-            label: `Inspect stale ${humanLabel(stale[0].name)} on ${object.name}`,
-            href: twinHref(
-              `/ontology/objects/${encodeURIComponent(object.id)}`,
-              vault.id,
-              { section: "Properties" },
-            ),
-            type: "stale" as const,
-            count: stale.length,
-          },
-        ]
-      : []),
-  ];
+  const stale = useMemo(
+    () => object?.properties.filter((p) => p.state === "stale") ?? [],
+    [object],
+  );
+  const pins: LandscapePin[] = useMemo(
+    () => [
+      ...pending.map((d) => ({
+        kind: d.kind,
+        label: `Review ${humanLabel(d.name)}`,
+        href: twinHref("/ontology/review", vault.id, { selected: d.id }),
+        type: "proposal" as const,
+      })),
+      ...(object && stale.length
+        ? [
+            {
+              kind: object.kind,
+              label: `Inspect ${humanLabel(stale[0].name)} on ${object.name}. The source changed after this value was saved. Check the value.`,
+              href: twinHref(
+                `/ontology/objects/${encodeURIComponent(object.id)}`,
+                vault.id,
+                { section: "Properties" },
+              ),
+              type: "stale" as const,
+              count: stale.length,
+            },
+          ]
+        : []),
+    ],
+    [pending, object, stale, vault.id],
+  );
   const groups = [
     { label: "Kinds", items: data.kinds.filter(visibleKind) },
     { label: "Properties", items: data.kinds.flatMap((k) => k.properties) },
@@ -177,13 +186,13 @@ export default function Overview({
               )}
               {stale.length > 0 && object ? (
                 <article className={`${styles.issue} ${styles.stale}`}>
-                  <span className={styles.tag}>Stale input</span>
+                  <span className={styles.tag}>Stale value</span>
                   <h3>
                     {object.name}: {humanLabel(stale[0].name)}
                   </h3>
                   <p>
-                    The current source is out of date. Inspect it before using
-                    this value.
+                    The source changed after this value was saved. Check the
+                    value.
                   </p>
                   <Link
                     className="link"
@@ -193,13 +202,13 @@ export default function Overview({
                       { section: "Properties" },
                     )}
                   >
-                    Inspect stale input <ArrowRightIcon aria-hidden size={14} />
+                    Inspect stale value <ArrowRightIcon aria-hidden size={14} />
                   </Link>
                 </article>
               ) : (
                 <p className={styles.caption}>
                   {object
-                    ? `No stale inputs reported for ${object.name}.`
+                    ? `No stale values reported for ${object.name}.`
                     : "Source checks appear when an object is available."}
                 </p>
               )}
@@ -258,7 +267,7 @@ export default function Overview({
                   className={stale.length ? styles.staleWord : styles.caption}
                 >
                   {stale.length
-                    ? `${humanLabel(stale[0].name)} is stale`
+                    ? `${humanLabel(stale[0].name)}: Source changed after this value was saved. Check the value.`
                     : "Inspect values and sources"}
                 </span>
                 <ArrowUpRightIcon size={22} aria-hidden />

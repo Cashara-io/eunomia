@@ -1,3 +1,4 @@
+import { linkSentence } from "./overview-format";
 import type { KindItem, LinkItem } from "@/lib/queries/ontology";
 
 export const linkKey = (link: LinkItem) =>
@@ -7,13 +8,19 @@ export const linkKey = (link: LinkItem) =>
 // large kind has presence without hiding smaller kinds. Zero stays flat.
 export function overviewLayout(kinds: KindItem[], links: LinkItem[]) {
   const linked = new Set(links.flatMap((l) => [l.from_kind, l.to_kind]));
-  const sorted = [...kinds].sort(
-    (a, b) =>
-      Number(!linked.has(a.kind)) - Number(!linked.has(b.kind)) ||
-      a.kind.localeCompare(b.kind),
+  const ranked = [...kinds].sort(
+    (a, b) => b.entities - a.entities || a.kind.localeCompare(b.kind),
   );
+  const overflow = ranked.slice(16);
+  const sorted = ranked
+    .slice(0, 16)
+    .sort(
+      (a, b) =>
+        Number(!linked.has(a.kind)) - Number(!linked.has(b.kind)) ||
+        a.kind.localeCompare(b.kind),
+    );
   const max = Math.max(1, ...kinds.map((k) => k.entities));
-  const rows = Math.max(1, Math.ceil(kinds.length / 4));
+  const rows = Math.max(1, Math.ceil(sorted.length / 4));
   const height = 65 + rows * 225;
   const nodes = sorted.map((kind, i) => ({
     kind,
@@ -22,7 +29,10 @@ export function overviewLayout(kinds: KindItem[], links: LinkItem[]) {
     height: kind.entities === 0 ? 4 : 12 + Math.sqrt(kind.entities / max) * 116,
     linked: linked.has(kind.kind),
   }));
-  const edges = links.flatMap((link, i) => {
+  const rankedLinks = [...links].sort(
+    (a, b) => b.count - a.count || linkKey(a).localeCompare(linkKey(b)),
+  );
+  const edges = rankedLinks.flatMap((link, i) => {
     const from = nodes.find((n) => n.kind.kind === link.from_kind);
     const to = nodes.find((n) => n.kind.kind === link.to_kind);
     if (!from || !to) return [];
@@ -31,14 +41,22 @@ export function overviewLayout(kinds: KindItem[], links: LinkItem[]) {
       {
         link,
         key: linkKey(link),
+        token: `r${i}`,
+        idle: i < 5,
+        bend,
+        angle: (Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI,
         path: `M${from.x},${from.y + 18} C${from.x + bend},${from.y + 65} ${to.x - bend},${to.y + 65} ${to.x},${to.y + 18}`,
         x: (from.x + to.x) / 2,
         y: (from.y + to.y) / 2 + 45,
       },
     ];
   });
+  edges.forEach((edge, i) => {
+    edge.idle = i < 5;
+  });
   return {
     nodes,
+    overflow,
     edges,
     height,
     unlinked: sorted.filter((k) => !linked.has(k.kind)),
@@ -57,9 +75,9 @@ export function routeLabels(
     const from = layout.nodes.find((n) => n.kind.kind === edge.link.from_kind);
     const to = layout.nodes.find((n) => n.kind.kind === edge.link.to_kind);
     if (!from || !to) return [];
-    const w = Math.max(190, edge.link.label.length * 12 + 70),
+    const w = 232,
       h = 56;
-    const bend = 28 + (layout.edges.indexOf(edge) % 3) * 8;
+    const bend = edge.bend;
     for (const t of [0.5, 0.35, 0.65, 0.2, 0.8, 0.1, 0.9]) {
       const u = 1 - t;
       const x =
@@ -93,7 +111,25 @@ export function routeLabels(
         )
           continue;
         occupied.push(box);
-        return [{ ...edge, x, y }];
+        const dx =
+          3 * u * u * bend +
+          6 * u * t * (to.x - from.x - 2 * bend) +
+          3 * t * t * bend;
+        const dy =
+          3 * u * u * 47 - 3 * t * t * 47 + 6 * u * t * (to.y - from.y);
+        const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+        return [
+          {
+            ...edge,
+            x,
+            y,
+            width: w,
+            height: h,
+            sentence: linkSentence(edge.link),
+            t,
+            angle,
+          },
+        ];
       }
     }
     // The linked panel retains every route when the plane has no clear label slot.
