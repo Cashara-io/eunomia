@@ -417,19 +417,18 @@ fn message_out(row: MessageRow, prose: &crate::views::ui::prose::ChatProse) -> M
 // New rows already contain the checked tree and are never reparsed.
 pub(crate) fn messages_out(rows: Vec<MessageRow>) -> Vec<MessageOut> {
     let mut evidence = std::collections::HashMap::<String, crate::views::ui::prose::ChatProse>::new();
-    let mut calls = std::collections::HashMap::<(String, String), Value>::new();
+    let mut calls = std::collections::HashMap::<(String, String), String>::new();
     rows.into_iter().map(|row| {
         let prose = evidence.entry(row.thread_id.to_string()).or_default();
         if row.role == "user" { *prose = Default::default(); prose.text(&row.content); calls.retain(|(thread, _), _| thread != &row.thread_id.to_string()); }
         for call in row.tool_calls.iter().flatten() {
-            if let (Some(id), Some(args)) = (call["id"].as_str(), call["function"]["arguments"].as_str())
-                && let Ok(args) = serde_json::from_str::<Value>(args) {
-                calls.insert((row.thread_id.to_string(), id.to_string()), args);
+            if let (Some(id), Some(name)) = (call["id"].as_str(), call["function"]["name"].as_str()) {
+                calls.insert((row.thread_id.to_string(), id.to_string()), name.to_string());
             }
         }
         if row.role == "tool" && let Ok(value) = serde_json::from_str::<Value>(&row.content)
-            && let Some(args) = row.tool_call_id.as_ref().and_then(|id| calls.get(&(row.thread_id.to_string(), id.clone()))) {
-            prose.tool_result(&value, args);
+            && let Some(name) = row.tool_call_id.as_ref().and_then(|id| calls.get(&(row.thread_id.to_string(), id.clone()))) {
+            prose.tool_result(name, &value);
         }
         message_out(row, prose)
     }).collect()
@@ -833,7 +832,7 @@ async fn run_send(
                 }
             };
             if within_budget { tool_calls_made.push(name.clone()); }
-            prose.tool_result(&result, &args);
+            prose.tool_result(&name, &result);
 
             said.tool_result(&result);
             let result_text = serde_json::to_string(&result).unwrap_or_else(|_| "null".to_string());

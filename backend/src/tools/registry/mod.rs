@@ -46,6 +46,7 @@ mod code;
 mod docs;
 mod documents;
 mod entities;
+pub mod evidence;
 mod memory;
 mod ontology;
 mod peers;
