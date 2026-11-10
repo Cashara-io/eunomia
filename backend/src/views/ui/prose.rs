@@ -540,8 +540,8 @@ fn chat_claims(text: &str, context: &ChatUnit, units: &[ChatUnit]) -> Vec<(std::
     let digit_unit = DIGIT_UNIT.get_or_init(|| Regex::new(r"^ *(?P<unit>per +[0-9]+ +[\p{L}]+|[\p{L}]+(?:\^?[0-9]+)?(?:/[\p{L}]+(?:\^?[0-9]+)?)+|[\p{L}]+\^?[0-9]+)\b").unwrap());
     // Recognise common physical units even when none of the evidence uses them. Otherwise
     // a currency prefix could incorrectly turn the unknown suffix in "$3 to 5 kg" into money.
-    // Interpret ambiguous m as metres only when an evidence unit identifies it.
-    let standard_units: Vec<_> = ["kg", "g", "mg", "t", "lb", "lbs", "oz", "l", "ml", "km", "cm", "mm", "h", "hr", "hrs", "days", "hours"].into_iter().map(ChatUnit::parse).collect();
+    // A bare m can also mean million; evidence must identify it as a physical unit.
+    let standard_units: Vec<_> = ["kg", "g", "mg", "t", "lb", "lbs", "oz", "l", "ml", "m", "km", "cm", "mm", "h", "hr", "hrs", "days", "hours"].into_iter().map(ChatUnit::parse).collect();
     let mut out = Vec::new();
     for mut span in chat_spans(text) {
         if out.last().is_some_and(|(r, _): &(std::ops::Range<usize>, Option<ChatNumber>)| span.start < r.end) { continue; }
@@ -552,7 +552,7 @@ fn chat_claims(text: &str, context: &ChatUnit, units: &[ChatUnit]) -> Vec<(std::
             (base_end + c.get(0).unwrap().end(), ChatUnit::parse(c.name("unit").unwrap().as_str()))
         });
         let decorated = ChatNumber::parse(&text[span.clone()], context).is_some_and(|n| matches!(n.unit, ChatUnit::Money(_) | ChatUnit::Percent));
-        for unit in units.iter().chain(&standard_units) {
+        for (unit, known) in units.iter().map(|unit| (unit, true)).chain(standard_units.iter().map(|unit| (unit, false))) {
             let name = match unit { ChatUnit::Other(s) => s.as_str(), ChatUnit::Ratio => "ratio", _ => continue };
             let mut forms = vec![name.to_string(), unit_form(name).into(), format!("{}s", unit_form(name))];
             for alias in ["kg", "kilogram", "kilograms", "g", "gram", "grams", "l", "litre", "litres", "liter", "liters", "m", "metre", "metres", "meter", "meters"] {
@@ -562,6 +562,7 @@ fn chat_claims(text: &str, context: &ChatUnit, units: &[ChatUnit]) -> Vec<(std::
                 if rest[gap..].starts_with(&form) {
                     let end = base_end + gap + form.len();
                     // "$5M" is a money scale, while the separate suffix in "$5 kg" conflicts.
+                    if !known && form == "m" && end <= span.end { continue; }
                     if decorated && end <= span.end { continue; }
                     if text[end..].chars().next().is_some_and(|c| token(c) && c != '.') { continue; }
                     if matched.as_ref().is_none_or(|(old, _)| end > *old) { matched = Some((end, unit.clone())); }
@@ -768,7 +769,7 @@ mod tests {
         let mut money = ChatProse::default();
         money.result(&json!([{"value":3,"unit":"AUD"},{"value":5,"unit":"AUD"},{"value":14,"unit":"AUD"},{"value":15.1,"unit":"AUD"}]));
         for raw in ["$3 to 5", "AUD 14 to 15.10", "$3 and 5", "AUD 14-15.10"] { assert!(money.check(raw).is_ok(), "{raw}: {}", money.safe(raw)); }
-        for raw in ["$3 to 999", "AUD 14. Then 15.10", "$3 to 5 kg", "$3 to 5 USD"] { assert!(money.check(raw).is_err(), "{raw}"); }
+        for raw in ["$3 to 999", "AUD 14. Then 15.10", "$3 to 5 kg", "$3 to 5 metres", "$3 to 5 USD"] { assert!(money.check(raw).is_err(), "{raw}"); }
     }
 
     #[test]
