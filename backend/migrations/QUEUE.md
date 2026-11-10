@@ -35,6 +35,6 @@ Control set: 0007 indexes secret audit queries; 0008 adds admin and suspension t
 | tenant | 0040 | object_paging | Ontology objects | #206 | merged |
 | tenant | 0041 | composio_connector | Composio connector | #205 | merged |
 | tenant | 0042 | ontology_activity | Ontology PR3 activity | #207 | merged |
-| tenant | 0043 | chat_turn_order | Chat #220 | #237 | locked |
+| tenant | 0043 | chat_turn_order | Chat #220 | #238 (reserved by #237) | locked |
 | control | 0007 | secret_audit_index | L3 Broker | #123 (#122), 2.0.9 | merged |
 | control | 0008 | user_admin_suspend | Admin (#144) | #162, 2.0.9 | merged |

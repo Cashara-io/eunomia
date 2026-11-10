@@ -202,18 +202,20 @@ pub async fn consolidate_subject(
         Err(e) => return Err(e),
     }
 
-    let mut raw_res = q::RAW_MEMORIES
-        .on(db)
-        .bind(("id", subject_id.clone()))
-        .await?;
-    let raw_rows: Vec<RawMemoryRow> = raw_res.take(0)?;
-
+    // Capture an existing observation's token before the facts. A later fact mutation
+    // advances the token, so a rebuild using older facts cannot mark it fresh.
     let mut existing_res = q::OBSERVATION_OF
         .on(db)
         .bind(("id", subject_id.clone()))
         .await?;
     let existing_rows: Vec<ObservationRow> = existing_res.take(0)?;
     let existing = existing_rows.into_iter().next();
+
+    let mut raw_res = q::RAW_MEMORIES
+        .on(db)
+        .bind(("id", subject_id.clone()))
+        .await?;
+    let raw_rows: Vec<RawMemoryRow> = raw_res.take(0)?;
 
     let seen: HashSet<String> = existing
         .as_ref()

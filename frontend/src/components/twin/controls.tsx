@@ -83,7 +83,7 @@ export function Pagination({ page, total }: { page: number; total: number }) {
   return (
     <nav
       aria-label="Pagination"
-      className="flex flex-wrap items-center justify-between gap-2 text-[13px] pt-3"
+      className="flex flex-wrap items-center justify-between gap-2 text-detail pt-3"
     >
       <span style={{ color: "var(--ink-dim)" }}>
         {total === 0

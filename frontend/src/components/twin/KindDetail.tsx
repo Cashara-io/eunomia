@@ -56,7 +56,7 @@ export default function KindDetail({
   return (
     <>
       <Link
-        className="link self-start text-[13px]"
+        className="link self-start text-detail"
         href={
           params.get("back")
             ? `/ontology/schema?${new URLSearchParams(params.get("back") ?? "")}`
@@ -66,15 +66,15 @@ export default function KindDetail({
         Back to Structure
       </Link>
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 className="text-[22px] font-medium">{words(kind)}</h2>
-        <Link className="link text-[13px]" href={twinHref("/ontology/objects", vault.id, { kind })}>
+        <h2 className="text-display font-medium">{words(kind)}</h2>
+        <Link className="link text-detail" href={twinHref("/ontology/objects", vault.id, { kind })}>
           <span className="font-mono">
             {item.entities.toLocaleString("en-AU")}
           </span>{" "}
           objects
         </Link>
       </div>
-      <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+      <p className="text-detail" style={{ color: "var(--ink-dim)" }}>
         {item.description || "No definition recorded."}
       </p>
       <Link className="link" href={twinHref("/ontology/connections", vault.id, { kind })}>Explore connections</Link>
@@ -123,7 +123,7 @@ export default function KindDetail({
                 className="border-b pb-3 last:border-0"
                 style={{ borderColor: "var(--border)" }}
               >
-                <summary className="cursor-pointer py-2 text-[14px] font-medium">
+                <summary className="cursor-pointer py-2 text-body font-medium">
                   {words(d.name)}
                   {d.type === "property"
                     ? ` (${d.item.datatype}${d.item.unit ? `, ${d.item.unit}` : ""})`
@@ -142,7 +142,7 @@ export default function KindDetail({
               </details>
             ))}
             {rows.length === 0 && (
-              <p className="text-[13px]">No definitions in this section yet.</p>
+              <p className="text-detail">No definitions in this section yet.</p>
             )}
           </section>
           {section !== "definition" && (

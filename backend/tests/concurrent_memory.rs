@@ -11,6 +11,7 @@ use serde_json::json;
 async fn concurrent_memory_writes_keep_exact_counts() {
     const PER_TASK: usize = 200;
     let app = TestApp::new().await;
+    app.tool("memory_write", json!({"subject_name":"Alice","subject_kind":"person","text":"Initial belief","type":"observation"})).await;
 
     let mut tasks = Vec::new();
     for t in 0..2 {
@@ -52,7 +53,7 @@ async fn concurrent_memory_writes_keep_exact_counts() {
     assert_eq!(count("SELECT count() AS n FROM memory WHERE type = 'observation' GROUP ALL").await, 1, "one observation");
     assert_eq!(
         count("SELECT version AS n FROM memory WHERE type = 'observation'").await,
-        total,
-        "observation version counter must equal the number of writes"
+        1 + 2 * total,
+        "observation version includes the initial belief, every fact invalidation and every belief write"
     );
 }

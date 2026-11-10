@@ -179,7 +179,7 @@ function ActivityContent({
         )}
       </div>
       {!compact && (
-        <div className="flex flex-wrap gap-3 text-[13px]">
+        <div className="flex flex-wrap gap-3 text-detail">
           <label>
             Actor
             <select
@@ -281,7 +281,7 @@ function ActivityContent({
               if (!paused && e.currentTarget.scrollTop > 16) pause();
             }}
           >
-            <ol className="text-[13px]">
+            <ol className="text-detail">
               {shown
                 .filter(
                   (event, index, rows) =>
@@ -440,7 +440,7 @@ function ActivityContent({
       )}
       {compact && !definition && (
         <Link
-          className="link self-start text-[13px]"
+          className="link self-start text-detail"
           href={twinHref("/ontology/activity", space)}
         >
           Open all activity

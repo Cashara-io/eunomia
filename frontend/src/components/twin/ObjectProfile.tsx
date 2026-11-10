@@ -162,7 +162,7 @@ function ProfileDetails({
                 <dl className="grid grid-cols-2 gap-4 mt-5">
                   <div>
                     <dt className="label">Known properties</dt>
-                    <dd className="font-mono text-xl">
+                    <dd className="font-mono text-heading">
                       {
                         data.properties.filter((p) => p.state !== "missing")
                           .length
@@ -172,7 +172,7 @@ function ProfileDetails({
                   </div>
                   <div>
                     <dt className="label">Recorded links</dt>
-                    <dd className="font-mono text-xl">
+                    <dd className="font-mono text-heading">
                       {data.link_counts.reduce((n, g) => n + g.total, 0)}
                     </dd>
                   </div>
@@ -201,7 +201,7 @@ function ProfileDetails({
                     <p>{n.definition}</p>
                     {n.result.run ? (
                       <>
-                        <p className="font-mono text-2xl">
+                        <p className="font-mono text-display">
                           {formatted(n.result.run.value, {
                             datatype:
                               n.result.run.unit &&
@@ -220,7 +220,7 @@ function ProfileDetails({
                             ? "contributing object."
                             : "contributing objects."}
                         </p>
-                        <p className="font-mono text-xs">
+                        <p className="font-mono text-caption">
                           As of {date(n.result.run.as_of)}
                         </p>
                         {n.result.run.warnings.map((w) => (
@@ -319,7 +319,7 @@ function ProfileDetails({
                     .map((e) => (
                       <li key={e.id}>
                         <p>{e.text}</p>
-                        <p className="font-mono text-xs text-[var(--ink-dim)]">
+                        <p className="font-mono text-caption text-[var(--ink-dim)]">
                           {date(e.at)}
                         </p>
                       </li>
@@ -341,7 +341,7 @@ function ProfileDetails({
                 {data.memories.map((m) => (
                   <article key={m.id}>
                     <p className="whitespace-pre-wrap break-words">{m.text}</p>
-                    <p className="font-mono text-xs text-[var(--ink-dim)] mt-2">
+                    <p className="font-mono text-caption text-[var(--ink-dim)] mt-2">
                       {date(m.recorded_at)}
                     </p>
                     <Link
