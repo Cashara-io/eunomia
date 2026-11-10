@@ -21,6 +21,12 @@ function upstreamHeaders(request: Request) {
 // Route handlers receive the original stream, without Next proxy's in-memory clone.
 // Only the fixed internal backend is contacted. No request-controlled host or redirect is followed.
 export async function streamBackend(request: Request) {
+  return streamBackendWithClock(request, uploadClock);
+}
+
+const uploadClock = { now: () => performance.now(), setInterval, clearInterval };
+
+export async function streamBackendWithClock(request: Request, clock: typeof uploadClock) {
   const url = new URL(request.url);
   const headers = upstreamHeaders(request);
   const deadline = new AbortController();
@@ -69,8 +75,8 @@ export async function streamBackend(request: Request) {
         graceMs: setting("EUNOMIA_UPLOAD_GRACE_MS", uploadPolicy.graceMs),
         windowMs: setting("EUNOMIA_UPLOAD_WINDOW_MS", uploadPolicy.windowMs),
       };
-      const budget = new UploadBudget(limit, policy);
-      timer = setInterval(() => { if (budget.expired()) deadline.abort(); }, Math.min(1000, policy.windowMs / 10));
+      const budget = new UploadBudget(limit, policy, clock.now);
+      timer = clock.setInterval(() => { if (budget.expired()) deadline.abort(); }, Math.min(1000, policy.windowMs / 10));
       let bytes = 0;
       body = body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
         transform(chunk, controller) {
@@ -83,7 +89,7 @@ export async function streamBackend(request: Request) {
           }
           controller.enqueue(chunk);
         },
-        flush() { clearInterval(timer); },
+        flush() { clock.clearInterval(timer); },
       }), { signal });
     }
     const response = await fetch(`${backend}${url.pathname}${url.search}`, {
@@ -107,6 +113,6 @@ export async function streamBackend(request: Request) {
     if (deadline.signal.aborted) return Response.json({ detail: "Upload body timed out" }, { status: 408 });
     return Response.json({ detail: "Backend unavailable" }, { status: 503 });
   } finally {
-    clearInterval(timer);
+    clock.clearInterval(timer);
   }
 }

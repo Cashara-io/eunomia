@@ -84,7 +84,7 @@ test("real backend confirms credentials before intact 2 MiB HTTP and MCP uploads
   const { token: readToken } = await readTokenResponse.json();
   for (const path of ["/mcp", "/api/documents?filename=readonly.txt"]) {
     expect(await refusedBeforeBodyCompletes({ url: `${baseURL}${path}`, credential: `Bearer ${readToken}` })).toBe(403);
-    expect(await refusedBeforeBodyCompletes({ url: `${baseURL}${path}`, credential: `Bearer ${token}`, chunked: true, bytes: 2 * 1024 * 1024 })).toBe(408);
+    expect(await refusedBeforeBodyCompletes({ url: `${baseURL}${path}`, credential: `Bearer ${token}`, chunked: true, bytes: 2 * 1024 * 1024, timeoutMs: 25_000 })).toBe(408);
   }
   // The timed-out stream is cancelled upstream, so a later upload can acquire the same slot.
   const afterTimeout = await request.post("/api/documents?filename=after-timeout.txt", {
