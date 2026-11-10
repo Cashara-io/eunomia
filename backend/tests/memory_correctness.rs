@@ -189,6 +189,132 @@ async fn a_background_rebuild_can_win_before_or_during_explicit_consolidation() 
     assert!(ids(&app.tool("recall", json!({"query": "Alice Mover"})).await, "results").contains(&rebuilt.id));
 }
 
+/// Hold two rebuilds at the model so the older facts try to commit first. Even an
+/// already-stale observation must reject that result after another fact mutation.
+async fn fact_mutation_during_rebuild(mutation: &str) {
+    use eunomia_backend::sources::mock::{route, serve};
+    use std::sync::Arc;
+    use tokio::sync::Notify;
+
+    let entered_old = Arc::new(Notify::new());
+    let release_old = Arc::new(Notify::new());
+    let entered_new = Arc::new(Notify::new());
+    let release_new = Arc::new(Notify::new());
+    let answer = |belief: &str| json!({"choices": [{"message": {"content": json!({"belief": belief}).to_string()}}]});
+    let embeddings = || route("POST", "/embeddings", json!({"data": [{"index": 0, "embedding": vec![0.01; 1536]}]}));
+    let supersede = || route("POST", "/chat/completions", json!({"choices": [{"message": {"content": "{\"superseded\": []}"}}]})).body("For each NEW fact");
+    let mock = serve(vec![embeddings(), supersede(), route("POST", "/chat/completions", answer("Alice lives in Paris and drinks tea"))]).await;
+    let mock_url = url::Url::parse(&mock.base).unwrap();
+    assert_eq!(mock_url.host_str(), Some("127.0.0.1"));
+    assert!(![3000, 8000, 8001, 3600, 8600, 3700, 18470, 18471, 18472, 18473].contains(&mock_url.port().unwrap()));
+    let mut settings = common::test_settings();
+    settings.surreal_url = "mem://".into();
+    settings.openai_api_key = Some("sk-test".into());
+    settings.openai_base_url = mock.base.clone();
+    settings.openai_chat_model = "test-model".into();
+    let app = Arc::new(TestApp::with_settings(settings).await);
+    let w = app.tool("memory_write", json!({"subject_name": "Alice Mover", "subject_kind": "person", "text": "Alice lives in Paris"})).await;
+    let alice = w["entity"]["id"].as_str().unwrap().to_string();
+    let fact = w["memory"]["id"].as_str().unwrap().to_string();
+    let tea = app.tool("memory_write", json!({"subject_name": "Alice Mover", "subject_kind": "person", "text": "Alice drinks tea"})).await;
+    let tea_id = tea["memory"]["id"].as_str().unwrap().to_string();
+    assert_eq!(app.tool("consolidate_observations", json!({"subject_id": alice})).await["consolidated"], json!([alice]));
+    app.tool("memory_update", json!({"memory_id": fact, "text": "Alice lives in Paris"})).await;
+
+    let expected = match mutation {
+        "delete" => "Alice drinks tea",
+        "add" => "Alice lives in Paris, drinks tea and runs",
+        "type" => "Alice lives in Paris and drinks tea",
+        _ => "Alice lives in Berlin and drinks tea",
+    };
+    mock.set_routes(vec![
+        embeddings(), supersede(),
+        route("POST", "/chat/completions", answer("Alice lives in Paris and drinks tea"))
+            .times(1).gated(entered_old.clone(), release_old.clone()),
+        route("POST", "/chat/completions", answer(expected))
+            .times(1).gated(entered_new.clone(), release_new.clone()),
+    ]);
+    let rebuild = || {
+        let app = app.clone();
+        let alice = alice.clone();
+        tokio::spawn(async move { app.tool("consolidate_observations", json!({"subject_id": alice})).await })
+    };
+    let old = rebuild();
+    tokio::time::timeout(std::time::Duration::from_secs(10), entered_old.notified()).await.unwrap();
+    let mut lineage = vec![fact.clone(), tea_id.clone()];
+    match mutation {
+        "text" => { app.tool("memory_update", json!({"memory_id": fact, "text": "Alice lives in Berlin"})).await; }
+        "text_type" => { app.tool("memory_update", json!({"memory_id": fact, "text": "Alice lives in Berlin", "type": "experience"})).await; }
+        "type" => { app.tool("memory_update", json!({"memory_id": fact, "type": "experience"})).await; }
+        "delete" => {
+            app.tool("memory_delete", json!({"memory_id": fact})).await;
+            lineage = vec![tea_id];
+        }
+        "add" => {
+            let added = app.tool("memory_write", json!({"subject_name": "Alice Mover", "subject_kind": "person", "text": "Alice runs"})).await;
+            lineage.push(added["memory"]["id"].as_str().unwrap().to_string());
+        }
+        _ => panic!("unknown mutation {mutation}"),
+    }
+    let new = rebuild();
+    tokio::time::timeout(std::time::Duration::from_secs(10), entered_new.notified()).await.unwrap();
+    release_old.notify_one();
+    let old_result = old.await.unwrap();
+    let after_old = observations(&app.tool("entities_get", json!({"id": alice})).await);
+    release_new.notify_one();
+    let new_result = new.await.unwrap();
+    let final_obs = observations(&app.tool("entities_get", json!({"id": alice})).await);
+    assert_eq!(old_result["consolidated"], json!([]), "{mutation}: outdated rebuild must lose");
+    assert_eq!(after_old[0]["status"], "stale", "{mutation}: outdated facts must not be marked fresh");
+    assert_eq!(new_result["consolidated"], json!([alice]));
+    assert_eq!(final_obs.len(), 1);
+    assert_eq!(final_obs[0]["text"], expected);
+    assert_eq!(final_obs[0]["status"], "fresh");
+    assert_eq!(final_obs[0]["source_memories"], json!(lineage));
+    let prompts: Vec<String> = mock.requests().iter()
+        .filter(|r| r.path == "/chat/completions")
+        .map(|r| serde_json::from_str::<Value>(&r.body).unwrap()["messages"][0]["content"].as_str().unwrap().to_string())
+        .filter(|p| p.contains("New raw facts:"))
+        .collect();
+    let prompt = prompts.last().unwrap();
+    assert!(prompt.contains("Current belief: (none yet)"), "a stale observation is rebuilt without its old belief");
+    if mutation == "text" || mutation == "text_type" {
+        assert!(prompt.contains("- Alice lives in Berlin"));
+        assert!(!prompt.contains("Paris"));
+    } else if mutation == "delete" {
+        assert!(!prompt.contains("Paris"));
+    } else if mutation == "add" {
+        assert!(prompt.contains("- Alice runs"));
+    }
+    let again = app.tool("consolidate_observations", json!({"subject_id": alice})).await;
+    assert_eq!(again["consolidated"], json!([]), "the repaired observation needs no further work");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn fact_text_edit_during_rebuild_rejects_outdated_facts() {
+    fact_mutation_during_rebuild("text").await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn fact_text_and_type_edit_during_rebuild_rejects_outdated_facts() {
+    fact_mutation_during_rebuild("text_type").await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn fact_type_edit_during_rebuild_rejects_outdated_facts() {
+    fact_mutation_during_rebuild("type").await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn fact_delete_during_rebuild_rejects_outdated_facts() {
+    fact_mutation_during_rebuild("delete").await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn fact_add_during_rebuild_rejects_outdated_facts() {
+    fact_mutation_during_rebuild("add").await;
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn deleting_facts_prunes_lineage_and_removes_a_sole_source_observation() {
     let app = TestApp::new().await;

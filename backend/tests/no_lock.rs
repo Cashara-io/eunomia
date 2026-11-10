@@ -50,6 +50,7 @@ struct Outcome {
 /// and what the database holds afterwards.
 async fn hammer(per_task: usize) -> Outcome {
     let app = TestApp::new().await;
+    app.tool("memory_write", json!({"subject_name":"Alice","subject_kind":"person","text":"Initial belief","type":"observation"})).await;
     let mut tasks = Vec::new();
     for t in 0..2 {
         let (state, user) = (app.state.clone(), app.user.clone());
@@ -101,7 +102,7 @@ async fn memory_writes_with_the_lock_on_are_exact() {
     let _l = LocksOff::set(false);
     let o = hammer(100).await;
     assert!(o.failed.is_empty(), "{:?}", o.failed.first());
-    assert_eq!((o.persons, o.worlds, o.observations, o.version), (1, 200, 1, 200));
+    assert_eq!((o.persons, o.worlds, o.observations, o.version), (1, 200, 1, 401));
 }
 
 /// Lock off: two tasks write the same entity straight into the transaction and retry path.

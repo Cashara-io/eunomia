@@ -873,8 +873,8 @@ async fn insert_memory(
     // One round trip, all-or-nothing. An observation is revised in place (one
     // per subject; a new one gets a deterministic id so two racing creators
     // collide on the key instead of making duplicates). A raw fact creates the
-    // memory and marks the subject's observation stale, skipping the write when
-    // it is already stale so concurrent fact writers do not conflict on it.
+    // memory and marks the subject's observation stale, advancing its version even
+    // when already stale so a rebuild using older facts cannot mark it fresh.
     // The hot path only point-reads the deterministic id: a `WHERE subject`
     // range read would conflict with every concurrent insert for the subject.
     // The range read remains as a fallback for observations that predate
