@@ -135,6 +135,8 @@ for (const width of [1440, 390]) {
 test("one primary upload, keyboard picker, drag and drop, and unframed passages", async ({ page }) => {
   await fixture(page);
   await page.goto("/documents");
+  // The header exists before hydration. Wait for the client-loaded fixture before using the keyboard.
+  await expect(page.getByTestId("document-row")).toHaveCount(1);
   await expect(page.locator(".btn-primary")).toHaveCount(1);
   const upload = page.getByRole("button", { name: "Upload", exact: true });
   await upload.focus();
