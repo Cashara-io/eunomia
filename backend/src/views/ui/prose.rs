@@ -527,6 +527,87 @@ impl ChatProse {
         self.collect(value, &ChatUnit::Plain, &HashMap::new());
         if let Some(sources) = value.pointer("/data/sources").and_then(Value::as_object) { self.sources.extend(sources.clone()); }
     }
+    /// Echoes are not evidence, regardless of which tool returned them. Remove argument-shaped
+    /// branches and scalar field echoes, then subtract input numbers from returned prose.
+    /// Typed numbers in independent result fields remain evidence, even if also present in input.
+    pub(crate) fn tool_result(&mut self, value: &Value, arguments: &Value) {
+        fn contains(value: &Value, input: &Value) -> bool {
+            match (value, input) {
+                (Value::Object(out), Value::Object(input)) => !input.is_empty()
+                    && input.iter().all(|(key, v)| out.get(key).is_some_and(|out| contains(out, v))),
+                (Value::Number(a), Value::Number(b)) => a == b || rust_decimal::Decimal::from_str_exact(&a.to_string()).ok()
+                    .zip(rust_decimal::Decimal::from_str_exact(&b.to_string()).ok()).is_some_and(|(a, b)| a == b),
+                _ => value == input,
+            }
+        }
+        fn array_argument(input: &Value, key: &str) -> bool {
+            match input {
+                Value::Object(m) => m.get(key).is_some_and(Value::is_array) || m.values().any(|v| array_argument(v, key)),
+                Value::Array(a) => a.iter().any(|v| array_argument(v, key)),
+                _ => false,
+            }
+        }
+        fn branches<'a>(input: &'a Value, out: &mut Vec<&'a Value>) {
+            match input {
+                Value::Object(m) => for v in m.values() {
+                    if v.is_object() || v.is_array() { out.push(v); branches(v, out); }
+                },
+                Value::Array(a) => for v in a {
+                    if v.is_object() || v.is_array() { out.push(v); branches(v, out); }
+                },
+                _ => (),
+            }
+        }
+        fn clean(value: &Value, arguments: &Value, echoes: &[&Value], discarded: &mut Vec<String>) -> Value {
+            if (value.is_object() || value.is_array()) && echoes.iter().any(|v| contains(value, v)) {
+                discarded.push(value.to_string());
+                return Value::Null;
+            }
+            match value {
+                Value::Object(m) => Value::Object(m.iter().filter_map(|(key, v)| {
+                    if arguments.get(key).is_some_and(|arg| !arg.is_object() && !arg.is_array() && contains(v, arg)) { discarded.push(v.to_string()); return None; }
+                    // A tool may render a requested selection as a list of descriptions,
+                    // including reformatted numbers. That list is still echoed input.
+                    if v.as_array().is_some_and(|a| a.iter().all(Value::is_string)) && array_argument(arguments, key) { discarded.push(v.to_string()); return None; }
+                    Some((key.clone(), clean(v, arguments, echoes, discarded)))
+                }).collect()),
+                Value::Array(a) => Value::Array(a.iter().map(|v| clean(v, arguments, echoes, discarded)).collect()),
+                _ => value.clone(),
+            }
+        }
+        fn subtract(value: &mut Value, input: &ChatProse) {
+            match value {
+                Value::Object(m) => for v in m.values_mut() { subtract(v, input); },
+                Value::Array(a) => for v in a { subtract(v, input); },
+                Value::String(s) => {
+                    let mut text = normalise(s);
+                    let echoed: Vec<_> = input.number_spans(&text).into_iter().filter_map(|(span, echoed)| echoed.then_some(span)).collect();
+                    if echoed.is_empty() { return; }
+                    for span in echoed.into_iter().rev() { text.replace_range(span, " "); }
+                    *s = text;
+                },
+                _ => (),
+            }
+        }
+        let mut input = Self::default();
+        let encoded = normalise(&arguments.to_string());
+        input.text(&encoded);
+        // Numeric spans attached to identifiers can look like malformed exponents.
+        // They are still input numbers when a tool rewrites them into ordinary prose.
+        static INPUT_NUMBER: OnceLock<Regex> = OnceLock::new();
+        for number in INPUT_NUMBER.get_or_init(|| Regex::new(r"[0-9][0-9,]*(?:\.[0-9]+)?").unwrap()).find_iter(&encoded) {
+            input.text(number.as_str());
+        }
+        let mut echoes = Vec::new();
+        branches(arguments, &mut echoes);
+        let mut discarded = Vec::new();
+        let mut value = clean(value, arguments, &echoes, &mut discarded);
+        // Summaries may repeat a rendered request elsewhere. Taint those spans too,
+        // before scanning any text, so object field order cannot affect evidence.
+        for text in discarded { input.text(&text); }
+        subtract(&mut value, &input);
+        self.result(&value);
+    }
     fn collect(&mut self, value: &Value, unit: &ChatUnit, columns: &HashMap<String,ChatUnit>) {
         match value {
             Value::Number(n) => self.evidence(&n.to_string(), unit),
@@ -547,6 +628,7 @@ impl ChatProse {
                     // Opaque IDs cannot authorise claims, and counters stay unit-free.
                     if key == "id" || key == "vault" || (key == "evidence" && m.get("view").and_then(Value::as_str) == Some("metric")) || key == "next_cursor" || key.ends_with("_id") || key.ends_with("_ids") { continue; }
                     let unit = if matches!(key.as_str(), "count" | "distinct" | "n" | "n_entities" | "total_rows" | "limit" | "offset") { ChatUnit::Plain }
+                        else if key == "delta_pct" { ChatUnit::Percent }
                         else { columns.get(key).cloned().unwrap_or_else(|| own_unit.clone()) };
                     self.collect(v, &unit, &columns);
                 }
@@ -667,6 +749,55 @@ impl ChatProse {
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn echoed_arguments_never_authorise_numbers_for_any_tool() {
+        for (tool, arguments, result) in [
+            ("show_view", json!({"reach":{"kinds":["sample999777"]}}), json!({"pagination":{"reach":{"depth":2,"kinds":["sample999777"]},"total":0}})),
+            ("show_view", json!({"reach":{"kinds":["samplex999777"]}}), json!({"pagination":{"reach":{"kinds":["samplex999777"]},"total":0}})),
+            ("metric_eval", json!({"filters":[{"property":"score","op":"gt","value":999777}]}), json!({"filters":[{"property":"score","op":"gt","value":999777}],"value":null,"n_entities":0,"warnings":["No score above 999777"]})),
+            ("scenario_run", json!({"changes":[{"scale":{"kind":"sample","property":"score","factor":999777}}]}), json!({"changes":["Scale score by 999777"],"n_changed":0,"scenario":[]})),
+            ("search", json!({"query":"sample999777","limit":876543}), json!({"query":"sample999777","limit":876543,"results":[],"error":"No sample999777 records"})),
+            ("unknown_future_tool", json!({"options":{"arbitrary":{"amount":999777}}}), json!({"echo":{"arbitrary":{"amount":999777,"default":true}},"count":0})),
+        ] {
+            let mut prose = ChatProse::default();
+            prose.tool_result(&result, &arguments);
+            assert!(prose.check("There are 999777 affected items").is_err(), "{tool}: {result}");
+            assert!(prose.safe("There are 999777 affected items").contains(UNVERIFIED), "{tool}");
+            assert!(prose.check("There are 876543 items").is_err(), "{tool}");
+        }
+    }
+
+    #[test]
+    fn rendered_argument_arrays_cannot_authorise_transformed_numbers() {
+        let mut prose = ChatProse::default();
+        prose.tool_result(&json!({"changes":["Price up 10%"],"value":14,"text":"Price up 10%, baseline 14"}),
+            &json!({"changes":[{"scale":{"factor":1.1}}]}));
+        assert!(prose.check("The increase is 10%").is_err());
+        assert!(prose.check("The result is 14").is_ok());
+        prose.tool_result(&json!({"echo":{"amount":999777.0}}), &json!({"options":{"amount":999777}}));
+        assert!(prose.check("The result is 999777").is_err());
+    }
+
+    #[test]
+    fn subtracting_an_echo_preserves_other_server_numbers_in_the_same_text() {
+        let mut prose = ChatProse::default();
+        prose.tool_result(&json!({"value":14,"unit":"AUD","text":"Baseline 14, requested scale 1.1"}), &json!({"factor":1.1}));
+        assert!(prose.check("Baseline 14").is_ok());
+        assert!(prose.check("The result is 1.1").is_err());
+    }
+
+    #[test]
+    fn computed_numbers_still_verify_when_the_arguments_contain_them() {
+        let mut prose = ChatProse::default();
+        prose.tool_result(&json!({"filters":[{"property":"score","op":"eq","value":999777}],"value":999777,"n_entities":1}),
+            &json!({"filters":[{"property":"score","op":"eq","value":999777}]}));
+        assert!(prose.check("The result is 999777").is_ok());
+        let mut scenario = ChatProse::default();
+        scenario.tool_result(&json!({"changes":["Price up 10%"],"scenario":[{"value":110,"unit":"AUD","delta_pct":10}]}),
+            &json!({"changes":[{"scale":{"factor":1.1}}]}));
+        assert!(scenario.check("The result increased 10%").is_ok());
+    }
+
     #[test]
     fn paging_metadata_cannot_authorise_prose_numbers() {
         let mut prose = ChatProse::default();

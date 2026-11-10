@@ -31,12 +31,10 @@ async fn impact_pages_count_and_reach_every_item_through_the_tool() {
     let mut seen = HashSet::new();
     let mut cursor = Value::Null;
     let mut second_cursor = Value::Null;
-    let mut second_first = Value::Null;
     for page in 0..7 {
         let mut args = args.clone(); args["cursor"] = cursor;
         let out = ok(app.tool("show_view", args).await);
         if page == 0 { second_cursor = out["pagination"]["next_cursor"].clone(); }
-        if page == 1 { second_first = out["affected"][0]["entity"]["name"].clone(); }
         cursor = out["pagination"]["next_cursor"].clone();
         assert_eq!(out["pagination"]["total"], 100);
         assert_eq!(out["pagination"]["page"], page);
@@ -51,31 +49,32 @@ async fn impact_pages_count_and_reach_every_item_through_the_tool() {
         }
     }
     assert_eq!(seen, expected);
-    // A model requests page two through the real chat tool loop, then replies
-    // with an unsupported number. The checked tree must still suppress it.
+    // Echoed selection text in a real chat tool result must not authorise the reply.
     let mut second_page = args.clone(); second_page["cursor"] = second_cursor.clone();
-    let sse = |delta: Value| format!("data: {}\n\ndata: [DONE]\n\n", json!({"choices":[{"delta":delta}]}));
-    mock.set_routes(vec![
-        route("POST", "/chat/completions", Value::Null).times(1).raw(&sse(json!({"tool_calls":[{"index":0,"id":"page_two","function":{"name":"show_view","arguments":second_page.to_string()}}]}))),
-        route("POST", "/chat/completions", Value::Null).raw(&sse(json!({"content":"There are 999777 affected items."}))),
-    ]);
-    use eunomia_backend::chat::service;
-    let db = app.db().await;
-    let thread = common::sys(service::create_thread(&db, &app.user.id, None)).await.unwrap();
-    let thread_id = eunomia_backend::rid::parse(&thread.id).unwrap();
-    let (tx, mut rx) = tokio::sync::mpsc::channel(256);
-    common::sys(service::send_stream(app.state.org(&app.user.org).await.unwrap(), app.user.clone(), thread_id.clone(), "Fetch the next page".into(), tx)).await;
-    let mut events = Vec::new();
-    while let Some(event) = rx.recv().await { events.push(serde_json::to_value(event).unwrap()); }
-    let result = events.iter().find(|e| e["type"] == "tool_result" && e["name"] == "show_view").unwrap();
-    assert_eq!(result["view"]["pagination"]["page"], 1);
-    assert_eq!(result["view"]["pagination"]["total"], 100);
-    assert_eq!(result["view"]["affected"][0]["entity"]["name"], second_first);
-    let last = events.last().unwrap();
-    assert!(last["reply"].as_str().unwrap().contains("[unverified number]"));
-    assert!(!last["reply"].as_str().unwrap().contains("999777"));
-    let history = common::sys(service::history(&db, &app.user.id, &thread_id)).await.unwrap().unwrap();
-    assert_eq!(serde_json::to_value(history).unwrap().as_array().unwrap().last().unwrap()["tree"], last["tree"]);
+    for kind in ["sample999777", "samplex999777"] {
+        let mut echoed_page = args.clone(); echoed_page["reach"]["kinds"] = json!([kind]);
+        let sse = |delta: Value| format!("data: {}\n\ndata: [DONE]\n\n", json!({"choices":[{"delta":delta}]}));
+        mock.set_routes(vec![
+            route("POST", "/chat/completions", Value::Null).times(1).raw(&sse(json!({"tool_calls":[{"index":0,"id":"page_two","function":{"name":"show_view","arguments":echoed_page.to_string()}}]}))),
+            route("POST", "/chat/completions", Value::Null).raw(&sse(json!({"content":"There are 999777 affected items."}))),
+        ]);
+        use eunomia_backend::chat::service;
+        let db = app.db().await;
+        let thread = common::sys(service::create_thread(&db, &app.user.id, None)).await.unwrap();
+        let thread_id = eunomia_backend::rid::parse(&thread.id).unwrap();
+        let (tx, mut rx) = tokio::sync::mpsc::channel(256);
+        common::sys(service::send_stream(app.state.org(&app.user.org).await.unwrap(), app.user.clone(), thread_id.clone(), "Fetch the next page".into(), tx)).await;
+        let mut events = Vec::new();
+        while let Some(event) = rx.recv().await { events.push(serde_json::to_value(event).unwrap()); }
+        let result = events.iter().find(|e| e["type"] == "tool_result" && e["name"] == "show_view").unwrap();
+        assert_eq!(result["view"]["pagination"]["total"], 0);
+        assert_eq!(result["view"]["affected"], json!([]));
+        let last = events.last().unwrap();
+        assert!(last["reply"].as_str().unwrap().contains("[unverified number]"));
+        assert!(!last["reply"].as_str().unwrap().contains("999777"));
+        let history = common::sys(service::history(&db, &app.user.id, &thread_id)).await.unwrap().unwrap();
+        assert_eq!(serde_json::to_value(history).unwrap().as_array().unwrap().last().unwrap()["tree"], last["tree"]);
+    }
     // The generic parameters and page result are also available over MCP.
     let (status, mcp) = app.http("POST", "/mcp", Some(json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"show_view","arguments":second_page}})), true).await;
     assert_eq!(status, 200);

@@ -415,10 +415,20 @@ fn message_out(row: MessageRow, prose: &crate::views::ui::prose::ChatProse) -> M
 // New rows already contain the checked tree and are never reparsed.
 pub(crate) fn messages_out(rows: Vec<MessageRow>) -> Vec<MessageOut> {
     let mut evidence = std::collections::HashMap::<String, crate::views::ui::prose::ChatProse>::new();
+    let mut calls = std::collections::HashMap::<(String, String), Value>::new();
     rows.into_iter().map(|row| {
         let prose = evidence.entry(row.thread_id.to_string()).or_default();
-        if row.role == "user" { *prose = Default::default(); prose.text(&row.content); }
-        if row.role == "tool" && let Ok(value) = serde_json::from_str::<Value>(&row.content) { prose.result(&value); }
+        if row.role == "user" { *prose = Default::default(); prose.text(&row.content); calls.retain(|(thread, _), _| thread != &row.thread_id.to_string()); }
+        for call in row.tool_calls.iter().flatten() {
+            if let (Some(id), Some(args)) = (call["id"].as_str(), call["function"]["arguments"].as_str())
+                && let Ok(args) = serde_json::from_str::<Value>(args) {
+                calls.insert((row.thread_id.to_string(), id.to_string()), args);
+            }
+        }
+        if row.role == "tool" && let Ok(value) = serde_json::from_str::<Value>(&row.content)
+            && let Some(args) = row.tool_call_id.as_ref().and_then(|id| calls.get(&(row.thread_id.to_string(), id.clone()))) {
+            prose.tool_result(&value, args);
+        }
         message_out(row, prose)
     }).collect()
 }
@@ -815,13 +825,13 @@ async fn run_send(
             } else if said.restates(&name, &args) && !resends_stored_text(db, owner, &name, &args).await {
                 json!({ "error": "Not saved: this text repeats a tool result or your own answer. Save only a new fact the user told you.", "code": ErrorCode::ValidationInvalid.as_str() })
             } else {
-                match crate::usage::with_context(crate::usage::Channel::Chat, thread_id.to_string(), registry::call(&state.app, user, &name, args)).await {
+                match crate::usage::with_context(crate::usage::Channel::Chat, thread_id.to_string(), registry::call(&state.app, user, &name, args.clone())).await {
                     Ok(v) => v,
                     Err(e) => e.to_tool_value(),
                 }
             };
             if within_budget { tool_calls_made.push(name.clone()); }
-            prose.result(&result);
+            prose.tool_result(&result, &args);
 
             said.tool_result(&result);
             let result_text = serde_json::to_string(&result).unwrap_or_else(|_| "null".to_string());
@@ -1030,6 +1040,21 @@ mod tests {
         let mut acc2: BTreeMap<usize, ToolCallAcc> = BTreeMap::new();
         acc2.insert(0, ToolCallAcc::default());
         assert!(!acc2.is_empty());
+    }
+
+    #[test]
+    fn legacy_history_excludes_call_arguments_from_tool_evidence() {
+        let arguments = json!({"reach":{"kinds":["sample999777"]}}).to_string();
+        let result = json!({"pagination":{"reach":{"kinds":["sample999777"]},"total":0}}).to_string();
+        let rows = vec![
+            row("user", "Find linked items", None, None),
+            row("assistant", "", Some(vec![json!({"id":"call_echo","function":{"name":"show_view","arguments":arguments}})]), None),
+            row("tool", &result, None, Some("call_echo")),
+            row("assistant", "There are 999777 affected items", None, None),
+        ];
+        let out = messages_out(rows);
+        assert!(out.last().unwrap().content.contains("[unverified number]"));
+        assert!(!out.last().unwrap().content.contains("999777"));
     }
 
     #[test]
