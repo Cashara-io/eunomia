@@ -47,7 +47,7 @@ fn spans(text: &str) -> Vec<std::ops::Range<usize>> {
         let tail = format!(r"(?: *{modifier}|[/\x{{2044}}e]|\p{{N}}|[.,'_]\p{{N}})*");
         let iso_range = format!(r"{iso}(?:(?:/|\.\.|-){iso})?");
         let part = format!(r"(?:{iso_range}|{connector}*[.,'_]?\p{{N}}{tail})");
-        Regex::new(&format!(r"(?:\b{code} *)?(?:{part})+(?:(?: \p{{N}}{tail})|(?: *{code}\b{tail}))*")).unwrap()
+        Regex::new(&format!(r"(?i)(?:\b{code} *)?(?:{part})+(?:(?: \p{{N}}{tail})|(?: *{code}\b{tail}))*")).unwrap()
     });
     number.find_iter(text).filter(|m| m.as_str().chars().any(char::is_numeric)).map(|m| m.range()).collect()
 }
@@ -167,9 +167,10 @@ impl Allowed {
         for span in &numeric {
             let overlaps: Vec<_> = bindings.iter().filter(|(range, _)| range.start < span.end && span.start < range.end).collect();
             let authorised = if !overlaps.is_empty() {
-                // Preserve main's exact-span rule, including its bare-number behaviour.
-                // Only a complete custom-unit binding at a clause boundary is exempt.
+                // A numeric binding must contain its scale and unit. Custom-unit bindings
+                // still require the entire field, as enforced below.
                 overlaps.len() == 1 && (overlaps[0].0 == *span && overlaps[0].1 == text[span.clone()]
+                        && ChatNumber::parse(&text, span.clone(), &ChatUnit::Plain, &[]).0.end <= span.end
                     || (span.start >= overlaps[0].0.start
                             // The scanner also consumes an opening single quote as a
                             // possible numeric separator. Keep a standalone quote as punctuation.
@@ -397,11 +398,13 @@ impl ChatUnit {
     fn parse(unit: &str) -> Self {
         static CODE: OnceLock<Regex> = OnceLock::new();
         let code = CODE.get_or_init(|| Regex::new(&format!("^{CURRENCY_CODE}$")).unwrap());
+        let symbol = display(unit);
+        if matches!(symbol.trim(), "M" | "MM" | "K") { return Self::Other(symbol.trim().into()); }
         let unit = normalise(unit).trim().to_string();
         match unit.as_str() {
             "" => Self::Plain,
-            "%" | "percent" | "percentage" => Self::Percent,
-            "ratio" => Self::Ratio,
+            "%" | "percent" | "percentage" | "per cent" => Self::Percent,
+            "ratio" | "times" => Self::Ratio,
             "$" | "€" | "£" | "¥" => Self::Money(unit),
             _ if code.is_match(&unit) => Self::Money(unit),
             _ => Self::Other(unit),
@@ -434,18 +437,15 @@ fn unit_form(unit: &str) -> &str {
     }
 }
 fn chat_spans(text: &str) -> Vec<std::ops::Range<usize>> {
-    static SUFFIX: OnceLock<Regex> = OnceLock::new();
-    let suffix = SUFFIX.get_or_init(|| Regex::new(&format!(r"^ *(?:thousand|million|billion|k|m|b)\b(?: *(?:{CURRENCY_CODE}\b|[%‰]))?|^ *(?:per cent|percent|percentage)\b")).unwrap());
     let mut out = Vec::new();
     for mut span in spans(text) {
         // In ranking prose, "top 5" is a count. TOP is also an ISO currency code.
-        if text[span.clone()].starts_with("top ") { span.start += 4; }
+        if text[span.clone()].to_lowercase().starts_with("top ") { span.start += 4; }
         if out.last().is_some_and(|r: &std::ops::Range<usize>| span.start < r.end) { continue; }
-        if let Some(m) = suffix.find(&text[span.end..]) { span.end += m.end(); }
         // The whole-span scanner deliberately keeps ambiguous arithmetic together. Split only
         // a simple two-endpoint range here, leaving dates, fractions and exponents untouched.
         static RANGE: OnceLock<Regex> = OnceLock::new();
-        let range = RANGE.get_or_init(|| Regex::new(&format!(r"^(?P<left>(?:\p{{Sc}}|{CURRENCY_CODE})? *[0-9]+(?:\.[0-9]+)?) *- *(?P<right>[0-9]+(?:\.[0-9]+)?(?: *{CURRENCY_CODE})?)$" )).unwrap());
+        let range = RANGE.get_or_init(|| Regex::new(&format!(r"(?i)^(?P<left>(?:\p{{Sc}}|{CURRENCY_CODE})? *[0-9]+(?:\.[0-9]+)?) *- *(?P<right>[0-9]+(?:\.[0-9]+)?(?: *{CURRENCY_CODE})?)$" )).unwrap());
         if let Some(c) = range.captures(&text[span.clone()]) {
             for part in ["left", "right"] {
                 let m = c.name(part).unwrap();
@@ -457,13 +457,13 @@ fn chat_spans(text: &str) -> Vec<std::ops::Range<usize>> {
 }
 
 fn coordinated(gap: &str) -> bool {
-    matches!(gap.trim(), "and" | "or" | "," | ", and" | ", or" | "to" | "up to" | "-")
+    matches!(gap.trim().to_lowercase().as_str(), "and" | "or" | "," | ", and" | ", or" | "to" | "up to" | "-")
 }
 
 impl ChatNumber {
-    fn parse(raw: &str, context: &ChatUnit) -> Option<Self> {
+    fn base(raw: &str) -> Option<Self> {
         static NUMBER: OnceLock<Regex> = OnceLock::new();
-        let number = NUMBER.get_or_init(|| Regex::new(&format!(r"^(?P<sign>[+-]?) *(?P<prefix>\p{{Sc}}|{CURRENCY_CODE})? *(?P<inner>[+-]?)(?P<value>(?:[0-9][0-9,]*)(?:\.[0-9]+)?|\.[0-9]+) *(?P<scale>thousand|million|billion|k|m|b)? *(?P<suffix>%|‰|per cent|percent|percentage|\p{{Sc}}|{CURRENCY_CODE})?$" )).unwrap());
+        let number = NUMBER.get_or_init(|| Regex::new(&format!(r"(?i)^(?P<sign>[+-]?) *(?P<prefix>\p{{Sc}}|{CURRENCY_CODE})? *(?P<inner>[+-]?)(?P<value>(?:[0-9][0-9,]*)(?:\.[0-9]+)?|\.[0-9]+) *(?P<suffix>%|‰|per cent|percent|percentage|\p{{Sc}}|{CURRENCY_CODE})?$" )).unwrap());
         let c = number.captures(raw.trim())?;
         let digits = c.name("value")?.as_str().replace(',', "");
         let sign = c.name("sign").map(|s| s.as_str()).unwrap_or("");
@@ -473,17 +473,14 @@ impl ChatNumber {
         let exact_digits = if digits.contains('.') { digits.trim_end_matches('0').trim_end_matches('.') } else { &digits };
         let value = rust_decimal::Decimal::from_str_exact(&format!("{sign}{inner}{exact_digits}")).ok()?;
         let precision = digits.split_once('.').map(|(_,s)| s.len() as u32).unwrap_or(0);
-        let scale = match c.name("scale").map(|s| s.as_str()) {
-            Some("k" | "thousand") => 1000, Some("m" | "million") => 1_000_000,
-            Some("b" | "billion") => 1_000_000_000, _ => 1,
-        }.into();
+        let scale = 1.into();
         let prefix = c.name("prefix").map(|s| ChatUnit::parse(s.as_str()));
-        let suffix = c.name("suffix").map(|s| match s.as_str() { "per cent" => ChatUnit::Percent, "‰" => ChatUnit::Other("‰".into()), s => ChatUnit::parse(s) });
+        let suffix = c.name("suffix").map(|s| match s.as_str().to_lowercase().as_str() { "per cent" => ChatUnit::Percent, "‰" => ChatUnit::Other("‰".into()), s => ChatUnit::parse(s) });
         if let (Some(a),Some(b)) = (&prefix,&suffix) && !a.compatible(b) { return None; }
         let unit = match (prefix, suffix) {
             (Some(ChatUnit::Money(symbol)), Some(code)) if symbol.chars().count() == 1 => code,
             (Some(unit), _) | (_, Some(unit)) => unit,
-            _ => context.clone(),
+            _ => ChatUnit::Plain,
         };
         Some(Self { value, precision, scale, unit })
     }
@@ -538,7 +535,7 @@ fn unit_text(unit: &[&mut String]) -> (String, Vec<(usize, std::ops::Range<usize
     let mut origins = Vec::new();
     for (i, value) in unit.iter().enumerate() {
         for (offset,c) in value.char_indices() {
-            for ch in normalise(&c.to_string()).chars() {
+            for ch in display(&c.to_string()).chars() {
                 if ch == ' ' && text.ends_with(' ') { continue; }
                 text.push(ch);
                 origins.extend(std::iter::repeat_n((i, offset..offset + c.len_utf8()), ch.len_utf8()));
@@ -553,60 +550,122 @@ fn opaque_identifier(text: &str) -> bool {
     OPAQUE.get_or_init(|| Regex::new(r"(?i)^(?:[a-z_][a-z_0-9]*:[^\s]+|[0-9a-f]{32,}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}|[0-9a-hjkmnp-tv-z]{26})$").unwrap()).is_match(text)
 }
 
-// Scan a measure once, including its unit. Unit digits never become separate claims.
-fn chat_claims(text: &str, context: &ChatUnit, units: &[ChatUnit]) -> Vec<(std::ops::Range<usize>, Option<ChatNumber>)> {
+// A suffix is either a scale or a semantic unit, never both. Keep case until
+// classification: M/MM mean million; spaced m/mm are SI units. Attached m/mm
+// are ambiguous and rejected, as are m/mm before another prose word. A range
+// connector can still follow an SI unit. Prefer spelled-out metres in sentences.
+enum QuantitySuffix { Scale(i64), Unit(ChatUnit), Ambiguous }
+fn quantity_suffix(text: &str, units: &[ChatUnit]) -> Option<(usize, QuantitySuffix)> {
+    static WORD: OnceLock<Regex> = OnceLock::new();
+    let word = WORD.get_or_init(|| Regex::new(r"^[\p{L}]+\b").unwrap());
+    let gap = text.len() - text.trim_start().len();
+    let rest = &text[gap..];
+    if let Some(m) = word.find(rest) {
+        if matches!(m.as_str(), "st" | "nd" | "rd" | "th") { return None; }
+        let scale = match m.as_str() {
+            "M" | "MM" => Some(1_000_000),
+            "mM" | "Mm" => return Some((gap + m.end(), QuantitySuffix::Ambiguous)),
+            "m" | "mm" => {
+                let tail = &rest[m.end()..];
+                let range = spans(tail).first().is_some_and(|n| coordinated(&tail[..n.start]));
+                if gap == 0 || tail.trim_start().starts_with(char::is_alphabetic) && !range {
+                    return Some((gap + m.end(), QuantitySuffix::Ambiguous));
+                }
+                None
+            }
+            s => match s.to_lowercase().as_str() {
+                "k" | "thousand" => Some(1000), "mn" | "million" => Some(1_000_000),
+                "b" | "bn" | "billion" => Some(1_000_000_000),
+                "tn" | "trillion" => Some(1_000_000_000_000),
+                "hundred" => Some(100), "dozen" => Some(12),
+                "lakh" => Some(100_000), "crore" => Some(10_000_000), _ => None,
+            },
+        };
+        if let Some(scale) = scale { return Some((gap + m.end(), QuantitySuffix::Scale(scale))); }
+    }
     static DIGIT_UNIT: OnceLock<Regex> = OnceLock::new();
     let digit_unit = DIGIT_UNIT.get_or_init(|| Regex::new(r"^ *(?P<unit>per +[0-9]+ +[\p{L}]+|[\p{L}]+(?:\^?[0-9]+)?(?:/[\p{L}]+(?:\^?[0-9]+)?)+|[\p{L}]+\^?[0-9]+)\b").unwrap());
-    // Recognise common physical units even when none of the evidence uses them. Otherwise
-    // a currency prefix could incorrectly turn the unknown suffix in "$3 to 5 kg" into money.
-    // A bare m can also mean million; evidence must identify it as a physical unit.
-    let standard_units: Vec<_> = ["kg", "g", "mg", "t", "lb", "lbs", "oz", "l", "ml", "m", "km", "cm", "mm", "h", "hr", "hrs", "days", "hours"].into_iter().map(ChatUnit::parse).collect();
-    let mut out = Vec::new();
-    for mut span in chat_spans(text) {
-        if out.last().is_some_and(|(r, _): &(std::ops::Range<usize>, Option<ChatNumber>)| span.start < r.end) { continue; }
-        let base_end = spans(&text[span.clone()]).first().map_or(span.end, |r| span.start + r.end);
-        let rest = &text[base_end..];
-        let gap = rest.len() - rest.trim_start().len();
-        let mut matched = digit_unit.captures(rest).map(|c| {
-            (base_end + c.get(0).unwrap().end(), ChatUnit::parse(c.name("unit").unwrap().as_str()))
-        });
-        let decorated = ChatNumber::parse(&text[span.clone()], context).is_some_and(|n| matches!(n.unit, ChatUnit::Money(_) | ChatUnit::Percent));
-        for (unit, known) in units.iter().map(|unit| (unit, true)).chain(standard_units.iter().map(|unit| (unit, false))) {
-            let name = match unit { ChatUnit::Other(s) => s.as_str(), ChatUnit::Ratio => "ratio", _ => continue };
-            let mut forms = vec![name.to_string(), unit_form(name).into(), format!("{}s", unit_form(name))];
-            for alias in ["kg", "kilogram", "kilograms", "g", "gram", "grams", "l", "litre", "litres", "liter", "liters", "m", "metre", "metres", "meter", "meters"] {
-                if unit_form(alias) == unit_form(name) { forms.push(alias.into()); }
-            }
-            for form in forms {
-                if rest[gap..].starts_with(&form) {
-                    let end = base_end + gap + form.len();
-                    // "$5M" is a money scale, while the separate suffix in "$5 kg" conflicts.
-                    if !known && form == "m" && end <= span.end { continue; }
-                    if decorated && end <= span.end { continue; }
-                    if text[end..].chars().next().is_some_and(|c| token(c) && c != '.') { continue; }
-                    if matched.as_ref().is_none_or(|(old, _)| end > *old) { matched = Some((end, unit.clone())); }
-                }
-            }
-        }
-        let number = if let Some((end, unit)) = matched {
-            let n = ChatNumber::parse(&text[span.start..base_end], &unit).filter(|n| n.unit.compatible(&unit));
-            span.end = end;
-            n
-        } else { ChatNumber::parse(&text[span.clone()], context) };
-        out.push((span, number));
+    static DECORATION: OnceLock<Regex> = OnceLock::new();
+    let decoration = DECORATION.get_or_init(|| Regex::new(&format!(r"(?i)^ *(?P<unit>{CURRENCY_CODE}\b|[\p{{Sc}}%‰])")).unwrap());
+    let mut matched = digit_unit.captures(text).map(|c| {
+        (c.get(0).unwrap().end(), QuantitySuffix::Unit(ChatUnit::parse(c.name("unit").unwrap().as_str())))
+    });
+    if matched.is_none() {
+        matched = decoration.captures(text).map(|c| (c.get(0).unwrap().end(), QuantitySuffix::Unit(ChatUnit::parse(c.name("unit").unwrap().as_str()))));
     }
-    // A trailing measure belongs to each bare member of the coordinated group. A typed
-    // member stops propagation of a different unit; punctuation other than a list comma stops it.
+    let standard = ["kg", "g", "mg", "t", "lb", "lbs", "oz", "l", "ml", "m", "km", "cm", "mm", "h", "hr", "hrs", "days", "hours", "ratio", "percent", "percentage", "per cent", "times", "%", "‰"];
+    for unit in units.iter().cloned().chain(standard.into_iter().map(ChatUnit::parse)) {
+        let name = match &unit {
+            ChatUnit::Other(s) | ChatUnit::Money(s) => s.as_str(),
+            ChatUnit::Ratio => "ratio", ChatUnit::Percent => "%", ChatUnit::Plain => continue,
+        };
+        let mut forms = vec![name.to_string(), unit_form(name).into(), format!("{}s", unit_form(name))];
+        match unit {
+            ChatUnit::Percent => forms.extend(["percent", "percentage", "per cent"].map(str::to_string)),
+            ChatUnit::Ratio => forms.push("times".into()),
+            _ => (),
+        }
+        for alias in ["kg", "kilogram", "kilograms", "g", "gram", "grams", "l", "litre", "litres", "liter", "liters", "m", "metre", "metres", "meter", "meters"] {
+            if unit_form(alias) == unit_form(name) { forms.push(alias.into()); }
+        }
+        for form in forms {
+            let Some(candidate) = rest.get(..form.len()) else { continue; };
+            if candidate.to_lowercase() != form { continue; }
+            let end = gap + form.len();
+            if text[end..].chars().next().is_some_and(|c| token(c) && c != '.') { continue; }
+            let parsed = match candidate.to_lowercase().as_str() {
+                "times" => ChatUnit::Ratio, "per cent" => ChatUnit::Percent,
+                _ => unit.clone(),
+            };
+            if matched.as_ref().is_none_or(|(old, _)| end > *old) { matched = Some((end, QuantitySuffix::Unit(parsed))); }
+        }
+    }
+    // Unknown attached letters are suffixes. Separate ordinary words remain prose.
+    if matched.is_none() && gap == 0 && let Some(m) = word.find(rest) {
+        matched = Some((m.end(), QuantitySuffix::Ambiguous));
+    }
+    matched
+}
+impl ChatNumber {
+    fn parse(text: &str, mut span: std::ops::Range<usize>, context: &ChatUnit, units: &[ChatUnit]) -> (std::ops::Range<usize>, Option<Self>) {
+        let mut number = Self::base(&text[span.clone()]);
+        let mut scaled = false;
+        let mut suffixed = false;
+        while let Some((len, suffix)) = quantity_suffix(&text[span.end..], units) {
+            span.end += len;
+            number = number.and_then(|mut n| {
+                match suffix {
+                    QuantitySuffix::Scale(scale) if !scaled && !suffixed && matches!(n.unit, ChatUnit::Plain | ChatUnit::Money(_)) => {
+                        n.scale = scale.into(); scaled = true;
+                    }
+                    QuantitySuffix::Unit(unit) if !suffixed && (n.unit == ChatUnit::Plain || matches!(n.unit, ChatUnit::Money(_)) && n.unit.compatible(&unit)) => {
+                        n.unit = unit; suffixed = true;
+                    }
+                    _ => return None,
+                }
+                Some(n)
+            });
+        }
+        if let Some(n) = &mut number && n.unit == ChatUnit::Plain { n.unit = context.clone(); }
+        (span, number)
+    }
+}
+// Parse each measure once. Unit digits never become separate claims.
+fn chat_claims(text: &str, context: &ChatUnit, units: &[ChatUnit]) -> Vec<(std::ops::Range<usize>, Option<ChatNumber>)> {
+    let mut out = Vec::new();
+    for span in chat_spans(text) {
+        if out.last().is_some_and(|(r, _): &(std::ops::Range<usize>, Option<ChatNumber>)| span.start < r.end) { continue; }
+        out.push(ChatNumber::parse(text, span, context, units));
+    }
+    // Carry a unit across a coordinated range, stopping at an explicitly typed member.
     for i in (0..out.len().saturating_sub(1)).rev() {
         if !coordinated(&text[out[i].0.end..out[i + 1].0.start]) { continue; }
         let Some(unit) = out[i + 1].1.as_ref().map(|n| n.unit.clone()).filter(|u| *u != ChatUnit::Plain) else { continue; };
         if let Some(number) = &mut out[i].1 && number.unit == ChatUnit::Plain { number.unit = unit; }
     }
-    // A currency prefix also applies forwards, including through an already inherited member.
     for i in 1..out.len() {
         if !coordinated(&text[out[i - 1].0.end..out[i].0.start]) { continue; }
-        let Some(ChatUnit::Money(code)) = out[i - 1].1.as_ref().map(|n| &n.unit) else { continue; };
-        let unit = ChatUnit::Money(code.clone());
+        let Some(unit) = out[i - 1].1.as_ref().map(|n| n.unit.clone()).filter(|u| *u != ChatUnit::Plain) else { continue; };
         if let Some(number) = &mut out[i].1 && number.unit == ChatUnit::Plain { number.unit = unit; }
     }
     out
@@ -614,7 +673,7 @@ fn chat_claims(text: &str, context: &ChatUnit, units: &[ChatUnit]) -> Vec<(std::
 
 impl ChatProse {
     fn evidence(&mut self, text: &str, unit: &ChatUnit) {
-        let text = normalise(text);
+        let text = display(text);
         static WORD: OnceLock<Regex> = OnceLock::new();
         let opaque: Vec<_> = WORD.get_or_init(|| Regex::new(r"\S+").unwrap()).find_iter(&text)
             .filter(|m| opaque_identifier(m.as_str().trim_matches(['(', ')', '[', ']', '{', '}', ',', '.', ';', '\'', '"'])))
@@ -622,7 +681,7 @@ impl ChatProse {
         for (span, number) in chat_claims(&text, unit, std::slice::from_ref(unit)) {
             if opaque.iter().any(|id| id.start < span.end && span.start < id.end) { continue; }
             if let Some(n) = number { self.numbers.push(n); }
-            else { self.exact.insert(text[span].into()); }
+            else if spans(&text[span.clone()]).first().is_some_and(|r| r.end == span.len()) { self.exact.insert(text[span].into()); }
         }
     }
     pub(crate) fn text(&mut self, text: &str) { self.evidence(text, &ChatUnit::Plain); }
@@ -762,8 +821,7 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    // Snapshot of Allowed::check at origin/main 04ee4397. The scanner and string
-    // permissions are unchanged, so both rules run the same inputs below.
+    // Snapshot of Allowed::check at origin/main 60b3536e, before #226.
     fn main_check(allowed: &Allowed, raw: &str, substitutions: &[(std::ops::Range<usize>, String)], path: &str) -> AppResult<()> {
         let text = normalise(raw);
         let numeric = spans(&text);
@@ -792,8 +850,16 @@ mod tests {
         for span in &numeric {
             let overlaps: Vec<_> = bindings.iter().filter(|(range, _)| range.start < span.end && span.start < range.end).collect();
             let authorised = if !overlaps.is_empty() {
-                // A binding cannot borrow even one connector from prose or another binding.
-                overlaps.len() == 1 && overlaps[0].0 == *span && overlaps[0].1 == text[span.clone()]
+                // A numeric binding must contain its scale and unit. Custom-unit bindings
+                // still require the entire field, as enforced below.
+                overlaps.len() == 1 && (overlaps[0].0 == *span && overlaps[0].1 == text[span.clone()]
+                    || (span.start >= overlaps[0].0.start
+                            // The scanner also consumes an opening single quote as a
+                            // possible numeric separator. Keep a standalone quote as punctuation.
+                            || text.get(span.start..overlaps[0].0.start) == Some("'")
+                                && !text[..span.start].chars().next_back().is_some_and(token))
+                        && span.end <= overlaps[0].0.end
+                        && complete_custom_binding(raw, substitutions, &text, &overlaps[0].0, &overlaps[0].1))
             } else if iso_span(&text[span.clone()]).is_some() {
                 !text[..span.start].chars().next_back().is_some_and(token)
                     && !following_token(&text[span.end..])
@@ -807,10 +873,11 @@ mod tests {
         }
         Ok(())
     }
+
     #[test]
-    fn boundary_probe_matches_main_except_custom_units_at_clause_boundaries() {
+    fn boundary_probe_records_main_and_quantity_modifier_verdicts() {
         // Brackets mark the exact server binding. Both verdicts are committed
-        // alongside every input, including the pre-existing gaps owned by #226.
+        // alongside every input. Main includes the whole-field custom-unit fix in #229.
         for row in include_str!("prose-boundaries.tsv").lines().skip(1) {
             let columns: Vec<_> = row.split('\t').collect();
             assert_eq!(columns.len(), 3, "{row}");
@@ -881,6 +948,89 @@ mod tests {
         assert!(resolve(&json!({"title":"Count {{/sources/graph/diagram/nodes/0/metrics/0/value}}"}), &custom).is_err());
         assert!(resolve(&json!({"title":"Count {{/sources/graph/diagram/nodes/0/metrics/0/value}}999"}), &custom).is_err());
         assert!(bound("/sources/graph/diagram/nodes/0/x", &data).is_err());
+    }
+
+    #[test]
+    fn quantity_scale_and_unit_table() {
+        let mut cases = Vec::new();
+        for (suffix, multiplier) in [
+            ("b", 1_000_000_000_i64), ("B", 1_000_000_000), ("bn", 1_000_000_000),
+            ("billion", 1_000_000_000), ("tn", 1_000_000_000_000), ("trillion", 1_000_000_000_000),
+            ("mn", 1_000_000), ("MM", 1_000_000), ("M", 1_000_000),
+            ("k", 1000), ("K", 1000), ("thousand", 1000), ("million", 1_000_000),
+            ("hundred", 100), ("dozen", 12), ("lakh", 100_000), ("crore", 10_000_000),
+        ] {
+            for space in ["", " "] {
+                let text = format!("2{space}{suffix} customers");
+                cases.push((json!(2), text.clone(), false));
+                cases.push((json!(2 * multiplier), text.clone(), true));
+                cases.push((json!(text), "2 customers".into(), false));
+                cases.push((json!({"value":2,"unit":"m"}), format!("2{space}{suffix} customers"), false));
+            }
+        }
+        for suffix in ["m", "mm"] {
+            // Lower-case SI symbols stay physical units. Attached forms are ambiguous.
+            cases.push((json!(2), format!("2 {suffix} customers"), false));
+            cases.push((json!(2_000_000), format!("2 {suffix} customers"), false));
+            cases.push((json!(2_000_000), format!("2{suffix} customers"), false));
+            cases.push((json!({"value":2,"unit":suffix}), format!("2 {suffix}"), true));
+            cases.push((json!({"value":2,"unit":suffix}), format!("2{suffix} customers"), false));
+            cases.push((json!({"value":2,"unit":suffix}), format!("2 {suffix} customers"), false));
+        }
+        cases.extend([
+            (json!({"value":5,"unit":"m"}), "5M customers".into(), false),
+            (json!({"value":5,"unit":"m"}), "5 m".into(), true),
+            (json!(5_000_000), "5 m".into(), false),
+            (json!({"value":5,"unit":"M"}), "5 million".into(), false),
+            (json!({"value":5,"unit":"M"}), "5 m".into(), false),
+            (json!({"value":5,"unit":"MM"}), "5 mm".into(), false),
+            (json!({"value":5,"unit":"mm"}), "5mM customers".into(), false),
+            (json!({"value":5,"unit":"mm"}), "5 Mm customers".into(), false),
+            (json!({"value":3,"unit":"times"}), "3 times".into(), true),
+            (json!({"value":5_000_000,"unit":"m"}), "5 million metres".into(), true),
+            (json!({"value":5_000_000,"unit":"m"}), "5 million kg".into(), false),
+            (json!({"value":5,"unit":"m"}), "5 million metres".into(), false),
+            (json!([5_000_000,{"value":5,"unit":"m"}]), "5 million metres".into(), false),
+            (json!("5 million metres"), "5000000 metres".into(), true),
+            (json!("5 million metres"), "5 metres".into(), false),
+            (json!(40), "40 percent".into(), false),
+            (json!({"value":40,"unit":"%"}), "40 percent".into(), true),
+            (json!({"value":40,"unit":"%"}), "40 items".into(), false),
+            (json!(3), "3 times".into(), false),
+            (json!({"value":3,"unit":"ratio"}), "3 times".into(), true),
+            (json!({"value":3,"unit":"ratio"}), "3 items".into(), false),
+            (json!(42), "42 orders today".into(), true),
+            (json!(5), "5 items".into(), true),
+            (json!(3), "3 people".into(), true),
+            (json!(5), "5quux".into(), false),
+            (json!(5), "5 million thousand".into(), false),
+            (json!(5_000_000), "5 millionquux".into(), false),
+            (json!([{"value":3,"unit":"kg"},{"value":5,"unit":"kg"}]), "3 kg to 5".into(), true),
+            (json!([{"value":3,"unit":"kg"},{"value":5,"unit":"kg"}]), "3 KG TO 5".into(), true),
+            (json!([{"value":3,"unit":"kg"},5]), "3 kg to 5".into(), false),
+            (json!([{"value":3,"unit":"kg"},{"value":5,"unit":"kg"}]), "3 to 5 kg".into(), true),
+            (json!([{"value":3,"unit":"kg"},{"value":5,"unit":"m"}]), "3 kg to 5 m".into(), true),
+            (json!([{"value":3,"unit":"m"},{"value":5,"unit":"m"}]), "3 m to 5".into(), true),
+        ]);
+        let mut failures = Vec::new();
+        for (evidence, text, expected) in cases {
+            let mut prose = ChatProse::default();
+            prose.result(&evidence);
+            if prose.check(&text).is_ok() != expected {
+                failures.push(format!("{evidence} -> {text:?}: expected {expected}, got {}", prose.safe(&text)));
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
+
+    #[test]
+    fn bound_quantity_modifiers_cannot_change_the_server_value() {
+        for suffix in ["hundred", "dozen", "times", "percent", "k", "K", "m", "M", "mm", "MM", "mn", "million", "b", "B", "bn", "billion", "tn", "trillion", "thousand", "lakh", "crore"] {
+            for space in ["", " "] {
+                let raw = format!("5{space}{suffix}");
+                assert!(Allowed::default().check(&raw, &[(0..1, "5".into())], "probe").is_err(), "{raw}");
+            }
+        }
     }
 
     #[test]
@@ -1232,8 +1382,8 @@ mod tests {
         for (raw, expected) in [
             ("Share {{/sources/sales/rows/0/share}}", "Share 12%"),
             ("Total {{/sources/sales/rows/0/amount}}", "Total 1588.00 AUD"),
-            ("Count {{/sources/sales/total_rows}} per cent", "Count 12 per cent"),
         ] { assert_eq!(title(raw, &data).unwrap()["title"], expected); }
+        assert!(title("Count {{/sources/sales/total_rows}} per cent", &data).is_err());
     }
     #[test]
     fn identifier_numeric_spans_must_attach_to_letters() {
