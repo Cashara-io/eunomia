@@ -1,22 +1,29 @@
 "use client";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
-import { MorphCount } from "@/components/ui/MorphText";
+import {
+  DotsThreeIcon,
+  ArrowClockwiseIcon,
+  TreeStructureIcon,
+} from "@phosphor-icons/react";
+import styles from "./overview.module.css";
+import OverviewSkeleton from "./OverviewSkeleton";
+import MorphText from "@/components/ui/MorphText";
+import ReadState from "./ReadState";
+import { returnKey } from "./overview-model";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useVaults } from "@/lib/queries/vaults";
 import { useOntology, useReadiness } from "@/lib/queries/ontology";
 import type { Vault } from "@/lib/types";
-import ErrorLine, { failure } from "@/components/ErrorLine";
-import PageHeader from "@/components/ui/PageHeader";
 import VaultChip, { vaultTone } from "@/components/VaultChip";
-import Select from "@/components/Select";
 import AutomapBar from "@/components/vaults/AutomapBar";
 import { definitions, twinHref } from "./model";
 import Activity from "./Activity";
 import Overview from "./Overview";
+import { OverviewHighlight } from "./OverviewHighlight";
 import Structure from "./Structure";
 import KindDetail from "./KindDetail";
 import Review from "./Review";
@@ -25,9 +32,11 @@ import ObjectProfile from "./ObjectProfile";
 
 const views = [
   { path: "/ontology", label: "Overview" },
-  { path: "/ontology/schema", label: "Structure" },
   { path: "/ontology/objects", label: "Objects" },
   { path: "/ontology/review", label: "Review" },
+];
+const moreViews = [
+  { path: "/ontology/schema", label: "Structure" },
   { path: "/ontology/activity", label: "Activity" },
 ];
 
@@ -35,7 +44,14 @@ export default function TwinArea({
   view,
   kind,
 }: {
-  view: "overview" | "structure" | "review" | "kind" | "objects" | "object" | "activity";
+  view:
+    | "overview"
+    | "structure"
+    | "review"
+    | "kind"
+    | "objects"
+    | "object"
+    | "activity";
   kind?: string;
 }) {
   const query = useVaults();
@@ -43,17 +59,12 @@ export default function TwinArea({
   const space = params.get("space");
   const vault = query.data?.find((v) => v.id === space);
   return (
-    <div className="max-w-6xl flex flex-col gap-6">
-      <PageHeader
-        title="Ontology"
-        intro="The people, work and numbers your business runs on."
-      />
+    <div className={styles.area}>
       {query.isError ? (
-        <ErrorLine
-          error={failure(
-            query.error,
-            "Could not load your memory spaces. Reload to try again.",
-          )}
+        <ReadState
+          error={query.error}
+          retry={() => void query.refetch()}
+          subject="your memory spaces"
         />
       ) : !query.data ? (
         <LoadingSkeleton label="Loading memory spaces" />
@@ -61,6 +72,7 @@ export default function TwinArea({
         <SelectedSpace key={vault.id} vault={vault} view={view} kind={kind} />
       ) : (
         <>
+          <h1 className="page-title">Ontology</h1>
           <h2 className="section-title">Choose a memory space</h2>
           <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
             {space
@@ -72,13 +84,15 @@ export default function TwinArea({
               <Link
                 key={v.id}
                 href={twinHref(
-                  view === "activity" ? "/ontology/activity" : view === "review"
-                    ? "/ontology/review"
-                    : view === "objects" || view === "object"
-                      ? "/ontology/objects"
-                      : view === "structure"
-                        ? "/ontology/schema"
-                        : "/ontology",
+                  view === "activity"
+                    ? "/ontology/activity"
+                    : view === "review"
+                      ? "/ontology/review"
+                      : view === "objects" || view === "object"
+                        ? "/ontology/objects"
+                        : view === "structure"
+                          ? "/ontology/schema"
+                          : "/ontology",
                   v.id,
                 )}
                 className="flex items-center justify-between gap-3 p-4 hover:bg-[var(--surface-raised)]"
@@ -107,7 +121,14 @@ function SelectedSpace({
   kind,
 }: {
   vault: Vault;
-  view: "overview" | "structure" | "review" | "kind" | "objects" | "object" | "activity";
+  view:
+    | "overview"
+    | "structure"
+    | "review"
+    | "kind"
+    | "objects"
+    | "object"
+    | "activity";
   kind?: string;
 }) {
   const objectView = view === "objects" || view === "object";
@@ -115,8 +136,19 @@ function SelectedSpace({
   const cache = useQueryClient();
   const readiness = useReadiness(vault.id, !objectView);
   const [adding, setAdding] = useState(false);
-  const router = useRouter();
   const pathname = usePathname();
+  const params = useSearchParams();
+  useEffect(() => {
+    if (view !== "object") return;
+    try {
+      sessionStorage.setItem(
+        returnKey(vault.id),
+        pathname + "?" + params.toString(),
+      );
+    } catch {
+      /* Storage may be disabled. */
+    }
+  }, [view, vault.id, pathname, params]);
   const data = query.data;
   const waiting = data
     ? definitions(data).filter((d) => d.item.status === "proposed").length
@@ -129,69 +161,104 @@ function SelectedSpace({
         : pathname;
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3 min-w-0">
-          <VaultChip tone={vaultTone(vault.kind)} name={vault.name} />
-          <Link className="link text-[13px]" href="/ontology">
-            Change space
+      <header className={styles.context}>
+        <div className={styles.identity}>
+          <Link href="/ontology" className={styles.areaName}>
+            <TreeStructureIcon size={18} weight="duotone" aria-hidden />
+            Ontology
+          </Link>
+          <Link
+            href="/ontology"
+            className={styles.spaceLink}
+            aria-label={`Change space, current space ${vault.name}`}
+          >
+            <VaultChip tone={vaultTone(vault.kind)} name={vault.name} />
           </Link>
         </div>
-        <div className="flex gap-2">
+        <div className={styles.contextActions}>
           <button
-            className="btn btn-sm"
+            className="btn btn-ghost btn-sm"
+            aria-label="Refresh ontology"
             disabled={query.isFetching}
             onClick={() => {
               if (!objectView) {
                 void query.refetch();
                 void readiness.refetch();
               }
-              void cache.invalidateQueries({
-                queryKey: ["object-kinds", vault.id],
-              });
-              void cache.invalidateQueries({ queryKey: ["objects", vault.id] });
-              void cache.invalidateQueries({
-                queryKey: ["object-profile", vault.id],
-              });
+              for (const key of [
+                "object-kinds",
+                "objects",
+                "object-profile",
+                "ontology-activity",
+              ])
+                void cache.invalidateQueries({ queryKey: [key, vault.id] });
             }}
           >
-            {query.isFetching ? "Refreshing…" : "Refresh"}
+            <ArrowClockwiseIcon size={16} aria-hidden />
+            <span>Refresh</span>
           </button>
           {vault.role === "owner" && (
             <button
               className="btn btn-sm"
               aria-expanded={adding}
+              aria-controls="ontology-add-data"
               onClick={() => setAdding(!adding)}
             >
               Add data
             </button>
           )}
         </div>
-      </div>
-      <nav aria-label="Ontology views" className="hidden sm:flex gap-2">
+      </header>
+      <nav aria-label="Ontology views" className={styles.navigation}>
         {views.map((v) => (
           <Link
             key={v.path}
-            className="pill"
+            className={styles.navLink}
             aria-current={current === v.path ? "page" : undefined}
             href={twinHref(v.path, vault.id)}
           >
             {v.label}
-            {v.label === "Review" && waiting !== null && <> (<MorphCount value={waiting} />)</>}
+            {v.label === "Review" && waiting !== null && waiting > 0 && (
+              <MorphText className={styles.navCount}>
+                {waiting.toLocaleString("en-AU")}
+              </MorphText>
+            )}
           </Link>
         ))}
+        <details
+          className={styles.more}
+          key={pathname}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.currentTarget.open = false;
+              e.currentTarget.querySelector("summary")?.focus();
+            }
+          }}
+        >
+          <summary
+            className={styles.navLink}
+            aria-current={
+              moreViews.some((v) => v.path === current) ? "page" : undefined
+            }
+          >
+            More <DotsThreeIcon aria-hidden size={18} />
+          </summary>
+          <div className={styles.morePanel}>
+            {moreViews.map((v) => (
+              <Link
+                key={v.path}
+                aria-current={v.path === current ? "page" : undefined}
+                href={twinHref(v.path, vault.id)}
+              >
+                {v.label}
+              </Link>
+            ))}
+          </div>
+        </details>
       </nav>
-      <div className="sm:hidden flex flex-col gap-1">
-        <span className="label">View</span>
-        <Select
-          aria-label="View"
-          value={current}
-          options={views.map((v) => ({ value: v.path, label: v.label }))}
-          onChange={(v) => router.push(twinHref(v, vault.id))}
-          className="w-full min-h-11"
-        />
-      </div>
       {adding && (
         <section
+          id="ontology-add-data"
           aria-label="Add data"
           className="ledger p-4 flex flex-col gap-4"
         >
@@ -209,28 +276,52 @@ function SelectedSpace({
           </Link>
         </section>
       )}
-      {view === "activity" ? <Activity space={vault.id} /> : view === "objects" ? (
+      {view !== "overview" && (
+        <h1 className="sr-only">
+          Ontology:{" "}
+          {view === "kind" ? kind : view === "object" ? "Object" : view}
+        </h1>
+      )}
+      {view === "activity" ? (
+        <Activity space={vault.id} />
+      ) : view === "objects" ? (
         <Objects space={vault.id} />
       ) : view === "object" ? (
         <ObjectProfile key={kind} space={vault.id} id={kind ?? ""} />
       ) : query.isError ? (
-        <ErrorLine
-          error={failure(
-            query.error,
-            "Could not load the ontology. Use Refresh to try again.",
-          )}
+        <ReadState
+          error={query.error}
+          retry={() => void query.refetch()}
+          subject="the ontology"
         />
       ) : !data ? (
-        <LoadingSkeleton label="Loading the ontology" layout={view === "overview" ? "overview" : view === "review" ? "rows" : "table"} rows={5} />
+        view === "overview" ? (
+          <OverviewSkeleton />
+        ) : (
+          <LoadingSkeleton
+            label="Loading the ontology"
+            layout={view === "review" ? "rows" : "table"}
+            rows={5}
+          />
+        )
       ) : (
         <>
-          {view === "overview" && <Overview vault={vault} data={data} />}
+          {view === "overview" && (
+            <OverviewHighlight>
+              <Overview
+                vault={vault}
+                data={data}
+                onAdd={() => setAdding(true)}
+              />
+              <Activity space={vault.id} compact />
+            </OverviewHighlight>
+          )}
           {view === "structure" && <Structure vault={vault} data={data} />}
           {view === "kind" && (
             <KindDetail vault={vault} data={data} kind={kind ?? ""} />
           )}
           {view === "review" && <Review vault={vault} data={data} />}
-          {(view === "review" || view === "overview") && <Activity space={vault.id} compact />}
+          {view === "review" && <Activity space={vault.id} compact />}
         </>
       )}
     </>

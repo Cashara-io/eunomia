@@ -2,7 +2,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import Select from "@/components/Select";
-import ErrorLine, { failure } from "@/components/ErrorLine";
+import ReadState from "./ReadState";
+import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import { useObjects, useObjectKinds } from "@/lib/queries/objects";
 import { useTwinParams } from "./controls";
 import ObjectProfile, { formatted, objectHref } from "./ObjectProfile";
@@ -20,7 +21,11 @@ export default function Objects({ space }: { space: string }) {
     kinds.data?.kinds.find((k) => k.entities > 0)?.kind ||
     kinds.data?.kinds[0]?.kind ||
     "";
-  const query = useObjects(space, params, kind);
+  const query = useObjects(
+    space,
+    params,
+    kinds.isError || !kinds.data ? "" : kind,
+  );
   const [hidden, setHidden] = useState<string[] | null>(null);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const data = query.data;
@@ -32,14 +37,6 @@ export default function Objects({ space }: { space: string }) {
     data?.columns.filter((c) => !hiddenColumns.includes(c.name)) ?? [];
   return (
     <div className="flex flex-col gap-4 min-w-0 text-[13px]">
-      {kinds.isError && (
-        <ErrorLine
-          error={failure(
-            kinds.error,
-            "Could not load object kinds. Use Refresh to try again.",
-          )}
-        />
-      )}
       <div>
         <h2 className="text-[22px] font-medium">Objects</h2>
         <p className="text-[var(--ink-dim)] mt-2">
@@ -47,138 +44,153 @@ export default function Objects({ space }: { space: string }) {
           missing.
         </p>
       </div>
-      <div className="flex flex-wrap gap-3 items-end">
-        <div className="flex flex-col gap-1">
-          <span className="label">Kind</span>
-          <Select
-            aria-label="Object kind"
-            value={kind}
-            options={(kinds.data?.kinds ?? []).map((k) => ({
-              value: k.kind,
-              label: words(k.kind),
-            }))}
-            onChange={(k) => {
-              setHidden(null);
-              update({
-                kind: k,
-                page: "1",
-                selected: "",
-                sort: "",
-                filter: "",
-                op: "",
-                value: "",
-              });
-            }}
-          />
-        </div>
-        <label className="flex-1 min-w-40 flex flex-col gap-1">
-          <span className="label">Search objects</span>
-          <input
-            className="field w-full px-3 min-h-10"
-            type="search"
-            value={params.get("search") ?? ""}
-            onChange={(e) =>
-              update({ search: e.target.value, selected: "", page: "1" }, true)
-            }
-          />
-        </label>
-        <button
-          className="btn"
-          aria-expanded={columnsOpen}
-          onClick={() => setColumnsOpen(!columnsOpen)}
-        >
-          Columns
-        </button>
-      </div>
-      {columnsOpen && (
-        <fieldset className="ledger p-4 flex flex-wrap gap-4">
-          <legend className="px-2">Visible columns</legend>
-          {data?.columns.map((c) => (
-            <label key={c.name} className="flex items-center gap-2">
+      {kinds.data && kinds.data.kinds.length > 0 && (
+        <>
+          <div className="flex flex-wrap gap-3 items-end">
+            <div className="flex flex-col gap-1">
+              <span className="label">Kind</span>
+              <Select
+                aria-label="Object kind"
+                value={kind}
+                options={(kinds.data?.kinds ?? []).map((k) => ({
+                  value: k.kind,
+                  label: words(k.kind),
+                }))}
+                onChange={(k) => {
+                  setHidden(null);
+                  update({
+                    kind: k,
+                    page: "1",
+                    selected: "",
+                    sort: "",
+                    filter: "",
+                    op: "",
+                    value: "",
+                  });
+                }}
+              />
+            </div>
+            <label className="flex-1 min-w-40 flex flex-col gap-1">
+              <span className="label">Search objects</span>
               <input
-                type="checkbox"
-                checked={!hiddenColumns.includes(c.name)}
+                className="field w-full px-3 min-h-10"
+                type="search"
+                value={params.get("search") ?? ""}
                 onChange={(e) =>
-                  setHidden(
-                    e.target.checked
-                      ? hiddenColumns.filter((n) => n !== c.name)
-                      : [...hiddenColumns, c.name],
+                  update(
+                    { search: e.target.value, selected: "", page: "1" },
+                    true,
                   )
                 }
               />
-              {words(c.name.replace(/^link:/, ""))}
             </label>
-          ))}
-        </fieldset>
-      )}
-      <details className="ledger p-3">
-        <summary className="cursor-pointer">
-          Filters {params.get("op") ? "(1 active)" : ""}
-        </summary>
-        <div className="flex flex-wrap items-end gap-3 mt-3">
-          <div>
-            <span className="label">Property</span>
-            <Select
-              aria-label="Filter property"
-              value={params.get("filter") ?? ""}
-              options={[
-                { value: "", label: "Choose property" },
-                ...(data?.columns
-                  .filter((c) => c.datatype !== "link")
-                  .map((c) => ({
-                    value: c.name,
-                    label: words(c.name.replace(/^link:/, "")),
-                  })) ?? []),
-              ]}
-              onChange={(v) => update({ filter: v, op: "", value: "" })}
-            />
+            <button
+              className="btn"
+              aria-expanded={columnsOpen}
+              onClick={() => setColumnsOpen(!columnsOpen)}
+            >
+              Columns
+            </button>
           </div>
-          <div>
-            <span className="label">Condition</span>
-            <Select
-              aria-label="Filter condition"
-              value={params.get("op") ?? ""}
-              options={[
-                { value: "", label: "No filter" },
-                { value: "eq", label: "Equals" },
-                { value: "gte", label: "At least" },
-                { value: "lte", label: "At most" },
-                { value: "missing", label: "Missing" },
-              ]}
-              onChange={(v) => update({ op: v })}
-              disabled={!params.get("filter")}
-            />
-          </div>
-          <label>
-            <span className="label">Value</span>
-            <input
-              className="field px-3 w-full min-h-10"
-              value={params.get("value") ?? ""}
-              onChange={(e) => update({ value: e.target.value }, true)}
-              disabled={params.get("op") === "missing"}
-            />
-          </label>
-          <button
-            className="btn btn-sm"
-            onClick={() => update({ filter: "", op: "", value: "" })}
-          >
-            Clear filters
-          </button>
-        </div>
-      </details>
-      {query.isError ? (
-        <ErrorLine
-          error={failure(
-            query.error,
-            "Could not load objects. Check filters and try again.",
+          {columnsOpen && (
+            <fieldset className="ledger p-4 flex flex-wrap gap-4">
+              <legend className="px-2">Visible columns</legend>
+              {data?.columns.map((c) => (
+                <label key={c.name} className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={!hiddenColumns.includes(c.name)}
+                    onChange={(e) =>
+                      setHidden(
+                        e.target.checked
+                          ? hiddenColumns.filter((n) => n !== c.name)
+                          : [...hiddenColumns, c.name],
+                      )
+                    }
+                  />
+                  {words(c.name.replace(/^link:/, ""))}
+                </label>
+              ))}
+            </fieldset>
           )}
+          <details className="ledger p-3">
+            <summary className="cursor-pointer">
+              Filters {params.get("op") ? "(1 active)" : ""}
+            </summary>
+            <div className="flex flex-wrap items-end gap-3 mt-3">
+              <div>
+                <span className="label">Property</span>
+                <Select
+                  aria-label="Filter property"
+                  value={params.get("filter") ?? ""}
+                  options={[
+                    { value: "", label: "Choose property" },
+                    ...(data?.columns
+                      .filter((c) => c.datatype !== "link")
+                      .map((c) => ({
+                        value: c.name,
+                        label: words(c.name.replace(/^link:/, "")),
+                      })) ?? []),
+                  ]}
+                  onChange={(v) => update({ filter: v, op: "", value: "" })}
+                />
+              </div>
+              <div>
+                <span className="label">Condition</span>
+                <Select
+                  aria-label="Filter condition"
+                  value={params.get("op") ?? ""}
+                  options={[
+                    { value: "", label: "No filter" },
+                    { value: "eq", label: "Equals" },
+                    { value: "gte", label: "At least" },
+                    { value: "lte", label: "At most" },
+                    { value: "missing", label: "Missing" },
+                  ]}
+                  onChange={(v) => update({ op: v })}
+                  disabled={!params.get("filter")}
+                />
+              </div>
+              <label>
+                <span className="label">Value</span>
+                <input
+                  className="field px-3 w-full min-h-10"
+                  value={params.get("value") ?? ""}
+                  onChange={(e) => update({ value: e.target.value }, true)}
+                  disabled={params.get("op") === "missing"}
+                />
+              </label>
+              <button
+                className="btn btn-sm"
+                onClick={() => update({ filter: "", op: "", value: "" })}
+              >
+                Clear filters
+              </button>
+            </div>
+          </details>
+        </>
+      )}
+      {kinds.isError ? (
+        <ReadState
+          error={kinds.error}
+          retry={() => void kinds.refetch()}
+          subject="object kinds"
+        />
+      ) : query.isError ? (
+        <ReadState
+          error={query.error}
+          retry={() => void query.refetch()}
+          subject="objects"
         />
       ) : !data ? (
-        <p role="status">
-          {kinds.data?.kinds.length === 0
-            ? "No objects or kinds recorded in this space."
-            : "Loading objects…"}
-        </p>
+        kinds.data?.kinds.length === 0 ? (
+          <p>
+            No objects or kinds recorded in this space. Use Add data to map
+            records.
+          </p>
+        ) : (
+          <LoadingSkeleton label="Loading objects" layout="table" rows={5} />
+        )
       ) : (
         <div className="flex gap-5 items-start min-w-0">
           <div className="min-w-0 flex-1">
@@ -302,7 +314,27 @@ export default function Objects({ space }: { space: string }) {
                     <tr>
                       <td colSpan={columns.length + 3} className="p-4">
                         {data.total === 0 ? (
-                          "No objects match these filters."
+                          params.get("search") || params.get("op") ? (
+                            <>
+                              No objects match these filters.{" "}
+                              <button
+                                className="link"
+                                onClick={() =>
+                                  update({
+                                    search: "",
+                                    filter: "",
+                                    op: "",
+                                    value: "",
+                                    page: "1",
+                                  })
+                                }
+                              >
+                                Clear filters
+                              </button>
+                            </>
+                          ) : (
+                            "No objects recorded for this kind yet."
+                          )
                         ) : (
                           <>
                             This page has no objects.{" "}

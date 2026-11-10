@@ -107,7 +107,7 @@ test("dedicated area, URL filters, kind details, Add data and old links", async 
   ).toBeVisible();
   await page.getByRole("link", { name: new RegExp(vault.name) }).click();
   await expect(
-    page.getByRole("heading", { name: `${vault.name}: Overview` }),
+    page.getByRole("heading", { name: "Your business, connected." }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Add data", exact: true }).click();
   await expect(page.getByTestId("automap")).toBeVisible();
@@ -133,7 +133,9 @@ test("dedicated area, URL filters, kind details, Add data and old links", async 
   await choose(page, "Status", "Approved");
   await expect(page.getByRole("table")).toContainText("No definitions match");
   await choose(page, "Status", "Suggested");
-  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Refresh ontology", exact: true })
+    .click();
   await expect(page.getByRole("table").locator("tbody tr")).toHaveCount(2);
   await page.getByRole("link", { name: "store", exact: true }).click();
   await expect(page).toHaveURL(/\/ontology\/kinds\/store/);
@@ -241,7 +243,10 @@ test("mobile navigation, keyboard filters and honest load failure", async ({
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });
     await page.goto(`/ontology/schema?space=${encodeURIComponent(vault.id)}`);
-    await choose(page, "View", "Review");
+    await page
+      .getByRole("navigation", { name: "Ontology views" })
+      .getByRole("link", { name: /^Review/ })
+      .click();
     await expect(page).toHaveURL(/\/ontology\/review/);
     await page.getByText("Search and filter suggestions", { exact: true }).click();
     await page.getByRole("searchbox").fill("store");
@@ -374,7 +379,9 @@ test("a batch approves dependencies in order and reports each saved result", asy
     store.metrics[0].status,
     current.links[0].status,
   ]).toEqual(["approved", "approved", "approved", "approved"]);
-  await page.goto(`/ontology/kinds/person?space=${encodeURIComponent(vault.id)}`);
+  await page.goto(
+    `/ontology/kinds/person?space=${encodeURIComponent(vault.id)}`,
+  );
   await expect(
     page.getByRole("button", { name: "Reject", exact: true }),
   ).toHaveCount(0);
@@ -390,7 +397,7 @@ test("one suggestion approves on its own, and closing it keeps the queue page", 
   const { vault } = await seed(page);
   const space = encodeURIComponent(vault.id);
   await page.goto(`/ontology/review?space=${space}&page=2`);
-  await page.getByRole("link").filter({ hasText: /fixture/i }).first().click();
+  await page.getByRole("region", { name: "Review queue" }).getByRole("link").filter({ hasText: /fixture/i }).first().click();
   await expect(page).toHaveURL(/selected=/);
   await page.getByRole("button", { name: "Back to queue" }).click();
   await expect(page).toHaveURL(/page=2/);
@@ -422,11 +429,15 @@ test("a kind page opened from Structure returns to the same Structure page", asy
   await expect(page).toHaveURL(/\/ontology\/schema\?.*page=2/);
 });
 
-test("batch merge stores its reason for each selected definition", async ({ page }) => {
+test("batch merge stores its reason for each selected definition", async ({
+  page,
+}) => {
   test.setTimeout(60000);
   const { vault } = await seed(page);
   const path = `/api/vaults/${vault.id}/ontology`;
-  const approved = await page.request.post(`${path}/kinds/decide`, { data: { kind: "store", revision: 1, decision: { action: "approve" } } });
+  const approved = await page.request.post(`${path}/kinds/decide`, {
+    data: { kind: "store", revision: 1, decision: { action: "approve" } },
+  });
   expect(approved.ok()).toBeTruthy();
   await page.goto(`/ontology/review?space=${encodeURIComponent(vault.id)}&type=kind&q=fixture`);
   await openBatch(page);
@@ -439,5 +450,10 @@ test("batch merge stores its reason for each selected definition", async ({ page
   await expect(page.getByRole("status").filter({ hasText: "Batch results" })).toContainText("Merged into Store");
   const events = await (await page.request.get(`${path}/activity?action=merged`)).json();
   expect(events.events).toHaveLength(2);
-  expect(events.events.every((event: { reason: string }) => event.reason === "Duplicate names for a store")).toBeTruthy();
+  expect(
+    events.events.every(
+      (event: { reason: string }) =>
+        event.reason === "Duplicate names for a store",
+    ),
+  ).toBeTruthy();
 });
