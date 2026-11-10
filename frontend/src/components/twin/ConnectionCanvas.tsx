@@ -36,6 +36,7 @@ import shared from "./overview.module.css";
 import styles from "./connections.module.css";
 
 type Camera = { x: number; y: number; zoom: number };
+export type ConnectionCanvasInput = { focus: string; camera: Camera; expanded: ReadonlySet<string> };
 type Mark = FormAnchor & {
   kind: string;
   name: string;
@@ -60,6 +61,8 @@ function labelPlates(marks: Mark[], zoom: number) {
   return plates;
 }
 export default function ConnectionCanvas({
+  input,
+  saveInput,
   scene,
   focus,
   selected,
@@ -68,6 +71,8 @@ export default function ConnectionCanvas({
   select,
   hover,
 }: {
+  input: ConnectionCanvasInput | null;
+  saveInput: (input: ConnectionCanvasInput) => void;
   scene: Scene;
   focus: string;
   selected: string;
@@ -77,9 +82,9 @@ export default function ConnectionCanvas({
   hover: (id: string) => void;
 }) {
   const [layout, setLayout] = useState<Layout | null>(null);
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => input?.focus === focus ? input.expanded : new Set());
   const [size, setSize] = useState({ width: 1000, height: 700 });
-  const [manual, move] = useState<Camera | null>(null);
+  const [manual, move] = useState<Camera | null>(() => input?.focus === focus ? input.camera : null);
   const [help, setHelp] = useState(false);
   const [keyboardTarget, setKeyboardTarget] = useState("");
   const cameraRef = useRef<Camera | null>(null);
@@ -153,8 +158,11 @@ export default function ConnectionCanvas({
   }, [marks, size]);
   const camera = manual ?? fitCamera;
   useEffect(() => {
-    if (layout) cameraRef.current = camera;
-  }, [camera, layout]);
+    if (layout) {
+      cameraRef.current = camera;
+      saveInput({ focus, camera, expanded });
+    }
+  }, [camera, layout, expanded, focus, saveInput]);
   const smallText = Math.max(12, 11 / camera.zoom);
   const nameText = Math.max(17, 13 / camera.zoom);
   const verbScale = Math.max(1, 11 / (14 * camera.zoom));

@@ -29,7 +29,7 @@ import KindDetail from "./KindDetail";
 import Review from "./Review";
 import Objects from "./Objects";
 import Connections from "./Connections";
-import ConnectionAccess from "./ConnectionAccess";
+import ConnectionAccess, { ConnectionContent } from "./ConnectionAccess";
 import ObjectProfile from "./ObjectProfile";
 
 const views = [
@@ -186,6 +186,7 @@ function SelectedSpace({
         : pathname;
   return (
     <>
+      <ConnectionContent>
       <header className={styles.context}>
         <div className={styles.identity}>
           <Link href="/ontology" className={styles.areaName}>
@@ -303,6 +304,7 @@ function SelectedSpace({
           </Link>
         </section>
       )}
+      </ConnectionContent>
       {view !== "overview" && (
         <h1 className="sr-only">
           Ontology:{" "}

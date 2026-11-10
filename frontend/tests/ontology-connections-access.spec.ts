@@ -183,3 +183,115 @@ test('leaving through the space chooser clears previous search caches', async ({
   await expect(page.getByRole('heading', {name:'Choose a memory space'})).toBeVisible();
   await expect.poll(async () => (await cacheKeys(page)).filter(k => ['connections','connection-search'].includes(String(k[0])) && k[1] === 'business')).toEqual([]);
 });
+
+async function expectNoProtectedContent(page: Page) {
+  for (const name of ['House blend 1kg', 'North Coast Beans', 'PO-1042', 'Fitzroy store', 'Decaf 1kg', 'Banksia Coffee']) {
+    await expect(page.locator('main')).not.toContainText(name);
+  }
+  await expect(page.locator('[data-camera], [data-object], [aria-label="Selected object"], [aria-label="Recently viewed objects"], [aria-label="Suggested objects"], [aria-label="Object search results"], [aria-label="Connections in words"]')).toHaveCount(0);
+}
+
+test('masked neighbourhood loss removes protected text during a delayed membership check', async ({page}) => {
+  await setup(page);
+  await page.getByRole('searchbox').fill('North');
+  await expect(page.getByLabel('Object search results')).toContainText('North Coast Beans');
+  let release = () => {};
+  const held = new Promise<void>(resolve => {release = resolve;});
+  let requested = () => {};
+  const started = new Promise<void>(resolve => {requested = resolve;});
+  await page.route('**/api/vaults/business/members', async r => {
+    requested();
+    await held;
+    await r.fulfill({status:403,json:{code:'vault.forbidden'}});
+  });
+  await page.route('**/api/tools/entities_neighbourhood', r => r.fulfill({json:{error:'not found',code:'entity.not_found'}}));
+  await page.getByLabel('Refresh ontology').click();
+  await started;
+  await expectNoProtectedContent(page);
+  await expect(page.getByRole('status').filter({hasText:'Checking access'})).toBeVisible();
+  release();
+  await expect(page.getByRole('alert').filter({hasText:'unavailable to you'})).toBeVisible();
+  await expectNoProtectedContent(page);
+  await expect.poll(async () => (await cacheKeys(page)).filter(k => k.includes('business'))).toEqual([]);
+});
+
+for (const failure of ['network', '500']) for (const outcome of ['confirmed', 'denied']) {
+  test(`masked neighbourhood with ${failure} membership failure stays closed, retry ${outcome}`, async ({page}) => {
+    await setup(page);
+    await page.getByLabel('Depth', {exact:true}).selectOption('2');
+    await page.getByLabel('Relation', {exact:true}).selectOption('supplies');
+    await page.getByLabel('Direction', {exact:true}).selectOption('in');
+    await page.getByRole('searchbox').fill('North');
+    await expect(page.getByLabel('Object search results')).toContainText('North Coast Beans');
+    await page.clock.install();
+    let attempts = 0;
+    let recovered = false;
+    await page.route('**/api/vaults/business/members', r => {
+      attempts++;
+      if (!recovered) return failure === 'network' ? r.abort('failed') : r.fulfill({status:500,json:{code:'internal'}});
+      return outcome === 'confirmed' ? r.fulfill({json:{results:[]}}) : r.fulfill({status:403,json:{code:'vault.forbidden'}});
+    });
+    await page.route('**/api/tools/entities_neighbourhood', r => r.fulfill({json:{error:'not found',code:'entity.not_found'}}));
+    await page.getByLabel('Refresh ontology').click();
+    const retry = page.getByRole('button', {name:'Try again',exact:true});
+    await expect(retry).toBeVisible();
+    await expect(page.getByRole('alert').filter({hasText:"Couldn't confirm access"})).toBeVisible();
+    await expectNoProtectedContent(page);
+    // One automatic retry, then a longer backoff. Failed checks never reveal cached text.
+    await page.clock.fastForward(2000);
+    await expect.poll(() => attempts).toBe(2);
+    await expect(retry).toBeVisible();
+    await expectNoProtectedContent(page);
+    recovered = true;
+    if (outcome === 'confirmed') await retry.click();
+    else await page.clock.fastForward(4000);
+    if (outcome === 'confirmed') {
+      await expect(page.getByRole('status').filter({hasText:'This object no longer exists'})).toBeVisible();
+      await expect(page.getByRole('searchbox')).toHaveValue('North');
+      await expect(page).toHaveURL(/depth=2/);
+      await expect(page).toHaveURL(/relation=supplies/);
+      await expect(page).toHaveURL(/direction=in/);
+      await expect(page).not.toHaveURL(/focus=/);
+      await expect(page.getByLabel('Object search results')).toContainText('North Coast Beans');
+    } else {
+      await expect(page.getByRole('alert').filter({hasText:'unavailable to you'})).toBeVisible();
+      await expectNoProtectedContent(page);
+      await expect.poll(async () => (await cacheKeys(page)).filter(k => k.includes('business'))).toEqual([]);
+    }
+  });
+}
+
+test('delayed confirmation of a deleted selection preserves input and camera', async ({page}) => {
+  await setup(page);
+  await page.getByLabel('Depth', {exact:true}).selectOption('2');
+  await page.getByLabel('Relation', {exact:true}).selectOption('supplies');
+  await page.getByLabel('Direction', {exact:true}).selectOption('in');
+  await page.getByLabel('Pan right', {exact:true}).click();
+  const camera = await page.locator('[data-camera]').getAttribute('data-camera');
+  await page.getByRole('searchbox').fill('North');
+  await expect(page.getByLabel('Object search results')).toContainText('North Coast Beans');
+  let release = () => {};
+  const held = new Promise<void>(resolve => {release = resolve;});
+  await page.route('**/api/vaults/business/members', async r => {
+    await held;
+    await r.fulfill({json:{results:[]}});
+  });
+  await page.route('**/ontology/objects/n0*', r => r.fulfill({status:404,json:{code:'entity.not_found'}}));
+  await page.getByLabel('Refresh ontology').click();
+  await expectNoProtectedContent(page);
+  await expect(page.getByRole('status').filter({hasText:'Checking access'})).toBeVisible();
+  release();
+  await expect(page.getByRole('status').filter({hasText:'This object no longer exists'})).toBeVisible();
+  await expect(page.getByRole('searchbox')).toHaveValue('North');
+  await expect(page.getByLabel('Depth', {exact:true})).toHaveValue('2');
+  await expect(page.getByLabel('Relation', {exact:true})).toHaveValue('supplies');
+  await expect(page.getByLabel('Direction', {exact:true})).toHaveValue('in');
+  await expect(page.locator('[data-camera]')).toHaveAttribute('data-camera', camera!);
+  await expect(page.getByLabel('Selected object')).toHaveCount(0);
+  await expect(page).toHaveURL(/focus=house/);
+  await expect(page).not.toHaveURL(/selected=/);
+  await expect(page.locator('main')).toContainText('House blend 1kg');
+  await expect(page.locator('main')).not.toContainText('North Coast Beans');
+  await page.getByRole('searchbox').fill('');
+  await expect(page.getByLabel('Recently viewed objects')).toContainText('House blend 1kg');
+});

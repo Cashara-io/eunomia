@@ -8,12 +8,12 @@ import {
   useNeighbourhood,
 } from "@/lib/queries/connections";
 import { ApiError } from "@/lib/api";
-import { useMissingConnectionObjects } from "./ConnectionAccess";
+import { ConnectionContent, useConfirmedConnectionAccess, useMissingConnectionObjects } from "./ConnectionAccess";
 import { useTwinParams } from "./controls";
 import { twinHref } from "./model";
 import { humanLabel, plural } from "./overview-format";
 import KindSummary from "./KindSummary";
-import ConnectionCanvas from "./ConnectionCanvas";
+import ConnectionCanvas, { type ConnectionCanvasInput } from "./ConnectionCanvas";
 import ConnectionSummary from "./ConnectionSummary";
 import ConnectionInspector from "./ConnectionInspector";
 import ReadState from "./ReadState";
@@ -28,6 +28,7 @@ export default function Connections({ space }: { space: string }) {
       className={styles.root}
       aria-label={`${mode === "kinds" ? "Kinds" : "Objects"} connections`}
     >
+      <ConnectionContent>
       <header className={styles.spread}>
         <div>
           <h2>Follow an object and the records that connect it.</h2>
@@ -57,8 +58,9 @@ export default function Connections({ space }: { space: string }) {
             : "Real things, in a local neighbourhood"}
         </span>
       </div>
+      </ConnectionContent>
       {mode === "kinds" ? (
-        <Kinds space={space} />
+        <ConnectionContent><Kinds space={space} /></ConnectionContent>
       ) : (
         <Objects key={space} space={space} />
       )}
@@ -101,6 +103,8 @@ const mobileSnapshot = () => window.matchMedia("(max-width: 640px)").matches;
 function Objects({ space }: { space: string }) {
   const { params, update } = useTwinParams();
   const missing = useMissingConnectionObjects();
+  const confirmed = useConfirmedConnectionAccess();
+  const [canvasInput, setCanvasInput] = useState<ConnectionCanvasInput | null>(null);
   const mobile = useSyncExternalStore(
     subscribeMobile,
     mobileSnapshot,
@@ -160,10 +164,10 @@ function Objects({ space }: { space: string }) {
     return () => window.removeEventListener("keydown", escape);
   });
   useEffect(() => {
-    if (!missing.size) return;
+    if (!confirmed || !missing.size) return;
     if (missing.has(focus)) update({ focus: "", selected: "" }, true);
     else if (missing.has(selected)) update({ selected: "" }, true);
-  }, [missing, focus, selected, update]);
+  }, [confirmed, missing, focus, selected, update]);
   function remember(node: ConnectionNode) {
     setRecent((prev) =>
       [node, ...prev.filter((n) => n.id !== node.id)].slice(0, 4),
@@ -182,6 +186,7 @@ function Objects({ space }: { space: string }) {
     update({ selected: "" });
     focusObject(selected);
   }
+  if (!confirmed) return null;
   return (
     <div>
       {missing.size > 0 && <p role="status">This object no longer exists</p>}
@@ -450,6 +455,8 @@ function Objects({ space }: { space: string }) {
                         >
                           <ConnectionCanvas
                             key={focus}
+                            input={canvasInput}
+                            saveInput={setCanvasInput}
                             scene={scene}
                             focus={focus}
                             selected={selected}
