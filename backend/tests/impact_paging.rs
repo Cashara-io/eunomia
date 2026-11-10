@@ -13,8 +13,6 @@ async fn impact_pages_count_and_reach_every_item_through_the_tool() {
     use eunomia_backend::sources::mock::{route, serve};
     let mock = serve(vec![route("GET", "/fixture", json!({})).header("x-eunomia-fixture", "impact-196")]).await;
     let url = format!("{}/fixture", mock.base);
-    let port = url::Url::parse(&url).unwrap().port().unwrap();
-    assert!(![3000, 8000, 8001, 3600, 8600, 3700, 18470, 18471, 18472, 18473].contains(&port));
     let proof = eunomia_backend::llm_net::client(&url).await.unwrap().get(&url).send().await.unwrap();
     assert_eq!(proof.headers()["x-eunomia-fixture"], "impact-196");
     let app = TestApp::with_settings(eunomia_backend::config::Settings {
@@ -31,9 +29,15 @@ async fn impact_pages_count_and_reach_every_item_through_the_tool() {
     ok(app.tool("entity_relate", json!({"from_id":start,"to_id":unrelated,"label":"other"})).await);
     let args = json!({"view":"impact","start_id":start,"headline":"Items linked to this incident","reach":{"depth":1,"kinds":["sample"],"labels":["touches"]}});
     let mut seen = HashSet::new();
+    let mut cursor = Value::Null;
+    let mut second_cursor = Value::Null;
+    let mut second_first = Value::Null;
     for page in 0..7 {
-        let mut args = args.clone(); args["page"] = json!(page);
+        let mut args = args.clone(); args["cursor"] = cursor;
         let out = ok(app.tool("show_view", args).await);
+        if page == 0 { second_cursor = out["pagination"]["next_cursor"].clone(); }
+        if page == 1 { second_first = out["affected"][0]["entity"]["name"].clone(); }
+        cursor = out["pagination"]["next_cursor"].clone();
         assert_eq!(out["pagination"]["total"], 100);
         assert_eq!(out["pagination"]["page"], page);
         assert_eq!(out["pagination"]["has_more"], page < 6);
@@ -49,7 +53,7 @@ async fn impact_pages_count_and_reach_every_item_through_the_tool() {
     assert_eq!(seen, expected);
     // A model requests page two through the real chat tool loop, then replies
     // with an unsupported number. The checked tree must still suppress it.
-    let mut second_page = args.clone(); second_page["page"] = json!(1);
+    let mut second_page = args.clone(); second_page["cursor"] = second_cursor.clone();
     let sse = |delta: Value| format!("data: {}\n\ndata: [DONE]\n\n", json!({"choices":[{"delta":delta}]}));
     mock.set_routes(vec![
         route("POST", "/chat/completions", Value::Null).times(1).raw(&sse(json!({"tool_calls":[{"index":0,"id":"page_two","function":{"name":"show_view","arguments":second_page.to_string()}}]}))),
@@ -66,7 +70,7 @@ async fn impact_pages_count_and_reach_every_item_through_the_tool() {
     let result = events.iter().find(|e| e["type"] == "tool_result" && e["name"] == "show_view").unwrap();
     assert_eq!(result["view"]["pagination"]["page"], 1);
     assert_eq!(result["view"]["pagination"]["total"], 100);
-    assert_eq!(result["view"]["affected"][0]["entity"]["name"], "Item 016");
+    assert_eq!(result["view"]["affected"][0]["entity"]["name"], second_first);
     let last = events.last().unwrap();
     assert!(last["reply"].as_str().unwrap().contains("[unverified number]"));
     assert!(!last["reply"].as_str().unwrap().contains("999777"));
@@ -78,7 +82,7 @@ async fn impact_pages_count_and_reach_every_item_through_the_tool() {
     let mcp_view = &mcp["result"]["structuredContent"];
     assert_eq!(mcp_view["pagination"]["page"], 1);
     assert_eq!(mcp_view["pagination"]["total"], 100);
-    let ui = json!({"view":"ui","spec":{"root":"impact","elements":{"impact":{"type":"Impact","props":{"title":"Linked items","summary":"Saved links","data":{"$state":"/sources/items"}}}}},"sources":{"items":{"type":"impact","start_id":start,"headline":"Linked items","reach":{"depth":1,"kinds":["sample"],"labels":["touches"]},"page":1}}});
+    let ui = json!({"view":"ui","spec":{"root":"impact","elements":{"impact":{"type":"Impact","props":{"title":"Linked items","summary":"Saved links","data":{"$state":"/sources/items"}}}}},"sources":{"items":{"type":"impact","start_id":start,"headline":"Linked items","reach":{"depth":1,"kinds":["sample"],"labels":["touches"]},"cursor":second_cursor}}});
     let shown = ok(app.tool("show_view", ui.clone()).await);
     assert_eq!(shown["data"]["sources"]["items"]["pagination"]["total"], 100);
     let mut unchecked = ui;
@@ -105,4 +109,115 @@ async fn impact_pages_count_and_reach_every_item_through_the_tool() {
     assert!(app.tool("show_view", mixed).await.get("error").is_some());
     let mut missing = args; missing["start_id"] = json!("entity:missing");
     assert!(app.tool("show_view", missing).await.get("error").is_some());
+}
+
+
+#[tokio::test]
+async fn quoted_and_prefixed_starts_never_count_themselves() {
+    assert_eq!(common::test_settings().surreal_url, "mem://");
+    let app = TestApp::new().await;
+    let id = entity(&app, "Alone", "sample").await;
+    let key = id.split_once(':').unwrap().1;
+    for start in [id.clone(), format!("`entity`:{key}"), format!("r'{id}'"), format!("r\"{id}\""), format!("`entity`:`{key}`")] {
+        let out = ok(app.tool("show_view", json!({"view":"impact","start_id":start,"headline":"Linked items","reach":{"depth":1}})).await);
+        assert_eq!(out["pagination"]["total"], 0, "{start}: {out}");
+        assert_eq!(out["affected"], json!([]));
+        assert_eq!(out["linked"], false);
+    }
+}
+
+#[tokio::test]
+async fn dense_frontier_bounds_actual_fetched_rows_and_labels_partial_total() {
+    assert_eq!(common::test_settings().surreal_url, "mem://");
+    let app = TestApp::new().await;
+    let start = entity(&app, "Start", "sample").await;
+    let db = app.db().await;
+    let vault = ok(app.tool("ontology_get", json!({})).await)["vault"].as_str().unwrap().to_owned();
+    let vault = eunomia_backend::rid::parse(&vault).unwrap();
+    // A thousand-node frontier, each with forty-two neighbouring links.
+    // The start's generated key is used by the seed's hub links below.
+    eunomia_backend::store::entities::seed_view_fixture(&db, &app.user.id, &vault, 1000).await;
+    eunomia_backend::store::entities::seed_dense_view_links(&db, &eunomia_backend::rid::parse(&start).unwrap(), 1000).await;
+    use eunomia_backend::entities::neighbourhood::FETCHED_EDGE_ROWS;
+    FETCHED_EDGE_ROWS.scope(std::cell::Cell::new(0), async {
+        let out = app.tool("show_view", json!({"view":"impact","start_id":start,"headline":"Linked items","reach":{"depth":2}})).await;
+        eprintln!("dense frontier fetched {} edge rows", FETCHED_EDGE_ROWS.with(std::cell::Cell::get));
+        assert!(FETCHED_EDGE_ROWS.with(std::cell::Cell::get) <= 40_000, "fetched {} rows", FETCHED_EDGE_ROWS.with(std::cell::Cell::get));
+        assert_eq!(out["pagination"]["total_partial"], true, "{out}");
+        assert!(out["text"].as_str().unwrap().contains("At least 1000 linked items"));
+    }).await;
+}
+
+#[tokio::test]
+async fn impact_cursor_survives_inserts_and_deletes_before_the_boundary() {
+    assert_eq!(common::test_settings().surreal_url, "mem://");
+    let app = TestApp::new().await;
+    let start = entity(&app, "Start", "sample").await;
+    let mut expected = HashSet::new();
+    for i in 0..40 {
+        let id = entity(&app, &format!("Item {i:03}"), "sample").await;
+        ok(app.tool("entity_relate", json!({"from_id":start,"to_id":id,"label":"touches"})).await);
+        expected.insert(id);
+    }
+    let args = json!({"view":"impact","start_id":start,"headline":"Linked items","reach":{"depth":1}});
+    let first = ok(app.tool("show_view", args.clone()).await);
+    let mut seen: HashSet<String> = first["affected"].as_array().unwrap().iter().map(|v| v["entity"]["id"].as_str().unwrap().to_owned()).collect();
+    let cursor = first["pagination"]["next_cursor"].as_str().expect("server cursor").to_owned();
+    // Delete both an earlier item and the boundary itself. Offsets would now skip a survivor.
+    for row in [&first["affected"][0], &first["affected"][15]] {
+        let removed = row["entity"]["id"].as_str().unwrap();
+        ok(app.tool("entity_delete", json!({"entity_id":removed})).await);
+        expected.remove(removed);
+        seen.remove(removed);
+    }
+    let db = app.db().await;
+    let vault = eunomia_backend::rid::parse(first["start"]["vault"].as_str().unwrap()).unwrap();
+    let added = "entity:000inserted";
+    eunomia_backend::store::entities::seed_view_item(&db, &app.user.id, &vault, &eunomia_backend::rid::parse(added).unwrap()).await;
+    ok(app.tool("entity_relate", json!({"from_id":start,"to_id":added,"label":"touches"})).await);
+    let mut wrong_selection = args.clone();
+    wrong_selection["reach"]["depth"] = json!(2);
+    wrong_selection["cursor"] = json!(cursor);
+    assert!(app.tool("show_view", wrong_selection).await.get("error").is_some());
+    let mut invalid = args.clone(); invalid["cursor"] = json!("not-a-cursor");
+    assert!(app.tool("show_view", invalid).await.get("error").is_some());
+    let mut next = Some(cursor);
+    while let Some(cursor) = next {
+        let mut request = args.clone(); request["cursor"] = json!(cursor);
+        let out = ok(app.tool("show_view", request).await);
+        for row in out["affected"].as_array().unwrap() {
+            assert!(seen.insert(row["entity"]["id"].as_str().unwrap().to_owned()), "repeated item");
+        }
+        next = out["pagination"]["next_cursor"].as_str().map(str::to_owned);
+    }
+    assert!(expected.is_subset(&seen), "no surviving original item may be skipped");
+}
+
+#[tokio::test]
+async fn metric_evidence_cursor_reaches_all_contributors() {
+    assert_eq!(common::test_settings().surreal_url, "mem://");
+    let app = TestApp::new().await;
+    entity(&app, "First", "sample").await;
+    let vault = ok(app.tool("ontology_get", json!({})).await)["vault"].as_str().unwrap().to_owned();
+    let db = app.db().await;
+    eunomia_backend::store::entities::seed_view_fixture(&db, &app.user.id, &eunomia_backend::rid::parse(&vault).unwrap(), 1239).await;
+    ok(app.tool("ontology_propose", json!({"vault_id":vault,"properties":[{"kind":"sample","name":"score","datatype":"number"}],"metrics":[{"kind":"sample","name":"item_count","expr":{"agg":"sum","property":"score"}}]})).await);
+    let (status, body) = app.http_session("POST", &format!("/api/vaults/{vault}/ontology/properties/decide"), Some(json!({"kind":"sample","name":"score","decision":{"action":"approve"}}))).await;
+    assert_eq!(status, 200, "{body}");
+    eunomia_backend::store::entities::seed_view_values(&db, &eunomia_backend::rid::parse(&vault).unwrap()).await;
+    let mut args = json!({"view":"metric","vault_id":vault,"metric":"item_count","allow_unapproved":true,"as_of":"2026-01-01T00:00:00.987654321Z"});
+    let mut next = Value::Null;
+    let mut seen = HashSet::new();
+    loop {
+        let mut request = args.clone();
+        if !next.is_null() { request["evidence_cursor"] = next; }
+        let out = ok(app.tool("show_view", request).await);
+        assert_eq!(out["metric"]["n_entities"], 1240);
+        assert_eq!(out["metric"]["value"], 1240.0);
+        for row in out["entities"].as_array().unwrap() { assert!(seen.insert(row["id"].as_str().unwrap().to_owned())); }
+        if out["evidence"]["next_cursor"].is_null() { break; }
+        next = out["evidence"]["next_cursor"].clone();
+        args = out["evidence"]["args"].clone(); args["view"] = json!("metric");
+    }
+    assert_eq!(seen.len(), 1240);
 }

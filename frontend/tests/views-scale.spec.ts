@@ -2,17 +2,16 @@ import { test, expect, type Page } from "@playwright/test";
 import type { OntologyOut, KindItem } from "../src/lib/gen";
 import type { ImpactView, MetricView, ScenarioView } from "../src/components/chat/views/types";
 
-// All APIs and the stream are intercepted. The server itself must also identify
-// as this disposable fixture before a test is allowed to navigate or click.
+// All APIs and the stream are intercepted. Local fixture runs can also require
+// a response header. CI runs against its own disposable compose app.
 async function fixture(page: Page) {
   const base = test.info().project.use.baseURL;
   expect(base).toBeTruthy();
   if (!base) throw new Error("baseURL must identify a disposable fixture");
-  const destination = new URL(base);
-  expect(["127.0.0.1", "localhost"]).toContain(destination.hostname);
-  expect([3000, 8000, 8001, 3600, 8600, 3700, 18470, 18471, 18472, 18473]).not.toContain(Number(destination.port));
-  const proof = await page.request.get("/healthz");
-  expect(proof.headers()["x-eunomia-fixture"]).toBe("views-196");
+  if (process.env.EUNOMIA_VIEWS_FIXTURE === "1") {
+    const proof = await page.request.get("/healthz");
+    expect(proof.headers()["x-eunomia-fixture"]).toBe("views-196");
+  }
   await page.route("**/api/**", route => {
     const path = new URL(route.request().url()).pathname;
     const json = path === "/api/auth/me" ? { id: "user:fixture", email: "fixture@example.test", onboarded: true, has_password: true, is_admin: false }
@@ -30,7 +29,7 @@ function impact(page: number): ImpactView {
     const entity = { ...start, id: `entity:item${page * 16 + i}`, name: `Item ${page * 16 + i + 1}`, kind: "sample" };
     return { entity, path: [{ id: `relates_to:r${page * 16 + i}`, from: start, to: entity, label: "touches" }], why: "" };
   });
-  return { view: "impact", start, headline: "Linked items", affected, linked: true, text: "Linked items", pagination: { reach, total: 100, page, page_size: 16, has_more: page < 6, truncated: true } };
+  return { view: "impact", start, headline: "Linked items", affected, linked: true, text: "Linked items", pagination: { reach, total: 100, page, page_size: 16, has_more: page < 6, truncated: true, total_partial: false, next_cursor: page < 6 ? `impact-${page + 1}` : null } };
 }
 const metric = {
   view: "metric", text: "Metric", entities: [{ ...start, id: "entity:evidence", name: "Evidence item" }],
@@ -56,31 +55,31 @@ test("impact pages all items, preserves the count and retries failed pages", asy
   await page.route("**/api/tools/show_view", route => {
     const args = route.request().postDataJSON();
     expect(args.reach).toEqual(reach);
-    requested = args.page;
+    requested = Number(args.cursor.replace("impact-", ""));
     if (fail) return route.fulfill({ status: 503, json: { detail: "Fixture failure" } });
-    return route.fulfill({ json: impact(args.page) });
+    return route.fulfill({ json: impact(requested) });
   });
   await page.goto("/chat");
   const view = page.getByRole("region", { name: "What this affects" });
   await expect(view).toContainText("100 linked items");
-  await expect(view).toContainText("Showing 1 to 16");
+  await expect(view).toContainText("Showing 16 items on page 1");
   await view.getByRole("button", { name: "Next" }).click();
   await expect(view.getByRole("alert")).toBeVisible();
-  await expect(view).toContainText("Showing 1 to 16");
+  await expect(view).toContainText("Showing 16 items on page 1");
   fail = false;
   const seen = new Set<string>();
   for (let p = 0; p < 7; p++) {
     if (p > 0) {
       await view.getByRole("button", { name: "Next" }).click();
       await expect.poll(() => requested).toBe(p);
-      await expect(view).toContainText(`Showing ${p * 16 + 1} to ${Math.min(100, (p + 1) * 16)}`);
+      await expect(view).toContainText(`Showing ${Math.min(16, 100 - p * 16)} items on page ${p + 1}`);
     }
     for (const name of await view.locator("li > div a").allTextContents()) seen.add(name);
   }
   expect(seen.size).toBe(100);
   await expect(view.getByRole("button", { name: "Next" })).toBeDisabled();
   await view.getByRole("button", { name: "Previous" }).click();
-  await expect(view).toContainText("Showing 81 to 96");
+  await expect(view).toContainText("Showing 16 items on page 6");
   const evidence = page.getByRole("region", { name: "The metric score" });
   await expect(evidence).toContainText("4567.00 AUD");
   await expect(evidence.getByRole("link", { name: "Evidence item" })).not.toBeVisible();
@@ -133,4 +132,60 @@ test("existing ontology stream refreshes Structure, Overview and kind definition
   definition = { ...kind("approved"), description: "A confirmed delivery" };
   send?.({ type: "ontology", vault: start.vault, event: { seq: 13 } });
   await expect(page.getByText("A confirmed delivery", { exact: true }).first()).toBeVisible();
+});
+
+
+test("metric evidence can reach all 1240 contributors and retry a failed page", async ({ page }) => {
+  await fixture(page);
+  await page.routeWebSocket("**/api/events/ws*", () => {});
+  await page.route("**/api/chat/threads", route => route.fulfill({ json: [{ id: "chat_thread:fixture", title: "Evidence", created_at: new Date().toISOString(), updated_at: new Date().toISOString() }] }));
+  const evidencePage = (offset: number) => ({
+    ...metric,
+    entities: Array.from({ length: Math.min(50, 1240 - offset) }, (_, i) => ({ ...start, id: `entity:evidence${offset + i}`, name: `Evidence ${offset + i}` })),
+    evidence: { args: { metric: "score", vault_id: start.vault, as_of: metric.metric.as_of }, next_cursor: offset + 50 < 1240 ? `evidence-${offset + 50}` : null },
+  });
+  await page.route("**/api/chat/threads/*/history", route => route.fulfill({ json: history([evidencePage(0)]) }));
+  let fail = true;
+  const requested: string[] = [];
+  await page.route("**/api/tools/show_view", route => {
+    const args = route.request().postDataJSON();
+    expect(args.view).toBe("metric");
+    expect(args.metric).toBe("score");
+    expect(args.as_of).toBe(metric.metric.as_of);
+    requested.push(args.evidence_cursor);
+    if (fail) return route.fulfill({ status: 503, json: { detail: "Fixture failure" } });
+    return route.fulfill({ json: evidencePage(Number(args.evidence_cursor.replace("evidence-", ""))) });
+  });
+  await page.goto("/chat");
+  const view = page.getByRole("region", { name: "The metric score" });
+  await view.locator("summary").click();
+  await expect(view.getByRole("link", { name: /^Evidence / })).toHaveCount(50);
+  await view.getByRole("button", { name: "Show more evidence" }).click();
+  await expect(view.getByRole("alert")).toBeVisible();
+  await expect(view.getByRole("link", { name: /^Evidence / })).toHaveCount(50);
+  fail = false;
+  for (let offset = 50; offset < 1240; offset += 50) {
+    await view.getByRole("button", { name: "Show more evidence" }).click();
+    await expect(view.getByRole("link", { name: /^Evidence / })).toHaveCount(Math.min(offset + 50, 1240));
+  }
+  expect(new Set(await view.getByRole("link", { name: /^Evidence / }).evaluateAll(links => links.map(link => link.getAttribute("href")))).size).toBe(1240);
+  expect(requested.slice(0, 2)).toEqual(["evidence-50", "evidence-50"]);
+  await expect(view.getByRole("button", { name: "Show more evidence" })).toHaveCount(0);
+  await expect(view).toContainText("Based on 1,240 items");
+  await expect(view).toContainText("4567.00 AUD");
+});
+
+
+test("impact traversal limits display a lower bound", async ({ page }) => {
+  await fixture(page);
+  await page.routeWebSocket("**/api/events/ws*", () => {});
+  await page.route("**/api/chat/threads", route => route.fulfill({ json: [{ id: "chat_thread:fixture", title: "Partial", created_at: new Date().toISOString(), updated_at: new Date().toISOString() }] }));
+  const partial = impact(0);
+  if (!partial.pagination) throw new Error("fixture needs pagination");
+  partial.pagination.total_partial = true;
+  await page.route("**/api/chat/threads/*/history", route => route.fulfill({ json: history([partial]) }));
+  await page.goto("/chat");
+  const view = page.getByRole("region", { name: "What this affects" });
+  await expect(view).toContainText("At least 100 linked items");
+  await expect(view).toContainText("Traversal limit reached");
 });

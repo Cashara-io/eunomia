@@ -28,7 +28,7 @@ pub struct Dataset {
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all="snake_case")]
 pub enum Bucket { Day, Week, Month, Quarter, Year }
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Sort { pub property: String, #[serde(default)] pub descending: bool }
 #[derive(Debug, Clone, Deserialize)]

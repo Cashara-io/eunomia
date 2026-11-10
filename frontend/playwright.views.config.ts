@@ -1,6 +1,7 @@
 import { defineConfig } from "@playwright/test";
 
 // Fixed, isolated ports. Never reuse an existing stack for these mocked tests.
+process.env.EUNOMIA_VIEWS_FIXTURE = "1";
 const baseURL = "http://127.0.0.1:19196";
 export default defineConfig({
   testDir: "./tests",

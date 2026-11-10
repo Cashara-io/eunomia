@@ -12,6 +12,7 @@
 //! names and kinds from the database, plus [`Shown::text`], a plain rendering for a terminal.
 
 mod decimal;
+mod cursor;
 pub(crate) mod impact;
 pub use impact::{ImpactReach, ImpactPage};
 pub mod ui;
@@ -57,6 +58,8 @@ pub enum ViewSpec {
         reach: Option<ImpactReach>,
         #[serde(default)]
         page: usize,
+        #[serde(default)]
+        cursor: Option<String>,
     },
     Subgraph {
         title: String,
@@ -65,7 +68,7 @@ pub enum ViewSpec {
         relation_ids: Vec<String>,
     },
     /// The same arguments as `metric_eval`; there is no field for a value.
-    Metric { #[serde(flatten)] args: EvalArgs },
+    Metric { #[serde(default)] evidence_cursor: Option<String>, #[serde(flatten)] args: EvalArgs },
     /// The same arguments as `scenario_run`, under `scenario`; there is no field for a number.
     Scenario { scenario: ScenarioArgs, headline: String },
 }
@@ -112,9 +115,15 @@ pub enum View {
     Impact { start: EntityRef, headline: String, affected: Vec<Affected>, linked: bool, #[serde(skip_serializing_if = "Option::is_none")] pagination: Option<ImpactPage> },
     Subgraph { title: String, entities: Vec<EntityRef>, relations: Vec<Step> },
     /// `metric` is the server's own run; `entities` are its `entity_ids` with names, the receipts.
-    Metric { metric: MetricEvalOut, entities: Vec<EntityRef> },
+    Metric { metric: Box<MetricEvalOut>, entities: Vec<EntityRef>, evidence: MetricEvidence },
     /// `result` is the server's own run of the what-if.
     Scenario { headline: String, result: ScenarioOut },
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct MetricEvidence {
+    pub args: serde_json::Value,
+    pub next_cursor: Option<String>,
 }
 
 /// `show_view`'s result: the view's fields, plus `text`.
@@ -134,14 +143,14 @@ tokio::task_local! {
 pub async fn show(db: &OrgDb, owner: &RecordId, spec: ViewSpec) -> AppResult<Shown> {
     let view = match spec {
         ViewSpec::Ui { spec, sources } => ui::resolve(db, owner, spec, sources, TURN_STARTED.try_with(|start| *start).unwrap_or_default()).await?,
-        ViewSpec::Impact { start_id, headline, affected, reach, page } => {
+        ViewSpec::Impact { start_id, headline, affected, reach, page, cursor } => {
             if let Some(reach) = reach {
                 if !affected.is_empty() { return Err(AppError::bad_request("use reach or affected, not both")); }
-                let view = impact::resolve(db, owner, &start_id, &headline, reach, page).await?;
+                let view = impact::resolve(db, owner, &start_id, &headline, reach, page, cursor.as_deref()).await?;
                 let text = view.text();
                 return Ok(Shown { view, text });
             }
-            if page != 0 { return Err(AppError::bad_request("page requires reach")); }
+            if page != 0 || cursor.is_some() { return Err(AppError::bad_request("page and cursor require reach")); }
             if affected.len() > MAX_AFFECTED {
                 return Err(AppError::bad_request(format!("an impact view lists at most {MAX_AFFECTED} affected entities")));
             }
@@ -196,12 +205,23 @@ pub async fn show(db: &OrgDb, owner: &RecordId, spec: ViewSpec) -> AppResult<Sho
             }
             View::Subgraph { title: clean("title", &title, MAX_HEADLINE)?, entities, relations }
         }
-        ViewSpec::Metric { args } => {
-            let out = metric::eval(db, owner, &args).await?;
-            let ids = out.entity_ids.iter().map(String::as_str);
-            let graph = Resolved::load(db, owner, ids, std::iter::empty()).await?;
+        ViewSpec::Metric { mut args, evidence_cursor } => {
+            if args.as_of.is_none() { args.as_of = Some(chrono::Utc::now().to_rfc3339()); }
+            let mut out = metric::eval_all_receipts(db, owner, &args).await?;
+            args.vault_id = Some(out.vault.clone());
+            let source = serde_json::to_value(&args).map_err(|_| AppError::internal("cannot encode metric source"))?;
+            let scope = cursor::scope(&source);
+            let boundary = cursor::Cursor::read(evidence_cursor.as_deref(), &scope)?;
+            let mut ids = out.entity_ids.into_iter().filter(|id| boundary.as_ref().is_none_or(|c| id > &c.key));
+            let page_ids: Vec<_> = ids.by_ref().take(metric::MAX_ENTITY_IDS).collect();
+            let next_cursor = if ids.next().is_some() {
+                page_ids.last().map(|id| cursor::Cursor::next(id.clone(), boundary.as_ref().map_or(1, |c| c.page + 1), scope))
+            } else { None };
+            out.truncated = boundary.is_some() || next_cursor.is_some();
+            out.entity_ids = page_ids;
+            let graph = Resolved::load(db, owner, out.entity_ids.iter().map(String::as_str), std::iter::empty()).await?;
             let entities = out.entity_ids.iter().filter_map(|id| graph.entity(id).ok()).collect();
-            View::Metric { metric: out, entities }
+            View::Metric { metric: Box::new(out), entities, evidence: MetricEvidence { args: source, next_cursor } }
         }
         ViewSpec::Scenario { scenario: args, headline } => {
             let headline = clean("headline", &headline, MAX_HEADLINE)?;
@@ -355,8 +375,9 @@ impl View {
             View::Impact { start, headline, affected, linked, pagination } => {
                 let mut out = format!("{headline}\nStarting from {} ({}).", start.name, words(&start.kind));
                 if let Some(p) = pagination {
-                    out.push_str(&format!("\n{} linked items in this selection. Showing {} on page {}.{}", p.total, affected.len(), p.page + 1,
-                        if p.has_more { " More remain: call show_view with the same reach and the next page." } else { "" }));
+                    out.push_str(&format!("\n{}{} linked items in this selection. Showing {} on page {}.{}{}", if p.total_partial { "At least " } else { "" }, p.total, affected.len(), p.page + 1,
+                        if p.total_partial { " Traversal limit reached. Narrow depth or labels for a complete count." } else { "" },
+                        if p.has_more { " More remain: call show_view with the same reach and cursor set to next_cursor. Items added after the first page may not appear." } else { "" }));
                 }
                 if !linked {
                     out.push_str(&format!(
@@ -380,7 +401,7 @@ impl View {
                 }
                 out
             }
-            View::Metric { metric: m, entities } => metric_text(m, entities),
+            View::Metric { metric: m, entities, .. } => metric_text(m, entities),
             View::Scenario { headline, result } => scenario_text(headline, result),
         }
     }

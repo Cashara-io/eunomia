@@ -545,7 +545,7 @@ impl ChatProse {
                 }
                 for (key,v) in m {
                     // Opaque IDs cannot authorise claims, and counters stay unit-free.
-                    if key == "id" || key == "vault" || key.ends_with("_id") || key.ends_with("_ids") { continue; }
+                    if key == "id" || key == "vault" || (key == "evidence" && m.get("view").and_then(Value::as_str) == Some("metric")) || key == "next_cursor" || key.ends_with("_id") || key.ends_with("_ids") { continue; }
                     let unit = if matches!(key.as_str(), "count" | "distinct" | "n" | "n_entities" | "total_rows" | "limit" | "offset") { ChatUnit::Plain }
                         else { columns.get(key).cloned().unwrap_or_else(|| own_unit.clone()) };
                     self.collect(v, &unit, &columns);
@@ -667,6 +667,16 @@ impl ChatProse {
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn paging_metadata_cannot_authorise_prose_numbers() {
+        let mut prose = ChatProse::default();
+        prose.result(&json!({"view":"metric","metric":{"value":12},"evidence":{"args":{"top_n":987654,"filters":[{"value":876543}]},"next_cursor":"opaque765432"}}));
+        assert!(prose.check("The result is 12").is_ok());
+        for text in ["The result is 987654", "The result is 876543", "The result is 765432"] {
+            assert!(prose.check(text).is_err(), "{text}");
+        }
+    }
+
     #[test]
     fn chat_rounds_to_displayed_precision_and_scale() {
         for (evidence, good, bad) in [

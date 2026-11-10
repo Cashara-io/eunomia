@@ -12,20 +12,22 @@ const away = (n: number) => (n === 1 ? "Directly linked" : `${n} links away`);
  * relations away they are, each with the chain that reaches it and the model's reason. */
 export default function ImpactView({ view }: { view: Impact }) {
   const [loaded, setLoaded] = useState<Pick<Impact, "affected" | "pagination"> | null>(null);
+  const [history, setHistory] = useState<Pick<Impact, "affected" | "pagination">[]>([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const current = loaded ?? view;
   const pagination = current.pagination;
-  async function load(page: number) {
-    if (!pagination || pending) return;
+  async function load() {
+    if (!pagination?.next_cursor || pending) return;
     setPending(true);
     setError("");
     try {
       const next = await invoke<Impact | { error: string }>("show_view", {
         view: "impact", start_id: view.start.id, headline: "Linked items",
-        reach: pagination.reach, page,
+        reach: pagination.reach, cursor: pagination.next_cursor,
       });
       if ("error" in next) throw new Error(next.error);
+      setHistory([...history, current]);
       setLoaded({ affected: next.affected, pagination: next.pagination });
     } catch {
       setError("Could not load linked items. Try again.");
@@ -59,13 +61,13 @@ export default function ImpactView({ view }: { view: Impact }) {
       )}
       {pagination && <div className="flex flex-col gap-2">
         <p className="text-[13px]" role="status">
-          {pagination.total.toLocaleString("en-AU")} linked items in this selection.
-          {" "}Showing {current.affected.length === 0 ? 0 : pagination.page * pagination.page_size + 1} to {pagination.page * pagination.page_size + current.affected.length}.
-          {pagination.truncated && " This page is only part of the full list."}
+          {pagination.total_partial && "At least "}{pagination.total.toLocaleString("en-AU")} linked items in this selection.
+          {" "}Showing {current.affected.length} items on page {pagination.page + 1}.
+          {pagination.total_partial ? " Traversal limit reached. Narrow the depth or labels for a complete count." : pagination.truncated && " This page is only part of the full list."}
         </p>
         <div className="flex gap-2" aria-label="Impact pages">
-          <button className="btn btn-sm" disabled={pending || pagination.page === 0} onClick={() => void load(pagination.page - 1)}>Previous</button>
-          <button className="btn btn-sm" disabled={pending || !pagination.has_more} onClick={() => void load(pagination.page + 1)}>Next</button>
+          <button className="btn btn-sm" disabled={pending || history.length === 0} onClick={() => { setLoaded(history[history.length - 1]); setHistory(history.slice(0, -1)); setError(""); }}>Previous</button>
+          <button className="btn btn-sm" disabled={pending || !pagination.has_more} onClick={() => void load()}>Next</button>
         </div>
         {pending && <p role="status">Loading linked items…</p>}
         {error && <p role="alert">{error}</p>}

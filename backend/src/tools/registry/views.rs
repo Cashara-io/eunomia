@@ -27,7 +27,8 @@ fn schema() -> serde_json::Value {
             "headline": {"type": "string", "description": "impact: one sentence, what happened; scenario: one sentence, what the what-if asks (at most 200 characters)"},
             "scenario": {"type": "object", "description": "scenario: the same arguments you gave scenario_run (changes, metrics, vault_id, as_of, impact_from, depth)"},
             "reach": views::impact::schema(),
-            "page": {"type":"integer","minimum":0,"description":"impact with reach: zero-based page, default 0; repeat the same reach and increment page to fetch all items"},
+            "cursor": {"type":"string","description":"impact with reach: previous next_cursor; repeat the same reach. Sorted by immutable record ID. Items added after the first page may not appear. total_partial means the total is a lower bound: say at least N"},
+            "evidence_cursor": {"type":"string","description":"metric: previous evidence.next_cursor; repeat evidence.args for the next contributors. Items added after the first page may not appear"},
             "affected": {
                 "type": "array",
                 "description": "impact: each affected entity once",

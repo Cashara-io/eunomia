@@ -1145,7 +1145,7 @@ pub async fn decide_metric(db: &OrgDb, user: &RecordId, vault: &RecordId, kind: 
 // ---------------------------------------------------------------------------
 
 /// What `metric_eval` was asked to run.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct EvalArgs {
     /// Approved property, or link:label for an approved outgoing link.
@@ -1533,6 +1533,15 @@ fn anchor_warnings(conds: &[&Cond], entities: &[&String], values: &Values) -> Ve
 /// Runs a metric by name for `owner`. Only an approved metric runs, unless `allow_unapproved` lets a
 /// proposed one run (marked so); a rejected metric with a merge target runs that one.
 pub async fn eval(db: &OrgDb, owner: &RecordId, args: &EvalArgs) -> AppResult<MetricEvalOut> {
+    eval_with_receipt_limit(db, owner, args, MAX_ENTITY_IDS).await
+}
+
+/// View paging reads the same computed contributor set before the normal receipt cap.
+pub(crate) async fn eval_all_receipts(db: &OrgDb, owner: &RecordId, args: &EvalArgs) -> AppResult<MetricEvalOut> {
+    eval_with_receipt_limit(db, owner, args, usize::MAX).await
+}
+
+async fn eval_with_receipt_limit(db: &OrgDb, owner: &RecordId, args: &EvalArgs, receipt_limit: usize) -> AppResult<MetricEvalOut> {
     let vault_id = args.vault_id.as_deref().map(str::trim).filter(|v| !v.is_empty()).map(|v| crate::rid::parse(v).map_err(|_| AppError::coded(ErrorCode::VaultNotFound, "Vault not found."))).transpose()?;
     let vault = resolve(db, owner, vault_id.as_ref(), Action::ReadMemories).await?;
     match prepare(db, &vault, args).await {
@@ -1548,7 +1557,7 @@ pub async fn eval(db: &OrgDb, owner: &RecordId, args: &EvalArgs) -> AppResult<Me
             let what = if args.related_to.is_some() { "The metric with the entity it is narrowed to" } else { args.metric.trim() };
             Err(super::scope::found_in(e, what, &homes))
         }
-        prepared => prepared?.run(None),
+        prepared => prepared?.run_with_receipt_limit(None, receipt_limit),
     }
 }
 
@@ -1806,6 +1815,10 @@ impl Prepared {
     /// The metric over the loaded values, or over them with `overlay`'s values in place and its removed
     /// entities left out: the same arithmetic either way.
     pub(super) fn run(&self, overlay: Option<&Overlay>) -> AppResult<MetricEvalOut> {
+        self.run_with_receipt_limit(overlay, MAX_ENTITY_IDS)
+    }
+
+    fn run_with_receipt_limit(&self, overlay: Option<&Overlay>, receipt_limit: usize) -> AppResult<MetricEvalOut> {
         let mut out = self.out.clone();
         if self.nothing {
             return Ok(out);
@@ -1872,8 +1885,8 @@ impl Prepared {
             out.warnings.push(format!("no {} matched as of {}: nothing was computed from any entity", words(kind.as_str()), out.as_of));
         }
         out.n_entities = used.len();
-        out.truncated = used.len() > MAX_ENTITY_IDS;
-        out.entity_ids = used.into_iter().take(MAX_ENTITY_IDS).collect();
+        out.truncated = used.len() > receipt_limit;
+        out.entity_ids = used.into_iter().take(receipt_limit).collect();
         Ok(out)
     }
 }
