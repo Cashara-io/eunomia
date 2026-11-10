@@ -9,7 +9,7 @@ test("two contexts see proposals, durable reasons and stale-review conflicts liv
   const vaultResponse = await page.request.post("/api/vaults", { data: { name: "Live proposal proof" } });
   expect(vaultResponse.ok()).toBeTruthy();
   const vault = await vaultResponse.json();
-  const tokenResponse = await page.request.post("/api/auth/tokens", { data: { name: "Mapping app" } });
+  const tokenResponse = await page.request.post("/api/auth/tokens", { data: { name: "Mapping app", vault_id: vault.id } });
   const { token } = await tokenResponse.json();
   const reviewer = await browser.newContext({ storageState: await page.context().storageState() });
   const review = await reviewer.newPage();

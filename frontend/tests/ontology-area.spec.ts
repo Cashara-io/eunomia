@@ -24,7 +24,7 @@ async function seed(page: Page) {
   const vault = await created.json();
   const { token } = await (
     await page.request.post("/api/auth/tokens", {
-      data: { name: "Twin test fixture" },
+      data: { name: "Twin test fixture", vault_id: vault.id },
     })
   ).json();
   const proposed = await page.request.post("/mcp", {

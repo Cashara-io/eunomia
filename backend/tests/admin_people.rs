@@ -86,7 +86,7 @@ async fn a_suspended_account_loses_sessions_tokens_and_sign_in() {
     let app = common::TestApp::new().await;
     let bob = common::register(&app.state, "bob@example.com").await;
     let owner_cookie = app.session_cookie().await;
-    let bob_token = models_user::create_api_token(&app.state.control, &bob.id, "laptop").await.unwrap().token;
+    let bob_token = models_user::create_api_token_with(&app.state.control, &bob.id, "laptop", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token;
     let bob_cookie = cookie_of(login(&app, &bob.email).await.1);
     // both work, and are now cached by the gate
     let ((status, _), _) = common::http(&app.router, "GET", "/api/auth/me", None, None, Some(&bob_cookie)).await;
@@ -136,8 +136,8 @@ async fn an_admin_sees_and_revokes_someone_elses_api_tokens() {
     let bob = common::register(&app.state, "bob@example.com").await;
     let carol = common::register(&app.state, "carol@example.com").await;
     let owner_cookie = app.session_cookie().await;
-    let laptop = models_user::create_api_token(&app.state.control, &bob.id, "work laptop").await.unwrap();
-    models_user::create_api_token(&app.state.control, &bob.id, "ci").await.unwrap();
+    let laptop = models_user::create_api_token_with(&app.state.control, &bob.id, "work laptop", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap();
+    models_user::create_api_token_with(&app.state.control, &bob.id, "ci", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap();
     let bob_cookie = cookie_of(login(&app, &bob.email).await.1);
     let tokens_path = format!("/api/admin/people/{}/tokens", bob.id.to_string());
     let revoke_path = format!("{tokens_path}/{}", laptop.id.to_string());

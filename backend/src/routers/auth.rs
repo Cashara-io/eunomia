@@ -89,15 +89,27 @@ struct Credentials {
 struct TokenCreate {
     name: String,
     /// Any of `memory:read`, `memory:write`, `vaults:admin`, `connectors`. Defaults
-    /// to all of them. Cannot exceed the creating credential's own scopes.
+    /// to read and write memory when omitted or null. Cannot exceed the creating credential's own scopes.
     #[serde(default)]
     scopes: Option<Vec<String>>,
-    /// Restrict the token to one vault you belong to.
-    #[serde(default)]
-    vault_id: Option<String>,
-    /// RFC 3339 timestamp in the future. Omit for a token that never expires.
-    #[serde(default)]
-    expires_at: Option<String>,
+    /// Omit for your Personal space. Explicit null allows all your spaces.
+    /// A string restricts the token to one vault you belong to.
+    #[serde(default, deserialize_with = "explicit_null")]
+    #[schema(value_type = Option<String>, required = false)]
+    vault_id: Option<Option<String>>,
+    /// RFC 3339 timestamp in the future. Omit for 90 days. Explicit null never expires.
+    #[serde(default, deserialize_with = "explicit_null")]
+    #[schema(value_type = Option<String>, required = false)]
+    expires_at: Option<Option<String>>,
+}
+
+// Serde normally collapses missing and null. Keep deliberate opt-ins separate from defaults.
+fn explicit_null<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer).map(Some)
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]
@@ -376,7 +388,7 @@ async fn create_token(
     };
     check_token_name(&name)?;
     let scopes: Vec<String> = match body.scopes {
-        None => scopes::ALL.iter().map(|s| s.to_string()).collect(),
+        None => vec![scopes::MEMORY_READ.to_string(), scopes::MEMORY_WRITE.to_string()],
         Some(s) if s.is_empty() => return Err(AppError::bad_request("Choose at least one scope.")),
         Some(mut s) => {
             if let Some(bad) = s.iter().find(|n| !scopes::is_known(n)) {
@@ -391,10 +403,11 @@ async fn create_token(
     for s in &scopes {
         authz::require_scope(s)?;
     }
-    let vault = match body.vault_id.as_deref().filter(|v| !v.is_empty()) {
-        None => None,
-        Some(v) => {
-            let rid: RecordId = crate::rid::parse(v)
+    let vault = match body.vault_id {
+        None => Some(crate::vaults::service::personal_vault_id(&state.org(&user.org).await?.db, &user.id).await?),
+        Some(None) => None,
+        Some(Some(v)) => {
+            let rid: RecordId = crate::rid::parse(&v)
                 .ok()
                 .filter(|r: &RecordId| r.table() == "vault")
                 .ok_or_else(|| AppError::coded(ErrorCode::VaultNotFound, "Vault not found."))?;
@@ -402,10 +415,11 @@ async fn create_token(
             Some(rid)
         }
     };
-    let expires = match body.expires_at.as_deref().filter(|v| !v.is_empty()) {
-        None => None,
-        Some(v) => {
-            let at = chrono::DateTime::parse_from_rfc3339(v)
+    let expires = match body.expires_at {
+        None => Some(chrono::Utc::now() + chrono::Duration::days(90)),
+        Some(None) => None,
+        Some(Some(v)) => {
+            let at = chrono::DateTime::parse_from_rfc3339(&v)
                 .map_err(|_| AppError::bad_request("expires_at must be an RFC 3339 timestamp."))?
                 .with_timezone(&chrono::Utc);
             if at <= chrono::Utc::now() {

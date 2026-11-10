@@ -15270,7 +15270,8 @@
           },
           "role": {
             "type": "string",
-            "description": "`edit` (the other Eunomia can add and change; the default) or `read`."
+            "description": "`read` by default. Explicit `edit` lets the other Eunomia add and change.",
+            "default": "read"
           }
         }
       },
@@ -15925,7 +15926,7 @@
               "string",
               "null"
             ],
-            "description": "RFC 3339 timestamp in the future. Omit for a token that never expires."
+            "description": "RFC 3339 timestamp in the future. Omit for 90 days. Explicit null never expires."
           },
           "name": {
             "type": "string"
@@ -15938,14 +15939,14 @@
             "items": {
               "type": "string"
             },
-            "description": "Any of `memory:read`, `memory:write`, `vaults:admin`, `connectors`. Defaults\nto all of them. Cannot exceed the creating credential's own scopes."
+            "description": "Any of `memory:read`, `memory:write`, `vaults:admin`, `connectors`. Defaults\nto read and write memory when omitted or null. Cannot exceed the creating credential's own scopes."
           },
           "vault_id": {
             "type": [
               "string",
               "null"
             ],
-            "description": "Restrict the token to one vault you belong to."
+            "description": "Omit for your Personal space. Explicit null allows all your spaces.\nA string restricts the token to one vault you belong to."
           }
         }
       },

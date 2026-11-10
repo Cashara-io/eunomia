@@ -322,6 +322,14 @@ fn describe(action: &str, target: &str, detail: &str, ok: bool, names: &HashMap<
         "oauth.consent" if ok => format!("Allowed {} to connect", name("an app")),
         "oauth.consent" => return format!("Declined to connect {}", name("an app")),
         "oauth.grant_revoke" => "Disconnected an app".into(),
+        "auth.scope_refused_suppressed" => {
+            let detail = serde_json::from_str::<serde_json::Value>(detail).unwrap_or_default();
+            let count = detail["count"].as_u64().unwrap_or(0);
+            let start = detail["window_start"].as_str().unwrap_or("unknown");
+            let end = detail["window_end"].as_str().unwrap_or("unknown");
+            let tools = detail["tools"].as_array().map(|tools| tools.iter().filter_map(serde_json::Value::as_str).collect::<Vec<_>>().join(", ")).unwrap_or_default();
+            return format!("Refused {count} more tool calls from {start} to {end}: {tools}");
+        },
         "authz.denied" => return "A token was refused (it lacks the permission)".into(),
         "extension.create" => "Added an extension".into(),
         "extension.update" => "Changed an extension".into(),
@@ -345,6 +353,11 @@ const SELF_EXPLAINED: &[&str] = &["auth.login", "auth.oidc_login", "auth.failed"
 /// The exact cause a failed attempt recorded in its detail (`why=...`), when it recorded one.
 fn why_words(detail: &str) -> Option<&'static str> {
     match detail.split_whitespace().find_map(|kv| kv.strip_prefix("why="))? {
+        "expired" => Some("The share code had expired"),
+        "used" => Some("The share code had already been used"),
+        "malformed" => Some("The share code was malformed or did not match"),
+        "unknown" => Some("The share code was not found"),
+        "mac" => Some("The share code authentication did not match"),
         "no_account" => Some("No account has that email yet"),
         "member" => Some("Already a member"),
         "pending" => Some("Already invited, not answered yet"),
@@ -479,6 +492,8 @@ async fn get_workspace_audit(State(state): State<AppState>, user: User, Query(q)
         .map(|r| {
             let ok = r.outcome == "ok";
             let actor_email = match r.email.filter(|e| !e.is_empty()) {
+                // A refused peer request is anonymous. `user` only scopes its ledger row.
+                Some(_) if r.actor_kind == "anonymous" => String::new(),
                 Some(e) => e,
                 // a failed password sign-in keeps the email that was tried in its detail
                 None if r.user.is_none() && r.action == "auth.login" => r.detail.clone(),

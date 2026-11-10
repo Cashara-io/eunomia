@@ -39,6 +39,6 @@ export async function showAdminSettings(page: Page) {
   await page.route("**/api/auth/me", async (route) => {
     const res = await route.fetch();
     if (!res.ok()) return route.fulfill({ response: res });
-    route.fulfill({ response: res, json: { ...(await res.json()), is_admin: true } });
+    await route.fulfill({ response: res, json: { ...(await res.json()), is_admin: true } });
   });
 }

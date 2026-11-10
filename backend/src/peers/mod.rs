@@ -339,26 +339,166 @@ fn not_valid() -> AppError {
     AppError::coded(ErrorCode::AuthForbidden, "This share code isn't valid any more. Ask for a new one.")
 }
 
+/// Host-only reasons. These never enter the peer protocol or the public error.
+#[derive(Clone, Copy)]
+pub(crate) enum JoinRefusal {
+    Expired,
+    Used,
+    Malformed,
+    Unknown,
+    WrongMac,
+}
+
+pub(crate) async fn refuse_join(state: &OrgState, reason: JoinRefusal) -> AppError {
+    // Every refusal resolves the host owner then writes the audit, regardless of whether the
+    // share exists. Never use a share creator to choose the work on this unauthenticated path.
+    #[derive(serde::Deserialize, surrealdb::types::SurrealValue)]
+    struct Owner { user: RecordId }
+    let owner = match store::control::ORG_FIRST_OWNER.on(&state.control).bind(("org", state.db.org().record())).await {
+        Ok(mut res) => res.take::<Vec<Owner>>(0).ok().and_then(|rows| rows.into_iter().next()).map(|row| row.user),
+        Err(_) => None,
+    };
+    if let Some(user) = owner.as_ref() {
+        let detail = match reason {
+            JoinRefusal::Expired => "why=expired",
+            JoinRefusal::Used => "why=used",
+            JoinRefusal::Malformed => "why=malformed",
+            JoinRefusal::Unknown => "why=unknown",
+            JoinRefusal::WrongMac => "why=mac",
+        };
+        crate::audit::record(&state.control, crate::audit::Event {
+            user: Some(user), actor: &crate::audit::anonymous(), action: "peer.join", target: "",
+            outcome: ErrorCode::AuthForbidden.as_str(), detail,
+        }).await;
+    }
+    join_step("audit", 0);
+    not_valid()
+}
+
+/// Bounds unauthenticated address work before any database or cryptographic operation.
+pub const MAX_JOIN_ADDRS: usize = 32;
+pub const MAX_JOIN_ADDR_BYTES: usize = 32 * 1024;
+const DUMMY_SHARE_KEY: &str = "refused-join";
+const DUMMY_SECRET_HEX: &str = "0000000000000000000000000000000000000000000000000000000000000000";
+
+#[cfg(feature = "test-support")]
+tokio::task_local! {
+    static JOIN_STEPS: std::cell::RefCell<Vec<(&'static str, usize)>>;
+}
+
+/// Observe completed operations in one request, without sharing counters across concurrent tests.
+#[cfg(feature = "test-support")]
+pub async fn test_join_steps<F: std::future::Future>(request: F) -> (F::Output, Vec<(&'static str, usize)>) {
+    JOIN_STEPS.scope(std::cell::RefCell::new(Vec::new()), async {
+        let out = request.await;
+        (out, JOIN_STEPS.with(|steps| steps.take()))
+    }).await
+}
+
+fn join_step(_name: &'static str, _bytes: usize) {
+    #[cfg(feature = "test-support")]
+    let _ = JOIN_STEPS.try_with(|steps| steps.borrow_mut().push((_name, _bytes)));
+}
+
+/// Parse even malformed objects into bounded work inputs. Missing required fields still refuse.
+pub async fn accept_join_json(state: &OrgState, body: serde_json::Value) -> AppResult<JoinResponse> {
+    fn field(body: &serde_json::Value, key: &str, max: usize, optional: bool, malformed: &mut bool) -> String {
+        match body.get(key) {
+            Some(serde_json::Value::String(s)) if s.len() <= max => s.clone(),
+            None if optional => String::new(),
+            _ => { *malformed = true; String::new() }
+        }
+    }
+    let mut malformed = !body.is_object();
+    let mut req = JoinRequest {
+        share: field(&body, "share", 32, false, &mut malformed),
+        guest_instance: field(&body, "guest_instance", 64, false, &mut malformed),
+        guest_org: field(&body, "guest_org", 64, true, &mut malformed),
+        guest_name: field(&body, "guest_name", 200, true, &mut malformed),
+        nonce_g: field(&body, "nonce_g", 64, false, &mut malformed),
+        mac: field(&body, "mac", 1024, false, &mut malformed),
+        guest_addrs: Vec::new(),
+    };
+    match body.get("guest_addrs") {
+        None => {},
+        Some(serde_json::Value::Array(addrs)) if addrs.len() <= MAX_JOIN_ADDRS => {
+            let mut bytes = addrs.len().saturating_sub(1);
+            for addr in addrs {
+                match addr.as_str() {
+                    Some(addr) if bytes.saturating_add(addr.len()) <= MAX_JOIN_ADDR_BYTES => {
+                        bytes += addr.len();
+                        req.guest_addrs.push(addr.to_string());
+                    },
+                    _ => { malformed = true; req.guest_addrs.clear(); break; }
+                }
+            }
+        },
+        _ => malformed = true,
+    }
+    accept_join_checked(state, req, malformed).await
+}
+
 pub async fn accept_join(state: &OrgState, req: JoinRequest) -> AppResult<JoinResponse> {
-    if !valid_key(&req.share) || req.nonce_g.len() > 64 || req.guest_name.len() > 200 || req.guest_instance.len() > 64 || req.guest_org.len() > 64 {
-        return Err(not_valid());
+    accept_join_checked(state, req, false).await
+}
+
+async fn accept_join_checked(state: &OrgState, mut req: JoinRequest, mut malformed: bool) -> AppResult<JoinResponse> {
+    // Normalise direct service calls too. Never join or hash an unbounded address list.
+    let addr_bytes = req.guest_addrs.iter().take(MAX_JOIN_ADDRS).try_fold(req.guest_addrs.len().saturating_sub(1), |n, a| n.checked_add(a.len()));
+    if req.guest_addrs.len() > MAX_JOIN_ADDRS || addr_bytes.is_none_or(|n| n > MAX_JOIN_ADDR_BYTES) {
+        malformed = true;
+        req.guest_addrs.clear();
     }
-    let share: Option<ShareRow> = store::get(&state.db, &share_rid(&req.share)).await?;
-    let Some(share) = share else { return Err(not_valid()) };
-    let Some(enc) = share.secret_enc.as_deref() else { return Err(not_valid()) };
-    if share.used_at.is_some() || share.expires_at.into_inner() < chrono::Utc::now() {
-        return Err(not_valid());
+    for (value, max) in [(&mut req.share, 32), (&mut req.nonce_g, 64), (&mut req.guest_name, 200),
+        (&mut req.guest_instance, 64), (&mut req.guest_org, 64), (&mut req.mac, 1024)] {
+        if value.len() > max { malformed = true; value.clear(); }
     }
-    let secret = hex::decode(crate::connectors::crypto::decrypt_exact(&state.settings.encryption_key, enc)?.trim()).map_err(|_| AppError::internal("share secret is not hex"))?;
-    if !crypto::verify_mac(&secret, &refs(&req.parts()), &req.mac) {
-        return Err(not_valid());
+    malformed |= !valid_key(&req.share);
+    join_step("bounded", 0);
+    let key = if valid_key(&req.share) { &req.share } else { DUMMY_SHARE_KEY };
+    let share: Option<ShareRow> = store::get(&state.db, &share_rid(key)).await?;
+    join_step("lookup", 0);
+    // Read the clock and compare the expiry for every code, so no state skips that work.
+    let now = chrono::Utc::now();
+    let unexpired = share.as_ref().map(|s| s.expires_at.into_inner() > now);
+    let unused = share.as_ref().map(|s| s.used_at.is_none());
+    let live = share.as_ref().filter(|_| (unused == Some(true)) & (unexpired == Some(true)));
+    // Encrypt the same dummy on EVERY request, then decrypt exactly one equal-length envelope.
+    // Unavailable codes never decrypt a stored secret, including expired codes that retain it.
+    let dummy = crate::connectors::crypto::encrypt(&state.settings.encryption_key, DUMMY_SECRET_HEX);
+    let stored = live.and_then(|s| s.secret_enc.as_deref());
+    let enc = stored.unwrap_or(&dummy);
+    let decrypted = crate::connectors::crypto::decrypt_exact(&state.settings.encryption_key, enc);
+    join_step("decrypt", 0);
+    let secret = decrypted.ok().and_then(|s| hex::decode(s.trim()).ok()).filter(|s| s.len() == 32);
+    let parts = req.parts();
+    let mac_ok = crypto::verify_mac(secret.as_deref().unwrap_or(&[0; 32]), &refs(&parts), &req.mac);
+    let reason = if malformed { Some(JoinRefusal::Malformed) }
+        else { match share.as_ref() {
+            None => Some(JoinRefusal::Unknown),
+            Some(s) if s.used_at.is_some() => Some(JoinRefusal::Used),
+            Some(_) if unexpired != Some(true) => Some(JoinRefusal::Expired),
+            Some(_) if stored.is_none() || secret.is_none() => Some(JoinRefusal::Malformed),
+            Some(_) if !mac_ok => Some(JoinRefusal::WrongMac),
+            Some(_) => None,
+        }};
+    join_step("decision", 0);
+    if let Some(reason) = reason {
+        return Err(refuse_join(state, reason).await);
     }
+    let share = share.expect("accepted a live share");
+    let secret = secret.expect("accepted a decrypted secret");
     let link = crypto::random_id();
     // only one join wins a code
     let mut res = q::CLAIM_SHARE.on(&state.db).bind(("id", share.id.clone())).bind(("link", link.clone())).await?;
     let claimed: Vec<RecordId> = res.take("id")?;
     if claimed.is_empty() {
-        return Err(not_valid());
+        // Another request may have claimed the code, or it expired during verification.
+        let current: Option<ShareRow> = store::get(&state.db, &share.id).await?;
+        let reason = if current.as_ref().is_some_and(|row| row.used_at.is_some()) { JoinRefusal::Used }
+            else if current.as_ref().is_some_and(|row| row.expires_at.into_inner() <= chrono::Utc::now()) { JoinRefusal::Expired }
+            else { JoinRefusal::Malformed };
+        return Err(refuse_join(state, reason).await);
     }
     let nonce_h = crypto::random_id();
     let key = crypto::link_key(&secret, &link, &req.nonce_g, &nonce_h);
@@ -453,7 +593,8 @@ pub async fn join(state: &OrgState, user: &RecordId, code: &str, my_addrs: Vec<S
         guest_instance: me,
         guest_org: state.db.org().key(),
         guest_name: name.chars().take(200).collect(),
-        guest_addrs: my_addrs,
+        // The host refuses more than MAX_JOIN_ADDRS, so send only that many (before signing).
+        guest_addrs: my_addrs.into_iter().take(MAX_JOIN_ADDRS).collect(),
         nonce_g: crypto::random_id(),
         mac: String::new(),
     };

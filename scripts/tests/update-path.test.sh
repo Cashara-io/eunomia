@@ -440,7 +440,10 @@ signup() { # signup JAR EMAIL : register (EUNOMIA_SIGNUP_ORG=personal: an org of
 }
 signup "$JAR_A" "$EMAIL_A" || die "signup of the first user (the instance admin) failed"
 signup "$JAR_B" "$EMAIL_B" || die "signup of the second user failed"
-TOKEN_A="$(api -f -b "$JAR_A" -H 'Content-Type: application/json' -d '{"name":"update-path"}' "$BASE/api/auth/tokens" | jq -r .token)"
+# This fixture creates team spaces and checks cross-space data after upgrading.
+# Ask for only memory and space administration, with all-space access.
+log "   fixture token A: read/write memory and vaults:admin in all spaces (default expiry)"
+TOKEN_A="$(api -f -b "$JAR_A" -H 'Content-Type: application/json' -d '{"name":"update-path","vault_id":null,"scopes":["memory:read","memory:write","vaults:admin"]}' "$BASE/api/auth/tokens" | jq -r .token)"
 TOKEN_B="$(api -f -b "$JAR_B" -H 'Content-Type: application/json' -d '{"name":"update-path"}' "$BASE/api/auth/tokens" | jq -r .token)"
 [ -n "$TOKEN_A" ] && [ "$TOKEN_A" != null ] && [ -n "$TOKEN_B" ] && [ "$TOKEN_B" != null ] || die "no PAT"
 # Every seed call must work: stop at the first that does not, with its line, logs dumped by the trap.

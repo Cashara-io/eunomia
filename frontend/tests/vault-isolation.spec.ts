@@ -32,7 +32,7 @@ async function newUser(baseURL: string, prefix: string): Promise<User> {
   const ctx = await pwRequest.newContext({ baseURL });
   const email = uniqueEmail(prefix);
   expect((await ctx.post("/api/auth/register", { data: { email, password: PASSWORD } })).ok()).toBeTruthy();
-  const token = (await (await ctx.post("/api/auth/tokens", { data: { name: prefix } })).json()).token as string;
+  const token = (await (await ctx.post("/api/auth/tokens", { data: { name: prefix, vault_id: null, scopes: ["memory:read", "memory:write", "vaults:admin", "connectors"] } })).json()).token as string;
   const call = async (name: string, args: object = {}): Promise<{ isError: boolean; data: Json }> => {
     for (let attempt = 0; ; attempt++) {
       const res = await ctx.post("/mcp", {

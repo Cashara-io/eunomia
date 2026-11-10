@@ -373,7 +373,7 @@ async fn other_users_cannot_see_or_claim_an_extension() {
     let same_org = common::register(&app.state, "other@example.com").await;
     let other_org = common::register_personal(&app.state, "third@example.com").await;
     for (who, user) in [("same org", same_org), ("other org", other_org)] {
-        let token = eunomia_backend::models_user::create_api_token(&app.state.control, &user.id, "t").await.unwrap().token;
+        let token = eunomia_backend::models_user::create_api_token_with(&app.state.control, &user.id, "t", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token;
         let (status, list) = api(&app, &token, "GET", "/api/extensions", None).await;
         assert_eq!((status, list.as_array().map(Vec::len)), (StatusCode::OK, Some(0)), "{who}");
         let calls: [(&str, String, Option<Value>); 8] = [

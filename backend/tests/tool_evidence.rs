@@ -266,6 +266,32 @@ async fn seeded_success_contract_covers_every_registered_tool() {
     }
 }
 
+#[tokio::test]
+async fn selector_refusals_never_turn_request_values_into_evidence() {
+    use eunomia_backend::{authz::{self, Actor, Caller}, rid, scopes};
+    let app = TestApp::new().await;
+    let caller = Caller { actor: Actor { kind: "token", id: "api_token:evidence-test".into() },
+        scopes: scopes::ALL.iter().map(|s| s.to_string()).collect(),
+        vault: Some(rid::parse("vault:bound999777").unwrap()), expires_at: None };
+    for (name, spec) in registry::all_tools() {
+        if *name == "memory_write_batch" { continue; }
+        for key in ["vault_id", "vault_id_a", "vault_id_b", "vault_ids"] {
+            if spec.schema["properties"].get(key).is_none() { continue; }
+            let mut args = canary(&spec.schema);
+            for selector in ["vault_id", "vault_id_a", "vault_id_b", "vault_ids"] {
+                if spec.schema["properties"].get(selector).is_some() {
+                    args[selector] = if selector == "vault_ids" { json!(["vault:bound999777"]) } else { json!("vault:bound999777") };
+                }
+            }
+            args[key] = if key == "vault_ids" { json!(["vault:request999777"]) } else { json!("vault:request999777") };
+            let result = authz::with_caller(caller.clone(), registry::call(&app.state, &app.user, name, args)).await.unwrap_or_else(|e| e.to_tool_value());
+            assert_eq!(result["code"], "auth.scope", "{name}/{key}");
+            let computed = evidence::for_tool(name).unwrap().computed(&result);
+            assert!(!has_canary(&computed), "{name}/{key}: refusal registered a request value as evidence");
+        }
+    }
+}
+
 #[test]
 fn diagram_layout_does_not_authorise_business_numbers() {
  let out=json!({"view":"diagram","diagram":{"height":999777,"bands":[{"distance":999777,"shown":42,"omitted":1,"x":999777}],"nodes":[{"x":999777,"y":999777,"distance":999777,"count":42}],"total_nodes":2,"total_edges":1}});

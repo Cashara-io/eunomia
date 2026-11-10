@@ -5,6 +5,9 @@
 mod common;
 
 use common::{sys, TestApp};
+use axum::{body::Body, http::{Request, StatusCode}};
+use http_body_util::BodyExt;
+use tower::ServiceExt;
 use eunomia_backend::peers::{self, sync};
 use eunomia_backend::rid::RecordIdExt;
 use eunomia_backend::state::OrgState;
@@ -404,5 +407,180 @@ fn review209_peer_redirect_is_stripped_and_host_extraction_keeps_jordan_separate
             assert!(!store.to_string().contains("Jordan enjoys cycling"), "{store}");
             assert_eq!(names(&a.find(&va, "Jordan").await), vec!["Jordan"]);
         }
+    });
+}
+
+#[test]
+fn share_role_defaults_preserve_existing_edit_codes_and_links() {
+    run(|| async {
+        let (host, guest) = (Node::new("defaults-host").await, Node::new("defaults-guest").await);
+        let vault = host.vault("Defaults").await;
+        // Stored before creating any code with the new API defaults.
+        let old_code = host.code(&vault, "edit").await;
+        let (copy, old_link) = guest.join(&old_code).await;
+        let path = format!("/api/vaults/{}/share-codes", vault.to_string());
+        let (status, read) = host.app.http("POST", &path, Some(json!({})), true).await;
+        assert_eq!(status, axum::http::StatusCode::OK);
+        assert_eq!(read["role"], "read");
+        let (status, edit) = host.app.http("POST", &path, Some(json!({"role":"edit"})), true).await;
+        assert_eq!(status, axum::http::StatusCode::OK);
+        assert_eq!(edit["role"], "edit");
+        assert_eq!(guest.link(&old_link).await.role, "edit");
+        guest.fact(&copy, "Legacy", "still writes").await;
+        guest.sync(&old_link).await;
+        assert!(names(&host.find(&vault, "Legacy").await).contains(&"Legacy".to_string()));
+        for (made, expected) in [(edit, "edit"), (read, "read")] {
+            // The API advertises real host addresses. Route only to our in-process fixture.
+            let mut body = peers::decode_code(made["code"].as_str().unwrap()).unwrap();
+            body.addrs = vec![host.base.clone()];
+            let (_, link) = guest.join(&peers::encode_code(&body)).await;
+            assert_eq!(guest.link(&link).await.role, expected);
+        }
+    });
+}
+
+#[test]
+fn join_refusals_are_generic_and_complete_the_same_work_before_audit() {
+    run(|| async {
+        let host = Node::new("audit-host").await;
+        let vault = host.vault("Audit").await;
+        let path = format!("/api/peer/v1/{}/join", host.app.user.org.key());
+        let mut replies = vec![];
+        let mut expected_audits = vec![];
+        // Near-limit data exercises the formerly state-dependent join + HMAC work. Oversized
+        // count and bytes must also take the whole refusal path, without hashing that payload.
+        for addrs in [vec!["a".repeat(1023); 32], vec!["a".repeat(2048); 32], vec!["a".into(); 33]] {
+            let oversized = addrs.len() > peers::MAX_JOIN_ADDRS || addrs.iter().map(String::len).sum::<usize>() > peers::MAX_JOIN_ADDR_BYTES;
+            let mut work = vec![];
+            for case in ["unknown", "used", "expired", "malformed", "mac", "invalid-key", "invalid-mac"] {
+                let code = host.code(&vault, "edit").await;
+                let share = peers::decode_code(&code).unwrap().share;
+                let mut body = json!({"share":share, "guest_instance":"untrusted", "guest_addrs":addrs, "nonce_g":"n", "mac":"00".repeat(32)});
+                match case {
+                    "unknown" => body["share"] = "00000000000000000000000000000000".into(),
+                    "invalid-key" => body["share"] = "not-a-key".into(),
+                    "invalid-mac" => body["mac"] = "bad".into(),
+                    "malformed" => body["guest_org"] = json!(42),
+                    "used" => { host.app.db().await.test_raw().query("UPDATE $id SET used_at = time::now(), secret_enc = NONE").bind(("id", RecordId::new("peer_share", share.clone()))).await.unwrap().check().unwrap(); },
+                    "expired" => { host.app.db().await.test_raw().query("UPDATE $id SET expires_at = time::now() - 1d").bind(("id", RecordId::new("peer_share", share.clone()))).await.unwrap().check().unwrap(); },
+                    _ => {},
+                }
+                let req = Request::builder().method("POST").uri(&path)
+                    .header("content-type", "application/json")
+                    .header("traceparent", "00-11111111111111111111111111111111-2222222222222222-01")
+                    .body(Body::from(body.to_string())).unwrap();
+                let (reply, steps) = peers::test_join_steps(host.app.router.clone().oneshot(req)).await;
+                let reply = reply.unwrap();
+                assert_eq!(steps.iter().map(|s| s.0).collect::<Vec<_>>(), ["bounded", "lookup", "decrypt", "mac", "decision", "audit"], "{case}");
+                let hashed_bytes = steps.iter().find(|s| s.0 == "mac").unwrap().1;
+                if oversized { assert!(hashed_bytes < 256, "oversize payload was hashed"); }
+                else { assert!(hashed_bytes > 32_000, "large payload did not reach HMAC: {case}"); }
+                // Invalid share keys have a different public length. All other cases hash the
+                // same byte count, including a structurally malformed object and invalid MAC.
+                if case != "invalid-key" { work.push(steps); }
+                assert_eq!(reply.status(), StatusCode::FORBIDDEN);
+                let status = reply.status();
+                let headers = reply.headers().clone();
+                let bytes = reply.into_body().collect().await.unwrap().to_bytes();
+                replies.push((status, headers, bytes));
+                let reason = if oversized || matches!(case, "malformed" | "invalid-key") { "malformed" }
+                    else if case == "invalid-mac" { "mac" } else { case };
+                expected_audits.push(format!("why={reason}"));
+                let mut result = host.app.state.control.test_raw().query("SELECT actor_kind, actor_id, target, detail FROM audit_event WHERE action = 'peer.join'").await.unwrap();
+                let rows: Vec<Value> = result.take(0).unwrap();
+                let mut details: Vec<_> = rows.iter().map(|r| r["detail"].as_str().unwrap().to_string()).collect();
+                let mut expected = expected_audits.clone();
+                details.sort(); expected.sort();
+                assert_eq!(details, expected, "{case}: each request adds exactly its true audit reason");
+                for row in rows {
+                    assert_eq!(row["actor_kind"], "anonymous");
+                    assert_eq!(row["actor_id"], "");
+                    assert_eq!(row["target"], "");
+                }
+            }
+            assert!(work.windows(2).all(|p| p[0] == p[1]));
+        }
+        // Extractor failures also run the same path, including missing fields and invalid JSON.
+        for raw in ["null", "{}", "{\"guest_addrs\": [\"large but invalid\"]"] {
+            let req = Request::builder().method("POST").uri(&path)
+                .header("content-type", "application/json")
+                .header("traceparent", "00-11111111111111111111111111111111-2222222222222222-01")
+                .body(Body::from(raw)).unwrap();
+            let (reply, steps) = peers::test_join_steps(host.app.router.clone().oneshot(req)).await;
+            assert_eq!(steps.iter().map(|s| s.0).collect::<Vec<_>>(), ["bounded", "lookup", "decrypt", "mac", "decision", "audit"]);
+            let reply = reply.unwrap();
+            let status = reply.status();
+            let headers = reply.headers().clone();
+            let bytes = reply.into_body().collect().await.unwrap().to_bytes();
+            replies.push((status, headers, bytes));
+        }
+        assert!(replies.windows(2).all(|p| p[0] == p[1]), "status, headers and raw bytes must match");
+    });
+}
+
+#[test]
+fn old_version_peer_joins_without_optional_identity_or_address_fields() {
+    run(|| async {
+        let host = Node::new("legacy-host").await;
+        let vault = host.vault("Legacy").await;
+        let code = peers::decode_code(&host.code(&vault, "edit").await).unwrap();
+        let secret = peers::crypto::unb64(&code.secret).unwrap();
+        let nonce = peers::crypto::random_id();
+        let mac = peers::crypto::mac(&secret, &["join", &code.share, "legacy-instance", "", "", "", &nonce]);
+        let path = format!("/api/peer/v1/{}/join", host.app.user.org.key());
+        let (status, reply) = host.app.http("POST", &path, Some(json!({"share":code.share,"guest_instance":"legacy-instance","nonce_g":nonce,"mac":mac})), false).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(reply["role"], "edit");
+        assert!(peers::crypto::verify_mac(&secret, &["joined", &code.share, reply["link"].as_str().unwrap(), &nonce,
+            reply["nonce_h"].as_str().unwrap(), "Legacy", "edit", reply["host_instance"].as_str().unwrap(), reply["host_name"].as_str().unwrap()], reply["mac"].as_str().unwrap()));
+    });
+}
+
+#[test]
+fn mcp_share_codes_default_to_read_and_allow_explicit_edit() {
+    run(|| async {
+        let mut settings = common::test_settings();
+        settings.public_url = "https://peer-tool-fixture.example.test".into();
+        let app = TestApp::with_settings(settings).await;
+        let vault = app.tool("vault_create", json!({"name":"MCP roles", "kind":"org"})).await["id"].clone();
+        let read = app.tool("vault_share_code", json!({"vault_id":vault})).await;
+        assert_eq!(read["role"], "read");
+        let edit = app.tool("vault_share_code", json!({"vault_id":vault, "role":"edit"})).await;
+        assert_eq!(edit["role"], "edit");
+    });
+}
+
+#[test]
+fn sender_truncates_addresses_before_signing_the_join_request() {
+    run(|| async {
+        let (host, guest) = (Node::new("bounded-host").await, Node::new("bounded-guest").await);
+        let sent = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let capture = sent.clone();
+        let router = host.app.router.clone().layer(axum::middleware::from_fn(move |req: Request<Body>, next: axum::middleware::Next| {
+            let capture = capture.clone();
+            async move {
+                let req = if req.uri().path().ends_with("/join") {
+                    let (parts, body) = req.into_parts();
+                    let bytes = body.collect().await.unwrap().to_bytes();
+                    let value: Value = serde_json::from_slice(&bytes).unwrap();
+                    *capture.lock().unwrap() = serde_json::from_value(value["guest_addrs"].clone()).unwrap();
+                    Request::from_parts(parts, Body::from(bytes))
+                } else { req };
+                next.run(req).await
+            }
+        }));
+        peers::net::test_route(&host.base, router);
+        let vault = host.vault("Bounded addresses").await;
+        let code = host.code(&vault, "read").await;
+        let addrs: Vec<String> = (0..peers::MAX_JOIN_ADDRS + 8).map(|i| format!("https://guest-{i}.example.test")).collect();
+        let st = guest.org().await;
+        // The real host verifies the MAC over the received addresses. A successful join
+        // proves truncation occurred before signing, rather than just before sending.
+        let joined = sys(peers::join(&st, &guest.app.user.id, &code, addrs.clone(), "Guest")).await.unwrap();
+        let received = host.link(&joined.link.id).await;
+        assert_eq!(*sent.lock().unwrap(), addrs[..peers::MAX_JOIN_ADDRS]);
+        // Storage applies a separate address cap after validating the signed request.
+        assert_eq!(received.peer_addrs, peers::addrs::sanitize(&addrs[..peers::MAX_JOIN_ADDRS]));
+        assert_eq!(guest.link(&joined.link.id).await.role, "read");
     });
 }

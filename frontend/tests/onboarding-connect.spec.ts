@@ -20,6 +20,9 @@ const tokenNames = async (page: Page) =>
 
 test.describe("Onboarding: Connect your AI", () => {
   test.use({ permissions: ["clipboard-read", "clipboard-write"] });
+  test.afterEach(async ({ page }) => {
+    await page.unrouteAll({ behavior: "wait" });
+  });
 
   test("lands on the app picker with nothing preselected, and an app opens its own guide", async ({ page }) => {
     await registerToConnectStep(page, { admin: true });
@@ -33,7 +36,7 @@ test.describe("Onboarding: Connect your AI", () => {
     await page.getByRole("link", { name: /^Claude Code/ }).click();
     await expect(page.getByRole("heading", { name: "Connect Claude Code", level: 1 })).toBeVisible();
     // Choosing an app finished setup: the guide stays put rather than bouncing back to onboarding.
-    expect((await (await page.request.get("/api/auth/me")).json()).onboarded).toBe(true);
+    await expect.poll(async () => (await (await page.request.get("/api/auth/me")).json()).onboarded).toBe(true);
   });
 
   test("each client gets its own token and a ready-to-paste setup with this URL", async ({ page }) => {
@@ -119,8 +122,8 @@ test.describe("Onboarding: Connect your AI", () => {
       await expect(page).toHaveURL(/\/onboarding(?:\?|$)/);
       completion.resolve();
       await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
-      await page.getByRole("link", { name: "Documents", exact: true }).first().click();
-      await expect(page.getByRole("heading", { name: "Documents", level: 1 })).toBeVisible();
+      await page.getByRole("link", { name: "Settings", exact: true }).first().click();
+      await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
     } finally {
       refresh.resolve();
       completion.resolve();

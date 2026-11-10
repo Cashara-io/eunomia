@@ -151,6 +151,7 @@ test.describe.serial("memory correctness", () => {
     ctx = await pwRequest.newContext({ baseURL: testInfo.project.use.baseURL as string });
     const email = uniqueEmail("memfix");
     expect((await ctx.post("/api/auth/register", { data: { email, password: "correct-horse-battery-staple" } })).ok()).toBeTruthy();
+    // Demo records and derived facts live in Personal. Keep this mint minimal.
     token = (await (await ctx.post("/api/auth/tokens", { data: { name: "memfix" } })).json()).token;
     userId = (await (await ctx.get("/api/auth/me")).json()).id;
     ownerKey = userId.slice("user:".length).replace(/^⟨|⟩$/g, "");

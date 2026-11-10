@@ -39,6 +39,39 @@ cd eunomia
 - ChatGPT and Claude.ai (web/desktop) need a public `https://` URL. Add them
   by hand (below).
 
+## API token defaults
+
+New tokens expire after 90 days, use your Personal memory space, and grant
+`memory:read` and `memory:write`. This applies to Settings, the Advanced guide,
+and scripts that post only a name to `POST /api/auth/tokens`. Renew the token
+before it expires. Personal-only tokens cannot access team spaces, create
+spaces or change account settings. Minimal scopes cannot manage spaces or
+connected sources.
+
+For a new token, omitted `vault_id` means Personal; explicit `vault_id: null`
+means all your memory spaces. Omitted `expires_at` means 90 days; explicit
+`expires_at: null` means no expiry. A future RFC 3339 timestamp sets the expiry
+explicitly. Empty strings are invalid. Omitted or null `scopes` grants only
+read and write memory. Request elevated scopes by listing them explicitly;
+a creating credential cannot grant more scopes or a longer lifetime than it holds.
+
+For example, an account automation that needs every space and connector
+management can deliberately request:
+
+```json
+{
+  "name": "Account automation",
+  "vault_id": null,
+  "expires_at": "2027-06-01T00:00:00Z",
+  "scopes": ["memory:read", "memory:write", "connectors"]
+}
+```
+
+Settings keeps all-space access, unlimited lifetime and elevated scopes as
+visible choices. If Personal cannot be loaded, minting waits for a resolved
+destination. Already issued tokens keep their existing expiry, space and
+scopes. There is no revocation, narrowing or data backfill.
+
 ## Connecting one agent by hand
 
 The onboarding wizard's **Connect your AI app** step, and the app picker on
@@ -644,3 +677,67 @@ and 90 requests, well inside a minute's limit. A CSV import (`document_import_ro
 costs one request per 500 rows, counted once the file is read, so a 5,000-row
 file is 10 requests. If a client still gets a 429,
 it should wait `Retry-After` seconds and resend that batch.
+
+## OAuth space access
+
+An interactive OAuth connection, such as ChatGPT or Claude, acts as the signed-in
+user in every space they belong to, including Personal and team spaces. The
+consent screen states that requested read and write permissions apply to every
+such space. Membership checks and the approved scopes still apply to each call.
+Access tokens last 15 minutes; rotating refresh tokens last 30 days. Refresh
+preserves the grant's space access and cannot expand its scopes.
+
+This deliberately differs from new personal access tokens, which default to
+Personal, read/write memory and 90 days. Cross-space recall is a core OAuth
+behaviour, so this release does not silently narrow OAuth grants or existing
+credentials. Space selection at consent is tracked in
+[issue 217](https://github.com/Cashara-io/eunomia/issues/217).
+
+## Script permission inventory
+
+| Consumer | Authentication and required access |
+| --- | --- |
+| `scripts/connect-agents.sh` | Login/register and list, revoke and mint tokens use the user's session. Each agent token uses the minimal defaults. Skill installation and Claude SessionStart use MCP `resources/read` for `eunomia://skill`, requiring only `memory:read`. Prompt recall also needs only `memory:read`; the agent's memory writes need `memory:write`. Neither needs account settings or space administration. An existing supplied token is left unchanged. |
+| Installer documented in `docs/installation.md` | The hosted script was inspected on 10 November 2026. It delegates account setup and token creation to `scripts/connect-agents.sh`, using the checkout copy or downloading it when absent. It makes no separate PAT mint or settings request. |
+| `scripts/auto-update.sh` and update helpers | Docker operations and status files, no personal access token issuance. |
+| `scripts/ci/e2e-setup.sh` | Registration and onboarding use a session cookie. Database discovery uses separate SurrealDB fixture credentials. It does not mint a personal access token. |
+| `scripts/tests/update-path.test.sh` | Token A explicitly requests all spaces and `memory:read`, `memory:write`, `vaults:admin` for team-space creation, memory changes, documents and integrity checks. It prints this permission choice. Token B uses memory operations in its own Personal space and keeps the minimal defaults. Expiry is omitted for both, so current releases use 90 days. Earlier FROM releases retain their stored credential behaviour through the upgrade. |
+| `scripts/chaos.sh`, `loadtest/k6/lib.js`, `loadtest/k6/mcp-mix.js` | Name-only tokens, with memory operations in Personal. The minimal defaults suffice. Caller-supplied load-test tokens retain their permissions. |
+| `sdk/README.md`, `docs/sdk.md` | Name-only creation for memory clients. Personal, read/write memory and 90 days suffice; other destinations or permissions require explicit choices. |
+| `docs/extensions.md` | Extension account APIs deliberately request all spaces. Extension management explicitly requires `connectors`; no change to the minimal defaults is needed. |
+| Project CLI | Explicit project space and `memory:write`, which includes read; omitted expiry receives 90 days. |
+
+## Restricted token defaults across tools
+
+An omitted space means the token's bound space when it has one. This applies to
+reads and writes, including `list`, `search`, `get`, `links`, memory, entities,
+documents, skills and ontology tools. A Personal-only token can read its own
+synced records and document passages. It cannot use an unqualified call to reach
+a team space. Explicit arguments do not override the credential's binding.
+
+MCP advertises `vault_id` as optional for a bound token, including vault reads
+that otherwise require it. Other required arguments remain required. Scope and
+membership checks still apply. Administrative tools need their explicit scopes;
+held-secret operations still need the person's approval.
+
+The name-only mint audit includes all Playwright specs, backend tests and
+`scripts/ci/e2e-setup.sh`:
+
+| Consumer | Resolution |
+| --- | --- |
+| `frontend/tests/documents.spec.ts`, uploading agent | Product fix (b). Keep the name-only Personal token. Upload, search, recall, get and download all belong in Personal. |
+| Same spec, another user's default token | Keep the default and pin `auth.scope` / 403 when it tries to read outside its bound Personal space. |
+| Same spec, cross-user membership check | Explicit access (a). A separate all-space, `memory:read` token tests the membership boundary and still receives not found / 404. All-space scope grants no extra membership. |
+| `frontend/tests/memory-correctness.spec.ts` | Product fix (b). Demo records and their derived facts are Personal. Keep the name-only token; list, get, links, search and recall use that space. |
+| `frontend/tests/skill.spec.ts` | Minimal token already fits MCP instructions and skill retrieval. Keep the name-only mint. |
+| `frontend/tests/secret-requests.spec.ts` | Minimal token already fits Personal secret requests and status. Keep the name-only mint and user-approval boundary. |
+| `frontend/tests/click-fixes.spec.ts` | The minted token is a token-management fixture. Listing, renaming and revoking use the browser session, so no elevated token is needed. |
+| `frontend/tests/brand-and-motion.spec.ts`, `security-defaults.spec.ts`, `type-scale.spec.ts` | Presentation mocks or creation-contract interceptions, not a consumer using a name-only token for broad calls. Keep the safe creation contract. |
+| `frontend/tests/every-tool.spec.ts`, `mcp.spec.ts`, `recall-eval.spec.ts`, `vault-isolation.spec.ts` | Already explicitly request broader scopes and all spaces for tests that deliberately administer or compare spaces. Keep those deliberate opt-ins (a). |
+| Ontology Playwright fixtures | Already select their intended vault explicitly. Keep the selected-vault opt-in (a). |
+| `backend/tests/auth_scopes.rs` | Deliberate default, token CRUD, cache and authority tests. Keep minimal name-only mints. Replace the obsolete blanket record-refusal assertion with scoped success and no Personal leakage into a team-bound read. |
+| `backend/tests/isolation.rs` | The name-only mint creates a control-row canary, not a credential used for broad calls. Its separate fixture credentials explicitly list their authority. No guard or assertion is removed. |
+| `backend/tests/security_consumers.rs` | Agent setup deliberately exercises name-only defaults. Upgrade fixture A separately opts into exactly its required authority. |
+| `backend/tests/default_tokens.rs` | Deliberately mint the real name-only token, walk every registered MCP tool without a space argument, pin intended refusals, and prove that no call exposes or changes the team canary. Also cover a team-bound minimal token, document retrieval and tombstones. |
+| Remaining internal backend fixtures | Every internal issuer now supplies scopes, vault and expiry explicitly. No name-only internal convenience issuer remains. |
+| `scripts/ci/e2e-setup.sh` | No PAT mint. Registration/onboarding use cookies; database discovery uses separate disposable fixture credentials. |

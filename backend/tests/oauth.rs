@@ -596,3 +596,34 @@ async fn never_authorized_dcr_clients_are_pruned_after_24_hours() {
     assert!(!left.contains(&stale), "unused for 25h and never authorized: {left:?}");
     assert!(left.contains(&fresh) && left.contains(&granted_id), "{left:?}");
 }
+
+/// Interactive OAuth acts as the user in every membership, unlike the PAT defaults.
+#[tokio::test]
+async fn oauth_initial_and_refresh_keep_all_member_spaces_and_short_access_lifetime() {
+    let app = TestApp::new().await;
+    let team = app.tool("vault_create", json!({"name": "OAuth team", "kind": "org"})).await["id"].clone();
+    let (_, vaults) = app.http_session("GET", "/api/vaults", None).await;
+    let personal = vaults["results"].as_array().unwrap().iter().find(|v| v["kind"] == "personal").unwrap()["id"].clone();
+    let (client_id, initial) = connect(&app, None).await;
+    let refreshed = form(&app, "/oauth/token", &[("grant_type", "refresh_token"),
+        ("refresh_token", initial["refresh_token"].as_str().unwrap()), ("client_id", &client_id)]).await;
+    assert_eq!(refreshed.status, StatusCode::OK);
+    for issued in [&initial, &refreshed.body] {
+        assert_eq!(issued["expires_in"], 900);
+        assert_eq!(issued["scope"], "memory:read memory:write");
+        for vault in [&personal, &team] {
+            let token = issued["access_token"].as_str().unwrap();
+            let written = mcp(&app, token, rpc("tools/call", json!({"name": "memory_write", "arguments": {
+                "vault_id": vault, "subject_name": "OAuth fixture", "subject_kind": "person", "text": "Shared recall fixture"
+            }}))).await;
+            assert_eq!(written.status, StatusCode::OK);
+            assert_eq!(written.body["result"]["isError"], false, "{}", written.body);
+            let recalled = mcp(&app, token, rpc("tools/call", json!({"name": "recall", "arguments": {
+                "vault_id": vault, "query": "OAuth fixture"
+            }}))).await;
+            assert_eq!(recalled.status, StatusCode::OK);
+            assert_eq!(recalled.body["result"]["isError"], false);
+            assert!(recalled.body.to_string().contains("Shared recall fixture"));
+        }
+    }
+}

@@ -135,20 +135,20 @@ for (const width of [1440, 390]) {
 test("one primary upload, keyboard picker, drag and drop, and unframed passages", async ({ page }) => {
   await fixture(page);
   await page.goto("/documents");
+  // The header exists before hydration. Wait for the client-loaded fixture before using the keyboard.
+  await expect(page.getByTestId("document-row")).toHaveCount(1);
   await expect(page.locator(".btn-primary")).toHaveCount(1);
   const upload = page.getByRole("button", { name: "Upload", exact: true });
-  await upload.focus();
   const successfulPicker = page.waitForEvent("filechooser");
-  await page.keyboard.press("Enter");
+  await upload.press("Enter");
   const uploaded = page.waitForRequest((request) => request.method() === "POST" && new URL(request.url()).pathname === "/api/documents");
   await (await successfulPicker).setFiles({ name: "field-notes.md", mimeType: "text/markdown", buffer: Buffer.from(text) });
   expect((await uploaded).postData()).toBe(text);
   await expect(page).toHaveURL(/id=document%3Anotes/);
   await expect(page.getByTestId("document-passage")).toHaveCount(2);
   await expect(page.getByTestId("document-status")).toHaveText("Ready");
-  await upload.focus();
   const picker = page.waitForEvent("filechooser");
-  await page.keyboard.press("Enter");
+  await upload.press("Enter");
   await (await picker).setFiles({ name: "installer.exe", mimeType: "application/octet-stream", buffer: Buffer.from("MZ") });
   await expect(page.getByRole("alert").filter({ hasText: "installer.exe is not a supported type" })).toBeVisible();
   const passages = page.getByTestId("document-panel").locator("ol");

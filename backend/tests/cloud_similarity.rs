@@ -81,7 +81,7 @@ async fn similarity_is_vault_scoped_like_the_cloud() {
     let secret = cloud_ids(&app).await.remove(0).0;
 
     let outsider = common::register(&app.state, "mallory@example.com").await;
-    let token = eunomia_backend::models_user::create_api_token(&app.state.control, &outsider.id, "t").await.unwrap().token;
+    let token = eunomia_backend::models_user::create_api_token_with(&app.state.control, &outsider.id, "t", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token;
     let post = |body: Value| {
         let router = app.router.clone();
         let token = token.clone();

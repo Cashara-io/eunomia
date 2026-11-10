@@ -230,7 +230,7 @@ async fn another_user_or_org_cannot_reach_a_document() {
     let colleague = common::register(&app.state, "colleague@example.com").await;
     let stranger = common::register_personal(&app.state, "stranger@example.com").await;
     for other in [&colleague, &stranger] {
-        let token = models_user::create_api_token(&app.state.control, &other.id, "t").await.unwrap().token;
+        let token = models_user::create_api_token_with(&app.state.control, &other.id, "t", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token;
         for (method, path) in [
             ("GET", format!("/api/documents/{id}")),
             ("GET", format!("/api/documents/{id}/download")),
@@ -443,7 +443,7 @@ async fn documents_live_in_their_vault_and_travel_with_it() {
     let (_, _, beta_list) = raw(&app, "GET", "/api/documents", vec![], None, &beta_token).await;
     assert_eq!(json_of(&beta_list)["total"], 1, "a restricted token lists its own vault");
     let colleague = common::register(&app.state, "colleague2@example.com").await;
-    let colleague_token = models_user::create_api_token(&app.state.control, &colleague.id, "t").await.unwrap().token;
+    let colleague_token = models_user::create_api_token_with(&app.state.control, &colleague.id, "t", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token;
     assert_eq!(download(&app, &doc_a, &colleague_token).await.0, StatusCode::NOT_FOUND);
     let (s, _, _) = raw(&app, "GET", &format!("/api/documents?vault_id={a}"), vec![], None, &colleague_token).await;
     assert_eq!(s, StatusCode::FORBIDDEN);

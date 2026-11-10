@@ -7,7 +7,7 @@ import { uniqueEmail } from "./helpers";
 async function account(request: APIRequestContext, prefix: string) {
   const email = uniqueEmail(prefix);
   expect((await request.post("/api/auth/register", { data: { email, password: "correct-horse-battery-staple" } })).ok()).toBeTruthy();
-  const token = (await (await request.post("/api/auth/tokens", { data: { name: prefix } })).json()).token as string;
+  const token = (await (await request.post("/api/auth/tokens", { data: { name: prefix, vault_id: null, scopes: ["memory:read", "memory:write", "vaults:admin", "connectors"] } })).json()).token as string;
   return { email, token };
 }
 

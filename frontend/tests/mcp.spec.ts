@@ -7,7 +7,7 @@ async function newToken(request: APIRequestContext): Promise<string> {
     data: { email: uniqueEmail("mcp"), password: "correct-horse-battery-staple" },
   });
   expect(reg.ok()).toBeTruthy();
-  const res = await request.post("/api/auth/tokens", { data: { name: "MCP" } });
+  const res = await request.post("/api/auth/tokens", { data: { name: "MCP", vault_id: null, scopes: ["memory:read", "memory:write", "vaults:admin"] } });
   return (await res.json()).token;
 }
 

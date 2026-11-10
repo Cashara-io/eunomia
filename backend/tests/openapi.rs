@@ -70,3 +70,13 @@ fn every_registered_route_is_in_the_spec() {
     assert!(missing.is_empty(), "routes without an OpenAPI path: {missing:?}");
     assert!(extra.is_empty(), "OpenAPI paths without a route: {extra:?}");
 }
+
+/// Handled tool refusals fit the open 200 result; HTTP errors use Problem separately.
+#[test]
+fn tool_results_and_http_errors_have_distinct_response_contracts() {
+    let doc = serde_json::to_value(openapi::spec()).unwrap();
+    let responses = &doc["paths"]["/api/tools/{name}"]["post"]["responses"];
+    assert_eq!(responses["200"]["content"]["application/json"]["schema"]["type"], "object");
+    assert_eq!(responses["default"]["content"]["application/problem+json"]["schema"]["$ref"], "#/components/schemas/Problem");
+    assert!(responses["200"]["content"].get("application/problem+json").is_none());
+}

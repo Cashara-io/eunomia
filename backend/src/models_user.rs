@@ -374,11 +374,6 @@ struct ApiTokenRow {
     name: String,
 }
 
-/// A full-scope, non-expiring token, as every token was before scopes existed.
-pub async fn create_api_token(db: &ControlDb, owner: &RecordId, name: &str) -> AppResult<ApiTokenCreated> {
-    create_api_token_with(db, owner, name, &all_scope_names(), None, None).await
-}
-
 pub async fn create_api_token_with(
     db: &ControlDb,
     owner: &RecordId,

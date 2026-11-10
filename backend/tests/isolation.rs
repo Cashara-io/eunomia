@@ -177,7 +177,7 @@ async fn raw(router: &Router, method: &str, path: &str, body: Option<Value>, bea
 /// is one, straight into the database where there is not.
 async fn plant(state: &AppState, router: &Router, name: &'static str, user: User) -> Org {
     let canary = canary(name);
-    let token = models_user::create_api_token(&state.control, &user.id, "plant").await.unwrap().token;
+    let token = models_user::create_api_token_with(&state.control, &user.id, "plant", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token;
     let db = state.pool.for_org(&user.org).await.unwrap();
     let org = || user.org;
     let mut ids = Ids::default();
@@ -917,7 +917,7 @@ async fn the_no_org_context_metric_is_exposed_and_zero() {
     let router = eunomia_backend::app(state.clone());
     let tok = |u: &User| {
         let (c, id) = (state.control.clone(), u.id.clone());
-        async move { models_user::create_api_token(&c, &id, "t").await.unwrap().token }
+        async move { models_user::create_api_token_with(&c, &id, "t", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token }
     };
     let (ta, tb) = (tok(&a).await, tok(&b).await);
     let (status, body) = raw(&router, "GET", "/api/debug/metrics", None, Some(&ta), None).await;

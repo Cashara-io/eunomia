@@ -131,7 +131,7 @@ impl TestApp {
             .await
             .expect("state");
         let user = register(&state, "tester@example.com").await;
-        let token = models_user::create_api_token(&state.control, &user.id, "test")
+        let token = models_user::create_api_token_with(&state.control, &user.id, "test", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None)
             .await
             .expect("token")
             .token;

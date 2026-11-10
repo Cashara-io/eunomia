@@ -11,8 +11,8 @@ import { InputModeTracker } from "@/components/bits/motion";
 
 // Each permission in plain words: what the app can do, and what that means for you.
 const SCOPE_WORDS: Record<string, { title: string; detail: string }> = {
-  "memory:read": { title: "Read your memories", detail: "Look up what you and your other AI apps have saved, in the memory spaces you can see." },
-  "memory:write": { title: "Save memories", detail: "Add new memories and change or delete ones it saved, as you." },
+  "memory:read": { title: "Read memories in every space you belong to", detail: "Look up what you and your other AI apps have saved, in the memory spaces you can see." },
+  "memory:write": { title: "Save memories in every space you belong to", detail: "Add, change or delete memories in every space you belong to, as you." },
   "vaults:admin": { title: "Manage your memory spaces", detail: "Create, rename, share and delete memory spaces." },
   connectors: { title: "Manage your connected sources", detail: "See and sync sources like GitHub or Gmail that you connected to Eunomia." },
 };
@@ -110,6 +110,10 @@ export default function ConsentPage() {
                   {info.user_email}
                 </span>
                 . If you choose Allow, it will be able to:
+              </p>
+
+              <p className="text-body" style={{ color: "var(--ink-dim)" }}>
+                These permissions apply to every space you belong to, including your Personal space and team spaces.
               </p>
 
               <ul className="ledger hairline-rows">

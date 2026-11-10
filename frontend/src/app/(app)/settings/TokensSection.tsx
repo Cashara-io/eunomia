@@ -40,14 +40,17 @@ export function TokensSection() {
   const createToken = useCreateToken();
   const revokeToken = useRevokeToken();
   const renameToken = useRenameToken();
-  const vaultList: Vault[] = useVaults().data ?? [];
+  const vaultsQuery = useVaults();
+  const vaultList: Vault[] = vaultsQuery.data ?? [];
   const [name, setName] = useState("");
   // Least privilege: a new token reads and saves memories only. Managing spaces and sources is opt-in.
   const [scopes, setScopes] = useState<Scope[]>(DEFAULT_SCOPES);
   // Untouched (null) means the safer default: your personal space, not every space. "All my memory spaces" stays one click away.
   const [vaultChoice, setVaultChoice] = useState<string | null>(null);
-  const personal = vaultList.find((v) => v.is_default);
-  const vaultId = vaultChoice ?? personal?.id ?? "";
+  const personal = vaultList.find((v) => v.is_default && v.id);
+  const vaultId = vaultChoice ?? personal?.id;
+  const destinationReady = vaultsQuery.isSuccess && vaultId !== undefined
+    && (vaultChoice === "" || vaultList.some((v) => v.id === vaultId));
   const setVaultId = setVaultChoice;
   // New tokens expire after 90 days unless you pick otherwise.
   const [expiryDays, setExpiryDays] = useState("90");
@@ -63,14 +66,14 @@ export function TokensSection() {
   const vaultName = (id: string) => vaultList.find((v) => v.id === id)?.name ?? id;
 
   async function create() {
-    if (!name.trim()) return;
+    if (!name.trim() || !destinationReady || vaultId === undefined) return;
     setBusy(true);
     setError(null);
     try {
       const res = await createToken.mutateAsync({
         name: name.trim(),
         scopes,
-        vault_id: vaultId || null,
+        vault_id: vaultId === "" ? null : vaultId,
         expires_at: expiryDays ? new Date(Date.now() + Number(expiryDays) * 86_400_000).toISOString() : null,
       });
       setMinted({ name: res.name, token: res.token });
@@ -192,7 +195,9 @@ export function TokensSection() {
             </span>
             <Select
               aria-label="Restrict to a memory space"
-              value={vaultId}
+              value={vaultId ?? "unresolved"}
+              disabled={!vaultsQuery.isSuccess}
+              placeholder="Loading memory spaces…"
               onChange={setVaultId}
               options={[
                 { value: "", label: "All my memory spaces" },
@@ -213,11 +218,18 @@ export function TokensSection() {
               className="h-10 text-[14px] w-full"
             />
           </div>
-          <button type="submit" disabled={busy || scopes.length === 0 || !name.trim()} className="btn btn-primary">
+          <button type="submit" disabled={busy || !destinationReady || scopes.length === 0 || !name.trim()} className="btn btn-primary">
             <KeyIcon {...ICON} />
             {busy ? "Creating…" : "Create token"}
           </button>
         </div>
+        {!destinationReady && (
+          <p role="status" className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+            {vaultsQuery.isError ? "Could not load your memory spaces. Reload to try again."
+              : vaultsQuery.isPending ? "Loading your Personal memory space…"
+              : "Your Personal memory space is unavailable. Choose a destination before creating a token."}
+          </p>
+        )}
         {vaultId && (
           <p className="text-[12px] -mt-1" style={{ color: "var(--ink-faint)" }}>
             A token limited to one memory space works only there. It can&apos;t create memory spaces or change account settings.

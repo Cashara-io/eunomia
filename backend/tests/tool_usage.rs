@@ -7,7 +7,7 @@ mod common;
 use axum::body::Body;
 use axum::http::{header, Request, StatusCode};
 use common::TestApp;
-use eunomia_backend::models_user::{create_api_token, create_api_token_with};
+use eunomia_backend::models_user::create_api_token_with;
 use eunomia_backend::rid::RecordIdExt;
 use eunomia_backend::scopes;
 use eunomia_backend::usage;
@@ -69,9 +69,9 @@ fn row<'a>(rows: &'a Value, field: &str, value: &str) -> &'a Value {
 async fn every_call_is_counted_per_person_credential_channel_session_and_tool() {
     let app = TestApp::new().await;
     let admin = &app.user;
-    let laptop = create_api_token(app.control(), &admin.id, "laptop").await.unwrap().token;
+    let laptop = create_api_token_with(app.control(), &admin.id, "laptop", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token;
     let member = common::register(&app.state, "member@example.com").await;
-    let member_token = create_api_token(app.control(), &member.id, "member-key").await.unwrap().token;
+    let member_token = create_api_token_with(app.control(), &member.id, "member-key", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token;
 
     // admin, token "test": two reads over REST
     for _ in 0..2 {
@@ -141,7 +141,7 @@ async fn every_call_is_counted_per_person_credential_channel_session_and_tool() 
 async fn a_member_sees_only_their_own_usage_and_an_admin_sees_everyone() {
     let app = TestApp::new().await;
     let member = common::register(&app.state, "member@example.com").await;
-    let member_token = create_api_token(app.control(), &member.id, "member-key").await.unwrap().token;
+    let member_token = create_api_token_with(app.control(), &member.id, "member-key", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token;
     rest(&app, &app.token, "recall", json!({"query": "a"})).await;
     rest(&app, &member_token, "recall", json!({"query": "b"})).await;
     rest(&app, &member_token, "recall", json!({"query": "c"})).await;
@@ -181,7 +181,7 @@ async fn usage_never_crosses_orgs() {
     let app = TestApp::new().await;
     let other = eunomia_backend::models_user::register_user_with(&app.state, "other@example.com", common::PASSWORD, true).await.unwrap();
     assert_ne!(other.org, app.user.org);
-    let other_token = create_api_token(app.control(), &other.id, "other-key").await.unwrap().token;
+    let other_token = create_api_token_with(app.control(), &other.id, "other-key", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token;
     rest(&app, &app.token, "recall", json!({"query": "a"})).await;
     rest(&app, &other_token, "recall", json!({"query": "b"})).await;
     rest(&app, &other_token, "recall", json!({"query": "c"})).await;

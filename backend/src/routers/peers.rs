@@ -43,13 +43,14 @@ fn parse_vault_id(vault_id: &str) -> AppResult<RecordId> {
 }
 
 fn default_role() -> String {
-    peers::ROLE_EDIT.to_string()
+    peers::ROLE_READ.to_string()
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]
 struct ShareCodeRequest {
-    /// `edit` (the other Eunomia can add and change; the default) or `read`.
+    /// `read` by default. Explicit `edit` lets the other Eunomia add and change.
     #[serde(default = "default_role")]
+    #[schema(default = "read")]
     role: String,
     /// How long the code works, in hours (default 168, at most 720).
     #[serde(default)]
@@ -281,10 +282,10 @@ async fn peer_hello(State(state): State<AppState>, Path(org): Path<String>) -> R
     responses((status = 200, body = Object), (status = "default", description = "Error", body = crate::openapi::Problem, content_type = "application/problem+json")),
     security(()),
 )]
-async fn peer_join(State(state): State<AppState>, Path(org): Path<String>, Json(body): Json<Value>) -> Response {
+async fn peer_join(State(state): State<AppState>, Path(org): Path<String>, body: Result<Json<Value>, axum::extract::rejection::JsonRejection>) -> Response {
     let Some(st) = peer_org(&state, &org).await else { return refuse(404, "unknown") };
-    let Ok(req) = serde_json::from_value::<peers::JoinRequest>(body) else { return refuse(400, "bad request") };
-    match peers::accept_join(&st, req).await {
+    let body = body.map(|Json(value)| value).unwrap_or(Value::Null);
+    match peers::accept_join_json(&st, body).await {
         Ok(out) => Json(out).into_response(),
         Err(e) => e.into_response(),
     }

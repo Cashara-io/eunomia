@@ -177,7 +177,8 @@ async fn run(state: &AppState, capsule: &Capsule, user: Option<&User>) -> AppRes
     let a = &capsule.args;
     let mut req = Request::builder().method(a["method"].as_str().unwrap_or("GET")).uri(a["uri"].as_str().unwrap_or("/"));
     if let Some(u) = user {
-        let token = models_user::create_api_token(&state.control, &u.id, "replay").await?.token;
+        // Replay runs in a fresh mem:// scratch database. Model the original full user authority explicitly.
+        let token = models_user::create_api_token_with(&state.control, &u.id, "replay", &crate::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await?.token;
         req = req.header(header::AUTHORIZATION, format!("Bearer {token}"));
     }
     let body = match &a["body"] {

@@ -337,7 +337,7 @@ async fn vault_restricted_token_is_confined_to_its_vault() {
     let (_, v) = mcp_call(&app, &t, "recall", json!({"query": "personal"})).await;
     assert!(!v.to_string().contains("in personal"), "{v}");
 
-    // it sees only its vault, cannot make new ones, cannot read raw source records
+    // It sees only its vault and cannot make new ones or read account settings.
     let (_, _, vs) = send(&app.router, "GET", "/api/vaults", None, &h).await;
     let ids: Vec<&str> = vs.as_array().or(vs["results"].as_array()).unwrap().iter().map(|v| v["id"].as_str().unwrap()).collect();
     assert_eq!(ids, [org.to_string()]);
@@ -352,7 +352,8 @@ async fn vault_restricted_token_is_confined_to_its_vault() {
         assert_eq!((status, body["code"].as_str()), (StatusCode::FORBIDDEN, Some("auth.scope")), "{m} {p}");
     }
     let (is_error, v) = mcp_call(&app, &t, "search", json!({"query": "x"})).await;
-    assert!((is_error, v["code"].as_str()) == (true, Some("auth.scope")), "{v}");
+    assert!(!is_error, "a default read uses the bound vault: {v}");
+    assert_eq!(v["results"], json!([]), "no Personal source records enter a team-bound read");
 
     // and the unrestricted token still reaches both
     let (status, _, _) = send(&app.router, "GET", &format!("/api/entities?vault_id={}", personal.to_string()), None, &bearer(&app.token)).await;
@@ -1094,4 +1095,54 @@ async fn chat_turns_reasoning_off_when_the_model_refuses_tools_while_reasoning()
     let bodies = bodies.lock().unwrap();
     assert_eq!(bodies.len(), 2, "one refused request, then one retry");
     assert!(!bodies[0].contains("reasoning_effort"), "the first request leaves reasoning_effort to the model");
+}
+
+#[tokio::test]
+async fn new_token_defaults_and_explicit_opt_ins_preserve_legacy_tokens() {
+    let app = TestApp::new().await;
+    let personal = common::sys(vaults::personal_vault_id(&app.db().await, &app.user.id)).await.unwrap();
+    let team = org_vault(&app).await;
+    let before = chrono::Utc::now();
+    let (status, made) = app.http_session("POST", "/api/auth/tokens", Some(json!({"name": "safe"}))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(made["vault_id"], personal.to_string());
+    assert_eq!(made["scopes"], json!(["memory:read", "memory:write"]));
+    let expiry = chrono::DateTime::parse_from_rfc3339(made["expires_at"].as_str().unwrap()).unwrap();
+    assert!(expiry >= before + chrono::Duration::days(90));
+    assert!(expiry <= chrono::Utc::now() + chrono::Duration::days(90));
+    let safe = made["token"].as_str().unwrap();
+    let (status, _, _) = send(&app.router, "GET", &format!("/api/entities?vault_id={}", team.to_string()), None, &bearer(safe)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let (status, _, _) = send(&app.router, "POST", "/api/tools/memory_write", Some(json!({"subject_name":"Safe", "subject_kind":"person", "text":"works"})), &bearer(safe)).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, _, _) = send(&app.router, "POST", "/api/vaults", Some(json!({"name":"Forbidden"})), &bearer(safe)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    let (status, explicit) = app.http_session("POST", "/api/auth/tokens", Some(json!({"name":"explicit", "expires_at":null, "vault_id":null, "scopes":scopes::ALL}))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(explicit["expires_at"].is_null());
+    assert!(explicit["vault_id"].is_null());
+    assert_eq!(explicit["scopes"].as_array().unwrap().len(), 4);
+    let (status, _, _) = send(&app.router, "GET", "/api/settings", None, &bearer(explicit["token"].as_str().unwrap())).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, dated) = app.http_session("POST", "/api/auth/tokens", Some(json!({"name":"dated", "expires_at":"2999-01-01T00:00:00Z", "vault_id":team.to_string(), "scopes":null}))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(dated["vault_id"], team.to_string());
+    assert!(dated["expires_at"].as_str().unwrap().starts_with("2999-01-01"));
+    assert_eq!(dated["scopes"], json!(["memory:read", "memory:write"]));
+    for field in ["vault_id", "expires_at"] {
+        let mut input = json!({"name":"invalid"});
+        input[field] = json!("");
+        assert!(app.http_session("POST", "/api/auth/tokens", Some(input)).await.0.is_client_error());
+    }
+    // The harness token uses the pre-release creation path, with all scopes and no limits.
+    let (status, _, _) = send(&app.router, "GET", "/api/settings", None, &bearer(&app.token)).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, _, _) = send(&app.router, "GET", &format!("/api/entities?vault_id={}", team.to_string()), None, &bearer(&app.token)).await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, list) = app.http_session("GET", "/api/auth/tokens", None).await;
+    let legacy = list.as_array().unwrap().iter().find(|t| t["name"] == "test").unwrap();
+    assert!(legacy["expires_at"].is_null() && legacy["vault_id"].is_null());
+    assert_eq!(legacy["scopes"].as_array().unwrap().len(), 4);
 }

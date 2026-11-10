@@ -45,7 +45,26 @@ A sender's own `X-Delivery-Id`, `X-GitHub-Delivery` or `Idempotency-Key` header 
 
 ## Taking events out
 
-These routes take a normal personal API token. Claim, ack and nack need `memory:write`; listing the inbox needs `memory:read`; managing extensions (create, edit, rotate, delete) needs the `connectors` scope. A vault-restricted token cannot use them: an extension belongs to the account.
+These routes take an account API token. Claim, ack and nack need `memory:write`; listing the inbox needs `memory:read`; managing extensions (create, edit, rotate, delete) needs the `connectors` scope. A vault-restricted token cannot use them: an extension belongs to the account.
+
+New API tokens default to Personal, read/write memory and a 90-day expiry.
+For these account routes, explicitly choose **All my memory spaces** in Settings
+or send `vault_id: null` when creating the token. Choose `connectors` explicitly
+if the integration manages extensions. For example, a registry and consumer
+integration can request:
+
+```json
+{
+  "name": "Extension worker",
+  "vault_id": null,
+  "scopes": ["memory:read", "memory:write", "connectors"]
+}
+```
+
+That token expires in 90 days. Renew it, supply a future `expires_at`, or opt in
+to unlimited lifetime with `expires_at: null`. Existing extension tokens keep
+their permissions and lifetime. See [API token defaults](agents.md#api-token-defaults).
+
 
 | Route | Does |
 |---|---|
@@ -72,7 +91,7 @@ Standard library only. It claims a batch, writes one fact per event, acks the on
 import json, os, urllib.error, urllib.request
 
 BASE = os.environ.get("EUNOMIA_URL", "http://localhost:8001").rstrip("/")
-TOKEN = os.environ["EUNOMIA_TOKEN"]        # a personal API token with memory:write
+TOKEN = os.environ["EUNOMIA_TOKEN"]        # an all-spaces API token with memory:write
 EXT = os.environ["EUNOMIA_EXTENSION"]      # the extension id, extension:...
 
 

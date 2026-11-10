@@ -50,6 +50,7 @@ pub mod evidence;
 mod memory;
 mod ontology;
 mod peers;
+mod preflight;
 mod records;
 mod secret_tools;
 pub(crate) mod skills;
@@ -143,12 +144,6 @@ pub fn is_destructive(name: &str) -> bool {
     matches!(name, "memory_delete" | "entity_delete" | "entity_merge" | "vault_delete" | "vault_remove_member" | "vault_leave" | "vault_set_role" | "vault_transfer_ownership" | "document_delete" | "skill_delete" | "vault_repair")
 }
 
-/// Tools over the user's raw synced source records, which belong to no vault:
-/// a vault-restricted token may not use them.
-fn reads_source_records(name: &str) -> bool {
-    matches!(name, "search" | "get" | "list" | "links")
-}
-
 /// What each tool does, for the model choosing between them (chat agent and
 /// MCP clients alike). Every registered tool must have one -- see tests.
 pub fn description(name: &str) -> &'static str {
@@ -217,7 +212,7 @@ pub fn description(name: &str) -> &'static str {
         "skill_get" => "One saved skill with its full Markdown body, by id (from `skill_find`) or by name (an error names the ids if several vaults hold that name).",
         "skill_delete" => "Delete one saved skill by id. Irreversible.",
         "changes_since" => "A vault's change log after a cursor: one numbered row per write (seq, op created/updated/deleted/merged, kind memory/entity/relation/skill/document, the item's id, who wrote it, when), oldest first, with no content (fetch the item to see it). Pass the returned `next` as `after` to read on. Your personal vault unless `vault_id` is given.",
-        "vault_share_code" => "Make a one-time share code for a vault you own, to share it with another Eunomia (a separate install, e.g. a teammate's or another machine of yours). Send the code to whoever runs the other Eunomia; it works once and expires (default 7 days). `role` edit (default) lets the other side add and change; read lets it only receive. The code carries this Eunomia's addresses, local network first. Documents are not shared.",
+        "vault_share_code" => "Make a one-time share code for a vault you own, to share it with another Eunomia (a separate install, e.g. a teammate's or another machine of yours). Send the code to whoever runs the other Eunomia; it works once and expires (default 7 days). `role` read (default) lets the other side only receive; explicit edit lets it add and change. The code carries this Eunomia's addresses, local network first. Documents are not shared.",
         "vault_join_shared" => "Join a vault another Eunomia shared, with the share code its owner sent (`eunomia1:...`). Makes a new vault here holding a full copy, kept in step automatically about every 30 seconds while the other Eunomia can be reached.",
         "vault_peers" => "List the other Eunomias a vault is shared with (or copied from): each link's id, direction (host: this one has the original; guest: a copy), role, status (up_to_date, syncing, unreachable, integrity_problem, revoked), last sync time and whether both copies match; plus unused share codes.",
         "vault_peer_sync" => "Sync a shared vault with the other Eunomia now (a `link_id` from `vault_peers`). Returns the link's status after.",
@@ -437,13 +432,21 @@ async fn call_inner(app: &AppState, user: &User, name: &str, mut args: Value) ->
         return Ok(AppError::coded(ErrorCode::ToolNotFound, format!("unknown tool {name}")).to_tool_value());
     };
 
-    let needed = authz::require_scope(scopes::for_tool(name, is_read_only(name))).and_then(|()| {
-        if reads_source_records(name) { authz::require_unrestricted() } else { Ok(()) }
-    });
+    let needed = authz::require_scope(scopes::for_tool(name, is_read_only(name)));
     if let Err(e) = needed {
         record_event(&app.control, owner, name, e.code.as_str(), "").await;
         count_call(app, user, name, true, 0);
         return Err(e);
+    }
+    // A bound credential already identifies the only vault a required vault argument can name.
+    // Optional scopes are resolved by the services; explicit input is never replaced.
+    if spec.schema["required"].as_array().is_some_and(|fields| fields.iter().any(|f| f == "vault_id"))
+        && let Some(only) = authz::restricted_vault()?
+        && let Some(object) = args.as_object_mut()
+        && !object.contains_key("vault_id")
+        && !object.contains_key("vault_ids")
+    {
+        object.insert("vault_id".into(), only.to_string().into());
     }
     let state = &app.org(&user.org).await?;
     if let Err(e) = resolve_vault_names(&state.db, owner, &mut args).await {
@@ -464,6 +467,17 @@ async fn call_inner(app: &AppState, user: &User, name: &str, mut args: Value) ->
             return Ok(e.to_tool_value());
         }
     };
+
+    // Refuse before invoking the handler, with no argument summary or replay capsule.
+    // Check resolved selectors too, as before, but scrub any resolved secret from the audit.
+    let selectors = prepared.as_ref().map(|p| &p.args).unwrap_or(&args);
+    if let Err(refusal) = preflight::check(name, &spec, selectors) {
+        let requested = refusal.requested.to_string();
+        let requested = prepared.as_ref().map(|p| p.scrub_text(&requested)).unwrap_or(requested);
+        preflight::record(state, owner, name, &refusal, &requested).await;
+        count_call(app, user, name, true, 0);
+        return preflight::result(name, refusal.error);
+    }
 
     let vault = args.get("vault_id").and_then(Value::as_str).unwrap_or("personal").to_string();
     let span = tracing::info_span!("tool.call", tool = name, vault = %vault, outcome = Empty, duration_ms = Empty);
@@ -605,11 +619,11 @@ async fn record_failure(state: &OrgState, owner: &RecordId, name: &str, args: Va
 /// Runs the tool with `args` (secret values in, when the call had references) and audits it with
 /// `audited` (the references, never the values).
 async fn run_tool(state: &OrgState, owner: &RecordId, name: &str, spec: &ToolSpec, args: Value, audited: &Value) -> AppResult<Value> {
+    let result = (spec.handler)(state, owner, args).await;
     if is_read_only(name) && !DISCLOSURE_TOOLS.contains(&name) {
-        return (spec.handler)(state, owner, args).await;
+        return result;
     }
 
-    let result = (spec.handler)(state, owner, args).await;
     let (outcome, code) = match &result {
         Ok(v) if v.get("error").is_some() => ("error", v.get("code").and_then(Value::as_str).unwrap_or("error")),
         Ok(_) => ("ok", "ok"),

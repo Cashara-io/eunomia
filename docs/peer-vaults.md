@@ -160,7 +160,7 @@ For the UI and agents (session or token, like other vault routes):
 
 | Route | Does |
 |---|---|
-| `POST /api/vaults/{vault}/share-codes` `{role, expires_in_hours?}` | A one-time code (owner only) → `{id, code, role, expires_at, addresses, fingerprint}` |
+| `POST /api/vaults/{vault}/share-codes` `{role?, expires_in_hours?}` | A one-time code (owner only) → `{id, code, role, expires_at, addresses, fingerprint}` |
 | `DELETE /api/vaults/{vault}/share-codes/{id}` | Cancel an unused code |
 | `GET /api/vaults/{vault}/peers` | Links with status, last sync, digests; unused codes; this instance's addresses |
 | `POST /api/peers/join` `{code, name?}` | Join → `{vault, link}` |
@@ -186,3 +186,17 @@ the only port a peer needs.
 - **Handing the main copy over (#134)** — making the other Eunomia the one that holds the original —
   is not done yet. Today: the new main copy shares the space back with a fresh code, and the old side
   stops sharing and joins it. Follow-up: flip a link's direction in place.
+
+## New share defaults and refused joins
+
+Omitting `role` when creating a share code through REST or the MCP
+`vault_share_code` tool grants `read`, matching the browser form. The owner can explicitly send `role: "edit"` for collaboration. Existing
+share codes and active edit links keep their stored role. There is no migration
+or downgrade. A read-only guest can keep local edits, but the host ignores them.
+
+The host records distinct `why=expired`, `why=used` and `why=malformed` reasons
+for refused joins in its workspace admin audit log. Unknown codes and invalid
+proofs count as malformed. Submitted codes, secrets and claimed peer identities
+are not stored in refusal entries. Public refusals stay identical, and the v1
+peer protocol is unchanged, so older peers continue to work. A guest cannot
+learn the host's private audit reason from the generic refusal.

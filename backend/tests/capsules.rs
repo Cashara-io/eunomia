@@ -167,7 +167,7 @@ async fn capsule_route_is_admin_only() {
     let app = new_app().await; // first user: the admin
     failing_tool(&app, &trace(20)).await;
     let other = common::register(&app.state, "other@example.com").await;
-    let other_token = models_user::create_api_token(&app.state.control, &other.id, "t").await.unwrap().token;
+    let other_token = models_user::create_api_token_with(&app.state.control, &other.id, "t", &eunomia_backend::scopes::ALL.iter().map(|s| s.to_string()).collect::<Vec<_>>(), None, None).await.unwrap().token;
     let path = format!("/api/debug/capsules/{}", trace(20));
 
     let ((status, body), _) = http(&app.router, "GET", &path, None, Some(&other_token), None).await;

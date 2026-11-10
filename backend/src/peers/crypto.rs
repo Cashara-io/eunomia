@@ -64,8 +64,13 @@ pub fn mac(key: &[u8], parts: &[&str]) -> String {
 
 /// Constant-time check of a [`mac`].
 pub fn verify_mac(key: &[u8], parts: &[&str], tag_hex: &str) -> bool {
-    let Ok(tag) = hex::decode(tag_hex.trim()) else { return false };
-    mac_state(key, parts).verify_slice(&tag).is_ok()
+    let mut tag = [0u8; 32];
+    let encoded = hex::decode_to_slice(tag_hex.trim(), &mut tag).is_ok();
+    // Hash all parts and compare a full-size tag even when the supplied tag is malformed.
+    let verified = mac_state(key, parts).verify_slice(&tag).is_ok();
+    #[cfg(feature = "test-support")]
+    super::join_step("mac", parts.iter().map(|part| part.len()).sum());
+    verified & encoded
 }
 
 /// `K = HMAC-SHA256(secret, "eunomia-peer-link-v1" || link_id || nonce_g || nonce_h)`.
