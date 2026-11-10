@@ -28,10 +28,12 @@ import Structure from "./Structure";
 import KindDetail from "./KindDetail";
 import Review from "./Review";
 import Objects from "./Objects";
+import Connections from "./Connections";
 import ObjectProfile from "./ObjectProfile";
 
 const views = [
   { path: "/ontology", label: "Overview" },
+  { path: "/ontology/connections", label: "Connections" },
   { path: "/ontology/objects", label: "Objects" },
   { path: "/ontology/review", label: "Review" },
 ];
@@ -45,6 +47,7 @@ export default function TwinArea({
   kind,
 }: {
   view:
+    | "connections"
     | "overview"
     | "structure"
     | "review"
@@ -84,15 +87,17 @@ export default function TwinArea({
               <Link
                 key={v.id}
                 href={twinHref(
-                  view === "activity"
-                    ? "/ontology/activity"
-                    : view === "review"
-                      ? "/ontology/review"
-                      : view === "objects" || view === "object"
-                        ? "/ontology/objects"
-                        : view === "structure"
-                          ? "/ontology/schema"
-                          : "/ontology",
+                  view === "connections"
+                    ? "/ontology/connections"
+                    : view === "activity"
+                      ? "/ontology/activity"
+                      : view === "review"
+                        ? "/ontology/review"
+                        : view === "objects" || view === "object"
+                          ? "/ontology/objects"
+                          : view === "structure"
+                            ? "/ontology/schema"
+                            : "/ontology",
                   v.id,
                 )}
                 className="flex items-center justify-between gap-3 p-4 hover:bg-[var(--surface-raised)]"
@@ -122,6 +127,7 @@ function SelectedSpace({
 }: {
   vault: Vault;
   view:
+    | "connections"
     | "overview"
     | "structure"
     | "review"
@@ -282,7 +288,9 @@ function SelectedSpace({
           {view === "kind" ? kind : view === "object" ? "Object" : view}
         </h1>
       )}
-      {view === "activity" ? (
+      {view === "connections" ? (
+        <Connections space={vault.id} />
+      ) : view === "activity" ? (
         <Activity space={vault.id} />
       ) : view === "objects" ? (
         <Objects space={vault.id} />
