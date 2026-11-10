@@ -77,7 +77,7 @@ function PayloadValue({ k, v }: { k: string; v: unknown }) {
     return (
       <div className="flex flex-col gap-1 pl-3" style={{ borderLeft: "1px solid var(--border)" }}>
         {entries.map(([nk, nv]) => (
-          <div key={nk} className="flex items-baseline gap-2 text-[12px]">
+          <div key={nk} className="flex items-baseline gap-2 text-caption">
             <span className="shrink-0" style={{ color: "var(--ink-faint)" }}>
               {formatKey(nk)}
             </span>
@@ -122,18 +122,18 @@ function RecordRow({ hit }: { hit: ToolHit }) {
           </button>
         </td>
         <td className="hidden sm:table-cell whitespace-nowrap">
-          <span className="font-mono text-[12px]" style={{ color: "var(--ink-dim)" }}>
+          <span className="font-mono text-caption" style={{ color: "var(--ink-dim)" }}>
             {hit.type}
           </span>
         </td>
-        <td className="whitespace-nowrap text-right font-mono text-[12px]" style={{ color: "var(--ink-dim)" }} title={hit.occurred_at ?? undefined}>
+        <td className="whitespace-nowrap text-right font-mono text-caption" style={{ color: "var(--ink-dim)" }} title={hit.occurred_at ?? undefined}>
           {hit.occurred_at ? relativeTime(hit.occurred_at) : "No date"}
         </td>
       </tr>
       {open && (
         <tr>
           <td colSpan={3} className="!h-auto" style={{ background: "var(--surface-raised)" }}>
-            <div className="py-3 pl-6 flex flex-col gap-2 text-[12.5px]">
+            <div className="py-3 pl-6 flex flex-col gap-2 text-detail">
               {detail === null && (
                 <div className="flex flex-col gap-2" aria-label="Loading record">
                   <span className="skeleton h-3 w-64" />
@@ -196,7 +196,7 @@ function rangeLabel(offset: number, count: number, total: number | null, hasMore
 
 function Breadcrumb({ label }: { label: string }) {
   return (
-    <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-[13px]" style={{ color: "var(--ink-dim)" }}>
+    <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-detail" style={{ color: "var(--ink-dim)" }}>
       <Link href="/connectors" className="link">
         Connected sources
       </Link>
@@ -235,7 +235,7 @@ function DeleteData({ row, kind }: { row: SourceRow; kind: ConnectorKind }) {
       <h2 id="delete-data-heading" className="section-title">
         Imported items
       </h2>
-      <p className="text-[14px] max-w-[62ch]" style={{ color: "var(--ink-dim)" }}>
+      <p className="text-body max-w-[62ch]" style={{ color: "var(--ink-dim)" }}>
         Remove everything Eunomia brought in from {row.label}. The connection stays, so later updates bring in new items only.
       </p>
       <button
@@ -376,7 +376,7 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
       <div className="max-w-5xl flex flex-col gap-6">
         <Breadcrumb label={kind} />
         <PageHeader title={formatKey(kind)} mark={<ConnectorTile kind={null} size={32} />} />
-        <div className="ledger px-5 py-4 flex items-center justify-between gap-4 flex-wrap text-[14px]">
+        <div className="ledger px-5 py-4 flex items-center justify-between gap-4 flex-wrap text-body">
           <span style={{ color: "var(--ink-dim)" }}>This source was removed: &ldquo;{kind}&rdquo; is not connected any more and has no items left.</span>
           <Link href="/connectors" className="btn">
             Back to connected sources
@@ -394,7 +394,7 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
       <div className="max-w-5xl flex flex-col gap-6">
         <Breadcrumb label={row.label} />
         <PageHeader title={row.label} mark={<ConnectorTile kind={connectorKind ?? null} size={32} />} />
-        <div className="ledger px-5 py-4 flex items-center justify-between gap-4 flex-wrap text-[14px]">
+        <div className="ledger px-5 py-4 flex items-center justify-between gap-4 flex-wrap text-body">
           <span style={{ color: "var(--ink-dim)" }}>{row.label} is not connected, so nothing has been imported yet.</span>
           {settingsHref ? (
             <Link href={settingsHref} className="btn btn-primary">
@@ -452,7 +452,7 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
       <dl className="ledger grid grid-cols-2 md:grid-cols-4">
         {[
           { label: "Status", value: <StatusLabel tone={toneFromVar(h.tone)}>{h.text}</StatusLabel> },
-          { label: "Items imported", value: <span className="text-[24px] tabular"><DigitRoll value={row.record_count} /></span> },
+          { label: "Items imported", value: <span className="text-display tabular"><DigitRoll value={row.record_count} /></span> },
           {
             label: "Last updated",
             value: (
@@ -465,7 +465,7 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
         ].map((s, i) => (
           <div
             key={s.label}
-            className={`px-4 py-3 flex flex-col gap-1.5 min-w-0 text-[14px] ${i % 2 ? "border-l" : ""} ${i > 1 ? "border-t md:border-t-0" : ""} ${i === 2 ? "md:border-l" : ""}`}
+            className={`px-4 py-3 flex flex-col gap-1.5 min-w-0 text-body ${i % 2 ? "border-l" : ""} ${i > 1 ? "border-t md:border-t-0" : ""} ${i === 2 ? "md:border-l" : ""}`}
           >
             <dt className="label">{s.label}</dt>
             <dd className="min-w-0 truncate">{s.value}</dd>
@@ -474,20 +474,20 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
       </dl>
 
       {row.sync_status.last_report?.status === "partial" && (
-        <p role="status" className="text-[14px]" style={{ color: "var(--warning)" }}>
+        <p role="status" className="text-body" style={{ color: "var(--warning)" }}>
           {row.sync_status.last_report.message}. Eunomia will continue automatically.
         </p>
       )}
       {row.sync_status.last_report?.warnings?.map((warning) => (
-        <p key={warning} role="status" className="text-[14px]" style={{ color: "var(--warning)" }}>{warning}</p>
+        <p key={warning} role="status" className="text-body" style={{ color: "var(--warning)" }}>{warning}</p>
       ))}
       {(syncError || row.sync_status.last_error) && (
         <div className="flex flex-col gap-1.5">
           <ErrorLine error={syncError}>
             <span className="font-medium">{syncError ? "The update could not start." : "The last update failed."}</span>{" "}
-            <span className="font-mono text-[12px] break-words">{syncError?.message ?? row.sync_status.last_error}</span>
+            <span className="font-mono text-caption break-words">{syncError?.message ?? row.sync_status.last_error}</span>
           </ErrorLine>
-          <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+          <p className="text-body" style={{ color: "var(--ink-dim)" }}>
             {settingsHref ? (
               <>
                 If it mentions sign-in or permission (for example HTTP 401 or 403), check the details in{" "}
@@ -510,7 +510,7 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <h2 id="records-heading" className="section-title">
             Imported items{" "}
-            <span className="font-normal text-[14px]" style={{ color: "var(--ink-dim)" }}>
+            <span className="font-normal text-body" style={{ color: "var(--ink-dim)" }}>
               {results && shown && results.length > 0 && rangeLabel(shown.offset, results.length, activeQuery ? null : total, shown.has_more)}
             </span>
           </h2>
@@ -522,7 +522,7 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
               onKeyDown={(e) => e.key === "Escape" && query && clearSearch()}
               placeholder={`Search ${row.label}…`}
               aria-label={`Search ${row.label} records`}
-              className="flex-1 min-w-0 text-[14px] bg-transparent outline-none"
+              className="flex-1 min-w-0 text-body bg-transparent outline-none"
             />
             {searching ? (
               <span className="label">Searching…</span>
@@ -566,7 +566,7 @@ export default function ConnectorWorkspacePage({ params }: { params: Promise<{ k
               {results !== null && results.length === 0 && (
                 <tr>
                   <td colSpan={3} className="!h-auto">
-                    <div className="py-4 flex items-center gap-3 flex-wrap text-[13px]" style={{ color: "var(--ink-dim)" }}>
+                    <div className="py-4 flex items-center gap-3 flex-wrap text-detail" style={{ color: "var(--ink-dim)" }}>
                       {activeQuery ? (
                         <>
                           No records match &ldquo;{activeQuery}&rdquo;.

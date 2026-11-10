@@ -83,10 +83,10 @@ export default function SecretRequestForm({ request, onDone, onLater }: { reques
       <div className="flex items-start gap-3">
         <KeyIcon weight="duotone" size={18} aria-hidden style={{ color: "var(--accent-text)", marginTop: 2 }} />
         <div className="min-w-0 flex-1">
-          <div className="text-[15px] font-medium" data-testid="secret-request-label">
+          <div className="text-reading font-medium" data-testid="secret-request-label">
             {request.label || request.name}
           </div>
-          <div className="text-[12.5px] mt-0.5" style={{ color: "var(--ink-dim)" }}>
+          <div className="text-detail mt-0.5" style={{ color: "var(--ink-dim)" }}>
             Asked by {askedBy(request)} {relativeTime(request.created_at)}
             {request.session ? <span style={{ color: "var(--ink-faint)" }}> · session {request.session.slice(0, 12)}</span> : null}
           </div>
@@ -94,7 +94,7 @@ export default function SecretRequestForm({ request, onDone, onLater }: { reques
       </div>
 
       {request.description && (
-        <div className="text-[13px]">
+        <div className="text-detail">
           <div className="label mb-1">Why, in the agent&apos;s words</div>
           <p className="whitespace-pre-wrap break-words" style={{ color: "var(--ink-dim)" }}>
             {request.description}
@@ -102,7 +102,7 @@ export default function SecretRequestForm({ request, onDone, onLater }: { reques
         </div>
       )}
 
-      <dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-[12.5px]">
+      <dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-detail">
         <dt style={{ color: "var(--ink-faint)" }}>Kept in</dt>
         <dd>{vaultName}</dd>
         <dt style={{ color: "var(--ink-faint)" }}>Agents get</dt>
@@ -118,11 +118,11 @@ export default function SecretRequestForm({ request, onDone, onLater }: { reques
       </dl>
 
       {closed ? (
-        <p className="ledger px-4 py-3 text-[13px]" role="status" style={{ color: "var(--ink-dim)" }}>
+        <p className="ledger px-4 py-3 text-detail" role="status" style={{ color: "var(--ink-dim)" }}>
           This request is {request.status}.
         </p>
       ) : !request.can_fill ? (
-        <p className="ledger px-4 py-3 text-[13px]" role="status" style={{ color: "var(--ink-dim)" }}>
+        <p className="ledger px-4 py-3 text-detail" role="status" style={{ color: "var(--ink-dim)" }}>
           Only the person whose agent asked can paste this secret. You can decline it.
         </p>
       ) : (
@@ -141,7 +141,7 @@ export default function SecretRequestForm({ request, onDone, onLater }: { reques
                 autoCapitalize="off"
                 spellCheck={false}
                 autoFocus
-                className="field h-9 px-3 text-[13px] font-mono w-full"
+                className="field h-9 px-3 text-detail font-mono w-full"
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
               />
@@ -149,7 +149,7 @@ export default function SecretRequestForm({ request, onDone, onLater }: { reques
                 {show ? <EyeSlashIcon weight="duotone" size={15} /> : <EyeIcon weight="duotone" size={15} />}
               </button>
             </div>
-            <span className="text-[12px] flex items-center gap-1.5" style={{ color: "var(--ink-faint)" }}>
+            <span className="text-caption flex items-center gap-1.5" style={{ color: "var(--ink-faint)" }}>
               <ShieldCheckIcon weight="duotone" size={13} aria-hidden />
               Encrypted before it is stored. Nobody can read it back, you included; the agent only gets the handle.
             </span>
@@ -158,13 +158,13 @@ export default function SecretRequestForm({ request, onDone, onLater }: { reques
           <fieldset className="flex flex-col gap-1.5">
             <legend className="label mb-1">May be sent to</legend>
             {hosts.length === 0 && (
-              <span className="text-[12.5px]" style={{ color: "var(--warning)" }}>
+              <span className="text-detail" style={{ color: "var(--warning)" }}>
                 No host: agents could only transform it, not send it anywhere.
               </span>
             )}
             <ul className="flex flex-wrap gap-1.5">
               {hosts.map((h) => (
-                <li key={h} className="inline-flex items-center gap-1 rounded px-2 h-7 text-[12.5px] font-mono" style={{ background: "var(--surface-raised)" }}>
+                <li key={h} className="inline-flex items-center gap-1 rounded px-2 h-7 text-detail font-mono" style={{ background: "var(--surface-raised)" }}>
                   {h}
                   <button type="button" className="btn btn-ghost btn-icon" style={{ height: 20, width: 20 }} aria-label={`Remove ${h}`} onClick={() => setHosts(hosts.filter((x) => x !== h))}>
                     <XIcon weight="duotone" size={12} />
@@ -175,7 +175,7 @@ export default function SecretRequestForm({ request, onDone, onLater }: { reques
             <div className="flex items-center gap-2">
               <input
                 aria-label="Add a host"
-                className="field h-8 px-3 text-[12.5px] font-mono flex-1"
+                className="field h-8 px-3 text-detail font-mono flex-1"
                 placeholder="api.example.com"
                 value={newHost}
                 onChange={(e) => setNewHost(e.target.value)}
@@ -194,7 +194,7 @@ export default function SecretRequestForm({ request, onDone, onLater }: { reques
 
           <fieldset className="flex flex-col gap-1">
             <legend className="label mb-1">Where in a request</legend>
-            <div className="flex flex-wrap gap-4 text-[13px]">
+            <div className="flex flex-wrap gap-4 text-detail">
               {PLACEMENTS.map((p) => (
                 <label key={p.value} className="inline-flex items-center gap-1.5">
                   <input
@@ -208,11 +208,11 @@ export default function SecretRequestForm({ request, onDone, onLater }: { reques
             </div>
           </fieldset>
 
-          <label className="inline-flex items-start gap-2 text-[13px]">
+          <label className="inline-flex items-start gap-2 text-detail">
             <input type="checkbox" className="mt-0.5" checked={anyAgent} onChange={(e) => setAnyAgent(e.target.checked)} />
             <span>
               Let any of my agents in {vaultName} use it
-              <span className="block text-[12px]" style={{ color: "var(--ink-faint)" }}>
+              <span className="block text-caption" style={{ color: "var(--ink-faint)" }}>
                 Otherwise only {askedBy(request)} may.
               </span>
             </span>
@@ -220,7 +220,7 @@ export default function SecretRequestForm({ request, onDone, onLater }: { reques
         </>
       )}
 
-      <p className="text-[12px]" style={{ color: "var(--ink-faint)" }}>
+      <p className="text-caption" style={{ color: "var(--ink-faint)" }}>
         Eunomia never asks for a secret in chat or on another site. Paste it only on this page.
       </p>
 

@@ -99,7 +99,7 @@ function InvitationsPanel() {
         Pending invitations
         <span className="label font-mono">{invitations.length}</span>
       </h2>
-      <p className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+      <p className="text-body" style={{ color: "var(--ink-dim)" }}>
         An invitation gives you no access until you join. Joining lets you read and add to that space.
       </p>
       {invitations.map((inv) => (
@@ -110,7 +110,7 @@ function InvitationsPanel() {
         >
           {joined === inv.vault_id && <JoinFlash />}
           <div className="flex-1 min-w-[160px]">
-            <div className="text-[15px] font-semibold truncate">
+            <div className="text-reading font-semibold truncate">
               {inv.vault_name}
             </div>
             <div className="label mt-0.5">
@@ -186,7 +186,7 @@ function VaultRow({
       <span className="flex-1 min-w-0">
         <span className="flex items-center gap-2.5 min-w-0">
           <VaultShape tone={vaultTone(vault.kind)} />
-          <span className="text-[16px] font-medium truncate">{vault.name}</span>
+          <span className="text-reading font-medium truncate">{vault.name}</span>
         </span>
         <span className="label block mt-1 truncate">
           {peopleLine(vault, members)}
@@ -237,14 +237,14 @@ function CreateVaultForm({
         create();
       }}
     >
-      <label htmlFor="new-vault-name" className="text-[14px] font-medium">
+      <label htmlFor="new-vault-name" className="text-body font-medium">
         Name the space. You become its owner and can invite people next.
       </label>
       <div className="flex flex-wrap items-center gap-2">
         <input
           id="new-vault-name"
           autoFocus
-          className="field h-10 px-3 text-[14px] flex-1 min-w-[180px]"
+          className="field h-10 px-3 text-body flex-1 min-w-[180px]"
           placeholder="Space name, e.g. a project, client, team or household"
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -271,7 +271,7 @@ function CreateVaultForm({
 }
 
 /** A quiet action that reads as a link (the page header keeps one primary button). */
-const TEXT_LINK = "link inline-flex items-center gap-1 min-h-10 text-[14px] font-medium";
+const TEXT_LINK = "link inline-flex items-center gap-1 min-h-10 text-body font-medium";
 
 const vaultLabel = (v: Vault) => (v.is_default ? "Personal" : v.name);
 
@@ -338,9 +338,9 @@ function MergeVaultsCard({
 
   const select = (value: string, set: (v: string) => void, label: string) => (
     <div className="flex flex-col gap-1.5 flex-1 min-w-[160px]">
-      <span className="text-[13px] font-medium">{label}</span>
+      <span className="text-detail font-medium">{label}</span>
       <Select
-        className="h-10 text-[14px] w-full"
+        className="h-10 text-body w-full"
         value={value}
         onChange={set}
         aria-label={label}
@@ -364,7 +364,7 @@ function MergeVaultsCard({
       </button>
       {open && (
       <div id="merge-panel" className="ledger p-5 flex flex-col gap-4 w-full">
-        <p className="text-[14px] max-w-[66ch]" style={{ color: "var(--ink-dim)" }}>
+        <p className="text-body max-w-[66ch]" style={{ color: "var(--ink-dim)" }}>
           Combining creates a brand new space with everything from both. The two originals stay exactly as they are,
           with the same members. Matching people and topics (same kind and name) are combined, and repeated facts are kept
           once. Only you are a member of the new space until you invite others.
@@ -381,9 +381,9 @@ function MergeVaultsCard({
         </div>
         <div className="flex items-end gap-2 flex-wrap">
           <label className="flex flex-col gap-1.5 flex-1 min-w-[180px]">
-            <span className="text-[13px] font-medium">Name for the new space</span>
+            <span className="text-detail font-medium">Name for the new space</span>
             <input
-              className="field h-10 px-3 text-[14px]"
+              className="field h-10 px-3 text-body"
               placeholder="New space name (optional)"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -403,7 +403,7 @@ function MergeVaultsCard({
         )}
         {result && (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <p role="status" className="text-[14px]">
+            <p role="status" className="text-body">
               <StatusLabel tone="good">{result}</StatusLabel>
             </p>
             {chips && <MergeChips key={chips.id} from={chips.from} to={chips.to} />}
@@ -411,7 +411,7 @@ function MergeVaultsCard({
         )}
         {mergedInto && affected > 0 && !repointed?.ok && (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <span className="text-[14px]" style={{ color: "var(--ink-dim)" }}>
+            <span className="text-body" style={{ color: "var(--ink-dim)" }}>
               {affected === 1 ? "A connected source still saves" : `${affected} connected sources still save`} into the spaces you combined. Pointing them at the new space only changes future syncs.
             </span>
             <button type="button" className="btn btn-sm" onClick={pointConnectors} disabled={repoint.isPending}>
@@ -420,7 +420,7 @@ function MergeVaultsCard({
           </div>
         )}
         {repointed && (
-          <p role="status" className="text-[14px] fade-in" style={{ color: repointed.ok ? "var(--ink)" : "var(--critical)" }}>
+          <p role="status" className="text-body fade-in" style={{ color: repointed.ok ? "var(--ink)" : "var(--critical)" }}>
             {repointed.text}
           </p>
         )}
@@ -432,7 +432,7 @@ function MergeVaultsCard({
 }
 
 const CHIP =
-  "inline-flex items-center h-5 px-1.5 rounded-[4px] text-[11.5px] font-medium whitespace-nowrap max-w-[140px] min-w-0";
+  "inline-flex items-center h-5 px-1.5 rounded-[4px] text-caption font-medium whitespace-nowrap max-w-[140px] min-w-0";
 
 /* After a merge: the two source chips glide together (260ms) and resolve into the new vault's name (180ms blur crossfade).
    Decorative and aria-hidden; the status line above already says it. The final state is the inline style, so reduced motion just shows it. */

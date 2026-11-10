@@ -327,7 +327,7 @@ for (const reduced of [false, true])
         path: `${artifactDir}/count-frame-0.png`,
         clip: bounds,
       });
-    await page.getByRole("button", { name: "Approve", exact: true }).click();
+    await page.getByRole("button", { name: "Approve Studio 0", exact: true }).click();
     await expect(
       page.getByRole("link", { name: /^Review\s+18$/ }),
     ).toBeVisible();
@@ -498,7 +498,7 @@ for (const mode of ["enabled", "disabled", "reduced", "desktop"])
       await page.goto(
         `/ontology/review?space=${space.id}&selected=${encodeURIComponent(JSON.stringify(["kind", "studio_0"]))}`,
       );
-      await page.getByRole("button", { name: "Approve", exact: true }).click();
+      await page.getByRole("button", { name: "Approve Studio 0", exact: true }).click();
       await expect(
         page
           .locator("[data-text-morph]")

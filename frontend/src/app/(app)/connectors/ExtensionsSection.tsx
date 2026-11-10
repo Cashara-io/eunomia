@@ -61,10 +61,10 @@ export default function ExtensionsSection() {
           <h2 id="extensions-heading" className="section-title">
             Custom integrations
           </h2>
-          <p className="text-[14px] mt-1 max-w-[62ch]" style={{ color: "var(--ink-dim)" }}>
-            For developers. An extension connects a script you run yourself, on your own computer or server. Eunomia gives it a webhook address
-            that holds incoming data until the script collects it over the API. Eunomia does not host or run the script.
+          <p className="text-body mt-1 max-w-[62ch]" style={{ color: "var(--ink-dim)" }}>
+            Connect a script you run on your own computer or server to a webhook inbox.
           </p>
+          <a href="/docs#custom-integrations" className="link text-detail">How custom integrations work</a>
         </div>
         {!creating && (
           <button type="button" className="btn" onClick={() => { setCreating(true); setMinted(null); }}>
@@ -83,20 +83,20 @@ export default function ExtensionsSection() {
           }}
         >
           <div className="flex items-start justify-between gap-3">
-            <h3 className="text-[17px] font-medium tracking-[-0.015em]">New extension</h3>
+            <h3 className="text-reading font-medium tracking-[-0.015em]">New extension</h3>
             <button type="button" onClick={() => setCreating(false)} aria-label="Cancel" className="btn btn-ghost btn-sm btn-icon -mt-1 -mr-1">
               <XIcon {...ICON} />
             </button>
           </div>
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="ext-name" className="text-[14px] font-medium">
+            <label htmlFor="ext-name" className="text-body font-medium">
               Name
             </label>
             <input
               id="ext-name"
               autoFocus
               required
-              className="field h-10 px-3 text-[14px] w-full"
+              className="field h-10 px-3 text-body w-full"
               placeholder="e.g. Notes importer"
               maxLength={NAME_MAX}
               value={name}
@@ -104,12 +104,12 @@ export default function ExtensionsSection() {
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="ext-description" className="text-[14px] font-medium">
+            <label htmlFor="ext-description" className="text-body font-medium">
               Description (optional)
             </label>
             <input
               id="ext-description"
-              className="field h-10 px-3 text-[14px] w-full"
+              className="field h-10 px-3 text-body w-full"
               placeholder="What it brings in and where it runs"
               maxLength={500}
               value={description}
@@ -118,13 +118,13 @@ export default function ExtensionsSection() {
           </div>
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex flex-col gap-1.5 w-full sm:w-[240px]">
-              <span className="text-[14px] font-medium">Saves to memory space</span>
+              <span className="text-body font-medium">Saves to memory space</span>
               <Select
                 aria-label="Target memory space"
                 value={vaultId}
                 onChange={setVaultId}
                 options={[{ value: "", label: "My personal space" }, ...vaults.map((v) => ({ value: v.id, label: v.name }))]}
-                className="h-10 text-[14px] w-full"
+                className="h-10 text-body w-full"
               />
             </div>
             <button type="submit" disabled={create.isPending || !name.trim()} className="btn btn-primary">
@@ -132,7 +132,7 @@ export default function ExtensionsSection() {
               {create.isPending ? "Creating…" : "Create extension"}
             </button>
           </div>
-          <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+          <p className="text-detail" style={{ color: "var(--ink-dim)" }}>
             The memory space is where the script is expected to save; it is told with each batch it collects. Nothing is hosted here: the script runs on your side.
           </p>
         </form>
@@ -162,7 +162,7 @@ export default function ExtensionsSection() {
           <LoadingSkeleton label="Loading extensions" rows={2} />
         )}
         {rows?.length === 0 && (
-          <p className="px-4 py-5 text-[14px]" style={{ color: "var(--ink-dim)" }}>
+          <p className="px-4 py-5 text-body" style={{ color: "var(--ink-dim)" }}>
             No extensions yet. Create one to get a webhook URL and a secret for a script of your own.
           </p>
         )}
@@ -189,8 +189,8 @@ function MintedCard({ minted, onDismiss }: { minted: Minted; onDismiss: () => vo
     <div className="task-panel p-5 flex flex-col gap-3" role="status">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-[15px] font-semibold">{minted.title}</div>
-          <p className="text-[14px] mt-0.5" style={{ color: "var(--ink-dim)" }}>
+          <div className="text-reading font-semibold">{minted.title}</div>
+          <p className="text-body mt-0.5" style={{ color: "var(--ink-dim)" }}>
             Copy the secret now and store it somewhere safe. It won&apos;t be shown again; you can rotate it for a new one.
           </p>
         </div>
@@ -219,7 +219,7 @@ function Curl({ url, secret }: { url: string; secret: string }) {
         <span className="label">Try it</span>
         <CopyButton value={text} size="sm" label="Copy curl" className="btn-ghost" />
       </div>
-      <pre className="field p-3 text-[12px] font-mono overflow-x-auto whitespace-pre" style={{ color: "var(--ink)" }}>
+      <pre className="field p-3 text-caption font-mono overflow-x-auto whitespace-pre" style={{ color: "var(--ink)" }}>
         {text}
       </pre>
     </div>
@@ -285,7 +285,7 @@ function ExtensionRow({
 
   return (
     <div>
-      <div className={`grid ${COLS} items-center gap-x-4 px-4 min-h-12 py-2 text-[13px]`}>
+      <div className={`grid ${COLS} items-center gap-x-4 px-4 min-h-12 py-2 text-detail`}>
         <button
           type="button"
           onClick={onToggle}
@@ -308,7 +308,7 @@ function ExtensionRow({
           </span>
           <span className="min-w-0 flex flex-col">
             <span className="font-medium truncate">{ext.name}</span>
-            <span className="text-[12px] truncate" style={{ color: "var(--ink-dim)" }}>
+            <span className="text-caption truncate" style={{ color: "var(--ink-dim)" }}>
               <span className="md:hidden font-mono">
                 {ext.pending} pending · {ext.done} done
                 {ext.dead > 0 ? ` · ${ext.dead} failed` : ""}
@@ -333,7 +333,7 @@ function ExtensionRow({
         <span className="hidden md:block text-right">
           <Count n={ext.dead} tone="var(--critical)" />
         </span>
-        <span className="hidden md:block font-mono text-[12px]" style={{ color: "var(--ink-dim)" }} title={ext.last_delivery_at ? new Date(ext.last_delivery_at).toLocaleString() : undefined}>
+        <span className="hidden md:block font-mono text-caption" style={{ color: "var(--ink-dim)" }} title={ext.last_delivery_at ? new Date(ext.last_delivery_at).toLocaleString() : undefined}>
           {relativeTime(ext.last_delivery_at)}
         </span>
         <button type="button" onClick={onToggle} aria-hidden tabIndex={-1} className="justify-self-end" style={{ color: "var(--ink-faint)" }}>
@@ -348,7 +348,7 @@ function ExtensionRow({
             <CopyField value={ext.webhook_url} />
           </div>
           <Curl url={ext.webhook_url} secret="$EXTENSION_SECRET" />
-          <p className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+          <p className="text-detail" style={{ color: "var(--ink-dim)" }}>
             Secret ending <span className="font-mono">{ext.secret_hint}</span>, rotated {relativeTime(ext.secret_rotated_at)}. Saves to: {vaultChip}. Collect batches with{" "}
             <span className="font-mono">POST /api/extensions/{ext.id}/events/claim</span> using an API token.
           </p>

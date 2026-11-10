@@ -22,7 +22,7 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
   return (
     <section className="flex flex-col gap-2 py-3">
       <div className="flex items-baseline justify-between gap-2">
-        <h3 className="text-[13px] font-medium" style={{ color: "var(--ink)" }}>
+        <h3 className="text-detail font-medium" style={{ color: "var(--ink)" }}>
           {title}
         </h3>
         {hint && <span className="label">{hint}</span>}
@@ -43,11 +43,11 @@ function PointButton({ p, color, active, onSelect, meta }: { p: InsightPoint; co
       style={active ? { background: "var(--surface-hover)" } : undefined}
     >
       <span className="dot mt-[5px] shrink-0" style={{ background: color }} aria-hidden />
-      <span className="text-[12.5px] leading-snug min-w-0 flex-1 line-clamp-2" style={{ color: "var(--ink)" }}>
+      <span className="text-detail leading-snug min-w-0 flex-1 line-clamp-2" style={{ color: "var(--ink)" }}>
         {p.label}
       </span>
       {meta && (
-        <span className="font-mono text-[11.5px] shrink-0 mt-px" style={{ color: "var(--ink-dim)" }}>
+        <span className="font-mono text-caption shrink-0 mt-px" style={{ color: "var(--ink-dim)" }}>
           {meta}
         </span>
       )}
@@ -67,7 +67,7 @@ export default function VectorInsights({ points, vaultOrder, nameOf, colorOf, se
   const typeOf = (kinds: { kind: string; count: number }[]) => kinds.map((k) => `${k.count} ${k.kind}`).join(" · ");
 
   return (
-    <div className="hairline-rows px-4 text-[13px]" aria-label="Vector insights">
+    <div className="hairline-rows px-4 text-detail" aria-label="Vector insights">
       <Section title="Overview">
         <dl className="grid grid-cols-3 gap-2">
           {[
@@ -76,7 +76,7 @@ export default function VectorInsights({ points, vaultOrder, nameOf, colorOf, se
             [String(ins.clusters.length), ins.clusters.length === 1 ? "group" : "groups"],
           ].map(([v, l]) => (
             <div key={l} className="flex flex-col">
-              <dd className="font-mono text-[18px] leading-tight order-1" style={{ color: "var(--ink)" }}>
+              <dd className="font-mono text-heading leading-tight order-1" style={{ color: "var(--ink)" }}>
                 {v}
               </dd>
               <dt className="label order-2">{l}</dt>
@@ -101,7 +101,7 @@ export default function VectorInsights({ points, vaultOrder, nameOf, colorOf, se
                 <span className="truncate" style={{ color: "var(--ink)" }}>
                   {nameOf(v.vault)}
                 </span>
-                <span className="font-mono text-[12px] ml-auto" style={{ color: "var(--ink-dim)" }}>
+                <span className="font-mono text-caption ml-auto" style={{ color: "var(--ink-dim)" }}>
                   {v.count}
                 </span>
               </div>
@@ -186,7 +186,7 @@ export default function VectorInsights({ points, vaultOrder, nameOf, colorOf, se
                 <span className="truncate" style={{ color: "var(--ink)" }}>
                   {nameOf(g.a)} / {nameOf(g.b)}
                 </span>
-                <span className="font-mono text-[11.5px] ml-auto shrink-0" style={{ color: "var(--ink-dim)" }}>
+                <span className="font-mono text-caption ml-auto shrink-0" style={{ color: "var(--ink-dim)" }}>
                   {fmt(g.distance)} · {pct(g.mixed)}
                 </span>
               </li>

@@ -180,7 +180,7 @@
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  font-size: 11px;
+  font-size: var(--type-caption);
   font-variant-numeric: tabular-nums;
   margin: 4px 0 12px;
 }

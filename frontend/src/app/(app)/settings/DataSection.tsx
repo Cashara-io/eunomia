@@ -29,7 +29,7 @@ export function DataSection() {
       </PanelHead>
       <div className="ledger px-5 py-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="text-[15px] font-semibold">Export</div>
+          <div className="text-reading font-semibold">Export</div>
           <div className="label mt-0.5 font-mono">eunomia-export.json</div>
         </div>
         <button onClick={doExport} disabled={exporting} className="btn">

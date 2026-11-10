@@ -157,11 +157,7 @@ export default function OnboardingPage() {
                 <div className="flex flex-col gap-2">
                   <h1 className="connect-title">Connect your AI app</h1>
                   <p className="text-[14px] leading-relaxed" style={{ color: "var(--ink-dim)" }}>
-                    Eunomia is your shared memory: ChatGPT, Claude and other AI apps can look things up in it.
-                  </p>
-                  <p className="text-[14px] leading-relaxed" style={{ color: "var(--ink-dim)" }}>
-                    You&apos;re signed in as <span className="font-medium" style={{ color: "var(--ink)" }}>{me.email}</span>. Choose the app you use and
-                    we&apos;ll show its steps. You can also do this later from Home.
+                    Choose an AI app to connect to your Eunomia memory. You can also do this later from Home.
                   </p>
                 </div>
                 <AppChoices onPick={pickApp} disabled={busy} />
@@ -192,8 +188,8 @@ export default function OnboardingPage() {
                 <div className="flex flex-col gap-4">
                   <h1 className="connect-title">Add an OpenAI key</h1>
                   <p className="text-[16px] leading-[1.6]" style={{ color: "var(--ink-dim)" }}>
-                    This is optional. Your connected AI app can already look up and save memories on its own. A key lets
-                    Eunomia also search by meaning and answer questions in Chat itself. You can add it later in Settings.
+                    Optional. Your AI app already works without a key. A key adds search by meaning and Chat inside
+                    Eunomia. You can add it later in Settings.
                   </p>
                   <div className="flex flex-col gap-1.5">
                     <label htmlFor="base-url" className="text-[14px] font-semibold">

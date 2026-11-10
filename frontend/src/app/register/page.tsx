@@ -43,16 +43,16 @@ function RegisterError({ error, email }: { error: Failure; email: string }) {
     >
       <AlertCircle size={18} strokeWidth={1.75} aria-hidden className="shrink-0 mt-px" style={{ color: "var(--critical)" }} />
       <div className="flex-1 min-w-0 flex flex-col gap-1.5">
-        <p className="text-[14px] leading-snug" style={{ color: "var(--critical)" }}>
+        <p className="text-body leading-snug" style={{ color: "var(--critical)" }}>
           {taken ? "There's already an account for this email." : plainMessage(error)}
         </p>
         {taken && (
-          <Link href={signIn} className="link text-[14px] font-medium self-start">
+          <Link href={signIn} className="link text-body font-medium self-start">
             Sign in instead
           </Link>
         )}
         {details && (
-          <details className="text-[12px]" style={{ color: "var(--ink-dim)" }}>
+          <details className="text-caption" style={{ color: "var(--ink-dim)" }}>
             <summary className="cursor-pointer select-none">Details</summary>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
               {error.code && <code className="font-mono">{error.code}</code>}
@@ -107,7 +107,7 @@ export default function RegisterPage() {
       <div className="flex flex-col gap-4">
         <div className="mb-3">
           <h1 className="connect-title">Create your account</h1>
-          <p className="mt-3 text-[16px]" style={{ color: "var(--ink-dim)" }}>
+          <p className="mt-3 text-reading" style={{ color: "var(--ink-dim)" }}>
             {mode === "oidc" ? `Sign in with your ${provider} account and Eunomia creates yours.` : "Your Eunomia account. You will use the same email and password to approve your AI apps later."}
           </p>
         </div>
@@ -138,7 +138,7 @@ export default function RegisterPage() {
                   autoFocus={!provider}
                   autoComplete="email"
                   spellCheck={false}
-                  className="field h-11 px-3 text-[15px]"
+                  className="field h-11 px-3 text-reading"
                   placeholder="you@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -150,7 +150,7 @@ export default function RegisterPage() {
                   <label htmlFor="password" className={LABEL}>
                     Password
                   </label>
-                  <span id="password-hint" className="text-[13px]" style={{ color: "var(--ink-dim)" }}>
+                  <span id="password-hint" className="text-detail" style={{ color: "var(--ink-dim)" }}>
                     8 to 72 characters
                   </span>
                 </div>
@@ -163,7 +163,7 @@ export default function RegisterPage() {
                     maxLength={72}
                     autoComplete="new-password"
                     aria-describedby="password-hint"
-                    className="field h-11 w-full pl-3 pr-16 text-[15px]"
+                    className="field h-11 w-full pl-3 pr-16 text-reading"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                   />
@@ -183,7 +183,7 @@ export default function RegisterPage() {
                   maxLength={72}
                   autoComplete="new-password"
                   aria-invalid={mismatch || undefined}
-                  className="field h-11 px-3 text-[15px]"
+                  className="field h-11 px-3 text-reading"
                   aria-describedby={mismatch ? "register-error" : undefined}
                   style={mismatch ? { borderColor: "var(--critical)" } : undefined}
                   value={confirmPassword}
@@ -205,7 +205,7 @@ export default function RegisterPage() {
                 {busy ? "Creating account…" : "Create account"}
               </button>
 
-              <p className="mt-2 text-[14px]" style={{ color: "var(--ink-dim)" }}>
+              <p className="mt-2 text-body" style={{ color: "var(--ink-dim)" }}>
                 Already have an account?{" "}
                 <Link href="/login" onClick={(e) => { e.preventDefault(); router.push(keepNext("/login")); }} className="link font-medium">
                   Sign in

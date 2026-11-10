@@ -13,6 +13,8 @@ const baseURL = process.env.E2E_BASE_URL || "http://localhost:3000";
 // boot, DB not ready yet) than just running it yourself once beforehand.
 export default defineConfig({
   testDir: "./tests",
+  // Run the mocked review regressions alongside the real API specs in CI.
+  testMatch: "**/*.spec.ts",
   fullyParallel: false,
   retries: 0,
   reporter: "list",

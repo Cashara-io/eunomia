@@ -26,7 +26,7 @@ export default function SecretRequestsSection() {
         <h2 id="secret-requests-heading" className="section-title">
           Secrets agents asked for
         </h2>
-        <p className="text-[12.5px] mt-1 max-w-[66ch]" style={{ color: "var(--ink-dim)" }}>
+        <p className="text-detail mt-1 max-w-[66ch]" style={{ color: "var(--ink-dim)" }}>
           When an agent needs a key it asks here instead of in the chat. You paste it in a pop-up; agents get a handle such as <code className="font-mono">eu://…/stripe_api_key</code> and can use it only with the hosts you
           approved. No one can read a value back: replace or delete it.
         </p>
@@ -44,7 +44,7 @@ function Requests() {
   const rows = (requests.data ?? []).slice(0, 20);
   return (
     <div className="flex flex-col gap-2">
-      <h3 className="text-[13px] font-medium">Requests</h3>
+      <h3 className="text-detail font-medium">Requests</h3>
       {requests.isError && <ErrorLine error={failure(requests.error, "Could not load the requests.", " Reload the page to try again.")} />}
       {error && <ErrorLine error={error} />}
       <div className="ledger overflow-hidden">
@@ -53,16 +53,16 @@ function Requests() {
             <LoadingSkeleton label="Loading secret requests" rows={1} />
           )}
           {requests.data && rows.length === 0 && (
-            <p className="px-4 py-4 text-[13px]" style={{ color: "var(--ink-dim)" }}>
+            <p className="px-4 py-4 text-detail" style={{ color: "var(--ink-dim)" }}>
               No requests yet. An agent asks with the <code className="font-mono">secret_request</code> tool.
             </p>
           )}
           {rows.map((r: RequestOut) => (
-            <div key={r.id} className="px-4 py-2.5 flex flex-wrap items-center gap-3 text-[13px]" data-testid="secret-request-row">
+            <div key={r.id} className="px-4 py-2.5 flex flex-wrap items-center gap-3 text-detail" data-testid="secret-request-row">
               <span className="dot" style={{ background: STATUS_COLOUR[r.status] ?? "var(--ink-faint)" }} aria-hidden />
               <div className="min-w-0 flex-1">
                 <div className="font-medium truncate">{r.label || r.name}</div>
-                <div className="text-[12px]" style={{ color: "var(--ink-faint)" }}>
+                <div className="text-caption" style={{ color: "var(--ink-faint)" }}>
                   {r.status} · {askedBy(r)} · {relativeTime(r.created_at)}
                 </div>
               </div>
@@ -94,11 +94,11 @@ function Held() {
   const names = new Map((rows ?? []).map((s) => [s.id, s.name]));
   return (
     <div className="flex flex-col gap-2">
-      <h3 className="text-[13px] font-medium mt-2">Held secrets</h3>
+      <h3 className="text-detail font-medium mt-2">Held secrets</h3>
       {held.isError && <ErrorLine error={failure(held.error, "Could not load the held secrets.", " Reload the page to try again.")} />}
       {error && <ErrorLine error={error} />}
       <div className="ledger overflow-hidden">
-        <table className="w-full text-[13px]">
+        <table className="w-full text-detail">
           <thead>
             <tr className="label border-b text-left h-8">
               <th className="px-4 font-medium">Handle</th>
@@ -143,11 +143,11 @@ function HeldRow({ s, vault, parents, onError, removing, onRemove }: { s: HeldOu
   return (
     <tr className="align-top" data-testid="held-secret-row">
       <td className="px-4 py-2.5 min-w-0">
-        <div className="flex items-center gap-1.5 font-mono text-[12.5px] break-all">
+        <div className="flex items-center gap-1.5 font-mono text-detail break-all">
           <KeyIcon {...ICON} aria-hidden style={{ color: "var(--ink-faint)", flexShrink: 0 }} />
           {s.handle}
         </div>
-        <div className="text-[12px]" style={{ color: "var(--ink-faint)" }}>
+        <div className="text-caption" style={{ color: "var(--ink-faint)" }}>
           {s.op ? `${s.op} of ${parents.join(", ")}` : "pasted"} · {relativeTime(s.updated_at)}
           {s.expires_at ? ` · expires ${new Date(s.expires_at).toLocaleDateString()}` : ""}
         </div>
@@ -159,7 +159,7 @@ function HeldRow({ s, vault, parents, onError, removing, onRemove }: { s: HeldOu
               save();
             }}
           >
-            <input type="password" autoComplete="off" spellCheck={false} aria-label={`New value for ${s.name}`} className="field h-8 px-3 text-[13px] font-mono flex-1" value={value} onChange={(e) => setValue(e.target.value)} />
+            <input type="password" autoComplete="off" spellCheck={false} aria-label={`New value for ${s.name}`} className="field h-8 px-3 text-detail font-mono flex-1" value={value} onChange={(e) => setValue(e.target.value)} />
             <button type="submit" className="btn btn-primary btn-sm" disabled={!value.trim() || replace.isPending}>
               Save
             </button>
@@ -170,7 +170,7 @@ function HeldRow({ s, vault, parents, onError, removing, onRemove }: { s: HeldOu
         )}
       </td>
       <td className="px-3 py-2.5 hidden md:table-cell">{vault}</td>
-      <td className="px-3 py-2.5 hidden md:table-cell font-mono text-[12px]">{s.allowed_hosts.length ? s.allowed_hosts.join(", ") : <span style={{ color: "var(--ink-faint)" }}>nowhere</span>}</td>
+      <td className="px-3 py-2.5 hidden md:table-cell font-mono text-caption">{s.allowed_hosts.length ? s.allowed_hosts.join(", ") : <span style={{ color: "var(--ink-faint)" }}>nowhere</span>}</td>
       <td className="px-3 py-2.5">
         {s.can_manage && (
           <div className="flex items-center justify-end gap-1">
