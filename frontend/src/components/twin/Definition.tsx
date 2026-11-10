@@ -6,10 +6,9 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import Link from "next/link";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { z } from "zod";
+import { useQueryClient } from "@tanstack/react-query";
 import { CheckIcon, ShieldCheckIcon, XIcon } from "@phosphor-icons/react/ssr";
-import { API_URL, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import ErrorLine, { failure, type Failure } from "@/components/ErrorLine";
 import {
@@ -35,19 +34,11 @@ import { useReviewArming } from "./use-review-arming";
 import ReviewEvidence from "./ReviewEvidence";
 import MergePreview from "./MergePreview";
 import { humanLabel, ReviewTime } from "./review-format";
+import { useReviewActivity } from "./review-activity";
+import { useLandscapeTint } from "./landscape-shared";
+import { ReviewTypeIcon } from "./ReviewInboxMeta";
 import { isReviewOwner, ownerOnly } from "./review-access";
 
-const activitySchema = z.object({
-  events: z.array(
-    z.object({
-      action: z.string(),
-      revision: z.number(),
-      actor_name: z.string(),
-      at: z.string(),
-      reason: z.string().nullable(),
-    }),
-  ),
-});
 type Action =
   | { action: "approve" }
   | { action: "reject"; merge_into?: string }
@@ -110,24 +101,7 @@ export default function Definition({
   const property = useDecideProperty(data.vault);
   const metric = useDecideMetric(data.vault);
   const preview = useTryMetric(data.vault);
-  const history = useQuery({
-    queryKey: ["ontology-activity", data.vault, "decision-receipt", d.id],
-    queryFn: async () => {
-      const params = new URLSearchParams({
-        definition_type: d.type,
-        kind: d.kind,
-        name: d.name,
-        newest: "true",
-        limit: "30",
-      });
-      const response = await fetch(
-        `${API_URL}/api/vaults/${encodeURIComponent(data.vault)}/ontology/activity?${params}`,
-        { credentials: "include" },
-      );
-      if (!response.ok) throw new Error("Activity is unavailable");
-      return activitySchema.parse(await response.json());
-    },
-  });
+  const history = useReviewActivity(data.vault, d);
   const proposer = history.data?.events.find(
     (e) => e.action === "proposed" && e.revision === d.item.revision,
   );
@@ -145,6 +119,7 @@ export default function Definition({
     region: reviewRegion, heading,
   });
   useImperativeHandle(ref, () => ({ beginNavigation: arming.beginNavigation }));
+  const { tint } = useLandscapeTint();
   const builtIn = d.type === "kind" && d.item.built_in;
 
   useEffect(() => {
@@ -296,8 +271,9 @@ export default function Definition({
         if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) arming.disarm();
       }}
     >
-      <header className={styles.identity}>
+      <header className={styles.identity} style={tint(d.kind)}>
         <div className="flex flex-wrap items-center justify-between gap-3">
+          <span className={styles.identityIcon}><ReviewTypeIcon definition={d} /></span>
           <h3 ref={heading} tabIndex={-1}>
             {humanLabel(d.name)}
           </h3>
@@ -552,6 +528,7 @@ export default function Definition({
                 </div>
               )}
               <footer className={styles.actions}>
+                <span className={styles.armedHint}>Keyboard decision ready. Press <kbd>Enter</kbd> to confirm, or <kbd>Esc</kbd> to cancel.</span>
                 <span className={styles.shortcuts}>
                   {busy ? (
                     "Saving decision…"
@@ -687,14 +664,14 @@ export function RevisionChanges({
 }) {
   const previous = reviewFields(before);
   return (
-    <dl className="text-[13px] flex flex-col gap-3">
+    <dl className="text-detail flex flex-col gap-3">
       {Object.entries(reviewFields(after))
         .filter(([key, value]) => previous[key] !== value)
         .map(([key, value]) => (
           <div key={key}>
             <dt className="font-medium">{key}</dt>
-            <dd>Before: {previous[key] || "None"}</dd>
-            <dd>Now: {value || "None"}</dd>
+            <dd className={styles.removed}>Before: <del>{previous[key] || "None"}</del></dd>
+            <dd className={styles.added}>Now: <ins>{value || "None"}</ins></dd>
           </div>
         ))}
     </dl>

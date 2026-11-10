@@ -3,6 +3,7 @@ import { ArrowsMergeIcon } from "@phosphor-icons/react/ssr";
 import { humanLabel } from "./review-format";
 import type { Definition } from "./model";
 import { affected, mergeConflicts } from "./review-model";
+import ReviewComparison from "./ReviewComparison";
 import styles from "./review.module.css";
 
 export default function MergePreview({
@@ -64,6 +65,7 @@ export default function MergePreview({
               <dd>{affected(target)}</dd>
             </div>
           </dl>
+          <details className={styles.mergeComparison}><summary>Compare destination fields</summary><ReviewComparison before={d} after={target} /></details>
           <p className="mt-4">
             {d.type === "metric"
               ? "Future calls use the destination calculation."

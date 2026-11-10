@@ -127,3 +127,36 @@ test("a different returned merge destination cannot confirm the requested merge"
   expect(result.confirmed).toBe(false);
   expect(result.message).toContain("merged into Quantity");
 });
+
+const { comparisonRows, reviewContext } = await import("../src/components/twin/review-visual-model");
+
+describe("review visual data", () => {
+  test("context includes only direct server kinds and links, with original counts and direction", () => {
+    const model = reviewFixture();
+    const d = definitions(model).find(d => d.type === "property" && d.name === "unit_cost");
+    const context = reviewContext(d, model);
+    expect(context.kinds.map(k => k.kind)).toEqual(["stock_item", "warehouse"]);
+    expect(context.links).toEqual([model.links[0]]);
+    expect(context.links[0]).toMatchObject({ from_kind: "stock_item", to_kind: "warehouse", count: 120 });
+    expect(context.kinds[0].entities).toBe(6000);
+    model.links = [];
+    expect(reviewContext(d, model).links).toEqual([]);
+    expect(reviewContext(d, model).kinds.map(k => k.kind)).toEqual(["stock_item"]);
+  });
+  test("comparison never invents a previous approved definition", () => {
+    const d = definitions(reviewFixture())[1];
+    expect(comparisonRows(undefined, d).every(row => row.change === "Unavailable" && row.previous === undefined)).toBe(true);
+  });
+  test("known revisions distinguish added, removed, changed and unchanged fields", () => {
+    const model = reviewFixture();
+    const before = definitions(structuredClone(model))[1];
+    model.kinds[0].properties[0].unit = null;
+    model.kinds[0].properties[0].synonyms = ["cost"];
+    model.kinds[0].properties[0].description = "Includes freight";
+    const rows = comparisonRows(before, definitions(model)[1]);
+    expect(rows.find(r => r.field === "Unit").change).toBe("Removed");
+    expect(rows.find(r => r.field === "Aliases").change).toBe("Added");
+    expect(rows.find(r => r.field === "Description").change).toBe("Changed");
+    expect(rows.find(r => r.field === "Data type").change).toBe("Unchanged");
+  });
+});
