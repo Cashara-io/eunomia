@@ -184,6 +184,7 @@ pub(crate) struct WalkLimits {
     pub edges: usize,
     pub per_entity: usize,
     /// Includes duplicate, cross-vault and label-filtered rows from both query directions.
+    /// One extra lookahead row may be read to prove that work was cut.
     pub fetched_rows: usize,
 }
 
@@ -214,8 +215,9 @@ pub(crate) async fn walk_bounded(
         for id in &frontier {
             for outgoing in [true, false] {
                 let remaining = max_fetch.saturating_sub(fetched);
-                if remaining == 0 { truncated = true; break 'walk; }
-                let limit = remaining.min(edge_limit.saturating_add(1));
+                // One lookahead row distinguishes an exactly full budget from omitted work.
+                // When the budget is spent, empty directions still prove completeness.
+                let limit = remaining.saturating_add(1).min(edge_limit.saturating_add(1));
                 let mut res = q::EDGES_IN_DIRECTION.on(db).bind(("id", id.clone()))
                     .bind(("outgoing", outgoing)).bind(("limit", limit)).await?;
                 let mut list: Vec<EdgeRow> = res.take(0)?;
@@ -223,8 +225,9 @@ pub(crate) async fn walk_bounded(
                 fetched += count;
                 #[cfg(feature = "test-support")]
                 let _ = FETCHED_EDGE_ROWS.try_with(|n| n.set(n.get() + count));
-                truncated |= count > edge_limit || (count == limit && fetched == max_fetch);
-                list.truncate(edge_limit);
+                let budget_cut = count > remaining;
+                truncated |= count > edge_limit || budget_cut;
+                list.truncate(edge_limit.min(remaining));
                 for e in list.into_iter().filter(|e| e.from_vault.as_ref() == Some(vault) && e.to_vault.as_ref() == Some(vault)) {
                     if (!labels.is_empty() && !labels.contains(&e.label)) || edge_ids.contains(&e.id.to_string()) { continue; }
                     if edges.len() >= max_edges { truncated = true; break 'walk; }
@@ -239,11 +242,19 @@ pub(crate) async fn walk_bounded(
                     edge_ids.insert(e.id.to_string());
                     edges.push(e);
                 }
+                if budget_cut { break 'walk; }
             }
         }
         frontier = next;
     }
     Ok(Walk { order, hops: seen, via, edges, truncated })
+}
+
+/// Exercise the real traversal with a small row budget in embedded integration tests.
+#[cfg(feature = "test-support")]
+pub async fn walk_fetch_budget_for_test(db: &OrgDb, vault: &RecordId, start: RecordId, budget: usize) -> AppResult<(usize, bool)> {
+    let walk = walk_bounded(db, vault, &[start], 1, WalkLimits { nodes: 150, edges: 600, per_entity: 500, fetched_rows: budget }, &[]).await?;
+    Ok((walk.edges.len(), walk.truncated))
 }
 
 /// Breadth-first from `entity_id` over its relations in both directions, `depth` hops (default

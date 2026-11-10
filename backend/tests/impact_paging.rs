@@ -141,7 +141,7 @@ async fn dense_frontier_bounds_actual_fetched_rows_and_labels_partial_total() {
     FETCHED_EDGE_ROWS.scope(std::cell::Cell::new(0), async {
         let out = app.tool("show_view", json!({"view":"impact","start_id":start,"headline":"Linked items","reach":{"depth":2}})).await;
         eprintln!("dense frontier fetched {} edge rows", FETCHED_EDGE_ROWS.with(std::cell::Cell::get));
-        assert!(FETCHED_EDGE_ROWS.with(std::cell::Cell::get) <= 40_000, "fetched {} rows", FETCHED_EDGE_ROWS.with(std::cell::Cell::get));
+        assert!(FETCHED_EDGE_ROWS.with(std::cell::Cell::get) <= 40_001, "fetched {} rows", FETCHED_EDGE_ROWS.with(std::cell::Cell::get));
         assert_eq!(out["pagination"]["total_partial"], true, "{out}");
         assert!(out["text"].as_str().unwrap().contains("At least 1000 linked items"));
     }).await;
@@ -290,5 +290,24 @@ async fn hostile_cursors_fail_before_traversing_the_graph() {
             let (status, _) = app.http_session("POST", "/api/tools/show_view", Some(request)).await;
             assert_ne!(status, 500);
         }).await;
+    }
+}
+
+#[tokio::test]
+async fn exact_fetched_row_budget_is_complete_but_one_more_is_partial() {
+    use eunomia_backend::{entities::neighbourhood::walk_fetch_budget_for_test, rid::parse};
+    let app = TestApp::new().await;
+    let root = ok(app.tool("memory_write", json!({"subject_name":"Budget root","subject_kind":"sample","text":"Budget fixture"})).await);
+    let start = root["entity"]["id"].as_str().unwrap().to_owned();
+    let vault = parse(root["entity"]["vault"].as_str().unwrap()).unwrap();
+    let db = app.db().await;
+    for i in 0..3 {
+        let child = entity(&app, &format!("Budget child {i}"), "sample").await;
+        ok(app.tool("entity_relate", json!({"from_id":start,"to_id":child,"label":"touches"})).await);
+        if i >= 1 {
+            let (edges, partial) = walk_fetch_budget_for_test(&db, &vault, parse(&start).unwrap(), 2).await.unwrap();
+            assert_eq!(edges, 2);
+            assert_eq!(partial, i == 2, "only an actual omitted row makes the result partial");
+        }
     }
 }
