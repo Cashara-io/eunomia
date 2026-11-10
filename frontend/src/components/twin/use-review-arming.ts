@@ -20,6 +20,7 @@ function clearArm(
   heading: RefObject<HTMLHeadingElement | null>,
 ) {
   armed.current = null;
+  region.current?.removeAttribute("data-review-armed");
   if (region.current?.contains(document.activeElement) &&
       document.activeElement?.hasAttribute("data-review-decision")) {
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
@@ -54,7 +55,8 @@ export function useReviewArming({
   }, [route]);
   useLayoutEffect(() => {
     clearArm(armed, region, heading);
-    return () => { armed.current = null; };
+    const element = region.current;
+    return () => { armed.current = null; element?.removeAttribute("data-review-armed"); };
   }, [id, revision, incomingId, incomingRevision, enabled, mode, route, region, heading]);
 
   function available() {
@@ -73,9 +75,11 @@ export function useReviewArming({
     },
     arm() {
       armed.current = available() ? { id, revision, route, mode } : null;
+      region.current?.setAttribute("data-review-armed", String(armed.current !== null));
     },
     consume() {
       const seen = armed.current;
+      region.current?.removeAttribute("data-review-armed");
       armed.current = null;
       return available() && seen?.id === id && seen.revision === revision &&
         seen.route === route && seen.mode === mode;

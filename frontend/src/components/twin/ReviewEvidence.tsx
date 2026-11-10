@@ -1,78 +1,31 @@
-import { FileTextIcon } from "@phosphor-icons/react/ssr";
-import { STATUS } from "./DefinitionRows";
+import { FileTextIcon, ArrowsLeftRightIcon, FingerprintIcon, CheckCircleIcon } from "@phosphor-icons/react/ssr";
 import type { OntologyOut } from "@/lib/queries/ontology";
 import type { Definition as DefinitionItem } from "./model";
 import { humanLabel } from "./review-format";
+import ReviewContext from "./ReviewContext";
+import ReviewComparison from "./ReviewComparison";
 import { affected } from "./review-model";
 import styles from "./review.module.css";
 
 export default function ReviewEvidence({
   definition: d,
   data,
+  sectionPrefix,
 }: {
   definition: DefinitionItem;
   data: OntologyOut;
+  sectionPrefix: string;
 }) {
   return (
     <>
-      <section className={styles.section} aria-label="What changes">
+      <section id={`${sectionPrefix}-changes`} className={styles.section} aria-label="What changes">
         <h4>
-          <span className={styles.step}>01</span>What changes
+          <ArrowsLeftRightIcon size={18} aria-hidden />What changes
         </h4>
-        <dl className={styles.diff}>
-          <div>
-            <dt>Current definition</dt>
-            <dd>
-              {d.item.status === "proposed"
-                ? "Previous approved definition unavailable."
-                : `${STATUS[d.item.status].label}: ${d.item.description || "No description recorded."}`}
-            </dd>
-            <dd className={`${styles.dim} mt-2`}>
-              {affected(d)}.{" "}
-              {d.item.status === "proposed" &&
-                "The earlier definition cannot be compared here."}
-            </dd>
-          </div>
-          <div>
-            <dt>
-              {d.item.status === "proposed"
-                ? "Proposed definition"
-                : "Definition under review"}
-            </dt>
-            <dd>{d.item.description || "No description recorded."}</dd>
-            <dd className={styles.fields}>
-              {d.type === "property" && (
-                <>
-                  <span className={styles.tag}>{humanLabel(d.item.datatype)}</span>
-                  {d.item.unit && (
-                    <span className={styles.tag}>{d.item.unit}</span>
-                  )}
-                  {d.item.enum_values?.length ? (
-                    <span className={styles.tag}>
-                      {d.item.enum_values.join(", ")}
-                    </span>
-                  ) : null}
-                </>
-              )}
-              {d.type === "metric" && (
-                <span>
-                  {d.item.expr_words}
-                  {d.item.unit ? ` · ${d.item.unit}` : ""}
-                </span>
-              )}
-              {d.type === "link" && (
-                <span>
-                  {humanLabel(d.item.from_kind)} → {humanLabel(d.item.to_kind)}
-                </span>
-              )}
-              {d.type !== "link" && d.item.synonyms.length > 0 && (
-                <span>Also called {d.item.synonyms.join(", ")}</span>
-              )}
-            </dd>
-          </div>
-        </dl>
+        <p className={styles.dim}>{affected(d)}.</p>
+        <ReviewComparison before={d.item.status === "proposed" ? undefined : d} after={d} />
       </section>
-      <Evidence definition={d} data={data} />
+      <Evidence definition={d} data={data} sectionPrefix={sectionPrefix} />
     </>
   );
 }
@@ -80,9 +33,11 @@ export default function ReviewEvidence({
 export function Evidence({
   definition: d,
   data,
+  sectionPrefix,
 }: {
   definition: DefinitionItem;
   data?: OntologyOut;
+  sectionPrefix?: string;
 }) {
   const samples =
     d.type === "metric"
@@ -99,9 +54,9 @@ export function Evidence({
     ) ?? [];
   return (
     <>
-      <section className={styles.section} aria-label="Source evidence">
+      <section id={sectionPrefix ? `${sectionPrefix}-source` : undefined} className={styles.section} aria-label="Source evidence">
         <h4>
-          <span className={styles.step}>02</span>Read the source
+          <FingerprintIcon size={18} aria-hidden />Read the source
         </h4>
         <p className={styles.dim}>
           {d.item.reason || "No suggestion reason recorded."}
@@ -110,9 +65,9 @@ export function Evidence({
           <div className={styles.source} key={i}>
             <FileTextIcon size={24} weight="duotone" />
             <div>
-              <p className="font-medium">{s.source}</p>
+              <p className={styles.sourceLabel}>Source file / record</p><p className="font-medium">{s.source}</p>
               <p className={styles.dim}>
-                {s.record_type} · {s.path}
+                <span className={styles.sourceLabel}>Record type · Column / path</span><span>{s.record_type} · {s.path}</span>
               </p>
             </div>
           </div>
@@ -145,9 +100,10 @@ export function Evidence({
           <p className={`${styles.dim} mt-3`}>No sample values recorded.</p>
         )}
       </section>
-      <section className={styles.section} aria-label="Consequence of approving">
+      {data && <ReviewContext definition={d} data={data} sectionId={sectionPrefix ? `${sectionPrefix}-context` : undefined} />}
+      <section id={sectionPrefix ? `${sectionPrefix}-consequence` : undefined} className={styles.section} aria-label="Consequence of approving">
         <h4>
-          <span className={styles.step}>03</span>If you approve
+          <CheckCircleIcon size={18} aria-hidden />If you approve
         </h4>
         <div className={styles.consequence}>
           <p>
@@ -169,7 +125,7 @@ export function Evidence({
         {d.type !== "kind" && (
           <div className={`${styles.fields} mt-4`}>
             {dependencies.map((k) => (
-              <span className={styles.tag} key={k.kind}>
+              <span className={styles.dependency} data-state={k.built_in || k.status === "approved" ? "available" : "required"} key={k.kind}>
                 {humanLabel(k.kind)}:{" "}
                 {k.built_in || k.status === "approved"
                   ? "available"

@@ -127,3 +127,79 @@ test("a different returned merge destination cannot confirm the requested merge"
   expect(result.confirmed).toBe(false);
   expect(result.message).toContain("merged into Quantity");
 });
+
+const { comparisonRows, reviewContext } = await import("../src/components/twin/review-visual-model");
+
+describe("review visual data", () => {
+  test("context includes only direct server kinds and links, with original counts and direction", () => {
+    const model = reviewFixture();
+    const d = definitions(model).find(d => d.type === "property" && d.name === "unit_cost");
+    const context = reviewContext(d, model);
+    expect(context.kinds.map(k => k.kind)).toEqual(["stock_item", "warehouse"]);
+    expect(context.links).toEqual([model.links[0]]);
+    expect(context.links[0]).toMatchObject({ from_kind: "stock_item", to_kind: "warehouse", count: 120 });
+    expect(context.kinds[0].entities).toBe(6000);
+    model.links = [];
+    expect(reviewContext(d, model).links).toEqual([]);
+    expect(reviewContext(d, model).kinds.map(k => k.kind)).toEqual(["stock_item"]);
+  });
+  test("comparison never invents a previous approved definition", () => {
+    const d = definitions(reviewFixture())[1];
+    expect(comparisonRows(undefined, d).every(row => row.change === "Unavailable" && row.previous === undefined)).toBe(true);
+  });
+  test("known revisions distinguish added, removed, changed and unchanged fields", () => {
+    const model = reviewFixture();
+    const before = definitions(structuredClone(model))[1];
+    model.kinds[0].properties[0].unit = null;
+    model.kinds[0].properties[0].synonyms = ["cost"];
+    model.kinds[0].properties[0].description = "Includes freight";
+    const rows = comparisonRows(before, definitions(model)[1]);
+    expect(rows.find(r => r.field === "Unit").change).toBe("Removed");
+    expect(rows.find(r => r.field === "Aliases").change).toBe("Added");
+    expect(rows.find(r => r.field === "Description").change).toBe("Changed");
+    expect(rows.find(r => r.field === "Data type").change).toBe("Unchanged");
+  });
+});
+
+const { renderToStaticMarkup } = await import("react-dom/server");
+const { createElement } = await import("react");
+const { default: ReviewComparison } = await import("../src/components/twin/ReviewComparison");
+
+test("new definitions render proposal labels without a comparison or change markers", () => {
+  const after = definitions(reviewFixture())[1];
+  const html = renderToStaticMarkup(createElement(ReviewComparison, { after }));
+  expect(html).toContain('aria-label="New definition"');
+  expect(html).toContain("There is nothing to compare against yet.");
+  expect(html).not.toContain('role="table"');
+  expect(html).not.toContain("data-change");
+});
+
+test("an approved baseline retains current and proposed values with real differences", () => {
+  const model = reviewFixture();
+  model.kinds[0].properties[0].status = "approved";
+  const before = definitions(structuredClone(model))[1];
+  model.kinds[0].properties[0].unit = null;
+  model.kinds[0].properties[0].description = "Includes freight";
+  model.kinds[0].properties[0].synonyms = ["cost"];
+  const html = renderToStaticMarkup(createElement(ReviewComparison, { before, after: definitions(model)[1] }));
+  expect(html).toContain('aria-label="Definition comparison"');
+  expect(html).toContain("Current");
+  expect(html).toContain("Proposed");
+  expect(html).toContain('data-change="Added"');
+  expect(html).toContain('data-change="Removed"');
+  expect(html).toContain('data-change="Changed"');
+  expect(html).toContain("Includes freight");
+  expect(html).toContain("<del>AUD</del>");
+});
+
+const { proposalEvent } = await import("../src/components/twin/review-activity");
+test("inbox activity matches the server link name including both endpoints and revision", () => {
+  const link = definitions(reviewFixture()).find(d => d.type === "link");
+  const event = {
+    action: "proposed", revision: 1, actor_name: "Claude Code", at: "2026-11-10T03:32:00Z", reason: null,
+    definition_type: "link", kind: link.kind, name: link.name, target: "ontology_link:fixture",
+  };
+  expect(proposalEvent([event], link)).toEqual(event);
+  expect(proposalEvent([{ ...event, name: "stock_item stored_at another_kind" }], link)).toBeUndefined();
+  expect(proposalEvent([{ ...event, revision: 2 }], link)).toBeUndefined();
+});

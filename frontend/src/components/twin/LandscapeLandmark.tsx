@@ -9,13 +9,6 @@ import {
 import Link from "next/link";
 import {
   CubeIcon,
-  UsersIcon,
-  PackageIcon,
-  ShoppingCartIcon,
-  ReceiptIcon,
-  MapPinIcon,
-  WarehouseIcon,
-  TruckIcon,
   ChatCircleDotsIcon,
   ClockCountdownIcon,
 } from "@phosphor-icons/react";
@@ -24,23 +17,8 @@ import type { overviewLayout } from "./overview-layout";
 import { linkKey } from "./overview-layout";
 import { humanLabel, plural, linkSentence } from "./overview-format";
 import type { LandscapePin, Highlight } from "./KindSummary";
+import { landscapeIcons } from "./landscape-icons";
 import styles from "./overview.module.css";
-const icons: Record<string, typeof CubeIcon> = {
-  customer: UsersIcon,
-  employee: UsersIcon,
-  person: UsersIcon,
-  product: PackageIcon,
-  stock_item: PackageIcon,
-  order: ShoppingCartIcon,
-  purchase_order: ShoppingCartIcon,
-  invoice: ReceiptIcon,
-  payment: ReceiptIcon,
-  location: MapPinIcon,
-  warehouse: WarehouseIcon,
-  shipment: TruckIcon,
-  delivery: TruckIcon,
-  delivery_route: TruckIcon,
-};
 
 type Props = {
   node: ReturnType<typeof overviewLayout>["nodes"][number];
@@ -79,7 +57,7 @@ export default memo(function LandscapeLandmark({
   setPinGroup,
 }: Props) {
   const { kind, x, y, height, linked } = node;
-  const Icon = icons[kind.kind] ?? CubeIcon;
+  const Icon = landscapeIcons[kind.kind] ?? CubeIcon;
   const item: Highlight = { type: "kind", key: kind.kind };
   return (
     <div
