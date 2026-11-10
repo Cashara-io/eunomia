@@ -12,7 +12,7 @@ import ReadState from "./ReadState";
 import { returnKey } from "./overview-model";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useVaults } from "@/lib/queries/vaults";
@@ -62,6 +62,20 @@ export default function TwinArea({
   const params = useSearchParams();
   const space = params.get("space");
   const vault = query.data?.find((v) => v.id === space);
+  const cache = useQueryClient();
+  const previousConnectionSpace = useRef<string | undefined>(undefined);
+  const connectionSpace = view === "connections" ? vault?.id : undefined;
+  useEffect(() => {
+    const previous = previousConnectionSpace.current;
+    previousConnectionSpace.current = connectionSpace;
+    if (!previous || previous === connectionSpace) return;
+    if (view === "connections" && !connectionSpace && new URLSearchParams(window.location.search).get("space") === previous) {
+      window.history.replaceState(null, "", `${window.location.pathname}?${new URLSearchParams({ space: previous })}`);
+    }
+    const scoped = { predicate: (q: { queryKey: readonly unknown[] }) => q.queryKey.includes(previous) };
+    void cache.cancelQueries(scoped);
+    cache.removeQueries(scoped);
+  }, [cache, connectionSpace, view]);
   return (
     <div className={styles.area}>
       {query.isError ? (

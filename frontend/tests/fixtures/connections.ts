@@ -143,10 +143,10 @@ export async function mockConnections(
     if (state === "loading") return;
     if (state === "denied" || state === "error")
       return route.fulfill({
-        status: state === "denied" ? 404 : 503,
+        status: state === "denied" ? 403 : 503,
         json: {
           error: "Unavailable",
-          code: state === "denied" ? "entity.not_found" : "http.error",
+          code: state === "denied" ? "vault.forbidden" : "http.error",
         },
       });
     const loaded =

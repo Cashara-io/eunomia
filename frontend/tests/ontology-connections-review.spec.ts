@@ -30,14 +30,14 @@ for (const source of ['neighbourhood', 'search', 'inspector', 'inspector-retryin
     await expect(page.getByLabel('Selected object')).toContainText('Values and their sources');
     expect((await protectedCache(page, source === "inspector-retrying")).length).toBeGreaterThan(0);
     if (source.startsWith('inspector')) {
-      await page.route('**/ontology/objects/*', r => r.fulfill({status:403,json:{code:'vault.not_a_member',detail:'Denied'}}));
+      await page.route('**/ontology/objects/*', r => r.fulfill({status:403,json:{code:'vault.forbidden',detail:'Denied'}}));
       await page.locator('[data-object="n0"]').click();
     } else if (source === 'ontology') {
-      await page.route('**/ontology', r => r.fulfill({status:403,json:{code:'vault.not_a_member',detail:'Denied'}}));
+      await page.route('**/ontology', r => r.fulfill({status:403,json:{code:'vault.forbidden',detail:'Denied'}}));
       await page.getByLabel('Refresh ontology').click();
     } else {
       await page.route(`**/api/tools/${source === 'neighbourhood' ? 'entities_neighbourhood' : 'entities_search'}`, r =>
-        r.fulfill({status:200,json:{error:'Denied',code:'vault.not_a_member'}}));
+        r.fulfill({status:200,json:{error:'Denied',code:'vault.forbidden'}}));
       if (source === 'search') await page.getByRole('searchbox').fill('North');
       else if (source === 'suggestions') await page.getByLabel('Refresh ontology').click();
       else await page.getByLabel('Depth', {exact:true}).selectOption('2');

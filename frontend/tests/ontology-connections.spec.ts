@@ -55,7 +55,10 @@ test("real authorised Connections route, directed links and space isolation", as
     `/ontology/connections?space=${encodeURIComponent(other.id)}&focus=${encodeURIComponent(product.id)}`,
   );
   await expect(
-    page.getByRole("heading", { name: "This object is unavailable here." }),
+    page.getByRole("status").filter({ hasText: "This object no longer exists" }),
   ).toBeVisible();
   await expect(page.getByRole("table")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Start with something you know." })).toBeVisible();
+  await expect(page.getByRole("searchbox")).toHaveValue("");
+  await expect(page).not.toHaveURL(/focus=/);
 });

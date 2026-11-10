@@ -48,11 +48,9 @@ async function tool<T>(
       ? (problem.data.code ?? "http.error")
       : "http.error";
     throw new ApiError(
-      code.includes("not_found") || code.includes("forbidden")
-        ? 404
-        : res.ok
-          ? 500
-          : res.status,
+      !res.ok ? res.status :
+        ["vault.forbidden", "auth.scope", "tenant.denied", "auth.forbidden"].includes(code) ? 403 :
+        ["entity.not_found", "resource.not_found", "vault.not_found"].includes(code) ? 404 : 500,
       code,
       "Connections unavailable",
     );

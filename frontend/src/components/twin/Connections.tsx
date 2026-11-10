@@ -8,6 +8,7 @@ import {
   useNeighbourhood,
 } from "@/lib/queries/connections";
 import { ApiError } from "@/lib/api";
+import { useMissingConnectionObjects } from "./ConnectionAccess";
 import { useTwinParams } from "./controls";
 import { twinHref } from "./model";
 import { humanLabel, plural } from "./overview-format";
@@ -99,6 +100,7 @@ const subscribeMobile = (listener: () => void) => {
 const mobileSnapshot = () => window.matchMedia("(max-width: 640px)").matches;
 function Objects({ space }: { space: string }) {
   const { params, update } = useTwinParams();
+  const missing = useMissingConnectionObjects();
   const mobile = useSyncExternalStore(
     subscribeMobile,
     mobileSnapshot,
@@ -126,14 +128,19 @@ function Objects({ space }: { space: string }) {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [hovered, setHovered] = useState("");
   const [activeKind, setActiveKind] = useState("");
-  const [recent, setRecent] = useState<ConnectionNode[]>([]);
+  const [recentNodes, setRecent] = useState<ConnectionNode[]>([]);
+  const recent = recentNodes.filter(n => !missing.has(n.id));
   const suggestions = useConnectionSearch(space, "", kind, 0, !search.trim());
   const scene = useMemo(
     () =>
       query.data
-        ? filterScene(query.data, focus, relation, direction, depth)
+        ? filterScene({
+            ...query.data,
+            nodes: query.data.nodes.filter(n => !missing.has(n.id)),
+            edges: query.data.edges.filter(e => !missing.has(e.from) && !missing.has(e.to)),
+          }, focus, relation, direction, depth)
         : null,
-    [query.data, focus, relation, direction, depth],
+    [query.data, focus, relation, direction, depth, missing],
   );
   const nodes = new Map(scene?.nodes.map((n) => [n.id, n]));
   const selectedNode = nodes.get(selected);
@@ -152,6 +159,11 @@ function Objects({ space }: { space: string }) {
     window.addEventListener("keydown", escape);
     return () => window.removeEventListener("keydown", escape);
   });
+  useEffect(() => {
+    if (!missing.size) return;
+    if (missing.has(focus)) update({ focus: "", selected: "" }, true);
+    else if (missing.has(selected)) update({ selected: "" }, true);
+  }, [missing, focus, selected, update]);
   function remember(node: ConnectionNode) {
     setRecent((prev) =>
       [node, ...prev.filter((n) => n.id !== node.id)].slice(0, 4),
@@ -172,6 +184,7 @@ function Objects({ space }: { space: string }) {
   }
   return (
     <div>
+      {missing.size > 0 && <p role="status">This object no longer exists</p>}
       <form className={styles.search} onSubmit={(e) => e.preventDefault()}>
         <label>
           <span className="label">
@@ -214,7 +227,7 @@ function Objects({ space }: { space: string }) {
             <div className={styles.suggestions} aria-label="Suggested objects">
               <span>Suggested starting points</span>
               {suggestions.data.results
-                .filter((n) => !recent.some((r) => r.id === n.id))
+                .filter((n) => !missing.has(n.id) && !recent.some((r) => r.id === n.id))
                 .slice(0, 4)
                 .map((n) => (
                   <button key={n.id} onClick={() => open(n)}>
@@ -237,7 +250,7 @@ function Objects({ space }: { space: string }) {
             <p role="status">Finding objects…</p>
           ) : (
             <>
-              {searchQuery.data.results.map((n) => (
+              {searchQuery.data.results.filter(n => !missing.has(n.id)).map((n) => (
                 <button
                   className={styles.result}
                   key={n.id}
@@ -378,7 +391,7 @@ function Objects({ space }: { space: string }) {
               {table ? "Show canvas" : "Show as table"}
             </button>
           </div>
-          {query.isError ? (
+          {query.isError && !scene ? (
             <div className={styles.state}>
               <h3>
                 {denied
@@ -398,6 +411,7 @@ function Objects({ space }: { space: string }) {
             </div>
           ) : (
             <>
+              {query.isError && <ReadState error={query.error} retry={() => void query.refetch()} subject="this neighbourhood" />}
               <div className={styles.summary} role="status">
                 {nodes.get(focus)?.name ?? "Object unavailable"} ·{" "}
                 {scene.nodes.length} {plural("object", scene.nodes.length)} ·{" "}

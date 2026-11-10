@@ -1,0 +1,185 @@
+import { test, expect, type Page } from '@playwright/test';
+import { mockConnections, neighbourhood } from './fixtures/connections';
+
+const url = '/ontology/connections?space=business&focus=house';
+
+async function cacheKeys(page: Page, action: 'read' | 'vaults' | 'switch' = 'read'): Promise<unknown[][]> {
+  return page.locator('main').evaluate((el, action) => {
+    const key = Object.keys(el).find(k => k.startsWith('__reactFiber$'))!;
+    let fiber = Reflect.get(el, key);
+    while (fiber) {
+      const client = fiber.memoizedProps?.client;
+      if (client?.getQueryCache) {
+        Reflect.set(window, '__connectionTestCache', client);
+        if (action === 'vaults') void client.invalidateQueries({queryKey: ['vaults', 'list']});
+        if (action === 'switch') {
+          const next = new URL(location.href);
+          next.search = '?space=personal';
+          history.pushState(null, '', next);
+        }
+        return client.getQueryCache().getAll().map((q: {queryKey: unknown[]}) => q.queryKey);
+      }
+      fiber = fiber.return;
+    }
+    throw new Error('Query provider not found');
+  }, action);
+}
+
+async function setup(page: Page, selected = 'n0') {
+  await mockConnections(page, 'populated', neighbourhood());
+  await page.routeWebSocket('**/api/events/ws*', ws => ws.send(JSON.stringify({type:'hello',vaults:{business:0}})));
+  await page.route('**/api/vaults/business/members', r => r.fulfill({json:{results:[]}}));
+  await page.goto(url);
+  await page.locator('[data-object="n0"]').first().click();
+  await page.locator('[data-object="house"]').first().click();
+  if (selected !== 'house') await page.locator(`[data-object="${selected}"]`).first().click();
+  await expect(page.getByLabel('Selected object')).toContainText('Values and their sources');
+}
+
+for (const target of ['selected', 'focus']) test(`deleted ${target} clears only the missing object after Refresh`, async ({page}) => {
+  await setup(page, target === 'focus' ? 'house' : 'n0');
+  await page.getByLabel('Pan right', {exact:true}).click();
+  const camera = await page.locator('[data-camera]').getAttribute('data-camera');
+  await page.getByRole('searchbox').fill('North');
+  await expect(page.getByLabel('Object search results')).toBeVisible();
+  await page.route(`**/ontology/objects/${target === 'focus' ? 'house' : 'n0'}*`, r => r.fulfill({status:404,json:{code:'resource.not_found',detail:'object unavailable'}}));
+  if (target === 'focus') await page.route('**/api/tools/entities_neighbourhood', r => r.fulfill({json:{error:'not found',code:'entity.not_found'}}));
+  await page.getByLabel('Refresh ontology').click();
+  await expect(page.getByRole('status').filter({hasText:'This object no longer exists'})).toBeVisible();
+  await expect(page.getByLabel('Selected object')).toHaveCount(0);
+  await expect(page.getByRole('searchbox')).toHaveValue('North');
+  await expect(page.getByLabel('Object search results')).toBeVisible();
+  await expect(page.getByRole('navigation', {name:'Ontology views'})).toBeVisible();
+  await expect(page).not.toHaveURL(/selected=/);
+  if (target === 'focus') {
+    await expect(page.getByRole('heading', {name:'Start with something you know.'})).toBeVisible();
+    await expect(page).not.toHaveURL(/focus=/);
+  } else await expect(page.locator('[data-camera]')).toHaveAttribute('data-camera', camera!);
+  await page.getByRole('searchbox').fill('');
+  await expect(page.getByLabel('Suggested objects')).toBeVisible();
+  await expect(page.getByLabel('Recently viewed objects')).toContainText(target === 'focus' ? 'North' : 'House');
+  await expect(page.getByLabel('Recently viewed objects')).not.toContainText(target === 'focus' ? 'House' : 'North');
+});
+
+for (const source of ['profile', 'masked-neighbourhood', 'space-404']) test(`real membership loss from ${source} clears everything and blocks late reads`, async ({page}) => {
+  await setup(page);
+  await page.getByRole('searchbox').fill('North');
+  await expect(page.getByLabel('Object search results')).toBeVisible();
+  let release: () => void = () => {};
+  const held = new Promise<void>(resolve => {release = resolve;});
+  let requested: () => void = () => {};
+  const started = new Promise<void>(resolve => {requested = resolve;});
+  let delivered: () => void = () => {};
+  const completed = new Promise<void>(resolve => {delivered = resolve;});
+  await page.route('**/api/tools/entities_search', async r => {
+    requested();
+    await held;
+    await r.fulfill({json:{results:neighbourhood().nodes}});
+    delivered();
+  });
+  await page.getByRole('searchbox').fill('Late');
+  await started;
+  await page.route('**/api/vaults/business/members', r => r.fulfill({status:403,json:{code:'vault.forbidden'}}));
+  if (source === 'profile') await page.route('**/ontology/objects/*', r => r.fulfill({status:403,json:{code:'vault.forbidden'}}));
+  else if (source === 'space-404') await page.route('**/ontology', r => r.fulfill({status:404,json:{code:'vault.not_found'}}));
+  else await page.route('**/api/tools/entities_neighbourhood', r => r.fulfill({json:{error:'not found',code:'entity.not_found'}}));
+  await page.getByLabel('Refresh ontology').click();
+  await expect(page.getByRole('alert').filter({hasText:'unavailable to you'})).toBeVisible();
+  release();
+  await completed;
+  await expect(page.locator('[data-camera], [data-object], [aria-label="Selected object"]')).toHaveCount(0);
+  await expect(page.getByRole('searchbox')).toHaveCount(0);
+  await expect(page).not.toHaveURL(/[?&](q|focus|selected)=/);
+  await expect.poll(async () => (await cacheKeys(page)).filter(k => k.includes('business'))).toEqual([]);
+});
+
+test('re-adding membership recovers the mounted view', async ({page}) => {
+  await setup(page);
+  await page.route('**/ontology/objects/*', r => r.fulfill({status:403,json:{code:'vault.forbidden'}}));
+  await page.getByLabel('Refresh ontology').click();
+  await expect(page.getByRole('alert').filter({hasText:'unavailable to you'})).toBeVisible();
+  await page.unroute('**/ontology/objects/*');
+  await cacheKeys(page, 'vaults');
+  await expect(page.getByRole('searchbox')).toHaveValue('');
+  await expect(page.getByRole('heading', {name:'Start with something you know.'})).toBeVisible();
+  await expect(page.getByLabel('Suggested objects')).toBeVisible();
+});
+
+test('switching spaces removes previous connection and search caches', async ({page}) => {
+  await setup(page);
+  await page.getByRole('searchbox').fill('North');
+  await expect(page.getByLabel('Object search results')).toBeVisible();
+  expect((await cacheKeys(page)).some(k => k[0] === 'connection-search' && k[1] === 'business')).toBe(true);
+  await cacheKeys(page, 'switch');
+  await expect(page).toHaveURL(/space=personal/);
+  await expect.poll(async () => (await cacheKeys(page)).filter(k => ['connections','connection-search'].includes(String(k[0])) && k[1] === 'business')).toEqual([]);
+});
+
+test('500 and network failures keep input, selection, recents and camera', async ({page}) => {
+  await setup(page);
+  await page.getByLabel('Pan right', {exact:true}).click();
+  const camera = await page.locator('[data-camera]').getAttribute('data-camera');
+  await page.getByRole('searchbox').fill('North');
+  await expect(page.getByLabel('Object search results')).toBeVisible();
+  for (const failure of ['500', 'network']) {
+    await page.route('**/api/tools/entities_neighbourhood', r => failure === '500' ? r.fulfill({status:500,json:{code:'internal'}}) : r.abort('failed'));
+    await page.route('**/ontology/objects/*', r => failure === '500' ? r.fulfill({status:500,json:{code:'internal'}}) : r.abort('failed'));
+    await page.getByLabel('Refresh ontology').click();
+    await expect(page.getByLabel('Selected object')).toContainText('Could not load this object');
+    await expect(page.getByRole('searchbox')).toHaveValue('North');
+    await expect(page.locator('[data-camera]')).toHaveAttribute('data-camera', camera!);
+    await expect(page).toHaveURL(/selected=n0/);
+  }
+  await page.getByRole('searchbox').fill('');
+  await expect(page.getByLabel('Recently viewed objects')).toContainText('North Coast Beans');
+});
+
+
+test('Retry space access recovers after re-adding without a vault list update', async ({page}) => {
+  await setup(page);
+  await page.route('**/ontology/objects/*', r => r.fulfill({status:403,json:{code:'vault.forbidden'}}));
+  await page.route('**/api/vaults/business/members', r => r.fulfill({status:403,json:{code:'vault.forbidden'}}));
+  await page.getByLabel('Refresh ontology').click();
+  const retry = page.getByRole('button', {name:'Retry space access'});
+  await expect(retry).toBeVisible();
+  await retry.click();
+  await expect(page.getByRole('searchbox')).toHaveCount(0);
+  await page.unroute('**/ontology/objects/*');
+  await page.unroute('**/api/vaults/business/members');
+  await page.route('**/api/vaults/business/members', r => r.fulfill({json:{results:[]}}));
+  await retry.click();
+  await expect(page.getByRole('searchbox')).toHaveValue('');
+  await expect(page.getByLabel('Suggested objects')).toBeVisible();
+});
+
+test('a vault list that loses the space clears its caches and can recover', async ({page}) => {
+  await setup(page);
+  await page.route('**/api/vaults', r => r.fulfill({json:{results:[]}}));
+  await cacheKeys(page, 'vaults');
+  await expect(page.getByRole('heading', {name:'Choose a memory space'})).toBeVisible();
+  await expect(page).not.toHaveURL(/[?&](q|focus|selected)=/);
+  await expect.poll(async () => (await cacheKeys(page)).filter(k => k.includes('business'))).toEqual([]);
+  await page.unroute('**/api/vaults');
+  await cacheKeys(page, 'vaults');
+  await expect(page.getByRole('searchbox')).toHaveValue('');
+  await expect(page.getByRole('heading', {name:'Start with something you know.'})).toBeVisible();
+});
+
+test('logout removes connection and search caches', async ({page}) => {
+  await setup(page);
+  await cacheKeys(page);
+  await page.route('**/api/auth/logout', r => r.fulfill({json:{ok:true}}));
+  await page.getByRole('button', {name:'Log out', exact:true}).click();
+  await expect.poll(() => page.evaluate(() => Reflect.get(window, '__connectionTestCache')
+    .getQueryCache().getAll().filter((q: {queryKey: unknown[]}) => q.queryKey.includes('business')).length)).toBe(0);
+});
+
+
+test('leaving through the space chooser clears previous search caches', async ({page}) => {
+  await setup(page);
+  await page.getByRole('searchbox').fill('North');
+  await expect(page.getByLabel('Object search results')).toBeVisible();
+  await page.getByRole('link', {name:'Change space, current space Banksia Coffee'}).click();
+  await expect(page.getByRole('heading', {name:'Choose a memory space'})).toBeVisible();
+  await expect.poll(async () => (await cacheKeys(page)).filter(k => ['connections','connection-search'].includes(String(k[0])) && k[1] === 'business')).toEqual([]);
+});
