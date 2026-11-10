@@ -410,14 +410,12 @@ pub async fn outgoing(ctx: &Ctx<'_>, after: i64) -> AppResult<Outgoing> {
 }
 
 /// After the other side took `items`: their content is the agreed base from now on.
-async fn mark_sent(ctx: &Ctx<'_>, items: &[Item]) {
+async fn mark_sent(ctx: &Ctx<'_>, items: &[Item]) -> AppResult<()> {
     for item in items {
         let Ok(rid) = crate::rid::parse(&item.id) else { continue };
-        let done = if item.op == "upsert" { ctx.save_map(&item.kind, &rid, None, None, &item.hash).await } else { ctx.drop_map(&rid).await };
-        if let Err(e) = done {
-            tracing::warn!(link = %ctx.key, error = %e.message, "peer sync: item map not updated");
-        }
+        if item.op == "upsert" { ctx.save_map(&item.kind, &rid, None, None, &item.hash).await?; } else { ctx.drop_map(&rid).await?; }
     }
+    Ok(())
 }
 
 // --- incoming ----------------------------------------------------------------------------------
@@ -991,13 +989,23 @@ pub async fn sync_link(state: &OrgState, key: &str) -> AppResult<Report> {
             failure = Some(CallError::Unreachable("an answer this Eunomia can't read (is the other one a different version?)".into()));
             break;
         };
+        theirs.add(&resp.report);
+        if resp.report.failed > 0 {
+            failure = Some(CallError::Unreachable("the peer could not write this page; it will be retried".into()));
+            break;
+        }
         if resp.ack >= out.upto {
-            mark_sent(&ctx, &out.items).await;
+            mark_sent(&ctx, &out.items).await?;
             out_cursor = out_cursor.max(resp.ack);
         }
-        theirs.add(&resp.report);
         let host_more = resp.more;
-        mine.add(&apply(&ctx, resp.changes).await);
+        let received = apply(&ctx, resp.changes).await;
+        let failed = received.failed > 0;
+        mine.add(&received);
+        if failed {
+            failure = Some(CallError::Unreachable("a received page could not be written; it will be retried".into()));
+            break;
+        }
         in_cursor = in_cursor.max(resp.next);
         if !out.more && !host_more {
             remote_digest = resp.digest;
@@ -1117,8 +1125,11 @@ pub async fn host_rpc(state: &OrgState, org: &str, key: &str, env: &Value) -> Re
 pub async fn host_exchange(ctx: &Ctx<'_>, req: ExchangeRequest) -> AppResult<Value> {
     let row = ctx.link;
     let report = if row.role == ROLE_EDIT { apply(ctx, req.changes).await } else { Report { ignored: req.changes.len(), ..Default::default() } };
+    if report.failed > 0 {
+        return Err(AppError::internal("a peer page could not be written; retry without advancing the cursor"));
+    }
     let out = outgoing(ctx, req.after).await?;
-    mark_sent(ctx, &out.items).await;
+    mark_sent(ctx, &out.items).await?;
     let digest = if out.more { None } else { Some(digest(ctx.db(), ctx.vault()).await?.0) };
     let status = if report.rejected > 0 { status::INTEGRITY_PROBLEM } else { status::UP_TO_DATE };
     let summary = json!({ "received": report, "documents_not_shared": out.documents });

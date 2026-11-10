@@ -292,3 +292,55 @@ fn review209_owner_merge_redirects_sync_to_existing_and_new_peer() {
         assert_eq!(a.digest(&va).await, b.digest(&vb).await);
     });
 }
+
+#[test]
+fn review209_failed_host_write_does_not_advance_cursor() {
+    run(|| async {
+        let (a, b) = (Node::new("failed-a").await, Node::new("failed-b").await);
+        let va = a.vault("Failures").await;
+        let (_, key) = b.join(&a.code(&va, "edit").await).await;
+        let st = a.org().await;
+        let row = a.link(&key).await;
+        let ctx = sync::Ctx { state: &st, link: &row, key: key.clone(), me: peers::instance_id(&st.db).await.unwrap() };
+        let data = sync::entity_content("person", "", &[], "");
+        let item = sync::Item { kind:"entity".into(), id:"person:invalid".into(), peer_id:None, origin:"failed:person:invalid".into(), op:"upsert".into(), hash:sync::item_hash("entity", &data), data, refs:Default::default(), updated_at:None, into:None };
+        let response = sys(sync::host_exchange(&ctx, sync::ExchangeRequest { changes:vec![item], upto:row.in_cursor + 10, ..Default::default() })).await;
+        assert!(response.is_err(), "a failed page must not be acknowledged: {response:?}");
+        assert_eq!(a.link(&key).await.in_cursor, row.in_cursor);
+    });
+}
+
+#[test]
+fn review209_failed_guest_write_does_not_advance_cursor() {
+    run(|| async {
+        use axum::{Json, Router, routing::post};
+        use eunomia_backend::peers::crypto;
+        let (a, b) = (Node::new("failed-guest-a").await, Node::new("failed-guest-b").await);
+        let va = a.vault("Guest failures").await;
+        let (_, key) = b.join(&a.code(&va, "edit").await).await;
+        let row = b.link(&key).await;
+        let secret = peers::link_secret(&b.app.state.settings, &row).unwrap();
+        let next = row.in_cursor + 10;
+        let route_key = key.clone();
+        // This authenticated in-process host sends a valid hash with a name the write rejects.
+        let router = Router::new().route("/api/peer/v1/{org}/links/{key}", post(move |Json(env): Json<Value>| {
+            let key = route_key.clone();
+            async move {
+                let data = sync::entity_content("person", "", &[], "");
+                let item = sync::Item { kind:"entity".into(), id:"person:invalid".into(), peer_id:None, origin:"failed:person:invalid".into(), op:"upsert".into(), hash:sync::item_hash("entity", &data), data, refs:Default::default(), updated_at:None, into:None };
+                let response = sync::ExchangeResponse { changes:vec![item], next, ..Default::default() };
+                let ts = chrono::Utc::now().timestamp();
+                let nonce = crypto::random_id();
+                let aad = crypto::response_aad(&key, env["nonce"].as_str().unwrap(), ts, &nonce);
+                let data = crypto::seal(&secret, &aad, &serde_json::to_vec(&response).unwrap());
+                Json(json!({"ts":ts,"nonce":nonce,"data":data}))
+            }
+        }));
+        peers::net::test_route(&a.base, router);
+        let report = b.sync(&key).await;
+        assert_eq!(report.failed, 1);
+        let after = b.link(&key).await;
+        assert_eq!(after.in_cursor, row.in_cursor, "failed guest page was skipped");
+        assert_eq!(after.status, peers::status::UNREACHABLE);
+    });
+}
