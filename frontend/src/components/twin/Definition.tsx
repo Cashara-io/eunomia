@@ -372,7 +372,21 @@ export default function Definition({
         </>
       ) : (
         <>
-          <nav className={styles.sectionIndex} aria-label="Review sections">
+          <nav
+            className={styles.sectionIndex}
+            aria-label="Review sections"
+            onClick={event => {
+              // Move focus to the section itself, never to a control inside it. A plain fragment
+              // link leaves focus on the body, outside the review region, and the shortcuts stop.
+              const link = (event.target as HTMLElement).closest("a");
+              const target = link ? document.getElementById(link.hash.slice(1)) : null;
+              if (!target) return;
+              event.preventDefault();
+              if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
+              target.scrollIntoView({ block: "start" });
+              target.focus({ preventScroll: true });
+            }}
+          >
             <a href={`#${reasonId}-changes`}>What changes</a>
             <a href={`#${reasonId}-source`}>Read the source</a>
             <a href={`#${reasonId}-context`}>In your business</a>

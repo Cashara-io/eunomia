@@ -170,7 +170,13 @@ for (const width of [390, 1440]) test(`section index only navigates to the detai
     expect(await target.evaluate(el => el.getBoundingClientRect().top)).toBeGreaterThanOrEqual(0);
     await expect(page.getByRole("button", { name: "Approve Unit cost", exact: true })).not.toBeFocused();
     await expect(page.getByText(/Keyboard decision ready/)).not.toBeVisible();
+    // Focus lands on the section itself, inside the review region, so the shortcuts keep working.
+    await expect(target).toBeFocused();
   }
+  // After "Decide", the keyboard path still needs both steps: A focuses Approve, and nothing is sent.
+  await page.keyboard.press("a");
+  await expect(page.getByRole("button", { name: "Approve Unit cost", exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
   expect(fixture.mutations).toHaveLength(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
